@@ -260,6 +260,7 @@ class MainWindow(QMainWindow):
                 self.rx_panel.table.setRowCount(0)
                 for m in self._diversity_stations.values():
                     self.rx_panel.add_message(m)
+                self.rx_panel.reapply_sort()
 
             self.control_panel.update_decode_count(
                 len(self._diversity_stations)
@@ -270,6 +271,7 @@ class MainWindow(QMainWindow):
             self.rx_panel.table.setRowCount(0)
             for msg in messages:
                 self.rx_panel.add_message(msg)
+            self.rx_panel.reapply_sort()
 
         # DX-Tune Dialog fuettern wenn aktiv
         if self._dx_tune_dialog is not None and messages:
@@ -347,6 +349,10 @@ class MainWindow(QMainWindow):
     def _on_band_changed(self, band: str):
         self.settings.set("band", band)
         freq = self.settings.frequency_mhz
+        # Empfangsliste komplett leeren bei Bandwechsel
+        self.rx_panel.table.setRowCount(0)
+        self._diversity_stations = {}
+        self.control_panel.update_decode_count(0)
         if self.radio.ip:
             s = self.radio._slice_idx
             self.radio.set_frequency(freq, slice_idx=s)

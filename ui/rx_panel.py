@@ -332,6 +332,11 @@ class RXPanel(QWidget):
         else:
             self.btn_rx.setText("RX OFF")
 
+    def reapply_sort(self):
+        """Aktuelle Sortierung erneut anwenden (nach Tabellen-Rebuild)."""
+        if self._sort_mode != "time":
+            self._set_sort(self._sort_mode)
+
     def _set_sort(self, mode: str):
         """Tabelle nach Kriterium sortieren."""
         self._sort_mode = mode
