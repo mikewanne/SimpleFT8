@@ -765,12 +765,22 @@ class MainWindow(QMainWindow):
                 self._diversity_cycle += 1
                 s = self.radio._slice_idx
                 band = self.settings.band
-                if self._diversity_cycle % 2 == 0:
+
+                # 4-Zyklus Even/Odd-Pattern (Mike's Idee):
+                # Block A: ANT1(odd) ANT2(even) ANT2(odd) ANT1(even)
+                # Block B: ANT2(odd) ANT1(even) ANT1(odd) ANT2(even)
+                # → jede Antenne deckt beide FT8-Phasen ab, keine Blindstellen
+                _pos = (self._diversity_cycle - 1) % 4
+                _block = ((self._diversity_cycle - 1) // 4) % 2
+                _PATTERN = (
+                    ("A1", "A2", "A2", "A1"),  # Block A
+                    ("A2", "A1", "A1", "A2"),  # Block B
+                )
+                self._diversity_current_ant = _PATTERN[_block][_pos]
+                if self._diversity_current_ant == "A1":
                     gain = FlexRadio.PREAMP_PRESETS.get(band, 10)
-                    self._diversity_current_ant = "A1"
                 else:
                     gain = FlexRadio.PREAMP_PRESETS.get(band, 10) + 10
-                    self._diversity_current_ant = "A2"
                 ant_cmd = "ANT1" if self._diversity_current_ant == "A1" else "ANT2"
 
             # BUG-3: ant_cmd + gain als Argumente, nicht als Closure
