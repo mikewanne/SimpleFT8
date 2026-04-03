@@ -157,15 +157,17 @@ Block B (Zyklen 5-8, umgekehrt):
 
 ### Antennen-Einmessung vor Diversity (DX Tuning)
 
-- [ ] DX Tuning Dialog laeuft bereits separat — Integration als "vor Diversity Messen"-Empfehlung
-- [ ] Bei Diversity-Aktivierung: Hinweis wenn kein Preset fuer aktuelles Band gespeichert
+- [x] DX Tuning Dialog v2: Interleaved 18-Zyklus-Messung (ANT1+ANT2 bei gleichem Gain gleichzeitig)
+- [x] Per-Antenne Presets: ant1_gain + ant2_gain separat gespeichert
+- [x] Bei Diversity-Aktivierung: Hinweis wenn kein Preset fuer aktuelles Band gespeichert
+- [x] Diversity nutzt ant1_gain fuer ANT1 und ant2_gain fuer ANT2 beim Wechsel
 
 ---
 
 ## Parser-Bugs
 
 - [ ] **"DXpedition not implemented"** — `parse_ft8_message()` zeigt rohen Fehlertext bei unbekannten Nachrichtenformaten (DXpedition-Calls, Compound-Callsigns wie `CQ DX CALL/P` etc.) → sauberes Fallback statt Exception-Text in der Liste anzeigen
-- [ ] **Portable/Mobile Suffixe** — `ON3MOH/P`, `R2FBY/MM` etc. → Prefix vor `/` extrahieren → Land + km korrekt anzeigen (aktuell `?` in Land-Spalte)
+- [x] **Portable/Mobile Suffixe** — `ON3MOH/P`, `R2FBY/MM` etc. → Prefix vor `/` extrahieren → Land + km korrekt anzeigen (rx_panel.py _populate_row)
 
 ---
 

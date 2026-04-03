@@ -106,14 +106,21 @@ class Settings:
         return presets.get(band)
 
     def save_dx_preset(self, band: str, rxant: str, gain: int,
-                       ant1_avg: float = 0, ant2_avg: float = 0):
-        """DX-Preset fuer ein Band speichern."""
+                       ant1_avg: float = 0, ant2_avg: float = 0,
+                       ant1_gain: int = None, ant2_gain: int = None):
+        """DX-Preset fuer ein Band speichern.
+
+        Neu: ant1_gain/ant2_gain separat (fuer Diversity).
+        rxant/gain bleiben fuer Rueckwaertskompatibilitaet erhalten.
+        """
         import time
         if "dx_presets" not in self._data:
             self._data["dx_presets"] = {}
         self._data["dx_presets"][band] = {
             "rxant": rxant,
             "gain": gain,
+            "ant1_gain": ant1_gain if ant1_gain is not None else gain,
+            "ant2_gain": ant2_gain if ant2_gain is not None else gain,
             "ant1_avg": round(ant1_avg, 1),
             "ant2_avg": round(ant2_avg, 1),
             "measured": time.strftime("%Y-%m-%d %H:%M"),

@@ -493,14 +493,48 @@ class MainWindow(QMainWindow):
         self._diversity_cycle = 0
         self._diversity_stations = {}
         self._diversity_current_ant = "A1"
-        self._diversity_ant_queue = deque()  # Queue: welche Antenne pro Zyklus aktiv war
+        self._diversity_ant_queue = deque()
+
         band = self.settings.band
-        gain_b = FlexRadio.PREAMP_PRESETS.get(band, 10) + 10
-        self.control_panel.dx_info.setText(
-            f"ANT1(G{FlexRadio.PREAMP_PRESETS.get(band, 10)}) + "
-            f"ANT2(G{gain_b})"
-        )
-        print(f"[Diversity] AKTIV — Antennen-Wechsel pro Zyklus")
+        preset = self.settings.get_dx_preset(band)
+
+        if preset and "ant1_gain" in preset:
+            # Preset vorhanden: per-Antenne optimierte Gains laden
+            self._diversity_ant1_gain = preset["ant1_gain"]
+            self._diversity_ant2_gain = preset["ant2_gain"]
+            measured = preset.get("measured", "?")
+            self.control_panel.dx_info.setText(
+                f"ANT1(G{self._diversity_ant1_gain}) + "
+                f"ANT2(G{self._diversity_ant2_gain})"
+            )
+            print(
+                f"[Diversity] Preset geladen: ANT1 G{self._diversity_ant1_gain}, "
+                f"ANT2 G{self._diversity_ant2_gain} (gemessen {measured})"
+            )
+        else:
+            # Kein Preset: Standard-Gains + Hinweis
+            self._diversity_ant1_gain = FlexRadio.PREAMP_PRESETS.get(band, 10)
+            self._diversity_ant2_gain = FlexRadio.PREAMP_PRESETS.get(band, 10) + 10
+            self.control_panel.dx_info.setText(
+                f"ANT1(G{self._diversity_ant1_gain}) + "
+                f"ANT2(G{self._diversity_ant2_gain})"
+            )
+            # Hinweis nur wenn kein Preset existiert (nicht wenn veraltet)
+            if not preset:
+                from PySide6.QtCore import QTimer
+                QTimer.singleShot(
+                    500,
+                    lambda: QMessageBox.information(
+                        self, "Kein DX Preset",
+                        f"Kein Antennen-Preset fuer {band}.\n\n"
+                        f"Tipp: Mit DX TUNING einmessen → optimale Preamp-Werte\n"
+                        f"fuer ANT1 und ANT2 separat finden.\n\n"
+                        f"Standard-Gains werden verwendet:\n"
+                        f"  ANT1: {self._diversity_ant1_gain} dB\n"
+                        f"  ANT2: {self._diversity_ant2_gain} dB",
+                    )
+                )
+            print(f"[Diversity] AKTIV — Standard-Gains, kein Preset fuer {band}")
 
     def _disable_diversity(self):
         """Diversity deaktivieren: zurueck auf ANT1."""
@@ -582,12 +616,20 @@ class MainWindow(QMainWindow):
             band=band,
             rxant=r.get("best_ant", "ANT1"),
             gain=r.get("best_gain", 0),
-            ant1_avg=r.get("ant1_avg", 0),
-            ant2_avg=r.get("ant2_avg", 0),
+            ant1_avg=r.get("ant1_avg", 0.0),
+            ant2_avg=r.get("ant2_avg", 0.0),
+            ant1_gain=r.get("ant1_gain", r.get("best_gain", 0)),
+            ant2_gain=r.get("ant2_gain", r.get("best_gain", 0)),
         )
-        ant = r.get("best_ant", "ANT1")
-        gain = r.get("best_gain", 0)
-        self.control_panel.dx_info.setText(f"{ant}, Gain {gain} dB")
+        ant1_g = r.get("ant1_gain", r.get("best_gain", 0))
+        ant2_g = r.get("ant2_gain", r.get("best_gain", 0))
+        self.control_panel.dx_info.setText(
+            f"ANT1(G{ant1_g}) + ANT2(G{ant2_g})"
+        )
+        # Diversity-Gains sofort aktualisieren falls gerade aktiv
+        if self._rx_mode == "diversity":
+            self._diversity_ant1_gain = ant1_g
+            self._diversity_ant2_gain = ant2_g
         self._dx_tune_dialog = None
 
     def _on_dx_tune_rejected(self):
@@ -779,9 +821,11 @@ class MainWindow(QMainWindow):
                 )
                 self._diversity_current_ant = _PATTERN[_block][_pos]
                 if self._diversity_current_ant == "A1":
-                    gain = FlexRadio.PREAMP_PRESETS.get(band, 10)
+                    gain = getattr(self, '_diversity_ant1_gain',
+                                   FlexRadio.PREAMP_PRESETS.get(band, 10))
                 else:
-                    gain = FlexRadio.PREAMP_PRESETS.get(band, 10) + 10
+                    gain = getattr(self, '_diversity_ant2_gain',
+                                   FlexRadio.PREAMP_PRESETS.get(band, 10) + 10)
                 ant_cmd = "ANT1" if self._diversity_current_ant == "A1" else "ANT2"
                 self.control_panel.update_diversity_cycle(_pos, self._diversity_current_ant)
 

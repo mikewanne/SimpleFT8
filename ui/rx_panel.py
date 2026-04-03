@@ -221,8 +221,21 @@ class RXPanel(QWidget):
         # Extras berechnen
         country = "?"
         caller = msg.caller
-        if caller and caller != "<....>":
-            country = callsign_to_country(caller)
+        # Portable/Mobile Suffix entfernen fuer Country-Lookup: ON3MOH/P → ON3MOH
+        # Ausnahme: Sonderpraefixe wie EA8/DA1MHH → EA8 ist das Land
+        lookup_call = caller
+        if caller and "/" in caller:
+            parts = caller.split("/")
+            # Mobil-Suffixe: P, M, MM, AM, QRP, portable → Basisrufzeichen nutzen
+            MOBILE_SUFFIXES = {"P", "M", "MM", "AM", "QRP", "PORTABLE", "MOBILE"}
+            if parts[-1].upper() in MOBILE_SUFFIXES:
+                lookup_call = parts[0]
+            # Sonstige Schraegstrich-Calls: laengeres Teil ist meist das Rufzeichen
+            else:
+                lookup_call = max(parts, key=len)
+
+        if lookup_call and lookup_call != "<....>":
+            country = callsign_to_country(lookup_call)
 
         dist_km = 0
         dist_approx = False
@@ -231,8 +244,8 @@ class RXPanel(QWidget):
             km = grid_distance(self._my_grid, msg.grid_or_report)
             dist_km = km if km is not None else 0
         # 2. Sonst: Ungefaehre Entfernung aus Callsign-Prefix
-        if dist_km == 0 and caller and caller != "<....>" and self._my_grid:
-            km = callsign_to_distance(caller, self._my_grid)
+        if dist_km == 0 and lookup_call and lookup_call != "<....>" and self._my_grid:
+            km = callsign_to_distance(lookup_call, self._my_grid)
             if km is not None:
                 dist_km = km
                 dist_approx = True
