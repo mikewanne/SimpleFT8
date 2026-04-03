@@ -46,11 +46,19 @@ Key rules:
 - **No second slice needed**: Uses the same single slice/receiver — just switches the antenna input
 - **Single decoder**: One decoder instance, one audio stream — ~20 lines of additional code
 
-### Why This Works
+### Simply Explained
 
-FT8 signals are persistent — a station calling CQ will repeat for many cycles. By alternating antennas, you capture stations that are only strong on one polarization/pattern. The 15-second FT8 cycle is the natural switching interval — no audio is lost, no decode is interrupted.
+FT8 transmits in fixed 15-second slots. Each station transmits for several minutes — so it's still there in the next slot.
 
-This works on **any radio with two antenna ports**, even single-receiver models. No hardware modification needed. ~20 lines of code.
+SimpleFT8 exploits exactly this: Slot 1 listens on ANT1 (vertical polarization), Slot 2 on ANT2 (horizontal polarization). Both slots are decoded and the stations are merged.
+
+**Why does this help so much?**
+
+Radio waves rotate their polarization randomly as they travel through the ionosphere. Some signals arrive vertically polarized, some horizontally — this even changes within a QSO. A single antenna only catches one part of that. With two antennas of different polarization, you catch both.
+
+**The special thing:** Normally, antenna diversity requires two complete receiver units — expensive. SimpleFT8 does it with just one, because FT8 naturally works in slots. The software does the rest — 20 lines of Python.
+
+This works on **any radio with two antenna ports**, even single-receiver models. No hardware modification needed.
 
 ### Measured Results (2026-04-02, 20m band, POOR conditions)
 
@@ -231,11 +239,19 @@ Regeln:
 - **Kein zweiter Slice noetig**: Nutzt denselben einzelnen Slice/Receiver — wechselt nur den Antenneneingang
 - **Ein Decoder**: Eine Decoder-Instanz, ein Audio-Stream — ~20 Zeilen zusaetzlicher Code
 
-### Warum das funktioniert
+### Einfach erklaert
 
-FT8-Signale sind persistent — eine Station die CQ ruft, wiederholt das ueber viele Zyklen. Durch den Antennenwechsel fangen wir Stationen ein, die nur auf einer Polarisation/einem Muster stark sind. Der 15-Sekunden-FT8-Zyklus ist das natuerliche Umschaltintervall — kein Audio geht verloren, keine Dekodierung wird unterbrochen.
+FT8 sendet in festen 15-Sekunden-Slots. Jede Station sendet mehrere Minuten lang — die ist also beim naechsten Slot noch da.
 
-Das funktioniert auf **jedem Radio mit zwei Antennenanschluessen**, auch mit nur einem Empfaenger. Keine Hardware-Modifikation noetig. ~20 Zeilen Code.
+SimpleFT8 nutzt genau das aus: Slot 1 hoert auf ANT1 (vertikale Polarisation), Slot 2 auf ANT2 (horizontale Polarisation). Beide Slots werden dekodiert und die Stationen zusammengefuehrt.
+
+**Warum bringt das so viel?**
+
+Funkwellen drehen ihre Polarisation auf dem Weg durch die Ionosphaere zufaellig. Manche Signale kommen vertikal polarisiert an, manche horizontal — das wechselt sogar innerhalb eines QSOs. Eine einzelne Antenne faengt immer nur einen Teil davon. Mit zwei Antennen unterschiedlicher Polarisation faengst du beide.
+
+**Das Besondere:** Normalerweise braucht man fuer Antenna Diversity zwei komplette Empfangseinheiten — teuer. SimpleFT8 macht es mit einer einzigen, weil FT8 von Natur aus in Slots arbeitet. Die Software macht den Rest — 20 Zeilen Python.
+
+Das funktioniert auf **jedem Radio mit zwei Antennenanschluessen**, auch mit nur einem Empfaenger. Keine Hardware-Modifikation noetig.
 
 ### Gemessene Ergebnisse (02.04.2026, 20m-Band, SCHLECHTE Bedingungen)
 
