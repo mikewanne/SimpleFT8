@@ -68,6 +68,7 @@ class MainWindow(QMainWindow):
         self._rx_mode = "normal"  # "normal", "diversity", "dx_tuning"
         self._diversity_cycle = 0  # Zaehler fuer Antennen-Wechsel
         self._diversity_stations = {}  # key → FT8Message (akkumuliert)
+        self._normal_stations = {}     # key → FT8Message (Normal, 2-Min-Fenster)
         import threading as _threading
         self._diversity_lock = _threading.Lock()  # BUG-2: Race Condition Guard
 
@@ -265,7 +266,7 @@ class MainWindow(QMainWindow):
 
             # Alte Stationen entfernen (>2 Min nicht mehr dekodiert)
             stale = [k for k, m in self._diversity_stations.items()
-                     if now - getattr(m, '_last_heard', now) > 120]
+                     if now - getattr(m, '_last_heard', now) > 75]
             if stale:
                 changed = True
                 for k in stale:
@@ -282,8 +283,55 @@ class MainWindow(QMainWindow):
                 len(self._diversity_stations)
             )
 
+        elif self._rx_mode == "normal" and messages:
+            # Normal: Akkumulation mit 2-Min-Fenster (wie Diversity, ohne Antennenwechsel)
+            import time as _t
+            now = _t.time()
+            utc_str = _t.strftime("%H%M%S", _t.gmtime())
+            changed = False
+            for msg in messages:
+                key = msg.caller
+                if not key:
+                    continue
+                existing = self._normal_stations.get(key)
+                if existing is None:
+                    msg._last_heard = now
+                    msg._utc_display = utc_str
+                    self._normal_stations[key] = msg
+                    changed = True
+                else:
+                    existing._last_heard = now
+                    snr_changed = msg.snr != existing.snr
+                    content_changed = (
+                        msg.field1 != existing.field1 or
+                        msg.field2 != existing.field2 or
+                        msg.field3 != existing.field3
+                    )
+                    if snr_changed or content_changed:
+                        existing._utc_display = utc_str
+                        existing.snr = msg.snr
+                        if content_changed:
+                            existing.raw = msg.raw
+                            existing.field1 = msg.field1
+                            existing.field2 = msg.field2
+                            existing.field3 = msg.field3
+                        changed = True
+            # Aging: >2 Min nicht dekodiert → raus
+            stale = [k for k, m in self._normal_stations.items()
+                     if now - getattr(m, '_last_heard', now) > 75]
+            if stale:
+                changed = True
+                for k in stale:
+                    del self._normal_stations[k]
+            if changed:
+                self.rx_panel.table.setRowCount(0)
+                for m in self._normal_stations.values():
+                    self.rx_panel.add_message(m)
+                self.rx_panel.reapply_sort()
+            self.control_panel.update_decode_count(len(self._normal_stations))
+
         elif messages:
-            # Normal / DX Tuning: wie bisher, nur aktueller Zyklus
+            # DX Tuning: nur aktueller Zyklus
             self.rx_panel.table.setRowCount(0)
             for msg in messages:
                 self.rx_panel.add_message(msg)
@@ -385,6 +433,7 @@ class MainWindow(QMainWindow):
         # Empfangsliste komplett leeren bei Bandwechsel
         self.rx_panel.table.setRowCount(0)
         self._diversity_stations = {}
+        self._normal_stations = {}
         self.control_panel.update_decode_count(0)
         if self.radio.ip:
             s = self.radio._slice_idx
@@ -426,6 +475,7 @@ class MainWindow(QMainWindow):
         # Neuen Modus aktivieren
         if mode == "normal":
             self._rx_mode = "normal"
+            self._normal_stations = {}
             self._apply_normal_mode()
         elif mode == "diversity":
             self._rx_mode = "diversity"

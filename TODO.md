@@ -76,10 +76,18 @@
    threading.Thread(target=_switch, args=(ant_cmd, gain), daemon=True).start()
    ```
 
+### Bereits gefixt (03.04.2026 Session)
+
+- [x] TX-Schutz bei Diversity (BUG-1) — encoder.is_transmitting Guard
+- [x] Race Condition Lock (BUG-2) — _diversity_lock threading.Lock()
+- [x] Closure-Bug Thread-Argumente (BUG-3) — args statt Closure
+- [x] is_transmitting Property im Encoder (BUG-4)
+- [x] RX OFF stoppt Diversity-Switching + ANT1 reset (neuer Bug)
+- [x] Normal-Modus: 2-Min-Akkumulation mit Smart-Timestamps (wie Diversity)
+- [x] Station Aging: 120s → 75s (5 Zyklen, DeepSeek-Empfehlung)
+
 ### QSO-Kette testen
 
-- [ ] TX-Schutz bei Diversity implementieren (DeepSeek Punkt 1)
-- [ ] Race Condition mit Lock fixen (DeepSeek Punkt 2)
 - [ ] CQ senden → warten auf Antwort → Report → RR73 → ADIF Log
 - [ ] State Machine Uebergaenge live verifizieren
 - [ ] ADIF-Datei pruefen (Band, Freq, Mode, RST, Grid korrekt?)
@@ -91,6 +99,50 @@
 - [ ] RFI-Problem: externe Laufwerke werden bei TX ausgeworfen (Ferritkerne)
 - [ ] TX-Frequenz: wird eine freie Luecke gewaehlt oder fest?
 - [ ] TX-Timing: exakt am Zyklusbeginn oder verschoben?
+
+---
+
+---
+
+## Diversity-Algorithmus verbessern (Prio HOCH)
+
+### 4-Zyklus Even/Odd-Pattern (Mike's Idee, DeepSeek bestaetigt)
+
+**Problem:** Aktuelles 2-Zyklus-Muster hat systematische Blindstellen:
+- ANT1 hoert immer nur ungerade Slots → verpasst Stationen die nur auf ANT2 + geraden Slots senden
+- ANT2 hoert immer nur gerade Slots → verpasst Stationen die nur auf ANT1 + ungeraden Slots senden
+
+**Loesung: 4-Zyklus-Block mit Block-A/B-Wechsel:**
+```
+Block A (Zyklen 1-4):
+  Zyklus 1 (ungerade): ANT1
+  Zyklus 2 (gerade):   ANT2
+  Zyklus 3 (ungerade): ANT2  ← ANT2 bekommt auch ungeraden Slot
+  Zyklus 4 (gerade):   ANT1  ← ANT1 bekommt auch geraden Slot
+
+Block B (Zyklen 5-8, umgekehrt):
+  Zyklus 5 (ungerade): ANT2
+  Zyklus 6 (gerade):   ANT1
+  Zyklus 7 (ungerade): ANT1
+  Zyklus 8 (gerade):   ANT2
+```
+→ Jede Antenne deckt BEIDE Phasen (gerade + ungerade) ab
+→ Keine systematischen Blindstellen mehr
+→ Passt perfekt zu 75s Aging (= 5 Zyklen, mindestens 1 kompletter Block)
+
+- [ ] 4-Zyklus-Pattern in `_on_cycle_start()` implementieren
+- [ ] `_diversity_cycle % 4` statt `% 2` + Block-A/B-Flag
+
+### Dynamisches Aging fuer angerufene Stationen (DeepSeek-Idee)
+
+- [ ] Station die aktiv angerufen wurde: Aging-Timeout auf 150s erhoehen
+- [ ] Begruendung: Warte auf Antwort auch wenn Propagation kurz einbricht
+- [ ] Implementation: `_called_stations = set()` in QSOStateMachine, Aging-Check beachtet das
+
+### Antennen-Einmessung vor Diversity (DX Tuning)
+
+- [ ] DX Tuning Dialog laeuft bereits separat — Integration als "vor Diversity Messen"-Empfehlung
+- [ ] Bei Diversity-Aktivierung: Hinweis wenn kein Preset fuer aktuelles Band gespeichert
 
 ---
 
