@@ -145,9 +145,16 @@ Block B (Zyklen 5-8, umgekehrt):
 3:1 ANT2 → Block A: ANT2 ANT1 ANT2 ANT2, Block B: ANT2 ANT2 ANT1 ANT2
 ```
 
-- [ ] Bias-Slider im Control Panel (5 Stufen: ANT1 3:1 / ANT1 2:1 / 1:1 / ANT2 2:1 / ANT2 3:1)
-- [ ] Auto-Bias: rollierender SNR-Schnitt je Antenne → automatisch auf bessere Antenne gewichten
-- [ ] Bias-Wert persistent speichern (pro Band)
+- [ ] **Manueller Bias-Schalter** (5 Preset-Buttons im Control Panel):
+      `100:0 | 70:30 | AUTO | 30:70 | 0:100`
+      - AUTO = aktuelles 4-Zyklus Even/Odd Pattern (50:50)
+      - Bei 70:30: 5-Slot-Block [A1,A2,A1,A1,A2] → A2 auf Pos 2+5 = gerade UND ungerade ✓
+      - Bei 30:70: 5-Slot-Block [A2,A1,A2,A2,A1] → A1 auf Pos 2+5 = gerade UND ungerade ✓
+      - 100:0 / 0:100: nur eine Antenne, aber Akkumulation bleibt aktiv
+      - Diversity bleibt AN — nur Slot-Verteilung aendert sich
+      - Bei Bandwechsel: zurueck auf AUTO
+- [ ] ~~Auto-Bias~~ (DeepSeek: Bias-Spirale, mathematisch gefaehrlich → NICHT bauen)
+- [ ] Diversity-Dashboard: ANT1-exklusiv / ANT2-exklusiv / Ueberlappung anzeigen (spaeter)
 
 ### Dynamisches Aging fuer angerufene Stationen (DeepSeek-Idee)
 
