@@ -19,9 +19,9 @@
 
 ![Normal Mode](assets/screenshots/normal_13stations.png)
 
-**Diversity mode — 43 stations on 40m (same band, same conditions, same antenna):**
+**Diversity mode — 63 stations on 20m (Indonesia 11,000 km, New Zealand 18,000 km):**
 
-![Diversity 43 Stations](assets/screenshots/diversity_43stations_conditions.png)
+![Diversity 63 Stations](assets/screenshots/diversity_63stations_20m.png)
 
 ---
 
@@ -222,9 +222,9 @@ MIT License — free for everyone. Use it, modify it, build on it, integrate it 
 
 ![Normal Modus](assets/screenshots/normal_13stations.png)
 
-**Diversity-Modus — 43 Stationen auf 40m (gleiches Band, gleiche Bedingungen, gleiche Antennen):**
+**Diversity-Modus — 63 Stationen auf 20m (Indonesien 11.000 km, Neuseeland 18.000 km):**
 
-![Diversity 43 Stationen](assets/screenshots/diversity_43stations_conditions.png)
+![Diversity 63 Stationen](assets/screenshots/diversity_63stations_20m.png)
 
 ---
 
