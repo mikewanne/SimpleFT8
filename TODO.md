@@ -1,7 +1,9 @@
 # SimpleFT8 — TODO & Roadmap
 
-**Stand:** 02.04.2026 abends | **Status:** TEMPORAL POLARIZATION DIVERSITY! 48 Stationen bei POOR, 3x NORMAL, IC-7300 geschlagen!
-**Backup:** backup_diversity_stable/
+**Stand:** 03.04.2026 abends | **Status:** Diversity STABIL, 63 Stationen 20m, Kiribati 13k auf Regenrinne, GitHub + Forum LIVE
+**Backup:** backup_2026-04-03_v3_final/
+**GitHub:** https://github.com/mikewanne/SimpleFT8
+**FlexRadio Forum:** Idea Post am 2026-04-03
 
 ---
 
@@ -10,181 +12,155 @@
 - [x] FlexRadio Verbindung (SmartSDR-M Disconnect, eigener Slice, Keepalive)
 - [x] VITA-49 RX Audio (int16 mono 24kHz, PCC 0x0123)
 - [x] VITA-49 TX Audio (int16 mono 24kHz, dax_tx, Opus-Header)
-- [x] FT8 Decoder (PyFT8 + Noise-Floor-Norm + LDPC 50 Iter + Multi-Sync + 5 Subtraction Passes)
+- [x] FT8 Decoder (PyFT8 2.6.1 + Noise-Floor-Norm + LDPC 50 Iter + Multi-Sync + 5 Subtraction Passes)
 - [x] FT8 Encoder (PyFT8 12kHz → 24kHz int16 mono BE)
-- [x] OSD Fallback-Decoder (eingebaut, braucht Tuning)
-- [x] GUI: QTableWidget RX-Panel, Ländernamen, km, Sortierung, RX ON/OFF
+- [x] Temporal Polarization Diversity (ANT1/ANT2 pro Zyklus, Queue-basiert)
+- [x] Callsign-basierte Akkumulierung (keine Duplikate)
+- [x] Smart Timestamps (nur bei SNR/Content/Antenne-Aenderung)
+- [x] Antennenvergleich A1>2 / A2>1
+- [x] Ant-Spalte (eigene Spalte, nicht im Message-Text)
+- [x] ~km Anzeige (approximiert aus Callsign-Prefix)
+- [x] Bandwechsel leert Empfangsliste
+- [x] Sort-Persistenz ueber Zyklen
+- [x] GUI: QTableWidget RX-Panel, Laendernamen, km, Sortierung, RX ON/OFF
 - [x] GUI: Band-Wechsel, Power-Slider, TX-Level, TUNE, Watt/SWR/ALC
-- [x] GUI: PSKReporter-Anzeige (Spots, km, Richtungen, Map-Button)
-- [x] GUI: Config-Dialog (Einstellungen-Button)
+- [x] GUI: PSKReporter-Anzeige (25 Spots, Max 11.996km Indonesien)
 - [x] GUI: CQ-Modus, QSO State Machine, ADIF Export
-- [x] Instanz-Cleanup (osascript + pkill + Port-Check)
-- [x] DT-Korrektur (geeicht an SDR-Control)
 - [x] SWR-Schutz (TX blockiert bei hohem SWR)
+- [x] CQ senden funktioniert (30+ PSKReporter Spots, bis Brasilien/Indonesien)
 
 ---
 
-## Erkenntnisse 02.04.2026 — EPISCHER TAG
+## Erkenntnisse 03.04.2026 — NOCH EPISCHERER TAG
 
-- **TEMPORAL POLARIZATION DIVERSITY erfunden und implementiert!**
-  - Antenne pro FT8-Zyklus wechseln (ANT1 ↔ ANT2), Stationen akkumulieren
-  - NORMAL: 14 Stationen → DIVERSITY: 48 Stationen (3.4x!)
-  - Funktioniert auf jedem FlexRadio mit 2 Antennenanschluessen, auch 1-SCU
-  - Kein zweiter Slice noetig, ein Decoder, ~20 Zeilen Code
-  - Neuseeland (18.000 km) empfangen bei POOR Conditions mit Regenrinne!
-- **DX Tuning Dialog** mit automatischer Top-5 SNR Messung
-  - Presets pro Band, automatisch laden bei Bandwechsel
-  - ANT2 (Regenrinne) +5.6 dB besser als ANT1 (Multiband-Dipol) auf 20m
-- **FLEX-8400M hat nur 1 SCU** — echtes Simultandiversity braucht 8600M
-  - Aber: Temporal Diversity liefert 90% des Nutzens auf dem halben-Preis-Radio
-- QSO-Panel aufgeraeumt, Statusmeldungen via MessageBox
-- 3-Klick RX-Modus: NORMAL / DIVERSITY / DX TUNING
-- LEVEL Meter Fix (src=SLC + num=slice_idx Matching)
-- Mail an Marcus Roskosch (DL8MRE, HAM-Radio-Apps.com) mit Feature-Idee geschrieben
-
-## Erkenntnisse 01.04.2026
-
-- SimpleFT8 schlaegt SDR-Control auf GLEICHEM FLEX-8400M: 13 vs 12 Stationen
-- Bei gemeinsamen Stationen 4-18 dB staerker als IC-7300
-- FLEX-8400M hat hoeheren Noise Floor als IC-7300 (-128 vs -140 dBm) → schwache Signale <-15 dB fehlen
-- Das ist BY DESIGN (Direct Sampling 16-bit ADC), KEIN Defekt
-- DX-Modus (32-bit float 48kHz) funktioniert, bringt mehr Dynamik
-- AP-Decoder funktioniert: -24 dB von 10% auf 45% im Benchmark
-- OSD bringt wenig weil Bottleneck die Demodulation ist, nicht LDPC
+- **Neuer Rechner (Mac Mini M2)** — SimpleFT8 laeuft auf beiden Rechnern
+- **Spectral Whitening Bug gefunden:** numpy 2.4 as_strided zerstoert Signal (Peak→1). Deaktiviert.
+- **PyFT8 2.8.0 hat Breaking Changes** — auf 2.6.1 gepinnt
+- **Diversity Queue-Desync gefixt:** leere Zyklen muessen Queue poppen
+- **63 Stationen auf 20m** (Rekord, Indonesien 11k, Neuseeland 18k, Japan 9k)
+- **43 Stationen auf 40m** bei K=4, Fair/Poor
+- **15m offen:** Kiribati ~13k, Brasilien ~9.5k, Indonesien ~11k — alles auf Regenrinne!
+- **IC-7300 + WSJT-X geschlagen:** 13 vs 32 auf 20m
+- **PSKReporter:** 25 Spots, Max 11.996km (YB8DYX Indonesien)
+- **GitHub veroeffentlicht:** https://github.com/mikewanne/SimpleFT8
+- **FlexRadio Community Forum:** Idea Post live
 
 ---
 
-## Phase 1: Empfang optimieren
+## NAECHSTE PHASE: TX / QSO (Prio HOECHSTE)
 
-### 1.1 OSD Tuning (Prio HOCH, Aufwand 1-2h)
-- [x] OSD debuggt — bringt bei aktuellem Demodulations-Level wenig (BP schafft -22dB, OSD hilft erst wenn BP fast konvergiert)
-- [x] Gauss-Elimination über GF(2) — korrigiert, proper RREF implementiert
-- [x] CRC-Check nach OSD — funktioniert
-- [x] Benchmarked: OSD depth 1-2, bringt 0 Extra bei aktuellem Demod-Level
-- **Erkenntnis:** Bottleneck ist Demodulation (demap), nicht LDPC. OSD bleibt als Fallback drin.
-- **Erwarteter Gewinn:** +2-4 Stationen/Zyklus
-- **Risiko:** Niedrig (Fallback, ändert BP nicht)
+### DeepSeek Code-Review Findings (03.04.2026)
 
-### 1.2 AP-Dekodierung (Prio HOCH, Aufwand 4-6h)
+**KRITISCH — VOR dem ersten QSO fixen:**
+
+1. **TX-Schutz bei Diversity** (GEFAHR!)
+   - Antenne kann waehrend TX umgeschaltet werden
+   - Fix: In `_on_cycle_start` TX-Status pruefen, Switch blockieren wenn TX aktiv
+   - Beim Senden IMMER auf ANT1 bleiben
+   ```python
+   if self._rx_mode == "diversity" and self.radio.ip:
+       if self.encoder.is_transmitting:  # TX aktiv? Nicht switchen!
+           return
+   ```
+
+2. **Race Condition Threading**
+   - `_diversity_current_ant` wird ohne Lock in verschiedenen Threads gelesen/geschrieben
+   - Fix: `threading.Lock()` fuer alle Diversity-Variablen
+   ```python
+   self._diversity_lock = threading.Lock()
+   ```
+
+3. **Thread-Argumente korrekt uebergeben**
+   - `ant_cmd` als Parameter an Thread, nicht als Closure-Variable
+   ```python
+   threading.Thread(target=_switch, args=(ant_cmd, gain), daemon=True).start()
+   ```
+
+### QSO-Kette testen
+
+- [ ] TX-Schutz bei Diversity implementieren (DeepSeek Punkt 1)
+- [ ] Race Condition mit Lock fixen (DeepSeek Punkt 2)
+- [ ] CQ senden → warten auf Antwort → Report → RR73 → ADIF Log
+- [ ] State Machine Uebergaenge live verifizieren
+- [ ] ADIF-Datei pruefen (Band, Freq, Mode, RST, Grid korrekt?)
+- [ ] **Das erste echte QSO mit SimpleFT8!**
+
+### Sende-Probleme pruefen
+
+- [ ] Schaltet SimpleFT8 beim Senden auf Empfangen? (DB8EB Timeout)
+- [ ] RFI-Problem: externe Laufwerke werden bei TX ausgeworfen (Ferritkerne)
+- [ ] TX-Frequenz: wird eine freie Luecke gewaehlt oder fest?
+- [ ] TX-Timing: exakt am Zyklusbeginn oder verschoben?
+
+---
+
+## Phase 1: Empfang weiter optimieren
+
+### Spectral Whitening fixen (Prio HOCH)
+- [ ] numpy 2.4 kompatible Implementierung (kein as_strided Trick)
+- [ ] Einfache Sliding-Window Median ohne Stride-Trick
+- [ ] Vorher/Nachher Vergleich: Stationszahl mit/ohne Whitening
+- **Erwartet:** +10-20% mehr schwache Stationen
+
+### AP-Dekodierung (Prio HOCH, Aufwand 4-6h)
 - [ ] LLR-Injection: bekannte Calls → 28 Bits auf ±100 setzen vor BP
 - [ ] AP-Datenbank aus `decoder.recent_calls` (schon vorhanden!)
-- [ ] 3-Pass Decoder:
-  - Pass 1: Blind (wie jetzt)
-  - Pass 2: AP mit eigenem Call (DA1MHH) als Constraint
-  - Pass 3: AP mit allen gehörten Calls als Constraint
-- [ ] Call-zu-Bits Mapping implementieren (77-Bit FT8 Frame → welche Bits = Call?)
+- [ ] Call-zu-Bits Mapping implementieren (77-Bit FT8 Frame)
 - **Erwarteter Gewinn:** +8-12 Stationen, SNR-Schwelle von -18 auf -24 dB
-- **Risiko:** Niedrig (zusätzliche Passes, BP bleibt unverändert)
 
-### 1.3 Spektrum-Akkumulierung (Prio MITTEL, Aufwand 2-3h)
-- [ ] Kandidaten-Scores über 2-3 Zyklen gewichtet mitteln
-- [ ] Persistente DX-Signale die knapp unter Schwelle liegen → über Schwelle heben
-- [ ] MUSS in separatem Thread laufen (sonst blockiert Keepalive → Disconnect!)
-
-### 1.4 DX-Modus Feinschliff (Prio MITTEL, Aufwand 2h)
-- [x] NORMAL/DX Schalter eingebaut (16-bit 24kHz vs 32-bit float 48kHz)
-- [ ] DX-Modus mid-session umschaltbar machen (braucht Reconnect)
-- [ ] DT-Kalibrierung fuer DX-Modus (DT-Werte verschoben durch 48k→24k Downsampling)
-
-### 1.5 Preamp-Optimierung pro Band (Prio MITTEL, Aufwand 2h)
-- [ ] LOW/MID/HIGH Preamp pro Band einstellbar
-- [ ] "8-10 dB Noise Rise" Regel: Antenne ab → messen → Antenne dran → 8-10 dB Anstieg = optimal
-- [ ] FLEX-8400M hat hoeheren Noise Floor als IC-7300 (-128 vs -140 dBm) → Preamp kann helfen
-- [ ] Automatische Preamp-Kalibrierung (Noise Floor messen + optimal einstellen)
-- [ ] History-Buffer für Sync-Scores pro Frequenz-Bin
-- **Erwarteter Gewinn:** +3-5 schwache DX-Stationen
-- **Risiko:** Niedrig (additiv)
-
-### 1.4 Blackman-Harris Fenster (Prio NIEDRIG, Aufwand 1h)
-- [ ] Audio-Buffer vor PyFT8 mit Blackman-Harris fenstern (statt Hanning)
-- [ ] Vorher/Nachher Vergleich: gleiche 15s Audio, Stationen zählen
-- [ ] Zurückrollen wenn schlechter
-- **Erwarteter Gewinn:** ~1 dB, vielleicht +1-2 Stationen
-- **Risiko:** Mittel (Doppel-Fensterung möglich)
+### Fehlende Callsign-Prefixe
+- [ ] Systematisch alle ITU-Prefixe einpflegen (aktuell ~80%, fehlen exotische)
+- [ ] Online-Datenbank als Fallback (QRZ.com API?)
 
 ---
 
-## Phase 2: Features
+## Phase 2: GUI Verbesserungen
 
-### 2.1 Erster QSO-Durchlauf (Prio HOCH, Aufwand 1h)
-- [ ] CQ senden → warten auf Antwort → Report → RR73 → ADIF Log
-- [ ] Verifizieren: State Machine Übergänge korrekt
-- [ ] ADIF-Datei prüfen (Band, Freq, Mode, RST, Grid korrekt?)
-- **Das erste echte QSO mit SimpleFT8!**
+### Diversity-Statistiken (DeepSeek Vorschlag)
+- [ ] Zaehler: ANT1 besser / ANT2 besser / nur ANT1 / nur ANT2
+- [ ] Anzeige im Control Panel
+- [ ] Globus-View: welche Antenne empfaengt aus welcher Richtung besser
 
-### 2.2 FT4 Modus (Prio MITTEL, Aufwand 3-4h)
-- [ ] Timer auf 7.5s Zyklen umschalten
-- [ ] FT4-Frequenzen aus settings.py (schon definiert!)
-- [ ] FT4 Encoding/Decoding — PyFT8 unterstützt FT4?
-- [ ] GUI: FT4-Button funktional machen
-- **Risiko:** Niedrig (separater Timer, gleicher Encoder/Decoder falls PyFT8 FT4 kann)
-
-### 2.3 PSKReporter-Verbesserung (Prio NIEDRIG, Aufwand 2h)
-- [ ] Abfrage häufiger wenn TX aktiv (alle 60s statt 180s)
-- [ ] Callsign aus Settings statt hardcoded DA1MHH
-- [ ] Spot-Historie: Trend anzeigen (wird Reichweite besser/schlechter?)
-- [ ] Top-10 weiteste Stationen als eigene Liste
+### GUI Polish
+- [ ] SWR als Balken-/Zeiger-Instrument statt nur Text
+- [ ] Watt-Anzeige als Pegel
+- [ ] Spaltenbreiten optimieren
+- [ ] Fenster-Groesse speichern/wiederherstellen
+- [ ] DeepSeek + Claude Review fuer UI-Layout (naechste Session)
 
 ---
 
-## Phase 3: Feinschliff
+## Phase 3: Robustheit + Packaging
 
-### 3.1 GUI Polish
-- [ ] Spaltenbreiten noch besser (Land-Spalte zu schmal für "Netherlands")
-- [ ] QSO-Panel: TX/RX Nachrichten farblich trennen
-- [ ] Band-Wechsel: gespeichertes Band korrekt laden (Bug war da)
-- [ ] Fenster-Größe speichern/wiederherstellen
-
-### 3.2 Robustheit
 - [ ] Auto-Reconnect verbessern (nach Radio-Neustart)
-- [ ] Fehlerbehandlung bei UDP-Verlust
 - [ ] Logging in Datei (nicht nur stdout)
-
-### 3.3 Packaging
-- [ ] PyInstaller Bundle (.app für macOS)
-- [ ] Icon, App-Name, Version
-- [ ] Einzel-Datei Distribution
+- [ ] PyInstaller Bundle (.app fuer macOS)
 
 ---
 
 ## NICHT machen (bewusste Entscheidung)
 
-- ❌ Library wechseln (PyFT8 funktioniert, Risiko zu hoch)
-- ❌ DAXIQ statt Audio (Overkill, kein Gewinn für FT8)
-- ❌ Globus-Karte in App (Browser-Link reicht)
-- ❌ NAH/MITTEL/DX Presets (entfernt, automatisch optimal pro Band)
-- ❌ Parallele Test-Skripte zum Radio (NIE WIEDER!)
+- Library wechseln (PyFT8 2.6.1 funktioniert, Risiko zu hoch)
+- DAXIQ statt Audio (Overkill, kein Gewinn fuer FT8)
+- Parallele Test-Skripte zum Radio (NIE WIEDER!)
 
 ---
 
-## Radio-Einstellungen (optimal, nicht ändern)
+## Leistungsdaten (03.04.2026)
 
-```
-Mode: DIGU
-Filter: 100-3100 Hz
-AGC: slow (threshold 50)
-NR/NB/ANF/WNB/NBFM/APF: OFF
-Preamp: pro Band (80m=0, 40m=10, 20m=10, 15m=20, 10m=20)
-DAX: send_reduced_bw_dax=1 (int16 mono 24kHz)
-TX: dax_tx Stream, int16 mono 24kHz BE, PCC 0x0123
-```
-
----
-
-## Leistungsdaten (02.04.2026)
-
-| Metrik | SimpleFT8 NORMAL | SimpleFT8 DIVERSITY | SDR-Control IC-7300 |
+| Metrik | SimpleFT8 NORMAL | SimpleFT8 DIVERSITY | IC-7300 WSJT-X |
 |--------|-----------------|--------------------|--------------------|
-| Stationen | 11-15 | **42-52** | 17-22 |
-| Peak | 15 | **52** | 22 |
+| 40m Stationen | 13 | **43** | — |
+| 20m Stationen | 8 | **63** | 13 |
+| 15m PSK Spots | — | **25** (TX) | — |
+| Peak | 13 | **63** | 13 |
 | Antennen | ANT1 | ANT1 + ANT2 (Regenrinne) | ANT1 |
-| Conditions | POOR | POOR | POOR |
-| Weiteste Station | — | **Neuseeland 18.000 km** | — |
+| Weiteste RX | — | **Kiribati ~13.000 km** | — |
+| Weiteste TX | — | **Indonesien 11.996 km** | — |
 
-**SimpleFT8 DIVERSITY > IC-7300 WSJT-X (48 vs 22)**
-**Temporal Polarization Diversity: 3x mehr Stationen als Single-Antenna**
-**Setup: FLEX-8400M + Multiband-Dipol (10cm Wandabstand) + Regenrinne**
+**SimpleFT8 DIVERSITY > IC-7300 WSJT-X (63 vs 13 auf 20m)**
+**Kiribati, Japan, Indonesien, Brasilien, Venezuela, Neuseeland — alles mit Regenrinne**
 
 ---
 
-*02.04.2026 — DA1MHH / Mike + Claude — Temporal Polarization Diversity Tag*
+*03.04.2026 — DA1MHH / Mike + Claude + DeepSeek — Epischster Tag*
