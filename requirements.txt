@@ -2,6 +2,6 @@ PySide6>=6.7
 numpy>=1.24
 sounddevice>=0.4
 ntplib>=0.4
-PyFT8>=2.6
+PyFT8==2.6.1
 pyserial>=3.5
 paho-mqtt>=2.0

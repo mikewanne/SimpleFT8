@@ -13,6 +13,16 @@
 
 **Status:** RX works. TX works (30+ PSKReporter spots). Full QSO cycle not yet tested end-to-end. Many rough edges. Published to timestamp the concept, not to ship a product.
 
+### Screenshots
+
+**Normal mode — 13 stations on 40m:**
+
+![Normal Mode](assets/screenshots/normal_13stations.png)
+
+**Diversity mode — 43 stations on 40m (same band, same conditions, same antenna):**
+
+![Diversity 43 Stations](assets/screenshots/diversity_43stations_conditions.png)
+
 ---
 
 ## The Concept: Temporal Polarization Diversity
@@ -205,6 +215,16 @@ MIT License — free for everyone. Use it, modify it, build on it, integrate it 
 > Getestet am FlexRadio 8400M mit Multiband-Dipol + Regenrinne als zweite Antenne.
 
 **Status:** RX funktioniert. TX funktioniert (30+ PSKReporter-Spots). Vollstaendiger QSO-Zyklus noch nicht End-to-End getestet. Viele raue Kanten. Veroeffentlicht um das Konzept mit Zeitstempel zu dokumentieren, nicht um ein Produkt zu liefern.
+
+### Screenshots
+
+**Normal-Modus — 13 Stationen auf 40m:**
+
+![Normal Modus](assets/screenshots/normal_13stations.png)
+
+**Diversity-Modus — 43 Stationen auf 40m (gleiches Band, gleiche Bedingungen, gleiche Antennen):**
+
+![Diversity 43 Stationen](assets/screenshots/diversity_43stations_conditions.png)
 
 ---
 

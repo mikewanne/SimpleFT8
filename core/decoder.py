@@ -92,60 +92,72 @@ class Decoder(QObject):
 
     def _decode_loop(self):
         while self._running:
-            now = time.time()
-            cycle_pos = now % 15.0
-            if cycle_pos < 13.5:
-                wait = 13.5 - cycle_pos
-            else:
-                wait = 15.0 - cycle_pos + 13.5
-            time.sleep(wait)
+            try:
+                now = time.time()
+                cycle_pos = now % 15.0
+                if cycle_pos < 13.5:
+                    wait = 13.5 - cycle_pos
+                else:
+                    wait = 15.0 - cycle_pos + 13.5
+                time.sleep(wait)
 
-            with self._buffer_lock:
-                chunks = self._audio_buffer_24k
-                self._audio_buffer_24k = []
+                with self._buffer_lock:
+                    chunks = self._audio_buffer_24k
+                    self._audio_buffer_24k = []
 
-            if not chunks:
-                continue
+                if not chunks:
+                    print(f"[Decoder] Zyklus {int(time.time()/15)}: kein Audio")
+                    continue
 
-            audio_raw = np.concatenate(chunks)
+                audio_raw = np.concatenate(chunks)
+                peak_raw = np.max(np.abs(audio_raw))
+                noise_pre = np.median(np.abs(audio_raw.astype(np.float32)))
+                print(f"[Decoder] Zyklus: {len(audio_raw)} Samples, Peak={peak_raw}, NoiseFloor={noise_pre:.0f}")
 
-            # Noise-Floor-basierte Normalisierung (statt Peak-basiert!)
-            # Median der Absolutwerte = robuster Noise-Floor-Schaetzer
-            # Skaliere so dass Noise-Floor bei ~300 liegt → Signale bei 1000-10000
-            # Erhalt das Verhaeltnis stark/schwach korrekt
-            audio_f = audio_raw.astype(np.float32)
-            noise_floor = np.median(np.abs(audio_f))
-            if noise_floor > 1.0:
-                target_noise = 300.0
-                audio_raw = np.clip(
-                    audio_f * (target_noise / noise_floor), -32767, 32767
-                ).astype(np.int16)
+                # Noise-Floor-basierte Normalisierung
+                audio_f = audio_raw.astype(np.float32)
+                noise_floor = np.median(np.abs(audio_f))
+                if noise_floor > 1.0:
+                    target_noise = 300.0
+                    audio_raw = np.clip(
+                        audio_f * (target_noise / noise_floor), -32767, 32767
+                    ).astype(np.int16)
 
-            # Samplerate: mit reduced_bw_dax=1 ist es 24kHz
-            self.input_sample_rate = 24000
-            # Anti-Alias Resampling 24k → 12k (Sinc+Hamming Filter)
-            audio_12k = _resample_to_12k(audio_raw, source_rate=24000)
+                # Samplerate: mit reduced_bw_dax=1 ist es 24kHz
+                self.input_sample_rate = 24000
+                # Anti-Alias Resampling 24k → 12k (Sinc+Hamming Filter)
+                audio_12k = _resample_to_12k(audio_raw, source_rate=24000)
 
-            if len(audio_12k) > CYCLE_SAMPLES_12K:
-                audio_12k = audio_12k[-CYCLE_SAMPLES_12K:]
-            elif len(audio_12k) < CYCLE_SAMPLES_12K // 2:
-                continue
-            else:
-                audio_12k = np.pad(
-                    audio_12k, (0, max(0, CYCLE_SAMPLES_12K - len(audio_12k)))
-                )
+                if len(audio_12k) > CYCLE_SAMPLES_12K:
+                    audio_12k = audio_12k[-CYCLE_SAMPLES_12K:]
+                elif len(audio_12k) < CYCLE_SAMPLES_12K // 2:
+                    print(f"[Decoder] Zu wenig Audio: {len(audio_12k)} < {CYCLE_SAMPLES_12K // 2}")
+                    continue
+                else:
+                    audio_12k = np.pad(
+                        audio_12k, (0, max(0, CYCLE_SAMPLES_12K - len(audio_12k)))
+                    )
 
-            audio_12k = _preprocess_audio(audio_12k)
-            messages = self._decode_with_subtraction(audio_12k)
+                audio_12k = _preprocess_audio(audio_12k)
+                peak_12k = np.max(np.abs(audio_12k))
+                print(f"[Decoder] Nach Preprocessing: {len(audio_12k)} Samples, Peak={peak_12k}")
+                messages = self._decode_with_subtraction(audio_12k)
 
-            # TODO: Spektrum-Akkumulierung spaeter einbauen
-            # (2. Decode-Pass mit kombiniertem Audio war zu CPU-intensiv
-            #  und hat Keepalive-Thread blockiert → Disconnect)
+                print(f"[Decoder] {len(messages)} Stationen dekodiert")
 
-            if messages:
-                self.cycle_decoded.emit(messages)
-                for msg in messages:
-                    self.message_decoded.emit(msg)
+                if messages:
+                    self.cycle_decoded.emit(messages)
+                    for msg in messages:
+                        self.message_decoded.emit(msg)
+                else:
+                    # Auch leere Ergebnisse emittieren damit GUI aktualisiert
+                    self.cycle_decoded.emit([])
+
+            except Exception as e:
+                import traceback
+                print(f"[Decoder] FEHLER: {e}")
+                traceback.print_exc()
+                # Weitermachen, nicht sterben!
 
     # ── Multi-Pass mit Signal Subtraction ────────────────────────
 
@@ -427,10 +439,12 @@ def _preprocess_audio(audio_int16: np.ndarray) -> np.ndarray:
     audio -= np.mean(audio)
 
     # 2. Spectral Whitening (vektorisiert für Performance)
+    # FIXME: Stride-Trick kaputt in numpy 2.4 — whitening zerstoert Signal (Peak→1)
+    # Temporaer deaktiviert bis gefixt
     n_fft = 2048
     hop_size = n_fft // 2
     n_frames = (len(audio) - n_fft) // hop_size
-    if n_frames > 0:
+    if False and n_frames > 0:
         window = np.hanning(n_fft).astype(np.float32)
         output = np.zeros_like(audio)
         weights = np.zeros_like(audio)

@@ -195,7 +195,12 @@ class MainWindow(QMainWindow):
 
         if self._rx_mode == "diversity" and messages:
             # Diversity: Stationen akkumulieren, nicht loeschen
-            ant = "A1" if self._diversity_cycle % 2 == 0 else "A2"
+            # Antenne aus Queue holen — dort wurde sie VOR dem Umschalten gespeichert
+            ant_queue = getattr(self, '_diversity_ant_queue', None)
+            if ant_queue:
+                ant = ant_queue.popleft()
+            else:
+                ant = "A1"
             import time as _t
             now = _t.time()
             utc_str = _t.strftime("%H%M%S", _t.gmtime())
@@ -232,9 +237,11 @@ class MainWindow(QMainWindow):
                 len(self._diversity_stations)
             )
 
-            # Alte Stationen entfernen (>2 Min nicht gehoert)
+            # Alte Stationen entfernen (>5 Min nicht gehoert)
+            # 2 Min war zu kurz — bei Diversity wird jede Antenne nur jeden 2. Zyklus
+            # gehoert, plus Stationen koennen kurz verschwinden bei Fading
             stale = [k for k, m in self._diversity_stations.items()
-                     if now - getattr(m, '_last_seen', now) > 120]
+                     if now - getattr(m, '_last_seen', now) > 300]
             if stale:
                 for k in stale:
                     del self._diversity_stations[k]
@@ -378,8 +385,11 @@ class MainWindow(QMainWindow):
 
     def _enable_diversity(self):
         """Diversity aktivieren: Antenne pro Zyklus wechseln, Stationen akkumulieren."""
+        from collections import deque
         self._diversity_cycle = 0
         self._diversity_stations = {}
+        self._diversity_current_ant = "A1"
+        self._diversity_ant_queue = deque()  # Queue: welche Antenne pro Zyklus aktiv war
         band = self.settings.band
         gain_b = FlexRadio.PREAMP_PRESETS.get(band, 10) + 10
         self.control_panel.dx_info.setText(
@@ -638,19 +648,27 @@ class MainWindow(QMainWindow):
 
         # Diversity: Antenne umschalten bei jedem Zyklus (non-blocking)
         if self._rx_mode == "diversity" and self.radio.ip:
+            # Queue: aktuelle Antenne merken BEVOR umgeschaltet wird.
+            # Der Decoder liefert spaeter das Ergebnis fuer DIESEN Zyklus.
+            # _on_cycle_decoded holt sich die Antenne per popleft() aus der Queue.
+            ant_queue = getattr(self, '_diversity_ant_queue', None)
+            if ant_queue is not None:
+                ant_queue.append(self._diversity_current_ant)
+
             self._diversity_cycle += 1
             s = self.radio._slice_idx
             band = self.settings.band
             if self._diversity_cycle % 2 == 0:
                 gain = FlexRadio.PREAMP_PRESETS.get(band, 10)
-                ant = "ANT1"
+                self._diversity_current_ant = "A1"
             else:
                 gain = FlexRadio.PREAMP_PRESETS.get(band, 10) + 10
-                ant = "ANT2"
+                self._diversity_current_ant = "A2"
             # In separatem Thread damit Keepalive nicht blockiert wird
             import threading
+            ant_cmd = "ANT1" if self._diversity_current_ant == "A1" else "ANT2"
             def _switch():
-                self.radio._send_cmd(f"slice set {s} rxant={ant}")
+                self.radio._send_cmd(f"slice set {s} rxant={ant_cmd}")
                 self.radio._send_cmd(f"slice set {s} rfgain={gain}")
             threading.Thread(target=_switch, daemon=True).start()
 
