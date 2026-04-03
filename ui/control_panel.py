@@ -47,12 +47,19 @@ class ControlPanel(QWidget):
         "dx_tuning": "background: #662200; color: #FF8844; border-color: #FF8844;",
     }
 
-    def __init__(self):
+    # Signal fuer manuellen Diversity-Bias (100:0 / 70:30 / AUTO / 30:70 / 0:100)
+    bias_changed = Signal(str)
+
+    _BIAS_PRESETS = ["100:0", "70:30", "AUTO", "30:70", "0:100"]
+
+    def __init__(self, callsign: str = "DA1MHH"):
         super().__init__()
         self._current_mode = "FT8"
         self._current_band = "20m"
         self._auto_mode = False
         self._rx_mode_idx = 0
+        self._callsign = callsign
+        self._current_bias = "AUTO"
         self._setup_ui()
         self._start_clock()
 
@@ -132,6 +139,44 @@ class ControlPanel(QWidget):
         dx_row.addWidget(self._cycle_ant_label)
         dx_row.addStretch()
         layout.addLayout(dx_row)
+
+        # --- Bias-Switch (nur sichtbar im Diversity-Modus) ---
+        self._bias_row_widget = QWidget()
+        bias_row = QHBoxLayout(self._bias_row_widget)
+        bias_row.setContentsMargins(0, 0, 0, 0)
+        bias_row.setSpacing(2)
+        bias_lbl = QLabel("Bias:")
+        bias_lbl.setStyleSheet("color:#888; font-size:10px; font-family:Menlo;")
+        bias_row.addWidget(bias_lbl)
+        self._bias_buttons = {}
+        for preset in self._BIAS_PRESETS:
+            btn = QPushButton(preset)
+            btn.setCheckable(True)
+            btn.setFixedHeight(20)
+            btn.setChecked(preset == "AUTO")
+            btn.setStyleSheet("""
+                QPushButton {
+                    background:#222; color:#888; border:1px solid #444;
+                    border-radius:3px; font-size:9px; font-family:Menlo;
+                    padding:0 4px; min-width:36px;
+                }
+                QPushButton:checked { background:#003344; color:#00CCFF; border-color:#00AADD; }
+                QPushButton:hover { background:#333; }
+            """)
+            btn.clicked.connect(lambda checked, p=preset: self._on_bias_clicked(p))
+            bias_row.addWidget(btn)
+            self._bias_buttons[preset] = btn
+        bias_row.addStretch()
+        layout.addWidget(self._bias_row_widget)
+        self._bias_row_widget.setVisible(False)  # nur im Diversity-Modus
+
+        # --- Diversity Stats ---
+        self._div_stats_label = QLabel("")
+        self._div_stats_label.setStyleSheet(
+            "color:#555; font-size:9px; font-family:Menlo; padding-left:2px;"
+        )
+        layout.addWidget(self._div_stats_label)
+        self._div_stats_label.setVisible(False)
 
         # --- PSK Reichweite ---
         self.psk_label = QLabel("PSK: —")
@@ -238,7 +283,7 @@ class ControlPanel(QWidget):
         self.rx_indicator.setStyleSheet("color: #44FF44; font-size: 13px; font-weight: bold; font-family: Menlo;")
         self.tx_indicator = QLabel("○ TX")
         self.tx_indicator.setStyleSheet("color: #666; font-size: 13px; font-weight: bold; font-family: Menlo;")
-        self.btn_auto = QPushButton("AUTO")
+        self.btn_auto = QPushButton("OFF")
         self.btn_auto.setCheckable(True)
         self.btn_auto.setFixedHeight(24)
         self.btn_auto.setStyleSheet("""
@@ -455,6 +500,11 @@ class ControlPanel(QWidget):
         )
         if mode == "normal":
             self.dx_info.setText("")
+        is_diversity = (mode == "diversity")
+        self._bias_row_widget.setVisible(is_diversity)
+        self._div_stats_label.setVisible(is_diversity)
+        if not is_diversity:
+            self._div_stats_label.setText("")
         self.rx_mode_changed.emit(mode)
 
     def set_rx_mode(self, mode: str):
@@ -474,11 +524,16 @@ class ControlPanel(QWidget):
         self.btn_dx.setStyleSheet(
             style_base.format(colors=self._RX_COLORS[mode])
         )
+        is_diversity = (mode == "diversity")
+        self._bias_row_widget.setVisible(is_diversity)
+        self._div_stats_label.setVisible(is_diversity)
 
     def _open_psk_map(self):
         """PSKReporter im Browser oeffnen mit eigenem Call."""
         import webbrowser
-        webbrowser.open("https://pskreporter.info/pskmap.html?callsign=DA1MHH")
+        webbrowser.open(
+            f"https://pskreporter.info/pskmap.html?callsign={self._callsign}"
+        )
 
     def update_psk_stats(self, spots: int, avg_km: int, max_km: int,
                           max_call: str, max_country: str,
@@ -668,6 +723,33 @@ class ControlPanel(QWidget):
         self._clock_timer = QTimer(self)
         self._clock_timer.timeout.connect(self._update_clock)
         self._clock_timer.start(1000)
+
+    def _on_bias_clicked(self, preset: str):
+        """Bias-Preset Button geklickt."""
+        self._current_bias = preset
+        for p, btn in self._bias_buttons.items():
+            btn.setChecked(p == preset)
+        self.bias_changed.emit(preset)
+
+    def set_bias(self, preset: str):
+        """Bias programmatisch setzen (ohne Signal)."""
+        self._current_bias = preset
+        for p, btn in self._bias_buttons.items():
+            btn.setChecked(p == preset)
+
+    def update_diversity_stats(self, a1_only: int, a2_only: int,
+                                a1_wins: int, a2_wins: int):
+        """Diversity-Statistiken: welche Antenne war besser."""
+        total = a1_only + a2_only + a1_wins + a2_wins
+        if total == 0:
+            self._div_stats_label.setText("")
+            return
+        self._div_stats_label.setText(
+            f"A1: {a1_only}  A2: {a2_only}  A1>{a1_wins}  A2>{a2_wins}"
+        )
+        self._div_stats_label.setStyleSheet(
+            "color:#446688; font-size:9px; font-family:Menlo; padding-left:2px;"
+        )
 
     def _update_clock(self):
         utc = time.strftime("%H:%M:%S", time.gmtime())

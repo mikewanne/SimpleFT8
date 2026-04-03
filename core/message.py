@@ -74,10 +74,29 @@ class FT8Message:
                 g[2].isdigit() and g[3].isdigit())
 
 
+# PyFT8 gibt bei unbekannten Formaten Fehler-Strings zurueck (z.B. DXpedition-Modus)
+# Diese beginnen mit bekannten Fehlerpraefixen oder haben unerwartete Struktur
+_PYFT8_ERROR_PREFIXES = (
+    "DXpedition",
+    "not implemented",
+    "Error",
+    "Invalid",
+    "???",
+    "Msg:",
+)
+
+
 def parse_ft8_message(msg_str: str, snr: int = -30,
                        freq_hz: int = 0, dt: float = 0.0) -> FT8Message:
     """Einen dekodierten FT8-String in ein FT8Message-Objekt parsen."""
     parts = msg_str.strip().split()
+
+    # PyFT8 Fehler-Strings abfangen (DXpedition, unbekannte Formate)
+    if not parts or any(msg_str.strip().startswith(p) for p in _PYFT8_ERROR_PREFIXES):
+        return FT8Message(
+            raw=msg_str.strip(), field1="?", field2="?", field3="?",
+            snr=snr, freq_hz=freq_hz, dt=dt,
+        )
 
     f1, f2, f3 = "", "", ""
     if len(parts) >= 1:

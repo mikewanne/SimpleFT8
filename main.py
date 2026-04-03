@@ -7,9 +7,37 @@ DA1MHH / Mike — Herne, Ruhrgebiet — 2026
 import sys
 import os
 import subprocess
+from pathlib import Path
 
 # Projektverzeichnis in den Python-Pfad aufnehmen
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+# ── File Logging: stdout+stderr in ~/.simpleft8/simpleft8.log ──────────────
+_LOG_DIR = Path.home() / ".simpleft8"
+_LOG_DIR.mkdir(parents=True, exist_ok=True)
+_log_file = open(_LOG_DIR / "simpleft8.log", "a", buffering=1)
+
+
+class _Tee:
+    """Leitet Ausgabe gleichzeitig an Terminal und Logdatei."""
+    def __init__(self, primary, secondary):
+        self._p = primary
+        self._s = secondary
+
+    def write(self, obj):
+        self._p.write(obj)
+        self._s.write(obj)
+
+    def flush(self):
+        self._p.flush()
+        self._s.flush()
+
+    def isatty(self):
+        return self._p.isatty()
+
+
+sys.stdout = _Tee(sys.__stdout__, _log_file)
+sys.stderr = _Tee(sys.__stderr__, _log_file)
 
 
 def kill_old_instances():

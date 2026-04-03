@@ -438,13 +438,13 @@ def _preprocess_audio(audio_int16: np.ndarray) -> np.ndarray:
     # 1. DC-Offset entfernen
     audio -= np.mean(audio)
 
-    # 2. Spectral Whitening (vektorisiert für Performance)
-    # FIXME: Stride-Trick kaputt in numpy 2.4 — whitening zerstoert Signal (Peak→1)
-    # Temporaer deaktiviert bis gefixt
+    # 2. Spectral Whitening (Overlap-Add, gleitender Median pro FFT-Frame)
+    # Fix: sliding_window_view statt as_strided (numpy 2.4 as_strided zerstoert Signal)
     n_fft = 2048
     hop_size = n_fft // 2
     n_frames = (len(audio) - n_fft) // hop_size
-    if False and n_frames > 0:
+    if n_frames > 0:
+        from numpy.lib.stride_tricks import sliding_window_view
         window = np.hanning(n_fft).astype(np.float32)
         output = np.zeros_like(audio)
         weights = np.zeros_like(audio)
@@ -457,15 +457,11 @@ def _preprocess_audio(audio_int16: np.ndarray) -> np.ndarray:
             spectrum = np.fft.rfft(frame)
             magnitude = np.abs(spectrum)
 
-            # Vektorisierter gleitender Median (schneller als Loop)
+            # Gleitender Median ueber Frequenzbereich (Noise-Floor schaetzen)
             mag_padded = np.pad(magnitude, pad_k, mode="reflect")
-            # Stride-Trick für Sliding-Window Median
-            shape = (len(magnitude), kernel)
-            strides = (mag_padded.strides[0], mag_padded.strides[0])
-            windows = np.lib.stride_tricks.as_strided(
-                mag_padded, shape=shape, strides=strides
-            )
-            noise_floor = np.median(windows, axis=1)
+            # sliding_window_view: shape (len(magnitude), kernel) — korrekt fuer numpy 2.x
+            windows_sw = sliding_window_view(mag_padded, kernel)
+            noise_floor = np.median(windows_sw, axis=1)
 
             noise_floor = np.maximum(noise_floor, 1e-6)
             whitened = spectrum * np.minimum(1.0 / noise_floor, 100.0)

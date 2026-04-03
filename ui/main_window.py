@@ -69,8 +69,20 @@ class MainWindow(QMainWindow):
         self._diversity_cycle = 0  # Zaehler fuer Antennen-Wechsel
         self._diversity_stations = {}  # key → FT8Message (akkumuliert)
         self._normal_stations = {}     # key → FT8Message (Normal, 2-Min-Fenster)
+        self._diversity_bias = "AUTO"  # Manueller Bias: 100:0 / 70:30 / AUTO / 30:70 / 0:100
+        self._diversity_stats = {"A1_only": 0, "A2_only": 0, "A1_wins": 0, "A2_wins": 0}
         import threading as _threading
         self._diversity_lock = _threading.Lock()  # BUG-2: Race Condition Guard
+
+        # Bias-Pattern-Tabelle (DeepSeek-Review: _BIAS_PATTERNS Dict)
+        # None = spezielles Block-A/B 4-Zyklus-Pattern (AUTO)
+        self._BIAS_PATTERNS = {
+            "100:0": ("A1",),
+            "70:30": ("A1", "A2", "A1", "A1", "A2"),
+            "AUTO":  None,  # 4-Zyklus Block A/B
+            "30:70": ("A2", "A1", "A2", "A2", "A1"),
+            "0:100": ("A2",),
+        }
 
         # UI aufbauen
         self._setup_ui()
@@ -100,6 +112,10 @@ class MainWindow(QMainWindow):
             "background-color: #111;"
         )
 
+        # Fenstergeometrie wiederherstellen
+        from PySide6.QtCore import QTimer as _QTimer
+        _QTimer.singleShot(0, self._restore_geometry)
+
     def _setup_ui(self):
         splitter = QSplitter(Qt.Orientation.Horizontal)
 
@@ -108,7 +124,7 @@ class MainWindow(QMainWindow):
             my_grid=self.settings.locator,
         )
         self.qso_panel = QSOPanel()
-        self.control_panel = ControlPanel()
+        self.control_panel = ControlPanel(callsign=self.settings.callsign)
 
         splitter.addWidget(self.rx_panel)
         splitter.addWidget(self.qso_panel)
@@ -278,6 +294,18 @@ class MainWindow(QMainWindow):
                 for m in self._diversity_stations.values():
                     self.rx_panel.add_message(m)
                 self.rx_panel.reapply_sort()
+                # Diversity-Stats aktualisieren
+                a1_only = sum(1 for m in self._diversity_stations.values()
+                              if getattr(m, 'antenna', '') == 'A1')
+                a2_only = sum(1 for m in self._diversity_stations.values()
+                              if getattr(m, 'antenna', '') == 'A2')
+                a1_wins = sum(1 for m in self._diversity_stations.values()
+                              if str(getattr(m, 'antenna', '')).startswith('A1>'))
+                a2_wins = sum(1 for m in self._diversity_stations.values()
+                              if str(getattr(m, 'antenna', '')).startswith('A2>'))
+                self.control_panel.update_diversity_stats(
+                    a1_only, a2_only, a1_wins, a2_wins
+                )
 
             self.control_panel.update_decode_count(
                 len(self._diversity_stations)
@@ -358,6 +386,7 @@ class MainWindow(QMainWindow):
         self.control_panel.tx_level_changed.connect(self._on_tx_level_changed)
         self.control_panel.rx_mode_changed.connect(self._on_rx_mode_changed)
         self.control_panel.settings_clicked.connect(self._on_settings_clicked)
+        self.control_panel.bias_changed.connect(self._on_bias_changed)
 
         # QSO State Machine
         self.qso_sm.state_changed.connect(self._on_state_changed)
@@ -435,6 +464,10 @@ class MainWindow(QMainWindow):
         self._diversity_stations = {}
         self._normal_stations = {}
         self.control_panel.update_decode_count(0)
+        # Bias auf AUTO zuruecksetzen bei Bandwechsel
+        if self._diversity_bias != "AUTO":
+            self._diversity_bias = "AUTO"
+            self.control_panel.set_bias("AUTO")
         if self.radio.ip:
             s = self.radio._slice_idx
             self.radio.set_frequency(freq, slice_idx=s)
@@ -540,10 +573,23 @@ class MainWindow(QMainWindow):
         """Diversity deaktivieren: zurueck auf ANT1."""
         self._diversity_stations = {}
         self._diversity_cycle = 0
+        self._diversity_bias = "AUTO"
         self._apply_normal_mode()
         self.control_panel.dx_info.setText("")
         self.control_panel.clear_diversity_cycle()
         print("[Diversity] Deaktiviert")
+
+    @Slot(str)
+    def _on_bias_changed(self, bias: str):
+        """Manueller Bias-Switch: Slot-Verteilung aendern."""
+        self._diversity_bias = bias
+        # Queue leeren (DeepSeek: Desync-Schutz bei Pattern-Wechsel)
+        with self._diversity_lock:
+            ant_queue = getattr(self, '_diversity_ant_queue', None)
+            if ant_queue is not None:
+                ant_queue.clear()
+            self._diversity_cycle = 0  # Neustart Pattern-Zaehler
+        print(f"[Diversity] Bias: {bias}")
 
     def _handle_dx_tuning(self):
         """DX-Tuning Modus: Preset laden oder Messung starten."""
@@ -809,17 +855,24 @@ class MainWindow(QMainWindow):
                 s = self.radio._slice_idx
                 band = self.settings.band
 
-                # 4-Zyklus Even/Odd-Pattern (Mike's Idee):
-                # Block A: ANT1(odd) ANT2(even) ANT2(odd) ANT1(even)
-                # Block B: ANT2(odd) ANT1(even) ANT1(odd) ANT2(even)
-                # → jede Antenne deckt beide FT8-Phasen ab, keine Blindstellen
-                _pos = (self._diversity_cycle - 1) % 4
-                _block = ((self._diversity_cycle - 1) // 4) % 2
-                _PATTERN = (
-                    ("A1", "A2", "A2", "A1"),  # Block A
-                    ("A2", "A1", "A1", "A2"),  # Block B
-                )
-                self._diversity_current_ant = _PATTERN[_block][_pos]
+                # Bias-basiertes Pattern (DeepSeek-Review: _BIAS_PATTERNS Dict)
+                bias = self._diversity_bias
+                pattern = self._BIAS_PATTERNS.get(bias)
+                if pattern is None:
+                    # AUTO: 4-Zyklus Block-A/B Pattern (keine Blindstellen)
+                    # Block A: ANT1(odd) ANT2(even) ANT2(odd) ANT1(even)
+                    # Block B: ANT2(odd) ANT1(even) ANT1(odd) ANT2(even)
+                    _block = ((self._diversity_cycle - 1) // 4) % 2
+                    _BLOCK_PATTERN = (
+                        ("A1", "A2", "A2", "A1"),  # Block A
+                        ("A2", "A1", "A1", "A2"),  # Block B
+                    )
+                    _pos = (self._diversity_cycle - 1) % 4
+                    self._diversity_current_ant = _BLOCK_PATTERN[_block][_pos]
+                else:
+                    _pos = (self._diversity_cycle - 1) % len(pattern)
+                    self._diversity_current_ant = pattern[_pos]
+
                 if self._diversity_current_ant == "A1":
                     gain = getattr(self, '_diversity_ant1_gain',
                                    FlexRadio.PREAMP_PRESETS.get(band, 10))
@@ -970,7 +1023,24 @@ class MainWindow(QMainWindow):
             QPushButton:hover { background: #444; }
         """
 
+    def _restore_geometry(self):
+        """Fenstergeometrie aus Settings laden."""
+        w = self.settings.get("window_w")
+        h = self.settings.get("window_h")
+        x = self.settings.get("window_x")
+        y = self.settings.get("window_y")
+        if w and h:
+            self.resize(int(w), int(h))
+        if x is not None and y is not None:
+            self.move(int(x), int(y))
+
     def closeEvent(self, event):
+        # Fenstergeometrie speichern
+        geom = self.geometry()
+        self.settings.set("window_x", geom.x())
+        self.settings.set("window_y", geom.y())
+        self.settings.set("window_w", geom.width())
+        self.settings.set("window_h", geom.height())
         self.timer.stop()
         if self._rx_mode == "diversity":
             self._apply_normal_mode()
