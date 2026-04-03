@@ -193,17 +193,22 @@ class MainWindow(QMainWindow):
         count = len(messages) if messages else 0
         self.control_panel.update_decode_count(count)
 
+        if self._rx_mode == "diversity":
+            # Queue IMMER poppen — auch bei 0 Stationen!
+            # Sonst geraet die Queue aus dem Takt wenn eine Antenne nichts empfaengt
+            ant_queue = getattr(self, '_diversity_ant_queue', None)
+            if ant_queue:
+                ant = ant_queue.popleft()
+            else:
+                ant = "A1"
+
         if self._rx_mode == "diversity" and messages:
             # Diversity: Stationen akkumulieren per Callsign
             # Zwei Timestamps:
             #   _last_heard:   wann zuletzt dekodiert (fuer Aging)
             #   _last_changed: wann sich Inhalt geaendert hat (fuer UTC-Anzeige)
             # Aging: 2 Min nicht mehr dekodiert → raus
-            ant_queue = getattr(self, '_diversity_ant_queue', None)
-            if ant_queue:
-                ant = ant_queue.popleft()
-            else:
-                ant = "A1"
+            # ant wurde oben schon aus der Queue geholt
             import time as _t
             now = _t.time()
             utc_str = _t.strftime("%H%M%S", _t.gmtime())
