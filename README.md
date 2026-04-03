@@ -24,6 +24,14 @@
 
 ![Diversity 63 Stations](assets/screenshots/diversity_63stations_20m.png)
 
+**Direct comparison — same band (40m), same evening (2026-04-03), 2 minutes apart:**
+
+| Normal — 27 stations | Diversity — 37 stations |
+|---|---|
+| ![Normal 27](assets/screenshots/normal_27stations_40m.png) | ![Diversity 37](assets/screenshots/diversity_37stations_40m.png) |
+
+*+10 stations (+37%) with diversity active. ANT column shows which antenna heard each station (A1, A2, A1>2, A2>1). 4-cycle even/odd pattern ensures both antennas cover both FT8 phases.*
+
 ---
 
 ## The Concept: Temporal Polarization Diversity
