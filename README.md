@@ -1,4 +1,4 @@
-# SimpleFT8 — Temporal Polarization Diversity for FT8
+# SimpleFT8 — Temporal Antenna Diversity for FT8
 
 🇬🇧 **English** | [🇩🇪 Deutsch](#deutsch)
 
@@ -6,7 +6,7 @@
 
 **WORK IN PROGRESS / BAUSTELLE** — This is an early proof-of-concept, far from a finished program. But the core idea works and RX is functional.
 
-**A proof-of-concept FT8 client that introduces Temporal Polarization Diversity — a novel technique to increase weak signal decoding on any single-receiver dual-antenna radio.**
+**A proof-of-concept FT8 client that introduces Temporal Antenna Diversity — a novel technique to increase weak signal decoding on any single-receiver dual-antenna radio.**
 
 > **Up to 2–3x more unique stations visible** in the same 2-minute window compared to accumulated single-antenna operation under poor conditions.
 > When compared to the standard single-cycle WSJT-X snapshot (15 seconds), the combined effect of accumulation + polarization diversity can show 4x more stations at once.
@@ -34,11 +34,11 @@
 
 ---
 
-## The Concept: Temporal Polarization Diversity
+## The Concept: Temporal Antenna Diversity
 
 ### The Problem
 
-FT8 stations are decoded from 15-second audio windows. A single antenna has one polarization pattern and radiation characteristic. Stations whose polarization or arrival angle doesn't match your antenna are weak or invisible.
+FT8 stations are decoded from 15-second audio windows. A single antenna has one fixed radiation pattern and noise profile. Stations whose arrival direction, radiation angle or local noise floor doesn't favor your antenna are weak or invisible.
 
 Most SDR radios with two antenna ports (like the FlexRadio 8400M) have only **one receiver (SCU)** — so you can't listen on both antennas simultaneously. True simultaneous diversity requires expensive dual-receiver models.
 
@@ -69,11 +69,11 @@ Key rules:
 
 FT8 transmits in fixed 15-second slots. Each station transmits for several minutes — so it's still there in the next slot.
 
-SimpleFT8 exploits exactly this: Slot 1 listens on ANT1 (vertical polarization), Slot 2 on ANT2 (horizontal polarization). Both slots are decoded and the stations are merged.
+SimpleFT8 exploits exactly this: Slot 1 listens on ANT1, Slot 2 on ANT2. Both slots are decoded and the stations are merged.
 
 **Why does this help so much?**
 
-Radio waves rotate their polarization randomly as they travel through the ionosphere. Some signals arrive vertically polarized, some horizontally — this even changes within a QSO. A single antenna only catches one part of that. With two antennas of different polarization, you catch both.
+Two antennas with different physical orientation and placement have different radiation patterns and noise profiles. Some stations sit in the null of ANT1 but in the main lobe of ANT2 — and vice versa. Some signals that are buried in local noise on ANT1 are above the noise floor on ANT2. These characteristics are **stable per station** — a station that's better on ANT2 will consistently be better on ANT2. By alternating antennas every 15-second slot, you systematically capture both populations.
 
 **The special thing:** Normally, antenna diversity requires two complete receiver units — expensive. SimpleFT8 does it with just one, because FT8 naturally works in slots. The software does the rest — 20 lines of Python.
 
@@ -90,7 +90,7 @@ This works on **any radio with two antenna ports**, even single-receiver models.
 
 **Two effects combined:**
 1. **Accumulation**: Stations persist as long as they're active — the view builds up over 2 minutes instead of resetting every 15 seconds. This alone roughly doubles the visible count vs. a single WSJT-X snapshot.
-2. **Polarization Diversity**: ANT2 adds stations that ANT1 physically cannot receive — polarization-faded signals, different radiation angles. This contributes the remaining 1.5–2x gain on top of accumulation.
+2. **Antenna Diversity**: ANT2 adds stations that ANT1 cannot receive well — different radiation pattern, different noise floor, different physical orientation. This contributes the remaining 1.5–2x gain on top of accumulation.
 
 Both effects are real. The honest comparison for diversity gain alone is Diversity-accumulated vs. ANT1-accumulated: **roughly 1.5–2x more unique stations** come from the second antenna. Peak: 63 stations on 20m (Diversity) vs. ~30 (ANT1 only, same 2-min window). Farthest: New Zealand, 18,000 km — received on the rain gutter.
 
@@ -117,7 +117,7 @@ SimpleFT8 includes an automated measurement dialog that optimizes antenna + gain
 
 ## What SimpleFT8 Is (and Isn't)
 
-**This is a proof-of-concept.** It demonstrates that Temporal Polarization Diversity works and delivers massive gains with minimal code.
+**This is a proof-of-concept.** It demonstrates that Temporal Antenna Diversity works and delivers massive gains with minimal code.
 
 It is **not** a polished product. It's a working FT8 client built in one week by one ham (DA1MHH) with AI assistance (Claude). It has rough edges, incomplete features, and no unit tests.
 
@@ -219,11 +219,11 @@ MIT License — free for everyone. Use it, modify it, build on it, integrate it 
 ---
 
 <a name="deutsch"></a>
-# 🇩🇪 SimpleFT8 — Temporal Polarization Diversity fuer FT8
+# 🇩🇪 SimpleFT8 — Temporal Antenna Diversity fuer FT8
 
 **BAUSTELLE / WORK IN PROGRESS** — Das ist eine fruehe Machbarkeitsstudie, weit entfernt von einem fertigen Programm. Aber die Kernidee funktioniert und der Empfang laeuft.
 
-**Eine Machbarkeitsstudie: FT8-Client mit Temporal Polarization Diversity — eine neue Technik die das Dekodieren schwacher Signale auf Single-Receiver Dual-Antennen-Radios deutlich verbessert.**
+**Eine Machbarkeitsstudie: FT8-Client mit Temporal Antenna Diversity — eine neue Technik die das Dekodieren schwacher Signale auf Single-Receiver Dual-Antennen-Radios deutlich verbessert.**
 
 > **Bis zu 2–3x mehr einzigartige Stationen sichtbar** im gleichen 2-Minuten-Fenster im Vergleich zu Single-Antenna-Betrieb mit Akkumulation bei schlechten Bedingungen.
 > Im Vergleich zum Standard 15-Sekunden WSJT-X Snapshot: bis zu 4x mehr Stationen auf einmal sichtbar (Akkumulation + Diversity kombiniert).
@@ -243,11 +243,11 @@ MIT License — free for everyone. Use it, modify it, build on it, integrate it 
 
 ---
 
-## Das Konzept: Temporal Polarization Diversity
+## Das Konzept: Temporal Antenna Diversity
 
 ### Das Problem
 
-FT8-Stationen werden aus 15-Sekunden-Audiofenstern dekodiert. Eine einzelne Antenne hat ein festes Polarisationsmuster und eine feste Abstrahlcharakteristik. Stationen deren Polarisation oder Eintreffwinkel nicht zur Antenne passt, sind schwach oder unsichtbar.
+FT8-Stationen werden aus 15-Sekunden-Audiofenstern dekodiert. Eine einzelne Antenne hat eine feste Abstrahlcharakteristik und ein festes Rauschprofil. Stationen deren Eintreffwinkel, Richtung oder lokales Rauschprofil nicht zur Antenne passt, sind schwach oder unsichtbar.
 
 Die meisten SDR-Radios mit zwei Antennenanschluessen (wie das FlexRadio 8400M) haben nur **einen Empfaenger (SCU)** — man kann also nicht gleichzeitig auf beiden Antennen hoeren. Echtes Simultandiversity braucht teure Dual-Receiver-Modelle.
 
@@ -278,11 +278,11 @@ Regeln:
 
 FT8 sendet in festen 15-Sekunden-Slots. Jede Station sendet mehrere Minuten lang — die ist also beim naechsten Slot noch da.
 
-SimpleFT8 nutzt genau das aus: Slot 1 hoert auf ANT1 (vertikale Polarisation), Slot 2 auf ANT2 (horizontale Polarisation). Beide Slots werden dekodiert und die Stationen zusammengefuehrt.
+SimpleFT8 nutzt genau das aus: Slot 1 hoert auf ANT1, Slot 2 auf ANT2. Beide Slots werden dekodiert und die Stationen zusammengefuehrt.
 
 **Warum bringt das so viel?**
 
-Funkwellen drehen ihre Polarisation auf dem Weg durch die Ionosphaere zufaellig. Manche Signale kommen vertikal polarisiert an, manche horizontal — das wechselt sogar innerhalb eines QSOs. Eine einzelne Antenne faengt immer nur einen Teil davon. Mit zwei Antennen unterschiedlicher Polarisation faengst du beide.
+Zwei Antennen mit unterschiedlicher physischer Ausrichtung und Position haben unterschiedliche Abstrahlcharakteristiken und Rauschprofile. Manche Stationen liegen im Null von ANT1 aber im Hauptlappen von ANT2 — und umgekehrt. Signale die auf ANT1 im Rauschen versinken, koennen auf ANT2 darueber liegen. Diese Eigenschaften sind **pro Station stabil** — eine Station die auf ANT2 besser ist, bleibt dort konsistent besser. Durch den Antennenwechsel alle 15 Sekunden werden systematisch beide Populationen erfasst.
 
 **Das Besondere:** Normalerweise braucht man fuer Antenna Diversity zwei komplette Empfangseinheiten — teuer. SimpleFT8 macht es mit einer einzigen, weil FT8 von Natur aus in Slots arbeitet. Die Software macht den Rest — 20 Zeilen Python.
 
@@ -299,7 +299,7 @@ Das funktioniert auf **jedem Radio mit zwei Antennenanschluessen**, auch mit nur
 
 **Zwei Effekte kombiniert:**
 1. **Akkumulation**: Stationen bleiben sichtbar solange sie aktiv sind — die Ansicht baut sich ueber 2 Minuten auf statt alle 15 Sekunden zurueckzusetzen. Das allein verdoppelt die sichtbare Anzahl gegenueber einem WSJT-X Snapshot.
-2. **Polarisations-Diversity**: ANT2 liefert Stationen die ANT1 physisch nicht empfangen kann — Polarisations-Fading, andere Eintreffwinkel. Das traegt den verbleibenden 1,5–2x Gewinn bei.
+2. **Antennen-Diversity**: ANT2 liefert Stationen die ANT1 nicht gut empfangen kann — anderes Strahlungsdiagramm, anderes Rauschprofil, andere physische Ausrichtung. Das traegt den verbleibenden 1,5–2x Gewinn bei.
 
 Der ehrliche Diversity-Gewinn allein (Diversity-akkumuliert vs. ANT1-akkumuliert): **ca. 1,5–2x mehr einzigartige Stationen** kommen von der zweiten Antenne. Peak: 63 Stationen auf 20m (Diversity) vs. ~30 (nur ANT1, gleiches 2-Min-Fenster). Weiteste Station: Neuseeland, 18.000 km — empfangen ueber die Regenrinne.
 
@@ -326,7 +326,7 @@ SimpleFT8 enthaelt einen automatischen Messdialog der Antenne + Gain pro Band op
 
 ## Was SimpleFT8 ist (und was nicht)
 
-**Das ist eine Machbarkeitsstudie.** Es zeigt dass Temporal Polarization Diversity funktioniert und mit minimalem Code massive Gewinne liefert.
+**Das ist eine Machbarkeitsstudie.** Es zeigt dass Temporal Antenna Diversity funktioniert und mit minimalem Code massive Gewinne liefert.
 
 Es ist **kein** fertiges Produkt. Es ist ein funktionierender FT8-Client, gebaut in einer Woche von einem Funkamateur (DA1MHH) mit KI-Unterstuetzung (Claude). Es hat raue Kanten, unfertige Features und keine Unit-Tests.
 
@@ -392,6 +392,6 @@ MIT-Lizenz — frei fuer alle. Nutzen, aendern, erweitern, in eigene Software ei
 **KI-Unterstuetzung:** Claude (Anthropic)
 **Datum:** Maerz/April 2026
 
-Das ist ein Amateurfunk-Projekt. Das Temporal Polarization Diversity Konzept wird hier als Prior Art veroeffentlicht — frei fuer jeden zum Nutzen, Bewerten, Verwerfen oder Einbauen in eigene Software.
+Das ist ein Amateurfunk-Projekt. Das Temporal Antenna Diversity Konzept wird hier als Prior Art veroeffentlicht — frei fuer jeden zum Nutzen, Bewerten, Verwerfen oder Einbauen in eigene Software.
 
 73 de DA1MHH
