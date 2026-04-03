@@ -239,8 +239,18 @@ class MainWindow(QMainWindow):
                         # Etwas hat sich geaendert → Timestamp + Werte updaten
                         existing._last_heard = now
                         existing._utc_display = utc_str
+                        # Antennen-Vergleich: auf welcher war sie staerker?
+                        if ant_changed and existing.antenna in ("A1", "A2"):
+                            old_ant = existing.antenna
+                            if msg.snr > existing.snr:
+                                # Neue Antenne staerker
+                                existing.antenna = f"{ant}>{old_ant[-1]}"
+                            else:
+                                # Alte Antenne war staerker
+                                existing.antenna = f"{old_ant}>{ant[-1]}"
+                        elif not ant_changed:
+                            pass  # Antenne gleich, nichts aendern
                         existing.snr = msg.snr
-                        existing.antenna = ant
                         if content_changed:
                             existing.raw = msg.raw
                             existing.field1 = msg.field1

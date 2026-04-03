@@ -63,12 +63,14 @@ _PREFIX_MAP = {
     # Europa
     'DA': 'DE', 'DB': 'DE', 'DC': 'DE', 'DD': 'DE', 'DF': 'DE',
     'DG': 'DE', 'DH': 'DE', 'DJ': 'DE', 'DK': 'DE', 'DL': 'DE', 'DM': 'DE',
-    'PA': 'NL', 'PB': 'NL', 'PD': 'NL', 'PE': 'NL', 'PH': 'NL', 'PI': 'NL',
+    'DN': 'DE', 'DO': 'DE', 'DP': 'DE', 'DR': 'DE',
+    'PA': 'NL', 'PB': 'NL', 'PC': 'NL', 'PD': 'NL', 'PE': 'NL', 'PH': 'NL', 'PI': 'NL',
     'ON': 'BE', 'OO': 'BE', 'OR': 'BE', 'OT': 'BE',
     'F': 'FR', 'FA': 'FR', 'FB': 'FR', 'FC': 'FR', 'FD': 'FR', 'FE': 'FR',
     'FF': 'FR', 'FG': 'FR', 'FH': 'FR', 'FJ': 'FR', 'FK': 'FR', 'FL': 'FR',
     'FM': 'FR', 'FO': 'FR', 'FP': 'FR', 'FQ': 'FR', 'FR': 'FR', 'FS': 'FR',
     'FT': 'FR', 'FW': 'FR', 'FY': 'FR',
+    '2E': 'GB', '2D': 'GB', '2W': 'GB', '2M': 'GB', '2I': 'GB',
     'G': 'GB', 'GB': 'GB', 'GC': 'GB', 'GD': 'GB', 'GI': 'GB',
     'GJ': 'GB', 'GM': 'GB', 'GN': 'GB', 'GW': 'GB', 'GX': 'GB',
     'M': 'GB', 'MA': 'GB', 'MB': 'GB', 'MC': 'GB', 'MD': 'GB',
@@ -188,11 +190,35 @@ _PREFIX_MAP = {
     'A6': 'AE', 'A7': 'QA',
     # Afrika extra
     'TY': 'BJ', '5T': 'MR', '6W': 'SN', 'D4': 'CV', '9G': 'GH',
-    'TU': 'CI', '3B': 'MU', 'J2': 'DJ',
+    'TU': 'CI', '3B': 'MU', 'J2': 'DJ', 'TJ': 'CM',
     # Asien extra
     '4L': 'GE', 'UN': 'KZ', 'EX': 'KG', 'YI': 'IQ', 'AP': 'PK',
     # Pazifik extra
     'FK': 'NC', 'FO': 'PF', 'PJ': 'BQ',
+    # Seltene / Exotische
+    '3Y': 'BV',  # Bouvet Island
+    'H44': 'SB',  # Solomon Islands
+    'H40': 'SB',
+    'VP8': 'FK',  # Falkland
+    'VP9': 'BM',  # Bermuda
+    'V5': 'NA',   # Namibia
+    'ZD': 'SH',   # St Helena
+    '9M': 'MY',   # Malaysia
+    '9V': 'SG',   # Singapore
+    'HS': 'TH',   # Thailand
+    'DU': 'PH',   # Philippines
+    'V8': 'BN',   # Brunei
+    'XX9': 'MO',  # Macau
+    'BV': 'TW',   # Taiwan
+    'DS': 'KR', 'HL': 'KR', '6K': 'KR',  # South Korea
+    'E5': 'CK',   # Cook Islands
+    'ZK': 'CK',
+    'T8': 'PW',   # Palau
+    'KG4': 'GT',  # Guantanamo
+    'P4': 'AW',   # Aruba
+    '8P': 'BB',   # Barbados
+    'J7': 'DM',   # Dominica
+    'VP2': 'MS',  # Montserrat
 }
 
 # Land-Code → voller Name (fuer Anzeige)
@@ -219,9 +245,14 @@ _COUNTRY_NAMES = {
     'OM': 'Oman', 'AE': 'UAE', 'QA': 'Qatar',
     'BJ': 'Benin', 'MR': 'Mauritania', 'SN': 'Senegal', 'CV': 'Cape Verde',
     'GH': 'Ghana', 'CI': 'Ivory Coast', 'MU': 'Mauritius', 'DJ': 'Djibouti',
+    'CM': 'Cameroon',
     'GE': 'Georgia', 'KZ': 'Kazakhstan', 'KG': 'Kyrgyzstan',
     'IQ': 'Iraq', 'PK': 'Pakistan',
     'NC': 'New Caledonia', 'PF': 'Polynesia', 'BQ': 'Bonaire',
+    'BV': 'Bouvet Isl.', 'SB': 'Solomons', 'FK': 'Falkland', 'BM': 'Bermuda',
+    'NA': 'Namibia', 'SH': 'St.Helena', 'BN': 'Brunei', 'MO': 'Macau',
+    'TW': 'Taiwan', 'CK': 'Cook Isl.', 'PW': 'Palau', 'AW': 'Aruba',
+    'BB': 'Barbados', 'DM': 'Dominica', 'MS': 'Montserrat', 'GT': 'Guantanamo',
 }
 
 
@@ -249,13 +280,19 @@ _COUNTRY_COORDS = {
     'CU': (23.1, -82.4), 'KI': (1.5, 173.0), 'QA': (25.3, 51.5),
     # Afrika
     'BJ': (6.5, 2.6), 'MR': (18.1, -15.9), 'SN': (14.7, -17.4),
-    'CV': (15.0, -23.6), 'GH': (5.6, -0.2), 'CI': (6.8, -5.3),
+    'CV': (15.0, -23.6), 'GH': (5.6, -0.2), 'CI': (6.8, -5.3), 'CM': (3.8, 11.5),
     'MU': (-20.2, 57.5), 'DJ': (11.6, 43.1),
     # Asien extra
     'GE': (41.7, 44.8), 'KZ': (51.2, 71.4), 'KG': (42.9, 74.6),
     'IQ': (33.3, 44.4), 'PK': (33.7, 73.0),
     # Pazifik extra
     'NC': (-22.3, 166.5), 'PF': (-17.5, -149.6), 'BQ': (12.2, -68.3),
+    # Seltene
+    'BV': (-54.4, 3.4), 'SB': (-9.4, 160.0), 'FK': (-51.8, -59.0),
+    'BM': (32.3, -64.8), 'NA': (-22.6, 17.1), 'SH': (-16.0, -5.7),
+    'BN': (4.9, 114.9), 'MO': (22.2, 113.5), 'TW': (25.0, 121.5),
+    'CK': (-21.2, -159.8), 'PW': (7.5, 134.6), 'AW': (12.5, -70.0),
+    'BB': (13.1, -59.6), 'DM': (15.4, -61.4), 'MS': (16.7, -62.2),
 }
 
 

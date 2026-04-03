@@ -20,7 +20,8 @@ COL_FREQ = 3
 COL_LAND = 4
 COL_KM = 5
 COL_MSG = 6
-COL_COUNT = 7
+COL_ANT = 7
+COL_COUNT = 8
 
 _FONT = QFont("Menlo", 11)
 _FONT_SEP = QFont("Menlo", 9)
@@ -110,7 +111,7 @@ class RXPanel(QWidget):
         # QTableWidget
         self.table = QTableWidget(0, COL_COUNT)
         self.table.setHorizontalHeaderLabels(
-            ["UTC", "dB", "DT", "Freq", "Land", "km", "Message"]
+            ["UTC", "dB", "DT", "Freq", "Land", "km", "Message", "Ant"]
         )
         self.table.verticalHeader().setVisible(False)
         self.table.setSelectionBehavior(
@@ -223,6 +224,7 @@ class RXPanel(QWidget):
             country = callsign_to_country(caller)
 
         dist_km = 0
+        dist_approx = False
         # 1. Bei CQ: Grid des Callers → exakte Entfernung
         if msg.is_cq and msg.is_grid and self._my_grid:
             km = grid_distance(self._my_grid, msg.grid_or_report)
@@ -230,7 +232,9 @@ class RXPanel(QWidget):
         # 2. Sonst: Ungefaehre Entfernung aus Callsign-Prefix
         if dist_km == 0 and caller and caller != "<....>" and self._my_grid:
             km = callsign_to_distance(caller, self._my_grid)
-            dist_km = km if km is not None else 0
+            if km is not None:
+                dist_km = km
+                dist_approx = True
 
         # Farbe bestimmen
         directed_to_us = msg.target == self._my_call and self._my_call
@@ -259,10 +263,11 @@ class RXPanel(QWidget):
 
         # km
         if dist_km > 0:
+            prefix = "~" if dist_approx else ""
             if dist_km >= 10000:
-                km_str = f"{dist_km // 1000}k"
+                km_str = f"{prefix}{dist_km // 1000}k"
             else:
-                km_str = str(dist_km)
+                km_str = f"{prefix}{dist_km}"
         else:
             km_str = "-"
 
@@ -271,19 +276,17 @@ class RXPanel(QWidget):
             msg_text = f"CQ {msg.caller} {msg.grid_or_report}"
         else:
             msg_text = msg.raw
-        # Diversity-Markierung anhaengen wenn vorhanden
-        ant = getattr(msg, 'antenna', '')
-        if ant:
-            msg_text = f"{msg_text}  [{ant}]"
+        # Antenne als eigene Spalte
+        ant_str = getattr(msg, 'antenna', '') or ""
 
         # Zellen setzen
-        values = [utc, snr_str, dt_str, freq_str, country, km_str, msg_text]
+        values = [utc, snr_str, dt_str, freq_str, country, km_str, msg_text, ant_str]
         for col, text in enumerate(values):
             item = QTableWidgetItem(text)
             item.setFont(_FONT)
             item.setForeground(color)
             # Numerische Spalten rechts ausrichten
-            if col in (COL_DB, COL_DT, COL_FREQ, COL_KM):
+            if col in (COL_DB, COL_DT, COL_FREQ, COL_KM, COL_ANT):
                 item.setTextAlignment(
                     Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
                 )
