@@ -6,9 +6,10 @@
 
 **WORK IN PROGRESS / BAUSTELLE** — This is an early proof-of-concept, far from a finished program. But the core idea works and RX is functional.
 
-**A proof-of-concept FT8 client that introduces Temporal Polarization Diversity — a novel technique to dramatically increase weak signal decoding on any dual-antenna radio.**
+**A proof-of-concept FT8 client that introduces Temporal Polarization Diversity — a novel technique to increase weak signal decoding on any single-receiver dual-antenna radio.**
 
-> **3.4x more stations decoded** compared to single-antenna operation under poor conditions.
+> **Up to 2–3x more unique stations visible** in the same 2-minute window compared to accumulated single-antenna operation under poor conditions.
+> When compared to the standard single-cycle WSJT-X snapshot (15 seconds), the combined effect of accumulation + polarization diversity can show 4x more stations at once.
 > Tested on FlexRadio 8400M with a multiband dipole + rain gutter as second antenna.
 
 **Status:** RX works. TX works (30+ PSKReporter spots). Full QSO cycle not yet tested end-to-end. Many rough edges. Published to timestamp the concept, not to ship a product.
@@ -70,15 +71,20 @@ Radio waves rotate their polarization randomly as they travel through the ionosp
 
 This works on **any radio with two antenna ports**, even single-receiver models. No hardware modification needed.
 
-### Measured Results (2026-04-02, 20m band, POOR conditions)
+### Measured Results (2026-04-02/03, 20m band, POOR conditions)
 
-| Mode | Stations | Setup |
-|------|----------|-------|
-| **Single Antenna (ANT1)** | 14 | Multiband dipole (vertical, 10cm from wall) |
-| **Temporal Diversity (ANT1+ANT2)** | **48** | + Rain gutter (horizontal) as ANT2 |
-| IC-7300 + WSJT-X (reference) | 22 | Same location, same time |
+| Mode | Stations | Window | Setup |
+|------|----------|--------|-------|
+| **Single Antenna (ANT1), one cycle** | ~14 | 15 sec | Multiband dipole (vertical, 10cm from wall) |
+| **Single Antenna (ANT1), accumulated** | ~25–30 | 2 min | Same antenna, same time period |
+| **Temporal Diversity (ANT1+ANT2)** | **48–63** | 2 min | + Rain gutter (horizontal) as ANT2 |
+| IC-7300 + WSJT-X (reference, one cycle) | 13–22 | 15 sec | Same location, same time |
 
-**3.4x improvement.** Farthest station: New Zealand, 18,000 km — received on the rain gutter.
+**Two effects combined:**
+1. **Accumulation**: Stations persist as long as they're active — the view builds up over 2 minutes instead of resetting every 15 seconds. This alone roughly doubles the visible count vs. a single WSJT-X snapshot.
+2. **Polarization Diversity**: ANT2 adds stations that ANT1 physically cannot receive — polarization-faded signals, different radiation angles. This contributes the remaining 1.5–2x gain on top of accumulation.
+
+Both effects are real. The honest comparison for diversity gain alone is Diversity-accumulated vs. ANT1-accumulated: **roughly 1.5–2x more unique stations** come from the second antenna. Peak: 63 stations on 20m (Diversity) vs. ~30 (ANT1 only, same 2-min window). Farthest: New Zealand, 18,000 km — received on the rain gutter.
 
 ---
 
@@ -209,9 +215,10 @@ MIT License — free for everyone. Use it, modify it, build on it, integrate it 
 
 **BAUSTELLE / WORK IN PROGRESS** — Das ist eine fruehe Machbarkeitsstudie, weit entfernt von einem fertigen Programm. Aber die Kernidee funktioniert und der Empfang laeuft.
 
-**Eine Machbarkeitsstudie: FT8-Client mit Temporal Polarization Diversity — eine neue Technik die das Dekodieren schwacher Signale auf jedem Dual-Antennen-Radio drastisch verbessert.**
+**Eine Machbarkeitsstudie: FT8-Client mit Temporal Polarization Diversity — eine neue Technik die das Dekodieren schwacher Signale auf Single-Receiver Dual-Antennen-Radios deutlich verbessert.**
 
-> **3,4x mehr Stationen dekodiert** im Vergleich zu Single-Antenna bei schlechten Bedingungen.
+> **Bis zu 2–3x mehr einzigartige Stationen sichtbar** im gleichen 2-Minuten-Fenster im Vergleich zu Single-Antenna-Betrieb mit Akkumulation bei schlechten Bedingungen.
+> Im Vergleich zum Standard 15-Sekunden WSJT-X Snapshot: bis zu 4x mehr Stationen auf einmal sichtbar (Akkumulation + Diversity kombiniert).
 > Getestet am FlexRadio 8400M mit Multiband-Dipol + Regenrinne als zweite Antenne.
 
 **Status:** RX funktioniert. TX funktioniert (30+ PSKReporter-Spots). Vollstaendiger QSO-Zyklus noch nicht End-to-End getestet. Viele raue Kanten. Veroeffentlicht um das Konzept mit Zeitstempel zu dokumentieren, nicht um ein Produkt zu liefern.
@@ -273,15 +280,20 @@ Funkwellen drehen ihre Polarisation auf dem Weg durch die Ionosphaere zufaellig.
 
 Das funktioniert auf **jedem Radio mit zwei Antennenanschluessen**, auch mit nur einem Empfaenger. Keine Hardware-Modifikation noetig.
 
-### Gemessene Ergebnisse (02.04.2026, 20m-Band, SCHLECHTE Bedingungen)
+### Gemessene Ergebnisse (02./03.04.2026, 20m-Band, SCHLECHTE Bedingungen)
 
-| Modus | Stationen | Setup |
-|-------|-----------|-------|
-| **Single Antenna (ANT1)** | 14 | Multiband-Dipol (vertikal, 10cm Wandabstand) |
-| **Temporal Diversity (ANT1+ANT2)** | **48** | + Regenrinne (horizontal) als ANT2 |
-| IC-7300 + WSJT-X (Referenz) | 22 | Gleicher Standort, gleiche Zeit |
+| Modus | Stationen | Fenster | Setup |
+|-------|-----------|---------|-------|
+| **Single Antenna (ANT1), ein Zyklus** | ~14 | 15 Sek | Multiband-Dipol (vertikal, 10cm Wandabstand) |
+| **Single Antenna (ANT1), akkumuliert** | ~25–30 | 2 Min | Gleiche Antenne, gleicher Zeitraum |
+| **Temporal Diversity (ANT1+ANT2)** | **48–63** | 2 Min | + Regenrinne (horizontal) als ANT2 |
+| IC-7300 + WSJT-X (Referenz, ein Zyklus) | 13–22 | 15 Sek | Gleicher Standort, gleiche Zeit |
 
-**3,4x Verbesserung.** Weiteste Station: Neuseeland, 18.000 km — empfangen ueber die Regenrinne.
+**Zwei Effekte kombiniert:**
+1. **Akkumulation**: Stationen bleiben sichtbar solange sie aktiv sind — die Ansicht baut sich ueber 2 Minuten auf statt alle 15 Sekunden zurueckzusetzen. Das allein verdoppelt die sichtbare Anzahl gegenueber einem WSJT-X Snapshot.
+2. **Polarisations-Diversity**: ANT2 liefert Stationen die ANT1 physisch nicht empfangen kann — Polarisations-Fading, andere Eintreffwinkel. Das traegt den verbleibenden 1,5–2x Gewinn bei.
+
+Der ehrliche Diversity-Gewinn allein (Diversity-akkumuliert vs. ANT1-akkumuliert): **ca. 1,5–2x mehr einzigartige Stationen** kommen von der zweiten Antenne. Peak: 63 Stationen auf 20m (Diversity) vs. ~30 (nur ANT1, gleiches 2-Min-Fenster). Weiteste Station: Neuseeland, 18.000 km — empfangen ueber die Regenrinne.
 
 ---
 

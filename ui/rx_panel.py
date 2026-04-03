@@ -43,6 +43,7 @@ class RXPanel(QWidget):
     """
 
     station_clicked = Signal(object)
+    rx_toggled = Signal(bool)  # True=RX ON, False=RX OFF
 
     def __init__(self, my_call: str = "DA1MHH", my_grid: str = "JO31"):
         super().__init__()
@@ -334,6 +335,7 @@ class RXPanel(QWidget):
             self._cycle_message_count = 0
         else:
             self.btn_rx.setText("RX OFF")
+        self.rx_toggled.emit(self._rx_active)
 
     def reapply_sort(self):
         """Aktuelle Sortierung erneut anwenden (nach Tabellen-Rebuild)."""

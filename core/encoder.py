@@ -37,6 +37,11 @@ class Encoder(QObject):
         self._radio = None
         self._decoder = None
         self._tx_thread = None
+        self._is_transmitting = False
+
+    @property
+    def is_transmitting(self) -> bool:
+        return self._is_transmitting
 
     def set_radio(self, radio):
         self._radio = radio
@@ -86,7 +91,14 @@ class Encoder(QObject):
 
     def _tx_worker(self, message: str):
         """TX-Worker: Timing → PTT → Audio via VITA-49 → PTT off."""
-        # Freie TX-Frequenz
+        self._is_transmitting = True
+        try:
+            self._tx_worker_inner(message)
+        finally:
+            self._is_transmitting = False
+
+    def _tx_worker_inner(self, message: str):
+        # Freie TX-Frequenz — einmal bestimmen und fuer diesen TX fixieren
         tx_freq = self.find_free_frequency()
         if tx_freq != self.audio_freq_hz:
             print(f"[TX] Freie Frequenz: {tx_freq} Hz")

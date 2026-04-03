@@ -68,6 +68,8 @@ class MainWindow(QMainWindow):
         self._rx_mode = "normal"  # "normal", "diversity", "dx_tuning"
         self._diversity_cycle = 0  # Zaehler fuer Antennen-Wechsel
         self._diversity_stations = {}  # key → FT8Message (akkumuliert)
+        import threading as _threading
+        self._diversity_lock = _threading.Lock()  # BUG-2: Race Condition Guard
 
         # UI aufbauen
         self._setup_ui()
@@ -190,6 +192,8 @@ class MainWindow(QMainWindow):
 
     def _on_cycle_decoded(self, messages: list):
         """Ein kompletter FT8-Zyklus dekodiert."""
+        if not self.rx_panel._rx_active:
+            return
         count = len(messages) if messages else 0
         self.control_panel.update_decode_count(count)
 
@@ -290,8 +294,9 @@ class MainWindow(QMainWindow):
             self._dx_tune_dialog.feed_cycle(messages)
 
     def _connect_signals(self):
-        # RX Panel → QSO starten
+        # RX Panel → QSO starten + RX-Toggle
         self.rx_panel.station_clicked.connect(self._on_station_clicked)
+        self.rx_panel.rx_toggled.connect(self._on_rx_panel_toggled)
 
         # Control Panel
         self.control_panel.mode_changed.connect(self._on_mode_changed)
@@ -329,6 +334,22 @@ class MainWindow(QMainWindow):
             their_grid=msg.grid_or_report if msg.is_grid else "",
             freq_hz=msg.freq_hz,
         )
+
+    @Slot(bool)
+    def _on_rx_panel_toggled(self, active: bool):
+        """RX ON/OFF vom Panel — bei OFF sofort auf ANT1 und Diversity-Stop."""
+        if not active and self._rx_mode == "diversity" and self.radio.ip:
+            import threading
+            s = self.radio._slice_idx
+            band = self.settings.band
+            gain = FlexRadio.PREAMP_PRESETS.get(band, 10)
+            def _reset_ant():
+                self.radio._send_cmd(f"slice set {s} rxant=ANT1")
+                self.radio._send_cmd(f"slice set {s} rfgain={gain}")
+            threading.Thread(target=_reset_ant, daemon=True).start()
+            with self._diversity_lock:
+                self._diversity_current_ant = "A1"
+        self.control_panel.update_decode_count(0)
 
     # ── Modus / Band / Power ────────────────────────────────────
 
@@ -680,29 +701,33 @@ class MainWindow(QMainWindow):
         self.qso_sm.on_cycle_end()
 
         # Diversity: Antenne umschalten bei jedem Zyklus (non-blocking)
-        if self._rx_mode == "diversity" and self.radio.ip:
-            # Queue: aktuelle Antenne merken BEVOR umgeschaltet wird.
-            # Der Decoder liefert spaeter das Ergebnis fuer DIESEN Zyklus.
-            # _on_cycle_decoded holt sich die Antenne per popleft() aus der Queue.
-            ant_queue = getattr(self, '_diversity_ant_queue', None)
-            if ant_queue is not None:
-                ant_queue.append(self._diversity_current_ant)
+        if self._rx_mode == "diversity" and self.radio.ip and self.rx_panel._rx_active:
+            # BUG-1: TX-Schutz — waehrend TX keine Antenne umschalten!
+            if self.encoder.is_transmitting:
+                return
 
-            self._diversity_cycle += 1
-            s = self.radio._slice_idx
-            band = self.settings.band
-            if self._diversity_cycle % 2 == 0:
-                gain = FlexRadio.PREAMP_PRESETS.get(band, 10)
-                self._diversity_current_ant = "A1"
-            else:
-                gain = FlexRadio.PREAMP_PRESETS.get(band, 10) + 10
-                self._diversity_current_ant = "A2"
-            # In separatem Thread damit Keepalive nicht blockiert wird
+            with self._diversity_lock:  # BUG-2: Race Condition Guard
+                # Queue: aktuelle Antenne merken BEVOR umgeschaltet wird.
+                ant_queue = getattr(self, '_diversity_ant_queue', None)
+                if ant_queue is not None:
+                    ant_queue.append(self._diversity_current_ant)
+
+                self._diversity_cycle += 1
+                s = self.radio._slice_idx
+                band = self.settings.band
+                if self._diversity_cycle % 2 == 0:
+                    gain = FlexRadio.PREAMP_PRESETS.get(band, 10)
+                    self._diversity_current_ant = "A1"
+                else:
+                    gain = FlexRadio.PREAMP_PRESETS.get(band, 10) + 10
+                    self._diversity_current_ant = "A2"
+                ant_cmd = "ANT1" if self._diversity_current_ant == "A1" else "ANT2"
+
+            # BUG-3: ant_cmd + gain als Argumente, nicht als Closure
             import threading
-            ant_cmd = "ANT1" if self._diversity_current_ant == "A1" else "ANT2"
-            def _switch():
-                self.radio._send_cmd(f"slice set {s} rxant={ant_cmd}")
-                self.radio._send_cmd(f"slice set {s} rfgain={gain}")
+            def _switch(cmd=ant_cmd, g=gain, sl=s):
+                self.radio._send_cmd(f"slice set {sl} rxant={cmd}")
+                self.radio._send_cmd(f"slice set {sl} rfgain={g}")
             threading.Thread(target=_switch, daemon=True).start()
 
     def on_message_decoded(self, msg: FT8Message):
