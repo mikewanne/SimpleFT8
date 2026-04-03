@@ -130,8 +130,24 @@ Block B (Zyklen 5-8, umgekehrt):
 → Keine systematischen Blindstellen mehr
 → Passt perfekt zu 75s Aging (= 5 Zyklen, mindestens 1 kompletter Block)
 
-- [ ] 4-Zyklus-Pattern in `_on_cycle_start()` implementieren
-- [ ] `_diversity_cycle % 4` statt `% 2` + Block-A/B-Flag
+- [x] 4-Zyklus-Pattern in `_on_cycle_start()` implementieren
+- [x] `_diversity_cycle % 4` statt `% 2` + Block-A/B-Flag
+- [x] Zyklus-Indikator GUI (4 Boxen + ANT-Label in Control Panel)
+
+### Adaptiver Bias (Mike's Idee — naechste Stufe nach 4-Zyklus)
+
+**Problem:** Wenn ANT2 heute schwaecher ist, kostet 50/50 Aufteilung Stationen.
+**Loesung:** Bias-Slider ANT1 ↔ Balanced ↔ ANT2 — manuell oder automatisch.
+
+```
+3:1 ANT1 → Block A: ANT1 ANT2 ANT1 ANT1, Block B: ANT1 ANT1 ANT2 ANT1
+1:1 Balanced → aktuelles 4-Zyklus-Pattern (Standard)
+3:1 ANT2 → Block A: ANT2 ANT1 ANT2 ANT2, Block B: ANT2 ANT2 ANT1 ANT2
+```
+
+- [ ] Bias-Slider im Control Panel (5 Stufen: ANT1 3:1 / ANT1 2:1 / 1:1 / ANT2 2:1 / ANT2 3:1)
+- [ ] Auto-Bias: rollierender SNR-Schnitt je Antenne → automatisch auf bessere Antenne gewichten
+- [ ] Bias-Wert persistent speichern (pro Band)
 
 ### Dynamisches Aging fuer angerufene Stationen (DeepSeek-Idee)
 
@@ -143,6 +159,13 @@ Block B (Zyklen 5-8, umgekehrt):
 
 - [ ] DX Tuning Dialog laeuft bereits separat — Integration als "vor Diversity Messen"-Empfehlung
 - [ ] Bei Diversity-Aktivierung: Hinweis wenn kein Preset fuer aktuelles Band gespeichert
+
+---
+
+## Parser-Bugs
+
+- [ ] **"DXpedition not implemented"** — `parse_ft8_message()` zeigt rohen Fehlertext bei unbekannten Nachrichtenformaten (DXpedition-Calls, Compound-Callsigns wie `CQ DX CALL/P` etc.) → sauberes Fallback statt Exception-Text in der Liste anzeigen
+- [ ] **Portable/Mobile Suffixe** — `ON3MOH/P`, `R2FBY/MM` etc. → Prefix vor `/` extrahieren → Land + km korrekt anzeigen (aktuell `?` in Land-Spalte)
 
 ---
 
