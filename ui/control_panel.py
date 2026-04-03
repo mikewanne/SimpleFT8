@@ -115,6 +115,21 @@ class ControlPanel(QWidget):
         self.dx_info = QLabel("")
         self.dx_info.setStyleSheet("color: #888; font-size: 10px; font-family: Menlo;")
         dx_row.addWidget(self.dx_info)
+
+        # Diversity Zyklus-Indikator: 4 Boxen + aktuelles Antenne-Label
+        self._cycle_boxes = []
+        for _ in range(4):
+            box = QPushButton()
+            box.setFixedSize(14, 14)
+            box.setEnabled(False)
+            box.setStyleSheet("background:#2a2a2a; border:1px solid #444; border-radius:2px;")
+            dx_row.addWidget(box)
+            self._cycle_boxes.append(box)
+        self._cycle_ant_label = QLabel("")
+        self._cycle_ant_label.setStyleSheet(
+            "color:#888; font-size:10px; font-family:Menlo; min-width:28px;"
+        )
+        dx_row.addWidget(self._cycle_ant_label)
         dx_row.addStretch()
         layout.addLayout(dx_row)
 
@@ -568,6 +583,34 @@ class ControlPanel(QWidget):
             self.tx_indicator.setStyleSheet(
                 "color: #666; font-size: 16px; font-weight: bold; font-family: Menlo;"
             )
+
+    def update_diversity_cycle(self, pos: int, ant: str):
+        """Diversity Zyklus-Indikator aktualisieren.
+        pos: 0-3 (Position im 4-Zyklus-Block)
+        ant: 'A1' oder 'A2'
+        """
+        is_ant1 = (ant == "A1")
+        for i, box in enumerate(self._cycle_boxes):
+            if i == pos:
+                color = "#2a6a2a" if is_ant1 else "#1a4a7a"
+                border = "#44FF44" if is_ant1 else "#44AAFF"
+                box.setStyleSheet(
+                    f"background:{color}; border:1px solid {border}; border-radius:2px;"
+                )
+            else:
+                box.setStyleSheet("background:#2a2a2a; border:1px solid #444; border-radius:2px;")
+        ant_text = "ANT1" if is_ant1 else "ANT2"
+        self._cycle_ant_label.setText(ant_text)
+        color = "#44FF44" if is_ant1 else "#44AAFF"
+        self._cycle_ant_label.setStyleSheet(
+            f"color:{color}; font-size:10px; font-family:Menlo; min-width:28px; font-weight:bold;"
+        )
+
+    def clear_diversity_cycle(self):
+        """Indikator zuruecksetzen wenn Diversity aus."""
+        for box in self._cycle_boxes:
+            box.setStyleSheet("background:#2a2a2a; border:1px solid #444; border-radius:2px;")
+        self._cycle_ant_label.setText("")
 
     def update_snr(self, snr: int):
         self.snr_label.setText(f"SNR:  {snr:+d} dB")

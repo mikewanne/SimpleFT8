@@ -508,6 +508,7 @@ class MainWindow(QMainWindow):
         self._diversity_cycle = 0
         self._apply_normal_mode()
         self.control_panel.dx_info.setText("")
+        self.control_panel.clear_diversity_cycle()
         print("[Diversity] Deaktiviert")
 
     def _handle_dx_tuning(self):
@@ -782,6 +783,7 @@ class MainWindow(QMainWindow):
                 else:
                     gain = FlexRadio.PREAMP_PRESETS.get(band, 10) + 10
                 ant_cmd = "ANT1" if self._diversity_current_ant == "A1" else "ANT2"
+                self.control_panel.update_diversity_cycle(_pos, self._diversity_current_ant)
 
             # BUG-3: ant_cmd + gain als Argumente, nicht als Closure
             import threading
