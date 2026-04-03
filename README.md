@@ -42,6 +42,9 @@ Key rules:
 - **Age out stale entries**: Stations not heard for >2 minutes are removed
 - **Mark antenna source**: `[A1]`, `[A2]`, `[A1>2]` (ANT1 stronger), `[A2>1]` (ANT2 stronger)
 - **TX always on ANT1**: Never switch antenna during transmit
+- **Non-blocking antenna commands**: Sent in a separate thread so keepalive and audio stream are never interrupted
+- **No second slice needed**: Uses the same single slice/receiver — just switches the antenna input
+- **Single decoder**: One decoder instance, one audio stream — ~20 lines of additional code
 
 ### Why This Works
 
@@ -63,12 +66,20 @@ This works on **any radio with two antenna ports**, even single-receiver models.
 
 ## DX Tuning (Automatic Antenna Measurement)
 
-SimpleFT8 includes an automated measurement dialog:
-1. Listens on ANT1 for 3 cycles, records Top-5 average SNR
-2. Switches to ANT2, repeats
-3. Tests RF gain levels (0/10/20 dB)
-4. Saves optimal preset per band to config
-5. On band change: preset is loaded automatically
+SimpleFT8 includes an automated measurement dialog that optimizes antenna + gain per band:
+
+**Phase 1 — Antenna comparison:**
+1. Listen on ANT1 for 3 FT8 cycles, record Top-5 strongest stations (average SNR)
+2. Switch to ANT2, repeat 3 cycles
+3. Winner = antenna with higher Top-5 average
+
+**Phase 2 — Gain optimization:**
+4. On the winning antenna, test RF gain 0, 10, 20 dB (3 cycles each)
+5. Save optimal antenna + gain as preset for this band
+
+**Automatic loading:**
+6. On band change: preset is loaded automatically — no manual tuning needed
+7. When conditions change (rain/sun): re-measure takes ~3-5 minutes
 
 ---
 
@@ -216,6 +227,9 @@ Regeln:
 - **Veraltete Eintraege entfernen**: Stationen die >2 Minuten nicht mehr gehoert werden, werden entfernt
 - **Antennenquelle markieren**: `[A1]`, `[A2]`, `[A1>2]` (ANT1 staerker), `[A2>1]` (ANT2 staerker)
 - **TX immer auf ANT1**: Antenne wird beim Senden nie gewechselt
+- **Non-blocking Antennenbefehle**: In eigenem Thread gesendet, damit Keepalive und Audio-Stream nicht blockiert werden
+- **Kein zweiter Slice noetig**: Nutzt denselben einzelnen Slice/Receiver — wechselt nur den Antenneneingang
+- **Ein Decoder**: Eine Decoder-Instanz, ein Audio-Stream — ~20 Zeilen zusaetzlicher Code
 
 ### Warum das funktioniert
 
@@ -237,12 +251,20 @@ Das funktioniert auf **jedem Radio mit zwei Antennenanschluessen**, auch mit nur
 
 ## DX Tuning (Automatische Antennenmessung)
 
-SimpleFT8 enthaelt einen automatischen Messdialog:
-1. Hoert auf ANT1 fuer 3 Zyklen, erfasst Top-5 Durchschnitts-SNR
-2. Wechselt zu ANT2, wiederholt die Messung
-3. Testet RF-Gain-Level (0/10/20 dB)
-4. Speichert optimales Preset pro Band in der Config
-5. Bei Bandwechsel: Preset wird automatisch geladen
+SimpleFT8 enthaelt einen automatischen Messdialog der Antenne + Gain pro Band optimiert:
+
+**Phase 1 — Antennenvergleich:**
+1. 3 FT8-Zyklen auf ANT1, Top-5 staerkste Stationen erfassen (Durchschnitts-SNR)
+2. Auf ANT2 wechseln, 3 Zyklen wiederholen
+3. Gewinner = Antenne mit hoeherem Top-5 Durchschnitt
+
+**Phase 2 — Gain-Optimierung:**
+4. Auf der Gewinner-Antenne RF-Gain 0, 10, 20 dB testen (je 3 Zyklen)
+5. Optimale Antenne + Gain als Preset fuer dieses Band speichern
+
+**Automatisches Laden:**
+6. Bei Bandwechsel: Preset wird automatisch geladen — kein manuelles Tuning noetig
+7. Bei wechselnden Bedingungen (Regen/Sonne): Neumessung dauert ca. 3-5 Minuten
 
 ---
 
