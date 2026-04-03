@@ -194,8 +194,11 @@ class MainWindow(QMainWindow):
         self.control_panel.update_decode_count(count)
 
         if self._rx_mode == "diversity" and messages:
-            # Diversity: Stationen akkumulieren, nicht loeschen
-            # Antenne aus Queue holen — dort wurde sie VOR dem Umschalten gespeichert
+            # Diversity: Stationen akkumulieren per Callsign
+            # Zwei Timestamps:
+            #   _last_heard:   wann zuletzt dekodiert (fuer Aging)
+            #   _last_changed: wann sich Inhalt geaendert hat (fuer UTC-Anzeige)
+            # Aging: 2 Min nicht mehr dekodiert → raus
             ant_queue = getattr(self, '_diversity_ant_queue', None)
             if ant_queue:
                 ant = ant_queue.popleft()
@@ -206,28 +209,48 @@ class MainWindow(QMainWindow):
             utc_str = _t.strftime("%H%M%S", _t.gmtime())
             changed = False
             for msg in messages:
+                key = msg.caller
+                if not key:
+                    continue
                 msg.antenna = ant
-                msg._last_seen = now
-                msg._utc_str = utc_str  # Empfangszeit
-                key = " ".join(msg.raw.split())
                 existing = self._diversity_stations.get(key)
                 if existing is None:
                     # Neue Station
-                    self._diversity_stations[key] = msg
-                    self.rx_panel.add_message(msg)
-                    changed = True
-                elif msg.snr > existing.snr:
-                    # Besserer SNR → aktualisieren, neue Zeit
-                    if existing.antenna != ant:
-                        msg.antenna = f"{ant}>{existing.antenna[-1]}"
+                    msg._last_heard = now
+                    msg._last_changed = now
+                    msg._utc_display = utc_str
                     self._diversity_stations[key] = msg
                     changed = True
                 else:
-                    # Station noch da, nur Timestamp fuer Aging
-                    existing._last_seen = now
-                    # UTC und Antenne NICHT aktualisieren
+                    # Station bekannt — immer _last_heard updaten (wurde dekodiert)
+                    existing._last_heard = now
+                    # SNR + Antenne still updaten (aktuelle Werte)
+                    existing.snr = msg.snr
+                    existing.antenna = ant
+                    # Hat sich der MESSAGE-INHALT geaendert? (CQ→Report→73)
+                    content_changed = (
+                        msg.field1 != existing.field1 or
+                        msg.field2 != existing.field2 or
+                        msg.field3 != existing.field3
+                    )
+                    if content_changed:
+                        existing._last_changed = now
+                        existing._utc_display = utc_str
+                        existing.raw = msg.raw
+                        existing.field1 = msg.field1
+                        existing.field2 = msg.field2
+                        existing.field3 = msg.field3
+                    changed = True  # SNR/Antenne aendert sich fast immer
 
-            # Nur bei Aenderungen Tabelle neu aufbauen
+            # Alte Stationen entfernen (>2 Min nicht mehr dekodiert)
+            stale = [k for k, m in self._diversity_stations.items()
+                     if now - getattr(m, '_last_heard', now) > 120]
+            if stale:
+                changed = True
+                for k in stale:
+                    del self._diversity_stations[k]
+
+            # Tabelle neu aufbauen wenn sich was geaendert hat
             if changed:
                 self.rx_panel.table.setRowCount(0)
                 for m in self._diversity_stations.values():
@@ -236,19 +259,6 @@ class MainWindow(QMainWindow):
             self.control_panel.update_decode_count(
                 len(self._diversity_stations)
             )
-
-            # Alte Stationen entfernen (>5 Min nicht gehoert)
-            # 2 Min war zu kurz — bei Diversity wird jede Antenne nur jeden 2. Zyklus
-            # gehoert, plus Stationen koennen kurz verschwinden bei Fading
-            stale = [k for k, m in self._diversity_stations.items()
-                     if now - getattr(m, '_last_seen', now) > 300]
-            if stale:
-                for k in stale:
-                    del self._diversity_stations[k]
-                # Tabelle aktualisieren nach Entfernung
-                self.rx_panel.table.setRowCount(0)
-                for m in self._diversity_stations.values():
-                    self.rx_panel.add_message(m)
 
         elif messages:
             # Normal / DX Tuning: wie bisher, nur aktueller Zyklus

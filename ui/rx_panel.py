@@ -243,8 +243,9 @@ class RXPanel(QWidget):
         else:
             color = _COLOR_NORMAL
 
-        # UTC: gespeicherte Zeit nutzen wenn vorhanden (Diversity)
-        utc = getattr(msg, '_utc_str', None) or time.strftime("%H%M%S", time.gmtime())
+        # UTC: _utc_display zeigt wann sich der Inhalt zuletzt geaendert hat
+        # (nicht wann zuletzt dekodiert — das waere bei Diversity immer "jetzt")
+        utc = getattr(msg, '_utc_display', None) or getattr(msg, '_utc_str', None) or time.strftime("%H%M%S", time.gmtime())
 
         # SNR
         snr_str = f"{msg.snr:+d}" if msg.snr != -30 else "?"
