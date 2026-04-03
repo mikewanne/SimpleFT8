@@ -227,25 +227,27 @@ class MainWindow(QMainWindow):
                     self._diversity_stations[key] = msg
                     changed = True
                 else:
-                    # Station bekannt — immer _last_heard updaten (wurde dekodiert)
-                    existing._last_heard = now
-                    # SNR + Antenne still updaten (aktuelle Werte)
-                    existing.snr = msg.snr
-                    existing.antenna = ant
-                    # Hat sich der MESSAGE-INHALT geaendert? (CQ→Report→73)
+                    # Station bekannt — hat sich IRGENDWAS geaendert?
+                    snr_changed = msg.snr != existing.snr
+                    ant_changed = ant != getattr(existing, 'antenna', '')
                     content_changed = (
                         msg.field1 != existing.field1 or
                         msg.field2 != existing.field2 or
                         msg.field3 != existing.field3
                     )
-                    if content_changed:
-                        existing._last_changed = now
+                    if snr_changed or ant_changed or content_changed:
+                        # Etwas hat sich geaendert → Timestamp + Werte updaten
+                        existing._last_heard = now
                         existing._utc_display = utc_str
-                        existing.raw = msg.raw
-                        existing.field1 = msg.field1
-                        existing.field2 = msg.field2
-                        existing.field3 = msg.field3
-                    changed = True  # SNR/Antenne aendert sich fast immer
+                        existing.snr = msg.snr
+                        existing.antenna = ant
+                        if content_changed:
+                            existing.raw = msg.raw
+                            existing.field1 = msg.field1
+                            existing.field2 = msg.field2
+                            existing.field3 = msg.field3
+                        changed = True
+                    # Sonst: exakt gleich → kein Update, altert nach 2 Min raus
 
             # Alte Stationen entfernen (>2 Min nicht mehr dekodiert)
             stale = [k for k, m in self._diversity_stations.items()
