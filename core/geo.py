@@ -84,7 +84,7 @@ _PREFIX_MAP = {
     'CT': 'PT', 'CU': 'PT',
     'HB': 'CH', 'HE': 'CH',
     'OE': 'AT',
-    'SP': 'PL', 'SQ': 'PL', 'SN': 'PL', 'SO': 'PL', '3Z': 'PL',
+    'SP': 'PL', 'SQ': 'PL', 'SN': 'PL', 'SO': 'PL', '3Z': 'PL', 'HF': 'PL', 'SR': 'PL',
     'OK': 'CZ', 'OL': 'CZ',
     'OM': 'SK',
     'HA': 'HU', 'HG': 'HU',
@@ -96,6 +96,16 @@ _PREFIX_MAP = {
     'YU': 'RS', 'YT': 'RS',
     'Z3': 'MK',
     'ZA': 'AL',
+    '4O': 'ME',  # Montenegro
+    'Z6': 'XK',  # Kosovo
+    'LX': 'LU',  # Luxembourg
+    '9H': 'MT',  # Malta
+    '5B': 'CY',  # Cyprus
+    'ER': 'MD',  # Moldova
+    'EU': 'BY', 'EW': 'BY',  # Belarus
+    'T7': 'SM',  # San Marino
+    '3A': 'MC',  # Monaco
+    'OY': 'FO',  # Faroe Islands
     'SV': 'GR', 'SW': 'GR', 'SX': 'GR', 'SY': 'GR', 'SZ': 'GR',
     'TA': 'TR', 'TB': 'TR', 'TC': 'TR',
     'SM': 'SE', 'SA': 'SE', 'SB': 'SE', 'SC': 'SE', 'SD': 'SE',
@@ -231,6 +241,9 @@ _COUNTRY_NAMES = {
     'SK': 'Slovakia', 'HU': 'Hungary', 'RO': 'Romania', 'BG': 'Bulgaria',
     'HR': 'Croatia', 'SI': 'Slovenia', 'BA': 'Bosnia', 'RS': 'Serbia',
     'MK': 'N.Macedonia', 'AL': 'Albania', 'GR': 'Greece', 'TR': 'Turkey',
+    'ME': 'Montenegro', 'XK': 'Kosovo', 'LU': 'Luxembourg', 'MT': 'Malta',
+    'CY': 'Cyprus', 'MD': 'Moldova', 'BY': 'Belarus', 'SM': 'San Marino',
+    'MC': 'Monaco', 'FO': 'Faroe Isl.',
     'SE': 'Sweden', 'NO': 'Norway', 'FI': 'Finland', 'DK': 'Denmark',
     'IS': 'Iceland', 'IE': 'Ireland', 'LT': 'Lithuania', 'LV': 'Latvia',
     'EE': 'Estonia', 'UA': 'Ukraine', 'RU': 'Russia',
@@ -266,7 +279,10 @@ _COUNTRY_COORDS = {
     'CH': (46.8, 8.2), 'AT': (47.5, 14.5), 'PL': (52.0, 20.0), 'CZ': (49.8, 15.5),
     'SK': (48.7, 19.7), 'HU': (47.5, 19.0), 'RO': (44.4, 26.1), 'BG': (42.7, 25.5),
     'HR': (45.8, 16.0), 'SI': (46.1, 14.5), 'BA': (43.9, 17.7), 'RS': (44.0, 21.0),
-    'GR': (37.9, 23.7), 'TR': (39.9, 32.9), 'SE': (59.3, 18.1), 'NO': (59.9, 10.7),
+    'GR': (37.9, 23.7), 'TR': (39.9, 32.9),
+    'ME': (42.4, 19.3), 'XK': (42.7, 21.2), 'LU': (49.6, 6.1), 'MT': (35.9, 14.5),
+    'CY': (35.2, 33.4), 'MD': (47.0, 28.9), 'BY': (53.9, 27.6),
+    'SM': (43.9, 12.5), 'MC': (43.7, 7.4), 'FO': (62.0, -6.8), 'SE': (59.3, 18.1), 'NO': (59.9, 10.7),
     'FI': (60.2, 24.9), 'DK': (55.7, 12.6), 'IS': (64.1, -21.9), 'IE': (53.3, -6.3),
     'LT': (54.7, 25.3), 'LV': (56.9, 24.1), 'EE': (59.4, 24.7),
     'UA': (50.4, 30.5), 'RU': (55.8, 37.6),

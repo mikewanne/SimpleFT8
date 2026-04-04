@@ -4,7 +4,8 @@ import time
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QTableWidget,
-    QTableWidgetItem, QPushButton, QHeaderView, QAbstractItemView,
+    QTableWidgetItem, QPushButton, QHeaderView, QAbstractItemView, QMenu,
+    QFrame, QSizePolicy,
 )
 from PySide6.QtCore import Signal, Qt
 from PySide6.QtGui import QColor, QFont
@@ -44,14 +45,18 @@ class RXPanel(QWidget):
 
     station_clicked = Signal(object)
     rx_toggled = Signal(bool)  # True=RX ON, False=RX OFF
+    country_filter_changed = Signal(list)  # gefilterte Länder (für Settings)
 
-    def __init__(self, my_call: str = "DA1MHH", my_grid: str = "JO31"):
+    def __init__(self, my_call: str = "DA1MHH", my_grid: str = "JO31",
+                 country_filter: list = None):
         super().__init__()
         self._my_call = my_call
         self._my_grid = my_grid
         self._cycle_message_count = 0
         self._sort_mode = "time"
         self._rx_active = True
+        self._country_filter: set = set(country_filter or [])
+        self._ant_filter: int = 0  # 0=alle, 1=A1, 2=A2
         self._setup_ui()
 
     def _setup_ui(self):
@@ -59,143 +64,133 @@ class RXPanel(QWidget):
         layout.setContentsMargins(4, 4, 4, 4)
         layout.setSpacing(2)
 
-        # Header mit EMPFANG-Label + Sort-Buttons
+        # ── Control Row: EMPFANG | RX ON/OFF | separator | CQ | Land ──
         header_row = QHBoxLayout()
-        header = QLabel("EMPFANG")
-        header.setStyleSheet(
-            "color: #00AAFF; font-weight: bold; font-size: 13px;"
-        )
-        header_row.addWidget(header)
+        header_row.setSpacing(4)
 
-        # CQ Filter Button
-        self.btn_cq_filter = QPushButton("CQ")
-        self.btn_cq_filter.setCheckable(True)
-        self.btn_cq_filter.setChecked(False)
-        self.btn_cq_filter.setFixedHeight(20)
-        self.btn_cq_filter.setFixedWidth(38)
-        self.btn_cq_filter.setToolTip("Nur CQ-Rufe anzeigen")
-        self.btn_cq_filter.setStyleSheet("""
-            QPushButton {
-                background: #222; color: #888; border: 1px solid #444;
-                border-radius: 2px; font-size: 10px; font-weight: bold;
-            }
-            QPushButton:checked {
-                background: #AA4400; color: #FF6622; border-color: #FF4400;
-            }
-            QPushButton:hover { background: #333; color: #CCC; }
-        """)
-        self.btn_cq_filter.clicked.connect(self._on_cq_filter_toggled)
-        header_row.addWidget(self.btn_cq_filter)
+        lbl = QLabel("EMPFANG")
+        lbl.setStyleSheet("color: #00AAFF; font-weight: bold; font-size: 13px;")
+        header_row.addWidget(lbl)
 
-        # RX ON/OFF Button
         self.btn_rx = QPushButton("RX ON")
         self.btn_rx.setCheckable(True)
         self.btn_rx.setChecked(True)
         self.btn_rx.setFixedHeight(20)
         self.btn_rx.setFixedWidth(52)
         self.btn_rx.setStyleSheet("""
-            QPushButton {
-                background: #004400; color: #44FF44; border: 1px solid #44FF44;
-                border-radius: 2px; font-size: 10px; font-weight: bold;
-            }
-            QPushButton:checked {
-                background: #004400; color: #44FF44; border-color: #44FF44;
-            }
-            QPushButton:!checked {
-                background: #440000; color: #FF4444; border-color: #FF4444;
-            }
+            QPushButton { background:#004400; color:#44FF44; border:1px solid #44FF44;
+                border-radius:2px; font-size:10px; font-weight:bold; }
+            QPushButton:checked { background:#004400; color:#44FF44; border-color:#44FF44; }
+            QPushButton:!checked { background:#440000; color:#FF4444; border-color:#FF4444; }
         """)
         self.btn_rx.clicked.connect(self._on_rx_toggled)
         header_row.addWidget(self.btn_rx)
 
+        sep = QFrame()
+        sep.setFrameShape(QFrame.Shape.VLine)
+        sep.setFixedWidth(1)
+        sep.setStyleSheet("background:#555; margin:3px 2px;")
+        header_row.addWidget(sep)
+
+        _FILTER_STYLE = """
+            QPushButton { background:#222; color:#888; border:1px solid #444;
+                border-radius:2px; font-size:10px; font-weight:bold; }
+            QPushButton:checked { background:#883300; color:#FFFFFF; border-color:#FF6622; }
+            QPushButton:hover { background:#333; color:#CCC; }
+        """
+
+        self.btn_cq_filter = QPushButton("CQ")
+        self.btn_cq_filter.setCheckable(True)
+        self.btn_cq_filter.setChecked(False)
+        self.btn_cq_filter.setFixedHeight(20)
+        self.btn_cq_filter.setFixedWidth(36)
+        self.btn_cq_filter.setToolTip("Nur CQ-Rufe anzeigen")
+        self.btn_cq_filter.setStyleSheet(_FILTER_STYLE)
+        self.btn_cq_filter.clicked.connect(self._on_cq_filter_toggled)
+        header_row.addWidget(self.btn_cq_filter)
+
+        self.btn_land_filter = QPushButton("Land")
+        self.btn_land_filter.setCheckable(True)
+        self.btn_land_filter.setChecked(bool(self._country_filter))
+        self.btn_land_filter.setFixedHeight(20)
+        self.btn_land_filter.setFixedWidth(40)
+        self.btn_land_filter.setToolTip("Länder ausblenden")
+        self.btn_land_filter.setStyleSheet(_FILTER_STYLE)
+        self.btn_land_filter.clicked.connect(self._on_land_filter_clicked)
+        header_row.addWidget(self.btn_land_filter)
+
+        # Ant-Filter Button (3 Zustände: Alle → A1 → A2)
+        self.btn_ant_filter = QPushButton("Ant")
+        self.btn_ant_filter.setFixedHeight(20)
+        self.btn_ant_filter.setFixedWidth(36)
+        self.btn_ant_filter.setToolTip("Filter: Alle / ANT1 / ANT2")
+        self.btn_ant_filter.setStyleSheet(_FILTER_STYLE)
+        self.btn_ant_filter.clicked.connect(self._on_ant_filter_clicked)
+        header_row.addWidget(self.btn_ant_filter)
+
         header_row.addStretch()
         layout.addLayout(header_row)
 
-        # QTableWidget
+        # ── QTableWidget mit nativem QHeaderView (100% Alignment-sicher) ──
         self.table = QTableWidget(0, COL_COUNT)
+        # Führende/Nachfolgende Spaces justieren Textposition pro Spalte:
+        # links-ausgerichtet + vorangestelltes Leerzeichen = nach rechts
+        # rechts-ausgerichtet + nachgestelltes Leerzeichen = nach links
         self.table.setHorizontalHeaderLabels(
-            ["UTC", "dB", "DT", "Freq", "Land", "km", "Message", "Ant"]
+            [" UTC", "dB ", "DT ", "Freq ", " Land", "km ", " Message", "    Ant"]
         )
-        # Numerische Spalten: Header rechts ausrichten (passend zu Zellen)
-        for col in (COL_DB, COL_DT, COL_FREQ, COL_KM):
+        hdr = self.table.horizontalHeader()
+        hdr.setSectionsClickable(True)
+        hdr.setSortIndicatorShown(False)
+        hdr.setDefaultAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        hdr.setCursor(Qt.CursorShape.PointingHandCursor)
+        hdr.sectionClicked.connect(self._on_header_clicked)
+
+        # Alle Spaltenköpfe: einheitliche Farbe + explizite Vertikal-Ausrichtung
+        for col in range(COL_COUNT):
             item = self.table.horizontalHeaderItem(col)
             if item:
-                item.setTextAlignment(
-                    Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
-                )
+                item.setForeground(QColor("#AAA"))
+                if col in (COL_DB, COL_DT, COL_FREQ, COL_KM):
+                    item.setTextAlignment(
+                        Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                else:
+                    item.setTextAlignment(
+                        Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+
         self.table.verticalHeader().setVisible(False)
-        self.table.setSelectionBehavior(
-            QAbstractItemView.SelectionBehavior.SelectRows
-        )
-        self.table.setSelectionMode(
-            QAbstractItemView.SelectionMode.SingleSelection
-        )
-        self.table.setEditTriggers(
-            QAbstractItemView.EditTrigger.NoEditTriggers
-        )
+        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.setShowGrid(False)
 
-        # Spaltenbreiten: alle ResizeToContents, Message -> Stretch
-        hdr = self.table.horizontalHeader()
+        _WIDTHS = {
+            COL_UTC: 66, COL_DB: 40, COL_DT: 46, COL_FREQ: 50,
+            COL_LAND: 100, COL_KM: 58, COL_ANT: 52,
+        }
         for col in range(COL_COUNT):
             if col == COL_MSG:
-                hdr.setSectionResizeMode(
-                    col, QHeaderView.ResizeMode.Stretch
-                )
+                hdr.setSectionResizeMode(col, QHeaderView.ResizeMode.Stretch)
             else:
-                hdr.setSectionResizeMode(
-                    col, QHeaderView.ResizeMode.ResizeToContents
-                )
-        hdr.setDefaultAlignment(Qt.AlignmentFlag.AlignLeft)
-        hdr.setSectionsClickable(True)
-        hdr.sectionClicked.connect(self._on_header_clicked)
-        # Mindestbreiten damit Header-Label sichtbar bleibt
-        hdr.setMinimumSectionSize(30)
-        self.table.setColumnWidth(COL_UTC,  66)
-        self.table.setColumnWidth(COL_DB,   38)
-        self.table.setColumnWidth(COL_DT,   44)
-        self.table.setColumnWidth(COL_FREQ, 44)
-        self.table.setColumnWidth(COL_ANT,  44)
+                hdr.setSectionResizeMode(col, QHeaderView.ResizeMode.Interactive)
+                self.table.setColumnWidth(col, _WIDTHS.get(col, 60))
 
-        # Dark-Theme Styling
         self.table.setStyleSheet("""
             QTableWidget {
-                background-color: #0d0d1a;
-                border: 1px solid #333;
-                border-radius: 3px;
-                gridline-color: transparent;
-                font-family: Menlo;
-                font-size: 11pt;
+                background-color: #0d0d1a; border: 1px solid #333; border-radius: 3px;
+                gridline-color: transparent; font-family: Menlo; font-size: 11pt;
             }
-            QTableWidget::item {
-                padding: 1px 4px;
-                border-bottom: 1px solid #1a1a2e;
-            }
-            QTableWidget::item:selected {
-                background-color: #0066AA;
-            }
-            QTableWidget::item:hover {
-                background-color: #1a1a3e;
-            }
+            QTableWidget::item { padding: 1px 4px; border-bottom: 1px solid #1a1a2e; }
+            QTableWidget::item:selected { background-color: #0066AA; }
+            QTableWidget::item:hover { background-color: #1a1a3e; }
             QHeaderView::section {
                 background-color: #1e2035;
-                color: #AAA;
-                border: none;
-                border-bottom: 2px solid #444;
-                border-right: 1px solid #2a2a3e;
-                padding: 3px 4px;
-                font-family: Menlo;
-                font-size: 10px;
+                border: none; border-right: 1px solid #2a2a3e; border-bottom: 2px solid #444;
+                padding: 2px 4px; font-family: Menlo; font-size: 10px;
             }
-            QHeaderView::section:hover {
-                background-color: #252540;
-                color: #DDD;
-            }
+            QHeaderView::section:hover { background-color: #252540; }
         """)
-
-        # Zeilenhoehe kompakt
         self.table.verticalHeader().setDefaultSectionSize(22)
-
         self.table.cellDoubleClicked.connect(self._on_cell_double_clicked)
         self.table.currentCellChanged.connect(self._on_selection_changed)
         layout.addWidget(self.table)
@@ -224,8 +219,7 @@ class RXPanel(QWidget):
         self.table.insertRow(0)
         self._populate_row(0, msg)
         self._cycle_message_count += 1
-        if self.btn_cq_filter.isChecked() and not msg.is_cq:
-            self.table.setRowHidden(0, True)
+        self.table.setRowHidden(0, self._row_should_hide(0))
 
     def add_cycle_separator(self, count: int):
         """Neuer Zyklus: ALLES LOESCHEN, nur aktuelle Stationen zeigen.
@@ -375,6 +369,50 @@ class RXPanel(QWidget):
             self.btn_rx.setText("RX OFF")
         self.rx_toggled.emit(self._rx_active)
 
+    def _on_header_clicked(self, col: int):
+        """Klick auf nativen Spaltenkopf → sortieren + Farbe aktualisieren."""
+        _COL_TO_SORT = {COL_UTC: "time", COL_DB: "snr", COL_LAND: "country", COL_KM: "dist"}
+        if col in _COL_TO_SORT:
+            self._set_sort(_COL_TO_SORT[col])
+            self._update_sort_colors()
+
+    def _update_sort_colors(self):
+        """Aktive Sortierung im Spaltenkopf markieren (Farbe + ▾)."""
+        _COL_TO_SORT = {COL_UTC: "time", COL_DB: "snr", COL_LAND: "country", COL_KM: "dist"}
+        _LABELS = {COL_UTC: " UTC", COL_DB: "dB ", COL_DT: "DT ", COL_FREQ: "Freq ",
+                   COL_LAND: " Land", COL_KM: "km ", COL_MSG: " Message", COL_ANT: "    Ant"}
+        for col in range(COL_COUNT):
+            item = self.table.horizontalHeaderItem(col)
+            if item is None:
+                continue
+            label = _LABELS.get(col, "")
+            if _COL_TO_SORT.get(col) == self._sort_mode:
+                item.setText(f"{label}▾")
+                item.setForeground(QColor("#00AAFF"))
+            else:
+                item.setText(label)
+                item.setForeground(QColor("#AAA"))
+            # Ausrichtung nach jedem Text-Update explizit neu setzen
+            if col in (COL_DB, COL_DT, COL_FREQ, COL_KM):
+                item.setTextAlignment(
+                    Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            else:
+                item.setTextAlignment(
+                    Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+
+    def _on_ant_filter_clicked(self):
+        """Ant-Filter: Alle → A1 → A2 → Alle"""
+        self._ant_filter = (self._ant_filter + 1) % 3
+        texts  = ["Ant", "A1 ▾", "A2 ▾"]
+        styles = [
+            "QPushButton{background:#222;color:#888;border:1px solid #444;border-radius:2px;font-size:10px;font-weight:bold;}QPushButton:hover{background:#333;color:#CCC;}",
+            "QPushButton{background:#003366;color:#00AAFF;border:1px solid #0066AA;border-radius:2px;font-size:10px;font-weight:bold;}",
+            "QPushButton{background:#664400;color:#FFCC00;border:1px solid #FFAA00;border-radius:2px;font-size:10px;font-weight:bold;}",
+        ]
+        self.btn_ant_filter.setText(texts[self._ant_filter])
+        self.btn_ant_filter.setStyleSheet(styles[self._ant_filter])
+        self._apply_filters()
+
     def reapply_sort(self):
         """Aktuelle Sortierung erneut anwenden (nach Tabellen-Rebuild)."""
         if self._sort_mode != "time":
@@ -410,41 +448,102 @@ class RXPanel(QWidget):
 
         # Tabelle neu aufbauen
         self.table.setRowCount(0)
-        cq_only = self.btn_cq_filter.isChecked()
         for msg, _, _ in messages:
             row = self.table.rowCount()
             self.table.insertRow(row)
             self._populate_row(row, msg)
-            if cq_only and not msg.is_cq:
-                self.table.setRowHidden(row, True)
+            self.table.setRowHidden(row, self._row_should_hide(row))
 
     def _on_cq_filter_toggled(self):
         """CQ-Filter: nur CQ-Rufe anzeigen oder alle."""
-        self._apply_cq_filter()
+        self._apply_filters()
 
-    def _apply_cq_filter(self):
-        """Zeilen ausblenden/einblenden je nach CQ-Filter-Status."""
-        cq_only = self.btn_cq_filter.isChecked()
+    def _on_land_filter_clicked(self):
+        """Land-Button: Menü anzeigen."""
+        self._show_country_menu()
+        # Checked-State korrigieren (click toggled es, wir wollen Filter-State)
+        self.btn_land_filter.setChecked(bool(self._country_filter))
+
+    def _show_country_menu(self):
+        """QMenu mit allen aktuellen Ländern als Checkboxen."""
+        # Alle Länder aus Tabelle sammeln
+        current = set()
         for row in range(self.table.rowCount()):
             item = self.table.item(row, COL_UTC)
-            if item is None:
-                continue
-            msg = item.data(Qt.ItemDataRole.UserRole)
-            if msg is None:
-                self.table.setRowHidden(row, False)
-                continue
-            self.table.setRowHidden(row, cq_only and not msg.is_cq)
+            if item:
+                country = item.data(Qt.ItemDataRole.UserRole + 1)
+                if country and country != "?":
+                    current.add(country)
+        # Auch gespeicherte Filter-Länder anzeigen (evtl. gerade nicht empfangen)
+        all_countries = sorted(current | self._country_filter)
+        if not all_countries:
+            return
+        menu = QMenu(self)
+        menu.setStyleSheet("""
+            QMenu { background: #1a1a2e; color: #CCC; border: 1px solid #444; }
+            QMenu::item { padding: 4px 20px 4px 28px; }
+            QMenu::item:selected { background: #0066AA; }
+            QMenu::item:checked { color: #FF6622; }
+            QMenu::indicator { width: 14px; height: 14px; }
+        """)
+        for country in all_countries:
+            action = menu.addAction(country)
+            action.setCheckable(True)
+            action.setChecked(country in self._country_filter)
+            action.triggered.connect(
+                lambda checked, c=country: self._toggle_country(c, checked)
+            )
+        if self._country_filter:
+            menu.addSeparator()
+            clear = menu.addAction("Alle zeigen (Filter löschen)")
+            clear.triggered.connect(self._clear_country_filter)
+        menu.exec(self.btn_land_filter.mapToGlobal(
+            self.btn_land_filter.rect().bottomLeft()
+        ))
 
-    def _on_header_clicked(self, col: int):
-        """Klick auf Spaltenkopf → Sortierung."""
-        mapping = {
-            COL_UTC:  "time",
-            COL_DB:   "snr",
-            COL_KM:   "dist",
-            COL_LAND: "country",
-        }
-        if col in mapping:
-            self._set_sort(mapping[col])
+    def _toggle_country(self, country: str, checked: bool):
+        """Land in Filter aufnehmen (checked=True) oder entfernen."""
+        if checked:
+            self._country_filter.add(country)
+        else:
+            self._country_filter.discard(country)
+        self.btn_land_filter.setChecked(bool(self._country_filter))
+        self._apply_filters()
+        self.country_filter_changed.emit(list(self._country_filter))
+
+    def _clear_country_filter(self):
+        """Alle Länder-Filter entfernen."""
+        self._country_filter.clear()
+        self.btn_land_filter.setChecked(False)
+        self._apply_filters()
+        self.country_filter_changed.emit([])
+
+    def _row_should_hide(self, row: int) -> bool:
+        """True wenn Zeile durch CQ-, Länder- oder Ant-Filter ausgeblendet werden soll."""
+        item = self.table.item(row, COL_UTC)
+        if item is None:
+            return False
+        msg = item.data(Qt.ItemDataRole.UserRole)
+        if msg is None:
+            return False  # Separator immer sichtbar
+        if self.btn_cq_filter.isChecked() and not msg.is_cq:
+            return True
+        if self._country_filter:
+            country = item.data(Qt.ItemDataRole.UserRole + 1) or "?"
+            if country in self._country_filter:
+                return True
+        if self._ant_filter > 0:
+            ant = getattr(msg, 'antenna', '') or ''
+            if self._ant_filter == 1 and not ant.startswith('A1'):
+                return True
+            if self._ant_filter == 2 and not ant.startswith('A2'):
+                return True
+        return False
+
+    def _apply_filters(self):
+        """Alle aktiven Filter auf die Tabelle anwenden."""
+        for row in range(self.table.rowCount()):
+            self.table.setRowHidden(row, self._row_should_hide(row))
 
     # ── Events ────────────────────────────────────────────────
 

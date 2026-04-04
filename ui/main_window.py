@@ -119,23 +119,27 @@ class MainWindow(QMainWindow):
         _QTimer.singleShot(0, self._restore_geometry)
 
     def _setup_ui(self):
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-
         self.rx_panel = RXPanel(
             my_call=self.settings.callsign,
             my_grid=self.settings.locator,
+            country_filter=self.settings.get("country_filter", []),
         )
         self.qso_panel = QSOPanel()
         self.control_panel = ControlPanel(callsign=self.settings.callsign)
 
-        splitter.addWidget(self.rx_panel)
-        splitter.addWidget(self.qso_panel)
-        splitter.addWidget(self.control_panel)
+        # Alle 3 Panels in einem QSplitter → sichtbarer Trenner bleibt erhalten
+        self.splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.splitter.addWidget(self.rx_panel)
+        self.splitter.addWidget(self.qso_panel)
+        self.splitter.addWidget(self.control_panel)
 
-        # Proportionen: 55% Empfang / 20% QSO / 25% Control
-        splitter.setSizes([700, 250, 300])
+        # EMPFANG + QSO 50:50, Control fix (wird in _restore_geometry überschrieben)
+        self.splitter.setSizes([500, 500, 400])
+        self.splitter.setStretchFactor(0, 1)  # RX: dehnen
+        self.splitter.setStretchFactor(1, 1)  # QSO: dehnen
+        self.splitter.setStretchFactor(2, 0)  # Control: nicht dehnen
 
-        self.setCentralWidget(splitter)
+        self.setCentralWidget(self.splitter)
 
     def _start_radio(self):
         """FlexRadio verbinden und Decoder starten (mit Auto-Retry)."""
@@ -406,6 +410,7 @@ class MainWindow(QMainWindow):
         # RX Panel → QSO starten + RX-Toggle
         self.rx_panel.station_clicked.connect(self._on_station_clicked)
         self.rx_panel.rx_toggled.connect(self._on_rx_panel_toggled)
+        self.rx_panel.country_filter_changed.connect(self._on_country_filter_changed)
 
         # Control Panel
         self.control_panel.mode_changed.connect(self._on_mode_changed)
@@ -445,6 +450,11 @@ class MainWindow(QMainWindow):
             their_grid=msg.grid_or_report if msg.is_grid else "",
             freq_hz=msg.freq_hz,
         )
+
+    def _on_country_filter_changed(self, country_filter: list):
+        """Länder-Filter in Settings speichern."""
+        self.settings.set("country_filter", country_filter)
+        self.settings.save()
 
     @Slot(bool)
     def _on_rx_panel_toggled(self, active: bool):
@@ -688,9 +698,9 @@ class MainWindow(QMainWindow):
             f"Bei SWR > {swr_limit:.1f} wird Einmessen abgebrochen."
         )
         msg.setStyleSheet(self._msgbox_style())
-        btn_tune  = msg.addButton("Tunen + Einmessen", QMessageBox.ButtonRole.AcceptRole)
-        btn_skip  = msg.addButton("Direkt einmessen",  QMessageBox.ButtonRole.ActionRole)
-        btn_abort = msg.addButton("Abbrechen",         QMessageBox.ButtonRole.RejectRole)
+        btn_tune  = msg.addButton("Tunen + Messen", QMessageBox.ButtonRole.AcceptRole)
+        btn_skip  = msg.addButton("Direkt messen",  QMessageBox.ButtonRole.ActionRole)
+        btn_abort = msg.addButton("Abbrechen",      QMessageBox.ButtonRole.RejectRole)
         msg.exec()
 
         if msg.clickedButton() == btn_abort:
@@ -704,8 +714,11 @@ class MainWindow(QMainWindow):
 
             def _after_tune():
                 self.radio.tune_off()
-                # Sendeleistung wieder auf normalen Wert
                 self.radio._send_cmd(f"transmit set rfpower={self.settings.power_watts}")
+                # Buffer leeren: AT hat RX-Impedanz geändert → alte Daten ungültig
+                self._normal_stations = {}
+                self._diversity_stations = {}
+                self.rx_panel.table.setRowCount(0)
                 # SWR pruefen
                 swr = self.radio._last_swr
                 if swr > swr_limit:
@@ -1137,7 +1150,7 @@ class MainWindow(QMainWindow):
         """
 
     def _restore_geometry(self):
-        """Fenstergeometrie aus Settings laden."""
+        """Fenstergeometrie + Splitter-Breiten aus Settings laden."""
         w = self.settings.get("window_w")
         h = self.settings.get("window_h")
         x = self.settings.get("window_x")
@@ -1146,14 +1159,18 @@ class MainWindow(QMainWindow):
             self.resize(int(w), int(h))
         if x is not None and y is not None:
             self.move(int(x), int(y))
+        sizes = self.settings.get("splitter_sizes")
+        if sizes and len(sizes) == 3:
+            self.splitter.setSizes([int(s) for s in sizes])
 
     def closeEvent(self, event):
-        # Fenstergeometrie speichern
+        # Fenstergeometrie + Splitter-Breiten speichern
         geom = self.geometry()
         self.settings.set("window_x", geom.x())
         self.settings.set("window_y", geom.y())
         self.settings.set("window_w", geom.width())
         self.settings.set("window_h", geom.height())
+        self.settings.set("splitter_sizes", self.splitter.sizes())
         self.timer.stop()
         if self._rx_mode == "diversity":
             self._apply_normal_mode()
