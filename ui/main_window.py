@@ -1029,6 +1029,8 @@ class MainWindow(QMainWindow):
 
     @Slot(float, float)
     def _on_cycle_tick(self, seconds_in_cycle: float, cycle_duration: float):
+        if not self.rx_panel._rx_active:
+            return
         self.control_panel.update_cycle_bar(seconds_in_cycle, cycle_duration)
 
     @Slot(int, bool)
@@ -1085,6 +1087,8 @@ class MainWindow(QMainWindow):
 
     def on_message_decoded(self, msg: FT8Message):
         """Vom Decoder — NUR fuer QSO-Logik, NICHT fuer Tabelle!"""
+        if not self.rx_panel._rx_active:
+            return
         self.control_panel.update_snr(msg.snr)
         self.qso_sm.set_last_snr(msg.snr)
         self.qso_sm.on_message_received(msg)
