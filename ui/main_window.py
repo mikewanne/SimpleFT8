@@ -403,7 +403,7 @@ class MainWindow(QMainWindow):
             self.rx_panel.reapply_sort()
 
         # DX-Tune Dialog fuettern wenn aktiv
-        if self._dx_tune_dialog is not None and messages:
+        if self._dx_tune_dialog is not None:
             self._dx_tune_dialog.feed_cycle(messages)
 
     def _connect_signals(self):

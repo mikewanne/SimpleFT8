@@ -152,6 +152,8 @@
 2. **FT4-Modus** nicht implementiert (7.5s Zyklen)
 3. **Buttons nicht deaktiviert** wenn Radio nicht verbunden
 4. **Exotische Callsign-Prefixe** fehlen noch (~20%)
+5. **EINMESSEN sperren wenn RX OFF** — Button deaktivieren oder Warning-Dialog zeigen wenn RX aus ist und User auf EINMESSEN/DIVERSITY klickt (Bug: DX Tuning haengt bei 0/18 weil kein Decoder laeuft)
+6. **DX Tuning: ersten Zyklus skippen** — Dialog startet mitten im Zyklus → erster Schritt bekommt keine Daten → `_skip_first = True` Flag in feed_cycle einbauen, naechsten vollen Zyklus abwarten
 
 ---
 
