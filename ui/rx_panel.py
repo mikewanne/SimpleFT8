@@ -89,24 +89,6 @@ class RXPanel(QWidget):
         header_row.addWidget(self.btn_rx)
 
         header_row.addStretch()
-
-        sort_label = QLabel("Sort:")
-        sort_label.setStyleSheet("color: #666; font-size: 10px;")
-        header_row.addWidget(sort_label)
-        for mode, label in [("time", "Zeit"), ("snr", "dB"),
-                             ("dist", "km"), ("country", "Land")]:
-            btn = QPushButton(label)
-            btn.setFixedHeight(20)
-            btn.setStyleSheet("""
-                QPushButton {
-                    background: #222; color: #888; border: 1px solid #444;
-                    border-radius: 2px; padding: 0 6px; font-size: 10px;
-                }
-                QPushButton:hover { background: #333; color: #CCC; }
-            """)
-            btn.clicked.connect(lambda _, m=mode: self._set_sort(m))
-            header_row.addWidget(btn)
-
         layout.addLayout(header_row)
 
         # QTableWidget
@@ -114,6 +96,13 @@ class RXPanel(QWidget):
         self.table.setHorizontalHeaderLabels(
             ["UTC", "dB", "DT", "Freq", "Land", "km", "Message", "Ant"]
         )
+        # Numerische Spalten: Header rechts ausrichten (passend zu Zellen)
+        for col in (COL_DB, COL_DT, COL_FREQ, COL_KM):
+            item = self.table.horizontalHeaderItem(col)
+            if item:
+                item.setTextAlignment(
+                    Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+                )
         self.table.verticalHeader().setVisible(False)
         self.table.setSelectionBehavior(
             QAbstractItemView.SelectionBehavior.SelectRows
@@ -138,6 +127,8 @@ class RXPanel(QWidget):
                     col, QHeaderView.ResizeMode.ResizeToContents
                 )
         hdr.setDefaultAlignment(Qt.AlignmentFlag.AlignLeft)
+        hdr.setSectionsClickable(True)
+        hdr.sectionClicked.connect(self._on_header_clicked)
 
         # Dark-Theme Styling
         self.table.setStyleSheet("""
@@ -389,6 +380,17 @@ class RXPanel(QWidget):
             row = self.table.rowCount()
             self.table.insertRow(row)
             self._populate_row(row, msg)
+
+    def _on_header_clicked(self, col: int):
+        """Klick auf Spaltenkopf → Sortierung."""
+        mapping = {
+            COL_UTC:  "time",
+            COL_DB:   "snr",
+            COL_KM:   "dist",
+            COL_LAND: "country",
+        }
+        if col in mapping:
+            self._set_sort(mapping[col])
 
     # ── Events ────────────────────────────────────────────────
 

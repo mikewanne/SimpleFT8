@@ -241,9 +241,6 @@ class MainWindow(QMainWindow):
             return
         count = len(messages) if messages else 0
         self.control_panel.update_decode_count(count)
-        if messages:
-            avg_snr = round(sum(m.snr for m in messages) / len(messages))
-            self.control_panel.update_snr(avg_snr)
 
         if self._rx_mode == "diversity":
             # Queue IMMER poppen — auch bei 0 Stationen!
@@ -388,6 +385,9 @@ class MainWindow(QMainWindow):
                     self.rx_panel.add_message(m)
                 self.rx_panel.reapply_sort()
             self.control_panel.update_decode_count(len(self._normal_stations))
+            if self._normal_stations:
+                avg_snr = round(sum(m.snr for m in self._normal_stations.values()) / len(self._normal_stations))
+                self.control_panel.update_snr(avg_snr)
 
         elif messages:
             # DX Tuning: nur aktueller Zyklus
