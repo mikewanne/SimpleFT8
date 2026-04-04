@@ -124,11 +124,12 @@ Result is stored per band — once measured, diversity just works.
 |---|---|
 | ![Normal 27](assets/screenshots/normal_27stations_40m.png) | ![Diversity 37](assets/screenshots/diversity_37stations_40m.png) |
 
-**40m test 04.04.2026 (poor conditions):**
+**40m test 04.04.2026 (poor conditions, 4 min each):**
 
-| Diversity — 13 stations | Normal — 9 stations |
+| Diversity — 13 stations (14:47–14:51) | Normal — 9 stations (14:52–14:56) |
 |---|---|
-| ![Diversity 40m 2026-04-04](assets/screenshots/test_diversity_40m_2026-04-04_1.png) | ![Normal 40m 2026-04-04](assets/screenshots/test_normal_40m_2026-04-04.png) |
+| ![Diversity 40m start](assets/screenshots/test_diversity_40m_start_1447.png) | ![Normal 40m start](assets/screenshots/test_normal_40m_start_1452.png) |
+| ![Diversity 40m end](assets/screenshots/test_diversity_40m_end_1451_13stations.png) | ![Normal 40m end](assets/screenshots/test_normal_40m_end_1456_9stations.png) |
 
 ---
 
@@ -297,11 +298,12 @@ Das Ergebnis wird pro Band gespeichert — einmal eingemessen, dann funktioniert
 |---|---|
 | ![Normal 27](assets/screenshots/normal_27stations_40m.png) | ![Diversity 37](assets/screenshots/diversity_37stations_40m.png) |
 
-**40m Test 04.04.2026 (schlechte Bedingungen):**
+**40m Test 04.04.2026 (schlechte Bedingungen, je 4 Minuten):**
 
-| Diversity — 13 Stationen | Normal — 9 Stationen |
+| Diversity — 13 Stationen (14:47–14:51) | Normal — 9 Stationen (14:52–14:56) |
 |---|---|
-| ![Diversity 40m 2026-04-04](assets/screenshots/test_diversity_40m_2026-04-04_1.png) | ![Normal 40m 2026-04-04](assets/screenshots/test_normal_40m_2026-04-04.png) |
+| ![Diversity 40m Start](assets/screenshots/test_diversity_40m_start_1447.png) | ![Normal 40m Start](assets/screenshots/test_normal_40m_start_1452.png) |
+| ![Diversity 40m Ende](assets/screenshots/test_diversity_40m_end_1451_13stations.png) | ![Normal 40m Ende](assets/screenshots/test_normal_40m_end_1456_9stations.png) |
 
 ---
 
