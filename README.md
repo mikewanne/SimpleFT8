@@ -10,7 +10,7 @@
 > When compared to the standard single-cycle WSJT-X snapshot (15 seconds), the combined effect of accumulation + polarization diversity can show 4x more stations at once.
 > Tested on FlexRadio 8400M with a multiband dipole + rain gutter as second antenna.
 
-**Status:** Full RX/TX operational. Diversity, DX Tuning, AP/OSD decoders, auto-reconnect, ADIF logging — all functional. QSO chain end-to-end and FT4 mode remain for future implementation.
+**Status:** Full RX operational with advanced decoding (Diversity, AP/OSD, DX Tuning). TX signal generation confirmed via 30+ PSKReporter spots. End-to-end QSO chain (CQ → response → report → RR73 → ADIF log) not yet validated in live conditions. FT4 mode planned.
 
 ### Screenshots
 
@@ -232,7 +232,7 @@ MIT License — free for everyone. Use it, modify it, build on it, integrate it 
 > Im Vergleich zum Standard 15-Sekunden WSJT-X Snapshot: bis zu 4x mehr Stationen auf einmal sichtbar (Akkumulation + Diversity kombiniert).
 > Getestet am FlexRadio 8400M mit Multiband-Dipol + Regenrinne als zweite Antenne.
 
-**Status:** Vollstaendiger RX/TX betriebsbereit. Diversity, DX Tuning, AP/OSD-Decoder, Auto-Reconnect, ADIF-Logging — alles funktioniert. QSO-Kette End-to-End und FT4-Modus bleiben fuer zukuenftige Implementierung.
+**Status:** Vollstaendiger RX betriebsbereit mit erweitertem Decoder (Diversity, AP/OSD, DX Tuning). TX-Signalerzeugung bestaetigt durch 30+ PSKReporter-Spots. End-to-End QSO-Kette (CQ → Antwort → Report → RR73 → ADIF-Log) noch nicht unter Live-Bedingungen verifiziert. FT4-Modus geplant.
 
 ### Screenshots
 
