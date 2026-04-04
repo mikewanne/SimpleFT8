@@ -241,6 +241,9 @@ class MainWindow(QMainWindow):
             return
         count = len(messages) if messages else 0
         self.control_panel.update_decode_count(count)
+        if messages:
+            avg_snr = round(sum(m.snr for m in messages) / len(messages))
+            self.control_panel.update_snr(avg_snr)
 
         if self._rx_mode == "diversity":
             # Queue IMMER poppen — auch bei 0 Stationen!
@@ -656,7 +659,7 @@ class MainWindow(QMainWindow):
             )
             msg.setStyleSheet(self._msgbox_style())
             btn_start = msg.addButton(
-                "DX Tuning starten", QMessageBox.ButtonRole.AcceptRole
+                "Tuning starten", QMessageBox.ButtonRole.AcceptRole
             )
             msg.addButton("Abbrechen", QMessageBox.ButtonRole.RejectRole)
             msg.exec()
