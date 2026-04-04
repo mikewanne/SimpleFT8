@@ -489,8 +489,10 @@ def _preprocess_audio(audio_int16: np.ndarray) -> np.ndarray:
 
     # 3. RMS-Normalisierung auf -18 dBFS (statt Peak-basiert!)
     # RMS ist robuster als Peak — erhaelt Verhaeltnis stark/schwach
+    # WICHTIG: Nach Whitening sind Werte winzig (~0.001) da irfft intern durch N=2048 teilt.
+    # Threshold muss klein genug sein um auch post-whitening Werte zu erwischen.
     rms = np.sqrt(np.mean(audio ** 2))
-    if rms > 0.1:
+    if rms > 1e-6:
         target_rms = 32767 * 10 ** (-18 / 20)  # ~4125
         audio = audio * (target_rms / rms)
 
