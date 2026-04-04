@@ -67,6 +67,26 @@ class RXPanel(QWidget):
         )
         header_row.addWidget(header)
 
+        # CQ Filter Button
+        self.btn_cq_filter = QPushButton("CQ")
+        self.btn_cq_filter.setCheckable(True)
+        self.btn_cq_filter.setChecked(False)
+        self.btn_cq_filter.setFixedHeight(20)
+        self.btn_cq_filter.setFixedWidth(38)
+        self.btn_cq_filter.setToolTip("Nur CQ-Rufe anzeigen")
+        self.btn_cq_filter.setStyleSheet("""
+            QPushButton {
+                background: #222; color: #888; border: 1px solid #444;
+                border-radius: 2px; font-size: 10px; font-weight: bold;
+            }
+            QPushButton:checked {
+                background: #AA4400; color: #FF6622; border-color: #FF4400;
+            }
+            QPushButton:hover { background: #333; color: #CCC; }
+        """)
+        self.btn_cq_filter.clicked.connect(self._on_cq_filter_toggled)
+        header_row.addWidget(self.btn_cq_filter)
+
         # RX ON/OFF Button
         self.btn_rx = QPushButton("RX ON")
         self.btn_rx.setCheckable(True)
@@ -129,6 +149,13 @@ class RXPanel(QWidget):
         hdr.setDefaultAlignment(Qt.AlignmentFlag.AlignLeft)
         hdr.setSectionsClickable(True)
         hdr.sectionClicked.connect(self._on_header_clicked)
+        # Mindestbreiten damit Header-Label sichtbar bleibt
+        hdr.setMinimumSectionSize(30)
+        self.table.setColumnWidth(COL_UTC,  66)
+        self.table.setColumnWidth(COL_DB,   38)
+        self.table.setColumnWidth(COL_DT,   44)
+        self.table.setColumnWidth(COL_FREQ, 44)
+        self.table.setColumnWidth(COL_ANT,  44)
 
         # Dark-Theme Styling
         self.table.setStyleSheet("""
@@ -151,13 +178,18 @@ class RXPanel(QWidget):
                 background-color: #1a1a3e;
             }
             QHeaderView::section {
-                background-color: #1a1a2e;
-                color: #666;
+                background-color: #1e2035;
+                color: #AAA;
                 border: none;
-                border-bottom: 1px solid #333;
-                padding: 2px 4px;
+                border-bottom: 2px solid #444;
+                border-right: 1px solid #2a2a3e;
+                padding: 3px 4px;
                 font-family: Menlo;
                 font-size: 10px;
+            }
+            QHeaderView::section:hover {
+                background-color: #252540;
+                color: #DDD;
             }
         """)
 
@@ -192,6 +224,8 @@ class RXPanel(QWidget):
         self.table.insertRow(0)
         self._populate_row(0, msg)
         self._cycle_message_count += 1
+        if self.btn_cq_filter.isChecked() and not msg.is_cq:
+            self.table.setRowHidden(0, True)
 
     def add_cycle_separator(self, count: int):
         """Neuer Zyklus: ALLES LOESCHEN, nur aktuelle Stationen zeigen.
@@ -376,10 +410,30 @@ class RXPanel(QWidget):
 
         # Tabelle neu aufbauen
         self.table.setRowCount(0)
+        cq_only = self.btn_cq_filter.isChecked()
         for msg, _, _ in messages:
             row = self.table.rowCount()
             self.table.insertRow(row)
             self._populate_row(row, msg)
+            if cq_only and not msg.is_cq:
+                self.table.setRowHidden(row, True)
+
+    def _on_cq_filter_toggled(self):
+        """CQ-Filter: nur CQ-Rufe anzeigen oder alle."""
+        self._apply_cq_filter()
+
+    def _apply_cq_filter(self):
+        """Zeilen ausblenden/einblenden je nach CQ-Filter-Status."""
+        cq_only = self.btn_cq_filter.isChecked()
+        for row in range(self.table.rowCount()):
+            item = self.table.item(row, COL_UTC)
+            if item is None:
+                continue
+            msg = item.data(Qt.ItemDataRole.UserRole)
+            if msg is None:
+                self.table.setRowHidden(row, False)
+                continue
+            self.table.setRowHidden(row, cq_only and not msg.is_cq)
 
     def _on_header_clicked(self, col: int):
         """Klick auf Spaltenkopf → Sortierung."""

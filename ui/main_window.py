@@ -41,9 +41,11 @@ class MainWindow(QMainWindow):
                 background-color: #16192b;
                 color: #CCCCCC;
             }
-            QSplitter::handle {
-                background-color: #444;
-                width: 3px;
+            QSplitter::handle:horizontal {
+                background-color: #555;
+                width: 4px;
+                border-left: 1px solid #777;
+                border-right: 1px solid #333;
             }
         """)
 
