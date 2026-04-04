@@ -179,6 +179,7 @@ class MainWindow(QMainWindow):
         self.radio.set_frequency(freq, slice_idx=s)
         self.radio.apply_ft8_preset(slice_idx=s, band=band)
         print(f"[FlexRadio] Band: {band}, Freq: {freq:.3f} MHz")
+        self.decoder.set_quality("normal")  # Start: schnell (NORMAL-Modus)
         self.decoder.start()
         self.radio.create_tx_stream()
         # Meter an GUI koppeln
@@ -412,6 +413,7 @@ class MainWindow(QMainWindow):
         self.control_panel.tune_clicked.connect(self._on_tune_clicked)
         self.control_panel.tx_level_changed.connect(self._on_tx_level_changed)
         self.control_panel.rx_mode_changed.connect(self._on_rx_mode_changed)
+        self.control_panel.einmessen_clicked.connect(self._handle_dx_tuning)
         self.control_panel.settings_clicked.connect(self._on_settings_clicked)
         self.control_panel.bias_changed.connect(self._on_bias_changed)
 
@@ -509,7 +511,7 @@ class MainWindow(QMainWindow):
                     self.control_panel.dx_info.setText(
                         f"ANT1+ANT2 (Gain {gain_b})"
                     )
-            elif self._rx_mode == "dx_tuning":
+            elif self._rx_mode == "normal":
                 self._apply_dx_preset_for_band(band)
             else:
                 self._apply_normal_mode()
@@ -519,18 +521,21 @@ class MainWindow(QMainWindow):
 
     @Slot(str)
     def _on_rx_mode_changed(self, mode: str):
-        """RX-Modus umschalten."""
+        """RX-Modus umschalten (nur 'normal' oder 'diversity')."""
         if not self.radio.ip:
             self.control_panel.set_rx_mode("normal")
             return
 
         old_mode = self._rx_mode
 
-        # Alten Modus sauber beenden
+        # Alten Modus sauber beenden + Liste immer leeren bei Wechsel
         if old_mode == "diversity":
             self._disable_diversity()
-        elif old_mode == "dx_tuning":
-            self._dx_mode = False
+        self.rx_panel.table.setRowCount(0)
+        self.control_panel.update_decode_count(0)
+
+        # Decode-Qualitaet automatisch: normal=schnell, diversity=tief
+        self.decoder.set_quality(mode)
 
         # Neuen Modus aktivieren
         if mode == "normal":
@@ -539,11 +544,8 @@ class MainWindow(QMainWindow):
             self._apply_normal_mode()
         elif mode == "diversity":
             self._rx_mode = "diversity"
+            self._diversity_stations = {}
             self._enable_diversity()
-        elif mode == "dx_tuning":
-            self._rx_mode = "dx_tuning"
-            self._dx_mode = True
-            self._handle_dx_tuning()
 
         self._update_statusbar()
 
@@ -661,10 +663,7 @@ class MainWindow(QMainWindow):
             if msg.clickedButton() == btn_start:
                 self._start_dx_tuning()
             else:
-                self._rx_mode = "normal"
-                self._dx_mode = False
-                self._apply_normal_mode()
-                self.control_panel.set_rx_mode("normal")
+                pass  # EINMESSEN abgebrochen — Modus unveraendert lassen
 
     def _start_dx_tuning(self):
         """DX Tune Dialog oeffnen — NICHT-MODAL damit Signale durchkommen."""
@@ -710,8 +709,6 @@ class MainWindow(QMainWindow):
         self._dx_tune_dialog = None
         self._dx_mode = False
         self._apply_normal_mode()
-        self.control_panel.btn_dx.setChecked(False)
-        self.control_panel.btn_dx.setText("NORMAL")
         self.control_panel.dx_info.setText("")
 
     def _apply_dx_preset(self, preset: dict):
@@ -734,16 +731,41 @@ class MainWindow(QMainWindow):
             self.control_panel.dx_info.setText("kein Preset")
 
     def _apply_normal_mode(self):
-        """Normal-Modus: ANT1, Standard-Gain, int16."""
+        """Normal-Modus: beste RX-Antenne aus DX-Preset (falls vorhanden), TX immer ANT1."""
         s = self.radio._slice_idx
         band = self.settings.band
         from radio.flexradio import FlexRadio
-        gain = FlexRadio.PREAMP_PRESETS.get(band, 10)
-        self.radio._send_cmd(f"slice set {s} rxant=ANT1")
+
+        preset = self.settings.get_dx_preset(band)
+        if preset:
+            rxant = preset.get("rxant", "ANT1")
+            gain  = preset.get("gain", FlexRadio.PREAMP_PRESETS.get(band, 10))
+            # Alter des Presets berechnen
+            import datetime
+            measured_str = preset.get("measured", "")
+            age_days = None
+            try:
+                measured_dt = datetime.datetime.strptime(measured_str, "%Y-%m-%d %H:%M")
+                age_days = (datetime.datetime.now() - measured_dt).days
+            except Exception:
+                pass
+            if age_days is not None and age_days > 7:
+                self.control_panel.dx_info.setText(f"RX:{rxant} G{gain}dB ({age_days}d alt!)")
+                self.control_panel.dx_info.setStyleSheet("color: #FFA500;")
+            else:
+                self.control_panel.dx_info.setText(f"RX:{rxant} G{gain}dB")
+                self.control_panel.dx_info.setStyleSheet("")
+            print(f"[DX] Normal-Modus: RX={rxant} TX=ANT1, Gain {gain} (Preset, {age_days}d alt)")
+        else:
+            rxant = "ANT1"
+            gain  = FlexRadio.PREAMP_PRESETS.get(band, 10)
+            self.control_panel.dx_info.setText("Kein Preset")
+            self.control_panel.dx_info.setStyleSheet("color: #888888;")
+            print(f"[DX] Normal-Modus: ANT1, Gain {gain} (kein Preset)")
+
+        self.radio._send_cmd(f"slice set {s} rxant={rxant}")
         self.radio._send_cmd(f"slice set {s} txant=ANT1")
         self.radio._send_cmd(f"slice set {s} rfgain={gain}")
-        self.control_panel.dx_info.setText("")
-        print(f"[DX] Normal-Modus: ANT1, Gain {gain}")
 
     # ── Meter / SWR ─────────────────────────────────────────────
 
@@ -1026,7 +1048,6 @@ class MainWindow(QMainWindow):
         mode_labels = {
             "normal": "Normal",
             "diversity": "DIVERSITY",
-            "dx_tuning": "DX Tuning",
         }
         mode_str = mode_labels.get(self._rx_mode, "Normal")
         self.statusBar().showMessage(

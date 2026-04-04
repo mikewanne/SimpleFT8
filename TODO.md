@@ -1,6 +1,6 @@
 # SimpleFT8 — TODO & Roadmap
 
-**Stand:** 03.04.2026 abends | **Status:** Diversity STABIL, 63 Stationen 20m, Kiribati 13k auf Regenrinne, GitHub + Forum LIVE
+**Stand:** 04.04.2026 | **Status:** Diversity STABIL, 16 Stationen 40m 05:03 UTC, Bias-Switch live, AP-Decoder live, Spectral Whitening gefixt
 **Backup:** backup_2026-04-03_v3_final/
 **GitHub:** https://github.com/mikewanne/SimpleFT8
 **FlexRadio Forum:** Idea Post am 2026-04-03
@@ -145,14 +145,11 @@ Block B (Zyklen 5-8, umgekehrt):
 3:1 ANT2 → Block A: ANT2 ANT1 ANT2 ANT2, Block B: ANT2 ANT2 ANT1 ANT2
 ```
 
-- [ ] **Manueller Bias-Schalter** (5 Preset-Buttons im Control Panel):
-      `100:0 | 70:30 | AUTO | 30:70 | 0:100`
+- [x] **Manueller Bias-Schalter** (5 Preset-Buttons im Control Panel): `100:0 | 70:30 | AUTO | 30:70 | 0:100`
       - AUTO = aktuelles 4-Zyklus Even/Odd Pattern (50:50)
       - Bei 70:30: 5-Slot-Block [A1,A2,A1,A1,A2] → A2 auf Pos 2+5 = gerade UND ungerade ✓
       - Bei 30:70: 5-Slot-Block [A2,A1,A2,A2,A1] → A1 auf Pos 2+5 = gerade UND ungerade ✓
-      - 100:0 / 0:100: nur eine Antenne, aber Akkumulation bleibt aktiv
-      - Diversity bleibt AN — nur Slot-Verteilung aendert sich
-      - Bei Bandwechsel: zurueck auf AUTO
+      - Bei Bandwechsel: zurueck auf AUTO — implementiert 04.04.2026
 - [ ] ~~Auto-Bias~~ (DeepSeek: Bias-Spirale, mathematisch gefaehrlich → NICHT bauen)
 - [ ] Diversity-Dashboard: ANT1-exklusiv / ANT2-exklusiv / Ueberlappung anzeigen (spaeter)
 
@@ -173,24 +170,24 @@ Block B (Zyklen 5-8, umgekehrt):
 
 ## Parser-Bugs
 
-- [ ] **"DXpedition not implemented"** — `parse_ft8_message()` zeigt rohen Fehlertext bei unbekannten Nachrichtenformaten (DXpedition-Calls, Compound-Callsigns wie `CQ DX CALL/P` etc.) → sauberes Fallback statt Exception-Text in der Liste anzeigen
+- [x] **"DXpedition not implemented"** — `message.py` erkennt PyFT8-Fehler-Prefixe → zeigt `?` statt rohem Exception-Text (04.04.2026)
 - [x] **Portable/Mobile Suffixe** — `ON3MOH/P`, `R2FBY/MM` etc. → Prefix vor `/` extrahieren → Land + km korrekt anzeigen (rx_panel.py _populate_row)
 
 ---
 
 ## Phase 1: Empfang weiter optimieren
 
-### Spectral Whitening fixen (Prio HOCH)
-- [ ] numpy 2.4 kompatible Implementierung (kein as_strided Trick)
-- [ ] Einfache Sliding-Window Median ohne Stride-Trick
-- [ ] Vorher/Nachher Vergleich: Stationszahl mit/ohne Whitening
-- **Erwartet:** +10-20% mehr schwache Stationen
+### Spectral Whitening (ERLEDIGT 04.04.2026)
+- [x] numpy 2.4 kompatibel: `sliding_window_view` statt `as_strided`
+- [x] RMS-Threshold gefixt: `1e-6` statt `0.1` (irfft/N Normalisierung beachtet)
+- [x] Wieder aktiviert — Peak=32767 stabil, 2-4 Stationen pro Zyklus ✓
 
-### AP-Dekodierung (Prio HOCH, Aufwand 4-6h)
-- [ ] LLR-Injection: bekannte Calls → 28 Bits auf ±100 setzen vor BP
-- [ ] AP-Datenbank aus `decoder.recent_calls` (schon vorhanden!)
-- [ ] Call-zu-Bits Mapping implementieren (77-Bit FT8 Frame)
-- **Erwarteter Gewinn:** +8-12 Stationen, SNR-Schwelle von -18 auf -24 dB
+### AP-Dekodierung (ERLEDIGT 04.04.2026)
+- [x] `core/ap_decoder.py` — LLR-Injection mit i3/CQ/myCall/recentCalls/priorityCall
+- [x] `recent_calls` deque(maxlen=200) mit `appendleft()` fuer Recency-Ordering
+- [x] `priority_call` = aktiver QSO-Partner → hoechste Prioritaet (59-Bit-Hint)
+- [x] Stage 0: QSO-Partner C1 + eigenes Call C2 (staerkster Hint)
+- [x] Stage 5: 20 bekannte Calls als C1 + CQ-Kombination
 
 ### Fehlende Callsign-Prefixe
 - [ ] Systematisch alle ITU-Prefixe einpflegen (aktuell ~80%, fehlen exotische)
@@ -216,8 +213,9 @@ Block B (Zyklen 5-8, umgekehrt):
 
 ## Phase 3: Robustheit + Packaging
 
-- [ ] Auto-Reconnect verbessern (nach Radio-Neustart)
-- [ ] Logging in Datei (nicht nur stdout)
+- [x] Auto-Reconnect: unbegrenzte Wiederholungen, Exponential Backoff 5→10→20→40→60s, Discovery nach 10 Fehlversuchen, GUI-Countdown (04.04.2026)
+- [x] Logging in Datei: `~/.simpleft8/simpleft8.log` via `_Tee` in `main.py` (04.04.2026)
+- [x] Fenster-Geometrie: speichern/wiederherstellen in `~/.simpleft8/config.json` (04.04.2026)
 - [ ] PyInstaller Bundle (.app fuer macOS)
 
 ---

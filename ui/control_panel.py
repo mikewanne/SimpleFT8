@@ -39,16 +39,14 @@ class ControlPanel(QWidget):
     rx_mode_changed = Signal(str)  # "normal", "diversity", "dx_tuning"
     settings_clicked = Signal()
 
-    _RX_MODES = ["normal", "diversity", "dx_tuning"]
-    _RX_LABELS = {"normal": "NORMAL", "diversity": "DIVERSITY", "dx_tuning": "DX TUNING"}
-    _RX_COLORS = {
-        "normal": "background: #222; color: #AAA; border-color: #555;",
-        "diversity": "background: #003344; color: #00CCFF; border-color: #00AADD;",
-        "dx_tuning": "background: #662200; color: #FF8844; border-color: #FF8844;",
-    }
+    _RX_MODES = ["normal", "diversity"]
+    _RX_STYLE_ACTIVE = "background: #0055AA; color: white; border-color: #0077CC; font-weight: bold;"
+    _RX_STYLE_INACTIVE = "background: #222; color: #AAA; border-color: #555;"
+    _RX_STYLE_DIVERSITY_ACTIVE = "background: #003344; color: #00CCFF; border-color: #00AADD; font-weight: bold;"
 
     # Signal fuer manuellen Diversity-Bias (100:0 / 70:30 / AUTO / 30:70 / 0:100)
     bias_changed = Signal(str)
+    einmessen_clicked = Signal()
 
     _BIAS_PRESETS = ["100:0", "70:30", "AUTO", "30:70", "0:100"]
 
@@ -104,25 +102,56 @@ class ControlPanel(QWidget):
         layout.addLayout(bands_row1)
         layout.addLayout(bands_row2)
 
-        # --- RX Modus: NORMAL / DIVERSITY / DX TUNING ---
+        # --- RX Modus: NORMAL / DIVERSITY / EINMESSEN ---
         dx_row = QHBoxLayout()
-        dx_row.setSpacing(6)
-        self.btn_dx = QPushButton("NORMAL")
-        self.btn_dx.setFixedHeight(28)
-        self.btn_dx.setStyleSheet("""
+        dx_row.setSpacing(4)
+        self._current_rx_mode = "normal"
+
+        _btn_style = (
+            "QPushButton {{ {colors} border-radius: 4px; font-size: 12px; "
+            "font-weight: bold; padding: 0 10px; border-width: 1px; border-style: solid; "
+            "min-height: 28px; }}"
+            "QPushButton:hover {{ background: #333; }}"
+        )
+        self.btn_normal = QPushButton("NORMAL")
+        self.btn_normal.setFixedHeight(28)
+        self.btn_normal.setStyleSheet(
+            _btn_style.format(colors=self._RX_STYLE_ACTIVE)
+        )
+        self.btn_normal.clicked.connect(lambda: self._on_rx_mode_clicked("normal"))
+        dx_row.addWidget(self.btn_normal)
+
+        self.btn_diversity = QPushButton("DIVERSITY")
+        self.btn_diversity.setFixedHeight(28)
+        self.btn_diversity.setStyleSheet(
+            _btn_style.format(colors=self._RX_STYLE_INACTIVE)
+        )
+        self.btn_diversity.clicked.connect(lambda: self._on_rx_mode_clicked("diversity"))
+        dx_row.addWidget(self.btn_diversity)
+
+        self.btn_einmessen = QPushButton("EINMESSEN")
+        self.btn_einmessen.setFixedHeight(28)
+        self.btn_einmessen.setStyleSheet("""
             QPushButton {
-                background: #222; color: #AAA; border: 1px solid #555;
-                border-radius: 4px; font-size: 12px; font-weight: bold;
-                padding: 0 16px;
+                background: #1a2a1a; color: #66AA66; border: 1px solid #448844;
+                border-radius: 4px; font-size: 12px; font-weight: bold; padding: 0 10px;
             }
-            QPushButton:hover { background: #333; }
+            QPushButton:hover { background: #223322; }
         """)
-        self.btn_dx.clicked.connect(self._on_dx_toggled)
-        dx_row.addWidget(self.btn_dx)
+        self.btn_einmessen.clicked.connect(self.einmessen_clicked.emit)
+        dx_row.addWidget(self.btn_einmessen)
+
+        dx_row.addStretch()
+        layout.addLayout(dx_row)
+
+        # --- Diversity Info-Zeile (nur sichtbar im Diversity-Modus) ---
+        self._div_info_widget = QWidget()
+        div_info_row = QHBoxLayout(self._div_info_widget)
+        div_info_row.setContentsMargins(0, 0, 0, 0)
+        div_info_row.setSpacing(4)
         self.dx_info = QLabel("")
         self.dx_info.setStyleSheet("color: #888; font-size: 10px; font-family: Menlo;")
-        dx_row.addWidget(self.dx_info)
-
+        div_info_row.addWidget(self.dx_info)
         # Diversity Zyklus-Indikator: 4 Boxen + aktuelles Antenne-Label
         self._cycle_boxes = []
         for _ in range(4):
@@ -130,15 +159,16 @@ class ControlPanel(QWidget):
             box.setFixedSize(14, 14)
             box.setEnabled(False)
             box.setStyleSheet("background:#2a2a2a; border:1px solid #444; border-radius:2px;")
-            dx_row.addWidget(box)
+            div_info_row.addWidget(box)
             self._cycle_boxes.append(box)
         self._cycle_ant_label = QLabel("")
         self._cycle_ant_label.setStyleSheet(
             "color:#888; font-size:10px; font-family:Menlo; min-width:28px;"
         )
-        dx_row.addWidget(self._cycle_ant_label)
-        dx_row.addStretch()
-        layout.addLayout(dx_row)
+        div_info_row.addWidget(self._cycle_ant_label)
+        div_info_row.addStretch()
+        self._div_info_widget.setVisible(False)
+        layout.addWidget(self._div_info_widget)
 
         # --- Bias-Switch (nur sichtbar im Diversity-Modus) ---
         self._bias_row_widget = QWidget()
@@ -484,47 +514,54 @@ class ControlPanel(QWidget):
         freq = BAND_FREQUENCIES.get(self._current_band, {}).get(mode_key, 0)
         self.freq_label.setText(f"{freq:.3f} MHz")
 
-    def _on_dx_toggled(self):
-        """Zyklisch durch RX-Modi schalten: NORMAL → DIVERSITY → DX TUNING → NORMAL."""
-        self._rx_mode_idx = (self._rx_mode_idx + 1) % 3
-        mode = self._RX_MODES[self._rx_mode_idx]
-        self.btn_dx.setText(self._RX_LABELS[mode])
-        style_base = (
-            "QPushButton {{ {colors} border-radius: 4px; "
-            "font-size: 12px; font-weight: bold; padding: 0 16px; "
-            "border-width: 1px; border-style: solid; }}"
+    def _on_rx_mode_clicked(self, mode: str):
+        """NORMAL oder DIVERSITY Button geklickt."""
+        if mode == self._current_rx_mode:
+            return  # Bereits aktiv — nichts tun
+        _btn_style = (
+            "QPushButton {{ {colors} border-radius: 4px; font-size: 12px; "
+            "font-weight: bold; padding: 0 10px; border-width: 1px; border-style: solid; "
+            "min-height: 28px; }}"
             "QPushButton:hover {{ background: #333; }}"
         )
-        self.btn_dx.setStyleSheet(
-            style_base.format(colors=self._RX_COLORS[mode])
-        )
         if mode == "normal":
+            self.btn_normal.setStyleSheet(_btn_style.format(colors=self._RX_STYLE_ACTIVE))
+            self.btn_diversity.setStyleSheet(_btn_style.format(colors=self._RX_STYLE_INACTIVE))
             self.dx_info.setText("")
+        else:  # diversity
+            self.btn_normal.setStyleSheet(_btn_style.format(colors=self._RX_STYLE_INACTIVE))
+            self.btn_diversity.setStyleSheet(_btn_style.format(colors=self._RX_STYLE_DIVERSITY_ACTIVE))
+        self._current_rx_mode = mode
         is_diversity = (mode == "diversity")
+        self._div_info_widget.setVisible(is_diversity)
         self._bias_row_widget.setVisible(is_diversity)
         self._div_stats_label.setVisible(is_diversity)
         if not is_diversity:
             self._div_stats_label.setText("")
+            self.dx_info.setText("")
         self.rx_mode_changed.emit(mode)
 
     def set_rx_mode(self, mode: str):
         """RX-Modus programmatisch setzen (ohne Signal auszuloesen)."""
-        try:
-            self._rx_mode_idx = self._RX_MODES.index(mode)
-        except ValueError:
-            self._rx_mode_idx = 0
+        if mode not in self._RX_MODES:
             mode = "normal"
-        self.btn_dx.setText(self._RX_LABELS[mode])
-        style_base = (
-            "QPushButton {{ {colors} border-radius: 4px; "
-            "font-size: 12px; font-weight: bold; padding: 0 16px; "
-            "border-width: 1px; border-style: solid; }}"
+        if mode == self._current_rx_mode:
+            return
+        _btn_style = (
+            "QPushButton {{ {colors} border-radius: 4px; font-size: 12px; "
+            "font-weight: bold; padding: 0 10px; border-width: 1px; border-style: solid; "
+            "min-height: 28px; }}"
             "QPushButton:hover {{ background: #333; }}"
         )
-        self.btn_dx.setStyleSheet(
-            style_base.format(colors=self._RX_COLORS[mode])
-        )
+        if mode == "normal":
+            self.btn_normal.setStyleSheet(_btn_style.format(colors=self._RX_STYLE_ACTIVE))
+            self.btn_diversity.setStyleSheet(_btn_style.format(colors=self._RX_STYLE_INACTIVE))
+        else:
+            self.btn_normal.setStyleSheet(_btn_style.format(colors=self._RX_STYLE_INACTIVE))
+            self.btn_diversity.setStyleSheet(_btn_style.format(colors=self._RX_STYLE_DIVERSITY_ACTIVE))
+        self._current_rx_mode = mode
         is_diversity = (mode == "diversity")
+        self._div_info_widget.setVisible(is_diversity)
         self._bias_row_widget.setVisible(is_diversity)
         self._div_stats_label.setVisible(is_diversity)
 

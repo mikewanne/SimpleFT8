@@ -4,21 +4,15 @@
 
 ---
 
-**WORK IN PROGRESS / BAUSTELLE** — This is an early proof-of-concept, far from a finished program. But the core idea works and RX is functional.
-
-**A proof-of-concept FT8 client that introduces Temporal Antenna Diversity — a novel technique to increase weak signal decoding on any single-receiver dual-antenna radio.**
+**A functional FT8 client implementing Temporal Antenna Diversity — a novel technique that significantly increases weak signal decoding on any single-receiver dual-antenna radio.**
 
 > **Up to 2–3x more unique stations visible** in the same 2-minute window compared to accumulated single-antenna operation under poor conditions.
 > When compared to the standard single-cycle WSJT-X snapshot (15 seconds), the combined effect of accumulation + polarization diversity can show 4x more stations at once.
 > Tested on FlexRadio 8400M with a multiband dipole + rain gutter as second antenna.
 
-**Status:** RX works. TX works (30+ PSKReporter spots). Full QSO cycle not yet tested end-to-end. Many rough edges. Published to timestamp the concept, not to ship a product.
+**Status:** Full RX/TX operational. Diversity, DX Tuning, AP/OSD decoders, auto-reconnect, ADIF logging — all functional. QSO chain end-to-end and FT4 mode remain for future implementation.
 
 ### Screenshots
-
-**Normal mode — 13 stations on 40m:**
-
-![Normal Mode](assets/screenshots/normal_13stations.png)
 
 **Diversity mode — 63 stations on 20m (Indonesia 11,000 km, New Zealand 18,000 km):**
 
@@ -58,12 +52,12 @@ Accumulated unique:       48 stations (vs 14 with single antenna)
 Key rules:
 - **Accumulate, don't replace**: New cycle results merge with existing stations
 - **Keep best SNR**: When a station is heard on both antennas, keep the stronger reading
-- **Age out stale entries**: Stations not heard for >2 minutes are removed
+- **Age out stale entries**: Stations not heard for >75s are removed
 - **Mark antenna source**: `[A1]`, `[A2]`, `[A1>2]` (ANT1 stronger), `[A2>1]` (ANT2 stronger)
 - **TX always on ANT1**: Never switch antenna during transmit
 - **Non-blocking antenna commands**: Sent in a separate thread so keepalive and audio stream are never interrupted
 - **No second slice needed**: Uses the same single slice/receiver — just switches the antenna input
-- **Single decoder**: One decoder instance, one audio stream — ~20 lines of additional code
+- **Single decoder**: One decoder instance, one audio stream
 
 ### Simply Explained
 
@@ -75,7 +69,7 @@ SimpleFT8 exploits exactly this: Slot 1 listens on ANT1, Slot 2 on ANT2. Both sl
 
 Two antennas with different physical orientation and placement have different radiation patterns and noise profiles. Some stations sit in the null of ANT1 but in the main lobe of ANT2 — and vice versa. Some signals that are buried in local noise on ANT1 are above the noise floor on ANT2. These characteristics are **stable per station** — a station that's better on ANT2 will consistently be better on ANT2. By alternating antennas every 15-second slot, you systematically capture both populations.
 
-**The special thing:** Normally, antenna diversity requires two complete receiver units — expensive. SimpleFT8 does it with just one, because FT8 naturally works in slots. The software does the rest — 20 lines of Python.
+**The special thing:** Normally, antenna diversity requires two complete receiver units — expensive. SimpleFT8 does it with just one, because FT8 naturally works in slots. The software does the rest.
 
 This works on **any radio with two antenna ports**, even single-receiver models. No hardware modification needed.
 
@@ -111,29 +105,29 @@ SimpleFT8 includes an automated measurement dialog that optimizes antenna + gain
 
 **Automatic loading:**
 6. On band change: preset is loaded automatically — no manual tuning needed
-7. When conditions change (rain/sun): re-measure takes ~3-5 minutes
+7. Normal mode also uses the preset: best antenna for RX, ANT1 always for TX
+8. When conditions change (rain/sun): re-measure takes ~3-5 minutes
 
 ---
 
 ## What SimpleFT8 Is (and Isn't)
 
-**This is a proof-of-concept.** It demonstrates that Temporal Antenna Diversity works and delivers massive gains with minimal code.
-
-It is **not** a polished product. It's a working FT8 client built in one week by one ham (DA1MHH) with AI assistance (Claude). It has rough edges, incomplete features, and no unit tests.
+**This is a working FT8 client** built by one ham (DA1MHH) with AI assistance (Claude). The focus is on simplicity and maximum receive performance — no waterfall, no clutter, 3-panel layout.
 
 **What works:**
 - Full FT8 RX/TX via VITA-49 (no SmartSDR needed)
 - 3 RX modes: Normal / Diversity / DX Tuning
-- Signal Subtraction (5 passes), Spectral Whitening, Anti-Alias Resampling
+- Signal Subtraction (5 passes NORMAL / 7 passes DIVERSITY), Spectral Whitening, Anti-Alias Resampling
+- AP decoding fully implemented (LLR injection for i3/CQ/known calls/QSO partner)
+- OSD decoder complete (depth=1, 10–20 candidates)
 - CQ mode with auto-reply, QSO state machine
 - Country detection, distance calculation, ADIF export
 - PSKReporter integration, 30+ confirmed spots with 10W
+- Auto-reconnect with exponential backoff, persistent logging, window geometry restore
 
 **What's incomplete:**
 - Full QSO cycle not yet live-tested end-to-end
 - FT4 mode not implemented
-- AP decoding (a-priori) only stubbed
-- OSD decoder incomplete
 - No unit tests
 
 ---
@@ -156,24 +150,34 @@ VITA-49 Audio (24kHz)
   → Anti-Alias Lowpass (Sinc/Hamming, fc=6kHz, 63 taps)
   → Resample to 12kHz
   → DC Remove
-  → Spectral Whitening (Overlap-Add FFT, Median Noise Floor)
+  → Spectral Whitening (Overlap-Add FFT, Median Noise Floor) — vectorized batch numpy
   → Normalization (-12 dBFS)
   → Window Sliding (0, +0.3s, -0.3s offset)
   → FT8 Decode (Costas Sync → Demap → LDPC 50 iter → CRC → Unpack)
-  → Signal Subtraction (up to 5 passes)
+  → Signal Subtraction (5 passes NORMAL / 7 passes DIVERSITY)
+  → AP/OSD decode on failed candidates
   → Result Fusion + Deduplication
 ```
+
+**Performance:** 2.71 seconds per full decode cycle on M4 Pro — every cycle decoded, no skipping.
+Key optimizations: Costas Sync (Python→numpy, 279x speedup), OSD (depth=1, limited candidates), Spectral Whitening (batch numpy).
 
 ### Diversity Implementation (core logic)
 
 ```python
-# At each FT8 cycle start:
-if diversity_cycle % 2 == 0:
-    radio.set_antenna("ANT1")
-    radio.set_rf_gain(preset.gain_ant1)
-else:
+# 4-cycle even/odd block pattern — each antenna covers both even and odd FT8 phases
+# Block A: ANT1, ANT2, ANT2, ANT1  |  Block B: ANT2, ANT1, ANT1, ANT2
+block = (diversity_cycle // 4) % 2
+pos   = diversity_cycle % 4
+pattern = [[0,1,1,0], [1,0,0,1]]     # 0=ANT1, 1=ANT2
+use_ant2 = pattern[block][pos]
+
+if use_ant2:
     radio.set_antenna("ANT2")
     radio.set_rf_gain(preset.gain_ant2)
+else:
+    radio.set_antenna("ANT1")
+    radio.set_rf_gain(preset.gain_ant1)
 
 # After decode: accumulate (don't replace)
 for station in new_stations:
@@ -183,8 +187,8 @@ for station in new_stations:
     else:
         accumulated[station.call] = station
 
-# Age out stations not heard for >2 minutes
-cutoff = time.time() - 120
+# Age out stations not heard for >75 seconds
+cutoff = time.time() - 75
 accumulated = {k: v for k, v in accumulated.items() if v.last_heard > cutoff}
 ```
 
@@ -192,6 +196,7 @@ accumulated = {k: v for k, v in accumulated.items() if v.last_heard > cutoff}
 
 ## Tested On
 
+- **Mac Mini M4 Pro** + FlexRadio 8400M
 - **Mac Mini M2** + FlexRadio 8400M
 - **iMac Pro** + FlexRadio 8400M
 - macOS, Python 3.12, PySide6
@@ -200,7 +205,7 @@ accumulated = {k: v for k, v in accumulated.items() if v.last_heard > cutoff}
 ## Installation
 
 ```bash
-git clone https://github.com/DA1MHH/SimpleFT8.git
+git clone https://github.com/mikewanne/SimpleFT8.git
 cd SimpleFT8
 python3.12 -m venv venv
 source venv/bin/activate
@@ -221,25 +226,27 @@ MIT License — free for everyone. Use it, modify it, build on it, integrate it 
 <a name="deutsch"></a>
 # 🇩🇪 SimpleFT8 — Temporal Antenna Diversity fuer FT8
 
-**BAUSTELLE / WORK IN PROGRESS** — Das ist eine fruehe Machbarkeitsstudie, weit entfernt von einem fertigen Programm. Aber die Kernidee funktioniert und der Empfang laeuft.
-
-**Eine Machbarkeitsstudie: FT8-Client mit Temporal Antenna Diversity — eine neue Technik die das Dekodieren schwacher Signale auf Single-Receiver Dual-Antennen-Radios deutlich verbessert.**
+**Ein funktionierender FT8-Client mit Temporal Antenna Diversity — eine neue Technik die das Dekodieren schwacher Signale auf Single-Receiver Dual-Antennen-Radios deutlich verbessert.**
 
 > **Bis zu 2–3x mehr einzigartige Stationen sichtbar** im gleichen 2-Minuten-Fenster im Vergleich zu Single-Antenna-Betrieb mit Akkumulation bei schlechten Bedingungen.
 > Im Vergleich zum Standard 15-Sekunden WSJT-X Snapshot: bis zu 4x mehr Stationen auf einmal sichtbar (Akkumulation + Diversity kombiniert).
 > Getestet am FlexRadio 8400M mit Multiband-Dipol + Regenrinne als zweite Antenne.
 
-**Status:** RX funktioniert. TX funktioniert (30+ PSKReporter-Spots). Vollstaendiger QSO-Zyklus noch nicht End-to-End getestet. Viele raue Kanten. Veroeffentlicht um das Konzept mit Zeitstempel zu dokumentieren, nicht um ein Produkt zu liefern.
+**Status:** Vollstaendiger RX/TX betriebsbereit. Diversity, DX Tuning, AP/OSD-Decoder, Auto-Reconnect, ADIF-Logging — alles funktioniert. QSO-Kette End-to-End und FT4-Modus bleiben fuer zukuenftige Implementierung.
 
 ### Screenshots
-
-**Normal-Modus — 13 Stationen auf 40m:**
-
-![Normal Modus](assets/screenshots/normal_13stations.png)
 
 **Diversity-Modus — 63 Stationen auf 20m (Indonesien 11.000 km, Neuseeland 18.000 km):**
 
 ![Diversity 63 Stationen](assets/screenshots/diversity_63stations_20m.png)
+
+**Direktvergleich — gleiche Band (40m), gleicher Abend (03.04.2026), 2 Minuten Abstand:**
+
+| Normal — 27 Stationen | Diversity — 37 Stationen |
+|---|---|
+| ![Normal 27](assets/screenshots/normal_27stations_40m.png) | ![Diversity 37](assets/screenshots/diversity_37stations_40m.png) |
+
+*+10 Stationen (+37%) mit aktivem Diversity. ANT-Spalte zeigt welche Antenne jede Station gehoert hat (A1, A2, A1>2, A2>1). 4-Zyklus Even/Odd-Pattern stellt sicher dass beide Antennen beide FT8-Phasen abdecken.*
 
 ---
 
@@ -267,12 +274,12 @@ Akkumuliert einzigartig:        48 Stationen (vs 14 mit einer Antenne)
 Regeln:
 - **Akkumulieren, nicht ersetzen**: Neue Zyklusergebnisse werden mit bestehenden Stationen zusammengefuehrt
 - **Besten SNR behalten**: Wird eine Station auf beiden Antennen gehoert, wird der staerkere Wert behalten
-- **Veraltete Eintraege entfernen**: Stationen die >2 Minuten nicht mehr gehoert werden, werden entfernt
+- **Veraltete Eintraege entfernen**: Stationen die >75s nicht mehr gehoert werden, werden entfernt
 - **Antennenquelle markieren**: `[A1]`, `[A2]`, `[A1>2]` (ANT1 staerker), `[A2>1]` (ANT2 staerker)
 - **TX immer auf ANT1**: Antenne wird beim Senden nie gewechselt
 - **Non-blocking Antennenbefehle**: In eigenem Thread gesendet, damit Keepalive und Audio-Stream nicht blockiert werden
 - **Kein zweiter Slice noetig**: Nutzt denselben einzelnen Slice/Receiver — wechselt nur den Antenneneingang
-- **Ein Decoder**: Eine Decoder-Instanz, ein Audio-Stream — ~20 Zeilen zusaetzlicher Code
+- **Ein Decoder**: Eine Decoder-Instanz, ein Audio-Stream
 
 ### Einfach erklaert
 
@@ -284,7 +291,7 @@ SimpleFT8 nutzt genau das aus: Slot 1 hoert auf ANT1, Slot 2 auf ANT2. Beide Slo
 
 Zwei Antennen mit unterschiedlicher physischer Ausrichtung und Position haben unterschiedliche Abstrahlcharakteristiken und Rauschprofile. Manche Stationen liegen im Null von ANT1 aber im Hauptlappen von ANT2 — und umgekehrt. Signale die auf ANT1 im Rauschen versinken, koennen auf ANT2 darueber liegen. Diese Eigenschaften sind **pro Station stabil** — eine Station die auf ANT2 besser ist, bleibt dort konsistent besser. Durch den Antennenwechsel alle 15 Sekunden werden systematisch beide Populationen erfasst.
 
-**Das Besondere:** Normalerweise braucht man fuer Antenna Diversity zwei komplette Empfangseinheiten — teuer. SimpleFT8 macht es mit einer einzigen, weil FT8 von Natur aus in Slots arbeitet. Die Software macht den Rest — 20 Zeilen Python.
+**Das Besondere:** Normalerweise braucht man fuer Antenna Diversity zwei komplette Empfangseinheiten — teuer. SimpleFT8 macht es mit einer einzigen, weil FT8 von Natur aus in Slots arbeitet. Die Software macht den Rest.
 
 Das funktioniert auf **jedem Radio mit zwei Antennenanschluessen**, auch mit nur einem Empfaenger. Keine Hardware-Modifikation noetig.
 
@@ -320,29 +327,29 @@ SimpleFT8 enthaelt einen automatischen Messdialog der Antenne + Gain pro Band op
 
 **Automatisches Laden:**
 6. Bei Bandwechsel: Preset wird automatisch geladen — kein manuelles Tuning noetig
-7. Bei wechselnden Bedingungen (Regen/Sonne): Neumessung dauert ca. 3-5 Minuten
+7. Normal-Modus nutzt das Preset ebenfalls: beste Antenne fuer RX, ANT1 immer fuer TX
+8. Bei wechselnden Bedingungen (Regen/Sonne): Neumessung dauert ca. 3-5 Minuten
 
 ---
 
 ## Was SimpleFT8 ist (und was nicht)
 
-**Das ist eine Machbarkeitsstudie.** Es zeigt dass Temporal Antenna Diversity funktioniert und mit minimalem Code massive Gewinne liefert.
-
-Es ist **kein** fertiges Produkt. Es ist ein funktionierender FT8-Client, gebaut in einer Woche von einem Funkamateur (DA1MHH) mit KI-Unterstuetzung (Claude). Es hat raue Kanten, unfertige Features und keine Unit-Tests.
+**Das ist ein funktionierender FT8-Client**, gebaut von einem Funkamateur (DA1MHH) mit KI-Unterstuetzung (Claude). Fokus: Einfachheit und maximale Empfangsleistung — kein Wasserfall, kein Klimbim, 3-Fenster-Layout.
 
 **Was funktioniert:**
 - Voller FT8 RX/TX ueber VITA-49 (kein SmartSDR noetig)
 - 3 RX-Modi: Normal / Diversity / DX Tuning
-- Signal Subtraction (5 Passes), Spectral Whitening, Anti-Alias Resampling
+- Signal Subtraction (5 Passes NORMAL / 7 Passes DIVERSITY), Spectral Whitening, Anti-Alias Resampling
+- AP-Dekodierung vollstaendig implementiert (LLR-Injection fuer i3/CQ/bekannte Calls/QSO-Partner)
+- OSD-Decoder komplett (depth=1, 10–20 Kandidaten)
 - CQ-Modus mit Auto-Antwort, QSO State Machine
 - Laendererkennung, Entfernungsberechnung, ADIF-Export
 - PSKReporter-Integration, 30+ bestaetigte Spots mit 10W
+- Auto-Reconnect mit Exponential Backoff, persistentes Logging, Fenstergeometrie gespeichert
 
 **Was noch fehlt:**
 - Vollstaendiger QSO-Zyklus noch nicht live End-to-End getestet
 - FT4-Modus nicht implementiert
-- AP-Dekodierung (A-Priori) nur als Stub
-- OSD-Decoder unvollstaendig
 - Keine Unit-Tests
 
 ---
@@ -358,10 +365,30 @@ Es ist **kein** fertiges Produkt. Es ist ein funktionierender FT8-Client, gebaut
 | Rig Control | SmartSDR TCP API (Port 4992) |
 | Config | ~/.simpleft8/config.json |
 
+### Decoder-Pipeline
+
+```
+VITA-49 Audio (24kHz)
+  → Anti-Alias Tiefpass (Sinc/Hamming, fc=6kHz, 63 Taps)
+  → Resample auf 12kHz
+  → DC-Remove
+  → Spectral Whitening (Overlap-Add FFT, Median-Noise-Floor) — vektorisiertes Batch-numpy
+  → Normalisierung (-12 dBFS)
+  → Fenster-Sliding (0, +0.3s, -0.3s Offset)
+  → FT8 Decode (Costas-Sync → Demap → LDPC 50 Iter → CRC → Unpack)
+  → Signal Subtraction (5 Passes NORMAL / 7 Passes DIVERSITY)
+  → AP/OSD-Dekodierung fehlgeschlagener Kandidaten
+  → Ergebnis-Fusion + Deduplizierung
+```
+
+**Performance:** 2,71 Sekunden pro vollstaendigem Dekodierzyklus auf M4 Pro — jeder Zyklus wird dekodiert, kein Ueberspringen.
+Optimierungen: Costas Sync (Python→numpy, 279x), OSD (depth=1, begrenzte Kandidaten), Spectral Whitening (Batch-numpy).
+
 ---
 
 ## Getestet auf
 
+- **Mac Mini M4 Pro** + FlexRadio 8400M
 - **Mac Mini M2** + FlexRadio 8400M
 - **iMac Pro** + FlexRadio 8400M
 - macOS, Python 3.12, PySide6
@@ -370,7 +397,7 @@ Es ist **kein** fertiges Produkt. Es ist ein funktionierender FT8-Client, gebaut
 ## Installation
 
 ```bash
-git clone https://github.com/DA1MHH/SimpleFT8.git
+git clone https://github.com/mikewanne/SimpleFT8.git
 cd SimpleFT8
 python3.12 -m venv venv
 source venv/bin/activate
