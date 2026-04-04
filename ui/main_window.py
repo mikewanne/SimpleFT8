@@ -669,6 +669,59 @@ class MainWindow(QMainWindow):
                 pass  # EINMESSEN abgebrochen — Modus unveraendert lassen
 
     def _start_dx_tuning(self):
+        """DX Tune Dialog — optional TUNE-Schritt + SWR-Pruefung vor Einmessen."""
+        from PySide6.QtWidgets import QMessageBox
+        from PySide6.QtCore import QTimer
+
+        tune_power = self.settings.get("tune_power", 10)
+        swr_limit  = self.settings.get("swr_limit", 3.0)
+
+        # TUNE anbieten (Antennentuner einstellen bevor Messung startet)
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Vor dem Einmessen: TUNE")
+        msg.setIcon(QMessageBox.Icon.Question)
+        msg.setText(
+            f"Vor dem Einmessen den Tuner einstellen?\n\n"
+            f"TUNE sendet {tune_power}W auf ANT1 fuer 5 Sekunden.\n"
+            f"Bei SWR > {swr_limit:.1f} wird Einmessen abgebrochen."
+        )
+        msg.setStyleSheet(self._msgbox_style())
+        btn_tune  = msg.addButton("Tunen + Einmessen", QMessageBox.ButtonRole.AcceptRole)
+        btn_skip  = msg.addButton("Direkt einmessen",  QMessageBox.ButtonRole.ActionRole)
+        btn_abort = msg.addButton("Abbrechen",         QMessageBox.ButtonRole.RejectRole)
+        msg.exec()
+
+        if msg.clickedButton() == btn_abort:
+            self._set_mode("normal")
+            return
+
+        if msg.clickedButton() == btn_tune and self.radio.ip:
+            # TX-Leistung auf Tune-Wert setzen, TUNE starten
+            self.radio._send_cmd(f"transmit set rfpower={tune_power}")
+            self.radio.tune_on()
+
+            def _after_tune():
+                self.radio.tune_off()
+                # Sendeleistung wieder auf normalen Wert
+                self.radio._send_cmd(f"transmit set rfpower={self.settings.power_watts}")
+                # SWR pruefen
+                swr = self.radio._last_swr
+                if swr > swr_limit:
+                    QMessageBox.warning(
+                        self, "SWR zu hoch",
+                        f"SWR {swr:.1f} > {swr_limit:.1f} — Einmessen abgebrochen.\n"
+                        f"Antenne/Tuner pruefen!"
+                    )
+                    self._set_mode("normal")
+                    return
+                self._open_dx_tune_dialog()
+
+            QTimer.singleShot(5000, _after_tune)
+        else:
+            # Direkt einmessen ohne TUNE
+            self._open_dx_tune_dialog()
+
+    def _open_dx_tune_dialog(self):
         """DX Tune Dialog oeffnen — NICHT-MODAL damit Signale durchkommen."""
         band = self.settings.band
         dialog = DXTuneDialog(self.radio, band, parent=self)

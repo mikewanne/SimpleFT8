@@ -118,7 +118,9 @@ _PREFIX_MAP = {
     'RL': 'RU', 'RM': 'RU', 'RN': 'RU', 'RO': 'RU', 'RQ': 'RU',
     'RT': 'RU', 'RU': 'RU', 'RV': 'RU', 'RW': 'RU', 'RX': 'RU',
     'RY': 'RU', 'RZ': 'RU', 'UA': 'RU', 'UB': 'RU', 'UC': 'RU',
-    'UD': 'RU',
+    'UD': 'RU', 'UE': 'RU', 'UF': 'RU', 'UG': 'RU', 'UH': 'RU', 'UI': 'RU',
+    'UJ': 'UZ', 'UK': 'UZ', 'UL': 'UZ', 'UM': 'UZ',
+    'UN': 'KZ', 'UO': 'KZ', 'UP': 'KZ', 'UQ': 'KZ',
     # Nordamerika
     'K': 'US', 'KA': 'US', 'KB': 'US', 'KC': 'US', 'KD': 'US',
     'KE': 'US', 'KF': 'US', 'KG': 'US', 'KI': 'US', 'KJ': 'US',
@@ -232,6 +234,7 @@ _COUNTRY_NAMES = {
     'SE': 'Sweden', 'NO': 'Norway', 'FI': 'Finland', 'DK': 'Denmark',
     'IS': 'Iceland', 'IE': 'Ireland', 'LT': 'Lithuania', 'LV': 'Latvia',
     'EE': 'Estonia', 'UA': 'Ukraine', 'RU': 'Russia',
+    'UZ': 'Uzbekistan', 'KZ': 'Kazakhstan',
     'US': 'USA', 'CA': 'Canada', 'MX': 'Mexico',
     'AR': 'Argentina', 'BR': 'Brazil', 'CL': 'Chile', 'CO': 'Colombia',
     'EC': 'Ecuador', 'PE': 'Peru', 'UY': 'Uruguay', 'VE': 'Venezuela',
