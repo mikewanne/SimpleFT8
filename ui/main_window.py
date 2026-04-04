@@ -471,6 +471,7 @@ class MainWindow(QMainWindow):
             with self._diversity_lock:
                 self._diversity_current_ant = "A1"
         self.control_panel.update_decode_count(0)
+        self.control_panel.set_rx_active(active)
 
     # ── Modus / Band / Power ────────────────────────────────────
 

@@ -710,6 +710,17 @@ class ControlPanel(QWidget):
     def update_state(self, state_name: str):
         self.state_label.setText(f"Status: {state_name}")
 
+    def set_rx_active(self, enabled: bool):
+        """EINMESSEN + DIVERSITY sperren wenn RX aus ist."""
+        self.btn_einmessen.setEnabled(enabled)
+        self.btn_diversity.setEnabled(enabled)
+        if not enabled:
+            self.btn_einmessen.setToolTip("RX einschalten um einzumessen")
+            self.btn_diversity.setToolTip("RX einschalten um Diversity zu nutzen")
+        else:
+            self.btn_einmessen.setToolTip("")
+            self.btn_diversity.setToolTip("")
+
     def set_connection_status(self, status: str):
         """Verbindungsstatus anzeigen: 'connected', 'disconnected', 'searching', 'reconnecting'."""
         colors = {
@@ -730,6 +741,10 @@ class ControlPanel(QWidget):
         self.connection_label.setStyleSheet(
             f"color: {color}; font-family: Menlo; font-size: 12px; font-weight: bold;"
         )
+        connected = (status == "connected")
+        for btn in [self.btn_tune, self.btn_cq, self.btn_diversity,
+                    self.btn_einmessen, self.btn_normal]:
+            btn.setEnabled(connected)
 
     def update_decode_count(self, count: int):
         """Anzahl dekodierter Stationen im letzten Zyklus."""

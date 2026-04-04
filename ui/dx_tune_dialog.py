@@ -55,6 +55,7 @@ class DXTuneDialog(QDialog):
         self._phase_data = {}   # (ant, gain) -> [snr_werte]
         self._cancelled = False
         self._finished = False
+        self._skip_first = True  # ersten angebrochenen Zyklus ueberspringen
 
         self.setWindowTitle(f"DX Tuning — {band}")
         self.setFixedSize(520, 460)
@@ -218,6 +219,10 @@ class DXTuneDialog(QDialog):
     def feed_cycle(self, messages: list):
         """Vom MainWindow aufgerufen wenn ein Dekodier-Zyklus fertig ist."""
         if self._cancelled or self._finished:
+            return
+        if self._skip_first:
+            self._skip_first = False
+            self.detail_label.setText("Warte auf naechsten vollen Zyklus...")
             return
         if self._step >= len(self._schedule):
             return

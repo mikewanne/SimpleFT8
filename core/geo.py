@@ -207,6 +207,44 @@ _PREFIX_MAP = {
     '4L': 'GE', 'UN': 'KZ', 'EX': 'KG', 'YI': 'IQ', 'AP': 'PK',
     # Pazifik extra
     'FK': 'NC', 'FO': 'PF', 'PJ': 'BQ',
+    # Naher Osten / Kaukasus
+    'EP': 'IR',              # Iran
+    'EK': 'AM',              # Armenia
+    '4J': 'AZ', '4K': 'AZ', # Azerbaijan
+    'OD': 'LE',              # Lebanon
+    'YK': 'SY',              # Syria
+    'A9': 'BH',              # Bahrain
+    '9K': 'KW',              # Kuwait
+    'YA': 'AF',              # Afghanistan
+    # Asien weitere
+    'XV': 'VN', '3W': 'VN', # Vietnam
+    'XU': 'KH_C',            # Cambodia
+    'XW': 'LAO',             # Laos
+    'VR': 'HK',              # Hong Kong
+    '4S': 'LK',              # Sri Lanka
+    'S2': 'BD', 'S3': 'BD', # Bangladesh
+    'JT': 'MN', 'JV': 'MN', # Mongolia
+    # Gibraltar
+    'ZB': 'GI',              # Gibraltar
+    # Mittelamerika
+    'TI': 'CR',              # Costa Rica
+    'YN': 'NI',              # Nicaragua
+    'HR': 'HN', 'HQ': 'HN', # Honduras
+    'YS': 'SV_C',            # El Salvador
+    'HP': 'PA_C',            # Panama
+    # Suedamerika extra
+    'ZP': 'PY_C',            # Paraguay
+    'CP': 'BO',              # Bolivia
+    # Afrika weitere
+    'Z2': 'ZW',              # Zimbabwe
+    '9J': 'ZM',              # Zambia
+    '7P': 'LS',              # Lesotho
+    'A2': 'BW',              # Botswana
+    '5H': 'TZ',              # Tanzania
+    'C5': 'GM_C',            # Gambia
+    'EL': 'LR',              # Liberia
+    '5V': 'TG_C',            # Togo
+    'TZ': 'ML',              # Mali
     # Seltene / Exotische
     '3Y': 'BV',  # Bouvet Island
     'H44': 'SB',  # Solomon Islands
@@ -265,6 +303,20 @@ _COUNTRY_NAMES = {
     'GE': 'Georgia', 'KZ': 'Kazakhstan', 'KG': 'Kyrgyzstan',
     'IQ': 'Iraq', 'PK': 'Pakistan',
     'NC': 'New Caledonia', 'PF': 'Polynesia', 'BQ': 'Bonaire',
+    # Naher Osten / Kaukasus
+    'IR': 'Iran', 'AM': 'Armenia', 'AZ': 'Azerbaijan',
+    'LE': 'Lebanon', 'SY': 'Syria', 'BH': 'Bahrain', 'KW': 'Kuwait', 'AF': 'Afghanistan',
+    # Asien weitere
+    'VN': 'Vietnam', 'KH_C': 'Cambodia', 'LAO': 'Laos',
+    'HK': 'Hong Kong', 'LK': 'Sri Lanka', 'BD': 'Bangladesh', 'MN': 'Mongolia',
+    # Gibraltar / Mittelamerika
+    'GI': 'Gibraltar', 'CR': 'Costa Rica', 'NI': 'Nicaragua',
+    'HN': 'Honduras', 'SV_C': 'El Salvador', 'PA_C': 'Panama',
+    # Suedamerika extra
+    'PY_C': 'Paraguay', 'BO': 'Bolivia',
+    # Afrika weitere
+    'ZW': 'Zimbabwe', 'ZM': 'Zambia', 'LS': 'Lesotho', 'BW': 'Botswana',
+    'TZ': 'Tanzania', 'GM_C': 'Gambia', 'LR': 'Liberia', 'TG_C': 'Togo', 'ML': 'Mali',
     'BV': 'Bouvet Isl.', 'SB': 'Solomons', 'FK': 'Falkland', 'BM': 'Bermuda',
     'NA': 'Namibia', 'SH': 'St.Helena', 'BN': 'Brunei', 'MO': 'Macau',
     'TW': 'Taiwan', 'CK': 'Cook Isl.', 'PW': 'Palau', 'AW': 'Aruba',
@@ -306,6 +358,22 @@ _COUNTRY_COORDS = {
     'IQ': (33.3, 44.4), 'PK': (33.7, 73.0),
     # Pazifik extra
     'NC': (-22.3, 166.5), 'PF': (-17.5, -149.6), 'BQ': (12.2, -68.3),
+    # Naher Osten / Kaukasus
+    'IR': (35.7, 51.4), 'AM': (40.2, 44.5), 'AZ': (40.4, 49.9),
+    'LE': (33.9, 35.5), 'SY': (33.5, 36.3), 'BH': (26.2, 50.6),
+    'KW': (29.4, 47.9), 'AF': (34.5, 69.2),
+    # Asien weitere
+    'VN': (21.0, 105.8), 'KH_C': (11.6, 104.9), 'LAO': (18.0, 102.6),
+    'HK': (22.3, 114.2), 'LK': (6.9, 79.9), 'BD': (23.7, 90.4), 'MN': (47.9, 106.9),
+    # Gibraltar / Mittelamerika
+    'GI': (36.1, -5.4), 'CR': (9.9, -84.1), 'NI': (12.1, -86.3),
+    'HN': (14.1, -87.2), 'SV_C': (13.7, -89.2), 'PA_C': (8.9, -79.5),
+    # Suedamerika extra
+    'PY_C': (-25.3, -57.6), 'BO': (-16.5, -68.1),
+    # Afrika weitere
+    'ZW': (-17.8, 31.1), 'ZM': (-15.4, 28.3), 'LS': (-29.3, 27.5),
+    'BW': (-24.7, 25.9), 'TZ': (-6.4, 34.9), 'GM_C': (13.5, -16.6),
+    'LR': (6.3, -10.8), 'TG_C': (6.1, 1.2), 'ML': (12.7, -8.0),
     # Seltene
     'BV': (-54.4, 3.4), 'SB': (-9.4, 160.0), 'FK': (-51.8, -59.0),
     'BM': (32.3, -64.8), 'NA': (-22.6, 17.1), 'SH': (-16.0, -5.7),
