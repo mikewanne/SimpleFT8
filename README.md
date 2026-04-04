@@ -6,8 +6,7 @@
 
 **A functional FT8 client implementing Temporal Antenna Diversity — a novel technique that significantly increases weak signal decoding on any single-receiver dual-antenna radio.**
 
-> **Up to 2–3x more unique stations visible** in the same 2-minute window compared to accumulated single-antenna operation under poor conditions.
-> When compared to the standard single-cycle WSJT-X snapshot (15 seconds), the combined effect of accumulation + polarization diversity can show 4x more stations at once.
+> **1.5–2x more unique stations visible** compared to single-antenna accumulated operation under the same conditions (measured: 27 → 37 stations on 40m, same evening; 30 → 63 stations peak on 20m).
 > Tested on FlexRadio 8400M with a multiband dipole + rain gutter as second antenna.
 
 **Status:** Full RX operational with advanced decoding (Diversity, AP/OSD, DX Tuning). TX signal generation confirmed via 30+ PSKReporter spots. End-to-end QSO chain (CQ → response → report → RR73 → ADIF log) not yet validated in live conditions. FT4 mode planned.
@@ -228,8 +227,7 @@ MIT License — free for everyone. Use it, modify it, build on it, integrate it 
 
 **Ein funktionierender FT8-Client mit Temporal Antenna Diversity — eine neue Technik die das Dekodieren schwacher Signale auf Single-Receiver Dual-Antennen-Radios deutlich verbessert.**
 
-> **Bis zu 2–3x mehr einzigartige Stationen sichtbar** im gleichen 2-Minuten-Fenster im Vergleich zu Single-Antenna-Betrieb mit Akkumulation bei schlechten Bedingungen.
-> Im Vergleich zum Standard 15-Sekunden WSJT-X Snapshot: bis zu 4x mehr Stationen auf einmal sichtbar (Akkumulation + Diversity kombiniert).
+> **1,5–2x mehr einzigartige Stationen sichtbar** gegenueber Single-Antenna-Akkumulation unter gleichen Bedingungen (gemessen: 27 → 37 Stationen auf 40m, gleicher Abend; 30 → 63 Stationen Peak auf 20m).
 > Getestet am FlexRadio 8400M mit Multiband-Dipol + Regenrinne als zweite Antenne.
 
 **Status:** Vollstaendiger RX betriebsbereit mit erweitertem Decoder (Diversity, AP/OSD, DX Tuning). TX-Signalerzeugung bestaetigt durch 30+ PSKReporter-Spots. End-to-End QSO-Kette (CQ → Antwort → Report → RR73 → ADIF-Log) noch nicht unter Live-Bedingungen verifiziert. FT4-Modus geplant.
