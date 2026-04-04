@@ -107,6 +107,14 @@ SimpleFT8 includes an automated measurement dialog that optimizes antenna + gain
 7. Normal mode also uses the preset: best antenna for RX, ANT1 always for TX
 8. When conditions change (rain/sun): re-measure takes ~3-5 minutes
 
+**Screenshots:**
+
+| No preset → offer tuning | Measurement complete |
+|---|---|
+| ![No preset dialog](assets/screenshots/dx_tuning_no_preset_dialog.png) | ![DX Tuning result](assets/screenshots/dx_tuning_result_1.png) |
+
+*Left: automatic prompt when switching to a band without a preset. Right: 18-cycle interleaved measurement finished — ANT1 and ANT2 each get their own optimal gain. 36 stations decoded in the background during the measurement.*
+
 ---
 
 ## What SimpleFT8 Is (and Isn't)
@@ -327,6 +335,14 @@ SimpleFT8 enthaelt einen automatischen Messdialog der Antenne + Gain pro Band op
 6. Bei Bandwechsel: Preset wird automatisch geladen — kein manuelles Tuning noetig
 7. Normal-Modus nutzt das Preset ebenfalls: beste Antenne fuer RX, ANT1 immer fuer TX
 8. Bei wechselnden Bedingungen (Regen/Sonne): Neumessung dauert ca. 3-5 Minuten
+
+**Screenshots:**
+
+| Kein Preset → Tuning anbieten | Messung abgeschlossen |
+|---|---|
+| ![Kein Preset Dialog](assets/screenshots/dx_tuning_no_preset_dialog.png) | ![DX Tuning Ergebnis](assets/screenshots/dx_tuning_result_1.png) |
+
+*Links: automatischer Dialog beim Wechsel auf ein Band ohne Preset. Rechts: 18-Zyklus-Messung abgeschlossen — ANT1 und ANT2 bekommen je ihren optimalen Gain. 36 Stationen wurden im Hintergrund waehrend der Messung dekodiert.*
 
 ---
 
