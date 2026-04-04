@@ -790,15 +790,19 @@ class ControlPanel(QWidget):
             btn.setChecked(p == preset)
 
     def update_diversity_stats(self, a1_only: int, a2_only: int,
-                                a1_wins: int, a2_wins: int):
+                                a1_wins: int, a2_wins: int,
+                                ucb_rate_a1: float = None, ucb_rate_a2: float = None,
+                                ucb_plays_a1: int = 0, ucb_plays_a2: int = 0):
         """Diversity-Statistiken: welche Antenne war besser."""
         total = a1_only + a2_only + a1_wins + a2_wins
         if total == 0:
             self._div_stats_label.setText("")
             return
-        self._div_stats_label.setText(
-            f"A1: {a1_only}  A2: {a2_only}  A1>{a1_wins}  A2>{a2_wins}"
-        )
+        base = f"A1: {a1_only}  A2: {a2_only}  A1>{a1_wins}  A2>{a2_wins}"
+        if ucb_rate_a1 is not None and ucb_rate_a2 is not None:
+            base += (f"   UCB: A1={ucb_rate_a1:.2f}({ucb_plays_a1})"
+                     f" A2={ucb_rate_a2:.2f}({ucb_plays_a2})")
+        self._div_stats_label.setText(base)
         self._div_stats_label.setStyleSheet(
             "color:#446688; font-size:9px; font-family:Menlo; padding-left:2px;"
         )

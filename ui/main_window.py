@@ -22,6 +22,53 @@ from .settings_dialog import SettingsDialog
 from .dx_tune_dialog import DXTuneDialog
 
 
+class _UCBAntennaSelector:
+    """UCB1-Algorithmus fuer adaptive Antennen-Auswahl im AUTO-Modus.
+
+    Loest die Bias-Spirale: exploriert automatisch die weniger gemessene
+    Antenne wenn Unsicherheit steigt. Kein manueller Reset noetig.
+    """
+
+    def __init__(self, weight: float = 1.5):
+        self._weight = weight
+        self.reset()
+
+    def reset(self):
+        self._plays   = {"A1": 0,   "A2": 0}
+        self._rewards = {"A1": 0.0, "A2": 0.0}
+
+    def choose(self) -> str:
+        """Naechste Antenne auswaehlen (UCB1)."""
+        import math
+        # Jede Antenne mindestens einmal spielen lassen
+        for ant in ("A1", "A2"):
+            if self._plays[ant] == 0:
+                return ant
+        total = self._plays["A1"] + self._plays["A2"]
+        best, best_score = "A1", -1.0
+        for ant in ("A1", "A2"):
+            avg     = self._rewards[ant] / self._plays[ant]
+            explore = self._weight * math.sqrt(math.log(total) / self._plays[ant])
+            score   = avg + explore
+            if score > best_score:
+                best_score = score
+                best = ant
+        return best
+
+    def update(self, ant: str, reward: float):
+        """Reward nach Zyklus-Ende einpflegen."""
+        if ant in self._plays:
+            self._plays[ant]   += 1
+            self._rewards[ant] += reward
+
+    def rates(self) -> dict:
+        """Erfolgsraten pro Antenne (fuer Anzeige)."""
+        return {
+            ant: (self._rewards[ant] / self._plays[ant] if self._plays[ant] > 0 else 0.0)
+            for ant in ("A1", "A2")
+        }
+
+
 class MainWindow(QMainWindow):
     """SimpleFT8 Hauptfenster — 3 Panels horizontal."""
 
@@ -73,6 +120,7 @@ class MainWindow(QMainWindow):
         self._normal_stations = {}     # key → FT8Message (Normal, 2-Min-Fenster)
         self._diversity_bias = "AUTO"  # Manueller Bias: 100:0 / 70:30 / AUTO / 30:70 / 0:100
         self._diversity_stats = {"A1_only": 0, "A2_only": 0, "A1_wins": 0, "A2_wins": 0}
+        self._ucb_selector = _UCBAntennaSelector(weight=1.5)  # UCB1 fuer AUTO-Modus
         import threading as _threading
         self._diversity_lock = _threading.Lock()  # BUG-2: Race Condition Guard
 
@@ -257,6 +305,14 @@ class MainWindow(QMainWindow):
             else:
                 ant = "A1"
 
+        # UCB1 Update (nur im AUTO-Modus, nach jedem Diversity-Zyklus)
+        if self._rx_mode == "diversity" and self._diversity_bias == "AUTO":
+            reward = sum(
+                max(0.0, (m.snr + 20) / 30.0)
+                for m in (messages or []) if m.snr is not None
+            )
+            self._ucb_selector.update(ant if self._rx_mode == "diversity" else "A1", reward)
+
         if self._rx_mode == "diversity" and messages:
             # Diversity: Stationen akkumulieren per Callsign
             # Zwei Timestamps:
@@ -337,9 +393,19 @@ class MainWindow(QMainWindow):
                               if str(getattr(m, 'antenna', '')).startswith('A1>'))
                 a2_wins = sum(1 for m in self._diversity_stations.values()
                               if str(getattr(m, 'antenna', '')).startswith('A2>'))
-                self.control_panel.update_diversity_stats(
-                    a1_only, a2_only, a1_wins, a2_wins
-                )
+                # UCB1-Raten in Stats anzeigen wenn AUTO aktiv
+                if self._diversity_bias == "AUTO":
+                    rates = self._ucb_selector.rates()
+                    plays = self._ucb_selector._plays
+                    self.control_panel.update_diversity_stats(
+                        a1_only, a2_only, a1_wins, a2_wins,
+                        ucb_rate_a1=rates["A1"], ucb_rate_a2=rates["A2"],
+                        ucb_plays_a1=plays["A1"], ucb_plays_a2=plays["A2"],
+                    )
+                else:
+                    self.control_panel.update_diversity_stats(
+                        a1_only, a2_only, a1_wins, a2_wins
+                    )
 
             self.control_panel.update_decode_count(
                 len(self._diversity_stations)
@@ -509,10 +575,11 @@ class MainWindow(QMainWindow):
         self._diversity_stations = {}
         self._normal_stations = {}
         self.control_panel.update_decode_count(0)
-        # Bias auf AUTO zuruecksetzen bei Bandwechsel
+        # Bias + UCB1 auf AUTO zuruecksetzen bei Bandwechsel
         if self._diversity_bias != "AUTO":
             self._diversity_bias = "AUTO"
             self.control_panel.set_bias("AUTO")
+        self._ucb_selector.reset()
         if self.radio.ip:
             s = self.radio._slice_idx
             self.radio.set_frequency(freq, slice_idx=s)
@@ -619,6 +686,7 @@ class MainWindow(QMainWindow):
         self._diversity_stations = {}
         self._diversity_cycle = 0
         self._diversity_bias = "AUTO"
+        self._ucb_selector.reset()
         self._apply_normal_mode()
         self.control_panel.dx_info.setText("")
         self.control_panel.clear_diversity_cycle()
@@ -987,16 +1055,14 @@ class MainWindow(QMainWindow):
                 bias = self._diversity_bias
                 pattern = self._BIAS_PATTERNS.get(bias)
                 if pattern is None:
-                    # AUTO: 4-Zyklus Block-A/B Pattern (keine Blindstellen)
-                    # Block A: ANT1(odd) ANT2(even) ANT2(odd) ANT1(even)
-                    # Block B: ANT2(odd) ANT1(even) ANT1(odd) ANT2(even)
-                    _block = ((self._diversity_cycle - 1) // 4) % 2
-                    _BLOCK_PATTERN = (
-                        ("A1", "A2", "A2", "A1"),  # Block A
-                        ("A2", "A1", "A1", "A2"),  # Block B
-                    )
-                    _pos = (self._diversity_cycle - 1) % 4
-                    self._diversity_current_ant = _BLOCK_PATTERN[_block][_pos]
+                    # AUTO: UCB1-Algorithmus waehlt adaptiv die bessere Antenne
+                    # Ersetzt das feste 4-Zyklus Even/Odd Pattern
+                    _pos = (self._diversity_cycle - 1) % 4  # nur fuer Zyklus-Indikator
+                    try:
+                        self._diversity_current_ant = self._ucb_selector.choose()
+                    except Exception:
+                        # Fallback auf einfaches Even/Odd
+                        self._diversity_current_ant = "A1" if (self._diversity_cycle % 2) == 1 else "A2"
                 else:
                     _pos = (self._diversity_cycle - 1) % len(pattern)
                     self._diversity_current_ant = pattern[_pos]
