@@ -157,6 +157,32 @@
 
 ---
 
+## IDEEN / SPAETERE FEATURES (DeepSeek + Claude, 04.04.2026)
+
+### DX Cluster / PSKReporter konsumieren (Prio: MITTEL)
+- PSKReporter API oder DX Cluster (Telnet) als Input nutzen — nicht nur eigene Spots senden
+- Alert wenn gesuchte DXCC-Entity gerade auf aktivem Band gehoert wird
+- Ziel-Callsign/DXCC-Liste definieren → automatische Benachrichtigung
+- Aus Decoder wird DX-Assistent
+
+### macOS Menu Bar Extra (Prio: NIEDRIG)
+- Kleines Symbol in macOS Menüleiste: Band, Stationszahl, Decode-Status
+- Ohne App in Vordergrund holen bedienbar
+- Globale Keyboard Shortcuts (Band wechseln, CQ starten)
+- Library: rumps oder pyobjus
+
+### Adaptiver Diversity-Zyklus — UCB1 Algorithmus (Prio: MITTEL)
+- Algorithmus: UCB1 (Upper Confidence Bound) — loest Bias-Spirale automatisch
+- Prinzip: Weniger gemessene Antenne bekommt Bonus wenn Unsicherheit steigt
+- Kein manueller Reset noetig — Exploration/Exploitation automatisch balanciert
+- Alternative: Epsilon-Greedy (10% Random, 90% beste Antenne) — einfacher zu implementieren
+- Metrik: Dekodier-Erfolge pro 15s-Periode normiert (nicht rohe SNR-Summe!)
+- Realistischer Gewinn: +3-5% mehr Stationen, konzentriert auf schwache DX-Signale
+- Aufwand: ~30 Zeilen Python in _on_cycle_start(), Rest existiert bereits
+- DeepSeek-Empfehlung: UCB1 oder Epsilon-Greedy, kein periodischer Reset
+
+---
+
 ## NICHT machen (bewusste Entscheidung)
 
 - Library wechseln (PyFT8 2.6.1 funktioniert, Risiko zu hoch)
