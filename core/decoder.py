@@ -71,10 +71,13 @@ class Decoder(QObject):
         self._audio_buffer_24k = []
         self._buffer_lock = threading.Lock()
         self._decode_thread = None
-        self.recent_calls = set()
+        # DeepSeek: deque statt set → Reihenfolge erhalten (aktuellste zuerst)
+        from collections import deque
+        self.recent_calls: deque = deque(maxlen=200)
         self.occupied_freqs = []
         self.input_sample_rate = 24000
         self._prev_audio_12k = None  # Vorheriger Zyklus fuer Akkumulierung
+        self.priority_call: str = ""  # QSO-Partner (hoechste AP-Prioritaet)
 
     def start(self):
         self._running = True
@@ -202,18 +205,16 @@ class Decoder(QObject):
             if subtracted == 0:
                 break
 
-        # Frequenzen und Calls tracken
+        # Frequenzen und Calls tracken (deque: aktuellste zuerst via appendleft)
         occupied = []
         for msg in all_messages:
             occupied.append(msg.freq_hz)
-            if msg.caller:
-                self.recent_calls.add(msg.caller)
-            if msg.target:
-                self.recent_calls.add(msg.target)
+            if msg.caller and msg.caller not in self.recent_calls:
+                self.recent_calls.appendleft(msg.caller)
+            if msg.target and msg.target not in self.recent_calls:
+                self.recent_calls.appendleft(msg.target)
 
         self.occupied_freqs = sorted(occupied)
-        if len(self.recent_calls) > 200:
-            self.recent_calls = set(list(self.recent_calls)[-200:])
 
         return all_messages
 
@@ -355,18 +356,31 @@ class Decoder(QObject):
                 except Exception:
                     continue
 
-        # AP + OSD Fallback
+        # AP + OSD Fallback (DeepSeek: priority_call fuer aktiven QSO-Partner)
         if failed_for_osd:
             my_call = self.my_call if hasattr(self, 'my_call') else "DA1MHH"
-            for llr, snr, fHz, dt in failed_for_osd[:30]:
+            # priority_call an den Anfang der recent_calls Liste stellen
+            p_call = getattr(self, 'priority_call', '')
+            ap_calls = self.recent_calls
+            if p_call and p_call not in ap_calls:
+                from collections import deque as _deque
+                ap_calls = _deque([p_call], maxlen=201)
+                ap_calls.extend(self.recent_calls)
+            elif p_call:
+                # Schon drin — ans Ende damit appendleft-Reihenfolge erhalten bleibt
+                pass
+            for llr, snr, fHz, dt in failed_for_osd[:40]:
                 decoded_msg = None
                 try:
                     decoded_msg = try_ap_decode(
                         llr, my_call=my_call,
-                        recent_calls=self.recent_calls,
+                        recent_calls=ap_calls,
+                        priority_call=p_call or None,
                     )
                     if not decoded_msg:
-                        decoded_msg = try_osd_decode(llr, max_depth=1)
+                        # OSD Tiefe 2 nur bei sehr schwachen Signalen (SNR < -20)
+                        depth = 2 if snr < -20 else 1
+                        decoded_msg = try_osd_decode(llr, max_depth=depth)
                 except Exception:
                     continue
                 if decoded_msg:

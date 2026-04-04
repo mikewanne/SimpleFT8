@@ -61,7 +61,7 @@ class MainWindow(QMainWindow):
         )
 
         self._reconnect_attempts = 0
-        self._max_reconnect_attempts = 10
+        self._reconnect_countdown = 0
         self._dx_mode = False
         self._dx_tune_dialog = None  # Aktiver DX-Tune Dialog
         # Diversity (simpel: Antenne pro Zyklus wechseln)
@@ -186,26 +186,53 @@ class MainWindow(QMainWindow):
         self.radio.swr_alarm.connect(self._on_swr_alarm)
 
     def _on_radio_disconnected(self):
-        """Verbindung verloren — Auto-Reconnect."""
+        """Verbindung verloren — unbegrenzt reconnecten mit Exponential Backoff."""
         self.control_panel.set_connection_status("disconnected")
         self.decoder.stop()
+        self._reconnect_attempts += 1
+        self._reconnect_countdown = 0
 
-        if self._reconnect_attempts < self._max_reconnect_attempts:
-            self._reconnect_attempts += 1
-            self.control_panel.set_connection_status("reconnecting")
-            import threading
-            threading.Thread(
-                target=self._reconnect_worker, daemon=True
-            ).start()
+        # QTimer im GUI-Thread erstellen (darf NICHT im Worker-Thread sein)
+        from PySide6.QtCore import QTimer
+        if not hasattr(self, '_countdown_timer'):
+            self._countdown_timer = QTimer(self)
+            self._countdown_timer.timeout.connect(self._on_countdown_tick)
+        self._countdown_timer.start(1000)
+
+        self.control_panel.set_connection_status("reconnecting")
+        import threading
+        threading.Thread(target=self._reconnect_worker, daemon=True).start()
+
+    def _on_countdown_tick(self):
+        """Countdown-Anzeige im GUI-Thread aktualisieren."""
+        secs = self._reconnect_countdown
+        if secs > 0:
+            self.control_panel.connection_label.setText(
+                f"RADIO: Reconnect in {secs}s..."
+            )
+            self.control_panel.connection_label.setStyleSheet(
+                "color: #FFD700; font-family: Menlo; font-size: 12px; font-weight: bold;"
+            )
 
     def _reconnect_worker(self):
-        """Reconnect im Hintergrund nach 5s Pause."""
-        import time as _time
-        _time.sleep(5)
-        if not self.radio._running:
-            ok = self.radio.auto_connect(max_retries=3, retry_delay=3.0)
-            if not ok:
-                self.control_panel.set_connection_status("disconnected")
+        """Reconnect-Schleife im Hintergrund (Exponential Backoff, unbegrenzt)."""
+        def _on_waiting(secs_remaining: int):
+            # Thread-safe: nur primitiven int setzen, QTimer liest ihn
+            self._reconnect_countdown = secs_remaining
+
+        ok = self.radio.reconnect_forever(on_waiting=_on_waiting)
+        self._reconnect_countdown = 0
+
+        # Timer stoppen (Thread-sicher via invokeMethod)
+        from PySide6.QtCore import QMetaObject, Qt
+        if hasattr(self, '_countdown_timer'):
+            QMetaObject.invokeMethod(
+                self._countdown_timer, "stop",
+                Qt.ConnectionType.QueuedConnection,
+            )
+
+        if not ok:
+            self.control_panel.set_connection_status("disconnected")
 
     def _on_cycle_decoded(self, messages: list):
         """Ein kompletter FT8-Zyklus dekodiert."""
@@ -769,6 +796,13 @@ class MainWindow(QMainWindow):
     def _on_state_changed(self, state: QSOState):
         name = state.name
         self.control_panel.update_state(name)
+        # AP-Prioritaet: aktiver QSO-Partner bekommt hoechste AP-Hint-Prioritaet
+        if state not in (QSOState.IDLE, QSOState.TIMEOUT):
+            self.decoder.priority_call = getattr(
+                self.qso_sm, 'their_call', ''
+            ) or ""
+        else:
+            self.decoder.priority_call = ""
 
         in_qso = state not in (
             QSOState.IDLE, QSOState.TIMEOUT,
@@ -1044,6 +1078,10 @@ class MainWindow(QMainWindow):
         self.timer.stop()
         if self._rx_mode == "diversity":
             self._apply_normal_mode()
+        # Reconnect-Schleife abbrechen bevor disconnect
+        self.radio.abort_reconnect()
+        if hasattr(self, '_countdown_timer'):
+            self._countdown_timer.stop()
         self.decoder.stop()
         self.radio.disconnect()
         self.settings.save()

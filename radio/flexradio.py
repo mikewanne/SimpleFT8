@@ -77,10 +77,15 @@ class FlexRadio(QObject):
 
     # ── Verbindung ──────────────────────────────────────────────
 
+    # Exponential Backoff Stufen in Sekunden (DeepSeek: in FlexRadio kapseln)
+    _RECONNECT_DELAYS = [5, 10, 20, 40, 60]
+
     def auto_connect(self, max_retries: int = 5, retry_delay: float = 3.0):
-        """Auto-Discovery + Connect mit Retry bis Radio gefunden."""
+        """Auto-Discovery + Connect mit Retry bis Radio gefunden.
+
+        Fuer den ersten Start: max_retries/retry_delay wie gehabt.
+        """
         for attempt in range(max_retries):
-            # Discovery wenn keine IP
             if not self.ip:
                 devices = self.discover(timeout=2.0)
                 if devices:
@@ -89,10 +94,8 @@ class FlexRadio(QObject):
                     print(f"[FlexRadio] {model} gefunden @ {self.ip}")
 
             if self.ip:
-                # Sauber aufraeumen vor Retry
                 self.disconnect()
                 time.sleep(0.5)
-
                 ok = self.connect()
                 if ok:
                     return True
@@ -102,6 +105,58 @@ class FlexRadio(QObject):
 
         self.error.emit("FlexRadio nicht erreichbar nach allen Versuchen")
         return False
+
+    def reconnect_forever(self, on_waiting=None):
+        """Unbegrenzte Reconnect-Schleife mit Exponential Backoff.
+
+        Wird von main_window in einem Hintergrund-Thread aufgerufen.
+        on_waiting(delay_secs): Callback fuer UI-Countdown (jede Sekunde).
+        Gibt True zurueck wenn verbunden, laeuft bis Verbindung steht
+        oder self._abort_reconnect gesetzt wird.
+        """
+        self._abort_reconnect = False
+        attempt = 0
+
+        while not self._abort_reconnect:
+            # Ab Versuch 10: Discovery-Modus (IP koennte sich geaendert haben)
+            if attempt >= 10:
+                print(f"[FlexRadio] Reconnect #{attempt}: Discovery-Modus (IP-Check)")
+                devices = self.discover(timeout=3.0)
+                if devices:
+                    new_ip = devices[0]["ip"]
+                    if new_ip != self.ip:
+                        print(f"[FlexRadio] Neue IP gefunden: {new_ip} (war {self.ip})")
+                        self.ip = new_ip
+
+            if self.ip:
+                self.disconnect()
+                time.sleep(0.5)
+                if not self._abort_reconnect:
+                    ok = self.connect()
+                    if ok:
+                        return True
+
+            # Exponential Backoff: 5→10→20→40→60→60→...
+            delay = self._RECONNECT_DELAYS[
+                min(attempt, len(self._RECONNECT_DELAYS) - 1)
+            ]
+            print(f"[FlexRadio] Reconnect #{attempt + 1} in {delay}s...")
+
+            # Sekunden-weise warten damit UI-Countdown updaten kann
+            for remaining in range(delay, 0, -1):
+                if self._abort_reconnect:
+                    return False
+                if on_waiting:
+                    on_waiting(remaining)
+                time.sleep(1)
+
+            attempt += 1
+
+        return False
+
+    def abort_reconnect(self):
+        """Reconnect-Schleife abbrechen."""
+        self._abort_reconnect = True
 
     def connect(self) -> bool:
         """Verbindung zum FlexRadio herstellen + Audio-Stream aufsetzen.

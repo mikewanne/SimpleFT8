@@ -83,15 +83,18 @@ def _try_bp_with_ap(llr_ap: np.ndarray) -> str | None:
 
 
 def try_ap_decode(llr: np.ndarray, my_call: str = "DA1MHH",
-                   recent_calls: set = None) -> str | None:
+                   recent_calls=None,
+                   priority_call: str = None) -> str | None:
     """AP-Dekodierung mit verschiedenen Hint-Stufen.
 
     Stufen (von wenig zu viel Vorwissen):
+    0. AP-priorityCall: aktiver QSO-Partner → hoechste Prioritaet
     1. AP-i3: nur Message-Typ setzen (i3=1, 3 Bits)
     2. AP-CQ: "CQ" als Callsign 1 + i3 (31 Bits)
     3. AP-myCall: eigenes Call als Callsign 2 + i3 (31 Bits)
     4. AP-myCall+CQ: CQ + eigenes Call + i3 (59 Bits!) ← staerkster Hint
-    5. AP-recentCall: bekanntes Call als Callsign 1 + i3
+    5. AP-priorityCall+myCall: QSO-Partner als C1 + eigenes Call als C2 (59 Bits)
+    6. AP-recentCall: bekannte Calls als Callsign 1 oder 2
 
     Returns: dekodierte Nachricht oder None
     """
@@ -112,6 +115,25 @@ def try_ap_decode(llr: np.ndarray, my_call: str = "DA1MHH",
     cq_bits = _call_to_bits("CQ")
     # Eigenes Call Bits
     my_bits = _call_to_bits(my_call)
+    # QSO-Partner Bits (hoechste Prioritaet)
+    prio_bits = _call_to_bits(priority_call) if priority_call else None
+
+    # --- Stufe 0: QSO-Partner als C1 → prioritaer wenn aktiv ---
+    if prio_bits:
+        llr_ap = _set_ap_bits(llr, POS_C28A + POS_I3, prio_bits + i3_bits)
+        msg = _try_bp_with_ap(llr_ap)
+        if msg:
+            return msg
+        # QSO-Partner als C1 + eigenes Call als C2 (staerkster QSO-Hint)
+        if my_bits:
+            llr_ap = _set_ap_bits(
+                llr,
+                POS_C28A + POS_C28B + POS_I3,
+                prio_bits + my_bits + i3_bits,
+            )
+            msg = _try_bp_with_ap(llr_ap)
+            if msg:
+                return msg
 
     # --- Stufe 1: nur i3 (3 Bits) ---
     llr_ap = _set_ap_bits(llr, POS_I3, i3_bits)
@@ -126,14 +148,14 @@ def try_ap_decode(llr: np.ndarray, my_call: str = "DA1MHH",
         if msg:
             return msg
 
-    # --- Stufe 3: eigenes Call + i3 (31 Bits) ---
+    # --- Stufe 3: eigenes Call als C2 + i3 (31 Bits) ---
     if my_bits:
         llr_ap = _set_ap_bits(llr, POS_C28B + POS_I3, my_bits + i3_bits)
         msg = _try_bp_with_ap(llr_ap)
         if msg:
             return msg
 
-    # --- Stufe 4: CQ + eigenes Call + i3 (59 Bits!) ---
+    # --- Stufe 4: CQ als C1 + eigenes Call als C2 + i3 (59 Bits!) ---
     if cq_bits and my_bits:
         llr_ap = _set_ap_bits(
             llr,
@@ -144,12 +166,29 @@ def try_ap_decode(llr: np.ndarray, my_call: str = "DA1MHH",
         if msg:
             return msg
 
-    # --- Stufe 5: bekannte Calls als Callsign 1 (wenn jemand CQ ruft den wir kennen) ---
+    # --- Stufe 5: bekannte Calls (deque: aktuellste zuerst) ---
     if recent_calls:
-        for call in list(recent_calls)[:10]:  # Max 10 Calls versuchen
+        checked = set()
+        if priority_call:
+            checked.add(priority_call)
+        for call in list(recent_calls)[:20]:  # Max 20 Calls (DeepSeek: war 10)
+            if call in checked:
+                continue
+            checked.add(call)
             call_bits = _call_to_bits(call)
-            if call_bits:
-                llr_ap = _set_ap_bits(llr, POS_C28A + POS_I3, call_bits + i3_bits)
+            if not call_bits:
+                continue
+            # Als Callsign 1 (anrufende Station)
+            llr_ap = _set_ap_bits(llr, POS_C28A + POS_I3, call_bits + i3_bits)
+            msg = _try_bp_with_ap(llr_ap)
+            if msg:
+                return msg
+            # Als Callsign 2 (empfangende Station) + CQ
+            if cq_bits:
+                llr_ap = _set_ap_bits(
+                    llr, POS_C28A + POS_C28B + POS_I3,
+                    cq_bits + call_bits + i3_bits,
+                )
                 msg = _try_bp_with_ap(llr_ap)
                 if msg:
                     return msg
