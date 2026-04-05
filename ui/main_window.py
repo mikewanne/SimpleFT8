@@ -517,10 +517,16 @@ class MainWindow(QMainWindow):
     @Slot(object)
     def _on_station_clicked(self, msg: FT8Message):
         """User hat eine Station in der Empfangsliste angeklickt."""
-        # Wenn gerade TX läuft: warten bis TX fertig (kein Abbruch während Senden!)
+        # Wenn gerade TX läuft: Klick merken, nach TX-Ende ausführen
         if self.encoder.is_transmitting:
-            print(f"[QSO] TX aktiv — Klick auf {msg.caller} ignoriert, warte auf TX-Ende")
+            self._pending_click = msg
+            print(f"[QSO] TX aktiv — {msg.caller} wird nach TX-Ende gerufen")
             return
+        self._pending_click = None
+        # CQ-Modus beenden wenn aktiv
+        if self.qso_sm.cq_mode:
+            self.qso_sm.stop_cq()
+            self.control_panel.set_cq_active(False)
         self._active_qso_targets.add(msg.caller)  # 150s Aging fuer angerufene Station
         self.rx_panel.set_active_call(msg.caller)  # Zeile im RX-Panel hervorheben
         self.qso_panel.add_info(f"Rufe {msg.caller}...")
@@ -959,7 +965,11 @@ class MainWindow(QMainWindow):
     @Slot()
     def _on_cq_clicked(self):
         if self.control_panel.btn_cq.isChecked():
-            self.encoder.tx_even = None  # CQ: kein Slot-Zwang
+            # CQ: immer auf festem Slot senden (aktueller Gegenteil-Slot)
+            # So antworten Stationen konsistent im anderen Slot
+            self.encoder.tx_even = not self.timer.is_even_cycle()
+            slot = "EVEN" if self.encoder.tx_even else "ODD"
+            print(f"[CQ] Fester TX-Slot: {slot}")
             self.qso_panel.add_info("CQ-Modus gestartet")
             self.qso_sm.start_cq()
         else:
@@ -1018,6 +1028,12 @@ class MainWindow(QMainWindow):
         """TX abgeschlossen — PTT aus, zurueck zu RX."""
         self.control_panel.set_tx_active(False)
         self.qso_sm.on_message_sent()
+        # Pending Klick ausfuehren (Station waehrend TX angeklickt)
+        pending = getattr(self, '_pending_click', None)
+        if pending:
+            self._pending_click = None
+            print(f"[QSO] TX fertig — starte gequeueten Klick auf {pending.caller}")
+            self._on_station_clicked(pending)
 
     @Slot(str)
     def _on_send_message(self, message: str):
