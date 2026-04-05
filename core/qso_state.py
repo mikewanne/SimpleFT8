@@ -153,7 +153,9 @@ class QSOStateMachine(QObject):
             max_calls=self.max_calls,
         )
 
-        msg = f"{self.my_call} {their_call} {self.my_grid}"
+        report = f"{self._last_snr:+03d}" if self._last_snr > -30 else "-10"
+        self.qso.our_snr = report
+        msg = f"{their_call} {self.my_call} {report}"
         print(f"[QSO] START: Rufe {their_call} auf {freq_hz}Hz → sende '{msg}' (max {self.max_calls} Versuche)")
         self._set_state(QSOState.TX_CALL)
         self.send_message.emit(msg)
@@ -177,7 +179,7 @@ class QSOStateMachine(QObject):
             if self.state == QSOState.WAIT_REPORT and self.qso.timeout_cycles == 2:
                 if self.qso.calls_made < self.qso.max_calls:
                     self.qso.calls_made += 1
-                    retry_msg = f"{self.my_call} {self.qso.their_call} {self.my_grid}"
+                    retry_msg = f"{self.qso.their_call} {self.my_call} {self.qso.our_snr or '-10'}"
                     print(f"[QSO] Retry {self.qso.calls_made}/{self.qso.max_calls}: '{retry_msg}'")
                     self._set_state(QSOState.TX_CALL)
                     self.send_message.emit(retry_msg)
@@ -216,6 +218,16 @@ class QSOStateMachine(QObject):
             self._set_state(QSOState.CQ_WAIT)
             self.qso.timeout_cycles = 0
         elif self.state == QSOState.TX_CALL:
+            # Hunt: Antwort während TX gemerkt?
+            pending = getattr(self, '_pending_hunt_reply', None)
+            if pending:
+                self._pending_hunt_reply = None
+                self._set_state(QSOState.WAIT_REPORT)
+                print(f"[QSO] TX fertig — verarbeite Hunt-Antwort: {pending.grid_or_report}")
+                self.qso.their_snr = pending.grid_or_report
+                if self.auto_mode or self.cq_mode or True:
+                    self.advance()
+                return
             self._set_state(QSOState.WAIT_REPORT)
             self.qso.timeout_cycles = 0
         elif self.state == QSOState.TX_REPORT:
@@ -266,9 +278,14 @@ class QSOStateMachine(QObject):
             if msg.caller != self.qso.their_call:
                 return
 
-        if self.state == QSOState.WAIT_REPORT:
+        if self.state in (QSOState.WAIT_REPORT, QSOState.TX_CALL):
             if msg.is_report:
                 self.qso.their_snr = msg.grid_or_report
+                if self.state == QSOState.TX_CALL:
+                    # Antwort kam während TX — merken für nach TX
+                    self._pending_hunt_reply = msg
+                    print(f"[QSO] Hunt-Antwort gemerkt: {msg.grid_or_report} (TX aktiv)")
+                    return
                 if self.auto_mode or self.cq_mode:
                     self.advance()
                 return
@@ -276,7 +293,7 @@ class QSOStateMachine(QObject):
             if msg.is_grid:
                 # Wiederholt Grid → unser Call kam nicht an, nochmal senden
                 self.qso.timeout_cycles = 0
-                tx_msg = f"{self.my_call} {self.qso.their_call} {self.my_grid}"
+                tx_msg = f"{self.qso.their_call} {self.my_call} {self.qso.our_snr or '-10'}"
                 self.send_message.emit(tx_msg)
                 return
 
