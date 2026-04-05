@@ -110,8 +110,7 @@ class QSOStateMachine(QObject):
             print(f"[QSO] Abbruch {old} → starte neu mit {their_call}")
             self._set_state(QSOState.IDLE)
 
-        was_cq = self.cq_mode
-        self.cq_mode = False  # CQ-Modus unterbrechen
+        self._was_cq = self.cq_mode  # CQ-Modus merken fuer Resume nach Timeout
 
         self.qso = QSOData(
             their_call=their_call,
@@ -155,7 +154,8 @@ class QSOStateMachine(QObject):
                     print(f"[QSO] Max Versuche ({self.qso.max_calls}) erreicht — TIMEOUT {call}")
                     self._set_state(QSOState.TIMEOUT)
                     self.qso_timeout.emit(call)
-                    if self.cq_mode:
+                    if self.cq_mode or getattr(self, '_was_cq', False):
+                        self.cq_mode = True
                         self._send_cq()
                     else:
                         self._set_state(QSOState.IDLE)
@@ -166,7 +166,8 @@ class QSOStateMachine(QObject):
                 print(f"[QSO] TIMEOUT: {call} hat nicht geantwortet nach {self.qso.max_timeout} Zyklen")
                 self._set_state(QSOState.TIMEOUT)
                 self.qso_timeout.emit(call)
-                if self.cq_mode:
+                if self.cq_mode or getattr(self, '_was_cq', False):
+                    self.cq_mode = True
                     self._send_cq()
                 else:
                     self._set_state(QSOState.IDLE)
