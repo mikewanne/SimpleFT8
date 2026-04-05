@@ -1027,7 +1027,14 @@ class MainWindow(QMainWindow):
     def _on_tx_finished(self):
         """TX abgeschlossen — PTT aus, zurueck zu RX."""
         self.control_panel.set_tx_active(False)
-        self.qso_sm.on_message_sent()
+        # Race-Condition-Schutz: wenn Encoder noch eine gequeuete Nachricht hat,
+        # war dieses TX die ALTE Nachricht (z.B. CQ). State hat sich schon geaendert
+        # (z.B. zu TX_REPORT). NICHT on_message_sent() aufrufen — warten bis
+        # die gequeuete Nachricht tatsaechlich gesendet wurde.
+        if getattr(self.encoder, '_pending_msg', None):
+            print("[TX] Alte Nachricht fertig — pending message folgt, kein State-Wechsel")
+        else:
+            self.qso_sm.on_message_sent()
         # Pending Klick ausfuehren (Station waehrend TX angeklickt)
         pending = getattr(self, '_pending_click', None)
         if pending:
