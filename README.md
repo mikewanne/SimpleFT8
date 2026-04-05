@@ -12,16 +12,26 @@
 
 ---
 
-## ⚠️ TX Status
+## First QSO completed!
 
-**TX is working — first full QSO is imminent:**
-- ✅ **TUNE** — Antenna tuner activation works
-- ✅ **CQ calling** — 155 PSKReporter spots worldwide, up to 12,000 km
-- ✅ **Stations respond** — DK5ON, UR5DU, UR5WCS, DB2HA, IN3LHF, F5PBG answered CQ calls
-- ✅ **QSO state machine** — Full sequence CQ → report → RR73 → ADIF log implemented
-- 🔄 **First complete QSO** — Stations respond and QSO sequence runs through, completion imminent
+**DA1MHH worked YL2TM (Latvia) on 20m FT8 — 05 April 2026, 17:31 UTC.**
+Thanks YL2TM for the first SimpleFT8 QSO!
 
-**QSO features:** Auto mode (CQ + Hunt), configurable call attempts (3/5/7/99), TX queue for responses during CQ, even/odd slot correction, TX frequency 1500 Hz (WSJT-X standard), station switch aborts running QSO.
+```
+17:31 → CQ DA1MHH JO31
+17:31 ← DA1MHH YL2TM -19
+17:31 → YL2TM DA1MHH R-12
+17:32 → YL2TM DA1MHH RR73
+17:32 ← DA1MHH YL2TM RR73
+       ✓ QSO complete — logged to ADIF
+```
+
+- ✅ **TX working** — 155+ PSKReporter spots worldwide, up to 12,000 km
+- ✅ **CQ + Auto mode** — Call CQ, auto-respond to callers, full QSO sequence
+- ✅ **Hunt mode** — Click a station, auto-sequence through QSO
+- ✅ **ADIF logging** — QSOs logged automatically
+
+**QSO features:** Auto mode (CQ + Hunt), configurable call attempts (3/5/7/99), even/odd slot correction, TX frequency 1500 Hz (WSJT-X standard), deferred reply pattern, station switching.
 
 ---
 
@@ -195,16 +205,26 @@ MIT License — free for everyone. Use it, modify it, build on it.
 
 ---
 
-## ⚠️ TX-Status
+## Erstes QSO geschafft!
 
-**TX funktioniert — erstes komplettes QSO steht kurz bevor:**
-- ✅ **TUNE** — Antennentuner einschalten funktioniert
-- ✅ **CQ rufen** — 155 PSKReporter-Spots weltweit, bis 12.000 km
-- ✅ **Stationen antworten** — DK5ON, UR5DU, UR5WCS, DB2HA, IN3LHF, F5PBG haben auf CQ geantwortet
-- ✅ **QSO State Machine** — Vollständige Sequenz CQ → Rapport → RR73 → ADIF-Log implementiert
-- 🔄 **Erstes komplettes QSO** — Stationen antworten und QSO-Sequenz läuft durch, Abschluss steht unmittelbar bevor
+**DA1MHH hat YL2TM (Lettland) auf 20m FT8 gearbeitet — 05. April 2026, 17:31 UTC.**
+Danke YL2TM fuer das erste SimpleFT8 QSO!
 
-**QSO-Features:** Auto-Modus (CQ + Hunt), einstellbare Anrufversuche (3/5/7/99), TX-Queue für Antworten während CQ, Even/Odd Slot-Korrektur, TX-Frequenz 1500 Hz (WSJT-X Standard), Station-Wechsel bricht laufendes QSO ab.
+```
+17:31 → CQ DA1MHH JO31
+17:31 ← DA1MHH YL2TM -19
+17:31 → YL2TM DA1MHH R-12
+17:32 → YL2TM DA1MHH RR73
+17:32 ← DA1MHH YL2TM RR73
+       ✓ QSO komplett — ins ADIF-Log geschrieben
+```
+
+- ✅ **TX funktioniert** — 155+ PSKReporter-Spots weltweit, bis 12.000 km
+- ✅ **CQ + Auto-Modus** — CQ rufen, automatisch auf Anrufer antworten, komplette QSO-Sequenz
+- ✅ **Hunt-Modus** — Station anklicken, QSO-Sequenz laeuft automatisch
+- ✅ **ADIF-Logging** — QSOs werden automatisch geloggt
+
+**QSO-Features:** Auto-Modus (CQ + Hunt), einstellbare Anrufversuche (3/5/7/99), Even/Odd Slot-Korrektur, TX-Frequenz 1500 Hz (WSJT-X Standard), Deferred Reply Pattern, Station-Wechsel.
 
 ---
 
