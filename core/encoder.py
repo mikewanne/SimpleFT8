@@ -87,8 +87,11 @@ class Encoder(QObject):
     def transmit(self, message: str):
         """FT8-Nachricht encoden und zum naechsten Zyklusbeginn senden."""
         if self._tx_thread and self._tx_thread.is_alive():
-            self.encoding_error.emit("TX bereits aktiv")
+            # TX aktiv → Nachricht fuer naechsten Zyklus merken
+            self._pending_msg = message
+            print(f"[TX] Queued (TX aktiv): '{message}'")
             return
+        self._pending_msg = None
         self._tx_thread = threading.Thread(
             target=self._tx_worker, args=(message,), daemon=True
         )
@@ -101,6 +104,12 @@ class Encoder(QObject):
             self._tx_worker_inner(message)
         finally:
             self._is_transmitting = False
+            # Gequeuete Nachricht sofort senden
+            pending = getattr(self, '_pending_msg', None)
+            if pending:
+                self._pending_msg = None
+                print(f"[TX] Sende gequeuete Nachricht: '{pending}'")
+                self.transmit(pending)
 
     def _tx_worker_inner(self, message: str):
         # Freie TX-Frequenz — einmal bestimmen und fuer diesen TX fixieren
@@ -143,7 +152,13 @@ class Encoder(QObject):
             elif cycle_pos < 0.2:
                 time.sleep(0.2 - cycle_pos)
 
-        # PTT an
+        # PTT an — mit Timing-Log
+        tx_time = time.time()
+        tx_cycle = int(tx_time / 15.0)
+        tx_slot = "EVEN" if tx_cycle % 2 == 0 else "ODD"
+        utc = time.strftime("%H:%M:%S", time.gmtime(tx_time))
+        print(f"[TX] {utc} Slot={tx_slot} Freq={self.audio_freq_hz}Hz → '{message}'")
+
         if self._radio:
             self._radio.ptt_on()
             time.sleep(0.1)

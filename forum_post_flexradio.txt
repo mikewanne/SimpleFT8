@@ -1,0 +1,121 @@
+TITEL:
+Antenna Diversity for FT8 — double your stations with a single SCU (open source)
+
+---
+
+Hi everyone,
+
+I'd like to share a simple idea that gave me surprisingly good results on my FLEX-8400M.
+
+THE IDEA
+
+FT8 works in fixed 15-second slots. Stations repeat their calls for several minutes. I wrote a small Python program that switches between ANT1 and ANT2 every FT8 cycle and accumulates the decoded stations across both antennas.
+
+Since the 8400M has only one SCU, you can't listen on both antennas simultaneously. But you don't need to — FT8 gives you time. Just alternate, and merge the results.
+
+WHY IT WORKS
+
+Radio waves rotate their polarization traveling through the ionosphere. Some signals arrive vertically polarized, some horizontally. A single antenna only catches one part. By alternating between two antennas with different polarization/pattern, you catch both.
+
+MY RESULTS
+
+Setup: FLEX-8400M, ANT1 = multiband dipole (vertical, 10cm from wall), ANT2 = rain gutter (horizontal). Yes, a rain gutter.
+
+40m band, K=4, conditions Fair/Poor:
+- Normal (ANT1 only): 13 stations
+- Diversity (ANT1 + ANT2 alternating): 43 stations
+
+20m band:
+- Normal: 8 stations
+- Diversity: 26 stations (including VK3DMP Australia at 14,000 km — on the rain gutter)
+
+These numbers are reproducible. I've tested on two different machines (Mac Mini M2 and iMac Pro) on different days with consistent results.
+
+HOW IT WORKS (TECHNICALLY)
+
+- At each 15s cycle start: switch rxant (ANT1/ANT2) via SmartSDR TCP API
+- Antenna command sent in a separate thread (non-blocking, keepalive stays alive)
+- Single slice, single decoder, single audio stream — no second SCU needed
+- After decode: accumulate stations by callsign, keep best SNR
+- Stations not heard for 2 minutes are removed
+- TX always stays on ANT1
+
+The core logic is about 20 lines of Python. No hardware modification needed. Works on any FlexRadio with two antenna ports, even single-SCU models.
+
+THE CODE
+
+Full source code is on GitHub, MIT license — free for everyone:
+https://github.com/mikewanne/SimpleFT8
+
+It's a standalone FT8 client that talks directly to the FLEX via SmartSDR TCP API + VITA-49 UDP. No SmartSDR needed. RX and TX both work (30+ PSKReporter spots confirmed).
+
+This is a proof-of-concept, not a finished product. Rough edges, no unit tests, built in a week. But the diversity concept works and the results speak for themselves.
+
+WHAT I'D LIKE TO KNOW
+
+- Has anyone tried something similar?
+- Would be interesting to see results from other antenna combinations (beam + vertical, two dipoles at different angles, etc.)
+- If any software developer wants to integrate this into their app — go for it, MIT license, no restrictions
+
+Screenshots are in the GitHub README (English + German).
+
+---
+
+Hallo zusammen,
+
+ich moechte eine einfache Idee teilen, die auf meinem FLEX-8400M ueberraschend gute Ergebnisse gebracht hat.
+
+DIE IDEE
+
+FT8 arbeitet in festen 15-Sekunden-Slots. Stationen wiederholen ihre Rufe ueber mehrere Minuten. Ich habe ein kleines Python-Programm geschrieben, das bei jedem FT8-Zyklus zwischen ANT1 und ANT2 wechselt und die dekodierten Stationen ueber beide Antennen akkumuliert.
+
+Da der 8400M nur eine SCU hat, kann man nicht gleichzeitig auf beiden Antennen hoeren. Muss man aber auch nicht — FT8 gibt einem die Zeit. Einfach abwechseln und die Ergebnisse zusammenfuehren.
+
+WARUM ES FUNKTIONIERT
+
+Funkwellen drehen ihre Polarisation auf dem Weg durch die Ionosphaere zufaellig. Manche Signale kommen vertikal polarisiert an, manche horizontal. Eine einzelne Antenne faengt immer nur einen Teil. Mit zwei Antennen unterschiedlicher Polarisation/Abstrahlcharakteristik faengt man beide Seiten.
+
+MEINE ERGEBNISSE
+
+Setup: FLEX-8400M, ANT1 = Multiband-Dipol (vertikal, 10cm Wandabstand), ANT2 = Regenrinne (horizontal). Ja, eine Regenrinne.
+
+40m-Band, K=4, Bedingungen Fair/Poor:
+- Normal (nur ANT1): 13 Stationen
+- Diversity (ANT1 + ANT2 abwechselnd): 43 Stationen
+
+20m-Band:
+- Normal: 8 Stationen
+- Diversity: 26 Stationen (darunter VK3DMP Australien mit 14.000 km — ueber die Regenrinne)
+
+Die Zahlen sind reproduzierbar. Getestet auf zwei verschiedenen Rechnern (Mac Mini M2 und iMac Pro) an verschiedenen Tagen mit konsistenten Ergebnissen.
+
+WIE ES TECHNISCH FUNKTIONIERT
+
+- Bei jedem 15s-Zyklusstart: rxant umschalten (ANT1/ANT2) ueber SmartSDR TCP API
+- Antennenbefehl in separatem Thread (non-blocking, Keepalive laeuft weiter)
+- Ein Slice, ein Decoder, ein Audio-Stream — keine zweite SCU noetig
+- Nach dem Dekodieren: Stationen per Callsign akkumulieren, besten SNR behalten
+- Stationen die 2 Minuten nicht mehr gehoert werden, werden entfernt
+- TX bleibt immer auf ANT1
+
+Die Kernlogik sind ca. 20 Zeilen Python. Keine Hardware-Modifikation noetig. Funktioniert auf jedem FlexRadio mit zwei Antennenanschluessen, auch mit nur einer SCU.
+
+DER CODE
+
+Vollstaendiger Quellcode auf GitHub, MIT-Lizenz — frei fuer jeden:
+https://github.com/mikewanne/SimpleFT8
+
+Das ist ein eigenstaendiger FT8-Client der direkt ueber SmartSDR TCP API + VITA-49 UDP mit dem FLEX kommuniziert. Kein SmartSDR noetig. RX und TX funktionieren (30+ PSKReporter-Spots bestaetigt).
+
+Das ist eine Machbarkeitsstudie, kein fertiges Produkt. Raue Kanten, keine Unit-Tests, in einer Woche gebaut. Aber das Diversity-Konzept funktioniert und die Ergebnisse sprechen fuer sich.
+
+WAS MICH INTERESSIERT
+
+- Hat jemand etwas Aehnliches versucht?
+- Wuerde mich interessieren welche Ergebnisse andere Antennenkombinationen bringen (Beam + Vertikal, zwei Dipole in verschiedenen Winkeln, etc.)
+- Wenn ein Software-Entwickler das in seine App einbauen moechte — gerne, MIT-Lizenz, keine Einschraenkungen
+
+Screenshots sind im GitHub README (Englisch + Deutsch).
+
+73 de DA1MHH
+Mike, Herne (JO31)

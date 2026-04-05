@@ -220,8 +220,12 @@ class Decoder(QObject):
                     is_partner = (hasattr(self, 'priority_call') and self.priority_call and
                                   hasattr(msg, 'caller') and msg.caller == self.priority_call)
                     if is_to_me or is_partner:
+                        import time as _rxtime
+                        _now = _rxtime.time()
+                        _slot = "EVEN" if int(_now / 15.0) % 2 == 0 else "ODD"
+                        _utc = _rxtime.strftime("%H:%M:%S", _rxtime.gmtime(_now))
                         tag = ">>> AN UNS" if is_to_me else "QSO-Partner"
-                        print(f"[RX] {msg.raw} | snr={msg.snr} freq={msg.freq_hz} [{tag}]")
+                        print(f"[RX] {_utc} Slot={_slot} | {msg.raw} | snr={msg.snr} freq={msg.freq_hz} [{tag}]")
                     self.message_decoded.emit(msg)
             else:
                 # Auch leere Ergebnisse emittieren damit GUI aktualisiert

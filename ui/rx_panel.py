@@ -32,6 +32,7 @@ _COLOR_DIRECTED = QColor("#FFD700")
 _COLOR_DONE = QColor("#44FF44")
 _COLOR_NORMAL = QColor("#CCCCCC")
 _COLOR_SEP = QColor("#444444")
+_COLOR_ACTIVE_CALL_BG = QColor("#2A1500")   # Dunkles Amber: aktiv angerufene Station
 
 _MAX_CYCLES = 3  # Nur die letzten 3 Zyklen anzeigen
 
@@ -57,6 +58,7 @@ class RXPanel(QWidget):
         self._rx_active = True
         self._country_filter: set = set(country_filter or [])
         self._ant_filter: int = 0  # 0=alle, 1=A1, 2=A2
+        self._active_call: str = ""  # Callsign der gerade aktiv angerufenen Station
         self._setup_ui()
 
     def _setup_ui(self):
@@ -212,12 +214,47 @@ class RXPanel(QWidget):
 
     # ── Oeffentliche API (Interface bleibt gleich) ────────────
 
+    def set_active_call(self, callsign: str):
+        """Aktiv angerufene Station hervorheben (amber Hintergrund + bold)."""
+        self._active_call = callsign or ""
+        self._apply_active_highlight()
+
+    def _apply_active_highlight(self):
+        """Alle Zeilen: Hintergrund fuer _active_call setzen, Rest loeschen."""
+        empty_bg = QColor()  # transparent / kein Hintergrund
+        for row in range(self.table.rowCount()):
+            utc_item = self.table.item(row, COL_UTC)
+            if utc_item is None:
+                continue
+            msg = utc_item.data(Qt.ItemDataRole.UserRole)
+            if msg is None:
+                continue
+            is_active = bool(self._active_call and
+                             getattr(msg, 'caller', '') == self._active_call)
+            bg = _COLOR_ACTIVE_CALL_BG if is_active else empty_bg
+            for col in range(COL_COUNT):
+                item = self.table.item(row, col)
+                if item:
+                    item.setBackground(bg)
+                    f = item.font()
+                    f.setBold(is_active)
+                    item.setFont(f)
+
     def add_message(self, msg: FT8Message):
         """Neue dekodierte Nachricht hinzufuegen."""
         if not self._rx_active:
             return
         self.table.insertRow(0)
         self._populate_row(0, msg)
+        # Highlight direkt setzen wenn diese Station aktiv angerufen wird
+        if self._active_call and getattr(msg, 'caller', '') == self._active_call:
+            for col in range(COL_COUNT):
+                item = self.table.item(0, col)
+                if item:
+                    item.setBackground(_COLOR_ACTIVE_CALL_BG)
+                    f = item.font()
+                    f.setBold(True)
+                    item.setFont(f)
         self._cycle_message_count += 1
         self.table.setRowHidden(0, self._row_should_hide(0))
 
@@ -453,6 +490,8 @@ class RXPanel(QWidget):
             self.table.insertRow(row)
             self._populate_row(row, msg)
             self.table.setRowHidden(row, self._row_should_hide(row))
+        # Highlight nach Rebuild wieder anwenden
+        self._apply_active_highlight()
 
     def _on_cq_filter_toggled(self):
         """CQ-Filter: nur CQ-Rufe anzeigen oder alle."""

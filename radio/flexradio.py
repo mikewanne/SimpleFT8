@@ -1303,6 +1303,8 @@ class FlexRadio(QObject):
     def _build_vita49_packet(self, stream_id: int, pcc: int,
                               payload: bytes) -> bytes:
         """VITA-49 Paket bauen."""
+        if not isinstance(stream_id, int) or not isinstance(pcc, int):
+            raise ValueError(f"stream_id={stream_id!r} pcc={pcc!r} — kein TX-Stream aktiv?")
         # Word 0: type=1(IFData), C=1, no trailer, packet size in words
         total_words = 7 + len(payload) // 4
         word0 = (0x1 << 28) | (1 << 27) | (total_words & 0xFFFF)

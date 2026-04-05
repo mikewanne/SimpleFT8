@@ -201,8 +201,8 @@ class QSOStateMachine(QObject):
             print(f"[QSO] Empfangen: '{msg.raw}' | State={self.state.name} "
                   f"| Erwartet von={self.qso.their_call or '?'} "
                   f"| is_report={msg.is_report} is_rr73={msg.is_rr73} is_grid={msg.is_grid}")
-        # ── CQ-Modus: jemand ruft UNS (auch während CQ noch sendet) ──
-        if self.state in (QSOState.CQ_WAIT, QSOState.CQ_CALLING) and msg.target == self.my_call:
+        # ── Jemand ruft UNS (CQ-Modus, oder im IDLE wenn auto_mode) ──
+        if self.state in (QSOState.IDLE, QSOState.CQ_WAIT, QSOState.CQ_CALLING) and msg.target == self.my_call:
             # Jemand antwortet auf unser CQ!
             self.qso = QSOData(
                 their_call=msg.caller,
@@ -222,10 +222,13 @@ class QSOStateMachine(QObject):
                 return
 
             if msg.is_report:
-                # Anrufer sendet direkt Rapport → wir antworten mit RR73
+                # Anrufer sendet Report → wir antworten mit R+unserem Report
                 self.qso.their_snr = msg.grid_or_report
-                tx_msg = f"{msg.caller} {self.my_call} RR73"
-                self._set_state(QSOState.TX_RR73)
+                report = f"R{self._last_snr:+d}" if self._last_snr > -30 else "R-10"
+                self.qso.our_snr = report
+                tx_msg = f"{msg.caller} {self.my_call} {report}"
+                print(f"[QSO] CQ-Antwort von {msg.caller} ({msg.grid_or_report}) → sende '{tx_msg}'")
+                self._set_state(QSOState.TX_REPORT)
                 self.send_message.emit(tx_msg)
                 return
 
@@ -261,6 +264,15 @@ class QSOStateMachine(QObject):
             if msg.is_rr73 or msg.is_73:
                 if self.auto_mode or self.cq_mode:
                     self.advance()
+                return
+            if msg.is_report:
+                # Gegenstation wiederholt Report → hat unseren nicht gehoert, nochmal senden
+                self.qso.timeout_cycles = 0
+                report = self.qso.our_snr or f"R{self._last_snr:+d}"
+                tx_msg = f"{self.qso.their_call} {self.my_call} {report}"
+                print(f"[QSO] Retry Report: '{tx_msg}' (Gegenstation wiederholt)")
+                self._set_state(QSOState.TX_REPORT)
+                self.send_message.emit(tx_msg)
                 return
 
     # ── Manueller Schritt ───────────────────────────────────────
