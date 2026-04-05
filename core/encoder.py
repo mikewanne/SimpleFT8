@@ -86,7 +86,7 @@ class Encoder(QObject):
 
     def transmit(self, message: str):
         """FT8-Nachricht encoden und zum naechsten Zyklusbeginn senden."""
-        if self._tx_thread and self._tx_thread.is_alive():
+        if self._is_transmitting:
             # TX aktiv → Nachricht fuer naechsten Zyklus merken
             self._pending_msg = message
             print(f"[TX] Queued (TX aktiv): '{message}'")
