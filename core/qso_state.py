@@ -95,9 +95,41 @@ class QSOStateMachine(QObject):
 
     def _send_cq(self):
         """CQ-Ruf senden."""
+        self._pending_reply = None  # Alte Antwort verwerfen
         msg = f"CQ {self.my_call} {self.my_grid}"
         self._set_state(QSOState.CQ_CALLING)
         self.send_message.emit(msg)
+
+    def _process_cq_reply(self):
+        """Gemerkte CQ-Antwort verarbeiten (nach TX-Ende)."""
+        msg = self._pending_reply
+        if msg is None:
+            return
+        self._pending_reply = None
+
+        self.qso = QSOData(
+            their_call=msg.caller,
+            their_grid=msg.grid_or_report if msg.is_grid else "",
+            their_snr=msg.grid_or_report if msg.is_report else "",
+            freq_hz=msg.freq_hz,
+            start_time=time.time(),
+        )
+
+        if msg.is_grid:
+            report = f"{self._last_snr:+03d}" if self._last_snr > -30 else "-10"
+            self.qso.our_snr = report
+            tx_msg = f"{msg.caller} {self.my_call} {report}"
+            print(f"[QSO] Antworte {msg.caller} mit Report '{tx_msg}'")
+            self._set_state(QSOState.TX_REPORT)
+            self.send_message.emit(tx_msg)
+        elif msg.is_report:
+            self.qso.their_snr = msg.grid_or_report
+            report = f"R{self._last_snr:+03d}" if self._last_snr > -30 else "R-10"
+            self.qso.our_snr = report
+            tx_msg = f"{msg.caller} {self.my_call} {report}"
+            print(f"[QSO] Antworte {msg.caller} mit R-Report '{tx_msg}'")
+            self._set_state(QSOState.TX_REPORT)
+            self.send_message.emit(tx_msg)
 
     # ── Hunt-Modus (Station anklicken) ──────────────────────────
 
@@ -176,6 +208,11 @@ class QSOStateMachine(QObject):
 
     def on_message_sent(self):
         if self.state == QSOState.CQ_CALLING:
+            # CQ TX fertig — Antwort wartend?
+            if getattr(self, '_pending_reply', None):
+                print("[QSO] CQ fertig — verarbeite gemerkte Antwort")
+                self._process_cq_reply()
+                return
             self._set_state(QSOState.CQ_WAIT)
             self.qso.timeout_cycles = 0
         elif self.state == QSOState.TX_CALL:
@@ -202,35 +239,17 @@ class QSOStateMachine(QObject):
             print(f"[QSO] Empfangen: '{msg.raw}' | State={self.state.name} "
                   f"| Erwartet von={self.qso.their_call or '?'} "
                   f"| is_report={msg.is_report} is_rr73={msg.is_rr73} is_grid={msg.is_grid}")
-        # ── Jemand ruft UNS (CQ-Modus, oder im IDLE wenn auto_mode) ──
+        # ── Jemand ruft UNS (CQ-Modus, oder im IDLE) ──
         if self.state in (QSOState.IDLE, QSOState.CQ_WAIT, QSOState.CQ_CALLING) and msg.target == self.my_call:
-            # Jemand antwortet auf unser CQ!
-            self.qso = QSOData(
-                their_call=msg.caller,
-                their_grid=msg.grid_or_report if msg.is_grid else "",
-                their_snr=msg.grid_or_report if msg.is_report else "",
-                freq_hz=msg.freq_hz,
-                start_time=time.time(),
-            )
-
-            if msg.is_grid:
-                # Anrufer sendet Grid → wir antworten mit Rapport
-                report = f"{self._last_snr:+03d}" if self._last_snr > -30 else "-10"
-                self.qso.our_snr = report
-                tx_msg = f"{msg.caller} {self.my_call} {report}"
-                self._set_state(QSOState.TX_REPORT)
-                self.send_message.emit(tx_msg)
-                return
-
-            if msg.is_report:
-                # Anrufer sendet Report → wir antworten mit R+unserem Report
-                self.qso.their_snr = msg.grid_or_report
-                report = f"R{self._last_snr:+d}" if self._last_snr > -30 else "R-10"
-                self.qso.our_snr = report
-                tx_msg = f"{msg.caller} {self.my_call} {report}"
-                print(f"[QSO] CQ-Antwort von {msg.caller} ({msg.grid_or_report}) → sende '{tx_msg}'")
-                self._set_state(QSOState.TX_REPORT)
-                self.send_message.emit(tx_msg)
+            if msg.is_grid or msg.is_report:
+                # Antwort merken — wird in on_message_sent() verarbeitet
+                # (falls CQ TX noch laeuft, darf JETZT nicht gesendet werden!)
+                self._pending_reply = msg
+                print(f"[QSO] Antwort von {msg.caller} gemerkt (State={self.state.name})")
+                # Wenn CQ_WAIT oder IDLE: sofort verarbeiten (TX ist frei)
+                if self.state in (QSOState.IDLE, QSOState.CQ_WAIT):
+                    self._process_cq_reply()
+                # Bei CQ_CALLING: on_message_sent() verarbeitet es nach TX-Ende
                 return
 
         # ── CQ_WAIT Timeout: nochmal CQ rufen ──

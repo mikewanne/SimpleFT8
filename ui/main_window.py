@@ -517,12 +517,9 @@ class MainWindow(QMainWindow):
     @Slot(object)
     def _on_station_clicked(self, msg: FT8Message):
         """User hat eine Station in der Empfangsliste angeklickt."""
-        # Wenn gerade TX läuft: Klick merken, nach TX-Ende ausführen
         if self.encoder.is_transmitting:
-            self._pending_click = msg
-            print(f"[QSO] TX aktiv — {msg.caller} wird nach TX-Ende gerufen")
+            print(f"[QSO] TX aktiv — Klick ignoriert, warte auf TX-Ende")
             return
-        self._pending_click = None
         # CQ-Modus beenden wenn aktiv
         if self.qso_sm.cq_mode:
             self.qso_sm.stop_cq()
@@ -1027,20 +1024,7 @@ class MainWindow(QMainWindow):
     def _on_tx_finished(self):
         """TX abgeschlossen — PTT aus, zurueck zu RX."""
         self.control_panel.set_tx_active(False)
-        # Race-Condition-Schutz: wenn Encoder noch eine gequeuete Nachricht hat,
-        # war dieses TX die ALTE Nachricht (z.B. CQ). State hat sich schon geaendert
-        # (z.B. zu TX_REPORT). NICHT on_message_sent() aufrufen — warten bis
-        # die gequeuete Nachricht tatsaechlich gesendet wurde.
-        if getattr(self.encoder, '_has_pending', False):
-            print("[TX] Alte Nachricht fertig — pending message folgt, kein State-Wechsel")
-        else:
-            self.qso_sm.on_message_sent()
-        # Pending Klick ausfuehren (Station waehrend TX angeklickt)
-        pending = getattr(self, '_pending_click', None)
-        if pending:
-            self._pending_click = None
-            print(f"[QSO] TX fertig — starte gequeueten Klick auf {pending.caller}")
-            self._on_station_clicked(pending)
+        self.qso_sm.on_message_sent()
 
     @Slot(str)
     def _on_send_message(self, message: str):
