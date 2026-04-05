@@ -214,7 +214,7 @@ class QSOStateMachine(QObject):
 
             if msg.is_grid:
                 # Anrufer sendet Grid → wir antworten mit Rapport
-                report = f"{self._last_snr:+d}" if self._last_snr > -30 else "-10"
+                report = f"{self._last_snr:+03d}" if self._last_snr > -30 else "-10"
                 self.qso.our_snr = report
                 tx_msg = f"{msg.caller} {self.my_call} {report}"
                 self._set_state(QSOState.TX_REPORT)
@@ -279,7 +279,7 @@ class QSOStateMachine(QObject):
 
     def advance(self):
         if self.state == QSOState.WAIT_REPORT and self.qso.their_snr:
-            report = f"{self._last_snr:+d}" if self._last_snr > -30 else "-10"
+            report = f"{self._last_snr:+03d}" if self._last_snr > -30 else "-10"
             self.qso.our_snr = report
             msg = f"{self.qso.their_call} {self.my_call} {report}"
             self._set_state(QSOState.TX_REPORT)
