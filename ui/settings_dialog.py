@@ -245,7 +245,7 @@ class SettingsDialog(QDialog):
         # Werte auf Defaults setzen (Rufzeichen/Locator behalten)
         self.power.setValue(DEFAULTS.get("power_watts", 50))
         self.tx_level.setValue(100)
-        self.max_calls_combo.setCurrentIndex(0)  # 3
+        self.max_calls_combo.setCurrentIndex(3)  # 99
         self.swr_limit.setValue(3.0)
         self.audio_freq.setValue(1500)
         self.max_decode_freq.setValue(DEFAULTS.get("max_decode_freq", 3000))

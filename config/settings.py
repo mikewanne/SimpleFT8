@@ -33,6 +33,7 @@ DEFAULTS = {
     "auto_mode": False,
     "audio_freq_hz": 1500,
     "max_decode_freq": 3000,
+    "max_calls": 99,
     "tune_power": 10,
 }
 
