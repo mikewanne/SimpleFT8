@@ -245,6 +245,48 @@ _PREFIX_MAP = {
     'EL': 'LR',              # Liberia
     '5V': 'TG_C',            # Togo
     'TZ': 'ML',              # Mali
+    # Nordamerika / Karibik
+    'KL': 'AK',              # Alaska
+    'KP4': 'PR', 'WP4': 'PR', 'NP4': 'PR',  # Puerto Rico
+    'J3': 'GD',              # Grenada
+    'J6': 'LC',              # St Lucia
+    'J8': 'VC',              # St Vincent
+    'V2': 'AG',              # Antigua & Barbuda
+    'V4': 'KN',              # St Kitts & Nevis
+    'V3': 'BZ',              # Belize
+    'VP5': 'TC',             # Turks & Caicos
+    'OX': 'GL',              # Greenland
+    # Suedamerika
+    'PZ': 'SUR',             # Suriname
+    'FY': 'GF',              # French Guiana (Ueberschreibt falsches FR)
+    # Asien / Suedasien
+    '9N': 'NP_A',            # Nepal
+    'A5': 'BT',              # Bhutan
+    # Pazifik / Ozeanien
+    '3D2': 'FJ',             # Fiji
+    'YJ': 'VU',              # Vanuatu
+    'T2': 'TV',              # Tuvalu
+    'V6': 'FSM',             # Micronesia
+    'V7': 'MH',              # Marshall Islands
+    'KH2': 'GU',             # Guam
+    'T3': 'KI',              # Kiribati (bereits als T3 drin, nur sicherheitshalber)
+    # Afrika (haeufig auf 40m/20m/15m)
+    'ET': 'ETH',             # Ethiopia
+    '5X': 'UG',              # Uganda
+    '5R': 'MG',              # Madagascar
+    'C9': 'MZ',              # Mozambique
+    '9Q': 'CD', '9S': 'CD', # DR Congo
+    'TT': 'TD',              # Chad
+    'TR': 'GA',              # Gabon
+    'TN': 'CG',              # Congo (Republic)
+    'ST': 'SD',              # Sudan
+    '5U': 'NE',              # Niger
+    'S9': 'ST_A',            # Sao Tome & Principe
+    'D6': 'KM',              # Comoros
+    'FH': 'YT',              # Mayotte
+    '3X': 'GN',              # Guinea
+    '6V': 'SN', '6W': 'SN', # Senegal (6W bereits drin, 6V neu)
+    'EA8': 'IC',             # Canary Islands
     # Seltene / Exotische
     '3Y': 'BV',  # Bouvet Island
     'H44': 'SB',  # Solomon Islands
@@ -321,6 +363,23 @@ _COUNTRY_NAMES = {
     'NA': 'Namibia', 'SH': 'St.Helena', 'BN': 'Brunei', 'MO': 'Macau',
     'TW': 'Taiwan', 'CK': 'Cook Isl.', 'PW': 'Palau', 'AW': 'Aruba',
     'BB': 'Barbados', 'DM': 'Dominica', 'MS': 'Montserrat', 'GT': 'Guantanamo',
+    # Nordamerika / Karibik
+    'AK': 'Alaska', 'PR': 'Puerto Rico', 'GL': 'Greenland',
+    'GD': 'Grenada', 'LC': 'St.Lucia', 'VC': 'St.Vincent',
+    'AG': 'Antigua', 'KN': 'St.Kitts', 'BZ': 'Belize', 'TC': 'T&Caicos',
+    # Suedamerika
+    'SUR': 'Suriname', 'GF': 'Fr.Guiana',
+    # Asien
+    'NP_A': 'Nepal', 'BT': 'Bhutan',
+    # Pazifik
+    'FJ': 'Fiji', 'VU': 'Vanuatu', 'TV': 'Tuvalu',
+    'FSM': 'Micronesia', 'MH': 'Marshall Isl.', 'GU': 'Guam',
+    # Afrika
+    'ETH': 'Ethiopia', 'UG': 'Uganda', 'MG': 'Madagascar',
+    'MZ': 'Mozambique', 'CD': 'DR Congo', 'TD': 'Chad',
+    'GA': 'Gabon', 'CG': 'Congo', 'SD': 'Sudan', 'NE': 'Niger',
+    'ST_A': 'Sao Tome', 'KM': 'Comoros', 'YT': 'Mayotte',
+    'GN': 'Guinea', 'IC': 'Canary Isl.',
 }
 
 
@@ -374,6 +433,24 @@ _COUNTRY_COORDS = {
     'ZW': (-17.8, 31.1), 'ZM': (-15.4, 28.3), 'LS': (-29.3, 27.5),
     'BW': (-24.7, 25.9), 'TZ': (-6.4, 34.9), 'GM_C': (13.5, -16.6),
     'LR': (6.3, -10.8), 'TG_C': (6.1, 1.2), 'ML': (12.7, -8.0),
+    # Nordamerika / Karibik
+    'AK': (64.2, -153.4), 'PR': (18.2, -66.5), 'GL': (71.7, -42.6),
+    'GD': (12.1, -61.7), 'LC': (13.9, -60.9), 'VC': (13.3, -61.2),
+    'AG': (17.1, -61.8), 'KN': (17.3, -62.7), 'BZ': (17.3, -88.5),
+    'TC': (21.7, -71.8),
+    # Suedamerika
+    'SUR': (3.9, -56.0), 'GF': (4.0, -53.1),
+    # Asien
+    'NP_A': (27.7, 85.3), 'BT': (27.5, 90.4),
+    # Pazifik
+    'FJ': (-18.1, 178.4), 'VU': (-17.7, 168.3), 'TV': (-8.5, 179.2),
+    'FSM': (6.9, 158.2), 'MH': (7.1, 171.2), 'GU': (13.4, 144.8),
+    # Afrika
+    'ETH': (9.0, 38.7), 'UG': (0.3, 32.6), 'MG': (-18.9, 47.5),
+    'MZ': (-25.9, 32.6), 'CD': (-4.3, 15.3), 'TD': (12.1, 15.1),
+    'GA': (0.4, 9.4), 'CG': (-4.3, 15.3), 'SD': (15.6, 32.5),
+    'NE': (13.5, 2.1), 'ST_A': (0.3, 6.7), 'KM': (-11.7, 43.3),
+    'YT': (-12.8, 45.2), 'GN': (9.5, -13.7), 'IC': (28.1, -15.4),
     # Seltene
     'BV': (-54.4, 3.4), 'SB': (-9.4, 160.0), 'FK': (-51.8, -59.0),
     'BM': (32.3, -64.8), 'NA': (-22.6, 17.1), 'SH': (-16.0, -5.7),

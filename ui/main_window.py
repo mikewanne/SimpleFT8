@@ -121,6 +121,7 @@ class MainWindow(QMainWindow):
         self._diversity_bias = "AUTO"  # Manueller Bias: 100:0 / 70:30 / AUTO / 30:70 / 0:100
         self._diversity_stats = {"A1_only": 0, "A2_only": 0, "A1_wins": 0, "A2_wins": 0}
         self._ucb_selector = _UCBAntennaSelector(weight=1.5)  # UCB1 fuer AUTO-Modus
+        self._active_qso_targets: set = set()  # Stationen im aktiven QSO → 150s Aging
         import threading as _threading
         self._diversity_lock = _threading.Lock()  # BUG-2: Race Condition Guard
 
@@ -370,9 +371,10 @@ class MainWindow(QMainWindow):
                         changed = True
                     # Sonst: exakt gleich → kein Update, altert nach 2 Min raus
 
-            # Alte Stationen entfernen (>2 Min nicht mehr dekodiert)
+            # Alte Stationen entfernen (75s normal, 150s wenn aktiv angerufen)
             stale = [k for k, m in self._diversity_stations.items()
-                     if now - getattr(m, '_last_heard', now) > 75]
+                     if now - getattr(m, '_last_heard', now) > (
+                         150 if k in self._active_qso_targets else 75)]
             if stale:
                 changed = True
                 for k in stale:
@@ -444,9 +446,10 @@ class MainWindow(QMainWindow):
                             existing.field2 = msg.field2
                             existing.field3 = msg.field3
                         changed = True
-            # Aging: >2 Min nicht dekodiert → raus
+            # Aging: 75s normal, 150s wenn aktiv angerufen
             stale = [k for k, m in self._normal_stations.items()
-                     if now - getattr(m, '_last_heard', now) > 75]
+                     if now - getattr(m, '_last_heard', now) > (
+                         150 if k in self._active_qso_targets else 75)]
             if stale:
                 changed = True
                 for k in stale:
@@ -510,6 +513,7 @@ class MainWindow(QMainWindow):
         """User hat eine Station in der Empfangsliste angeklickt."""
         if self.qso_sm.state != QSOState.IDLE:
             return
+        self._active_qso_targets.add(msg.caller)  # 150s Aging fuer angerufene Station
         self.qso_panel.add_info(f"Rufe {msg.caller}...")
         self.qso_sm.start_qso(
             their_call=msg.caller,
@@ -950,6 +954,7 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def _on_cancel(self):
+        self._active_qso_targets.clear()
         self.qso_panel.add_info("QSO abgebrochen")
         self.qso_sm.cancel()
         self.control_panel.set_cq_active(False)
@@ -1002,6 +1007,7 @@ class MainWindow(QMainWindow):
     @Slot(object)
     def _on_qso_complete(self, qso_data):
         """QSO abgeschlossen — ADIF schreiben."""
+        self._active_qso_targets.discard(qso_data.their_call)
         self.qso_panel.add_qso_complete(qso_data.their_call)
 
         band = self.settings.band.upper()
@@ -1023,6 +1029,7 @@ class MainWindow(QMainWindow):
 
     @Slot(str)
     def _on_qso_timeout(self, their_call: str):
+        self._active_qso_targets.discard(their_call)
         self.qso_panel.add_timeout(their_call)
 
     # ── Timer ───────────────────────────────────────────────────
