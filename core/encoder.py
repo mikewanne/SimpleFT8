@@ -103,12 +103,17 @@ class Encoder(QObject):
         try:
             self._tx_worker_inner(message)
         finally:
-            self._is_transmitting = False
-            # Gequeuete Nachricht sofort senden
+            # Gequeuete Nachricht ZUERST pruefen BEVOR _is_transmitting=False
+            # und BEVOR tx_finished emitted wird (Race Condition Schutz)
             pending = getattr(self, '_pending_msg', None)
             if pending:
                 self._pending_msg = None
+                self._has_pending = True  # Flag fuer _on_tx_finished
                 print(f"[TX] Sende gequeuete Nachricht: '{pending}'")
+            else:
+                self._has_pending = False
+            self._is_transmitting = False
+            if pending:
                 self.transmit(pending)
 
     def _tx_worker_inner(self, message: str):

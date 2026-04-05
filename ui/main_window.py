@@ -1031,7 +1031,7 @@ class MainWindow(QMainWindow):
         # war dieses TX die ALTE Nachricht (z.B. CQ). State hat sich schon geaendert
         # (z.B. zu TX_REPORT). NICHT on_message_sent() aufrufen — warten bis
         # die gequeuete Nachricht tatsaechlich gesendet wurde.
-        if getattr(self.encoder, '_pending_msg', None):
+        if getattr(self.encoder, '_has_pending', False):
             print("[TX] Alte Nachricht fertig — pending message folgt, kein State-Wechsel")
         else:
             self.qso_sm.on_message_sent()
