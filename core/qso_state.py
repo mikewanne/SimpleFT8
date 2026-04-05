@@ -37,7 +37,9 @@ class QSOData:
     freq_hz: int = 0
     start_time: float = 0.0
     timeout_cycles: int = 0
-    max_timeout: int = 3
+    max_timeout: int = 5
+    calls_made: int = 0    # Wie oft haben wir bereits gesendet
+    max_calls: int = 3     # Maximale Anrufversuche (aus Settings)
 
 
 class QSOStateMachine(QObject):
@@ -65,6 +67,7 @@ class QSOStateMachine(QObject):
         self.cq_mode = False        # CQ-Modus aktiv
         self.cq_qso_count = 0       # Zähler: bearbeitete QSOs in CQ-Session
         self._last_snr = -10        # Letzter empfangener SNR (für Report)
+        self.max_calls = 3          # Maximale Anrufversuche (aus Settings)
 
     def _set_state(self, new_state: QSOState):
         self.state = new_state
@@ -112,9 +115,12 @@ class QSOStateMachine(QObject):
             their_grid=their_grid,
             freq_hz=freq_hz,
             start_time=time.time(),
+            calls_made=1,
+            max_calls=self.max_calls,
         )
 
         msg = f"{self.my_call} {their_call} {self.my_grid}"
+        print(f"[QSO] START: Rufe {their_call} auf {freq_hz}Hz → sende '{msg}' (max {self.max_calls} Versuche)")
         self._set_state(QSOState.TX_CALL)
         self.send_message.emit(msg)
 
@@ -130,8 +136,31 @@ class QSOStateMachine(QObject):
 
         if self.state in (QSOState.WAIT_REPORT, QSOState.WAIT_RR73):
             self.qso.timeout_cycles += 1
+            print(f"[QSO] Warte auf {self.qso.their_call} "
+                  f"({self.state.name}, Zyklus {self.qso.timeout_cycles}/{self.qso.max_timeout})")
+
+            # Nach 2 Zyklen ohne Antwort: Call nochmal senden (wie WSJT-X)
+            if self.state == QSOState.WAIT_REPORT and self.qso.timeout_cycles == 2:
+                if self.qso.calls_made < self.qso.max_calls:
+                    self.qso.calls_made += 1
+                    retry_msg = f"{self.my_call} {self.qso.their_call} {self.my_grid}"
+                    print(f"[QSO] Retry {self.qso.calls_made}/{self.qso.max_calls}: '{retry_msg}'")
+                    self._set_state(QSOState.TX_CALL)
+                    self.send_message.emit(retry_msg)
+                else:
+                    call = self.qso.their_call
+                    print(f"[QSO] Max Versuche ({self.qso.max_calls}) erreicht — TIMEOUT {call}")
+                    self._set_state(QSOState.TIMEOUT)
+                    self.qso_timeout.emit(call)
+                    if self.cq_mode:
+                        self._send_cq()
+                    else:
+                        self._set_state(QSOState.IDLE)
+                return
+
             if self.qso.timeout_cycles >= self.qso.max_timeout:
                 call = self.qso.their_call
+                print(f"[QSO] TIMEOUT: {call} hat nicht geantwortet nach {self.qso.max_timeout} Zyklen")
                 self._set_state(QSOState.TIMEOUT)
                 self.qso_timeout.emit(call)
                 if self.cq_mode:
@@ -164,6 +193,11 @@ class QSOStateMachine(QObject):
     # ── Nachricht empfangen ─────────────────────────────────────
 
     def on_message_received(self, msg: FT8Message):
+        # Alle Nachrichten an uns loggen (fuer Debugging)
+        if msg.target == self.my_call:
+            print(f"[QSO] Empfangen: '{msg.raw}' | State={self.state.name} "
+                  f"| Erwartet von={self.qso.their_call or '?'} "
+                  f"| is_report={msg.is_report} is_rr73={msg.is_rr73} is_grid={msg.is_grid}")
         # ── CQ-Modus: jemand ruft UNS ──
         if self.state == QSOState.CQ_WAIT and msg.target == self.my_call:
             # Jemand antwortet auf unser CQ!

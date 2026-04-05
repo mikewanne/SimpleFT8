@@ -514,7 +514,9 @@ class MainWindow(QMainWindow):
         if self.qso_sm.state != QSOState.IDLE:
             return
         self._active_qso_targets.add(msg.caller)  # 150s Aging fuer angerufene Station
+        self.rx_panel.set_active_call(msg.caller)  # Zeile im RX-Panel hervorheben
         self.qso_panel.add_info(f"Rufe {msg.caller}...")
+        self.qso_sm.max_calls = self.settings.get("max_calls", 3)
         self.qso_sm.start_qso(
             their_call=msg.caller,
             their_grid=msg.grid_or_report if msg.is_grid else "",
@@ -955,6 +957,7 @@ class MainWindow(QMainWindow):
     @Slot()
     def _on_cancel(self):
         self._active_qso_targets.clear()
+        self.rx_panel.set_active_call("")
         self.qso_panel.add_info("QSO abgebrochen")
         self.qso_sm.cancel()
         self.control_panel.set_cq_active(False)
@@ -1008,6 +1011,7 @@ class MainWindow(QMainWindow):
     def _on_qso_complete(self, qso_data):
         """QSO abgeschlossen — ADIF schreiben."""
         self._active_qso_targets.discard(qso_data.their_call)
+        self.rx_panel.set_active_call("")
         self.qso_panel.add_qso_complete(qso_data.their_call)
 
         band = self.settings.band.upper()
@@ -1030,6 +1034,7 @@ class MainWindow(QMainWindow):
     @Slot(str)
     def _on_qso_timeout(self, their_call: str):
         self._active_qso_targets.discard(their_call)
+        self.rx_panel.set_active_call("")
         self.qso_panel.add_timeout(their_call)
 
     # ── Timer ───────────────────────────────────────────────────
@@ -1185,6 +1190,7 @@ class MainWindow(QMainWindow):
         dialog = SettingsDialog(self.settings, self)
         if dialog.exec():
             self._update_statusbar()
+            self.qso_sm.max_calls = self.settings.get("max_calls", 3)
             if hasattr(self.radio, '_tx_audio_level'):
                 self.radio._tx_audio_level = (
                     self.settings.get("tx_level", 100) / 100.0
