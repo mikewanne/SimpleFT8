@@ -153,7 +153,7 @@ class QSOStateMachine(QObject):
             max_calls=self.max_calls,
         )
 
-        msg = f"{self.my_call} {their_call} {self.my_grid}"
+        msg = f"{their_call} {self.my_call} {self.my_grid}"
         print(f"[QSO] START: Rufe {their_call} auf {freq_hz}Hz → sende '{msg}' (max {self.max_calls} Versuche)")
         self._set_state(QSOState.TX_CALL)
         self.send_message.emit(msg)
@@ -177,7 +177,7 @@ class QSOStateMachine(QObject):
             if self.state == QSOState.WAIT_REPORT and self.qso.timeout_cycles == 2:
                 if self.qso.calls_made < self.qso.max_calls:
                     self.qso.calls_made += 1
-                    retry_msg = f"{self.my_call} {self.qso.their_call} {self.my_grid}"
+                    retry_msg = f"{self.qso.their_call} {self.my_call} {self.my_grid}"
                     print(f"[QSO] Retry {self.qso.calls_made}/{self.qso.max_calls}: '{retry_msg}'")
                     self._set_state(QSOState.TX_CALL)
                     self.send_message.emit(retry_msg)
@@ -276,7 +276,7 @@ class QSOStateMachine(QObject):
             if msg.is_grid:
                 # Wiederholt Grid → unser Call kam nicht an, nochmal senden
                 self.qso.timeout_cycles = 0
-                tx_msg = f"{self.my_call} {self.qso.their_call} {self.my_grid}"
+                tx_msg = f"{self.qso.their_call} {self.my_call} {self.my_grid}"
                 self.send_message.emit(tx_msg)
                 return
 
