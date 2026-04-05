@@ -7,19 +7,21 @@
 **A standalone FT8 client for FlexRadio (8400M/6xxx/8600M) that automatically switches between two antennas every 15 seconds — hearing far more stations than any single-antenna setup.**
 
 > **Up to 5x more stations** compared to single-antenna operation.
-> Measured: Normal 9 stations → Diversity 13 stations (40m, poor conditions, 04.04.2026).
-> Peak: 8 stations → 63 stations on 20m. Rain gutter as 2nd antenna confirmed working.
+> Measured: Normal 10 stations → Diversity 13 stations (40m, poor conditions, 04.04.2026).
+> Peak: 63 stations on 20m (typically 10–20 per cycle). Rain gutter as 2nd antenna confirmed working.
 
 ---
 
-## ⚠️ TX Status — Please Read Before Transmitting
+## ⚠️ TX Status
 
-**TX is partially implemented:**
+**TX is working — first full QSO is imminent:**
 - ✅ **TUNE** — Antenna tuner activation works
-- ✅ **CQ calling** — Confirmed working (30+ PSKReporter spots, up to 12,000 km)
-- ❌ **Full QSO** — CQ → response → signal report → RR73 → ADIF log is **not yet live-tested**
+- ✅ **CQ calling** — 155 PSKReporter spots worldwide, up to 12,000 km
+- ✅ **Stations respond** — DK5ON, UR5DU, UR5WCS, DB2HA, IN3LHF, F5PBG answered CQ calls
+- ✅ **QSO state machine** — Full sequence CQ → report → RR73 → ADIF log implemented
+- 🔄 **First complete QSO** — Stations respond and QSO sequence runs through, completion imminent
 
-**If you want to make real QSOs, please use WSJT-X.** SimpleFT8's strength is RX — hearing as many stations as possible.
+**QSO features:** Auto mode (CQ + Hunt), configurable call attempts (3/5/7/99), TX queue for responses during CQ, even/odd slot correction, TX frequency 1500 Hz (WSJT-X standard), station switch aborts running QSO.
 
 ---
 
@@ -30,12 +32,12 @@ Most radios have two antenna sockets but only one receiver — you normally have
 **SimpleFT8 does something clever:** FT8 transmits in fixed 15-second slots. Each station on the air stays active for several minutes. So SimpleFT8 listens on ANT1 during slot 1, then ANT2 during slot 2, then merges the results. You see stations from *both* antennas in one combined list.
 
 ```
-Slot 1 (ANT1):  12 stations decoded
-Slot 2 (ANT2):  14 stations decoded  ← some new ones ANT1 couldn't hear
-Slot 3 (ANT1):  11 stations decoded
-Slot 4 (ANT2):  13 stations decoded
+Slot 1 (ANT1):  14 stations decoded
+Slot 2 (ANT2):  17 stations decoded  ← some new ones ANT1 couldn't hear
+Slot 3 (ANT1):  12 stations decoded
+Slot 4 (ANT2):  15 stations decoded
                 ──────────────────
-Combined list:  48 unique stations  (vs 14 with one antenna)
+Combined list:  40+ unique stations  (vs ~15 with one antenna)
 ```
 
 **Why does it work?** Two antennas with different physical orientation and placement have different characteristics. A station sitting in the "dead zone" of ANT1 might be perfectly audible on ANT2. A signal buried under local noise on ANT1 might be clean on ANT2. By alternating every 15 seconds, you systematically capture both.
@@ -76,11 +78,11 @@ Result is stored per band — once measured, diversity just works.
 
 | Date | Band | Conditions | NORMAL | DIVERSITY | Notes |
 |------|------|-----------|--------|-----------|-------|
-| 03.04.2026 | 20m | Poor | ~30 stations | **63 stations** | Indonesia 12,000 km |
-| 03.04.2026 | 40m | Normal | 27 stations | **37 stations** | +37% |
-| 04.04.2026 | 40m | Poor | 9–10 stations | **13 stations** | Russia 2054 km vs Ukraine 1643 km |
+| 03.04.2026 | 20m | Poor | ~15 stations/cycle | **63 stations accumulated** | Indonesia 12,000 km |
+| 03.04.2026 | 40m | Normal | ~15 stations/cycle | **37 stations accumulated** | +37% |
+| 04.04.2026 | 40m | Poor | 10 stations/cycle | **13 stations accumulated** | Russia 2054 km vs Ukraine 1643 km |
 
-*Reference: IC-7300 + WSJT-X on same location same time: 13–22 stations (single cycle, single antenna).*
+*Reference: IC-7300 + WSJT-X on same location same time: 13–22 stations (single cycle, single antenna). SimpleFT8 typically decodes 10–20 stations per cycle on 20m/40m.*
 
 **Two effects work together:**
 1. **Accumulation** — stations persist for 75s instead of resetting every 15s. This alone roughly doubles visible count vs. a single WSJT-X snapshot.
@@ -95,7 +97,14 @@ Result is stored per band — once measured, diversity just works.
 - UCB1 adaptive antenna selection in AUTO mode
 - Advanced decoder: AP decoding (known calls/grids), signal subtraction (5 passes), spectral whitening
 - Country detection + distance calculation for 100+ prefixes
-- CQ mode with auto-reply state machine
+- **QSO state machine** with CQ mode and Hunt mode (click a station to call)
+- **155 PSKReporter spots** worldwide, stations respond to CQ calls
+- Configurable call attempts (3/5/7/99) with auto-abort
+- TX queue for incoming responses during CQ
+- Even/odd slot correction, TX frequency 1500 Hz (WSJT-X standard)
+- Station switch aborts running QSO cleanly
+- Info buttons in Settings with reset to defaults
+- SWR alarm in status bar only (no popup interruptions)
 - ADIF log export
 - PSKReporter integration
 - Auto-reconnect (exponential backoff, unlimited retries)
@@ -105,7 +114,7 @@ Result is stored per band — once measured, diversity just works.
 
 ## What's Missing
 
-- Full QSO cycle end-to-end (CQ → report exchange → RR73) not live-tested
+- First complete QSO not yet logged (stations respond, sequence runs, completion imminent)
 - FT4 mode (7.5s cycles) not implemented
 - Buttons not yet disabled when radio is disconnected
 - ~20% of exotic callsign prefixes missing
@@ -181,19 +190,21 @@ MIT License — free for everyone. Use it, modify it, build on it.
 **Ein eigenständiger FT8-Client für FlexRadio (8400M/6xxx/8600M), der automatisch alle 15 Sekunden zwischen zwei Antennen wechselt — und dabei deutlich mehr Stationen hört als jedes Einzelantennen-Setup.**
 
 > **Bis zu 5x mehr Stationen** im Vergleich zum Betrieb mit nur einer Antenne.
-> Gemessen: Normal 9 Stationen → Diversity 13 Stationen (40m, schlechte Bedingungen, 04.04.2026).
-> Spitzenwert: 8 → 63 Stationen auf 20m. Regenrinne als zweite Antenne bestätigt funktionierend.
+> Gemessen: Normal 10 Stationen → Diversity 13 Stationen (40m, schlechte Bedingungen, 04.04.2026).
+> Spitzenwert: 63 Stationen auf 20m (typisch 10–20 pro Zyklus). Regenrinne als zweite Antenne bestätigt funktionierend.
 
 ---
 
-## ⚠️ TX-Status — Bitte vor dem Senden lesen
+## ⚠️ TX-Status
 
-**TX ist teilweise implementiert:**
+**TX funktioniert — erstes komplettes QSO steht kurz bevor:**
 - ✅ **TUNE** — Antennentuner einschalten funktioniert
-- ✅ **CQ rufen** — Funktioniert (30+ PSKReporter-Spots, bis 12.000 km bestätigt)
-- ❌ **Vollständiges QSO** — CQ → Antwort → Rapport → RR73 → ADIF-Log ist **noch nicht live getestet**
+- ✅ **CQ rufen** — 155 PSKReporter-Spots weltweit, bis 12.000 km
+- ✅ **Stationen antworten** — DK5ON, UR5DU, UR5WCS, DB2HA, IN3LHF, F5PBG haben auf CQ geantwortet
+- ✅ **QSO State Machine** — Vollständige Sequenz CQ → Rapport → RR73 → ADIF-Log implementiert
+- 🔄 **Erstes komplettes QSO** — Stationen antworten und QSO-Sequenz läuft durch, Abschluss steht unmittelbar bevor
 
-**Für echte QSOs bitte WSJT-X verwenden.** SimpleFT8s Stärke ist der Empfang — so viele Stationen wie möglich hören.
+**QSO-Features:** Auto-Modus (CQ + Hunt), einstellbare Anrufversuche (3/5/7/99), TX-Queue für Antworten während CQ, Even/Odd Slot-Korrektur, TX-Frequenz 1500 Hz (WSJT-X Standard), Station-Wechsel bricht laufendes QSO ab.
 
 ---
 
@@ -204,12 +215,12 @@ Die meisten Radios haben zwei Antennenanschlüsse aber nur einen Empfänger — 
 **SimpleFT8 macht etwas Cleveres:** FT8 sendet in festen 15-Sekunden-Slots. Jede Station bleibt mehrere Minuten aktiv. Also hört SimpleFT8 im ersten Slot auf ANT1, im zweiten Slot auf ANT2 und fügt die Ergebnisse zusammen. Man sieht Stationen von *beiden* Antennen in einer kombinierten Liste.
 
 ```
-Slot 1 (ANT1):  12 Stationen dekodiert
-Slot 2 (ANT2):  14 Stationen dekodiert  ← einige neue die ANT1 nicht hörte
-Slot 3 (ANT1):  11 Stationen dekodiert
-Slot 4 (ANT2):  13 Stationen dekodiert
+Slot 1 (ANT1):  14 Stationen dekodiert
+Slot 2 (ANT2):  17 Stationen dekodiert  ← einige neue die ANT1 nicht hörte
+Slot 3 (ANT1):  12 Stationen dekodiert
+Slot 4 (ANT2):  15 Stationen dekodiert
                 ───────────────────────
-Kombinierte Liste:  48 einzigartige Stationen  (vs 14 mit einer Antenne)
+Kombinierte Liste:  40+ einzigartige Stationen  (vs ~15 mit einer Antenne)
 ```
 
 **Warum funktioniert das?** Zwei Antennen mit unterschiedlicher Ausrichtung haben unterschiedliche Eigenschaften. Eine Station im "toten Winkel" von ANT1 ist auf ANT2 vielleicht gut hörbar. Ein Signal im Rauschen auf ANT1 kann auf ANT2 sauber sein. Durch den Wechsel alle 15 Sekunden werden systematisch beide erfasst.
@@ -250,11 +261,11 @@ Das Ergebnis wird pro Band gespeichert — einmal eingemessen, dann funktioniert
 
 | Datum | Band | Bedingungen | NORMAL | DIVERSITY | Anmerkungen |
 |-------|------|------------|--------|-----------|-------------|
-| 03.04.2026 | 20m | Schlecht | ~30 Stationen | **63 Stationen** | Indonesien 12.000 km |
-| 03.04.2026 | 40m | Normal | 27 Stationen | **37 Stationen** | +37% |
-| 04.04.2026 | 40m | Schlecht | 9–10 Stationen | **13 Stationen** | Russland 2054 km vs Ukraine 1643 km |
+| 03.04.2026 | 20m | Schlecht | ~15 Stationen/Zyklus | **63 Stationen akkumuliert** | Indonesien 12.000 km |
+| 03.04.2026 | 40m | Normal | ~15 Stationen/Zyklus | **37 Stationen akkumuliert** | +37% |
+| 04.04.2026 | 40m | Schlecht | 10 Stationen/Zyklus | **13 Stationen akkumuliert** | Russland 2054 km vs Ukraine 1643 km |
 
-*Referenz: IC-7300 + WSJT-X am gleichen Standort zur gleichen Zeit: 13–22 Stationen (einzelner Zyklus, einzelne Antenne).*
+*Referenz: IC-7300 + WSJT-X am gleichen Standort zur gleichen Zeit: 13–22 Stationen (einzelner Zyklus, einzelne Antenne). SimpleFT8 dekodiert typisch 10–20 Stationen pro Zyklus auf 20m/40m.*
 
 **Zwei Effekte zusammen:**
 1. **Akkumulation** — Stationen bleiben 75s sichtbar statt alle 15s zurückzusetzen. Das allein verdoppelt die sichtbare Anzahl vs. einem WSJT-X-Snapshot.
@@ -269,7 +280,14 @@ Das Ergebnis wird pro Band gespeichert — einmal eingemessen, dann funktioniert
 - UCB1 adaptive Antennen-Auswahl im AUTO-Modus
 - Erweiterter Decoder: AP-Dekodierung (bekannte Calls/Grids), Signal Subtraction (5 Passes), Spectral Whitening
 - Ländererkennung + Entfernungsberechnung für 100+ Präfixe
-- CQ-Modus mit Auto-Antwort State Machine
+- **QSO State Machine** mit CQ-Modus und Hunt-Modus (Station anklicken zum Anrufen)
+- **155 PSKReporter-Spots** weltweit, Stationen antworten auf CQ-Rufe
+- Einstellbare Anrufversuche (3/5/7/99) mit Auto-Abbruch
+- TX-Queue für eingehende Antworten während CQ
+- Even/Odd Slot-Korrektur, TX-Frequenz 1500 Hz (WSJT-X Standard)
+- Station-Wechsel bricht laufendes QSO sauber ab
+- Info-Buttons in Settings mit Reset auf Standardwerte
+- SWR-Alarm nur in Statusbar (keine Popup-Unterbrechungen)
 - ADIF-Log-Export
 - PSKReporter-Integration
 - Auto-Reconnect (Exponential Backoff, unbegrenzte Versuche)
@@ -279,7 +297,7 @@ Das Ergebnis wird pro Band gespeichert — einmal eingemessen, dann funktioniert
 
 ## Was noch fehlt
 
-- Vollständiger QSO-Zyklus End-to-End (CQ → Rapport-Austausch → RR73) noch nicht live getestet
+- Erstes komplettes QSO noch nicht geloggt (Stationen antworten, Sequenz läuft, Abschluss steht bevor)
 - FT4-Modus (7,5s Zyklen) nicht implementiert
 - Buttons noch nicht deaktiviert wenn Radio getrennt
 - ~20% exotischer Callsign-Präfixe fehlen noch
