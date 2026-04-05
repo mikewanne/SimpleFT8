@@ -1077,6 +1077,9 @@ class MainWindow(QMainWindow):
         self._active_qso_targets.discard(their_call)
         self.rx_panel.set_active_call("")
         self.qso_panel.add_timeout(their_call)
+        # CQ-Button aktiv halten wenn CQ-Modus laeuft
+        if self.qso_sm.cq_mode:
+            self.control_panel.set_cq_active(True)
 
     # ── Timer ───────────────────────────────────────────────────
 
