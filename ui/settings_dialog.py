@@ -3,11 +3,53 @@
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel,
     QLineEdit, QSpinBox, QDoubleSpinBox, QPushButton, QGroupBox,
-    QComboBox, QMessageBox,
+    QComboBox, QMessageBox, QToolButton,
 )
 from PySide6.QtCore import Qt
 
-from config.settings import Settings
+from config.settings import Settings, DEFAULTS
+
+# Info-Texte fuer die (i)-Buttons
+_HINTS = {
+    "callsign": "Dein Amateurfunk-Rufzeichen (z.B. DA1MHH).\nWird in allen FT8-Nachrichten verwendet.",
+    "locator": "Maidenhead-Locator deines Standorts (4 oder 6 Zeichen).\nWird bei CQ und erstem Anruf mitgesendet.",
+    "radio_ip": "IP-Adresse des FlexRadio. Leer = Auto-Discovery per Broadcast.\nNur aendern wenn mehrere Radios im Netzwerk.",
+    "power": "HF-Sendeleistung in Watt.\nFuer FT8 reichen 20-50W fuer weltweiten Betrieb.",
+    "tx_level": "Audio-Pegel zum Radio (100% = volles Signal).\nBei ALC-Ausschlag reduzieren.",
+    "max_calls": "Wie oft eine Station maximal angerufen wird bevor Timeout.\n3 = schnell weiter, 7 = hartnäckig, 99 = quasi-endlos.",
+    "swr_limit": "Bei SWR ueber diesem Wert wird TX sofort gestoppt.\nSchuetzt Endstufe und Antenne.",
+    "tune_power": "Leistung beim TUNE-Vorgang (Antennentuner einstellen).\nMax 20W — hoehere Werte brauchen Bestaetigung.",
+    "tx_freq": "Audio-Frequenz fuer TX im FT8-Fenster.\n1500 Hz = Standard (WSJT-X Default).\nBereich 1000-2000 Hz wird von allen Stationen dekodiert.\nUnter 800 Hz: wird von vielen Stationen ausgefiltert!",
+    "max_decode": "Obere Grenze des Dekodier-Bereichs.\n3000 Hz = Standard. Hoeher = mehr Stationen aber mehr CPU.",
+}
+
+
+def _make_info_btn(hint: str) -> QToolButton:
+    """Kleiner (i)-Button mit Tooltip."""
+    btn = QToolButton()
+    btn.setText("?")
+    btn.setFixedSize(20, 20)
+    btn.setStyleSheet("""
+        QToolButton {
+            background: #333; color: #888; border: 1px solid #555;
+            border-radius: 10px; font-size: 11px; font-weight: bold;
+        }
+        QToolButton:hover { background: #444; color: #FFF; }
+    """)
+    btn.setToolTip(hint)
+    btn.clicked.connect(lambda: QMessageBox.information(
+        btn.window(), "Info", hint
+    ))
+    return btn
+
+
+def _row_with_hint(widget, hint_key: str) -> QHBoxLayout:
+    """Widget + (i)-Button in einer Zeile."""
+    row = QHBoxLayout()
+    row.addWidget(widget)
+    if hint_key in _HINTS:
+        row.addWidget(_make_info_btn(_HINTS[hint_key]))
+    return row
 
 
 class SettingsDialog(QDialog):
@@ -17,7 +59,7 @@ class SettingsDialog(QDialog):
         super().__init__(parent)
         self.settings = settings
         self.setWindowTitle("SimpleFT8 — Einstellungen")
-        self.setMinimumWidth(400)
+        self.setMinimumWidth(420)
         self.setStyleSheet("""
             QDialog { background-color: #1a1a2e; color: #CCC; }
             QGroupBox { color: #00AAFF; border: 1px solid #333;
@@ -31,6 +73,8 @@ class SettingsDialog(QDialog):
                 border-radius: 3px; padding: 8px 16px; font-weight: bold; }
             QPushButton:hover { background: #0088CC; }
             QPushButton#cancel { background: #333; }
+            QPushButton#reset { background: #553300; }
+            QPushButton#reset:hover { background: #774400; }
         """)
         self._setup_ui()
         self._load_values()
@@ -44,8 +88,8 @@ class SettingsDialog(QDialog):
         self.callsign = QLineEdit()
         self.locator = QLineEdit()
         self.locator.setMaxLength(6)
-        form1.addRow("Rufzeichen:", self.callsign)
-        form1.addRow("Locator:", self.locator)
+        form1.addRow("Rufzeichen:", _row_with_hint(self.callsign, "callsign"))
+        form1.addRow("Locator:", _row_with_hint(self.locator, "locator"))
         layout.addWidget(station)
 
         # --- Radio ---
@@ -53,7 +97,7 @@ class SettingsDialog(QDialog):
         form2 = QFormLayout(radio)
         self.radio_ip = QLineEdit()
         self.radio_ip.setPlaceholderText("Auto-Discovery")
-        form2.addRow("IP Adresse:", self.radio_ip)
+        form2.addRow("IP Adresse:", _row_with_hint(self.radio_ip, "radio_ip"))
         layout.addWidget(radio)
 
         # --- TX ---
@@ -65,13 +109,11 @@ class SettingsDialog(QDialog):
         self.tx_level = QSpinBox()
         self.tx_level.setRange(1, 100)
         self.tx_level.setSuffix(" %")
-        self.tx_level.setToolTip("TX Audio-Pegel (100% = volles Signal)")
         self.max_calls_combo = QComboBox()
         self.max_calls_combo.addItems(["3", "5", "7", "99"])
-        self.max_calls_combo.setToolTip("Wie oft CQ/Call senden wenn keine Antwort (wie SmartSDR)")
-        form3.addRow("Sendeleistung:", self.power)
-        form3.addRow("TX Audio-Pegel:", self.tx_level)
-        form3.addRow("Anrufversuche:", self.max_calls_combo)
+        form3.addRow("Sendeleistung:", _row_with_hint(self.power, "power"))
+        form3.addRow("TX Audio-Pegel:", _row_with_hint(self.tx_level, "tx_level"))
+        form3.addRow("Anrufversuche:", _row_with_hint(self.max_calls_combo, "max_calls"))
         layout.addWidget(tx)
 
         # --- Schutz ---
@@ -81,8 +123,7 @@ class SettingsDialog(QDialog):
         self.swr_limit.setRange(1.5, 10.0)
         self.swr_limit.setSingleStep(0.5)
         self.swr_limit.setDecimals(1)
-        self.swr_limit.setToolTip("Bei SWR ueber diesem Wert wird TX sofort gestoppt")
-        form4.addRow("SWR-Limit:", self.swr_limit)
+        form4.addRow("SWR-Limit:", _row_with_hint(self.swr_limit, "swr_limit"))
 
         # Tune-Leistung: 3 feste Werte, max 20W (kein Schutz-Risiko)
         tune_row = QHBoxLayout()
@@ -101,30 +142,37 @@ class SettingsDialog(QDialog):
             btn.clicked.connect(lambda _, watt=w: self._on_tune_power_clicked(watt))
             tune_row.addWidget(btn)
             self._tune_btns[w] = btn
+        tune_row.addWidget(_make_info_btn(_HINTS["tune_power"]))
         tune_row.addStretch()
         form4.addRow("Tune-Leistung:", tune_row)
         layout.addWidget(protect)
 
         # --- FT8 ---
-        ft8 = QGroupBox("FT8 Decoder")
+        ft8 = QGroupBox("FT8")
         form5 = QFormLayout(ft8)
         self.audio_freq = QSpinBox()
-        self.audio_freq.setRange(200, 2800)
+        self.audio_freq.setRange(800, 2800)
         self.audio_freq.setSuffix(" Hz")
+        self.audio_freq.setSingleStep(50)
         self.max_decode_freq = QSpinBox()
         self.max_decode_freq.setRange(1000, 5000)
         self.max_decode_freq.setSuffix(" Hz")
-        form5.addRow("TX Audio-Frequenz:", self.audio_freq)
-        form5.addRow("Max. Decode-Frequenz:", self.max_decode_freq)
+        form5.addRow("TX Audio-Frequenz:", _row_with_hint(self.audio_freq, "tx_freq"))
+        form5.addRow("Max. Decode-Frequenz:", _row_with_hint(self.max_decode_freq, "max_decode"))
         layout.addWidget(ft8)
 
         # --- Buttons ---
         btn_row = QHBoxLayout()
+        btn_reset = QPushButton("Grundeinstellungen")
+        btn_reset.setObjectName("reset")
+        btn_reset.setToolTip("Alle Werte auf Werkseinstellungen zuruecksetzen")
+        btn_reset.clicked.connect(self._reset_defaults)
         btn_save = QPushButton("Speichern")
         btn_save.clicked.connect(self._save_and_close)
         btn_cancel = QPushButton("Abbrechen")
         btn_cancel.setObjectName("cancel")
         btn_cancel.clicked.connect(self.reject)
+        btn_row.addWidget(btn_reset)
         btn_row.addStretch()
         btn_row.addWidget(btn_cancel)
         btn_row.addWidget(btn_save)
@@ -159,7 +207,7 @@ class SettingsDialog(QDialog):
         mc = self.settings.get("max_calls", 3)
         self.max_calls_combo.setCurrentIndex({3: 0, 5: 1, 7: 2, 99: 3}.get(mc, 0))
         self.swr_limit.setValue(self.settings.get("swr_limit", 3.0))
-        self.audio_freq.setValue(self.settings.audio_freq_hz)
+        self.audio_freq.setValue(self.settings.get("audio_freq_hz", 1500))
         self.max_decode_freq.setValue(self.settings.max_decode_freq)
         # Tune-Leistung
         tp = self.settings.get("tune_power", 10)
@@ -180,3 +228,27 @@ class SettingsDialog(QDialog):
         self.settings.set("max_decode_freq", self.max_decode_freq.value())
         self.settings.save()
         self.accept()
+
+    def _reset_defaults(self):
+        """Alle Werte auf Grundeinstellungen zuruecksetzen."""
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Grundeinstellungen")
+        msg.setIcon(QMessageBox.Icon.Question)
+        msg.setText("Alle Einstellungen auf Werkseinstellungen zuruecksetzen?\n\n"
+                    "Rufzeichen und Locator bleiben erhalten.")
+        msg.setStyleSheet("QMessageBox { background:#1a1a2e; color:#CCC; }")
+        btn_yes = msg.addButton("Zuruecksetzen", QMessageBox.ButtonRole.AcceptRole)
+        msg.addButton("Abbrechen", QMessageBox.ButtonRole.RejectRole)
+        msg.exec()
+        if msg.clickedButton() != btn_yes:
+            return
+        # Werte auf Defaults setzen (Rufzeichen/Locator behalten)
+        self.power.setValue(DEFAULTS.get("power_watts", 50))
+        self.tx_level.setValue(100)
+        self.max_calls_combo.setCurrentIndex(0)  # 3
+        self.swr_limit.setValue(3.0)
+        self.audio_freq.setValue(1500)
+        self.max_decode_freq.setValue(DEFAULTS.get("max_decode_freq", 3000))
+        self._current_tune_power = 10
+        for w, btn in self._tune_btns.items():
+            btn.setChecked(w == 10)

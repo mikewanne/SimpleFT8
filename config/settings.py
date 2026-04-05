@@ -31,7 +31,7 @@ DEFAULTS = {
     "band": "20m",
     "mode": "FT8",
     "auto_mode": False,
-    "audio_freq_hz": 1000,
+    "audio_freq_hz": 1500,
     "max_decode_freq": 3000,
     "tune_power": 10,
 }

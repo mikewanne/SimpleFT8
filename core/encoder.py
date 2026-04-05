@@ -38,6 +38,7 @@ class Encoder(QObject):
         self._decoder = None
         self._tx_thread = None
         self._is_transmitting = False
+        self.tx_even = None  # None=nächster Slot, True=even, False=odd
 
     @property
     def is_transmitting(self) -> bool:
@@ -53,7 +54,11 @@ class Encoder(QObject):
         if not self._decoder or not self._decoder.occupied_freqs:
             return self.audio_freq_hz
         occupied = self._decoder.occupied_freqs
-        for candidate in range(300, 2700, 50):
+        for candidate in range(1500, 2700, 50):
+            if all(abs(candidate - f) >= 100 for f in occupied):
+                return candidate
+        # Fallback: ab 800 Hz suchen wenn oben voll
+        for candidate in range(800, 1500, 50):
             if all(abs(candidate - f) >= 100 for f in occupied):
                 return candidate
         return self.audio_freq_hz
@@ -109,14 +114,34 @@ class Encoder(QObject):
         if audio_12k is None:
             return
 
-        # Warte auf naechsten Zyklusbeginn
+        # Warte auf richtigen Zyklusbeginn (Even/Odd Slot)
         now = time.time()
         cycle_pos = now % 15.0
-        if cycle_pos > 1.0:
-            wait = 15.0 - cycle_pos + 0.2
-            time.sleep(wait)
-        elif cycle_pos < 0.2:
-            time.sleep(0.2 - cycle_pos)
+        cycle_num = int(now / 15.0)
+        is_even = cycle_num % 2 == 0
+
+        if self.tx_even is not None:
+            # Bestimmter Slot gefordert (Hunt: Gegenteil der Gegenstation)
+            want_even = self.tx_even
+            if is_even == want_even and cycle_pos <= 1.0:
+                # Richtig — am Anfang des gewünschten Slots
+                time.sleep(max(0, 0.2 - cycle_pos))
+            else:
+                # Warten bis zum nächsten passenden Slot
+                wait = 15.0 - cycle_pos  # bis nächste Grenze
+                next_even = (cycle_num + 1) % 2 == 0
+                if next_even != want_even:
+                    wait += 15.0  # einen Slot überspringen
+                wait += 0.2
+                print(f"[TX] Slot-Korrektur: warte {wait:.1f}s auf {'EVEN' if want_even else 'ODD'}")
+                time.sleep(wait)
+        else:
+            # Kein Slot-Vorgabe (CQ: nächster Slot)
+            if cycle_pos > 1.0:
+                wait = 15.0 - cycle_pos + 0.2
+                time.sleep(wait)
+            elif cycle_pos < 0.2:
+                time.sleep(0.2 - cycle_pos)
 
         # PTT an
         if self._radio:

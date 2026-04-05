@@ -26,17 +26,15 @@ class FT8Message:
 
     @property
     def caller(self) -> str:
-        """Rufzeichen des Senders."""
-        if self.is_cq:
-            return self.field2
-        return self.field1
+        """Rufzeichen des Senders (field2, bei CQ auch field2)."""
+        return self.field2
 
     @property
     def target(self) -> str:
-        """Rufzeichen des Empfängers (leer bei CQ)."""
+        """Rufzeichen des Empfängers (field1, leer bei CQ)."""
         if self.is_cq:
             return ""
-        return self.field2
+        return self.field1
 
     @property
     def grid_or_report(self) -> str:

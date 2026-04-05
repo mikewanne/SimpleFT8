@@ -213,7 +213,15 @@ class Decoder(QObject):
 
             if messages:
                 self.cycle_decoded.emit(messages)
+                my = getattr(self, '_my_call', '')
                 for msg in messages:
+                    # Roh-Log: Nachrichten an uns oder von QSO-Partner hervorheben
+                    is_to_me = my and hasattr(msg, 'target') and msg.target == my
+                    is_partner = (hasattr(self, 'priority_call') and self.priority_call and
+                                  hasattr(msg, 'caller') and msg.caller == self.priority_call)
+                    if is_to_me or is_partner:
+                        tag = ">>> AN UNS" if is_to_me else "QSO-Partner"
+                        print(f"[RX] {msg.raw} | snr={msg.snr} freq={msg.freq_hz} [{tag}]")
                     self.message_decoded.emit(msg)
             else:
                 # Auch leere Ergebnisse emittieren damit GUI aktualisiert

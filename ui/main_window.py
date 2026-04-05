@@ -101,6 +101,7 @@ class MainWindow(QMainWindow):
         self.qso_sm = QSOStateMachine(settings.callsign, settings.locator)
         self.encoder = Encoder(settings.audio_freq_hz)
         self.decoder = Decoder(max_freq=settings.max_decode_freq)
+        self.decoder._my_call = settings.callsign
         self.adif = AdifWriter()
 
         # FlexRadio
@@ -294,6 +295,11 @@ class MainWindow(QMainWindow):
         """Ein kompletter FT8-Zyklus dekodiert."""
         if not self.rx_panel._rx_active:
             return
+        # Slot-Parity: dekodierte Messages waren im VORHERIGEN Zyklus gesendet
+        msg_was_even = not self.timer.is_even_cycle()
+        if messages:
+            for m in messages:
+                m._tx_even = msg_was_even
         count = len(messages) if messages else 0
         self.control_panel.update_decode_count(count)
 
@@ -511,12 +517,21 @@ class MainWindow(QMainWindow):
     @Slot(object)
     def _on_station_clicked(self, msg: FT8Message):
         """User hat eine Station in der Empfangsliste angeklickt."""
-        if self.qso_sm.state != QSOState.IDLE:
+        # Wenn gerade TX läuft: warten bis TX fertig (kein Abbruch während Senden!)
+        if self.encoder.is_transmitting:
+            print(f"[QSO] TX aktiv — Klick auf {msg.caller} ignoriert, warte auf TX-Ende")
             return
         self._active_qso_targets.add(msg.caller)  # 150s Aging fuer angerufene Station
         self.rx_panel.set_active_call(msg.caller)  # Zeile im RX-Panel hervorheben
         self.qso_panel.add_info(f"Rufe {msg.caller}...")
         self.qso_sm.max_calls = self.settings.get("max_calls", 3)
+        # Even/Odd: sende im GEGENTEILIGEN Slot der Gegenstation
+        their_even = getattr(msg, '_tx_even', None)
+        if their_even is not None:
+            self.encoder.tx_even = not their_even
+            print(f"[TX] Slot: Gegenstation={'EVEN' if their_even else 'ODD'} → wir={'ODD' if their_even else 'EVEN'}")
+        else:
+            self.encoder.tx_even = None  # Fallback: nächster Slot
         self.qso_sm.start_qso(
             their_call=msg.caller,
             their_grid=msg.grid_or_report if msg.is_grid else "",
@@ -917,11 +932,13 @@ class MainWindow(QMainWindow):
 
     @Slot(float)
     def _on_swr_alarm(self, swr: float):
-        QMessageBox.warning(
-            self, "SWR Alarm",
-            f"SWR {swr:.1f} — TX wurde gestoppt!\n\n"
-            f"Antenne/Kabel pruefen.",
-        )
+        import time as _t
+        now = _t.time()
+        if now - getattr(self, '_last_swr_alarm', 0) < 10:
+            return  # Cooldown: max 1 Alarm pro 10s
+        self._last_swr_alarm = now
+        self.statusBar().showMessage(f"SWR ALARM: {swr:.1f} — TX gestoppt! Tuner/Antenne pruefen.", 10000)
+        print(f"[SWR] Alarm: {swr:.1f} — TX gestoppt")
 
     @Slot(str, float)
     def _on_meter_update(self, name: str, value: float):
@@ -942,6 +959,7 @@ class MainWindow(QMainWindow):
     @Slot()
     def _on_cq_clicked(self):
         if self.control_panel.btn_cq.isChecked():
+            self.encoder.tx_even = None  # CQ: kein Slot-Zwang
             self.qso_panel.add_info("CQ-Modus gestartet")
             self.qso_sm.start_cq()
         else:

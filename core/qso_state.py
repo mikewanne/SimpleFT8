@@ -103,9 +103,12 @@ class QSOStateMachine(QObject):
 
     def start_qso(self, their_call: str, their_grid: str = "",
                    freq_hz: int = 0):
-        """QSO mit angeklickter Station starten."""
+        """QSO mit angeklickter Station starten. Bricht laufendes QSO ab."""
         if self.state not in (QSOState.IDLE, QSOState.CQ_WAIT):
-            return
+            # Laufendes QSO abbrechen → neues starten
+            old = self.qso.their_call if self.qso else "?"
+            print(f"[QSO] Abbruch {old} → starte neu mit {their_call}")
+            self._set_state(QSOState.IDLE)
 
         was_cq = self.cq_mode
         self.cq_mode = False  # CQ-Modus unterbrechen
@@ -198,8 +201,8 @@ class QSOStateMachine(QObject):
             print(f"[QSO] Empfangen: '{msg.raw}' | State={self.state.name} "
                   f"| Erwartet von={self.qso.their_call or '?'} "
                   f"| is_report={msg.is_report} is_rr73={msg.is_rr73} is_grid={msg.is_grid}")
-        # ── CQ-Modus: jemand ruft UNS ──
-        if self.state == QSOState.CQ_WAIT and msg.target == self.my_call:
+        # ── CQ-Modus: jemand ruft UNS (auch während CQ noch sendet) ──
+        if self.state in (QSOState.CQ_WAIT, QSOState.CQ_CALLING) and msg.target == self.my_call:
             # Jemand antwortet auf unser CQ!
             self.qso = QSOData(
                 their_call=msg.caller,
