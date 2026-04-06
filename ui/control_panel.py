@@ -228,7 +228,20 @@ class _AntenneCard(QFrame):
             lbl.setStyleSheet(_DIV_PCT_OFF)
             ratio_row.addWidget(lbl)
             self._a1_pct[pct] = lbl
-        ratio_row.addStretch()
+        ratio_row.addSpacing(6)
+        self._a1_count_label = QLabel("")
+        self._a1_count_label.setStyleSheet(
+            f"color:{_LED_GREEN};font-size:9px;font-family:{_FONT};font-weight:bold;"
+        )
+        self._a1_count_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        ratio_row.addWidget(self._a1_count_label)
+        self._a2_count_label = QLabel("")
+        self._a2_count_label.setStyleSheet(
+            f"color:{_LED_BLUE};font-size:9px;font-family:{_FONT};font-weight:bold;"
+        )
+        self._a2_count_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        ratio_row.addWidget(self._a2_count_label)
+        ratio_row.addSpacing(6)
         self._a2_pct = {}
         for pct in ("30%", "50%", "70%"):
             lbl = QLabel(pct)
@@ -581,6 +594,8 @@ class ControlPanel(QWidget):
         self._a1_pct = ant_card._a1_pct
         self._a2_pct = ant_card._a2_pct
         self._phase_label = ant_card._phase_label
+        self._a1_count_label = ant_card._a1_count_label
+        self._a2_count_label = ant_card._a2_count_label
         self.btn_normal.setStyleSheet(self._rx_btn_style(self._RX_STYLE_ACTIVE))
         self.btn_diversity.setStyleSheet(self._rx_btn_style(self._RX_STYLE_INACTIVE))
         self.btn_normal.clicked.connect(lambda: self._on_rx_mode_clicked("normal"))
@@ -763,11 +778,13 @@ class ControlPanel(QWidget):
     # =====================================================================
     # Diversity Ratio Display
     # =====================================================================
-    def update_diversity_ratio(self, ratio: str, phase: str):
+    def update_diversity_ratio(self, ratio: str, phase: str,
+                               measure_step: int = 0, measure_total: int = 4):
         """Diversity-Anzeige aktualisieren.
 
         ratio: '70:30' | '30:70' | '50:50'
         phase: 'measure' | 'operate'
+        measure_step: abgeschlossene Messschritte (0..measure_total)
         """
         for lbl in self._a1_pct.values():
             lbl.setStyleSheet(_DIV_PCT_OFF)
@@ -775,7 +792,8 @@ class ControlPanel(QWidget):
             lbl.setStyleSheet(_DIV_PCT_OFF)
 
         if phase == "measure":
-            self._phase_label.setText("● MESSEN...")
+            step_txt = f"{measure_step}/{measure_total}" if measure_step > 0 else f"0/{measure_total}"
+            self._phase_label.setText(f"● MESSEN {step_txt}")
             self._a1_pct["50%"].setStyleSheet(_DIV_PCT_YELLOW)
             self._a2_pct["50%"].setStyleSheet(_DIV_PCT_YELLOW)
         else:
@@ -789,6 +807,15 @@ class ControlPanel(QWidget):
             else:  # 50:50
                 self._a1_pct["50%"].setStyleSheet(_DIV_PCT_TEAL)
                 self._a2_pct["50%"].setStyleSheet(_DIV_PCT_TEAL)
+
+    def update_diversity_counts(self, a1_count: int, a2_count: int):
+        """Stationsanzahl pro Antenne im Diversity-Panel anzeigen."""
+        if a1_count == 0 and a2_count == 0:
+            self._a1_count_label.setText("")
+            self._a2_count_label.setText("")
+        else:
+            self._a1_count_label.setText(f"{a1_count} St.")
+            self._a2_count_label.setText(f"{a2_count} St.")
 
     # =====================================================================
     # PSK Reporter

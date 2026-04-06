@@ -82,6 +82,7 @@ class MainWindow(QMainWindow):
         self._reconnect_attempts = 0
         self._reconnect_countdown = 0
         self._dx_tune_dialog = None  # Aktiver DX-Tune Dialog
+        self._has_sent_cq = False    # PSKReporter nur nach CQ anzeigen
         # Diversity (simpel: Antenne pro Zyklus wechseln)
         self._rx_mode = "normal"  # "normal", "diversity", "dx_tuning"
         self._diversity_stations = {}  # key → FT8Message (akkumuliert)
@@ -210,7 +211,7 @@ class MainWindow(QMainWindow):
                 f"Preset {band} geladen: ANT1 G{preset['ant1_gain']} dB", 4000
             )
             print(f"[FlexRadio] Preset {band}: ANT1 G{preset['ant1_gain']} dB")
-        self.decoder.set_quality("normal")  # Start: schnell (NORMAL-Modus)
+        self.decoder.set_quality(self._rx_mode)  # Qualität vom aktiven Modus abhängig
         self.decoder.start()
         self.radio.create_tx_stream()
         # Meter an GUI koppeln
@@ -293,7 +294,9 @@ class MainWindow(QMainWindow):
             with self._diversity_lock:
                 self._diversity_ctrl.record_measurement(ant, score)
             self.control_panel.update_diversity_ratio(
-                self._diversity_ctrl.ratio, self._diversity_ctrl.phase
+                self._diversity_ctrl.ratio, self._diversity_ctrl.phase,
+                measure_step=self._diversity_ctrl.measure_step,
+                measure_total=self._diversity_ctrl.MEASURE_CYCLES,
             )
 
         if self._rx_mode == "diversity" and messages:
@@ -367,6 +370,11 @@ class MainWindow(QMainWindow):
                 for m in self._diversity_stations.values():
                     self.rx_panel.add_message(m)
                 self.rx_panel.reapply_sort()
+                a1_cnt = sum(1 for m in self._diversity_stations.values()
+                             if getattr(m, 'antenna', '').startswith('A1'))
+                a2_cnt = sum(1 for m in self._diversity_stations.values()
+                             if getattr(m, 'antenna', '').startswith('A2'))
+                self.control_panel.update_diversity_counts(a1_cnt, a2_cnt)
 
             self.control_panel.update_decode_count(
                 len(self._diversity_stations)
@@ -456,6 +464,7 @@ class MainWindow(QMainWindow):
         self.qso_sm.state_changed.connect(self._on_state_changed)
         self.qso_sm.send_message.connect(self._on_send_message)
         self.qso_sm.qso_complete.connect(self._on_qso_complete)
+        self.qso_sm.qso_confirmed.connect(self._on_qso_confirmed)
         self.qso_sm.qso_timeout.connect(self._on_qso_timeout)
 
         # Timer
@@ -543,13 +552,18 @@ class MainWindow(QMainWindow):
     def _on_band_changed(self, band: str):
         self.settings.set("band", band)
         freq = self.settings.frequency_mhz
+        self._has_sent_cq = False
         # Empfangsliste komplett leeren bei Bandwechsel
         self.rx_panel.table.setRowCount(0)
         self._diversity_stations = {}
         self._normal_stations = {}
         self.control_panel.update_decode_count(0)
-        # Diversity Controller bei Bandwechsel zuruecksetzen
-        self._diversity_ctrl.reset()
+        # Diversity Controller bei Bandwechsel: Neueinmessung
+        self._diversity_ctrl.on_band_change()
+        if self._rx_mode == "diversity":
+            self.control_panel.update_diversity_ratio("50:50", "measure", 0,
+                                                      self._diversity_ctrl.MEASURE_CYCLES)
+            self.control_panel.update_diversity_counts(0, 0)
         if self.radio.ip:
             s = self.radio._slice_idx
             self.radio.set_frequency(freq, slice_idx=s)
@@ -608,7 +622,9 @@ class MainWindow(QMainWindow):
         self._diversity_current_ant = "A1"
         self._diversity_ant_queue = deque()  # (ant, phase) Tupel
         self._diversity_ctrl.reset()
-        self.control_panel.update_diversity_ratio("50:50", "measure")  # sofort anzeigen
+        self.control_panel.update_diversity_ratio("50:50", "measure", 0,
+                                                  self._diversity_ctrl.MEASURE_CYCLES)
+        self.control_panel.update_diversity_counts(0, 0)
 
         band = self.settings.band
         preset = self.settings.get_dx_preset(band)
@@ -659,8 +675,11 @@ class MainWindow(QMainWindow):
         """Diversity deaktivieren: zurueck auf ANT1."""
         self._diversity_stations = {}
         self._diversity_ctrl.reset()
+        self._rx_mode = "normal"
         self._apply_normal_mode()
+        self.control_panel.set_rx_mode("normal")
         self.control_panel.dx_info.setText("")
+        self.control_panel.update_diversity_counts(0, 0)
         print("[Diversity] Deaktiviert")
 
     def _handle_dx_tuning(self):
@@ -732,7 +751,7 @@ class MainWindow(QMainWindow):
         msg.exec()
 
         if msg.clickedButton() == btn_abort:
-            self._set_mode("normal")
+            self._on_rx_mode_changed("normal")
             return
 
         if msg.clickedButton() == btn_tune and self.radio.ip:
@@ -755,7 +774,7 @@ class MainWindow(QMainWindow):
                         f"SWR {swr:.1f} > {swr_limit:.1f} — Einmessen abgebrochen.\n"
                         f"Antenne/Tuner pruefen!"
                     )
-                    self._set_mode("normal")
+                    self._on_rx_mode_changed("normal")
                     return
                 self._open_dx_tune_dialog()
 
@@ -956,15 +975,16 @@ class MainWindow(QMainWindow):
     @Slot(str)
     def _on_send_message(self, message: str):
         """FT8-Nachricht encoden und ueber FlexRadio senden."""
+        if message.startswith("CQ "):
+            self._has_sent_cq = True
         self.qso_panel.add_tx(message)
         self.encoder.transmit(message)
 
     @Slot(object)
     def _on_qso_complete(self, qso_data):
-        """QSO abgeschlossen — ADIF schreiben."""
+        """RR73 gesendet — ADIF schreiben. ✓ erst bei _on_qso_confirmed."""
         self._active_qso_targets.discard(qso_data.their_call)
         self.rx_panel.set_active_call("")
-        self.qso_panel.add_qso_complete(qso_data.their_call)
 
         band = self.settings.band.upper()
         freq = self.settings.frequency_mhz
@@ -983,6 +1003,11 @@ class MainWindow(QMainWindow):
             time_on=qso_data.start_time,
         )
         self.qso_log.add_qso(qso_data.their_call, band)
+
+    @Slot(object)
+    def _on_qso_confirmed(self, qso_data):
+        """73 empfangen — QSO wirklich komplett, ✓ anzeigen."""
+        self.qso_panel.add_qso_complete(qso_data.their_call)
 
     @Slot(str)
     def _on_qso_timeout(self, their_call: str):
@@ -1040,7 +1065,9 @@ class MainWindow(QMainWindow):
                                    FlexRadio.PREAMP_PRESETS.get(band, 10) + 10)
                 ant_cmd = "ANT1" if self._diversity_current_ant == "A1" else "ANT2"
                 self.control_panel.update_diversity_ratio(
-                    self._diversity_ctrl.ratio, self._diversity_ctrl.phase
+                    self._diversity_ctrl.ratio, self._diversity_ctrl.phase,
+                    measure_step=self._diversity_ctrl.measure_step,
+                    measure_total=self._diversity_ctrl.MEASURE_CYCLES,
                 )
 
             # BUG-3: ant_cmd + gain als Argumente, nicht als Closure
@@ -1064,6 +1091,12 @@ class MainWindow(QMainWindow):
     # ── PSKReporter ─────────────────────────────────────────────
 
     def _fetch_psk_stats(self):
+        if not self._has_sent_cq:
+            self.control_panel.psk_label.setText("PSK: — (nur nach CQ)")
+            self.control_panel.psk_label.setStyleSheet(
+                "color: #557766; font-family: Menlo; font-size: 10px; padding: 2px;"
+            )
+            return
         threading.Thread(target=self._psk_worker, daemon=True).start()
 
     def _psk_worker(self):

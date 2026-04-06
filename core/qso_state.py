@@ -24,7 +24,8 @@ class QSOState(Enum):
     TX_REPORT = auto()      # Sende Rapport
     WAIT_RR73 = auto()      # Warte auf RR73
     TX_RR73 = auto()        # Sende RR73
-    LOGGING = auto()        # QSO abgeschlossen
+    WAIT_73 = auto()        # Warte auf 73 (QSO schon geloggt)
+    LOGGING = auto()        # QSO abgeschlossen (legacy, nicht mehr genutzt)
     TIMEOUT = auto()        # Keine Antwort
 
 
@@ -54,7 +55,8 @@ class QSOStateMachine(QObject):
 
     state_changed = Signal(object)
     send_message = Signal(str)
-    qso_complete = Signal(object)
+    qso_complete = Signal(object)   # RR73 gesendet → ADIF loggen
+    qso_confirmed = Signal(object)  # 73 empfangen → ✓ anzeigen
     qso_timeout = Signal(str)
 
     def __init__(self, my_call: str, my_grid: str):
@@ -172,6 +174,13 @@ class QSOStateMachine(QObject):
     # ── Zyklusende (Timeout-Überwachung) ────────────────────────
 
     def on_cycle_end(self):
+        if self.state == QSOState.WAIT_73:
+            self.qso.timeout_cycles += 1
+            if self.qso.timeout_cycles >= 2:
+                print(f"[QSO] WAIT_73 Timeout — kein 73 empfangen, QSO war schon geloggt")
+                self._resume_cq_if_needed()
+            return
+
         if self.state == QSOState.CQ_WAIT:
             # Im CQ-Modus: nach 2 Zyklen ohne Antwort nochmal CQ
             self.qso.timeout_cycles += 1
@@ -249,14 +258,12 @@ class QSOStateMachine(QObject):
             self._set_state(QSOState.WAIT_RR73)
             self.qso.timeout_cycles = 0
         elif self.state == QSOState.TX_RR73:
-            self._set_state(QSOState.LOGGING)
+            # ADIF sofort loggen (RR73 = unsere Bestätigung ist raus)
             self.qso_complete.emit(self.qso)
             self.cq_qso_count += 1
-            # Im CQ-Modus: sofort nächstes CQ
-            if self.cq_mode:
-                self._send_cq()
-            else:
-                self._set_state(QSOState.IDLE)
+            # Warte noch auf 73 von Gegenstation (max 2 Zyklen)
+            self._set_state(QSOState.WAIT_73)
+            self.qso.timeout_cycles = 0
 
     # ── Nachricht empfangen ─────────────────────────────────────
 
@@ -346,6 +353,13 @@ class QSOStateMachine(QObject):
                 self._set_state(QSOState.TX_REPORT)
                 self.send_message.emit(tx_msg)
                 return
+
+        if self.state == QSOState.WAIT_73:
+            if msg.is_73 or msg.is_rr73:
+                print(f"[QSO] 73 von {msg.caller} empfangen — QSO bestätigt!")
+                self.qso_confirmed.emit(self.qso)
+                self._resume_cq_if_needed()
+            return
 
     # ── Manueller Schritt ───────────────────────────────────────
 
