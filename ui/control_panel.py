@@ -399,19 +399,9 @@ class _QSOStatusCard(QFrame):
         self.rx_indicator.setStyleSheet(f"color: #44FF44; font-size: 12px; font-weight: bold; font-family: {_FONT};")
         self.tx_indicator = QLabel("○ TX")
         self.tx_indicator.setStyleSheet(f"color: #666; font-size: 12px; font-weight: bold; font-family: {_FONT};")
-        self.btn_auto = QPushButton("OFF")
-        self.btn_auto.setCheckable(True)
-        self.btn_auto.setFixedHeight(22)
-        self.btn_auto.setStyleSheet(
-            f"QPushButton {{ background: rgba(180,40,40,0.25); color: #FF6666; "
-            f"border: 1px solid rgba(200,60,60,0.5); border-radius: 3px; "
-            f"padding: 1px 8px; font-weight: bold; font-family: {_FONT}; font-size: 10px; }}"
-            f"QPushButton:checked {{ background: rgba(40,140,40,0.3); color: #44FF44; border-color: rgba(60,180,60,0.6); }}"
-        )
         rxtx_row.addWidget(self.rx_indicator)
         rxtx_row.addWidget(self.tx_indicator)
         rxtx_row.addStretch()
-        rxtx_row.addWidget(self.btn_auto)
         lay.addLayout(rxtx_row)
 
         self.btn_cq = QPushButton("CQ RUFEN")
@@ -538,7 +528,6 @@ class ControlPanel(QWidget):
     mode_changed = Signal(str)
     band_changed = Signal(str)
     power_changed = Signal(int)
-    auto_toggled = Signal(bool)
     advance_clicked = Signal()
     cancel_clicked = Signal()
     cq_clicked = Signal()
@@ -566,7 +555,6 @@ class ControlPanel(QWidget):
         super().__init__()
         self._current_mode = "FT8"
         self._current_band = "20m"
-        self._auto_mode = False
         self._rx_mode_idx = 0
         self._callsign = callsign
         self._current_bias = "AUTO"
@@ -639,8 +627,6 @@ class ControlPanel(QWidget):
         qso_card = _QSOStatusCard(self)
         self.rx_indicator = qso_card.rx_indicator
         self.tx_indicator = qso_card.tx_indicator
-        self.btn_auto = qso_card.btn_auto
-        self.btn_auto.clicked.connect(self._on_auto_toggled)
         self.btn_cq = qso_card.btn_cq
         self.btn_cq.clicked.connect(self._on_cq_clicked)
         self.qso_counter_label = qso_card.qso_counter_label
@@ -985,11 +971,6 @@ class ControlPanel(QWidget):
     # =====================================================================
     # QSO Controls
     # =====================================================================
-    def _on_auto_toggled(self):
-        self._auto_mode = self.btn_auto.isChecked()
-        self.btn_auto.setText("ON" if self._auto_mode else "OFF")
-        self.auto_toggled.emit(self._auto_mode)
-
     def _on_cq_clicked(self):
         self.cq_clicked.emit()
         if self.btn_cq.isChecked():
