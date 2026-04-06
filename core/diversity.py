@@ -13,7 +13,7 @@ class DiversityController:
     """
 
     MEASURE_CYCLES = 8   # 4×A1 + 4×A2 (~2 Min Fenster, je even+odd pro Antenne)
-    OPERATE_CYCLES = 40
+    OPERATE_CYCLES = 80  # 20 Min Betrieb mit guter Antenne
     _PAT_70_A1 = ("A1","A1","A2","A1","A1","A2","A1","A1","A2","A1")  # 7×A1, 3×A2
     _PAT_70_A2 = ("A2","A2","A1","A2","A2","A1","A2","A2","A1","A2")  # 7×A2, 3×A1
 
@@ -75,6 +75,11 @@ class DiversityController:
     def measure_step(self) -> int:
         """Bereits abgeschlossene Messschritte (0..MEASURE_CYCLES)."""
         return self._measure_step
+
+    @property
+    def operate_cycles(self) -> int:
+        """Bereits abgeschlossene Betriebszyklen (0..OPERATE_CYCLES)."""
+        return self._operate_cycles
 
     def _evaluate(self):
         s1, s2 = self._scores["A1"], self._scores["A2"]

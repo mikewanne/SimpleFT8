@@ -297,6 +297,8 @@ class MainWindow(QMainWindow):
                 self._diversity_ctrl.ratio, self._diversity_ctrl.phase,
                 measure_step=self._diversity_ctrl.measure_step,
                 measure_total=self._diversity_ctrl.MEASURE_CYCLES,
+                operate_cycles=self._diversity_ctrl.operate_cycles,
+                operate_total=self._diversity_ctrl.OPERATE_CYCLES,
             )
 
         if self._rx_mode == "diversity" and messages:
@@ -1068,6 +1070,8 @@ class MainWindow(QMainWindow):
                     self._diversity_ctrl.ratio, self._diversity_ctrl.phase,
                     measure_step=self._diversity_ctrl.measure_step,
                     measure_total=self._diversity_ctrl.MEASURE_CYCLES,
+                    operate_cycles=self._diversity_ctrl.operate_cycles,
+                    operate_total=self._diversity_ctrl.OPERATE_CYCLES,
                 )
 
             # BUG-3: ant_cmd + gain als Argumente, nicht als Closure
