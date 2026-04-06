@@ -318,6 +318,15 @@ class QSOStateMachine(QObject):
                 self._set_state(QSOState.TX_REPORT)
                 self.send_message.emit(tx_msg)
                 return
+            if msg.is_grid:
+                # Gegenstation hat unseren Report nicht empfangen → nochmal senden
+                self.qso.timeout_cycles = 0
+                report = self.qso.our_snr or f"{self._last_snr:+03d}"
+                tx_msg = f"{self.qso.their_call} {self.my_call} {report}"
+                print(f"[QSO] Grid in WAIT_RR73 (unser Report nicht angekommen) → sende erneut: '{tx_msg}'")
+                self._set_state(QSOState.TX_REPORT)
+                self.send_message.emit(tx_msg)
+                return
 
     # ── Manueller Schritt ───────────────────────────────────────
 

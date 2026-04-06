@@ -103,11 +103,11 @@ class Encoder(QObject):
             self._is_transmitting = False
 
     def _tx_worker_inner(self, message: str):
-        # Freie TX-Frequenz — einmal bestimmen und fuer diesen TX fixieren
-        tx_freq = self.find_free_frequency()
-        if tx_freq != self.audio_freq_hz:
-            print(f"[TX] Freie Frequenz: {tx_freq} Hz")
-            self.audio_freq_hz = tx_freq
+        # FESTE TX-Frequenz — NICHT bei jedem TX ändern!
+        # Bug: find_free_frequency() wechselt die Frequenz zwischen CQ und Report.
+        # DK0KG wartet auf CQ-Frequenz; Report kommt auf anderer Freq → unsichtbar.
+        tx_freq = self.audio_freq_hz
+        print(f"[TX] Frequenz: {tx_freq} Hz → '{message}'")
 
         # Audio erzeugen (12kHz int16)
         audio_12k = self.encode_message(message)

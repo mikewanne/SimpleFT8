@@ -2,7 +2,7 @@
 
 from PySide6.QtWidgets import (
     QMainWindow, QSplitter, QWidget, QVBoxLayout, QStatusBar,
-    QMessageBox,
+    QMessageBox, QScrollArea,
 )
 from PySide6.QtCore import Qt, Slot
 from PySide6.QtGui import QFont
@@ -85,7 +85,7 @@ class MainWindow(QMainWindow):
                 background-color: #16192b;
             }
             QWidget {
-                background-color: #16192b;
+                background-color: #06060c;
                 color: #CCCCCC;
             }
             QSplitter::handle:horizontal {
@@ -103,6 +103,16 @@ class MainWindow(QMainWindow):
         self.decoder = Decoder(max_freq=settings.max_decode_freq)
         self.decoder._my_call = settings.callsign
         self.adif = AdifWriter()
+
+        # QSO-Verzeichnis (Worked-Before)
+        from log.qso_log import QSOLog
+        from pathlib import Path
+        self.qso_log = QSOLog()
+        self.qso_log.load_directory(Path.cwd())
+        import_path = self.settings.get("adif_import_path")
+        if import_path:
+            self.qso_log.load_directory(Path(import_path))
+        print(f"[QSOLog] {self.qso_log.worked_count()} unique Calls, {self.qso_log.qso_count()} QSOs")
 
         # FlexRadio
         self.radio = FlexRadio(
@@ -139,6 +149,7 @@ class MainWindow(QMainWindow):
         # UI aufbauen
         self._setup_ui()
         self._connect_signals()
+        self.rx_panel.set_qso_log(self.qso_log)
 
         # Timer starten
         self.timer.start()
@@ -177,11 +188,24 @@ class MainWindow(QMainWindow):
         self.qso_panel = QSOPanel()
         self.control_panel = ControlPanel(callsign=self.settings.callsign)
 
+        # Control Panel in ScrollArea einpacken — scrollbar wenn Fenster zu klein
+        self._ctrl_scroll = QScrollArea()
+        self._ctrl_scroll.setWidget(self.control_panel)
+        self._ctrl_scroll.setWidgetResizable(True)
+        self._ctrl_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._ctrl_scroll.setMinimumWidth(320)
+        self._ctrl_scroll.setStyleSheet(
+            "QScrollArea { background: #08080e; border: none; }"
+            "QScrollArea > QWidget > QWidget { background: #08080e; }"
+            "QScrollBar:vertical { background: #111; width: 6px; }"
+            "QScrollBar::handle:vertical { background: #333; border-radius: 3px; }"
+        )
+
         # Alle 3 Panels in einem QSplitter → sichtbarer Trenner bleibt erhalten
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
         self.splitter.addWidget(self.rx_panel)
         self.splitter.addWidget(self.qso_panel)
-        self.splitter.addWidget(self.control_panel)
+        self.splitter.addWidget(self._ctrl_scroll)
 
         # EMPFANG + QSO 50:50, Control fix (wird in _restore_geometry überschrieben)
         self.splitter.setSizes([500, 500, 400])
@@ -1055,6 +1079,7 @@ class MainWindow(QMainWindow):
             tx_power=self.settings.power_watts,
             time_on=qso_data.start_time,
         )
+        self.qso_log.add_qso(qso_data.their_call, band)
 
     @Slot(str)
     def _on_qso_timeout(self, their_call: str):
