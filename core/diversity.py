@@ -12,7 +12,7 @@ class DiversityController:
     Δ < 15% → 50:50, sonst bessere Antenne auf 70%
     """
 
-    MEASURE_CYCLES = 2
+    MEASURE_CYCLES = 8   # 4×A1 + 4×A2 (~2 Min Fenster, je even+odd pro Antenne)
     OPERATE_CYCLES = 40
     _PAT_70_A1 = ("A1","A1","A2","A1","A1","A2","A1","A1","A2","A1")  # 7×A1, 3×A2
     _PAT_70_A2 = ("A2","A2","A1","A2","A2","A1","A2","A2","A1","A2")  # 7×A2, 3×A1
@@ -31,7 +31,7 @@ class DiversityController:
     def choose(self) -> str:
         """Antenne fuer den naechsten Zyklus waehlen."""
         if self._phase == "measure":
-            return "A1" if self._measure_step == 0 else "A2"
+            return "A2" if self._measure_step % 2 == 0 else "A1"  # A2,A1,A2,A1 (A1 war init)
         if self.ratio == "70:30":
             return self._PAT_70_A1[self._operate_cycles % 10]
         if self.ratio == "30:70":
@@ -42,7 +42,7 @@ class DiversityController:
         """Score nach Messzyklus einpflegen — evaluiert nach 2 Messungen."""
         if self._phase != "measure":
             return
-        self._scores[ant] = score
+        self._scores[ant] += score   # akkumulieren: even+odd pro Antenne
         self._measure_step += 1
         if self._measure_step >= self.MEASURE_CYCLES:
             self._evaluate()
@@ -62,9 +62,19 @@ class DiversityController:
         self._measure_step = 0
         self._scores = {"A1": 0.0, "A2": 0.0}
 
+    def on_band_change(self):
+        """Bandwechsel → Neueinmessung starten."""
+        self.reset()
+        print("[Diversity] Bandwechsel — Neueinmessung gestartet (4 Zyklen)")
+
     @property
     def phase(self) -> str:
         return self._phase
+
+    @property
+    def measure_step(self) -> int:
+        """Bereits abgeschlossene Messschritte (0..MEASURE_CYCLES)."""
+        return self._measure_step
 
     def _evaluate(self):
         s1, s2 = self._scores["A1"], self._scores["A2"]
@@ -85,5 +95,5 @@ class DiversityController:
                 self.dominant = "A2"
         self._phase = "operate"
         self._operate_cycles = 0
-        print(f"[Diversity] Messung: A1={s1:.1f} A2={s2:.1f} → {self.ratio} "
+        print(f"[Diversity] Messung: A1={s1:.1f} A2={s2:.1f} diff={diff:.3f} → {self.ratio} "
               f"(dominant: {self.dominant})")
