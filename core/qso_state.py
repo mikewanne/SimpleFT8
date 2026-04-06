@@ -234,7 +234,14 @@ class QSOStateMachine(QObject):
                 self._set_state(QSOState.WAIT_REPORT)
                 print(f"[QSO] TX fertig — verarbeite Hunt-Antwort: {pending.grid_or_report}")
                 self.qso.their_snr = pending.grid_or_report
-                self.advance()
+                if pending.is_r_report:
+                    # R-Report = direkt RR73
+                    print(f"[QSO] R-Report in pending → sende RR73")
+                    tx_msg = f"{self.qso.their_call} {self.my_call} RR73"
+                    self._set_state(QSOState.TX_RR73)
+                    self.send_message.emit(tx_msg)
+                else:
+                    self.advance()
                 return
             self._set_state(QSOState.WAIT_REPORT)
             self.qso.timeout_cycles = 0
@@ -294,7 +301,14 @@ class QSOStateMachine(QObject):
                     self._pending_hunt_reply = msg
                     print(f"[QSO] Hunt-Antwort gemerkt: {msg.grid_or_report} (TX aktiv)")
                     return
-                self.advance()
+                if msg.is_r_report:
+                    # R-Report = Gegenstation hat uns empfangen → direkt RR73
+                    print(f"[QSO] R-Report in WAIT_REPORT: {msg.grid_or_report} → sende RR73")
+                    tx_msg = f"{self.qso.their_call} {self.my_call} RR73"
+                    self._set_state(QSOState.TX_RR73)
+                    self.send_message.emit(tx_msg)
+                else:
+                    self.advance()  # plain report → sende R-Report zurück
                 return
 
             if msg.is_grid:
