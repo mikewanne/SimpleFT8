@@ -515,7 +515,6 @@ class MainWindow(QMainWindow):
         self.control_panel.mode_changed.connect(self._on_mode_changed)
         self.control_panel.band_changed.connect(self._on_band_changed)
         self.control_panel.power_changed.connect(self._on_power_changed)
-        self.control_panel.auto_toggled.connect(self._on_auto_toggled)
         self.control_panel.advance_clicked.connect(self._on_advance)
         self.control_panel.cancel_clicked.connect(self._on_cancel)
         self.control_panel.cq_clicked.connect(self._on_cq_clicked)
@@ -978,11 +977,6 @@ class MainWindow(QMainWindow):
 
     # ── QSO Steuerung ──────────────────────────────────────────
 
-    @Slot(bool)
-    def _on_auto_toggled(self, auto_on: bool):
-        self.qso_sm.auto_mode = auto_on
-        self.settings.set("auto_mode", auto_on)
-
     @Slot()
     def _on_cq_clicked(self):
         if self.control_panel.btn_cq.isChecked():
@@ -1029,7 +1023,6 @@ class MainWindow(QMainWindow):
         )
         self.control_panel.btn_advance.setEnabled(
             state in (QSOState.WAIT_REPORT, QSOState.WAIT_RR73)
-            and not self.qso_sm.auto_mode
             and not self.qso_sm.cq_mode
         )
         self.control_panel.btn_cancel.setEnabled(

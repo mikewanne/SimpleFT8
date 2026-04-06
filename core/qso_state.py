@@ -63,7 +63,7 @@ class QSOStateMachine(QObject):
         self.my_grid = my_grid
         self.state = QSOState.IDLE
         self.qso = QSOData()
-        self.auto_mode = False
+        self.auto_mode = True   # immer aktiv — kein Toggle
         self.cq_mode = False        # CQ-Modus aktiv
         self.cq_qso_count = 0       # Zähler: bearbeitete QSOs in CQ-Session
         self._last_snr = -10        # Letzter empfangener SNR (für Report)
@@ -124,12 +124,19 @@ class QSOStateMachine(QObject):
             self.send_message.emit(tx_msg)
         elif msg.is_report:
             self.qso.their_snr = msg.grid_or_report
-            report = f"R{self._last_snr:+03d}" if self._last_snr > -30 else "R-10"
-            self.qso.our_snr = report
-            tx_msg = f"{msg.caller} {self.my_call} {report}"
-            print(f"[QSO] Antworte {msg.caller} mit R-Report '{tx_msg}'")
-            self._set_state(QSOState.TX_REPORT)
-            self.send_message.emit(tx_msg)
+            if msg.is_r_report:
+                # R-prefix = sie haben uns schon bestätigt → RR73 senden (kein Report mehr!)
+                tx_msg = f"{msg.caller} {self.my_call} RR73"
+                print(f"[QSO] Antworte {msg.caller} mit RR73 (R-Report erhalten)")
+                self._set_state(QSOState.TX_RR73)
+                self.send_message.emit(tx_msg)
+            else:
+                report = f"R{self._last_snr:+03d}" if self._last_snr > -30 else "R-10"
+                self.qso.our_snr = report
+                tx_msg = f"{msg.caller} {self.my_call} {report}"
+                print(f"[QSO] Antworte {msg.caller} mit R-Report '{tx_msg}'")
+                self._set_state(QSOState.TX_REPORT)
+                self.send_message.emit(tx_msg)
 
     # ── Hunt-Modus (Station anklicken) ──────────────────────────
 
@@ -225,8 +232,7 @@ class QSOStateMachine(QObject):
                 self._set_state(QSOState.WAIT_REPORT)
                 print(f"[QSO] TX fertig — verarbeite Hunt-Antwort: {pending.grid_or_report}")
                 self.qso.their_snr = pending.grid_or_report
-                if self.auto_mode or self.cq_mode or True:
-                    self.advance()
+                self.advance()
                 return
             self._set_state(QSOState.WAIT_REPORT)
             self.qso.timeout_cycles = 0
@@ -286,8 +292,7 @@ class QSOStateMachine(QObject):
                     self._pending_hunt_reply = msg
                     print(f"[QSO] Hunt-Antwort gemerkt: {msg.grid_or_report} (TX aktiv)")
                     return
-                if self.auto_mode or self.cq_mode:
-                    self.advance()
+                self.advance()
                 return
 
             if msg.is_grid:
@@ -299,15 +304,13 @@ class QSOStateMachine(QObject):
 
         if self.state == QSOState.WAIT_RR73:
             if msg.is_rr73 or msg.is_73:
-                if self.auto_mode or self.cq_mode:
-                    self.advance()
+                self.advance()
                 return
-            if msg.is_report and msg.grid_or_report.startswith("R"):
+            if msg.is_r_report:
                 # R+Report (z.B. R+19, R-07) = Bestätigung + Report → wie RR73 behandeln
                 self.qso.their_snr = msg.grid_or_report
                 print(f"[QSO] R-Report empfangen: {msg.grid_or_report} → sende RR73")
-                if self.auto_mode or self.cq_mode:
-                    self.advance()
+                self.advance()
                 return
             if msg.is_report:
                 # Report OHNE R-Prefix → Gegenstation wiederholt, nochmal senden

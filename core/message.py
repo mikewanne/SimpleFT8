@@ -55,6 +55,11 @@ class FT8Message:
             return False
 
     @property
+    def is_r_report(self) -> bool:
+        """R-prefix Report (Bestätigung + SNR) z.B. R-08, R+12."""
+        return self.field3.startswith("R") and self.is_report
+
+    @property
     def is_rr73(self) -> bool:
         return self.field3 in ("RR73", "RRR")
 
