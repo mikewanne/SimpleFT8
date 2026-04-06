@@ -63,11 +63,13 @@ class QSOStateMachine(QObject):
         self.my_grid = my_grid
         self.state = QSOState.IDLE
         self.qso = QSOData()
-        self.auto_mode = True   # immer aktiv — kein Toggle
         self.cq_mode = False        # CQ-Modus aktiv
         self.cq_qso_count = 0       # Zähler: bearbeitete QSOs in CQ-Session
         self._last_snr = -10        # Letzter empfangener SNR (für Report)
         self.max_calls = 3          # Maximale Anrufversuche (aus Settings)
+        self._pending_reply = None      # Gemerkter CQ-Anrufer (während TX)
+        self._pending_hunt_reply = None # Gemerkter Hunt-Report (während TX)
+        self._was_cq = False            # CQ-Modus vor Hunt-Start
 
     def _set_state(self, new_state: QSOState):
         self.state = new_state
@@ -195,11 +197,7 @@ class QSOStateMachine(QObject):
                     print(f"[QSO] Max Versuche ({self.qso.max_calls}) erreicht — TIMEOUT {call}")
                     self._set_state(QSOState.TIMEOUT)
                     self.qso_timeout.emit(call)
-                    if self.cq_mode or getattr(self, '_was_cq', False):
-                        self.cq_mode = True
-                        self._send_cq()
-                    else:
-                        self._set_state(QSOState.IDLE)
+                    self._resume_cq_if_needed()
                 return
 
             if self.qso.timeout_cycles >= self.qso.max_timeout:
@@ -207,18 +205,22 @@ class QSOStateMachine(QObject):
                 print(f"[QSO] TIMEOUT: {call} hat nicht geantwortet nach {self.qso.max_timeout} Zyklen")
                 self._set_state(QSOState.TIMEOUT)
                 self.qso_timeout.emit(call)
-                if self.cq_mode or getattr(self, '_was_cq', False):
-                    self.cq_mode = True
-                    self._send_cq()
-                else:
-                    self._set_state(QSOState.IDLE)
+                self._resume_cq_if_needed()
+
+    def _resume_cq_if_needed(self):
+        """Nach Timeout/Hunt: CQ wieder aufnehmen wenn vorher CQ-Modus aktiv war."""
+        if self.cq_mode or self._was_cq:
+            self.cq_mode = True
+            self._send_cq()
+        else:
+            self._set_state(QSOState.IDLE)
 
     # ── TX abgeschlossen ────────────────────────────────────────
 
     def on_message_sent(self):
         if self.state == QSOState.CQ_CALLING:
             # CQ TX fertig — Antwort wartend?
-            if getattr(self, '_pending_reply', None):
+            if self._pending_reply:
                 print("[QSO] CQ fertig — verarbeite gemerkte Antwort")
                 self._process_cq_reply()
                 return
@@ -226,7 +228,7 @@ class QSOStateMachine(QObject):
             self.qso.timeout_cycles = 0
         elif self.state == QSOState.TX_CALL:
             # Hunt: Antwort während TX gemerkt?
-            pending = getattr(self, '_pending_hunt_reply', None)
+            pending = self._pending_hunt_reply
             if pending:
                 self._pending_hunt_reply = None
                 self._set_state(QSOState.WAIT_REPORT)
