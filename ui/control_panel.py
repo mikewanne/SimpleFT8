@@ -779,12 +779,14 @@ class ControlPanel(QWidget):
     # Diversity Ratio Display
     # =====================================================================
     def update_diversity_ratio(self, ratio: str, phase: str,
-                               measure_step: int = 0, measure_total: int = 4):
+                               measure_step: int = 0, measure_total: int = 8,
+                               operate_cycles: int = 0, operate_total: int = 80):
         """Diversity-Anzeige aktualisieren.
 
         ratio: '70:30' | '30:70' | '50:50'
         phase: 'measure' | 'operate'
         measure_step: abgeschlossene Messschritte (0..measure_total)
+        operate_cycles: abgeschlossene Betriebszyklen (0..operate_total)
         """
         for lbl in self._a1_pct.values():
             lbl.setStyleSheet(_DIV_PCT_OFF)
@@ -794,10 +796,23 @@ class ControlPanel(QWidget):
         if phase == "measure":
             step_txt = f"{measure_step}/{measure_total}" if measure_step > 0 else f"0/{measure_total}"
             self._phase_label.setText(f"● MESSEN {step_txt}")
+            self._phase_label.setStyleSheet(
+                f"color:#FFCC00;font-size:9px;font-family:{_FONT};font-style:italic;"
+            )
             self._a1_pct["50%"].setStyleSheet(_DIV_PCT_YELLOW)
             self._a2_pct["50%"].setStyleSheet(_DIV_PCT_YELLOW)
         else:
-            self._phase_label.setText("")
+            remaining = operate_total - operate_cycles
+            if remaining <= 5:
+                color = "#FF8800"
+            elif remaining <= 15:
+                color = "#FFCC00"
+            else:
+                color = "#558866"
+            self._phase_label.setText(f"Neu in {remaining} Zyklen")
+            self._phase_label.setStyleSheet(
+                f"color:{color};font-size:9px;font-family:{_FONT};font-style:italic;"
+            )
             if ratio == "70:30":
                 self._a1_pct["70%"].setStyleSheet(_DIV_PCT_GREEN)
                 self._a2_pct["30%"].setStyleSheet(_DIV_PCT_RED)
