@@ -59,6 +59,7 @@ class RXPanel(QWidget):
         self._country_filter: set = set(country_filter or [])
         self._ant_filter: int = 0  # 0=alle, 1=A1, 2=A2
         self._active_call: str = ""  # Callsign der gerade aktiv angerufenen Station
+        self._qso_log = None  # QSOLog fuer Worked-Before Filter
         self._setup_ui()
 
     def _setup_ui(self):
@@ -129,6 +130,17 @@ class RXPanel(QWidget):
         self.btn_ant_filter.setStyleSheet(_FILTER_STYLE)
         self.btn_ant_filter.clicked.connect(self._on_ant_filter_clicked)
         header_row.addWidget(self.btn_ant_filter)
+
+        # NEW-Filter: nur ungearbeitete Stationen
+        self.btn_new_filter = QPushButton("NEW")
+        self.btn_new_filter.setCheckable(True)
+        self.btn_new_filter.setChecked(False)
+        self.btn_new_filter.setFixedHeight(20)
+        self.btn_new_filter.setFixedWidth(40)
+        self.btn_new_filter.setToolTip("Nur neue Stationen (schon gearbeitete ausblenden)")
+        self.btn_new_filter.setStyleSheet(_FILTER_STYLE)
+        self.btn_new_filter.clicked.connect(self._apply_filters)
+        header_row.addWidget(self.btn_new_filter)
 
         header_row.addStretch()
         layout.addLayout(header_row)
@@ -213,6 +225,10 @@ class RXPanel(QWidget):
         layout.addWidget(self.btn_answer)
 
     # ── Oeffentliche API (Interface bleibt gleich) ────────────
+
+    def set_qso_log(self, qso_log):
+        """QSOLog setzen fuer Worked-Before Filter."""
+        self._qso_log = qso_log
 
     def set_active_call(self, callsign: str):
         """Aktiv angerufene Station hervorheben (amber Hintergrund + bold)."""
@@ -576,6 +592,11 @@ class RXPanel(QWidget):
             if self._ant_filter == 1 and not ant.startswith('A1'):
                 return True
             if self._ant_filter == 2 and not ant.startswith('A2'):
+                return True
+        # NEW-Filter: schon gearbeitete ausblenden
+        if self.btn_new_filter.isChecked() and self._qso_log is not None:
+            caller = getattr(msg, 'caller', '')
+            if caller and self._qso_log.is_worked(caller):
                 return True
         return False
 

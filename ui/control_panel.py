@@ -1,15 +1,518 @@
-"""SimpleFT8 Control Panel — Fenster 3: Steuerung und Status."""
+"""SimpleFT8 Control Panel — Fenster 3: Steuerung und Status.
+
+Dark Theme Redesign mit LED-Balance-Indikator.
+"""
 
 import time
-import threading
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QSlider, QButtonGroup, QFrame, QLineEdit,
+    QSlider, QFrame, QGridLayout,
 )
 from PySide6.QtCore import Signal, Qt, QTimer
 from PySide6.QtGui import QFont
 
 from config.settings import BAND_FREQUENCIES
+
+# ---------------------------------------------------------------------------
+# Konstanten
+# ---------------------------------------------------------------------------
+_BG = "#16192b"
+_TEXT = "#CCC"
+_FONT = "Menlo"
+_SEP_COLOR = "#333"
+_MIN_WIDTH = 320
+
+_LED_OFF = "#1a1a1a"
+_LED_OFF_BORDER = "#2a2a2a"
+_LED_GREEN = "#00ee55"
+_LED_BLUE = "#00aaff"
+_LED_YELLOW = "#ffcc00"
+_LED_AMBER = "#ff8800"
+_LED_SIZE = 18
+
+# ---------------------------------------------------------------------------
+# Glossy 3D Card Styles (DeepSeek-Design)
+# ---------------------------------------------------------------------------
+_BTN_BASE = """
+    QPushButton {
+        background-color: rgba(255,255,255,0.06);
+        color: #BBB;
+        border: 1px solid rgba(255,255,255,0.15);
+        border-radius: 4px;
+        font-family: Menlo;
+        font-size: 11px;
+        font-weight: bold;
+        padding: 3px 8px;
+        min-height: 22px;
+    }
+    QPushButton:checked {
+        background-color: #0066AA;
+        color: white;
+        border-color: #00AAFF;
+    }
+    QPushButton:hover {
+        background-color: rgba(255,255,255,0.12);
+    }
+"""
+
+_CARD_SS_BLUE = """
+QFrame#card {
+    border: 2px solid #5588ff;
+    border-radius: 8px;
+}
+""" + _BTN_BASE
+
+_CARD_SS_GREEN = """
+QFrame#card {
+    border: 2px solid #33cc77;
+    border-radius: 8px;
+}
+""" + _BTN_BASE
+
+_CARD_SS_TEAL = """
+QFrame#card {
+    border: 2px solid #00aacc;
+    border-radius: 8px;
+}
+""" + _BTN_BASE
+
+_CARD_SS_ORANGE = """
+QFrame#card {
+    border: 2px solid #ee9922;
+    border-radius: 8px;
+}
+""" + _BTN_BASE
+
+# Legacy alias
+_CARD_SS = _CARD_SS_BLUE
+
+
+class _ModeBandCard(QFrame):
+    """Kachel 1 (blau) — Modus (FT8/FT4) + Band-Auswahl."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("card")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setStyleSheet(_CARD_SS_BLUE)
+
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(10, 10, 10, 10)
+        lay.setSpacing(8)
+
+        # ── Modus-Zeile ──────────────────────────────────────────
+        row_m = QHBoxLayout()
+        row_m.setSpacing(6)
+        lbl_modus = QLabel("Modus")
+        lbl_modus.setFixedWidth(42)
+        row_m.addWidget(lbl_modus)
+        self.btn_ft8 = QPushButton("FT8")
+        self.btn_ft8.setCheckable(True)
+        self.btn_ft8.setChecked(True)
+        self.btn_ft8.setFixedHeight(28)
+        self.btn_ft4 = QPushButton("FT4")
+        self.btn_ft4.setCheckable(True)
+        self.btn_ft4.setFixedHeight(28)
+        row_m.addWidget(self.btn_ft8)
+        row_m.addWidget(self.btn_ft4)
+        row_m.addStretch()
+        lay.addLayout(row_m)
+
+        # ── Band-Grid (Label links, alle Buttons gleich breit) ────
+        self.band_buttons = {}
+        grid = QGridLayout()
+        grid.setSpacing(4)
+        grid.setContentsMargins(0, 0, 0, 0)
+
+        lbl_band = QLabel("Band")
+        lbl_band.setFixedWidth(42)
+        grid.addWidget(lbl_band, 0, 0)
+
+        bands_row1 = ["10m", "12m", "15m", "17m", "20m"]
+        bands_row2 = ["30m", "40m", "60m", "80m"]
+
+        for col, b in enumerate(bands_row1):
+            btn = QPushButton(b)
+            btn.setCheckable(True)
+            btn.setChecked(b == "20m")
+            btn.setFixedHeight(28)
+            self.band_buttons[b] = btn
+            grid.addWidget(btn, 0, col + 1)
+
+        for col, b in enumerate(bands_row2):
+            btn = QPushButton(b)
+            btn.setCheckable(True)
+            btn.setFixedHeight(28)
+            self.band_buttons[b] = btn
+            grid.addWidget(btn, 1, col + 1)  # ab Spalte 1 = unter 10m
+
+        # Alle Button-Spalten (1-5) gleich breit strecken
+        for col in range(1, 6):
+            grid.setColumnStretch(col, 1)
+
+        lay.addLayout(grid)
+
+
+def _sep_line() -> QFrame:
+    """Dünne Trennlinie innerhalb einer Kachel."""
+    line = QFrame()
+    line.setFrameShape(QFrame.Shape.HLine)
+    line.setFixedHeight(1)
+    line.setStyleSheet("background: rgba(255,255,255,0.08); border: none;")
+    return line
+
+
+class _AntenneCard(QFrame):
+    """Kachel 2 (grün) — ANTENNE alleine (NORMAL/DIVERSITY/EINMESSEN + LED)."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("card")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setStyleSheet(_CARD_SS_GREEN)
+
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(10, 8, 10, 8)
+        lay.setSpacing(5)
+
+        lbl_ant = QLabel("ANTENNE")
+        lbl_ant.setStyleSheet(f"color: #55BBAA; font-size: 10px; font-family: {_FONT}; font-weight: bold;")
+        lay.addWidget(lbl_ant)
+
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(4)
+        self.btn_normal = QPushButton("NORMAL")
+        self.btn_normal.setFixedHeight(28)
+        self.btn_diversity = QPushButton("DIVERSITY")
+        self.btn_diversity.setFixedHeight(28)
+        self.btn_einmessen = QPushButton("EINMESSEN")
+        self.btn_einmessen.setFixedHeight(28)
+        self.btn_einmessen.setStyleSheet(
+            "QPushButton { background: rgba(60,140,60,0.25); color: #88CC88; "
+            "border: 1px solid rgba(80,180,80,0.4); border-radius: 4px; "
+            "font-size: 11px; font-weight: bold; padding: 0 10px; }"
+            "QPushButton:hover { background: rgba(80,160,80,0.35); }"
+        )
+        btn_row.addWidget(self.btn_normal)
+        btn_row.addWidget(self.btn_diversity)
+        btn_row.addWidget(self.btn_einmessen)
+        lay.addLayout(btn_row)
+
+        self.dx_info = QLabel("")
+        self.dx_info.setStyleSheet(f"color: #668877; font-size: 10px; font-family: {_FONT};")
+        lay.addWidget(self.dx_info)
+
+        # LED Balance
+        self._led_widget = QWidget()
+        led_outer = QVBoxLayout(self._led_widget)
+        led_outer.setContentsMargins(0, 2, 0, 2)
+        led_outer.setSpacing(2)
+        led_row = QHBoxLayout()
+        led_row.setSpacing(3)
+        lbl_a1 = QLabel("A1")
+        lbl_a1.setStyleSheet(f"color: {_LED_GREEN}; font-size: 10px; font-family: {_FONT}; font-weight: bold;")
+        led_row.addWidget(lbl_a1)
+        self._leds = []
+        r = _LED_SIZE // 2
+        for _ in range(7):
+            led = QLabel()
+            led.setFixedSize(_LED_SIZE, _LED_SIZE)
+            led.setStyleSheet(
+                f"background: {_LED_OFF}; border-radius: {r}px; "
+                f"border: 1px solid {_LED_OFF_BORDER}; "
+                f"min-width: {_LED_SIZE}px; max-width: {_LED_SIZE}px; "
+                f"min-height: {_LED_SIZE}px; max-height: {_LED_SIZE}px;"
+            )
+            led_row.addWidget(led)
+            self._leds.append(led)
+        lbl_a2 = QLabel("A2")
+        lbl_a2.setStyleSheet(f"color: {_LED_BLUE}; font-size: 10px; font-family: {_FONT}; font-weight: bold;")
+        led_row.addWidget(lbl_a2)
+        led_row.addStretch()
+        led_outer.addLayout(led_row)
+        self._bias_value_label = QLabel("AUTO 50:50")
+        self._bias_value_label.setStyleSheet(f"color: #00CCFF; font-size: 10px; font-family: {_FONT};")
+        self._bias_value_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        led_outer.addWidget(self._bias_value_label)
+        self._led_widget.setVisible(False)
+        lay.addWidget(self._led_widget)
+
+        self._div_stats_label = QLabel("")
+        self._div_stats_label.setStyleSheet(f"color: #446655; font-size: 9px; font-family: {_FONT};")
+        self._div_stats_label.setVisible(False)
+        lay.addWidget(self._div_stats_label)
+
+        self._cycle_widget = QWidget()
+        cycle_row = QHBoxLayout(self._cycle_widget)
+        cycle_row.setContentsMargins(0, 0, 0, 0)
+        cycle_row.setSpacing(4)
+        self._cycle_boxes = []
+        for _ in range(4):
+            box = QPushButton()
+            box.setFixedSize(14, 14)
+            box.setEnabled(False)
+            box.setStyleSheet("background:#1e2e1e; border:1px solid #336633; border-radius:2px;")
+            cycle_row.addWidget(box)
+            self._cycle_boxes.append(box)
+        self._cycle_ant_label = QLabel("")
+        self._cycle_ant_label.setStyleSheet(f"color:#668866; font-size:10px; font-family:{_FONT}; min-width:28px;")
+        cycle_row.addWidget(self._cycle_ant_label)
+        cycle_row.addStretch()
+        self._cycle_widget.setVisible(False)
+        lay.addWidget(self._cycle_widget)
+
+
+class _RadioCard(QFrame):
+    """Kachel 3 (türkis) — RADIO Controls (PSK, Freq, Power, TUNE, ALC, TX)."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("card")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setStyleSheet(_CARD_SS_TEAL)
+
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(10, 8, 10, 8)
+        lay.setSpacing(5)
+
+        lbl_radio = QLabel("RADIO")
+        lbl_radio.setStyleSheet(f"color: #00aacc; font-size: 10px; font-family: {_FONT}; font-weight: bold;")
+        lay.addWidget(lbl_radio)
+
+        # PSK
+        self.psk_label = QLabel("PSK: —")
+        self.psk_label.setStyleSheet(f"color: #557766; font-family: {_FONT}; font-size: 10px;")
+        self.psk_label.setWordWrap(True)
+        lay.addWidget(self.psk_label)
+
+        psk_row = QHBoxLayout()
+        psk_row.setSpacing(2)
+        self.btn_psk_map = QPushButton("Map")
+        self.btn_psk_map.setFixedHeight(22)
+        self.btn_psk_map.setFixedWidth(40)
+        self.btn_psk_map.setStyleSheet(
+            "QPushButton { background: rgba(0,150,100,0.2); color: #00CCAA; "
+            "border: 1px solid rgba(0,180,130,0.4); border-radius: 2px; font-size: 10px; }"
+            "QPushButton:hover { background: rgba(0,170,120,0.3); }"
+        )
+        psk_row.addWidget(self.btn_psk_map)
+        psk_row.addStretch()
+        lay.addLayout(psk_row)
+
+        # Frequenz
+        self.freq_label = QLabel("14.074 MHz")
+        self.freq_label.setStyleSheet(
+            f"color: #FFD700; font-size: 14pt; font-weight: bold; "
+            f"font-family: {_FONT}; padding: 2px;"
+        )
+        self.freq_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lay.addWidget(self.freq_label)
+
+        # Power Slider
+        power_row = QHBoxLayout()
+        power_row.setSpacing(4)
+        self.power_slider = QSlider(Qt.Orientation.Horizontal)
+        self.power_slider.setRange(0, 100)
+        self.power_slider.setValue(50)
+        self.power_slider.setFixedHeight(18)
+        self.power_slider.setStyleSheet(
+            "QSlider::groove:horizontal { background: rgba(255,255,255,0.1); height: 4px; border-radius: 2px; }"
+            "QSlider::handle:horizontal { background: #00CCAA; width: 14px; margin: -5px 0; border-radius: 7px; }"
+            "QSlider::sub-page:horizontal { background: rgba(0,180,140,0.5); border-radius: 2px; }"
+        )
+        self.power_label = QLabel("50W")
+        self.power_label.setStyleSheet(f"color: {_TEXT}; font-family: {_FONT}; font-size: 11px;")
+        power_row.addWidget(self.power_slider)
+        power_row.addWidget(self.power_label)
+        lay.addLayout(power_row)
+
+        # TUNE + Watt + SWR
+        tune_row = QHBoxLayout()
+        tune_row.setSpacing(4)
+        self.btn_tune = QPushButton("TUNE")
+        self.btn_tune.setCheckable(True)
+        self.btn_tune.setFixedHeight(24)
+        self.btn_tune.setFixedWidth(60)
+        self.btn_tune.setStyleSheet(
+            f"QPushButton {{ background: rgba(180,150,0,0.2); color: #FFD700; "
+            f"border: 1px solid rgba(220,180,0,0.5); border-radius: 3px; "
+            f"font-weight: bold; font-family: {_FONT}; font-size: 10px; }}"
+            f"QPushButton:checked {{ background: rgba(180,150,0,0.4); }}"
+        )
+        self.watt_label = QLabel("0 W")
+        self.watt_label.setStyleSheet(f"color: #FFD700; font-family: {_FONT}; font-size: 12px; font-weight: bold;")
+        self.swr_label = QLabel("SWR —")
+        self.swr_label.setStyleSheet(f"color: #44FF44; font-family: {_FONT}; font-size: 12px; font-weight: bold;")
+        tune_row.addWidget(self.btn_tune)
+        tune_row.addWidget(self.watt_label)
+        tune_row.addWidget(self.swr_label)
+        lay.addLayout(tune_row)
+
+        # ALC
+        self.alc_label = QLabel("ALC —")
+        self.alc_label.setStyleSheet(f"color: #557766; font-family: {_FONT}; font-size: 11px;")
+        lay.addWidget(self.alc_label)
+
+        # TX Level
+        tx_row = QHBoxLayout()
+        tx_row.setSpacing(4)
+        tx_lbl = QLabel("TX Lvl")
+        tx_lbl.setStyleSheet(f"color: #557766; font-family: {_FONT}; font-size: 10px;")
+        self.tx_level_slider = QSlider(Qt.Orientation.Horizontal)
+        self.tx_level_slider.setRange(0, 100)
+        self.tx_level_slider.setValue(100)
+        self.tx_level_slider.setFixedHeight(16)
+        self.tx_level_slider.setStyleSheet(
+            "QSlider::groove:horizontal { background: rgba(255,255,255,0.1); height: 3px; border-radius: 1px; }"
+            "QSlider::handle:horizontal { background: #FF8800; width: 12px; margin: -4px 0; border-radius: 6px; }"
+            "QSlider::sub-page:horizontal { background: rgba(220,120,0,0.5); border-radius: 1px; }"
+        )
+        self.tx_level_label = QLabel("100%")
+        self.tx_level_label.setStyleSheet(f"color: {_TEXT}; font-family: {_FONT}; font-size: 10px;")
+        tx_row.addWidget(tx_lbl)
+        tx_row.addWidget(self.tx_level_slider)
+        tx_row.addWidget(self.tx_level_label)
+        lay.addLayout(tx_row)
+
+
+class _QSOStatusCard(QFrame):
+    """Kachel 3 (orange) — QSO + STATUS + Settings."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("card")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setStyleSheet(_CARD_SS_ORANGE)
+
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(6, 4, 6, 4)
+        lay.setSpacing(2)
+
+        # ── QSO ──────────────────────────────────────────────────
+        lbl_qso = QLabel("QSO")
+        lbl_qso.setStyleSheet(f"color: #CC9944; font-size: 10px; font-family: {_FONT}; font-weight: bold;")
+        lay.addWidget(lbl_qso)
+
+        rxtx_row = QHBoxLayout()
+        rxtx_row.setSpacing(4)
+        self.rx_indicator = QLabel("● RX")
+        self.rx_indicator.setStyleSheet(f"color: #44FF44; font-size: 12px; font-weight: bold; font-family: {_FONT};")
+        self.tx_indicator = QLabel("○ TX")
+        self.tx_indicator.setStyleSheet(f"color: #666; font-size: 12px; font-weight: bold; font-family: {_FONT};")
+        self.btn_auto = QPushButton("OFF")
+        self.btn_auto.setCheckable(True)
+        self.btn_auto.setFixedHeight(22)
+        self.btn_auto.setStyleSheet(
+            f"QPushButton {{ background: rgba(180,40,40,0.25); color: #FF6666; "
+            f"border: 1px solid rgba(200,60,60,0.5); border-radius: 3px; "
+            f"padding: 1px 8px; font-weight: bold; font-family: {_FONT}; font-size: 10px; }}"
+            f"QPushButton:checked {{ background: rgba(40,140,40,0.3); color: #44FF44; border-color: rgba(60,180,60,0.6); }}"
+        )
+        rxtx_row.addWidget(self.rx_indicator)
+        rxtx_row.addWidget(self.tx_indicator)
+        rxtx_row.addStretch()
+        rxtx_row.addWidget(self.btn_auto)
+        lay.addLayout(rxtx_row)
+
+        self.btn_cq = QPushButton("CQ RUFEN")
+        self.btn_cq.setCheckable(True)
+        self.btn_cq.setFixedHeight(26)
+        self.btn_cq.setStyleSheet(
+            f"QPushButton {{ background: rgba(140,0,0,0.5); color: white; "
+            f"border: 1px solid rgba(220,60,60,0.6); border-radius: 5px; "
+            f"font-size: 12px; font-weight: bold; font-family: {_FONT}; }}"
+            f"QPushButton:checked {{ background: rgba(200,0,0,0.7); color: #FFD700; "
+            f"border-color: rgba(255,180,0,0.7); }}"
+            f"QPushButton:hover {{ background: rgba(180,0,0,0.6); }}"
+        )
+        lay.addWidget(self.btn_cq)
+
+        self.qso_counter_label = QLabel("")
+        self.qso_counter_label.setStyleSheet(
+            f"color: #88CC66; font-family: {_FONT}; font-size: 10px; font-weight: bold;"
+        )
+        self.qso_counter_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.qso_counter_label.setVisible(False)
+        lay.addWidget(self.qso_counter_label)
+
+        # Weiter + Abbrechen nebeneinander
+        adv_row = QHBoxLayout()
+        adv_row.setSpacing(4)
+        self.btn_advance = QPushButton("Weiter →")
+        self.btn_advance.setFixedHeight(22)
+        self.btn_advance.setStyleSheet(
+            "QPushButton { background: rgba(0,100,0,0.35); color: #88CC88; "
+            "border: 1px solid rgba(0,150,0,0.4); border-radius: 4px; "
+            "padding: 2px; font-size: 11px; font-weight: bold; }"
+            "QPushButton:hover { background: rgba(0,130,0,0.45); }"
+            "QPushButton:disabled { background: rgba(255,255,255,0.04); color: #444; border-color: #333; }"
+        )
+        self.btn_advance.setEnabled(False)
+        self.btn_cancel = QPushButton("Abbrechen")
+        self.btn_cancel.setFixedHeight(22)
+        self.btn_cancel.setStyleSheet(
+            "QPushButton { background: rgba(100,0,0,0.35); color: #CC6666; "
+            "border: 1px solid rgba(150,0,0,0.4); border-radius: 4px; padding: 2px; font-size: 11px; }"
+            "QPushButton:hover { background: rgba(130,0,0,0.45); }"
+            "QPushButton:disabled { background: rgba(255,255,255,0.04); color: #444; border-color: #333; }"
+        )
+        self.btn_cancel.setEnabled(False)
+        adv_row.addWidget(self.btn_advance)
+        adv_row.addWidget(self.btn_cancel)
+        lay.addLayout(adv_row)
+
+        lay.addWidget(_sep_line())
+
+        # ── STATUS ────────────────────────────────────────────────
+        lbl_status = QLabel("STATUS")
+        lbl_status.setStyleSheet(f"color: #CC9944; font-size: 10px; font-family: {_FONT}; font-weight: bold;")
+        lay.addWidget(lbl_status)
+
+        self.connection_label = QLabel("RADIO: Suche...")
+        self.connection_label.setStyleSheet(
+            f"color: #FFD700; font-family: {_FONT}; font-size: 11px; font-weight: bold;"
+        )
+        lay.addWidget(self.connection_label)
+
+        self.decode_label = QLabel("Decode: —")
+        self.decode_label.setStyleSheet(f"color: {_TEXT}; font-family: {_FONT}; font-size: 11px;")
+        lay.addWidget(self.decode_label)
+
+        # SNR + UTC in einer Zeile
+        snr_utc_row = QHBoxLayout()
+        snr_utc_row.setSpacing(8)
+        self.snr_label = QLabel("SNR: — dB")
+        self.snr_label.setStyleSheet(f"color: {_TEXT}; font-family: {_FONT}; font-size: 11px;")
+        self.utc_label = QLabel("UTC: --:--:--")
+        self.utc_label.setStyleSheet(f"color: {_TEXT}; font-family: {_FONT}; font-size: 11px;")
+        snr_utc_row.addWidget(self.snr_label)
+        snr_utc_row.addStretch()
+        snr_utc_row.addWidget(self.utc_label)
+        lay.addLayout(snr_utc_row)
+
+        self.state_label = QLabel("Status: IDLE")
+        self.state_label.setStyleSheet(f"color: #776644; font-family: {_FONT}; font-size: 10px;")
+        lay.addWidget(self.state_label)
+
+        self.cycle_bar = QLabel("")
+        self.cycle_bar.setStyleSheet(
+            "background: rgba(255,255,255,0.04); border: 1px solid rgba(255,170,50,0.2); "
+            "border-radius: 3px; padding: 2px;"
+        )
+        self.cycle_bar.setFixedHeight(18)
+        lay.addWidget(self.cycle_bar)
+
+        lay.addWidget(_sep_line())
+
+        # ── Settings ──────────────────────────────────────────────
+        self.btn_settings = QPushButton("Einstellungen")
+        self.btn_settings.setFixedHeight(24)
+        self.btn_settings.setStyleSheet(
+            "QPushButton { background: rgba(255,255,255,0.06); color: #AA8844; "
+            "border: 1px solid rgba(180,130,50,0.3); border-radius: 3px; font-size: 11px; }"
+            "QPushButton:hover { background: rgba(255,255,255,0.1); color: #FFBB66; }"
+        )
+        lay.addWidget(self.btn_settings)
 
 
 class ControlPanel(QWidget):
@@ -20,11 +523,18 @@ class ControlPanel(QWidget):
         band_changed: (str) — z.B. "20m"
         power_changed: (int) — Leistung in Prozent (0-100)
         auto_toggled: (bool) — Auto-Modus an/aus
-        advance_clicked: () — Nächster QSO-Schritt (manuell)
+        advance_clicked: () — Naechster QSO-Schritt (manuell)
         cancel_clicked: () — QSO abbrechen
         cq_clicked: () — CQ-Modus starten/stoppen
+        tune_clicked: (bool)
+        tx_level_changed: (int)
+        rx_mode_changed: (str) — "normal", "diversity"
+        settings_clicked: ()
+        bias_changed: (str) — Diversity-Bias Preset
+        einmessen_clicked: ()
     """
 
+    # ── Signals ──────────────────────────────────────────────────────────
     mode_changed = Signal(str)
     band_changed = Signal(str)
     power_changed = Signal(int)
@@ -35,21 +545,23 @@ class ControlPanel(QWidget):
     tune_clicked = Signal(bool)
     dx_preset_changed = Signal(str)
     tx_level_changed = Signal(int)
-    preamp_changed = Signal(bool)  # Legacy, nicht mehr genutzt
-    rx_mode_changed = Signal(str)  # "normal", "diversity", "dx_tuning"
+    preamp_changed = Signal(bool)           # Legacy, nicht mehr genutzt
+    rx_mode_changed = Signal(str)
     settings_clicked = Signal()
+    bias_changed = Signal(str)
+    einmessen_clicked = Signal()
 
+    # ── Klassen-Konstanten ───────────────────────────────────────────────
     _RX_MODES = ["normal", "diversity"]
     _RX_STYLE_ACTIVE = "background: #0055AA; color: white; border-color: #0077CC; font-weight: bold;"
     _RX_STYLE_INACTIVE = "background: #222; color: #AAA; border-color: #555;"
     _RX_STYLE_DIVERSITY_ACTIVE = "background: #003344; color: #00CCFF; border-color: #00AADD; font-weight: bold;"
 
-    # Signal fuer manuellen Diversity-Bias (100:0 / 70:30 / AUTO / 30:70 / 0:100)
-    bias_changed = Signal(str)
-    einmessen_clicked = Signal()
-
     _BIAS_PRESETS = ["100:0", "70:30", "AUTO", "30:70", "0:100"]
 
+    # =====================================================================
+    # Init
+    # =====================================================================
     def __init__(self, callsign: str = "DA1MHH"):
         super().__init__()
         self._current_mode = "FT8"
@@ -58,443 +570,257 @@ class ControlPanel(QWidget):
         self._rx_mode_idx = 0
         self._callsign = callsign
         self._current_bias = "AUTO"
+        self._current_rx_mode = "normal"
+        self.setMinimumWidth(_MIN_WIDTH)
+        self.setAutoFillBackground(True)
+        self.setStyleSheet("ControlPanel { background-color: #06060c; color: #CCC; font-family: Menlo; }")
         self._setup_ui()
         self._start_clock()
 
+    # =====================================================================
+    # UI Setup
+    # =====================================================================
     def _setup_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(4, 2, 4, 2)
-        layout.setSpacing(4)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(8)
 
-        header = QLabel("CONTROL")
-        header.setStyleSheet(
-            "color: #00AAFF; font-weight: bold; font-size: 13px; padding: 2px;"
-        )
-        layout.addWidget(header)
-
-        # --- Modus ---
-        mode_row = QHBoxLayout()
-        mode_row.setSpacing(2)
-        self.btn_ft8 = self._band_btn("FT8", checked=True)
-        self.btn_ft4 = self._band_btn("FT4")
-        self.btn_ft8.clicked.connect(lambda: self._set_mode("FT8"))
-        self.btn_ft4.clicked.connect(lambda: self._set_mode("FT4"))
-        mode_row.addWidget(self.btn_ft8)
-        mode_row.addWidget(self.btn_ft4)
-        layout.addLayout(mode_row)
-
-        # --- Band (kompakt) ---
-        layout.addWidget(self._section_label("Band"))
-        bands_row1 = QHBoxLayout()
-        bands_row1.setSpacing(2)
-        bands_row2 = QHBoxLayout()
-        bands_row2.setSpacing(2)
-        self.band_buttons = {}
-        bands = ["10m", "12m", "15m", "17m", "20m", "30m", "40m", "60m", "80m"]
-        for i, band in enumerate(bands):
-            btn = self._band_btn(band, checked=(band == "20m"))
+        # ── Kachel 1: MODUS + BAND (blau) ───────────────────────────────
+        mb_card = _ModeBandCard(self)
+        self.btn_ft8 = mb_card.btn_ft8
+        self.btn_ft4 = mb_card.btn_ft4
+        self.band_buttons = mb_card.band_buttons
+        mb_card.btn_ft8.clicked.connect(lambda: self._set_mode("FT8"))
+        mb_card.btn_ft4.clicked.connect(lambda: self._set_mode("FT4"))
+        for band, btn in mb_card.band_buttons.items():
             btn.clicked.connect(lambda checked, b=band: self._set_band(b))
-            self.band_buttons[band] = btn
-            if i < 5:
-                bands_row1.addWidget(btn)
-            else:
-                bands_row2.addWidget(btn)
-        layout.addLayout(bands_row1)
-        layout.addLayout(bands_row2)
+        layout.addWidget(mb_card)
 
-        # --- RX Modus: NORMAL / DIVERSITY / EINMESSEN ---
-        dx_row = QHBoxLayout()
-        dx_row.setSpacing(4)
-        self._current_rx_mode = "normal"
-
-        _btn_style = (
-            "QPushButton {{ {colors} border-radius: 4px; font-size: 12px; "
-            "font-weight: bold; padding: 0 10px; border-width: 1px; border-style: solid; "
-            "min-height: 28px; }}"
-            "QPushButton:hover {{ background: #333; }}"
-        )
-        self.btn_normal = QPushButton("NORMAL")
-        self.btn_normal.setFixedHeight(28)
-        self.btn_normal.setStyleSheet(
-            _btn_style.format(colors=self._RX_STYLE_ACTIVE)
-        )
+        # ── Kachel 2: ANTENNE (grün) ─────────────────────────────────────
+        ant_card = _AntenneCard(self)
+        self.btn_normal = ant_card.btn_normal
+        self.btn_diversity = ant_card.btn_diversity
+        self.btn_einmessen = ant_card.btn_einmessen
+        self.dx_info = ant_card.dx_info
+        self._led_widget = ant_card._led_widget
+        self._leds = ant_card._leds
+        self._bias_value_label = ant_card._bias_value_label
+        self._div_stats_label = ant_card._div_stats_label
+        self._cycle_widget = ant_card._cycle_widget
+        self._cycle_boxes = ant_card._cycle_boxes
+        self._cycle_ant_label = ant_card._cycle_ant_label
+        self.btn_normal.setStyleSheet(self._rx_btn_style(self._RX_STYLE_ACTIVE))
+        self.btn_diversity.setStyleSheet(self._rx_btn_style(self._RX_STYLE_INACTIVE))
         self.btn_normal.clicked.connect(lambda: self._on_rx_mode_clicked("normal"))
-        dx_row.addWidget(self.btn_normal)
-
-        self.btn_diversity = QPushButton("DIVERSITY")
-        self.btn_diversity.setFixedHeight(28)
-        self.btn_diversity.setStyleSheet(
-            _btn_style.format(colors=self._RX_STYLE_INACTIVE)
-        )
         self.btn_diversity.clicked.connect(lambda: self._on_rx_mode_clicked("diversity"))
-        dx_row.addWidget(self.btn_diversity)
-
-        self.btn_einmessen = QPushButton("EINMESSEN")
-        self.btn_einmessen.setFixedHeight(28)
-        self.btn_einmessen.setStyleSheet("""
-            QPushButton {
-                background: #1a2a1a; color: #66AA66; border: 1px solid #448844;
-                border-radius: 4px; font-size: 12px; font-weight: bold; padding: 0 10px;
-            }
-            QPushButton:hover { background: #223322; }
-        """)
         self.btn_einmessen.clicked.connect(self.einmessen_clicked.emit)
-        dx_row.addWidget(self.btn_einmessen)
+        layout.addWidget(ant_card)
 
-        dx_row.addStretch()
-        layout.addLayout(dx_row)
-
-        # --- Diversity Info-Zeile (nur sichtbar im Diversity-Modus) ---
-        self._div_info_widget = QWidget()
-        div_info_row = QHBoxLayout(self._div_info_widget)
-        div_info_row.setContentsMargins(0, 0, 0, 0)
-        div_info_row.setSpacing(4)
-        self.dx_info = QLabel("")
-        self.dx_info.setStyleSheet("color: #888; font-size: 10px; font-family: Menlo;")
-        div_info_row.addWidget(self.dx_info)
-        # Diversity Zyklus-Indikator: 4 Boxen + aktuelles Antenne-Label
-        self._cycle_boxes = []
-        for _ in range(4):
-            box = QPushButton()
-            box.setFixedSize(14, 14)
-            box.setEnabled(False)
-            box.setStyleSheet("background:#2a2a2a; border:1px solid #444; border-radius:2px;")
-            div_info_row.addWidget(box)
-            self._cycle_boxes.append(box)
-        self._cycle_ant_label = QLabel("")
-        self._cycle_ant_label.setStyleSheet(
-            "color:#888; font-size:10px; font-family:Menlo; min-width:28px;"
-        )
-        div_info_row.addWidget(self._cycle_ant_label)
-        div_info_row.addStretch()
-        self._div_info_widget.setVisible(False)
-        layout.addWidget(self._div_info_widget)
-
-        # --- Bias-Switch (nur sichtbar im Diversity-Modus) ---
-        self._bias_row_widget = QWidget()
-        bias_row = QHBoxLayout(self._bias_row_widget)
-        bias_row.setContentsMargins(0, 0, 0, 0)
-        bias_row.setSpacing(2)
-        bias_lbl = QLabel("Bias:")
-        bias_lbl.setStyleSheet("color:#888; font-size:10px; font-family:Menlo;")
-        bias_row.addWidget(bias_lbl)
-        self._bias_buttons = {}
-        for preset in self._BIAS_PRESETS:
-            btn = QPushButton(preset)
-            btn.setCheckable(True)
-            btn.setFixedHeight(20)
-            btn.setChecked(preset == "AUTO")
-            btn.setStyleSheet("""
-                QPushButton {
-                    background:#222; color:#888; border:1px solid #444;
-                    border-radius:3px; font-size:9px; font-family:Menlo;
-                    padding:0 4px; min-width:36px;
-                }
-                QPushButton:checked { background:#003344; color:#00CCFF; border-color:#00AADD; }
-                QPushButton:hover { background:#333; }
-            """)
-            btn.clicked.connect(lambda checked, p=preset: self._on_bias_clicked(p))
-            bias_row.addWidget(btn)
-            self._bias_buttons[preset] = btn
-        bias_row.addStretch()
-        layout.addWidget(self._bias_row_widget)
-        self._bias_row_widget.setVisible(False)  # nur im Diversity-Modus
-
-        # --- Diversity Stats ---
-        self._div_stats_label = QLabel("")
-        self._div_stats_label.setStyleSheet(
-            "color:#555; font-size:9px; font-family:Menlo; padding-left:2px;"
-        )
-        layout.addWidget(self._div_stats_label)
-        self._div_stats_label.setVisible(False)
-
-        # --- PSK Reichweite ---
-        self.psk_label = QLabel("PSK: —")
-        self.psk_label.setStyleSheet(
-            "color: #888; font-family: Menlo; font-size: 10px; padding: 2px;"
-        )
-        self.psk_label.setWordWrap(True)
-        layout.addWidget(self.psk_label)
-
-        psk_row = QHBoxLayout()
-        psk_row.setSpacing(2)
-        self.btn_psk_map = QPushButton("Map")
-        self.btn_psk_map.setFixedHeight(22)
-        self.btn_psk_map.setFixedWidth(40)
-        self.btn_psk_map.setStyleSheet("""
-            QPushButton { background: #333; color: #00AAFF; border: 1px solid #00AAFF;
-                border-radius: 2px; font-size: 10px; }
-            QPushButton:hover { background: #004466; }
-        """)
+        # ── Kachel 3: RADIO (türkis) ─────────────────────────────────────
+        radio_card = _RadioCard(self)
+        self.psk_label = radio_card.psk_label
+        self.btn_psk_map = radio_card.btn_psk_map
         self.btn_psk_map.clicked.connect(self._open_psk_map)
-        psk_row.addWidget(self.btn_psk_map)
-        psk_row.addStretch()
-        layout.addLayout(psk_row)
-
-        # --- Frequenz ---
-        self.freq_label = QLabel("14.074 MHz")
-        self.freq_label.setStyleSheet(
-            "color: #FFD700; font-size: 15px; font-weight: bold; "
-            "font-family: Menlo; padding: 2px;"
-        )
-        self.freq_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(self.freq_label)
-
-        # --- Power + Tune ---
-        power_row = QHBoxLayout()
-        power_row.setSpacing(4)
-        self.power_slider = QSlider(Qt.Orientation.Horizontal)
-        self.power_slider.setRange(0, 100)
-        self.power_slider.setValue(50)
-        self.power_slider.setFixedHeight(18)
-        self.power_slider.setStyleSheet("""
-            QSlider::groove:horizontal { background: #333; height: 4px; border-radius: 2px; }
-            QSlider::handle:horizontal { background: #00AAFF; width: 14px; margin: -5px 0; border-radius: 7px; }
-            QSlider::sub-page:horizontal { background: #0066AA; border-radius: 2px; }
-        """)
-        self.power_label = QLabel("50W")
-        self.power_label.setStyleSheet("color: #CCC; font-family: Menlo; font-size: 11px;")
+        self.freq_label = radio_card.freq_label
+        self.power_slider = radio_card.power_slider
+        self.power_label = radio_card.power_label
         self.power_slider.valueChanged.connect(self._on_power_changed)
-        power_row.addWidget(self.power_slider)
-        power_row.addWidget(self.power_label)
-        layout.addLayout(power_row)
-
-        tune_meter_row = QHBoxLayout()
-        tune_meter_row.setSpacing(4)
-        self.btn_tune = QPushButton("TUNE")
-        self.btn_tune.setCheckable(True)
-        self.btn_tune.setFixedHeight(24)
-        self.btn_tune.setFixedWidth(60)
-        self.btn_tune.setStyleSheet("""
-            QPushButton { background: #333; color: #FFD700; border: 1px solid #FFD700;
-                border-radius: 3px; font-weight: bold; font-family: Menlo; font-size: 10px; }
-            QPushButton:checked { background: #665500; }
-        """)
+        self.btn_tune = radio_card.btn_tune
         self.btn_tune.clicked.connect(self._on_tune_clicked)
-        self.watt_label = QLabel("0 W")
-        self.watt_label.setStyleSheet("color: #FFD700; font-family: Menlo; font-size: 12px; font-weight: bold;")
-        self.swr_label = QLabel("SWR —")
-        self.swr_label.setStyleSheet("color: #44FF44; font-family: Menlo; font-size: 12px; font-weight: bold;")
-        self.alc_label = QLabel("ALC —")
-        self.alc_label.setStyleSheet("color: #888; font-family: Menlo; font-size: 11px;")
-        tune_meter_row.addWidget(self.btn_tune)
-        tune_meter_row.addWidget(self.watt_label)
-        tune_meter_row.addWidget(self.swr_label)
-        layout.addLayout(tune_meter_row)
-        layout.addWidget(self.alc_label)
-
-        # --- TX Level ---
-        tx_level_row = QHBoxLayout()
-        tx_level_row.setSpacing(4)
-        tx_lvl_label = QLabel("TX Lvl")
-        tx_lvl_label.setStyleSheet("color: #888; font-family: Menlo; font-size: 10px;")
-        self.tx_level_slider = QSlider(Qt.Orientation.Horizontal)
-        self.tx_level_slider.setRange(0, 100)
-        self.tx_level_slider.setValue(100)
-        self.tx_level_slider.setFixedHeight(16)
-        self.tx_level_slider.setStyleSheet("""
-            QSlider::groove:horizontal { background: #333; height: 3px; border-radius: 1px; }
-            QSlider::handle:horizontal { background: #FF8800; width: 12px; margin: -4px 0; border-radius: 6px; }
-            QSlider::sub-page:horizontal { background: #884400; border-radius: 1px; }
-        """)
-        self.tx_level_label = QLabel("100%")
-        self.tx_level_label.setStyleSheet("color: #CCC; font-family: Menlo; font-size: 10px;")
+        self.watt_label = radio_card.watt_label
+        self.swr_label = radio_card.swr_label
+        self.alc_label = radio_card.alc_label
+        self.tx_level_slider = radio_card.tx_level_slider
+        self.tx_level_label = radio_card.tx_level_label
         self.tx_level_slider.valueChanged.connect(self._on_tx_level_changed)
-        tx_level_row.addWidget(tx_lvl_label)
-        tx_level_row.addWidget(self.tx_level_slider)
-        tx_level_row.addWidget(self.tx_level_label)
-        layout.addLayout(tx_level_row)
+        layout.addWidget(radio_card)
 
-        # --- RX/TX + AUTO ---
-        layout.addWidget(self._separator())
-        rxtx_row = QHBoxLayout()
-        rxtx_row.setSpacing(4)
-        self.rx_indicator = QLabel("● RX")
-        self.rx_indicator.setStyleSheet("color: #44FF44; font-size: 13px; font-weight: bold; font-family: Menlo;")
-        self.tx_indicator = QLabel("○ TX")
-        self.tx_indicator.setStyleSheet("color: #666; font-size: 13px; font-weight: bold; font-family: Menlo;")
-        self.btn_auto = QPushButton("OFF")
-        self.btn_auto.setCheckable(True)
-        self.btn_auto.setFixedHeight(24)
-        self.btn_auto.setStyleSheet("""
-            QPushButton { background: #333; color: #FF4444; border: 1px solid #FF4444;
-                border-radius: 3px; padding: 2px 8px; font-weight: bold; font-family: Menlo; font-size: 10px; }
-            QPushButton:checked { background: #004400; color: #44FF44; border-color: #44FF44; }
-        """)
+        # ── Kachel 3: QSO + STATUS (orange) ─────────────────────────────
+        qso_card = _QSOStatusCard(self)
+        self.rx_indicator = qso_card.rx_indicator
+        self.tx_indicator = qso_card.tx_indicator
+        self.btn_auto = qso_card.btn_auto
         self.btn_auto.clicked.connect(self._on_auto_toggled)
-        rxtx_row.addWidget(self.rx_indicator)
-        rxtx_row.addWidget(self.tx_indicator)
-        rxtx_row.addStretch()
-        rxtx_row.addWidget(self.btn_auto)
-        layout.addLayout(rxtx_row)
-
-        # --- CQ Rufen ---
-        self.btn_cq = QPushButton("CQ RUFEN")
-        self.btn_cq.setCheckable(True)
-        self.btn_cq.setFixedHeight(32)
-        self.btn_cq.setStyleSheet("""
-            QPushButton { background: #8B0000; color: white; border: 1px solid #FF4444;
-                border-radius: 3px; font-size: 13px; font-weight: bold; font-family: Menlo; }
-            QPushButton:checked { background: #CC0000; color: #FFD700; border-color: #FFD700; }
-            QPushButton:hover { background: #AA0000; }
-        """)
+        self.btn_cq = qso_card.btn_cq
         self.btn_cq.clicked.connect(self._on_cq_clicked)
-        layout.addWidget(self.btn_cq)
-
-        self.qso_counter_label = QLabel("")
-        self.qso_counter_label.setStyleSheet(
-            "color: #44FF44; font-family: Menlo; font-size: 13px; "
-            "font-weight: bold; padding: 2px;"
-        )
-        self.qso_counter_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(self.qso_counter_label)
-
-        # --- Weiter / Abbrechen ---
-        layout.addWidget(self._separator())
-        self.btn_advance = QPushButton("Weiter →")
-        self.btn_advance.setStyleSheet("""
-            QPushButton {
-                background-color: #006600;
-                color: white;
-                border: none;
-                border-radius: 4px;
-                padding: 8px;
-                font-size: 13px;
-                font-weight: bold;
-            }
-            QPushButton:hover { background-color: #008800; }
-            QPushButton:disabled { background-color: #333; color: #666; }
-        """)
-        self.btn_advance.setEnabled(False)
+        self.qso_counter_label = qso_card.qso_counter_label
+        self.btn_advance = qso_card.btn_advance
         self.btn_advance.clicked.connect(self.advance_clicked.emit)
-        layout.addWidget(self.btn_advance)
-
-        self.btn_cancel = QPushButton("Abbrechen")
-        self.btn_cancel.setStyleSheet("""
-            QPushButton {
-                background-color: #660000;
-                color: white;
-                border: none;
-                border-radius: 4px;
-                padding: 6px;
-                font-size: 12px;
-            }
-            QPushButton:hover { background-color: #880000; }
-            QPushButton:disabled { background-color: #333; color: #666; }
-        """)
-        self.btn_cancel.setEnabled(False)
+        self.btn_cancel = qso_card.btn_cancel
         self.btn_cancel.clicked.connect(self.cancel_clicked.emit)
-        layout.addWidget(self.btn_cancel)
-
-        # --- Info ---
-        layout.addWidget(self._separator())
-
-        # Verbindungsstatus
-        self.connection_label = QLabel("RADIO: Suche...")
-        self.connection_label.setStyleSheet(
-            "color: #FFD700; font-family: Menlo; font-size: 12px; font-weight: bold;"
-        )
-        layout.addWidget(self.connection_label)
-
-        # Decode-Counter
-        self.decode_label = QLabel("Decode: —")
-        self.decode_label.setStyleSheet("color: #CCC; font-family: Menlo; font-size: 12px;")
-        layout.addWidget(self.decode_label)
-
-        self.snr_label = QLabel("SNR:  — dB")
-        self.snr_label.setStyleSheet("color: #CCC; font-family: Menlo; font-size: 12px;")
-        layout.addWidget(self.snr_label)
-
-        self.utc_label = QLabel("UTC:  --:--:--")
-        self.utc_label.setStyleSheet("color: #CCC; font-family: Menlo; font-size: 12px;")
-        layout.addWidget(self.utc_label)
-
-        self.state_label = QLabel("Status: IDLE")
-        self.state_label.setStyleSheet("color: #888; font-family: Menlo; font-size: 11px;")
-        layout.addWidget(self.state_label)
-
-        # --- Takt-Balken ---
-        self.cycle_bar = QLabel("")
-        self.cycle_bar.setStyleSheet(
-            "background-color: #1a1a2e; border: 1px solid #333; "
-            "border-radius: 3px; padding: 2px;"
-        )
-        self.cycle_bar.setFixedHeight(20)
-        layout.addWidget(self.cycle_bar)
-
-        # --- Settings Button ---
-        layout.addWidget(self._separator())
-        self.btn_settings = QPushButton("Einstellungen")
-        self.btn_settings.setFixedHeight(26)
-        self.btn_settings.setStyleSheet("""
-            QPushButton { background: #333; color: #AAA; border: 1px solid #555;
-                border-radius: 3px; font-size: 11px; }
-            QPushButton:hover { background: #444; color: #FFF; }
-        """)
+        self.connection_label = qso_card.connection_label
+        self.decode_label = qso_card.decode_label
+        self.snr_label = qso_card.snr_label
+        self.utc_label = qso_card.utc_label
+        self.state_label = qso_card.state_label
+        self.cycle_bar = qso_card.cycle_bar
+        self.btn_settings = qso_card.btn_settings
         self.btn_settings.clicked.connect(self.settings_clicked.emit)
-        layout.addWidget(self.btn_settings)
+        layout.addWidget(qso_card)
 
         layout.addStretch()
 
-    def _section_label(self, text: str) -> QLabel:
+    # =====================================================================
+    # Helper: UI-Bausteine
+    # =====================================================================
+    def _group_label(self, text: str) -> QLabel:
+        """Gruppenueberschrift — klein, gedimmt."""
         lbl = QLabel(text)
-        lbl.setStyleSheet("color: #888; font-size: 11px; padding-top: 4px;")
+        lbl.setStyleSheet(
+            f"color: #5588AA; font-size: 10px; font-family: {_FONT}; "
+            f"font-weight: bold; padding-top: 2px; padding-bottom: 0px;"
+        )
         return lbl
 
     def _separator(self) -> QFrame:
+        """1px Trennlinie in #333."""
         line = QFrame()
         line.setFrameShape(QFrame.Shape.HLine)
-        line.setStyleSheet("color: #333;")
+        line.setFixedHeight(1)
+        line.setStyleSheet(f"background: {_SEP_COLOR}; border: none;")
         return line
 
     def _band_btn(self, text: str, checked: bool = False) -> QPushButton:
-        """Kompakter Band-Button (schmaler als Standard)."""
+        """Kompakter Band-Button."""
         btn = QPushButton(text)
         btn.setCheckable(True)
         btn.setChecked(checked)
-        btn.setFixedHeight(26)
-        btn.setStyleSheet("""
-            QPushButton {
-                background-color: #2a2a3e;
-                color: #AAA;
-                border: 1px solid #444;
-                border-radius: 3px;
-                padding: 2px 4px;
-                font-family: Menlo;
-                font-size: 11px;
-                min-width: 32px;
-            }
-            QPushButton:checked {
-                background-color: #0066AA;
-                color: white;
-                border-color: #00AAFF;
-            }
-            QPushButton:hover { background-color: #333; }
+        btn.setFixedHeight(22)
+        btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: #2a2a3e; color: #AAA; border: 1px solid #444;
+                border-radius: 3px; padding: 1px 2px; font-family: {_FONT};
+                font-size: 10px; min-width: 24px;
+            }}
+            QPushButton:checked {{
+                background-color: #0066AA; color: white; border-color: #00AAFF;
+            }}
+            QPushButton:hover {{ background-color: #333; }}
         """)
         return btn
 
-    def _toggle_btn(self, text: str, checked: bool = False) -> QPushButton:
+    def _toggle_btn(self, text: str, checked: bool = False, width: int = 0) -> QPushButton:
+        """Toggle-Button fuer Modus (FT8/FT4)."""
         btn = QPushButton(text)
         btn.setCheckable(True)
         btn.setChecked(checked)
-        btn.setStyleSheet("""
-            QPushButton {
-                background-color: #333;
-                color: #CCC;
-                border: 1px solid #555;
-                border-radius: 3px;
-                padding: 4px 8px;
-                font-family: Menlo;
-                font-size: 12px;
-            }
-            QPushButton:checked {
-                background-color: #0066AA;
-                color: white;
-                border-color: #00AAFF;
-            }
+        btn.setFixedHeight(24)
+        if width:
+            btn.setFixedWidth(width)
+        btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: #2a2a3e; color: #AAA; border: 1px solid #444;
+                border-radius: 4px; padding: 2px 8px; font-family: {_FONT};
+                font-size: 11px; font-weight: bold;
+            }}
+            QPushButton:checked {{
+                background-color: #0066AA; color: white; border-color: #00AAFF;
+            }}
+            QPushButton:hover {{ background-color: #333; }}
         """)
         return btn
 
+    @staticmethod
+    def _rx_btn_style(colors: str) -> str:
+        """StyleSheet fuer NORMAL/DIVERSITY Buttons."""
+        return (
+            f"QPushButton {{ {colors} border-radius: 4px; font-size: 12px; "
+            f"font-weight: bold; padding: 0 10px; border-width: 1px; border-style: solid; "
+            f"min-height: 28px; }}"
+            f"QPushButton:hover {{ background: #333; }}"
+        )
+
+    @staticmethod
+    def _led_style(color: str) -> str:
+        """StyleSheet fuer eine einzelne runde LED (18px, leuchtend)."""
+        r = _LED_SIZE // 2
+        if color == _LED_OFF:
+            return (
+                f"background: {_LED_OFF}; border-radius: {r}px; "
+                f"border: 1px solid {_LED_OFF_BORDER}; "
+                f"min-width: {_LED_SIZE}px; max-width: {_LED_SIZE}px; "
+                f"min-height: {_LED_SIZE}px; max-height: {_LED_SIZE}px;"
+            )
+        # Leuchtende LED: heller Kern + helle Border simuliert Glow
+        return (
+            f"background: {color}; border-radius: {r}px; "
+            f"border: 2px solid {color}; "
+            f"min-width: {_LED_SIZE}px; max-width: {_LED_SIZE}px; "
+            f"min-height: {_LED_SIZE}px; max-height: {_LED_SIZE}px;"
+        )
+
+    # =====================================================================
+    # LED Balance Indikator
+    # =====================================================================
+    def update_led_indicator(self, a1_pct: float, a2_pct: float):
+        """LED-Anzeige fuer Diversity-Balance aktualisieren.
+
+        7 LEDs: [0 1 2] [3=Mitte] [4 5 6]
+        Links (0-2) = A1-Anteil (gruen), Rechts (4-6) = A2-Anteil (blau).
+        Mitte = gruen bei 50:50, sonst gelb.
+        LEDs leuchten von der Mitte nach aussen.
+
+        Beispiele:
+            100:0  → ###O---  (3 links, Mitte gelb, 0 rechts)
+            70:30  → -##O---  (2 links, Mitte gelb, 0 rechts... eigentlich basierend auf Berechnung)
+            50:50  → ---G---  (0 links, Mitte gruen, 0 rechts)
+            30:70  → ---O##-  (0 links, Mitte gelb, 2 rechts)
+            0:100  → ---O###  (0 links, Mitte gelb, 3 rechts)
+        """
+        total = a1_pct + a2_pct
+        if total <= 0:
+            # Alle aus
+            for led in self._leds:
+                led.setStyleSheet(self._led_style(_LED_OFF))
+            self._bias_value_label.setText("—")
+            return
+
+        ratio_a1 = a1_pct / total
+        ratio_a2 = a2_pct / total
+
+        # Wie viele LEDs auf jeder Seite (0-3)
+        left_count = round(ratio_a1 * 3)
+        right_count = round(ratio_a2 * 3)
+
+        # Mitte: gruen bei ~50:50 (left_count == right_count), sonst gelb
+        is_balanced = (left_count == right_count)
+        mid_color = _LED_GREEN if is_balanced else _LED_YELLOW
+
+        # Links: Position 2, 1, 0 (von Mitte nach aussen)
+        left_positions = [2, 1, 0]
+        for i, pos in enumerate(left_positions):
+            if i < left_count:
+                self._leds[pos].setStyleSheet(self._led_style(_LED_GREEN))
+            else:
+                self._leds[pos].setStyleSheet(self._led_style(_LED_OFF))
+
+        # Mitte (Position 3)
+        self._leds[3].setStyleSheet(self._led_style(mid_color))
+
+        # Rechts: Position 4, 5, 6 (von Mitte nach aussen)
+        right_positions = [4, 5, 6]
+        for i, pos in enumerate(right_positions):
+            if i < right_count:
+                self._leds[pos].setStyleSheet(self._led_style(_LED_BLUE))
+            else:
+                self._leds[pos].setStyleSheet(self._led_style(_LED_OFF))
+
+        # Text unter den LEDs
+        if is_balanced:
+            self._bias_value_label.setText("AUTO 50:50")
+            self._bias_value_label.setStyleSheet(
+                f"color: #00CCFF; font-size: 10px; font-family: {_FONT};"
+            )
+        else:
+            self._bias_value_label.setText(f"A1:{a1_pct:.0f}% A2:{a2_pct:.0f}%")
+            color = _LED_GREEN if ratio_a1 > ratio_a2 else _LED_BLUE
+            self._bias_value_label.setStyleSheet(
+                f"color: {color}; font-size: 10px; font-family: {_FONT};"
+            )
+
+    # =====================================================================
+    # Modus / Band
+    # =====================================================================
     def _set_mode(self, mode: str):
         self._current_mode = mode
         self.btn_ft8.setChecked(mode == "FT8")
@@ -514,29 +840,26 @@ class ControlPanel(QWidget):
         freq = BAND_FREQUENCIES.get(self._current_band, {}).get(mode_key, 0)
         self.freq_label.setText(f"{freq:.3f} MHz")
 
+    # =====================================================================
+    # RX Modus (Antenne)
+    # =====================================================================
     def _on_rx_mode_clicked(self, mode: str):
         """NORMAL oder DIVERSITY Button geklickt."""
         if mode == self._current_rx_mode:
-            return  # Bereits aktiv — nichts tun
-        _btn_style = (
-            "QPushButton {{ {colors} border-radius: 4px; font-size: 12px; "
-            "font-weight: bold; padding: 0 10px; border-width: 1px; border-style: solid; "
-            "min-height: 28px; }}"
-            "QPushButton:hover {{ background: #333; }}"
-        )
+            return
         if mode == "normal":
-            self.btn_normal.setStyleSheet(_btn_style.format(colors=self._RX_STYLE_ACTIVE))
-            self.btn_diversity.setStyleSheet(_btn_style.format(colors=self._RX_STYLE_INACTIVE))
+            self.btn_normal.setStyleSheet(self._rx_btn_style(self._RX_STYLE_ACTIVE))
+            self.btn_diversity.setStyleSheet(self._rx_btn_style(self._RX_STYLE_INACTIVE))
             self.dx_info.setText("")
-        else:  # diversity
-            self.btn_normal.setStyleSheet(_btn_style.format(colors=self._RX_STYLE_INACTIVE))
-            self.btn_diversity.setStyleSheet(_btn_style.format(colors=self._RX_STYLE_DIVERSITY_ACTIVE))
+        else:
+            self.btn_normal.setStyleSheet(self._rx_btn_style(self._RX_STYLE_INACTIVE))
+            self.btn_diversity.setStyleSheet(self._rx_btn_style(self._RX_STYLE_DIVERSITY_ACTIVE))
         self._current_rx_mode = mode
-        is_diversity = (mode == "diversity")
-        self._div_info_widget.setVisible(is_diversity)
-        self._bias_row_widget.setVisible(is_diversity)
-        self._div_stats_label.setVisible(is_diversity)
-        if not is_diversity:
+        is_div = (mode == "diversity")
+        self._led_widget.setVisible(is_div)
+        self._div_stats_label.setVisible(is_div)
+        self._cycle_widget.setVisible(is_div)
+        if not is_div:
             self._div_stats_label.setText("")
             self.dx_info.setText("")
         self.rx_mode_changed.emit(mode)
@@ -547,24 +870,43 @@ class ControlPanel(QWidget):
             mode = "normal"
         if mode == self._current_rx_mode:
             return
-        _btn_style = (
-            "QPushButton {{ {colors} border-radius: 4px; font-size: 12px; "
-            "font-weight: bold; padding: 0 10px; border-width: 1px; border-style: solid; "
-            "min-height: 28px; }}"
-            "QPushButton:hover {{ background: #333; }}"
-        )
         if mode == "normal":
-            self.btn_normal.setStyleSheet(_btn_style.format(colors=self._RX_STYLE_ACTIVE))
-            self.btn_diversity.setStyleSheet(_btn_style.format(colors=self._RX_STYLE_INACTIVE))
+            self.btn_normal.setStyleSheet(self._rx_btn_style(self._RX_STYLE_ACTIVE))
+            self.btn_diversity.setStyleSheet(self._rx_btn_style(self._RX_STYLE_INACTIVE))
         else:
-            self.btn_normal.setStyleSheet(_btn_style.format(colors=self._RX_STYLE_INACTIVE))
-            self.btn_diversity.setStyleSheet(_btn_style.format(colors=self._RX_STYLE_DIVERSITY_ACTIVE))
+            self.btn_normal.setStyleSheet(self._rx_btn_style(self._RX_STYLE_INACTIVE))
+            self.btn_diversity.setStyleSheet(self._rx_btn_style(self._RX_STYLE_DIVERSITY_ACTIVE))
         self._current_rx_mode = mode
-        is_diversity = (mode == "diversity")
-        self._div_info_widget.setVisible(is_diversity)
-        self._bias_row_widget.setVisible(is_diversity)
-        self._div_stats_label.setVisible(is_diversity)
+        is_div = (mode == "diversity")
+        self._led_widget.setVisible(is_div)
+        self._div_stats_label.setVisible(is_div)
+        self._cycle_widget.setVisible(is_div)
 
+    # =====================================================================
+    # Bias (programmatisch — kein Slider mehr)
+    # =====================================================================
+    def set_bias(self, preset: str):
+        """Bias programmatisch setzen (aufgerufen von main_window)."""
+        self._current_bias = preset
+        # LED-Indikator entsprechend aktualisieren
+        preset_to_pct = {
+            "100:0": (100, 0),
+            "70:30": (70, 30),
+            "AUTO":  (50, 50),
+            "30:70": (30, 70),
+            "0:100": (0, 100),
+        }
+        a1, a2 = preset_to_pct.get(preset, (50, 50))
+        self.update_led_indicator(a1, a2)
+
+    def update_bias_display(self, a1_pct: float, a2_pct: float):
+        """Im AUTO-Modus: aktuelle UCB1-Balance auf LED-Indikator anzeigen."""
+        if self._current_bias == "AUTO":
+            self.update_led_indicator(a1_pct * 100, a2_pct * 100)
+
+    # =====================================================================
+    # PSK Reporter
+    # =====================================================================
     def _open_psk_map(self):
         """PSKReporter im Browser oeffnen mit eigenem Call."""
         import webbrowser
@@ -579,7 +921,7 @@ class ControlPanel(QWidget):
         if spots == 0:
             self.psk_label.setText("PSK: keine Spots")
             self.psk_label.setStyleSheet(
-                "color: #666; font-family: Menlo; font-size: 10px; padding: 2px;"
+                f"color: #666; font-family: {_FONT}; font-size: 10px; padding: 2px;"
             )
             return
         text = (f"PSK: {spots} Spots | Ø {avg_km:,}km | Max: {max_km:,}km\n"
@@ -587,9 +929,12 @@ class ControlPanel(QWidget):
                 f"{max_call} ({max_country})")
         self.psk_label.setText(text)
         self.psk_label.setStyleSheet(
-            "color: #44FF44; font-family: Menlo; font-size: 10px; padding: 2px;"
+            f"color: #44FF44; font-family: {_FONT}; font-size: 10px; padding: 2px;"
         )
 
+    # =====================================================================
+    # Power / TX Level / Tune
+    # =====================================================================
     def _on_power_changed(self, value: int):
         self.power_label.setText(f"{value}W")
         self.power_changed.emit(value)
@@ -606,14 +951,14 @@ class ControlPanel(QWidget):
 
     def update_swr(self, swr: float):
         if swr < 1.5:
-            color = "#44FF44"  # gruen
+            color = "#44FF44"
         elif swr < 2.5:
-            color = "#FFD700"  # gelb
+            color = "#FFD700"
         else:
-            color = "#FF4444"  # rot
+            color = "#FF4444"
         self.swr_label.setText(f"SWR {swr:.1f}")
         self.swr_label.setStyleSheet(
-            f"color: {color}; font-family: Menlo; font-size: 14px; font-weight: bold;"
+            f"color: {color}; font-family: {_FONT}; font-size: 14px; font-weight: bold;"
         )
 
     def update_alc(self, alc: float):
@@ -622,22 +967,24 @@ class ControlPanel(QWidget):
         FlexRadio ALC:
         - 0 dB = kein Eingriff (Signal unter ALC-Schwelle)
         - > 0 dB = ALC komprimiert (SCHLECHT fuer FT8!)
-        - Optimal: TX Lvl so einstellen dass ALC gerade NICHT ausschlaegt
         """
         if alc > 5:
-            color = "#FF4444"  # ROT — stark uebersteuert!
+            color = "#FF4444"
             label = f"ALC {alc:.0f} dB HOCH!"
         elif alc > 0:
-            color = "#FFD700"  # GELB — ALC greift ein, etwas zurueckdrehen
+            color = "#FFD700"
             label = f"ALC {alc:.0f} dB"
         else:
-            color = "#44FF44"  # GRUEN — kein ALC, optimal
+            color = "#44FF44"
             label = f"ALC {alc:.0f} dB"
         self.alc_label.setText(label)
         self.alc_label.setStyleSheet(
-            f"color: {color}; font-family: Menlo; font-size: 11px;"
+            f"color: {color}; font-family: {_FONT}; font-size: 11px;"
         )
 
+    # =====================================================================
+    # QSO Controls
+    # =====================================================================
     def _on_auto_toggled(self):
         self._auto_mode = self.btn_auto.isChecked()
         self.btn_auto.setText("ON" if self._auto_mode else "OFF")
@@ -653,8 +1000,9 @@ class ControlPanel(QWidget):
     def update_qso_counter(self, count: int):
         if count > 0:
             self.qso_counter_label.setText(f"({count}) QSOs bearbeitet")
+            self.qso_counter_label.setVisible(True)
         else:
-            self.qso_counter_label.setText("")
+            self.qso_counter_label.setVisible(False)
 
     def set_cq_active(self, active: bool):
         self.btn_cq.setChecked(active)
@@ -663,19 +1011,22 @@ class ControlPanel(QWidget):
     def set_tx_active(self, active: bool):
         if active:
             self.tx_indicator.setStyleSheet(
-                "color: #FF4444; font-size: 16px; font-weight: bold; font-family: Menlo;"
+                f"color: #FF4444; font-size: 16px; font-weight: bold; font-family: {_FONT};"
             )
             self.rx_indicator.setStyleSheet(
-                "color: #666; font-size: 16px; font-weight: bold; font-family: Menlo;"
+                f"color: #666; font-size: 16px; font-weight: bold; font-family: {_FONT};"
             )
         else:
             self.rx_indicator.setStyleSheet(
-                "color: #44FF44; font-size: 16px; font-weight: bold; font-family: Menlo;"
+                f"color: #44FF44; font-size: 16px; font-weight: bold; font-family: {_FONT};"
             )
             self.tx_indicator.setStyleSheet(
-                "color: #666; font-size: 16px; font-weight: bold; font-family: Menlo;"
+                f"color: #666; font-size: 16px; font-weight: bold; font-family: {_FONT};"
             )
 
+    # =====================================================================
+    # Diversity Cycle + Stats
+    # =====================================================================
     def update_diversity_cycle(self, pos: int, ant: str):
         """Diversity Zyklus-Indikator aktualisieren.
         pos: 0-3 (Position im 4-Zyklus-Block)
@@ -695,7 +1046,7 @@ class ControlPanel(QWidget):
         self._cycle_ant_label.setText(ant_text)
         color = "#44FF44" if is_ant1 else "#44AAFF"
         self._cycle_ant_label.setStyleSheet(
-            f"color:{color}; font-size:10px; font-family:Menlo; min-width:28px; font-weight:bold;"
+            f"color:{color}; font-size:10px; font-family:{_FONT}; min-width:28px; font-weight:bold;"
         )
 
     def clear_diversity_cycle(self):
@@ -704,6 +1055,29 @@ class ControlPanel(QWidget):
             box.setStyleSheet("background:#2a2a2a; border:1px solid #444; border-radius:2px;")
         self._cycle_ant_label.setText("")
 
+    def update_diversity_stats(self, a1_only: int, a2_only: int,
+                                a1_wins: int, a2_wins: int,
+                                ucb_rate_a1: float = None, ucb_rate_a2: float = None,
+                                ucb_plays_a1: int = 0, ucb_plays_a2: int = 0):
+        """Diversity-Statistiken: Exklusiv / Beide / UCB."""
+        total = a1_only + a2_only + a1_wins + a2_wins
+        if total == 0:
+            self._div_stats_label.setText("")
+            return
+        both = a1_wins + a2_wins
+        base = (f"Exklusiv  A1:{a1_only}  A2:{a2_only}"
+                f"  |  Beide:{both}  (A1>{a1_wins} A2>{a2_wins})")
+        if ucb_rate_a1 is not None and ucb_rate_a2 is not None:
+            base += (f"   UCB A1={ucb_rate_a1:.2f}({ucb_plays_a1})"
+                     f" A2={ucb_rate_a2:.2f}({ucb_plays_a2})")
+        self._div_stats_label.setText(base)
+        self._div_stats_label.setStyleSheet(
+            f"color:#446688; font-size:9px; font-family:{_FONT}; padding-left:2px;"
+        )
+
+    # =====================================================================
+    # Status / Info
+    # =====================================================================
     def update_snr(self, snr: int):
         self.snr_label.setText(f"SNR:  {snr:+d} dB")
 
@@ -739,7 +1113,7 @@ class ControlPanel(QWidget):
         label = labels.get(status, f"RADIO: {status}")
         self.connection_label.setText(label)
         self.connection_label.setStyleSheet(
-            f"color: {color}; font-family: Menlo; font-size: 12px; font-weight: bold;"
+            f"color: {color}; font-family: {_FONT}; font-size: 12px; font-weight: bold;"
         )
         connected = (status == "connected")
         for btn in [self.btn_tune, self.btn_cq, self.btn_diversity,
@@ -751,12 +1125,12 @@ class ControlPanel(QWidget):
         if count > 0:
             self.decode_label.setText(f"Decode: {count} Station{'en' if count != 1 else ''}")
             self.decode_label.setStyleSheet(
-                "color: #44FF44; font-family: Menlo; font-size: 12px;"
+                f"color: #44FF44; font-family: {_FONT}; font-size: 12px;"
             )
         else:
             self.decode_label.setText("Decode: —")
             self.decode_label.setStyleSheet(
-                "color: #666; font-family: Menlo; font-size: 12px;"
+                f"color: #666; font-family: {_FONT}; font-size: 12px;"
             )
 
     def update_cycle_bar(self, seconds_in_cycle: float, cycle_duration: float):
@@ -768,46 +1142,16 @@ class ControlPanel(QWidget):
         self.cycle_bar.setStyleSheet(
             f"background-color: #1a1a2e; border: 1px solid #333; "
             f"border-radius: 3px; padding: 2px; color: #{'FF4444' if progress > 0.8 else '00AAFF'}; "
-            f"font-family: Menlo; font-size: 11px;"
+            f"font-family: {_FONT}; font-size: 11px;"
         )
 
+    # =====================================================================
+    # Clock
+    # =====================================================================
     def _start_clock(self):
         self._clock_timer = QTimer(self)
         self._clock_timer.timeout.connect(self._update_clock)
         self._clock_timer.start(1000)
-
-    def _on_bias_clicked(self, preset: str):
-        """Bias-Preset Button geklickt."""
-        self._current_bias = preset
-        for p, btn in self._bias_buttons.items():
-            btn.setChecked(p == preset)
-        self.bias_changed.emit(preset)
-
-    def set_bias(self, preset: str):
-        """Bias programmatisch setzen (ohne Signal)."""
-        self._current_bias = preset
-        for p, btn in self._bias_buttons.items():
-            btn.setChecked(p == preset)
-
-    def update_diversity_stats(self, a1_only: int, a2_only: int,
-                                a1_wins: int, a2_wins: int,
-                                ucb_rate_a1: float = None, ucb_rate_a2: float = None,
-                                ucb_plays_a1: int = 0, ucb_plays_a2: int = 0):
-        """Diversity-Statistiken: Exklusiv / Beide / UCB."""
-        total = a1_only + a2_only + a1_wins + a2_wins
-        if total == 0:
-            self._div_stats_label.setText("")
-            return
-        both = a1_wins + a2_wins
-        base = (f"Exklusiv  A1:{a1_only}  A2:{a2_only}"
-                f"  |  Beide:{both}  (A1>{a1_wins} A2>{a2_wins})")
-        if ucb_rate_a1 is not None and ucb_rate_a2 is not None:
-            base += (f"   UCB A1={ucb_rate_a1:.2f}({ucb_plays_a1})"
-                     f" A2={ucb_rate_a2:.2f}({ucb_plays_a2})")
-        self._div_stats_label.setText(base)
-        self._div_stats_label.setStyleSheet(
-            "color:#446688; font-size:9px; font-family:Menlo; padding-left:2px;"
-        )
 
     def _update_clock(self):
         utc = time.strftime("%H:%M:%S", time.gmtime())
