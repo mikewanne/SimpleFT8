@@ -202,6 +202,14 @@ class MainWindow(QMainWindow):
         self.radio.set_frequency(freq, slice_idx=s)
         self.radio.apply_ft8_preset(slice_idx=s, band=band)
         print(f"[FlexRadio] Band: {band}, Freq: {freq:.3f} MHz")
+        # DX-Preset ANT1-Gain silent laden wenn vorhanden
+        preset = self.settings.get_dx_preset(band)
+        if preset and "ant1_gain" in preset:
+            self.radio._send_cmd(f"slice set {s} rfgain={preset['ant1_gain']}")
+            self.statusBar().showMessage(
+                f"Preset {band} geladen: ANT1 G{preset['ant1_gain']} dB", 4000
+            )
+            print(f"[FlexRadio] Preset {band}: ANT1 G{preset['ant1_gain']} dB")
         self.decoder.set_quality("normal")  # Start: schnell (NORMAL-Modus)
         self.decoder.start()
         self.radio.create_tx_stream()
@@ -606,10 +614,14 @@ class MainWindow(QMainWindow):
         preset = self.settings.get_dx_preset(band)
 
         if preset and "ant1_gain" in preset:
-            # Preset vorhanden: per-Antenne optimierte Gains laden
+            # Preset vorhanden: per-Antenne optimierte Gains laden + sofort ans Radio
             self._diversity_ant1_gain = preset["ant1_gain"]
             self._diversity_ant2_gain = preset["ant2_gain"]
             measured = preset.get("measured", "?")
+            if self.radio.ip:
+                s = self.radio._slice_idx
+                self.radio._send_cmd(f"slice set {s} rxant=ANT1")
+                self.radio._send_cmd(f"slice set {s} rfgain={self._diversity_ant1_gain}")
             self.control_panel.dx_info.setText(
                 f"ANT1(G{self._diversity_ant1_gain}) + "
                 f"ANT2(G{self._diversity_ant2_gain})"
