@@ -22,13 +22,8 @@ _FONT = "Menlo"
 _SEP_COLOR = "#333"
 _MIN_WIDTH = 320
 
-_LED_OFF = "#1a1a1a"
-_LED_OFF_BORDER = "#2a2a2a"
 _LED_GREEN = "#00ee55"
 _LED_BLUE = "#00aaff"
-_LED_YELLOW = "#ffcc00"
-_LED_AMBER = "#ff8800"
-_LED_SIZE = 18
 
 # Diversity Ratio Label Styles
 _DIV_PCT_OFF    = ("background:rgba(255,255,255,0.04);color:#333;border:1px solid #222;"

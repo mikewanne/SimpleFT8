@@ -1,5 +1,10 @@
 """SimpleFT8 Main Window — 3-Fenster-Layout mit QSplitter."""
 
+import math
+import threading
+import time
+from collections import deque
+
 from PySide6.QtWidgets import (
     QMainWindow, QSplitter, QWidget, QVBoxLayout, QStatusBar,
     QMessageBox, QScrollArea,
@@ -13,6 +18,7 @@ from core.qso_state import QSOStateMachine, QSOState
 from core.encoder import Encoder
 from core.decoder import Decoder
 from core.message import FT8Message
+from core.diversity import DiversityController
 from log.adif import AdifWriter
 from radio.flexradio import FlexRadio
 from .rx_panel import RXPanel
@@ -20,94 +26,6 @@ from .qso_panel import QSOPanel
 from .control_panel import ControlPanel
 from .settings_dialog import SettingsDialog
 from .dx_tune_dialog import DXTuneDialog
-
-
-class _DiversityController:
-    """Periodische Antennen-Messung fuer Diversity-Modus.
-
-    Ablauf:
-    - MESS-PHASE  (2 Zyklen): ANT1 dann ANT2 messen
-    - BETRIEB     (40 Zyklen ≈ 10 Min): 70:30 oder 50:50
-    - Nach 40 Zyklen ohne aktives QSO → neu messen
-    Score = Summe (snr+30) aller dekodierten Stationen
-    Δ < 15% → 50:50, sonst bessere Antenne auf 70%
-    """
-
-    MEASURE_CYCLES = 2
-    OPERATE_CYCLES = 40
-    _PAT_70_A1 = ("A1","A1","A2","A1","A1","A2","A1","A1","A2","A1")  # 7×A1, 3×A2
-    _PAT_70_A2 = ("A2","A2","A1","A2","A2","A1","A2","A2","A1","A2")  # 7×A2, 3×A1
-
-    def __init__(self):
-        self.reset()
-
-    def reset(self):
-        self._phase = "measure"
-        self._measure_step = 0
-        self._scores = {"A1": 0.0, "A2": 0.0}
-        self._operate_cycles = 0
-        self.ratio = "50:50"
-        self.dominant = None  # "A1", "A2", oder None
-
-    def choose(self) -> str:
-        """Antenne fuer den naechsten Zyklus waehlen."""
-        if self._phase == "measure":
-            return "A1" if self._measure_step == 0 else "A2"
-        if self.ratio == "70:30":
-            return self._PAT_70_A1[self._operate_cycles % 10]
-        if self.ratio == "30:70":
-            return self._PAT_70_A2[self._operate_cycles % 10]
-        return ("A1", "A2")[self._operate_cycles % 2]  # 50:50
-
-    def record_measurement(self, ant: str, score: float):
-        """Score nach Messzyklus einpflegen — evaluiert nach 2 Messungen."""
-        if self._phase != "measure":
-            return
-        self._scores[ant] = score
-        self._measure_step += 1
-        if self._measure_step >= self.MEASURE_CYCLES:
-            self._evaluate()
-
-    def on_operate_cycle(self):
-        """Pro Betriebszyklus aufrufen."""
-        if self._phase == "operate":
-            self._operate_cycles += 1
-
-    def should_remeasure(self, qso_active: bool) -> bool:
-        return (self._phase == "operate"
-                and self._operate_cycles >= self.OPERATE_CYCLES
-                and not qso_active)
-
-    def start_measure(self):
-        self._phase = "measure"
-        self._measure_step = 0
-        self._scores = {"A1": 0.0, "A2": 0.0}
-
-    @property
-    def phase(self) -> str:
-        return self._phase
-
-    def _evaluate(self):
-        s1, s2 = self._scores["A1"], self._scores["A2"]
-        total = s1 + s2
-        if total <= 0:
-            self.ratio = "50:50"
-            self.dominant = None
-        else:
-            diff = abs(s1 - s2) / total
-            if diff < 0.15:
-                self.ratio = "50:50"
-                self.dominant = None
-            elif s1 >= s2:
-                self.ratio = "70:30"
-                self.dominant = "A1"
-            else:
-                self.ratio = "30:70"
-                self.dominant = "A2"
-        self._phase = "operate"
-        self._operate_cycles = 0
-        print(f"[Diversity] Messung: A1={s1:.1f} A2={s2:.1f} → {self.ratio} "
-              f"(dominant: {self.dominant})")
 
 
 class MainWindow(QMainWindow):
@@ -163,16 +81,14 @@ class MainWindow(QMainWindow):
 
         self._reconnect_attempts = 0
         self._reconnect_countdown = 0
-        self._dx_mode = False
         self._dx_tune_dialog = None  # Aktiver DX-Tune Dialog
         # Diversity (simpel: Antenne pro Zyklus wechseln)
         self._rx_mode = "normal"  # "normal", "diversity", "dx_tuning"
         self._diversity_stations = {}  # key → FT8Message (akkumuliert)
         self._normal_stations = {}     # key → FT8Message (Normal, 2-Min-Fenster)
-        self._diversity_ctrl = _DiversityController()
+        self._diversity_ctrl = DiversityController()
         self._active_qso_targets: set = set()  # Stationen im aktiven QSO → 150s Aging
-        import threading as _threading
-        self._diversity_lock = _threading.Lock()  # Race Condition Guard
+        self._diversity_lock = threading.Lock()  # Race Condition Guard
 
         # UI aufbauen
         self._setup_ui()
@@ -265,7 +181,6 @@ class MainWindow(QMainWindow):
 
         # Auto-Connect im Hintergrund
         self.control_panel.set_connection_status("searching")
-        import threading
         threading.Thread(
             target=self._connect_worker, daemon=True
         ).start()
@@ -309,7 +224,6 @@ class MainWindow(QMainWindow):
         self._countdown_timer.start(1000)
 
         self.control_panel.set_connection_status("reconnecting")
-        import threading
         threading.Thread(target=self._reconnect_worker, daemon=True).start()
 
     def _on_countdown_tick(self):
@@ -381,9 +295,8 @@ class MainWindow(QMainWindow):
             #   _last_changed: wann sich Inhalt geaendert hat (fuer UTC-Anzeige)
             # Aging: 2 Min nicht mehr dekodiert → raus
             # ant wurde oben schon aus der Queue geholt
-            import time as _t
-            now = _t.time()
-            utc_str = _t.strftime("%H%M%S", _t.gmtime())
+            now = time.time()
+            utc_str = time.strftime("%H%M%S", time.gmtime())
             changed = False
             for msg in messages:
                 key = msg.caller
@@ -453,9 +366,8 @@ class MainWindow(QMainWindow):
 
         elif self._rx_mode == "normal" and messages:
             # Normal: Akkumulation mit 2-Min-Fenster (wie Diversity, ohne Antennenwechsel)
-            import time as _t
-            now = _t.time()
-            utc_str = _t.strftime("%H%M%S", _t.gmtime())
+            now = time.time()
+            utc_str = time.strftime("%H%M%S", time.gmtime())
             changed = False
             for msg in messages:
                 key = msg.caller
@@ -580,7 +492,6 @@ class MainWindow(QMainWindow):
     def _on_rx_panel_toggled(self, active: bool):
         """RX ON/OFF vom Panel — bei OFF sofort auf ANT1 und Diversity-Stop."""
         if not active and self._rx_mode == "diversity" and self.radio.ip:
-            import threading
             s = self.radio._slice_idx
             band = self.settings.band
             gain = FlexRadio.PREAMP_PRESETS.get(band, 10)
@@ -685,11 +596,11 @@ class MainWindow(QMainWindow):
 
     def _enable_diversity(self):
         """Diversity aktivieren: Antenne pro Zyklus wechseln, Stationen akkumulieren."""
-        from collections import deque
         self._diversity_stations = {}
         self._diversity_current_ant = "A1"
         self._diversity_ant_queue = deque()  # (ant, phase) Tupel
         self._diversity_ctrl.reset()
+        self.control_panel.update_diversity_ratio("50:50", "measure")  # sofort anzeigen
 
         band = self.settings.band
         preset = self.settings.get_dx_preset(band)
@@ -883,7 +794,6 @@ class MainWindow(QMainWindow):
     def _on_dx_tune_rejected(self):
         """DX Tuning abgebrochen — zurueck auf Normal."""
         self._dx_tune_dialog = None
-        self._dx_mode = False
         self._apply_normal_mode()
         self.control_panel.dx_info.setText("")
 
@@ -947,8 +857,7 @@ class MainWindow(QMainWindow):
 
     @Slot(float)
     def _on_swr_alarm(self, swr: float):
-        import time as _t
-        now = _t.time()
+        now = time.time()
         if now - getattr(self, '_last_swr_alarm', 0) < 10:
             return  # Cooldown: max 1 Alarm pro 10s
         self._last_swr_alarm = now
@@ -1123,7 +1032,6 @@ class MainWindow(QMainWindow):
                 )
 
             # BUG-3: ant_cmd + gain als Argumente, nicht als Closure
-            import threading
             def _switch(cmd=ant_cmd, g=gain, sl=s):
                 self.radio._send_cmd(f"slice set {sl} rxant={cmd}")
                 self.radio._send_cmd(f"slice set {sl} rfgain={g}")
@@ -1144,13 +1052,11 @@ class MainWindow(QMainWindow):
     # ── PSKReporter ─────────────────────────────────────────────
 
     def _fetch_psk_stats(self):
-        import threading
         threading.Thread(target=self._psk_worker, daemon=True).start()
 
     def _psk_worker(self):
         import urllib.request
         import xml.etree.ElementTree as ET
-        import math
 
         call = self.settings.callsign
         my_grid = self.settings.locator
