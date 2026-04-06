@@ -26,7 +26,7 @@ _LED_GREEN = "#00ee55"
 _LED_BLUE = "#00aaff"
 
 # Diversity Ratio Label Styles
-_DIV_PCT_OFF    = ("background:rgba(255,255,255,0.04);color:#333;border:1px solid #222;"
+_DIV_PCT_OFF    = ("background:rgba(255,255,255,0.04);color:#666;border:1px solid #333;"
                    "border-radius:3px;font-size:10px;font-family:Menlo;font-weight:bold;padding:1px 4px;")
 _DIV_PCT_GREEN  = ("background:rgba(0,180,60,0.22);color:#00ee55;border:1px solid rgba(0,200,80,0.6);"
                    "border-radius:3px;font-size:10px;font-family:Menlo;font-weight:bold;padding:1px 4px;")
