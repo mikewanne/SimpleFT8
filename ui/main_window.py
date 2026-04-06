@@ -22,51 +22,92 @@ from .settings_dialog import SettingsDialog
 from .dx_tune_dialog import DXTuneDialog
 
 
-class _UCBAntennaSelector:
-    """UCB1-Algorithmus fuer adaptive Antennen-Auswahl im AUTO-Modus.
+class _DiversityController:
+    """Periodische Antennen-Messung fuer Diversity-Modus.
 
-    Loest die Bias-Spirale: exploriert automatisch die weniger gemessene
-    Antenne wenn Unsicherheit steigt. Kein manueller Reset noetig.
+    Ablauf:
+    - MESS-PHASE  (2 Zyklen): ANT1 dann ANT2 messen
+    - BETRIEB     (40 Zyklen ≈ 10 Min): 70:30 oder 50:50
+    - Nach 40 Zyklen ohne aktives QSO → neu messen
+    Score = Summe (snr+30) aller dekodierten Stationen
+    Δ < 15% → 50:50, sonst bessere Antenne auf 70%
     """
 
-    def __init__(self, weight: float = 1.5):
-        self._weight = weight
+    MEASURE_CYCLES = 2
+    OPERATE_CYCLES = 40
+    _PAT_70_A1 = ("A1","A1","A2","A1","A1","A2","A1","A1","A2","A1")  # 7×A1, 3×A2
+    _PAT_70_A2 = ("A2","A2","A1","A2","A2","A1","A2","A2","A1","A2")  # 7×A2, 3×A1
+
+    def __init__(self):
         self.reset()
 
     def reset(self):
-        self._plays   = {"A1": 0,   "A2": 0}
-        self._rewards = {"A1": 0.0, "A2": 0.0}
+        self._phase = "measure"
+        self._measure_step = 0
+        self._scores = {"A1": 0.0, "A2": 0.0}
+        self._operate_cycles = 0
+        self.ratio = "50:50"
+        self.dominant = None  # "A1", "A2", oder None
 
     def choose(self) -> str:
-        """Naechste Antenne auswaehlen (UCB1)."""
-        import math
-        # Jede Antenne mindestens einmal spielen lassen
-        for ant in ("A1", "A2"):
-            if self._plays[ant] == 0:
-                return ant
-        total = self._plays["A1"] + self._plays["A2"]
-        best, best_score = "A1", -1.0
-        for ant in ("A1", "A2"):
-            avg     = self._rewards[ant] / self._plays[ant]
-            explore = self._weight * math.sqrt(math.log(total) / self._plays[ant])
-            score   = avg + explore
-            if score > best_score:
-                best_score = score
-                best = ant
-        return best
+        """Antenne fuer den naechsten Zyklus waehlen."""
+        if self._phase == "measure":
+            return "A1" if self._measure_step == 0 else "A2"
+        if self.ratio == "70:30":
+            return self._PAT_70_A1[self._operate_cycles % 10]
+        if self.ratio == "30:70":
+            return self._PAT_70_A2[self._operate_cycles % 10]
+        return ("A1", "A2")[self._operate_cycles % 2]  # 50:50
 
-    def update(self, ant: str, reward: float):
-        """Reward nach Zyklus-Ende einpflegen."""
-        if ant in self._plays:
-            self._plays[ant]   += 1
-            self._rewards[ant] += reward
+    def record_measurement(self, ant: str, score: float):
+        """Score nach Messzyklus einpflegen — evaluiert nach 2 Messungen."""
+        if self._phase != "measure":
+            return
+        self._scores[ant] = score
+        self._measure_step += 1
+        if self._measure_step >= self.MEASURE_CYCLES:
+            self._evaluate()
 
-    def rates(self) -> dict:
-        """Erfolgsraten pro Antenne (fuer Anzeige)."""
-        return {
-            ant: (self._rewards[ant] / self._plays[ant] if self._plays[ant] > 0 else 0.0)
-            for ant in ("A1", "A2")
-        }
+    def on_operate_cycle(self):
+        """Pro Betriebszyklus aufrufen."""
+        if self._phase == "operate":
+            self._operate_cycles += 1
+
+    def should_remeasure(self, qso_active: bool) -> bool:
+        return (self._phase == "operate"
+                and self._operate_cycles >= self.OPERATE_CYCLES
+                and not qso_active)
+
+    def start_measure(self):
+        self._phase = "measure"
+        self._measure_step = 0
+        self._scores = {"A1": 0.0, "A2": 0.0}
+
+    @property
+    def phase(self) -> str:
+        return self._phase
+
+    def _evaluate(self):
+        s1, s2 = self._scores["A1"], self._scores["A2"]
+        total = s1 + s2
+        if total <= 0:
+            self.ratio = "50:50"
+            self.dominant = None
+        else:
+            diff = abs(s1 - s2) / total
+            if diff < 0.15:
+                self.ratio = "50:50"
+                self.dominant = None
+            elif s1 >= s2:
+                self.ratio = "70:30"
+                self.dominant = "A1"
+            else:
+                self.ratio = "30:70"
+                self.dominant = "A2"
+        self._phase = "operate"
+        self._operate_cycles = 0
+        print(f"[Diversity] Messung: A1={s1:.1f} A2={s2:.1f} → {self.ratio} "
+              f"(dominant: {self.dominant})")
 
 
 class MainWindow(QMainWindow):
@@ -126,25 +167,12 @@ class MainWindow(QMainWindow):
         self._dx_tune_dialog = None  # Aktiver DX-Tune Dialog
         # Diversity (simpel: Antenne pro Zyklus wechseln)
         self._rx_mode = "normal"  # "normal", "diversity", "dx_tuning"
-        self._diversity_cycle = 0  # Zaehler fuer Antennen-Wechsel
         self._diversity_stations = {}  # key → FT8Message (akkumuliert)
         self._normal_stations = {}     # key → FT8Message (Normal, 2-Min-Fenster)
-        self._diversity_bias = "AUTO"  # Manueller Bias: 100:0 / 70:30 / AUTO / 30:70 / 0:100
-        self._diversity_stats = {"A1_only": 0, "A2_only": 0, "A1_wins": 0, "A2_wins": 0}
-        self._ucb_selector = _UCBAntennaSelector(weight=1.5)  # UCB1 fuer AUTO-Modus
+        self._diversity_ctrl = _DiversityController()
         self._active_qso_targets: set = set()  # Stationen im aktiven QSO → 150s Aging
         import threading as _threading
-        self._diversity_lock = _threading.Lock()  # BUG-2: Race Condition Guard
-
-        # Bias-Pattern-Tabelle (DeepSeek-Review: _BIAS_PATTERNS Dict)
-        # None = spezielles Block-A/B 4-Zyklus-Pattern (AUTO)
-        self._BIAS_PATTERNS = {
-            "100:0": ("A1",),
-            "70:30": ("A1", "A2", "A1", "A1", "A2"),
-            "AUTO":  None,  # 4-Zyklus Block A/B
-            "30:70": ("A2", "A1", "A2", "A2", "A1"),
-            "0:100": ("A2",),
-        }
+        self._diversity_lock = _threading.Lock()  # Race Condition Guard
 
         # UI aufbauen
         self._setup_ui()
@@ -332,17 +360,19 @@ class MainWindow(QMainWindow):
             # Sonst geraet die Queue aus dem Takt wenn eine Antenne nichts empfaengt
             ant_queue = getattr(self, '_diversity_ant_queue', None)
             if ant_queue:
-                ant = ant_queue.popleft()
+                ant, was_phase = ant_queue.popleft()
             else:
-                ant = "A1"
+                ant, was_phase = "A1", "operate"
 
-        # UCB1 Update (nur im AUTO-Modus, nach jedem Diversity-Zyklus)
-        if self._rx_mode == "diversity" and self._diversity_bias == "AUTO":
-            reward = sum(
-                max(0.0, (m.snr + 20) / 30.0)
-                for m in (messages or []) if m.snr is not None
+        # Messung aufzeichnen wenn wir in der Mess-Phase waren
+        if self._rx_mode == "diversity" and was_phase == "measure":
+            score = sum(max(0.0, float(m.snr + 30)) for m in (messages or [])
+                        if m.snr is not None)
+            with self._diversity_lock:
+                self._diversity_ctrl.record_measurement(ant, score)
+            self.control_panel.update_diversity_ratio(
+                self._diversity_ctrl.ratio, self._diversity_ctrl.phase
             )
-            self._ucb_selector.update(ant if self._rx_mode == "diversity" else "A1", reward)
 
         if self._rx_mode == "diversity" and messages:
             # Diversity: Stationen akkumulieren per Callsign
@@ -416,28 +446,6 @@ class MainWindow(QMainWindow):
                 for m in self._diversity_stations.values():
                     self.rx_panel.add_message(m)
                 self.rx_panel.reapply_sort()
-                # Diversity-Stats aktualisieren
-                a1_only = sum(1 for m in self._diversity_stations.values()
-                              if getattr(m, 'antenna', '') == 'A1')
-                a2_only = sum(1 for m in self._diversity_stations.values()
-                              if getattr(m, 'antenna', '') == 'A2')
-                a1_wins = sum(1 for m in self._diversity_stations.values()
-                              if str(getattr(m, 'antenna', '')).startswith('A1>'))
-                a2_wins = sum(1 for m in self._diversity_stations.values()
-                              if str(getattr(m, 'antenna', '')).startswith('A2>'))
-                # UCB1-Raten in Stats anzeigen wenn AUTO aktiv
-                if self._diversity_bias == "AUTO":
-                    rates = self._ucb_selector.rates()
-                    plays = self._ucb_selector._plays
-                    self.control_panel.update_diversity_stats(
-                        a1_only, a2_only, a1_wins, a2_wins,
-                        ucb_rate_a1=rates["A1"], ucb_rate_a2=rates["A2"],
-                        ucb_plays_a1=plays["A1"], ucb_plays_a2=plays["A2"],
-                    )
-                else:
-                    self.control_panel.update_diversity_stats(
-                        a1_only, a2_only, a1_wins, a2_wins
-                    )
 
             self.control_panel.update_decode_count(
                 len(self._diversity_stations)
@@ -523,7 +531,6 @@ class MainWindow(QMainWindow):
         self.control_panel.rx_mode_changed.connect(self._on_rx_mode_changed)
         self.control_panel.einmessen_clicked.connect(self._handle_dx_tuning)
         self.control_panel.settings_clicked.connect(self._on_settings_clicked)
-        self.control_panel.bias_changed.connect(self._on_bias_changed)
 
         # QSO State Machine
         self.qso_sm.state_changed.connect(self._on_state_changed)
@@ -622,11 +629,8 @@ class MainWindow(QMainWindow):
         self._diversity_stations = {}
         self._normal_stations = {}
         self.control_panel.update_decode_count(0)
-        # Bias + UCB1 auf AUTO zuruecksetzen bei Bandwechsel
-        if self._diversity_bias != "AUTO":
-            self._diversity_bias = "AUTO"
-            self.control_panel.set_bias("AUTO")
-        self._ucb_selector.reset()
+        # Diversity Controller bei Bandwechsel zuruecksetzen
+        self._diversity_ctrl.reset()
         if self.radio.ip:
             s = self.radio._slice_idx
             self.radio.set_frequency(freq, slice_idx=s)
@@ -682,10 +686,10 @@ class MainWindow(QMainWindow):
     def _enable_diversity(self):
         """Diversity aktivieren: Antenne pro Zyklus wechseln, Stationen akkumulieren."""
         from collections import deque
-        self._diversity_cycle = 0
         self._diversity_stations = {}
         self._diversity_current_ant = "A1"
-        self._diversity_ant_queue = deque()
+        self._diversity_ant_queue = deque()  # (ant, phase) Tupel
+        self._diversity_ctrl.reset()
 
         band = self.settings.band
         preset = self.settings.get_dx_preset(band)
@@ -731,25 +735,10 @@ class MainWindow(QMainWindow):
     def _disable_diversity(self):
         """Diversity deaktivieren: zurueck auf ANT1."""
         self._diversity_stations = {}
-        self._diversity_cycle = 0
-        self._diversity_bias = "AUTO"
-        self._ucb_selector.reset()
+        self._diversity_ctrl.reset()
         self._apply_normal_mode()
         self.control_panel.dx_info.setText("")
-        self.control_panel.clear_diversity_cycle()
         print("[Diversity] Deaktiviert")
-
-    @Slot(str)
-    def _on_bias_changed(self, bias: str):
-        """Manueller Bias-Switch: Slot-Verteilung aendern."""
-        self._diversity_bias = bias
-        # Queue leeren (DeepSeek: Desync-Schutz bei Pattern-Wechsel)
-        with self._diversity_lock:
-            ant_queue = getattr(self, '_diversity_ant_queue', None)
-            if ant_queue is not None:
-                ant_queue.clear()
-            self._diversity_cycle = 0  # Neustart Pattern-Zaehler
-        print(f"[Diversity] Bias: {bias}")
 
     def _handle_dx_tuning(self):
         """DX-Tuning Modus: Preset laden oder Messung starten."""
@@ -1102,30 +1091,25 @@ class MainWindow(QMainWindow):
                 return
 
             with self._diversity_lock:  # BUG-2: Race Condition Guard
-                # Queue: aktuelle Antenne merken BEVOR umgeschaltet wird.
+                # Queue: aktuelle Antenne + Phase merken BEVOR umgeschaltet wird.
                 ant_queue = getattr(self, '_diversity_ant_queue', None)
                 if ant_queue is not None:
-                    ant_queue.append(self._diversity_current_ant)
+                    ant_queue.append((self._diversity_current_ant, self._diversity_ctrl.phase))
 
-                self._diversity_cycle += 1
                 s = self.radio._slice_idx
                 band = self.settings.band
 
-                # Bias-basiertes Pattern (DeepSeek-Review: _BIAS_PATTERNS Dict)
-                bias = self._diversity_bias
-                pattern = self._BIAS_PATTERNS.get(bias)
-                if pattern is None:
-                    # AUTO: UCB1-Algorithmus waehlt adaptiv die bessere Antenne
-                    # Ersetzt das feste 4-Zyklus Even/Odd Pattern
-                    _pos = (self._diversity_cycle - 1) % 4  # nur fuer Zyklus-Indikator
-                    try:
-                        self._diversity_current_ant = self._ucb_selector.choose()
-                    except Exception:
-                        # Fallback auf einfaches Even/Odd
-                        self._diversity_current_ant = "A1" if (self._diversity_cycle % 2) == 1 else "A2"
-                else:
-                    _pos = (self._diversity_cycle - 1) % len(pattern)
-                    self._diversity_current_ant = pattern[_pos]
+                # Betriebszyklus zaehlen + ggf. neu messen
+                if self._diversity_ctrl.phase == "operate":
+                    self._diversity_ctrl.on_operate_cycle()
+                    qso_active = self.qso_sm.state not in (
+                        QSOState.IDLE, QSOState.TIMEOUT,
+                        QSOState.CQ_CALLING, QSOState.CQ_WAIT,
+                    )
+                    if self._diversity_ctrl.should_remeasure(qso_active):
+                        self._diversity_ctrl.start_measure()
+
+                self._diversity_current_ant = self._diversity_ctrl.choose()
 
                 if self._diversity_current_ant == "A1":
                     gain = getattr(self, '_diversity_ant1_gain',
@@ -1134,7 +1118,9 @@ class MainWindow(QMainWindow):
                     gain = getattr(self, '_diversity_ant2_gain',
                                    FlexRadio.PREAMP_PRESETS.get(band, 10) + 10)
                 ant_cmd = "ANT1" if self._diversity_current_ant == "A1" else "ANT2"
-                self.control_panel.update_diversity_cycle(_pos, self._diversity_current_ant)
+                self.control_panel.update_diversity_ratio(
+                    self._diversity_ctrl.ratio, self._diversity_ctrl.phase
+                )
 
             # BUG-3: ant_cmd + gain als Argumente, nicht als Closure
             import threading

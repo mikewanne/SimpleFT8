@@ -30,6 +30,18 @@ _LED_YELLOW = "#ffcc00"
 _LED_AMBER = "#ff8800"
 _LED_SIZE = 18
 
+# Diversity Ratio Label Styles
+_DIV_PCT_OFF    = ("background:rgba(255,255,255,0.04);color:#333;border:1px solid #222;"
+                   "border-radius:3px;font-size:10px;font-family:Menlo;font-weight:bold;padding:1px 4px;")
+_DIV_PCT_GREEN  = ("background:rgba(0,180,60,0.22);color:#00ee55;border:1px solid rgba(0,200,80,0.6);"
+                   "border-radius:3px;font-size:10px;font-family:Menlo;font-weight:bold;padding:1px 4px;")
+_DIV_PCT_RED    = ("background:rgba(200,50,50,0.22);color:#FF5555;border:1px solid rgba(220,60,60,0.6);"
+                   "border-radius:3px;font-size:10px;font-family:Menlo;font-weight:bold;padding:1px 4px;")
+_DIV_PCT_TEAL   = ("background:rgba(0,170,200,0.18);color:#00CCFF;border:1px solid rgba(0,180,210,0.5);"
+                   "border-radius:3px;font-size:10px;font-family:Menlo;font-weight:bold;padding:1px 4px;")
+_DIV_PCT_YELLOW = ("background:rgba(200,170,0,0.18);color:#FFCC00;border:1px solid rgba(210,180,0,0.5);"
+                   "border-radius:3px;font-size:10px;font-family:Menlo;font-weight:bold;padding:1px 4px;")
+
 # ---------------------------------------------------------------------------
 # Glossy 3D Card Styles (DeepSeek-Design)
 # ---------------------------------------------------------------------------
@@ -202,64 +214,47 @@ class _AntenneCard(QFrame):
         self.dx_info.setStyleSheet(f"color: #668877; font-size: 10px; font-family: {_FONT};")
         lay.addWidget(self.dx_info)
 
-        # LED Balance
-        self._led_widget = QWidget()
-        led_outer = QVBoxLayout(self._led_widget)
-        led_outer.setContentsMargins(0, 2, 0, 2)
-        led_outer.setSpacing(2)
-        led_row = QHBoxLayout()
-        led_row.setSpacing(3)
-        lbl_a1 = QLabel("A1")
-        lbl_a1.setStyleSheet(f"color: {_LED_GREEN}; font-size: 10px; font-family: {_FONT}; font-weight: bold;")
-        led_row.addWidget(lbl_a1)
-        self._leds = []
-        r = _LED_SIZE // 2
-        for _ in range(7):
-            led = QLabel()
-            led.setFixedSize(_LED_SIZE, _LED_SIZE)
-            led.setStyleSheet(
-                f"background: {_LED_OFF}; border-radius: {r}px; "
-                f"border: 1px solid {_LED_OFF_BORDER}; "
-                f"min-width: {_LED_SIZE}px; max-width: {_LED_SIZE}px; "
-                f"min-height: {_LED_SIZE}px; max-height: {_LED_SIZE}px;"
-            )
-            led_row.addWidget(led)
-            self._leds.append(led)
-        lbl_a2 = QLabel("A2")
-        lbl_a2.setStyleSheet(f"color: {_LED_BLUE}; font-size: 10px; font-family: {_FONT}; font-weight: bold;")
-        led_row.addWidget(lbl_a2)
-        led_row.addStretch()
-        led_outer.addLayout(led_row)
-        self._bias_value_label = QLabel("AUTO 50:50")
-        self._bias_value_label.setStyleSheet(f"color: #00CCFF; font-size: 10px; font-family: {_FONT};")
-        self._bias_value_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        led_outer.addWidget(self._bias_value_label)
-        self._led_widget.setVisible(False)
-        lay.addWidget(self._led_widget)
-
-        self._div_stats_label = QLabel("")
-        self._div_stats_label.setStyleSheet(f"color: #446655; font-size: 9px; font-family: {_FONT};")
-        self._div_stats_label.setVisible(False)
-        lay.addWidget(self._div_stats_label)
-
-        self._cycle_widget = QWidget()
-        cycle_row = QHBoxLayout(self._cycle_widget)
-        cycle_row.setContentsMargins(0, 0, 0, 0)
-        cycle_row.setSpacing(4)
-        self._cycle_boxes = []
-        for _ in range(4):
-            box = QPushButton()
-            box.setFixedSize(14, 14)
-            box.setEnabled(False)
-            box.setStyleSheet("background:#1e2e1e; border:1px solid #336633; border-radius:2px;")
-            cycle_row.addWidget(box)
-            self._cycle_boxes.append(box)
-        self._cycle_ant_label = QLabel("")
-        self._cycle_ant_label.setStyleSheet(f"color:#668866; font-size:10px; font-family:{_FONT}; min-width:28px;")
-        cycle_row.addWidget(self._cycle_ant_label)
-        cycle_row.addStretch()
-        self._cycle_widget.setVisible(False)
-        lay.addWidget(self._cycle_widget)
+        # Diversity Ratio Display
+        self._div_widget = QWidget()
+        div_lay = QVBoxLayout(self._div_widget)
+        div_lay.setContentsMargins(0, 2, 0, 2)
+        div_lay.setSpacing(2)
+        ratio_row = QHBoxLayout()
+        ratio_row.setSpacing(3)
+        lbl_a1 = QLabel("ANT1")
+        lbl_a1.setStyleSheet(f"color:{_LED_GREEN};font-size:10px;font-family:{_FONT};font-weight:bold;")
+        ratio_row.addWidget(lbl_a1)
+        ratio_row.addSpacing(4)
+        self._a1_pct = {}
+        for pct in ("70%", "50%", "30%"):
+            lbl = QLabel(pct)
+            lbl.setMinimumWidth(30)
+            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            lbl.setStyleSheet(_DIV_PCT_OFF)
+            ratio_row.addWidget(lbl)
+            self._a1_pct[pct] = lbl
+        ratio_row.addStretch()
+        self._a2_pct = {}
+        for pct in ("30%", "50%", "70%"):
+            lbl = QLabel(pct)
+            lbl.setMinimumWidth(30)
+            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            lbl.setStyleSheet(_DIV_PCT_OFF)
+            ratio_row.addWidget(lbl)
+            self._a2_pct[pct] = lbl
+        ratio_row.addSpacing(4)
+        lbl_a2 = QLabel("ANT2")
+        lbl_a2.setStyleSheet(f"color:{_LED_BLUE};font-size:10px;font-family:{_FONT};font-weight:bold;")
+        ratio_row.addWidget(lbl_a2)
+        div_lay.addLayout(ratio_row)
+        self._phase_label = QLabel("")
+        self._phase_label.setStyleSheet(
+            f"color:#FFCC00;font-size:9px;font-family:{_FONT};font-style:italic;"
+        )
+        self._phase_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        div_lay.addWidget(self._phase_label)
+        self._div_widget.setVisible(False)
+        lay.addWidget(self._div_widget)
 
 
 class _RadioCard(QFrame):
@@ -537,7 +532,6 @@ class ControlPanel(QWidget):
     preamp_changed = Signal(bool)           # Legacy, nicht mehr genutzt
     rx_mode_changed = Signal(str)
     settings_clicked = Signal()
-    bias_changed = Signal(str)
     einmessen_clicked = Signal()
 
     # ── Klassen-Konstanten ───────────────────────────────────────────────
@@ -546,7 +540,6 @@ class ControlPanel(QWidget):
     _RX_STYLE_INACTIVE = "background: #222; color: #AAA; border-color: #555;"
     _RX_STYLE_DIVERSITY_ACTIVE = "background: #003344; color: #00CCFF; border-color: #00AADD; font-weight: bold;"
 
-    _BIAS_PRESETS = ["100:0", "70:30", "AUTO", "30:70", "0:100"]
 
     # =====================================================================
     # Init
@@ -557,7 +550,6 @@ class ControlPanel(QWidget):
         self._current_band = "20m"
         self._rx_mode_idx = 0
         self._callsign = callsign
-        self._current_bias = "AUTO"
         self._current_rx_mode = "normal"
         self.setMinimumWidth(_MIN_WIDTH)
         self.setAutoFillBackground(True)
@@ -590,13 +582,10 @@ class ControlPanel(QWidget):
         self.btn_diversity = ant_card.btn_diversity
         self.btn_einmessen = ant_card.btn_einmessen
         self.dx_info = ant_card.dx_info
-        self._led_widget = ant_card._led_widget
-        self._leds = ant_card._leds
-        self._bias_value_label = ant_card._bias_value_label
-        self._div_stats_label = ant_card._div_stats_label
-        self._cycle_widget = ant_card._cycle_widget
-        self._cycle_boxes = ant_card._cycle_boxes
-        self._cycle_ant_label = ant_card._cycle_ant_label
+        self._div_widget = ant_card._div_widget
+        self._a1_pct = ant_card._a1_pct
+        self._a2_pct = ant_card._a2_pct
+        self._phase_label = ant_card._phase_label
         self.btn_normal.setStyleSheet(self._rx_btn_style(self._RX_STYLE_ACTIVE))
         self.btn_diversity.setStyleSheet(self._rx_btn_style(self._RX_STYLE_INACTIVE))
         self.btn_normal.clicked.connect(lambda: self._on_rx_mode_clicked("normal"))
@@ -716,93 +705,6 @@ class ControlPanel(QWidget):
             f"QPushButton:hover {{ background: #333; }}"
         )
 
-    @staticmethod
-    def _led_style(color: str) -> str:
-        """StyleSheet fuer eine einzelne runde LED (18px, leuchtend)."""
-        r = _LED_SIZE // 2
-        if color == _LED_OFF:
-            return (
-                f"background: {_LED_OFF}; border-radius: {r}px; "
-                f"border: 1px solid {_LED_OFF_BORDER}; "
-                f"min-width: {_LED_SIZE}px; max-width: {_LED_SIZE}px; "
-                f"min-height: {_LED_SIZE}px; max-height: {_LED_SIZE}px;"
-            )
-        # Leuchtende LED: heller Kern + helle Border simuliert Glow
-        return (
-            f"background: {color}; border-radius: {r}px; "
-            f"border: 2px solid {color}; "
-            f"min-width: {_LED_SIZE}px; max-width: {_LED_SIZE}px; "
-            f"min-height: {_LED_SIZE}px; max-height: {_LED_SIZE}px;"
-        )
-
-    # =====================================================================
-    # LED Balance Indikator
-    # =====================================================================
-    def update_led_indicator(self, a1_pct: float, a2_pct: float):
-        """LED-Anzeige fuer Diversity-Balance aktualisieren.
-
-        7 LEDs: [0 1 2] [3=Mitte] [4 5 6]
-        Links (0-2) = A1-Anteil (gruen), Rechts (4-6) = A2-Anteil (blau).
-        Mitte = gruen bei 50:50, sonst gelb.
-        LEDs leuchten von der Mitte nach aussen.
-
-        Beispiele:
-            100:0  → ###O---  (3 links, Mitte gelb, 0 rechts)
-            70:30  → -##O---  (2 links, Mitte gelb, 0 rechts... eigentlich basierend auf Berechnung)
-            50:50  → ---G---  (0 links, Mitte gruen, 0 rechts)
-            30:70  → ---O##-  (0 links, Mitte gelb, 2 rechts)
-            0:100  → ---O###  (0 links, Mitte gelb, 3 rechts)
-        """
-        total = a1_pct + a2_pct
-        if total <= 0:
-            # Alle aus
-            for led in self._leds:
-                led.setStyleSheet(self._led_style(_LED_OFF))
-            self._bias_value_label.setText("—")
-            return
-
-        ratio_a1 = a1_pct / total
-        ratio_a2 = a2_pct / total
-
-        # Wie viele LEDs auf jeder Seite (0-3)
-        left_count = round(ratio_a1 * 3)
-        right_count = round(ratio_a2 * 3)
-
-        # Mitte: gruen bei ~50:50 (left_count == right_count), sonst gelb
-        is_balanced = (left_count == right_count)
-        mid_color = _LED_GREEN if is_balanced else _LED_YELLOW
-
-        # Links: Position 2, 1, 0 (von Mitte nach aussen)
-        left_positions = [2, 1, 0]
-        for i, pos in enumerate(left_positions):
-            if i < left_count:
-                self._leds[pos].setStyleSheet(self._led_style(_LED_GREEN))
-            else:
-                self._leds[pos].setStyleSheet(self._led_style(_LED_OFF))
-
-        # Mitte (Position 3)
-        self._leds[3].setStyleSheet(self._led_style(mid_color))
-
-        # Rechts: Position 4, 5, 6 (von Mitte nach aussen)
-        right_positions = [4, 5, 6]
-        for i, pos in enumerate(right_positions):
-            if i < right_count:
-                self._leds[pos].setStyleSheet(self._led_style(_LED_BLUE))
-            else:
-                self._leds[pos].setStyleSheet(self._led_style(_LED_OFF))
-
-        # Text unter den LEDs
-        if is_balanced:
-            self._bias_value_label.setText("AUTO 50:50")
-            self._bias_value_label.setStyleSheet(
-                f"color: #00CCFF; font-size: 10px; font-family: {_FONT};"
-            )
-        else:
-            self._bias_value_label.setText(f"A1:{a1_pct:.0f}% A2:{a2_pct:.0f}%")
-            color = _LED_GREEN if ratio_a1 > ratio_a2 else _LED_BLUE
-            self._bias_value_label.setStyleSheet(
-                f"color: {color}; font-size: 10px; font-family: {_FONT};"
-            )
 
     # =====================================================================
     # Modus / Band
@@ -842,11 +744,8 @@ class ControlPanel(QWidget):
             self.btn_diversity.setStyleSheet(self._rx_btn_style(self._RX_STYLE_DIVERSITY_ACTIVE))
         self._current_rx_mode = mode
         is_div = (mode == "diversity")
-        self._led_widget.setVisible(is_div)
-        self._div_stats_label.setVisible(is_div)
-        self._cycle_widget.setVisible(is_div)
+        self._div_widget.setVisible(is_div)
         if not is_div:
-            self._div_stats_label.setText("")
             self.dx_info.setText("")
         self.rx_mode_changed.emit(mode)
 
@@ -864,31 +763,37 @@ class ControlPanel(QWidget):
             self.btn_diversity.setStyleSheet(self._rx_btn_style(self._RX_STYLE_DIVERSITY_ACTIVE))
         self._current_rx_mode = mode
         is_div = (mode == "diversity")
-        self._led_widget.setVisible(is_div)
-        self._div_stats_label.setVisible(is_div)
-        self._cycle_widget.setVisible(is_div)
+        self._div_widget.setVisible(is_div)
 
     # =====================================================================
-    # Bias (programmatisch — kein Slider mehr)
+    # Diversity Ratio Display
     # =====================================================================
-    def set_bias(self, preset: str):
-        """Bias programmatisch setzen (aufgerufen von main_window)."""
-        self._current_bias = preset
-        # LED-Indikator entsprechend aktualisieren
-        preset_to_pct = {
-            "100:0": (100, 0),
-            "70:30": (70, 30),
-            "AUTO":  (50, 50),
-            "30:70": (30, 70),
-            "0:100": (0, 100),
-        }
-        a1, a2 = preset_to_pct.get(preset, (50, 50))
-        self.update_led_indicator(a1, a2)
+    def update_diversity_ratio(self, ratio: str, phase: str):
+        """Diversity-Anzeige aktualisieren.
 
-    def update_bias_display(self, a1_pct: float, a2_pct: float):
-        """Im AUTO-Modus: aktuelle UCB1-Balance auf LED-Indikator anzeigen."""
-        if self._current_bias == "AUTO":
-            self.update_led_indicator(a1_pct * 100, a2_pct * 100)
+        ratio: '70:30' | '30:70' | '50:50'
+        phase: 'measure' | 'operate'
+        """
+        for lbl in self._a1_pct.values():
+            lbl.setStyleSheet(_DIV_PCT_OFF)
+        for lbl in self._a2_pct.values():
+            lbl.setStyleSheet(_DIV_PCT_OFF)
+
+        if phase == "measure":
+            self._phase_label.setText("● MESSEN...")
+            self._a1_pct["50%"].setStyleSheet(_DIV_PCT_YELLOW)
+            self._a2_pct["50%"].setStyleSheet(_DIV_PCT_YELLOW)
+        else:
+            self._phase_label.setText("")
+            if ratio == "70:30":
+                self._a1_pct["70%"].setStyleSheet(_DIV_PCT_GREEN)
+                self._a2_pct["30%"].setStyleSheet(_DIV_PCT_RED)
+            elif ratio == "30:70":
+                self._a1_pct["30%"].setStyleSheet(_DIV_PCT_RED)
+                self._a2_pct["70%"].setStyleSheet(_DIV_PCT_GREEN)
+            else:  # 50:50
+                self._a1_pct["50%"].setStyleSheet(_DIV_PCT_TEAL)
+                self._a2_pct["50%"].setStyleSheet(_DIV_PCT_TEAL)
 
     # =====================================================================
     # PSK Reporter
@@ -1005,56 +910,6 @@ class ControlPanel(QWidget):
                 f"color: #666; font-size: 16px; font-weight: bold; font-family: {_FONT};"
             )
 
-    # =====================================================================
-    # Diversity Cycle + Stats
-    # =====================================================================
-    def update_diversity_cycle(self, pos: int, ant: str):
-        """Diversity Zyklus-Indikator aktualisieren.
-        pos: 0-3 (Position im 4-Zyklus-Block)
-        ant: 'A1' oder 'A2'
-        """
-        is_ant1 = (ant == "A1")
-        for i, box in enumerate(self._cycle_boxes):
-            if i == pos:
-                color = "#2a6a2a" if is_ant1 else "#1a4a7a"
-                border = "#44FF44" if is_ant1 else "#44AAFF"
-                box.setStyleSheet(
-                    f"background:{color}; border:1px solid {border}; border-radius:2px;"
-                )
-            else:
-                box.setStyleSheet("background:#2a2a2a; border:1px solid #444; border-radius:2px;")
-        ant_text = "ANT1" if is_ant1 else "ANT2"
-        self._cycle_ant_label.setText(ant_text)
-        color = "#44FF44" if is_ant1 else "#44AAFF"
-        self._cycle_ant_label.setStyleSheet(
-            f"color:{color}; font-size:10px; font-family:{_FONT}; min-width:28px; font-weight:bold;"
-        )
-
-    def clear_diversity_cycle(self):
-        """Indikator zuruecksetzen wenn Diversity aus."""
-        for box in self._cycle_boxes:
-            box.setStyleSheet("background:#2a2a2a; border:1px solid #444; border-radius:2px;")
-        self._cycle_ant_label.setText("")
-
-    def update_diversity_stats(self, a1_only: int, a2_only: int,
-                                a1_wins: int, a2_wins: int,
-                                ucb_rate_a1: float = None, ucb_rate_a2: float = None,
-                                ucb_plays_a1: int = 0, ucb_plays_a2: int = 0):
-        """Diversity-Statistiken: Exklusiv / Beide / UCB."""
-        total = a1_only + a2_only + a1_wins + a2_wins
-        if total == 0:
-            self._div_stats_label.setText("")
-            return
-        both = a1_wins + a2_wins
-        base = (f"Exklusiv  A1:{a1_only}  A2:{a2_only}"
-                f"  |  Beide:{both}  (A1>{a1_wins} A2>{a2_wins})")
-        if ucb_rate_a1 is not None and ucb_rate_a2 is not None:
-            base += (f"   UCB A1={ucb_rate_a1:.2f}({ucb_plays_a1})"
-                     f" A2={ucb_rate_a2:.2f}({ucb_plays_a2})")
-        self._div_stats_label.setText(base)
-        self._div_stats_label.setStyleSheet(
-            f"color:#446688; font-size:9px; font-family:{_FONT}; padding-left:2px;"
-        )
 
     # =====================================================================
     # Status / Info
