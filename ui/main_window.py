@@ -593,6 +593,22 @@ class MainWindow(QMainWindow):
         self.settings.set("band", band)
         freq = self.settings.frequency_mhz
         self._has_sent_cq = False
+
+        # ── BANDWECHSEL STOPPT ALLES ──────────────────────────
+        # CQ-Modus sofort stoppen
+        if self.qso_sm.cq_mode or self.qso_sm.state != QSOState.IDLE:
+            self.qso_sm.stop_cq()
+            self.qso_sm.cancel()
+            self.control_panel.set_cq_active(False)
+        # TX stoppen falls gerade gesendet wird
+        if self.encoder.is_transmitting:
+            self.encoder.abort()
+            if self.radio.ip:
+                self.radio.ptt_off()
+        # QSO-Panel (Live Log) leeren — neues Band = neuer Kontext
+        self.qso_panel.log_view.clear()
+        self.qso_panel.status_label.setText("Bandwechsel")
+
         # Empfangsliste komplett leeren bei Bandwechsel
         self.rx_panel.table.setRowCount(0)
         self._diversity_stations = {}
@@ -1050,11 +1066,21 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def _on_cancel(self):
+        """HALT — stoppt ALLES: CQ, QSO, TX, Messung."""
         self._active_qso_targets.clear()
         self.rx_panel.set_active_call("")
-        self.qso_panel.add_info("QSO abgebrochen")
+        # TX sofort stoppen
+        if self.encoder.is_transmitting:
+            self.encoder.abort()
+            if self.radio.ip:
+                self.radio.ptt_off()
+        # CQ + QSO stoppen
+        self.qso_sm.stop_cq()
         self.qso_sm.cancel()
         self.control_panel.set_cq_active(False)
+        self.qso_panel.add_info("HALT — alles gestoppt")
+        self.statusBar().showMessage("HALT — CQ, QSO, TX gestoppt", 5000)
+        print("[HALT] Alles gestoppt")
 
     @Slot(object)
     def _on_state_changed(self, state: QSOState):

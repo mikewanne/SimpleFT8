@@ -83,7 +83,67 @@
 
 ---
 
+## PRIO 0: SOFORT (Bandwechsel-Schutz)
+
+- [ ] **Bandwechsel stoppt ALLES** — main_window.py `_on_band_changed()`
+  - CQ-Modus sofort stoppen (`qso_sm.stop_cq()`, CQ-Button reset)
+  - Laufendes QSO abbrechen (`qso_sm.cancel()`)
+  - Diversity-Messung abbrechen wenn aktiv
+  - Encoder TX stoppen falls gerade gesendet wird
+  - QSO-Panel (Live Log) leeren — neues Band = neuer Kontext
+  - Aktuell: Band wechselt aber CQ/QSO laufen auf der alten Frequenz weiter!
+
+- [ ] **HALT Button (Notaus)** — qso_panel.py oder control_panel.py
+  - Ein Button der ALLES sofort stoppt: CQ, QSO, TX, Messung
+  - Gut sichtbar im QSO-Bereich (rot, gross)
+  - Wie ein Panic-Stop — egal was gerade laeuft, alles wird abgebrochen
+  - Setzt State Machine auf IDLE, CQ-Modus aus, TX aus
+
+---
+
+## PRIO 1.5: QSO LOGIK VERBESSERUNGEN
+
+- [ ] **Even/Odd Slot Tracking (KRITISCH!)** — qso_state.py + timing.py
+  - Aktuell: kein explizites Slot-Tracking
+  - Regel: Antwort IMMER im Gegen-Slot (wenn er im even sendet, wir im odd)
+  - Bei Empfang: rx_slot merken, tx_slot = Gegenteil
+  - Bei Slot-Verlust: re-sync anhand empfangener Nachricht
+  - WSJT-X macht das — vermutlich Hauptursache fuer viele Timeouts!
+
+- [ ] **Gesamt-QSO Timeout (3 Min)** — qso_state.py
+  - Unabhaengig von einzelnen Retry-Countern
+  - Wenn 3 Minuten ohne Fortschritt (kein State-Wechsel vorwaerts) → aufgeben
+  - Verhindert ALLE "endlos senden" Szenarien
+
+- [ ] **RRR als Bestaetigung akzeptieren** — qso_state.py
+  - Manche Stationen senden RRR statt RR73
+  - Beides als Bestaetigung werten → TX_RR73 oder WAIT_73
+
+- [ ] **Retry-Limits differenzieren** — qso_state.py
+  - **Anruf auf Station (Hunt + CQ-Antwort):** max 7 Versuche (hart), auch wenn 99 eingestellt
+  - **CQ Rufe:** max_calls aus Settings (3/5/7/99) — CQ darf lang laufen
+  - **WAIT_RR73 Retry:** max 3 (wenn nach 3x Report wiederholen keine Antwort → aufgeben)
+
+- [ ] **Vorwaerts-Springen im State** — qso_state.py
+  - Wenn Nachricht empfangen die WEITER im Ablauf ist als erwartet → State ueberspringen
+  - z.B. in WAIT_REPORT aber RR73 empfangen → direkt zu TX_RR73
+  - WSJT-X macht das fuer maximale Flexibilitaet
+
+- [ ] **GitHub Docs auch auf Deutsch** — docs/
+  - DIVERSITY.md → DIVERSITY_DE.md
+  - DX_TUNING.md → DX_TUNING_DE.md
+  - POWER_REGULATION.md → POWER_REGULATION_DE.md
+  - README_DE.md: Links zu deutschen Docs aktualisieren
+
+---
+
 ## PRIO 5: FEATURES
+
+- [ ] **Antennen-Info im QSO Log** — qso_panel.py + main_window.py
+  - Bei Diversity: zeigen auf welcher Antenne die Antwort empfangen wurde
+  - z.B. `10:00 ← DA1MHH R1BEO KP50  [A2]` im QSO Verlauf
+  - Bestaetigung fuer den Operator: "Die Station kam ueber ANT2 rein!"
+  - Braucht: aktuelle Antenne aus Diversity-Controller an QSO-Panel durchreichen
 
 - [ ] **QSO-Resume aus QSO-Panel** — qso_state.py
   - Station im QSO-Verlauf anklicken → QSO fortfuehren

@@ -484,15 +484,14 @@ class _QSOStatusCard(QFrame):
             "QPushButton:disabled { background: rgba(255,255,255,0.04); color: #444; border-color: #333; }"
         )
         self.btn_advance.setEnabled(False)
-        self.btn_cancel = QPushButton("Abbrechen")
+        self.btn_cancel = QPushButton("HALT")
         self.btn_cancel.setFixedHeight(22)
         self.btn_cancel.setStyleSheet(
-            "QPushButton { background: rgba(100,0,0,0.35); color: #CC6666; "
-            "border: 1px solid rgba(150,0,0,0.4); border-radius: 4px; padding: 2px; font-size: 11px; }"
-            "QPushButton:hover { background: rgba(130,0,0,0.45); }"
-            "QPushButton:disabled { background: rgba(255,255,255,0.04); color: #444; border-color: #333; }"
+            f"QPushButton {{ background: rgba(180,0,0,0.4); color: #FF4444; "
+            f"border: 1px solid rgba(220,40,40,0.6); border-radius: 4px; padding: 2px; "
+            f"font-size: 11px; font-weight: bold; font-family: {_FONT}; }}"
+            f"QPushButton:hover {{ background: rgba(220,0,0,0.6); color: #FF6666; }}"
         )
-        self.btn_cancel.setEnabled(False)
         adv_row.addWidget(self.btn_advance)
         adv_row.addWidget(self.btn_cancel)
         lay.addLayout(adv_row)

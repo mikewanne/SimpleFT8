@@ -44,6 +44,11 @@ class Encoder(QObject):
     def is_transmitting(self) -> bool:
         return self._is_transmitting
 
+    def abort(self):
+        """TX sofort abbrechen (Bandwechsel, Notaus)."""
+        self._is_transmitting = False
+        print("[Encoder] TX abgebrochen")
+
     def set_radio(self, radio):
         self._radio = radio
 
