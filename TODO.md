@@ -103,6 +103,13 @@
 
 ## PRIO 1.5: QSO LOGIK VERBESSERUNGEN
 
+- [ ] **Diversity-Messung pausiert bei TX** — main_window.py
+  - Bei TX: Mess-Schritt NICHT zaehlen, Antenne NICHT wechseln
+  - Aber auch NICHT return (Rest der Funktion soll laufen)
+  - GUI: "MESSEN pausiert (TX)" anzeigen
+  - Sobald TX vorbei → Messung geht automatisch weiter
+  - Simple Loesung: 5 Zeilen Code-Aenderung
+
 - [ ] **Even/Odd Slot Tracking (KRITISCH!)** — qso_state.py + timing.py
   - Aktuell: kein explizites Slot-Tracking
   - Regel: Antwort IMMER im Gegen-Slot (wenn er im even sendet, wir im odd)
