@@ -408,7 +408,11 @@ class _RadioCard(QFrame):
         self.swr_label = QLabel("SWR —")
         self.swr_label.setStyleSheet(
             f"color: #44FF44; font-family: {_FONT}; font-size: 10px; font-weight: bold; border: none;")
+        tx_lbl = QLabel("TX")
+        tx_lbl.setStyleSheet(f"color: #666; font-family: {_FONT}; font-size: 9px; border: none;")
+        tx_lbl.setFixedWidth(16)
         metrics_row.addWidget(self.peak_label)
+        metrics_row.addWidget(tx_lbl)
         metrics_row.addWidget(self.tx_level_bar, 1)
         metrics_row.addWidget(self.tx_level_label)
         metrics_row.addWidget(self.swr_label)

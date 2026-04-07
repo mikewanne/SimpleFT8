@@ -1,53 +1,7 @@
 """SimpleFT8 QSO Log — ADIF laden, Worked-Before tracking."""
 
 from pathlib import Path
-
-
-def parse_adif_file(path: Path) -> list[dict]:
-    """ADIF-Datei parsen. Gibt Liste von Dicts mit Tag→Wert zurueck."""
-    try:
-        text = path.read_text(encoding="utf-8", errors="ignore")
-    except (OSError, IOError):
-        return []
-
-    # Header ueberspringen (alles vor <EOH>)
-    eoh = text.upper().find("<EOH>")
-    if eoh >= 0:
-        text = text[eoh + 5:]
-
-    records = []
-    # Records splitten bei <EOR>
-    for block in text.upper().split("<EOR>"):
-        record = {}
-        pos = 0
-        while pos < len(block):
-            # Naechstes <TAG:LEN> finden
-            start = block.find("<", pos)
-            if start < 0:
-                break
-            end = block.find(">", start)
-            if end < 0:
-                break
-            tag_spec = block[start + 1:end]
-            if ":" in tag_spec:
-                parts = tag_spec.split(":")
-                tag = parts[0].strip()
-                try:
-                    length = int(parts[1].strip())
-                except ValueError:
-                    pos = end + 1
-                    continue
-                value = text[eoh + 5:] if False else block[end + 1:end + 1 + length] if end + 1 + length <= len(block) else ""
-                # Original-Case aus der Datei holen
-                orig_start = start - (len(text) - len(block) - 5 if eoh >= 0 else 0)
-                value = block[end + 1:end + 1 + length].strip()
-                record[tag] = value
-                pos = end + 1 + length
-            else:
-                pos = end + 1
-        if "CALL" in record:
-            records.append(record)
-    return records
+from log.adif import parse_adif_file
 
 
 class QSOLog:

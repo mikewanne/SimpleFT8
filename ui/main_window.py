@@ -93,9 +93,10 @@ class MainWindow(QMainWindow):
         self._active_qso_targets: set = set()  # Stationen im aktiven QSO → 150s Aging
         self._diversity_lock = threading.Lock()  # Race Condition Guard
 
-        # Auto TX Level Regelung
+        # Auto TX Level Regelung (PI-Controller)
         self._power_target = settings.get("power_preset", 10)  # Watt-Ziel vom Button
         self._fwdpwr_samples = []  # FWDPWR Messwerte waehrend TX
+        self._integral_error = 0.0  # PI: akkumulierter Fehler
 
         # UI aufbauen
         self._setup_ui()
@@ -238,10 +239,10 @@ class MainWindow(QMainWindow):
                 f"Preset {band} geladen: ANT1 G{preset['ant1_gain']} dB", 4000
             )
             print(f"[FlexRadio] Preset {band}: ANT1 G{preset['ant1_gain']} dB")
-        # Leistung: erst Radio auf 100W Maximum setzen, dann Preset laden
-        self.radio.set_power(100)   # Basis: 100W = 100% → rfpower=75 == 75W
-        power_preset = self.settings.get("power_preset", 15)
-        self.radio.set_power(power_preset)
+        # Leistung: rfpower 15% ueber Ziel fuer linearen PA-Betrieb
+        power_preset = self.settings.get("power_preset", 10)
+        rfpower = min(100, int(power_preset * 1.15))
+        self.radio.set_power(rfpower)
         self.control_panel.set_power_preset(power_preset)
         # TX Audio-Drive (mic_level) setzen — steuert wieviel Leistung die PA tatsaechlich abgibt
         tx_level = self.settings.get("tx_level", 100)
@@ -572,8 +573,11 @@ class MainWindow(QMainWindow):
     def _on_power_changed(self, power: int):
         self.settings.set("power_preset", power)
         self._power_target = power
+        self._integral_error = 0.0  # PI: I-Term bei Power-Wechsel reset
         if self.radio.ip:
-            self.radio.set_power(power)
+            # rfpower 15% ueber Ziel: PA bleibt im linearen Bereich
+            rfpower = min(100, int(power * 1.15))
+            self.radio.set_power(rfpower)
 
     @Slot(bool)
     def _on_tune_clicked(self, on: bool):
@@ -625,6 +629,7 @@ class MainWindow(QMainWindow):
         self.control_panel.tx_level_bar.setValue(saved_level)
         self.control_panel.tx_level_label.setText(f"{saved_level}%")
         self._fwdpwr_samples.clear()  # Alte Messwerte verwerfen
+        self._integral_error = 0.0   # PI: I-Term bei Bandwechsel reset
         self._update_statusbar()
 
     # ── RX Modus: NORMAL / DIVERSITY / DX TUNING ──────────────
@@ -960,7 +965,7 @@ class MainWindow(QMainWindow):
         ratio = max(0.5, min(2.0, target / measured))
         ideal_factor = math.sqrt(ratio)
 
-        # Asymmetrische Korrektur: RUNTER aggressiver als HOCH (Schutz vor Uebersteuern)
+        # PI-Controller: asymmetrisch (RUNTER aggressiver als HOCH)
         error = ideal_factor - 1.0
         if error >= 0:
             KP = 0.3       # Hochregeln: vorsichtig
@@ -968,7 +973,11 @@ class MainWindow(QMainWindow):
         else:
             KP = 0.6       # Runterregeln: doppelt so aggressiv
             MAX_STEP = 0.20
-        correction = max(-MAX_STEP, min(MAX_STEP, KP * error))
+
+        # Integral-Term: hilft bei nachhaltigem Unter-/Uebersteuern
+        KI = 0.02
+        self._integral_error = max(-1.0, min(1.0, self._integral_error + error))  # Anti-Windup
+        correction = max(-MAX_STEP, min(MAX_STEP, KP * error + KI * self._integral_error))
 
         new_level = current * (1.0 + correction)
         new_level = max(0.05, min(1.5, new_level))
@@ -1136,33 +1145,49 @@ class MainWindow(QMainWindow):
         return self._qrz_client
 
     def _on_logbook_qso_clicked(self, record: dict):
-        """Logbuch-Eintrag angeklickt → Detail Overlay zeigen + QRZ Lookup."""
+        """Logbuch-Eintrag angeklickt → Detail Overlay zeigen + QRZ Lookup (non-blocking)."""
         self._detail_overlay.load_qso(record)
         self._right_stack.setCurrentIndex(1)
 
-        # QRZ Lookup im Hintergrund
+        # QRZ Lookup in Background Thread (blockiert nicht die GUI)
         call = record.get("CALL", "")
         if call:
+            from concurrent.futures import ThreadPoolExecutor
+            if not hasattr(self, '_qrz_pool'):
+                self._qrz_pool = ThreadPoolExecutor(max_workers=1)
             client = self._get_qrz_client()
             if client.username:
-                info = client.lookup_callsign(call)
-                self._detail_overlay.set_qrz_info(info)
+                future = self._qrz_pool.submit(client.lookup_callsign, call)
+                future.add_done_callback(
+                    lambda f: self._detail_overlay.set_qrz_info(f.result())
+                    if not f.exception() else None
+                )
             else:
                 self._detail_overlay.qrz_status.setText("QRZ: kein Login konfiguriert")
 
     def _qrz_upload_single(self, record: dict):
-        """Einzelnes QSO an QRZ.com hochladen."""
+        """Einzelnes QSO an QRZ.com hochladen (non-blocking)."""
+        from concurrent.futures import ThreadPoolExecutor
+        if not hasattr(self, '_qrz_pool'):
+            self._qrz_pool = ThreadPoolExecutor(max_workers=1)
         client = self._get_qrz_client()
-        result = client.upload_qso_from_dict(record)
-        status = result.get("RESULT", "FAIL")
-        if status == "OK":
-            self.statusBar().showMessage(f"QRZ Upload OK: {record.get('CALL', '')}", 5000)
-        else:
-            self.statusBar().showMessage(f"QRZ Fehler: {result.get('REASON', 'unbekannt')}", 8000)
+
+        def _do_upload():
+            result = client.upload_qso_from_dict(record)
+            status = result.get("RESULT", "FAIL")
+            call = record.get("CALL", "?")
+            if status == "OK":
+                return f"QRZ Upload OK: {call}"
+            return f"QRZ Fehler: {result.get('REASON', 'unbekannt')}"
+
+        future = self._qrz_pool.submit(_do_upload)
+        future.add_done_callback(
+            lambda f: self.statusBar().showMessage(f.result(), 5000)
+            if not f.exception() else None
+        )
 
     def _on_qrz_upload(self):
-        """Alle QSOs aus dem Logbuch an QRZ.com hochladen."""
-        from log.qrz import QRZClient
+        """Alle QSOs an QRZ.com hochladen (non-blocking)."""
         api_key = self.settings.get("qrz_api_key", "")
         if not api_key:
             from PySide6.QtWidgets import QMessageBox
@@ -1172,28 +1197,32 @@ class MainWindow(QMainWindow):
                 '"qrz_api_key": "XXXX-XXXX-XXXX-XXXX"')
             return
 
-        client = QRZClient(api_key=api_key)
         records = self.qso_panel.logbook._all_records
         if not records:
             self.statusBar().showMessage("Keine QSOs zum Hochladen.", 5000)
             return
 
-        ok_count = 0
-        fail_count = 0
-        dup_count = 0
-        for rec in records:
-            result = client.upload_qso_from_dict(rec)
-            status = result.get("RESULT", "FAIL")
-            if status == "OK":
-                ok_count += 1
-            elif "duplicate" in result.get("REASON", "").lower():
-                dup_count += 1
-            else:
-                fail_count += 1
-                print(f"[QRZ] Upload fehlgeschlagen: {rec.get('CALL', '?')} — {result}")
+        from concurrent.futures import ThreadPoolExecutor
+        if not hasattr(self, '_qrz_pool'):
+            self._qrz_pool = ThreadPoolExecutor(max_workers=1)
+        client = self._get_qrz_client()
+        self.statusBar().showMessage(f"QRZ Upload: {len(records)} QSOs...", 30000)
 
-        msg = f"QRZ Upload: {ok_count} neu, {dup_count} Duplikate, {fail_count} Fehler"
-        self.statusBar().showMessage(msg, 10000)
+        def _do_bulk():
+            ok, fail, dup = 0, 0, 0
+            for rec in records:
+                result = client.upload_qso_from_dict(rec)
+                s = result.get("RESULT", "FAIL")
+                if s == "OK": ok += 1
+                elif "duplicate" in result.get("REASON", "").lower(): dup += 1
+                else: fail += 1
+            return f"QRZ Upload: {ok} neu, {dup} Duplikate, {fail} Fehler"
+
+        future = self._qrz_pool.submit(_do_bulk)
+        future.add_done_callback(
+            lambda f: self.statusBar().showMessage(f.result(), 10000)
+            if not f.exception() else None
+        )
         print(f"[QRZ] {msg}")
 
     @Slot(str)
