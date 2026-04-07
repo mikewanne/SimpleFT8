@@ -39,7 +39,8 @@ class QSOPanel(QWidget):
                 color: #888;
                 border: 1px solid #333;
                 border-bottom: none;
-                padding: 5px 14px;
+                padding: 6px 20px;
+                min-width: 80px;
                 font-family: Menlo;
                 font-size: 11px;
                 font-weight: bold;
@@ -77,12 +78,12 @@ class QSOPanel(QWidget):
         self.status_label.setStyleSheet("color: #666; font-size: 11px; padding: 2px;")
         live_layout.addWidget(self.status_label)
 
-        self.tabs.addTab(live_tab, "QSO VERLAUF")
+        self.tabs.addTab(live_tab, "Log")
 
         # Tab 2: Logbuch
         self.logbook = LogbookWidget()
         self.logbook.upload_requested.connect(self.upload_qrz.emit)
-        self.tabs.addTab(self.logbook, "LOGBUCH")
+        self.tabs.addTab(self.logbook, "Logbuch")
 
         layout.addWidget(self.tabs)
 

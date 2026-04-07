@@ -138,7 +138,16 @@ class MainWindow(QMainWindow):
         self.qso_panel = QSOPanel()
         # Logbuch mit ADIF-Dateien laden
         self.qso_panel.logbook.load_adif(Path.cwd())
+        self.qso_panel.upload_qrz.connect(self._on_qrz_upload)
+        self.qso_panel.logbook.qso_clicked.connect(self._on_logbook_qso_clicked)
         self.control_panel = ControlPanel(callsign=self.settings.callsign)
+
+        # QSO Detail Overlay (wird ueber Control Panel gelegt bei Logbuch-Klick)
+        from ui.qso_detail_overlay import QSODetailOverlay
+        self._detail_overlay = QSODetailOverlay()
+        self._detail_overlay.upload_requested.connect(
+            lambda rec: self._qrz_upload_single(rec))
+        self._qrz_client = None  # Lazy init
 
         # Control Panel in ScrollArea einpacken — scrollbar wenn Fenster zu klein
         self._ctrl_scroll = QScrollArea()
@@ -153,11 +162,21 @@ class MainWindow(QMainWindow):
             "QScrollBar::handle:vertical { background: #333; border-radius: 3px; }"
         )
 
+        # Right Panel: Stacked Widget (Control Panel + Detail Overlay)
+        from PySide6.QtWidgets import QStackedWidget
+        self._right_stack = QStackedWidget()
+        self._right_stack.addWidget(self._ctrl_scroll)     # Index 0: Control Panel
+        self._right_stack.addWidget(self._detail_overlay)   # Index 1: QSO Detail
+        self._right_stack.setCurrentIndex(0)
+        self._right_stack.setMinimumWidth(320)
+        self._detail_overlay.btn_close.clicked.connect(
+            lambda: self._right_stack.setCurrentIndex(0))
+
         # Alle 3 Panels in einem QSplitter → sichtbarer Trenner bleibt erhalten
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
         self.splitter.addWidget(self.rx_panel)
         self.splitter.addWidget(self.qso_panel)
-        self.splitter.addWidget(self._ctrl_scroll)
+        self.splitter.addWidget(self._right_stack)
 
         # EMPFANG + QSO 50:50, Control fix (wird in _restore_geometry überschrieben)
         self.splitter.setSizes([500, 500, 400])
@@ -1098,6 +1117,78 @@ class MainWindow(QMainWindow):
         self.qso_panel.add_qso_complete(qso_data.their_call)
         # Logbuch aktualisieren (neues QSO wurde in ADIF geschrieben)
         self.qso_panel.logbook.refresh()
+
+    def _get_qrz_client(self):
+        """QRZ Client lazy initialisieren."""
+        if self._qrz_client is None:
+            from log.qrz import QRZClient
+            self._qrz_client = QRZClient(
+                api_key=self.settings.get("qrz_api_key", ""),
+                username=self.settings.get("qrz_username", ""),
+                password=self.settings.get("qrz_password", ""),
+            )
+        return self._qrz_client
+
+    def _on_logbook_qso_clicked(self, record: dict):
+        """Logbuch-Eintrag angeklickt → Detail Overlay zeigen + QRZ Lookup."""
+        self._detail_overlay.load_qso(record)
+        self._right_stack.setCurrentIndex(1)
+
+        # QRZ Lookup im Hintergrund
+        call = record.get("CALL", "")
+        if call:
+            client = self._get_qrz_client()
+            if client.username:
+                info = client.lookup_callsign(call)
+                self._detail_overlay.set_qrz_info(info)
+            else:
+                self._detail_overlay.qrz_status.setText("QRZ: kein Login konfiguriert")
+
+    def _qrz_upload_single(self, record: dict):
+        """Einzelnes QSO an QRZ.com hochladen."""
+        client = self._get_qrz_client()
+        result = client.upload_qso_from_dict(record)
+        status = result.get("RESULT", "FAIL")
+        if status == "OK":
+            self.statusBar().showMessage(f"QRZ Upload OK: {record.get('CALL', '')}", 5000)
+        else:
+            self.statusBar().showMessage(f"QRZ Fehler: {result.get('REASON', 'unbekannt')}", 8000)
+
+    def _on_qrz_upload(self):
+        """Alle QSOs aus dem Logbuch an QRZ.com hochladen."""
+        from log.qrz import QRZClient
+        api_key = self.settings.get("qrz_api_key", "")
+        if not api_key:
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "QRZ.com",
+                "Kein QRZ API Key konfiguriert.\n"
+                "Bitte in ~/.simpleft8/config.json eintragen:\n"
+                '"qrz_api_key": "XXXX-XXXX-XXXX-XXXX"')
+            return
+
+        client = QRZClient(api_key=api_key)
+        records = self.qso_panel.logbook._all_records
+        if not records:
+            self.statusBar().showMessage("Keine QSOs zum Hochladen.", 5000)
+            return
+
+        ok_count = 0
+        fail_count = 0
+        dup_count = 0
+        for rec in records:
+            result = client.upload_qso_from_dict(rec)
+            status = result.get("RESULT", "FAIL")
+            if status == "OK":
+                ok_count += 1
+            elif "duplicate" in result.get("REASON", "").lower():
+                dup_count += 1
+            else:
+                fail_count += 1
+                print(f"[QRZ] Upload fehlgeschlagen: {rec.get('CALL', '?')} — {result}")
+
+        msg = f"QRZ Upload: {ok_count} neu, {dup_count} Duplikate, {fail_count} Fehler"
+        self.statusBar().showMessage(msg, 10000)
+        print(f"[QRZ] {msg}")
 
     @Slot(str)
     def _on_qso_timeout(self, their_call: str):
