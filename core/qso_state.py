@@ -8,9 +8,42 @@ Unterstützt zwei Modi:
 import time
 from enum import Enum, auto
 from dataclasses import dataclass
+from pathlib import Path
 from PySide6.QtCore import QObject, Signal
 
 from .message import FT8Message
+
+
+class QSODebugLog:
+    """Detailliertes QSO-Logging — wird bei jedem neuen QSO ueberschrieben."""
+
+    def __init__(self, path: str = "qso_debug.log"):
+        self._path = Path(path)
+        self._lines = []
+
+    def reset(self, their_call: str):
+        """Neues QSO startet — altes Log ueberschreiben."""
+        self._lines = [
+            f"{'='*60}",
+            f"QSO DEBUG LOG — {their_call}",
+            f"Start: {time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime())} UTC",
+            f"{'='*60}",
+        ]
+        self._flush()
+
+    def log(self, category: str, message: str):
+        """Eintrag loggen: [UTC] [KATEGORIE] Nachricht"""
+        utc = time.strftime("%H:%M:%S", time.gmtime())
+        line = f"[{utc}] [{category:>8}] {message}"
+        self._lines.append(line)
+        print(f"[QSO-DBG] {line}")
+        self._flush()
+
+    def _flush(self):
+        try:
+            self._path.write_text("\n".join(self._lines) + "\n")
+        except Exception:
+            pass
 
 
 class QSOState(Enum):
@@ -72,9 +105,12 @@ class QSOStateMachine(QObject):
         self._pending_reply = None      # Gemerkter CQ-Anrufer (während TX)
         self._pending_hunt_reply = None # Gemerkter Hunt-Report (während TX)
         self._was_cq = False            # CQ-Modus vor Hunt-Start
+        self._dbg = QSODebugLog()       # QSO Debug Logger
 
     def _set_state(self, new_state: QSOState):
+        old = self.state.name
         self.state = new_state
+        self._dbg.log("STATE", f"{old} → {new_state.name}")
         self.state_changed.emit(new_state)
 
     def set_last_snr(self, snr: int):
@@ -101,6 +137,7 @@ class QSOStateMachine(QObject):
         """CQ-Ruf senden."""
         self._pending_reply = None  # Alte Antwort verwerfen
         msg = f"CQ {self.my_call} {self.my_grid}"
+        self._dbg.log("TX", f"Sende: '{msg}'")
         self._set_state(QSOState.CQ_CALLING)
         self.send_message.emit(msg)
 
@@ -110,6 +147,9 @@ class QSOStateMachine(QObject):
         if msg is None:
             return
         self._pending_reply = None
+        self._dbg.reset(msg.caller)
+        self._dbg.log("RX", f"CQ-Antwort von {msg.caller}: '{msg.raw}' "
+                       f"grid={msg.is_grid} report={msg.is_report} r_report={msg.is_r_report}")
 
         self.qso = QSOData(
             their_call=msg.caller,
@@ -123,7 +163,7 @@ class QSOStateMachine(QObject):
             report = f"{self._last_snr:+03d}" if self._last_snr > -30 else "-10"
             self.qso.our_snr = report
             tx_msg = f"{msg.caller} {self.my_call} {report}"
-            print(f"[QSO] Antworte {msg.caller} mit Report '{tx_msg}'")
+            self._dbg.log("TX", f"Sende Report: '{tx_msg}' (SNR={self._last_snr})")
             self._set_state(QSOState.TX_REPORT)
             self.send_message.emit(tx_msg)
         elif msg.is_report:
@@ -164,10 +204,12 @@ class QSOStateMachine(QObject):
             max_calls=self.max_calls,
         )
 
+        self._dbg.reset(their_call)
         report = f"{self._last_snr:+03d}" if self._last_snr > -30 else "-10"
         self.qso.our_snr = report
         msg = f"{their_call} {self.my_call} {report}"
-        print(f"[QSO] START: Rufe {their_call} auf {freq_hz}Hz → sende '{msg}' (max {self.max_calls} Versuche)")
+        self._dbg.log("START", f"Hunt: {their_call} auf {freq_hz}Hz, max {self.max_calls} Versuche")
+        self._dbg.log("TX", f"Sende: '{msg}' (SNR={self._last_snr})")
         self._set_state(QSOState.TX_CALL)
         self.send_message.emit(msg)
 
@@ -190,8 +232,8 @@ class QSOStateMachine(QObject):
 
         if self.state in (QSOState.WAIT_REPORT, QSOState.WAIT_RR73):
             self.qso.timeout_cycles += 1
-            print(f"[QSO] Warte auf {self.qso.their_call} "
-                  f"({self.state.name}, Zyklus {self.qso.timeout_cycles}/{self.qso.max_timeout})")
+            self._dbg.log("WAIT", f"Warte auf {self.qso.their_call} "
+                         f"({self.state.name}, Zyklus {self.qso.timeout_cycles}/{self.qso.max_timeout})")
 
             # Nach 2 Zyklen ohne Antwort: Call nochmal senden (wie WSJT-X)
             if self.state == QSOState.WAIT_REPORT and self.qso.timeout_cycles == 2:
@@ -270,9 +312,10 @@ class QSOStateMachine(QObject):
     def on_message_received(self, msg: FT8Message):
         # Alle Nachrichten an uns loggen (fuer Debugging)
         if msg.target == self.my_call:
-            print(f"[QSO] Empfangen: '{msg.raw}' | State={self.state.name} "
-                  f"| Erwartet von={self.qso.their_call or '?'} "
-                  f"| is_report={msg.is_report} is_rr73={msg.is_rr73} is_grid={msg.is_grid}")
+            self._dbg.log("RX", f"Von {msg.caller}: '{msg.raw}' | State={self.state.name} "
+                          f"| Erwartet={self.qso.their_call or '?'} "
+                          f"| report={msg.is_report} r_rpt={msg.is_r_report} "
+                          f"rr73={msg.is_rr73} 73={msg.is_73} grid={msg.is_grid}")
         # ── Jemand ruft UNS (CQ-Modus, oder im IDLE) ──
         if self.state in (QSOState.IDLE, QSOState.CQ_WAIT, QSOState.CQ_CALLING) and msg.target == self.my_call:
             if msg.is_grid or msg.is_report:
