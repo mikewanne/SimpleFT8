@@ -1,5 +1,7 @@
 # SimpleFT8 — Minimal FT8/FT4 Client for FlexRadio on macOS
 
+**English** | [Deutsch](README_DE.md)
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![Platform: macOS](https://img.shields.io/badge/platform-macOS-lightgrey.svg)](https://www.apple.com/macos/)
