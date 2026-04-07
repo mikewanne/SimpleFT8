@@ -1,13 +1,20 @@
-"""SimpleFT8 QSO Panel — Fenster 2: QSO-Verlauf der aktuellen Session."""
+"""SimpleFT8 QSO Panel — Fenster 2: QSO-Verlauf + Logbuch mit Tabs."""
 
 import time
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QTextEdit
-from PySide6.QtCore import Qt
+from pathlib import Path
+from PySide6.QtWidgets import (
+    QWidget, QVBoxLayout, QLabel, QTextEdit, QTabWidget,
+)
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont, QTextCursor, QColor
+
+from ui.logbook_widget import LogbookWidget
 
 
 class QSOPanel(QWidget):
-    """QSO-Verlaufsfenster — chronologische Anzeige aller eigenen QSOs."""
+    """QSO-Verlaufsfenster mit Tabs: Live Log + Logbuch."""
+
+    upload_qrz = Signal()  # QRZ.com Upload angefordert
 
     def __init__(self):
         super().__init__()
@@ -17,12 +24,40 @@ class QSOPanel(QWidget):
     def _setup_ui(self):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(4, 4, 4, 4)
+        layout.setSpacing(0)
 
-        header = QLabel("QSO VERLAUF")
-        header.setStyleSheet(
-            "color: #00AAFF; font-weight: bold; font-size: 14px; padding: 4px;"
-        )
-        layout.addWidget(header)
+        # Tab Widget
+        self.tabs = QTabWidget()
+        self.tabs.setStyleSheet("""
+            QTabWidget::pane {
+                border: 1px solid #333;
+                border-radius: 4px;
+                background: #0d0d1a;
+            }
+            QTabBar::tab {
+                background: #1a1a2e;
+                color: #888;
+                border: 1px solid #333;
+                border-bottom: none;
+                padding: 5px 14px;
+                font-family: Menlo;
+                font-size: 11px;
+                font-weight: bold;
+            }
+            QTabBar::tab:selected {
+                background: #0d0d1a;
+                color: #00AAFF;
+                border-bottom: 2px solid #00AAFF;
+            }
+            QTabBar::tab:hover {
+                color: #CCCCCC;
+            }
+        """)
+
+        # Tab 1: Live QSO Log
+        live_tab = QWidget()
+        live_layout = QVBoxLayout(live_tab)
+        live_layout.setContentsMargins(0, 4, 0, 0)
 
         self.log_view = QTextEdit()
         self.log_view.setReadOnly(True)
@@ -31,17 +66,25 @@ class QSOPanel(QWidget):
             QTextEdit {
                 background-color: #0d0d1a;
                 color: #CCCCCC;
-                border: 1px solid #333;
-                border-radius: 4px;
+                border: none;
                 padding: 6px;
                 selection-background-color: #0066AA;
             }
         """)
-        layout.addWidget(self.log_view)
+        live_layout.addWidget(self.log_view)
 
         self.status_label = QLabel("Keine QSOs")
         self.status_label.setStyleSheet("color: #666; font-size: 11px; padding: 2px;")
-        layout.addWidget(self.status_label)
+        live_layout.addWidget(self.status_label)
+
+        self.tabs.addTab(live_tab, "QSO VERLAUF")
+
+        # Tab 2: Logbuch
+        self.logbook = LogbookWidget()
+        self.logbook.upload_requested.connect(self.upload_qrz.emit)
+        self.tabs.addTab(self.logbook, "LOGBUCH")
+
+        layout.addWidget(self.tabs)
 
     def add_tx(self, message: str):
         """Eigene gesendete Nachricht anzeigen."""

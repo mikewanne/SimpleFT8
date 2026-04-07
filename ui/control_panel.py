@@ -338,13 +338,24 @@ class _RadioCard(QFrame):
             power_row.addWidget(btn)
         lay.addLayout(power_row)
 
-        # TUNE + Watt + SWR
+        # TX Status Block — gerahmter Bereich fuer alle TX-Metriken
+        from PySide6.QtWidgets import QProgressBar
+        tx_frame = QFrame()
+        tx_frame.setStyleSheet(
+            "QFrame { border: 1px solid #333; border-radius: 4px; "
+            "background: rgba(255,255,255,0.02); }"
+        )
+        tx_lay = QVBoxLayout(tx_frame)
+        tx_lay.setContentsMargins(6, 4, 6, 4)
+        tx_lay.setSpacing(3)
+
+        # Zeile 1: TUNE + Watt
         tune_row = QHBoxLayout()
-        tune_row.setSpacing(4)
+        tune_row.setSpacing(6)
         self.btn_tune = QPushButton("TUNE")
         self.btn_tune.setCheckable(True)
         self.btn_tune.setFixedHeight(24)
-        self.btn_tune.setFixedWidth(60)
+        self.btn_tune.setFixedWidth(56)
         self.btn_tune.setStyleSheet(
             f"QPushButton {{ background: rgba(180,150,0,0.2); color: #FFD700; "
             f"border: 1px solid rgba(220,180,0,0.5); border-radius: 3px; "
@@ -352,24 +363,22 @@ class _RadioCard(QFrame):
             f"QPushButton:checked {{ background: rgba(180,150,0,0.4); }}"
         )
         self.watt_label = QLabel("0 W")
-        self.watt_label.setStyleSheet(f"color: #FFD700; font-family: {_FONT}; font-size: 12px; font-weight: bold;")
-        self.swr_label = QLabel("SWR —")
-        self.swr_label.setStyleSheet(f"color: #44FF44; font-family: {_FONT}; font-size: 12px; font-weight: bold;")
+        self.watt_label.setStyleSheet(
+            f"color: #FFD700; font-family: {_FONT}; font-size: 13px; font-weight: bold;")
         tune_row.addWidget(self.btn_tune)
         tune_row.addWidget(self.watt_label)
-        tune_row.addWidget(self.swr_label)
-        lay.addLayout(tune_row)
+        tune_row.addStretch()
+        tx_lay.addLayout(tune_row)
 
-        # Peak + TX Level kombinierte Anzeige
-        peak_tx_row = QHBoxLayout()
-        peak_tx_row.setSpacing(4)
+        # Zeile 2: Peak + TX Bar + % + SWR (alle TX-Qualitaetsmetriken)
+        metrics_row = QHBoxLayout()
+        metrics_row.setSpacing(4)
         self.peak_label = QLabel("Peak —")
-        self.peak_label.setFixedWidth(66)
+        self.peak_label.setFixedWidth(62)
         self.peak_label.setStyleSheet(
             f"color: #557766; font-family: {_FONT}; font-size: 10px; "
             f"border: 1px solid #333; border-radius: 2px; padding: 1px 3px;"
         )
-        from PySide6.QtWidgets import QProgressBar
         self.tx_level_bar = QProgressBar()
         self.tx_level_bar.setRange(0, 150)
         self.tx_level_bar.setValue(100)
@@ -382,15 +391,21 @@ class _RadioCard(QFrame):
             "border-radius: 1px; }"
         )
         self.tx_level_label = QLabel("100%")
-        self.tx_level_label.setFixedWidth(42)
+        self.tx_level_label.setFixedWidth(38)
         self.tx_level_label.setStyleSheet(
             f"color: {_TEXT}; font-family: {_FONT}; font-size: 10px; "
-            f"border: 1px solid #333; border-radius: 2px; padding: 1px 3px;"
+            f"border: 1px solid #333; border-radius: 2px; padding: 1px 2px;"
         )
-        peak_tx_row.addWidget(self.peak_label)
-        peak_tx_row.addWidget(self.tx_level_bar, 1)
-        peak_tx_row.addWidget(self.tx_level_label)
-        lay.addLayout(peak_tx_row)
+        self.swr_label = QLabel("SWR —")
+        self.swr_label.setStyleSheet(
+            f"color: #44FF44; font-family: {_FONT}; font-size: 10px; font-weight: bold;")
+        metrics_row.addWidget(self.peak_label)
+        metrics_row.addWidget(self.tx_level_bar, 1)
+        metrics_row.addWidget(self.tx_level_label)
+        metrics_row.addWidget(self.swr_label)
+        tx_lay.addLayout(metrics_row)
+
+        lay.addWidget(tx_frame)
 
 
 class _QSOStatusCard(QFrame):
@@ -403,7 +418,7 @@ class _QSOStatusCard(QFrame):
         self.setStyleSheet(_CARD_SS_ORANGE)
 
         lay = QVBoxLayout(self)
-        lay.setContentsMargins(6, 4, 6, 4)
+        lay.setContentsMargins(6, 8, 6, 4)
         lay.setSpacing(2)
 
         # ── QSO ──────────────────────────────────────────────────

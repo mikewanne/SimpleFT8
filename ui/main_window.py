@@ -4,6 +4,7 @@ import math
 import threading
 import time
 from collections import deque
+from pathlib import Path
 
 from PySide6.QtWidgets import (
     QMainWindow, QSplitter, QWidget, QVBoxLayout, QStatusBar,
@@ -135,6 +136,8 @@ class MainWindow(QMainWindow):
             country_filter=self.settings.get("country_filter", []),
         )
         self.qso_panel = QSOPanel()
+        # Logbuch mit ADIF-Dateien laden
+        self.qso_panel.logbook.load_adif(Path.cwd())
         self.control_panel = ControlPanel(callsign=self.settings.callsign)
 
         # Control Panel in ScrollArea einpacken — scrollbar wenn Fenster zu klein
@@ -1093,6 +1096,8 @@ class MainWindow(QMainWindow):
     def _on_qso_confirmed(self, qso_data):
         """73 empfangen — QSO wirklich komplett, ✓ anzeigen."""
         self.qso_panel.add_qso_complete(qso_data.their_call)
+        # Logbuch aktualisieren (neues QSO wurde in ADIF geschrieben)
+        self.qso_panel.logbook.refresh()
 
     @Slot(str)
     def _on_qso_timeout(self, their_call: str):
