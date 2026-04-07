@@ -104,6 +104,7 @@ class QSOStateMachine(QObject):
         self.max_calls = 3          # Maximale Anrufversuche (aus Settings)
         self._pending_reply = None      # Gemerkter CQ-Anrufer (während TX)
         self._pending_hunt_reply = None # Gemerkter Hunt-Report (während TX)
+        self._pending_rr73 = None       # Gemerktes RR73 (waehrend TX_REPORT)
         self._was_cq = False            # CQ-Modus vor Hunt-Start
         self._dbg = QSODebugLog()       # QSO Debug Logger
 
@@ -307,6 +308,15 @@ class QSOStateMachine(QObject):
             self._set_state(QSOState.WAIT_REPORT)
             self.qso.timeout_cycles = 0
         elif self.state == QSOState.TX_REPORT:
+            # RR73 waehrend TX empfangen? → direkt abschliessen
+            pending = self._pending_rr73
+            if pending:
+                self._pending_rr73 = None
+                self._dbg.log("TX", f"TX_REPORT fertig — pending RR73 von {pending.caller} → sende RR73")
+                tx_msg = f"{self.qso.their_call} {self.my_call} RR73"
+                self._set_state(QSOState.TX_RR73)
+                self.send_message.emit(tx_msg)
+                return
             self._set_state(QSOState.WAIT_RR73)
             self.qso.timeout_cycles = 0
         elif self.state == QSOState.TX_RR73:
@@ -376,6 +386,17 @@ class QSOStateMachine(QObject):
                 self.qso.timeout_cycles = 0
                 tx_msg = f"{self.qso.their_call} {self.my_call} {self.qso.our_snr or '-10'}"
                 self.send_message.emit(tx_msg)
+                return
+
+        # RR73/73 waehrend TX_REPORT merken (Gegenstation hat schneller geantwortet als wir fertig sind)
+        if self.state == QSOState.TX_REPORT:
+            if msg.is_rr73 or msg.is_73:
+                self._pending_rr73 = msg
+                self._dbg.log("RX", f"RR73 waehrend TX_REPORT gemerkt von {msg.caller}")
+                return
+            if msg.is_report:
+                # Gegenstation wiederholt Report waehrend wir senden → ignorieren, wir senden ja schon
+                self._dbg.log("RX", f"Report waehrend TX_REPORT ignoriert: {msg.grid_or_report}")
                 return
 
         if self.state == QSOState.WAIT_RR73:
