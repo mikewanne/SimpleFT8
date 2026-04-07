@@ -32,7 +32,7 @@ Kontrollierter Test auf 40m, gleiche Hardware (FLEX-8400M), 2 Minuten Abstand:
 | Weitester RX | -- | Kiribati ~13.000 km |
 | Weitester TX | -- | Indonesien 11.996 km |
 
-Siehe [Test-Screenshots und Methodik](docs/DIVERSITY.md) fuer Details.
+Siehe [Test-Screenshots und Methodik](docs/DIVERSITY_DE.md) fuer Details.
 
 ---
 
@@ -40,9 +40,17 @@ Siehe [Test-Screenshots und Methodik](docs/DIVERSITY.md) fuer Details.
 
 | Hauptoberflaeche | Diversity-Modus |
 |:-:|:-:|
-| ![Main](screenshots/main.png) | ![Diversity](screenshots/diversity.png) |
+| ![Main](docs/screenshots/normal_27stations_40m.png) | ![Diversity](docs/screenshots/diversity_37stations_40m.png) |
 
-*(Eigene Screenshots im `screenshots/`-Verzeichnis ablegen)*
+---
+
+## Kern-Innovationen
+
+Jede der drei Kernfunktionen hat eine eigene ausfuehrliche Dokumentation mit Screenshots und technischer Erklaerung:
+
+- **[Temporale Polarisations-Diversity](docs/DIVERSITY_DE.md)** — Wie der Antennenwechsel funktioniert, UCB1 Algorithmus, Testergebnisse
+- **[DX Tuning / Gain-Messung](docs/DX_TUNING_DE.md)** — Automatisierte Antennenoptimierung, Presets pro Band
+- **[Automatische TX-Leistungsregelung](docs/POWER_REGULATION_DE.md)** — Geschlossener Regelkreis, Clipping-Schutz, Kalibrierung pro Band
 
 ---
 

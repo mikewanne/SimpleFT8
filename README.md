@@ -40,9 +40,7 @@ See [test screenshots and methodology](docs/DIVERSITY.md) for details.
 
 | Main Interface | Diversity Mode |
 |:-:|:-:|
-| ![Main](screenshots/main.png) | ![Diversity](screenshots/diversity.png) |
-
-*(Add your own screenshots to the `screenshots/` directory)*
+| ![Main](docs/screenshots/normal_27stations_40m.png) | ![Diversity](docs/screenshots/diversity_37stations_40m.png) |
 
 ---
 
