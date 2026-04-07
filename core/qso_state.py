@@ -344,6 +344,13 @@ class QSOStateMachine(QObject):
                           f"| Erwartet={self.qso.their_call or '?'} "
                           f"| report={msg.is_report} r_rpt={msg.is_r_report} "
                           f"rr73={msg.is_rr73} 73={msg.is_73} grid={msg.is_grid}")
+        # ── RR73/73 von vorherigem QSO nach Timeout (Station hat doch noch geantwortet) ──
+        if self.state in (QSOState.IDLE, QSOState.CQ_WAIT, QSOState.CQ_CALLING) and msg.target == self.my_call:
+            if msg.is_rr73 or msg.is_73:
+                self._dbg.log("RX", f"RR73/73 von {msg.caller} nach Timeout/CQ — QSO nachtraeglich bestaetigt")
+                # Nicht als neues QSO behandeln, einfach ignorieren (oder loggen falls gewuenscht)
+                return
+
         # ── Jemand ruft UNS (CQ-Modus, oder im IDLE) ──
         if self.state in (QSOState.IDLE, QSOState.CQ_WAIT, QSOState.CQ_CALLING) and msg.target == self.my_call:
             if msg.is_grid or msg.is_report:
@@ -396,14 +403,19 @@ class QSOStateMachine(QObject):
                 self.send_message.emit(tx_msg)
                 return
 
-        # RR73/73 waehrend TX_REPORT merken (Gegenstation hat schneller geantwortet als wir fertig sind)
+        # RR73/73/R-Report waehrend TX_REPORT merken (Gegenstation antwortet schneller als wir fertig sind)
         if self.state == QSOState.TX_REPORT:
             if msg.is_rr73 or msg.is_73:
                 self._pending_rr73 = msg
                 self._dbg.log("RX", f"RR73 waehrend TX_REPORT gemerkt von {msg.caller}")
                 return
+            if msg.is_r_report:
+                # R-Report = Bestaetigung! Auch als pending merken → nach TX senden wir RR73
+                self._pending_rr73 = msg
+                self._dbg.log("RX", f"R-Report waehrend TX_REPORT gemerkt: {msg.grid_or_report} → wird RR73")
+                return
             if msg.is_report:
-                # Gegenstation wiederholt Report waehrend wir senden → ignorieren, wir senden ja schon
+                # Plain report waehrend wir senden → ignorieren
                 self._dbg.log("RX", f"Report waehrend TX_REPORT ignoriert: {msg.grid_or_report}")
                 return
 
