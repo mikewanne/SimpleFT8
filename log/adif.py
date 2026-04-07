@@ -1,7 +1,9 @@
-"""SimpleFT8 ADIF Writer — QSO-Export im ADIF 3.1.7 Format."""
+"""SimpleFT8 ADIF Writer + Parser — QSO-Export und -Import im ADIF 3.1.7 Format."""
 
+import re
 import time
 from pathlib import Path
+from typing import Dict, List
 
 
 ADIF_HEADER = """SimpleFT8 ADIF Export
@@ -15,6 +17,45 @@ ADIF_HEADER = """SimpleFT8 ADIF Export
 def _field(name: str, value: str) -> str:
     """Ein ADIF-Feld formatieren."""
     return f"<{name.upper()}:{len(value)}>{value}"
+
+
+def parse_adif_file(path: Path) -> List[Dict[str, str]]:
+    """ADIF-Datei parsen → Liste von Dicts mit Feldnamen als Keys."""
+    text = path.read_text(errors="replace")
+    # Header ueberspringen (alles vor <EOH>)
+    eoh = text.upper().find("<EOH>")
+    if eoh >= 0:
+        text = text[eoh + 5:]
+
+    records = []
+    # Jeder Record endet mit <EOR>
+    _FIELD_RE = re.compile(r"<(\w+):(\d+)(?::\w+)?>", re.IGNORECASE)
+    for block in re.split(r"<EOR>", text, flags=re.IGNORECASE):
+        if not block.strip():
+            continue
+        record = {}
+        pos = 0
+        for m in _FIELD_RE.finditer(block):
+            name = m.group(1).upper()
+            length = int(m.group(2))
+            value_start = m.end()
+            record[name] = block[value_start:value_start + length].strip()
+        if record:
+            records.append(record)
+    return records
+
+
+def parse_all_adif_files(directory: Path) -> List[Dict[str, str]]:
+    """Alle ADIF-Dateien in einem Verzeichnis laden, nach Datum sortiert."""
+    all_records = []
+    for adi_file in sorted(directory.glob("*.adi")):
+        all_records.extend(parse_adif_file(adi_file))
+    # Nach Datum+Zeit sortieren (neueste zuerst)
+    all_records.sort(
+        key=lambda r: r.get("QSO_DATE", "") + r.get("TIME_ON", ""),
+        reverse=True,
+    )
+    return all_records
 
 
 class AdifWriter:
