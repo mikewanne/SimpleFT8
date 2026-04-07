@@ -9,6 +9,7 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor, QFont
 
 from log.adif import parse_all_adif_files
+from core.geo import callsign_to_country
 
 _FONT = "Menlo"
 _BG = "#0d0d1a"
@@ -22,31 +23,6 @@ _COLUMNS = [
     ("_COUNTRY",   "Land",        90),
     ("_KM",        "km",          50),
 ]
-
-# Einfache Prefix → Land Zuordnung (Subset)
-_PREFIX_COUNTRY = {
-    "DA": "Germany", "DB": "Germany", "DC": "Germany", "DD": "Germany",
-    "DE": "Germany", "DF": "Germany", "DG": "Germany", "DH": "Germany",
-    "DK": "Germany", "DL": "Germany", "DJ": "Germany", "DM": "Germany",
-    "F": "France", "G": "England", "I": "Italy", "EA": "Spain",
-    "PA": "Netherlands", "ON": "Belgium", "OE": "Austria", "HB": "Switzerland",
-    "OK": "Czech Rep.", "SP": "Poland", "HA": "Hungary", "YO": "Romania",
-    "LZ": "Bulgaria", "UR": "Ukraine", "UA": "Russia", "OH": "Finland",
-    "SM": "Sweden", "LA": "Norway", "OZ": "Denmark", "K": "USA", "W": "USA",
-    "N": "USA", "VE": "Canada", "JA": "Japan", "VK": "Australia",
-    "ZL": "New Zealand", "PY": "Brazil", "LU": "Argentina",
-}
-
-
-def _guess_country(call: str) -> str:
-    """Land aus Callsign-Prefix raten."""
-    call = call.upper().strip()
-    # Versuche 2-Zeichen, dann 1-Zeichen Prefix
-    for length in (2, 1):
-        prefix = call[:length]
-        if prefix in _PREFIX_COUNTRY:
-            return _PREFIX_COUNTRY[prefix]
-    return ""
 
 
 def _format_datetime(record: dict) -> str:
@@ -211,7 +187,7 @@ class LogbookWidget(QWidget):
                 if key == "_DATETIME":
                     value = _format_datetime(rec)
                 elif key == "_COUNTRY":
-                    value = _guess_country(rec.get("CALL", ""))
+                    value = callsign_to_country(rec.get("CALL", ""))
                 elif key == "_KM":
                     value = _estimate_km(rec.get("GRIDSQUARE", ""))
                 else:
@@ -245,7 +221,7 @@ class LogbookWidget(QWidget):
         calls = set()
         for rec in self._all_records:
             call = rec.get("CALL", "")
-            country = _guess_country(call)
+            country = callsign_to_country(call)
             if country:
                 countries.add(country)
             if call:
@@ -263,7 +239,7 @@ class LogbookWidget(QWidget):
             r for r in self._all_records
             if (text in r.get("CALL", "").upper()
                 or text in r.get("BAND", "").upper()
-                or text in _guess_country(r.get("CALL", "")).upper()
+                or text in callsign_to_country(r.get("CALL", "")).upper()
                 or text in r.get("GRIDSQUARE", "").upper())
         ]
         self._populate_table(filtered)

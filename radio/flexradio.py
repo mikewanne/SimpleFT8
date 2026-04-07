@@ -56,7 +56,7 @@ class FlexRadio(QObject):
         self._slice_idx = 0  # Wird dynamisch gesetzt
         self._udp_port = 4991       # Unser lokaler UDP Port
         self._radio_udp_port = None  # Port auf dem das Radio UDP sendet (auto-detect)
-        self._responses = {}  # seq → response
+        self._responses = {}  # seq → (timestamp, response)
         self._response_events = {}  # seq → threading.Event
         self.on_audio_callback = None
         self._swr_limit = 3.0
@@ -1115,6 +1115,11 @@ class FlexRadio(QObject):
                 event = self._response_events.pop(seq, None)
                 if event:
                     event.set()
+                # Memory Leak Fix: alte Responses entfernen (max 200 behalten)
+                if len(self._responses) > 200:
+                    oldest_keys = sorted(self._responses.keys())[:100]
+                    for k in oldest_keys:
+                        self._responses.pop(k, None)
 
         # Status: Slice-Frequenz-Updates
         if "slice" in line and "RF_frequency" in line:
