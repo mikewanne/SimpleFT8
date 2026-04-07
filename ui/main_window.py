@@ -1,5 +1,6 @@
 """SimpleFT8 Main Window — 3-Fenster-Layout mit QSplitter."""
 
+import copy
 import math
 import threading
 import time
@@ -347,10 +348,11 @@ class MainWindow(QMainWindow):
             now = time.time()
             utc_str = time.strftime("%H%M%S", time.gmtime())
             changed = False
-            for msg in messages:
-                key = msg.caller
+            for orig_msg in messages:
+                key = orig_msg.caller
                 if not key:
                     continue
+                msg = copy.copy(orig_msg)  # Thread-safe: Kopie vor Mutation
                 msg.antenna = ant
                 existing = self._diversity_stations.get(key)
                 if existing is None:
@@ -1051,9 +1053,9 @@ class MainWindow(QMainWindow):
         self.control_panel.update_state(name)
         # AP-Prioritaet: aktiver QSO-Partner bekommt hoechste AP-Hint-Prioritaet
         if state not in (QSOState.IDLE, QSOState.TIMEOUT):
-            self.decoder.priority_call = getattr(
-                self.qso_sm, 'their_call', ''
-            ) or ""
+            self.decoder.priority_call = (
+                self.qso_sm.qso.their_call if self.qso_sm.qso else ""
+            )
         else:
             self.decoder.priority_call = ""
 

@@ -1,5 +1,6 @@
 """SimpleFT8 Message — FT8-Nachrichten parsen und klassifizieren."""
 
+import copy
 from dataclasses import dataclass, field
 
 

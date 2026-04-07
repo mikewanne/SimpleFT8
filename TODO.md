@@ -1,148 +1,128 @@
 # SimpleFT8 — TODO & Roadmap
 
-**Stand:** 04.04.2026 Abend | **Status:** UCB1 live, RX-OFF Bugfixes, DX-Tuning repariert, README ueberarbeitet, Screenshots korrekt
-**Backup:** backup_2026-04-04_feierabend/
-**GitHub:** https://github.com/mikewanne/SimpleFT8 | **Tag:** v0.8-ucb1-readme
-**FlexRadio Forum:** Idea Post am 2026-04-03
+**Stand:** 07.04.2026 | **Tag:** v0.15-logbook-docs
+**GitHub:** https://github.com/mikewanne/SimpleFT8
 
 ---
 
-## Was FUNKTIONIERT (nicht anfassen!)
+## PRIO 1: KRITISCHE BUGS (Code Review 07.04.2026)
 
-- [x] FlexRadio Verbindung (SmartSDR-M Disconnect, eigener Slice, Keepalive)
-- [x] VITA-49 RX Audio (int16 mono 24kHz, PCC 0x0123)
-- [x] VITA-49 TX Audio (int16 mono 24kHz, dax_tx, Opus-Header)
-- [x] FT8 Decoder (PyFT8 2.6.1 + Noise-Floor-Norm + LDPC 50 Iter + Multi-Sync + 5 Subtraction Passes)
-- [x] FT8 Encoder (PyFT8 12kHz → 24kHz int16 mono BE)
-- [x] Temporal Polarization Diversity (ANT1/ANT2 pro Zyklus, Queue-basiert)
-- [x] Callsign-basierte Akkumulierung (keine Duplikate)
-- [x] Smart Timestamps (nur bei SNR/Content/Antenne-Aenderung)
-- [x] Antennenvergleich A1>2 / A2>1
-- [x] Ant-Spalte (eigene Spalte, nicht im Message-Text)
-- [x] ~km Anzeige (approximiert aus Callsign-Prefix)
-- [x] Bandwechsel leert Empfangsliste
-- [x] Sort-Persistenz ueber Zyklen
-- [x] GUI: QTableWidget RX-Panel, Laendernamen, km, Sortierung, RX ON/OFF
-- [x] GUI: Band-Wechsel, Power-Slider, TX-Level, TUNE, Watt/SWR/ALC
-- [x] GUI: PSKReporter-Anzeige (25 Spots, Max 11.996km Indonesien)
-- [x] GUI: CQ-Modus, QSO State Machine, ADIF Export
-- [x] SWR-Schutz (TX blockiert bei hohem SWR)
-- [x] CQ senden funktioniert (30+ PSKReporter Spots, bis Brasilien/Indonesien)
-- [x] Land-Filter (QMenu Checkboxen, Settings persistiert)
-- [x] Ant-Filter Button (Alle/A1/A2)
-- [x] Spaltenkoepfe native QHeaderView, klickbar, einheitliche Farbe
-- [x] 50:50 Layout + Splitter-Speicherung + Fenster-Geometrie
-- [x] Buffer-Reset nach TUNE
-- [x] **NEU 04.04.2026:** UCB1 adaptive Antennen-Auswahl im AUTO-Modus
-- [x] **NEU 04.04.2026:** EINMESSEN + DIVERSITY gesperrt wenn RX OFF
-- [x] **NEU 04.04.2026:** Alle Buttons deaktiviert wenn Radio nicht verbunden
-- [x] **NEU 04.04.2026:** DX Tuning: ersten Zyklus ueberspringen (_skip_first)
-- [x] **NEU 04.04.2026:** DX Tuning: kein Haengen mehr bei stillem Band (and messages Bug gefixt)
-- [x] **NEU 04.04.2026:** SNR + Zyklus-Balken stoppen wenn RX OFF
-- [x] **NEU 04.04.2026:** ~35 neue Callsign-Prefixe (Iran, Armenien, Vietnam, Zentralamerika, Afrika, ...)
-- [x] **NEU 04.04.2026:** README komplett ueberarbeitet (verstaendlich, TX-Status klar, UCB1 erklaert)
-- [x] **NEU 04.04.2026:** Test-Screenshots 40m korrekt dokumentiert (Start+Ende, Zeitstempel)
+- [ ] **Memory Leak: `_responses` Dict waechst unbegrenzt** — flexradio.py:59
+  - Fire-and-forget Responses werden nie geloescht
+  - Fix: Alte Eintraege nach 30s entfernen oder Dict-Groesse begrenzen
+
+- [ ] **Thread-Safety: FT8Message wird aus Decoder-Thread mutiert** — decoder.py + main_window.py
+  - `msg.antenna = ant` wird im GUI-Thread gesetzt waehrend Decoder-Thread msg referenziert
+  - Fix: Kopie der Message erstellen bevor GUI sie modifiziert
+
+- [ ] **advance() sendet plain report statt R-report** — qso_state.py:410
+  - In WAIT_REPORT nach Empfang eines plain reports wird "-10" statt "R-10" gesendet
+  - Muss geprueft werden ob das der Grund fuer weitere Timeouts ist
+
+- [ ] **AP-Decoder priority_call ist immer leer** — main_window.py:1054
+  - `getattr(self.qso_sm, 'their_call', '')` — falsches Attribut
+  - Richtig: `self.qso_sm.qso.their_call`
+  - Effekt: AP-Dekodierung mit Prioritaet fuer aktive Station funktioniert nicht
 
 ---
 
-## Erkenntnisse 04.04.2026 Abend
+## PRIO 2: PERFORMANCE + STABILITÄT
 
-- **UCB1 in AUTO-Modus:** Bias-Spirale mathematisch geloest. Unter-gemessene Antenne bekommt Exploration-Bonus. Kein manueller Reset.
-- **40m Test (schlechte Bedingungen, 4 Min):** Diversity 13 Stationen vs Normal 9 — und Diversity holte Russland (~2054km) rein, Normal gar nicht.
-- **DX Tuning Bugs behoben:** `and messages` Fehler + erster Zyklus ohne Daten
-- **RX OFF sauber:** SNR, Zyklus-Balken, EINMESSEN, DIVERSITY — alles stoppt korrekt
-- **README:** Jetzt auch fuer unerfahrene Funkamateure verstaendlich. TX-Einschraenkung klar kommuniziert.
+- [ ] **QRZ Lookup blockiert GUI-Thread** — main_window.py:1146
+  - HTTP Request bis 10s → UI eingefroren
+  - Fix: In QThread oder concurrent.futures auslagern
 
----
+- [ ] **QRZ Bulk Upload blockiert GUI-Thread** — main_window.py:1182
+  - Loop ueber alle QSOs mit HTTP pro QSO → langer Freeze
+  - Fix: Background Worker mit Fortschrittsanzeige
 
-## NAECHSTE PHASE: TX / QSO (Prio HOECHSTE)
+- [ ] **Duplicate ADIF Parser** — log/adif.py + log/qso_log.py
+  - Zwei verschiedene Implementierungen
+  - Fix: Einen Parser verwenden, den anderen loeschen
 
-### QSO-Kette testen — ERSTER VOLLSTAENDIGER DURCHLAUF NOCH OFFEN
+- [ ] **Duplicate qso_state Datei** — core/qso_state 2.py
+  - Alte Version, muss geloescht werden
 
-- [ ] CQ senden → warten auf Antwort → Report → RR73 → ADIF Log
-- [ ] State Machine Uebergaenge live verifizieren
-- [ ] ADIF-Datei pruefen (Band, Freq, Mode, RST, Grid korrekt?)
-- [ ] **Das erste echte QSO mit SimpleFT8!**
-
-### Sende-Probleme pruefen
-
-- [ ] Schaltet SimpleFT8 beim Senden auf Empfangen? (DB8EB Timeout)
-- [ ] RFI-Problem: externe Laufwerke werden bei TX ausgeworfen (Ferritkerne)
-- [ ] TX-Frequenz: wird eine freie Luecke gewaehlt oder fest?
-- [ ] TX-Timing: exakt am Zyklusbeginn oder verschoben?
+- [ ] **Logbook nutzt eigene kleine Prefix-Map** — logbook_widget.py:27
+  - Hat nur ~40 Laender, core/geo.py hat 300+
+  - Fix: geo.py importieren statt eigene Map
 
 ---
 
-## Diversity-Algorithmus — VOLLSTAENDIG IMPLEMENTIERT
+## PRIO 3: TX POWER OPTIMIERUNG
 
-- [x] 4-Zyklus-Pattern in `_on_cycle_start()`
-- [x] Zyklus-Indikator GUI (4 Boxen + ANT-Label)
-- [x] Manueller Bias-Schalter: `100:0 | 70:30 | AUTO | 30:70 | 0:100`
-- [x] Bei Bandwechsel: automatisch zurueck auf AUTO
-- [x] **UCB1 in AUTO-Modus** (SNR-gewichtete Rewards, Exploration-Bonus)
-- [x] UCB1-Stats in Control Panel (Rate + Spiel-Anzahl pro Antenne)
-- [x] DX Tuning v2: Interleaved 18-Zyklus-Messung, Per-Antenne Presets
-- [ ] Diversity-Dashboard: ANT1-exklusiv / ANT2-exklusiv / Ueberlappung (spaeter)
-- [ ] Dynamisches Aging fuer angerufene Stationen (150s statt 75s)
+- [ ] **rfpower 15% ueber Zielwert setzen** — main_window.py
+  - Statt rfpower=70 → rfpower=80 setzen, Audio-Drive reduzieren
+  - PA arbeitet linearer = saubereres Signal
+  - Peak sollte bei 85-90% liegen, nicht bei 58%
 
----
+- [ ] **PI-Controller statt P-Controller** — main_window.py
+  - Integral-Term fuer nachhaltige Fehler > 30s
+  - Verhindert dauerhaftes Unter-/Uebersteuern
 
-## NOCH OFFEN
-
-1. **Erster vollstaendiger QSO-Durchlauf** noch nicht getestet
-2. **FT4-Modus** nicht implementiert (7.5s Zyklen)
-3. **ITU-Prefixe** noch nicht vollstaendig (~85% nach heutigen Ergaenzungen)
+- [ ] **TX Level Bar beschriften** — control_panel.py
+  - "TX" oder "RF" Label vor den Balken setzen
+  - Balken ggf. kleiner machen
 
 ---
 
-## QSO FEATURES — GEPLANT
+## PRIO 4: ARCHITEKTUR-REFACTORING
 
-- [ ] **QSO-Resume aus QSO-Panel** — Station im QSO-Verlauf anklicken → QSO an der richtigen Stelle fortführen
-  - Empfangene Zeile anklicken (z.B. `← DA1MHH R2EN R-18`)
-  - Software erkennt State aus Message-Typ: Report → TX_RR73, nur Call → TX_REPORT
-  - Even/Odd Slot korrekt setzen (Gegenteil der Gegenstation)
-  - `qso_sm.force_resume(their_call, state)` Methode nötig
-  - Aufwand: ~2h
+- [ ] **SessionController/Engine extrahieren** — main_window.py (~1300 Zeilen)
+  - Diversity-Logik, Power-Regelung, Meter-Handling, QSO-Flow raus aus UI
+  - MainWindow wird reine View
+  - Ermoeglicht Unit-Tests und Headless-Betrieb
 
----
+- [ ] **FlexRadio Klasse aufteilen** — flexradio.py (~1300 Zeilen)
+  - ProtocolHandler (TCP/UDP)
+  - AudioStreamManager (VITA-49 RX/TX)
+  - MeterParser (FWDPWR, SWR, ALC)
 
-## IDEEN / SPAETERE FEATURES
-
-### DX Cluster / PSKReporter konsumieren (Prio: MITTEL)
-- PSKReporter API oder DX Cluster (Telnet) als Input nutzen
-- Alert wenn gesuchte DXCC-Entity gerade auf aktivem Band gehoert wird
-- Ziel-Callsign/DXCC-Liste → automatische Benachrichtigung
-
-### macOS Menu Bar Extra (Prio: NIEDRIG)
-- Symbol in Menuleiste: Band, Stationszahl, Decode-Status
-- Library: rumps oder pyobjus
+- [ ] **`hasattr` Anti-Pattern entfernen** — flexradio.py
+  - `_pcc_seen`, `_lvl_dbg_t`, `_alc_dbg` in `__init__` initialisieren
 
 ---
 
-## NICHT machen (bewusste Entscheidung)
+## PRIO 5: FEATURES
 
-- Library wechseln (PyFT8 2.6.1 funktioniert, Risiko zu hoch)
-- DAXIQ statt Audio (Overkill, kein Gewinn fuer FT8)
-- Parallele Test-Skripte zum Radio (NIE WIEDER!)
-- Auto-Bias ohne UCB1 (Bias-Spirale mathematisch gefaehrlich)
-- FT2 (noch nicht oeffentlich verfuegbar, keine Python-Implementation)
+- [ ] **QSO-Resume aus QSO-Panel** — qso_state.py
+  - Station im QSO-Verlauf anklicken → QSO fortfuehren
+  - `qso_sm.force_resume(their_call, state)` noetig
 
----
+- [ ] **Logbuch: QSO loeschen** — logbook_widget.py + adif.py
+  - Delete-Button ist im Overlay, aber ADIF-Loesch-Logik fehlt noch
 
-## Leistungsdaten
+- [ ] **Logbuch: QSO editieren + speichern** — qso_detail_overlay.py
+  - Save-Button ist da, aber Rueckschreiben in ADIF fehlt
 
-| Metrik | SimpleFT8 NORMAL | SimpleFT8 DIVERSITY | IC-7300 WSJT-X |
-|--------|-----------------|--------------------|----------------|
-| 40m Stationen (gut) | 13 | **43** | — |
-| 40m Stationen (schlecht, 4min) | **9** | **13** | — |
-| 20m Stationen | 8 | **63** | 13 |
-| 15m PSK Spots | — | **25** (TX) | — |
-| Weiteste RX | — | **Kiribati ~13.000 km** | — |
-| Weiteste TX | — | **Indonesien 11.996 km** | — |
-| 40m Ausreisser Diversity | — | **Russland ~2054km** (Normal: nicht dekodiert) | — |
+- [ ] **FT4-Modus** — 7.5s Zyklen, andere Frequenzen
 
-**SimpleFT8 DIVERSITY > IC-7300 WSJT-X (63 vs 13 auf 20m)**
+- [ ] **Band Map / Spot Aggregation** — PSKReporter + DX Cluster als Input
 
 ---
 
-*04.04.2026 Abend — DA1MHH / Mike + Claude + DeepSeek — UCB1, Bugfixes, README, Feierabend*
+## ERLEDIGT (07.04.2026)
+
+- [x] Auto TX Power Regulation (P-Controller + FWDPWR Feedback)
+- [x] Asymmetrische Regelung (runter 2x schneller als hoch)
+- [x] Clipping-Schutz (Peak-Monitor, stoppt bei >95%)
+- [x] Per-Band TX Level Speicherung
+- [x] 10 Power Buttons (10-100W)
+- [x] Peak-Anzeige statt ALC
+- [x] TX Level Bar (automatisch, keine manuelle Bedienung)
+- [x] max_power_level=100 bei jedem set_power()
+- [x] mic_level Steuerung via set_tx_level()
+- [x] WAIT_RR73 Retry (Report wird wiederholt wenn RR73 ausbleibt)
+- [x] QSO Debug Logger (qso_debug.log, wird pro QSO ueberschrieben)
+- [x] Integriertes Logbuch (Tab im QSO Panel)
+- [x] QSO Detail Overlay (Klick → Details + QRZ Lookup)
+- [x] QRZ.com API Client (Upload + Callsign Lookup)
+- [x] RADIO Kachel Redesign (PSK Frame, TX Frame, Trenner)
+- [x] Karten-Rahmen: Top-Akzent-Strip
+- [x] README EN + DE + 3 Innovation Docs
+- [x] Diversity UnboundLocalError fix (diff bei total=0)
+- [x] Ehrliche Performance-Tabelle (nur belegte 40m Daten)
+
+---
+
+*07.04.2026 — DA1MHH / Mike + Claude + DeepSeek*

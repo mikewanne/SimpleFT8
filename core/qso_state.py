@@ -418,9 +418,10 @@ class QSOStateMachine(QObject):
 
     def advance(self):
         if self.state == QSOState.WAIT_REPORT and self.qso.their_snr:
-            report = f"{self._last_snr:+03d}" if self._last_snr > -30 else "-10"
+            report = f"R{self._last_snr:+03d}" if self._last_snr > -30 else "R-10"
             self.qso.our_snr = report
             msg = f"{self.qso.their_call} {self.my_call} {report}"
+            self._dbg.log("TX", f"advance() R-Report: '{msg}'")
             self._set_state(QSOState.TX_REPORT)
             self.send_message.emit(msg)
 
