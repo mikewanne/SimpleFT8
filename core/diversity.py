@@ -84,6 +84,7 @@ class DiversityController:
     def _evaluate(self):
         s1, s2 = self._scores["A1"], self._scores["A2"]
         total = s1 + s2
+        diff = 0.0
         if total <= 0:
             self.ratio = "50:50"
             self.dominant = None
