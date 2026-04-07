@@ -285,12 +285,20 @@ class _RadioCard(QFrame):
         lbl_radio.setStyleSheet(f"color: #00aacc; font-size: 10px; font-family: {_FONT}; font-weight: bold;")
         lay.addWidget(lbl_radio)
 
-        # PSK + Map auf einer Zeile
-        psk_row = QHBoxLayout()
-        psk_row.setSpacing(4)
-        self.psk_label = QLabel("PSK: —")
-        self.psk_label.setStyleSheet(f"color: #557766; font-family: {_FONT}; font-size: 10px;")
+        _SEP_SS = "background: #445544; max-height: 1px; min-height: 1px;"
+
+        # ── Sektion 1: PSK Info + Map ─────────────────────────
+        psk_frame = QFrame()
+        psk_frame.setStyleSheet(
+            "QFrame { background: rgba(255,255,255,0.02); border: 1px solid #3a3a4a; "
+            "border-radius: 3px; }")
+        psk_inner = QHBoxLayout(psk_frame)
+        psk_inner.setContentsMargins(6, 4, 4, 4)
+        psk_inner.setSpacing(4)
+        self.psk_label = QLabel("PSK:  —")
+        self.psk_label.setStyleSheet(f"color: #00CC88; font-family: {_FONT}; font-size: 10px; border: none;")
         self.psk_label.setWordWrap(True)
+        self.psk_label.setMinimumHeight(16)
         self.btn_psk_map = QPushButton("Map")
         self.btn_psk_map.setFixedHeight(22)
         self.btn_psk_map.setFixedWidth(40)
@@ -299,23 +307,17 @@ class _RadioCard(QFrame):
             "border: 1px solid rgba(0,180,130,0.4); border-radius: 2px; font-size: 10px; }"
             "QPushButton:hover { background: rgba(0,170,120,0.3); }"
         )
-        psk_row.addWidget(self.psk_label, 1)
-        psk_row.addWidget(self.btn_psk_map, 0, Qt.AlignmentFlag.AlignTop)
-        lay.addLayout(psk_row)
+        psk_inner.addWidget(self.psk_label, 1)
+        psk_inner.addWidget(self.btn_psk_map, 0, Qt.AlignmentFlag.AlignTop)
+        lay.addWidget(psk_frame)
 
-        # Power Preset Buttons — inaktive dunkel, nur ausgewaehlter leuchtet
+        # ── Sektion 2: Power Buttons ──────────────────────────
         _PRESETS = [
-            # watts, active_bg, active_border
-            (10,  "#007733", "#00BB55"),
-            (20,  "#00AA44", "#00FF66"),
-            (30,  "#22AA44", "#44EE66"),
-            (40,  "#668800", "#99CC00"),
-            (50,  "#AA8800", "#DDCC00"),
-            (60,  "#CC7700", "#FFAA00"),
-            (70,  "#CC7700", "#FFAA00"),
-            (80,  "#CC4400", "#FF6622"),
-            (90,  "#CC2222", "#FF4444"),
-            (100, "#AA0000", "#FF2222"),
+            (10,  "#007733", "#00BB55"), (20,  "#00AA44", "#00FF66"),
+            (30,  "#22AA44", "#44EE66"), (40,  "#668800", "#99CC00"),
+            (50,  "#AA8800", "#DDCC00"), (60,  "#CC7700", "#FFAA00"),
+            (70,  "#CC7700", "#FFAA00"), (80,  "#CC4400", "#FF6622"),
+            (90,  "#CC2222", "#FF4444"), (100, "#AA0000", "#FF2222"),
         ]
         self.power_buttons = {}
         self._power_btn_group = QButtonGroup(self)
@@ -338,39 +340,46 @@ class _RadioCard(QFrame):
             power_row.addWidget(btn)
         lay.addLayout(power_row)
 
-        # TX Status Block — gerahmter Bereich fuer alle TX-Metriken
+        # ── Sektion 3: TX Status (gerahmt) ────────────────────
         from PySide6.QtWidgets import QProgressBar
         tx_frame = QFrame()
         tx_frame.setStyleSheet(
-            "QFrame { border: 1px solid #333; border-radius: 4px; "
-            "background: rgba(255,255,255,0.02); }"
+            "QFrame { border: 1px solid #446644; border-radius: 4px; "
+            "background: rgba(0,60,30,0.08); }"
         )
         tx_lay = QVBoxLayout(tx_frame)
-        tx_lay.setContentsMargins(6, 4, 6, 4)
-        tx_lay.setSpacing(3)
+        tx_lay.setContentsMargins(6, 5, 6, 5)
+        tx_lay.setSpacing(4)
 
-        # Zeile 1: TUNE + Watt
+        # Zeile 1: TUNE + Watt (vertikal zentriert = gleiche Basislinie)
         tune_row = QHBoxLayout()
-        tune_row.setSpacing(6)
+        tune_row.setSpacing(8)
         self.btn_tune = QPushButton("TUNE")
         self.btn_tune.setCheckable(True)
-        self.btn_tune.setFixedHeight(24)
+        self.btn_tune.setFixedHeight(26)
         self.btn_tune.setFixedWidth(56)
         self.btn_tune.setStyleSheet(
-            f"QPushButton {{ background: rgba(180,150,0,0.2); color: #FFD700; "
-            f"border: 1px solid rgba(220,180,0,0.5); border-radius: 3px; "
+            f"QPushButton {{ background: rgba(180,150,0,0.15); color: #FFD700; "
+            f"border: 1px solid rgba(220,180,0,0.4); border-radius: 3px; "
             f"font-weight: bold; font-family: {_FONT}; font-size: 10px; }}"
-            f"QPushButton:checked {{ background: rgba(180,150,0,0.4); }}"
+            f"QPushButton:checked {{ background: rgba(180,150,0,0.35); }}"
         )
         self.watt_label = QLabel("0 W")
+        self.watt_label.setFixedHeight(26)
         self.watt_label.setStyleSheet(
-            f"color: #FFD700; font-family: {_FONT}; font-size: 13px; font-weight: bold;")
+            f"color: #FFD700; font-family: {_FONT}; font-size: 14px; font-weight: bold; border: none;")
         tune_row.addWidget(self.btn_tune)
         tune_row.addWidget(self.watt_label)
         tune_row.addStretch()
         tx_lay.addLayout(tune_row)
 
-        # Zeile 2: Peak + TX Bar + % + SWR (alle TX-Qualitaetsmetriken)
+        # Trenner innerhalb TX Block
+        sep = QFrame()
+        sep.setStyleSheet(_SEP_SS)
+        sep.setFixedHeight(1)
+        tx_lay.addWidget(sep)
+
+        # Zeile 2: Peak + TX Bar + % + SWR
         metrics_row = QHBoxLayout()
         metrics_row.setSpacing(4)
         self.peak_label = QLabel("Peak —")
@@ -382,7 +391,7 @@ class _RadioCard(QFrame):
         self.tx_level_bar = QProgressBar()
         self.tx_level_bar.setRange(0, 150)
         self.tx_level_bar.setValue(100)
-        self.tx_level_bar.setFixedHeight(12)
+        self.tx_level_bar.setFixedHeight(14)
         self.tx_level_bar.setTextVisible(False)
         self.tx_level_bar.setStyleSheet(
             "QProgressBar { background: rgba(255,255,255,0.06); border: 1px solid #333; border-radius: 2px; }"
@@ -398,7 +407,7 @@ class _RadioCard(QFrame):
         )
         self.swr_label = QLabel("SWR —")
         self.swr_label.setStyleSheet(
-            f"color: #44FF44; font-family: {_FONT}; font-size: 10px; font-weight: bold;")
+            f"color: #44FF44; font-family: {_FONT}; font-size: 10px; font-weight: bold; border: none;")
         metrics_row.addWidget(self.peak_label)
         metrics_row.addWidget(self.tx_level_bar, 1)
         metrics_row.addWidget(self.tx_level_label)
@@ -418,8 +427,8 @@ class _QSOStatusCard(QFrame):
         self.setStyleSheet(_CARD_SS_ORANGE)
 
         lay = QVBoxLayout(self)
-        lay.setContentsMargins(6, 8, 6, 4)
-        lay.setSpacing(2)
+        lay.setContentsMargins(6, 10, 6, 4)
+        lay.setSpacing(3)
 
         # ── QSO ──────────────────────────────────────────────────
         lbl_qso = QLabel("QSO")

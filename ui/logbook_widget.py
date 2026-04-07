@@ -15,16 +15,12 @@ _BG = "#0d0d1a"
 
 # Spalten-Definition: (ADIF-Key, Header-Text, Breite)
 _COLUMNS = [
-    ("_DATETIME",  "Datum/Zeit",  130),
-    ("CALL",       "Rufzeichen",   80),
-    ("BAND",       "Band",         45),
-    ("FREQ",       "Freq MHz",     75),
-    ("MODE",       "Mode",         40),
-    ("RST_SENT",   "Sent",         40),
-    ("RST_RCVD",   "Rcvd",         40),
-    ("GRIDSQUARE", "Grid",         50),
-    ("_COUNTRY",   "Land",         90),
-    ("TX_PWR",     "W",            30),
+    ("_DATETIME",  "Datum",        68),
+    ("CALL",       "Call",         75),
+    ("BAND",       "Band",        40),
+    ("MODE",       "Mode",        38),
+    ("_COUNTRY",   "Land",        90),
+    ("_KM",        "km",          50),
 ]
 
 # Einfache Prefix → Land Zuordnung (Subset)
@@ -54,23 +50,46 @@ def _guess_country(call: str) -> str:
 
 
 def _format_datetime(record: dict) -> str:
-    """QSO_DATE + TIME_ON in lesbares Format."""
+    """QSO_DATE + TIME_ON in kompaktes deutsches Format: DD.MM.YY HH:MM"""
     d = record.get("QSO_DATE", "")
     t = record.get("TIME_ON", "")
-    if len(d) == 8 and len(t) >= 4:
-        return f"{d[:4]}-{d[4:6]}-{d[6:8]} {t[:2]}:{t[2:4]}"
-    return f"{d} {t}"
+    if len(d) == 8:
+        return f"{d[6:8]}.{d[4:6]}.{d[2:4]}"
+    return d
+
+
+def _estimate_km(grid: str) -> str:
+    """Entfernung von JO31 (DA1MHH) zu Grid in km schaetzen."""
+    if not grid or len(grid) < 4:
+        return ""
+    try:
+        import math
+        def grid_to_latlon(g):
+            g = g.upper()
+            lon = (ord(g[0]) - ord('A')) * 20 - 180 + (int(g[2]) * 2) + 1
+            lat = (ord(g[1]) - ord('A')) * 10 - 90 + int(g[3]) + 0.5
+            return lat, lon
+        lat1, lon1 = grid_to_latlon("JO31")  # DA1MHH
+        lat2, lon2 = grid_to_latlon(grid)
+        dlat = math.radians(lat2 - lat1)
+        dlon = math.radians(lon2 - lon1)
+        a = math.sin(dlat/2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon/2)**2
+        return str(int(6371 * 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))))
+    except Exception:
+        return ""
 
 
 class LogbookWidget(QWidget):
     """Logbuch-Tabelle mit Suche und DXCC-Zaehler."""
 
     upload_requested = Signal()  # Fuer QRZ.com Upload
+    qso_clicked = Signal(dict)   # QSO-Eintrag angeklickt → Detail-Overlay
 
     def __init__(self, adif_directory: Path = None):
         super().__init__()
         self._adif_dir = adif_directory or Path.cwd()
         self._all_records = []
+        self._filtered_records = []
         self._setup_ui()
 
     def _setup_ui(self):
@@ -166,6 +185,7 @@ class LogbookWidget(QWidget):
             }}
         """)
 
+        self.table.cellClicked.connect(self._on_row_clicked)
         layout.addWidget(self.table)
 
     def load_adif(self, directory: Path = None):
@@ -182,6 +202,7 @@ class LogbookWidget(QWidget):
 
     def _populate_table(self, records):
         """Tabelle mit Records fuellen."""
+        self._filtered_records = records
         self.table.setSortingEnabled(False)
         self.table.setRowCount(len(records))
 
@@ -191,23 +212,28 @@ class LogbookWidget(QWidget):
                     value = _format_datetime(rec)
                 elif key == "_COUNTRY":
                     value = _guess_country(rec.get("CALL", ""))
+                elif key == "_KM":
+                    value = _estimate_km(rec.get("GRIDSQUARE", ""))
                 else:
                     value = rec.get(key, "")
 
                 item = QTableWidgetItem(value)
                 item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
 
+                # Record als UserRole im ersten Item speichern (fuer Klick nach Sortierung)
+                if col == 0:
+                    item.setData(Qt.ItemDataRole.UserRole, rec)
+
                 # Farbcodierung
                 if key == "CALL":
                     item.setForeground(QColor("#00CCFF"))
                 elif key == "BAND":
                     item.setForeground(QColor("#FFAA00"))
-                elif key == "RST_SENT":
-                    item.setForeground(QColor("#FFAA00"))
-                elif key == "RST_RCVD":
-                    item.setForeground(QColor("#44BBFF"))
                 elif key == "_COUNTRY":
                     item.setForeground(QColor("#88CC88"))
+                elif key == "_KM":
+                    item.setForeground(QColor("#AAAACC"))
+                    item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
 
                 self.table.setItem(row, col, item)
 
@@ -241,3 +267,11 @@ class LogbookWidget(QWidget):
                 or text in r.get("GRIDSQUARE", "").upper())
         ]
         self._populate_table(filtered)
+
+    def _on_row_clicked(self, row: int, col: int):
+        """Zeile angeklickt → QSO-Daten aus UserRole lesen (sortier-sicher)."""
+        item = self.table.item(row, 0)
+        if item:
+            rec = item.data(Qt.ItemDataRole.UserRole)
+            if rec:
+                self.qso_clicked.emit(rec)

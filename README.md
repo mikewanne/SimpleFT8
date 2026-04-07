@@ -43,6 +43,16 @@ Unlike WSJT-X or similar clients that need SmartSDR running, SimpleFT8 communica
 
 ---
 
+## Core Innovations
+
+Each of the three core features has its own detailed documentation with screenshots and technical explanation:
+
+- **[Temporal Polarization Diversity](docs/DIVERSITY.md)** — How antenna cycling works, UCB1 algorithm, test results
+- **[DX Tuning / Gain Measurement](docs/DX_TUNING.md)** — Automated antenna optimization, per-band presets
+- **[Auto TX Power Regulation](docs/POWER_REGULATION.md)** — Closed-loop feedback, clipping protection, per-band calibration
+
+---
+
 ## Features
 
 ### Temporal Polarization Diversity
