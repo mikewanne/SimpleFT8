@@ -253,13 +253,21 @@ class QSOStateMachine(QObject):
                         self._resume_cq_if_needed()
                     return
                 elif self.state == QSOState.WAIT_RR73:
-                    # Report nochmal senden — Gegenstation hat ihn nicht gehoert
-                    report = self.qso.our_snr or f"R{self._last_snr:+03d}"
-                    retry_msg = f"{self.qso.their_call} {self.my_call} {report}"
-                    self._dbg.log("RETRY", f"WAIT_RR73 Retry: '{retry_msg}' (Report wiederholen)")
-                    self.qso.timeout_cycles = 0  # Reset fuer naechsten Retry
-                    self._set_state(QSOState.TX_REPORT)
-                    self.send_message.emit(retry_msg)
+                    # Report nochmal senden — max 3 Retries, dann Timeout
+                    self.qso.calls_made += 1
+                    if self.qso.calls_made <= self.qso.max_calls:
+                        report = self.qso.our_snr or f"R{self._last_snr:+03d}"
+                        retry_msg = f"{self.qso.their_call} {self.my_call} {report}"
+                        self._dbg.log("RETRY", f"WAIT_RR73 Retry {self.qso.calls_made}/{self.qso.max_calls}: '{retry_msg}'")
+                        self.qso.timeout_cycles = 0
+                        self._set_state(QSOState.TX_REPORT)
+                        self.send_message.emit(retry_msg)
+                    else:
+                        call = self.qso.their_call
+                        self._dbg.log("TIMEOUT", f"WAIT_RR73 max Retries ({self.qso.max_calls}) erreicht")
+                        self._set_state(QSOState.TIMEOUT)
+                        self.qso_timeout.emit(call)
+                        self._resume_cq_if_needed()
                     return
 
             if self.qso.timeout_cycles >= self.qso.max_timeout:
