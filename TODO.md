@@ -95,6 +95,17 @@
 
 ---
 
+## QSO FEATURES — GEPLANT
+
+- [ ] **QSO-Resume aus QSO-Panel** — Station im QSO-Verlauf anklicken → QSO an der richtigen Stelle fortführen
+  - Empfangene Zeile anklicken (z.B. `← DA1MHH R2EN R-18`)
+  - Software erkennt State aus Message-Typ: Report → TX_RR73, nur Call → TX_REPORT
+  - Even/Odd Slot korrekt setzen (Gegenteil der Gegenstation)
+  - `qso_sm.force_resume(their_call, state)` Methode nötig
+  - Aufwand: ~2h
+
+---
+
 ## IDEEN / SPAETERE FEATURES
 
 ### DX Cluster / PSKReporter konsumieren (Prio: MITTEL)

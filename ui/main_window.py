@@ -91,6 +91,10 @@ class MainWindow(QMainWindow):
         self._active_qso_targets: set = set()  # Stationen im aktiven QSO → 150s Aging
         self._diversity_lock = threading.Lock()  # Race Condition Guard
 
+        # Auto TX Level Regelung
+        self._power_target = settings.get("power_preset", 10)  # Watt-Ziel vom Button
+        self._fwdpwr_samples = []  # FWDPWR Messwerte waehrend TX
+
         # UI aufbauen
         self._setup_ui()
         self._connect_signals()
@@ -105,7 +109,7 @@ class MainWindow(QMainWindow):
         # UI mit gespeicherten Settings synchronisieren
         self.control_panel._set_band(settings.band)
         self.control_panel._set_mode(settings.mode)
-        self.control_panel.power_slider.setValue(settings.power_watts)
+        self.control_panel.set_power_preset(settings.get("power_preset", 10))
 
         # PSKReporter Timer (alle 3 Minuten abfragen)
         from PySide6.QtCore import QTimer
@@ -211,6 +215,16 @@ class MainWindow(QMainWindow):
                 f"Preset {band} geladen: ANT1 G{preset['ant1_gain']} dB", 4000
             )
             print(f"[FlexRadio] Preset {band}: ANT1 G{preset['ant1_gain']} dB")
+        # Leistung: erst Radio auf 100W Maximum setzen, dann Preset laden
+        self.radio.set_power(100)   # Basis: 100W = 100% → rfpower=75 == 75W
+        power_preset = self.settings.get("power_preset", 15)
+        self.radio.set_power(power_preset)
+        self.control_panel.set_power_preset(power_preset)
+        # TX Audio-Drive (mic_level) setzen — steuert wieviel Leistung die PA tatsaechlich abgibt
+        tx_level = self.settings.get("tx_level", 100)
+        self.radio.set_tx_level(tx_level / 100.0)
+        self.control_panel.tx_level_bar.setValue(tx_level)
+        self.control_panel.tx_level_label.setText(f"{tx_level}%")
         self.decoder.set_quality(self._rx_mode)  # Qualität vom aktiven Modus abhängig
         self.decoder.start()
         self.radio.create_tx_stream()
@@ -457,7 +471,6 @@ class MainWindow(QMainWindow):
         self.control_panel.cancel_clicked.connect(self._on_cancel)
         self.control_panel.cq_clicked.connect(self._on_cq_clicked)
         self.control_panel.tune_clicked.connect(self._on_tune_clicked)
-        self.control_panel.tx_level_changed.connect(self._on_tx_level_changed)
         self.control_panel.rx_mode_changed.connect(self._on_rx_mode_changed)
         self.control_panel.einmessen_clicked.connect(self._handle_dx_tuning)
         self.control_panel.settings_clicked.connect(self._on_settings_clicked)
@@ -533,7 +546,8 @@ class MainWindow(QMainWindow):
 
     @Slot(int)
     def _on_power_changed(self, power: int):
-        self.settings.set("power_watts", power)
+        self.settings.set("power_preset", power)
+        self._power_target = power
         if self.radio.ip:
             self.radio.set_power(power)
 
@@ -545,10 +559,6 @@ class MainWindow(QMainWindow):
             else:
                 self.radio.tune_off()
 
-    @Slot(int)
-    def _on_tx_level_changed(self, value: int):
-        if self.radio.ip:
-            self.radio.set_tx_level(value / 100.0)
 
     @Slot(str)
     def _on_band_changed(self, band: str):
@@ -584,6 +594,13 @@ class MainWindow(QMainWindow):
                 self._apply_dx_preset_for_band(band)
             else:
                 self._apply_normal_mode()
+        # Per-Band TX Level laden (Auto-Regelung speichert pro Band)
+        band_levels = self.settings.get("tx_levels_per_band", {})
+        saved_level = band_levels.get(band, 100)
+        self.radio.set_tx_level(saved_level / 100.0)
+        self.control_panel.tx_level_bar.setValue(saved_level)
+        self.control_panel.tx_level_label.setText(f"{saved_level}%")
+        self._fwdpwr_samples.clear()  # Alte Messwerte verwerfen
         self._update_statusbar()
 
     # ── RX Modus: NORMAL / DIVERSITY / DX TUNING ──────────────
@@ -763,7 +780,7 @@ class MainWindow(QMainWindow):
 
             def _after_tune():
                 self.radio.tune_off()
-                self.radio._send_cmd(f"transmit set rfpower={self.settings.power_watts}")
+                self.radio.set_power(self.settings.get("power_preset", 15))
                 # Buffer leeren: AT hat RX-Impedanz geändert → alte Daten ungültig
                 self._normal_stations = {}
                 self._diversity_stations = {}
@@ -897,10 +914,76 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"SWR ALARM: {swr:.1f} — TX gestoppt! Tuner/Antenne pruefen.", 10000)
         print(f"[SWR] Alarm: {swr:.1f} — TX gestoppt")
 
+    def _auto_adjust_tx_level(self):
+        """FWDPWR-basierte Auto-Regelung: TX Level so anpassen dass Ist ≈ Soll.
+        Clipping-Schutz: stoppt Erhoehung wenn Audio-Peak > 0.95."""
+        import math
+        if not self._fwdpwr_samples:
+            return
+        # Durchschnitt der FWDPWR-Messungen (ignoriere erste 2 = Ramp-Up)
+        samples = self._fwdpwr_samples[2:] if len(self._fwdpwr_samples) > 4 else self._fwdpwr_samples
+        measured = sum(samples) / len(samples)
+        self._fwdpwr_samples.clear()
+
+        target = self._power_target
+        if target <= 0 or measured <= 0:
+            return
+
+        current = self.radio._tx_audio_level
+        peak = getattr(self.radio, '_last_tx_peak', 0.0)
+
+        # P-Controller: sqrt(target/measured) = benoetigter Amplitude-Faktor
+        ratio = max(0.5, min(2.0, target / measured))
+        ideal_factor = math.sqrt(ratio)
+
+        # Proportionale Korrektur mit Daempfung
+        KP = 0.4
+        MAX_STEP = 0.15
+        error = ideal_factor - 1.0
+        correction = max(-MAX_STEP, min(MAX_STEP, KP * error))
+
+        new_level = current * (1.0 + correction)
+        new_level = max(0.05, min(1.5, new_level))
+
+        # CLIPPING-SCHUTZ: nicht erhoehen wenn Audio-Peak >= 0.95
+        if peak >= 0.95 and new_level > current:
+            print(f"[AutoTX] Clipping-Schutz: Peak={peak:.2f} — TX Level nicht weiter erhoehen")
+            new_level = current
+
+        # Sicherheit: nicht erhoehen wenn schon ueber Ziel
+        if measured > target * 1.05 and new_level > current:
+            new_level = current * 0.95  # leicht reduzieren
+
+        # Peak-Level immer aktualisieren (auch wenn keine Regelung noetig)
+        self.control_panel.update_tx_peak(peak)
+
+        # Nur anwenden wenn Aenderung > 1%
+        if abs(new_level - current) < 0.01:
+            return
+
+        self.radio.set_tx_level(new_level)
+        slider_val = min(150, int(new_level * 100))
+        self.control_panel.tx_level_bar.setValue(slider_val)
+        self.control_panel.tx_level_label.setText(f"{slider_val}%")
+
+        # Per-Band speichern
+        band = self.settings.band
+        band_levels = self.settings.get("tx_levels_per_band", {})
+        band_levels[band] = slider_val
+        self.settings.set("tx_levels_per_band", band_levels)
+
+        # Peak-Level in GUI aktualisieren
+        self.control_panel.update_tx_peak(peak)
+
+        print(f"[AutoTX] {band}: {measured:.0f}W/{target}W Peak={peak:.2f} → TxLvl {current:.2f}→{new_level:.2f} ({slider_val}%)")
+
     @Slot(str, float)
     def _on_meter_update(self, name: str, value: float):
         if name == "FWDPWR":
             self.control_panel.update_watt(value)
+            # FWDPWR Samples fuer Auto-TX-Regelung sammeln (nur waehrend TX, >1W)
+            if self.encoder.is_transmitting and value > 1:
+                self._fwdpwr_samples.append(value)
         elif name == "SWR":
             self.control_panel.update_swr(value)
         elif name == "ALC":
@@ -1030,6 +1113,10 @@ class MainWindow(QMainWindow):
 
     @Slot(int, bool)
     def _on_cycle_start(self, cycle_num: int, is_even: bool):
+        # ── Auto TX Level Regelung ──────────────────────────────
+        if self._fwdpwr_samples:
+            self._auto_adjust_tx_level()
+
         self.qso_sm.on_cycle_end()
 
         # Diversity: Antenne umschalten bei jedem Zyklus (non-blocking)
@@ -1183,7 +1270,7 @@ class MainWindow(QMainWindow):
                     self.settings.get("tx_level", 100) / 100.0
                 )
             if self.radio.ip:
-                self.radio.set_power(self.settings.power_watts)
+                self.radio.set_power(self.settings.get("power_preset", 15))
 
     def _update_statusbar(self):
         freq = self.settings.frequency_mhz
