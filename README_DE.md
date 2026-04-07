@@ -22,14 +22,17 @@ Anders als WSJT-X oder aehnliche Clients, die SmartSDR benoetigen, kommuniziert 
 
 ### Praxis-Ergebnisse
 
-| Messwert | SimpleFT8 Normal | SimpleFT8 Diversity | IC-7300 + WSJT-X |
-|----------|:---:|:---:|:---:|
-| 20m Stationen | 8 | **63** | 13 |
-| 40m Stationen (gut) | 13 | **43** | -- |
-| 40m Stationen (schlecht, 4 min) | 9 | **13** | -- |
-| PSKReporter Spots (TX) | -- | **155** | -- |
-| Weitester RX | -- | **Kiribati ~13.000 km** | -- |
-| Weitester TX | -- | **Indonesien 11.996 km** | -- |
+Kontrollierter Test auf 40m, gleiche Hardware (FLEX-8400M), 2 Minuten Abstand:
+
+| Messwert | SimpleFT8 Normal | SimpleFT8 Diversity |
+|----------|:---:|:---:|
+| 40m, gute Bedingungen | 27 | **37** (+37%) |
+| 40m, schlechte Bedingungen (4 min) | 9 | **13** (+44%) |
+| PSKReporter Spots (TX, 15m) | -- | **190** |
+| Weitester RX | -- | Kiribati ~13.000 km |
+| Weitester TX | -- | Indonesien 11.996 km |
+
+Siehe [Test-Screenshots und Methodik](docs/DIVERSITY.md) fuer Details.
 
 ---
 

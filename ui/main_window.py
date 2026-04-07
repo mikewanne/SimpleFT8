@@ -958,10 +958,14 @@ class MainWindow(QMainWindow):
         ratio = max(0.5, min(2.0, target / measured))
         ideal_factor = math.sqrt(ratio)
 
-        # Proportionale Korrektur mit Daempfung
-        KP = 0.4
-        MAX_STEP = 0.15
+        # Asymmetrische Korrektur: RUNTER aggressiver als HOCH (Schutz vor Uebersteuern)
         error = ideal_factor - 1.0
+        if error >= 0:
+            KP = 0.3       # Hochregeln: vorsichtig
+            MAX_STEP = 0.12
+        else:
+            KP = 0.6       # Runterregeln: doppelt so aggressiv
+            MAX_STEP = 0.20
         correction = max(-MAX_STEP, min(MAX_STEP, KP * error))
 
         new_level = current * (1.0 + correction)
@@ -972,9 +976,9 @@ class MainWindow(QMainWindow):
             print(f"[AutoTX] Clipping-Schutz: Peak={peak:.2f} — TX Level nicht weiter erhoehen")
             new_level = current
 
-        # Sicherheit: nicht erhoehen wenn schon ueber Ziel
-        if measured > target * 1.05 and new_level > current:
-            new_level = current * 0.95  # leicht reduzieren
+        # Sicherheit: schon bei 3% ueber Ziel aggressiv reduzieren
+        if measured > target * 1.03 and new_level > current:
+            new_level = current * 0.92
 
         # Peak-Level immer aktualisieren (auch wenn keine Regelung noetig)
         self.control_panel.update_tx_peak(peak)
