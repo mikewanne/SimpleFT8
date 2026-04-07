@@ -6,7 +6,7 @@ Dark Theme Redesign mit LED-Balance-Indikator.
 import time
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QSlider, QFrame, QGridLayout,
+    QSlider, QFrame, QGridLayout, QButtonGroup,
 )
 from PySide6.QtCore import Signal, Qt, QTimer
 from PySide6.QtGui import QFont
@@ -62,33 +62,21 @@ _BTN_BASE = """
     }
 """
 
-_CARD_SS_BLUE = """
-QFrame#card {
-    border: 2px solid #5588ff;
-    border-radius: 8px;
-}
+def _card_ss(accent: str) -> str:
+    """Einheitlicher Karten-Stil: dunkler Rahmen + farbige Top-Akzent-Linie."""
+    return f"""
+QFrame#card {{
+    background-color: #111111;
+    border: 1px solid #222222;
+    border-top: 3px solid {accent};
+    border-radius: 6px;
+}}
 """ + _BTN_BASE
 
-_CARD_SS_GREEN = """
-QFrame#card {
-    border: 2px solid #33cc77;
-    border-radius: 8px;
-}
-""" + _BTN_BASE
-
-_CARD_SS_TEAL = """
-QFrame#card {
-    border: 2px solid #00aacc;
-    border-radius: 8px;
-}
-""" + _BTN_BASE
-
-_CARD_SS_ORANGE = """
-QFrame#card {
-    border: 2px solid #ee9922;
-    border-radius: 8px;
-}
-""" + _BTN_BASE
+_CARD_SS_BLUE   = _card_ss("#4477cc")
+_CARD_SS_GREEN  = _card_ss("#2a8c4a")
+_CARD_SS_TEAL   = _card_ss("#2a8c8c")
+_CARD_SS_ORANGE = _card_ss("#8c5a2a")
 
 # Legacy alias
 _CARD_SS = _CARD_SS_BLUE
@@ -107,12 +95,18 @@ class _ModeBandCard(QFrame):
         lay.setContentsMargins(10, 10, 10, 10)
         lay.setSpacing(8)
 
-        # ── Modus-Zeile ──────────────────────────────────────────
-        row_m = QHBoxLayout()
-        row_m.setSpacing(6)
+        # ── Alles in einem Grid → exakte Spalten-Ausrichtung ─────
+        # Spalten: 0=Label(fix), 1=FT8, 2=FT4, 3=10m/15m, 4=12m/17m, 5=20m
+        # Freq-Frame: Zeile 0, Spalten 3-5 (gleiche Breite wie 15m+17m+20m)
+        self.band_buttons = {}
+        grid = QGridLayout()
+        grid.setSpacing(4)
+        grid.setContentsMargins(0, 0, 0, 0)
+
+        # Zeile 0: Modus + FT8/FT4 + Freq-Box
         lbl_modus = QLabel("Modus")
         lbl_modus.setFixedWidth(42)
-        row_m.addWidget(lbl_modus)
+        grid.addWidget(lbl_modus, 0, 0)
         self.btn_ft8 = QPushButton("FT8")
         self.btn_ft8.setCheckable(True)
         self.btn_ft8.setChecked(True)
@@ -120,38 +114,47 @@ class _ModeBandCard(QFrame):
         self.btn_ft4 = QPushButton("FT4")
         self.btn_ft4.setCheckable(True)
         self.btn_ft4.setFixedHeight(28)
-        row_m.addWidget(self.btn_ft8)
-        row_m.addWidget(self.btn_ft4)
-        row_m.addStretch()
-        lay.addLayout(row_m)
+        grid.addWidget(self.btn_ft8, 0, 1)
+        grid.addWidget(self.btn_ft4, 0, 2)
 
-        # ── Band-Grid (Label links, alle Buttons gleich breit) ────
-        self.band_buttons = {}
-        grid = QGridLayout()
-        grid.setSpacing(4)
-        grid.setContentsMargins(0, 0, 0, 0)
+        freq_frame = QFrame()
+        freq_frame.setStyleSheet(
+            "QFrame { border: 1px solid rgba(120,160,255,0.65); "
+            "border-radius: 4px; background: rgba(0,0,0,0.3); }"
+        )
+        freq_frame.setFixedHeight(30)
+        freq_lay = QHBoxLayout(freq_frame)
+        freq_lay.setContentsMargins(6, 0, 6, 0)
+        self.freq_label = QLabel("14.074 MHz")
+        self.freq_label.setStyleSheet(
+            f"color: #FFD700; font-size: 13pt; font-weight: bold; "
+            f"font-family: {_FONT}; border: none; background: transparent;"
+        )
+        self.freq_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        freq_lay.addWidget(self.freq_label)
+        grid.addWidget(freq_frame, 0, 3, 1, 3)  # span 3 Spalten (= 15m + 17m + 20m)
 
+        # Zeile 1: Band + 10m 12m 15m 17m 20m
         lbl_band = QLabel("Band")
         lbl_band.setFixedWidth(42)
-        grid.addWidget(lbl_band, 0, 0)
-
+        grid.addWidget(lbl_band, 1, 0)
         bands_row1 = ["10m", "12m", "15m", "17m", "20m"]
-        bands_row2 = ["30m", "40m", "60m", "80m"]
-
         for col, b in enumerate(bands_row1):
             btn = QPushButton(b)
             btn.setCheckable(True)
             btn.setChecked(b == "20m")
             btn.setFixedHeight(28)
             self.band_buttons[b] = btn
-            grid.addWidget(btn, 0, col + 1)
+            grid.addWidget(btn, 1, col + 1)
 
+        # Zeile 2: 30m 40m 60m 80m (ab Spalte 1)
+        bands_row2 = ["30m", "40m", "60m", "80m"]
         for col, b in enumerate(bands_row2):
             btn = QPushButton(b)
             btn.setCheckable(True)
             btn.setFixedHeight(28)
             self.band_buttons[b] = btn
-            grid.addWidget(btn, 1, col + 1)  # ab Spalte 1 = unter 10m
+            grid.addWidget(btn, 2, col + 1)
 
         # Alle Button-Spalten (1-5) gleich breit strecken
         for col in range(1, 6):
@@ -282,14 +285,12 @@ class _RadioCard(QFrame):
         lbl_radio.setStyleSheet(f"color: #00aacc; font-size: 10px; font-family: {_FONT}; font-weight: bold;")
         lay.addWidget(lbl_radio)
 
-        # PSK
+        # PSK + Map auf einer Zeile
+        psk_row = QHBoxLayout()
+        psk_row.setSpacing(4)
         self.psk_label = QLabel("PSK: —")
         self.psk_label.setStyleSheet(f"color: #557766; font-family: {_FONT}; font-size: 10px;")
         self.psk_label.setWordWrap(True)
-        lay.addWidget(self.psk_label)
-
-        psk_row = QHBoxLayout()
-        psk_row.setSpacing(2)
         self.btn_psk_map = QPushButton("Map")
         self.btn_psk_map.setFixedHeight(22)
         self.btn_psk_map.setFixedWidth(40)
@@ -298,35 +299,43 @@ class _RadioCard(QFrame):
             "border: 1px solid rgba(0,180,130,0.4); border-radius: 2px; font-size: 10px; }"
             "QPushButton:hover { background: rgba(0,170,120,0.3); }"
         )
-        psk_row.addWidget(self.btn_psk_map)
-        psk_row.addStretch()
+        psk_row.addWidget(self.psk_label, 1)
+        psk_row.addWidget(self.btn_psk_map, 0, Qt.AlignmentFlag.AlignTop)
         lay.addLayout(psk_row)
 
-        # Frequenz
-        self.freq_label = QLabel("14.074 MHz")
-        self.freq_label.setStyleSheet(
-            f"color: #FFD700; font-size: 14pt; font-weight: bold; "
-            f"font-family: {_FONT}; padding: 2px;"
-        )
-        self.freq_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        lay.addWidget(self.freq_label)
-
-        # Power Slider
+        # Power Preset Buttons — inaktive dunkel, nur ausgewaehlter leuchtet
+        _PRESETS = [
+            # watts, active_bg, active_border
+            (10,  "#007733", "#00BB55"),
+            (20,  "#00AA44", "#00FF66"),
+            (30,  "#22AA44", "#44EE66"),
+            (40,  "#668800", "#99CC00"),
+            (50,  "#AA8800", "#DDCC00"),
+            (60,  "#CC7700", "#FFAA00"),
+            (70,  "#CC7700", "#FFAA00"),
+            (80,  "#CC4400", "#FF6622"),
+            (90,  "#CC2222", "#FF4444"),
+            (100, "#AA0000", "#FF2222"),
+        ]
+        self.power_buttons = {}
+        self._power_btn_group = QButtonGroup(self)
+        self._power_btn_group.setExclusive(True)
         power_row = QHBoxLayout()
-        power_row.setSpacing(4)
-        self.power_slider = QSlider(Qt.Orientation.Horizontal)
-        self.power_slider.setRange(0, 100)
-        self.power_slider.setValue(50)
-        self.power_slider.setFixedHeight(18)
-        self.power_slider.setStyleSheet(
-            "QSlider::groove:horizontal { background: rgba(255,255,255,0.1); height: 4px; border-radius: 2px; }"
-            "QSlider::handle:horizontal { background: #00CCAA; width: 14px; margin: -5px 0; border-radius: 7px; }"
-            "QSlider::sub-page:horizontal { background: rgba(0,180,140,0.5); border-radius: 2px; }"
-        )
-        self.power_label = QLabel("50W")
-        self.power_label.setStyleSheet(f"color: {_TEXT}; font-family: {_FONT}; font-size: 11px;")
-        power_row.addWidget(self.power_slider)
-        power_row.addWidget(self.power_label)
+        power_row.setSpacing(1)
+        for watts, active_bg, active_border in _PRESETS:
+            btn = QPushButton(f"{watts}")
+            btn.setCheckable(True)
+            btn.setFixedHeight(22)
+            btn.setStyleSheet(
+                f"QPushButton {{ background: rgba(40,40,40,0.8); color: #999; "
+                f"border: 1px solid #444; border-radius: 2px; "
+                f"font-size: 9px; font-family: {_FONT}; font-weight: bold; padding: 0 1px; }}"
+                f"QPushButton:checked {{ background: {active_bg}; color: white; border-color: {active_border}; }}"
+                f"QPushButton:hover {{ background: rgba(60,60,60,0.8); color: #CCC; }}"
+            )
+            self.power_buttons[watts] = btn
+            self._power_btn_group.addButton(btn)
+            power_row.addWidget(btn)
         lay.addLayout(power_row)
 
         # TUNE + Watt + SWR
@@ -351,31 +360,37 @@ class _RadioCard(QFrame):
         tune_row.addWidget(self.swr_label)
         lay.addLayout(tune_row)
 
-        # ALC
-        self.alc_label = QLabel("ALC —")
-        self.alc_label.setStyleSheet(f"color: #557766; font-family: {_FONT}; font-size: 11px;")
-        lay.addWidget(self.alc_label)
-
-        # TX Level
-        tx_row = QHBoxLayout()
-        tx_row.setSpacing(4)
-        tx_lbl = QLabel("TX Lvl")
-        tx_lbl.setStyleSheet(f"color: #557766; font-family: {_FONT}; font-size: 10px;")
-        self.tx_level_slider = QSlider(Qt.Orientation.Horizontal)
-        self.tx_level_slider.setRange(0, 100)
-        self.tx_level_slider.setValue(100)
-        self.tx_level_slider.setFixedHeight(16)
-        self.tx_level_slider.setStyleSheet(
-            "QSlider::groove:horizontal { background: rgba(255,255,255,0.1); height: 3px; border-radius: 1px; }"
-            "QSlider::handle:horizontal { background: #FF8800; width: 12px; margin: -4px 0; border-radius: 6px; }"
-            "QSlider::sub-page:horizontal { background: rgba(220,120,0,0.5); border-radius: 1px; }"
+        # Peak + TX Level kombinierte Anzeige
+        peak_tx_row = QHBoxLayout()
+        peak_tx_row.setSpacing(4)
+        self.peak_label = QLabel("Peak —")
+        self.peak_label.setFixedWidth(66)
+        self.peak_label.setStyleSheet(
+            f"color: #557766; font-family: {_FONT}; font-size: 10px; "
+            f"border: 1px solid #333; border-radius: 2px; padding: 1px 3px;"
+        )
+        from PySide6.QtWidgets import QProgressBar
+        self.tx_level_bar = QProgressBar()
+        self.tx_level_bar.setRange(0, 150)
+        self.tx_level_bar.setValue(100)
+        self.tx_level_bar.setFixedHeight(12)
+        self.tx_level_bar.setTextVisible(False)
+        self.tx_level_bar.setStyleSheet(
+            "QProgressBar { background: rgba(255,255,255,0.06); border: 1px solid #333; border-radius: 2px; }"
+            "QProgressBar::chunk { background: qlineargradient(x1:0,x2:1, "
+            "stop:0 rgba(0,160,80,0.7), stop:0.7 rgba(180,150,0,0.7), stop:1 rgba(200,80,0,0.8)); "
+            "border-radius: 1px; }"
         )
         self.tx_level_label = QLabel("100%")
-        self.tx_level_label.setStyleSheet(f"color: {_TEXT}; font-family: {_FONT}; font-size: 10px;")
-        tx_row.addWidget(tx_lbl)
-        tx_row.addWidget(self.tx_level_slider)
-        tx_row.addWidget(self.tx_level_label)
-        lay.addLayout(tx_row)
+        self.tx_level_label.setFixedWidth(42)
+        self.tx_level_label.setStyleSheet(
+            f"color: {_TEXT}; font-family: {_FONT}; font-size: 10px; "
+            f"border: 1px solid #333; border-radius: 2px; padding: 1px 3px;"
+        )
+        peak_tx_row.addWidget(self.peak_label)
+        peak_tx_row.addWidget(self.tx_level_bar, 1)
+        peak_tx_row.addWidget(self.tx_level_label)
+        lay.addLayout(peak_tx_row)
 
 
 class _QSOStatusCard(QFrame):
@@ -578,6 +593,7 @@ class ControlPanel(QWidget):
         self.btn_ft8 = mb_card.btn_ft8
         self.btn_ft4 = mb_card.btn_ft4
         self.band_buttons = mb_card.band_buttons
+        self.freq_label = mb_card.freq_label
         mb_card.btn_ft8.clicked.connect(lambda: self._set_mode("FT8"))
         mb_card.btn_ft4.clicked.connect(lambda: self._set_mode("FT4"))
         for band, btn in mb_card.band_buttons.items():
@@ -608,18 +624,18 @@ class ControlPanel(QWidget):
         self.psk_label = radio_card.psk_label
         self.btn_psk_map = radio_card.btn_psk_map
         self.btn_psk_map.clicked.connect(self._open_psk_map)
-        self.freq_label = radio_card.freq_label
-        self.power_slider = radio_card.power_slider
-        self.power_label = radio_card.power_label
-        self.power_slider.valueChanged.connect(self._on_power_changed)
+        self.power_buttons = radio_card.power_buttons
+        for watts, btn in self.power_buttons.items():
+            btn.clicked.connect(lambda checked, w=watts: self._on_power_preset_clicked(w))
+        # Default: 10W vorselektieren
+        self.power_buttons[10].setChecked(True)
         self.btn_tune = radio_card.btn_tune
         self.btn_tune.clicked.connect(self._on_tune_clicked)
         self.watt_label = radio_card.watt_label
         self.swr_label = radio_card.swr_label
-        self.alc_label = radio_card.alc_label
-        self.tx_level_slider = radio_card.tx_level_slider
+        self.peak_label = radio_card.peak_label
+        self.tx_level_bar = radio_card.tx_level_bar
         self.tx_level_label = radio_card.tx_level_label
-        self.tx_level_slider.valueChanged.connect(self._on_tx_level_changed)
         layout.addWidget(radio_card)
 
         # ── Kachel 3: QSO + STATUS (orange) ─────────────────────────────
@@ -863,9 +879,15 @@ class ControlPanel(QWidget):
     # =====================================================================
     # Power / TX Level / Tune
     # =====================================================================
-    def _on_power_changed(self, value: int):
-        self.power_label.setText(f"{value}W")
-        self.power_changed.emit(value)
+    def _on_power_preset_clicked(self, watts: int):
+        self.power_changed.emit(watts)
+
+    def set_power_preset(self, watts: int):
+        """Preset-Button programmatisch selektieren (ohne Signal)."""
+        # Naechsten verfuegbaren Wert finden
+        available = sorted(self.power_buttons.keys())
+        best = min(available, key=lambda w: abs(w - watts))
+        self.power_buttons[best].setChecked(True)
 
     def _on_tx_level_changed(self, value: int):
         self.tx_level_label.setText(f"{value}%")
@@ -890,24 +912,26 @@ class ControlPanel(QWidget):
         )
 
     def update_alc(self, alc: float):
-        """ALC-Meter aktualisieren mit Farbcodierung.
+        """ALC-Meter aktualisieren (nur intern, nicht mehr angezeigt)."""
+        pass
 
-        FlexRadio ALC:
-        - 0 dB = kein Eingriff (Signal unter ALC-Schwelle)
-        - > 0 dB = ALC komprimiert (SCHLECHT fuer FT8!)
-        """
-        if alc > 5:
+    def update_tx_peak(self, peak: float):
+        """Audio-Peak-Level anzeigen. peak=0.0-x.x (1.0 = Clipping)."""
+        if peak > 1.0:
             color = "#FF4444"
-            label = f"ALC {alc:.0f} dB HOCH!"
-        elif alc > 0:
+            label = f"Peak {peak:.0%} CLIP!"
+        elif peak > 0.90:
             color = "#FFD700"
-            label = f"ALC {alc:.0f} dB"
-        else:
+            label = f"Peak {peak:.0%}"
+        elif peak > 0.01:
             color = "#44FF44"
-            label = f"ALC {alc:.0f} dB"
-        self.alc_label.setText(label)
-        self.alc_label.setStyleSheet(
-            f"color: {color}; font-family: {_FONT}; font-size: 11px;"
+            label = f"Peak {peak:.0%}"
+        else:
+            color = "#557766"
+            label = "Peak —"
+        self.peak_label.setText(label)
+        self.peak_label.setStyleSheet(
+            f"color: {color}; font-family: {_FONT}; font-size: 10px;"
         )
 
     # =====================================================================

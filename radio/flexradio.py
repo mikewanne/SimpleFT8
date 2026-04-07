@@ -63,6 +63,7 @@ class FlexRadio(QObject):
         self._last_swr = 1.0
         self._last_fwdpwr_dbm = -130.0  # Letzter Empfangspegel (fuer Noise Floor Messung)
         self._tx_audio_level = 1.0
+        self._last_tx_peak = 0.0  # Peak-Level des letzten TX-Audio (0.0-x.x)
         self._is_transmitting = False
         self._meter_ids = {}
         self._dx_mode = False
@@ -240,6 +241,7 @@ class FlexRadio(QObject):
             time.sleep(1)
             self._raw_send(f"slice set {s} tx=1")
             self._raw_send("interlock tx1_enabled=1")
+            self._raw_send("transmit set max_power_level=100")  # Volle 100W freischalten
             self._raw_send("transmit set rfpower=50")
             self._raw_send(f"slice set {s} dax=1")
             self._raw_send(f"dax audio set 1 slice={s}")
@@ -850,7 +852,9 @@ class FlexRadio(QObject):
         self._send_cmd(f"slice set {slice_idx} mode={mode}")
 
     def set_power(self, power_percent: int):
-        """Sendeleistung in Prozent (0-100)."""
+        """Sendeleistung in Prozent (0-100). max_power_level=100 wird immer zuerst gesetzt,
+        da Bandwechsel das Radio-Profil laden und den Wert ueberschreiben koennen."""
+        self._send_cmd("transmit set max_power_level=100")
         self._send_cmd(f"transmit set rfpower={power_percent}")
 
     def check_swr_safe(self) -> bool:
@@ -858,8 +862,11 @@ class FlexRadio(QObject):
         return self._last_swr < self._swr_limit
 
     def set_tx_level(self, level: float):
-        """Set TX audio level (0.0 to 1.0)."""
-        self._tx_audio_level = max(0.0, min(1.0, level))
+        """Set TX audio level (0.0 to 1.5). Steuert FlexRadio mic_level (0-100) UND Software-Gain.
+        Ueber 100% (1.0) wird das Audio-Signal im Software-Pfad verstaerkt (mic_level bleibt 100)."""
+        self._tx_audio_level = max(0.0, min(1.5, level))
+        mic_level = min(100, int(level * 100))
+        self._send_cmd(f"transmit set mic_level={mic_level}")
 
     def ptt_on(self):
         if not self.check_swr_safe():
@@ -959,6 +966,11 @@ class FlexRadio(QObject):
 
         # TX audio level anwenden
         audio = audio * self._tx_audio_level
+
+        # Peak-Level messen VOR Clipping (fuer Signal-Qualitaets-Monitoring)
+        self._last_tx_peak = float(np.max(np.abs(audio)))
+        if self._last_tx_peak > 1.0:
+            print(f"[TX] CLIPPING! Peak={self._last_tx_peak:.2f} bei TxLvl={self._tx_audio_level:.2f}")
 
         # Float → int16 big-endian mono (wie AetherSDR Zeile 956-958)
         mono_int16 = (np.clip(audio, -1, 1) * 32767).astype(np.int16)
@@ -1285,6 +1297,8 @@ class FlexRadio(QObject):
                         print(f"[TX] SWR ALARM: {swr:.1f}!")
                         self.swr_alarm.emit(swr)
             elif mid == self._meter_ids.get("HWALC"):
+                if self._is_transmitting and abs(val) > 0.01:
+                    print(f"[Meter] HWALC raw={raw} val={val:.2f} dB")
                 self.meter_update.emit("ALC", val)
             elif mid == self._meter_ids.get("LEVEL"):
                 self._last_fwdpwr_dbm = val
