@@ -9,7 +9,7 @@ import threading
 import numpy as np
 from PySide6.QtCore import QObject, Signal
 
-from PyFT8.transmitter import pack_message, AudioOut
+from .ft8lib_decoder import get_ft8lib
 
 
 SAMPLE_RATE_FT8 = 12000
@@ -33,7 +33,6 @@ class Encoder(QObject):
     def __init__(self, audio_freq_hz: int = 1000):
         super().__init__()
         self.audio_freq_hz = audio_freq_hz
-        self._audio_out = AudioOut()
         self._radio = None
         self._decoder = None
         self._tx_thread = None
@@ -76,15 +75,10 @@ class Encoder(QObject):
                 self.encoding_error.emit(f"Ungueltige Nachricht: {message}")
                 return None
 
-            symbols = pack_message(parts[0], parts[1], parts[2])
-            if symbols is None or len(symbols) != 79:
+            audio = get_ft8lib().encode(message.strip(), freq_hz=float(self.audio_freq_hz))
+            if audio is None:
                 self.encoding_error.emit(f"Encoding fehlgeschlagen: {message}")
-                return None
-
-            return self._audio_out.create_ft8_wave(
-                symbols, fs=SAMPLE_RATE_FT8,
-                f_base=float(self.audio_freq_hz),
-            )
+            return audio
         except Exception as e:
             self.encoding_error.emit(f"Encoder-Fehler: {e}")
             return None
@@ -94,7 +88,6 @@ class Encoder(QObject):
         if self._is_transmitting:
             print(f"[TX] SKIP (TX aktiv): '{message}'")
             return
-        self._is_transmitting = True  # Atomar setzen VOR Thread-Start (Race-Fix)
         self._tx_thread = threading.Thread(
             target=self._tx_worker, args=(message,), daemon=True
         )
@@ -102,11 +95,11 @@ class Encoder(QObject):
 
     def _tx_worker(self, message: str):
         """TX-Worker: Timing → PTT → Audio via VITA-49 → PTT off."""
+        self._is_transmitting = True
         try:
             self._tx_worker_inner(message)
         finally:
             self._is_transmitting = False
-            self.tx_finished.emit()  # IMMER emitten — auch bei encode-Fehler/Abbruch
 
     def _tx_worker_inner(self, message: str):
         # FESTE TX-Frequenz — NICHT bei jedem TX ändern!
@@ -171,3 +164,5 @@ class Encoder(QObject):
         # PTT aus
         if self._radio:
             self._radio.ptt_off()
+
+        self.tx_finished.emit()
