@@ -827,7 +827,7 @@ class ControlPanel(QWidget):
         """Diversity-Anzeige aktualisieren.
 
         ratio: '70:30' | '30:70' | '50:50'
-        phase: 'measure' | 'operate'
+        phase: 'measure' | 'operate' | 'remeasure'
         measure_step: abgeschlossene Messschritte (0..measure_total)
         operate_cycles: abgeschlossene Betriebszyklen (0..operate_total)
         """
@@ -836,7 +836,14 @@ class ControlPanel(QWidget):
         for lbl in self._a2_pct.values():
             lbl.setStyleSheet(_DIV_PCT_OFF)
 
-        if phase == "measure":
+        if phase == "remeasure":
+            self._phase_label.setText("● NEUEINMESSUNG")
+            self._phase_label.setStyleSheet(
+                f"color:#FF6600;font-size:9px;font-family:{_FONT};font-weight:bold;"
+            )
+            self._a1_pct["50%"].setStyleSheet(_DIV_PCT_YELLOW)
+            self._a2_pct["50%"].setStyleSheet(_DIV_PCT_YELLOW)
+        elif phase == "measure":
             step_txt = f"{measure_step}/{measure_total}" if measure_step > 0 else f"0/{measure_total}"
             self._phase_label.setText(f"● MESSEN {step_txt}")
             self._phase_label.setStyleSheet(

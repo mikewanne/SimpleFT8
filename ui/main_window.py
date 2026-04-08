@@ -682,11 +682,36 @@ class MainWindow(QMainWindow):
             self._normal_stations = {}
             self._apply_normal_mode()
         elif mode == "diversity":
+            # Dialog: Einmessen erforderlich?
+            from PySide6.QtWidgets import QMessageBox
+            dlg = QMessageBox(self)
+            dlg.setWindowTitle("Diversity Modus")
+            dlg.setText(
+                "Einmessen der Antennen erforderlich.\n\n"
+                "Während des Einmessens ist kein CQ möglich.\n"
+                "Dauer: ca. 2 Minuten (8 Zyklen)."
+            )
+            btn_measure = dlg.addButton("Einmessen starten", QMessageBox.ButtonRole.AcceptRole)
+            btn_normal  = dlg.addButton("Normal Mode", QMessageBox.ButtonRole.RejectRole)
+            dlg.exec()
+            if dlg.clickedButton() == btn_normal:
+                # Zurück zu Normal — Button-State korrigieren
+                self.control_panel.set_rx_mode("normal")
+                self._update_statusbar()
+                return
             self._rx_mode = "diversity"
             self._diversity_stations = {}
             self._enable_diversity()
 
         self._update_statusbar()
+
+    def _set_cq_locked(self, locked: bool):
+        """CQ-Button sperren/freigeben waehrend Diversity-Einmessen."""
+        self.control_panel.btn_cq.setEnabled(not locked)
+        if locked and self.qso_sm.cq_mode:
+            self.qso_sm.stop_cq()
+            self.control_panel.set_cq_active(False)
+            self.qso_panel.add_info("CQ gestoppt — Diversity-Einmessen startet")
 
     def _enable_diversity(self):
         """Diversity aktivieren: Antenne pro Zyklus wechseln, Stationen akkumulieren."""
@@ -694,6 +719,7 @@ class MainWindow(QMainWindow):
         self._diversity_current_ant = "A1"
         self._diversity_ant_queue = deque()  # (ant, phase) Tupel
         self._diversity_ctrl.reset()
+        self._set_cq_locked(True)   # CQ sperren bis Einmessen abgeschlossen
         self.control_panel.update_diversity_ratio("50:50", "measure", 0,
                                                   self._diversity_ctrl.MEASURE_CYCLES)
         self.control_panel.update_diversity_counts(0, 0)
