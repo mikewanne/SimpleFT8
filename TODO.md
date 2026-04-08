@@ -1,6 +1,6 @@
 # SimpleFT8 — TODO & Roadmap
 
-**Stand:** 08.04.2026 | **Tag:** v0.19-slot-fix
+**Stand:** 08.04.2026 | **Tag:** v0.20-forward-jump-fix
 **GitHub:** https://github.com/mikewanne/SimpleFT8
 
 ---
@@ -8,8 +8,9 @@
 ## PRIO 1: NOCH OFFEN (QSO-Logik)
 
 - [x] **Vorwaerts-Springen im State** — qso_state.py (08.04.2026)
-  - WAIT_REPORT + RR73/73 → direkt TX_RR73 (ueberspringt TX_REPORT + WAIT_RR73)
-  - TX_CALL + RR73/73 → pending → nach TX direkt TX_RR73
+  - WAIT_REPORT + RR73/73 → direkt TX_73 (WSJT-X konform: sendet 73, nicht RR73)
+  - TX_CALL + RR73/73 → pending → nach TX direkt TX_73
+  - Fix: vorher wurde RR73 zurueckgesendet → "Double RR73 Glitch" → jetzt 73 (korrekt)
 
 - [ ] **Even/Odd Slot bei Retries** — qso_state.py + encoder.py
   - Beim ersten CQ-Reply wird Slot jetzt korrekt gesetzt (v0.19)

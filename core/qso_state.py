@@ -327,9 +327,9 @@ class QSOStateMachine(QObject):
                 self._set_state(QSOState.WAIT_REPORT)
                 print(f"[QSO] TX fertig — verarbeite Hunt-Antwort: '{pending.raw}'")
                 if pending.is_rr73 or pending.is_73:
-                    # Vorwaerts-Sprung: RR73/73 waehrend TX_CALL → direkt TX_RR73
-                    self._dbg.log("TX", f"Pending RR73/73 von {pending.caller} → TX_RR73")
-                    tx_msg = f"{self.qso.their_call} {self.my_call} RR73"
+                    # Vorwaerts-Sprung: RR73/73 waehrend TX_CALL → sende 73 (WSJT-X konform)
+                    self._dbg.log("TX", f"Pending RR73/73 von {pending.caller} → TX_73")
+                    tx_msg = f"{self.qso.their_call} {self.my_call} 73"
                     self._set_state(QSOState.TX_RR73)
                     self.send_message.emit(tx_msg)
                 elif pending.is_r_report:
@@ -349,6 +349,8 @@ class QSOStateMachine(QObject):
             pending = self._pending_rr73
             if pending:
                 self._pending_rr73 = None
+                if pending.is_r_report:
+                    self.qso.their_snr = pending.grid_or_report
                 self._dbg.log("TX", f"TX_REPORT fertig — pending RR73 von {pending.caller} → sende RR73")
                 tx_msg = f"{self.qso.their_call} {self.my_call} RR73"
                 self._set_state(QSOState.TX_RR73)
@@ -357,7 +359,7 @@ class QSOStateMachine(QObject):
             self._set_state(QSOState.WAIT_RR73)
             self.qso.timeout_cycles = 0
         elif self.state == QSOState.TX_RR73:
-            # ADIF sofort loggen (RR73 = unsere Bestätigung ist raus)
+            # ADIF sofort loggen (RR73 oder 73 gesendet = QSO von unserer Seite bestaetigt)
             self.qso_complete.emit(self.qso)
             self.cq_qso_count += 1
             # Warte noch auf 73 von Gegenstation (max 2 Zyklen)
@@ -414,9 +416,9 @@ class QSOStateMachine(QObject):
                     self._pending_hunt_reply = msg
                     self._dbg.log("RX", f"RR73/73 waehrend TX_CALL gemerkt von {msg.caller} → wird TX_RR73")
                     return
-                # WAIT_REPORT + RR73/73 → direkt TX_RR73 (Station hat alles empfangen)
-                self._dbg.log("RX", f"Vorwaerts-Sprung: RR73/73 in WAIT_REPORT → TX_RR73")
-                tx_msg = f"{self.qso.their_call} {self.my_call} RR73"
+                # WAIT_REPORT + RR73/73 → sende 73 (WSJT-X konform, Station hat alles empfangen)
+                self._dbg.log("RX", f"Vorwaerts-Sprung: RR73/73 in WAIT_REPORT → TX_73")
+                tx_msg = f"{self.qso.their_call} {self.my_call} 73"
                 self._set_state(QSOState.TX_RR73)
                 self.send_message.emit(tx_msg)
                 return
