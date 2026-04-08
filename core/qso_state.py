@@ -240,7 +240,7 @@ class QSOStateMachine(QObject):
             return
         if self.state == QSOState.WAIT_73:
             self.qso.timeout_cycles += 1
-            if self.qso.timeout_cycles >= 2:
+            if self.qso.timeout_cycles >= 3:
                 print(f"[QSO] WAIT_73 Timeout — kein 73 empfangen, QSO war schon geloggt")
                 self._resume_cq_if_needed()
             return
@@ -257,8 +257,9 @@ class QSOStateMachine(QObject):
             self._dbg.log("WAIT", f"Warte auf {self.qso.their_call} "
                          f"({self.state.name}, Zyklus {self.qso.timeout_cycles}/{self.qso.max_timeout})")
 
-            # Nach 2 Zyklen ohne Antwort: nochmal senden (wie WSJT-X)
-            if self.qso.timeout_cycles == 2:
+            # Nach 3 Zyklen ohne Antwort: nochmal senden
+            # (3 statt 2: Decoder braucht 1-2s nach Slot-Ende → Race Condition vermeiden)
+            if self.qso.timeout_cycles == 3:
                 if self.state == QSOState.WAIT_REPORT:
                     station_limit = min(self.qso.max_calls, MAX_STATION_CALLS)
                     if self.qso.calls_made < station_limit:

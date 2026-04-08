@@ -3,12 +3,12 @@
 from pathlib import Path
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QTableWidget, QTableWidgetItem, QLineEdit, QHeaderView,
+    QTableWidget, QTableWidgetItem, QLineEdit, QHeaderView, QMessageBox,
 )
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor, QFont
 
-from log.adif import parse_all_adif_files
+from log.adif import parse_all_adif_files, delete_qso
 from core.geo import callsign_to_country
 
 _FONT = "Menlo"
@@ -111,6 +111,19 @@ class LogbookWidget(QWidget):
         btn_upload.clicked.connect(self.upload_requested.emit)
         toolbar.addWidget(btn_upload)
 
+        self.btn_delete = QPushButton("Löschen")
+        self.btn_delete.setFixedWidth(60)
+        self.btn_delete.setEnabled(False)
+        self.btn_delete.setStyleSheet(
+            f"QPushButton {{ background: rgba(180,30,30,0.25); color: #CC4444; "
+            f"border: 1px solid #633; border-radius: 3px; font-family: {_FONT}; "
+            f"font-size: 10px; font-weight: bold; }}"
+            f"QPushButton:hover {{ background: rgba(200,40,40,0.4); color: #FF6666; }}"
+            f"QPushButton:disabled {{ color: #555; border-color: #333; }}"
+        )
+        self.btn_delete.clicked.connect(self._on_delete_clicked)
+        toolbar.addWidget(self.btn_delete)
+
         layout.addLayout(toolbar)
 
         # Tabelle
@@ -162,6 +175,7 @@ class LogbookWidget(QWidget):
         """)
 
         self.table.cellClicked.connect(self._on_row_clicked)
+        self.table.itemSelectionChanged.connect(self._on_selection_changed)
         layout.addWidget(self.table)
 
     def load_adif(self, directory: Path = None):
@@ -251,3 +265,57 @@ class LogbookWidget(QWidget):
             rec = item.data(Qt.ItemDataRole.UserRole)
             if rec:
                 self.qso_clicked.emit(rec)
+
+    def _on_selection_changed(self):
+        """Auswahl geändert → Delete-Button aktivieren/deaktivieren."""
+        self.btn_delete.setEnabled(bool(self.table.selectedItems()))
+
+    def _selected_record(self):
+        """Aktuell ausgewählten Record zurückgeben oder None."""
+        rows = self.table.selectedItems()
+        if not rows:
+            return None
+        row = self.table.currentRow()
+        item = self.table.item(row, 0)
+        return item.data(Qt.ItemDataRole.UserRole) if item else None
+
+    def _on_delete_clicked(self):
+        """Ausgewählten QSO-Eintrag mit Sicherheitsabfrage löschen."""
+        rec = self._selected_record()
+        if not rec:
+            return
+
+        call = rec.get("CALL", "?")
+        date = rec.get("QSO_DATE", "")
+        datum = f"{date[6:8]}.{date[4:6]}.{date[2:4]}" if len(date) == 8 else date
+        band = rec.get("BAND", "?")
+        mode = rec.get("MODE", "?")
+        time_on = rec.get("TIME_ON", "")
+        uhrzeit = f"{time_on[:2]}:{time_on[2:4]}" if len(time_on) >= 4 else time_on
+
+        msg = QMessageBox()
+        msg.setWindowTitle("QSO löschen")
+        msg.setIcon(QMessageBox.Icon.Warning)
+        msg.setText(
+            f"Wollen Sie diesen QSO-Eintrag wirklich löschen?\n\n"
+            f"  Call:   {call}\n"
+            f"  Datum:  {datum}  {uhrzeit} UTC\n"
+            f"  Band:   {band}  {mode}\n\n"
+            f"Diese Aktion kann nicht rückgängig gemacht werden!"
+        )
+        msg.setStyleSheet("""
+            QMessageBox { background-color: #1a1a2e; }
+            QMessageBox QLabel { color: #CCC; font-family: Menlo; font-size: 12px; }
+            QPushButton { background: #333; color: #CCC; border: 1px solid #555;
+                border-radius: 4px; padding: 6px 16px; font-size: 12px; min-width: 80px; }
+            QPushButton:hover { background: #444; }
+        """)
+        btn_yes = msg.addButton("Ja, löschen", QMessageBox.ButtonRole.DestructiveRole)
+        msg.addButton("Abbrechen", QMessageBox.ButtonRole.RejectRole)
+        msg.exec()
+
+        if msg.clickedButton() == btn_yes:
+            if delete_qso(rec):
+                self.refresh()
+            else:
+                QMessageBox.warning(self, "Fehler", "Eintrag konnte nicht gelöscht werden.")

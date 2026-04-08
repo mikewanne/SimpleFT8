@@ -28,21 +28,74 @@ def parse_adif_file(path: Path) -> List[Dict[str, str]]:
         text = text[eoh + 5:]
 
     records = []
-    # Jeder Record endet mit <EOR>
     _FIELD_RE = re.compile(r"<(\w+):(\d+)(?::\w+)?>", re.IGNORECASE)
     for block in re.split(r"<EOR>", text, flags=re.IGNORECASE):
         if not block.strip():
             continue
         record = {}
-        pos = 0
         for m in _FIELD_RE.finditer(block):
             name = m.group(1).upper()
             length = int(m.group(2))
             value_start = m.end()
             record[name] = block[value_start:value_start + length].strip()
         if record:
+            record["_SOURCE_FILE"] = str(path)  # Quelldatei merken fuer Loeschen
             records.append(record)
     return records
+
+
+def delete_qso(record: Dict[str, str]) -> bool:
+    """QSO-Record aus der ADIF-Datei loeschen. Gibt True zurueck wenn erfolgreich."""
+    source = record.get("_SOURCE_FILE")
+    if not source:
+        return False
+    path = Path(source)
+    if not path.exists():
+        return False
+
+    # Identifikation: CALL + QSO_DATE + TIME_ON (eindeutig genug)
+    match_call = record.get("CALL", "")
+    match_date = record.get("QSO_DATE", "")
+    match_time = record.get("TIME_ON", "")
+
+    text = path.read_text(errors="replace")
+    eoh_pos = text.upper().find("<EOH>")
+    header = text[:eoh_pos + 5] if eoh_pos >= 0 else ""
+    body = text[eoh_pos + 5:] if eoh_pos >= 0 else text
+
+    _FIELD_RE = re.compile(r"<(\w+):(\d+)(?::\w+)?>", re.IGNORECASE)
+    blocks = re.split(r"(<EOR>)", body, flags=re.IGNORECASE)
+
+    # blocks: [block0, "<EOR>", block1, "<EOR>", ...]
+    new_body = ""
+    i = 0
+    deleted = False
+    while i < len(blocks):
+        block = blocks[i]
+        eor = blocks[i + 1] if i + 1 < len(blocks) else ""
+        i += 2
+
+        if not block.strip():
+            continue
+
+        # Record aus Block parsen
+        rec = {}
+        for m in _FIELD_RE.finditer(block):
+            name = m.group(1).upper()
+            length = int(m.group(2))
+            rec[name] = block[m.end():m.end() + length].strip()
+
+        if (not deleted
+                and rec.get("CALL") == match_call
+                and rec.get("QSO_DATE") == match_date
+                and rec.get("TIME_ON") == match_time):
+            deleted = True  # diesen Record ueberspringen
+        else:
+            new_body += block + eor
+
+    if deleted:
+        path.write_text(header + new_body)
+    return deleted
 
 
 def parse_all_adif_files(directory: Path) -> List[Dict[str, str]]:

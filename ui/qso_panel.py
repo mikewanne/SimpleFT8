@@ -89,13 +89,13 @@ class QSOPanel(QWidget):
 
     def add_tx(self, message: str):
         """Eigene gesendete Nachricht anzeigen."""
-        utc = time.strftime("%H:%M", time.gmtime())
-        self._append_colored(f"{utc} → {message}", "#FFAA00")
+        utc = time.strftime("%H:%M:%S", time.gmtime())
+        self._append_colored(f"{utc}  →  Sende   {message}", "#FFAA00")
 
     def add_rx(self, message: str):
         """Empfangene Antwort anzeigen."""
-        utc = time.strftime("%H:%M", time.gmtime())
-        self._append_colored(f"{utc} ← {message}", "#44BBFF")
+        utc = time.strftime("%H:%M:%S", time.gmtime())
+        self._append_colored(f"{utc}  ←  Empf.   {message}", "#44BBFF")
 
     def add_qso_complete(self, their_call: str):
         """QSO als abgeschlossen markieren."""
