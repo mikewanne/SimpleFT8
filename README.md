@@ -1,18 +1,21 @@
-# SimpleFT8 — Minimal FT8/FT4 Client for FlexRadio on macOS
+# SimpleFT8 — FT8/FT4 Client for FlexRadio
 
-**English** | [Deutsch](README_DE.md)
+[English](#english) | [Deutsch](#deutsch)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![Platform: macOS](https://img.shields.io/badge/platform-macOS-lightgrey.svg)](https://www.apple.com/macos/)
 
-**Direct SmartSDR control | Temporal Polarization Diversity | Adaptive Antenna Selection | Auto TX Power Regulation**
-
-SimpleFT8 is a standalone FT8/FT4 client that controls your FlexRadio directly via the SmartSDR TCP API — no SmartSDR GUI needed. It features temporal antenna diversity with UCB1 adaptive selection, achieving up to 8x more decoded stations than conventional setups.
-
 ---
 
-## What Makes This Different
+<a name="english"></a>
+## English
+
+**Direct SmartSDR control | Temporal Polarization Diversity | Adaptive Antenna Selection | Auto TX Power Regulation**
+
+SimpleFT8 is a standalone FT8/FT4 client that controls your FlexRadio directly via the SmartSDR TCP API — no SmartSDR GUI needed. It features temporal antenna diversity with UCB1 adaptive selection.
+
+### What Makes This Different
 
 Unlike WSJT-X or similar clients that need SmartSDR running, SimpleFT8 communicates **directly** with your FlexRadio via TCP (port 4992) and streams VITA-49 audio over UDP (port 4991). This enables:
 
@@ -34,229 +37,160 @@ Controlled test on 40m, same hardware (FLEX-8400M), 2 minutes apart:
 
 See [test screenshots and methodology](docs/DIVERSITY.md) for details.
 
----
-
-## Screenshots
+### Screenshots
 
 | Main Interface | Diversity Mode |
 |:-:|:-:|
 | ![Main](docs/screenshots/normal_27stations_40m.png) | ![Diversity](docs/screenshots/diversity_37stations_40m.png) |
 
----
-
-## Core Innovations
-
-Each of the three core features has its own detailed documentation with screenshots and technical explanation:
+### Core Innovations
 
 - **[Temporal Polarization Diversity](docs/DIVERSITY.md)** — How antenna cycling works, UCB1 algorithm, test results
 - **[DX Tuning / Gain Measurement](docs/DX_TUNING.md)** — Automated antenna optimization, per-band presets
 - **[Auto TX Power Regulation](docs/POWER_REGULATION.md)** — Closed-loop feedback, clipping protection, per-band calibration
 
----
+### Features
 
-## Features
+- **Temporal Polarization Diversity** with UCB1 adaptive antenna ratio (70:30, 50:50, 30:70)
+- **DX Tuning**: Automated 18-cycle gain measurement, per-band presets
+- **Auto TX Power Regulation**: PI-controller with FWDPWR feedback, peak monitoring, per-band calibration
+- **Signal Processing**: 5-pass signal subtraction, spectral whitening, sinc resampling
+- **QSO Management**: Hunt mode + CQ mode, full state machine, ADIF 3.1.7 logging
+- **Integrated Logbook**: Sortable table, search, DXCC counter, QSO detail overlay
+- **QRZ.com**: Callsign lookup + logbook upload
+- **PSKReporter** integration with spot statistics and distance display
 
-### Temporal Polarization Diversity
-- Cycles between ANT1 and ANT2 every 15-second FT8 cycle
-- Accumulates decoded stations from both antennas without duplicates
-- Visual indicators show which stations are exclusive to each antenna (A1, A2, A1>2, A2>1)
-- Works on any FlexRadio with two antenna ports (even single-SCU models)
-
-### UCB1 Adaptive Antenna Selection
-- In AUTO mode, uses Upper Confidence Bound (UCB1) multi-armed bandit algorithm
-- Dynamically finds the optimal antenna ratio: 70:30, 50:50, or 30:70
-- Continuously adapts to changing propagation — no manual tuning needed
-- Exploration bonus prevents under-sampled antenna from being abandoned
-
-### DX Tuning
-- Automated 18-cycle interleaved measurement of both antennas
-- Per-antenna preamp gain optimization per band
-- Presets saved and automatically loaded on band change
-
-### Auto TX Power Regulation
-- P-controller feedback loop using the radio's FWDPWR meter
-- Automatically adjusts TX audio drive (mic_level + software gain) so actual watts match selected power
-- Per-band calibration saved — instant convergence on band change
-- Clipping protection: monitors audio peak level, stops increasing if signal would distort
-- Compensates for antenna/SWR changes and weather conditions in real-time
-
-### Signal Processing
-- 5-pass iterative signal subtraction for weak signal recovery
-- FFT-based spectral whitening with median noise floor normalization
-- Anti-alias sinc resampling (63 taps, Hamming window) from 24 kHz to 12 kHz
-- LDPC decoder with 50 iterations, 200 candidates, multi-sync LLR sweep
-
-### QSO Management
-- **Hunt mode**: Click any station in the RX panel to initiate a QSO
-- **CQ mode**: Automatic CQ calling with TX queue for incoming callers
-- Full state machine: CQ -> Report -> RR73 -> ADIF log
-- Configurable max call attempts (3/5/7/99)
-- Even/Odd slot auto-detection and correction
-
-### Logging and Reporting
-- ADIF 3.1.7 export (append mode)
-- PSKReporter integration with spot statistics and distance display
-- Country detection from callsign prefix with distance in km
-
----
-
-## Installation
-
-### Prerequisites
-- macOS (tested on macOS 15 Sequoia)
-- Python 3.12 or newer
-- FlexRadio with SmartSDR TCP API (FLEX-6000 / 8000 series)
-- Two antenna ports for Diversity mode (optional)
-
-### Setup
+### Installation
 
 ```bash
 git clone https://github.com/mikewanne/SimpleFT8.git
 cd SimpleFT8
-
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-
 python3 main.py
 ```
 
-### Dependencies
-- PySide6 (Qt6 GUI framework)
-- PyFT8 2.6.1 (FT8/FT4 encode/decode)
-- NumPy (signal processing)
-- sounddevice (audio fallback)
-- ntplib (time synchronization)
+**Requirements:** macOS, Python 3.12+, FlexRadio with SmartSDR TCP API (FLEX-6000/8000 series). Two antenna ports for Diversity mode (optional).
 
----
+### Configuration
 
-## Configuration
+Settings in `~/.simpleft8/config.json`: callsign, locator, radio IP, band, power preset, QRZ API key.
 
-SimpleFT8 stores settings in `~/.simpleft8/config.json`:
-
-```json
-{
-  "callsign": "YOURCALL",
-  "locator": "JO31",
-  "flexradio_ip": "192.168.1.68",
-  "flexradio_port": 4992,
-  "band": "20m",
-  "mode": "FT8",
-  "power_preset": 70,
-  "max_calls": 3,
-  "swr_limit": 3.0
-}
-```
-
-On first run, the file is created with default values. Set your callsign, locator, and radio IP, then restart.
-
----
-
-## Architecture
+### Architecture
 
 ```
 SimpleFT8/
-├── main.py               # Entry point + instance cleanup
-├── config/
-│   └── settings.py       # Settings, band frequencies, FlexRadio IP
-├── core/
-│   ├── decoder.py        # FT8 decode (PyFT8 + subtraction + whitening)
-│   ├── encoder.py        # FT8 encode (PyFT8 -> VITA-49 TX)
-│   ├── message.py        # FT8 message parser (CQ, Report, Grid, RR73)
-│   ├── qso_state.py      # QSO state machine (Hunt + CQ)
-│   ├── diversity.py      # Diversity controller (measure/operate phases)
-│   └── timing.py         # UTC clock, 15s/7.5s cycle timing
-├── radio/
-│   └── flexradio.py      # SmartSDR TCP + VITA-49 RX/TX audio
-├── log/
-│   └── adif.py           # ADIF 3.1.7 writer
-├── ui/
-│   ├── main_window.py    # 3-panel QSplitter layout
-│   ├── rx_panel.py       # RX station list (color-coded)
-│   ├── qso_panel.py      # QSO history (TX/RX chronological)
-│   └── control_panel.py  # Mode, Band, Antenna, Radio, QSO controls
-└── requirements.txt
+├── main.py               # Entry point
+├── config/settings.py    # Settings, band frequencies
+├── core/                 # Decoder, encoder, QSO state machine, diversity, timing
+├── radio/flexradio.py    # SmartSDR TCP + VITA-49 RX/TX audio
+├── log/                  # ADIF writer, QRZ.com API
+└── ui/                   # PySide6 GUI (3-panel layout)
 ```
 
-### Connection Flow
+### Radio Compatibility
 
-```
-1. TCP connect to radio:4992
-2. Disconnect SmartSDR-M (free receiver resources)
-3. Create own panadapter + slice
-4. Configure: DIGU mode, DAX, TX stream
-5. Set max_power_level=100, rfpower, mic_level
-6. Stream VITA-49 audio: RX decode + TX encode
-7. Keepalive every 5 seconds
-```
+**Tested:** FLEX-8400M. **Expected compatible:** FLEX-6400/6600/6700/8400/8600 series.
 
-### Audio Pipeline
-
-```
-VITA-49 RX (24kHz int16 mono)
-  -> Anti-alias lowpass (sinc/Hamming, fc=6kHz)
-  -> Resample to 12kHz
-  -> DC removal
-  -> Spectral whitening (overlap-add FFT)
-  -> Normalize (-12 dBFS)
-  -> Window sliding (0, +0.3s, -0.3s offsets)
-  -> FT8 decode (Costas sync -> LDPC -> CRC -> Unpack)
-  -> Signal subtraction (up to 5 passes)
-  -> Result fusion + deduplication
-```
-
----
-
-## Radio Compatibility
-
-**Tested:**
-- FLEX-8400M (primary development platform)
-
-**Expected compatible:**
-- FLEX-6400 / 6400M / 6600 / 6600M / 6700
-- FLEX-8400 / 8600 / 8600M
-
-Any FlexRadio with SmartSDR TCP API should work. Diversity requires two antenna ports.
-
----
-
-## Usage
-
-### Basic Workflow
-1. Start SimpleFT8 — it auto-discovers and connects to your FlexRadio
-2. Select band (20m, 40m, etc.) — radio tunes automatically
-3. Watch stations appear in the RX panel
-4. **Hunt mode**: Click a station to call them
-5. **CQ mode**: Press CQ button for automatic calling
-
-### Antenna Modes
-- **NORMAL**: Single antenna (ANT1), standard FT8 operation
-- **DIVERSITY**: Temporal switching ANT1/ANT2, station accumulation
-- **EINMESSEN (DX Tuning)**: Automated antenna + preamp measurement
-
-### Power Control
-Select power with the 10W-100W buttons. The auto-regulation adjusts TX drive so the radio's actual output matches your selection. The TX bar shows current drive level, Peak shows audio headroom.
-
----
-
-## Contributing
-
-Contributions welcome! Please:
-1. Open an issue to discuss changes before submitting a PR
-2. Follow existing code style
-3. Test with an actual FlexRadio if possible
-
----
-
-## License
+### License
 
 MIT License (c) 2026 DA1MHH (Mike Hammerer)
 
-See [LICENSE](LICENSE) for details.
+---
+
+<a name="deutsch"></a>
+## Deutsch
+
+**Direkte SmartSDR-Steuerung | Temporale Polarisations-Diversity | Adaptive Antennenwahl | Automatische TX-Leistungsregelung**
+
+SimpleFT8 ist ein eigenstaendiger FT8/FT4 Client, der dein FlexRadio direkt ueber die SmartSDR TCP API steuert — kein SmartSDR GUI noetig. Mit temporaler Antennen-Diversity und UCB1-adaptiver Auswahl.
+
+### Was macht SimpleFT8 anders?
+
+Anders als WSJT-X oder aehnliche Clients kommuniziert SimpleFT8 **direkt** mit deinem FlexRadio ueber TCP (Port 4992) und streamt VITA-49 Audio ueber UDP (Port 4991). Das ermoeglicht:
+
+- **Temporale Polarisations-Diversity**: Wechsel zwischen zwei Antennen pro FT8-Zyklus, Stationen beider Antennen werden akkumuliert
+- **Automatische TX-Leistungsregelung**: Geschlossener Regelkreis haelt die tatsaechliche Ausgangsleistung auf dem eingestellten Wert
+- **Komplett eigenstaendiger Betrieb**: Kein SmartSDR, keine virtuellen Audiokabel, kein DAX-Panel
+
+### Praxis-Ergebnisse
+
+Kontrollierter Test auf 40m, gleiche Hardware (FLEX-8400M), 2 Minuten Abstand:
+
+| Messwert | SimpleFT8 Normal | SimpleFT8 Diversity |
+|----------|:---:|:---:|
+| 40m, gute Bedingungen | 27 | **37** (+37%) |
+| 40m, schlechte Bedingungen (4 min) | 9 | **13** (+44%) |
+| PSKReporter Spots (TX, 15m) | -- | **190** |
+| Weitester RX | -- | Kiribati ~13.000 km |
+| Weitester TX | -- | Indonesien 11.996 km |
+
+Siehe [Test-Screenshots und Methodik](docs/DIVERSITY_DE.md) fuer Details.
+
+### Screenshots
+
+| Hauptoberflaeche | Diversity-Modus |
+|:-:|:-:|
+| ![Main](docs/screenshots/normal_27stations_40m.png) | ![Diversity](docs/screenshots/diversity_37stations_40m.png) |
+
+### Kern-Innovationen
+
+- **[Temporale Polarisations-Diversity](docs/DIVERSITY_DE.md)** — Antennenwechsel, UCB1 Algorithmus, Testergebnisse
+- **[DX Tuning / Gain-Messung](docs/DX_TUNING_DE.md)** — Automatisierte Antennenoptimierung, Presets pro Band
+- **[Automatische TX-Leistungsregelung](docs/POWER_REGULATION_DE.md)** — Regelkreis, Clipping-Schutz, Kalibrierung pro Band
+
+### Funktionen
+
+- **Temporale Polarisations-Diversity** mit UCB1 adaptivem Antennenverhaeltnis (70:30, 50:50, 30:70)
+- **DX Tuning**: Automatisierte 18-Zyklen Gain-Messung, Presets pro Band
+- **Automatische TX-Leistungsregelung**: PI-Regler mit FWDPWR-Feedback, Peak-Monitor, Kalibrierung pro Band
+- **Signalverarbeitung**: 5-Pass Signal Subtraction, Spectral Whitening, Sinc-Resampling
+- **QSO-Management**: Hunt-Modus + CQ-Modus, Zustandsmaschine, ADIF 3.1.7 Logging
+- **Integriertes Logbuch**: Sortierbare Tabelle, Suche, DXCC-Zaehler, QSO-Detail-Overlay
+- **QRZ.com**: Rufzeichen-Lookup + Logbuch-Upload
+- **PSKReporter**-Integration mit Spot-Statistik und Entfernungsanzeige
+
+### Installation
+
+```bash
+git clone https://github.com/mikewanne/SimpleFT8.git
+cd SimpleFT8
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+python3 main.py
+```
+
+**Voraussetzungen:** macOS, Python 3.12+, FlexRadio mit SmartSDR TCP API (FLEX-6000/8000 Serie). Zwei Antennenanschluesse fuer Diversity-Modus (optional).
+
+### Konfiguration
+
+Einstellungen in `~/.simpleft8/config.json`: Rufzeichen, Locator, Radio-IP, Band, Leistungs-Preset, QRZ API Key.
+
+### Architektur
+
+```
+SimpleFT8/
+├── main.py               # Einstiegspunkt
+├── config/settings.py    # Einstellungen, Band-Frequenzen
+├── core/                 # Decoder, Encoder, QSO-Zustandsmaschine, Diversity, Timing
+├── radio/flexradio.py    # SmartSDR TCP + VITA-49 RX/TX Audio
+├── log/                  # ADIF Writer, QRZ.com API
+└── ui/                   # PySide6 GUI (3-Panel Layout)
+```
+
+### Radio-Kompatibilitaet
+
+**Getestet:** FLEX-8400M. **Voraussichtlich kompatibel:** FLEX-6400/6600/6700/8400/8600 Serie.
+
+### Lizenz
+
+MIT License (c) 2026 DA1MHH (Mike Hammerer)
 
 ---
 
-## Acknowledgments
+## Acknowledgments / Danksagungen
 
 - [PyFT8](https://github.com/kgoba/ft8_lib) — FT8/FT4 encode/decode library
 - [FlexRadio Systems](https://www.flexradio.com/) — SmartSDR TCP API
@@ -264,4 +198,4 @@ See [LICENSE](LICENSE) for details.
 
 ---
 
-*SimpleFT8: Because weak signals deserve a fighting chance.*
+*SimpleFT8: Because weak signals deserve a fighting chance. / Weil schwache Signale eine faire Chance verdienen.*
