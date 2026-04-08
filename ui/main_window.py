@@ -312,8 +312,9 @@ class MainWindow(QMainWindow):
         """Ein kompletter FT8-Zyklus dekodiert."""
         if not self.rx_panel._rx_active:
             return
-        # Slot-Parity: dekodierte Messages waren im VORHERIGEN Zyklus gesendet
-        msg_was_even = not self.timer.is_even_cycle()
+        # Slot-Parity: ft8lib dekodiert innerhalb des SELBEN Slots (< 0.3s)
+        # → is_even_cycle() zeigt noch den aktuellen Slot, KEIN not nötig
+        msg_was_even = self.timer.is_even_cycle()
         if messages:
             for m in messages:
                 m._tx_even = msg_was_even
@@ -351,7 +352,8 @@ class MainWindow(QMainWindow):
             # Aging: 2 Min nicht mehr dekodiert → raus
             # ant wurde oben schon aus der Queue geholt
             now = time.time()
-            utc_str = time.strftime("%H%M%S", time.gmtime())
+            slot_start = now - (now % 15.0)
+            utc_str = time.strftime("%H%M%S", time.gmtime(slot_start))
             changed = False
             for orig_msg in messages:
                 key = orig_msg.caller
@@ -428,7 +430,8 @@ class MainWindow(QMainWindow):
         elif self._rx_mode == "normal" and messages:
             # Normal: Akkumulation mit 2-Min-Fenster (wie Diversity, ohne Antennenwechsel)
             now = time.time()
-            utc_str = time.strftime("%H%M%S", time.gmtime())
+            slot_start = now - (now % 15.0)
+            utc_str = time.strftime("%H%M%S", time.gmtime(slot_start))
             changed = False
             for msg in messages:
                 key = msg.caller

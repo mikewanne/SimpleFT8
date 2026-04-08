@@ -113,6 +113,15 @@ class Encoder(QObject):
         if audio_12k is None:
             return
 
+        # Trailing Silence trimmen: TX muss mindestens 0.4s VOR dem naechsten Slot enden.
+        # ft8s_encode erzeugt 180000 Samples (15.0s); mit 0.2s Start-Delay + 0.1s PTT-Settle
+        # wuerde TX bei slot+15.3s enden = 0.3s IN den naechsten Slot → ICOM-RX geblockt.
+        # Loesung: letzte 0.7s (8400 Samples) abschneiden (das ist trailing silence).
+        # Ergebnis: PTT-off bei slot+0.2+0.1+14.3 = slot+14.6s → 0.4s Puffer fuer T/R-Switching.
+        TRIM_SAMPLES = int(0.7 * SAMPLE_RATE_FT8)   # 8400 @ 12kHz
+        if len(audio_12k) > TRIM_SAMPLES:
+            audio_12k = audio_12k[:-TRIM_SAMPLES]
+
         # Warte auf richtigen Zyklusbeginn (Even/Odd Slot)
         now = time.time()
         cycle_pos = now % 15.0
@@ -159,9 +168,7 @@ class Encoder(QObject):
         if self._radio:
             self._radio.send_audio(audio_12k, sample_rate=SAMPLE_RATE_FT8)
 
-        time.sleep(0.2)
-
-        # PTT aus
+        # PTT aus (kein extra Sleep — trailing silence im Audio gibt genug Puffer)
         if self._radio:
             self._radio.ptt_off()
 

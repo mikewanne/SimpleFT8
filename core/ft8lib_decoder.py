@@ -8,6 +8,7 @@ Methoden bereit:
 
 import ctypes
 import sys
+import threading
 from pathlib import Path
 
 import numpy as np
@@ -52,6 +53,7 @@ class Ft8Lib:
     """
 
     _instance = None
+    _lock = threading.Lock()   # serialisiert encode + decode (s_hashtable nicht thread-safe)
 
     def __new__(cls):
         if cls._instance is None:
@@ -104,14 +106,15 @@ class Ft8Lib:
         audio = np.ascontiguousarray(audio_int16, dtype=np.int16)
         results = (_Ft8sResult * max_results)()
 
-        n_found = self._lib.ft8s_decode(
-            audio.ctypes.data_as(ctypes.POINTER(ctypes.c_int16)),
-            ctypes.c_int(len(audio)),
-            ctypes.c_float(max_freq_hz),
-            ctypes.c_int(num_passes),
-            results,
-            ctypes.c_int(max_results),
-        )
+        with Ft8Lib._lock:
+            n_found = self._lib.ft8s_decode(
+                audio.ctypes.data_as(ctypes.POINTER(ctypes.c_int16)),
+                ctypes.c_int(len(audio)),
+                ctypes.c_float(max_freq_hz),
+                ctypes.c_int(num_passes),
+                results,
+                ctypes.c_int(max_results),
+            )
 
         return [
             {
@@ -133,12 +136,13 @@ class Ft8Lib:
         max_samples = 200_000
         out_buf = (ctypes.c_int16 * max_samples)()
 
-        n_written = self._lib.ft8s_encode(
-            message_text.encode("ascii"),
-            ctypes.c_float(freq_hz),
-            out_buf,
-            ctypes.c_int(max_samples),
-        )
+        with Ft8Lib._lock:
+            n_written = self._lib.ft8s_encode(
+                message_text.encode("ascii"),
+                ctypes.c_float(freq_hz),
+                out_buf,
+                ctypes.c_int(max_samples),
+            )
 
         if n_written < 0:
             return None

@@ -3,9 +3,9 @@
 import time
 from pathlib import Path
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QLabel, QTextEdit, QTabWidget,
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QTextEdit, QTabWidget,
 )
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QTimer
 from PySide6.QtGui import QFont, QTextCursor, QColor
 
 from ui.logbook_widget import LogbookWidget
@@ -24,7 +24,25 @@ class QSOPanel(QWidget):
     def _setup_ui(self):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(4, 4, 4, 4)
-        layout.setSpacing(0)
+        layout.setSpacing(4)
+
+        # EVEN/ODD Slot-Anzeige
+        slot_row = QHBoxLayout()
+        slot_row.setContentsMargins(2, 0, 2, 0)
+        self._even_label = QLabel("EVEN")
+        self._odd_label  = QLabel("ODD")
+        for lbl in (self._even_label, self._odd_label):
+            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            lbl.setFixedHeight(22)
+            lbl.setFont(QFont("Menlo", 10, QFont.Weight.Bold))
+        slot_row.addWidget(self._even_label)
+        slot_row.addWidget(self._odd_label)
+        layout.addLayout(slot_row)
+
+        self._slot_timer = QTimer(self)
+        self._slot_timer.timeout.connect(self._update_slot_display)
+        self._slot_timer.start(500)
+        self._update_slot_display()
 
         # Tab Widget
         self.tabs = QTabWidget()
@@ -78,7 +96,7 @@ class QSOPanel(QWidget):
         self.status_label.setStyleSheet("color: #666; font-size: 11px; padding: 2px;")
         live_layout.addWidget(self.status_label)
 
-        self.tabs.addTab(live_tab, "Log")
+        self.tabs.addTab(live_tab, "QSO")
 
         # Tab 2: Logbuch
         self.logbook = LogbookWidget()
@@ -112,6 +130,26 @@ class QSOPanel(QWidget):
     def add_info(self, text: str):
         """Info-Nachricht anzeigen."""
         self._append_colored(f"       {text}", "#666666")
+
+    def _update_slot_display(self):
+        """EVEN/ODD Label alle 500ms aktualisieren — zeigt aktuellen TX-Slot."""
+        now = time.time()
+        cycle_num = int(now / 15.0)
+        is_even = (cycle_num % 2 == 0)
+        active   = "#00FF88"   # hell grün = aktiver Slot
+        inactive = "#333344"   # dunkel = inaktiver Slot
+        txt_act  = "#000000"
+        txt_inact= "#555566"
+        if is_even:
+            self._even_label.setStyleSheet(
+                f"background:{active}; color:{txt_act}; border-radius:3px;")
+            self._odd_label.setStyleSheet(
+                f"background:{inactive}; color:{txt_inact}; border-radius:3px;")
+        else:
+            self._even_label.setStyleSheet(
+                f"background:{inactive}; color:{txt_inact}; border-radius:3px;")
+            self._odd_label.setStyleSheet(
+                f"background:{active}; color:{txt_act}; border-radius:3px;")
 
     def _append_colored(self, text: str, color: str):
         cursor = self.log_view.textCursor()
