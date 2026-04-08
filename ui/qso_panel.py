@@ -112,7 +112,9 @@ class QSOPanel(QWidget):
 
     def add_rx(self, message: str):
         """Empfangene Antwort anzeigen."""
-        utc = time.strftime("%H:%M:%S", time.gmtime())
+        now = time.time()
+        slot_start = now - (now % 15.0)   # auf Slot-Grenze runden (15s Raster)
+        utc = time.strftime("%H:%M:%S", time.gmtime(slot_start))
         self._append_colored(f"{utc}  ←  Empf.   {message}", "#44BBFF")
 
     def add_qso_complete(self, their_call: str):

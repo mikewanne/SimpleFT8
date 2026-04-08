@@ -14,6 +14,13 @@ from .ft8lib_decoder import get_ft8lib
 
 SAMPLE_RATE_FT8 = 12000
 
+# TX-Timing: Signal startet 500ms nach Slot-Grenze (wie WSJT-X)
+# Stille-Padding absorbiert den Jitter des Software-Timers.
+TARGET_TX_OFFSET = -0.65 # Sekunden nach Slot-Grenze — kompensiert FlexRadio ~0.8s Latenz → DT≈+0.5 auf ICOM
+# Trailing Silence trimmen: FT8-Nutzsignal ist 12.64s, Rest ist Stille.
+# slot+0.5 + 13.5s = slot+14.0s → 1.0s Puffer vor naechstem Slot (sicher)
+TRIM_SAMPLES = int(1.5 * SAMPLE_RATE_FT8)   # 18000 Samples @ 12kHz
+
 
 class Encoder(QObject):
     """Erzeugt FT8-Audio und sendet es zum richtigen Zeitpunkt.
@@ -101,74 +108,94 @@ class Encoder(QObject):
         finally:
             self._is_transmitting = False
 
-    def _tx_worker_inner(self, message: str):
-        # FESTE TX-Frequenz — NICHT bei jedem TX ändern!
-        # Bug: find_free_frequency() wechselt die Frequenz zwischen CQ und Report.
-        # DK0KG wartet auf CQ-Frequenz; Report kommt auf anderer Freq → unsichtbar.
-        tx_freq = self.audio_freq_hz
-        print(f"[TX] Frequenz: {tx_freq} Hz → '{message}'")
+    def _next_slot_boundary(self) -> float:
+        """Naechste passende Slot-Grenze als Unix-Timestamp.
 
-        # Audio erzeugen (12kHz int16)
+        Gibt den Slot-Start zurueck auf den wir TX-Parity haben.
+        Liefert stets einen Zeitpunkt in der Zukunft (oder sehr nah dran).
+        """
+        now = time.time()
+        cycle_num = int(now / 15.0)
+        cycle_pos = now % 15.0
+        is_even = (cycle_num % 2 == 0)
+
+        if self.tx_even is not None:
+            want_even = self.tx_even
+            # Am Anfang des richtigen Slots (erste 0.5s): aktuelle Grenze nehmen
+            if is_even == want_even and cycle_pos < 0.5:
+                return float(cycle_num * 15)
+            # Naechste Grenze bestimmen
+            next_num = cycle_num + 1
+            next_boundary = float(next_num * 15)
+            if (next_num % 2 == 0) != want_even:
+                next_boundary += 15.0   # einen weiteren Slot ueberspringen
+            return next_boundary
+        else:
+            # Kein Slot vorgegeben: naechster beliebiger Slot
+            return float((cycle_num + 1) * 15)
+
+    def _tx_worker_inner(self, message: str):
+        # FESTE TX-Frequenz
+        print(f"[TX] Frequenz: {self.audio_freq_hz} Hz → '{message}'")
+
+        # 1. Audio SOFORT codieren — unabhaengig vom Timing, kein GIL-Problem
         audio_12k = self.encode_message(message)
         if audio_12k is None:
             return
 
-        # Trailing Silence trimmen: TX muss mindestens 0.4s VOR dem naechsten Slot enden.
-        # ft8s_encode erzeugt 180000 Samples (15.0s); mit 0.2s Start-Delay + 0.1s PTT-Settle
-        # wuerde TX bei slot+15.3s enden = 0.3s IN den naechsten Slot → ICOM-RX geblockt.
-        # Loesung: letzte 0.7s (8400 Samples) abschneiden (das ist trailing silence).
-        # Ergebnis: PTT-off bei slot+0.2+0.1+14.3 = slot+14.6s → 0.4s Puffer fuer T/R-Switching.
-        TRIM_SAMPLES = int(0.7 * SAMPLE_RATE_FT8)   # 8400 @ 12kHz
+        # Trailing Silence trimmen (FT8-Nutzsignal ist 12.64s, Rest ist stille)
+        # slot+0.5 + 13.5s = slot+14.0s → 1.0s Puffer vor naechstem Slot
         if len(audio_12k) > TRIM_SAMPLES:
             audio_12k = audio_12k[:-TRIM_SAMPLES]
 
-        # Warte auf richtigen Zyklusbeginn (Even/Odd Slot)
+        # 2. Naechste passende Slot-Grenze berechnen
+        next_boundary = self._next_slot_boundary()
+
+        # 3. Grob bis 500ms VOR Slot-Grenze schlafen
+        #    (langer Sleep = zuverlaessig, GIL-Jitter egal)
+        sleep_dur = (next_boundary + TARGET_TX_OFFSET - 0.5) - time.time()
+        if sleep_dur > 0.001:
+            time.sleep(sleep_dur)
+
+        # 4. Silence-Padding berechnen (jetzt praezise, da nahe am Ziel)
+        #    Stille absorbiert den restlichen Jitter des OS-Schedulers
         now = time.time()
-        cycle_pos = now % 15.0
-        cycle_num = int(now / 15.0)
-        is_even = cycle_num % 2 == 0
+        silence_secs = max(0.0, (next_boundary + TARGET_TX_OFFSET) - now)
 
-        if self.tx_even is not None:
-            # Bestimmter Slot gefordert (Hunt: Gegenteil der Gegenstation)
-            want_even = self.tx_even
-            if is_even == want_even and cycle_pos <= 1.0:
-                # Richtig — am Anfang des gewünschten Slots
-                time.sleep(max(0, 0.2 - cycle_pos))
-            else:
-                # Warten bis zum nächsten passenden Slot
-                wait = 15.0 - cycle_pos  # bis nächste Grenze
-                next_even = (cycle_num + 1) % 2 == 0
-                if next_even != want_even:
-                    wait += 15.0  # einen Slot überspringen
-                wait += 0.2
-                print(f"[TX] Slot-Korrektur: warte {wait:.1f}s auf {'EVEN' if want_even else 'ODD'}")
-                time.sleep(wait)
-        else:
-            # Kein Slot-Vorgabe (CQ: nächster Slot)
-            if cycle_pos > 1.0:
-                wait = 15.0 - cycle_pos + 0.2
-                time.sleep(wait)
-            elif cycle_pos < 0.2:
-                time.sleep(0.2 - cycle_pos)
+        # Kaltstart-Guard: weniger als 0.1s Stille = PTT hat keine Settle-Zeit
+        # → naechsten Slot nehmen statt zu frueh senden (vermeidet DT<0)
+        if silence_secs < 0.1:
+            next_boundary += 30.0 if self.tx_even is not None else 15.0
+            silence_secs = max(0.0, (next_boundary + TARGET_TX_OFFSET) - time.time())
+            print(f"[TX] Kaltstart-Guard: Slot uebersprungen, naechste Grenze {next_boundary:.1f}")
 
-        # PTT an — mit Timing-Log
+        silence_samples = int(silence_secs * SAMPLE_RATE_FT8)
+
+        # 5. [Stille] + [FT8-Signal] als einen Block zusammenbauen
+        audio_full = np.concatenate([
+            np.zeros(silence_samples, dtype=np.int16),
+            audio_12k,
+        ])
+
+        # Timing-Log
         tx_time = time.time()
-        tx_cycle = int(tx_time / 15.0)
-        tx_slot = "EVEN" if tx_cycle % 2 == 0 else "ODD"
+        tx_slot = "EVEN" if int(tx_time / 15.0) % 2 == 0 else "ODD"
         utc = time.strftime("%H:%M:%S", time.gmtime(tx_time))
-        print(f"[TX] {utc} Slot={tx_slot} Freq={self.audio_freq_hz}Hz → '{message}'")
+        print(f"[TX] {utc} Slot={tx_slot} Freq={self.audio_freq_hz}Hz → '{message}' "
+              f"| Stille={silence_secs:.3f}s | Signal={len(audio_12k)/SAMPLE_RATE_FT8:.2f}s")
 
+        # 6. PTT an — Stille gibt 0.3-0.5s PTT-Settle-Zeit
         if self._radio:
             self._radio.ptt_on()
-            time.sleep(0.1)
 
         self.tx_started.emit(message)
 
-        # Audio via VITA-49 senden (radio.send_audio macht Resampling + Pacing)
+        # 7. Stream: FlexRadio Hardware-Clock uebernimmt das Pacing
+        #    t_start = jetzt → jedes Paket bei t_start + n*5.33ms (absolut, kein Drift)
         if self._radio:
-            self._radio.send_audio(audio_12k, sample_rate=SAMPLE_RATE_FT8)
+            self._radio.send_audio(audio_full, sample_rate=SAMPLE_RATE_FT8)
 
-        # PTT aus (kein extra Sleep — trailing silence im Audio gibt genug Puffer)
+        # 8. PTT aus
         if self._radio:
             self._radio.ptt_off()
 
