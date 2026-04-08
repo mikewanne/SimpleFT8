@@ -227,10 +227,14 @@ class Decoder(QObject):
                 for r in results:
                     key = " ".join(r["message"].split())
                     if key and key not in seen:
-                        # dt korrigieren: Offset-Verschiebung rueckgaengig machen
+                        # dt korrigieren:
+                        # 1) Offset-Verschiebung rueckgaengig machen (Window-Sliding)
+                        # 2) Buffer-Offset: Decode-Loop wacht bei 13.5s in Slot auf →
+                        #    Buffer startet 1.5s VOR Slot-Start → alle DT um +1.5 zu hoch
+                        DT_BUFFER_OFFSET = 1.5
                         raw_results.append({
                             **r,
-                            "dt":     r["dt"] + offset_samples / SAMP_RATE,
+                            "dt": r["dt"] + offset_samples / SAMP_RATE - DT_BUFFER_OFFSET,
                             "freq_hz": r["freq_hz"],
                         })
 
