@@ -97,6 +97,7 @@ class QSOStateMachine(QObject):
     qso_complete = Signal(object)   # RR73 gesendet → ADIF loggen
     qso_confirmed = Signal(object)  # 73 empfangen → ✓ anzeigen
     qso_timeout = Signal(str)
+    tx_slot_for_partner = Signal(object)  # CQ-Reply: msg mit _tx_even → Encoder soll Gegentakt setzen
 
     def __init__(self, my_call: str, my_grid: str):
         super().__init__()
@@ -165,6 +166,10 @@ class QSOStateMachine(QObject):
             freq_hz=msg.freq_hz,
             start_time=time.time(),
         )
+
+        # Slot-Korrektur: Antwort immer im GEGENTAKT der anfragenden Station senden
+        # main_window setzt encoder.tx_even = not their_even
+        self.tx_slot_for_partner.emit(msg)
 
         if msg.is_grid:
             report = f"{self._last_snr:+03d}" if self._last_snr > -30 else "-10"
@@ -298,6 +303,7 @@ class QSOStateMachine(QObject):
         """Nach Timeout/Hunt: CQ wieder aufnehmen wenn vorher CQ-Modus aktiv war."""
         if self.cq_mode or self._was_cq:
             self.cq_mode = True
+            self.qso.timeout_cycles = 0  # CQ-WAIT Zaehler frisch starten
             self._send_cq()
         else:
             self._set_state(QSOState.IDLE)
@@ -319,15 +325,21 @@ class QSOStateMachine(QObject):
             if pending:
                 self._pending_hunt_reply = None
                 self._set_state(QSOState.WAIT_REPORT)
-                print(f"[QSO] TX fertig — verarbeite Hunt-Antwort: {pending.grid_or_report}")
-                self.qso.their_snr = pending.grid_or_report
-                if pending.is_r_report:
-                    # R-Report = direkt RR73
-                    print(f"[QSO] R-Report in pending → sende RR73")
+                print(f"[QSO] TX fertig — verarbeite Hunt-Antwort: '{pending.raw}'")
+                if pending.is_rr73 or pending.is_73:
+                    # Vorwaerts-Sprung: RR73/73 waehrend TX_CALL → direkt TX_RR73
+                    self._dbg.log("TX", f"Pending RR73/73 von {pending.caller} → TX_RR73")
+                    tx_msg = f"{self.qso.their_call} {self.my_call} RR73"
+                    self._set_state(QSOState.TX_RR73)
+                    self.send_message.emit(tx_msg)
+                elif pending.is_r_report:
+                    self.qso.their_snr = pending.grid_or_report
+                    self._dbg.log("TX", f"Pending R-Report → TX_RR73")
                     tx_msg = f"{self.qso.their_call} {self.my_call} RR73"
                     self._set_state(QSOState.TX_RR73)
                     self.send_message.emit(tx_msg)
                 else:
+                    self.qso.their_snr = pending.grid_or_report
                     self.advance()
                 return
             self._set_state(QSOState.WAIT_REPORT)
@@ -362,11 +374,10 @@ class QSOStateMachine(QObject):
                           f"| report={msg.is_report} r_rpt={msg.is_r_report} "
                           f"rr73={msg.is_rr73} 73={msg.is_73} grid={msg.is_grid}")
         # ── RR73/73 von vorherigem QSO nach Timeout (Station hat doch noch geantwortet) ──
+        # Ignorieren, aber CQ-Flow NICHT unterbrechen (kein return!)
         if self.state in (QSOState.IDLE, QSOState.CQ_WAIT, QSOState.CQ_CALLING) and msg.target == self.my_call:
             if msg.is_rr73 or msg.is_73:
-                self._dbg.log("RX", f"RR73/73 von {msg.caller} nach Timeout/CQ — QSO nachtraeglich bestaetigt")
-                # Nicht als neues QSO behandeln, einfach ignorieren (oder loggen falls gewuenscht)
-                return
+                self._dbg.log("RX", f"RR73/73 von {msg.caller} nach Timeout/CQ — ignoriert")
 
         # ── Jemand ruft UNS (CQ-Modus, oder im IDLE) ──
         if self.state in (QSOState.IDLE, QSOState.CQ_WAIT, QSOState.CQ_CALLING) and msg.target == self.my_call:
@@ -396,6 +407,20 @@ class QSOStateMachine(QObject):
                 return
 
         if self.state in (QSOState.WAIT_REPORT, QSOState.TX_CALL):
+            # Vorwaerts-Springen: RR73/73 direkt empfangen → ueberspringt TX_REPORT + WAIT_RR73
+            if msg.is_rr73 or msg.is_73:
+                if self.state == QSOState.TX_CALL:
+                    # Waehrend TX merken
+                    self._pending_hunt_reply = msg
+                    self._dbg.log("RX", f"RR73/73 waehrend TX_CALL gemerkt von {msg.caller} → wird TX_RR73")
+                    return
+                # WAIT_REPORT + RR73/73 → direkt TX_RR73 (Station hat alles empfangen)
+                self._dbg.log("RX", f"Vorwaerts-Sprung: RR73/73 in WAIT_REPORT → TX_RR73")
+                tx_msg = f"{self.qso.their_call} {self.my_call} RR73"
+                self._set_state(QSOState.TX_RR73)
+                self.send_message.emit(tx_msg)
+                return
+
             if msg.is_report:
                 self.qso.their_snr = msg.grid_or_report
                 if self.state == QSOState.TX_CALL:

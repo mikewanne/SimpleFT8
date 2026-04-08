@@ -1,166 +1,42 @@
 # SimpleFT8 — TODO & Roadmap
 
-**Stand:** 07.04.2026 | **Tag:** v0.15-logbook-docs
+**Stand:** 08.04.2026 | **Tag:** v0.19-slot-fix
 **GitHub:** https://github.com/mikewanne/SimpleFT8
 
 ---
 
-## PRIO 1: KRITISCHE BUGS (Code Review 07.04.2026)
+## PRIO 1: NOCH OFFEN (QSO-Logik)
 
-- [ ] **Memory Leak: `_responses` Dict waechst unbegrenzt** — flexradio.py:59
-  - Fire-and-forget Responses werden nie geloescht
-  - Fix: Alte Eintraege nach 30s entfernen oder Dict-Groesse begrenzen
+- [x] **Vorwaerts-Springen im State** — qso_state.py (08.04.2026)
+  - WAIT_REPORT + RR73/73 → direkt TX_RR73 (ueberspringt TX_REPORT + WAIT_RR73)
+  - TX_CALL + RR73/73 → pending → nach TX direkt TX_RR73
 
-- [ ] **Thread-Safety: FT8Message wird aus Decoder-Thread mutiert** — decoder.py + main_window.py
-  - `msg.antenna = ant` wird im GUI-Thread gesetzt waehrend Decoder-Thread msg referenziert
-  - Fix: Kopie der Message erstellen bevor GUI sie modifiziert
+- [ ] **Even/Odd Slot bei Retries** — qso_state.py + encoder.py
+  - Beim ersten CQ-Reply wird Slot jetzt korrekt gesetzt (v0.19)
+  - Bei Hunt-Retries (WAIT_REPORT → retry): Slot koennte nach langer Wartezeit falsch sein
+  - Pruefen ob Slot bei jedem retry neu gesetzt werden muss
 
-- [ ] **advance() sendet plain report statt R-report** — qso_state.py:410
-  - In WAIT_REPORT nach Empfang eines plain reports wird "-10" statt "R-10" gesendet
-  - Muss geprueft werden ob das der Grund fuer weitere Timeouts ist
-
-- [ ] **AP-Decoder priority_call ist immer leer** — main_window.py:1054
-  - `getattr(self.qso_sm, 'their_call', '')` — falsches Attribut
-  - Richtig: `self.qso_sm.qso.their_call`
-  - Effekt: AP-Dekodierung mit Prioritaet fuer aktive Station funktioniert nicht
+- [ ] **Diversity-Messung: "MESSEN pausiert (TX)" anzeigen** — main_window.py
+  - Waehrend TX wird Antenne nicht gewechselt (korrekt implementiert)
+  - GUI zeigt aber kein Feedback → Operator denkt Messung haengt
+  - Fix: `control_panel.update_diversity_ratio("PAUSE", ...)` waehrend TX
 
 ---
 
-## PRIO 2: PERFORMANCE + STABILITÄT
-
-- [ ] **QRZ Lookup blockiert GUI-Thread** — main_window.py:1146
-  - HTTP Request bis 10s → UI eingefroren
-  - Fix: In QThread oder concurrent.futures auslagern
-
-- [ ] **QRZ Bulk Upload blockiert GUI-Thread** — main_window.py:1182
-  - Loop ueber alle QSOs mit HTTP pro QSO → langer Freeze
-  - Fix: Background Worker mit Fortschrittsanzeige
-
-- [ ] **Duplicate ADIF Parser** — log/adif.py + log/qso_log.py
-  - Zwei verschiedene Implementierungen
-  - Fix: Einen Parser verwenden, den anderen loeschen
-
-- [ ] **Duplicate qso_state Datei** — core/qso_state 2.py
-  - Alte Version, muss geloescht werden
-
-- [ ] **Logbook nutzt eigene kleine Prefix-Map** — logbook_widget.py:27
-  - Hat nur ~40 Laender, core/geo.py hat 300+
-  - Fix: geo.py importieren statt eigene Map
-
----
-
-## PRIO 3: TX POWER OPTIMIERUNG
-
-- [ ] **rfpower 15% ueber Zielwert setzen** — main_window.py
-  - Statt rfpower=70 → rfpower=80 setzen, Audio-Drive reduzieren
-  - PA arbeitet linearer = saubereres Signal
-  - Peak sollte bei 85-90% liegen, nicht bei 58%
-
-- [ ] **PI-Controller statt P-Controller** — main_window.py
-  - Integral-Term fuer nachhaltige Fehler > 30s
-  - Verhindert dauerhaftes Unter-/Uebersteuern
-
-- [ ] **TX Level Bar beschriften** — control_panel.py
-  - "TX" oder "RF" Label vor den Balken setzen
-  - Balken ggf. kleiner machen
-
----
-
-## PRIO 4: ARCHITEKTUR-REFACTORING
-
-- [ ] **SessionController/Engine extrahieren** — main_window.py (~1300 Zeilen)
-  - Diversity-Logik, Power-Regelung, Meter-Handling, QSO-Flow raus aus UI
-  - MainWindow wird reine View
-  - Ermoeglicht Unit-Tests und Headless-Betrieb
-
-- [ ] **FlexRadio Klasse aufteilen** — flexradio.py (~1300 Zeilen)
-  - ProtocolHandler (TCP/UDP)
-  - AudioStreamManager (VITA-49 RX/TX)
-  - MeterParser (FWDPWR, SWR, ALC)
-
-- [ ] **`hasattr` Anti-Pattern entfernen** — flexradio.py
-  - `_pcc_seen`, `_lvl_dbg_t`, `_alc_dbg` in `__init__` initialisieren
-
----
-
-## PRIO 0: SOFORT (Bandwechsel-Schutz)
-
-- [ ] **Bandwechsel stoppt ALLES** — main_window.py `_on_band_changed()`
-  - CQ-Modus sofort stoppen (`qso_sm.stop_cq()`, CQ-Button reset)
-  - Laufendes QSO abbrechen (`qso_sm.cancel()`)
-  - Diversity-Messung abbrechen wenn aktiv
-  - Encoder TX stoppen falls gerade gesendet wird
-  - QSO-Panel (Live Log) leeren — neues Band = neuer Kontext
-  - Aktuell: Band wechselt aber CQ/QSO laufen auf der alten Frequenz weiter!
-
-- [ ] **HALT Button (Notaus)** — qso_panel.py oder control_panel.py
-  - Ein Button der ALLES sofort stoppt: CQ, QSO, TX, Messung
-  - Gut sichtbar im QSO-Bereich (rot, gross)
-  - Wie ein Panic-Stop — egal was gerade laeuft, alles wird abgebrochen
-  - Setzt State Machine auf IDLE, CQ-Modus aus, TX aus
-
----
-
-## PRIO 1.5: QSO LOGIK VERBESSERUNGEN
-
-- [ ] **Diversity-Messung pausiert bei TX** — main_window.py
-  - Bei TX: Mess-Schritt NICHT zaehlen, Antenne NICHT wechseln
-  - Aber auch NICHT return (Rest der Funktion soll laufen)
-  - GUI: "MESSEN pausiert (TX)" anzeigen
-  - Sobald TX vorbei → Messung geht automatisch weiter
-  - Simple Loesung: 5 Zeilen Code-Aenderung
-
-- [ ] **Even/Odd Slot Tracking (KRITISCH!)** — qso_state.py + timing.py
-  - Aktuell: kein explizites Slot-Tracking
-  - Regel: Antwort IMMER im Gegen-Slot (wenn er im even sendet, wir im odd)
-  - Bei Empfang: rx_slot merken, tx_slot = Gegenteil
-  - Bei Slot-Verlust: re-sync anhand empfangener Nachricht
-  - WSJT-X macht das — vermutlich Hauptursache fuer viele Timeouts!
-
-- [ ] **Gesamt-QSO Timeout (3 Min)** — qso_state.py
-  - Unabhaengig von einzelnen Retry-Countern
-  - Wenn 3 Minuten ohne Fortschritt (kein State-Wechsel vorwaerts) → aufgeben
-  - Verhindert ALLE "endlos senden" Szenarien
-
-- [ ] **RRR als Bestaetigung akzeptieren** — qso_state.py
-  - Manche Stationen senden RRR statt RR73
-  - Beides als Bestaetigung werten → TX_RR73 oder WAIT_73
-
-- [ ] **Retry-Limits differenzieren** — qso_state.py
-  - **Anruf auf Station (Hunt + CQ-Antwort):** max 7 Versuche (hart), auch wenn 99 eingestellt
-  - **CQ Rufe:** max_calls aus Settings (3/5/7/99) — CQ darf lang laufen
-  - **WAIT_RR73 Retry:** max 3 (wenn nach 3x Report wiederholen keine Antwort → aufgeben)
-
-- [ ] **Vorwaerts-Springen im State** — qso_state.py
-  - Wenn Nachricht empfangen die WEITER im Ablauf ist als erwartet → State ueberspringen
-  - z.B. in WAIT_REPORT aber RR73 empfangen → direkt zu TX_RR73
-  - WSJT-X macht das fuer maximale Flexibilitaet
-
-- [ ] **GitHub Docs auch auf Deutsch** — docs/
-  - DIVERSITY.md → DIVERSITY_DE.md
-  - DX_TUNING.md → DX_TUNING_DE.md
-  - POWER_REGULATION.md → POWER_REGULATION_DE.md
-  - README_DE.md: Links zu deutschen Docs aktualisieren
-
----
-
-## PRIO 5: FEATURES
+## PRIO 2: FEATURES
 
 - [ ] **Antennen-Info im QSO Log** — qso_panel.py + main_window.py
   - Bei Diversity: zeigen auf welcher Antenne die Antwort empfangen wurde
   - z.B. `10:00 ← DA1MHH R1BEO KP50  [A2]` im QSO Verlauf
-  - Bestaetigung fuer den Operator: "Die Station kam ueber ANT2 rein!"
-  - Braucht: aktuelle Antenne aus Diversity-Controller an QSO-Panel durchreichen
+
+- [ ] **Logbuch: QSO loeschen** — logbook_widget.py + adif.py
+  - Delete-Button im Overlay vorhanden, ADIF-Loesch-Logik fehlt
+
+- [ ] **Logbuch: QSO editieren + speichern** — qso_detail_overlay.py
+  - Save-Button vorhanden, Rueckschreiben in ADIF fehlt
 
 - [ ] **QSO-Resume aus QSO-Panel** — qso_state.py
   - Station im QSO-Verlauf anklicken → QSO fortfuehren
-  - `qso_sm.force_resume(their_call, state)` noetig
-
-- [ ] **Logbuch: QSO loeschen** — logbook_widget.py + adif.py
-  - Delete-Button ist im Overlay, aber ADIF-Loesch-Logik fehlt noch
-
-- [ ] **Logbuch: QSO editieren + speichern** — qso_detail_overlay.py
-  - Save-Button ist da, aber Rueckschreiben in ADIF fehlt
 
 - [ ] **FT4-Modus** — 7.5s Zyklen, andere Frequenzen
 
@@ -168,28 +44,54 @@
 
 ---
 
-## ERLEDIGT (07.04.2026)
+## PRIO 3: ARCHITEKTUR (langfristig)
 
-- [x] Auto TX Power Regulation (P-Controller + FWDPWR Feedback)
-- [x] Asymmetrische Regelung (runter 2x schneller als hoch)
-- [x] Clipping-Schutz (Peak-Monitor, stoppt bei >95%)
-- [x] Per-Band TX Level Speicherung
-- [x] 10 Power Buttons (10-100W)
-- [x] Peak-Anzeige statt ALC
-- [x] TX Level Bar (automatisch, keine manuelle Bedienung)
-- [x] max_power_level=100 bei jedem set_power()
-- [x] mic_level Steuerung via set_tx_level()
-- [x] WAIT_RR73 Retry (Report wird wiederholt wenn RR73 ausbleibt)
-- [x] QSO Debug Logger (qso_debug.log, wird pro QSO ueberschrieben)
-- [x] Integriertes Logbuch (Tab im QSO Panel)
-- [x] QSO Detail Overlay (Klick → Details + QRZ Lookup)
-- [x] QRZ.com API Client (Upload + Callsign Lookup)
-- [x] RADIO Kachel Redesign (PSK Frame, TX Frame, Trenner)
-- [x] Karten-Rahmen: Top-Akzent-Strip
-- [x] README EN + DE + 3 Innovation Docs
-- [x] Diversity UnboundLocalError fix (diff bei total=0)
-- [x] Ehrliche Performance-Tabelle (nur belegte 40m Daten)
+- [ ] **SessionController/Engine extrahieren** — main_window.py (~1300 Zeilen)
+  - Diversity-Logik, Power-Regelung, Meter-Handling, QSO-Flow raus aus UI
+
+- [ ] **FlexRadio Klasse aufteilen** — flexradio.py (~1300 Zeilen)
+  - ProtocolHandler / AudioStreamManager / MeterParser
 
 ---
 
-*07.04.2026 — DA1MHH / Mike + Claude + DeepSeek*
+## ERLEDIGT (chronologisch)
+
+### 08.04.2026
+- [x] **Even/Odd Slot Fix (CQ-Modus)** — qso_state.py + main_window.py
+  - `tx_slot_for_partner` Signal: CQ-Reply Slot → encoder.tx_even = Gegentakt
+  - Behebt: UR4QWW-Muster (Station empfaengt unsere Reports nicht)
+- [x] **73 nach QSO blockiert CQ** — qso_state.py
+  - BLOCK 1: kein `return` mehr bei 73 waehrend CQ-States
+  - `_resume_cq_if_needed()`: timeout_cycles = 0 reset
+  - `_on_state_changed()`: CQ-Button bleibt aktiv bei CQ_CALLING/CQ_WAIT
+
+### 07.04.2026 (v0.16–v0.18)
+- [x] Memory Leak: `_responses` Dict begrenzt auf 200 Eintraege
+- [x] Thread-Safety: `copy.copy()` vor FT8Message Mutation
+- [x] `advance()` sendet R-Report (nicht plain Report)
+- [x] AP-Decoder priority_call fix: `qso_sm.qso.their_call`
+- [x] QRZ Lookup + Bulk Upload non-blocking (ThreadPoolExecutor)
+- [x] Duplicate ADIF Parser: qso_log.py importiert aus adif.py
+- [x] rfpower +15% Headroom fuer linearen PA-Betrieb
+- [x] PI-Controller (asymmetrisch, Kp_up/Kp_down/Ki)
+- [x] TX Level Bar mit "TX" Label beschriftet
+- [x] Bandwechsel stoppt CQ, QSO, TX, leert QSO-Log
+- [x] HALT Button (Notaus, rot, immer aktiv)
+- [x] Gesamt-QSO Timeout 3 Min (MAX_QSO_DURATION=180)
+- [x] Retry-Limits: MAX_STATION_CALLS=7, MAX_RR73_RETRIES=3
+- [x] RRR als Bestaetigung (is_rr73 prueft "RRR" + "RR73")
+- [x] RR73/R-Report waehrend TX_REPORT: pending queue
+- [x] WAIT_RR73 endlos-Retry fix
+- [x] README.md: EN + DE auf einer GitHub-Seite
+- [x] Docs EN+DE: DIVERSITY, DX_TUNING, POWER_REGULATION
+
+### Vor 07.04.2026
+- [x] Auto TX Power Regulation, Peak-Monitor, 10 Power Buttons
+- [x] Integriertes Logbuch, QSO Detail Overlay, QRZ.com API
+- [x] Temporal Polarization Diversity, UCB1, DX Tuning
+- [x] VITA-49 TX (int16 mono 24kHz), FT8 Decoder Pipeline
+- [x] ADIF 3.1.7 Logging, PSKReporter Integration
+
+---
+
+*08.04.2026 — DA1MHH / Mike + Claude + DeepSeek*
