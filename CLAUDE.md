@@ -2,7 +2,7 @@
 
 **Rufzeichen:** DA1MHH | **Locator:** JO31 | **Radio:** FlexRadio 8400M
 **Erstellt:** 29. Maerz 2026 | **Letztes Update:** 07. April 2026
-**Status:** v0.18 — QSOs funktionieren (OH6IH komplett), Auto TX Power, Logbuch, QRZ.com, 190+ PSKReporter Spots
+**Status:** v0.19 — ft8lib C-Backend (MIT, 400x schneller), QSO 2min->1min, kein GPL mehr
 
 ---
 
@@ -27,7 +27,7 @@ Alte Instanzen werden automatisch beendet.
 | Komponente | Technologie |
 |-----------|-------------|
 | GUI | Python 3.12 + PySide6 |
-| FT8 Decode/Encode | PyFT8 2.6.1 (pure Python, pip) |
+| FT8 Decode/Encode | libft8simple.dylib (C, MIT, kgoba/ft8_lib) |
 | Audio RX | VITA-49 UDP DAX RX (Fallback: remote_audio_rx) |
 | Audio TX | VITA-49 UDP DAX TX (float32 stereo 48kHz, PCC 0x03E3) |
 | Rig Control | SmartSDR TCP API (Port 4992) |
@@ -208,6 +208,7 @@ git reset --hard v0.5-filter-ui
 - `v0.16-bugfixes` — R-Report, Memory Leak, Thread Safety, AP Decoder
 - `v0.17-power-pi` — PI Controller, rfpower Headroom, non-blocking QRZ
 - `v0.18-robust-qso` — Bandwechsel-Schutz, HALT, QSO Timeouts, deutsche Docs
+- `v0.19-ft8lib-c` — ft8lib C-Backend (MIT), 400x schneller, QSO 2min->1min, kein GPL
 
 ### Regel
 → Vor jedem nicht-trivialen Feature: zuerst committen was stabil ist + taggen.

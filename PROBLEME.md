@@ -1,5 +1,54 @@
 # SimpleFT8 — Bekannte Probleme und Loesungen
 
+## PROBLEM: Python Crash (SIGSEGV Thread 0) bei ft8lib-Decode (GELOEST 08.04.2026)
+
+**Symptom:** App stuerzt sofort beim ersten echten Decode-Zyklus ab. macOS Crash-Report:
+`Thread 0 Crashed: ... SIGSEGV ... ftx_message_decode+0x38` (ARM-64, Python 3.12)
+
+**Ursache:** `ftx_message_decode()` in ft8_lib schreibt IMMER in `offsets->types[]` und
+`offsets->offsets[]` — das 4. Argument darf NICHT NULL sein. Unser erster `libft8simple.c`
+hatte `ftx_message_decode(&msg, &s_hash_if, text, NULL)` → SEGFAULT.
+
+**Loesung:** Stack-Variable deklarieren und Adresse uebergeben:
+```c
+ftx_message_offsets_t offsets;
+ftx_message_rc_t rc = ftx_message_decode(&msg, &s_hash_if, text, &offsets);
+```
+
+**Datei:** `ft8_lib/libft8simple.c` Zeile ~179
+
+---
+
+## PROBLEM: ft8lib Decode liefert 0 Ergebnisse (2 Bugs, GELOEST 08.04.2026)
+
+**Symptom:** `lib.decode(audio)` gibt leere Liste zurueck, obwohl echte FT8-Signale im Audio sind.
+
+**Bug 1 — monitor_process() falsche Block-Groesse:**
+`monitor_process()` erwartet `block_size=1920` Samples (1 FT8-Symbol @ 12kHz).
+Intern verarbeitet es `time_osr=2` Sub-Bloecke selbst. Wenn man `subblock_size=960`
+uebergibt, zerschneidet man die Symbole → Costas-Sync findet nichts.
+
+**Bug 2 — Naiver Sinus-Encoder (kein GFSK):**
+Einfaches `sinf(2π*f*t)` erzeugt Phasen-Sprunge zwischen Symbolen.
+ft8_lib-Decoder braucht phasenkontinuierliche GFSK-Synthese fuer Costas-Korrelation.
+
+**Loesung:**
+```c
+// Bug 1: block_size verwenden, NICHT subblock_size
+int block_size = mon.block_size;   // 1920 @ 12kHz
+while (n_fed + block_size <= n_samples) {
+    monitor_process(&mon, fbuf);
+    n_fed += block_size;
+}
+
+// Bug 2: synth_gfsk() aus ft8_lib/demo/gen_ft8.c (MIT) uebernehmen
+synth_gfsk(tones, FT8_NN, freq_hz, FT8_SYMBOL_BT, FT8_SYMBOL_PERIOD, rate, signal);
+```
+
+**Datei:** `ft8_lib/libft8simple.c`
+
+---
+
 ## PROBLEM: DAX Audio-Devices liefern kein Signal (GELOEST)
 
 **Symptom:** Audio-Devices "Radio to External" (9) und "External To Radio" (8) zeigen Peak=0. Kein Audio vom FlexRadio empfangbar ueber virtuelle Audio-Devices.
