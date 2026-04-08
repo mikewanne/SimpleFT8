@@ -94,6 +94,7 @@ class Encoder(QObject):
         if self._is_transmitting:
             print(f"[TX] SKIP (TX aktiv): '{message}'")
             return
+        self._is_transmitting = True  # Atomar setzen VOR Thread-Start (Race-Fix)
         self._tx_thread = threading.Thread(
             target=self._tx_worker, args=(message,), daemon=True
         )
@@ -101,11 +102,11 @@ class Encoder(QObject):
 
     def _tx_worker(self, message: str):
         """TX-Worker: Timing → PTT → Audio via VITA-49 → PTT off."""
-        self._is_transmitting = True
         try:
             self._tx_worker_inner(message)
         finally:
             self._is_transmitting = False
+            self.tx_finished.emit()  # IMMER emitten — auch bei encode-Fehler/Abbruch
 
     def _tx_worker_inner(self, message: str):
         # FESTE TX-Frequenz — NICHT bei jedem TX ändern!
@@ -170,5 +171,3 @@ class Encoder(QObject):
         # PTT aus
         if self._radio:
             self._radio.ptt_off()
-
-        self.tx_finished.emit()
