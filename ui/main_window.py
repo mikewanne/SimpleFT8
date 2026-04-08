@@ -506,6 +506,7 @@ class MainWindow(QMainWindow):
         self.qso_sm.qso_complete.connect(self._on_qso_complete)
         self.qso_sm.qso_confirmed.connect(self._on_qso_confirmed)
         self.qso_sm.qso_timeout.connect(self._on_qso_timeout)
+        self.qso_sm.tx_slot_for_partner.connect(self._on_tx_slot_for_partner)
 
         # Timer
         self.timer.cycle_tick.connect(self._on_cycle_tick)
@@ -1114,6 +1115,9 @@ class MainWindow(QMainWindow):
 
         if self.qso_sm.cq_mode:
             self.control_panel.update_qso_counter(self.qso_sm.cq_qso_count)
+            # CQ-Button aktiv halten wenn CQ-Modus laeuft (auch nach QSO-Resume)
+            if state in (QSOState.CQ_CALLING, QSOState.CQ_WAIT):
+                self.control_panel.set_cq_active(True)
 
     def _on_tx_finished(self):
         """TX abgeschlossen — PTT aus, zurueck zu RX."""
@@ -1259,6 +1263,15 @@ class MainWindow(QMainWindow):
         # CQ-Button aktiv halten wenn CQ-Modus laeuft
         if self.qso_sm.cq_mode:
             self.control_panel.set_cq_active(True)
+
+    @Slot(object)
+    def _on_tx_slot_for_partner(self, msg):
+        """CQ-Reply empfangen: Encoder-Slot auf Gegentakt der Station setzen."""
+        their_even = getattr(msg, '_tx_even', None)
+        if their_even is not None:
+            self.encoder.tx_even = not their_even
+            slot_str = "ODD" if their_even else "EVEN"
+            print(f"[TX] CQ-Reply {msg.caller}: sie={('EVEN' if their_even else 'ODD')} → wir={slot_str}")
 
     # ── Timer ───────────────────────────────────────────────────
 
