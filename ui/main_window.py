@@ -206,6 +206,10 @@ class MainWindow(QMainWindow):
         self.encoder.tx_started.connect(
             lambda msg: self.control_panel.set_tx_active(True)
         )
+        self.encoder.tx_started.connect(
+            lambda msg: self.qso_panel.add_tx(msg),
+            Qt.ConnectionType.QueuedConnection,
+        )
         self.encoder.tx_finished.connect(self._on_tx_finished)
 
         # Auto-Connect im Hintergrund
@@ -1129,8 +1133,7 @@ class MainWindow(QMainWindow):
         """FT8-Nachricht encoden und ueber FlexRadio senden."""
         if message.startswith("CQ "):
             self._has_sent_cq = True
-        self.qso_panel.add_tx(message)
-        self.encoder.transmit(message)
+        self.encoder.transmit(message)  # add_tx() wird via tx_started Signal aufgerufen
 
     @Slot(object)
     def _on_qso_complete(self, qso_data):
@@ -1343,11 +1346,12 @@ class MainWindow(QMainWindow):
             return
         self.control_panel.update_snr(msg.snr)
         self.qso_sm.set_last_snr(msg.snr)
-        self.qso_sm.on_message_received(msg)
 
-        # Empfangene an-uns-Nachricht im QSO-Log
+        # RX zuerst anzeigen, dann verarbeiten (sonst erscheint TX-Antwort vor RX im Log)
         if msg.target == self.settings.callsign:
             self.qso_panel.add_rx(msg.raw)
+
+        self.qso_sm.on_message_received(msg)
 
     # ── PSKReporter ─────────────────────────────────────────────
 
