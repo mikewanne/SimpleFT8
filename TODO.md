@@ -1,98 +1,50 @@
-# SimpleFT8 — TODO & Roadmap
+# SimpleFT8 TODO — Stand 08.04.2026
 
-**Stand:** 08.04.2026 | **Tag:** v0.20-forward-jump-fix
-**GitHub:** https://github.com/mikewanne/SimpleFT8
+## Morgen früh testen (nach Neustart mit TARGET_TX_OFFSET=-0.65)
 
----
+### 1. DT-Timing Test
+- CQ rufen, ICOM beobachten
+- Ziel: DT konstant ~+0.5s (war: -2.8 bis +1.2, fix: immer +0.8-0.9, jetzt -0.65 offset)
+- Kaltstart: erster TX darf Ausreißer sein (Guard aktiv), ab zweitem stabil
+- Test in Normal-Modus UND Diversity-Modus
 
-## PRIO 1: NOCH OFFEN (QSO-Logik)
+### 2. CQ auf EVEN und ODD senden
+- Statt fester Slot-Bindung beim CQ: tx_even pro CQ-Ruf togglen (EVEN → ODD → EVEN → ...)
+- Verdoppelt Sichtbarkeit (Stationen die nur EVEN-Slots monitoren UND ODD-Monitoren hören uns)
+- Erste Antwort → normales QSO, zweite Antwort → Queue
+- Implementierung: in `_on_cq_clicked` / `qso_state.py::_send_cq()` tx_even togglen
 
-- [x] **Vorwaerts-Springen im State** — qso_state.py (08.04.2026)
-  - WAIT_REPORT + RR73/73 → direkt TX_73 (WSJT-X konform: sendet 73, nicht RR73)
-  - TX_CALL + RR73/73 → pending → nach TX direkt TX_73
-  - Fix: vorher wurde RR73 zurueckgesendet → "Double RR73 Glitch" → jetzt 73 (korrekt)
+### 3. Diversity-Messung FIX (WICHTIG!)
+**Problem:** Nach 20 Min wird während CQ neu gemessen → unterbricht Betrieb
+**Was soll raus:** Neueinmessung WÄHREND CQ (CQ_CALLING/CQ_WAIT States)
 
-- [ ] **Even/Odd Slot bei Retries** — qso_state.py + encoder.py
-  - Beim ersten CQ-Reply wird Slot jetzt korrekt gesetzt (v0.19)
-  - Bei Hunt-Retries (WAIT_REPORT → retry): Slot koennte nach langer Wartezeit falsch sein
-  - Pruefen ob Slot bei jedem retry neu gesetzt werden muss
+**Gewünschtes Verhalten:**
+- Einmessen: NUR bei Diversity-Aktivierung + Bandwechsel
+- Gültigkeit: 15 Min (nicht 20 Min) ODER bis Bandwechsel
+- Re-Messung: nur wenn IDLE (nicht wenn CQ oder QSO aktiv)
+- Während CQ/QSO: immer auf letztem bekanntem Ergebnis weiterarbeiten
 
-- [ ] **Diversity-Messung: "MESSEN pausiert (TX)" anzeigen** — main_window.py
-  - Waehrend TX wird Antenne nicht gewechselt (korrekt implementiert)
-  - GUI zeigt aber kein Feedback → Operator denkt Messung haengt
-  - Fix: `control_panel.update_diversity_ratio("PAUSE", ...)` waehrend TX
+**Code-Änderungen (core/diversity.py + ui/main_window.py):**
+```python
+# diversity.py: OPERATE_CYCLES von 80 → 60 (15 Min)
+OPERATE_CYCLES = 60  # 15 Min
 
----
+# main_window.py Zeile ~1316: CQ-States NICHT remeasuren
+qso_active = self.qso_sm.state not in (
+    QSOState.IDLE, QSOState.TIMEOUT,
+    # CQ_CALLING und CQ_WAIT RAUS → kein Remeasure während CQ!
+)
+```
 
-## PRIO 2: FEATURES
+## Erledigte Features (08.04.2026)
+- [x] TX-Timing Jitter-Fix: Silence-Padding (war -2.8..+1.2s, jetzt stabil)
+- [x] TARGET_TX_OFFSET=-0.65 für DT≈+0.5 auf ICOM (FlexRadio 0.8s Latenz kompensiert)
+- [x] Kaltstart-Guard: silence<0.1s → nächsten Slot nehmen
+- [x] UTC im QSO-Panel: Slot-Start zeigen statt Decode-Zeit
+- [x] "Beendet ist beendet": kuerzlich gearbeitete Stationen 5 Min ignorieren
 
-- [ ] **Antennen-Info im QSO Log** — qso_panel.py + main_window.py
-  - Bei Diversity: zeigen auf welcher Antenne die Antwort empfangen wurde
-  - z.B. `10:00 ← DA1MHH R1BEO KP50  [A2]` im QSO Verlauf
-
-- [ ] **Logbuch: QSO loeschen** — logbook_widget.py + adif.py
-  - Delete-Button im Overlay vorhanden, ADIF-Loesch-Logik fehlt
-
-- [ ] **Logbuch: QSO editieren + speichern** — qso_detail_overlay.py
-  - Save-Button vorhanden, Rueckschreiben in ADIF fehlt
-
-- [ ] **QSO-Resume aus QSO-Panel** — qso_state.py
-  - Station im QSO-Verlauf anklicken → QSO fortfuehren
-
-- [ ] **FT4-Modus** — 7.5s Zyklen, andere Frequenzen
-
-- [ ] **Band Map / Spot Aggregation** — PSKReporter + DX Cluster als Input
-
----
-
-## PRIO 3: ARCHITEKTUR (langfristig)
-
-- [ ] **SessionController/Engine extrahieren** — main_window.py (~1300 Zeilen)
-  - Diversity-Logik, Power-Regelung, Meter-Handling, QSO-Flow raus aus UI
-
-- [ ] **FlexRadio Klasse aufteilen** — flexradio.py (~1300 Zeilen)
-  - ProtocolHandler / AudioStreamManager / MeterParser
-
----
-
-## ERLEDIGT (chronologisch)
-
-### 08.04.2026
-- [x] **Even/Odd Slot Fix (CQ-Modus)** — qso_state.py + main_window.py
-  - `tx_slot_for_partner` Signal: CQ-Reply Slot → encoder.tx_even = Gegentakt
-  - Behebt: UR4QWW-Muster (Station empfaengt unsere Reports nicht)
-- [x] **73 nach QSO blockiert CQ** — qso_state.py
-  - BLOCK 1: kein `return` mehr bei 73 waehrend CQ-States
-  - `_resume_cq_if_needed()`: timeout_cycles = 0 reset
-  - `_on_state_changed()`: CQ-Button bleibt aktiv bei CQ_CALLING/CQ_WAIT
-
-### 07.04.2026 (v0.16–v0.18)
-- [x] Memory Leak: `_responses` Dict begrenzt auf 200 Eintraege
-- [x] Thread-Safety: `copy.copy()` vor FT8Message Mutation
-- [x] `advance()` sendet R-Report (nicht plain Report)
-- [x] AP-Decoder priority_call fix: `qso_sm.qso.their_call`
-- [x] QRZ Lookup + Bulk Upload non-blocking (ThreadPoolExecutor)
-- [x] Duplicate ADIF Parser: qso_log.py importiert aus adif.py
-- [x] rfpower +15% Headroom fuer linearen PA-Betrieb
-- [x] PI-Controller (asymmetrisch, Kp_up/Kp_down/Ki)
-- [x] TX Level Bar mit "TX" Label beschriftet
-- [x] Bandwechsel stoppt CQ, QSO, TX, leert QSO-Log
-- [x] HALT Button (Notaus, rot, immer aktiv)
-- [x] Gesamt-QSO Timeout 3 Min (MAX_QSO_DURATION=180)
-- [x] Retry-Limits: MAX_STATION_CALLS=7, MAX_RR73_RETRIES=3
-- [x] RRR als Bestaetigung (is_rr73 prueft "RRR" + "RR73")
-- [x] RR73/R-Report waehrend TX_REPORT: pending queue
-- [x] WAIT_RR73 endlos-Retry fix
-- [x] README.md: EN + DE auf einer GitHub-Seite
-- [x] Docs EN+DE: DIVERSITY, DX_TUNING, POWER_REGULATION
-
-### Vor 07.04.2026
-- [x] Auto TX Power Regulation, Peak-Monitor, 10 Power Buttons
-- [x] Integriertes Logbuch, QSO Detail Overlay, QRZ.com API
-- [x] Temporal Polarization Diversity, UCB1, DX Tuning
-- [x] VITA-49 TX (int16 mono 24kHz), FT8 Decoder Pipeline
-- [x] ADIF 3.1.7 Logging, PSKReporter Integration
-
----
-
-*08.04.2026 — DA1MHH / Mike + Claude + DeepSeek*
+## Ideen / Später
+- [ ] Turbo FT8: "Listen-Slot" — einen TX-Slot überspringen um zweiten Caller zu erfassen
+  - A hört EVEN-CQ → antwortet ODD → wir TX EVEN
+  - B hört ODD-CQ → antwortet EVEN → wir müssen einen EVEN-Slot freihalten zum lauschen
+  - Risiko gering: WSJT-X wiederholt 5-7x automatisch
