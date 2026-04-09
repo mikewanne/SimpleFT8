@@ -17,14 +17,14 @@
 
 ### Why SimpleFT8 vs. WSJT-X?
 
-| Feature | WSJT-X / JS8Call | SimpleFT8 |
-|---------|:---:|:---:|
-| TX Power Control | Manual ALC monitoring | **Automatic closed-loop (FWDPWR feedback)** |
-| Antenna Selection | Manual | **Automatic via UCB1 reinforcement learning** |
-| CQ Frequency Selection | Manual waterfall scan | **Automatic via spectrum histogram** |
-| Simultaneous Callers | Second station ignored | **Queued, answered automatically after first QSO** |
-| SmartSDR required | Yes (most clients) | **No — direct VITA-49 + TCP** |
-| Band change power re-calibration | Manual | **Automatic per-band calibration** |
+| Feature | WSJT‑X / JS8Call | SimpleFT8 |
+|:---|:---|:---|
+| **TX Power Control** | Manual ALC monitoring<br>❌ Requires user attention | **Automatic closed‑loop**<br>✅ FWDPWR feedback, real‑time adjustment |
+| **Antenna Selection** | Manual switching<br>❌ One antenna at a time | **Automatic via UCB1 reinforcement learning**<br>✅ Temporal Polarization Diversity (ANT1=TX, ANT2=RX‑only) |
+| **CQ Frequency Selection** | Manual waterfall scan<br>❌ Visual search required | **Automatic via spectrum histogram**<br>✅ Finds widest clear gap (>150 Hz) |
+| **Simultaneous Callers** | Second station ignored<br>❌ Missed opportunities | **Queued & answered automatically**<br>✅ FIFO waitlist after first QSO |
+| **SmartSDR Required** | Yes (most clients)<br>❌ Depends on GUI | **No — direct VITA‑49 + TCP**<br>✅ Standalone, no GUI needed |
+| **Band‑Change Calibration** | Manual recalibration<br>❌ Per‑band adjustment by hand | **Automatic per‑band calibration**<br>✅ Stores & loads gain/power settings per band |
 
 ### Key Innovations
 
@@ -123,14 +123,14 @@ MIT License (c) 2026 DA1MHH (Mike Hammerer)
 
 ### Warum SimpleFT8 statt WSJT-X?
 
-| Funktion | WSJT-X / JS8Call | SimpleFT8 |
-|---------|:---:|:---:|
-| TX-Leistungsregelung | Manuelles ALC-Monitoring | **Automatischer Regelkreis (FWDPWR-Feedback)** |
-| Antennenwahl | Manuell | **Automatisch via UCB1 Reinforcement Learning** |
-| CQ-Frequenzwahl | Manueller Wasserfall | **Automatisch via Frequenz-Histogramm** |
-| Gleichzeitige Anrufer | Zweite Station ignoriert | **Warteliste — automatisch nach erstem QSO beantwortet** |
-| SmartSDR erforderlich | Ja (die meisten Clients) | **Nein — direkt via VITA-49 + TCP** |
-| Leistungs-Rekalibrierung nach Bandwechsel | Manuell | **Automatisch pro Band** |
+| Funktion | WSJT‑X / JS8Call | SimpleFT8 |
+|:---|:---|:---|
+| **TX‑Leistungsregelung** | Manuelles ALC‑Monitoring<br>❌ Erfordert Benutzer‑Eingriff | **Automatischer Regelkreis**<br>✅ FWDPWR‑Feedback, Echtzeit‑Anpassung |
+| **Antennenwahl** | Manuelles Umschalten<br>❌ Immer nur eine Antenne aktiv | **Automatisch via UCB1 Reinforcement Learning**<br>✅ Temporal Polarization Diversity (ANT1=TX, ANT2=nur RX) |
+| **CQ‑Frequenzwahl** | Manueller Wasserfall‑Scan<br>❌ Visuelle Suche nötig | **Automatisch via Frequenz‑Histogramm**<br>✅ Findet breiteste freie Lücke (>150 Hz) |
+| **Gleichzeitige Anrufer** | Zweite Station ignoriert<br>❌ Verpasste Kontakte | **Warteliste & automatische Antwort**<br>✅ FIFO‑Queue nach erstem QSO |
+| **SmartSDR erforderlich** | Ja (die meisten Clients)<br>❌ Abhängig von GUI | **Nein — direkt via VITA‑49 + TCP**<br>✅ Standalone, keine GUI nötig |
+| **Leistungs‑Rekalibrierung nach Bandwechsel** | Manuelle Neueinmessung<br>❌ Pro Band manuell justieren | **Automatisch pro Band**<br>✅ Speichert & lädt Gain‑/Leistungseinstellungen pro Band |
 
 ### Die wichtigsten Innovationen
 
