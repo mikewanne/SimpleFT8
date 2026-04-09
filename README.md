@@ -30,7 +30,7 @@
 
 - **Auto TX Power Regulation** — Set your target wattage (e.g. 50W), SimpleFT8 reads the actual FWDPWR from the radio and adjusts rfpower proportionally until the target is hit. No more overdrive, no more weak signal on band changes. Works automatically every QSO cycle.
 
-- **Temporal Polarization Diversity** — Cycles between two antennas every FT8 cycle and uses the UCB1 multi-armed bandit algorithm to learn which antenna/polarization performs better. After 80 cycles it re-evaluates and adjusts the ratio (70:30, 50:50, 30:70). Accumulates decoded stations from both antennas.
+- **Temporal Polarization Diversity** — Cycles between two antennas every FT8 cycle and uses the UCB1 multi-armed bandit algorithm to learn which antenna/polarization performs better. After 80 cycles it re-evaluates and adjusts the ratio (70:30, 50:50, 30:70). Accumulates decoded stations from both antennas. **Important:** The 70:30 ratio is a calculated mix across both even AND odd slots — not a fixed even=ANT1/odd=ANT2 assignment. A 10-cycle pattern (`A1,A1,A2,A1,A1,A2,A1,A1,A2,A1`) ensures both antennas cover both slot types proportionally.
 
 - **Automatic CQ Frequency Selection** — After diversity calibration, a 50 Hz bin histogram of all occupied frequencies is built. The widest clear gap (>150 Hz) is automatically chosen as the CQ frequency. No more manually hunting for a free slot.
 
@@ -136,7 +136,7 @@ MIT License (c) 2026 DA1MHH (Mike Hammerer)
 
 - **Automatische TX-Leistungsregelung** — Zielwatt einstellen (z.B. 50W), SimpleFT8 liest den tatsächlichen FWDPWR-Wert vom Radio und regelt den rfpower-Wert proportional nach — aufwärts und abwärts. Kein manuelles ALC, keine Übersteuerung, keine zu schwachen Signale nach dem Bandwechsel.
 
-- **Temporale Polarisations-Diversity** — Wechselt pro FT8-Zyklus zwischen zwei Antennen und nutzt den UCB1 Multi-Armed-Bandit-Algorithmus um zu lernen, welche Antenne/Polarisation besser ist. Nach 80 Zyklen wird neu eingemessen und das Verhältnis angepasst (70:30, 50:50, 30:70).
+- **Temporale Polarisations-Diversity** — Wechselt pro FT8-Zyklus zwischen zwei Antennen und nutzt den UCB1 Multi-Armed-Bandit-Algorithmus um zu lernen, welche Antenne/Polarisation besser ist. Nach 80 Zyklen wird neu eingemessen und das Verhältnis angepasst (70:30, 50:50, 30:70). **Wichtig:** Das Verhältnis 70:30 ist ein berechneter prozentualer Mix über gerade UND ungerade Slots — keine feste Zuordnung even=ANT1/odd=ANT2. Ein 10-Zyklen-Muster (`A1,A1,A2,A1,A1,A2,A1,A1,A2,A1`) stellt sicher dass beide Antennen beide Slot-Typen proportional abdecken.
 
 - **Automatische CQ-Frequenzwahl** — Nach dem Einmessen wird aus einem 50-Hz-Bin-Histogramm aller belegten Frequenzen die breiteste freie Lücke (>150 Hz) automatisch als CQ-Frequenz gewählt. Kein manuelles Suchen nach freiem Platz im Wasserfall.
 
