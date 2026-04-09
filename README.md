@@ -54,11 +54,15 @@ See [test screenshots and methodology](docs/DIVERSITY.md) for details.
 
 ### Screenshots
 
-| Main Interface | Diversity Mode |
+**All features running simultaneously** — active QSO (EA2JE, R-13→RR73), Diversity 70:30 (ANT1/ANT2/A1>2/A2>1 visible in RX list), CQ frequency histogram with yellow marker at 2125 Hz (free gap), 74W output, SWR 1.5, Clipguard 85%, PSKReporter 5 spots, 68 cycles until re-calibration:
+
+![SimpleFT8 Complete Feature Demo](docs/screenshots/simpleft8_complete.png)
+
+| Normal Mode (27 stations) | Diversity Mode (37 stations, +37%) |
 |:-:|:-:|
 | ![Main](docs/screenshots/normal_27stations_40m.png) | ![Diversity](docs/screenshots/diversity_37stations_40m.png) |
 
-**Automatic CQ Frequency Selection** — after diversity calibration, a 50 Hz bin histogram of all occupied frequencies is built. The widest clear gap is automatically chosen as CQ frequency (yellow marker). Green overlay = free gap. Red/orange bars = occupied slots.
+**Automatic CQ Frequency Selection** — 50 Hz bin histogram, green = free gap, yellow marker = auto-selected CQ frequency:
 
 ![CQ Frequency Histogram](docs/screenshots/cq_freq_histogram.png)
 
@@ -154,7 +158,11 @@ Kontrollierter Test auf 40m, gleiche Hardware (FLEX-8400M), 2 Minuten Abstand:
 
 Siehe [Test-Screenshots und Methodik](docs/DIVERSITY_DE.md) für Details.
 
-**Automatische CQ-Frequenzwahl** — Nach dem Einmessen wird ein 50-Hz-Bin-Histogramm aller belegten Frequenzen aufgebaut. Die breiteste freie Lücke wird automatisch als CQ-Frequenz gewählt (gelber Marker). Grüne Fläche = freie Lücke. Rote/orange Balken = belegte Slots.
+**Alle Features gleichzeitig** — laufendes QSO (EA2JE, R-13→RR73), Diversity 70:30 (ANT1/ANT2/A1>2/A2>1 sichtbar), CQ-Histogramm mit gelbem Marker bei 2125 Hz, 74W, SWR 1.5, Clipschutz 85%, PSKReporter 5 Spots, 68 Zyklen bis zur Neueinmessung:
+
+![SimpleFT8 Alle Features](docs/screenshots/simpleft8_complete.png)
+
+**Automatische CQ-Frequenzwahl** — 50-Hz-Histogramm, grün = freie Lücke, gelber Marker = automatisch gewählte CQ-Frequenz:
 
 ![CQ Frequenz Histogramm](docs/screenshots/cq_freq_histogram.png)
 
