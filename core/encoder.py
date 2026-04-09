@@ -158,6 +158,11 @@ class Encoder(QObject):
         if sleep_dur > 0.001:
             time.sleep(sleep_dur)
 
+        # Abort-Check: wurde TX während des Schlafs abgebrochen?
+        if not self._is_transmitting:
+            print("[Encoder] TX abgebrochen (während Warte-Phase)")
+            return
+
         # 4. Silence-Padding berechnen (jetzt praezise, da nahe am Ziel)
         #    Stille absorbiert den restlichen Jitter des OS-Schedulers
         now = time.time()

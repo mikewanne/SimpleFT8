@@ -1,4 +1,6 @@
-"""SimpleFT8 Diversity Controller — periodische Antennen-Messung."""
+"""SimpleFT8 Diversity Controller — periodische Antennen-Messung + CQ-Frequenzwahl."""
+
+from typing import Optional
 
 
 class DiversityController:
@@ -20,13 +22,21 @@ class DiversityController:
     def __init__(self):
         self.reset()
 
+    # CQ-Frequenzwahl: 50-Hz-Histogramm der belegten Subfrequenzen
+    FREQ_BIN_HZ = 50        # Bin-Breite in Hz
+    FREQ_MIN_HZ = 150       # Untergrenze Sicherheitsabstand
+    FREQ_MAX_HZ = 2800      # Obergrenze Sicherheitsabstand
+    FREQ_MIN_GAP_HZ = 150   # Mindestbreite einer freien Lücke
+
     def reset(self):
         self._phase = "measure"
         self._measure_step = 0
         self._scores = {"A1": 0.0, "A2": 0.0}
         self._operate_cycles = 0
         self.ratio = "50:50"
-        self.dominant = None  # "A1", "A2", oder None
+        self.dominant = None   # "A1", "A2", oder None
+        self._freq_histogram = {}  # bin_idx → Anzahl Stationen
+        self._cq_freq_hz: Optional[int] = None  # Letzte berechnete CQ-Frequenz
 
     def choose(self) -> str:
         """Antenne fuer den naechsten Zyklus waehlen."""
@@ -37,6 +47,63 @@ class DiversityController:
         if self.ratio == "30:70":
             return self._PAT_70_A2[self._operate_cycles % 10]
         return ("A1", "A2")[self._operate_cycles % 2]  # 50:50
+
+    def record_freq(self, freq_hz: float):
+        """Belegte Frequenz aus Messphase ins Histogramm eintragen."""
+        if freq_hz < self.FREQ_MIN_HZ or freq_hz > self.FREQ_MAX_HZ:
+            return
+        bin_idx = int(freq_hz // self.FREQ_BIN_HZ)
+        self._freq_histogram[bin_idx] = self._freq_histogram.get(bin_idx, 0) + 1
+
+    def get_free_cq_freq(self) -> Optional[int]:
+        """Freie CQ-Frequenz aus Histogramm berechnen.
+
+        Sucht die breiteste Lücke im Histogramm und gibt deren Mitte zurück.
+        Gibt None zurück wenn keine ausreichende Lücke gefunden.
+        """
+        if not self._freq_histogram:
+            return None
+
+        # Alle Bins im Nutzbereich prüfen
+        min_bin = int(self.FREQ_MIN_HZ // self.FREQ_BIN_HZ)
+        max_bin = int(self.FREQ_MAX_HZ // self.FREQ_BIN_HZ)
+        min_gap_bins = max(1, self.FREQ_MIN_GAP_HZ // self.FREQ_BIN_HZ)
+
+        best_gap_start = None
+        best_gap_len = 0
+        current_gap_start = None
+        current_gap_len = 0
+
+        for b in range(min_bin, max_bin + 1):
+            if b not in self._freq_histogram:  # leerer Bin
+                if current_gap_start is None:
+                    current_gap_start = b
+                current_gap_len += 1
+            else:  # belegter Bin
+                if current_gap_len > best_gap_len:
+                    best_gap_len = current_gap_len
+                    best_gap_start = current_gap_start
+                current_gap_start = None
+                current_gap_len = 0
+
+        # Letztes Segment prüfen
+        if current_gap_len > best_gap_len:
+            best_gap_len = current_gap_len
+            best_gap_start = current_gap_start
+
+        if best_gap_start is None or best_gap_len < min_gap_bins:
+            return None
+
+        # Mitte der besten Lücke
+        center_bin = best_gap_start + best_gap_len // 2
+        freq_hz = center_bin * self.FREQ_BIN_HZ + self.FREQ_BIN_HZ // 2
+        self._cq_freq_hz = int(freq_hz)
+        return self._cq_freq_hz
+
+    @property
+    def cq_freq_hz(self) -> Optional[int]:
+        """Letzte berechnete CQ-Frequenz (Hz), oder None."""
+        return self._cq_freq_hz
 
     def record_measurement(self, ant: str, score: float):
         """Score nach Messzyklus einpflegen — evaluiert nach 2 Messungen."""
@@ -61,6 +128,7 @@ class DiversityController:
         self._phase = "measure"
         self._measure_step = 0
         self._scores = {"A1": 0.0, "A2": 0.0}
+        self._freq_histogram = {}  # Histogramm für neue Messung zurücksetzen
 
     def on_band_change(self):
         """Bandwechsel → Neueinmessung starten."""

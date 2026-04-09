@@ -351,59 +351,64 @@ class _RadioCard(QFrame):
         tx_lay.setContentsMargins(6, 5, 6, 5)
         tx_lay.setSpacing(4)
 
-        # Zeile 1: TUNE + Watt (vertikal zentriert = gleiche Basislinie)
-        tune_row = QHBoxLayout()
-        tune_row.setSpacing(8)
-        self.btn_tune = QPushButton("TUNE")
-        self.btn_tune.setCheckable(True)
-        self.btn_tune.setFixedHeight(26)
-        self.btn_tune.setFixedWidth(56)
-        self.btn_tune.setStyleSheet(
-            f"QPushButton {{ background: rgba(180,150,0,0.15); color: #FFD700; "
-            f"border: 1px solid rgba(220,180,0,0.4); border-radius: 3px; "
-            f"font-weight: bold; font-family: {_FONT}; font-size: 10px; }}"
-            f"QPushButton:checked {{ background: rgba(180,150,0,0.35); }}"
-        )
-        self.watt_label = QLabel("0 W")
-        self.watt_label.setFixedHeight(26)
-        self.watt_label.setStyleSheet(
-            f"color: #FFD700; font-family: {_FONT}; font-size: 14px; font-weight: bold; border: none;")
-        tune_row.addWidget(self.btn_tune)
-        tune_row.addWidget(self.watt_label)
-        tune_row.addStretch()
-        tx_lay.addLayout(tune_row)
-
-        # Trenner innerhalb TX Block
-        sep = QFrame()
-        sep.setStyleSheet(_SEP_SS)
-        sep.setFixedHeight(1)
-        tx_lay.addWidget(sep)
-
-        # Zeile 2: Peak + TX-Pegel + SWR (kein Balken — nur Zahlen)
-        metrics_row = QHBoxLayout()
-        metrics_row.setSpacing(6)
+        # Zeile 1: Antennensignal — Clipschutz | TX-Pegel | RF
+        _lbl_ss = (f"font-family: {_FONT}; font-size: 10px; "
+                   f"border: 1px solid #333; border-radius: 2px; padding: 1px 4px;")
+        signal_row = QHBoxLayout()
+        signal_row.setSpacing(6)
         self.peak_label = QLabel("Clipschutz —")
-        self.peak_label.setStyleSheet(
-            f"color: #557766; font-family: {_FONT}; font-size: 10px; "
-            f"border: 1px solid #333; border-radius: 2px; padding: 1px 4px;"
-        )
-        self.tx_level_label = QLabel("TX-Pegel: 100%")
-        self.tx_level_label.setStyleSheet(
-            f"color: {_TEXT}; font-family: {_FONT}; font-size: 10px; "
-            f"border: 1px solid #333; border-radius: 2px; padding: 1px 4px;"
-        )
+        self.peak_label.setFixedWidth(100)
+        self.peak_label.setStyleSheet(f"color: #557766; " + _lbl_ss)
+        self.tx_level_label = QLabel("TX-Pegel: 75%")
+        self.tx_level_label.setFixedWidth(90)
+        self.tx_level_label.setStyleSheet(f"color: #AAAACC; " + _lbl_ss)
+        self.rf_power_label = QLabel("RF: —")
+        self.rf_power_label.setFixedWidth(70)
+        self.rf_power_label.setStyleSheet(f"color: #FFAA44; " + _lbl_ss)
         # tx_level_bar bleibt als Dummy erhalten (wird intern noch referenziert)
         self.tx_level_bar = QProgressBar()
         self.tx_level_bar.setVisible(False)
+        signal_row.addWidget(self.peak_label)
+        signal_row.addStretch()
+        signal_row.addWidget(self.tx_level_label)
+        signal_row.addStretch()
+        signal_row.addWidget(self.rf_power_label)
+        tx_lay.addLayout(signal_row)
+
+        # Zeile 2: Ausgangsleistung — [TUNE] --- [Watt  SWR]
+        output_row = QHBoxLayout()
+        output_row.setSpacing(8)
+        # TUNE als deutlich erkennbarer Button (raised, heller Hintergrund)
+        self.btn_tune = QPushButton("TUNE")
+        self.btn_tune.setCheckable(True)
+        self.btn_tune.setFixedHeight(28)
+        self.btn_tune.setFixedWidth(60)
+        self.btn_tune.setStyleSheet(
+            f"QPushButton {{ background: #2a2a00; color: #FFD700; "
+            f"border: 2px solid #998800; border-radius: 5px; "
+            f"font-weight: bold; font-family: {_FONT}; font-size: 11px; "
+            f"padding: 2px 6px; }}"
+            f"QPushButton:hover {{ background: #444400; border-color: #FFD700; color: #FFFF00; }}"
+            f"QPushButton:pressed {{ background: #666600; }}"
+            f"QPushButton:checked {{ background: #998800; color: #000; border-color: #FFD700; }}"
+        )
+        # Watt + SWR direkt nebeneinander (Anzeigen, kein Button)
+        self.watt_label = QLabel("0 W")
+        self.watt_label.setFixedHeight(28)
+        self.watt_label.setStyleSheet(
+            f"color: #FFD700; font-family: {_FONT}; font-size: 14px; font-weight: bold; border: none;")
         self.swr_label = QLabel("SWR —")
+        self.swr_label.setFixedWidth(75)
+        self.swr_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.swr_label.setStyleSheet(
-            f"color: #44FF44; font-family: {_FONT}; font-size: 10px; font-weight: bold; border: none;")
-        metrics_row.addWidget(self.peak_label)
-        metrics_row.addStretch()
-        metrics_row.addWidget(self.tx_level_label)
-        metrics_row.addStretch()
-        metrics_row.addWidget(self.swr_label)
-        tx_lay.addLayout(metrics_row)
+            f"color: #44FF44; font-family: {_FONT}; font-size: 10px; "
+            f"font-weight: bold; border: 1px solid #333; border-radius: 2px; padding: 1px 4px;")
+        output_row.addWidget(self.btn_tune)
+        output_row.addStretch()          # Abstand zwischen TUNE und Anzeigen
+        output_row.addWidget(self.watt_label)
+        output_row.addSpacing(8)
+        output_row.addWidget(self.swr_label)
+        tx_lay.addLayout(output_row)
 
         lay.addWidget(tx_frame)
 
@@ -653,6 +658,7 @@ class ControlPanel(QWidget):
         self.peak_label = radio_card.peak_label
         self.tx_level_bar = radio_card.tx_level_bar
         self.tx_level_label = radio_card.tx_level_label
+        self.rf_power_label = radio_card.rf_power_label
         layout.addWidget(radio_card)
 
         # ── Kachel 3: QSO + STATUS (orange) ─────────────────────────────
@@ -955,7 +961,27 @@ class ControlPanel(QWidget):
             label = "Clipschutz —"
         self.peak_label.setText(label)
         self.peak_label.setStyleSheet(
-            f"color: {color}; font-family: {_FONT}; font-size: 10px;"
+            f"color: {color}; font-family: {_FONT}; font-size: 10px; "
+            f"border: 1px solid #333; border-radius: 2px; padding: 1px 4px;"
+        )
+
+    def update_rfpower(self, rfpower: int):
+        """RF-Power-Anzeige aktualisieren (0-100%)."""
+        if rfpower <= 0:
+            self.rf_power_label.setText("RF: —")
+            color = "#555555"
+        elif rfpower >= 90:
+            self.rf_power_label.setText(f"RF: {rfpower}%")
+            color = "#FF6644"
+        elif rfpower >= 70:
+            self.rf_power_label.setText(f"RF: {rfpower}%")
+            color = "#FFAA44"
+        else:
+            self.rf_power_label.setText(f"RF: {rfpower}%")
+            color = "#AAAACC"
+        self.rf_power_label.setStyleSheet(
+            f"color: {color}; font-family: {_FONT}; font-size: 10px; "
+            f"border: 1px solid #333; border-radius: 2px; padding: 1px 4px;"
         )
 
     # =====================================================================

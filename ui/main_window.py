@@ -9,7 +9,7 @@ from pathlib import Path
 
 from PySide6.QtWidgets import (
     QMainWindow, QSplitter, QWidget, QVBoxLayout, QStatusBar,
-    QMessageBox, QScrollArea,
+    QMessageBox, QScrollArea, QLabel,
 )
 from PySide6.QtCore import Qt, Slot
 from PySide6.QtGui import QFont
@@ -93,10 +93,10 @@ class MainWindow(QMainWindow):
         self._active_qso_targets: set = set()  # Stationen im aktiven QSO → 150s Aging
         self._diversity_lock = threading.Lock()  # Race Condition Guard
 
-        # Auto TX Level Regelung (PI-Controller)
+        # Auto TX Level Regelung (zweistufig: rfpower primär, audio sekundär)
         self._power_target = settings.get("power_preset", 10)  # Watt-Ziel vom Button
-        self._fwdpwr_samples = []  # FWDPWR Messwerte waehrend TX
-        self._integral_error = 0.0  # PI: akkumulierter Fehler
+        self._fwdpwr_samples = []   # FWDPWR Messwerte waehrend TX
+        self._rfpower_current = 50  # Aktuell gesetzter rfpower-Wert (0-100)
 
         # UI aufbauen
         self._setup_ui()
@@ -186,7 +186,25 @@ class MainWindow(QMainWindow):
         self.splitter.setStretchFactor(1, 1)  # QSO: dehnen
         self.splitter.setStretchFactor(2, 0)  # Control: nicht dehnen
 
-        self.setCentralWidget(self.splitter)
+        # RX-Warnung: rotes Banner oben im Fenster (sichtbar wenn RX deaktiviert)
+        self._rx_warning_label = QLabel("⚠   EMPFANG RX DEAKTIVIERT   ⚠")
+        self._rx_warning_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._rx_warning_label.setFixedHeight(26)
+        self._rx_warning_label.setStyleSheet(
+            "QLabel { background-color: rgba(160, 0, 0, 0.90); color: #FF4444; "
+            "font-family: Menlo; font-size: 12px; font-weight: bold; "
+            "padding: 2px; letter-spacing: 2px; border-bottom: 1px solid #FF0000; }"
+        )
+        self._rx_warning_label.setVisible(False)
+
+        _container = QWidget()
+        _container.setStyleSheet("background: transparent;")
+        _vlay = QVBoxLayout(_container)
+        _vlay.setContentsMargins(0, 0, 0, 0)
+        _vlay.setSpacing(0)
+        _vlay.addWidget(self._rx_warning_label)
+        _vlay.addWidget(self.splitter)
+        self.setCentralWidget(_container)
 
     def _start_radio(self):
         """FlexRadio verbinden und Decoder starten (mit Auto-Retry)."""
@@ -243,13 +261,13 @@ class MainWindow(QMainWindow):
                 f"Preset {band} geladen: ANT1 G{preset['ant1_gain']} dB", 4000
             )
             print(f"[FlexRadio] Preset {band}: ANT1 G{preset['ant1_gain']} dB")
-        # Leistung: rfpower 15% ueber Ziel fuer linearen PA-Betrieb
+        # Leistung: konservativer Start bei 50%, Regelung regelt auf Zielwatt ein
         power_preset = self.settings.get("power_preset", 10)
-        rfpower = min(100, int(power_preset * 1.15))
-        self.radio.set_power(rfpower)
+        self._rfpower_current = 50
+        self.radio.set_power(self._rfpower_current)
         self.control_panel.set_power_preset(power_preset)
         # TX Audio-Drive (mic_level) setzen — steuert wieviel Leistung die PA tatsaechlich abgibt
-        tx_level = self.settings.get("tx_level", 100)
+        tx_level = min(75, self.settings.get("tx_level", 75))  # max 75%
         self.radio.set_tx_level(tx_level / 100.0)
         self.control_panel.tx_level_bar.setValue(tx_level)
         self.control_panel.tx_level_label.setText(f"TX-Pegel: {tx_level}%")
@@ -336,6 +354,10 @@ class MainWindow(QMainWindow):
                         if m.snr is not None)
             with self._diversity_lock:
                 self._diversity_ctrl.record_measurement(ant, score)
+                # Stationsfrequenzen für CQ-Frequenzwahl erfassen
+                for m in (messages or []):
+                    if hasattr(m, 'freq_hz') and m.freq_hz:
+                        self._diversity_ctrl.record_freq(m.freq_hz)
             self.control_panel.update_diversity_ratio(
                 self._diversity_ctrl.ratio, self._diversity_ctrl.phase,
                 measure_step=self._diversity_ctrl.measure_step,
@@ -343,10 +365,18 @@ class MainWindow(QMainWindow):
                 operate_cycles=self._diversity_ctrl.operate_cycles,
                 operate_total=self._diversity_ctrl.OPERATE_CYCLES,
             )
-            # Messung abgeschlossen → CQ freigeben
+            # Messung abgeschlossen → CQ freigeben + Frequenz wählen
             if self._diversity_ctrl.phase == "operate":
                 self._set_cq_locked(False)
-                self.qso_panel.add_info("Einmessen abgeschlossen — CQ freigegeben")
+                cq_freq = self._diversity_ctrl.get_free_cq_freq()
+                if cq_freq:
+                    self.encoder.audio_freq_hz = cq_freq
+                    self.qso_panel.add_info(
+                        f"Einmessen abgeschlossen — CQ auf {cq_freq} Hz (freie Lücke)"
+                    )
+                    print(f"[Diversity] CQ-Frequenz: {cq_freq} Hz (aus Histogramm)")
+                else:
+                    self.qso_panel.add_info("Einmessen abgeschlossen — CQ freigegeben")
 
         if self._rx_mode == "diversity" and messages:
             # Diversity: Stationen akkumulieren per Callsign
@@ -518,6 +548,7 @@ class MainWindow(QMainWindow):
         self.qso_sm.qso_confirmed.connect(self._on_qso_confirmed)
         self.qso_sm.qso_timeout.connect(self._on_qso_timeout)
         self.qso_sm.tx_slot_for_partner.connect(self._on_tx_slot_for_partner)
+        self.qso_sm.queue_changed.connect(self._on_caller_queue_changed)
 
         # Timer
         self.timer.cycle_tick.connect(self._on_cycle_tick)
@@ -572,12 +603,8 @@ class MainWindow(QMainWindow):
                 self._diversity_current_ant = "A1"
         self.control_panel.update_decode_count(0)
         self.control_panel.set_rx_active(active)
-        # Titelleiste: rote Warnung wenn RX aus
-        call = self.settings.callsign
-        if active:
-            self.setWindowTitle(f"SimpleFT8 — {call}")
-        else:
-            self.setWindowTitle(f"SimpleFT8 — {call}  ⚠ EMPFANG RX DEAKTIVIERT ⚠")
+        # Rotes Banner im Fenster wenn RX deaktiviert
+        self._rx_warning_label.setVisible(not active)
 
     # ── Modus / Band / Power ────────────────────────────────────
 
@@ -591,11 +618,9 @@ class MainWindow(QMainWindow):
     def _on_power_changed(self, power: int):
         self.settings.set("power_preset", power)
         self._power_target = power
-        self._integral_error = 0.0  # PI: I-Term bei Power-Wechsel reset
+        self._rfpower_current = 50  # Reset auf konservativen Start bei Power-Wechsel
         if self.radio.ip:
-            # rfpower 15% ueber Ziel: PA bleibt im linearen Bereich
-            rfpower = min(100, int(power * 1.15))
-            self.radio.set_power(rfpower)
+            self.radio.set_power(self._rfpower_current)
 
     @Slot(bool)
     def _on_tune_clicked(self, on: bool):
@@ -658,12 +683,12 @@ class MainWindow(QMainWindow):
                 self._apply_normal_mode()
         # Per-Band TX Level laden (Auto-Regelung speichert pro Band)
         band_levels = self.settings.get("tx_levels_per_band", {})
-        saved_level = band_levels.get(band, 100)
+        saved_level = min(75, band_levels.get(band, 75))  # max 75% (Clipschutz-Anker)
         self.radio.set_tx_level(saved_level / 100.0)
         self.control_panel.tx_level_bar.setValue(saved_level)
         self.control_panel.tx_level_label.setText(f"TX-Pegel: {saved_level}%")
-        self._fwdpwr_samples.clear()  # Alte Messwerte verwerfen
-        self._integral_error = 0.0   # PI: I-Term bei Bandwechsel reset
+        self._fwdpwr_samples.clear()   # Alte Messwerte verwerfen
+        self._rfpower_current = 50    # Reset auf konservativen Start bei Bandwechsel
         self._update_statusbar()
 
     # ── RX Modus: NORMAL / DIVERSITY / DX TUNING ──────────────
@@ -1012,83 +1037,96 @@ class MainWindow(QMainWindow):
         print(f"[SWR] Alarm: {swr:.1f} — TX gestoppt")
 
     def _auto_adjust_tx_level(self):
-        """FWDPWR-basierte Auto-Regelung: TX Level so anpassen dass Ist ≈ Soll.
-        Clipping-Schutz: stoppt Erhoehung wenn Audio-Peak > 0.95."""
-        import math
+        """Zweistufige TX-Regelung (kein PI-Controller):
+        Primär:   rfpower → Ziel-Wattzahl (via FWDPWR-Feedback)
+        Sekundär: audio_level bei 0.75 halten (Clipschutz-Anker)
+        Clipschutz: raw_peak >= 0.75 → audio NICHT erhöhen, rfpower hoch."""
         if not self._fwdpwr_samples:
             return
-        # Durchschnitt der FWDPWR-Messungen (ignoriere erste 2 = Ramp-Up)
         samples = self._fwdpwr_samples[2:] if len(self._fwdpwr_samples) > 4 else self._fwdpwr_samples
-        measured = sum(samples) / len(samples)
+        fwdpwr = sum(samples) / len(samples)
         self._fwdpwr_samples.clear()
 
         target = self._power_target
-        if target <= 0 or measured <= 0:
+        if target <= 0 or fwdpwr < 0:
             return
 
-        current = self.radio._tx_audio_level
-        peak = getattr(self.radio, '_last_tx_peak', 0.0)
+        current_audio = self.radio._tx_audio_level
+        raw_peak = getattr(self.radio, '_last_tx_raw_peak', 0.0)
 
-        # P-Controller: sqrt(target/measured) = benoetigter Amplitude-Faktor
-        ratio = max(0.5, min(2.0, target / measured))
-        ideal_factor = math.sqrt(ratio)
+        CLIP_LIMIT  = 0.75  # Audio-Ziel + Clipschutz-Grenze (max audio_level)
+        AUDIO_STEP  = 0.05  # Schritt pro Zyklus (langsam = stabil)
+        RF_STEP_MAX = 20    # Max rfpower-Sprung pro Zyklus (proportionale Regelung)
 
-        # PI-Controller: asymmetrisch (RUNTER aggressiver als HOCH)
-        error = ideal_factor - 1.0
-        if error >= 0:
-            KP = 0.3       # Hochregeln: vorsichtig
-            MAX_STEP = 0.12
-        else:
-            KP = 0.6       # Runterregeln: doppelt so aggressiv
-            MAX_STEP = 0.20
+        new_audio   = current_audio
+        new_rfpower = self._rfpower_current
 
-        # Integral-Term: hilft bei nachhaltigem Unter-/Uebersteuern
-        KI = 0.02
-        self._integral_error = max(-1.0, min(1.0, self._integral_error + error))  # Anti-Windup
-        correction = max(-MAX_STEP, min(MAX_STEP, KP * error + KI * self._integral_error))
+        # Schritt 1: audio sofort auf CLIP_LIMIT begrenzen (nicht schrittweise!)
+        if current_audio > CLIP_LIMIT:
+            new_audio = CLIP_LIMIT
 
-        new_level = current * (1.0 + correction)
-        new_level = max(0.05, min(1.5, new_level))
+        # Schritt 2: Wattzahl-Regelung via rfpower (unabhängig von raw_peak!)
+        if fwdpwr < target * 0.95:
+            # Audio kann erhöht werden wenn: unter Limit UND raw_peak niedrig genug
+            if new_audio < CLIP_LIMIT and raw_peak < CLIP_LIMIT:
+                new_audio = min(CLIP_LIMIT, new_audio + AUDIO_STEP)
+            else:
+                # Audio am Limit ODER raw_peak zu hoch → rfpower erhöhen
+                # Proportionale Schätzung: rfpower * (target/fwdpwr), max +20 pro Zyklus
+                if fwdpwr > 2:
+                    estimated = int(self._rfpower_current * (target / fwdpwr))
+                    step = max(5, min(RF_STEP_MAX, estimated - self._rfpower_current))
+                else:
+                    step = 10  # Kein Messwert → konservativer Sprung
+                new_rfpower = min(100, self._rfpower_current + step)
+        elif fwdpwr > target * 1.05:
+            # Zu viele Watts: proportional reduzieren (symmetrisch zur Erhöhung)
+            if fwdpwr > 2 and target > 0:
+                estimated = int(self._rfpower_current * (target / fwdpwr))
+                step = max(5, min(RF_STEP_MAX, self._rfpower_current - estimated))
+            else:
+                step = 5
+            new_rfpower = max(10, self._rfpower_current - step)
 
-        # CLIPPING-SCHUTZ: nicht erhoehen wenn Audio-Peak >= 0.95
-        if peak >= 0.95 and new_level > current:
-            print(f"[AutoTX] Clipping-Schutz: Peak={peak:.2f} — TX Level nicht weiter erhoehen")
-            new_level = current
+        # rfpower anwenden wenn geändert
+        if new_rfpower != self._rfpower_current:
+            self._rfpower_current = new_rfpower
+            self.radio.set_power(new_rfpower)
 
-        # Sicherheit: schon bei 3% ueber Ziel aggressiv reduzieren
-        if measured > target * 1.03 and new_level > current:
-            new_level = current * 0.92
+        # Audio anwenden wenn Änderung > 1%
+        if abs(new_audio - current_audio) >= 0.01:
+            self.radio.set_tx_level(new_audio)
+            slider_val = int(new_audio * 100)
+            self.control_panel.tx_level_bar.setValue(slider_val)
+            self.control_panel.tx_level_label.setText(f"TX-Pegel: {slider_val}%")
+            band = self.settings.band
+            band_levels = self.settings.get("tx_levels_per_band", {})
+            band_levels[band] = slider_val
+            self.settings.set("tx_levels_per_band", band_levels)
 
-        # Peak-Level immer aktualisieren (auch wenn keine Regelung noetig)
-        self.control_panel.update_tx_peak(peak)
+        # Anzeige immer aktualisieren
+        self.control_panel.update_tx_peak(raw_peak if raw_peak > 0.01 else current_audio)
+        self.control_panel.update_rfpower(self._rfpower_current)
 
-        # Nur anwenden wenn Aenderung > 1%
-        if abs(new_level - current) < 0.01:
-            return
-
-        self.radio.set_tx_level(new_level)
-        slider_val = min(150, int(new_level * 100))
-        self.control_panel.tx_level_bar.setValue(slider_val)
-        self.control_panel.tx_level_label.setText(f"{slider_val}%")
-
-        # Per-Band speichern
-        band = self.settings.band
-        band_levels = self.settings.get("tx_levels_per_band", {})
-        band_levels[band] = slider_val
-        self.settings.set("tx_levels_per_band", band_levels)
-
-        # Peak-Level in GUI aktualisieren
-        self.control_panel.update_tx_peak(peak)
-
-        print(f"[AutoTX] {band}: {measured:.0f}W/{target}W Peak={peak:.2f} → TxLvl {current:.2f}→{new_level:.2f} ({slider_val}%)")
+        print(f"[AutoTX] {self.settings.band}: {fwdpwr:.0f}W/{target}W "
+              f"raw={raw_peak:.2f} audio {current_audio:.2f}→{new_audio:.2f} "
+              f"rfpower {new_rfpower}%")
 
     @Slot(str, float)
     def _on_meter_update(self, name: str, value: float):
         if name == "FWDPWR":
             self.control_panel.update_watt(value)
-            # FWDPWR Samples fuer Auto-TX-Regelung sammeln (nur waehrend TX, >1W)
             if self.encoder.is_transmitting and value > 1:
                 self._fwdpwr_samples.append(value)
+                # Live-Update Clipschutz + TX-Pegel + RF während TX
+                raw_peak = getattr(self.radio, '_last_tx_raw_peak', 0.0)
+                self.control_panel.update_tx_peak(raw_peak if raw_peak > 0.01 else value)
+                audio_pct = int(getattr(self.radio, '_tx_audio_level', 0.75) * 100)
+                self.control_panel.tx_level_label.setText(f"TX-Pegel: {audio_pct}%")
+                self.control_panel.update_rfpower(self._rfpower_current)
+            elif not self.encoder.is_transmitting:
+                # TX inaktiv → Anzeige zurücksetzen
+                self.control_panel.update_tx_peak(0.0)
         elif name == "SWR":
             self.control_panel.update_swr(value)
         elif name == "ALC":
@@ -1314,6 +1352,17 @@ class MainWindow(QMainWindow):
         if self.qso_sm.cq_mode:
             self.control_panel.set_cq_active(True)
 
+    @Slot(list)
+    def _on_caller_queue_changed(self, queue: list):
+        """Warteliste geändert — im QSO-Panel anzeigen."""
+        if queue:
+            calls = ", ".join(queue)
+            self.qso_panel.add_info(f"⏳ Warteliste: {calls}")
+            self.control_panel.update_qso_counter(self.qso_sm.cq_qso_count)
+        else:
+            if self.qso_sm.cq_mode:
+                self.qso_panel.add_info("Warteliste leer")
+
     @Slot(object)
     def _on_tx_slot_for_partner(self, msg):
         """CQ-Reply empfangen: Encoder-Slot auf Gegentakt der Station setzen."""
@@ -1333,6 +1382,10 @@ class MainWindow(QMainWindow):
 
     @Slot(int, bool)
     def _on_cycle_start(self, cycle_num: int, is_even: bool):
+        # ── Anzeige zurücksetzen wenn kein TX ──────────────────
+        if not self.encoder.is_transmitting:
+            self.control_panel.update_tx_peak(0.0)
+
         # ── Auto TX Level Regelung ──────────────────────────────
         if self._fwdpwr_samples:
             self._auto_adjust_tx_level()

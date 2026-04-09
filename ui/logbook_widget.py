@@ -272,12 +272,15 @@ class LogbookWidget(QWidget):
 
     def _selected_record(self):
         """Aktuell ausgewählten Record zurückgeben oder None."""
-        rows = self.table.selectedItems()
-        if not rows:
+        selected = self.table.selectedItems()
+        if not selected:
             return None
-        row = self.table.currentRow()
-        item = self.table.item(row, 0)
-        return item.data(Qt.ItemDataRole.UserRole) if item else None
+        # Bei aktivem Sorting gibt currentRow() visuelle Zeile, item() braucht logische Zeile.
+        # selectedItems() enthält die Items mit korrektem logischen row()-Index.
+        for item in selected:
+            if item.column() == 0:
+                return item.data(Qt.ItemDataRole.UserRole)
+        return None
 
     def _on_delete_clicked(self):
         """Ausgewählten QSO-Eintrag mit Sicherheitsabfrage löschen."""

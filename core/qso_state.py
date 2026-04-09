@@ -98,6 +98,8 @@ class QSOStateMachine(QObject):
     qso_confirmed = Signal(object)  # 73 empfangen → ✓ anzeigen
     qso_timeout = Signal(str)
     tx_slot_for_partner = Signal(object)  # CQ-Reply: msg mit _tx_even → Encoder soll Gegentakt setzen
+    caller_queued = Signal(str)     # Station zur Warteliste hinzugefügt (call)
+    queue_changed = Signal(list)    # Warteliste geändert → UI aktualisieren
 
     def __init__(self, my_call: str, my_grid: str):
         super().__init__()
@@ -116,6 +118,7 @@ class QSOStateMachine(QObject):
         self._dbg = QSODebugLog()       # QSO Debug Logger
         self._worked_calls: dict = {}   # {callsign: timestamp} — gesperrte Calls nach QSO
         self._WORKED_BLOCK_SECS = 300   # 5 Minuten Sperre nach QSO
+        self._caller_queue: list = []   # Warteliste: Stationen die während QSO gerufen haben
 
     def _set_state(self, new_state: QSOState):
         old = self.state.name
@@ -167,6 +170,11 @@ class QSOStateMachine(QObject):
         if msg is None:
             return
         self._pending_reply = None
+
+        # Kein CQ-Reply verarbeiten wenn CQ-Modus nicht aktiv (z.B. nach HALT)
+        if not self.cq_mode:
+            print(f"[QSO] {msg.caller} ignoriert — CQ-Modus nicht aktiv")
+            return
 
         # Kein neues QSO mit kuerzlich gearbeiteter Station
         if self._is_worked_recently(msg.caller):
@@ -269,9 +277,9 @@ class QSOStateMachine(QObject):
             return
 
         if self.state == QSOState.CQ_WAIT:
-            # Im CQ-Modus: nach 2 Zyklen ohne Antwort nochmal CQ
+            # Im CQ-Modus: nach 1 Zyklus ohne Antwort nochmal CQ
             self.qso.timeout_cycles += 1
-            if self.qso.timeout_cycles >= 2 and self.cq_mode:
+            if self.qso.timeout_cycles >= 1 and self.cq_mode:
                 self._send_cq()
             return
 
@@ -323,11 +331,20 @@ class QSOStateMachine(QObject):
                 self._resume_cq_if_needed()
 
     def _resume_cq_if_needed(self):
-        """Nach Timeout/Hunt: CQ wieder aufnehmen wenn vorher CQ-Modus aktiv war."""
+        """Nach Timeout/Hunt: CQ wieder aufnehmen wenn vorher CQ-Modus aktiv war.
+        Wenn Warteliste nicht leer: direkt nächste Station antworten."""
         if self.cq_mode or self._was_cq:
             self.cq_mode = True
-            self.qso.timeout_cycles = 0  # CQ-WAIT Zaehler frisch starten
-            self._send_cq()
+            self.qso.timeout_cycles = 0
+            # Warteliste prüfen: direkt antworten statt CQ senden
+            if self._caller_queue:
+                next_msg = self._caller_queue.pop(0)
+                self.queue_changed.emit([m.caller for m in self._caller_queue])
+                print(f"[QSO] Warteliste: antworte {next_msg.caller} (noch {len(self._caller_queue)} wartend)")
+                self._pending_reply = next_msg
+                self._process_cq_reply()
+            else:
+                self._send_cq()
         else:
             self._set_state(QSOState.IDLE)
 
@@ -407,6 +424,18 @@ class QSOStateMachine(QObject):
         if self.state in (QSOState.IDLE, QSOState.CQ_WAIT, QSOState.CQ_CALLING) and msg.target == self.my_call:
             if msg.is_rr73 or msg.is_73:
                 self._dbg.log("RX", f"RR73/73 von {msg.caller} nach Timeout/CQ — ignoriert")
+
+        # ── Warteliste: Neue CQ-Anrufer während aktivem QSO ──
+        if (self.cq_mode
+                and self.state not in (QSOState.IDLE, QSOState.CQ_WAIT, QSOState.CQ_CALLING)
+                and msg.target == self.my_call
+                and msg.is_grid
+                and msg.caller != self.qso.their_call
+                and not self._is_worked_recently(msg.caller)
+                and not any(q.caller == msg.caller for q in self._caller_queue)):
+            self._caller_queue.append(msg)
+            self.queue_changed.emit([m.caller for m in self._caller_queue])
+            print(f"[QSO] {msg.caller} → Warteliste ({len(self._caller_queue)} wartend)")
 
         # ── Jemand ruft UNS (CQ-Modus, oder im IDLE) ──
         if self.state in (QSOState.IDLE, QSOState.CQ_WAIT, QSOState.CQ_CALLING) and msg.target == self.my_call:
@@ -550,3 +579,8 @@ class QSOStateMachine(QObject):
         self.cq_mode = False
         self._set_state(QSOState.IDLE)
         self.qso = QSOData()
+        self._pending_reply = None
+        self._pending_hunt_reply = None
+        self._pending_rr73 = None
+        self._caller_queue.clear()
+        self.queue_changed.emit([])

@@ -197,7 +197,7 @@ _PREFIX_MAP = {
     'C3': 'AD', 'C31': 'AD',
     '4X': 'IL', '4Z': 'IL',
     'T3': 'KI', 'T31': 'KI',  # Kiribati
-    'HZ': 'SA',
+    'HZ': 'SA', '7Z': 'SA',
     'A4': 'OM',
     'A6': 'AE', 'A7': 'QA',
     # Afrika extra
