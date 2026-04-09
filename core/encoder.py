@@ -121,8 +121,9 @@ class Encoder(QObject):
 
         if self.tx_even is not None:
             want_even = self.tx_even
-            # Am Anfang des richtigen Slots (erste 0.5s): aktuelle Grenze nehmen
-            if is_even == want_even and cycle_pos < 0.5:
+            # Am Anfang des richtigen Slots (erste 3s): aktuelle Grenze nehmen
+            # 3s Fenster weil on_cycle_end oft 0.5-1s nach Slot-Grenze feuert
+            if is_even == want_even and cycle_pos < 3.0:
                 return float(cycle_num * 15)
             # Naechste Grenze bestimmen
             next_num = cycle_num + 1
@@ -162,12 +163,19 @@ class Encoder(QObject):
         now = time.time()
         silence_secs = max(0.0, (next_boundary + TARGET_TX_OFFSET) - now)
 
-        # Kaltstart-Guard: weniger als 0.1s Stille = PTT hat keine Settle-Zeit
-        # → naechsten Slot nehmen statt zu frueh senden (vermeidet DT<0)
+        # Kaltstart-Guard: nur springen wenn weit daneben (>5s), sonst sofort senden
+        # Bei CQ-Resends ist silence≈0 normal (on_cycle_end feuert am Slot-Rand)
         if silence_secs < 0.1:
-            next_boundary += 30.0 if self.tx_even is not None else 15.0
-            silence_secs = max(0.0, (next_boundary + TARGET_TX_OFFSET) - time.time())
-            print(f"[TX] Kaltstart-Guard: Slot uebersprungen, naechste Grenze {next_boundary:.1f}")
+            overshoot = now - (next_boundary + TARGET_TX_OFFSET)
+            if overshoot > 5.0:
+                # Wirklich verschlafen (Kaltstart) → naechsten Slot nehmen
+                next_boundary += 30.0 if self.tx_even is not None else 15.0
+                silence_secs = max(0.0, (next_boundary + TARGET_TX_OFFSET) - time.time())
+                print(f"[TX] Kaltstart-Guard: {overshoot:.1f}s daneben → Slot {next_boundary:.1f}")
+            else:
+                # Normaler CQ-Resend am Slot-Rand → sofort senden
+                silence_secs = 0.0
+                print(f"[TX] Slot-Rand: sofort senden (overshoot={overshoot:.2f}s)")
 
         silence_samples = int(silence_secs * SAMPLE_RATE_FT8)
 

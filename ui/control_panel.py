@@ -379,42 +379,29 @@ class _RadioCard(QFrame):
         sep.setFixedHeight(1)
         tx_lay.addWidget(sep)
 
-        # Zeile 2: Peak + TX Bar + % + SWR
+        # Zeile 2: Peak + TX-Pegel + SWR (kein Balken — nur Zahlen)
         metrics_row = QHBoxLayout()
-        metrics_row.setSpacing(4)
-        self.peak_label = QLabel("Peak —")
-        self.peak_label.setFixedWidth(62)
+        metrics_row.setSpacing(6)
+        self.peak_label = QLabel("Clipschutz —")
         self.peak_label.setStyleSheet(
             f"color: #557766; font-family: {_FONT}; font-size: 10px; "
-            f"border: 1px solid #333; border-radius: 2px; padding: 1px 3px;"
+            f"border: 1px solid #333; border-radius: 2px; padding: 1px 4px;"
         )
-        self.tx_level_bar = QProgressBar()
-        self.tx_level_bar.setRange(0, 150)
-        self.tx_level_bar.setValue(100)
-        self.tx_level_bar.setFixedHeight(14)
-        self.tx_level_bar.setTextVisible(False)
-        self.tx_level_bar.setStyleSheet(
-            "QProgressBar { background: rgba(255,255,255,0.06); border: 1px solid #333; border-radius: 2px; }"
-            "QProgressBar::chunk { background: qlineargradient(x1:0,x2:1, "
-            "stop:0 rgba(0,160,80,0.7), stop:0.7 rgba(180,150,0,0.7), stop:1 rgba(200,80,0,0.8)); "
-            "border-radius: 1px; }"
-        )
-        self.tx_level_label = QLabel("100%")
-        self.tx_level_label.setFixedWidth(38)
+        self.tx_level_label = QLabel("TX-Pegel: 100%")
         self.tx_level_label.setStyleSheet(
             f"color: {_TEXT}; font-family: {_FONT}; font-size: 10px; "
-            f"border: 1px solid #333; border-radius: 2px; padding: 1px 2px;"
+            f"border: 1px solid #333; border-radius: 2px; padding: 1px 4px;"
         )
+        # tx_level_bar bleibt als Dummy erhalten (wird intern noch referenziert)
+        self.tx_level_bar = QProgressBar()
+        self.tx_level_bar.setVisible(False)
         self.swr_label = QLabel("SWR —")
         self.swr_label.setStyleSheet(
             f"color: #44FF44; font-family: {_FONT}; font-size: 10px; font-weight: bold; border: none;")
-        tx_lbl = QLabel("TX")
-        tx_lbl.setStyleSheet(f"color: #666; font-family: {_FONT}; font-size: 9px; border: none;")
-        tx_lbl.setFixedWidth(16)
         metrics_row.addWidget(self.peak_label)
-        metrics_row.addWidget(tx_lbl)
-        metrics_row.addWidget(self.tx_level_bar, 1)
+        metrics_row.addStretch()
         metrics_row.addWidget(self.tx_level_label)
+        metrics_row.addStretch()
         metrics_row.addWidget(self.swr_label)
         tx_lay.addLayout(metrics_row)
 
@@ -460,6 +447,8 @@ class _QSOStatusCard(QFrame):
             f"QPushButton:checked {{ background: rgba(200,0,0,0.7); color: #FFD700; "
             f"border-color: rgba(255,180,0,0.7); }}"
             f"QPushButton:hover {{ background: rgba(180,0,0,0.6); }}"
+            f"QPushButton:disabled {{ background: #2a2a2a; color: #666666; "
+            f"border: 1px solid #444444; }}"
         )
         lay.addWidget(self.btn_cq)
 
@@ -481,7 +470,7 @@ class _QSOStatusCard(QFrame):
             "border: 1px solid rgba(0,150,0,0.4); border-radius: 4px; "
             "padding: 2px; font-size: 11px; font-weight: bold; }"
             "QPushButton:hover { background: rgba(0,130,0,0.45); }"
-            "QPushButton:disabled { background: rgba(255,255,255,0.04); color: #444; border-color: #333; }"
+            "QPushButton:disabled { background: #2a2a2a; color: #666666; border-color: #444444; }"
         )
         self.btn_advance.setEnabled(False)
         self.btn_cancel = QPushButton("HALT")
@@ -491,6 +480,7 @@ class _QSOStatusCard(QFrame):
             f"border: 1px solid rgba(220,40,40,0.6); border-radius: 4px; padding: 2px; "
             f"font-size: 11px; font-weight: bold; font-family: {_FONT}; }}"
             f"QPushButton:hover {{ background: rgba(220,0,0,0.6); color: #FF6666; }}"
+            f"QPushButton:disabled {{ background: #2a2a2a; color: #666666; border: 1px solid #444444; }}"
         )
         adv_row.addWidget(self.btn_advance)
         adv_row.addWidget(self.btn_cancel)
@@ -924,7 +914,7 @@ class ControlPanel(QWidget):
         self.power_buttons[best].setChecked(True)
 
     def _on_tx_level_changed(self, value: int):
-        self.tx_level_label.setText(f"{value}%")
+        self.tx_level_label.setText(f"TX-Pegel: {value}%")
         self.tx_level_changed.emit(value)
 
     def _on_tune_clicked(self):
@@ -953,16 +943,16 @@ class ControlPanel(QWidget):
         """Audio-Peak-Level anzeigen. peak=0.0-x.x (1.0 = Clipping)."""
         if peak > 1.0:
             color = "#FF4444"
-            label = f"Peak {peak:.0%} CLIP!"
+            label = f"Clipschutz {peak:.0%} CLIP!"
         elif peak > 0.90:
             color = "#FFD700"
-            label = f"Peak {peak:.0%}"
+            label = f"Clipschutz {peak:.0%}"
         elif peak > 0.01:
             color = "#44FF44"
-            label = f"Peak {peak:.0%}"
+            label = f"Clipschutz {peak:.0%}"
         else:
             color = "#557766"
-            label = "Peak —"
+            label = "Clipschutz —"
         self.peak_label.setText(label)
         self.peak_label.setStyleSheet(
             f"color: {color}; font-family: {_FONT}; font-size: 10px;"
