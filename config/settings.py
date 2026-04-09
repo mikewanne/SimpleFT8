@@ -35,6 +35,7 @@ DEFAULTS = {
     "max_decode_freq": 3000,
     "max_calls": 99,
     "tune_power": 10,
+    "diversity_operate_cycles": 80,  # 80/160/240 — Betriebszyklen bis Neueinmessung
 }
 
 

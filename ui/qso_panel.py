@@ -107,7 +107,9 @@ class QSOPanel(QWidget):
 
     def add_tx(self, message: str):
         """Eigene gesendete Nachricht anzeigen."""
-        utc = time.strftime("%H:%M:%S", time.gmtime())
+        now = time.time()
+        slot_start = now - (now % 15.0)
+        utc = time.strftime("%H:%M:%S", time.gmtime(slot_start))
         self._append_colored(f"{utc}  →  Sende   {message}", "#FFAA00")
 
     def add_rx(self, message: str):

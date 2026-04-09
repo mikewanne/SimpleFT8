@@ -21,6 +21,7 @@ _HINTS = {
     "tune_power": "Leistung beim TUNE-Vorgang (Antennentuner einstellen).\nMax 20W — hoehere Werte brauchen Bestaetigung.",
     "tx_freq": "Audio-Frequenz fuer TX im FT8-Fenster.\n1500 Hz = Standard (WSJT-X Default).\nBereich 1000-2000 Hz wird von allen Stationen dekodiert.\nUnter 800 Hz: wird von vielen Stationen ausgefiltert!",
     "max_decode": "Obere Grenze des Dekodier-Bereichs.\n3000 Hz = Standard. Hoeher = mehr Stationen aber mehr CPU.",
+    "diversity_cycles": "Anzahl Betriebszyklen bis zur naechsten Antennen-Messung.\n80 ≈ 20 Min  |  160 ≈ 40 Min  |  240 ≈ 60 Min\nAntennen werden dann automatisch auf 50:50 zurueckgesetzt und neu vermessen.",
 }
 
 
@@ -161,6 +162,14 @@ class SettingsDialog(QDialog):
         form5.addRow("Max. Decode-Frequenz:", _row_with_hint(self.max_decode_freq, "max_decode"))
         layout.addWidget(ft8)
 
+        # --- Diversity ---
+        diversity = QGroupBox("Diversity")
+        form6 = QFormLayout(diversity)
+        self.diversity_cycles = QComboBox()
+        self.diversity_cycles.addItems(["80", "160", "240"])
+        form6.addRow("Neueinmessung nach:", _row_with_hint(self.diversity_cycles, "diversity_cycles"))
+        layout.addWidget(diversity)
+
         # --- Buttons ---
         btn_row = QHBoxLayout()
         btn_reset = QPushButton("Grundeinstellungen")
@@ -209,6 +218,9 @@ class SettingsDialog(QDialog):
         self.swr_limit.setValue(self.settings.get("swr_limit", 3.0))
         self.audio_freq.setValue(self.settings.get("audio_freq_hz", 1500))
         self.max_decode_freq.setValue(self.settings.max_decode_freq)
+        # Diversity-Zyklen
+        dc = self.settings.get("diversity_operate_cycles", 80)
+        self.diversity_cycles.setCurrentIndex({80: 0, 160: 1, 240: 2}.get(dc, 0))
         # Tune-Leistung
         tp = self.settings.get("tune_power", 10)
         self._current_tune_power = tp
@@ -226,6 +238,7 @@ class SettingsDialog(QDialog):
         self.settings.set("tune_power", self._current_tune_power)
         self.settings.set("audio_freq_hz", self.audio_freq.value())
         self.settings.set("max_decode_freq", self.max_decode_freq.value())
+        self.settings.set("diversity_operate_cycles", int(self.diversity_cycles.currentText()))
         self.settings.save()
         self.accept()
 
@@ -252,3 +265,4 @@ class SettingsDialog(QDialog):
         self._current_tune_power = 10
         for w, btn in self._tune_btns.items():
             btn.setChecked(w == 10)
+        self.diversity_cycles.setCurrentIndex(0)  # 80 Zyklen

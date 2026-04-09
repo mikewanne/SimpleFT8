@@ -252,7 +252,7 @@ class MainWindow(QMainWindow):
         tx_level = self.settings.get("tx_level", 100)
         self.radio.set_tx_level(tx_level / 100.0)
         self.control_panel.tx_level_bar.setValue(tx_level)
-        self.control_panel.tx_level_label.setText(f"{tx_level}%")
+        self.control_panel.tx_level_label.setText(f"TX-Pegel: {tx_level}%")
         self.decoder.set_quality(self._rx_mode)  # Qualität vom aktiven Modus abhängig
         self.decoder.start()
         self.radio.create_tx_stream()
@@ -343,6 +343,10 @@ class MainWindow(QMainWindow):
                 operate_cycles=self._diversity_ctrl.operate_cycles,
                 operate_total=self._diversity_ctrl.OPERATE_CYCLES,
             )
+            # Messung abgeschlossen → CQ freigeben
+            if self._diversity_ctrl.phase == "operate":
+                self._set_cq_locked(False)
+                self.qso_panel.add_info("Einmessen abgeschlossen — CQ freigegeben")
 
         if self._rx_mode == "diversity" and messages:
             # Diversity: Stationen akkumulieren per Callsign
@@ -568,6 +572,12 @@ class MainWindow(QMainWindow):
                 self._diversity_current_ant = "A1"
         self.control_panel.update_decode_count(0)
         self.control_panel.set_rx_active(active)
+        # Titelleiste: rote Warnung wenn RX aus
+        call = self.settings.callsign
+        if active:
+            self.setWindowTitle(f"SimpleFT8 — {call}")
+        else:
+            self.setWindowTitle(f"SimpleFT8 — {call}  ⚠ EMPFANG RX DEAKTIVIERT ⚠")
 
     # ── Modus / Band / Power ────────────────────────────────────
 
@@ -651,7 +661,7 @@ class MainWindow(QMainWindow):
         saved_level = band_levels.get(band, 100)
         self.radio.set_tx_level(saved_level / 100.0)
         self.control_panel.tx_level_bar.setValue(saved_level)
-        self.control_panel.tx_level_label.setText(f"{saved_level}%")
+        self.control_panel.tx_level_label.setText(f"TX-Pegel: {saved_level}%")
         self._fwdpwr_samples.clear()  # Alte Messwerte verwerfen
         self._integral_error = 0.0   # PI: I-Term bei Bandwechsel reset
         self._update_statusbar()
@@ -706,18 +716,26 @@ class MainWindow(QMainWindow):
         self._update_statusbar()
 
     def _set_cq_locked(self, locked: bool):
-        """CQ-Button sperren/freigeben waehrend Diversity-Einmessen."""
+        """CQ-Button + Weiter sperren/freigeben waehrend Diversity-Einmessen."""
         self.control_panel.btn_cq.setEnabled(not locked)
-        if locked and self.qso_sm.cq_mode:
-            self.qso_sm.stop_cq()
-            self.control_panel.set_cq_active(False)
-            self.qso_panel.add_info("CQ gestoppt — Diversity-Einmessen startet")
+        self.control_panel.btn_advance.setEnabled(not locked)
+        self.control_panel.btn_cancel.setEnabled(not locked)
+        if locked:
+            self.control_panel.btn_cq.setText("CQ RUFEN  ⏳")
+            if self.qso_sm.cq_mode:
+                self.qso_sm.stop_cq()
+                self.control_panel.set_cq_active(False)
+                self.qso_panel.add_info("CQ gestoppt — Diversity-Einmessen startet")
+        else:
+            self.control_panel.btn_cq.setText("CQ RUFEN")
 
     def _enable_diversity(self):
         """Diversity aktivieren: Antenne pro Zyklus wechseln, Stationen akkumulieren."""
         self._diversity_stations = {}
         self._diversity_current_ant = "A1"
         self._diversity_ant_queue = deque()  # (ant, phase) Tupel
+        # Betriebszyklen aus Settings laden
+        self._diversity_ctrl.OPERATE_CYCLES = self.settings.get("diversity_operate_cycles", 80)
         self._diversity_ctrl.reset()
         self._set_cq_locked(True)   # CQ sperren bis Einmessen abgeschlossen
         self.control_panel.update_diversity_ratio("50:50", "measure", 0,
@@ -1341,10 +1359,14 @@ class MainWindow(QMainWindow):
                     self._diversity_ctrl.on_operate_cycle()
                     qso_active = self.qso_sm.state not in (
                         QSOState.IDLE, QSOState.TIMEOUT,
-                        QSOState.CQ_CALLING, QSOState.CQ_WAIT,
                     )
                     if self._diversity_ctrl.should_remeasure(qso_active):
                         self._diversity_ctrl.start_measure()
+                        self._set_cq_locked(True)
+                        self.control_panel.update_diversity_ratio(
+                            "50:50", "remeasure", 0,
+                            self._diversity_ctrl.MEASURE_CYCLES)
+                        print("[Diversity] Automatische Neueinmessung gestartet")
 
                 self._diversity_current_ant = self._diversity_ctrl.choose()
 
@@ -1468,6 +1490,7 @@ class MainWindow(QMainWindow):
         if dialog.exec():
             self._update_statusbar()
             self.qso_sm.max_calls = self.settings.get("max_calls", 3)
+            self._diversity_ctrl.OPERATE_CYCLES = self.settings.get("diversity_operate_cycles", 80)
             if hasattr(self.radio, '_tx_audio_level'):
                 self.radio._tx_audio_level = (
                     self.settings.get("tx_level", 100) / 100.0
