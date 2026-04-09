@@ -58,6 +58,10 @@ See [test screenshots and methodology](docs/DIVERSITY.md) for details.
 |:-:|:-:|
 | ![Main](docs/screenshots/normal_27stations_40m.png) | ![Diversity](docs/screenshots/diversity_37stations_40m.png) |
 
+**Automatic CQ Frequency Selection** — after diversity calibration, a 50 Hz bin histogram of all occupied frequencies is built. The widest clear gap is automatically chosen as CQ frequency (yellow marker). Green overlay = free gap. Red/orange bars = occupied slots.
+
+![CQ Frequency Histogram](docs/screenshots/cq_freq_histogram.png)
+
 ### All Features
 
 - **Auto TX Power Regulation**: Proportional closed-loop FWDPWR feedback, clipping protection (audio level capped at 0.75), per-band calibration, fast proportional step-up and step-down
@@ -149,6 +153,10 @@ Kontrollierter Test auf 40m, gleiche Hardware (FLEX-8400M), 2 Minuten Abstand:
 | Weitester TX | — | Indonesien 11.996 km |
 
 Siehe [Test-Screenshots und Methodik](docs/DIVERSITY_DE.md) für Details.
+
+**Automatische CQ-Frequenzwahl** — Nach dem Einmessen wird ein 50-Hz-Bin-Histogramm aller belegten Frequenzen aufgebaut. Die breiteste freie Lücke wird automatisch als CQ-Frequenz gewählt (gelber Marker). Grüne Fläche = freie Lücke. Rote/orange Balken = belegte Slots.
+
+![CQ Frequenz Histogramm](docs/screenshots/cq_freq_histogram.png)
 
 ### Alle Funktionen
 
