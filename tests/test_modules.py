@@ -259,6 +259,66 @@ def test_factory_unknown_type():
         pass
 
 
+# ── Drift-Kompensation ───────────────────────────────────────────────────────
+
+def test_drift_no_change_for_zero():
+    """Drift-Rate 0 → Audio unveraendert."""
+    from core.drift import apply_drift_correction
+    audio = (np.random.randn(12000) * 5000).astype(np.int16)
+    result = apply_drift_correction(audio, 0.0)
+    np.testing.assert_array_equal(audio, result)
+
+
+def test_drift_output_shape():
+    """Korrigiertes Audio hat gleiche Laenge und dtype."""
+    from core.drift import apply_drift_correction
+    audio = (np.random.randn(180000) * 5000).astype(np.int16)
+    result = apply_drift_correction(audio, 1.0)
+    assert result.shape == audio.shape
+    assert result.dtype == np.int16
+
+
+def test_drift_no_clipping():
+    """Kein int16 Overflow nach Korrektur."""
+    from core.drift import apply_drift_correction
+    audio = np.full(12000, 30000, dtype=np.int16)
+    result = apply_drift_correction(audio, 2.0)
+    assert np.max(np.abs(result)) <= 32767
+
+
+def test_drift_variants_count():
+    """generate_drift_variants erzeugt 4 Varianten (Standard)."""
+    from core.drift import generate_drift_variants
+    audio = np.zeros(12000, dtype=np.int16)
+    variants = generate_drift_variants(audio)
+    assert len(variants) == 4
+    rates = [r for r, _ in variants]
+    assert -1.5 in rates and 1.5 in rates
+
+
+def test_drift_correction_changes_audio():
+    """Bei signifikantem Drift aendert sich das Audio."""
+    from core.drift import apply_drift_correction
+    np.random.seed(42)
+    audio = (np.random.randn(180000) * 5000).astype(np.int16)
+    result = apply_drift_correction(audio, 2.0)
+    # Audio sollte sich geaendert haben (nicht identisch)
+    diff = np.mean(np.abs(audio.astype(float) - result.astype(float)))
+    assert diff > 10, f"Drift-Korrektur hat Audio kaum veraendert: diff={diff:.1f}"
+
+
+def test_drift_analytic_signal():
+    """Analytisches Signal hat korrekte Laenge."""
+    from core.drift import _to_analytic
+    signal = np.random.randn(1000).astype(np.float64)
+    analytic = _to_analytic(signal)
+    assert len(analytic) == len(signal)
+    assert np.iscomplexobj(analytic)
+    # Realteil sollte dem Original aehnlich sein
+    corr = np.corrcoef(signal, analytic.real)[0, 1]
+    assert corr > 0.99, f"Realteil weicht vom Original ab: corr={corr:.4f}"
+
+
 # ── Propagation ──────────────────────────────────────────────────────────────
 
 def test_propagation_step_down():

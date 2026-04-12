@@ -98,23 +98,27 @@ wächst mit jedem Feature — je länger wir warten, desto mehr muss entkoppelt 
 - [ ] 40m abends: verhindert AGC Decoder-Übersteuerung?
 - [ ] Stille → Gain rampt auf 4.0x Max. Kein Problem wenn danach Signale kommen?
 
-#### Frequenz-Drift-Kompensation
-**Was:** FT8 hat 3× Costas-Arrays. Drift über 15s messbar → kompensieren.
+#### Frequenz-Drift-Kompensation ✓ CODE FERTIG (v0.30)
+**Was:** Extra Decode-Passes mit linearer Drift-Korrektur (±0.5, ±1.5 Hz/s).
 **Warum:** Billige QRP-Gegenstationen driften 0.5-5 Hz → wir dekodieren sie schlechter.
-Unser FlexRadio driftet nicht (GNSS), aber ihre Geräte schon.
-- [ ] Drift aus Costas-Array Anfang/Mitte/Ende berechnen
-- [ ] Signal vor LDPC linearisieren
-- [ ] Gewinn: +5-10% mehr Decodes bei driftenden Gegenstationen
+**Methode:** Analytisches Signal (Hilbert) × exp(-jπ·d·t²), 4 Drift-Raten auf Residual-Audio.
+- [x] `core/drift.py`: `apply_drift_correction()`, `generate_drift_variants()`
+- [x] `core/decoder.py`: 4 Drift-Passes nach Signal Subtraction integriert
+- [x] 6 Unit Tests (Shape, Clipping, Varianten, Analytic Signal, Audio-Change)
+- [ ] **Feldtest:** Bringt es tatsaechlich neue Decodes? Log: `[Drift] +N Stationen`
+- [ ] Performance-Impact akzeptabel? (~400ms extra pro Zyklus)
 
 ---
 
 ### PRIO 4 — Langfristig / Refactoring
 
-#### main_window.py aufteilen (~1755 Zeilen)
-- [ ] `ui/main_window_base.py` — Widget-Setup + Layout
-- [ ] `ui/cycle_handler.py` — `_on_cycle_decoded()` und Timer-Logik
-- [ ] `ui/qso_controller.py` — QSO-State-Machine Callbacks
-- [ ] Macht auch Radio-Abstraktions-Layer einfacher
+#### main_window.py aufteilen ✓ ERLEDIGT (v0.29)
+- [x] 1755→473 Zeilen via Mixin-Pattern (4 Mixins: Cycle, QSO, Radio, TX)
+- [x] `ui/mw_cycle.py` (360Z) — Zyklusverarbeitung, Diversity Akkumulation
+- [x] `ui/mw_qso.py` (304Z) — QSO-Callbacks, CQ, QRZ
+- [x] `ui/mw_radio.py` (554Z) — Radio, Band, Diversity, DX-Tuning
+- [x] `ui/mw_tx.py` (139Z) — TX-Regelung, Meter, SWR
+- [x] 29 permanente Unit Tests in `tests/test_modules.py`
 
 ---
 
@@ -187,6 +191,8 @@ Unser FlexRadio driftet nicht (GNSS), aber ihre Geräte schon.
   - 10 neue public API Methoden + 3 Properties in FlexRadio
   - base_radio.py (ABC) mit 3 abstract + 6 default methods erweitert
   - IC-7300 Fork: nur noch `radio/ic7300.py` mit den 10 Methoden implementieren
+- [x] **main_window.py Split (v0.29)** — 1755→473 Zeilen, 4 Mixins, 29→35 Unit Tests
+- [x] **Frequenz-Drift-Kompensation (v0.30)** — core/drift.py, 4 Drift-Passes in decoder.py
 
 ### 12.04.2026 (Session 2 — komplette Offline-Implementierung)
 - [x] Radio-Abstraktions-Layer: base_radio.py + presets.py + radio_factory.py (v0.25)
