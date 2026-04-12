@@ -78,6 +78,7 @@ See [test screenshots and methodology](docs/DIVERSITY.md) for details.
 - **Integrated Logbook**: Sortable table, search, DXCC counter, QSO detail overlay
 - **QRZ.com**: Callsign lookup + logbook upload
 - **PSKReporter** integration with spot statistics and distance display
+- **AP-Lite** *(in development)*: Weak QSO rescue via coherent addition of repeated slots — Costas-aligned combining of two failed decodes yields ~4–5 dB SNR gain
 
 ### Installation
 
@@ -180,6 +181,7 @@ Siehe [Test-Screenshots und Methodik](docs/DIVERSITY_DE.md) für Details.
 - **Integriertes Logbuch**: Sortierbare Tabelle, Suche, DXCC-Zähler, QSO-Detail-Overlay
 - **QRZ.com**: Rufzeichen-Lookup + Logbuch-Upload
 - **PSKReporter**-Integration mit Spot-Statistik und Entfernungsanzeige
+- **AP-Lite** *(in Entwicklung)*: Schwache QSOs retten via kohärenter Addition wiederholter Slots — Costas-Alignment zweier fehlgeschlagener Dekodierungen bringt ~4–5 dB SNR-Gewinn
 
 ### Installation
 
