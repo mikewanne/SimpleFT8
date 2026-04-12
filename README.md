@@ -68,8 +68,9 @@ See [test screenshots and methodology](docs/DIVERSITY.md) for details.
 
 ### All Features
 
-- **Auto TX Power Regulation**: Proportional closed-loop FWDPWR feedback, clipping protection (audio level capped at 0.75), per-band calibration, fast proportional step-up and step-down
-- **Temporal Polarization Diversity** with UCB1 adaptive antenna ratio (70:30, 50:50, 30:70), auto re-measurement every 80 cycles
+**Tested & Working:**
+- **Auto TX Power Regulation**: Proportional closed-loop FWDPWR feedback, clipping protection (audio level capped at 0.75), per-band calibration
+- **Temporal Polarization Diversity** with UCB1 adaptive antenna ratio (70:30, 50:50, 30:70), auto re-measurement every 60 cycles. Fixed even/odd slot alignment: both antennas cover both slot types (A1-A1-A2-A2 block pattern)
 - **Automatic CQ Frequency** via spectrum histogram after diversity calibration
 - **Caller Waitlist**: Queue simultaneous callers, respond automatically after current QSO
 - **DX Tuning**: Automated 18-cycle gain measurement, per-band presets saved
@@ -78,8 +79,12 @@ See [test screenshots and methodology](docs/DIVERSITY.md) for details.
 - **Integrated Logbook**: Sortable table, search, DXCC counter, QSO detail overlay
 - **QRZ.com**: Callsign lookup + logbook upload
 - **PSKReporter** integration with spot statistics and distance display
-- **AP-Lite** *(in development)*: Weak QSO rescue via coherent addition of repeated slots — Costas-aligned combining of two failed decodes yields ~4–5 dB SNR gain
-- **Propagation Bars**: 4px color indicator under each band button — HamQSL solar data + time-of-day correction for Central Europe (no API key needed)
+
+**Implemented — Field Test Pending (⚠️ UNTESTED):**
+- ⚠️ **RMS Auto-Gain Control** *(v0.27, untested)*: Automatic input level regulation before decoder pipeline. Target: −12 dBFS RMS. EMA smoothing (α=0.02), ±3 dB hysteresis to prevent pumping, gain limits [−20 dB … +12 dB]. Prevents decoder overload on crowded bands (40m evenings).
+- ⚠️ **AP-Lite v2.2** *(v0.26, untested)*: Weak QSO rescue via coherent addition of two failed decode attempts. Costas-array alignment (±8 samples / ±1.5 Hz), normalized cross-correlation + Costas-weighted scoring, threshold 0.75. Expected gain: ~4–5 dB SNR. Disabled by default (`AP_LITE_ENABLED = False`), enable after field-test calibration.
+- ⚠️ **DT Time Correction** *(v0.21, untested)*: Median DT from decoded stations used to detect and correct local clock drift. 50 ms dead-band, EMA smoothing factor 0.3, minimum 5 stations. Needs field validation: sign, smoothing, threshold.
+- ⚠️ **Propagation Bars** *(v0.23, untested)*: 4px color indicator under each band button — HamQSL solar data + time-of-day correction for Central Europe. Colors: green/yellow/orange/red. Appears ~3s after app start. Field validation pending: colors plausible?
 
 
 ### Installation
@@ -106,9 +111,20 @@ Settings via GUI or directly in `~/.simpleft8/config.json`: callsign, locator, b
 ```
 SimpleFT8/
 ├── main.py               # Entry point
-├── config/settings.py    # Settings, band frequencies
-├── core/                 # Decoder, encoder, QSO state machine, diversity, timing
-├── radio/flexradio.py    # SmartSDR TCP + VITA-49 RX/TX audio streaming
+├── config/settings.py    # Settings, band frequencies, radio_type
+├── core/
+│   ├── decoder.py        # FT8 decode + RMS AGC + signal subtraction + whitening
+│   ├── encoder.py        # FT8 encode → VITA-49 TX + reference wave generation
+│   ├── ap_lite.py        # AP-Lite v2.2 ⚠️ UNTESTED (coherent addition rescue)
+│   ├── ntp_time.py       # DT-based clock correction ⚠️ UNTESTED
+│   ├── propagation.py    # Band propagation bars ⚠️ UNTESTED
+│   ├── diversity.py      # Diversity controller (measure/operate phases)
+│   └── timing.py         # UTC clock, 15s cycle timing
+├── radio/
+│   ├── base_radio.py     # RadioInterface ABC (contract for future radios)
+│   ├── radio_factory.py  # create_radio(settings) → FlexRadio | IC7300 (future)
+│   ├── presets.py        # PREAMP_PRESETS per band (radio-agnostic)
+│   └── flexradio.py      # SmartSDR TCP + VITA-49 RX/TX audio streaming
 ├── log/                  # ADIF writer, QRZ.com API
 └── ui/                   # PySide6 GUI (3-panel dark theme)
 ```
@@ -173,8 +189,9 @@ Siehe [Test-Screenshots und Methodik](docs/DIVERSITY_DE.md) für Details.
 
 ### Alle Funktionen
 
-- **Automatische TX-Leistungsregelung**: Proportionaler Regelkreis mit FWDPWR-Feedback, Clipping-Schutz (Audio-Level max. 0,75), Kalibrierung pro Band
-- **Temporale Polarisations-Diversity** mit UCB1 adaptivem Verhältnis (70:30, 50:50, 30:70), automatische Neueinmessung alle 80 Zyklen
+**Getestet & funktionsfähig:**
+- **Automatische TX-Leistungsregelung**: Proportionaler Regelkreis mit FWDPWR-Feedback, Clipping-Schutz, Kalibrierung pro Band
+- **Temporale Polarisations-Diversity** mit UCB1 adaptivem Verhältnis (70:30, 50:50, 30:70), automatische Neueinmessung alle 60 Zyklen. Bugfix: A1-A1-A2-A2 Block-Muster → beide Antennen decken Even- UND Odd-Slots ab
 - **Automatische CQ-Frequenz** via Frequenz-Histogramm nach dem Einmessen
 - **Warteliste**: Gleichzeitige Anrufer werden gequeued, nach aktuellem QSO automatisch beantwortet
 - **DX Tuning**: Automatisierte 18-Zyklen Gain-Messung, Presets pro Band
@@ -183,7 +200,12 @@ Siehe [Test-Screenshots und Methodik](docs/DIVERSITY_DE.md) für Details.
 - **Integriertes Logbuch**: Sortierbare Tabelle, Suche, DXCC-Zähler, QSO-Detail-Overlay
 - **QRZ.com**: Rufzeichen-Lookup + Logbuch-Upload
 - **PSKReporter**-Integration mit Spot-Statistik und Entfernungsanzeige
-- **AP-Lite** *(in Entwicklung)*: Schwache QSOs retten via kohärenter Addition wiederholter Slots — Costas-Alignment zweier fehlgeschlagener Dekodierungen bringt ~4–5 dB SNR-Gewinn
+
+**Implementiert — Feldtest ausstehend (⚠️ UNGETESTET):**
+- ⚠️ **RMS Auto-Gain Control** *(v0.27, ungetestet)*: Automatische Eingangspegelregelung vor der Decoder-Pipeline. Ziel: −12 dBFS RMS. EMA-Glättung (α=0,02), ±3 dB Hysterese (kein Pumpen), Gain-Grenzen [−20 dB … +12 dB]. Verhindert Decoder-Übersteuerung auf belebten Bändern (40m abends).
+- ⚠️ **AP-Lite v2.2** *(v0.26, ungetestet)*: Schwache QSOs retten via kohärenter Addition zweier fehlgeschlagener Dekodierversuche. Costas-Alignment (±8 Samples / ±1,5 Hz), normalisierte Kreuzkorrelation + Costas-Gewichtung, Schwellwert 0,75. Erwarteter Gewinn: ~4–5 dB SNR. Standardmäßig deaktiviert (`AP_LITE_ENABLED = False`), nach Feldtest-Kalibrierung aktivieren.
+- ⚠️ **DT-Zeitkorrektur** *(v0.21, ungetestet)*: Median-DT aus dekodierten Stationen zur Erkennung und Korrektur der lokalen Uhrdrift. 50 ms Totband, EMA-Faktor 0,3, Minimum 5 Stationen. Feldvalidierung ausstehend: Vorzeichen, Glättung, Schwellwert.
+- ⚠️ **Propagation-Balken** *(v0.23, ungetestet)*: 4px Farbindikator unter jedem Bandbutton — HamQSL-Solardaten + bandspezifische Tageszeit-Korrektur für Mitteleuropa. Farben: grün/gelb/orange/rot. Erscheint ~3s nach App-Start. Feldvalidierung ausstehend: Farben plausibel?
 
 ### Installation
 
