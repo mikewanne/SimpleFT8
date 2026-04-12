@@ -23,7 +23,7 @@ import numpy as np
 sys.path.insert(0, "/Users/mikehammerer/Documents/KI N8N Projekte/FT8/SimpleFT8")
 from PyFT8.transmitter import pack_message, AudioOut
 
-IP = "192.168.1.68"
+IP = "192.168.1.1"  # FlexRadio IP — anpassen
 FLEX_OUI = 0x001C2D
 FLEX_ICC = 0x534C
 PCC_FLOAT32 = 0x03E3
