@@ -74,6 +74,26 @@ class Encoder(QObject):
                 return candidate
         return self.audio_freq_hz
 
+    def generate_reference_wave(self, msg: str, freq_hz: float,
+                                sample_rate: int = 12000) -> np.ndarray | None:
+        """FT8-Referenz-Welle für AP-Lite Korrelation (float32, normalisiert, 12kHz).
+
+        Args:
+            msg: FT8-Nachricht z.B. "DA1MHH DK5ON RR73"
+            freq_hz: Audio-Frequenz des Signals (Hz)
+            sample_rate: Ziel-Samplerate (Standard 12kHz)
+
+        Returns:
+            float32 Array [-1.0 .. +1.0], oder None bei Fehler.
+        """
+        try:
+            audio_int16 = get_ft8lib().encode(msg.strip(), freq_hz=float(freq_hz))
+            if audio_int16 is None:
+                return None
+            return audio_int16.astype(np.float32) / 32767.0
+        except Exception:
+            return None
+
     def encode_message(self, message: str) -> np.ndarray | None:
         """FT8-Nachricht in Audio-Signal umwandeln (12kHz int16)."""
         try:

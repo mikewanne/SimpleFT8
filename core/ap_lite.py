@@ -244,49 +244,48 @@ def correlate_candidate(
     """Einen Kandidaten gegen den kombinierten Buffer korrelieren.
 
     Args:
-        combined_buf: Kohärent addierter Buffer (buf1 + aligned_buf2)
+        combined_buf: Kohärent addierter Buffer (buf1 + aligned_buf2), float32 12kHz
         candidate_msg: FT8-Nachricht als String (z.B. "DA1MHH DK5ON RR73")
         freq_hz: Erwartete Frequenz des Signals
         encoder: SimpleFT8 Encoder-Instanz (für Referenz-Signal-Generierung)
 
     Returns:
         Korrelations-Score 0.0-1.0
-
-    TODO: Echten Encoder für Referenz-Signal verwenden!
-          Aktuell nur Stub — gibt immer 0.0 zurück.
     """
     if encoder is None:
-        # Ohne Encoder kein Referenz-Signal möglich
         logger.warning("AP-Lite: Kein Encoder — Korrelation nicht möglich")
         return 0.0
 
-    # TODO: Encoder aufrufen um Referenz-Welle zu generieren
-    # ref_wave = encoder.generate_reference_wave(candidate_msg, freq_hz, SAMPLE_RATE)
-    # if ref_wave is None:
-    #     return 0.0
-    #
-    # # Normalisierte Kreuzkorrelation
-    # n = min(len(combined_buf), len(ref_wave))
-    # dot = np.dot(combined_buf[:n], ref_wave[:n])
-    # norm = np.linalg.norm(combined_buf[:n]) * np.linalg.norm(ref_wave[:n])
-    # score = float(dot / norm) if norm > 0 else 0.0
-    #
-    # # Zusätzliches Gewicht auf Costas-Symbole
-    # costas_dot = 0.0
-    # costas_norm = 0.0
-    # for pos in COSTAS_POSITIONS:
-    #     start = pos * SYMBOL_SAMPLES
-    #     end = min(start + SYMBOL_SAMPLES, n)
-    #     if end > start:
-    #         costas_dot += np.dot(combined_buf[start:end], ref_wave[start:end])
-    #         costas_norm += SYMBOL_SAMPLES
-    # costas_score = float(costas_dot / costas_norm) if costas_norm > 0 else 0.0
-    #
-    # # Gewichteter Gesamt-Score: 50% gesamt, 50% Costas
-    # weighted_score = 0.5 * score + 0.5 * costas_score
-    # return max(0.0, min(1.0, weighted_score))
+    ref_wave = encoder.generate_reference_wave(candidate_msg, freq_hz, SAMPLE_RATE)
+    if ref_wave is None:
+        return 0.0
 
-    return 0.0  # Stub bis Encoder-Integration
+    # Normalisierte Kreuzkorrelation (Cosinus-Ähnlichkeit)
+    n = min(len(combined_buf), len(ref_wave))
+    buf = combined_buf[:n]
+    ref = ref_wave[:n]
+    norm = np.linalg.norm(buf) * np.linalg.norm(ref)
+    overall_score = float(np.dot(buf, ref) / norm) if norm > 0 else 0.0
+
+    # Costas-Symbol-Gewichtung: 21 bekannte Sync-Symbole einzeln normalisiert
+    # DeepSeek-Empfehlung: pro Symbol normalisieren um Spike-Dominanz zu vermeiden
+    costas_scores = []
+    for pos in COSTAS_POSITIONS:
+        start = pos * SYMBOL_SAMPLES
+        end = min(start + SYMBOL_SAMPLES, n)
+        if end - start < SYMBOL_SAMPLES // 2:
+            continue
+        seg_buf = buf[start:end]
+        seg_ref = ref[start:end]
+        seg_norm = np.linalg.norm(seg_buf) * np.linalg.norm(seg_ref)
+        if seg_norm > 0:
+            costas_scores.append(float(np.dot(seg_buf, seg_ref) / seg_norm))
+
+    costas_score = float(np.mean(costas_scores)) if costas_scores else 0.0
+
+    # 50% Gesamt + 50% Costas-Gewichtung
+    weighted_score = 0.5 * overall_score + 0.5 * costas_score
+    return max(0.0, min(1.0, weighted_score))
 
 
 # ─────────────────────────────────────────────────────────────────────────────

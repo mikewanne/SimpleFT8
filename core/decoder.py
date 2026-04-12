@@ -61,6 +61,7 @@ class Decoder(QObject):
         self.occupied_freqs = []
         self.input_sample_rate = 24000
         self.priority_call: str = ""   # QSO-Partner fuer Prioritaets-Logging
+        self.last_pcm_12k: np.ndarray | None = None  # AP-Lite: letzter 12kHz float32 Buffer
 
     def start(self):
         self._running = True
@@ -172,6 +173,9 @@ class Decoder(QObject):
             t_decode = time.time()
             peak_12k = np.max(np.abs(audio_12k))
             print(f"[Decoder] Preprocessing: {t_decode - t_pre:.2f}s, Peak={peak_12k}")
+
+            # AP-Lite: verarbeiteten Buffer merken (float32, normalisiert)
+            self.last_pcm_12k = audio_12k.astype(np.float32) / 32767.0
 
             messages = self._decode_with_subtraction(audio_12k)
             t_done = time.time()
