@@ -266,16 +266,15 @@ class MainWindow(QMainWindow):
         self._reconnect_attempts = 0
         self.control_panel.set_connection_status("connected")
         # Gespeichertes Band + Frequenz setzen
-        s = self.radio._slice_idx
         freq = self.settings.frequency_mhz
         band = self.settings.band
-        self.radio.set_frequency(freq, slice_idx=s)
-        self.radio.apply_ft8_preset(slice_idx=s, band=band)
+        self.radio.set_frequency(freq)
+        self.radio.apply_ft8_preset(band=band)
         print(f"[FlexRadio] Band: {band}, Freq: {freq:.3f} MHz")
         # DX-Preset ANT1-Gain silent laden wenn vorhanden
         preset = self.settings.get_dx_preset(band)
         if preset and "ant1_gain" in preset:
-            self.radio._send_cmd(f"slice set {s} rfgain={preset['ant1_gain']}")
+            self.radio.set_rfgain(preset['ant1_gain'])
             self.statusBar().showMessage(
                 f"Preset {band} geladen: ANT1 G{preset['ant1_gain']} dB", 4000
             )
@@ -656,12 +655,11 @@ class MainWindow(QMainWindow):
     def _on_rx_panel_toggled(self, active: bool):
         """RX ON/OFF vom Panel — bei OFF sofort auf ANT1 und Diversity-Stop."""
         if not active and self._rx_mode == "diversity" and self.radio.ip:
-            s = self.radio._slice_idx
             band = self.settings.band
             gain = PREAMP_PRESETS.get(band, 10)
             def _reset_ant():
-                self.radio._send_cmd(f"slice set {s} rxant=ANT1")
-                self.radio._send_cmd(f"slice set {s} rfgain={gain}")
+                self.radio.set_rx_antenna("ANT1")
+                self.radio.set_rfgain(gain)
             threading.Thread(target=_reset_ant, daemon=True).start()
             with self._diversity_lock:
                 self._diversity_current_ant = "A1"
@@ -728,16 +726,13 @@ class MainWindow(QMainWindow):
                                                       self._diversity_ctrl.MEASURE_CYCLES)
             self.control_panel.update_diversity_counts(0, 0)
         if self.radio.ip:
-            s = self.radio._slice_idx
-            self.radio.set_frequency(freq, slice_idx=s)
-            self.radio.apply_ft8_preset(slice_idx=s, band=band)
+            self.radio.set_frequency(freq)
+            self.radio.apply_ft8_preset(band=band)
             if self._rx_mode == "diversity":
                 # Diversity: 2. Slice auch umtunen + Preset anpassen
-                if self.radio._slice_idx_b is not None:
+                if self.radio.has_secondary_slice():
                     gain_b = PREAMP_PRESETS.get(band, 10) + 10
-                    self.radio._send_cmd(
-                        f"slice set {self.radio._slice_idx_b} rfgain={gain_b}"
-                    )
+                    self.radio.set_rfgain_secondary(gain_b)
                     self.control_panel.dx_info.setText(
                         f"ANT1+ANT2 (Gain {gain_b})"
                     )
@@ -841,9 +836,8 @@ class MainWindow(QMainWindow):
             self._diversity_ant2_gain = preset["ant2_gain"]
             measured = preset.get("measured", "?")
             if self.radio.ip:
-                s = self.radio._slice_idx
-                self.radio._send_cmd(f"slice set {s} rxant=ANT1")
-                self.radio._send_cmd(f"slice set {s} rfgain={self._diversity_ant1_gain}")
+                self.radio.set_rx_antenna("ANT1")
+                self.radio.set_rfgain(self._diversity_ant1_gain)
             self.control_panel.dx_info.setText(
                 f"ANT1(G{self._diversity_ant1_gain}) + "
                 f"ANT2(G{self._diversity_ant2_gain})"
@@ -962,7 +956,7 @@ class MainWindow(QMainWindow):
 
         if msg.clickedButton() == btn_tune and self.radio.ip:
             # TX-Leistung auf Tune-Wert setzen, TUNE starten
-            self.radio._send_cmd(f"transmit set rfpower={tune_power}")
+            self.radio.set_rfpower_direct(tune_power)
             self.radio.tune_on()
 
             def _after_tune():
@@ -973,7 +967,7 @@ class MainWindow(QMainWindow):
                 self._diversity_stations = {}
                 self.rx_panel.table.setRowCount(0)
                 # SWR pruefen
-                swr = self.radio._last_swr
+                swr = self.radio.last_swr
                 if swr > swr_limit:
                     QMessageBox.warning(
                         self, "SWR zu hoch",
@@ -1036,12 +1030,11 @@ class MainWindow(QMainWindow):
 
     def _apply_dx_preset(self, preset: dict):
         """DX-Preset am Radio anwenden."""
-        s = self.radio._slice_idx
         rxant = preset.get("rxant", "ANT1")
         gain = preset.get("gain", 10)
-        self.radio._send_cmd(f"slice set {s} rxant={rxant}")
-        self.radio._send_cmd(f"slice set {s} rfgain={gain}")
-        self.radio._send_cmd(f"slice set {s} txant=ANT1")
+        self.radio.set_rx_antenna(rxant)
+        self.radio.set_rfgain(gain)
+        self.radio.set_tx_antenna("ANT1")
         self.control_panel.dx_info.setText(f"{rxant}, Gain {gain} dB")
         print(f"[DX] Preset geladen: {rxant}, Gain {gain}")
 
@@ -1055,7 +1048,6 @@ class MainWindow(QMainWindow):
 
     def _apply_normal_mode(self):
         """Normal-Modus: beste RX-Antenne aus DX-Preset (falls vorhanden), TX immer ANT1."""
-        s = self.radio._slice_idx
         band = self.settings.band
 
         preset = self.settings.get_dx_preset(band)
@@ -1085,9 +1077,9 @@ class MainWindow(QMainWindow):
             self.control_panel.dx_info.setStyleSheet("color: #888888;")
             print(f"[DX] Normal-Modus: ANT1, Gain {gain} (kein Preset)")
 
-        self.radio._send_cmd(f"slice set {s} rxant={rxant}")
-        self.radio._send_cmd(f"slice set {s} txant=ANT1")
-        self.radio._send_cmd(f"slice set {s} rfgain={gain}")
+        self.radio.set_rx_antenna(rxant)
+        self.radio.set_tx_antenna("ANT1")
+        self.radio.set_rfgain(gain)
 
     # ── Meter / SWR ─────────────────────────────────────────────
 
@@ -1115,8 +1107,8 @@ class MainWindow(QMainWindow):
         if target <= 0 or fwdpwr < 0:
             return
 
-        current_audio = self.radio._tx_audio_level
-        raw_peak = getattr(self.radio, '_last_tx_raw_peak', 0.0)
+        current_audio = self.radio.tx_audio_level
+        raw_peak = self.radio.tx_raw_peak
 
         CLIP_LIMIT  = 0.75  # Audio-Ziel + Clipschutz-Grenze (max audio_level)
         AUDIO_STEP  = 0.05  # Schritt pro Zyklus (langsam = stabil)
@@ -1183,9 +1175,9 @@ class MainWindow(QMainWindow):
             if self.encoder.is_transmitting and value > 1:
                 self._fwdpwr_samples.append(value)
                 # Live-Update Clipschutz + TX-Pegel + RF während TX
-                raw_peak = getattr(self.radio, '_last_tx_raw_peak', 0.0)
+                raw_peak = self.radio.tx_raw_peak
                 self.control_panel.update_tx_peak(raw_peak if raw_peak > 0.01 else value)
-                audio_pct = int(getattr(self.radio, '_tx_audio_level', 0.75) * 100)
+                audio_pct = int(self.radio.tx_audio_level * 100)
                 self.control_panel.tx_level_label.setText(f"TX-Pegel: {audio_pct}%")
                 self.control_panel.update_rfpower(self._rfpower_current)
             elif not self.encoder.is_transmitting:
@@ -1488,7 +1480,6 @@ class MainWindow(QMainWindow):
                 if ant_queue is not None:
                     ant_queue.append((self._diversity_current_ant, self._diversity_ctrl.phase))
 
-                s = self.radio._slice_idx
                 band = self.settings.band
 
                 # Betriebszyklus zaehlen + ggf. neu messen
@@ -1526,9 +1517,9 @@ class MainWindow(QMainWindow):
                 )
 
             # BUG-3: ant_cmd + gain als Argumente, nicht als Closure
-            def _switch(cmd=ant_cmd, g=gain, sl=s):
-                self.radio._send_cmd(f"slice set {sl} rxant={cmd}")
-                self.radio._send_cmd(f"slice set {sl} rfgain={g}")
+            def _switch(cmd=ant_cmd, g=gain):
+                self.radio.set_rx_antenna(cmd)
+                self.radio.set_rfgain(g)
             threading.Thread(target=_switch, daemon=True).start()
 
     def on_message_decoded(self, msg: FT8Message):
@@ -1676,10 +1667,9 @@ class MainWindow(QMainWindow):
             self._update_statusbar()
             self.qso_sm.max_calls = self.settings.get("max_calls", 3)
             self._diversity_ctrl.OPERATE_CYCLES = self.settings.get("diversity_operate_cycles", 80)
-            if hasattr(self.radio, '_tx_audio_level'):
-                self.radio._tx_audio_level = (
-                    self.settings.get("tx_level", 100) / 100.0
-                )
+            self.radio.tx_audio_level = (
+                self.settings.get("tx_level", 100) / 100.0
+            )
             if self.radio.ip:
                 self.radio.set_power(self.settings.get("power_preset", 15))
 

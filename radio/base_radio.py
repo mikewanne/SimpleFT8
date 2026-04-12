@@ -146,6 +146,64 @@ class RadioInterface(ABC):
         """
         ...
 
+    # ── Antennen (abstrakt) ────────────────────────────────────────
+
+    @abstractmethod
+    def set_rx_antenna(self, ant: str) -> None:
+        """RX-Antenne wählen (z.B. 'ANT1', 'ANT2')."""
+        ...
+
+    @abstractmethod
+    def set_tx_antenna(self, ant: str) -> None:
+        """TX-Antenne wählen (z.B. 'ANT1')."""
+        ...
+
+    # ── Gain ────────────────────────────────────────────────────
+
+    @abstractmethod
+    def set_rfgain(self, gain: int) -> None:
+        """RF-Gain auf Primary Receiver setzen (0-30 dB)."""
+        ...
+
+    def set_rfgain_secondary(self, gain: int) -> None:
+        """RF-Gain auf Secondary Receiver setzen (Diversity B).
+
+        Default: No-op. Nur Radios mit 2 Empfängern überschreiben das.
+        """
+        pass
+
+    def has_secondary_slice(self) -> bool:
+        """True wenn 2. Empfangskanal für Diversity vorhanden."""
+        return False
+
+    # ── Power (direkt) ──────────────────────────────────────────
+
+    def set_rfpower_direct(self, value: int) -> None:
+        """RF-Power direkt setzen (ohne Safety-Checks wie max_power_level)."""
+        self.set_tx_power(value)
+
+    # ── TX-Level Properties ─────────────────────────────────────
+
+    @property
+    def last_swr(self) -> float:
+        """Letzter SWR-Messwert (1.0 = perfekt)."""
+        return 1.0
+
+    @property
+    def tx_raw_peak(self) -> float:
+        """Audio-Peak VOR Gain (0.0-1.0) — für Clipschutz."""
+        return 0.0
+
+    @property
+    def tx_audio_level(self) -> float:
+        """Aktueller TX-Audiopegel (0.0-1.0)."""
+        return 1.0
+
+    @tx_audio_level.setter
+    def tx_audio_level(self, value: float) -> None:
+        """TX-Audiopegel setzen."""
+        pass
+
     # ── Preamp / Gain ─────────────────────────────────────────────
 
     def set_preamp(self, level: int) -> bool:
