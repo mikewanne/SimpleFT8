@@ -85,6 +85,7 @@ Jede der drei Kernfunktionen hat eine eigene ausfuehrliche Dokumentation mit Scr
 - FFT-basiertes Spectral Whitening mit Median-Rauschboden-Normalisierung
 - Anti-Alias Sinc-Resampling (63 Taps, Hamming-Fenster) von 24 kHz auf 12 kHz
 - LDPC-Decoder mit 50 Iterationen, 200 Kandidaten, Multi-Sync LLR-Sweep
+- ⚠️ **RMS Auto-Gain Control** *(v0.27, ungetestet)*: Automatische Eingangspegelregelung vor Whitening. Ziel −12 dBFS, EMA-Glättung, ±3 dB Hysterese. Verhindert Decoder-Übersteuerung auf belebten Bändern.
 
 ### QSO-Management
 - **Hunt-Modus**: Klicke eine Station im RX-Panel an, um ein QSO zu starten
@@ -96,10 +97,13 @@ Jede der drei Kernfunktionen hat eine eigene ausfuehrliche Dokumentation mit Scr
 ### Logging und Reporting
 - ADIF 3.1.7 Export (Append-Modus)
 - PSKReporter-Integration mit Spot-Statistik und Entfernungsanzeige
-- **AP-Lite** *(in Entwicklung)*: Schwache QSOs retten via kohärenter Addition wiederholter Slots — Costas-Alignment zweier fehlgeschlagener Dekodierungen bringt ~4–5 dB SNR-Gewinn
-- **Propagation-Balken**: 4px Farbindikator unter jedem Bandbutton — HamQSL-Solardaten + bandspezifische Tageszeit-Korrektur für Mitteleuropa (kein API-Key nötig)
-
 - Laendererkennung aus Rufzeichen-Prefix mit Entfernung in km
+
+### Implementiert — Feldtest ausstehend (⚠️ UNGETESTET)
+
+- ⚠️ **AP-Lite v2.2** *(v0.26, ungetestet)*: Schwache QSOs retten via kohärenter Addition zweier fehlgeschlagener Dekodierversuche. Costas-Alignment (±8 Samples / ±1,5 Hz), normalisierte Kreuzkorrelation + Costas-Symbol-Gewichtung. Erwarteter Gewinn: ~4–5 dB SNR. Standardmäßig deaktiviert (`AP_LITE_ENABLED = False`), nach Feldtest-Kalibrierung aktivieren.
+- ⚠️ **DT-Zeitkorrektur** *(v0.21, ungetestet)*: Median-DT aus dekodierten Stationen erkennt und korrigiert Uhrdrift des Rechners. 50 ms Totband, EMA-Glättung 0,3. Feldvalidierung ausstehend.
+- ⚠️ **Propagation-Balken** *(v0.23, ungetestet)*: 4px Farbindikator unter Bandbuttons — HamQSL-Solardaten + Tageszeit-Korrektur für Mitteleuropa. Feldvalidierung: Farben plausibel?
 
 ---
 
@@ -163,13 +167,19 @@ SimpleFT8/
 ├── config/
 │   └── settings.py       # Einstellungen, Band-Frequenzen, FlexRadio IP
 ├── core/
-│   ├── decoder.py        # FT8 Decode (PyFT8 + Subtraction + Whitening)
+│   ├── decoder.py        # FT8 Decode (PyFT8 + Subtraction + Whitening + AGC ⚠️)
 │   ├── encoder.py        # FT8 Encode (PyFT8 -> VITA-49 TX)
 │   ├── message.py        # FT8 Message Parser (CQ, Report, Grid, RR73)
 │   ├── qso_state.py      # QSO-Zustandsmaschine (Hunt + CQ)
 │   ├── diversity.py      # Diversity-Controller (Mess-/Betriebsphasen)
-│   └── timing.py         # UTC-Takt, 15s/7.5s Zyklus-Timing
+│   ├── timing.py         # UTC-Takt, 15s/7.5s Zyklus-Timing
+│   ├── ap_lite.py        # ⚠️ UNGETESTET: AP-Lite v2.2 (kohärente Addition)
+│   ├── ntp_time.py       # ⚠️ UNGETESTET: DT-Zeitkorrektur (Median-DT)
+│   └── propagation.py    # ⚠️ UNGETESTET: Propagation-Balken (HamQSL)
 ├── radio/
+│   ├── base_radio.py     # RadioInterface ABC (Kontrakt für alle Radios)
+│   ├── presets.py        # PREAMP_PRESETS (radio-agnostisch)
+│   ├── radio_factory.py  # create_radio(settings) → FlexRadio | IC7300 (zukünftig)
 │   └── flexradio.py      # SmartSDR TCP + VITA-49 RX/TX Audio
 ├── log/
 │   └── adif.py           # ADIF 3.1.7 Writer
@@ -199,6 +209,7 @@ SimpleFT8/
 VITA-49 RX (24kHz int16 mono)
   -> Anti-Alias Tiefpass (Sinc/Hamming, fc=6kHz)
   -> Resampling auf 12kHz
+  -> RMS Auto-Gain Control (⚠️ UNGETESTET: Ziel -12 dBFS, EMA α=0.02)
   -> DC-Entfernung
   -> Spectral Whitening (Overlap-Add FFT)
   -> Normalisierung (-12 dBFS)
