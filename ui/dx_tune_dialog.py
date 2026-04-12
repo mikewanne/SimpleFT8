@@ -196,12 +196,11 @@ class DXTuneDialog(QDialog):
             return
 
         ant, gain = self._schedule[self._step]
-        s = self.radio._slice_idx
 
         # Antenne + Gain setzen, TX bleibt ANT1
-        self.radio._send_cmd(f"slice set {s} rxant={ant}")
-        self.radio._send_cmd(f"slice set {s} rfgain={gain}")
-        self.radio._send_cmd(f"slice set {s} txant=ANT1")
+        self.radio.set_rx_antenna(ant)
+        self.radio.set_rfgain(gain)
+        self.radio.set_tx_antenna("ANT1")
 
         round_num = self._step // (len(GAIN_VALUES) * 2) + 1
         pos_in_round = self._step % (len(GAIN_VALUES) * 2) + 1
@@ -311,12 +310,11 @@ class DXTuneDialog(QDialog):
             self._results["best_gain"] = self._results["ant2_gain"]
 
         # Optimale Einstellungen am Radio setzen (beste Antenne mit bestem Gain)
-        s = self.radio._slice_idx
         ant = self._results["best_ant"]
         gain = self._results["best_gain"]
-        self.radio._send_cmd(f"slice set {s} rxant={ant}")
-        self.radio._send_cmd(f"slice set {s} rfgain={gain}")
-        self.radio._send_cmd(f"slice set {s} txant=ANT1")
+        self.radio.set_rx_antenna(ant)
+        self.radio.set_rfgain(gain)
+        self.radio.set_tx_antenna("ANT1")
 
         # UI
         ant1_gain = self._results["ant1_gain"]
@@ -370,10 +368,9 @@ class DXTuneDialog(QDialog):
 
     def _on_cancel(self):
         self._cancelled = True
-        s = self.radio._slice_idx
-        self.radio._send_cmd(f"slice set {s} rxant=ANT1")
-        self.radio._send_cmd(f"slice set {s} txant=ANT1")
-        self.radio._send_cmd(f"slice set {s} rfgain=10")
+        self.radio.set_rx_antenna("ANT1")
+        self.radio.set_tx_antenna("ANT1")
+        self.radio.set_rfgain(10)
         self.reject()
 
     def get_results(self) -> dict:
