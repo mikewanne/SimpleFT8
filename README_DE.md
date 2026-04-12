@@ -96,6 +96,7 @@ Jede der drei Kernfunktionen hat eine eigene ausfuehrliche Dokumentation mit Scr
 ### Logging und Reporting
 - ADIF 3.1.7 Export (Append-Modus)
 - PSKReporter-Integration mit Spot-Statistik und Entfernungsanzeige
+- **AP-Lite** *(in Entwicklung)*: Schwache QSOs retten via kohärenter Addition wiederholter Slots — Costas-Alignment zweier fehlgeschlagener Dekodierungen bringt ~4–5 dB SNR-Gewinn
 - Laendererkennung aus Rufzeichen-Prefix mit Entfernung in km
 
 ---
