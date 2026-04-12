@@ -21,6 +21,7 @@ from core.encoder import Encoder
 from core.decoder import Decoder
 from core.message import FT8Message
 from core.diversity import DiversityController
+from core import ntp_time
 from log.adif import AdifWriter
 from radio.flexradio import FlexRadio
 from .rx_panel import RXPanel
@@ -339,6 +340,11 @@ class MainWindow(QMainWindow):
         count = len(messages) if messages else 0
         self.control_panel.update_decode_count(count)
 
+        # DT-Korrektur aktualisieren (TODO: ungetestet — Feldtest nötig)
+        if messages:
+            dt_values = [m.dt for m in messages if hasattr(m, 'dt')]
+            ntp_time.update_from_decoded(dt_values)
+
         if self._rx_mode == "diversity":
             # Queue IMMER poppen — auch bei 0 Stationen!
             # Sonst geraet die Queue aus dem Takt wenn eine Antenne nichts empfaengt
@@ -377,6 +383,9 @@ class MainWindow(QMainWindow):
                     print(f"[Diversity] CQ-Frequenz: {cq_freq} Hz (aus Histogramm)")
                 else:
                     self.qso_panel.add_info("Einmessen abgeschlossen — CQ freigegeben")
+                self.control_panel.update_freq_histogram(
+                    self._diversity_ctrl.get_histogram_data()
+                )
 
         if self._rx_mode == "diversity" and messages:
             # Diversity: Stationen akkumulieren per Callsign
@@ -716,6 +725,7 @@ class MainWindow(QMainWindow):
             self._rx_mode = "normal"
             self._normal_stations = {}
             self._apply_normal_mode()
+            self.control_panel._freq_hist.setVisible(False)
         elif mode == "diversity":
             # Dialog: Einmessen erforderlich?
             from PySide6.QtWidgets import QMessageBox

@@ -105,6 +105,43 @@ class DiversityController:
         """Letzte berechnete CQ-Frequenz (Hz), oder None."""
         return self._cq_freq_hz
 
+    def get_histogram_data(self) -> dict:
+        """Histogramm-Daten für Visualisierung.
+
+        Returns:
+            bins: {bin_idx: count}, cq_freq: Hz, gap_start_hz: Hz, gap_end_hz: Hz
+        """
+        if not self._freq_histogram:
+            return {'bins': {}, 'cq_freq': self._cq_freq_hz,
+                    'gap_start_hz': None, 'gap_end_hz': None}
+
+        min_bin = int(self.FREQ_MIN_HZ // self.FREQ_BIN_HZ)
+        max_bin = int(self.FREQ_MAX_HZ // self.FREQ_BIN_HZ)
+
+        best_gap_start, best_gap_len = None, 0
+        cur_start, cur_len = None, 0
+        for b in range(min_bin, max_bin + 1):
+            if b not in self._freq_histogram:
+                if cur_start is None:
+                    cur_start = b
+                cur_len += 1
+            else:
+                if cur_len > best_gap_len:
+                    best_gap_len, best_gap_start = cur_len, cur_start
+                cur_start, cur_len = None, 0
+        if cur_len > best_gap_len:
+            best_gap_len, best_gap_start = cur_len, cur_start
+
+        gap_start_hz = best_gap_start * self.FREQ_BIN_HZ if best_gap_start else None
+        gap_end_hz = (best_gap_start + best_gap_len) * self.FREQ_BIN_HZ if best_gap_start else None
+
+        return {
+            'bins': self._freq_histogram.copy(),
+            'cq_freq': self._cq_freq_hz,
+            'gap_start_hz': gap_start_hz,
+            'gap_end_hz': gap_end_hz,
+        }
+
     def record_measurement(self, ant: str, score: float):
         """Score nach Messzyklus einpflegen — evaluiert nach 2 Messungen."""
         if self._phase != "measure":

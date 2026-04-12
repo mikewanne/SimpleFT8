@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (
     QSlider, QFrame, QGridLayout, QButtonGroup,
 )
 from PySide6.QtCore import Signal, Qt, QTimer
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QPainter, QColor, QPen
 
 from config.settings import BAND_FREQUENCIES
 
@@ -80,6 +80,101 @@ _CARD_SS_ORANGE = _card_ss("#8c5a2a")
 
 # Legacy alias
 _CARD_SS = _CARD_SS_BLUE
+
+
+class FrequencyHistogramWidget(QWidget):
+    """50-Hz-Bin Frequenz-Histogramm: belegte Frequenzen + freie Lücke + CQ-Marker."""
+
+    FREQ_MIN = 150
+    FREQ_MAX = 2800
+    BIN_HZ   = 50
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedHeight(50)
+        self.setMinimumWidth(200)
+        self._bins: dict       = {}
+        self._cq_freq          = None
+        self._gap_start_hz     = None
+        self._gap_end_hz       = None
+
+    def update_data(self, data: dict):
+        """Daten aus DiversityController.get_histogram_data() übernehmen."""
+        self._bins         = data.get('bins', {})
+        self._cq_freq      = data.get('cq_freq')
+        self._gap_start_hz = data.get('gap_start_hz')
+        self._gap_end_hz   = data.get('gap_end_hz')
+        self.update()
+
+    def paintEvent(self, event):  # noqa: N802
+        if not self._bins and self._cq_freq is None:
+            return
+
+        painter = QPainter(self)
+        w, h     = self.width(), self.height()
+        label_h  = 12
+        bar_h    = h - label_h
+        freq_rng = self.FREQ_MAX - self.FREQ_MIN
+
+        def fx(hz: float) -> int:
+            return int((hz - self.FREQ_MIN) / freq_rng * w)
+
+        # Hintergrund
+        painter.fillRect(0, 0, w, bar_h, QColor("#0a0a14"))
+
+        # Freie Lücke (grüne Fläche)
+        if self._gap_start_hz is not None and self._gap_end_hz is not None:
+            x1 = fx(self._gap_start_hz)
+            x2 = fx(self._gap_end_hz)
+            painter.fillRect(x1, 0, max(2, x2 - x1), bar_h, QColor(0, 130, 55, 55))
+
+        # Bins (grau → orange → rot je Belegungsgrad)
+        if self._bins:
+            max_c   = max(self._bins.values(), default=1)
+            bin_px  = max(1, int(self.BIN_HZ / freq_rng * w))
+            for idx, cnt in self._bins.items():
+                hz = idx * self.BIN_HZ
+                if not (self.FREQ_MIN <= hz <= self.FREQ_MAX):
+                    continue
+                x     = fx(hz)
+                ratio = cnt / max_c
+                bh    = max(2, int(ratio * (bar_h - 1)))
+                if ratio < 0.5:
+                    r = int(80  + 175 * ratio * 2)
+                    g = int(70  * (1 - ratio * 2))
+                    b = 20
+                else:
+                    r = 255
+                    g = int(60 * (1 - (ratio - 0.5) * 2))
+                    b = 0
+                painter.fillRect(x, bar_h - bh, bin_px, bh, QColor(r, g, b))
+
+        # CQ-Marker (gelbe Linie)
+        if self._cq_freq:
+            x = fx(self._cq_freq)
+            painter.setPen(QPen(QColor("#FFD700"), 2))
+            painter.drawLine(x, 0, x, bar_h - 1)
+
+        # Trennlinie Balken / Label
+        painter.setPen(QPen(QColor("#222"), 1))
+        painter.drawLine(0, bar_h, w, bar_h)
+
+        # Labels
+        painter.setFont(QFont("Menlo", 7))
+        painter.setPen(QColor("#555"))
+        painter.drawText(1, h - 1, "150")
+        painter.drawText(w - 30, h - 1, "2800Hz")
+
+        if self._cq_freq:
+            x   = fx(self._cq_freq)
+            lbl = f"CQ {self._cq_freq}Hz"
+            fm  = painter.fontMetrics()
+            lw  = fm.horizontalAdvance(lbl)
+            tx  = max(0, min(w - lw, x - lw // 2))
+            painter.setPen(QColor("#FFD700"))
+            painter.drawText(tx, h - 1, lbl)
+
+        painter.end()
 
 
 class _ModeBandCard(QFrame):
@@ -266,6 +361,11 @@ class _AntenneCard(QFrame):
         div_lay.addWidget(self._phase_label)
         self._div_widget.setVisible(False)
         lay.addWidget(self._div_widget)
+
+        # Frequenz-Histogramm (nur nach Einmessen sichtbar)
+        self._freq_hist = FrequencyHistogramWidget(self)
+        self._freq_hist.setVisible(False)
+        lay.addWidget(self._freq_hist)
 
 
 class _RadioCard(QFrame):
@@ -634,6 +734,7 @@ class ControlPanel(QWidget):
         self._phase_label = ant_card._phase_label
         self._a1_count_label = ant_card._a1_count_label
         self._a2_count_label = ant_card._a2_count_label
+        self._freq_hist = ant_card._freq_hist
         self.btn_normal.setStyleSheet(self._rx_btn_style(self._RX_STYLE_ACTIVE))
         self.btn_diversity.setStyleSheet(self._rx_btn_style(self._RX_STYLE_INACTIVE))
         self.btn_normal.clicked.connect(lambda: self._on_rx_mode_clicked("normal"))
@@ -877,6 +978,12 @@ class ControlPanel(QWidget):
         else:
             self._a1_count_label.setText(f"{a1_count} St.")
             self._a2_count_label.setText(f"{a2_count} St.")
+
+    def update_freq_histogram(self, data: dict):
+        """Frequenz-Histogramm aktualisieren und anzeigen."""
+        self._freq_hist.update_data(data)
+        if data.get('bins') or data.get('cq_freq'):
+            self._freq_hist.setVisible(True)
 
     # =====================================================================
     # PSK Reporter
