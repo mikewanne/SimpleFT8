@@ -121,6 +121,16 @@ class MainWindow(QMainWindow):
         self._psk_timer.timeout.connect(self._fetch_psk_stats)
         self._psk_timer.start(180000)  # 3 Minuten
 
+        # Propagation: Hintergrund-Abruf starten + UI alle 5 Minuten aktualisieren
+        from core import propagation as _prop
+        self._prop_error_shown = False
+        _prop.start_background_updater()
+        self._prop_timer = QTimer(self)
+        self._prop_timer.timeout.connect(self._update_propagation_ui)
+        self._prop_timer.start(5 * 60 * 1000)   # 5 Minuten
+        # Erster UI-Update nach kurzem Delay (Abruf läuft im Hintergrund)
+        QTimer.singleShot(3000, self._update_propagation_ui)
+
         # Statusbar
         self._update_statusbar()
         self.statusBar().setStyleSheet(
@@ -1468,6 +1478,23 @@ class MainWindow(QMainWindow):
         self.qso_sm.on_message_received(msg)
 
     # ── PSKReporter ─────────────────────────────────────────────
+
+    def _update_propagation_ui(self):
+        """Propagations-Balken aus Hintergrund-Cache aktualisieren."""
+        from core import propagation as _prop
+        conditions = _prop.get_conditions()
+        if conditions is None:
+            # Netzwerkfehler — Balken ausblenden + einmalige Meldung
+            self.control_panel.update_propagation(None)
+            if not self._prop_error_shown:
+                self._prop_error_shown = True
+                QMessageBox.information(
+                    self, "Propagation",
+                    "Kein Netzwerk — keine Propagationsdaten verfügbar."
+                )
+        else:
+            self._prop_error_shown = False   # Reset für nächsten Fehler
+            self.control_panel.update_propagation(conditions)
 
     def _fetch_psk_stats(self):
         if not self._has_sent_cq:
