@@ -3,6 +3,7 @@
 Pipeline:
   VITA-49 Audio (24kHz)
     → Anti-Alias Tiefpass + Resample auf 12kHz
+    → RMS Auto-Gain Control (-12 dBFS Ziel, ±3 dB Hysterese)
     → DC-Remove
     → Spectral Whitening (Overlap-Add FFT, Median)
     → Normalisierung (-18 dBFS RMS)
@@ -37,6 +38,54 @@ SLIDE_OFFSETS = [0, 3600, -3600]
 # Maximale Kandidaten pro Pass (fuer Logging)
 MAX_CANDIDATES = 200
 
+# ── RMS Auto-Gain Control ─────────────────────────────────────────────────────
+
+# Ziel: -12 dBFS RMS  (= 0.251 float = 8225 bei int16 full-scale)
+_AGC_TARGET_INT16: float = 8225.0
+_AGC_ALPHA:        float = 0.02    # EMA-Glättung (langsam = kein Pumpen)
+_AGC_HYSTERESIS:   float = 3.0    # ±3 dB Totband → keine Anpassung bei kleinen Schwankungen
+_AGC_MAX_GAIN:     float = 4.0    # +12 dB maximal (Rausch-Grenze)
+_AGC_MIN_GAIN:     float = 0.1    # -20 dB minimal (kein komplettes Abwürgen)
+
+
+def _apply_agc(
+    audio_int16: np.ndarray,
+    gain_state: tuple,
+) -> tuple[np.ndarray, tuple]:
+    """RMS-basierter Auto-Gain-Control für FT8 Audio-Eingang.
+
+    Platzierung: nach 12kHz Resample, VOR Spectral Whitening.
+    Verhindert Übersteuerung des Decoders bei starken Signalsummen (40m abends).
+
+    Args:
+        audio_int16: 1D int16 Array @ 12kHz
+        gain_state: (current_gain, ema_gain) — aus letztem Zyklus
+
+    Returns:
+        (audio_int16_processed, new_gain_state)
+    """
+    current_gain, ema_gain = gain_state
+
+    audio_f = audio_int16.astype(np.float32)
+    rms = float(np.sqrt(np.mean(audio_f ** 2)))
+    rms = max(rms, 1.0)  # Stille nicht verstärken
+
+    desired_gain = _AGC_TARGET_INT16 / rms
+
+    # Hysterese: Gain nur anpassen wenn Abweichung > ±3 dB
+    hyst = 10.0 ** (_AGC_HYSTERESIS / 20.0)  # ≈ 1.413
+    ratio = desired_gain / ema_gain
+    if 1.0 / hyst <= ratio <= hyst:
+        desired_gain = ema_gain  # Im Totband — nicht ändern
+
+    # EMA-Glättung des Gain-Faktors (verhindert Pumpen)
+    ema_gain = _AGC_ALPHA * desired_gain + (1.0 - _AGC_ALPHA) * ema_gain
+    ema_gain = float(np.clip(ema_gain, _AGC_MIN_GAIN, _AGC_MAX_GAIN))
+    current_gain = ema_gain
+
+    audio_out = np.clip(audio_f * current_gain, -32767, 32767).astype(np.int16)
+    return audio_out, (current_gain, ema_gain)
+
 
 class Decoder(QObject):
     """FT8 Decoder mit Signal Subtraction und Fenster-Sliding.
@@ -62,6 +111,7 @@ class Decoder(QObject):
         self.input_sample_rate = 24000
         self.priority_call: str = ""   # QSO-Partner fuer Prioritaets-Logging
         self.last_pcm_12k: np.ndarray | None = None  # AP-Lite: letzter 12kHz float32 Buffer
+        self._agc_state: tuple = (1.0, 1.0)           # RMS-AGC: (current_gain, ema_gain)
 
     def start(self):
         self._running = True
@@ -167,6 +217,11 @@ class Decoder(QObject):
                 audio_12k = np.pad(
                     audio_12k, (0, max(0, CYCLE_SAMPLES_12K - len(audio_12k)))
                 )
+
+            # RMS Auto-Gain Control (vor Whitening) — verhindert Übersteuerung
+            audio_12k, self._agc_state = _apply_agc(audio_12k, self._agc_state)
+            print(f"[AGC] Gain={self._agc_state[0]:.2f}x "
+                  f"({20*np.log10(max(self._agc_state[0],1e-6)):.1f} dB)")
 
             t_pre = time.time()
             audio_12k = _preprocess_audio(audio_12k)
