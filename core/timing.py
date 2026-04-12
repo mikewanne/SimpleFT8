@@ -3,6 +3,7 @@
 import time
 import threading
 from PySide6.QtCore import QObject, Signal
+from core import ntp_time
 
 
 class FT8Timer(QObject):
@@ -39,8 +40,9 @@ class FT8Timer(QObject):
         self.cycle_duration = self.CYCLE_DURATIONS[mode]
 
     def utc_now(self) -> float:
-        """Aktuelle UTC-Zeit mit NTP-Korrektur."""
-        return time.time() + self._ntp_offset
+        """Aktuelle UTC-Zeit mit DT-Korrektur.
+        TODO: ungetestet — Feldtest nötig (Vorzeichen, Smoothing)."""
+        return ntp_time.get_time() + self._ntp_offset
 
     def seconds_in_cycle(self) -> float:
         """Sekunden seit Beginn des aktuellen Zyklus."""

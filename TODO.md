@@ -50,6 +50,29 @@ qso_active = self.qso_sm.state not in (
 - [x] UTC im QSO-Panel: Slot-Start zeigen statt Decode-Zeit
 - [x] "Beendet ist beendet": kuerzlich gearbeitete Stationen 5 Min ignorieren
 
+## Neu implementiert — Feldtest ausständig (12.04.2026)
+
+### DT-basierte Zeitkorrektur (`core/ntp_time.py`)
+**Status:** Code fertig, UNGETESTET — nur mit echtem Bandverkehr validierbar
+
+**Was es tut:**
+- Nach jedem Dekodier-Zyklus: Median aller DT-Werte berechnen
+- Smoothing: 70% alter Wert + 30% neuer Median
+- `FT8Timer.utc_now()` verwendet korrigierte Zeit automatisch
+- Kein Internet/NTP nötig, inkludiert Radio-Latenz
+
+**Was im Feldtest prüfen:**
+- [ ] Vorzeichen korrekt? (positiver Median → Uhr geht nach → positive Korrektur)
+- [ ] Smoothing-Faktor 0.3 sinnvoll? (evtl. anpassen)
+- [ ] Mindestens 5 Stationen ausreichend? (bei wenig Bandverkehr)
+- [ ] 50ms Deadband OK? (unter 50ms kein Korrektur)
+- [ ] Log-Output prüfen: `[DT-Korr] Median=+0.XXXs → Korrektur=+0.XXXs (n=XX)`
+- [ ] PSKReporter DT-Werte vorher/nachher vergleichen
+
+**Relevante Dateien:** `core/ntp_time.py`, `core/timing.py`, `ui/main_window.py`
+
+---
+
 ## Ideen / Später
 - [ ] Turbo FT8: "Listen-Slot" — einen TX-Slot überspringen um zweiten Caller zu erfassen
   - A hört EVEN-CQ → antwortet ODD → wir TX EVEN
