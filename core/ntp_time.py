@@ -125,6 +125,7 @@ def update_from_decoded(dt_values: list) -> bool:
 def reset():
     """Korrektur zurücksetzen (z.B. bei Bandwechsel)."""
     global _dt_correction, _last_sample_count, _last_median_dt
-    _dt_correction = 0.0
-    _last_sample_count = 0
-    _last_median_dt = 0.0
+    with _lock:
+        _dt_correction = 0.0
+        _last_sample_count = 0
+        _last_median_dt = 0.0
