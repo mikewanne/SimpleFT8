@@ -218,6 +218,7 @@ git reset --hard v0.5-filter-ui
 - `v0.22-ap-lite-skeleton` — AP-Lite v2.2 Skeleton (deaktiviert, AP_LITE_ENABLED=False)
 - `v0.23-propagation-bars` — Propagation-Balken unter Band-Buttons (HamQSL + Tageszeit-Korrektur)
 - `v0.24-omni-tx-skeleton` — OMNI-TX v3.2 Skeleton (deaktiviert, Easter Egg auf Versionsnummer)
+- `v0.24.1-bugfixes` — DeepSeek-Review: 3 Bugfixes (omni_tx Block-Switch Guard, propagation dead code, ntp_time Thread-Safety)
 
 ### Regel
 → Vor jedem nicht-trivialen Feature: zuerst committen was stabil ist + taggen.
