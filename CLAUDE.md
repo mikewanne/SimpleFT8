@@ -52,6 +52,9 @@ SimpleFT8/
 │   ├── propagation.py       # Bandbedingungen von HamQSL.com (poor/fair/good, Tageszeit-Korrektur)
 │   └── omni_tx.py           # Experimentelles TX-Scheduling (DEAKTIVIERT)
 ├── radio/
+│   ├── base_radio.py        # RadioInterface ABC — Kontrakt für alle Radio-Implementierungen
+│   ├── presets.py           # PREAMP_PRESETS — Band-Gain-Werte (radio-agnostisch)
+│   ├── radio_factory.py     # create_radio(settings) → FlexRadio | IC7300Interface (zukünftig)
 │   └── flexradio.py         # SmartSDR TCP + VITA-49 RX/TX Audio-Streaming
 ├── log/
 │   └── adif.py              # ADIF 3.1.7 Writer
@@ -220,6 +223,7 @@ git reset --hard v0.5-filter-ui
 - `v0.24-omni-tx-skeleton` — Experimentelles TX-Scheduling Skeleton (deaktiviert)
 - `v0.24.1-bugfixes` — DeepSeek-Review: 3 Bugfixes (omni_tx Block-Switch Guard, propagation dead code, ntp_time Thread-Safety)
 - `v0.24.2-diversity-fix` — 50:50 Diversity Bug: A1-A2-A1-A2 → A1-A1-A2-A2 (Even+Odd beide pro Antenne, echter per-Station Diversity)
+- `v0.25-radio-abstraction` — RadioInterface ABC + radio_factory.py + presets.py (IC-7300 Fork vorbereitet)
 
 ### Regel
 → Vor jedem nicht-trivialen Feature: zuerst committen was stabil ist + taggen.

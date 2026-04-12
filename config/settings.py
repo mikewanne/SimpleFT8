@@ -36,6 +36,7 @@ DEFAULTS = {
     "max_calls": 99,
     "tune_power": 10,
     "diversity_operate_cycles": 80,  # 80/160/240 — Betriebszyklen bis Neueinmessung
+    "radio_type": "flex",            # "flex" = FlexRadio SmartSDR, "ic7300" = CI-V (zukünftig)
 }
 
 

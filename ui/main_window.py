@@ -23,7 +23,8 @@ from core.message import FT8Message
 from core.diversity import DiversityController
 from core import ntp_time
 from log.adif import AdifWriter
-from radio.flexradio import FlexRadio
+from radio.radio_factory import create_radio
+from radio.presets import PREAMP_PRESETS
 from .rx_panel import RXPanel
 from .qso_panel import QSOPanel
 from .control_panel import ControlPanel
@@ -76,11 +77,8 @@ class MainWindow(QMainWindow):
             self.qso_log.load_directory(Path(import_path))
         print(f"[QSOLog] {self.qso_log.worked_count()} unique Calls, {self.qso_log.qso_count()} QSOs")
 
-        # FlexRadio
-        self.radio = FlexRadio(
-            ip=settings.get("flexradio_ip", ""),
-            port=settings.get("flexradio_port", 4992),
-        )
+        # Radio — via Factory (unterstützt flex + zukünftig ic7300)
+        self.radio = create_radio(settings)
 
         self._reconnect_attempts = 0
         self._reconnect_countdown = 0
@@ -619,7 +617,7 @@ class MainWindow(QMainWindow):
         if not active and self._rx_mode == "diversity" and self.radio.ip:
             s = self.radio._slice_idx
             band = self.settings.band
-            gain = FlexRadio.PREAMP_PRESETS.get(band, 10)
+            gain = PREAMP_PRESETS.get(band, 10)
             def _reset_ant():
                 self.radio._send_cmd(f"slice set {s} rxant=ANT1")
                 self.radio._send_cmd(f"slice set {s} rfgain={gain}")
@@ -695,7 +693,7 @@ class MainWindow(QMainWindow):
             if self._rx_mode == "diversity":
                 # Diversity: 2. Slice auch umtunen + Preset anpassen
                 if self.radio._slice_idx_b is not None:
-                    gain_b = FlexRadio.PREAMP_PRESETS.get(band, 10) + 10
+                    gain_b = PREAMP_PRESETS.get(band, 10) + 10
                     self.radio._send_cmd(
                         f"slice set {self.radio._slice_idx_b} rfgain={gain_b}"
                     )
@@ -815,8 +813,8 @@ class MainWindow(QMainWindow):
             )
         else:
             # Kein Preset: Standard-Gains + Hinweis
-            self._diversity_ant1_gain = FlexRadio.PREAMP_PRESETS.get(band, 10)
-            self._diversity_ant2_gain = FlexRadio.PREAMP_PRESETS.get(band, 10) + 10
+            self._diversity_ant1_gain = PREAMP_PRESETS.get(band, 10)
+            self._diversity_ant2_gain = PREAMP_PRESETS.get(band, 10) + 10
             self.control_panel.dx_info.setText(
                 f"ANT1(G{self._diversity_ant1_gain}) + "
                 f"ANT2(G{self._diversity_ant2_gain})"
@@ -1018,12 +1016,11 @@ class MainWindow(QMainWindow):
         """Normal-Modus: beste RX-Antenne aus DX-Preset (falls vorhanden), TX immer ANT1."""
         s = self.radio._slice_idx
         band = self.settings.band
-        from radio.flexradio import FlexRadio
 
         preset = self.settings.get_dx_preset(band)
         if preset:
             rxant = preset.get("rxant", "ANT1")
-            gain  = preset.get("gain", FlexRadio.PREAMP_PRESETS.get(band, 10))
+            gain  = preset.get("gain", PREAMP_PRESETS.get(band, 10))
             # Alter des Presets berechnen
             import datetime
             measured_str = preset.get("measured", "")
@@ -1042,7 +1039,7 @@ class MainWindow(QMainWindow):
             print(f"[DX] Normal-Modus: RX={rxant} TX=ANT1, Gain {gain} (Preset, {age_days}d alt)")
         else:
             rxant = "ANT1"
-            gain  = FlexRadio.PREAMP_PRESETS.get(band, 10)
+            gain  = PREAMP_PRESETS.get(band, 10)
             self.control_panel.dx_info.setText("Kein Preset")
             self.control_panel.dx_info.setStyleSheet("color: #888888;")
             print(f"[DX] Normal-Modus: ANT1, Gain {gain} (kein Preset)")
@@ -1436,8 +1433,11 @@ class MainWindow(QMainWindow):
                 # Betriebszyklus zaehlen + ggf. neu messen
                 if self._diversity_ctrl.phase == "operate":
                     self._diversity_ctrl.on_operate_cycle()
+                    # Remeasure NUR wenn wirklich idle — CQ_CALLING/CQ_WAIT schützen!
                     qso_active = self.qso_sm.state not in (
                         QSOState.IDLE, QSOState.TIMEOUT,
+                    ) or self.qso_sm.state in (
+                        QSOState.CQ_CALLING, QSOState.CQ_WAIT,
                     )
                     if self._diversity_ctrl.should_remeasure(qso_active):
                         self._diversity_ctrl.start_measure()
@@ -1451,10 +1451,10 @@ class MainWindow(QMainWindow):
 
                 if self._diversity_current_ant == "A1":
                     gain = getattr(self, '_diversity_ant1_gain',
-                                   FlexRadio.PREAMP_PRESETS.get(band, 10))
+                                   PREAMP_PRESETS.get(band, 10))
                 else:
                     gain = getattr(self, '_diversity_ant2_gain',
-                                   FlexRadio.PREAMP_PRESETS.get(band, 10) + 10)
+                                   PREAMP_PRESETS.get(band, 10) + 10)
                 ant_cmd = "ANT1" if self._diversity_current_ant == "A1" else "ANT2"
                 self.control_panel.update_diversity_ratio(
                     self._diversity_ctrl.ratio, self._diversity_ctrl.phase,
