@@ -125,6 +125,10 @@ class MainWindow(QMainWindow):
         self._omni_tx = _omni.get_instance(block_cycles=_block_cycles)
         self.control_panel.omni_tx_clicked.connect(self._on_omni_tx_easter_egg)
 
+        # AP-Lite: Initialisieren (deaktiviert, AP_LITE_ENABLED=False)
+        from core import ap_lite as _ap
+        self._ap_lite = _ap.get_instance(encoder=self.encoder)
+
         # Propagation: Hintergrund-Abruf starten + UI alle 5 Minuten aktualisieren
         from core import propagation as _prop
         self._prop_error_shown = False
@@ -545,6 +549,43 @@ class MainWindow(QMainWindow):
         # DX-Tune Dialog fuettern wenn aktiv
         if self._dx_tune_dialog is not None:
             self._dx_tune_dialog.feed_cycle(messages)
+
+        # AP-Lite: Rescue bei QSO-Decode-Fail (WAIT_REPORT / WAIT_RR73)
+        # Läuft nur wenn AP_LITE_ENABLED = True (Feldtest-Flag)
+        if self._ap_lite.enabled and self.qso_sm.qso:
+            _state = self.qso_sm.state
+            if _state in (QSOState.WAIT_REPORT, QSOState.WAIT_RR73):
+                _their = self.qso_sm.qso.their_call
+                _freq = float(getattr(self.qso_sm.qso, 'freq_hz',
+                                     self.encoder.audio_freq_hz) or self.encoder.audio_freq_hz)
+                _qso_state_int = 1 if _state == QSOState.WAIT_REPORT else 2
+                _partner_found = any(
+                    getattr(m, 'caller', '') == _their for m in (messages or [])
+                )
+                if not _partner_found and self.decoder.last_pcm_12k is not None:
+                    _pcm = self.decoder.last_pcm_12k
+                    _slot_time = float(int(time.time() / 15.0) * 15)
+                    # Rescue-Versuch (zweiter Fehler)
+                    _result = self._ap_lite.try_rescue(
+                        _pcm, _slot_time, _their, _freq, _qso_state_int,
+                        own_callsign=self.settings.callsign,
+                        own_locator=self.settings.locator,
+                    )
+                    if _result and _result.success:
+                        self.qso_panel.add_info(
+                            f"[AP-Lite] Gerettet: {_result.recovered_message} "
+                            f"(score={_result.score:.2f})"
+                        )
+                        print(f"[AP-Lite] RESCUE: '{_result.recovered_message}' "
+                              f"score={_result.score:.3f}")
+                    else:
+                        # Ersten Fehler merken für nächsten Rescue-Versuch
+                        self._ap_lite.on_decode_failed(
+                            _pcm, _slot_time, _their, _freq, _qso_state_int,
+                            own_callsign=self.settings.callsign,
+                            own_locator=self.settings.locator,
+                            snr_estimate=float(getattr(self.qso_sm, '_last_snr', -10)),
+                        )
 
     def _connect_signals(self):
         # RX Panel → QSO starten + RX-Toggle
@@ -1207,6 +1248,14 @@ class MainWindow(QMainWindow):
         else:
             self.decoder.priority_call = ""
 
+        # OMNI-TX: Bei QSO-Start Zähler zurücksetzen (Block beibehalten)
+        if state == QSOState.TX_CALL:
+            self._omni_tx.on_qso_started()
+
+        # AP-Lite: Buffer löschen wenn QSO endet oder neu startet
+        if state in (QSOState.IDLE, QSOState.TIMEOUT, QSOState.TX_CALL):
+            self._ap_lite.clear()
+
         in_qso = state not in (
             QSOState.IDLE, QSOState.TIMEOUT,
             QSOState.CQ_CALLING, QSOState.CQ_WAIT,
@@ -1241,6 +1290,11 @@ class MainWindow(QMainWindow):
         """FT8-Nachricht encoden und ueber FlexRadio senden."""
         if message.startswith("CQ "):
             self._has_sent_cq = True
+            # OMNI-TX: CQ-Slot überspringen wenn Muster es vorgibt.
+            # QSO-Schutz: nur CQ-Nachrichten unterdrücken — QSO-Nachrichten IMMER senden!
+            if self._omni_tx.active and not self._omni_tx.should_tx():
+                print(f"[OMNI-TX] Skip CQ (Slot: {self._omni_tx.slot_label})")
+                return
         self.encoder.transmit(message)  # add_tx() wird via tx_started Signal aufgerufen
 
     @Slot(object)
@@ -1414,6 +1468,13 @@ class MainWindow(QMainWindow):
             self._auto_adjust_tx_level()
 
         self.qso_sm.on_cycle_end()
+
+        # OMNI-TX: pro Zyklus voranschreiten (nach QSO-State-Update)
+        _in_qso = self.qso_sm.state not in (
+            QSOState.IDLE, QSOState.TIMEOUT,
+            QSOState.CQ_CALLING, QSOState.CQ_WAIT,
+        )
+        self._omni_tx.advance(qso_active=_in_qso)
 
         # Diversity: Antenne umschalten bei jedem Zyklus (non-blocking)
         if self._rx_mode == "diversity" and self.radio.ip and self.rx_panel._rx_active:
