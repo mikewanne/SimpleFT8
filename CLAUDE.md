@@ -219,6 +219,7 @@ git reset --hard v0.5-filter-ui
 - `v0.23-propagation-bars` — Propagation-Balken unter Band-Buttons (HamQSL + Tageszeit-Korrektur)
 - `v0.24-omni-tx-skeleton` — OMNI-TX v3.2 Skeleton (deaktiviert, Easter Egg auf Versionsnummer)
 - `v0.24.1-bugfixes` — DeepSeek-Review: 3 Bugfixes (omni_tx Block-Switch Guard, propagation dead code, ntp_time Thread-Safety)
+- `v0.24.2-diversity-fix` — 50:50 Diversity Bug: A1-A2-A1-A2 → A1-A1-A2-A2 (Even+Odd beide pro Antenne, echter per-Station Diversity)
 
 ### Regel
 → Vor jedem nicht-trivialen Feature: zuerst committen was stabil ist + taggen.
