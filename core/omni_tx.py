@@ -148,11 +148,15 @@ class OmniTX:
     # ─────────────────────────────────────────────────────────────────────────
 
     def _switch_block(self) -> None:
+        # Block-Wechsel NUR an natürlicher Muster-Grenze (Position 0).
+        # Sonst würde ein Wechsel z.B. bei Position 2 (RX) direkt auf TX springen.
+        if self._slot_index != 0:
+            logger.debug(f"[OMNI-TX] Block-Wechsel verzögert bis Muster-Grenze "
+                         f"(aktuell Position {self._slot_index})")
+            return
         old_block = self.block
         self.block = 2 if self.block == 1 else 1
         self._cycle_count = 0
-        # Slot-Index auf Anfang neuen Blocks (Position 0 = sauberer Start)
-        self._slot_index = 0
         logger.info(f"[OMNI-TX] Block {old_block} → Block {self.block} "
                     f"(nach {self.block_cycles} Zyklen)")
 

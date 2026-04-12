@@ -30,12 +30,6 @@ FETCH_TIMEOUT    = 10             # Sekunden
 ALL_BANDS   = ["10m", "12m", "15m", "17m", "20m", "30m", "40m", "60m", "80m"]
 XML_BANDS   = ["10m", "12m", "15m", "17m", "20m", "30m", "40m", "80m"]  # 60m fehlt in XML
 
-# HamQSL XML-Bandname → unser Name (z.B. "80m-80m" → "80m")
-_XML_BAND_MAP = {b.split("-")[0]: b for b in [
-    "80m-80m", "40m-40m", "30m-30m", "20m-20m",
-    "17m-17m", "15m-15m", "12m-12m", "10m-10m"
-]}
-
 # Stufenregel: good→fair, fair→poor, poor→poor
 _CONDITION_ORDER = ["good", "fair", "poor"]
 

@@ -27,6 +27,7 @@ TODO: UNGETESTET — muss im Heimstudio mit echtem Radio und
 
 import time
 import statistics
+import threading
 
 # Aktuelle Zeitkorrektur in Sekunden (Median-DT basiert)
 _dt_correction: float = 0.0
@@ -36,6 +37,9 @@ _last_sample_count: int = 0
 
 # Letzter berechneter Median-DT (für UI-Anzeige / Debugging)
 _last_median_dt: float = 0.0
+
+# Lock für thread-sichere Zugriffe
+_lock = threading.Lock()
 
 
 def get_time() -> float:
@@ -98,8 +102,6 @@ def update_from_decoded(dt_values: list) -> bool:
         return False
 
     median_dt = statistics.median(valid)
-    _last_median_dt = median_dt
-    _last_sample_count = len(valid)
 
     # Unter 50ms nicht korrigieren — Messrauschen
     if abs(median_dt) < 0.05:
@@ -108,10 +110,14 @@ def update_from_decoded(dt_values: list) -> bool:
     # Smoothing: 30% neuer Wert, 70% alter Wert
     # TODO: Faktor im Feldtest anpassen
     target = median_dt  # positiver Median → Uhr geht nach → pos. Korrektur
-    _dt_correction = _dt_correction * 0.7 + target * 0.3
+    with _lock:
+        _dt_correction = _dt_correction * 0.7 + target * 0.3
+        _last_median_dt = median_dt
+        _last_sample_count = len(valid)
+        correction = _dt_correction
 
     print(f"[DT-Korr] Median={median_dt:+.3f}s "
-          f"→ Korrektur={_dt_correction:+.3f}s "
+          f"→ Korrektur={correction:+.3f}s "
           f"(n={len(valid)})")
     return True
 
