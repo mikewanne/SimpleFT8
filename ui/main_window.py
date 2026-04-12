@@ -121,6 +121,12 @@ class MainWindow(QMainWindow):
         self._psk_timer.timeout.connect(self._fetch_psk_stats)
         self._psk_timer.start(180000)  # 3 Minuten
 
+        # OMNI-TX: Initialisieren (deaktiviert), Easter Egg verbinden
+        from core import omni_tx as _omni
+        _block_cycles = max(10, self.settings.get("diversity_operate_cycles", 80) // 2)
+        self._omni_tx = _omni.get_instance(block_cycles=_block_cycles)
+        self.control_panel.omni_tx_clicked.connect(self._on_omni_tx_easter_egg)
+
         # Propagation: Hintergrund-Abruf starten + UI alle 5 Minuten aktualisieren
         from core import propagation as _prop
         self._prop_error_shown = False
@@ -1479,6 +1485,34 @@ class MainWindow(QMainWindow):
 
     # ── PSKReporter ─────────────────────────────────────────────
 
+    def _on_omni_tx_easter_egg(self):
+        """Easter Egg: OMNI-TX via Klick auf Versionsnummer aktivieren/deaktivieren."""
+        if self._omni_tx.active:
+            # Deaktivieren
+            self._omni_tx.disable()
+            self.control_panel.update_omni_tx(False)
+            self._update_statusbar()
+        else:
+            # Aktivierungsdialog
+            msg = QMessageBox(self)
+            msg.setWindowTitle("OMNI-TX")
+            msg.setText(
+                "<b>OMNI-TX aktivieren?</b><br><br>"
+                "SimpleFT8 wechselt automatisch zwischen Even und Odd Slot.<br>"
+                "Gleiche Sendezeit, mehr Reichweite.<br>"
+                "Technisch regelkonform."
+            )
+            msg.setStandardButtons(
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel
+            )
+            msg.button(QMessageBox.StandardButton.Yes).setText("Aktivieren")
+            msg.button(QMessageBox.StandardButton.Cancel).setText("Abbrechen")
+            msg.setStyleSheet(self._msgbox_style())
+            if msg.exec() == QMessageBox.StandardButton.Yes:
+                self._omni_tx.enable()
+                self.control_panel.update_omni_tx(True)
+                self._update_statusbar()
+
     def _update_propagation_ui(self):
         """Propagations-Balken aus Hintergrund-Cache aktualisieren."""
         from core import propagation as _prop
@@ -1595,10 +1629,11 @@ class MainWindow(QMainWindow):
             "diversity": "DIVERSITY",
         }
         mode_str = mode_labels.get(self._rx_mode, "Normal")
+        omni_str = "  Ω" if getattr(self, '_omni_tx', None) and self._omni_tx.active else ""
         self.statusBar().showMessage(
             f"{self.settings.callsign}  |  {self.settings.locator}  |  "
             f"{self.settings.mode}  |  {self.settings.band}  |  "
-            f"{freq:.3f} MHz  |  {mode_str}"
+            f"{freq:.3f} MHz  |  {mode_str}{omni_str}"
         )
 
     # ── Hilfsfunktionen ─────────────────────────────────────────
