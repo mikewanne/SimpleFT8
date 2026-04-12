@@ -1,0 +1,360 @@
+"""SimpleFT8 MainWindow — Zyklusverarbeitung + Diversity Akkumulation Mixin."""
+
+from __future__ import annotations
+
+import copy
+import threading
+import time
+from typing import TYPE_CHECKING
+
+from PySide6.QtCore import Slot
+
+if TYPE_CHECKING:
+    from .main_window import MainWindow
+
+from core.qso_state import QSOState
+from core.message import FT8Message
+from core import ntp_time
+from radio.presets import PREAMP_PRESETS
+
+
+class CycleMixin:
+    """Mixin fuer Zyklusverarbeitung — wird in MainWindow eingemischt.
+
+    Enthaelt: _on_cycle_decoded (Diversity/Normal Akkumulation),
+    _on_cycle_start (Antennenwechsel), on_message_decoded.
+    """
+
+    def _on_cycle_decoded(self, messages: list):
+        """Ein kompletter FT8-Zyklus dekodiert."""
+        if not self.rx_panel._rx_active:
+            return
+        # Slot-Parity: ft8lib dekodiert innerhalb des SELBEN Slots (< 0.3s)
+        # → is_even_cycle() zeigt noch den aktuellen Slot, KEIN not nötig
+        msg_was_even = self.timer.is_even_cycle()
+        if messages:
+            for m in messages:
+                m._tx_even = msg_was_even
+        count = len(messages) if messages else 0
+        self.control_panel.update_decode_count(count)
+
+        # DT-Korrektur aktualisieren (TODO: ungetestet — Feldtest nötig)
+        if messages:
+            dt_values = [m.dt for m in messages if hasattr(m, 'dt')]
+            ntp_time.update_from_decoded(dt_values)
+
+        if self._rx_mode == "diversity":
+            # Queue IMMER poppen — auch bei 0 Stationen!
+            # Sonst geraet die Queue aus dem Takt wenn eine Antenne nichts empfaengt
+            ant_queue = getattr(self, '_diversity_ant_queue', None)
+            if ant_queue:
+                ant, was_phase = ant_queue.popleft()
+            else:
+                ant, was_phase = "A1", "operate"
+
+        # Messung aufzeichnen wenn wir in der Mess-Phase waren
+        if self._rx_mode == "diversity" and was_phase == "measure":
+            score = sum(max(0.0, float(m.snr + 30)) for m in (messages or [])
+                        if m.snr is not None)
+            with self._diversity_lock:
+                self._diversity_ctrl.record_measurement(ant, score)
+                # Stationsfrequenzen für CQ-Frequenzwahl erfassen
+                for m in (messages or []):
+                    if hasattr(m, 'freq_hz') and m.freq_hz:
+                        self._diversity_ctrl.record_freq(m.freq_hz)
+            self.control_panel.update_diversity_ratio(
+                self._diversity_ctrl.ratio, self._diversity_ctrl.phase,
+                measure_step=self._diversity_ctrl.measure_step,
+                measure_total=self._diversity_ctrl.MEASURE_CYCLES,
+                operate_cycles=self._diversity_ctrl.operate_cycles,
+                operate_total=self._diversity_ctrl.OPERATE_CYCLES,
+            )
+            # Messung abgeschlossen → CQ freigeben + Frequenz wählen
+            if self._diversity_ctrl.phase == "operate":
+                self._set_cq_locked(False)
+                cq_freq = self._diversity_ctrl.get_free_cq_freq()
+                if cq_freq:
+                    self.encoder.audio_freq_hz = cq_freq
+                    self.qso_panel.add_info(
+                        f"Einmessen abgeschlossen — CQ auf {cq_freq} Hz (freie Lücke)"
+                    )
+                    print(f"[Diversity] CQ-Frequenz: {cq_freq} Hz (aus Histogramm)")
+                else:
+                    self.qso_panel.add_info("Einmessen abgeschlossen — CQ freigegeben")
+                self.control_panel.update_freq_histogram(
+                    self._diversity_ctrl.get_histogram_data()
+                )
+
+        if self._rx_mode == "diversity" and messages:
+            # Diversity: Stationen akkumulieren per Callsign
+            # Zwei Timestamps:
+            #   _last_heard:   wann zuletzt dekodiert (fuer Aging)
+            #   _last_changed: wann sich Inhalt geaendert hat (fuer UTC-Anzeige)
+            # Aging: 2 Min nicht mehr dekodiert → raus
+            # ant wurde oben schon aus der Queue geholt
+            now = time.time()
+            slot_start = now - (now % 15.0)
+            utc_str = time.strftime("%H%M%S", time.gmtime(slot_start))
+            changed = False
+            for orig_msg in messages:
+                key = orig_msg.caller
+                if not key:
+                    continue
+                msg = copy.copy(orig_msg)  # Thread-safe: Kopie vor Mutation
+                msg.antenna = ant
+                existing = self._diversity_stations.get(key)
+                if existing is None:
+                    # Neue Station
+                    msg._last_heard = now
+                    msg._last_changed = now
+                    msg._utc_display = utc_str
+                    self._diversity_stations[key] = msg
+                    changed = True
+                else:
+                    # Station bekannt — hat sich IRGENDWAS geaendert?
+                    snr_changed = msg.snr != existing.snr
+                    ant_changed = ant != getattr(existing, 'antenna', '')
+                    content_changed = (
+                        msg.field1 != existing.field1 or
+                        msg.field2 != existing.field2 or
+                        msg.field3 != existing.field3
+                    )
+                    if snr_changed or ant_changed or content_changed:
+                        # Etwas hat sich geaendert → Timestamp + Werte updaten
+                        existing._last_heard = now
+                        existing._utc_display = utc_str
+                        # Antennen-Vergleich: auf welcher war sie staerker?
+                        if ant_changed and existing.antenna in ("A1", "A2"):
+                            old_ant = existing.antenna
+                            if msg.snr > existing.snr:
+                                # Neue Antenne staerker
+                                existing.antenna = f"{ant}>{old_ant[-1]}"
+                            else:
+                                # Alte Antenne war staerker
+                                existing.antenna = f"{old_ant}>{ant[-1]}"
+                        elif not ant_changed:
+                            pass  # Antenne gleich, nichts aendern
+                        existing.snr = msg.snr
+                        if content_changed:
+                            existing.raw = msg.raw
+                            existing.field1 = msg.field1
+                            existing.field2 = msg.field2
+                            existing.field3 = msg.field3
+                        changed = True
+                    # Sonst: exakt gleich → kein Update, altert nach 2 Min raus
+
+            # Alte Stationen entfernen (75s normal, 150s wenn aktiv angerufen)
+            stale = [k for k, m in self._diversity_stations.items()
+                     if now - getattr(m, '_last_heard', now) > (
+                         150 if k in self._active_qso_targets else 75)]
+            if stale:
+                changed = True
+                for k in stale:
+                    del self._diversity_stations[k]
+
+            # Tabelle neu aufbauen wenn sich was geaendert hat
+            if changed:
+                self.rx_panel.table.setRowCount(0)
+                for m in self._diversity_stations.values():
+                    self.rx_panel.add_message(m)
+                self.rx_panel.reapply_sort()
+                a1_cnt = sum(1 for m in self._diversity_stations.values()
+                             if getattr(m, 'antenna', '').startswith('A1'))
+                a2_cnt = sum(1 for m in self._diversity_stations.values()
+                             if getattr(m, 'antenna', '').startswith('A2'))
+                self.control_panel.update_diversity_counts(a1_cnt, a2_cnt)
+
+            self.control_panel.update_decode_count(
+                len(self._diversity_stations)
+            )
+
+        elif self._rx_mode == "normal" and messages:
+            # Normal: Akkumulation mit 2-Min-Fenster (wie Diversity, ohne Antennenwechsel)
+            now = time.time()
+            slot_start = now - (now % 15.0)
+            utc_str = time.strftime("%H%M%S", time.gmtime(slot_start))
+            changed = False
+            for msg in messages:
+                key = msg.caller
+                if not key:
+                    continue
+                existing = self._normal_stations.get(key)
+                if existing is None:
+                    msg._last_heard = now
+                    msg._utc_display = utc_str
+                    self._normal_stations[key] = msg
+                    changed = True
+                else:
+                    existing._last_heard = now
+                    snr_changed = msg.snr != existing.snr
+                    content_changed = (
+                        msg.field1 != existing.field1 or
+                        msg.field2 != existing.field2 or
+                        msg.field3 != existing.field3
+                    )
+                    if snr_changed or content_changed:
+                        existing._utc_display = utc_str
+                        existing.snr = msg.snr
+                        if content_changed:
+                            existing.raw = msg.raw
+                            existing.field1 = msg.field1
+                            existing.field2 = msg.field2
+                            existing.field3 = msg.field3
+                        changed = True
+            # Aging: 75s normal, 150s wenn aktiv angerufen
+            stale = [k for k, m in self._normal_stations.items()
+                     if now - getattr(m, '_last_heard', now) > (
+                         150 if k in self._active_qso_targets else 75)]
+            if stale:
+                changed = True
+                for k in stale:
+                    del self._normal_stations[k]
+            if changed:
+                self.rx_panel.table.setRowCount(0)
+                for m in self._normal_stations.values():
+                    self.rx_panel.add_message(m)
+                self.rx_panel.reapply_sort()
+            self.control_panel.update_decode_count(len(self._normal_stations))
+            if self._normal_stations:
+                avg_snr = round(sum(m.snr for m in self._normal_stations.values()) / len(self._normal_stations))
+                self.control_panel.update_snr(avg_snr)
+
+        elif messages:
+            # DX Tuning: nur aktueller Zyklus
+            self.rx_panel.table.setRowCount(0)
+            for msg in messages:
+                self.rx_panel.add_message(msg)
+            self.rx_panel.reapply_sort()
+
+        # DX-Tune Dialog fuettern wenn aktiv
+        if self._dx_tune_dialog is not None:
+            self._dx_tune_dialog.feed_cycle(messages)
+
+        # AP-Lite: Rescue bei QSO-Decode-Fail (WAIT_REPORT / WAIT_RR73)
+        # Läuft nur wenn AP_LITE_ENABLED = True (Feldtest-Flag)
+        if self._ap_lite.enabled and self.qso_sm.qso:
+            _state = self.qso_sm.state
+            if _state in (QSOState.WAIT_REPORT, QSOState.WAIT_RR73):
+                _their = self.qso_sm.qso.their_call
+                _freq = float(getattr(self.qso_sm.qso, 'freq_hz',
+                                     self.encoder.audio_freq_hz) or self.encoder.audio_freq_hz)
+                _qso_state_int = 1 if _state == QSOState.WAIT_REPORT else 2
+                _partner_found = any(
+                    getattr(m, 'caller', '') == _their for m in (messages or [])
+                )
+                if not _partner_found and self.decoder.last_pcm_12k is not None:
+                    _pcm = self.decoder.last_pcm_12k
+                    _slot_time = float(int(time.time() / 15.0) * 15)
+                    # Rescue-Versuch (zweiter Fehler)
+                    _result = self._ap_lite.try_rescue(
+                        _pcm, _slot_time, _their, _freq, _qso_state_int,
+                        own_callsign=self.settings.callsign,
+                        own_locator=self.settings.locator,
+                    )
+                    if _result and _result.success:
+                        self.qso_panel.add_info(
+                            f"[AP-Lite] Gerettet: {_result.recovered_message} "
+                            f"(score={_result.score:.2f})"
+                        )
+                        print(f"[AP-Lite] RESCUE: '{_result.recovered_message}' "
+                              f"score={_result.score:.3f}")
+                    else:
+                        # Ersten Fehler merken für nächsten Rescue-Versuch
+                        self._ap_lite.on_decode_failed(
+                            _pcm, _slot_time, _their, _freq, _qso_state_int,
+                            own_callsign=self.settings.callsign,
+                            own_locator=self.settings.locator,
+                            snr_estimate=float(getattr(self.qso_sm, '_last_snr', -10)),
+                        )
+
+    @Slot(float, float)
+    def _on_cycle_tick(self, seconds_in_cycle: float, cycle_duration: float):
+        if not self.rx_panel._rx_active:
+            return
+        self.control_panel.update_cycle_bar(seconds_in_cycle, cycle_duration)
+
+    @Slot(int, bool)
+    def _on_cycle_start(self, cycle_num: int, is_even: bool):
+        # ── Anzeige zurücksetzen wenn kein TX ──────────────────
+        if not self.encoder.is_transmitting:
+            self.control_panel.update_tx_peak(0.0)
+
+        # ── Auto TX Level Regelung ──────────────────────────────
+        if self._fwdpwr_samples:
+            self._auto_adjust_tx_level()
+
+        self.qso_sm.on_cycle_end()
+
+        # OMNI-TX: pro Zyklus voranschreiten (nach QSO-State-Update)
+        _in_qso = self.qso_sm.state not in (
+            QSOState.IDLE, QSOState.TIMEOUT,
+            QSOState.CQ_CALLING, QSOState.CQ_WAIT,
+        )
+        self._omni_tx.advance(qso_active=_in_qso)
+
+        # Diversity: Antenne umschalten bei jedem Zyklus (non-blocking)
+        if self._rx_mode == "diversity" and self.radio.ip and self.rx_panel._rx_active:
+            # BUG-1: TX-Schutz — waehrend TX keine Antenne umschalten!
+            if self.encoder.is_transmitting:
+                return
+
+            with self._diversity_lock:  # BUG-2: Race Condition Guard
+                # Queue: aktuelle Antenne + Phase merken BEVOR umgeschaltet wird.
+                ant_queue = getattr(self, '_diversity_ant_queue', None)
+                if ant_queue is not None:
+                    ant_queue.append((self._diversity_current_ant, self._diversity_ctrl.phase))
+
+                band = self.settings.band
+
+                # Betriebszyklus zaehlen + ggf. neu messen
+                if self._diversity_ctrl.phase == "operate":
+                    self._diversity_ctrl.on_operate_cycle()
+                    # Remeasure NUR wenn wirklich idle — CQ_CALLING/CQ_WAIT schützen!
+                    qso_active = self.qso_sm.state not in (
+                        QSOState.IDLE, QSOState.TIMEOUT,
+                    ) or self.qso_sm.state in (
+                        QSOState.CQ_CALLING, QSOState.CQ_WAIT,
+                    )
+                    if self._diversity_ctrl.should_remeasure(qso_active):
+                        self._diversity_ctrl.start_measure()
+                        self._set_cq_locked(True)
+                        self.control_panel.update_diversity_ratio(
+                            "50:50", "remeasure", 0,
+                            self._diversity_ctrl.MEASURE_CYCLES)
+                        print("[Diversity] Automatische Neueinmessung gestartet")
+
+                self._diversity_current_ant = self._diversity_ctrl.choose()
+
+                if self._diversity_current_ant == "A1":
+                    gain = getattr(self, '_diversity_ant1_gain',
+                                   PREAMP_PRESETS.get(band, 10))
+                else:
+                    gain = getattr(self, '_diversity_ant2_gain',
+                                   PREAMP_PRESETS.get(band, 10) + 10)
+                ant_cmd = "ANT1" if self._diversity_current_ant == "A1" else "ANT2"
+                self.control_panel.update_diversity_ratio(
+                    self._diversity_ctrl.ratio, self._diversity_ctrl.phase,
+                    measure_step=self._diversity_ctrl.measure_step,
+                    measure_total=self._diversity_ctrl.MEASURE_CYCLES,
+                    operate_cycles=self._diversity_ctrl.operate_cycles,
+                    operate_total=self._diversity_ctrl.OPERATE_CYCLES,
+                )
+
+            # BUG-3: ant_cmd + gain als Argumente, nicht als Closure
+            def _switch(cmd=ant_cmd, g=gain):
+                self.radio.set_rx_antenna(cmd)
+                self.radio.set_rfgain(g)
+            threading.Thread(target=_switch, daemon=True).start()
+
+    def on_message_decoded(self, msg: FT8Message):
+        """Vom Decoder — NUR fuer QSO-Logik, NICHT fuer Tabelle!"""
+        if not self.rx_panel._rx_active:
+            return
+        self.control_panel.update_snr(msg.snr)
+        self.qso_sm.set_last_snr(msg.snr)
+
+        # RX zuerst anzeigen, dann verarbeiten (sonst erscheint TX-Antwort vor RX im Log)
+        if msg.target == self.settings.callsign:
+            self.qso_panel.add_rx(msg.raw)
+
+        self.qso_sm.on_message_received(msg)
