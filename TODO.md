@@ -50,6 +50,30 @@ qso_active = self.qso_sm.state not in (
 - [x] UTC im QSO-Panel: Slot-Start zeigen statt Decode-Zeit
 - [x] "Beendet ist beendet": kuerzlich gearbeitete Stationen 5 Min ignorieren
 
+## Vorbereitet — noch deaktiviert (12.04.2026)
+
+### AP-Lite v2.2 (`core/ap_lite.py`)
+**Status:** Code-Skeleton fertig, `AP_LITE_ENABLED = False` — scharfschalten erst nach Feldtest!
+
+**Was es tut:**
+- Speichert PCM-Buffer wenn Decode fehlschlägt (aber Nachricht erwartet wurde)
+- Gegenstation wiederholt → 2. Slot fehlschlägt → Costas-Alignment + kohärente Addition
+- ~4-5 dB SNR-Gewinn durch Combining zweier Rausch-Samples
+- Kandidaten aus QSO-State: State1=Reports, State2=RR73/73/RRR
+- Gewichtete Korrelation → Score ≥ 0.75 → QSO retten
+
+**Was fehlt bis zum Aktivieren:**
+- [ ] `correlate_candidate()` — Encoder-Integration (Referenz-Welle aus FT8-String)
+- [ ] Hook in `main_window.py`: `ap_lite.on_decode_failed()` wenn QSO aktiv + leer
+- [ ] Hook in `main_window.py`: `ap_lite.try_rescue()` beim zweiten Fehler
+- [ ] Encoder: `generate_reference_wave(msg, freq_hz, sample_rate)` Methode ergänzen
+- [ ] Threshold 0.75 im Feldtest kalibrieren
+- [ ] State-3-Kandidaten (CQ_WAIT) — Locator der Gegenstation aus Decoded-History?
+
+**Schätzung:** 85-90% der doppelt-wiederholten QSOs gerettet = +~5% mehr QSOs
+
+---
+
 ## Neu implementiert — Feldtest ausständig (12.04.2026)
 
 ### DT-basierte Zeitkorrektur (`core/ntp_time.py`)
