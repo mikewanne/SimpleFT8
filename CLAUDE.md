@@ -48,7 +48,9 @@ SimpleFT8/
 │   ├── qso_state.py         # QSO-Zustandsmaschine (Hunt + CQ Modus)
 │   ├── timing.py            # UTC-Takt, 15s/7.5s Zyklen
 │   ├── ntp_time.py          # DT-basierte Zeitkorrektur (Median-DT aus Dekodierungen, UNGETESTET)
-│   └── ap_lite.py           # AP-Lite v2.2: Schwache QSOs retten via Kohärenter Addition (DEAKTIVIERT)
+│   ├── ap_lite.py           # AP-Lite v2.2: Schwache QSOs retten via Kohärenter Addition (DEAKTIVIERT)
+│   ├── propagation.py       # Bandbedingungen von HamQSL.com (poor/fair/good, Tageszeit-Korrektur)
+│   └── omni_tx.py           # OMNI-TX v3.2: Even+Odd Slot-Rotation (DEAKTIVIERT, Easter Egg)
 ├── radio/
 │   └── flexradio.py         # SmartSDR TCP + VITA-49 RX/TX Audio-Streaming
 ├── log/
@@ -214,6 +216,8 @@ git reset --hard v0.5-filter-ui
 - `v0.20-diversity-cq-fixes` — Diversity-Messung pausiert bei CQ/QSO, UCB1-Ratio, CQ-Freq-Histogramm
 - `v0.21-dt-correction` — DT-basierte Zeitkorrektur (ntp_time.py), FrequencyHistogramWidget
 - `v0.22-ap-lite-skeleton` — AP-Lite v2.2 Skeleton (deaktiviert, AP_LITE_ENABLED=False)
+- `v0.23-propagation-bars` — Propagation-Balken unter Band-Buttons (HamQSL + Tageszeit-Korrektur)
+- `v0.24-omni-tx-skeleton` — OMNI-TX v3.2 Skeleton (deaktiviert, Easter Egg auf Versionsnummer)
 
 ### Regel
 → Vor jedem nicht-trivialen Feature: zuerst committen was stabil ist + taggen.
@@ -224,9 +228,11 @@ git reset --hard v0.5-filter-ui
 ## Offen / Naechste Schritte (siehe TODO.md fuer Details)
 
 1. **DT-Zeitkorrektur (core/ntp_time.py)** — implementiert, UNGETESTET. Feldtest: Vorzeichen, Smoothing, Threshold validieren.
-2. **AP-Lite v2.2 (core/ap_lite.py)** — Skeleton fertig, AP_LITE_ENABLED=False. Noch fehlt: Encoder-Integration fuer Referenz-Welle + 2 Hooks in main_window.py.
-3. **Architektur-Refactoring** — main_window.py + flexradio.py aufteilen (langfristig)
-4. **Features:** QSO-Resume, Logbuch loeschen/editieren, FT4, Antennen-Info im QSO Log
+2. **AP-Lite v2.2 (core/ap_lite.py)** — Skeleton fertig, AP_LITE_ENABLED=False. Noch fehlt: Encoder-Integration + 2 Hooks in main_window.py.
+3. **OMNI-TX v3.2 (core/omni_tx.py)** — Skeleton fertig, active=False. Noch fehlt: 3 Hooks in _on_cycle_decoded (should_tx, advance, on_qso_started).
+4. **Propagation-Balken (core/propagation.py)** — Aktiv! Feldtest: Farben plausibel? Tageszeit-Korrektur stimmt?
+5. **Architektur-Refactoring** — main_window.py + flexradio.py aufteilen (langfristig)
+6. **Features:** QSO-Resume, Logbuch loeschen/editieren, FT4, Antennen-Info im QSO Log
 
 ## FLEX-8400M Verbindungssequenz (AKTUELL, Stand 30.03.2026)
 
