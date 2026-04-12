@@ -176,13 +176,17 @@ Unser FlexRadio driftet nicht (GNSS), aber ihre Geräte schon.
 
 ## ERLEDIGTE FEATURES
 
-### 12.04.2026 (Session 3 — Opus+DeepSeek Full Review + Tests)
+### 12.04.2026 (Session 3 — Opus+DeepSeek Full Review + Refactoring)
 - [x] RMS Auto-Gain Control: `_apply_agc()` in decoder.py (v0.27)
 - [x] README.md + README_DE.md: ungetestete Features mit ⚠️ markiert
 - [x] BUG FIX: `main_window.py:1421` — undefinierte Variable `msg` in QRZ-Upload (→ NameError)
 - [x] BUG FIX: `ntp_time.py:reset()` — Lock hinzugefügt (Race Condition)
 - [x] DeepSeek Full Code Review: 11 Dateien, 1675 Zeilen — 2 echte Bugs gefunden + gefixt
 - [x] 8 Unit Tests geschrieben + bestanden (AGC, NTP, OMNI-TX, AP-Lite, Diversity, Factory, Propagation, Syntax)
+- [x] **REFACTORING: Radio-Abstraktion komplett (v0.28)** — 22→0 private FlexRadio-Zugriffe in main_window.py
+  - 10 neue public API Methoden + 3 Properties in FlexRadio
+  - base_radio.py (ABC) mit 3 abstract + 6 default methods erweitert
+  - IC-7300 Fork: nur noch `radio/ic7300.py` mit den 10 Methoden implementieren
 
 ### 12.04.2026 (Session 2 — komplette Offline-Implementierung)
 - [x] Radio-Abstraktions-Layer: base_radio.py + presets.py + radio_factory.py (v0.25)
@@ -238,18 +242,18 @@ main_window.py greift 22× direkt auf FlexRadio-Interna zu:
 
 ### Refactoring-Plan (NÄCHSTE SESSION)
 
-**Phase 1: Abstraktionsmethoden in FlexRadio ergänzen**
-- [ ] `set_antenna(ant: str)` → `slice set {s} rxant={ant}`
-- [ ] `set_rfgain(gain: int)` → `slice set {s} rfgain={gain}`
-- [ ] `set_txant(ant: str)` → `slice set {s} txant={ant}`
-- [ ] `get_last_swr() -> float` → `self._last_swr`
-- [ ] `get_tx_peak() -> float` → `self._last_tx_raw_peak`
-- [ ] `set_rfpower_raw(value: int)` → `transmit set rfpower={value}`
+**Phase 1: Abstraktionsmethoden in FlexRadio ✓ ERLEDIGT (v0.28)**
+- [x] `set_rx_antenna(ant)`, `set_tx_antenna(ant)`, `set_rfgain(gain)`
+- [x] `set_rfgain_secondary(gain)`, `has_secondary_slice()`
+- [x] `set_rfpower_direct(value)`
+- [x] Properties: `last_swr`, `tx_raw_peak`, `tx_audio_level` (r/w)
+- [x] `set_frequency()` + `apply_ft8_preset()` nutzen internen `_slice_idx`
+- [x] `base_radio.py` (ABC) erweitert: 3 abstract + 6 default methods
 
-**Phase 2: main_window.py entkoppeln**
-- [ ] Alle 22 `_send_cmd` / `_slice_idx` Zugriffe durch abstrakte Methoden ersetzen
-- [ ] `_slice_idx_b` Diversity-Logik in FlexRadio kapseln
-- [ ] Kein `self.radio._xxx` mehr in main_window.py!
+**Phase 2: main_window.py entkoppelt ✓ ERLEDIGT (v0.28)**
+- [x] Alle 22 `_send_cmd` / `_slice_idx` Zugriffe eliminiert
+- [x] `_slice_idx_b` durch `has_secondary_slice()` + `set_rfgain_secondary()` ersetzt
+- [x] Kein `self.radio._xxx` mehr in main_window.py — verifiziert via grep
 
 **Phase 3: IC-7300 implementieren**
 - [ ] `radio/ic7300.py` — `IC7300Interface` (CI-V + sounddevice)
