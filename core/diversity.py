@@ -46,7 +46,7 @@ class DiversityController:
             return self._PAT_70_A1[self._operate_cycles % 10]
         if self.ratio == "30:70":
             return self._PAT_70_A2[self._operate_cycles % 10]
-        return ("A1", "A2")[self._operate_cycles % 2]  # 50:50
+        return ("A1", "A1", "A2", "A2")[self._operate_cycles % 4]  # 50:50: 2 Zyklen pro Antenne → Even+Odd beide auf jeder Antenne
 
     def record_freq(self, freq_hz: float):
         """Belegte Frequenz aus Messphase ins Histogramm eintragen."""
