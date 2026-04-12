@@ -98,7 +98,7 @@ Jede der drei Kernfunktionen hat eine eigene ausfuehrliche Dokumentation mit Scr
 - PSKReporter-Integration mit Spot-Statistik und Entfernungsanzeige
 - **AP-Lite** *(in Entwicklung)*: Schwache QSOs retten via kohärenter Addition wiederholter Slots — Costas-Alignment zweier fehlgeschlagener Dekodierungen bringt ~4–5 dB SNR-Gewinn
 - **Propagation-Balken**: 4px Farbindikator unter jedem Bandbutton — HamQSL-Solardaten + bandspezifische Tageszeit-Korrektur für Mitteleuropa (kein API-Key nötig)
-- **OMNI-TX** *(verstecktes Feature)*: Automatische Even/Odd Slot-Rotation für ~20–30% mehr CQ-Antworten — via Easter Egg aktivierbar, sendet 20% *weniger* als normales CQ bei doppelter Hörerbasis
+
 - Laendererkennung aus Rufzeichen-Prefix mit Entfernung in km
 
 ---

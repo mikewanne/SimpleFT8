@@ -50,7 +50,7 @@ SimpleFT8/
 │   ├── ntp_time.py          # DT-basierte Zeitkorrektur (Median-DT aus Dekodierungen, UNGETESTET)
 │   ├── ap_lite.py           # AP-Lite v2.2: Schwache QSOs retten via Kohärenter Addition (DEAKTIVIERT)
 │   ├── propagation.py       # Bandbedingungen von HamQSL.com (poor/fair/good, Tageszeit-Korrektur)
-│   └── omni_tx.py           # OMNI-TX v3.2: Even+Odd Slot-Rotation (DEAKTIVIERT, Easter Egg)
+│   └── omni_tx.py           # Experimentelles TX-Scheduling (DEAKTIVIERT)
 ├── radio/
 │   └── flexradio.py         # SmartSDR TCP + VITA-49 RX/TX Audio-Streaming
 ├── log/
@@ -217,7 +217,7 @@ git reset --hard v0.5-filter-ui
 - `v0.21-dt-correction` — DT-basierte Zeitkorrektur (ntp_time.py), FrequencyHistogramWidget
 - `v0.22-ap-lite-skeleton` — AP-Lite v2.2 Skeleton (deaktiviert, AP_LITE_ENABLED=False)
 - `v0.23-propagation-bars` — Propagation-Balken unter Band-Buttons (HamQSL + Tageszeit-Korrektur)
-- `v0.24-omni-tx-skeleton` — OMNI-TX v3.2 Skeleton (deaktiviert, Easter Egg auf Versionsnummer)
+- `v0.24-omni-tx-skeleton` — Experimentelles TX-Scheduling Skeleton (deaktiviert)
 - `v0.24.1-bugfixes` — DeepSeek-Review: 3 Bugfixes (omni_tx Block-Switch Guard, propagation dead code, ntp_time Thread-Safety)
 - `v0.24.2-diversity-fix` — 50:50 Diversity Bug: A1-A2-A1-A2 → A1-A1-A2-A2 (Even+Odd beide pro Antenne, echter per-Station Diversity)
 
@@ -231,7 +231,7 @@ git reset --hard v0.5-filter-ui
 
 1. **DT-Zeitkorrektur (core/ntp_time.py)** — implementiert, UNGETESTET. Feldtest: Vorzeichen, Smoothing, Threshold validieren.
 2. **AP-Lite v2.2 (core/ap_lite.py)** — Skeleton fertig, AP_LITE_ENABLED=False. Noch fehlt: Encoder-Integration + 2 Hooks in main_window.py.
-3. **OMNI-TX v3.2 (core/omni_tx.py)** — Skeleton fertig, active=False. Noch fehlt: 3 Hooks in _on_cycle_decoded (should_tx, advance, on_qso_started).
+3. **Experimentelles TX-Scheduling (core/omni_tx.py)** — Skeleton fertig, deaktiviert. Noch fehlt: 3 Hooks in _on_cycle_decoded.
 4. **Propagation-Balken (core/propagation.py)** — Aktiv! Feldtest: Farben plausibel? Tageszeit-Korrektur stimmt?
 5. **Architektur-Refactoring** — main_window.py + flexradio.py aufteilen (langfristig)
 6. **Features:** QSO-Resume, Logbuch loeschen/editieren, FT4, Antennen-Info im QSO Log

@@ -80,7 +80,7 @@ See [test screenshots and methodology](docs/DIVERSITY.md) for details.
 - **PSKReporter** integration with spot statistics and distance display
 - **AP-Lite** *(in development)*: Weak QSO rescue via coherent addition of repeated slots — Costas-aligned combining of two failed decodes yields ~4–5 dB SNR gain
 - **Propagation Bars**: 4px color indicator under each band button — HamQSL solar data + time-of-day correction for Central Europe (no API key needed)
-- **OMNI-TX** *(hidden feature)*: Automatic Even/Odd slot rotation for ~20–30% more CQ replies — activated via Easter egg, sends 20% *less* than normal CQ while reaching both listener groups
+
 
 ### Installation
 
