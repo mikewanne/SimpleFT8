@@ -15,7 +15,7 @@ class DiversityController:
     """
 
     MEASURE_CYCLES = 8   # 4×A1 + 4×A2 (~2 Min Fenster, je even+odd pro Antenne)
-    OPERATE_CYCLES = 80  # 20 Min Betrieb mit guter Antenne
+    OPERATE_CYCLES = 60  # 15 Min Betrieb (vorher 80=20 Min)
     _PAT_70_A1 = ("A1","A1","A2","A1","A1","A2","A1","A1","A2","A1")  # 7×A1, 3×A2
     _PAT_70_A2 = ("A2","A2","A1","A2","A2","A1","A2","A2","A1","A2")  # 7×A2, 3×A1
 

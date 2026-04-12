@@ -11,6 +11,8 @@ import re
 import numpy as np
 from PySide6.QtCore import QObject, Signal
 
+from radio.presets import PREAMP_PRESETS as _PREAMP_PRESETS
+
 
 # VITA-49 Konstanten
 FLEX_OUI = 0x001C2D
@@ -549,13 +551,8 @@ class FlexRadio(QObject):
 
     # ── Rig Control ─────────────────────────────────────────────
 
-    # Preamp pro Band — Basiswerte (werden per DX-Preset angepasst)
-    PREAMP_PRESETS = {
-        "160m": 0, "80m": 0, "60m": 0,
-        "40m": 10, "30m": 10,
-        "20m": 10, "17m": 10,
-        "15m": 20, "12m": 20, "10m": 20,
-    }
+    # Preamp pro Band — aus radio.presets importiert (radio-agnostischer Zugriff via Factory)
+    PREAMP_PRESETS = _PREAMP_PRESETS
 
     # DX-Presets: Radio-Einstellungen fuer verschiedene Einsatzzwecke
     # Jedes Preset definiert: agc_mode, agc_off_level, preamp_boost, Beschreibung

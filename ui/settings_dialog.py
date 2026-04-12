@@ -60,7 +60,7 @@ class SettingsDialog(QDialog):
         super().__init__(parent)
         self.settings = settings
         self.setWindowTitle("SimpleFT8 — Einstellungen")
-        self.setMinimumWidth(420)
+        self.setMinimumWidth(620)
         self.setStyleSheet("""
             QDialog { background-color: #1a1a2e; color: #CCC; }
             QGroupBox { color: #00AAFF; border: 1px solid #333;
@@ -82,28 +82,32 @@ class SettingsDialog(QDialog):
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
+        layout.setSpacing(10)
 
-        # --- Station ---
-        station = QGroupBox("Station")
+        # ── Oberer Bereich: 2 Spalten ─────────────────────────────────
+        top = QHBoxLayout()
+        top.setSpacing(14)
+
+        # LINKE SPALTE: Station & Hardware
+        left = QVBoxLayout()
+        station = QGroupBox("Station & Hardware")
         form1 = QFormLayout(station)
         self.callsign = QLineEdit()
         self.locator = QLineEdit()
         self.locator.setMaxLength(6)
-        form1.addRow("Rufzeichen:", _row_with_hint(self.callsign, "callsign"))
-        form1.addRow("Locator:", _row_with_hint(self.locator, "locator"))
-        layout.addWidget(station)
-
-        # --- Radio ---
-        radio = QGroupBox("FlexRadio")
-        form2 = QFormLayout(radio)
         self.radio_ip = QLineEdit()
         self.radio_ip.setPlaceholderText("Auto-Discovery")
-        form2.addRow("IP Adresse:", _row_with_hint(self.radio_ip, "radio_ip"))
-        layout.addWidget(radio)
+        form1.addRow("Rufzeichen:", _row_with_hint(self.callsign, "callsign"))
+        form1.addRow("Locator:", _row_with_hint(self.locator, "locator"))
+        form1.addRow("IP Adresse:", _row_with_hint(self.radio_ip, "radio_ip"))
+        left.addWidget(station)
+        left.addStretch()
+        top.addLayout(left)
 
-        # --- TX ---
-        tx = QGroupBox("Senden")
-        form3 = QFormLayout(tx)
+        # RECHTE SPALTE: TX & Schutz
+        right = QVBoxLayout()
+        tx = QGroupBox("TX & Schutz")
+        form2 = QFormLayout(tx)
         self.power = QSpinBox()
         self.power.setRange(1, 100)
         self.power.setSuffix(" W")
@@ -112,21 +116,14 @@ class SettingsDialog(QDialog):
         self.tx_level.setSuffix(" %")
         self.max_calls_combo = QComboBox()
         self.max_calls_combo.addItems(["3", "5", "7", "99"])
-        form3.addRow("Sendeleistung:", _row_with_hint(self.power, "power"))
-        form3.addRow("TX Audio-Pegel:", _row_with_hint(self.tx_level, "tx_level"))
-        form3.addRow("Anrufversuche:", _row_with_hint(self.max_calls_combo, "max_calls"))
-        layout.addWidget(tx)
-
-        # --- Schutz ---
-        protect = QGroupBox("Schutz")
-        form4 = QFormLayout(protect)
         self.swr_limit = QDoubleSpinBox()
         self.swr_limit.setRange(1.5, 10.0)
         self.swr_limit.setSingleStep(0.5)
         self.swr_limit.setDecimals(1)
-        form4.addRow("SWR-Limit:", _row_with_hint(self.swr_limit, "swr_limit"))
-
-        # Tune-Leistung: 3 feste Werte, max 20W (kein Schutz-Risiko)
+        form2.addRow("Sendeleistung:", _row_with_hint(self.power, "power"))
+        form2.addRow("TX Audio-Pegel:", _row_with_hint(self.tx_level, "tx_level"))
+        form2.addRow("Anrufversuche:", _row_with_hint(self.max_calls_combo, "max_calls"))
+        form2.addRow("SWR-Limit:", _row_with_hint(self.swr_limit, "swr_limit"))
         tune_row = QHBoxLayout()
         self._tune_btns = {}
         self._current_tune_power = 10
@@ -145,12 +142,15 @@ class SettingsDialog(QDialog):
             self._tune_btns[w] = btn
         tune_row.addWidget(_make_info_btn(_HINTS["tune_power"]))
         tune_row.addStretch()
-        form4.addRow("Tune-Leistung:", tune_row)
-        layout.addWidget(protect)
+        form2.addRow("Tune-Leistung:", tune_row)
+        right.addWidget(tx)
+        right.addStretch()
+        top.addLayout(right)
+        layout.addLayout(top)
 
-        # --- FT8 ---
-        ft8 = QGroupBox("FT8")
-        form5 = QFormLayout(ft8)
+        # ── Unterer Bereich: volle Breite — FT8 & Antennen ───────────
+        ft8 = QGroupBox("FT8 & Antennen")
+        form3 = QFormLayout(ft8)
         self.audio_freq = QSpinBox()
         self.audio_freq.setRange(800, 2800)
         self.audio_freq.setSuffix(" Hz")
@@ -158,19 +158,14 @@ class SettingsDialog(QDialog):
         self.max_decode_freq = QSpinBox()
         self.max_decode_freq.setRange(1000, 5000)
         self.max_decode_freq.setSuffix(" Hz")
-        form5.addRow("TX Audio-Frequenz:", _row_with_hint(self.audio_freq, "tx_freq"))
-        form5.addRow("Max. Decode-Frequenz:", _row_with_hint(self.max_decode_freq, "max_decode"))
-        layout.addWidget(ft8)
-
-        # --- Diversity ---
-        diversity = QGroupBox("Diversity")
-        form6 = QFormLayout(diversity)
         self.diversity_cycles = QComboBox()
         self.diversity_cycles.addItems(["80", "160", "240"])
-        form6.addRow("Neueinmessung nach:", _row_with_hint(self.diversity_cycles, "diversity_cycles"))
-        layout.addWidget(diversity)
+        form3.addRow("TX Audio-Frequenz:", _row_with_hint(self.audio_freq, "tx_freq"))
+        form3.addRow("Max. Decode-Frequenz:", _row_with_hint(self.max_decode_freq, "max_decode"))
+        form3.addRow("Neueinmessung nach:", _row_with_hint(self.diversity_cycles, "diversity_cycles"))
+        layout.addWidget(ft8)
 
-        # --- Buttons ---
+        # ── Buttons ───────────────────────────────────────────────────
         btn_row = QHBoxLayout()
         btn_reset = QPushButton("Grundeinstellungen")
         btn_reset.setObjectName("reset")

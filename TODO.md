@@ -1,149 +1,181 @@
-# SimpleFT8 TODO — Stand 08.04.2026
+# SimpleFT8 TODO — Stand 12.04.2026
 
-## Morgen früh testen (nach Neustart mit TARGET_TX_OFFSET=-0.65)
+---
 
-### 1. DT-Timing Test
-- CQ rufen, ICOM beobachten
-- Ziel: DT konstant ~+0.5s (war: -2.8 bis +1.2, fix: immer +0.8-0.9, jetzt -0.65 offset)
-- Kaltstart: erster TX darf Ausreißer sein (Guard aktiv), ab zweitem stabil
-- Test in Normal-Modus UND Diversity-Modus
+## OFFENE AUFGABEN — Priorisiert
 
-### ~~2. CQ auf EVEN und ODD senden~~ — VERWORFEN
-- Verstößt gegen FT8-Standard: Antwortende Stationen würden sich gegenseitig
-  blockieren (man sieht sie nicht während man selbst TX ist → Kollisionen).
-  FT8 setzt voraus dass eine Station genau einen festen Slot belegt.
+### PRIO 1 — Architektur (JETZT, bevor Code zu groß wird!)
 
-### 3. Diversity-Messung FIX (WICHTIG!)
-**Problem:** Nach 20 Min wird während CQ neu gemessen → unterbricht Betrieb
-**Was soll raus:** Neueinmessung WÄHREND CQ (CQ_CALLING/CQ_WAIT States)
+#### Radio-Abstraktions-Layer für IC-7300 Fork
+**Warum JETZT:** Jede weitere Woche macht den Fork schwieriger. FlexRadio-Code
+wächst mit jedem Feature — je länger wir warten, desto mehr muss entkoppelt werden.
 
-**Gewünschtes Verhalten:**
-- Einmessen: NUR bei Diversity-Aktivierung + Bandwechsel
-- Gültigkeit: 15 Min (nicht 20 Min) ODER bis Bandwechsel
-- Re-Messung: nur wenn IDLE (nicht wenn CQ oder QSO aktiv)
-- Während CQ/QSO: immer auf letztem bekanntem Ergebnis weiterarbeiten
+**Was zu tun ist:**
+- [x] `radio/base_radio.py` — Abstract Base Class `RadioInterface` erstellt (15 Methoden)
+- [x] `radio/presets.py` — PREAMP_PRESETS ausgelagert (radio-agnostisch)
+- [x] `radio/radio_factory.py` — `create_radio(settings)` → FlexRadio (v0.25)
+- [x] `radio/flexradio.py` — PREAMP_PRESETS jetzt aus presets.py importiert
+- [x] `main_window.py`: FlexRadio-Import → `create_radio()` + `PREAMP_PRESETS` aus presets
+- [x] `config/settings.py`: `radio_type: "flex"` als neue Setting
+- [ ] Künftig: `radio/ic7300.py` — `IC7300Interface(RadioInterface)` (CI-V + sounddevice)
 
-**Code-Änderungen (core/diversity.py + ui/main_window.py):**
-```python
-# diversity.py: OPERATE_CYCLES von 80 → 60 (15 Min)
-OPERATE_CYCLES = 60  # 15 Min
+**IC-7300 Steuerung (für spätere Referenz):**
+- Protokoll: CI-V über USB Serial (`/dev/ttyUSB0`, Adresse 0x94)
+- Audio RX/TX: USB Audio über `sounddevice` (kein VITA-49!)
+- PTT: CI-V Befehl 0x1C oder RTS
+- Python Library: `iu2frl/iu2frl-civ` (GitHub, MIT)
+- Frequenz: `device.read_operating_frequency()`, `device.set_operating_frequency()`
 
-# main_window.py Zeile ~1316: CQ-States NICHT remeasuren
-qso_active = self.qso_sm.state not in (
-    QSOState.IDLE, QSOState.TIMEOUT,
-    # CQ_CALLING und CQ_WAIT RAUS → kein Remeasure während CQ!
-)
+**Aufwand:** 2-4 Stunden Refactoring, null neue Features nötig, kein Risiko für Betrieb.
+
+---
+
+#### Settings Dialog — 2-Spalten Layout
+**Problem:** 6 GroupBoxen vertikal gestapelt → zu hoch, unübersichtlich
+
+**Neue Struktur (3 Gruppen, 2-Spalten):**
 ```
+┌──────────────────────┬─────────────────────┐
+│  Station & Hardware  │  TX & Schutz        │
+│  Rufzeichen          │  Sendeleistung W    │
+│  Locator             │  TX Audio-Pegel %   │
+│  Radio IP            │  Anrufversuche      │
+│                      │  SWR-Limit          │
+│                      │  Tune-Leistung      │
+├──────────────────────┴─────────────────────┤
+│  FT8 & Antennen                            │
+│  TX Audio-Frequenz Hz                      │
+│  Max. Decode-Frequenz Hz                   │
+│  Diversity-Zyklen                          │
+└────────────────────────────────────────────┘
+```
+- [x] `ui/settings_dialog.py` auf 2-Spalten QHBoxLayout umgebaut (v0.24.x)
+- [x] 3 Gruppen: Station & Hardware | TX & Schutz | FT8 & Antennen
+- [x] ~40% weniger Höhe erreicht
 
-## Erledigte Features (09.04.2026)
-- [x] CQ 60s-Bug gefixt → jetzt alle 30s (Slot-Fenster 0.5→3.0s + Kaltstart-Guard intelligent)
-- [x] Diversity UX: Dialog, CQ-Sperre, NEUEINMESSUNG, Zyklen einstellbar (80/160/240)
-- [x] RX-OFF Warnung in Titelleiste: "⚠ EMPFANG RX DEAKTIVIERT ⚠"
-- [x] TX-Balken entfernt → "Clipschutz X%" + "TX-Pegel: X%" + "SWR X.X" als Text
-- [x] TX-Zeiten im QSO-Panel auf Slot-Start gerundet
-- [x] Messung pausiert bei CQ/QSO (kein Remeasure während Funkbetrieb)
+---
 
-## Erledigte Features (08.04.2026)
-- [x] TX-Timing Jitter-Fix: Silence-Padding (war -2.8..+1.2s, jetzt stabil)
-- [x] TARGET_TX_OFFSET=-0.65 für DT≈+0.5 auf ICOM (FlexRadio 0.8s Latenz kompensiert)
-- [x] Kaltstart-Guard: silence<0.1s → nächsten Slot nehmen
-- [x] UTC im QSO-Panel: Slot-Start zeigen statt Decode-Zeit
-- [x] "Beendet ist beendet": kuerzlich gearbeitete Stationen 5 Min ignorieren
+### PRIO 2 — Features fertigstellen
 
-## Vorbereitet — noch deaktiviert (12.04.2026, ergänzt 12.04.2026)
+#### AP-Lite v2.2 (`core/ap_lite.py`) — KEIN OSD!
+**Warum besser als OSD:** +4-5 dB (vs. OSD +1.2 dB), kein LDPC-Internals nötig.
+**Status:** Code-Skeleton fertig, `AP_LITE_ENABLED = False`
 
-### OMNI-TX v3.2 (`core/omni_tx.py`)
-**Status:** Skeleton fertig, `active = False` — Aktivierung nur via Easter Egg
+**Was fehlt:**
+- [ ] `Encoder.generate_reference_wave(msg, freq_hz, sample_rate)` Methode
+- [ ] `correlate_candidate()` — Korrelation PCM-Buffer gegen Referenz-Welle
+- [ ] Hook in `main_window.py`: `ap_lite.on_decode_failed()` bei leerem Decode im QSO
+- [ ] Hook in `main_window.py`: `ap_lite.try_rescue()` beim zweiten Fehler
+- [ ] Threshold 0.75 im Feldtest kalibrieren
 
-**Was es tut:**
-- CQ auf Even UND Odd → ~20-30% mehr Antworten auf belebten Bändern
-- 5-Slot-Muster: TX TX RX RX RX (40% Sendeanteil vs. 50% normal → 20% weniger TX!)
-- Block-Wechsel nach `diversity_operate_cycles // 2` Zyklen (default: 40)
-- Easter Egg: Klick auf "SimpleFT8 v0.23" in GUI → Aktivierungsdialog → Ω-Symbol
-- Statusbar zeigt "Ω" wenn aktiv
-
-**Was fehlt bis zum Scharfschalten:**
-- [ ] Hook in `_on_cycle_decoded`: `if cq_active and not omni_tx.should_tx(): skip_tx()`
-- [ ] `omni_tx.advance(qso_active=...)` pro Zyklus aufrufen
-- [ ] `omni_tx.on_qso_started()` bei QSO-Beginn aufrufen
-- [ ] Feldtest: funktioniert Timing sauber? Keine Kollisionen mit laufendem QSO?
-
-**⚠️ QSO-Schutz PFLICHT:** `should_tx()` darf nur wirken wenn `cq_active=True`!
-  → Bei laufendem QSO (`qso_sm.is_busy()`) IMMER senden, nie unterdrücken.
-  → Sonst bricht OMNI-TX ein laufendes QSO ab. Hook in `main_window.py` entsprechend bauen!
-
-**Bugfix (12.04.2026):** `_switch_block()` hatte Mid-Pattern TX-Jump Bug.
-  → Korrigiert: Block-Wechsel nur an Muster-Grenze (`_slot_index == 0`).
-  → Wenn Zähler voll läuft, aber gerade Pos 2-4 aktiv → Wechsel verzögert bis Pos 0.
-
-### Propagation-Balken (`core/propagation.py`)
-**Status:** Implementiert und aktiv (kein Feature-Flag nötig, rein visuell)
-
-**Was es tut:**
-- 4px Farbbalken unter jedem Bandbutton (good=grün, fair=gelb, poor=rot, grey=grau)
-- HamQSL XML alle 3h im Hintergrund-Thread (kein API-Key)
-- Tageszeit-Korrektur: bandspezifische UTC-Fenster senken Bewertung in Übergangsstunden
-- Bei Netzwerkfehler: Balken unsichtbar + einmalige Infobox
+#### DT-Zeitkorrektur (`core/ntp_time.py`) — Feldtest
+**Status:** Code fertig + thread-sicher, UNGETESTET
 
 **Im Feldtest prüfen:**
-- [ ] Balken erscheinen nach ~3s App-Start?
-- [ ] Farben stimmen mit eigener Band-Erfahrung überein?
-- [ ] Tageszeit-Korrektur plausibel? (80m mittags = rot?)
-
----
-
-## Vorbereitet — noch deaktiviert (12.04.2026)
-
-### AP-Lite v2.2 (`core/ap_lite.py`)
-**Status:** Code-Skeleton fertig, `AP_LITE_ENABLED = False` — scharfschalten erst nach Feldtest!
-
-**Was es tut:**
-- Speichert PCM-Buffer wenn Decode fehlschlägt (aber Nachricht erwartet wurde)
-- Gegenstation wiederholt → 2. Slot fehlschlägt → Costas-Alignment + kohärente Addition
-- ~4-5 dB SNR-Gewinn durch Combining zweier Rausch-Samples
-- Kandidaten aus QSO-State: State1=Reports, State2=RR73/73/RRR
-- Gewichtete Korrelation → Score ≥ 0.75 → QSO retten
-
-**Was fehlt bis zum Aktivieren:**
-- [ ] `correlate_candidate()` — Encoder-Integration (Referenz-Welle aus FT8-String)
-- [ ] Hook in `main_window.py`: `ap_lite.on_decode_failed()` wenn QSO aktiv + leer
-- [ ] Hook in `main_window.py`: `ap_lite.try_rescue()` beim zweiten Fehler
-- [ ] Encoder: `generate_reference_wave(msg, freq_hz, sample_rate)` Methode ergänzen
-- [ ] Threshold 0.75 im Feldtest kalibrieren
-- [ ] State-3-Kandidaten (CQ_WAIT) — Locator der Gegenstation aus Decoded-History?
-
-**Schätzung:** 85-90% der doppelt-wiederholten QSOs gerettet = +~5% mehr QSOs
-
----
-
-## Neu implementiert — Feldtest ausständig (12.04.2026)
-
-### DT-basierte Zeitkorrektur (`core/ntp_time.py`)
-**Status:** Code fertig, UNGETESTET — nur mit echtem Bandverkehr validierbar
-
-**Was es tut:**
-- Nach jedem Dekodier-Zyklus: Median aller DT-Werte berechnen
-- Smoothing: 70% alter Wert + 30% neuer Median
-- `FT8Timer.utc_now()` verwendet korrigierte Zeit automatisch
-- Kein Internet/NTP nötig, inkludiert Radio-Latenz
-
-**Was im Feldtest prüfen:**
 - [ ] Vorzeichen korrekt? (positiver Median → Uhr geht nach → positive Korrektur)
-- [ ] Smoothing-Faktor 0.3 sinnvoll? (evtl. anpassen)
-- [ ] Mindestens 5 Stationen ausreichend? (bei wenig Bandverkehr)
-- [ ] 50ms Deadband OK? (unter 50ms kein Korrektur)
-- [ ] Log-Output prüfen: `[DT-Korr] Median=+0.XXXs → Korrektur=+0.XXXs (n=XX)`
-- [ ] PSKReporter DT-Werte vorher/nachher vergleichen
+- [ ] Smoothing-Faktor 0.3 sinnvoll?
+- [ ] 5 Stationen Minimum ausreichend?
+- [ ] 50ms Deadband sinnvoll?
+- [ ] Log prüfen: `[DT-Korr] Median=+0.XXXs → Korrektur=+0.XXXs (n=XX)`
 
-**Bugfix (12.04.2026):** `update_from_decoded()` war nicht thread-sicher.
-  → Korrigiert: `threading.Lock()` + `with _lock:` schützt alle State-Mutations.
-
-**Relevante Dateien:** `core/ntp_time.py`, `core/timing.py`, `ui/main_window.py`
+#### Diversity-Messung FIX ✓ ERLEDIGT (v0.24.2)
+- [x] `diversity.py`: OPERATE_CYCLES 80 → 60 (15 Min)
+- [x] `main_window.py`: CQ_CALLING + CQ_WAIT aus Remeasure-Bedingung entfernt
 
 ---
 
-## Ideen / Später
-- [ ] Turbo FT8: "Listen-Slot" — einen TX-Slot überspringen um zweiten Caller zu erfassen
-  - A hört EVEN-CQ → antwortet ODD → wir TX EVEN
-  - B hört ODD-CQ → antwortet EVEN → wir müssen einen EVEN-Slot freihalten zum lauschen
-  - Risiko gering: WSJT-X wiederholt 5-7x automatisch
+### PRIO 3 — Neue Features (nach Feldtest)
+
+#### RMS Auto-Gain Control (Audio-Eingang)
+**Was:** Misst laufend RMS-Pegel des Audio-Eingangs, reguliert Gain automatisch.
+**Warum:** 40m abends → viele starke Signale → Summe übersteuert → Decoder versagt.
+Wir haben Spectral Whitening (Rauschboden), aber kein Eingangs-AGC.
+- [ ] RMS-Messung vor Decoder-Pipeline einbauen
+- [ ] Gain-Faktor automatisch anpassen (Ziel: -12 dBFS RMS)
+- [ ] Hysterese damit es nicht pumpt
+
+#### Frequenz-Drift-Kompensation
+**Was:** FT8 hat 3× Costas-Arrays. Drift über 15s messbar → kompensieren.
+**Warum:** Billige QRP-Gegenstationen driften 0.5-5 Hz → wir dekodieren sie schlechter.
+Unser FlexRadio driftet nicht (GNSS), aber ihre Geräte schon.
+- [ ] Drift aus Costas-Array Anfang/Mitte/Ende berechnen
+- [ ] Signal vor LDPC linearisieren
+- [ ] Gewinn: +5-10% mehr Decodes bei driftenden Gegenstationen
+
+---
+
+### PRIO 4 — Langfristig / Refactoring
+
+#### main_window.py aufteilen (~1700 Zeilen)
+- [ ] `ui/main_window_base.py` — Widget-Setup + Layout
+- [ ] `ui/cycle_handler.py` — `_on_cycle_decoded()` und Timer-Logik
+- [ ] `ui/qso_controller.py` — QSO-State-Machine Callbacks
+- [ ] Macht auch Radio-Abstraktions-Layer einfacher
+
+---
+
+## VORBEREITET — Noch deaktiviert (Secrets intern)
+
+### OMNI-TX v3.2 (`core/omni_tx.py`) — ⛔ GEHEIM
+**Status:** Skeleton fertig, `active = False` — nur via Easter Egg aktivierbar
+**Was fehlt bis zum Scharfschalten:**
+- [ ] Hook: `if cq_active and not omni_tx.should_tx(): skip_tx()`
+- [ ] `omni_tx.advance(qso_active=...)` pro Zyklus
+- [ ] `omni_tx.on_qso_started()` bei QSO-Beginn
+- [ ] ⚠️ QSO-Schutz: Bei laufendem QSO IMMER senden, nie unterdrücken!
+
+### Propagation-Balken (`core/propagation.py`)
+**Status:** Aktiv — Feldtest ausstehend
+- [ ] Balken erscheinen nach ~3s App-Start?
+- [ ] Farben plausibel? 80m mittags = rot?
+
+---
+
+## ERLEDIGTE FEATURES
+
+### 12.04.2026
+- [x] 50:50 Diversity Bug gefixt: A1-A2-A1-A2 → A1-A1-A2-A2 (Even+Odd je auf beide Antennen)
+- [x] DeepSeek Review: 3 Bugfixes (omni_tx Block-Switch, propagation dead code, ntp_time Lock)
+- [x] OSD von Roadmap gestrichen → AP-Lite ist der bessere Ansatz (+4-5dB vs +1.2dB)
+
+### 09.04.2026
+- [x] CQ 60s-Bug → jetzt 30s
+- [x] Diversity UX: Dialog, CQ-Sperre, NEUEINMESSUNG, Zyklen einstellbar
+- [x] RX-OFF Warnung in Titelleiste
+- [x] TX-Status als Text (Clipschutz/Pegel/SWR)
+- [x] Messung pausiert bei CQ/QSO
+
+### 08.04.2026
+- [x] TX-Timing Jitter-Fix (war -2.8..+1.2s, jetzt stabil)
+- [x] TARGET_TX_OFFSET=-0.65
+- [x] Kaltstart-Guard
+- [x] UTC Slot-Start im QSO-Panel
+- [x] "Beendet ist beendet" (5 Min Cooldown)
+
+---
+
+## IDEEN / SPÄTER
+- [ ] Turbo FT8: Listen-Slot (einen TX-Slot überspringen um zweiten Caller zu erfassen)
+- [ ] FT4 Modus
+- [ ] QSO-Resume bei App-Neustart
+- [ ] Band Map (visuelle Frequenz-Belegung)
+
+---
+
+## IC-7300 FORK — Zukünftige Planung
+**Voraussetzung:** Radio-Abstraktions-Layer (PRIO 1 oben) muss zuerst rein!
+
+**Was beim Fork getauscht wird:**
+- `radio/flexradio.py` → `radio/ic7300.py`
+- Audio: VITA-49 UDP → USB Audio (`sounddevice`)
+- Steuerung: SmartSDR TCP → CI-V Serial (`iu2frl-civ` Library)
+- PTT: TCP-Befehl → CI-V 0x1C oder RTS
+- Antennen: ANT1/ANT2 TCP → CI-V Antenna Select (falls vorhanden)
+- Meter: VITA-49 Meter → CI-V Poll (SWR: 0x15, Power: 0x16)
+
+**Was GLEICH bleibt:**
+- Gesamte Decoder/Encoder Pipeline (PCM Audio ist radio-agnostisch)
+- QSO State Machine
+- GUI komplett
+- Diversity-Logik (wenn IC-7300 2 Antennen hat)
+- Alle FT8-Optimierungen
