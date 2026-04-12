@@ -46,7 +46,9 @@ SimpleFT8/
 │   ├── encoder.py           # FT8 Encoder (PyFT8 → VITA-49 TX)
 │   ├── message.py           # FT8-Message Parser (CQ, Report, Grid, RR73)
 │   ├── qso_state.py         # QSO-Zustandsmaschine (Hunt + CQ Modus)
-│   └── timing.py            # UTC-Takt, 15s/7.5s Zyklen
+│   ├── timing.py            # UTC-Takt, 15s/7.5s Zyklen
+│   ├── ntp_time.py          # DT-basierte Zeitkorrektur (Median-DT aus Dekodierungen, UNGETESTET)
+│   └── ap_lite.py           # AP-Lite v2.2: Schwache QSOs retten via Kohärenter Addition (DEAKTIVIERT)
 ├── radio/
 │   └── flexradio.py         # SmartSDR TCP + VITA-49 RX/TX Audio-Streaming
 ├── log/
@@ -209,6 +211,9 @@ git reset --hard v0.5-filter-ui
 - `v0.17-power-pi` — PI Controller, rfpower Headroom, non-blocking QRZ
 - `v0.18-robust-qso` — Bandwechsel-Schutz, HALT, QSO Timeouts, deutsche Docs
 - `v0.19-ft8lib-c` — ft8lib C-Backend (MIT), 400x schneller, QSO 2min->1min, kein GPL
+- `v0.20-diversity-cq-fixes` — Diversity-Messung pausiert bei CQ/QSO, UCB1-Ratio, CQ-Freq-Histogramm
+- `v0.21-dt-correction` — DT-basierte Zeitkorrektur (ntp_time.py), FrequencyHistogramWidget
+- `v0.22-ap-lite-skeleton` — AP-Lite v2.2 Skeleton (deaktiviert, AP_LITE_ENABLED=False)
 
 ### Regel
 → Vor jedem nicht-trivialen Feature: zuerst committen was stabil ist + taggen.
@@ -218,8 +223,8 @@ git reset --hard v0.5-filter-ui
 
 ## Offen / Naechste Schritte (siehe TODO.md fuer Details)
 
-1. **Diversity-Messung pausiert bei TX** — ANT2 wird nicht gemessen bei CQ
-2. **Even/Odd Slot Tracking** — vermutlich Hauptursache fuer verbleibende Timeouts
+1. **DT-Zeitkorrektur (core/ntp_time.py)** — implementiert, UNGETESTET. Feldtest: Vorzeichen, Smoothing, Threshold validieren.
+2. **AP-Lite v2.2 (core/ap_lite.py)** — Skeleton fertig, AP_LITE_ENABLED=False. Noch fehlt: Encoder-Integration fuer Referenz-Welle + 2 Hooks in main_window.py.
 3. **Architektur-Refactoring** — main_window.py + flexradio.py aufteilen (langfristig)
 4. **Features:** QSO-Resume, Logbuch loeschen/editieren, FT4, Antennen-Info im QSO Log
 
