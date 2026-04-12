@@ -233,6 +233,7 @@ class _ModeBandCard(QFrame):
         lbl_band = QLabel("Band")
         lbl_band.setFixedWidth(42)
         grid.addWidget(lbl_band, 1, 0)
+        self.prop_bars: dict = {}
         bands_row1 = ["10m", "12m", "15m", "17m", "20m"]
         for col, b in enumerate(bands_row1):
             btn = QPushButton(b)
@@ -241,21 +242,58 @@ class _ModeBandCard(QFrame):
             btn.setFixedHeight(28)
             self.band_buttons[b] = btn
             grid.addWidget(btn, 1, col + 1)
+            bar = QFrame()
+            bar.setFixedHeight(4)
+            bar.setStyleSheet("background: #555555; border: none; border-radius: 2px;")
+            bar.setVisible(False)
+            self.prop_bars[b] = bar
+            grid.addWidget(bar, 2, col + 1)
 
-        # Zeile 2: 30m 40m 60m 80m (ab Spalte 1)
+        # Zeile 3: 30m 40m 60m 80m (ab Spalte 1, Zeile 2→3 wegen Prop-Bars)
         bands_row2 = ["30m", "40m", "60m", "80m"]
         for col, b in enumerate(bands_row2):
             btn = QPushButton(b)
             btn.setCheckable(True)
             btn.setFixedHeight(28)
             self.band_buttons[b] = btn
-            grid.addWidget(btn, 2, col + 1)
+            grid.addWidget(btn, 3, col + 1)
+            bar = QFrame()
+            bar.setFixedHeight(4)
+            bar.setStyleSheet("background: #555555; border: none; border-radius: 2px;")
+            bar.setVisible(False)
+            self.prop_bars[b] = bar
+            grid.addWidget(bar, 4, col + 1)
 
         # Alle Button-Spalten (1-5) gleich breit strecken
         for col in range(1, 6):
             grid.setColumnStretch(col, 1)
+        # Prop-Bar-Zeilen minimal halten
+        grid.setRowMinimumHeight(2, 4)
+        grid.setRowMinimumHeight(4, 4)
 
         lay.addLayout(grid)
+
+    def update_propagation(self, conditions: dict) -> None:
+        """Propagations-Balken aktualisieren. conditions=None → alle ausblenden."""
+        _COLORS = {
+            "good": "#00CC00",
+            "fair": "#FFAA00",
+            "poor": "#CC0000",
+            "grey": "#555555",
+        }
+        for band, bar in self.prop_bars.items():
+            if not conditions:
+                bar.setVisible(False)
+                continue
+            cond = conditions.get(band)
+            if cond is None:
+                bar.setVisible(False)
+            else:
+                bar.setStyleSheet(
+                    f"background: {_COLORS.get(cond, '#555555')}; "
+                    "border: none; border-radius: 2px;"
+                )
+                bar.setVisible(True)
 
 
 def _sep_line() -> QFrame:
@@ -712,6 +750,7 @@ class ControlPanel(QWidget):
 
         # ── Kachel 1: MODUS + BAND (blau) ───────────────────────────────
         mb_card = _ModeBandCard(self)
+        self._mode_band_card = mb_card          # für update_propagation
         self.btn_ft8 = mb_card.btn_ft8
         self.btn_ft4 = mb_card.btn_ft4
         self.band_buttons = mb_card.band_buttons
@@ -984,6 +1023,14 @@ class ControlPanel(QWidget):
         self._freq_hist.update_data(data)
         if data.get('bins') or data.get('cq_freq'):
             self._freq_hist.setVisible(True)
+
+    def update_propagation(self, conditions) -> None:
+        """Propagations-Balken unter Band-Buttons aktualisieren.
+
+        Args:
+            conditions: Dict {'80m': 'good', ...} oder None (→ Balken ausblenden).
+        """
+        self._mode_band_card.update_propagation(conditions or {})
 
     # =====================================================================
     # PSK Reporter
