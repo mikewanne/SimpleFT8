@@ -94,7 +94,9 @@ python3 main.py
 
 ### Configuration
 
-Settings via GUI or directly in `~/.simpleft8/config.json`: callsign, locator, radio IP, band, power preset, QRZ API key.
+Settings via GUI or directly in `~/.simpleft8/config.json`: callsign, locator, band, power preset, QRZ API key.
+
+**Radio IP — leave blank for auto-discovery:** SimpleFT8 automatically finds your FlexRadio on the local network via UDP broadcast. No IP address needs to be configured. If auto-discovery fails or you have multiple radios, set the IP manually in Settings.
 
 ### Architecture
 
@@ -194,7 +196,9 @@ python3 main.py
 
 ### Konfiguration
 
-Einstellungen über die GUI oder direkt in `~/.simpleft8/config.json`: Rufzeichen, Locator, Radio-IP, Band, Leistungs-Preset, QRZ API-Key.
+Einstellungen über die GUI oder direkt in `~/.simpleft8/config.json`: Rufzeichen, Locator, Band, Leistungs-Preset, QRZ API-Key.
+
+**Radio-IP — leer lassen für Auto-Discovery:** SimpleFT8 findet das FlexRadio automatisch im lokalen Netzwerk per UDP-Broadcast. Es muss keine IP-Adresse eingetragen werden. Falls Auto-Discovery fehlschlägt oder mehrere Radios im Netz sind, kann die IP manuell in den Einstellungen gesetzt werden.
 
 ### Architektur
 
