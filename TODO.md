@@ -86,13 +86,17 @@ wächst mit jedem Feature — je länger wir warten, desto mehr muss entkoppelt 
 
 ### PRIO 3 — Neue Features (nach Feldtest)
 
-#### RMS Auto-Gain Control (Audio-Eingang)
-**Was:** Misst laufend RMS-Pegel des Audio-Eingangs, reguliert Gain automatisch.
-**Warum:** 40m abends → viele starke Signale → Summe übersteuert → Decoder versagt.
-Wir haben Spectral Whitening (Rauschboden), aber kein Eingangs-AGC.
-- [ ] RMS-Messung vor Decoder-Pipeline einbauen
-- [ ] Gain-Faktor automatisch anpassen (Ziel: -12 dBFS RMS)
-- [ ] Hysterese damit es nicht pumpt
+#### RMS Auto-Gain Control ✓ CODE FERTIG (v0.27)
+**Status:** Integriert in decoder.py, aktiv. Unit Tests bestanden.
+- [x] RMS-Messung nach Resample, vor Spectral Whitening
+- [x] Gain-Faktor automatisch (Ziel: -12 dBFS = 8225 int16 RMS)
+- [x] EMA α=0.02, ±3 dB Hysterese, Gain [0.1x..4.0x], Clipping-Schutz
+
+**Im Feldtest prüfen (NUR MIT RADIO TESTBAR):**
+- [ ] AGC-Gain konvergiert nahe 1.0 bei normalem Bandverkehr?
+- [ ] Dreifache Normalisierung: Noise-Floor (raw) + AGC (12k) + Whitening (preprocess) — kollidieren die? Gain-Wert im Log beobachten: `[AGC] Gain=X.XXx`
+- [ ] 40m abends: verhindert AGC Decoder-Übersteuerung?
+- [ ] Stille → Gain rampt auf 4.0x Max. Kein Problem wenn danach Signale kommen?
 
 #### Frequenz-Drift-Kompensation
 **Was:** FT8 hat 3× Costas-Arrays. Drift über 15s messbar → kompensieren.
@@ -106,7 +110,7 @@ Unser FlexRadio driftet nicht (GNSS), aber ihre Geräte schon.
 
 ### PRIO 4 — Langfristig / Refactoring
 
-#### main_window.py aufteilen (~1700 Zeilen)
+#### main_window.py aufteilen (~1755 Zeilen)
 - [ ] `ui/main_window_base.py` — Widget-Setup + Layout
 - [ ] `ui/cycle_handler.py` — `_on_cycle_decoded()` und Timer-Logik
 - [ ] `ui/qso_controller.py` — QSO-State-Machine Callbacks
@@ -130,7 +134,55 @@ Unser FlexRadio driftet nicht (GNSS), aber ihre Geräte schon.
 
 ---
 
+## NUR MIT RADIO TESTBAR — Feldtest-Checkliste
+
+**Diese Punkte können NICHT offline getestet werden. Beim nächsten Einschalten prüfen:**
+
+### AGC (decoder.py)
+- [ ] `[AGC] Gain=X.XXx` im Log beobachten — konvergiert bei normalem Band nahe 1.0?
+- [ ] 40m abends: verhindert AGC Übersteuerung bei vielen starken Signalen?
+- [ ] Dreifache Normalisierung (Noise-Floor + AGC + Whitening): Gain-Wert stabil oder oszilliert?
+- [ ] Stille/Band leer: Gain rampt auf 4.0x Max — erholt sich schnell wenn Signale kommen?
+
+### DT-Zeitkorrektur (ntp_time.py)
+- [ ] `[DT-Korr] Median=+X.XXXs → Korrektur=+X.XXXs (n=XX)` im Log
+- [ ] Vorzeichen korrekt? (positiver Median → positive Korrektur)
+- [ ] Smoothing-Faktor 0.3 → konvergiert nicht zu langsam/schnell?
+- [ ] 50ms Deadband → blockiert nicht sinnvolle Korrekturen?
+
+### AP-Lite (ap_lite.py)
+- [ ] Erst nach Feldtest `AP_LITE_ENABLED = True` setzen!
+- [ ] Threshold 0.75 kalibrieren: zu viele False Positives? Zu wenige Rescues?
+- [ ] Costas-Alignment findet korrekte Verschiebung?
+- [ ] `generate_reference_wave()` erzeugt identisches Signal wie Gegenstation?
+
+### OMNI-TX (omni_tx.py)
+- [ ] Easter-Egg-Aktivierung funktioniert (Klick Versionsnummer)?
+- [ ] 5-Slot-Muster TX-TX-RX-RX-RX sichtbar im Log?
+- [ ] Block-Wechsel alle N Zyklen beobachtbar?
+- [ ] QSO wird NICHT durch OMNI-TX unterbrochen?
+
+### Propagation (propagation.py)
+- [ ] HamQSL-Abruf funktioniert (Netzwerk verfügbar)?
+- [ ] Farben unter Band-Buttons plausibel?
+- [ ] 80m mittags = rot/orange, 20m mittags = grün?
+
+### Radio-Abstraktionsschicht
+- [ ] `create_radio(settings)` → FlexRadio Instanz funktioniert?
+- [ ] PREAMP_PRESETS aus presets.py werden korrekt geladen?
+- [ ] Keine Regression bei Bandwechsel, Diversity, DX Tuning?
+
+---
+
 ## ERLEDIGTE FEATURES
+
+### 12.04.2026 (Session 3 — Opus+DeepSeek Full Review + Tests)
+- [x] RMS Auto-Gain Control: `_apply_agc()` in decoder.py (v0.27)
+- [x] README.md + README_DE.md: ungetestete Features mit ⚠️ markiert
+- [x] BUG FIX: `main_window.py:1421` — undefinierte Variable `msg` in QRZ-Upload (→ NameError)
+- [x] BUG FIX: `ntp_time.py:reset()` — Lock hinzugefügt (Race Condition)
+- [x] DeepSeek Full Code Review: 11 Dateien, 1675 Zeilen — 2 echte Bugs gefunden + gefixt
+- [x] 8 Unit Tests geschrieben + bestanden (AGC, NTP, OMNI-TX, AP-Lite, Diversity, Factory, Propagation, Syntax)
 
 ### 12.04.2026 (Session 2 — komplette Offline-Implementierung)
 - [x] Radio-Abstraktions-Layer: base_radio.py + presets.py + radio_factory.py (v0.25)
@@ -166,20 +218,49 @@ Unser FlexRadio driftet nicht (GNSS), aber ihre Geräte schon.
 
 ---
 
-## IC-7300 FORK — Zukünftige Planung
-**Voraussetzung:** Radio-Abstraktions-Layer (PRIO 1 oben) muss zuerst rein!
+## IC-7300 FORK — Detaillierte Planung
 
-**Was beim Fork getauscht wird:**
-- `radio/flexradio.py` → `radio/ic7300.py`
-- Audio: VITA-49 UDP → USB Audio (`sounddevice`)
-- Steuerung: SmartSDR TCP → CI-V Serial (`iu2frl-civ` Library)
-- PTT: TCP-Befehl → CI-V 0x1C oder RTS
-- Antennen: ANT1/ANT2 TCP → CI-V Antenna Select (falls vorhanden)
-- Meter: VITA-49 Meter → CI-V Poll (SWR: 0x15, Power: 0x16)
+**Status:** Radio-Abstraktions-Layer FERTIG (v0.25): `base_radio.py` + `radio_factory.py` + `presets.py`
+**Nächster Schritt:** FlexRadio-spezifische Aufrufe aus main_window.py abstrahieren!
 
-**Was GLEICH bleibt:**
-- Gesamte Decoder/Encoder Pipeline (PCM Audio ist radio-agnostisch)
+### Problem: 22 direkte FlexRadio-Zugriffe in main_window.py
+
+main_window.py greift 22× direkt auf FlexRadio-Interna zu:
+
+| Zugriff | Vorkommen | Abstraktion nötig |
+|---------|-----------|-------------------|
+| `self.radio._send_cmd(...)` | 12× | → `set_antenna()`, `set_rfgain()`, `set_txant()` |
+| `self.radio._slice_idx` | 6× | → Flex-spezifisch (IC-7300 hat keine Slices) |
+| `self.radio._slice_idx_b` | 1× | → Nur Flex-Diversity mit 2 Slices |
+| `self.radio._tx_audio_level` | 2× | → `get_tx_level()` / `set_tx_level()` |
+| `self.radio._last_swr` | 1× | → `get_last_swr()` |
+| `self.radio._last_tx_raw_peak` | 1× | → `get_tx_peak()` (via Meter) |
+
+### Refactoring-Plan (NÄCHSTE SESSION)
+
+**Phase 1: Abstraktionsmethoden in FlexRadio ergänzen**
+- [ ] `set_antenna(ant: str)` → `slice set {s} rxant={ant}`
+- [ ] `set_rfgain(gain: int)` → `slice set {s} rfgain={gain}`
+- [ ] `set_txant(ant: str)` → `slice set {s} txant={ant}`
+- [ ] `get_last_swr() -> float` → `self._last_swr`
+- [ ] `get_tx_peak() -> float` → `self._last_tx_raw_peak`
+- [ ] `set_rfpower_raw(value: int)` → `transmit set rfpower={value}`
+
+**Phase 2: main_window.py entkoppeln**
+- [ ] Alle 22 `_send_cmd` / `_slice_idx` Zugriffe durch abstrakte Methoden ersetzen
+- [ ] `_slice_idx_b` Diversity-Logik in FlexRadio kapseln
+- [ ] Kein `self.radio._xxx` mehr in main_window.py!
+
+**Phase 3: IC-7300 implementieren**
+- [ ] `radio/ic7300.py` — `IC7300Interface` (CI-V + sounddevice)
+- [ ] Audio: USB Audio über `sounddevice` (kein VITA-49!)
+- [ ] Steuerung: CI-V Serial (`iu2frl-civ` Library, `/dev/ttyUSB0`)
+- [ ] PTT: CI-V 0x1C oder RTS
+- [ ] Meter: CI-V Poll (SWR: 0x15, Power: 0x16)
+
+**Was GLEICH bleibt (radio-agnostisch):**
+- Decoder/Encoder Pipeline (PCM Audio)
 - QSO State Machine
 - GUI komplett
-- Diversity-Logik (wenn IC-7300 2 Antennen hat)
-- Alle FT8-Optimierungen
+- Diversity-Logik (wenn 2 Antennen vorhanden)
+- Alle FT8-Optimierungen (AGC, Whitening, Subtraction)

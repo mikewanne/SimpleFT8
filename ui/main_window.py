@@ -1418,7 +1418,7 @@ class MainWindow(QMainWindow):
             lambda f: self.statusBar().showMessage(f.result(), 10000)
             if not f.exception() else None
         )
-        print(f"[QRZ] {msg}")
+        print(f"[QRZ] Upload gestartet ({len(records)} QSOs)")
 
     @Slot(str)
     def _on_qso_timeout(self, their_call: str):
