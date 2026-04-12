@@ -57,16 +57,16 @@ wächst mit jedem Feature — je länger wir warten, desto mehr muss entkoppelt 
 
 ### PRIO 2 — Features fertigstellen
 
-#### AP-Lite v2.2 (`core/ap_lite.py`) — KEIN OSD!
+#### AP-Lite v2.2 (`core/ap_lite.py`) ✓ CODE FERTIG (v0.26)
 **Warum besser als OSD:** +4-5 dB (vs. OSD +1.2 dB), kein LDPC-Internals nötig.
-**Status:** Code-Skeleton fertig, `AP_LITE_ENABLED = False`
+**Status:** Vollständig integriert, `AP_LITE_ENABLED = False` bis Feldtest
 
-**Was fehlt:**
-- [ ] `Encoder.generate_reference_wave(msg, freq_hz, sample_rate)` Methode
-- [ ] `correlate_candidate()` — Korrelation PCM-Buffer gegen Referenz-Welle
-- [ ] Hook in `main_window.py`: `ap_lite.on_decode_failed()` bei leerem Decode im QSO
-- [ ] Hook in `main_window.py`: `ap_lite.try_rescue()` beim zweiten Fehler
-- [ ] Threshold 0.75 im Feldtest kalibrieren
+- [x] `encoder.generate_reference_wave()` — int16→float32, normalisiert
+- [x] `correlate_candidate()` — Cosinus-Ähnlichkeit + Costas-Gewichtung (DeepSeek)
+- [x] `decoder.last_pcm_12k` — PCM-Buffer für AP-Lite zugänglich
+- [x] Hook: `on_decode_failed()` bei erstem Fehler in WAIT_REPORT/WAIT_RR73
+- [x] Hook: `try_rescue()` beim zweiten Fehler
+- [ ] Threshold 0.75 im Feldtest kalibrieren → dann `AP_LITE_ENABLED = True`
 
 #### DT-Zeitkorrektur (`core/ntp_time.py`) — Feldtest
 **Status:** Code fertig + thread-sicher, UNGETESTET
@@ -116,13 +116,12 @@ Unser FlexRadio driftet nicht (GNSS), aber ihre Geräte schon.
 
 ## VORBEREITET — Noch deaktiviert (Secrets intern)
 
-### OMNI-TX v3.2 (`core/omni_tx.py`) — ⛔ GEHEIM
-**Status:** Skeleton fertig, `active = False` — nur via Easter Egg aktivierbar
-**Was fehlt bis zum Scharfschalten:**
-- [ ] Hook: `if cq_active and not omni_tx.should_tx(): skip_tx()`
-- [ ] `omni_tx.advance(qso_active=...)` pro Zyklus
-- [ ] `omni_tx.on_qso_started()` bei QSO-Beginn
-- [ ] ⚠️ QSO-Schutz: Bei laufendem QSO IMMER senden, nie unterdrücken!
+### OMNI-TX v3.2 (`core/omni_tx.py`) — ⛔ GEHEIM ✓ HOOKS KOMPLETT (v0.26)
+**Status:** Vollständig integriert — Easter Egg aktivierbar (Klick Versionsnummer)
+- [x] Hook: `should_tx()` in `_on_send_message` (nur CQ, QSO-Schutz!)
+- [x] `advance(qso_active)` pro Zyklus in `_on_cycle_start`
+- [x] `on_qso_started()` bei TX_CALL in `_on_state_changed`
+- [ ] Feldtest: 5-Slot-Muster verifizieren, Block-Wechsel beobachten
 
 ### Propagation-Balken (`core/propagation.py`)
 **Status:** Aktiv — Feldtest ausstehend
@@ -133,7 +132,12 @@ Unser FlexRadio driftet nicht (GNSS), aber ihre Geräte schon.
 
 ## ERLEDIGTE FEATURES
 
-### 12.04.2026
+### 12.04.2026 (Session 2 — komplette Offline-Implementierung)
+- [x] Radio-Abstraktions-Layer: base_radio.py + presets.py + radio_factory.py (v0.25)
+- [x] Settings Dialog → 2-Spalten Layout, 40% kompakter
+- [x] Diversity FIX: OPERATE_CYCLES 80→60, Remeasure-Sperre bei CQ/QSO
+- [x] OMNI-TX Hooks komplett (3 Hooks, QSO-Schutz, Easter Egg voll funktionsfähig)
+- [x] AP-Lite v2.2 Encoder-Integration: generate_reference_wave(), correlate_candidate() aktiviert, 2 Hooks
 - [x] 50:50 Diversity Bug gefixt: A1-A2-A1-A2 → A1-A1-A2-A2 (Even+Odd je auf beide Antennen)
 - [x] DeepSeek Review: 3 Bugfixes (omni_tx Block-Switch, propagation dead code, ntp_time Lock)
 - [x] OSD von Roadmap gestrichen → AP-Lite ist der bessere Ansatz (+4-5dB vs +1.2dB)
