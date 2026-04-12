@@ -713,6 +713,7 @@ class ControlPanel(QWidget):
     dx_preset_changed = Signal(str)
     tx_level_changed = Signal(int)
     preamp_changed = Signal(bool)           # Legacy, nicht mehr genutzt
+    omni_tx_clicked = Signal()             # Easter Egg: Klick auf Versionsnummer
     rx_mode_changed = Signal(str)
     settings_clicked = Signal()
     einmessen_clicked = Signal()
@@ -823,6 +824,27 @@ class ControlPanel(QWidget):
         layout.addWidget(qso_card)
 
         layout.addStretch()
+
+        # ── Easter Egg: Versionsnummer (OMNI-TX Aktivierung) ────────────
+        self._version_row = QHBoxLayout()
+        self._version_row.setContentsMargins(0, 0, 4, 2)
+        self._omni_symbol = QLabel("Ω")
+        self._omni_symbol.setStyleSheet(
+            f"color: #AA44FF; font-family: {_FONT}; font-size: 11px; "
+            "padding: 0 3px; background: transparent; border: none;"
+        )
+        self._omni_symbol.setVisible(False)
+        self._version_label = QLabel("SimpleFT8 v0.23")
+        self._version_label.setStyleSheet(
+            f"color: #333; font-family: {_FONT}; font-size: 10px; "
+            "border: none; background: transparent;"
+        )
+        self._version_label.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._version_label.mousePressEvent = lambda e: self.omni_tx_clicked.emit()
+        self._version_row.addStretch()
+        self._version_row.addWidget(self._omni_symbol)
+        self._version_row.addWidget(self._version_label)
+        layout.addLayout(self._version_row)
 
     # =====================================================================
     # Helper: UI-Bausteine
@@ -1023,6 +1045,15 @@ class ControlPanel(QWidget):
         self._freq_hist.update_data(data)
         if data.get('bins') or data.get('cq_freq'):
             self._freq_hist.setVisible(True)
+
+    def update_omni_tx(self, active: bool) -> None:
+        """Ω-Symbol ein-/ausblenden je nach OMNI-TX Status."""
+        self._omni_symbol.setVisible(active)
+        color = "#222" if active else "#333"
+        self._version_label.setStyleSheet(
+            f"color: {color}; font-family: {_FONT}; font-size: 10px; "
+            "border: none; background: transparent;"
+        )
 
     def update_propagation(self, conditions) -> None:
         """Propagations-Balken unter Band-Buttons aktualisieren.
