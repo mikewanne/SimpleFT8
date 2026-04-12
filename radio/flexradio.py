@@ -839,15 +839,76 @@ class FlexRadio(QObject):
         self.on_audio_callback_b = None
         print("[Diversity] Deaktiviert")
 
-    def set_frequency(self, freq_mhz: float, slice_idx: int = 0):
-        """Frequenz setzen in MHz. Bei Diversity beide Slices synchron."""
-        self._send_cmd(f"slice tune {slice_idx} {freq_mhz}")
+    def set_frequency(self, freq_mhz: float, slice_idx: int | None = None):
+        """Frequenz setzen in MHz. Bei Diversity beide Slices synchron.
+
+        slice_idx: Optional — wenn None, wird der interne Primary-Slice verwendet.
+        """
+        s = slice_idx if slice_idx is not None else self._slice_idx
+        self._send_cmd(f"slice tune {s} {freq_mhz}")
         if self._diversity_mode and self._slice_idx_b is not None:
             self._send_cmd(f"slice tune {self._slice_idx_b} {freq_mhz}")
 
-    def set_mode(self, mode: str, slice_idx: int = 0):
+    def set_mode(self, mode: str, slice_idx: int | None = None):
         """Betriebsart setzen (DIGU für FT8)."""
-        self._send_cmd(f"slice set {slice_idx} mode={mode}")
+        s = slice_idx if slice_idx is not None else self._slice_idx
+        self._send_cmd(f"slice set {s} mode={mode}")
+
+    # ── Radio-Abstraktions-API ─────────────────────────────────
+    # Alle Methoden unten werden von main_window.py verwendet.
+    # IC-7300 muss nur diese Methoden implementieren (kein _send_cmd nötig).
+
+    def set_rx_antenna(self, ant: str):
+        """RX-Antenne setzen (ANT1, ANT2)."""
+        self._send_cmd(f"slice set {self._slice_idx} rxant={ant}")
+
+    def set_tx_antenna(self, ant: str):
+        """TX-Antenne setzen (ANT1, ANT2)."""
+        self._send_cmd(f"slice set {self._slice_idx} txant={ant}")
+
+    def set_rfgain(self, gain: int):
+        """RF-Gain auf Primary Slice setzen (0-30 dB)."""
+        self._send_cmd(f"slice set {self._slice_idx} rfgain={gain}")
+
+    def set_rfgain_secondary(self, gain: int):
+        """RF-Gain auf Secondary Slice setzen (Diversity B).
+
+        No-op wenn kein 2. Slice vorhanden.
+        """
+        if self._slice_idx_b is not None:
+            self._send_cmd(f"slice set {self._slice_idx_b} rfgain={gain}")
+
+    def has_secondary_slice(self) -> bool:
+        """True wenn 2. Slice für Diversity vorhanden."""
+        return self._slice_idx_b is not None
+
+    def set_rfpower_direct(self, value: int):
+        """rfpower direkt setzen (ohne max_power_level Reset).
+
+        Für Tune-Modus und andere Low-Level-Steuerung.
+        set_power() setzt zusätzlich max_power_level=100.
+        """
+        self._send_cmd(f"transmit set rfpower={value}")
+
+    @property
+    def last_swr(self) -> float:
+        """Letzter SWR-Messwert (1.0 = perfekt)."""
+        return self._last_swr
+
+    @property
+    def tx_raw_peak(self) -> float:
+        """Audio-Peak VOR Gain (0.0-1.0) — für Clipschutz."""
+        return self._last_tx_raw_peak
+
+    @property
+    def tx_audio_level(self) -> float:
+        """Aktueller TX-Audiopegel (0.0-1.0)."""
+        return self._tx_audio_level
+
+    @tx_audio_level.setter
+    def tx_audio_level(self, value: float):
+        """TX-Audiopegel setzen (wird auch intern für send_audio() verwendet)."""
+        self._tx_audio_level = value
 
     def set_power(self, power_percent: int):
         """Sendeleistung in Prozent (0-100). max_power_level=100 wird immer zuerst gesetzt,
@@ -890,7 +951,7 @@ class FlexRadio(QObject):
         """Tune-Modus stoppen."""
         self._send_cmd("transmit tune 0")
 
-    def apply_ft8_preset(self, slice_idx: int = 0, band: str = "20m",
+    def apply_ft8_preset(self, slice_idx: int | None = None, band: str = "20m",
                          dx_mode: str = "mittel"):
         """FT8-Einstellungen am FLEX-8400M nach DX-Preset.
 
@@ -899,35 +960,36 @@ class FlexRadio(QObject):
           'mittel' — Mittel-DX: AGC slow(50), erhoehter Preamp
           'dx'     — Extrem-DX: AGC slow(20), max Preamp, max Empfindlichkeit
         """
+        s = slice_idx if slice_idx is not None else self._slice_idx
         preset = self.DX_PRESETS.get(dx_mode, self.DX_PRESETS["mittel"])
         base_preamp = self.PREAMP_PRESETS.get(band, 10)
         preamp = min(base_preamp + preset["preamp_boost"], 30)  # Max 30 dB
 
         cmds = [
-            f"slice set {slice_idx} mode=DIGU",
+            f"slice set {s} mode=DIGU",
             # Alles aus was FT8-Signale verfaelscht
-            f"slice set {slice_idx} nr=0",
-            f"slice set {slice_idx} nb=0",
-            f"slice set {slice_idx} anf=0",
-            f"slice set {slice_idx} wnb=0",
-            f"slice set {slice_idx} nbfm=0",   # Kein FM-Noise-Blanker
-            f"slice set {slice_idx} apf=0",     # Kein Audio-Peak-Filter
+            f"slice set {s} nr=0",
+            f"slice set {s} nb=0",
+            f"slice set {s} anf=0",
+            f"slice set {s} wnb=0",
+            f"slice set {s} nbfm=0",   # Kein FM-Noise-Blanker
+            f"slice set {s} apf=0",     # Kein Audio-Peak-Filter
             # FT8 Bandbreite (100-3100Hz: FT8-Signale starten bei ~200Hz)
-            f"slice set {slice_idx} filter_lo=100",
-            f"slice set {slice_idx} filter_hi=3100",
+            f"slice set {s} filter_lo=100",
+            f"slice set {s} filter_hi=3100",
             # Preamp
-            f"slice set {slice_idx} rfgain={preamp}",
+            f"slice set {s} rfgain={preamp}",
         ]
 
         # AGC nach DX-Preset
         agc_mode = preset["agc_mode"]
-        cmds.append(f"slice set {slice_idx} agc_mode={agc_mode}")
+        cmds.append(f"slice set {s} agc_mode={agc_mode}")
         if agc_mode == "off":
             off_level = preset.get("agc_off_level", 20)
-            cmds.append(f"slice set {slice_idx} agc_off_level={off_level}")
+            cmds.append(f"slice set {s} agc_off_level={off_level}")
         else:
             threshold = preset.get("agc_threshold", 65)
-            cmds.append(f"slice set {slice_idx} agc_threshold={threshold}")
+            cmds.append(f"slice set {s} agc_threshold={threshold}")
 
         for cmd in cmds:
             self._send_cmd(cmd)
