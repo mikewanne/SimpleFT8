@@ -112,6 +112,8 @@ class Decoder(QObject):
         self.priority_call: str = ""   # QSO-Partner fuer Prioritaets-Logging
         self.last_pcm_12k: np.ndarray | None = None  # AP-Lite: letzter 12kHz float32 Buffer
         self._agc_state: tuple = (1.0, 1.0)           # RMS-AGC: (current_gain, ema_gain)
+        self._startup_samples: int = 0                 # Startup-Purge: erste 2s verwerfen
+        self._startup_done: bool = False
 
     def start(self):
         self._running = True
@@ -136,6 +138,13 @@ class Decoder(QObject):
             print("[Decoder] Qualitaet: DIVERSITY (5 Passes, ft8lib C)")
 
     def feed_audio(self, samples_int16: np.ndarray):
+        # Startup-Purge: erste 2s Audio verwerfen (Verbindungs-Müll)
+        if not self._startup_done:
+            self._startup_samples += len(samples_int16)
+            if self._startup_samples < 48000:  # 2s @ 24kHz
+                return
+            self._startup_done = True
+            print(f"[Decoder] Startup-Purge: {self._startup_samples} Samples verworfen")
         with self._buffer_lock:
             self._audio_buffer_24k.append(samples_int16.copy())
 
@@ -150,9 +159,8 @@ class Decoder(QObject):
             try:
                 now = time.time()
                 cycle_pos = now % 15.0
-                # 14.3 statt 13.5: kompensiert VITA-49 Audio-Latenz (~0.8s)
-                # Feldtest 13.04.2026: 13.5→+0.7 DT, 14.0→+0.3 DT, 14.3→~0.0 DT
-                _WAKE_TIME = 14.3
+                # 13.5: Standard-Aufwachzeit. DT-Korrektur regelt den Rest via Buffer-Shift.
+                _WAKE_TIME = 13.5
                 if cycle_pos < _WAKE_TIME:
                     wait = _WAKE_TIME - cycle_pos
                 else:
@@ -304,7 +312,7 @@ class Decoder(QObject):
                         # 1) Offset-Verschiebung rueckgaengig machen (Window-Sliding)
                         # 2) Buffer-Offset: Decode-Loop wacht bei 13.5s in Slot auf →
                         #    Buffer startet 1.5s VOR Slot-Start → alle DT um +1.5 zu hoch
-                        DT_BUFFER_OFFSET = 0.7  # 15.0 - _WAKE_TIME (14.3)
+                        DT_BUFFER_OFFSET = 1.5  # 15.0 - _WAKE_TIME (13.5)
                         raw_results.append({
                             **r,
                             "dt": r["dt"] + offset_samples / SAMP_RATE - DT_BUFFER_OFFSET,
