@@ -437,14 +437,22 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         }
         mode_str = mode_labels.get(self._rx_mode, "Normal")
         omni_str = "  Ω" if getattr(self, '_omni_tx', None) and self._omni_tx.active else ""
-        # DT-Korrektur in Statusbar anzeigen
+        # DT-Korrektur + AP-Lite in Statusbar anzeigen
         from core import ntp_time
         dt_corr = ntp_time.get_correction()
         dt_str = f"  |  DT: {dt_corr:+.2f}s" if abs(dt_corr) > 0.01 else ""
+        ap_str = ""
+        if hasattr(self, '_ap_lite') and self._ap_lite.enabled:
+            r = self._ap_lite.rescue_count
+            a = self._ap_lite.attempt_count
+            if a > 0:
+                ap_str = f"  |  AP: {r}/{a} gerettet"
+            else:
+                ap_str = "  |  AP: aktiv"
         self.statusBar().showMessage(
             f"{self.settings.callsign}  |  {self.settings.locator}  |  "
             f"{self.settings.mode}  |  {self.settings.band}  |  "
-            f"{freq:.3f} MHz  |  {mode_str}{omni_str}{dt_str}"
+            f"{freq:.3f} MHz  |  {mode_str}{omni_str}{dt_str}{ap_str}"
         )
 
     # ── Hilfsfunktionen ──────────────────────────────────────────

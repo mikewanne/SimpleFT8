@@ -310,7 +310,10 @@ class APLite:
         self.encoder = encoder
         # Buffer: key = (callsign, qso_state)
         self._buffers: Dict[Tuple[str, int], FailedDecodeBuffer] = {}
-        self._max_buffers = 3  # Mehr als 3 QSOs gleichzeitig = unwahrscheinlich
+        self._max_buffers = 3
+        # Statistik
+        self.rescue_count: int = 0       # Erfolgreiche Rescues
+        self.attempt_count: int = 0      # Rescue-Versuche gesamt
 
     def on_decode_failed(
         self,
@@ -424,7 +427,9 @@ class APLite:
         # Buffer aufräumen — max 2 Versuche
         del self._buffers[key]
 
+        self.attempt_count += 1
         if best_score >= SCORE_THRESHOLD and best_candidate:
+            self.rescue_count += 1
             logger.info(f"[AP-Lite] ERFOLG: '{best_candidate}' score={best_score:.3f}")
             return APLiteResult(
                 success=True,
