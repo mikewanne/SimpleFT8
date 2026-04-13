@@ -131,10 +131,11 @@ wächst mit jedem Feature — je länger wir warten, desto mehr muss entkoppelt 
 - [x] `on_qso_started()` bei TX_CALL in `_on_state_changed`
 - [ ] Feldtest: 5-Slot-Muster verifizieren, Block-Wechsel beobachten
 
-### Propagation-Balken (`core/propagation.py`)
-**Status:** Aktiv — Feldtest ausstehend
-- [ ] Balken erscheinen nach ~3s App-Start?
-- [ ] Farben plausibel? 80m mittags = rot?
+### Propagation-Balken (`core/propagation.py`) ✓ GETESTET (13.04.2026)
+**Status:** Funktioniert! HamQSL Band-Gruppen-Fix angewendet.
+- [x] Balken erscheinen nach ~3s App-Start
+- [x] Farben plausibel: 20m/30m=grün, 15m/17m=gelb, 80m/40m/10m/12m=rot
+- [x] Stimmt mit HAM-Toolbox überein (Screenshot-Vergleich)
 
 ---
 
@@ -142,17 +143,18 @@ wächst mit jedem Feature — je länger wir warten, desto mehr muss entkoppelt 
 
 **Diese Punkte können NICHT offline getestet werden. Beim nächsten Einschalten prüfen:**
 
-### AGC (decoder.py)
-- [ ] `[AGC] Gain=X.XXx` im Log beobachten — konvergiert bei normalem Band nahe 1.0?
-- [ ] 40m abends: verhindert AGC Übersteuerung bei vielen starken Signalen?
-- [ ] Dreifache Normalisierung (Noise-Floor + AGC + Whitening): Gain-Wert stabil oder oszilliert?
-- [ ] Stille/Band leer: Gain rampt auf 4.0x Max — erholt sich schnell wenn Signale kommen?
+### AGC (decoder.py) ⛔ DEAKTIVIERT (13.04.2026)
+**Ergebnis:** AGC kollidiert mit Noise-Floor-Norm → 4x Gain → Clipping → 0-2 Stationen.
+DeepSeek-Analyse: Dreifach-Normalisierung (Noise-Floor + Whitening + RMS) reicht aus.
+AGC ist NICHT noetig und bleibt deaktiviert.
 
-### DT-Zeitkorrektur (ntp_time.py)
-- [ ] `[DT-Korr] Median=+X.XXXs → Korrektur=+X.XXXs (n=XX)` im Log
-- [ ] Vorzeichen korrekt? (positiver Median → positive Korrektur)
-- [ ] Smoothing-Faktor 0.3 → konvergiert nicht zu langsam/schnell?
-- [ ] 50ms Deadband → blockiert nicht sinnvolle Korrekturen?
+### DT-Zeitkorrektur (ntp_time.py) ✓ GETESTET (13.04.2026)
+**Ergebnis:** Funktioniert! Kumulative Korrektur, 4-Zyklen-Messung, 20-Zyklen-Betrieb.
+- [x] DT-Werte nach Korrektur bei ±0.2 (vorher +0.7)
+- [x] TX-Timing auf ICOM: stabil +0.2 (perfekt)
+- [x] Kumulative Korrektur verhindert Oszillation
+- [x] Startup Audio-Purge (2s) verhindert Müll-DT beim Start
+- [x] Anzeige in Statusbar: `DT: +0.XXs`
 
 ### AP-Lite (ap_lite.py)
 - [ ] Erst nach Feldtest `AP_LITE_ENABLED = True` setzen!
@@ -166,15 +168,15 @@ wächst mit jedem Feature — je länger wir warten, desto mehr muss entkoppelt 
 - [ ] Block-Wechsel alle N Zyklen beobachtbar?
 - [ ] QSO wird NICHT durch OMNI-TX unterbrochen?
 
-### Propagation (propagation.py)
-- [ ] HamQSL-Abruf funktioniert (Netzwerk verfügbar)?
-- [ ] Farben unter Band-Buttons plausibel?
-- [ ] 80m mittags = rot/orange, 20m mittags = grün?
+### Propagation (propagation.py) ✓ GETESTET (13.04.2026)
+- [x] HamQSL-Abruf funktioniert
+- [x] Farben stimmen (verglichen mit HAM-Toolbox)
+- [x] Band-Gruppen-Fix: "80m-40m" → einzelne Bänder aufgelöst
 
-### Radio-Abstraktionsschicht
-- [ ] `create_radio(settings)` → FlexRadio Instanz funktioniert?
-- [ ] PREAMP_PRESETS aus presets.py werden korrekt geladen?
-- [ ] Keine Regression bei Bandwechsel, Diversity, DX Tuning?
+### Radio-Abstraktionsschicht ✓ GETESTET (13.04.2026)
+- [x] `create_radio(settings)` → FlexRadio Instanz funktioniert
+- [x] PREAMP_PRESETS werden korrekt geladen
+- [x] Bandwechsel, Diversity, DX Tuning: keine Regression
 
 ---
 
