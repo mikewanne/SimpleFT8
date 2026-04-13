@@ -106,23 +106,6 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self._connect_signals()
         self.rx_panel.set_qso_log(self.qso_log)
 
-        # Timer starten
-        self.timer.start()
-
-        # FlexRadio + Decoder starten
-        self._start_radio()
-
-        # UI mit gespeicherten Settings synchronisieren
-        self.control_panel._set_band(settings.band)
-        self.control_panel._set_mode(settings.mode)
-        self.control_panel.set_power_preset(settings.get("power_preset", 10))
-
-        # PSKReporter Timer (alle 3 Minuten abfragen)
-        from PySide6.QtCore import QTimer
-        self._psk_timer = QTimer(self)
-        self._psk_timer.timeout.connect(self._fetch_psk_stats)
-        self._psk_timer.start(180000)  # 3 Minuten
-
         # OMNI-TX: Initialisieren (deaktiviert), Easter Egg verbinden
         from core import omni_tx as _omni
         _block_cycles = max(10, self.settings.get("diversity_operate_cycles", 80) // 2)
@@ -138,6 +121,23 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         # AP-Lite: Initialisieren (deaktiviert, AP_LITE_ENABLED=False)
         from core import ap_lite as _ap
         self._ap_lite = _ap.get_instance(encoder=self.encoder)
+
+        # Timer starten
+        self.timer.start()
+
+        # FlexRadio + Decoder starten (NACH OMNI-TX/Auto-Hunt/AP-Lite Init!)
+        self._start_radio()
+
+        # UI mit gespeicherten Settings synchronisieren
+        self.control_panel._set_band(settings.band)
+        self.control_panel._set_mode(settings.mode)
+        self.control_panel.set_power_preset(settings.get("power_preset", 10))
+
+        # PSKReporter Timer (alle 3 Minuten abfragen)
+        from PySide6.QtCore import QTimer
+        self._psk_timer = QTimer(self)
+        self._psk_timer.timeout.connect(self._fetch_psk_stats)
+        self._psk_timer.start(180000)  # 3 Minuten
 
         # Propagation: Hintergrund-Abruf starten + UI alle 5 Minuten aktualisieren
         from core import propagation as _prop

@@ -6,7 +6,7 @@ Dark Theme Redesign mit LED-Balance-Indikator.
 import time
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QSlider, QFrame, QGridLayout, QButtonGroup,
+    QSlider, QFrame, QGridLayout, QButtonGroup, QProgressBar,
 )
 from PySide6.QtCore import Signal, Qt, QTimer
 from PySide6.QtGui import QFont, QPainter, QColor, QPen
