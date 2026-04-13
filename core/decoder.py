@@ -157,12 +157,6 @@ class Decoder(QObject):
                     wait = _WAKE_TIME - cycle_pos
                 else:
                     wait = 15.0 - cycle_pos + _WAKE_TIME
-                # DT-Korrektur: Sleep-Zeit anpassen (nicht now!)
-                # Positive DT = Signale kommen "zu spät" im Buffer an
-                # → Unser Buffer startet zu früh → LÄNGER schlafen → PLUS!
-                from core import ntp_time
-                dt_adj = ntp_time.get_correction()
-                wait = max(0.1, wait + dt_adj)  # PLUS: später aufwachen
                 time.sleep(wait)
 
                 with self._decode_busy_lock:
@@ -227,10 +221,20 @@ class Decoder(QObject):
                     audio_12k, (0, max(0, CYCLE_SAMPLES_12K - len(audio_12k)))
                 )
 
+            # DT-Korrektur: Audio-Buffer verschieben (nicht Sleep-Zeit!)
+            # Positive Korrektur = Signale zu spät im Buffer → vorne abschneiden
+            from core import ntp_time
+            _dt_shift = ntp_time.get_correction()
+            _shift_samples = int(_dt_shift * SAMP_RATE)
+            if abs(_shift_samples) > 100 and abs(_shift_samples) < CYCLE_SAMPLES_12K // 3:
+                if _shift_samples > 0:
+                    # Signal kommt zu spät → vorne abschneiden, hinten padden
+                    audio_12k = np.pad(audio_12k[_shift_samples:], (0, _shift_samples))
+                else:
+                    # Signal kommt zu früh → hinten abschneiden, vorne padden
+                    audio_12k = np.pad(audio_12k[:_shift_samples], (-_shift_samples, 0))
+
             # RMS Auto-Gain Control — DEAKTIVIERT
-            # Kollidiert mit Noise-Floor-Normalisierung (Zeile 199-206):
-            # Noise-Norm setzt Median auf 300, AGC will RMS auf 8225 → 4x Gain → Clipping!
-            # TODO: Entweder Noise-Norm ODER AGC, nicht beides. Feldtest nötig.
             # audio_12k, self._agc_state = _apply_agc(audio_12k, self._agc_state)
 
             t_pre = time.time()
