@@ -148,13 +148,17 @@ class Decoder(QObject):
 
         while self._running:
             try:
-                from core import ntp_time
-                now = ntp_time.get_time()  # DT-korrigierte Zeit (inkl. Radio-Latenz)
+                now = time.time()
                 cycle_pos = now % 15.0
                 if cycle_pos < 13.5:
                     wait = 13.5 - cycle_pos
                 else:
                     wait = 15.0 - cycle_pos + 13.5
+                # DT-Korrektur: Sleep-Zeit anpassen (nicht now!)
+                # Positive Korrektur = wir sind zu spät → früher aufwachen
+                from core import ntp_time
+                dt_adj = ntp_time.get_correction()
+                wait = max(0.1, wait - dt_adj)  # min 100ms Sleep
                 time.sleep(wait)
 
                 with self._decode_busy_lock:
@@ -219,10 +223,11 @@ class Decoder(QObject):
                     audio_12k, (0, max(0, CYCLE_SAMPLES_12K - len(audio_12k)))
                 )
 
-            # RMS Auto-Gain Control (vor Whitening) — verhindert Übersteuerung
-            audio_12k, self._agc_state = _apply_agc(audio_12k, self._agc_state)
-            print(f"[AGC] Gain={self._agc_state[0]:.2f}x "
-                  f"({20*np.log10(max(self._agc_state[0],1e-6)):.1f} dB)")
+            # RMS Auto-Gain Control — DEAKTIVIERT
+            # Kollidiert mit Noise-Floor-Normalisierung (Zeile 199-206):
+            # Noise-Norm setzt Median auf 300, AGC will RMS auf 8225 → 4x Gain → Clipping!
+            # TODO: Entweder Noise-Norm ODER AGC, nicht beides. Feldtest nötig.
+            # audio_12k, self._agc_state = _apply_agc(audio_12k, self._agc_state)
 
             t_pre = time.time()
             audio_12k = _preprocess_audio(audio_12k)
