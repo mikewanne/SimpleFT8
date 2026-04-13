@@ -209,6 +209,8 @@ class _ModeBandCard(QFrame):
         self.btn_ft4 = QPushButton("FT4")
         self.btn_ft4.setCheckable(True)
         self.btn_ft4.setFixedHeight(28)
+        self.btn_ft4.setEnabled(False)  # Noch nicht implementiert
+        self.btn_ft4.setToolTip("FT4 (7.5s Zyklen) — noch nicht implementiert")
         self.btn_ft2 = QPushButton("FT2")
         self.btn_ft2.setFixedHeight(28)
         self.btn_ft2.setEnabled(False)  # Ausgegraut — noch nicht implementiert
