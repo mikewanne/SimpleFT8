@@ -46,6 +46,7 @@ class CycleMixin:
             n = ntp_time._last_sample_count
             if n > 0:
                 self.control_panel.update_dt_correction(corr, n)
+                self._update_statusbar()  # DT in Statusbar aktualisieren
 
         if self._rx_mode == "diversity":
             # Queue IMMER poppen — auch bei 0 Stationen!
