@@ -1060,8 +1060,8 @@ class ControlPanel(QWidget):
             self._a1_count_label.setText("")
             self._a2_count_label.setText("")
         elif a1_avg_snr is not None and a2_avg_snr is not None:
-            self._a1_count_label.setText(f"Ø{a1_avg_snr:+.0f}dB")
-            self._a2_count_label.setText(f"Ø{a2_avg_snr:+.0f}dB")
+            self._a1_count_label.setText(f"{a1_count} Ø{a1_avg_snr:+.0f}")
+            self._a2_count_label.setText(f"{a2_count} Ø{a2_avg_snr:+.0f}")
         else:
             self._a1_count_label.setText(f"{a1_count} St.")
             self._a2_count_label.setText(f"{a2_count} St.")
