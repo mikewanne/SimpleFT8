@@ -143,6 +143,8 @@ SimpleFT8/
 
 **Tested:** FLEX-8400M. **Expected compatible:** FLEX-6300/6400/6500/6600/6700/8400/8600 series.
 
+**Radio-agnostic architecture (v0.28+):** The entire UI and decoder layer is fully decoupled from the radio driver. New radios can be added by implementing a single file (`radio/ic7300.py` etc.) — no changes to the rest of the software. Currently prepared: **ICOM IC-7300** (CI-V + USB Audio).
+
 ### Detailed Feature Documentation
 
 Each feature has its own in-depth explanation (DE + EN) — with physics, formulas, pros/cons:

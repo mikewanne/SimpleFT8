@@ -243,6 +243,9 @@ VITA-49 RX (24kHz int16 mono)
 
 Jedes FlexRadio mit SmartSDR TCP API sollte funktionieren. Diversity erfordert zwei Antennenanschluesse.
 
+**Radio-agnostische Architektur (ab v0.28):**
+Die gesamte UI- und Decoder-Schicht ist vollstaendig vom Radio-Treiber entkoppelt. Neue Radios koennen durch Implementierung einer einzigen Datei (`radio/ic7300.py` etc.) angebunden werden — ohne Aenderungen am Rest der Software. Aktuell vorbereitet: **ICOM IC-7300** (CI-V + USB Audio).
+
 ---
 
 ## Bedienung
