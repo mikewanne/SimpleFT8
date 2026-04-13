@@ -595,6 +595,20 @@ class _QSOStatusCard(QFrame):
         )
         lay.addWidget(self.btn_cq)
 
+        # Operator Presence Balken (Totmannschalter)
+        # Fest 15 Min, nicht konfigurierbar, gesetzliche Pflicht (DE)
+        self.presence_bar = QProgressBar()
+        self.presence_bar.setRange(0, 900)  # 900 Sekunden = 15 Min
+        self.presence_bar.setValue(900)
+        self.presence_bar.setFixedHeight(4)
+        self.presence_bar.setTextVisible(False)
+        self.presence_bar.setStyleSheet("""
+            QProgressBar { background: #1a1a1a; border: none; border-radius: 1px; }
+            QProgressBar::chunk { background: #00AA00; border-radius: 1px; }
+        """)
+        self.presence_bar.setToolTip("Operator Presence — 15 Min Timeout")
+        lay.addWidget(self.presence_bar)
+
         self.qso_counter_label = QLabel("")
         self.qso_counter_label.setStyleSheet(
             f"color: #88CC66; font-family: {_FONT}; font-size: 10px; font-weight: bold;"
@@ -808,6 +822,7 @@ class ControlPanel(QWidget):
         self.tx_indicator = qso_card.tx_indicator
         self.btn_cq = qso_card.btn_cq
         self.btn_cq.clicked.connect(self._on_cq_clicked)
+        self.presence_bar = qso_card.presence_bar
         self.qso_counter_label = qso_card.qso_counter_label
         self.btn_advance = qso_card.btn_advance
         self.btn_advance.clicked.connect(self.advance_clicked.emit)
@@ -1045,6 +1060,21 @@ class ControlPanel(QWidget):
         self._freq_hist.update_data(data)
         if data.get('bins') or data.get('cq_freq'):
             self._freq_hist.setVisible(True)
+
+    def update_presence(self, remaining_secs: int) -> None:
+        """Operator Presence Balken aktualisieren (0-900 Sekunden)."""
+        self.presence_bar.setValue(max(0, remaining_secs))
+        # Farbe: grün > 5min, gelb > 2min, rot <= 2min
+        if remaining_secs > 300:
+            color = "#00AA00"
+        elif remaining_secs > 120:
+            color = "#CCAA00"
+        else:
+            color = "#CC0000"
+        self.presence_bar.setStyleSheet(
+            f"QProgressBar {{ background: #1a1a1a; border: none; border-radius: 1px; }}"
+            f"QProgressBar::chunk {{ background: {color}; border-radius: 1px; }}"
+        )
 
     def update_omni_tx(self, active: bool) -> None:
         """Ω-Symbol ein-/ausblenden je nach OMNI-TX Status."""
