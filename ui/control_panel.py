@@ -672,6 +672,7 @@ class _QSOStatusCard(QFrame):
         snr_utc_row.addWidget(self.utc_label)
         lay.addLayout(snr_utc_row)
 
+        self._last_state = "IDLE"
         self.state_label = QLabel("Status: IDLE")
         self.state_label.setStyleSheet(f"color: #776644; font-family: {_FONT}; font-size: 10px;")
         lay.addWidget(self.state_label)
@@ -1244,6 +1245,7 @@ class ControlPanel(QWidget):
         self.snr_label.setText(f"SNR:  {snr:+d} dB")
 
     def update_state(self, state_name: str):
+        self._last_state = state_name
         self.state_label.setText(f"Status: {state_name}")
 
     def set_rx_active(self, enabled: bool):
@@ -1281,6 +1283,14 @@ class ControlPanel(QWidget):
         for btn in [self.btn_tune, self.btn_cq, self.btn_diversity,
                     self.btn_einmessen, self.btn_normal]:
             btn.setEnabled(connected)
+
+    def update_dt_correction(self, correction: float, sample_count: int):
+        """DT-Korrektur Anzeige im State-Label (dezent)."""
+        if sample_count > 0:
+            self.state_label.setText(
+                f"Status: {self._last_state}  |  DT: {correction:+.2f}s (n={sample_count})"
+            )
+        # _last_state wird in update_state gesetzt
 
     def update_decode_count(self, count: int):
         """Anzahl dekodierter Stationen im letzten Zyklus."""

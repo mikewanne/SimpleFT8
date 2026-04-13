@@ -38,10 +38,14 @@ class CycleMixin:
         count = len(messages) if messages else 0
         self.control_panel.update_decode_count(count)
 
-        # DT-Korrektur aktualisieren (TODO: ungetestet — Feldtest nötig)
+        # DT-Korrektur aktualisieren + Anzeige
         if messages:
             dt_values = [m.dt for m in messages if hasattr(m, 'dt')]
             ntp_time.update_from_decoded(dt_values)
+            corr = ntp_time.get_correction()
+            n = ntp_time._last_sample_count
+            if n > 0:
+                self.control_panel.update_dt_correction(corr, n)
 
         if self._rx_mode == "diversity":
             # Queue IMMER poppen — auch bei 0 Stationen!
