@@ -150,10 +150,13 @@ class Decoder(QObject):
             try:
                 now = time.time()
                 cycle_pos = now % 15.0
-                if cycle_pos < 13.5:
-                    wait = 13.5 - cycle_pos
+                # 14.0 statt 13.5: kompensiert VITA-49 Audio-Latenz (~0.5s)
+                # SmartSDR/WSJT-X zeigen DT +0.2..+0.4, wir hatten +0.7 bei 13.5
+                _WAKE_TIME = 14.0
+                if cycle_pos < _WAKE_TIME:
+                    wait = _WAKE_TIME - cycle_pos
                 else:
-                    wait = 15.0 - cycle_pos + 13.5
+                    wait = 15.0 - cycle_pos + _WAKE_TIME
                 # DT-Korrektur: Sleep-Zeit anpassen (nicht now!)
                 # Positive DT = Signale kommen "zu spät" im Buffer an
                 # → Unser Buffer startet zu früh → LÄNGER schlafen → PLUS!
@@ -297,7 +300,7 @@ class Decoder(QObject):
                         # 1) Offset-Verschiebung rueckgaengig machen (Window-Sliding)
                         # 2) Buffer-Offset: Decode-Loop wacht bei 13.5s in Slot auf →
                         #    Buffer startet 1.5s VOR Slot-Start → alle DT um +1.5 zu hoch
-                        DT_BUFFER_OFFSET = 1.5
+                        DT_BUFFER_OFFSET = 1.0  # 15.0 - _WAKE_TIME (14.0)
                         raw_results.append({
                             **r,
                             "dt": r["dt"] + offset_samples / SAMP_RATE - DT_BUFFER_OFFSET,
