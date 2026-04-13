@@ -32,7 +32,7 @@ import numpy as np
 
 # ─────────────────────────────────────────────────────────────────────────────
 # FEATURE FLAG — auf True setzen erst wenn Feldtest abgeschlossen!
-AP_LITE_ENABLED: bool = False
+AP_LITE_ENABLED: bool = True   # Feldtest 13.04.2026 — Threshold 0.75
 # ─────────────────────────────────────────────────────────────────────────────
 
 # FT8 Konstanten (12 kHz Sample-Rate, 15s Slots)
