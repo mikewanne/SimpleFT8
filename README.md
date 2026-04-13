@@ -10,6 +10,9 @@
 > **No more manual ALC babysitting, no missed replies, no guessing the best antenna or frequency.**
 > SimpleFT8 automates your entire FT8/FT4 workflow with closed-loop power control, reinforcement learning antenna selection, automatic CQ frequency optimization, and intelligent caller queuing.
 
+> **Every feature explained in detail:** How does it work? Why? Pros/Cons? Physics + formulas.
+> German + English → **[docs/explained/](docs/explained/)** (7 features × 2 languages = 14 documents)
+
 ---
 
 <a name="english"></a>
