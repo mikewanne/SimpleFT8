@@ -84,7 +84,6 @@ See [test screenshots and methodology](docs/DIVERSITY.md) for details.
 - **PSKReporter** integration with spot statistics and distance display
 
 **Implemented — Field Test Pending (⚠️ UNTESTED):**
-- ⚠️ **RMS Auto-Gain Control** *(v0.27, untested)*: Automatic input level regulation before decoder pipeline. Target: −12 dBFS RMS. EMA smoothing (α=0.02), ±3 dB hysteresis to prevent pumping, gain limits [−20 dB … +12 dB]. Prevents decoder overload on crowded bands (40m evenings).
 - ⚠️ **AP-Lite v2.2** *(v0.26, untested)*: Weak QSO rescue via coherent addition of two failed decode attempts. Costas-array alignment (±8 samples / ±1.5 Hz), normalized cross-correlation + Costas-weighted scoring, threshold 0.75. Expected gain: ~4–5 dB SNR. Disabled by default (`AP_LITE_ENABLED = False`), enable after field-test calibration.
 - ⚠️ **DT Time Correction** *(v0.21, untested)*: Median DT from decoded stations used to detect and correct local clock drift. 50 ms dead-band, EMA smoothing factor 0.3, minimum 5 stations. Needs field validation: sign, smoothing, threshold.
 - ⚠️ **Propagation Bars** *(v0.23, untested)*: 4px color indicator under each band button — HamQSL solar data + time-of-day correction for Central Europe. Colors: green/yellow/orange/red. Appears ~3s after app start. Field validation pending: colors plausible?
@@ -121,7 +120,7 @@ SimpleFT8/
 ├── main.py               # Entry point
 ├── config/settings.py    # Settings, band frequencies, radio_type
 ├── core/
-│   ├── decoder.py        # FT8 decode + RMS AGC + signal subtraction + whitening
+│   ├── decoder.py        # FT8 decode + signal subtraction + whitening
 │   ├── encoder.py        # FT8 encode → VITA-49 TX + reference wave generation
 │   ├── ap_lite.py        # AP-Lite v2.2 ⚠️ UNTESTED (coherent addition rescue)
 │   ├── ntp_time.py       # DT-based clock correction ⚠️ UNTESTED
@@ -150,7 +149,6 @@ Each feature has its own in-depth explanation (DE + EN) — with physics, formul
 | Feature | Deutsch | English |
 |---------|---------|---------|
 | Signal Processing | [signal-processing_de.md](docs/explained/signal-processing_de.md) | [signal-processing.md](docs/explained/signal-processing.md) |
-| RMS Auto-Gain | [rms-agc_de.md](docs/explained/rms-agc_de.md) | [rms-agc.md](docs/explained/rms-agc.md) |
 | AP-Lite (QSO Rescue) | [ap-lite_de.md](docs/explained/ap-lite_de.md) | [ap-lite.md](docs/explained/ap-lite.md) |
 | DT Time Correction | [dt-correction_de.md](docs/explained/dt-correction_de.md) | [dt-correction.md](docs/explained/dt-correction.md) |
 | Propagation Indicators | [propagation-indicators_de.md](docs/explained/propagation-indicators_de.md) | [propagation-indicators.md](docs/explained/propagation-indicators.md) |
@@ -225,7 +223,6 @@ Siehe [Test-Screenshots und Methodik](docs/DIVERSITY_DE.md) für Details.
 - **PSKReporter**-Integration mit Spot-Statistik und Entfernungsanzeige
 
 **Implementiert — Feldtest ausstehend (⚠️ UNGETESTET):**
-- ⚠️ **RMS Auto-Gain Control** *(v0.27, ungetestet)*: Automatische Eingangspegelregelung vor der Decoder-Pipeline. Ziel: −12 dBFS RMS. EMA-Glättung (α=0,02), ±3 dB Hysterese (kein Pumpen), Gain-Grenzen [−20 dB … +12 dB]. Verhindert Decoder-Übersteuerung auf belebten Bändern (40m abends).
 - ⚠️ **AP-Lite v2.2** *(v0.26, ungetestet)*: Schwache QSOs retten via kohärenter Addition zweier fehlgeschlagener Dekodierversuche. Costas-Alignment (±8 Samples / ±1,5 Hz), normalisierte Kreuzkorrelation + Costas-Gewichtung, Schwellwert 0,75. Erwarteter Gewinn: ~4–5 dB SNR. Standardmäßig deaktiviert (`AP_LITE_ENABLED = False`), nach Feldtest-Kalibrierung aktivieren.
 - ⚠️ **DT-Zeitkorrektur** *(v0.21, ungetestet)*: Median-DT aus dekodierten Stationen zur Erkennung und Korrektur der lokalen Uhrdrift. 50 ms Totband, EMA-Faktor 0,3, Minimum 5 Stationen. Feldvalidierung ausstehend: Vorzeichen, Glättung, Schwellwert.
 - ⚠️ **Propagation-Balken** *(v0.23, ungetestet)*: 4px Farbindikator unter jedem Bandbutton — HamQSL-Solardaten + bandspezifische Tageszeit-Korrektur für Mitteleuropa. Farben: grün/gelb/orange/rot. Erscheint ~3s nach App-Start. Feldvalidierung ausstehend: Farben plausibel?
