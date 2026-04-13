@@ -142,6 +142,11 @@ class QSOMixin:
     @Slot(str)
     def _on_send_message(self, message: str):
         """FT8-Nachricht encoden und ueber FlexRadio senden."""
+        # Operator Presence Check (Totmannschalter, gesetzl. Pflicht DE)
+        # Laufende QSOs werden IMMER zu Ende gefuehrt!
+        if not self.presence_can_tx():
+            print(f"[Presence] TX blockiert (Operator abwesend): '{message}'")
+            return
         if message.startswith("CQ "):
             self._has_sent_cq = True
             # OMNI-TX: CQ-Slot überspringen wenn Muster es vorgibt.

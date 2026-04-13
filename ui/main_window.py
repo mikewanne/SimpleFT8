@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
     QMainWindow, QSplitter, QWidget, QVBoxLayout,
     QMessageBox, QScrollArea, QLabel,
 )
-from PySide6.QtCore import Qt, Slot
+from PySide6.QtCore import Qt, Slot, QEvent
 
 from config.settings import Settings, BAND_FREQUENCIES
 from core.timing import FT8Timer
@@ -142,6 +142,21 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self._prop_timer.start(5 * 60 * 1000)   # 5 Minuten
         # Erster UI-Update nach kurzem Delay (Abruf läuft im Hintergrund)
         QTimer.singleShot(3000, self._update_propagation_ui)
+
+        # ── Operator Presence (Totmannschalter) ───────────────────
+        # Gesetzliche Pflicht (DE): Operator muss anwesend sein.
+        # Fest 15 Min, nicht konfigurierbar, nicht umgehbar.
+        # Bei Ablauf: CQ stoppt, kein neuer TX. Laufendes QSO wird zu Ende gefuehrt.
+        _PRESENCE_TIMEOUT = 900  # 15 Minuten in Sekunden
+        self._presence_remaining = _PRESENCE_TIMEOUT
+        self._presence_timeout = _PRESENCE_TIMEOUT
+        self._presence_expired = False
+        self._presence_timer = QTimer(self)
+        self._presence_timer.timeout.connect(self._on_presence_tick)
+        self._presence_timer.start(1000)  # Jede Sekunde
+        # Mouse-Tracking fuer Presence-Reset
+        self.setMouseTracking(True)
+        self.installEventFilter(self)
 
         # Statusbar
         self._update_statusbar()
@@ -451,6 +466,65 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         sizes = self.settings.get("splitter_sizes")
         if sizes and len(sizes) == 3:
             self.splitter.setSizes([int(s) for s in sizes])
+
+    # ── Operator Presence (Totmannschalter) ─────────────────────
+
+    def eventFilter(self, obj, event):
+        """Alle Input-Events abfangen → Presence-Timer zuruecksetzen."""
+        etype = event.type()
+        if etype in (QEvent.Type.MouseMove, QEvent.Type.KeyPress,
+                     QEvent.Type.MouseButtonPress):
+            self._reset_presence()
+        return super().eventFilter(obj, event)
+
+    def _reset_presence(self):
+        """Operator ist aktiv — Timer zuruecksetzen."""
+        was_expired = self._presence_expired
+        self._presence_remaining = self._presence_timeout
+        self._presence_expired = False
+        if was_expired:
+            print("[Presence] Operator zurueck — TX freigegeben")
+
+    def _on_presence_tick(self):
+        """Jede Sekunde: Countdown herunterzaehlen."""
+        if self._presence_remaining > 0:
+            self._presence_remaining -= 1
+
+        self.control_panel.update_presence(self._presence_remaining)
+
+        if self._presence_remaining <= 0 and not self._presence_expired:
+            self._presence_expired = True
+            print("[Presence] TIMEOUT — Operator nicht anwesend, CQ wird gestoppt")
+            # CQ stoppen (aber laufendes QSO zu Ende fuehren!)
+            if self.qso_sm.cq_mode:
+                # Nur CQ stoppen wenn KEIN aktives QSO laeuft
+                if self.qso_sm.state in (QSOState.CQ_CALLING, QSOState.CQ_WAIT,
+                                          QSOState.IDLE, QSOState.TIMEOUT):
+                    self.qso_sm.stop_cq()
+                    self.control_panel.set_cq_active(False)
+                    self.qso_panel.add_info(
+                        "Operator Presence abgelaufen — CQ gestoppt. "
+                        "Maus bewegen oder Taste druecken zum Fortsetzen."
+                    )
+                else:
+                    # QSO laeuft → nach QSO-Ende stoppen
+                    self.qso_panel.add_info(
+                        "Operator Presence abgelaufen — CQ wird nach QSO-Ende gestoppt."
+                    )
+
+    def presence_can_tx(self) -> bool:
+        """True wenn TX erlaubt (Operator anwesend ODER QSO laeuft).
+
+        Laufende QSOs werden IMMER zu Ende gefuehrt — nur neue CQ werden blockiert.
+        """
+        if not self._presence_expired:
+            return True
+        # QSO laeuft → TX erlauben damit es sauber abgeschlossen wird
+        if self.qso_sm.state in (QSOState.TX_CALL, QSOState.WAIT_REPORT,
+                                  QSOState.TX_REPORT, QSOState.WAIT_RR73,
+                                  QSOState.TX_RR73):
+            return True
+        return False
 
     def closeEvent(self, event):
         # Fenstergeometrie + Splitter-Breiten speichern
