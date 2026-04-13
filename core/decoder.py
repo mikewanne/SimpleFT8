@@ -155,10 +155,11 @@ class Decoder(QObject):
                 else:
                     wait = 15.0 - cycle_pos + 13.5
                 # DT-Korrektur: Sleep-Zeit anpassen (nicht now!)
-                # Positive Korrektur = wir sind zu spät → früher aufwachen
+                # Positive DT = Signale kommen "zu spät" im Buffer an
+                # → Unser Buffer startet zu früh → LÄNGER schlafen → PLUS!
                 from core import ntp_time
                 dt_adj = ntp_time.get_correction()
-                wait = max(0.1, wait - dt_adj)  # min 100ms Sleep
+                wait = max(0.1, wait + dt_adj)  # PLUS: später aufwachen
                 time.sleep(wait)
 
                 with self._decode_busy_lock:
