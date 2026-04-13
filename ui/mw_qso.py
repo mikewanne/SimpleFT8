@@ -30,6 +30,9 @@ class QSOMixin:
         if self.qso_sm.cq_mode:
             self.qso_sm.stop_cq()
             self.control_panel.set_cq_active(False)
+        # Auto-Hunt pausieren bei manuellem Klick
+        if self._auto_hunt.active:
+            self._auto_hunt.on_manual_qso_start()
         self._active_qso_targets.add(msg.caller)  # 150s Aging fuer angerufene Station
         self.rx_panel.set_active_call(msg.caller)  # Zeile im RX-Panel hervorheben
         self.qso_panel.add_info(f"Rufe {msg.caller}...")
@@ -161,6 +164,9 @@ class QSOMixin:
         """RR73 gesendet — ADIF schreiben. ✓ erst bei _on_qso_confirmed."""
         self._active_qso_targets.discard(qso_data.their_call)
         self.rx_panel.set_active_call("")
+        # Auto-Hunt: QSO erfolgreich → Pause, dann naechste Station
+        if self._auto_hunt.active:
+            self._auto_hunt.on_qso_complete(qso_data.their_call)
 
         band = self.settings.band.upper()
         freq = self.settings.frequency_mhz
@@ -284,6 +290,9 @@ class QSOMixin:
         self._active_qso_targets.discard(their_call)
         self.rx_panel.set_active_call("")
         self.qso_panel.add_timeout(their_call)
+        # Auto-Hunt: Timeout → Cooldown setzen, naechste Station
+        if self._auto_hunt.active:
+            self._auto_hunt.on_qso_timeout(their_call)
         # CQ-Button aktiv halten wenn CQ-Modus laeuft
         if self.qso_sm.cq_mode:
             self.control_panel.set_cq_active(True)

@@ -267,6 +267,30 @@ class CycleMixin:
                             snr_estimate=float(getattr(self.qso_sm, '_last_snr', -10)),
                         )
 
+        # Auto-Hunt: automatisch CQ-Stationen anrufen (verstecktes Feature)
+        if self._auto_hunt.active:
+            _idle = self.qso_sm.state in (QSOState.IDLE, QSOState.TIMEOUT)
+            _candidate = self._auto_hunt.select_next(
+                messages=messages or [],
+                qso_idle=_idle,
+                presence_ok=self.presence_can_tx(),
+            )
+            if _candidate:
+                # Hunt-QSO starten (gleicher Weg wie manueller Klick)
+                self._active_qso_targets.add(_candidate.call)
+                self.rx_panel.set_active_call(_candidate.call)
+                self.qso_sm.max_calls = 3
+                # Even/Odd: sende im GEGENTEILIGEN Slot der Gegenstation
+                if _candidate.tx_even is not None:
+                    self.encoder.tx_even = not _candidate.tx_even
+                else:
+                    self.encoder.tx_even = None
+                self.qso_sm.start_qso(
+                    their_call=_candidate.call,
+                    their_grid=_candidate.grid,
+                    freq_hz=_candidate.freq_hz,
+                )
+
     @Slot(float, float)
     def _on_cycle_tick(self, seconds_in_cycle: float, cycle_duration: float):
         if not self.rx_panel._rx_active:
