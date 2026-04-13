@@ -160,9 +160,11 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self._presence_timer = QTimer(self)
         self._presence_timer.timeout.connect(self._on_presence_tick)
         self._presence_timer.start(1000)  # Jede Sekunde
-        # Mouse-Tracking fuer Presence-Reset
-        self.setMouseTracking(True)
-        self.installEventFilter(self)
+        # Mouse-Tracking fuer Presence-Reset (auf QApplication-Ebene!)
+        # installEventFilter auf self fängt nur MainWindow-Events,
+        # NICHT Klicks auf Buttons/Tabellen. QApplication fängt ALLES.
+        from PySide6.QtWidgets import QApplication
+        QApplication.instance().installEventFilter(self)
 
         # Statusbar
         self._update_statusbar()
@@ -478,10 +480,13 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
     # ── Operator Presence (Totmannschalter) ─────────────────────
 
     def eventFilter(self, obj, event):
-        """Alle Input-Events abfangen → Presence-Timer zuruecksetzen."""
+        """Alle Input-Events abfangen → Presence-Timer zuruecksetzen.
+
+        Installiert auf QApplication-Ebene — fängt Events von ALLEN Widgets.
+        """
         etype = event.type()
         if etype in (QEvent.Type.MouseMove, QEvent.Type.KeyPress,
-                     QEvent.Type.MouseButtonPress):
+                     QEvent.Type.MouseButtonPress, QEvent.Type.Wheel):
             self._reset_presence()
         return super().eventFilter(obj, event)
 
