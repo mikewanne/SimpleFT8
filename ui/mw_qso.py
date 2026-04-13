@@ -58,8 +58,14 @@ class QSOMixin:
     @Slot()
     def _on_cq_clicked(self):
         if self.control_panel.btn_cq.isChecked():
+            # Laufendes Hunt-QSO abbrechen bevor CQ startet!
+            if self.qso_sm.state not in (QSOState.IDLE, QSOState.TIMEOUT,
+                                          QSOState.CQ_CALLING, QSOState.CQ_WAIT):
+                self.qso_sm.cancel()
+                self._active_qso_targets.clear()
+                self.rx_panel.set_active_call("")
+                print("[CQ] Hunt-QSO abgebrochen → CQ starten")
             # CQ: immer auf festem Slot senden (aktueller Gegenteil-Slot)
-            # So antworten Stationen konsistent im anderen Slot
             self.encoder.tx_even = not self.timer.is_even_cycle()
             slot = "EVEN" if self.encoder.tx_even else "ODD"
             print(f"[CQ] Fester TX-Slot: {slot}")
