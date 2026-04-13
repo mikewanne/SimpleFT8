@@ -102,26 +102,47 @@ def _fetch_and_parse() -> Optional[Dict[str, str]]:
 
     conditions: Dict[str, str] = {b: "grey" for b in ALL_BANDS}
 
-    calc = root.find("calculatedconditions")
+    # HamQSL: calculatedconditions ist unter solardata (rekursiv suchen)
+    calc = root.find(".//calculatedconditions")
     if calc is None:
         return conditions
 
     for elem in calc.findall("band"):
-        xml_name = elem.get("name", "")   # z.B. "80m-80m"
+        xml_name = elem.get("name", "")   # z.B. "80m-40m" oder "30m-20m"
         xml_time = elem.get("time", "")   # "day" oder "night"
         raw      = (elem.text or "").strip().lower()  # "good"/"fair"/"poor"
 
         if xml_time != time_of_day or raw not in _CONDITION_ORDER:
             continue
 
-        # Band extrahieren: "80m-80m" → "80m"
-        band = xml_name.split("-")[0] if "-" in xml_name else xml_name
-        if band not in XML_BANDS:
-            continue
+        # Band-Gruppe aufloesen: "80m-40m" → ["80m", "40m"]
+        # HamQSL gruppiert: 80m-40m, 30m-20m, 17m-15m, 12m-10m
+        parts = xml_name.split("-")
+        if len(parts) == 2:
+            # "80m-40m" → beide Bänder bekommen den gleichen Wert
+            bands_in_group = _expand_band_range(parts[0], parts[1])
+        else:
+            bands_in_group = [xml_name]
 
-        conditions[band] = _apply_time_correction(band, raw, utc_hour)
+        for band in bands_in_group:
+            if band in XML_BANDS:
+                conditions[band] = _apply_time_correction(band, raw, utc_hour)
 
     return conditions
+
+
+def _expand_band_range(band_from: str, band_to: str) -> list:
+    """Band-Bereich aufloesen: '80m','40m' → ['80m','60m','40m']."""
+    # Alle Baender in absteigender Wellenlaenge
+    _ALL_ORDERED = ["160m", "80m", "60m", "40m", "30m", "20m", "17m", "15m", "12m", "10m"]
+    try:
+        idx_from = _ALL_ORDERED.index(band_from)
+        idx_to = _ALL_ORDERED.index(band_to)
+        if idx_from > idx_to:
+            idx_from, idx_to = idx_to, idx_from
+        return _ALL_ORDERED[idx_from:idx_to + 1]
+    except ValueError:
+        return [band_from, band_to]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
