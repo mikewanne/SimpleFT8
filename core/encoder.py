@@ -134,8 +134,7 @@ class Encoder(QObject):
         Gibt den Slot-Start zurueck auf den wir TX-Parity haben.
         Liefert stets einen Zeitpunkt in der Zukunft (oder sehr nah dran).
         """
-        from core import ntp_time
-        now = ntp_time.get_time()  # DT-korrigierte Zeit
+        now = time.time()
         cycle_num = int(now / 15.0)
         cycle_pos = now % 15.0
         is_even = (cycle_num % 2 == 0)

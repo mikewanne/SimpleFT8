@@ -98,12 +98,10 @@ wächst mit jedem Feature — je länger wir warten, desto mehr muss entkoppelt 
 - [ ] 40m abends: verhindert AGC Decoder-Übersteuerung?
 - [ ] Stille → Gain rampt auf 4.0x Max. Kein Problem wenn danach Signale kommen?
 
-#### Frequenz-Drift-Kompensation ✓ CODE FERTIG (v0.30)
-**Was:** Extra Decode-Passes mit linearer Drift-Korrektur (±0.5, ±1.5 Hz/s).
-**Warum:** Billige QRP-Gegenstationen driften 0.5-5 Hz → wir dekodieren sie schlechter.
-**Methode:** Analytisches Signal (Hilbert) × exp(-jπ·d·t²), 4 Drift-Raten auf Residual-Audio.
-- [x] `core/drift.py`: `apply_drift_correction()`, `generate_drift_variants()`
-- [x] `core/decoder.py`: 4 Drift-Passes nach Signal Subtraction integriert
+#### Frequenz-Drift-Kompensation ⛔ ENTFERNT (13.04.2026)
+**Ergebnis Feldtest:** 0 zusaetzliche Decodes in >20 Zyklen auf 20m+40m.
+LDPC-Decoder kompensiert intern ~1 Hz Drift. Stationen mit >2 Hz/s Drift sind <0.1%.
+400ms/Zyklus Overhead fuer 0 Nutzen → Code komplett entfernt.
 - [x] 6 Unit Tests (Shape, Clipping, Varianten, Analytic Signal, Audio-Change)
 - [ ] **Feldtest:** Bringt es tatsaechlich neue Decodes? Log: `[Drift] +N Stationen`
 - [ ] Performance-Impact akzeptabel? (~400ms extra pro Zyklus)
@@ -194,7 +192,7 @@ AGC ist NICHT noetig und bleibt deaktiviert.
   - base_radio.py (ABC) mit 3 abstract + 6 default methods erweitert
   - IC-7300 Fork: nur noch `radio/ic7300.py` mit den 10 Methoden implementieren
 - [x] **main_window.py Split (v0.29)** — 1755→473 Zeilen, 4 Mixins, 29→35 Unit Tests
-- [x] **Frequenz-Drift-Kompensation (v0.30)** — core/drift.py, 4 Drift-Passes in decoder.py
+- [x] Frequenz-Drift-Kompensation implementiert, nach Feldtest wieder ENTFERNT (0 Nutzen, 400ms Overhead)
 
 ### 12.04.2026 (Session 2 — komplette Offline-Implementierung)
 - [x] Radio-Abstraktions-Layer: base_radio.py + presets.py + radio_factory.py (v0.25)
