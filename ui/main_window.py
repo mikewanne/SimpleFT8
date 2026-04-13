@@ -160,12 +160,23 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self._presence_timer = QTimer(self)
         self._presence_timer.timeout.connect(self._on_presence_tick)
         self._presence_timer.start(1000)  # Jede Sekunde
-        # Presence-Reset: Mausposition alle 500ms prüfen (bulletproof, kein EventFilter nötig)
+        # Presence-Reset: Maus-Polling + Tastatur-Filter
         from PySide6.QtGui import QCursor
         self._presence_last_mouse_pos = QCursor.pos()
         self._presence_poll_timer = QTimer(self)
         self._presence_poll_timer.timeout.connect(self._poll_mouse_activity)
         self._presence_poll_timer.start(500)  # 2× pro Sekunde
+        # Tastatur: eigenes QObject als Filter auf QApplication (Mixin-MRO-safe)
+        from PySide6.QtCore import QObject, QEvent
+        _mw = self  # Closure-Referenz
+        class _KeyFilter(QObject):
+            def eventFilter(self, obj, event):
+                if event.type() == QEvent.Type.KeyPress:
+                    _mw._reset_presence()
+                return False
+        self._key_filter = _KeyFilter(self)
+        from PySide6.QtWidgets import QApplication
+        QApplication.instance().installEventFilter(self._key_filter)
 
         # Statusbar
         self._update_statusbar()
@@ -491,10 +502,6 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
             self._presence_last_mouse_pos = pos
             self._reset_presence()
 
-    def keyPressEvent(self, event):
-        """Tastendruck → Presence Reset."""
-        self._reset_presence()
-        super().keyPressEvent(event)
 
     def _reset_presence(self):
         """Operator ist aktiv — Timer zuruecksetzen."""
