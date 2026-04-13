@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
     QMainWindow, QSplitter, QWidget, QVBoxLayout,
     QMessageBox, QScrollArea, QLabel,
 )
-from PySide6.QtCore import Qt, Slot, QEvent
+from PySide6.QtCore import Qt, Slot
 
 from config.settings import Settings, BAND_FREQUENCIES
 from core.timing import FT8Timer
@@ -160,11 +160,12 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self._presence_timer = QTimer(self)
         self._presence_timer.timeout.connect(self._on_presence_tick)
         self._presence_timer.start(1000)  # Jede Sekunde
-        # Mouse-Tracking fuer Presence-Reset (auf QApplication-Ebene!)
-        # installEventFilter auf self fängt nur MainWindow-Events,
-        # NICHT Klicks auf Buttons/Tabellen. QApplication fängt ALLES.
-        from PySide6.QtWidgets import QApplication
-        QApplication.instance().installEventFilter(self)
+        # Presence-Reset: Mausposition alle 500ms prüfen (bulletproof, kein EventFilter nötig)
+        from PySide6.QtGui import QCursor
+        self._presence_last_mouse_pos = QCursor.pos()
+        self._presence_poll_timer = QTimer(self)
+        self._presence_poll_timer.timeout.connect(self._poll_mouse_activity)
+        self._presence_poll_timer.start(500)  # 2× pro Sekunde
 
         # Statusbar
         self._update_statusbar()
@@ -479,16 +480,21 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
 
     # ── Operator Presence (Totmannschalter) ─────────────────────
 
-    def eventFilter(self, obj, event):
-        """Alle Input-Events abfangen → Presence-Timer zuruecksetzen.
+    def _poll_mouse_activity(self):
+        """Alle 500ms: Hat sich die Maus bewegt? → Presence Reset.
 
-        Installiert auf QApplication-Ebene — fängt Events von ALLEN Widgets.
+        Bulletproof-Methode: kein EventFilter noetig, funktioniert immer.
         """
-        etype = event.type()
-        if etype in (QEvent.Type.MouseMove, QEvent.Type.KeyPress,
-                     QEvent.Type.MouseButtonPress, QEvent.Type.Wheel):
+        from PySide6.QtGui import QCursor
+        pos = QCursor.pos()
+        if pos != self._presence_last_mouse_pos:
+            self._presence_last_mouse_pos = pos
             self._reset_presence()
-        return super().eventFilter(obj, event)
+
+    def keyPressEvent(self, event):
+        """Tastendruck → Presence Reset."""
+        self._reset_presence()
+        super().keyPressEvent(event)
 
     def _reset_presence(self):
         """Operator ist aktiv — Timer zuruecksetzen."""
