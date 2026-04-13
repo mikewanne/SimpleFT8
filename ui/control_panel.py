@@ -1053,11 +1053,15 @@ class ControlPanel(QWidget):
                 self._a1_pct["50%"].setStyleSheet(_DIV_PCT_TEAL)
                 self._a2_pct["50%"].setStyleSheet(_DIV_PCT_TEAL)
 
-    def update_diversity_counts(self, a1_count: int, a2_count: int):
-        """Stationsanzahl pro Antenne im Diversity-Panel anzeigen."""
+    def update_diversity_counts(self, a1_count: int, a2_count: int,
+                                a1_avg_snr: float = None, a2_avg_snr: float = None):
+        """SNR-Durchschnitt pro Antenne im Diversity-Panel anzeigen."""
         if a1_count == 0 and a2_count == 0:
             self._a1_count_label.setText("")
             self._a2_count_label.setText("")
+        elif a1_avg_snr is not None and a2_avg_snr is not None:
+            self._a1_count_label.setText(f"Ø{a1_avg_snr:+.0f}dB")
+            self._a2_count_label.setText(f"Ø{a2_avg_snr:+.0f}dB")
         else:
             self._a1_count_label.setText(f"{a1_count} St.")
             self._a2_count_label.setText(f"{a2_count} St.")
