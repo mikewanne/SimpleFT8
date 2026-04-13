@@ -41,7 +41,11 @@ Siehe [Test-Screenshots und Methodik](docs/DIVERSITY_DE.md) fuer Details.
 
 ## Screenshots
 
-| Diversity 20m (DT-korrigiert, A1/A2) | Vergleichstest 40m |
+**CQ-Modus mit DT-Korrektur, Propagation-Balken, Totmannschalter, PSKReporter 21 Spots (Max 6111km):**
+
+![SimpleFT8 Komplett](docs/screenshots/simpleft8_v031_complete.png)
+
+| Diversity 20m (DT-korrigiert, A1/A2) | Vergleichstest 40m (+37%) |
 |:-:|:-:|
 | ![Diversity 20m](docs/screenshots/diversity_20m_dt_corrected.png) | ![Vergleich](docs/screenshots/diversity_37stations_40m.png) |
 

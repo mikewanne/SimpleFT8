@@ -57,9 +57,9 @@ See [test screenshots and methodology](docs/DIVERSITY.md) for details.
 
 ### Screenshots
 
-**All features running simultaneously** — active QSO (EA2JE, R-13→RR73), Diversity 70:30 (ANT1/ANT2/A1>2/A2>1 visible in RX list), CQ frequency histogram with yellow marker at 2125 Hz (free gap), 74W output, SWR 1.5, Clipguard 85%, PSKReporter 5 spots, 68 cycles until re-calibration:
+**CQ mode with DT correction, Propagation bars, Operator Presence timer, PSKReporter 21 spots (Max 6111km)** — DT values ±0.2 (auto-corrected), 20m band, Japan/Canada/Ukraine visible:
 
-![SimpleFT8 Complete Feature Demo](docs/screenshots/simpleft8_complete.png)
+![SimpleFT8 Complete](docs/screenshots/simpleft8_v031_complete.png)
 
 | Diversity 20m (DT-corrected, A1/A2) | Comparison Test 40m (+37%) |
 |:-:|:-:|
