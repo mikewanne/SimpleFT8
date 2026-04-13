@@ -163,11 +163,14 @@ class CycleMixin:
                 for m in self._diversity_stations.values():
                     self.rx_panel.add_message(m)
                 self.rx_panel.reapply_sort()
-                a1_cnt = sum(1 for m in self._diversity_stations.values()
-                             if getattr(m, 'antenna', '').startswith('A1'))
-                a2_cnt = sum(1 for m in self._diversity_stations.values()
-                             if getattr(m, 'antenna', '').startswith('A2'))
-                self.control_panel.update_diversity_counts(a1_cnt, a2_cnt)
+                a1_msgs = [m for m in self._diversity_stations.values()
+                           if getattr(m, 'antenna', '').startswith('A1')]
+                a2_msgs = [m for m in self._diversity_stations.values()
+                           if getattr(m, 'antenna', '').startswith('A2')]
+                a1_avg = sum(m.snr for m in a1_msgs) / len(a1_msgs) if a1_msgs else -30
+                a2_avg = sum(m.snr for m in a2_msgs) / len(a2_msgs) if a2_msgs else -30
+                self.control_panel.update_diversity_counts(
+                    len(a1_msgs), len(a2_msgs), a1_avg, a2_avg)
 
             self.control_panel.update_decode_count(
                 len(self._diversity_stations)
