@@ -589,8 +589,8 @@ class _QSOStatusCard(QFrame):
         self.btn_cq.setCheckable(True)
         self.btn_cq.setFixedHeight(26)
         self.btn_cq.setStyleSheet(
-            f"QPushButton {{ background: rgba(80,0,0,0.4); color: #AA6666; "
-            f"border: 1px solid rgba(150,40,40,0.4); border-radius: 5px; "
+            f"QPushButton {{ background: rgba(120,0,0,0.45); color: #CC8888; "
+            f"border: 1px solid rgba(180,50,50,0.5); border-radius: 5px; "
             f"font-size: 12px; font-weight: bold; font-family: {_FONT}; }}"
             f"QPushButton:checked {{ background: rgba(200,0,0,0.7); color: #FFD700; "
             f"border-color: rgba(255,180,0,0.7); }}"
@@ -1060,8 +1060,8 @@ class ControlPanel(QWidget):
             self._a1_count_label.setText("")
             self._a2_count_label.setText("")
         elif a1_avg_snr is not None and a2_avg_snr is not None:
-            self._a1_count_label.setText(f"{a1_count} Ø{a1_avg_snr:+.0f}")
-            self._a2_count_label.setText(f"{a2_count} Ø{a2_avg_snr:+.0f}")
+            self._a1_count_label.setText(f"{a1_count} St.\nØ {a1_avg_snr:+.0f} dB")
+            self._a2_count_label.setText(f"{a2_count} St.\nØ {a2_avg_snr:+.0f} dB")
         else:
             self._a1_count_label.setText(f"{a1_count} St.")
             self._a2_count_label.setText(f"{a2_count} St.")
