@@ -104,6 +104,14 @@ Jede der drei Kernfunktionen hat eine eigene ausfuehrliche Dokumentation mit Scr
 - ⚠️ **AP-Lite v2.2** *(v0.26, ungetestet)*: Schwache QSOs retten via kohärenter Addition zweier fehlgeschlagener Dekodierversuche. Costas-Alignment (±8 Samples / ±1,5 Hz), normalisierte Kreuzkorrelation + Costas-Symbol-Gewichtung. Erwarteter Gewinn: ~4–5 dB SNR. Standardmäßig deaktiviert (`AP_LITE_ENABLED = False`), nach Feldtest-Kalibrierung aktivieren.
 - ⚠️ **DT-Zeitkorrektur** *(v0.21, ungetestet)*: Median-DT aus dekodierten Stationen erkennt und korrigiert Uhrdrift des Rechners. 50 ms Totband, EMA-Glättung 0,3. Feldvalidierung ausstehend.
 - ⚠️ **Propagation-Balken** *(v0.23, ungetestet)*: 4px Farbindikator unter Bandbuttons — HamQSL-Solardaten + Tageszeit-Korrektur für Mitteleuropa. Feldvalidierung: Farben plausibel?
+- ⚠️ **Frequenz-Drift-Kompensation** *(v0.30, ungetestet)*: Extra Decode-Passes mit linearer Drift-Korrektur (±0,5 / ±1,5 Hz/s) fuer driftende QRP-Stationen. Analytisches Signal (Hilbert) mit quadratischer Phasenkorrektur. Erwarteter Gewinn: +5–10% Decodes bei billigen VFOs.
+
+### Operator Presence (Totmannschalter)
+- **Gesetzliche Pflicht (DE)**: Operator muss am Funkgeraet anwesend sein — kein Bot-Betrieb
+- Fest 15 Minuten Timeout, nicht konfigurierbar, nicht umgehbar
+- 4px Countdown-Balken unter CQ-Button (gruen → gelb → rot)
+- Reset durch Maus-/Tastaturaktivitaet im SimpleFT8-Fenster
+- Bei Ablauf: CQ wird gestoppt, kein neuer TX — laufende QSOs werden zu Ende gefuehrt
 
 ---
 
