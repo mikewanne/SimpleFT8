@@ -74,20 +74,24 @@ def test_ntp_too_few_stations():
 
 
 def test_ntp_positive_correction():
-    """10 Stationen mit dt=+0.3 → positive Korrektur ~0.09."""
+    """10 Stationen mit dt=+0.8 → kumulative Korrektur +0.8 (erster Zyklus = 100%)."""
     from core import ntp_time
     ntp_time.reset()
-    assert ntp_time.update_from_decoded([0.3] * 10)
+    # Braucht 4 Zyklen (MEASURE_CYCLES) bis Korrektur angewendet wird
+    for _ in range(4):
+        ntp_time.update_from_decoded([0.8] * 10)
     corr = ntp_time.get_correction()
-    assert 0.05 < corr < 0.15, f"DT-Korrektur: {corr}"
+    assert 0.5 < corr < 1.0, f"DT-Korrektur: {corr}"
     ntp_time.reset()
 
 
 def test_ntp_deadband():
-    """DT unter 50ms → keine Korrektur (Messrauschen)."""
+    """DT unter 0.1s (Totband) → keine Korrektur."""
     from core import ntp_time
     ntp_time.reset()
-    assert not ntp_time.update_from_decoded([0.03] * 10)
+    for _ in range(4):
+        ntp_time.update_from_decoded([0.05] * 10)
+    assert ntp_time.get_correction() == 0.0, f"Totband: sollte 0 sein, ist {ntp_time.get_correction()}"
     ntp_time.reset()
 
 
@@ -257,66 +261,6 @@ def test_factory_unknown_type():
         assert False, "Haette ValueError werfen sollen"
     except ValueError:
         pass
-
-
-# ── Drift-Kompensation ───────────────────────────────────────────────────────
-
-def test_drift_no_change_for_zero():
-    """Drift-Rate 0 → Audio unveraendert."""
-    from core.drift import apply_drift_correction
-    audio = (np.random.randn(12000) * 5000).astype(np.int16)
-    result = apply_drift_correction(audio, 0.0)
-    np.testing.assert_array_equal(audio, result)
-
-
-def test_drift_output_shape():
-    """Korrigiertes Audio hat gleiche Laenge und dtype."""
-    from core.drift import apply_drift_correction
-    audio = (np.random.randn(180000) * 5000).astype(np.int16)
-    result = apply_drift_correction(audio, 1.0)
-    assert result.shape == audio.shape
-    assert result.dtype == np.int16
-
-
-def test_drift_no_clipping():
-    """Kein int16 Overflow nach Korrektur."""
-    from core.drift import apply_drift_correction
-    audio = np.full(12000, 30000, dtype=np.int16)
-    result = apply_drift_correction(audio, 2.0)
-    assert np.max(np.abs(result)) <= 32767
-
-
-def test_drift_variants_count():
-    """generate_drift_variants erzeugt 4 Varianten (Standard)."""
-    from core.drift import generate_drift_variants
-    audio = np.zeros(12000, dtype=np.int16)
-    variants = generate_drift_variants(audio)
-    assert len(variants) == 4
-    rates = [r for r, _ in variants]
-    assert -1.5 in rates and 1.5 in rates
-
-
-def test_drift_correction_changes_audio():
-    """Bei signifikantem Drift aendert sich das Audio."""
-    from core.drift import apply_drift_correction
-    np.random.seed(42)
-    audio = (np.random.randn(180000) * 5000).astype(np.int16)
-    result = apply_drift_correction(audio, 2.0)
-    # Audio sollte sich geaendert haben (nicht identisch)
-    diff = np.mean(np.abs(audio.astype(float) - result.astype(float)))
-    assert diff > 10, f"Drift-Korrektur hat Audio kaum veraendert: diff={diff:.1f}"
-
-
-def test_drift_analytic_signal():
-    """Analytisches Signal hat korrekte Laenge."""
-    from core.drift import _to_analytic
-    signal = np.random.randn(1000).astype(np.float64)
-    analytic = _to_analytic(signal)
-    assert len(analytic) == len(signal)
-    assert np.iscomplexobj(analytic)
-    # Realteil sollte dem Original aehnlich sein
-    corr = np.corrcoef(signal, analytic.real)[0, 1]
-    assert corr > 0.99, f"Realteil weicht vom Original ab: corr={corr:.4f}"
 
 
 # ── Propagation ──────────────────────────────────────────────────────────────

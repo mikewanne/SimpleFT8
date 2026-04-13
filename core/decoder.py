@@ -362,34 +362,6 @@ class Decoder(QObject):
             if subtracted == 0:
                 break
 
-        # ── Drift-Kompensation: Extra-Passes mit linearer Frequenzkorrektur ────
-        # Billige QRP-Stationen driften 0.5-5 Hz ueber 15s.
-        # Wir probieren verschiedene Drift-Raten auf dem Residual-Audio.
-        from .drift import generate_drift_variants
-        drift_new = 0
-        for drift_rate, drift_audio in generate_drift_variants(audio_work.astype(np.int16)):
-            drift_results = lib.decode(
-                drift_audio,
-                max_freq_hz=float(self.max_freq),
-                num_passes=1,
-                max_results=MAX_CANDIDATES,
-            )
-            for r in drift_results:
-                key = " ".join(r["message"].split())
-                if key and key not in seen:
-                    seen.add(key)
-                    DT_BUFFER_OFFSET = 1.5
-                    msg = parse_ft8_message(
-                        r["message"],
-                        snr=r["snr"],
-                        freq_hz=int(r["freq_hz"]),
-                        dt=r["dt"] - DT_BUFFER_OFFSET,
-                    )
-                    all_messages.append(msg)
-                    drift_new += 1
-        if drift_new:
-            print(f"[Drift] +{drift_new} Stationen durch Drift-Kompensation")
-
         # Frequenzen und Calls tracken
         occupied = []
         for msg in all_messages:
