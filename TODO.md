@@ -99,9 +99,7 @@ wächst mit jedem Feature — je länger wir warten, desto mehr muss entkoppelt 
 - [ ] Stille → Gain rampt auf 4.0x Max. Kein Problem wenn danach Signale kommen?
 
 #### Frequenz-Drift-Kompensation ⛔ ENTFERNT (13.04.2026)
-**Ergebnis Feldtest:** 0 zusaetzliche Decodes in >20 Zyklen auf 20m+40m.
-LDPC-Decoder kompensiert intern ~1 Hz Drift. Stationen mit >2 Hz/s Drift sind <0.1%.
-400ms/Zyklus Overhead fuer 0 Nutzen → Code komplett entfernt.
+Feldtest: 0 Nutzen, 400ms Overhead → entfernt. Code in Git-History (v0.30).
 - [x] 6 Unit Tests (Shape, Clipping, Varianten, Analytic Signal, Audio-Change)
 - [ ] **Feldtest:** Bringt es tatsaechlich neue Decodes? Log: `[Drift] +N Stationen`
 - [ ] Performance-Impact akzeptabel? (~400ms extra pro Zyklus)

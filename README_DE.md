@@ -88,7 +88,6 @@ Jede der drei Kernfunktionen hat eine eigene ausfuehrliche Dokumentation mit Scr
 - FFT-basiertes Spectral Whitening mit Median-Rauschboden-Normalisierung
 - Anti-Alias Sinc-Resampling (63 Taps, Hamming-Fenster) von 24 kHz auf 12 kHz
 - LDPC-Decoder mit 50 Iterationen, 200 Kandidaten, Multi-Sync LLR-Sweep
-- ⚠️ **RMS Auto-Gain Control** *(v0.27, ungetestet)*: Automatische Eingangspegelregelung vor Whitening. Ziel −12 dBFS, EMA-Glättung, ±3 dB Hysterese. Verhindert Decoder-Übersteuerung auf belebten Bändern.
 
 ### QSO-Management
 - **Hunt-Modus**: Klicke eine Station im RX-Panel an, um ein QSO zu starten
@@ -218,7 +217,6 @@ SimpleFT8/
 VITA-49 RX (24kHz int16 mono)
   -> Anti-Alias Tiefpass (Sinc/Hamming, fc=6kHz)
   -> Resampling auf 12kHz
-  -> RMS Auto-Gain Control (⚠️ UNGETESTET: Ziel -12 dBFS, EMA α=0.02)
   -> DC-Entfernung
   -> Spectral Whitening (Overlap-Add FFT)
   -> Normalisierung (-12 dBFS)
@@ -272,7 +270,6 @@ Fuer jedes Feature gibt es eine eigene Erklaerung in Deutsch und Englisch — mi
 | Feature | Deutsch | English |
 |---------|---------|---------|
 | Signalverarbeitung | [signal-processing_de.md](docs/explained/signal-processing_de.md) | [signal-processing.md](docs/explained/signal-processing.md) |
-| RMS Auto-Gain | [rms-agc_de.md](docs/explained/rms-agc_de.md) | [rms-agc.md](docs/explained/rms-agc.md) |
 | AP-Lite (QSO Rescue) | [ap-lite_de.md](docs/explained/ap-lite_de.md) | [ap-lite.md](docs/explained/ap-lite.md) |
 | DT-Zeitkorrektur | [dt-correction_de.md](docs/explained/dt-correction_de.md) | [dt-correction.md](docs/explained/dt-correction.md) |
 | Propagation-Anzeige | [propagation-indicators_de.md](docs/explained/propagation-indicators_de.md) | [propagation-indicators.md](docs/explained/propagation-indicators.md) |
