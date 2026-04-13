@@ -11,7 +11,9 @@
 > SimpleFT8 automates your entire FT8/FT4 workflow with closed-loop power control, reinforcement learning antenna selection, automatic CQ frequency optimization, and intelligent caller queuing.
 
 > **Every feature explained in detail:** How does it work? Why? Pros/Cons? Physics + formulas.
-> German + English → **[docs/explained/](docs/explained/)** (7 features × 2 languages = 14 documents)
+> German + English → **[docs/explained/](docs/explained/)** (5 features × 2 languages = 10 documents)
+
+> **Optimize yes — Automate no.** SimpleFT8 is an operator-in-the-loop tool. It optimizes workflow but does not replace human agency. All automated features — dead man's switch (15 min), semi-automatic CQ mode, manual hunt mode — ensure the operator retains final control and can intervene at any time. This reflects our commitment to responsible amateur radio software and regulatory compliance.
 
 ---
 

@@ -209,8 +209,13 @@ class _ModeBandCard(QFrame):
         self.btn_ft4 = QPushButton("FT4")
         self.btn_ft4.setCheckable(True)
         self.btn_ft4.setFixedHeight(28)
+        self.btn_ft2 = QPushButton("FT2")
+        self.btn_ft2.setFixedHeight(28)
+        self.btn_ft2.setEnabled(False)  # Ausgegraut — noch nicht implementiert
+        self.btn_ft2.setToolTip("FT2 (3.8s Zyklen) — in Entwicklung")
         grid.addWidget(self.btn_ft8, 0, 1)
         grid.addWidget(self.btn_ft4, 0, 2)
+        grid.addWidget(self.btn_ft2, 0, 3)
 
         freq_frame = QFrame()
         freq_frame.setStyleSheet(
@@ -227,7 +232,7 @@ class _ModeBandCard(QFrame):
         )
         self.freq_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         freq_lay.addWidget(self.freq_label)
-        grid.addWidget(freq_frame, 0, 3, 1, 3)  # span 3 Spalten (= 15m + 17m + 20m)
+        grid.addWidget(freq_frame, 0, 4, 1, 3)  # span 3 Spalten (= 15m + 17m + 20m)
 
         # Zeile 1: Band + 10m 12m 15m 17m 20m
         lbl_band = QLabel("Band")
@@ -584,12 +589,12 @@ class _QSOStatusCard(QFrame):
         self.btn_cq.setCheckable(True)
         self.btn_cq.setFixedHeight(26)
         self.btn_cq.setStyleSheet(
-            f"QPushButton {{ background: rgba(140,0,0,0.5); color: white; "
-            f"border: 1px solid rgba(220,60,60,0.6); border-radius: 5px; "
+            f"QPushButton {{ background: rgba(80,0,0,0.4); color: #AA6666; "
+            f"border: 1px solid rgba(150,40,40,0.4); border-radius: 5px; "
             f"font-size: 12px; font-weight: bold; font-family: {_FONT}; }}"
             f"QPushButton:checked {{ background: rgba(200,0,0,0.7); color: #FFD700; "
             f"border-color: rgba(255,180,0,0.7); }}"
-            f"QPushButton:hover {{ background: rgba(180,0,0,0.6); }}"
+            f"QPushButton:hover {{ background: rgba(140,0,0,0.5); color: white; }}"
             f"QPushButton:disabled {{ background: #2a2a2a; color: #666666; "
             f"border: 1px solid #444444; }}"
         )
