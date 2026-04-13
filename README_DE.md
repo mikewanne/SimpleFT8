@@ -10,6 +10,9 @@
 
 SimpleFT8 ist ein eigenstaendiger FT8/FT4 Client, der dein FlexRadio direkt ueber die SmartSDR TCP API steuert — kein SmartSDR GUI noetig. Mit temporaler Antennen-Diversity und UCB1-adaptiver Auswahl werden bis zu 8x mehr Stationen dekodiert als mit konventionellen Setups.
 
+> **Jedes Feature ausfuehrlich erklaert:** Wie funktioniert es? Warum? Vor-/Nachteile? Physik + Formeln.
+> Deutsch + Englisch → **[docs/explained/](docs/explained/)** (7 Features × 2 Sprachen = 14 Dokumente)
+
 ---
 
 ## Was macht SimpleFT8 anders?
