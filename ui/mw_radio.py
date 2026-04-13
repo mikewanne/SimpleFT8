@@ -194,6 +194,10 @@ class RadioMixin:
         self.control_panel.update_decode_count(0)
         # Diversity Controller bei Bandwechsel: Neueinmessung
         self._diversity_ctrl.on_band_change()
+        # Auto-Hunt: Cooldowns loeschen bei Bandwechsel
+        if self._auto_hunt.active:
+            self._auto_hunt.set_band(band)
+            self._auto_hunt.on_band_change()
         if self._rx_mode == "diversity":
             self.control_panel.update_diversity_ratio("50:50", "measure", 0,
                                                       self._diversity_ctrl.MEASURE_CYCLES)

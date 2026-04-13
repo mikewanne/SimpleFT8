@@ -129,6 +129,12 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self._omni_tx = _omni.get_instance(block_cycles=_block_cycles)
         self.control_panel.omni_tx_clicked.connect(self._on_omni_tx_easter_egg)
 
+        # Auto-Hunt: Initialisieren (deaktiviert, zusammen mit OMNI-TX)
+        from core.auto_hunt import AutoHunt
+        self._auto_hunt = AutoHunt()
+        self._auto_hunt.set_qso_log(self.qso_log)
+        self._auto_hunt.set_band(settings.band)
+
         # AP-Lite: Initialisieren (deaktiviert, AP_LITE_ENABLED=False)
         from core import ap_lite as _ap
         self._ap_lite = _ap.get_instance(encoder=self.encoder)
@@ -282,6 +288,7 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         if self._omni_tx.active:
             # Deaktivieren
             self._omni_tx.disable()
+            self._auto_hunt.disable()
             self.control_panel.update_omni_tx(False)
             self._update_statusbar()
         else:
@@ -302,6 +309,7 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
             msg.setStyleSheet(self._msgbox_style())
             if msg.exec() == QMessageBox.StandardButton.Yes:
                 self._omni_tx.enable()
+                self._auto_hunt.enable()
                 self.control_panel.update_omni_tx(True)
                 self._update_statusbar()
 
