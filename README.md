@@ -85,7 +85,14 @@ See [test screenshots and methodology](docs/DIVERSITY.md) for details.
 - ⚠️ **AP-Lite v2.2** *(v0.26, untested)*: Weak QSO rescue via coherent addition of two failed decode attempts. Costas-array alignment (±8 samples / ±1.5 Hz), normalized cross-correlation + Costas-weighted scoring, threshold 0.75. Expected gain: ~4–5 dB SNR. Disabled by default (`AP_LITE_ENABLED = False`), enable after field-test calibration.
 - ⚠️ **DT Time Correction** *(v0.21, untested)*: Median DT from decoded stations used to detect and correct local clock drift. 50 ms dead-band, EMA smoothing factor 0.3, minimum 5 stations. Needs field validation: sign, smoothing, threshold.
 - ⚠️ **Propagation Bars** *(v0.23, untested)*: 4px color indicator under each band button — HamQSL solar data + time-of-day correction for Central Europe. Colors: green/yellow/orange/red. Appears ~3s after app start. Field validation pending: colors plausible?
+- ⚠️ **Frequency Drift Compensation** *(v0.30, untested)*: Extra decode passes with linear drift correction (±0.5 / ±1.5 Hz/s) for drifting QRP stations. Analytic signal (Hilbert) with quadratic phase correction. Expected gain: +5–10% decodes from cheap VFOs.
 
+**Operator Presence (Anti-Bot):**
+- **Legal requirement (DE)**: Operator must be present at the radio — no unattended bot operation
+- Fixed 15-minute timeout, not configurable, not bypassable
+- 4px countdown bar below CQ button (green → yellow → red)
+- Reset by mouse/keyboard activity inside SimpleFT8 window
+- On timeout: CQ stops, no new TX — active QSOs always finish cleanly
 
 ### Installation
 
