@@ -834,6 +834,7 @@ class ControlPanel(QWidget):
         self.snr_label = qso_card.snr_label
         self.utc_label = qso_card.utc_label
         self.state_label = qso_card.state_label
+        self._last_state = "IDLE"
         self.cycle_bar = qso_card.cycle_bar
         self.btn_settings = qso_card.btn_settings
         self.btn_settings.clicked.connect(self.settings_clicked.emit)
