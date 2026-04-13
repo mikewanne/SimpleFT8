@@ -103,15 +103,25 @@ def update_from_decoded(dt_values: list) -> bool:
 
     median_dt = statistics.median(valid)
 
-    # Unter 50ms nicht korrigieren — Messrauschen
-    if abs(median_dt) < 0.05:
+    # Totband: ±0.3s → NICHT korrigieren (normaler Stations-Jitter)
+    # Verhindert Oszillation: Korrektur schiesst auf 0.0, Jitter bringt +0.3,
+    # Korrektur reagiert → Welle. Mit Totband: einmal kalibriert, stabil.
+    if abs(median_dt) < 0.3:
+        with _lock:
+            _last_median_dt = median_dt
+            _last_sample_count = len(valid)
         return False
 
-    # Smoothing: 30% neuer Wert, 70% alter Wert
-    # TODO: Faktor im Feldtest anpassen
-    target = median_dt  # positiver Median → Uhr geht nach → pos. Korrektur
+    # 1. Zyklus: volle Korrektur sofort anwenden
+    # Danach: sanfte 20/80 Mischung (kein Ueberschiessen)
+    target = median_dt
     with _lock:
-        _dt_correction = _dt_correction * 0.7 + target * 0.3
+        if _last_sample_count == 0:
+            _dt_correction = target
+        else:
+            _dt_correction = _dt_correction * 0.8 + target * 0.2
+        # Korrektur auf ±2.0s begrenzen (Sicherheit)
+        _dt_correction = max(-2.0, min(2.0, _dt_correction))
         _last_median_dt = median_dt
         _last_sample_count = len(valid)
         correction = _dt_correction
