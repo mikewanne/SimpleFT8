@@ -148,7 +148,8 @@ class Decoder(QObject):
 
         while self._running:
             try:
-                now = time.time()
+                from core import ntp_time
+                now = ntp_time.get_time()  # DT-korrigierte Zeit (inkl. Radio-Latenz)
                 cycle_pos = now % 15.0
                 if cycle_pos < 13.5:
                     wait = 13.5 - cycle_pos
