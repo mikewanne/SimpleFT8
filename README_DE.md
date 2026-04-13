@@ -38,9 +38,9 @@ Siehe [Test-Screenshots und Methodik](docs/DIVERSITY_DE.md) fuer Details.
 
 ## Screenshots
 
-| Hauptoberflaeche | Diversity-Modus |
+| Diversity 20m (DT-korrigiert, A1/A2) | Vergleichstest 40m |
 |:-:|:-:|
-| ![Main](docs/screenshots/normal_27stations_40m.png) | ![Diversity](docs/screenshots/diversity_37stations_40m.png) |
+| ![Diversity 20m](docs/screenshots/diversity_20m_dt_corrected.png) | ![Vergleich](docs/screenshots/diversity_37stations_40m.png) |
 
 ---
 
@@ -258,6 +258,22 @@ Jedes FlexRadio mit SmartSDR TCP API sollte funktionieren. Diversity erfordert z
 
 ### Leistungssteuerung
 Waehle die Leistung mit den 10W-100W Buttons. Die automatische Regelung passt den TX-Pegel an, damit die tatsaechliche Ausgangsleistung des Radios deiner Auswahl entspricht. Der TX-Balken zeigt den aktuellen Pegel, Peak zeigt die Audio-Reserve.
+
+---
+
+## Ausfuehrliche Feature-Dokumentation
+
+Fuer jedes Feature gibt es eine eigene Erklaerung in Deutsch und Englisch — mit Physik, Formeln, Vor-/Nachteilen:
+
+| Feature | Deutsch | English |
+|---------|---------|---------|
+| Signalverarbeitung | [signal-processing_de.md](docs/explained/signal-processing_de.md) | [signal-processing.md](docs/explained/signal-processing.md) |
+| RMS Auto-Gain | [rms-agc_de.md](docs/explained/rms-agc_de.md) | [rms-agc.md](docs/explained/rms-agc.md) |
+| Drift-Kompensation | [drift-compensation_de.md](docs/explained/drift-compensation_de.md) | [drift-compensation.md](docs/explained/drift-compensation.md) |
+| AP-Lite (QSO Rescue) | [ap-lite_de.md](docs/explained/ap-lite_de.md) | [ap-lite.md](docs/explained/ap-lite.md) |
+| DT-Zeitkorrektur | [dt-correction_de.md](docs/explained/dt-correction_de.md) | [dt-correction.md](docs/explained/dt-correction.md) |
+| Propagation-Anzeige | [propagation-indicators_de.md](docs/explained/propagation-indicators_de.md) | [propagation-indicators.md](docs/explained/propagation-indicators.md) |
+| Operator Presence | [operator-presence_de.md](docs/explained/operator-presence_de.md) | [operator-presence.md](docs/explained/operator-presence.md) |
 
 ---
 

@@ -58,9 +58,9 @@ See [test screenshots and methodology](docs/DIVERSITY.md) for details.
 
 ![SimpleFT8 Complete Feature Demo](docs/screenshots/simpleft8_complete.png)
 
-| Normal Mode (27 stations) | Diversity Mode (37 stations, +37%) |
+| Diversity 20m (DT-corrected, A1/A2) | Comparison Test 40m (+37%) |
 |:-:|:-:|
-| ![Main](docs/screenshots/normal_27stations_40m.png) | ![Diversity](docs/screenshots/diversity_37stations_40m.png) |
+| ![Diversity 20m](docs/screenshots/diversity_20m_dt_corrected.png) | ![Comparison](docs/screenshots/diversity_37stations_40m.png) |
 
 **Automatic CQ Frequency Selection** — 50 Hz bin histogram, green = free gap, yellow marker = auto-selected CQ frequency:
 
@@ -139,6 +139,20 @@ SimpleFT8/
 ### Radio Compatibility
 
 **Tested:** FLEX-8400M. **Expected compatible:** FLEX-6300/6400/6500/6600/6700/8400/8600 series.
+
+### Detailed Feature Documentation
+
+Each feature has its own in-depth explanation (DE + EN) — with physics, formulas, pros/cons:
+
+| Feature | Deutsch | English |
+|---------|---------|---------|
+| Signal Processing | [signal-processing_de.md](docs/explained/signal-processing_de.md) | [signal-processing.md](docs/explained/signal-processing.md) |
+| RMS Auto-Gain | [rms-agc_de.md](docs/explained/rms-agc_de.md) | [rms-agc.md](docs/explained/rms-agc.md) |
+| Drift Compensation | [drift-compensation_de.md](docs/explained/drift-compensation_de.md) | [drift-compensation.md](docs/explained/drift-compensation.md) |
+| AP-Lite (QSO Rescue) | [ap-lite_de.md](docs/explained/ap-lite_de.md) | [ap-lite.md](docs/explained/ap-lite.md) |
+| DT Time Correction | [dt-correction_de.md](docs/explained/dt-correction_de.md) | [dt-correction.md](docs/explained/dt-correction.md) |
+| Propagation Indicators | [propagation-indicators_de.md](docs/explained/propagation-indicators_de.md) | [propagation-indicators.md](docs/explained/propagation-indicators.md) |
+| Operator Presence | [operator-presence_de.md](docs/explained/operator-presence_de.md) | [operator-presence.md](docs/explained/operator-presence.md) |
 
 ### License
 
