@@ -164,6 +164,18 @@ class RadioMixin:
     def _on_mode_changed(self, mode: str):
         self.settings.set("mode", mode)
         self.timer.set_mode(mode)
+        # Decoder + Encoder auf neues Protokoll umschalten
+        self.decoder.set_protocol(mode)
+        self.encoder.set_protocol(mode)
+        # Frequenz fuer neuen Modus setzen (FT4 hat andere Dial-Frequenzen)
+        from core.protocol import BAND_FREQUENCIES
+        band = self.settings.band
+        mode_freqs = BAND_FREQUENCIES.get(mode, {})
+        if band in mode_freqs and self.radio.ip:
+            freq = mode_freqs[band]
+            self.radio.set_frequency(freq)
+            self.control_panel.freq_label.setText(f"{freq:.3f} MHz")
+            print(f"[Mode] {mode} auf {band}: {freq:.3f} MHz")
         self._update_statusbar()
 
     @Slot(str)
