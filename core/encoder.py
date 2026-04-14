@@ -47,6 +47,12 @@ class Encoder(QObject):
         self._tx_thread = None
         self._is_transmitting = False
         self.tx_even = None  # None=nächster Slot, True=even, False=odd
+        self._mode = "FT8"  # "FT8", "FT4", "FT2"
+
+    def set_protocol(self, mode: str):
+        """Protokoll wechseln."""
+        self._mode = mode
+        print(f"[Encoder] Protokoll: {mode}")
 
     @property
     def is_transmitting(self) -> bool:
@@ -104,7 +110,8 @@ class Encoder(QObject):
                 self.encoding_error.emit(f"Ungueltige Nachricht: {message}")
                 return None
 
-            audio = get_ft8lib().encode(message.strip(), freq_hz=float(self.audio_freq_hz))
+            audio = get_ft8lib().encode(message.strip(), freq_hz=float(self.audio_freq_hz),
+                                       mode=self._mode)
             if audio is None:
                 self.encoding_error.emit(f"Encoding fehlgeschlagen: {message}")
             return audio
@@ -136,26 +143,23 @@ class Encoder(QObject):
         Gibt den Slot-Start zurueck auf den wir TX-Parity haben.
         Liefert stets einen Zeitpunkt in der Zukunft (oder sehr nah dran).
         """
+        _SLOT = {"FT8": 15.0, "FT4": 7.5, "FT2": 3.8}.get(self._mode, 15.0)
         now = time.time()
-        cycle_num = int(now / 15.0)
-        cycle_pos = now % 15.0
+        cycle_num = int(now / _SLOT)
+        cycle_pos = now % _SLOT
         is_even = (cycle_num % 2 == 0)
 
         if self.tx_even is not None:
             want_even = self.tx_even
-            # Am Anfang des richtigen Slots (erste 3s): aktuelle Grenze nehmen
-            # 3s Fenster weil on_cycle_end oft 0.5-1s nach Slot-Grenze feuert
-            if is_even == want_even and cycle_pos < 3.0:
-                return float(cycle_num * 15)
-            # Naechste Grenze bestimmen
+            if is_even == want_even and cycle_pos < (_SLOT / 5):
+                return float(cycle_num * _SLOT)
             next_num = cycle_num + 1
-            next_boundary = float(next_num * 15)
+            next_boundary = float(next_num * _SLOT)
             if (next_num % 2 == 0) != want_even:
-                next_boundary += 15.0   # einen weiteren Slot ueberspringen
+                next_boundary += _SLOT
             return next_boundary
         else:
-            # Kein Slot vorgegeben: naechster beliebiger Slot
-            return float((cycle_num + 1) * 15)
+            return float((cycle_num + 1) * _SLOT)
 
     def _tx_worker_inner(self, message: str):
         # FESTE TX-Frequenz

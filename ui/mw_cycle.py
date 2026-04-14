@@ -80,12 +80,9 @@ class CycleMixin:
                 cq_freq = self._diversity_ctrl.get_free_cq_freq()
                 if cq_freq:
                     self.encoder.audio_freq_hz = cq_freq
-                    self.qso_panel.add_info(
-                        f"Einmessen abgeschlossen — CQ auf {cq_freq} Hz (freie Lücke)"
-                    )
-                    print(f"[Diversity] CQ-Frequenz: {cq_freq} Hz (aus Histogramm)")
+                    print(f"[Diversity] Einmessen fertig — CQ auf {cq_freq} Hz")
                 else:
-                    self.qso_panel.add_info("Einmessen abgeschlossen — CQ freigegeben")
+                    print("[Diversity] Einmessen fertig — CQ freigegeben")
                 self.control_panel.update_freq_histogram(
                     self._diversity_ctrl.get_histogram_data()
                 )

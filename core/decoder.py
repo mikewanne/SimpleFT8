@@ -135,6 +135,12 @@ class Decoder(QObject):
     def stop(self):
         self._running = False
 
+    def set_protocol(self, mode: str):
+        """Protokoll wechseln: FT8, FT4, FT2."""
+        self._mode = mode
+        self._slot_samples = _SLOT_SAMPLES.get(mode, CYCLE_SAMPLES_12K)
+        print(f"[Decoder] Protokoll: {mode} (Slot: {self._slot_samples/SAMP_RATE:.1f}s)")
+
     def set_quality(self, mode: str):
         """Decode-Qualitaet anpassen: 'normal' = schnell, 'diversity' = tief."""
         global MAX_SUBTRACT_PASSES, MAX_CANDIDATES
@@ -168,13 +174,14 @@ class Decoder(QObject):
         while self._running:
             try:
                 now = time.time()
-                cycle_pos = now % 15.0
-                # 13.5: Standard-Aufwachzeit. DT-Korrektur regelt den Rest via Buffer-Shift.
-                _WAKE_TIME = 13.5
-                if cycle_pos < _WAKE_TIME:
-                    wait = _WAKE_TIME - cycle_pos
+                # Mode-abhängige Slot-Dauer + Wake-Time
+                _SLOT = {"FT8": 15.0, "FT4": 7.5, "FT2": 3.8}.get(self._mode, 15.0)
+                _WAKE = _SLOT - 1.5   # 1.5s vor Slot-Ende aufwachen
+                cycle_pos = now % _SLOT
+                if cycle_pos < _WAKE:
+                    wait = _WAKE - cycle_pos
                 else:
-                    wait = 15.0 - cycle_pos + _WAKE_TIME
+                    wait = _SLOT - cycle_pos + _WAKE
                 time.sleep(wait)
 
                 with self._decode_busy_lock:
@@ -244,7 +251,7 @@ class Decoder(QObject):
             from core import ntp_time
             _dt_shift = ntp_time.get_correction()
             _shift_samples = int(_dt_shift * SAMP_RATE)
-            if abs(_shift_samples) > 100 and abs(_shift_samples) < CYCLE_SAMPLES_12K // 3:
+            if abs(_shift_samples) > 100 and abs(_shift_samples) < self._slot_samples // 3:
                 if _shift_samples > 0:
                     # Signal kommt zu spät → vorne abschneiden, hinten padden
                     audio_12k = np.pad(audio_12k[_shift_samples:], (0, _shift_samples))
@@ -312,8 +319,9 @@ class Decoder(QObject):
                 results = lib.decode(
                     shifted.astype(np.int16),
                     max_freq_hz=float(self.max_freq),
-                    num_passes=1,          # 1 C-Pass, Python verwaltet Passes
+                    num_passes=1,
                     max_results=MAX_CANDIDATES,
+                    mode=self._mode,
                 )
                 for r in results:
                     key = " ".join(r["message"].split())
@@ -322,7 +330,7 @@ class Decoder(QObject):
                         # 1) Offset-Verschiebung rueckgaengig machen (Window-Sliding)
                         # 2) Buffer-Offset: Decode-Loop wacht bei 13.5s in Slot auf →
                         #    Buffer startet 1.5s VOR Slot-Start → alle DT um +1.5 zu hoch
-                        DT_BUFFER_OFFSET = 1.5  # 15.0 - _WAKE_TIME (13.5)
+                        DT_BUFFER_OFFSET = 1.5  # = _SLOT - _WAKE (immer 1.5s)
                         raw_results.append({
                             **r,
                             "dt": r["dt"] + offset_samples / SAMP_RATE - DT_BUFFER_OFFSET,
