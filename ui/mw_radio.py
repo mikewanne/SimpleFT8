@@ -167,6 +167,15 @@ class RadioMixin:
         # Decoder + Encoder auf neues Protokoll umschalten
         self.decoder.set_protocol(mode)
         self.encoder.set_protocol(mode)
+        # RX-Liste leeren bei Mode-Wechsel (FT8/FT4/FT2 mischen = verwirrend)
+        self.rx_panel.table.setRowCount(0)
+        self._diversity_stations = {}
+        self._normal_stations = {}
+        self.control_panel.update_decode_count(0)
+        # CQ stoppen bei Mode-Wechsel
+        if self.qso_sm.cq_mode:
+            self.qso_sm.stop_cq()
+            self.control_panel.set_cq_active(False)
         # Frequenz fuer neuen Modus setzen (FT4 hat andere Dial-Frequenzen)
         from core.protocol import BAND_FREQUENCIES
         band = self.settings.band
@@ -176,6 +185,11 @@ class RadioMixin:
             self.radio.set_frequency(freq)
             self.control_panel.freq_label.setText(f"{freq:.3f} MHz")
             print(f"[Mode] {mode} auf {band}: {freq:.3f} MHz")
+        # DT-Korrektur: bei MODE-Wechsel auf 0 zuruecksetzen!
+        # FT8-Korrektur (+0.7) ist FALSCH fuer FT4 (anderes Protokoll-Timing)
+        # Bei BAND-Wechsel behalten wir den Wert (gleiche Radio-Latenz)
+        from core import ntp_time
+        ntp_time.reset(keep_correction=False)
         self._update_statusbar()
 
     @Slot(str)
