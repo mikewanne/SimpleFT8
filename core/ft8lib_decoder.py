@@ -91,6 +91,11 @@ class Ft8Lib:
         self._lib.ft8s_decode_ft4.argtypes = _decode_args
         self._lib.ft8s_encode_ft4.restype = ctypes.c_int
         self._lib.ft8s_encode_ft4.argtypes = _encode_args
+        # FT2
+        self._lib.ft8s_decode_ft2.restype = ctypes.c_int
+        self._lib.ft8s_decode_ft2.argtypes = _decode_args
+        self._lib.ft8s_encode_ft2.restype = ctypes.c_int
+        self._lib.ft8s_encode_ft2.argtypes = _encode_args
 
     def decode(
         self,
@@ -107,7 +112,8 @@ class Ft8Lib:
         audio = np.ascontiguousarray(audio_int16, dtype=np.int16)
         results = (_Ft8sResult * max_results)()
 
-        decode_fn = self._lib.ft8s_decode_ft4 if mode == "FT4" else self._lib.ft8s_decode
+        _decode_fns = {"FT4": self._lib.ft8s_decode_ft4, "FT2": self._lib.ft8s_decode_ft2}
+        decode_fn = _decode_fns.get(mode, self._lib.ft8s_decode)
 
         with Ft8Lib._lock:
             n_found = decode_fn(
@@ -139,7 +145,8 @@ class Ft8Lib:
         max_samples = 200_000
         out_buf = (ctypes.c_int16 * max_samples)()
 
-        encode_fn = self._lib.ft8s_encode_ft4 if mode == "FT4" else self._lib.ft8s_encode
+        _encode_fns = {"FT4": self._lib.ft8s_encode_ft4, "FT2": self._lib.ft8s_encode_ft2}
+        encode_fn = _encode_fns.get(mode, self._lib.ft8s_encode)
 
         with Ft8Lib._lock:
             n_written = encode_fn(

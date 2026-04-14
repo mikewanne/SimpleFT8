@@ -210,9 +210,8 @@ class _ModeBandCard(QFrame):
         self.btn_ft4.setCheckable(True)
         self.btn_ft4.setFixedHeight(28)
         self.btn_ft2 = QPushButton("FT2")
+        self.btn_ft2.setCheckable(True)
         self.btn_ft2.setFixedHeight(28)
-        self.btn_ft2.setEnabled(False)  # Ausgegraut — noch nicht implementiert
-        self.btn_ft2.setToolTip("FT2 (3.8s Zyklen) — in Entwicklung")
         grid.addWidget(self.btn_ft8, 0, 1)
         grid.addWidget(self.btn_ft4, 0, 2)
         grid.addWidget(self.btn_ft2, 0, 3)
@@ -778,6 +777,7 @@ class ControlPanel(QWidget):
         self.freq_label = mb_card.freq_label
         mb_card.btn_ft8.clicked.connect(lambda: self._set_mode("FT8"))
         mb_card.btn_ft4.clicked.connect(lambda: self._set_mode("FT4"))
+        mb_card.btn_ft2.clicked.connect(lambda: self._set_mode("FT2"))
         for band, btn in mb_card.band_buttons.items():
             btn.clicked.connect(lambda checked, b=band: self._set_band(b))
         layout.addWidget(mb_card)
