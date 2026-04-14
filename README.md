@@ -85,10 +85,13 @@ See [test screenshots and methodology](docs/DIVERSITY.md) for details.
 - **QRZ.com**: Callsign lookup + logbook upload
 - **PSKReporter** integration with spot statistics and distance display
 
-**Implemented — Field Test Pending (⚠️ UNTESTED):**
-- ⚠️ **AP-Lite v2.2** *(v0.26, untested)*: Weak QSO rescue via coherent addition of two failed decode attempts. Costas-array alignment (±8 samples / ±1.5 Hz), normalized cross-correlation + Costas-weighted scoring, threshold 0.75. Expected gain: ~4–5 dB SNR. Disabled by default (`AP_LITE_ENABLED = False`), enable after field-test calibration.
-- ⚠️ **DT Time Correction** *(v0.21, untested)*: Median DT from decoded stations used to detect and correct local clock drift. 50 ms dead-band, EMA smoothing factor 0.3, minimum 5 stations. Needs field validation: sign, smoothing, threshold.
-- ⚠️ **Propagation Bars** *(v0.23, untested)*: 4px color indicator under each band button — HamQSL solar data + time-of-day correction for Central Europe. Colors: green/yellow/orange/red. Appears ~3s after app start. Field validation pending: colors plausible?
+**Tested & Confirmed (Field Test 13.04.2026):**
+- ✅ **DT Time Correction**: Cumulative correction from band consensus. 4-cycle measurement, 20-cycle operation. DT values ±0.2 (was +0.7). TX and RX corrected simultaneously. Band change preserves correction.
+- ✅ **Propagation Bars**: HamQSL solar data with time-of-day correction for Central Europe. Colors verified against HAM-Toolbox. Band group fix applied.
+- ✅ **Operator Presence (Anti-Bot)**: 15 min timeout, mouse reset confirmed working.
+
+**In Active Field Test:**
+- ⚠️ **AP-Lite v2.2** *(enabled 13.04.2026)*: Weak QSO rescue via coherent addition. Threshold 0.75, calibration in progress.
 **Operator Presence (Anti-Bot):**
 - **Legal requirement (DE)**: Operator must be present at the radio — no unattended bot operation
 - Fixed 15-minute timeout, not configurable, not bypassable

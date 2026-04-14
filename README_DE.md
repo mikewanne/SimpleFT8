@@ -107,11 +107,15 @@ Jede der drei Kernfunktionen hat eine eigene ausfuehrliche Dokumentation mit Scr
 - PSKReporter-Integration mit Spot-Statistik und Entfernungsanzeige
 - Laendererkennung aus Rufzeichen-Prefix mit Entfernung in km
 
-### Implementiert — Feldtest ausstehend (⚠️ UNGETESTET)
+### Getestet und bestaetigt (Feldtest 13.04.2026)
 
-- ⚠️ **AP-Lite v2.2** *(v0.26, ungetestet)*: Schwache QSOs retten via kohärenter Addition zweier fehlgeschlagener Dekodierversuche. Costas-Alignment (±8 Samples / ±1,5 Hz), normalisierte Kreuzkorrelation + Costas-Symbol-Gewichtung. Erwarteter Gewinn: ~4–5 dB SNR. Standardmäßig deaktiviert (`AP_LITE_ENABLED = False`), nach Feldtest-Kalibrierung aktivieren.
-- ⚠️ **DT-Zeitkorrektur** *(v0.21, ungetestet)*: Median-DT aus dekodierten Stationen erkennt und korrigiert Uhrdrift des Rechners. 50 ms Totband, EMA-Glättung 0,3. Feldvalidierung ausstehend.
-- ⚠️ **Propagation-Balken** *(v0.23, ungetestet)*: 4px Farbindikator unter Bandbuttons — HamQSL-Solardaten + Tageszeit-Korrektur für Mitteleuropa. Feldvalidierung: Farben plausibel?
+- ✅ **DT-Zeitkorrektur**: Kumulative Korrektur aus Band-Konsens. 4-Zyklen-Messung, 20-Zyklen-Betrieb. DT-Werte ±0.2 (vorher +0.7). TX und RX gleichzeitig korrigiert. Bandwechsel behaelt Korrekturwert.
+- ✅ **Propagation-Balken**: HamQSL-Solardaten mit Tageszeit-Korrektur fuer Mitteleuropa. Farben stimmen mit HAM-Toolbox ueberein. Band-Gruppen-Fix angewendet.
+- ✅ **Operator Presence (Totmannschalter)**: 15 Min Timeout, Maus-Reset funktioniert.
+
+### Implementiert — Feldtest laeuft
+
+- ⚠️ **AP-Lite v2.2** *(aktiviert seit 13.04.2026)*: Schwache QSOs retten via kohaerenter Addition. Threshold 0.75, Feldtest-Kalibrierung laeuft.
 ### Operator Presence (Totmannschalter)
 - **Gesetzliche Pflicht (DE)**: Operator muss am Funkgeraet anwesend sein — kein Bot-Betrieb
 - Fest 15 Minuten Timeout, nicht konfigurierbar, nicht umgehbar
