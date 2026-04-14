@@ -773,6 +773,7 @@ class ControlPanel(QWidget):
         self._mode_band_card = mb_card          # für update_propagation
         self.btn_ft8 = mb_card.btn_ft8
         self.btn_ft4 = mb_card.btn_ft4
+        self.btn_ft2 = mb_card.btn_ft2
         self.band_buttons = mb_card.band_buttons
         self.freq_label = mb_card.freq_label
         mb_card.btn_ft8.clicked.connect(lambda: self._set_mode("FT8"))
