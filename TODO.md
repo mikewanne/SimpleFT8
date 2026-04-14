@@ -1,4 +1,22 @@
-# SimpleFT8 TODO — Stand 12.04.2026
+# SimpleFT8 TODO — Stand 14.04.2026
+
+---
+
+## BUGS — MORGEN FIXEN
+
+### FT4 Einmessen dauert ewig (nur jeder ~8. Zyklus gemessen)
+**Ursache:** `CYCLE_SAMPLES_12K = 180000` (FT8 15s) ist hardcoded in `_process_cycle()`.
+FT4 liefert nur 90000 Samples (7.5s) → Buffer zu klein → `len(audio_12k) < CYCLE_SAMPLES_12K // 2` → Decoder ueberspringt Zyklen.
+**Fix:** `CYCLE_SAMPLES_12K` durch `self._slot_samples` ersetzen in `_process_cycle()`.
+
+### FT2 Decode funktioniert nicht (Resample-Trick fehlerhaft)
+**Ursache:** FT4-Decoder bei 6kHz erwartet 288 sps, aber Downsampling aendert Symbol-Timing.
+**Fix:** `FTX_PROTOCOL_FT2` in ft8_lib C-Library einfuegen (eigene Konstanten: 288 sps, 103 sym).
+FT2 Encode funktioniert (45600 Samples = 3.80s getestet).
+
+### Warteliste: Station nach QSO-Ende nicht angerufen
+**Bug:** EA3FHP war in Warteliste waehrend R65CTC QSO. Nach QSO-Ende → "Warteliste leer" statt EA3FHP anzurufen.
+**Fix:** QSO-State-Machine pruefen ob Warteliste nach QSO-Complete verarbeitet wird.
 
 ---
 
