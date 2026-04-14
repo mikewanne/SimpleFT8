@@ -14,9 +14,11 @@ from .ft8lib_decoder import get_ft8lib
 
 SAMPLE_RATE_FT8 = 12000
 
-# TX-Timing: Signal startet 500ms nach Slot-Grenze (wie WSJT-X)
-# Stille-Padding absorbiert den Jitter des Software-Timers.
-TARGET_TX_OFFSET = -0.65 # Sekunden nach Slot-Grenze — kompensiert FlexRadio ~0.8s Latenz → DT≈+0.5 auf ICOM
+# TX-Timing: DT-Korrektur regelt den Versatz automatisch.
+# TARGET_TX_OFFSET = 0 → kein hardcoded Offset mehr.
+# Die DT-Korrektur (ntp_time) misst den realen Versatz und korrigiert RX+TX gleich.
+# Vorher: -0.65 (handkalibriert für FlexRadio 8400M, funktionierte NUR auf diesem Setup)
+TARGET_TX_OFFSET = 0.0
 # Trailing Silence trimmen: FT8-Nutzsignal ist 12.64s, Rest ist Stille.
 # slot+0.5 + 13.5s = slot+14.0s → 1.0s Puffer vor naechstem Slot (sicher)
 TRIM_SAMPLES = int(1.5 * SAMPLE_RATE_FT8)   # 18000 Samples @ 12kHz
