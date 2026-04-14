@@ -65,6 +65,11 @@ class QSOMixin:
                 self._active_qso_targets.clear()
                 self.rx_panel.set_active_call("")
                 print("[CQ] Hunt-QSO abgebrochen → CQ starten")
+            # CQ-Frequenz: Diversity-Histogramm wenn vorhanden, sonst Default
+            cq_freq = self._diversity_ctrl.cq_freq_hz
+            if cq_freq and cq_freq != self.encoder.audio_freq_hz:
+                self.encoder.audio_freq_hz = cq_freq
+                print(f"[CQ] TX-Frequenz auf {cq_freq} Hz (aus Histogramm)")
             # CQ: immer auf festem Slot senden (aktueller Gegenteil-Slot)
             self.encoder.tx_even = not self.timer.is_even_cycle()
             slot = "EVEN" if self.encoder.tx_even else "ODD"
@@ -163,6 +168,7 @@ class QSOMixin:
             if self._omni_tx.active and not self._omni_tx.should_tx():
                 print(f"[OMNI-TX] Skip CQ (Slot: {self._omni_tx.slot_label})")
                 return
+        print(f"[TX] → '{message}' auf {self.encoder.audio_freq_hz} Hz")
         self.encoder.transmit(message)  # add_tx() wird via tx_started Signal aufgerufen
 
     @Slot(object)
