@@ -26,7 +26,14 @@ from .message import FT8Message, parse_ft8_message
 # ── Konstanten ────────────────────────────────────────────────────────────────
 
 SAMP_RATE = 12000                         # ft8_lib Eingabe-Samplerate
-CYCLE_SAMPLES_12K = int(15 * SAMP_RATE)   # 180 000 Samples pro 15s Slot
+CYCLE_SAMPLES_12K = int(15 * SAMP_RATE)   # 180 000 Samples pro 15s Slot (FT8 Default)
+
+# Slot-Samples pro Modus (wird bei set_mode() aktualisiert)
+_SLOT_SAMPLES = {
+    "FT8": int(15.0 * SAMP_RATE),   # 180000
+    "FT4": int(7.5 * SAMP_RATE),    # 90000
+    "FT2": int(3.8 * SAMP_RATE),    # 45600
+}
 
 # Signal Subtraction — wird per set_quality() angepasst
 MAX_SUBTRACT_PASSES = 5
@@ -98,10 +105,13 @@ class Decoder(QObject):
     message_decoded = Signal(object)
     cycle_decoded = Signal(list)
 
-    def __init__(self, max_freq: int = 3000, my_call: str = "DA1MHH"):
+    def __init__(self, max_freq: int = 3000, my_call: str = "DA1MHH",
+                 mode: str = "FT8"):
         super().__init__()
         self.max_freq = max_freq
         self.my_call = my_call
+        self._mode = mode
+        self._slot_samples = _SLOT_SAMPLES.get(mode, CYCLE_SAMPLES_12K)
         self._running = False
         self._audio_buffer_24k = []
         self._buffer_lock = threading.Lock()
