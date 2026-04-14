@@ -19,11 +19,11 @@ class FT8Timer(QObject):
     cycle_start = Signal(int, bool)     # (cycle_number, is_even)
     tx_window = Signal()
 
-    # Zyklusdauer pro Modus
+    # Zyklusdauer pro Modus (aus Protocol Profiles)
     CYCLE_DURATIONS = {
         "FT8": 15.0,
         "FT4": 7.5,
-        "FT2": 3.75,
+        "FT2": 3.8,   # Decodium: 2.47s Signal + 1.33s Pause
     }
 
     def __init__(self, mode: str = "FT8"):
