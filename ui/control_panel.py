@@ -946,6 +946,7 @@ class ControlPanel(QWidget):
         self._current_mode = mode
         self.btn_ft8.setChecked(mode == "FT8")
         self.btn_ft4.setChecked(mode == "FT4")
+        self.btn_ft2.setChecked(mode == "FT2")
         self._update_frequency()
         self.mode_changed.emit(mode)
 

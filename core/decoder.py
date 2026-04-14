@@ -176,7 +176,9 @@ class Decoder(QObject):
                 now = time.time()
                 # Mode-abhängige Slot-Dauer + Wake-Time
                 _SLOT = {"FT8": 15.0, "FT4": 7.5, "FT2": 3.8}.get(self._mode, 15.0)
-                _WAKE = _SLOT - 1.5   # 1.5s vor Slot-Ende aufwachen
+                # Wake-Time: kurz vor Slot-Ende, mode-abhängig
+                _WAKE_OFFSETS = {"FT8": 1.5, "FT4": 0.5, "FT2": 0.3}
+                _WAKE = _SLOT - _WAKE_OFFSETS.get(self._mode, 1.5)
                 cycle_pos = now % _SLOT
                 if cycle_pos < _WAKE:
                     wait = _WAKE - cycle_pos
@@ -330,7 +332,9 @@ class Decoder(QObject):
                         # 1) Offset-Verschiebung rueckgaengig machen (Window-Sliding)
                         # 2) Buffer-Offset: Decode-Loop wacht bei 13.5s in Slot auf →
                         #    Buffer startet 1.5s VOR Slot-Start → alle DT um +1.5 zu hoch
-                        DT_BUFFER_OFFSET = 1.5  # = _SLOT - _WAKE (immer 1.5s)
+                        # Mode-abhaengiger Buffer-Offset
+                        _DT_OFFSETS = {"FT8": 1.5, "FT4": 0.5, "FT2": 0.3}
+                        DT_BUFFER_OFFSET = _DT_OFFSETS.get(self._mode, 1.5)
                         raw_results.append({
                             **r,
                             "dt": r["dt"] + offset_samples / SAMP_RATE - DT_BUFFER_OFFSET,
