@@ -60,9 +60,9 @@ def test_agc_silence():
 # ── NTP Time ─────────────────────────────────────────────────────────────────
 
 def test_ntp_reset():
-    """Reset setzt Korrektur auf 0."""
+    """Reset mit keep_correction=False setzt auf 0."""
     from core import ntp_time
-    ntp_time.reset()
+    ntp_time.reset(keep_correction=False)
     assert ntp_time.get_correction() == 0.0
 
 
