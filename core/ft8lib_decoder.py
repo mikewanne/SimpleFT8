@@ -72,24 +72,25 @@ class Ft8Lib:
         print(f"[Ft8Lib] Geladen: {lib_path}")
 
     def _setup_prototypes(self):
-        # int ft8s_decode(const int16_t*, int, float, int, ft8s_result_t*, int)
+        _decode_args = [
+            ctypes.POINTER(ctypes.c_int16), ctypes.c_int,
+            ctypes.c_float, ctypes.c_int,
+            ctypes.POINTER(_Ft8sResult), ctypes.c_int,
+        ]
+        _encode_args = [
+            ctypes.c_char_p, ctypes.c_float,
+            ctypes.POINTER(ctypes.c_int16), ctypes.c_int,
+        ]
+        # FT8
         self._lib.ft8s_decode.restype = ctypes.c_int
-        self._lib.ft8s_decode.argtypes = [
-            ctypes.POINTER(ctypes.c_int16),   # samples
-            ctypes.c_int,                      # n_samples
-            ctypes.c_float,                    # max_freq_hz
-            ctypes.c_int,                      # num_passes
-            ctypes.POINTER(_Ft8sResult),       # results
-            ctypes.c_int,                      # max_results
-        ]
-        # int ft8s_encode(const char*, float, int16_t*, int)
+        self._lib.ft8s_decode.argtypes = _decode_args
         self._lib.ft8s_encode.restype = ctypes.c_int
-        self._lib.ft8s_encode.argtypes = [
-            ctypes.c_char_p,                   # message_text
-            ctypes.c_float,                    # freq_hz
-            ctypes.POINTER(ctypes.c_int16),    # out_samples
-            ctypes.c_int,                      # max_samples
-        ]
+        self._lib.ft8s_encode.argtypes = _encode_args
+        # FT4
+        self._lib.ft8s_decode_ft4.restype = ctypes.c_int
+        self._lib.ft8s_decode_ft4.argtypes = _decode_args
+        self._lib.ft8s_encode_ft4.restype = ctypes.c_int
+        self._lib.ft8s_encode_ft4.argtypes = _encode_args
 
     def decode(
         self,
@@ -97,17 +98,19 @@ class Ft8Lib:
         max_freq_hz: float = 3000.0,
         num_passes: int = 5,
         max_results: int = 200,
+        mode: str = "FT8",
     ) -> list[dict]:
         """int16 PCM @ 12kHz → Liste von Decode-Ergebnissen.
 
-        Jedes Ergebnis: {"message": str, "freq_hz": float, "dt": float,
-                         "snr": int, "ldpc_errors": int}
+        mode: "FT8" oder "FT4" (FT2 noch nicht unterstuetzt)
         """
         audio = np.ascontiguousarray(audio_int16, dtype=np.int16)
         results = (_Ft8sResult * max_results)()
 
+        decode_fn = self._lib.ft8s_decode_ft4 if mode == "FT4" else self._lib.ft8s_decode
+
         with Ft8Lib._lock:
-            n_found = self._lib.ft8s_decode(
+            n_found = decode_fn(
                 audio.ctypes.data_as(ctypes.POINTER(ctypes.c_int16)),
                 ctypes.c_int(len(audio)),
                 ctypes.c_float(max_freq_hz),
@@ -127,17 +130,19 @@ class Ft8Lib:
             for i in range(max(0, n_found))
         ]
 
-    def encode(self, message_text: str, freq_hz: float = 1000.0) -> np.ndarray | None:
+    def encode(self, message_text: str, freq_hz: float = 1000.0,
+               mode: str = "FT8") -> np.ndarray | None:
         """Nachrichtentext → int16 PCM @ 12kHz.
 
-        Gibt None zurueck wenn der Text ungueltig ist oder die Bibliothek
-        einen Fehler meldet.
+        mode: "FT8" oder "FT4" (FT2 noch nicht unterstuetzt)
         """
         max_samples = 200_000
         out_buf = (ctypes.c_int16 * max_samples)()
 
+        encode_fn = self._lib.ft8s_encode_ft4 if mode == "FT4" else self._lib.ft8s_encode
+
         with Ft8Lib._lock:
-            n_written = self._lib.ft8s_encode(
+            n_written = encode_fn(
                 message_text.encode("ascii"),
                 ctypes.c_float(freq_hz),
                 out_buf,
