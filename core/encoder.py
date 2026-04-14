@@ -186,7 +186,11 @@ class Encoder(QObject):
         # 4. Silence-Padding berechnen (jetzt praezise, da nahe am Ziel)
         #    Stille absorbiert den restlichen Jitter des OS-Schedulers
         now = time.time()
-        silence_secs = max(0.0, (next_boundary + TARGET_TX_OFFSET) - now)
+        # DT-Korrektur auch fürs Senden: gleicher Zeitschlitz-Versatz wie RX
+        # Positive Korrektur = wir sind "zu spät" → FRÜHER senden → abziehen
+        from core import ntp_time
+        dt_adj = ntp_time.get_correction()
+        silence_secs = max(0.0, (next_boundary + TARGET_TX_OFFSET - dt_adj) - now)
 
         # Kaltstart-Guard: nur springen wenn weit daneben (>5s), sonst sofort senden
         # Bei CQ-Resends ist silence≈0 normal (on_cycle_end feuert am Slot-Rand)

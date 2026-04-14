@@ -124,12 +124,18 @@ def update_from_decoded(dt_values: list) -> bool:
     return False
 
 
-def reset():
-    """Korrektur komplett zuruecksetzen (z.B. bei Bandwechsel)."""
+def reset(keep_correction: bool = True):
+    """Neue Messphase starten. Korrekturwert bleibt erhalten (Bandwechsel).
+
+    keep_correction=True: Letzten Korrekturwert behalten, nur neu messen.
+    keep_correction=False: Alles auf 0 (nur bei App-Start).
+    """
     global _correction, _phase, _cycle_count, _measure_buffer
     global _last_median_dt, _last_sample_count
     with _lock:
-        _correction = 0.0
+        if not keep_correction:
+            _correction = 0.0
+        # Neu messen, aber Korrektur behalten
         _phase = "measure"
         _cycle_count = 0
         _measure_buffer = []
