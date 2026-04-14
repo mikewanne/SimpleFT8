@@ -167,12 +167,15 @@ class QSOMixin:
 
     @Slot(object)
     def _on_qso_complete(self, qso_data):
-        """RR73 gesendet — ADIF schreiben. ✓ erst bei _on_qso_confirmed."""
+        """RR73 gesendet — ADIF schreiben + Meldung anzeigen."""
         self._active_qso_targets.discard(qso_data.their_call)
         self.rx_panel.set_active_call("")
         # Auto-Hunt: QSO erfolgreich → Pause, dann naechste Station
         if self._auto_hunt.active:
             self._auto_hunt.on_qso_complete(qso_data.their_call)
+
+        # QSO-Komplett Meldung im QSO-Panel (✓ + geloggt)
+        self.qso_panel.add_qso_complete(qso_data.their_call)
 
         band = self.settings.band.upper()
         freq = self.settings.frequency_mhz
