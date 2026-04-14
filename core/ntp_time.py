@@ -23,7 +23,7 @@ import threading
 
 MEASURE_CYCLES = 4     # Zyklen pro Messphase
 OPERATE_CYCLES = 20    # Zyklen Betrieb zwischen Messungen
-MIN_STATIONS = 5       # Mindestanzahl Stationen pro Zyklus
+MIN_STATIONS = 3       # Mindestanzahl Stationen (FT4/FT2 haben weniger Aktivitaet)
 MAX_CORRECTION = 2.0   # Maximale kumulative Korrektur (±2.0s)
 
 # ── Zustand ───────────────────────────────────────────────────────────────────
