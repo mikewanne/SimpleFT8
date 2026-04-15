@@ -1,5 +1,13 @@
-"""SimpleFT8 Diversity Controller — periodische Antennen-Messung + CQ-Frequenzwahl."""
+"""SimpleFT8 Diversity Controller — periodische Antennen-Messung + CQ-Frequenzwahl.
 
+Scoring-Modi:
+  "normal" — Fokus auf Masse: Anzahl dekodierbarer Stationen (SNR > -20 dB)
+  "dx"     — Fokus auf Qualitaet: Durchschnitts-SNR der Top-5 Stationen
+
+Auswertung: Median ueber 4 Zyklen pro Antenne, Schwelle 8% (statt 15%).
+"""
+
+import statistics
 from typing import Optional
 
 
@@ -7,19 +15,21 @@ class DiversityController:
     """Periodische Antennen-Messung fuer Diversity-Modus.
 
     Ablauf:
-    - MESS-PHASE  (2 Zyklen): ANT1 dann ANT2 messen
-    - BETRIEB     (40 Zyklen ≈ 10 Min): 70:30 oder 50:50
-    - Nach 40 Zyklen ohne aktives QSO → neu messen
-    Score = Summe (snr+30) aller dekodierten Stationen
-    Δ < 15% → 50:50, sonst bessere Antenne auf 70%
+    - MESS-PHASE  (8 Zyklen): 4×A1 + 4×A2 messen
+    - BETRIEB     (60 Zyklen ≈ 15 Min): 70:30 oder 50:50
+    - Nach 60 Zyklen ohne aktives QSO → neu messen
+    Scoring: Modus-abhaengig (Normal=Stationsanzahl, DX=Top-5-SNR)
+    Schwelle: 8% relative Differenz → 50:50, sonst 70:30
     """
 
     MEASURE_CYCLES = 8   # 4×A1 + 4×A2 (~2 Min Fenster, je even+odd pro Antenne)
     OPERATE_CYCLES = 60  # 15 Min Betrieb (vorher 80=20 Min)
+    THRESHOLD = 0.08     # 8% relative Differenz fuer Antennen-Entscheidung
     _PAT_70_A1 = ("A1","A1","A2","A1","A1","A2","A1","A1","A2","A1")  # 7×A1, 3×A2
     _PAT_70_A2 = ("A2","A2","A1","A2","A2","A1","A2","A2","A1","A2")  # 7×A2, 3×A1
 
-    def __init__(self):
+    def __init__(self, scoring_mode: str = "normal"):
+        self._scoring_mode = scoring_mode  # "normal" oder "dx"
         self.reset()
 
     # CQ-Frequenzwahl: 50-Hz-Histogramm der belegten Subfrequenzen
@@ -28,10 +38,20 @@ class DiversityController:
     FREQ_MAX_HZ = 2800      # Obergrenze Sicherheitsabstand
     FREQ_MIN_GAP_HZ = 150   # Mindestbreite einer freien Lücke
 
+    @property
+    def scoring_mode(self) -> str:
+        """Aktueller Scoring-Modus: 'normal' oder 'dx'."""
+        return self._scoring_mode
+
+    @scoring_mode.setter
+    def scoring_mode(self, mode: str):
+        if mode in ("normal", "dx"):
+            self._scoring_mode = mode
+
     def reset(self):
         self._phase = "measure"
         self._measure_step = 0
-        self._scores = {"A1": 0.0, "A2": 0.0}
+        self._measurements: dict[str, list[float]] = {"A1": [], "A2": []}
         self._operate_cycles = 0
         self.ratio = "50:50"
         self.dominant = None   # "A1", "A2", oder None
@@ -58,15 +78,18 @@ class DiversityController:
     def get_free_cq_freq(self) -> Optional[int]:
         """Freie CQ-Frequenz aus Histogramm berechnen.
 
-        Sucht die breiteste Lücke im Histogramm und gibt deren Mitte zurück.
-        Gibt None zurück wenn keine ausreichende Lücke gefunden.
+        Sucht eine Luecke im AKTIVEN Bereich (wo Stationen sind).
+        Bevorzugt 800-2000 Hz (Sweet Spot fuer CQ), nicht die leere Zone >2000 Hz.
         """
         if not self._freq_histogram:
             return None
 
-        # Alle Bins im Nutzbereich prüfen
-        min_bin = int(self.FREQ_MIN_HZ // self.FREQ_BIN_HZ)
-        max_bin = int(self.FREQ_MAX_HZ // self.FREQ_BIN_HZ)
+        # Aktiven Bereich bestimmen: wo sind die meisten Stationen?
+        # Bevorzuge 800-2000 Hz als CQ Sweet Spot (Grok/DeepSeek Konsens)
+        SWEET_MIN = 800
+        SWEET_MAX = 2000
+        min_bin = int(SWEET_MIN // self.FREQ_BIN_HZ)
+        max_bin = int(SWEET_MAX // self.FREQ_BIN_HZ)
         min_gap_bins = max(1, self.FREQ_MIN_GAP_HZ // self.FREQ_BIN_HZ)
 
         best_gap_start = None
@@ -142,11 +165,29 @@ class DiversityController:
             'gap_end_hz': gap_end_hz,
         }
 
-    def record_measurement(self, ant: str, score: float):
-        """Score nach Messzyklus einpflegen — evaluiert nach 2 Messungen."""
+    def record_measurement(self, ant: str, score: float,
+                           station_count: int = 0, avg_snr: float = -30.0,
+                           dx_weak_count: int = 0):
+        """Score nach Messzyklus einpflegen — evaluiert nach 8 Messungen.
+
+        Args:
+            ant: "A1" oder "A2"
+            score: Legacy-Score (sum(snr+30)), fuer Rueckwaerts-Kompatibilitaet
+            station_count: Anzahl dekodierbarer Stationen (SNR > -20)
+            avg_snr: Durchschnitts-SNR aller Stationen
+            dx_weak_count: Anzahl schwacher Stationen (SNR < -10, DX-Modus)
+        """
         if self._phase != "measure":
             return
-        self._scores[ant] += score   # akkumulieren: even+odd pro Antenne
+
+        # Modus-abhaengigen Score speichern (Einzelwert, NICHT akkumuliert)
+        if self._scoring_mode == "dx":
+            # DX: Anzahl schwacher Stationen (SNR < -10) — mehr = bessere DX-Antenne
+            self._measurements[ant].append(float(dx_weak_count))
+        else:
+            # Standard: Gesamtzahl dekodierbarer Stationen — mehr = besser
+            self._measurements[ant].append(float(station_count))
+
         self._measure_step += 1
         if self._measure_step >= self.MEASURE_CYCLES:
             self._evaluate()
@@ -164,7 +205,7 @@ class DiversityController:
     def start_measure(self):
         self._phase = "measure"
         self._measure_step = 0
-        self._scores = {"A1": 0.0, "A2": 0.0}
+        self._measurements = {"A1": [], "A2": []}
         self._freq_histogram = {}  # Histogramm für neue Messung zurücksetzen
 
     def on_band_change(self):
@@ -187,15 +228,22 @@ class DiversityController:
         return self._operate_cycles
 
     def _evaluate(self):
-        s1, s2 = self._scores["A1"], self._scores["A2"]
-        total = s1 + s2
+        m1 = self._measurements["A1"]
+        m2 = self._measurements["A2"]
+
+        # Median pro Antenne (robust gegen Ausreisser)
+        s1 = statistics.median(m1) if m1 else 0.0
+        s2 = statistics.median(m2) if m2 else 0.0
+        peak = max(s1, s2)
+
         diff = 0.0
-        if total <= 0:
+        if peak <= 1.0:
+            # Zu wenig Daten fuer zuverlaessige Entscheidung
             self.ratio = "50:50"
             self.dominant = None
         else:
-            diff = abs(s1 - s2) / total
-            if diff < 0.15:
+            diff = abs(s1 - s2) / peak  # relative Differenz zum Besseren
+            if diff < self.THRESHOLD:    # 8% statt 15%
                 self.ratio = "50:50"
                 self.dominant = None
             elif s1 >= s2:
@@ -206,5 +254,7 @@ class DiversityController:
                 self.dominant = "A2"
         self._phase = "operate"
         self._operate_cycles = 0
-        print(f"[Diversity] Messung: A1={s1:.1f} A2={s2:.1f} diff={diff:.3f} → {self.ratio} "
-              f"(dominant: {self.dominant})")
+        mode_tag = "DX" if self._scoring_mode == "dx" else "Normal"
+        print(f"[Diversity] Messung ({mode_tag}): A1={s1:.1f} A2={s2:.1f} "
+              f"diff={diff:.3f} (>{self.THRESHOLD:.0%}?) → {self.ratio} "
+              f"(dominant: {self.dominant}, Werte: A1={m1} A2={m2})")

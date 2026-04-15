@@ -59,10 +59,20 @@ class CycleMixin:
 
         # Messung aufzeichnen wenn wir in der Mess-Phase waren
         if self._rx_mode == "diversity" and was_phase == "measure":
-            score = sum(max(0.0, float(m.snr + 30)) for m in (messages or [])
-                        if m.snr is not None)
+            valid = [m for m in (messages or []) if m.snr is not None and m.snr > -20]
+            score = sum(max(0.0, float(m.snr + 30)) for m in valid)
+            station_count = len(valid)
+            avg_snr = (sum(m.snr for m in valid) / station_count) if station_count else -30.0
+            # DX-Score: Anzahl SCHWACHER Stationen (SNR < -10 dB)
+            # Schwache Signale = DX (Australien -24dB zaehlt, Bochum +12dB nicht)
+            weak_count = len([m for m in valid if m.snr < -10])
             with self._diversity_lock:
-                self._diversity_ctrl.record_measurement(ant, score)
+                self._diversity_ctrl.record_measurement(
+                    ant, score,
+                    station_count=station_count,
+                    avg_snr=avg_snr,
+                    dx_weak_count=weak_count,
+                )
                 # Stationsfrequenzen für CQ-Frequenzwahl erfassen
                 for m in (messages or []):
                     if hasattr(m, 'freq_hz') and m.freq_hz:
@@ -73,6 +83,7 @@ class CycleMixin:
                 measure_total=self._diversity_ctrl.MEASURE_CYCLES,
                 operate_cycles=self._diversity_ctrl.operate_cycles,
                 operate_total=self._diversity_ctrl.OPERATE_CYCLES,
+                scoring_mode=self._diversity_ctrl.scoring_mode,
             )
             # Messung abgeschlossen → CQ freigeben + Frequenz wählen
             if self._diversity_ctrl.phase == "operate":
@@ -167,7 +178,8 @@ class CycleMixin:
                 a1_avg = sum(m.snr for m in a1_msgs) / len(a1_msgs) if a1_msgs else -30
                 a2_avg = sum(m.snr for m in a2_msgs) / len(a2_msgs) if a2_msgs else -30
                 self.control_panel.update_diversity_counts(
-                    len(a1_msgs), len(a2_msgs), a1_avg, a2_avg)
+                    len(a1_msgs), len(a2_msgs), a1_avg, a2_avg,
+                    scoring_mode=self._diversity_ctrl.scoring_mode)
 
             self.control_panel.update_decode_count(
                 len(self._diversity_stations)
@@ -349,7 +361,8 @@ class CycleMixin:
                         self._set_cq_locked(True)
                         self.control_panel.update_diversity_ratio(
                             "50:50", "remeasure", 0,
-                            self._diversity_ctrl.MEASURE_CYCLES)
+                            self._diversity_ctrl.MEASURE_CYCLES,
+                            scoring_mode=self._diversity_ctrl.scoring_mode)
                         print("[Diversity] Automatische Neueinmessung gestartet")
 
                 self._diversity_current_ant = self._diversity_ctrl.choose()
@@ -367,6 +380,7 @@ class CycleMixin:
                     measure_total=self._diversity_ctrl.MEASURE_CYCLES,
                     operate_cycles=self._diversity_ctrl.operate_cycles,
                     operate_total=self._diversity_ctrl.OPERATE_CYCLES,
+                    scoring_mode=self._diversity_ctrl.scoring_mode,
                 )
 
             # BUG-3: ant_cmd + gain als Argumente, nicht als Closure

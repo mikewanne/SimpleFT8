@@ -8,10 +8,28 @@ from collections import deque
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import Qt, Slot
-from PySide6.QtWidgets import QMessageBox
+from PySide6.QtWidgets import QMessageBox, QCheckBox
 
 if TYPE_CHECKING:
     from .main_window import MainWindow
+
+
+def _show_info_once(parent, key: str, title: str, text: str, settings) -> bool:
+    """Info-Dialog mit 'Nicht mehr anzeigen' Checkbox. Gibt True zurueck wenn angezeigt."""
+    if settings.get(f"hide_info_{key}", False):
+        return False
+    dlg = QMessageBox(parent)
+    dlg.setWindowTitle(title)
+    dlg.setIcon(QMessageBox.Icon.Information)
+    dlg.setText(text)
+    cb = QCheckBox("Beim naechsten Mal nicht mehr anzeigen")
+    dlg.setCheckBox(cb)
+    dlg.addButton(QMessageBox.StandardButton.Ok)
+    dlg.exec()
+    if cb.isChecked():
+        settings.set(f"hide_info_{key}", True)
+        settings.save()
+    return True
 
 from radio.presets import PREAMP_PRESETS
 from core.qso_state import QSOState
@@ -277,27 +295,39 @@ class RadioMixin:
             self._normal_stations = {}
             self._apply_normal_mode()
             self.control_panel._freq_hist.setVisible(False)
+            self.control_panel.btn_diversity.setText("DIVERSITY")  # Reset Button-Text
         elif mode == "diversity":
-            # Dialog: Einmessen erforderlich?
-            from PySide6.QtWidgets import QMessageBox
+            # Info-Dialog (einmalig)
+            _show_info_once(self, "diversity", "Diversity Modus",
+                "Diversity vergleicht zwei Antennen und waehlt die bessere.\n\n"
+                "Standard: Zaehlt alle dekodierten Stationen.\n"
+                "Die Antenne die mehr Stationen hoert gewinnt.\n"
+                "Ideal fuer CQ-Betrieb mit vielen QSOs.\n\n"
+                "DX: Zaehlt nur schwache Stationen (SNR < -10 dB).\n"
+                "Entfernte DX-Stationen kommen schwach rein (z.B. -24 dB).\n"
+                "Die Antenne die mehr DX-Stationen hoert gewinnt.\n\n"
+                "Messdauer: 8 Zyklen (~2 Min).\n"
+                "Ergebnis: bessere Antenne 70:30 oder gleichmaessig 50:50.",
+                self.settings)
+            # Scoring-Modus waehlen
             dlg = QMessageBox(self)
-            dlg.setWindowTitle("Diversity Modus")
-            dlg.setText(
-                "Einmessen der Antennen erforderlich.\n\n"
-                "Während des Einmessens ist kein CQ möglich.\n"
-                "Dauer: ca. 2 Minuten (8 Zyklen)."
-            )
-            btn_measure = dlg.addButton("Einmessen starten", QMessageBox.ButtonRole.AcceptRole)
-            btn_normal  = dlg.addButton("Normal Mode", QMessageBox.ButtonRole.RejectRole)
+            dlg.setWindowTitle("Diversity — Modus waehlen")
+            dlg.setText("Welchen Scoring-Modus verwenden?")
+            btn_normal_m = dlg.addButton("Standard", QMessageBox.ButtonRole.AcceptRole)
+            btn_dx       = dlg.addButton("DX", QMessageBox.ButtonRole.AcceptRole)
+            btn_cancel   = dlg.addButton("Abbrechen", QMessageBox.ButtonRole.RejectRole)
             dlg.exec()
-            if dlg.clickedButton() == btn_normal:
-                # Zurück zu Normal — Button-State korrigieren
+            if dlg.clickedButton() == btn_cancel:
                 self.control_panel.set_rx_mode("normal")
                 self._update_statusbar()
                 return
+            scoring = "dx" if dlg.clickedButton() == btn_dx else "normal"
             self._rx_mode = "diversity"
             self._diversity_stations = {}
-            self._enable_diversity()
+            # Button-Text: zeigt aktiven Modus
+            label = "DIVERSITY DX" if scoring == "dx" else "DIVERSITY"
+            self.control_panel.btn_diversity.setText(label)
+            self._enable_diversity(scoring_mode=scoring)
 
         self._update_statusbar()
 
@@ -315,15 +345,17 @@ class RadioMixin:
         else:
             self.control_panel.btn_cq.setText("CQ RUFEN")
 
-    def _enable_diversity(self):
+    def _enable_diversity(self, scoring_mode: str = "normal"):
         """Diversity aktivieren: Antenne pro Zyklus wechseln, Stationen akkumulieren."""
         self._diversity_stations = {}
         self._diversity_current_ant = "A1"
         self._diversity_ant_queue = deque()  # (ant, phase) Tupel
         # Betriebszyklen aus Settings laden
         self._diversity_ctrl.OPERATE_CYCLES = self.settings.get("diversity_operate_cycles", 80)
+        self._diversity_ctrl.scoring_mode = scoring_mode
         self._diversity_ctrl.reset()
-        self._set_cq_locked(True)   # CQ sperren bis Einmessen abgeschlossen
+        self._set_cq_locked(True)   # CQ sperren bis Messung abgeschlossen
+        print(f"[Diversity] Gestartet — Scoring: {scoring_mode.upper()}")
         self.control_panel.update_diversity_ratio("50:50", "measure", 0,
                                                   self._diversity_ctrl.MEASURE_CYCLES)
         self.control_panel.update_diversity_counts(0, 0)
@@ -385,6 +417,14 @@ class RadioMixin:
 
     def _handle_dx_tuning(self):
         """DX-Tuning Modus: Preset laden oder Messung starten."""
+        _show_info_once(self, "gain_messung", "Gain-Messung",
+            "Die Gain-Messung ermittelt optimale Preamp-Werte\n"
+            "fuer jede Antenne auf dem aktuellen Band.\n\n"
+            "Die Werte werden pro Band gespeichert und beim\n"
+            "naechsten Start automatisch geladen.\n\n"
+            "Bei DX-Verkehr oder wechselnden Bedingungen\n"
+            "sollte die Messung taeglich wiederholt werden.",
+            self.settings)
         band = self.settings.band
         preset = self.settings.get_dx_preset(band)
 
@@ -426,10 +466,10 @@ class RadioMixin:
             if msg.clickedButton() == btn_start:
                 self._start_dx_tuning()
             else:
-                pass  # EINMESSEN abgebrochen — Modus unveraendert lassen
+                pass  # GAIN-MESSUNG abgebrochen — Modus unveraendert lassen
 
     def _start_dx_tuning(self):
-        """DX Tune Dialog — optional TUNE-Schritt + SWR-Pruefung vor Einmessen."""
+        """DX Tune Dialog — optional TUNE-Schritt + SWR-Pruefung vor Gain-Messung."""
         from PySide6.QtWidgets import QMessageBox
         from PySide6.QtCore import QTimer
 
@@ -438,12 +478,12 @@ class RadioMixin:
 
         # TUNE anbieten (Antennentuner einstellen bevor Messung startet)
         msg = QMessageBox(self)
-        msg.setWindowTitle("Vor dem Einmessen: TUNE")
+        msg.setWindowTitle("Vor der Gain-Messung: TUNE")
         msg.setIcon(QMessageBox.Icon.Question)
         msg.setText(
-            f"Vor dem Einmessen den Tuner einstellen?\n\n"
+            f"Vor der Gain-Messung den Tuner einstellen?\n\n"
             f"TUNE sendet {tune_power}W auf ANT1 fuer 5 Sekunden.\n"
-            f"Bei SWR > {swr_limit:.1f} wird Einmessen abgebrochen."
+            f"Bei SWR > {swr_limit:.1f} wird Gain-Messung abgebrochen."
         )
         msg.setStyleSheet(self._msgbox_style())
         btn_tune  = msg.addButton("Tunen + Messen", QMessageBox.ButtonRole.AcceptRole)
@@ -472,7 +512,7 @@ class RadioMixin:
                 if swr > swr_limit:
                     QMessageBox.warning(
                         self, "SWR zu hoch",
-                        f"SWR {swr:.1f} > {swr_limit:.1f} — Einmessen abgebrochen.\n"
+                        f"SWR {swr:.1f} > {swr_limit:.1f} — Gain-Messung abgebrochen.\n"
                         f"Antenne/Tuner pruefen!"
                     )
                     self._on_rx_mode_changed("normal")
@@ -481,7 +521,7 @@ class RadioMixin:
 
             QTimer.singleShot(5000, _after_tune)
         else:
-            # Direkt einmessen ohne TUNE
+            # Direkt Gain-Messung ohne TUNE
             self._open_dx_tune_dialog()
 
     def _open_dx_tune_dialog(self):

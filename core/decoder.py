@@ -238,14 +238,14 @@ class Decoder(QObject):
             # Anti-Alias Resampling 24k → 12k
             audio_12k = _resample_to_12k(audio_raw, source_rate=24000)
 
-            if len(audio_12k) > CYCLE_SAMPLES_12K:
-                audio_12k = audio_12k[-CYCLE_SAMPLES_12K:]
-            elif len(audio_12k) < CYCLE_SAMPLES_12K // 2:
-                print(f"[Decoder] Zu wenig Audio: {len(audio_12k)} < {CYCLE_SAMPLES_12K // 2}")
+            if len(audio_12k) > self._slot_samples:
+                audio_12k = audio_12k[-self._slot_samples:]
+            elif len(audio_12k) < self._slot_samples // 2:
+                print(f"[Decoder] Zu wenig Audio: {len(audio_12k)} < {self._slot_samples // 2}")
                 return
             else:
                 audio_12k = np.pad(
-                    audio_12k, (0, max(0, CYCLE_SAMPLES_12K - len(audio_12k)))
+                    audio_12k, (0, max(0, self._slot_samples - len(audio_12k)))
                 )
 
             # DT-Korrektur: Audio-Buffer verschieben (nicht Sleep-Zeit!)

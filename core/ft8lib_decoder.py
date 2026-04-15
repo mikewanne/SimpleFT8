@@ -107,7 +107,7 @@ class Ft8Lib:
     ) -> list[dict]:
         """int16 PCM @ 12kHz → Liste von Decode-Ergebnissen.
 
-        mode: "FT8" oder "FT4" (FT2 noch nicht unterstuetzt)
+        mode: "FT8", "FT4" oder "FT2"
         """
         audio = np.ascontiguousarray(audio_int16, dtype=np.int16)
         results = (_Ft8sResult * max_results)()
@@ -140,7 +140,7 @@ class Ft8Lib:
                mode: str = "FT8") -> np.ndarray | None:
         """Nachrichtentext → int16 PCM @ 12kHz.
 
-        mode: "FT8" oder "FT4" (FT2 noch nicht unterstuetzt)
+        mode: "FT8", "FT4" oder "FT2"
         """
         max_samples = 200_000
         out_buf = (ctypes.c_int16 * max_samples)()
