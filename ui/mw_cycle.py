@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import copy
 import threading
 import time
 from typing import TYPE_CHECKING
@@ -15,6 +14,7 @@ if TYPE_CHECKING:
 from core.qso_state import QSOState
 from core.message import FT8Message
 from core import ntp_time
+from core.station_accumulator import accumulate_stations
 from radio.presets import PREAMP_PRESETS
 
 
@@ -99,71 +99,10 @@ class CycleMixin:
                 )
 
         if self._rx_mode == "diversity" and messages:
-            # Diversity: Stationen akkumulieren per Callsign
-            # Zwei Timestamps:
-            #   _last_heard:   wann zuletzt dekodiert (fuer Aging)
-            #   _last_changed: wann sich Inhalt geaendert hat (fuer UTC-Anzeige)
-            # Aging: 2 Min nicht mehr dekodiert → raus
-            # ant wurde oben schon aus der Queue geholt
-            now = time.time()
-            slot_start = now - (now % 15.0)
-            utc_str = time.strftime("%H%M%S", time.gmtime(slot_start))
-            changed = False
-            for orig_msg in messages:
-                key = orig_msg.caller
-                if not key:
-                    continue
-                msg = copy.copy(orig_msg)  # Thread-safe: Kopie vor Mutation
-                msg.antenna = ant
-                existing = self._diversity_stations.get(key)
-                if existing is None:
-                    # Neue Station
-                    msg._last_heard = now
-                    msg._last_changed = now
-                    msg._utc_display = utc_str
-                    self._diversity_stations[key] = msg
-                    changed = True
-                else:
-                    # Station bekannt — hat sich IRGENDWAS geaendert?
-                    snr_changed = msg.snr != existing.snr
-                    ant_changed = ant != getattr(existing, 'antenna', '')
-                    content_changed = (
-                        msg.field1 != existing.field1 or
-                        msg.field2 != existing.field2 or
-                        msg.field3 != existing.field3
-                    )
-                    if snr_changed or ant_changed or content_changed:
-                        # Etwas hat sich geaendert → Timestamp + Werte updaten
-                        existing._last_heard = now
-                        existing._utc_display = utc_str
-                        # Antennen-Vergleich: auf welcher war sie staerker?
-                        if ant_changed and existing.antenna in ("A1", "A2"):
-                            old_ant = existing.antenna
-                            if msg.snr > existing.snr:
-                                # Neue Antenne staerker
-                                existing.antenna = f"{ant}>{old_ant[-1]}"
-                            else:
-                                # Alte Antenne war staerker
-                                existing.antenna = f"{old_ant}>{ant[-1]}"
-                        elif not ant_changed:
-                            pass  # Antenne gleich, nichts aendern
-                        existing.snr = msg.snr
-                        if content_changed:
-                            existing.raw = msg.raw
-                            existing.field1 = msg.field1
-                            existing.field2 = msg.field2
-                            existing.field3 = msg.field3
-                        changed = True
-                    # Sonst: exakt gleich → kein Update, altert nach 2 Min raus
-
-            # Alte Stationen entfernen (75s normal, 150s wenn aktiv angerufen)
-            stale = [k for k, m in self._diversity_stations.items()
-                     if now - getattr(m, '_last_heard', now) > (
-                         150 if k in self._active_qso_targets else 75)]
-            if stale:
-                changed = True
-                for k in stale:
-                    del self._diversity_stations[k]
+            # Diversity: gemeinsame Akkumulation mit Antennen-Info
+            changed = accumulate_stations(
+                self._diversity_stations, messages,
+                self._active_qso_targets, antenna=ant)
 
             # Tabelle neu aufbauen wenn sich was geaendert hat
             if changed:
@@ -186,46 +125,10 @@ class CycleMixin:
             )
 
         elif self._rx_mode == "normal" and messages:
-            # Normal: Akkumulation mit 2-Min-Fenster (wie Diversity, ohne Antennenwechsel)
-            now = time.time()
-            slot_start = now - (now % 15.0)
-            utc_str = time.strftime("%H%M%S", time.gmtime(slot_start))
-            changed = False
-            for msg in messages:
-                key = msg.caller
-                if not key:
-                    continue
-                existing = self._normal_stations.get(key)
-                if existing is None:
-                    msg._last_heard = now
-                    msg._utc_display = utc_str
-                    self._normal_stations[key] = msg
-                    changed = True
-                else:
-                    existing._last_heard = now
-                    snr_changed = msg.snr != existing.snr
-                    content_changed = (
-                        msg.field1 != existing.field1 or
-                        msg.field2 != existing.field2 or
-                        msg.field3 != existing.field3
-                    )
-                    if snr_changed or content_changed:
-                        existing._utc_display = utc_str
-                        existing.snr = msg.snr
-                        if content_changed:
-                            existing.raw = msg.raw
-                            existing.field1 = msg.field1
-                            existing.field2 = msg.field2
-                            existing.field3 = msg.field3
-                        changed = True
-            # Aging: 75s normal, 150s wenn aktiv angerufen
-            stale = [k for k, m in self._normal_stations.items()
-                     if now - getattr(m, '_last_heard', now) > (
-                         150 if k in self._active_qso_targets else 75)]
-            if stale:
-                changed = True
-                for k in stale:
-                    del self._normal_stations[k]
+            # Normal: gemeinsame Akkumulation ohne Antennen-Info
+            changed = accumulate_stations(
+                self._normal_stations, messages,
+                self._active_qso_targets, antenna="")
             if changed:
                 self.rx_panel.table.setRowCount(0)
                 for m in self._normal_stations.values():

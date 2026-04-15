@@ -314,6 +314,180 @@ def test_no_private_radio_access():
         assert not matches, f"{path}: Private Zugriffe: {set(matches)}"
 
 
+# ── QSO State Machine ────────────────────────────────────────────────────────
+
+def _make_msg(caller, target, raw, grid_or_report="", is_grid=False,
+              is_report=False, is_r_report=False, is_rr73=False, is_73=False):
+    """Hilfs-FT8Message fuer Tests (umgeht parse_ft8_message)."""
+    from core.message import FT8Message
+    m = FT8Message(raw=raw)
+    m.field1 = target
+    m.field2 = caller
+    m.field3 = grid_or_report
+    m.snr = -15
+    m.freq_hz = 1000
+    m.dt = 0.0
+    m._tx_even = True
+    # Properties ueberschreiben via Attribute
+    m._is_grid = is_grid
+    m._is_report = is_report
+    m._is_r_report = is_r_report
+    m._is_rr73 = is_rr73
+    m._is_73 = is_73
+    # Monkey-Patch Properties
+    type(m).is_grid = property(lambda s: getattr(s, '_is_grid', False))
+    type(m).is_report = property(lambda s: getattr(s, '_is_report', False))
+    type(m).is_r_report = property(lambda s: getattr(s, '_is_r_report', False))
+    type(m).is_rr73 = property(lambda s: getattr(s, '_is_rr73', False))
+    type(m).is_73 = property(lambda s: getattr(s, '_is_73', False))
+    type(m).grid_or_report = property(lambda s: s.field3)
+    type(m).caller = property(lambda s: s.field2)
+    type(m).target = property(lambda s: s.field1)
+    return m
+
+
+def test_qso_cq_flow():
+    """CQ-Modus: CQ → Antwort → Report → R-Report → RR73 → fertig."""
+    from core.qso_state import QSOStateMachine, QSOState
+    sm = QSOStateMachine("DA1MHH", "JO31")
+    sent = []
+    sm.send_message.connect(lambda m: sent.append(m))
+    completed = []
+    sm.qso_complete.connect(lambda q: completed.append(q))
+
+    sm.start_cq()
+    assert sm.state == QSOState.CQ_CALLING
+    assert len(sent) == 1 and "CQ" in sent[0]
+
+    # Simuliere TX fertig
+    sm.on_message_sent()
+    assert sm.state == QSOState.CQ_WAIT
+
+    # Station antwortet mit Grid
+    msg = _make_msg("R3EDI", "DA1MHH", "DA1MHH R3EDI KO82",
+                     grid_or_report="KO82", is_grid=True)
+    sm.on_message_received(msg)
+    assert sm.state == QSOState.TX_REPORT
+    assert len(sent) == 2  # Report gesendet
+
+    # TX fertig → WAIT_RR73
+    sm.on_message_sent()
+    assert sm.state == QSOState.WAIT_RR73
+
+    # Station sendet R-Report
+    msg2 = _make_msg("R3EDI", "DA1MHH", "DA1MHH R3EDI R-06",
+                      grid_or_report="R-06", is_report=True, is_r_report=True)
+    sm.on_message_received(msg2)
+    assert sm.state == QSOState.TX_RR73
+    assert "RR73" in sent[-1]
+
+    # TX fertig → QSO komplett
+    sm.on_message_sent()
+    assert len(completed) == 1
+    assert sm.state == QSOState.WAIT_73
+
+
+def test_qso_wait73_no_timeout():
+    """WAIT_73 darf NICHT den 3-Min Global-Timeout ausloesen."""
+    import time
+    from core.qso_state import QSOStateMachine, QSOState
+    sm = QSOStateMachine("DA1MHH", "JO31")
+    sm.state = QSOState.WAIT_73
+    sm.qso.start_time = time.time() - 200  # 200s = ueber 180s Limit
+    timeouts = []
+    sm.qso_timeout.connect(lambda c: timeouts.append(c))
+    sm.on_cycle_end()
+    assert len(timeouts) == 0, "WAIT_73 soll NICHT timeout ausloesen"
+
+
+def test_qso_rr73_courtesy():
+    """Nach QSO: Station sendet nochmal R-Report → RR73 Hoeflichkeit (max 2x)."""
+    from core.qso_state import QSOStateMachine, QSOState
+    sm = QSOStateMachine("DA1MHH", "JO31")
+    sm.state = QSOState.WAIT_73
+    sm.qso.their_call = "R3EDI"
+    sm.qso.rr73_retries = 0
+    sent = []
+    sm.send_message.connect(lambda m: sent.append(m))
+
+    # Station sendet nochmal R-Report
+    msg = _make_msg("R3EDI", "DA1MHH", "DA1MHH R3EDI R-06",
+                     grid_or_report="R-06", is_report=True, is_r_report=True)
+    sm.on_message_received(msg)
+    assert len(sent) == 1 and "RR73" in sent[0]
+
+    # Nochmal
+    sm.on_message_received(msg)
+    assert len(sent) == 2
+
+    # Drittes Mal → wird ignoriert (max 2)
+    sm.on_message_received(msg)
+    assert len(sent) == 2  # kein drittes RR73
+
+
+def test_qso_73_confirmation():
+    """Nach RR73: 73 von Gegenstation → QSO bestaetigt."""
+    from core.qso_state import QSOStateMachine, QSOState
+    sm = QSOStateMachine("DA1MHH", "JO31")
+    sm.state = QSOState.WAIT_73
+    sm.qso.their_call = "R3EDI"
+    sm.cq_mode = True
+    confirmed = []
+    sm.qso_confirmed.connect(lambda q: confirmed.append(q))
+
+    msg = _make_msg("R3EDI", "DA1MHH", "DA1MHH R3EDI 73", is_73=True)
+    sm.on_message_received(msg)
+    assert len(confirmed) == 1
+
+
+def test_qso_hunt_basic():
+    """Hunt-Modus: Station anklicken → Report senden."""
+    from core.qso_state import QSOStateMachine, QSOState
+    sm = QSOStateMachine("DA1MHH", "JO31")
+    sent = []
+    sm.send_message.connect(lambda m: sent.append(m))
+    sm.start_qso(their_call="US5EAA", their_grid="KN78", freq_hz=1200)
+    assert sm.state == QSOState.TX_CALL
+    assert "US5EAA" in sent[0] and "DA1MHH" in sent[0]
+
+
+def test_qso_worked_recently_block():
+    """Kuerzlich gearbeitete Station wird im CQ-Modus ignoriert."""
+    import time
+    from core.qso_state import QSOStateMachine, QSOState
+    sm = QSOStateMachine("DA1MHH", "JO31")
+    sm._worked_calls["R3EDI"] = time.time()  # gerade gearbeitet
+    sm.state = QSOState.CQ_WAIT
+    sm.cq_mode = True
+    sent = []
+    sm.send_message.connect(lambda m: sent.append(m))
+
+    msg = _make_msg("R3EDI", "DA1MHH", "DA1MHH R3EDI KO82",
+                     grid_or_report="KO82", is_grid=True)
+    sm.on_message_received(msg)
+    # Sollte ignoriert werden → kein neuer TX
+    assert not any("R3EDI" in s and "RR73" not in s and "CQ" not in s for s in sent)
+
+
+# ── DT Correction Persistence ────────────────────────────────────────────────
+
+def test_dt_correction_mode_switch():
+    """DT-Korrektur: Modus-Wechsel laedt gespeicherten Wert."""
+    from core import ntp_time
+    # Simuliere: FT8 hat Korrektur +0.5
+    ntp_time._correction = 0.5
+    ntp_time._mode = "FT8"
+    ntp_time._saved = {"FT8": 0.5, "FT4": 0.3}
+    # Wechsel auf FT4 → soll 0.3 laden
+    ntp_time.set_mode("FT4")
+    assert abs(ntp_time._correction - 0.3) < 0.01
+    # Zurueck auf FT8 → soll 0.5 laden
+    ntp_time.set_mode("FT8")
+    assert abs(ntp_time._correction - 0.5) < 0.01
+    # Reset
+    ntp_time.reset(keep_correction=False)
+
+
 # ── Runner ───────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
