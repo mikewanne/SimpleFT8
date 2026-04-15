@@ -299,6 +299,7 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
             self._omni_tx.disable()
             self._auto_hunt.disable()
             self.control_panel.update_omni_tx(False)
+            self.control_panel.btn_cq.setText("CQ RUFEN")
             self._update_statusbar()
         else:
             # Aktivierungsdialog
@@ -320,6 +321,7 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
                 self._omni_tx.enable()
                 self._auto_hunt.enable()
                 self.control_panel.update_omni_tx(True)
+                self.control_panel.btn_cq.setText("OMNI CQ")
                 self._update_statusbar()
 
     # ── Propagation ──────────────────────────────────────────────

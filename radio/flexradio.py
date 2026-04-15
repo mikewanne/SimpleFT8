@@ -866,6 +866,12 @@ class FlexRadio(QObject):
         """TX-Antenne setzen (ANT1, ANT2)."""
         self._send_cmd(f"slice set {self._slice_idx} txant={ant}")
 
+    def set_rx_filter(self, lo_hz: int, hi_hz: int) -> None:
+        """RX-Filter Bandbreite am FlexRadio setzen."""
+        self._send_cmd(f"slice set {self._slice_idx} filter_lo={lo_hz}")
+        self._send_cmd(f"slice set {self._slice_idx} filter_hi={hi_hz}")
+        print(f"[FlexRadio] Filter: {lo_hz}-{hi_hz} Hz")
+
     def set_rfgain(self, gain: int):
         """RF-Gain auf Primary Slice setzen (0-30 dB)."""
         self._send_cmd(f"slice set {self._slice_idx} rfgain={gain}")

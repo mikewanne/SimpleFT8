@@ -8,18 +8,18 @@ CONFIG_DIR = Path.home() / ".simpleft8"
 CONFIG_FILE = CONFIG_DIR / "config.json"
 
 # Standard-FT8/FT4/FT2-Frequenzen pro Band
-# FT2: Decodium-kompatibel (4-GFSK, Costas), Community-Frequenzen Stand April 2026
-# Quelle: ft2.it, PSKReporter, RadioReference
+# FT2: Community-Frequenzen (DXZone/Decodium), Stand April 2026
+# HINWEIS: FT2-Decoder noch NICHT Decodium-kompatibel (8-GFSK noetig, wir haben 4-GFSK)
 BAND_FREQUENCIES = {
-    "80m": {"ft8": 3.573, "ft4": 3.575, "ft2": 3.582},
-    "60m": {"ft8": 5.357, "ft4": 5.357, "ft2": 5.362},
-    "40m": {"ft8": 7.074, "ft4": 7.047, "ft2": 7.062},
-    "30m": {"ft8": 10.136, "ft4": 10.140, "ft2": 10.143},
-    "20m": {"ft8": 14.074, "ft4": 14.080, "ft2": 14.082},
+    "80m": {"ft8": 3.573, "ft4": 3.575, "ft2": 3.578},
+    "60m": {"ft8": 5.357, "ft4": 5.357, "ft2": 5.360},
+    "40m": {"ft8": 7.074, "ft4": 7.047, "ft2": 7.052},
+    "30m": {"ft8": 10.136, "ft4": 10.140, "ft2": 10.144},
+    "20m": {"ft8": 14.074, "ft4": 14.080, "ft2": 14.084},
     "17m": {"ft8": 18.100, "ft4": 18.104, "ft2": 18.108},
-    "15m": {"ft8": 21.074, "ft4": 21.140, "ft2": 21.082},
-    "12m": {"ft8": 24.915, "ft4": 24.919, "ft2": 24.922},
-    "10m": {"ft8": 28.074, "ft4": 28.180, "ft2": 28.082},
+    "15m": {"ft8": 21.074, "ft4": 21.140, "ft2": 21.144},
+    "12m": {"ft8": 24.915, "ft4": 24.919, "ft2": 24.923},
+    "10m": {"ft8": 28.074, "ft4": 28.180, "ft2": 28.184},
 }
 
 DEFAULTS = {

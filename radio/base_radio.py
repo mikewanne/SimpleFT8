@@ -176,6 +176,18 @@ class RadioInterface(ABC):
         """True wenn 2. Empfangskanal für Diversity vorhanden."""
         return False
 
+    # ── Filter ─────────────────────────────────────────────────
+
+    def set_rx_filter(self, lo_hz: int, hi_hz: int) -> None:
+        """RX-Filter Bandbreite setzen (Low/High in Hz).
+
+        Wird beim Modus-Wechsel aufgerufen:
+          FT8:  100-3100 Hz (50 Hz Signalbreite)
+          FT4:  100-3100 Hz (83 Hz Signalbreite)
+          FT2:  100-4000 Hz (150 Hz Signalbreite, breiterer Filter noetig)
+        """
+        pass  # Default: no-op, Radios die Filter unterstuetzen ueberschreiben
+
     # ── Power (direkt) ──────────────────────────────────────────
 
     def set_rfpower_direct(self, value: int) -> None:
