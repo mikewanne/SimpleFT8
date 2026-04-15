@@ -168,12 +168,22 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self._presence_poll_timer.timeout.connect(self._poll_mouse_activity)
         self._presence_poll_timer.start(500)
 
-        # Statusbar
+        # Statusbar + Hilfe-Button
         self._update_statusbar()
         self.statusBar().setStyleSheet(
             "color: #888; font-family: Menlo; font-size: 11px; "
             "background-color: #111;"
         )
+        from PySide6.QtWidgets import QPushButton as _QPB
+        _help_btn = _QPB(" ? ")
+        _help_btn.setStyleSheet(
+            "QPushButton { background: #1a2a3a; color: #88AACC; border: 1px solid #336;"
+            "border-radius: 3px; font-size: 12px; font-weight: bold; padding: 2px 8px; }"
+            "QPushButton:hover { background: #2a3a5a; }"
+        )
+        _help_btn.setFixedHeight(22)
+        _help_btn.clicked.connect(self._on_help_clicked)
+        self.statusBar().addPermanentWidget(_help_btn)
 
         # Fenstergeometrie wiederherstellen
         from PySide6.QtCore import QTimer as _QTimer
@@ -289,6 +299,13 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         # Timer
         self.timer.cycle_tick.connect(self._on_cycle_tick)
         self.timer.cycle_start.connect(self._on_cycle_start)
+
+    def _on_help_clicked(self):
+        """Hilfe-Dialog oeffnen mit Feature-Dokumentation."""
+        from ui.help_dialog import HelpDialog
+        lang = self.settings.get("language", "de")
+        dlg = HelpDialog(self, language=lang)
+        dlg.exec()
 
     # ── Easter Egg ───────────────────────────────────────────────
 

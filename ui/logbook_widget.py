@@ -34,25 +34,26 @@ def _format_datetime(record: dict) -> str:
     return d
 
 
-def _estimate_km(grid: str) -> str:
-    """Entfernung von JO31 (DA1MHH) zu Grid in km schaetzen."""
-    if not grid or len(grid) < 4:
-        return ""
-    try:
-        import math
-        def grid_to_latlon(g):
-            g = g.upper()
-            lon = (ord(g[0]) - ord('A')) * 20 - 180 + (int(g[2]) * 2) + 1
-            lat = (ord(g[1]) - ord('A')) * 10 - 90 + int(g[3]) + 0.5
-            return lat, lon
-        lat1, lon1 = grid_to_latlon("JO31")  # DA1MHH
-        lat2, lon2 = grid_to_latlon(grid)
-        dlat = math.radians(lat2 - lat1)
-        dlon = math.radians(lon2 - lon1)
-        a = math.sin(dlat/2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon/2)**2
-        return str(int(6371 * 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))))
-    except Exception:
-        return ""
+def _estimate_km(grid: str, callsign: str = "") -> str:
+    """Entfernung von JO31 (DA1MHH) — Grid exakt, Callsign-Prefix als Fallback."""
+    if grid and len(grid) >= 4:
+        try:
+            from core.geo import grid_distance
+            km = grid_distance("JO31", grid)
+            if km is not None:
+                return str(km)
+        except Exception:
+            pass
+    # Fallback: Callsign-Prefix → ungefaehre Entfernung
+    if callsign:
+        try:
+            from core.geo import callsign_to_distance
+            km = callsign_to_distance(callsign, "JO31")
+            if km is not None:
+                return f"~{km}"
+        except Exception:
+            pass
+    return ""
 
 
 class LogbookWidget(QWidget):
@@ -203,7 +204,7 @@ class LogbookWidget(QWidget):
                 elif key == "_COUNTRY":
                     value = callsign_to_country(rec.get("CALL", ""))
                 elif key == "_KM":
-                    value = _estimate_km(rec.get("GRIDSQUARE", ""))
+                    value = _estimate_km(rec.get("GRIDSQUARE", ""), rec.get("CALL", ""))
                 else:
                     value = rec.get(key, "")
 
