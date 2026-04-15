@@ -55,12 +55,18 @@
 
 ### 15.04.2026
 - FT2 nativ + Decodium-kompatibel (Source Code verifiziert: NN=103, NSPS=288, 4-GFSK)
-- Diversity Standard/DX Modi + DX-Score (schwache Stationen)
-- QSO-Bugs: WAIT_73 Timeout, RR73 Hoeflichkeit, Overlay
-- DT-Korrektur: schneller, gedaempft, Modus-Wechsel behaelt Wert
-- RX-Filter automatisch pro Modus (FlexRadio)
+- FT2 QSO erfolgreich abgeschlossen (Empfang + Senden funktioniert)
+- Diversity Standard/DX Modi + DX-Score (schwache Stationen <-10dB)
+- QSO-Bugs: WAIT_73 Timeout, RR73 Hoeflichkeit (max 2x), Overlay
+- DT-Korrektur v2: schneller, gedaempft, pro Modus gespeichert (~/.simpleft8/dt_corrections.json)
+- RX-Filter automatisch pro Modus (FT8/FT4=3100Hz, FT2=4000Hz)
 - CQ Frequenz Sweet Spot (800-2000 Hz)
-- OMNI-TX CQ Button, Even/Odd Spalte, Info-Dialoge
+- OMNI-TX CQ Button, Even/Odd Spalte RX + QSO-Panel [E]/[O]
+- CQ-Zeilen zusammengefasst (CQ ×24 statt 24 Einzelzeilen)
+- QSO-Panel Auto-Trim (max 40 Zeilen)
+- Even/Odd Anzeige modus-abhaengig (nicht mehr hardcoded 15s)
+- FT2 Frequenzen DXZone (40m=7.052, 20m=14.084)
+- Info-Dialoge mit "Nicht mehr anzeigen"
 
 ### 14.04.2026
 - FT4/FT2 Integration (Decoder, Encoder, Timing, UI)

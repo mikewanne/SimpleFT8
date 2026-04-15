@@ -1,19 +1,20 @@
 """SimpleFT8 DT-basierte Zeitkorrektur.
 
 Strategie (Mike + Claude + DeepSeek, optimiert 15.04.2026):
-  1. Start mit Systemzeit (correction = 0)
-  2. 2 Zyklen messen, Median → ERSTE Korrektur (100% aggressiv)
+  1. Start: gespeicherten Korrekturwert fuer aktuellen Modus laden
+  2. 2 Zyklen messen, Median → Korrektur verfeinern
   3. 10 Zyklen mit Korrektur arbeiten
-  4. 2 Zyklen messen → Folge-Korrektur (70% gedaempft, verhindert Oszillation)
-  5. Wiederholen
+  4. Wiederholen + nach jeder Messung speichern
 
-Korrektur ist KUMULATIV: correction += neuer_median * daempfung
-Jede Messung gibt nur den REST-Fehler nach vorheriger Korrektur.
-Erste Runde: volle Korrektur. Danach: 70% Daempfung gegen Rauschen.
+Korrekturwerte werden PRO MODUS in config.json gespeichert:
+  {"FT8": +0.73, "FT4": +0.45, "FT2": +0.12}
+Beim Modus-Wechsel: gespeicherten Wert laden → sofort gute Grundkorrektur.
 """
 
+import json
 import statistics
 import threading
+from pathlib import Path
 
 # ── Konfiguration ─────────────────────────────────────────────────────────────
 
@@ -25,17 +26,72 @@ MAX_CORRECTION = 2.0          # Maximale kumulative Korrektur (±2.0s)
 DEADBAND = 0.05               # 50ms Totband (statt 100ms — praeziser)
 DAMPING = 0.7                 # 70% Daempfung fuer Folge-Korrekturen
 
+_DT_FILE = Path.home() / ".simpleft8" / "dt_corrections.json"
+
 # ── Zustand ───────────────────────────────────────────────────────────────────
 
 _lock = threading.Lock()
 
 _correction: float = 0.0          # Kumulative Korrektur in Sekunden
+_mode: str = "FT8"                # Aktueller Modus
 _phase: str = "measure"           # "measure" oder "operate"
 _cycle_count: int = 0             # Zaehler innerhalb der Phase
 _measure_buffer: list = []        # DT-Mediane der Messzyklen
 _last_median_dt: float = 0.0      # Letzter Median (fuer Anzeige)
 _last_sample_count: int = 0       # Letzte Stationsanzahl (fuer Anzeige)
 _is_initial: bool = True          # Erste Messung nach Start/Reset?
+_saved: dict = {}                 # Gespeicherte Korrekturwerte pro Modus
+
+
+def _load_saved():
+    """Gespeicherte Korrekturwerte laden."""
+    global _saved
+    try:
+        if _DT_FILE.exists():
+            _saved = json.loads(_DT_FILE.read_text())
+            print(f"[DT-Korr] Gespeicherte Werte geladen: {_saved}")
+    except Exception:
+        _saved = {}
+
+
+def _save_current():
+    """Aktuellen Korrekturwert fuer den Modus speichern."""
+    global _saved
+    _saved[_mode] = round(_correction, 4)
+    try:
+        _DT_FILE.parent.mkdir(parents=True, exist_ok=True)
+        _DT_FILE.write_text(json.dumps(_saved, indent=2))
+    except Exception as e:
+        print(f"[DT-Korr] Speichern fehlgeschlagen: {e}")
+
+
+# Beim Import laden
+_load_saved()
+
+
+def set_mode(mode: str):
+    """Modus wechseln — gespeicherten Korrekturwert laden.
+
+    Wird bei FT8↔FT4↔FT2 Wechsel aufgerufen.
+    Laedt den zuletzt gespeicherten Wert fuer diesen Modus.
+    """
+    global _correction, _mode, _phase, _cycle_count, _measure_buffer, _is_initial
+    with _lock:
+        # Alten Wert speichern bevor wir wechseln
+        if _correction != 0.0:
+            _save_current()
+        _mode = mode
+        # Gespeicherten Wert fuer neuen Modus laden
+        saved_val = _saved.get(mode, 0.0)
+        _correction = saved_val
+        _phase = "measure"
+        _cycle_count = 0
+        _measure_buffer = []
+        _is_initial = (saved_val == 0.0)  # Nur initial wenn kein Wert gespeichert
+        if saved_val != 0.0:
+            print(f"[DT-Korr] Modus {mode}: Gespeicherter Wert {saved_val:+.3f}s geladen")
+        else:
+            print(f"[DT-Korr] Modus {mode}: Kein gespeicherter Wert, starte bei 0")
 
 
 def get_time() -> float:
@@ -101,6 +157,7 @@ def update_from_decoded(dt_values: list) -> bool:
                         print(f"[DT-Korr] Feinkorrektur: Median={avg_median:+.3f}s "
                               f"×{DAMPING} → Δ{delta:+.3f}s → Korrektur={_correction:+.3f}s")
                     _correction = max(-MAX_CORRECTION, min(MAX_CORRECTION, _correction))
+                    _save_current()  # Nach jeder Korrektur speichern
                 else:
                     print(f"[DT-Korr] Messung: Median={avg_median:+.3f}s "
                           f"→ im Totband ({DEADBAND}s), kein Update")

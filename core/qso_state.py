@@ -278,7 +278,9 @@ class QSOStateMachine(QObject):
             return
 
         if self.state == QSOState.CQ_WAIT:
-            # Im CQ-Modus: nach 1 Zyklus ohne Antwort nochmal CQ
+            # Im CQ-Modus: nach 1 RX-Zyklus ohne Antwort nochmal CQ
+            # Funktioniert fuer alle Modi gleich (Even/Odd Alternation):
+            # TX-Slot → RX-Slot (1 Zyklus warten) → TX-Slot
             self.qso.timeout_cycles += 1
             if self.qso.timeout_cycles >= 1 and self.cq_mode:
                 self._send_cq()
