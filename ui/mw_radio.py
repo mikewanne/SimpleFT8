@@ -185,6 +185,10 @@ class RadioMixin:
         # Decoder + Encoder auf neues Protokoll umschalten
         self.decoder.set_protocol(mode)
         self.encoder.set_protocol(mode)
+        self.qso_sm._mode = mode
+        # Even/Odd Anzeige: Slot-Dauer fuer QSO-Panel
+        _DURATIONS = {"FT8": 15.0, "FT4": 7.5, "FT2": 3.8}
+        self.qso_panel._cycle_duration = _DURATIONS.get(mode, 15.0)
         # RX-Liste leeren bei Mode-Wechsel (FT8/FT4/FT2 mischen = verwirrend)
         self.rx_panel.table.setRowCount(0)
         self._diversity_stations = {}
@@ -208,11 +212,9 @@ class RadioMixin:
         flo, fhi = _FILTERS.get(mode, (100, 3100))
         if self.radio.ip:
             self.radio.set_rx_filter(flo, fhi)
-        # DT-Korrektur: Wert BEHALTEN bei Modus-Wechsel!
-        # Die Korrektur ist ein Systemuhr-Offset, unabhaengig vom Modus.
-        # Nur Mess-Zyklus neu starten (gleiche Korrektur, neue Messung)
+        # DT-Korrektur: gespeicherten Wert fuer neuen Modus laden
         from core import ntp_time
-        ntp_time.reset(keep_correction=True)
+        ntp_time.set_mode(mode)
         self._update_statusbar()
 
     @Slot(str)

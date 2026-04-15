@@ -105,19 +105,47 @@ class QSOPanel(QWidget):
 
         layout.addWidget(self.tabs)
 
-    def add_tx(self, message: str):
-        """Eigene gesendete Nachricht anzeigen."""
+    def _slot_tag(self) -> str:
+        """Aktuellen Slot als Tag: [E] oder [O]."""
         now = time.time()
-        slot_start = now - (now % 15.0)
+        slot = getattr(self, '_cycle_duration', 15.0)
+        return "[E]" if int(now / slot) % 2 == 0 else "[O]"
+
+    def add_tx(self, message: str):
+        """Eigene gesendete Nachricht anzeigen. CQ-Wiederholungen zusammenfassen."""
+        now = time.time()
+        slot = getattr(self, '_cycle_duration', 15.0)
+        slot_start = now - (now % slot)
         utc = time.strftime("%H:%M:%S", time.gmtime(slot_start))
-        self._append_colored(f"{utc}  →  Sende   {message}", "#FFAA00")
+        tag = self._slot_tag()
+        is_cq = message.startswith("CQ ")
+
+        if is_cq:
+            self._cq_count = getattr(self, '_cq_count', 0) + 1
+            if self._cq_count > 2:
+                doc = self.log_view.document()
+                cursor = QTextCursor(doc)
+                cursor.movePosition(QTextCursor.MoveOperation.End)
+                cursor.movePosition(QTextCursor.MoveOperation.StartOfBlock, QTextCursor.MoveMode.KeepAnchor)
+                cursor.removeSelectedText()
+                cursor.deletePreviousChar()
+                self._append_colored(f"{utc} {tag} →  CQ ×{self._cq_count}", "#886600")
+                return
+            self._append_colored(f"{utc} {tag} →  Sende   {message}", "#FFAA00")
+        else:
+            self._cq_count = 0
+            self._append_colored(f"{utc} {tag} →  Sende   {message}", "#FFAA00")
+        self._auto_trim()
 
     def add_rx(self, message: str):
         """Empfangene Antwort anzeigen."""
+        self._cq_count = 0
         now = time.time()
-        slot_start = now - (now % 15.0)   # auf Slot-Grenze runden (15s Raster)
+        slot = getattr(self, '_cycle_duration', 15.0)
+        slot_start = now - (now % slot)
         utc = time.strftime("%H:%M:%S", time.gmtime(slot_start))
-        self._append_colored(f"{utc}  ←  Empf.   {message}", "#44BBFF")
+        tag = self._slot_tag()
+        self._append_colored(f"{utc} {tag} ←  Empf.   {message}", "#44BBFF")
 
     def add_qso_complete(self, their_call: str):
         """QSO als abgeschlossen markieren."""
@@ -138,7 +166,9 @@ class QSOPanel(QWidget):
     def _update_slot_display(self):
         """EVEN/ODD Label alle 500ms aktualisieren — zeigt aktuellen TX-Slot."""
         now = time.time()
-        cycle_num = int(now / 15.0)
+        # Modus-abhaengige Slot-Dauer (FT8=15, FT4=7.5, FT2=3.8)
+        slot = getattr(self, '_cycle_duration', 15.0)
+        cycle_num = int(now / slot)
         is_even = (cycle_num % 2 == 0)
         active   = "#00FF88"   # hell grün = aktiver Slot
         inactive = "#333344"   # dunkel = inaktiver Slot
@@ -164,3 +194,15 @@ class QSOPanel(QWidget):
         # Auto-Scroll nach unten
         scrollbar = self.log_view.verticalScrollBar()
         scrollbar.setValue(scrollbar.maximum())
+
+    def _auto_trim(self, max_lines: int = 40):
+        """QSO-Log auf ~40 Zeilen begrenzen (~3 Min Traffic)."""
+        doc = self.log_view.document()
+        excess = doc.blockCount() - max_lines
+        if excess > 5:
+            cursor = QTextCursor(doc)
+            cursor.movePosition(QTextCursor.MoveOperation.Start)
+            for _ in range(excess):
+                cursor.movePosition(QTextCursor.MoveOperation.Down, QTextCursor.MoveMode.KeepAnchor)
+            cursor.removeSelectedText()
+            cursor.deleteChar()

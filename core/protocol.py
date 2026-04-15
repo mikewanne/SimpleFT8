@@ -132,8 +132,9 @@ BAND_FREQUENCIES = {
         "17m": 18.104, "15m": 21.140, "12m": 24.919, "10m": 28.180,
     },
     "FT2": {
-        # FT2 Frequenzen noch nicht standardisiert — vorlaeufig FT8 + 6 kHz
-        "80m": 3.579, "40m": 7.080, "20m": 14.080, "15m": 21.080,
-        "10m": 28.080,
+        # FT2 Community-Frequenzen (DXZone/Decodium, Stand April 2026)
+        "80m": 3.578, "60m": 5.360, "40m": 7.052, "30m": 10.144,
+        "20m": 14.084, "17m": 18.108, "15m": 21.144, "12m": 24.923,
+        "10m": 28.184,
     },
 }
