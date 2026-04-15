@@ -1,0 +1,99 @@
+"""SimpleFT8 Station Accumulator — gemeinsame Logik fuer Normal + Diversity.
+
+Extrahiert die duplizierte Station-Akkumulation aus mw_cycle.py.
+Beide Modi nutzen dieselbe Basis (Update, Aging, Change-Detection),
+Diversity fuegt Antennen-Vergleich hinzu.
+"""
+
+import copy
+import time
+
+
+def accumulate_stations(stations: dict, messages: list, active_qso_targets: set,
+                        antenna: str = "") -> bool:
+    """Stationen akkumulieren — gemeinsame Logik fuer Normal + Diversity.
+
+    Args:
+        stations: Dict {callsign: FT8Message} — wird IN-PLACE modifiziert
+        messages: Neue Nachrichten aus diesem Zyklus
+        active_qso_targets: Set von Callsigns die gerade angerufen werden (150s Aging)
+        antenna: Optional "A1"/"A2" fuer Diversity (leer fuer Normal)
+
+    Returns:
+        True wenn sich was geaendert hat (Tabelle muss neu aufgebaut werden)
+    """
+    now = time.time()
+    slot_dur = 15.0  # wird unten nicht gebraucht fuer Logik
+    utc_str = time.strftime("%H%M%S", time.gmtime(now))
+    changed = False
+
+    for orig_msg in (messages or []):
+        key = orig_msg.caller
+        if not key:
+            continue
+
+        msg = copy.copy(orig_msg) if antenna else orig_msg
+        if antenna:
+            msg.antenna = antenna
+
+        existing = stations.get(key)
+        if existing is None:
+            # Neue Station
+            msg._last_heard = now
+            msg._last_changed = now
+            msg._utc_display = utc_str
+            stations[key] = msg
+            changed = True
+        else:
+            # Station bekannt — hat sich was geaendert?
+            snr_changed = msg.snr != existing.snr
+            content_changed = (
+                msg.field1 != existing.field1 or
+                msg.field2 != existing.field2 or
+                msg.field3 != existing.field3
+            )
+            ant_changed = antenna and antenna != getattr(existing, 'antenna', '')
+
+            if snr_changed or ant_changed or content_changed:
+                existing._last_heard = now
+                existing._utc_display = utc_str
+
+                # Diversity: Antennen-Vergleich
+                if ant_changed and getattr(existing, 'antenna', '') in ("A1", "A2"):
+                    old_ant = existing.antenna
+                    if msg.snr > existing.snr:
+                        existing.antenna = f"{antenna}>{old_ant[-1]}"
+                    else:
+                        existing.antenna = f"{old_ant}>{antenna[-1]}"
+
+                existing.snr = msg.snr
+                if content_changed:
+                    existing.raw = msg.raw
+                    existing.field1 = msg.field1
+                    existing.field2 = msg.field2
+                    existing.field3 = msg.field3
+                changed = True
+
+    # Aging: alte Stationen entfernen
+    stale = remove_stale(stations, active_qso_targets, now)
+    if stale:
+        changed = True
+
+    return changed
+
+
+def remove_stale(stations: dict, active_qso_targets: set,
+                 now: float = None) -> list:
+    """Abgelaufene Stationen entfernen (75s normal, 150s wenn aktiv angerufen).
+
+    Returns:
+        Liste der entfernten Callsigns
+    """
+    if now is None:
+        now = time.time()
+    stale = [k for k, m in stations.items()
+             if now - getattr(m, '_last_heard', now) > (
+                 150 if k in active_qso_targets else 75)]
+    for k in stale:
+        del stations[k]
+    return stale

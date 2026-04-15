@@ -1,7 +1,7 @@
 # JOHNBOY Analysis Report
 
 ## Project: SimpleFT8
-**Generated:** 2026-04-13 07:28:42
+**Generated:** 2026-04-15 17:47:11
 **Tool:** JOHNBOY v1.0.0 - Sequential Single-Pass Analysis
 **Path:** /Users/mikehammerer/Documents/KI N8N Projekte/FT8/SimpleFT8
 
@@ -10,63 +10,64 @@
 
 **Was:** Desktop GUI App | Python
 **Starten:** `python3 main.py` (Port 4991)
-**Kern:** `ui/control_panel.py` (1320 Z., 6 Klassen, 2 Funktionen)
-**Stand:** 2698 Code-Issues · 29 TODOs · Git ✅ · kein .env · ℹ️ 3627 Anti-Pattern Warnings
+**Kern:** `ui/control_panel.py` (1349 Z., 6 Klassen, 2 Funktionen)
+**Stand:** 2733 Code-Issues · 28 TODOs · Git ✅ · kein .env · ℹ️ 3642 Anti-Pattern Warnings
 ---
 ## ⚠️ Anti-Pattern Check
 
 ### Status: 🟡 WARNUNGEN
 - **Patterns geladen:** 30 (aus PROBLEME.md)
-- **Dateien geprüft:** 595
-- **Treffer gesamt:** 8483 (0 Errors, 3627 Warnings, 4856 Info)
+- **Dateien geprüft:** 596
+- **Treffer gesamt:** 8525 (0 Errors, 3642 Warnings, 4883 Info)
 
 ### 🟡 Warnings
-- `[python_fstring_missing_f]` **61× gefunden** — Zeile 148: String mit {variable} aber ohne f-Prefix — wird NICHT interpoliert!
-  → `ui/mw_qso.py` (L148) | `core/ap_lite.py` (L428) | `radio/flexradio.py` (L718,723,767,997) | `core/encoder.py` (L116,160,217) | `core/qso_state.py` (L153,209,224,255,298...) +34 weitere
-  → Fix: f-Prefix hinzufügen: f"Text {variable}" statt "Text {variable}"
-- `[js_deep_nesting]` **3491× gefunden** — Zeile 367: Code >6 Ebenen eingerückt — schwer lesbar und testbar
-  → `ui/main_window.py` (L367,502,506,507,512...) | `ui/control_panel.py` (L998,999,1107,1108) | `core/decoder.py` (L161,162,172,246,248...) | `ui/mw_cycle.py` (L58,64,79,118,119...) | `ui/mw_radio.py` (L199,210,298,334,335...) +234 weitere
+- `[js_deep_nesting]` **3505× gefunden** — Zeile 254: Code >6 Ebenen eingerückt — schwer lesbar und testbar
+  → `ui/mw_radio.py` (L254,265,367,403,404...) | `core/ntp_time.py` (L149,150,151,152,155...) | `core/qso_state.py` (L264,292,299,300,301...) | `radio/flexradio.py` (L132,133,141,267,268...) | `ui/rx_panel.py` (L171,174,250,401,402...) +237 weitere
   → Fix: Early Returns, Guard Clauses, oder Logik in Hilfsfunktionen auslagern
+- `[python_fstring_missing_f]` **62× gefunden** — Zeile 153: String mit {variable} aber ohne f-Prefix — wird NICHT interpoliert!
+  → `core/qso_state.py` (L153,209,224,255,301...) | `radio/flexradio.py` (L718,723,767,1003) | `ui/mw_qso.py` (L162,171) | `core/encoder.py` (L125,166,227) | `core/ap_lite.py` (L433) +34 weitere
+  → Fix: f-Prefix hinzufügen: f"Text {variable}" statt "Text {variable}"
 - `[python_broad_except]` **75× gefunden** — Zeile 41: Blankes except: fängt ALLES (auch SystemExit, KeyboardInterrupt)
   → `tests/tx_bruteforce.py` (L41,47,79,126,134) | `backup/2026-04-02_dx-progress/tests/tx_bruteforce.py` (L41,47,79,126,134) | `backup/2026-03-31_TX-funktioniert/tests/tx_bruteforce.py` (L41,47,79,126,134) | `backup/2026-04-01_FEIERABEND_besser-als-sdr-control/tests/tx_bruteforce.py` (L41,47,79,126,134) | `backup/2026-04-01_1700_besser-als-sdr-control/tests/tx_bruteforce.py` (L41,47,79,126,134) +10 weitere
   → Fix: except Exception: oder spezifischen Typ verwenden
 
 ### ℹ️ Info
-- `[python_print_debug]` **4856× gefunden** — Zeile 27: print() Debug-Ausgabe — in Produktion logging verwenden
-  → `ui/mw_qso.py` (L27,41,62,91,148...) | `ui/main_window.py` (L82,403,486,497) | `tests/test_modules.py` (L387,390,394,395,396...) | `core/decoder.py` (L132,136,161,170,183...) | `ui/mw_cycle.py` (L81,259,324) +210 weitere
+- `[python_print_debug]` **4883× gefunden** — Zeile 90: print() Debug-Ausgabe — in Produktion logging verwenden
+  → `ui/mw_radio.py` (L90,98,209,365,385...) | `core/ntp_time.py` (L52,65,92,94,151...) | `core/qso_state.py` (L39,176,181,186,217...) | `radio/flexradio.py` (L98,106,127,132,147...) | `ui/main_window.py` (L82,422,521,532) +211 weitere
   → Fix: import logging + logging.debug() statt print()
 
 > Neue Patterns: In `johnboy/PROBLEME.md` als `## PATTERN: name` eintragen → sofort aktiv!
 ---
-## 🤖 KI Deep-Analysis (2026-04-13)
+## 🤖 KI Deep-Analysis (2026-04-15)
 
 ### Architektur-Bewertung
-★★☆☆☆ (2/5) — Monolithische decode.py ohne klare Trennung von Signalverarbeitung, Decodierung und UI. Globale Variablen statt Dependency Injection. Fehlende Abstraktion für Radio-Hardware.
+★★☆☆☆ (2/5) Monolithische Skripte ohne klare Trennung. decode.py mischt Signalverarbeitung, Decodierung, Visualisierung und CLI-Logik. dx_tune_dialog.py koppelt UI-Logik eng mit Radio-Hardware-Steuerung.
 
 ### Versteckte Risiken
-- **Race Conditions**: DXTuneDialog.feed_cycle() wird asynchron aufgerufen ohne Thread-Synchronisation.
-- **Hardware-Zustand**: Radio-Einstellungen (Antenne/Gain) werden direkt manipuliert, keine Rollback-Logik bei Abbruch.
-- **Speicherlecks**: decode.py lädt gesamte WAV-Datei in RAM, keine Streaming-Architektur für große Dateien.
-- **Nicht-atomare Operationen**: In search_sync_coarse() wird score_map während Iteration modifiziert (del score_map[key]).
+- **Race Conditions**: dx_tune_dialog.py verwendet `feed_cycle()` ohne Thread-Synchronisation bei asynchronen Radio-Events.
+- **Hardware-Zustandslecks**: Tuning-Dialog setzt Radio-Parameter, bei Abbruch/Fehler bleibt Hardware in unbekanntem Zustand.
+- **Speicher-Explosion**: `search_sync_coarse()` erzeugt `score_map` mit unbegrenztem Wachstum bei vielen Kandidaten.
+- **Blockierende UI**: Lange STFT-Berechnungen in decode.py blockieren Hauptthread.
 
 ### Fehlende Patterns
-- **Error Handling**: Keine Exception-Handling für Hardware-Fehler (Radio-IO) oder decode-Fehler.
-- **Logging**: Statt print()-Debugging fehlt strukturiertes Logging mit Levels.
-- **Tests**: Keine Unit-Tests für Signalverarbeitungs-Algorithmen.
-- **Konfiguration**: Hardgecodete Parameter (GAIN_VALUES, ROUNDS) statt Konfigurationsdatei.
+- **Error Handling**: Keine Exception-Behandlung für Hardware-Fehler (Radio-Steuerung) oder Datei-I/O.
+- **Logging**: Nur print()-Debugging, keine strukturierte Protokollierung.
+- **Tests**: Keine Unit/Integration-Tests für Signalverarbeitung.
+- **Dependency Injection**: Radio-Objekt direkt instanziiert, schwer mockbar.
+- **Konfiguration**: Magic numbers (GAIN_VALUES, ROUNDS) hardcoded.
 
 ### Sofort-Aktionen
-1. **Thread-Sicherheit**: DXTuneDialog mit QMutex/Locks absichern, Radio-Operationen in Main-Thread serialisieren.
-2. **Error-Handling**: Try-catch in decode.py für Datei-I/O und Signalverarbeitung, Fehler an UI melden.
-3. **Dependency Injection**: Radio-Interface abstrahieren, Mock für Tests ermöglichen.
+1. **Thread-Sicherheit**: Mutex für `feed_cycle()` und Radio-Zugriffe in dx_tune_dialog.py.
+2. **Hardware-Reset**: Safe-Recovery-Prozedur bei Dialog-Abbruch.
+3. **Memory-Limit**: `score_map` in `search_sync_coarse()` auf max_cand begrenzen.
 
 ### Score
-4/10 — Funktionierender Prototyp, aber nicht produktionsreif. Fehlende Wartbarkeit und Robustheit.
+4/10 – Funktionell aber fragil. Fehlende Abstraktionen führen zu Wartungsproblemen.
 
 ---
 ## 📄 PROJECT DOCUMENTATION
 
-**Source:** `README.md` (266 Zeilen, 2026-04-13)
+**Source:** `README.md` (284 Zeilen, 2026-04-14)
 
 SimpleFT8 — The Autonomous FT8/FT4 Client for FlexRadio
 [English](#english) | [Deutsch](#deutsch)
@@ -137,8 +138,8 @@ SimpleFT8 — The Autonomous FT8/FT4 Client for FlexRadio
 | Code Quality | 9.5/10 ✅ EXCELLENT |
 | Maintainability | 6.0/10 |
 | Git | ✅ Git repo on main |
-| Scale | 595 files, 147,839 lines |
-| Technical Debt | 29 TODOs + 2698 code issues |
+| Scale | 596 files, 148,858 lines |
+| Technical Debt | 28 TODOs + 2733 code issues |
 | Risk | LOW - Minor issues to address |
 
 ### SOFORT-AKTIONEN:
@@ -147,8 +148,8 @@ SimpleFT8 — The Autonomous FT8/FT4 Client for FlexRadio
 ## 📝 TODO Items and Issues
 
 ### TODO Summary
-- **Total TODOs:** 29
-- **By Priority:** Critical: 0, Medium: 26
+- **Total TODOs:** 28
+- **By Priority:** Critical: 0, Medium: 25
 - **By File:** decoder.py(1), decoder.py(1), decoder.py(1)
 
 ### TODO Items by Location
@@ -177,14 +178,14 @@ SimpleFT8 — The Autonomous FT8/FT4 Client for FlexRadio
 ## 🔗 Dependency Analysis
 
 ### Dependency Overview
-- **Total Files Analyzed:** 564
-- **Total Import Statements:** 6011
+- **Total Files Analyzed:** 565
+- **Total Import Statements:** 6033
 - **External/Third-party Dependencies:** 7
 - **Circular Dependencies:** 0 found
 
 ### External Dependencies
-- **PySide6**: Used in 918 file(s)
-- **numpy**: Used in 388 file(s)
+- **PySide6**: Used in 920 file(s)
+- **numpy**: Used in 386 file(s)
 - **ntplib**: Used in 40 file(s)
 - **PyFT8**: Used in 496 file(s)
 - **scipy**: Used in 4 file(s)
@@ -192,39 +193,39 @@ SimpleFT8 — The Autonomous FT8/FT4 Client for FlexRadio
 - **matplotlib**: Used in 6 file(s)
 
 ### Import Statistics
-- **Total Imports**: 6011
-- **Local Imports**: 1343
+- **Total Imports**: 6033
+- **Local Imports**: 1347
 - **Third Party Imports**: 1854
-- **Builtin Imports**: 2814
-- **From Imports**: 2989
-- **Direct Imports**: 3022
+- **Builtin Imports**: 2832
+- **From Imports**: 3005
+- **Direct Imports**: 3028
 ---
 ## 🏗️ Code-Struktur Index
 
 ### Übersicht
-- **Klassen gesamt:** 440
-- **Funktionen gesamt:** 953
+- **Klassen gesamt:** 443
+- **Funktionen gesamt:** 950
 - **API-Endpoints gesamt:** 0
 
 ### API-Endpoints
 - Keine API-Endpoints erkannt
 
 ### Datei-Index (Klassen + Funktionen)
-- **ui/mw_qso.py** (309 Z.) — 1 Klassen (QSOMixin)
-- **ui/main_window.py** (547 Z.) — 1 Klassen (MainWindow)
-- **ui/control_panel.py** (1320 Z.) — 6 Klassen (FrequencyHistogramWidget, _ModeBandCard, _AntenneCard...) | 2 Funktionen (_card_ss, _sep_line)
-- **tests/test_modules.py** (402 Z.) — 2 Klassen (FakeSettings, BadSettings) | 35 Funktionen (test_agc_loud_signal, test_agc_normal_signal, test_agc_clipping_protection, test_agc_silence...)
-- **core/decoder.py** (479 Z.) — 1 Klassen (Decoder) | 5 Funktionen (_apply_agc, _reconstruct_signal, _apply_offset, _preprocess_audio...)
-- **core/drift.py** (116 Z.) — 3 Funktionen (_to_analytic, apply_drift_correction, generate_drift_variants)
-- **ui/mw_cycle.py** (360 Z.) — 1 Klassen (CycleMixin)
-- **ui/mw_tx.py** (139 Z.) — 1 Klassen (TXMixin)
-- **ui/mw_radio.py** (554 Z.) — 1 Klassen (RadioMixin)
-- **core/ap_lite.py** (459 Z.) — 3 Klassen (FailedDecodeBuffer, APLiteResult, APLite) | 5 Funktionen (generate_candidates, _build_costas_reference, align_buffers, correlate_candidate...)
-- **ui/dx_tune_dialog.py** (378 Z.) — 1 Klassen (DXTuneDialog) | 1 Funktionen (_build_interleaved_schedule)
-- **radio/base_radio.py** (229 Z.) — 1 Klassen (RadioInterface)
-- **radio/flexradio.py** (1436 Z.) — 1 Klassen (FlexRadio)
-- **core/ntp_time.py** (131 Z.) — 5 Funktionen (get_time, get_correction, get_status_text, update_from_decoded...)
-- **core/encoder.py** (235 Z.) — 1 Klassen (Encoder)
+- **ui/qso_panel.py** (208 Z.) — 1 Klassen (QSOPanel)
+- **ui/mw_radio.py** (631 Z.) — 1 Klassen (RadioMixin) | 1 Funktionen (_show_info_once)
+- **core/ntp_time.py** (208 Z.) — 8 Funktionen (_load_saved, _save_current, set_mode, get_time...)
+- **core/qso_state.py** (599 Z.) — 4 Klassen (QSODebugLog, QSOState, QSOData...)
+- **core/protocol.py** (140 Z.) — 1 Klassen (ProtocolProfile) | 1 Funktionen (get_profile)
+- **radio/flexradio.py** (1442 Z.) — 1 Klassen (FlexRadio)
+- **radio/base_radio.py** (241 Z.) — 1 Klassen (RadioInterface)
+- **config/settings.py** (134 Z.) — 1 Klassen (Settings)
+- **ui/rx_panel.py** (647 Z.) — 1 Klassen (RXPanel)
+- **ui/main_window.py** (582 Z.) — 1 Klassen (MainWindow)
+- **ui/control_panel.py** (1349 Z.) — 6 Klassen (FrequencyHistogramWidget, _ModeBandCard, _AntenneCard...) | 2 Funktionen (_card_ss, _sep_line)
+- **core/ft8lib_decoder.py** (166 Z.) — 2 Klassen (_Ft8sResult, Ft8Lib) | 2 Funktionen (_find_lib, get_ft8lib)
+- **core/diversity.py** (260 Z.) — 1 Klassen (DiversityController)
+- **ui/mw_cycle.py** (403 Z.) — 1 Klassen (CycleMixin)
+- **ui/mw_qso.py** (351 Z.) — 1 Klassen (QSOMixin)
 ---
 ## ⚙️ Config-Snapshot
 
@@ -255,13 +256,13 @@ Keine .env Datei
 ## ⚡ Performance Impact Analysis
 
 ### CODEBASE SCALE:
-- **Files**: 595
-- **Lines of code**: 147,839
+- **Files**: 596
+- **Lines of code**: 148,858
 - **Scale**: Large project
 
 ### LARGE FILE BOTTLENECKS:
-- **radio/flexradio.py**: 1436 lines — consider splitting
-- **ui/control_panel.py**: 1320 lines — consider splitting
+- **radio/flexradio.py**: 1442 lines — consider splitting
+- **ui/control_panel.py**: 1349 lines — consider splitting
 - **backup_diversity_stable/flexradio.py**: 1297 lines — consider splitting
 - **backup_diversity_v1/flexradio.py**: 1297 lines — consider splitting
 - **backup_beta/flexradio.py**: 1297 lines — consider splitting
@@ -287,10 +288,13 @@ Keine .env Datei
 - **backup_beta/main_window.py**: 777 lines — monitor size
 - **backup_alpha/main_window.py**: 677 lines — monitor size
 - **backup/main_window.py**: 667 lines — monitor size
-- **ui/rx_panel.py**: 641 lines — monitor size
+- **ui/rx_panel.py**: 647 lines — monitor size
+- **ft8_lib/libft8simple.c**: 642 lines — monitor size
+- **ui/mw_radio.py**: 631 lines — monitor size
 - **backup_diversity_stable/control_panel.py**: 631 lines — monitor size
 - **backup_diversity_v1/control_panel.py**: 631 lines — monitor size
 - **backup_beta/control_panel.py**: 631 lines — monitor size
+- **core/qso_state.py**: 599 lines — monitor size
 - **backup_alpha/control_panel.py**: 598 lines — monitor size
 - **backup/control_panel.py**: 598 lines — monitor size
 - **backup/2026-04-01_1700_besser-als-sdr-control/ui/control_panel.py**: 598 lines — monitor size
@@ -302,14 +306,12 @@ Keine .env Datei
 - **backup/2026-04-01_1710_dx-switch/ui/control_panel.py**: 594 lines — monitor size
 - **backup/2026-04-02_single-cycle-dx-fix/ui/control_panel.py**: 594 lines — monitor size
 - **backup/2026-04-02_session-start/ui/control_panel.py**: 594 lines — monitor size
-- **ft8_lib/ft8/decode.c**: 592 lines — monitor size
-- **core/qso_state.py**: 586 lines — monitor size
+- **ft8_lib/ft8/decode.c**: 593 lines — monitor size
+- **ui/main_window.py**: 582 lines — monitor size
 - **backup/2026-04-01_1510_spektrum-akkum/ui/control_panel.py**: 563 lines — monitor size
 - **backup/2026-04-01_1505_AP-live/ui/control_panel.py**: 563 lines — monitor size
 - **backup/2026-04-01_AP-Decoder-Fix/ui/control_panel.py**: 563 lines — monitor size
 - **backup/2026-04-01_RX-TX-PSK-OSD/ui/control_panel.py**: 563 lines — monitor size
-- **ui/mw_radio.py**: 554 lines — monitor size
-- **ui/main_window.py**: 547 lines — monitor size
 - **backup/2026-04-02_dx-progress/ui/main_window.py**: 529 lines — monitor size
 - **backup/2026-04-02_km-prefix-single-cycle/ui/main_window.py**: 526 lines — monitor size
 - **backup/2026-04-02_dx-tune/ui/main_window.py**: 523 lines — monitor size
@@ -338,24 +340,24 @@ Keine .env Datei
 - **backup/2026-04-01_AP-Decoder-Fix/core/decoder.py**: 502 lines — monitor size
 
 ### COMPLEXITY ASSESSMENT:
-- **Import density**: 6011 imports — high coupling
+- **Import density**: 6033 imports — high coupling
 - **External dependencies**: 1854 third-party imports
-- **Avg. file size**: 248 lines — moderate
+- **Avg. file size**: 249 lines — moderate
 ---
 ## 🎨 Code Quality Analysis
 
 ### Code Quality: ✅ EXCELLENT
-- **Files Analyzed:** 564
-- **Files with Issues:** 423
-- **Total Issues:** 2698
+- **Files Analyzed:** 565
+- **Files with Issues:** 426
+- **Total Issues:** 2733
 - **Tools Available:** 2/2
 
 **📊 Issue Breakdown by Tool:**
-- **Style + Logic (flake8):** 2697
+- **Style + Logic (flake8):** 2732
 - **Type Checking (mypy):** 1
 
 **📈 By Severity:**
-- **Errors:** 2692
+- **Errors:** 2727
 - **Warnings:** 6
 
 **🔥 Top Problem Files:**
@@ -375,5 +377,5 @@ Keine .env Datei
 ---
 
 *Generated by JOHNBOY v1.0.0 - Sequential Single-Pass Analysis*
-*Report Generation Time: 2026-04-13 07:28:42*
+*Report Generation Time: 2026-04-15 17:47:11*
 *Analysis Method: File Tracker, TODO Extractor, Git Integration, Dependency Mapper, Security Scanner, Code Quality Checker*
