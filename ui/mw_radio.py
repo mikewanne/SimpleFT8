@@ -189,11 +189,13 @@ class RadioMixin:
         # Even/Odd Anzeige: Slot-Dauer fuer QSO-Panel
         _DURATIONS = {"FT8": 15.0, "FT4": 7.5, "FT2": 3.8}
         self.qso_panel._cycle_duration = _DURATIONS.get(mode, 15.0)
-        # RX-Liste leeren bei Mode-Wechsel (FT8/FT4/FT2 mischen = verwirrend)
+        # RX-Liste + QSO-Panel leeren bei Mode-Wechsel (neuer Modus = neuer Kontext)
         self.rx_panel.table.setRowCount(0)
         self._diversity_stations = {}
         self._normal_stations = {}
         self.control_panel.update_decode_count(0)
+        self.qso_panel.log_view.clear()
+        self.qso_panel.status_label.setText(f"Modus: {mode}")
         # CQ stoppen bei Mode-Wechsel
         if self.qso_sm.cq_mode:
             self.qso_sm.stop_cq()
