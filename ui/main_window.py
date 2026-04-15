@@ -444,22 +444,29 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         }
         mode_str = mode_labels.get(self._rx_mode, "Normal")
         omni_str = "  Ω" if getattr(self, '_omni_tx', None) and self._omni_tx.active else ""
-        # DT-Korrektur + AP-Lite in Statusbar anzeigen
+        # DT-Korrektur Status (nicht exakte Zeit — macht Funker nervoes)
         from core import ntp_time
-        dt_corr = ntp_time.get_correction()
-        dt_str = f"  |  DT: {dt_corr:+.2f}s" if abs(dt_corr) > 0.01 else ""
+        dt_phase = ntp_time._phase
+        dt_str = "  |  DT: Korrektur" if dt_phase == "measure" else "  |  DT: Aktiv"
+        if ntp_time._correction == 0.0 and ntp_time._is_initial:
+            dt_str = "  |  DT: —"
+        # Filter-Anzeige pro Modus
+        _FILTERS = {"FT8": "100-3100", "FT4": "100-3100", "FT2": "100-4000"}
+        filter_str = _FILTERS.get(self.settings.mode, "100-3100")
+        # AP-Lite
         ap_str = ""
         if hasattr(self, '_ap_lite') and self._ap_lite.enabled:
             r = self._ap_lite.rescue_count
             a = self._ap_lite.attempt_count
             if a > 0:
-                ap_str = f"  |  AP: {r}/{a} gerettet"
+                ap_str = f"  |  AP: {r}/{a}"
             else:
                 ap_str = "  |  AP: aktiv"
         self.statusBar().showMessage(
             f"{self.settings.callsign}  |  {self.settings.locator}  |  "
-            f"{self.settings.mode}  |  {self.settings.band}  |  "
-            f"{freq:.3f} MHz  |  {mode_str}{omni_str}{dt_str}{ap_str}"
+            f"{self.settings.mode} {self.settings.band}  |  "
+            f"{freq:.3f} MHz  |  Filter: {filter_str} Hz  |  "
+            f"{mode_str}{omni_str}{dt_str}{ap_str}"
         )
 
     # ── Hilfsfunktionen ──────────────────────────────────────────
