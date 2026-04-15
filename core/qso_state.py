@@ -429,10 +429,11 @@ class QSOStateMachine(QObject):
                 self._dbg.log("RX", f"RR73/73 von {msg.caller} nach Timeout/CQ — ignoriert")
 
         # ── Warteliste: Neue CQ-Anrufer während aktivem QSO ──
+        # Grid ODER Report akzeptieren (vorher nur Grid → EA3FHP-Bug)
         if (self.cq_mode
                 and self.state not in (QSOState.IDLE, QSOState.CQ_WAIT, QSOState.CQ_CALLING)
                 and msg.target == self.my_call
-                and msg.is_grid
+                and (msg.is_grid or msg.is_report)
                 and msg.caller != self.qso.their_call
                 and not self._is_worked_recently(msg.caller)
                 and not any(q.caller == msg.caller for q in self._caller_queue)):

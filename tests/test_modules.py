@@ -469,6 +469,29 @@ def test_qso_worked_recently_block():
     assert not any("R3EDI" in s and "RR73" not in s and "CQ" not in s for s in sent)
 
 
+def test_qso_caller_queue():
+    """Warteliste: Station waehrend QSO wird nach QSO-Ende angerufen."""
+    from core.qso_state import QSOStateMachine, QSOState
+    sm = QSOStateMachine("DA1MHH", "JO31")
+    sm.cq_mode = True
+    sm.state = QSOState.WAIT_REPORT
+    sm.qso.their_call = "R3EDI"
+    sent = []
+    sm.send_message.connect(lambda m: sent.append(m))
+
+    # EA3FHP ruft uns waehrend QSO mit R3EDI (mit Grid)
+    msg_grid = _make_msg("EA3FHP", "DA1MHH", "DA1MHH EA3FHP JN01",
+                          grid_or_report="JN01", is_grid=True)
+    sm.on_message_received(msg_grid)
+    assert len(sm._caller_queue) == 1, "EA3FHP soll in Queue sein"
+
+    # EA3FHP mit Report statt Grid (vorher Bug: wurde nicht aufgenommen)
+    msg_report = _make_msg("IS0LIT", "DA1MHH", "DA1MHH IS0LIT -15",
+                            grid_or_report="-15", is_report=True)
+    sm.on_message_received(msg_report)
+    assert len(sm._caller_queue) == 2, "IS0LIT soll auch in Queue sein (Report)"
+
+
 # ── DT Correction Persistence ────────────────────────────────────────────────
 
 def test_dt_correction_mode_switch():
