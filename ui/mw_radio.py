@@ -203,11 +203,16 @@ class RadioMixin:
             self.radio.set_frequency(freq)
             self.control_panel.freq_label.setText(f"{freq:.3f} MHz")
             print(f"[Mode] {mode} auf {band}: {freq:.3f} MHz")
-        # DT-Korrektur: bei MODE-Wechsel auf 0 zuruecksetzen!
-        # FT8-Korrektur (+0.7) ist FALSCH fuer FT4 (anderes Protokoll-Timing)
-        # Bei BAND-Wechsel behalten wir den Wert (gleiche Radio-Latenz)
+        # RX-Filter pro Modus: FT2 braucht breiteren Filter (150 Hz Signalbreite)
+        _FILTERS = {"FT8": (100, 3100), "FT4": (100, 3100), "FT2": (100, 4000)}
+        flo, fhi = _FILTERS.get(mode, (100, 3100))
+        if self.radio.ip:
+            self.radio.set_rx_filter(flo, fhi)
+        # DT-Korrektur: Wert BEHALTEN bei Modus-Wechsel!
+        # Die Korrektur ist ein Systemuhr-Offset, unabhaengig vom Modus.
+        # Nur Mess-Zyklus neu starten (gleiche Korrektur, neue Messung)
         from core import ntp_time
-        ntp_time.reset(keep_correction=False)
+        ntp_time.reset(keep_correction=True)
         self._update_statusbar()
 
     @Slot(str)

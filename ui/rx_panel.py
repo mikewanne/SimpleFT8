@@ -22,7 +22,8 @@ COL_LAND = 4
 COL_KM = 5
 COL_MSG = 6
 COL_ANT = 7
-COL_COUNT = 8
+COL_SLOT = 8
+COL_COUNT = 9
 
 _FONT = QFont("Menlo", 11)
 _FONT_SEP = QFont("Menlo", 9)
@@ -151,7 +152,7 @@ class RXPanel(QWidget):
         # links-ausgerichtet + vorangestelltes Leerzeichen = nach rechts
         # rechts-ausgerichtet + nachgestelltes Leerzeichen = nach links
         self.table.setHorizontalHeaderLabels(
-            [" UTC", "dB ", "DT ", "Freq ", " Land", "km ", " Message", "    Ant"]
+            [" UTC", "dB ", "DT ", "Freq ", " Land", "km ", " Message", "    Ant", "Slot"]
         )
         hdr = self.table.horizontalHeader()
         hdr.setSectionsClickable(True)
@@ -180,7 +181,7 @@ class RXPanel(QWidget):
 
         _WIDTHS = {
             COL_UTC: 66, COL_DB: 40, COL_DT: 46, COL_FREQ: 50,
-            COL_LAND: 100, COL_KM: 58, COL_ANT: 52,
+            COL_LAND: 100, COL_KM: 58, COL_ANT: 52, COL_SLOT: 32,
         }
         for col in range(COL_COUNT):
             if col == COL_MSG:
@@ -365,8 +366,12 @@ class RXPanel(QWidget):
         # Antenne als eigene Spalte
         ant_str = getattr(msg, 'antenna', '') or ""
 
+        # Even/Odd Slot
+        tx_even = getattr(msg, '_tx_even', None)
+        slot_str = "E" if tx_even else ("O" if tx_even is False else "")
+
         # Zellen setzen
-        values = [utc, snr_str, dt_str, freq_str, country, km_str, msg_text, ant_str]
+        values = [utc, snr_str, dt_str, freq_str, country, km_str, msg_text, ant_str, slot_str]
         for col, text in enumerate(values):
             item = QTableWidgetItem(text)
             item.setFont(_FONT)
@@ -433,7 +438,8 @@ class RXPanel(QWidget):
         """Aktive Sortierung im Spaltenkopf markieren (Farbe + ▾)."""
         _COL_TO_SORT = {COL_UTC: "time", COL_DB: "snr", COL_LAND: "country", COL_KM: "dist"}
         _LABELS = {COL_UTC: " UTC", COL_DB: "dB ", COL_DT: "DT ", COL_FREQ: "Freq ",
-                   COL_LAND: " Land", COL_KM: "km ", COL_MSG: " Message", COL_ANT: "    Ant"}
+                   COL_LAND: " Land", COL_KM: "km ", COL_MSG: " Message", COL_ANT: "    Ant",
+                   COL_SLOT: "Slot"}
         for col in range(COL_COUNT):
             item = self.table.horizontalHeaderItem(col)
             if item is None:
