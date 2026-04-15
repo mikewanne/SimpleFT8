@@ -332,7 +332,7 @@ class _AntenneCard(QFrame):
         self.btn_normal.setFixedHeight(28)
         self.btn_diversity = QPushButton("DIVERSITY")
         self.btn_diversity.setFixedHeight(28)
-        self.btn_einmessen = QPushButton("EINMESSEN")
+        self.btn_einmessen = QPushButton("GAIN-MESSUNG")
         self.btn_einmessen.setFixedHeight(28)
         self.btn_einmessen.setStyleSheet(
             "QPushButton { background: rgba(60,140,60,0.25); color: #88CC88; "
@@ -1005,14 +1005,15 @@ class ControlPanel(QWidget):
     # =====================================================================
     def update_diversity_ratio(self, ratio: str, phase: str,
                                measure_step: int = 0, measure_total: int = 8,
-                               operate_cycles: int = 0, operate_total: int = 80):
+                               operate_cycles: int = 0, operate_total: int = 80,
+                               scoring_mode: str = "normal"):
         """Diversity-Anzeige aktualisieren.
 
         ratio: '70:30' | '30:70' | '50:50'
         phase: 'measure' | 'operate' | 'remeasure'
-        measure_step: abgeschlossene Messschritte (0..measure_total)
-        operate_cycles: abgeschlossene Betriebszyklen (0..operate_total)
+        scoring_mode: 'normal' (Standard) | 'dx' (DX)
         """
+        mode_tag = "DX" if scoring_mode == "dx" else "Standard"
         for lbl in self._a1_pct.values():
             lbl.setStyleSheet(_DIV_PCT_OFF)
         for lbl in self._a2_pct.values():
@@ -1056,16 +1057,21 @@ class ControlPanel(QWidget):
                 self._a2_pct["50%"].setStyleSheet(_DIV_PCT_TEAL)
 
     def update_diversity_counts(self, a1_count: int, a2_count: int,
-                                a1_avg_snr: float = None, a2_avg_snr: float = None):
-        """SNR-Durchschnitt pro Antenne im Diversity-Panel anzeigen."""
+                                a1_avg_snr: float = None, a2_avg_snr: float = None,
+                                scoring_mode: str = "normal"):
+        """Diversity-Counts pro Antenne — modus-abhaengig.
+
+        Standard: nur Stationsanzahl. DX: nur SNR.
+        """
         if a1_count == 0 and a2_count == 0:
             self._a1_count_label.setText("")
             self._a2_count_label.setText("")
-        elif a1_avg_snr is not None and a2_avg_snr is not None:
-            # Kompakt: "17▸Ø-19" = 17 Stationen, Durchschnitt -19 dB
-            self._a1_count_label.setText(f"{a1_count}▸Ø{a1_avg_snr:+.0f}")
-            self._a2_count_label.setText(f"{a2_count}▸Ø{a2_avg_snr:+.0f}")
+        elif scoring_mode == "dx" and a1_avg_snr is not None:
+            # DX: nur SNR anzeigen (Schwache Signale zaehlen)
+            self._a1_count_label.setText(f"Ø{a1_avg_snr:+.0f}dB")
+            self._a2_count_label.setText(f"Ø{a2_avg_snr:+.0f}dB")
         else:
+            # Standard: nur Stationsanzahl
             self._a1_count_label.setText(f"{a1_count} St.")
             self._a2_count_label.setText(f"{a2_count} St.")
 
@@ -1262,11 +1268,11 @@ class ControlPanel(QWidget):
         self.state_label.setText(f"Status: {state_name}")
 
     def set_rx_active(self, enabled: bool):
-        """EINMESSEN + DIVERSITY sperren wenn RX aus ist."""
+        """GAIN-MESSUNG + DIVERSITY sperren wenn RX aus ist."""
         self.btn_einmessen.setEnabled(enabled)
         self.btn_diversity.setEnabled(enabled)
         if not enabled:
-            self.btn_einmessen.setToolTip("RX einschalten um einzumessen")
+            self.btn_einmessen.setToolTip("RX einschalten fuer Gain-Messung")
             self.btn_diversity.setToolTip("RX einschalten um Diversity zu nutzen")
         else:
             self.btn_einmessen.setToolTip("")

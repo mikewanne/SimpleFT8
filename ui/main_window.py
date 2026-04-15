@@ -190,6 +190,8 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self.qso_panel.logbook.load_adif(Path.cwd())
         self.qso_panel.upload_qrz.connect(self._on_qrz_upload)
         self.qso_panel.logbook.qso_clicked.connect(self._on_logbook_qso_clicked)
+        # Tab-Wechsel: Detail-Overlay zuruecksetzen wenn User vom Logbuch weg navigiert
+        self.qso_panel.tabs.currentChanged.connect(self._on_qso_tab_changed)
         self.control_panel = ControlPanel(callsign=self.settings.callsign)
 
         # QSO Detail Overlay (wird ueber Control Panel gelegt bei Logbuch-Klick)
@@ -221,6 +223,9 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self._right_stack.setMinimumWidth(320)
         self._detail_overlay.btn_close.clicked.connect(
             lambda: self._right_stack.setCurrentIndex(0))
+        # Delete-Signal: Logbuch loeschen + Overlay schliessen
+        self._detail_overlay.delete_requested.connect(self._on_logbook_delete)
+
 
         # Alle 3 Panels in einem QSplitter → sichtbarer Trenner bleibt erhalten
         self.splitter = QSplitter(Qt.Orientation.Horizontal)

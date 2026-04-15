@@ -331,3 +331,21 @@ class QSOMixin:
             self.encoder.tx_even = not their_even
             slot_str = "ODD" if their_even else "EVEN"
             print(f"[TX] CQ-Reply {msg.caller}: sie={('EVEN' if their_even else 'ODD')} → wir={slot_str}")
+
+    def _on_qso_tab_changed(self, index: int):
+        """Tab-Wechsel im QSO-Panel: Detail-Overlay schliessen wenn nicht mehr im Logbuch."""
+        if index == 0:  # QSO-Tab (nicht Logbuch)
+            self._right_stack.setCurrentIndex(0)
+
+    def _on_logbook_delete(self, record: dict):
+        """QSO aus Logbuch loeschen (via Detail-Overlay Delete-Button)."""
+        from log.adif import delete_qso
+        call = record.get("CALL", "?")
+        ok = delete_qso(record)
+        if ok:
+            print(f"[Logbuch] QSO mit {call} geloescht")
+            self.qso_panel.logbook.refresh()
+            self._right_stack.setCurrentIndex(0)  # Overlay schliessen
+        else:
+            print(f"[Logbuch] FEHLER: QSO mit {call} nicht gefunden zum Loeschen")
+            self.statusBar().showMessage(f"Fehler: QSO {call} nicht geloescht", 5000)

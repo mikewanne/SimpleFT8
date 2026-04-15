@@ -260,7 +260,8 @@ class QSOStateMachine(QObject):
 
     def on_cycle_end(self):
         # Gesamt-QSO Timeout (3 Min) — egal welcher State
-        if (self.state not in (QSOState.IDLE, QSOState.CQ_CALLING, QSOState.CQ_WAIT, QSOState.TIMEOUT)
+        if (self.state not in (QSOState.IDLE, QSOState.CQ_CALLING, QSOState.CQ_WAIT,
+                               QSOState.TIMEOUT, QSOState.WAIT_73)
                 and self.qso.start_time > 0
                 and time.time() - self.qso.start_time > MAX_QSO_DURATION):
             call = self.qso.their_call
@@ -557,6 +558,16 @@ class QSOStateMachine(QObject):
                 print(f"[QSO] 73 von {msg.caller} empfangen — QSO bestätigt!")
                 self.qso_confirmed.emit(self.qso)
                 self._resume_cq_if_needed()
+            elif msg.is_r_report and msg.caller == self.qso.their_call:
+                # Hoeflichkeit: Station hat unser RR73 nicht empfangen → nochmal senden (max 2x)
+                if self.qso.rr73_retries < 2:
+                    self.qso.rr73_retries += 1
+                    tx_msg = f"{self.qso.their_call} {self.my_call} RR73"
+                    print(f"[QSO] Hoeflichkeit: {msg.caller} wiederholt R-Report → sende RR73 erneut "
+                          f"({self.qso.rr73_retries}/2)")
+                    self.send_message.emit(tx_msg)
+                else:
+                    print(f"[QSO] {msg.caller} wiederholt R-Report — max Retries erreicht, ignoriert")
             return
 
     # ── Manueller Schritt ───────────────────────────────────────

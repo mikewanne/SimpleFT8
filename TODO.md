@@ -1,18 +1,38 @@
-# SimpleFT8 TODO — Stand 14.04.2026
+# SimpleFT8 TODO — Stand 15.04.2026
 
 ---
 
-## BUGS — MORGEN FIXEN
+## BUGS — OFFEN
 
-### FT4 Einmessen dauert ewig (nur jeder ~8. Zyklus gemessen)
-**Ursache:** `CYCLE_SAMPLES_12K = 180000` (FT8 15s) ist hardcoded in `_process_cycle()`.
-FT4 liefert nur 90000 Samples (7.5s) → Buffer zu klein → `len(audio_12k) < CYCLE_SAMPLES_12K // 2` → Decoder ueberspringt Zyklen.
-**Fix:** `CYCLE_SAMPLES_12K` durch `self._slot_samples` ersetzen in `_process_cycle()`.
+### FT4 Einmessen dauert ewig ✓ GEFIXT (15.04.2026)
+**Fix:** `CYCLE_SAMPLES_12K` durch `self._slot_samples` ersetzt in decoder.py `_process_cycle()`.
 
-### FT2 Decode funktioniert nicht (Resample-Trick fehlerhaft)
-**Ursache:** FT4-Decoder bei 6kHz erwartet 288 sps, aber Downsampling aendert Symbol-Timing.
-**Fix:** `FTX_PROTOCOL_FT2` in ft8_lib C-Library einfuegen (eigene Konstanten: 288 sps, 103 sym).
-FT2 Encode funktioniert (45600 Samples = 3.80s getestet).
+### FT2 Decode ✓ GEFIXT (15.04.2026)
+**Fix:** `FTX_PROTOCOL_FT2` nativ in ft8_lib C-Library: constants.h + monitor.c + decode.c + libft8simple.c.
+Kein Resample-Trick mehr — nativer Decoder bei 12kHz mit 288 sps.
+Encode + Decode kompiliert, Block-Sizes verifiziert (288 sps). Feldtest mit echtem Signal steht aus.
+
+### Diversity Scoring immer 50:50 ✓ GEFIXT (15.04.2026)
+**Fix:** Zwei Scoring-Modi (Normal/DX), Einzelmessungen statt Akkumulation, Median, 8% Schwelle.
+Button "EINMESSEN" → "GAIN-MESSUNG" umbenannt.
+
+### QSO komplett + Timeout gleichzeitig ✓ GEFIXT (15.04.2026)
+**Ursache:** `WAIT_73` fehlte in der Timeout-Ausnahmeliste (`on_cycle_end()`).
+Bei QSOs die exakt 3 Min dauerten (MAX_QSO_DURATION=180s) feuerte der Global-Timeout
+waehrend WAIT_73, obwohl QSO schon geloggt war.
+**Fix:** `QSOState.WAIT_73` zur Ausnahmeliste hinzugefuegt.
+
+### RR73 Hoeflichkeits-Wiederholung ✓ NEU (15.04.2026)
+Wenn Gegenstation nach QSO-Complete weiter R-Report sendet (RR73 nicht empfangen),
+wird RR73 automatisch nochmal gesendet (max 2x). Danach zurueck zu CQ.
+
+### Detail-Overlay bleibt sichtbar ✓ GEFIXT (15.04.2026)
+Wechsel vom Logbuch-Tab zum QSO-Tab setzt jetzt den _right_stack zurueck.
+Delete-Signal vom Detail-Overlay jetzt korrekt verbunden.
+
+### Info-Dialoge ✓ NEU (15.04.2026)
+"Nicht mehr anzeigen" Checkbox fuer Gain-Messung und Diversity-Erklaerung.
+Flags in config.json gespeichert (hide_info_gain_messung, hide_info_diversity).
 
 ### Warteliste: Station nach QSO-Ende nicht angerufen
 **Bug:** EA3FHP war in Warteliste waehrend R65CTC QSO. Nach QSO-Ende → "Warteliste leer" statt EA3FHP anzurufen.
