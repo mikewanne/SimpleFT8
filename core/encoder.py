@@ -14,10 +14,10 @@ from .ft8lib_decoder import get_ft8lib
 
 SAMPLE_RATE_FT8 = 12000
 
-# TX-Timing: Hardware-Latenz kompensieren (VITA-49 Pipeline + PTT-Delay).
-# Negativ = frueher senden. Empirisch: FlexRadio ~0.15s Latenz.
-# DT-Korrektur regelt den Rest (Systemuhr-Versatz).
-TARGET_TX_OFFSET = -0.15
+# TX-Timing: KEIN hardcoded Offset.
+# DT-Korrektur (ntp_time) regelt alles — pro Modus gespeichert + geladen.
+# Hardware-Latenz wird durch DT-Messung automatisch erkannt und kompensiert.
+TARGET_TX_OFFSET = 0.0
 # Trailing Silence trimmen: FT8-Nutzsignal ist 12.64s, Rest ist Stille.
 # slot+0.5 + 13.5s = slot+14.0s → 1.0s Puffer vor naechstem Slot (sicher)
 TRIM_SAMPLES = int(1.5 * SAMPLE_RATE_FT8)   # 18000 Samples @ 12kHz
@@ -203,7 +203,8 @@ class Encoder(QObject):
             overshoot = now - (next_boundary + TARGET_TX_OFFSET)
             if overshoot > 5.0:
                 # Wirklich verschlafen (Kaltstart) → naechsten Slot nehmen
-                next_boundary += 30.0 if self.tx_even is not None else 15.0
+                _SLOT = {"FT8": 15.0, "FT4": 7.5, "FT2": 3.8}.get(self._mode, 15.0)
+                next_boundary += (2 * _SLOT) if self.tx_even is not None else _SLOT
                 silence_secs = max(0.0, (next_boundary + TARGET_TX_OFFSET) - time.time())
                 print(f"[TX] Kaltstart-Guard: {overshoot:.1f}s daneben → Slot {next_boundary:.1f}")
             else:
