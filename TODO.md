@@ -34,9 +34,16 @@
 - [ ] **Spalten-Konfig in Settings:** RX-Spalten ein/ausblendbar + gespeichert/geladen (Slot, Ant, DT, etc.)
 
 ### Bugs
-- [ ] **Warteliste:** EA3FHP nicht angerufen nach R65CTC QSO — Queue-Verarbeitung in `_resume_cq_if_needed()` debuggen
-- [ ] **Logbuch-Loeschen:** Evtl. Zeitformat-Mismatch (HHMMSS vs HH:MM:SS) — im Betrieb testen
-- [ ] **km fehlt bei QSOs:** Grid-Cache aus frueheren QSOs, Prefix-Naeherung im Logbuch
+- [x] **Warteliste:** Queue akzeptiert jetzt Grid + Report (EA3FHP-Fix, v0.36)
+- [x] **Logbuch-Loeschen:** Funktioniert (bestaetigt 15.04)
+- [x] **km Fallback:** Callsign-Prefix Naeherung (~km) im Logbuch eingebaut (v0.37)
+
+### Gain-Messung Scoring (UNTERSUCHEN)
+- [ ] **Scoring-Logik pruefen:** Zeigt "optimal" Gain mit WENIGER Stationen als andere Gains.
+  Aktuell: waehlt nach bestem Top-5 SNR. Aber Stationsanzahl wird daneben angezeigt → verwirrend.
+  Optionen: (a) Scoring klar beschriften "Bester SNR", (b) Stationsanzahl statt SNR als Kriterium,
+  (c) Kombination aus beiden, (d) Alle Zyklen-Durchschnitt pruefen (nur letzte Messung oder Schnitt?)
+- [ ] **Logging:** Jede Messung protokollieren fuer spaetere Analyse
 
 ### Feldtest (NUR MIT RADIO)
 - [ ] **FT2 Feldtest:** Auf 40m (7.052 MHz) oder 20m (14.084 MHz) testen ob Decodium-Stationen dekodiert werden
