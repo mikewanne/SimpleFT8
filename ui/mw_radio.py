@@ -390,12 +390,31 @@ class RadioMixin:
         self._diversity_ctrl.OPERATE_CYCLES = base * _MULT.get(mode, 1)
         self._diversity_ctrl.MEASURE_CYCLES = 8 * _MULT.get(mode, 1)
         self._diversity_ctrl.scoring_mode = scoring_mode
-        self._diversity_ctrl.reset()
-        self._set_cq_locked(True)   # CQ sperren bis Messung abgeschlossen
-        print(f"[Diversity] Gestartet — Scoring: {scoring_mode.upper()}")
-        self.control_panel.update_diversity_ratio("50:50", "measure", 0,
-                                                  self._diversity_ctrl.MEASURE_CYCLES)
-        self.control_panel.update_diversity_counts(0, 0)
+
+        # Gespeichertes Preset laden? → sofort Betrieb statt Messung
+        mode = self.settings.mode
+        band = self.settings.band
+        preset = self.settings.get_diversity_preset(mode, band)
+        if preset:
+            self._diversity_ctrl.load_preset(preset)
+            self._diversity_ctrl.OPERATE_CYCLES = base * _MULT.get(mode, 1)
+            self._diversity_ctrl.MEASURE_CYCLES = 8 * _MULT.get(mode, 1)
+            print(f"[Diversity] Preset {mode}_{band}: {preset['ratio']} — Betrieb sofort")
+            self.control_panel.update_diversity_ratio(
+                self._diversity_ctrl.ratio, "operate",
+                operate_cycles=0,
+                operate_total=self._diversity_ctrl.OPERATE_CYCLES,
+                scoring_mode=scoring_mode)
+            self.control_panel.update_diversity_counts(0, 0)
+        else:
+            # Kein Preset → normal einmessen
+            self._diversity_ctrl.reset()
+            self._set_cq_locked(True)
+            print(f"[Diversity] Kein Preset — starte Messung ({scoring_mode.upper()})")
+            self.control_panel.update_diversity_ratio("50:50", "measure", 0,
+                                                      self._diversity_ctrl.MEASURE_CYCLES,
+                                                      scoring_mode=scoring_mode)
+            self.control_panel.update_diversity_counts(0, 0)
 
         band = self.settings.band
         preset = self.settings.get_dx_preset(band)
@@ -451,6 +470,18 @@ class RadioMixin:
         self.control_panel.dx_info.setText("")
         self.control_panel.update_diversity_counts(0, 0)
         print("[Diversity] Deaktiviert")
+
+    def _on_diversity_remeasure(self):
+        """NEU-Button: Diversity sofort neu einmessen (erzwungen)."""
+        if self._rx_mode != "diversity":
+            return
+        print("[Diversity] Manuelle Neueinmessung gestartet")
+        self._diversity_ctrl.start_measure()
+        self._set_cq_locked(True)
+        self.control_panel.update_diversity_ratio(
+            "50:50", "measure", 0,
+            self._diversity_ctrl.MEASURE_CYCLES,
+            scoring_mode=self._diversity_ctrl.scoring_mode)
 
     def _handle_dx_tuning(self):
         """DX-Tuning Modus: Preset laden oder Messung starten."""

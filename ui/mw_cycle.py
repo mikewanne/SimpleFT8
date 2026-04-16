@@ -60,34 +60,49 @@ class CycleMixin:
         # Messung aufzeichnen wenn wir in der Mess-Phase waren
         if self._rx_mode == "diversity" and was_phase == "measure":
             valid = [m for m in (messages or []) if m.snr is not None and m.snr > -20]
-            score = sum(max(0.0, float(m.snr + 30)) for m in valid)
             station_count = len(valid)
-            avg_snr = (sum(m.snr for m in valid) / station_count) if station_count else -30.0
-            # DX-Score: Anzahl SCHWACHER Stationen (SNR < -10 dB)
-            # Schwache Signale = DX (Australien -24dB zaehlt, Bochum +12dB nicht)
-            weak_count = len([m for m in valid if m.snr < -10])
-            with self._diversity_lock:
-                self._diversity_ctrl.record_measurement(
-                    ant, score,
-                    station_count=station_count,
-                    avg_snr=avg_snr,
-                    dx_weak_count=weak_count,
+
+            # Mindest-Stationen pruefen — zu wenig → Messung pausieren
+            if not self._diversity_ctrl.can_measure(station_count):
+                print(f"[Diversity] Nur {station_count} Stationen — Messung pausiert")
+                # Trotzdem UI aktualisieren (zeigt Wartegrund)
+                self.control_panel.update_diversity_ratio(
+                    self._diversity_ctrl.ratio, "measure",
+                    measure_step=self._diversity_ctrl.measure_step,
+                    measure_total=self._diversity_ctrl.MEASURE_CYCLES,
+                    scoring_mode=self._diversity_ctrl.scoring_mode)
+            else:
+                score = sum(max(0.0, float(m.snr + 30)) for m in valid)
+                avg_snr = (sum(m.snr for m in valid) / station_count) if station_count else -30.0
+                weak_count = len([m for m in valid if m.snr < -10])
+                with self._diversity_lock:
+                    self._diversity_ctrl.record_measurement(
+                        ant, score,
+                        station_count=station_count,
+                        avg_snr=avg_snr,
+                        dx_weak_count=weak_count,
+                    )
+                    for m in (messages or []):
+                        if hasattr(m, 'freq_hz') and m.freq_hz:
+                            self._diversity_ctrl.record_freq(m.freq_hz)
+                self.control_panel.update_diversity_ratio(
+                    self._diversity_ctrl.ratio, self._diversity_ctrl.phase,
+                    measure_step=self._diversity_ctrl.measure_step,
+                    measure_total=self._diversity_ctrl.MEASURE_CYCLES,
+                    operate_cycles=self._diversity_ctrl.operate_cycles,
+                    operate_total=self._diversity_ctrl.OPERATE_CYCLES,
+                    scoring_mode=self._diversity_ctrl.scoring_mode,
                 )
-                # Stationsfrequenzen für CQ-Frequenzwahl erfassen
-                for m in (messages or []):
-                    if hasattr(m, 'freq_hz') and m.freq_hz:
-                        self._diversity_ctrl.record_freq(m.freq_hz)
-            self.control_panel.update_diversity_ratio(
-                self._diversity_ctrl.ratio, self._diversity_ctrl.phase,
-                measure_step=self._diversity_ctrl.measure_step,
-                measure_total=self._diversity_ctrl.MEASURE_CYCLES,
-                operate_cycles=self._diversity_ctrl.operate_cycles,
-                operate_total=self._diversity_ctrl.OPERATE_CYCLES,
-                scoring_mode=self._diversity_ctrl.scoring_mode,
-            )
-            # Messung abgeschlossen → CQ freigeben + Frequenz wählen
-            if self._diversity_ctrl.phase == "operate":
-                self._set_cq_locked(False)
+                # Messung abgeschlossen → CQ freigeben + Preset speichern
+                if self._diversity_ctrl.phase == "operate":
+                    self._set_cq_locked(False)
+                    # Preset speichern fuer naechsten Modus/Bandwechsel
+                    self.settings.save_diversity_preset(
+                        mode=self.settings.mode,
+                        band=self.settings.band,
+                        ratio=self._diversity_ctrl.ratio,
+                        dominant=self._diversity_ctrl.dominant,
+                    )
                 cq_freq = self._diversity_ctrl.get_free_cq_freq()
                 if cq_freq:
                     self.encoder.audio_freq_hz = cq_freq
