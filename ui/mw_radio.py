@@ -383,12 +383,12 @@ class RadioMixin:
         self._diversity_stations = {}
         self._diversity_current_ant = "A1"
         self._diversity_ant_queue = deque()  # (ant, phase) Tupel
-        # Modus-abhaengige Zyklen (immer ~15 Min Betrieb, ~1-2 Min Messung)
+        # Settings-Wert × Modus-Multiplikator (gleiche ZEIT fuer alle Modi)
         mode = self.settings.mode
-        _OPERATE = {"FT8": 60, "FT4": 120, "FT2": 240}  # ~15 Min
-        _MEASURE = {"FT8": 8, "FT4": 8, "FT2": 16}       # FT2 braucht mehr Daten
-        self._diversity_ctrl.OPERATE_CYCLES = _OPERATE.get(mode, 60)
-        self._diversity_ctrl.MEASURE_CYCLES = _MEASURE.get(mode, 8)
+        _MULT = {"FT8": 1, "FT4": 2, "FT2": 4}
+        base = self.settings.get("diversity_operate_cycles", 60)
+        self._diversity_ctrl.OPERATE_CYCLES = base * _MULT.get(mode, 1)
+        self._diversity_ctrl.MEASURE_CYCLES = 8 * _MULT.get(mode, 1)
         self._diversity_ctrl.scoring_mode = scoring_mode
         self._diversity_ctrl.reset()
         self._set_cq_locked(True)   # CQ sperren bis Messung abgeschlossen
