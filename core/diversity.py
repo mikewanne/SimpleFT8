@@ -91,60 +91,56 @@ class DiversityController:
         self._freq_histogram[bin_idx] = self._freq_histogram.get(bin_idx, 0) + 1
 
     def get_free_cq_freq(self) -> Optional[int]:
-        """Freie CQ-Frequenz aus Histogramm berechnen.
+        """Freie CQ-Frequenz MITTEN in der Aktivitaet (nicht am Rand!).
 
-        Dynamischer Sweet Spot: Median der Aktivitaet ±400 Hz.
-        Wenn kein Histogramm: Fallback 800-2000 Hz.
+        Sucht die Luecke die am naechsten am Median der Aktivitaet liegt.
+        Vermeidet leere Randbereiche wo niemand hinschaut.
         """
         if not self._freq_histogram:
             return None
 
-        # Dynamischer Sweet Spot: wo ist die Aktivitaet?
+        # Median der Aktivitaet berechnen
         all_freqs = []
         for bin_idx, count in self._freq_histogram.items():
             freq = bin_idx * self.FREQ_BIN_HZ + self.FREQ_BIN_HZ // 2
             all_freqs.extend([freq] * count)
+        if not all_freqs:
+            return None
 
-        if all_freqs:
-            import statistics
-            median_freq = statistics.median(all_freqs)
-            SWEET_MIN = max(self.FREQ_MIN_HZ, int(median_freq - 400))
-            SWEET_MAX = min(self.FREQ_MAX_HZ, int(median_freq + 400))
-        else:
-            SWEET_MIN = 800
-            SWEET_MAX = 2000
+        import statistics
+        median_freq = statistics.median(all_freqs)
 
-        min_bin = int(SWEET_MIN // self.FREQ_BIN_HZ)
-        max_bin = int(SWEET_MAX // self.FREQ_BIN_HZ)
+        # Alle Luecken im aktiven Bereich (Median ±600 Hz) finden
+        SEARCH_MIN = max(self.FREQ_MIN_HZ, int(median_freq - 600))
+        SEARCH_MAX = min(self.FREQ_MAX_HZ, int(median_freq + 600))
+        min_bin = int(SEARCH_MIN // self.FREQ_BIN_HZ)
+        max_bin = int(SEARCH_MAX // self.FREQ_BIN_HZ)
         min_gap_bins = max(1, self.FREQ_MIN_GAP_HZ // self.FREQ_BIN_HZ)
 
-        best_gap_start = None
-        best_gap_len = 0
+        # Alle Luecken sammeln
+        gaps = []  # [(start_bin, length)]
         current_gap_start = None
         current_gap_len = 0
-
         for b in range(min_bin, max_bin + 1):
-            if b not in self._freq_histogram:  # leerer Bin
+            if b not in self._freq_histogram:
                 if current_gap_start is None:
                     current_gap_start = b
                 current_gap_len += 1
-            else:  # belegter Bin
-                if current_gap_len > best_gap_len:
-                    best_gap_len = current_gap_len
-                    best_gap_start = current_gap_start
+            else:
+                if current_gap_len >= min_gap_bins:
+                    gaps.append((current_gap_start, current_gap_len))
                 current_gap_start = None
                 current_gap_len = 0
+        if current_gap_len >= min_gap_bins:
+            gaps.append((current_gap_start, current_gap_len))
 
-        # Letztes Segment prüfen
-        if current_gap_len > best_gap_len:
-            best_gap_len = current_gap_len
-            best_gap_start = current_gap_start
-
-        if best_gap_start is None or best_gap_len < min_gap_bins:
+        if not gaps:
             return None
 
-        # Mitte der besten Lücke
-        center_bin = best_gap_start + best_gap_len // 2
+        # Luecke waehlen die am naechsten am Median liegt
+        median_bin = int(median_freq // self.FREQ_BIN_HZ)
+        best_gap = min(gaps, key=lambda g: abs((g[0] + g[1] // 2) - median_bin))
+        center_bin = best_gap[0] + best_gap[1] // 2
         freq_hz = center_bin * self.FREQ_BIN_HZ + self.FREQ_BIN_HZ // 2
         self._cq_freq_hz = int(freq_hz)
         return self._cq_freq_hz
