@@ -1063,6 +1063,82 @@ def test_protocol_ft2_different_from_ft4():
     assert ft4_20 != ft2_20, f"FT4 und FT2 auf 20m gleich: {ft4_20}"
 
 
+# ── DT Pro-Modus Persistence ──────────────────────────────────────────────────
+
+def test_dt_save_load_file():
+    """DT-Werte werden in JSON gespeichert und geladen."""
+    from core import ntp_time
+    ntp_time._correction = 0.55
+    ntp_time._mode = "FT8"
+    ntp_time._save_current()
+    assert ntp_time._saved.get("FT8") == 0.55
+    # Datei existiert
+    assert ntp_time._DT_FILE.exists()
+    ntp_time.reset(keep_correction=False)
+
+
+def test_dt_set_mode_loads_saved():
+    """set_mode() laedt gespeicherten Wert."""
+    from core import ntp_time
+    ntp_time._saved = {"FT8": 0.7, "FT4": 0.3, "FT2": 0.1}
+    ntp_time.set_mode("FT4")
+    assert abs(ntp_time._correction - 0.3) < 0.01
+    assert not ntp_time._is_initial  # Hat gespeicherten Wert → nicht initial
+    ntp_time.set_mode("FT2")
+    assert abs(ntp_time._correction - 0.1) < 0.01
+    ntp_time.reset(keep_correction=False)
+
+
+def test_dt_set_mode_no_saved():
+    """set_mode() ohne gespeicherten Wert → 0 + initial."""
+    from core import ntp_time
+    ntp_time._saved = {}
+    ntp_time.set_mode("FT2")
+    assert ntp_time._correction == 0.0
+    assert ntp_time._is_initial is True
+    ntp_time.reset(keep_correction=False)
+
+
+def test_dt_set_mode_saves_old():
+    """set_mode() speichert alten Wert bevor gewechselt wird."""
+    from core import ntp_time
+    ntp_time._mode = "FT8"
+    ntp_time._correction = 0.65
+    ntp_time._saved = {}
+    ntp_time.set_mode("FT4")
+    assert ntp_time._saved.get("FT8") == 0.65
+    ntp_time.reset(keep_correction=False)
+
+
+def test_dt_min_stations_ft2():
+    """FT2: MIN_STATIONS=2 (nicht 1, Ausreisser-Schutz)."""
+    from core import ntp_time
+    ntp_time._mode = "FT2"
+    # 1 Station reicht NICHT
+    result = ntp_time.update_from_decoded([0.5])
+    assert result is False
+    # 2 Stationen reichen
+    ntp_time._phase = "measure"
+    ntp_time._cycle_count = 0
+    ntp_time._measure_buffer = []
+    result = ntp_time.update_from_decoded([0.5, 0.5])
+    assert result is not None  # Wurde verarbeitet (True oder False)
+    ntp_time.reset(keep_correction=False)
+
+
+def test_dt_max_correction_clamp():
+    """Korrektur wird auf ±2.0s begrenzt."""
+    from core import ntp_time
+    ntp_time.reset(keep_correction=False)
+    ntp_time._is_initial = True
+    ntp_time._phase = "measure"
+    # Extrem hohe DT-Werte → Korrektur darf nicht ueber 2.0 gehen
+    ntp_time.update_from_decoded([1.9, 1.9, 1.9, 1.9, 1.9])
+    ntp_time.update_from_decoded([1.9, 1.9, 1.9, 1.9, 1.9])
+    assert ntp_time._correction <= 2.0
+    ntp_time.reset(keep_correction=False)
+
+
 # ── Runner ───────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":

@@ -125,7 +125,7 @@ def update_from_decoded(dt_values: list) -> bool:
 
     # Ausreisser filtern + modus-abhaengige Mindestanzahl
     valid = [dt for dt in dt_values if -2.0 <= dt <= 2.0]
-    _MIN = {"FT8": 3, "FT4": 2, "FT2": 1}.get(_mode, MIN_STATIONS)
+    _MIN = {"FT8": 3, "FT4": 2, "FT2": 2}.get(_mode, MIN_STATIONS)
     if len(valid) < _MIN:
         return False
 
