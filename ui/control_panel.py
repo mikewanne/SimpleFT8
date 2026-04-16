@@ -114,27 +114,39 @@ class FrequencyHistogramWidget(QWidget):
         w, h     = self.width(), self.height()
         label_h  = 12
         bar_h    = h - label_h
-        freq_rng = self.FREQ_MAX - self.FREQ_MIN
+
+        # Dynamischer Bereich: Zoom auf die Aktivitaet
+        if self._bins:
+            min_idx = min(self._bins.keys())
+            max_idx = max(self._bins.keys())
+            freq_lo = max(100, min_idx * self.BIN_HZ - 100)
+            freq_hi = min(2800, max_idx * self.BIN_HZ + 200)
+            # CQ-Marker muss auch reinpassen
+            if self._cq_freq:
+                freq_lo = min(freq_lo, self._cq_freq - 50)
+                freq_hi = max(freq_hi, self._cq_freq + 50)
+            # Mindestbreite 500 Hz
+            if freq_hi - freq_lo < 500:
+                center = (freq_lo + freq_hi) // 2
+                freq_lo, freq_hi = center - 250, center + 250
+        else:
+            freq_lo, freq_hi = self.FREQ_MIN, self.FREQ_MAX
+
+        freq_rng = max(1, freq_hi - freq_lo)
 
         def fx(hz: float) -> int:
-            return int((hz - self.FREQ_MIN) / freq_rng * w)
+            return int((hz - freq_lo) / freq_rng * w)
 
         # Hintergrund
         painter.fillRect(0, 0, w, bar_h, QColor("#0a0a14"))
 
-        # Freie Lücke (grüne Fläche)
-        if self._gap_start_hz is not None and self._gap_end_hz is not None:
-            x1 = fx(self._gap_start_hz)
-            x2 = fx(self._gap_end_hz)
-            painter.fillRect(x1, 0, max(2, x2 - x1), bar_h, QColor(0, 130, 55, 55))
-
         # Bins (grau → orange → rot je Belegungsgrad)
         if self._bins:
             max_c   = max(self._bins.values(), default=1)
-            bin_px  = max(1, int(self.BIN_HZ / freq_rng * w))
+            bin_px  = max(2, int(self.BIN_HZ / freq_rng * w))
             for idx, cnt in self._bins.items():
                 hz = idx * self.BIN_HZ
-                if not (self.FREQ_MIN <= hz <= self.FREQ_MAX):
+                if not (freq_lo <= hz <= freq_hi):
                     continue
                 x     = fx(hz)
                 ratio = cnt / max_c
@@ -149,8 +161,8 @@ class FrequencyHistogramWidget(QWidget):
                     b = 0
                 painter.fillRect(x, bar_h - bh, bin_px, bh, QColor(r, g, b))
 
-        # CQ-Marker (gelbe Linie)
-        if self._cq_freq:
+        # CQ-Marker (gelbe Linie — IMMER wenn Frequenz gesetzt)
+        if self._cq_freq and freq_lo <= self._cq_freq <= freq_hi:
             x = fx(self._cq_freq)
             painter.setPen(QPen(QColor("#FFD700"), 2))
             painter.drawLine(x, 0, x, bar_h - 1)
@@ -159,11 +171,11 @@ class FrequencyHistogramWidget(QWidget):
         painter.setPen(QPen(QColor("#222"), 1))
         painter.drawLine(0, bar_h, w, bar_h)
 
-        # Labels
+        # Dynamische Labels
         painter.setFont(QFont("Menlo", 7))
         painter.setPen(QColor("#555"))
-        painter.drawText(1, h - 1, "150")
-        painter.drawText(w - 30, h - 1, "2800Hz")
+        painter.drawText(1, h - 1, f"{freq_lo}")
+        painter.drawText(w - 35, h - 1, f"{freq_hi}Hz")
 
         if self._cq_freq:
             x   = fx(self._cq_freq)
