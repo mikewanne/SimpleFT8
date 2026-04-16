@@ -534,17 +534,40 @@ class RadioMixin:
             self._open_dx_tune_dialog()
 
     def _open_dx_tune_dialog(self):
-        """DX Tune Dialog oeffnen — NICHT-MODAL damit Signale durchkommen."""
+        """DX Tune Dialog oeffnen — NICHT-MODAL, immer im Vordergrund, GUI gesperrt."""
         from ui.dx_tune_dialog import DXTuneDialog
         band = self.settings.band
         dialog = DXTuneDialog(self.radio, band, parent=self)
         self._dx_tune_dialog = dialog
 
-        # Nicht-modal: open() statt exec() — sonst blockiert der
-        # modale Event-Loop die Signal-Zustellung vom Decoder-Thread
+        # Immer im Vordergrund halten (verschwindet nicht hinter der GUI)
+        dialog.setWindowFlags(dialog.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
+
+        # GUI sperren waehrend Gain-Messung (kein Band/Modus-Wechsel, kein CQ)
+        self._set_gain_measure_lock(True)
+
         dialog.accepted.connect(self._on_dx_tune_accepted)
         dialog.rejected.connect(self._on_dx_tune_rejected)
         dialog.show()
+
+    def _set_gain_measure_lock(self, locked: bool):
+        """GUI sperren/entsperren waehrend Gain-Messung."""
+        # Mode-Buttons sperren
+        self.control_panel.btn_ft8.setEnabled(not locked)
+        self.control_panel.btn_ft4.setEnabled(not locked)
+        self.control_panel.btn_ft2.setEnabled(not locked)
+        # Band-Buttons sperren
+        for btn in self.control_panel.band_buttons.values():
+            btn.setEnabled(not locked)
+        # CQ + QSO-Buttons sperren
+        self.control_panel.btn_cq.setEnabled(not locked)
+        self.control_panel.btn_advance.setEnabled(not locked)
+        self.control_panel.btn_cancel.setEnabled(not locked)
+        # Normal/Diversity sperren
+        self.control_panel.btn_normal.setEnabled(not locked)
+        self.control_panel.btn_diversity.setEnabled(not locked)
+        if locked:
+            self.statusBar().showMessage("GAIN-MESSUNG AKTIV — Bedienung gesperrt", 0)
 
     def _on_dx_tune_accepted(self):
         """DX Tuning erfolgreich — Preset speichern."""
@@ -572,12 +595,16 @@ class RadioMixin:
             self._diversity_ant1_gain = ant1_g
             self._diversity_ant2_gain = ant2_g
         self._dx_tune_dialog = None
+        self._set_gain_measure_lock(False)
+        self._update_statusbar()
 
     def _on_dx_tune_rejected(self):
         """DX Tuning abgebrochen — zurueck auf Normal."""
         self._dx_tune_dialog = None
+        self._set_gain_measure_lock(False)
         self._apply_normal_mode()
         self.control_panel.dx_info.setText("")
+        self._update_statusbar()
 
     def _apply_dx_preset(self, preset: dict):
         """DX-Preset am Radio anwenden."""
