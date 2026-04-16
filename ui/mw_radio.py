@@ -357,26 +357,38 @@ class RadioMixin:
         self._update_statusbar()
 
     def _set_cq_locked(self, locked: bool):
-        """CQ-Button + Weiter sperren/freigeben waehrend Diversity-Einmessen."""
+        """CQ + Hunt sperren waehrend Diversity-Einmessen.
+
+        Beide Slots (Even+Odd) werden fuer Messung gebraucht!
+        Hunt wuerde TX in einen Mess-Slot schieben → Messung kaputt.
+        """
         self.control_panel.btn_cq.setEnabled(not locked)
         self.control_panel.btn_advance.setEnabled(not locked)
         self.control_panel.btn_cancel.setEnabled(not locked)
+        # Hunt blockieren: RX-Tabelle Klicks ignorieren
+        self._diversity_measuring = locked
+        self.rx_panel.table.setEnabled(not locked)
         if locked:
-            self.control_panel.btn_cq.setText("CQ RUFEN  ⏳")
+            self.control_panel.btn_cq.setText("EINMESSEN  ⏳")
             if self.qso_sm.cq_mode:
                 self.qso_sm.stop_cq()
                 self.control_panel.set_cq_active(False)
-                self.qso_panel.add_info("CQ gestoppt — Diversity-Einmessen startet")
+                self.qso_panel.add_info("CQ gestoppt — Einmessen aktiv")
         else:
             self.control_panel.btn_cq.setText("CQ RUFEN")
+            self.rx_panel.table.setEnabled(True)
 
     def _enable_diversity(self, scoring_mode: str = "normal"):
         """Diversity aktivieren: Antenne pro Zyklus wechseln, Stationen akkumulieren."""
         self._diversity_stations = {}
         self._diversity_current_ant = "A1"
         self._diversity_ant_queue = deque()  # (ant, phase) Tupel
-        # Betriebszyklen aus Settings laden
-        self._diversity_ctrl.OPERATE_CYCLES = self.settings.get("diversity_operate_cycles", 80)
+        # Modus-abhaengige Zyklen (immer ~15 Min Betrieb, ~1-2 Min Messung)
+        mode = self.settings.mode
+        _OPERATE = {"FT8": 60, "FT4": 120, "FT2": 240}  # ~15 Min
+        _MEASURE = {"FT8": 8, "FT4": 8, "FT2": 16}       # FT2 braucht mehr Daten
+        self._diversity_ctrl.OPERATE_CYCLES = _OPERATE.get(mode, 60)
+        self._diversity_ctrl.MEASURE_CYCLES = _MEASURE.get(mode, 8)
         self._diversity_ctrl.scoring_mode = scoring_mode
         self._diversity_ctrl.reset()
         self._set_cq_locked(True)   # CQ sperren bis Messung abgeschlossen
