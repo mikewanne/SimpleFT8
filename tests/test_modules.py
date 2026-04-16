@@ -816,6 +816,253 @@ def test_dt_min_stations_per_mode():
     assert _MIN["FT2"] == 1
 
 
+# ── ADIF Writer/Parser ────────────────────────────────────────────────────────
+
+def test_adif_header():
+    """ADIF-Datei hat korrekten Header."""
+    from pathlib import Path
+    adi_files = list(Path(".").glob("SimpleFT8_LOG_*.adi"))
+    if not adi_files:
+        return  # Keine Logdateien vorhanden
+    text = adi_files[0].read_text()
+    assert "<ADIF_VER:" in text
+    assert "<PROGRAMID:" in text
+    assert "<EOH>" in text
+
+
+def test_adif_required_fields():
+    """Jeder ADIF-Record hat alle Pflichtfelder."""
+    from pathlib import Path
+    import re
+    adi_files = list(Path(".").glob("SimpleFT8_LOG_*.adi"))
+    if not adi_files:
+        return
+    text = adi_files[0].read_text()
+    eoh = text.upper().find("<EOH>")
+    body = text[eoh + 5:] if eoh >= 0 else text
+    records = re.split(r"<EOR>", body, flags=re.IGNORECASE)
+    required = ["CALL", "QSO_DATE", "TIME_ON", "BAND", "MODE", "FREQ"]
+    for rec in records:
+        if not rec.strip():
+            continue
+        for field in required:
+            assert f"<{field}:" in rec.upper(), f"Pflichtfeld {field} fehlt in: {rec[:80]}"
+
+
+def test_adif_date_format():
+    """QSO_DATE = YYYYMMDD (8 Zeichen), TIME_ON = HHMMSS (6 Zeichen)."""
+    from pathlib import Path
+    import re
+    adi_files = list(Path(".").glob("SimpleFT8_LOG_*.adi"))
+    if not adi_files:
+        return
+    text = adi_files[0].read_text()
+    dates = re.findall(r"<QSO_DATE:8>(\d{8})", text)
+    times = re.findall(r"<TIME_ON:6>(\d{6})", text)
+    for d in dates:
+        assert len(d) == 8 and d[:4].isdigit()
+    for t in times:
+        assert len(t) == 6 and int(t[:2]) < 24 and int(t[2:4]) < 60
+
+
+def test_adif_parse_roundtrip():
+    """ADIF-Datei lesen + Felder korrekt extrahieren."""
+    from log.adif import parse_adif_file
+    from pathlib import Path
+    adi_files = list(Path(".").glob("SimpleFT8_LOG_*.adi"))
+    if not adi_files:
+        return
+    records = parse_adif_file(adi_files[0])
+    assert len(records) >= 0  # Kann leer sein
+    for rec in records:
+        assert "CALL" in rec
+        assert "_SOURCE_FILE" in rec  # Intern gesetzt fuer Delete
+
+
+# ── Geo / Distance ───────────────────────────────────────────────────────────
+
+def test_grid_to_latlon():
+    """Grid JO31 → ca. 51°N, 6°E (Ruhrgebiet)."""
+    from core.geo import grid_to_latlon
+    lat, lon = grid_to_latlon("JO31")
+    assert 50 < lat < 52
+    assert 5 < lon < 8
+
+
+def test_grid_distance_known():
+    """JO31 → KP42 (Finnland) = ca. 1500-2000 km."""
+    from core.geo import grid_distance
+    km = grid_distance("JO31", "KP42")
+    assert km is not None
+    assert 1400 < km < 2200
+
+
+def test_grid_distance_invalid():
+    """Ungueltiges Grid → None."""
+    from core.geo import grid_distance
+    assert grid_distance("JO31", "") is None
+    assert grid_distance("JO31", "XX") is None
+
+
+def test_callsign_to_distance():
+    """Callsign-Prefix → ungefaehre Entfernung."""
+    from core.geo import callsign_to_distance
+    km = callsign_to_distance("VK3ABC", "JO31")  # Australien
+    if km is not None:
+        assert km > 10000
+
+
+# ── CQ Frequency ─────────────────────────────────────────────────────────────
+
+def test_cq_freq_empty_histogram():
+    """Leeres Histogramm → None."""
+    from core.diversity import DiversityController
+    dc = DiversityController()
+    assert dc.get_free_cq_freq() is None
+
+
+def test_cq_freq_sweet_spot():
+    """CQ-Frequenz muss im Sweet Spot 800-2000 Hz liegen."""
+    from core.diversity import DiversityController
+    dc = DiversityController()
+    # Simuliere belegte Frequenzen bei 1000-1200 Hz
+    for f in range(1000, 1200, 50):
+        dc.record_freq(f)
+    freq = dc.get_free_cq_freq()
+    if freq is not None:
+        assert 800 <= freq <= 2000, f"CQ-Freq {freq} ausserhalb Sweet Spot"
+
+
+# ── Settings Roundtrip ────────────────────────────────────────────────────────
+
+def test_settings_save_load():
+    """Settings speichern und laden Roundtrip."""
+    from config.settings import Settings
+    s = Settings()
+    old_call = s.callsign
+    s.set("test_key_temp", 42)
+    s.save()
+    s2 = Settings()
+    assert s2.get("test_key_temp") == 42
+    assert s2.callsign == old_call
+
+
+def test_settings_missing_key():
+    """Fehlender Key → Default zurueck."""
+    from config.settings import Settings
+    s = Settings()
+    assert s.get("nonexistent_key_xyz", "default") == "default"
+
+
+# ── Timer / Timing ───────────────────────────────────────────────────────────
+
+def test_timer_cycle_durations():
+    """Timer kennt alle Modi-Dauern."""
+    from core.timing import FT8Timer
+    t = FT8Timer("FT8")
+    assert t.cycle_duration == 15.0
+    t.set_mode("FT4")
+    assert t.cycle_duration == 7.5
+    t.set_mode("FT2")
+    assert t.cycle_duration == 3.8
+
+
+def test_timer_seconds_in_cycle():
+    """seconds_in_cycle() gibt Wert zwischen 0 und cycle_duration."""
+    from core.timing import FT8Timer
+    t = FT8Timer("FT8")
+    sic = t.seconds_in_cycle()
+    assert 0 <= sic < 15.0
+
+
+# ── Message Parser erweitert ─────────────────────────────────────────────────
+
+def test_parse_cq_dx():
+    """CQ DX Nachricht korrekt geparst."""
+    from core.message import parse_ft8_message
+    m = parse_ft8_message("CQ DX DA1MHH JO31", snr=-15, freq_hz=1000, dt=0.1)
+    assert m.is_cq
+    assert m.caller == "DA1MHH"
+
+
+def test_parse_grid_message():
+    """Grid-Antwort korrekt erkannt."""
+    from core.message import parse_ft8_message
+    m = parse_ft8_message("DA1MHH R3EDI KO82", snr=-15, freq_hz=1000, dt=0.1)
+    assert m.is_grid
+    assert m.caller == "R3EDI"
+    assert m.grid_or_report == "KO82"
+
+
+# ── QSO State Machine erweitert ──────────────────────────────────────────────
+
+def test_qso_cancel_resets():
+    """Cancel setzt State auf IDLE und leert Queue."""
+    from core.qso_state import QSOStateMachine, QSOState
+    sm = QSOStateMachine("DA1MHH", "JO31")
+    sm.cq_mode = True
+    sm.state = QSOState.TX_REPORT
+    sm.cancel()
+    assert sm.state == QSOState.IDLE
+    assert not sm.cq_mode
+    assert len(sm._caller_queue) == 0
+
+
+def test_qso_3min_timeout():
+    """3-Min Global-Timeout feuert in WAIT_REPORT."""
+    import time
+    from core.qso_state import QSOStateMachine, QSOState
+    sm = QSOStateMachine("DA1MHH", "JO31")
+    sm.state = QSOState.WAIT_REPORT
+    sm.qso.their_call = "TEST"
+    sm.qso.start_time = time.time() - 200
+    timeouts = []
+    sm.qso_timeout.connect(lambda c: timeouts.append(c))
+    sm.on_cycle_end()
+    assert len(timeouts) == 1
+
+
+def test_qso_no_double_log():
+    """QSO wird nur einmal geloggt (nicht bei 73 nochmal)."""
+    from core.qso_state import QSOStateMachine, QSOState
+    sm = QSOStateMachine("DA1MHH", "JO31")
+    completed = []
+    sm.qso_complete.connect(lambda q: completed.append(q))
+    # Simuliere TX_RR73 → on_message_sent
+    sm.state = QSOState.TX_RR73
+    sm.qso.their_call = "R3EDI"
+    sm.on_message_sent()
+    assert len(completed) == 1
+    assert sm.state == QSOState.WAIT_73
+    # 73 empfangen → qso_confirmed, NICHT nochmal qso_complete
+    confirmed = []
+    sm.qso_confirmed.connect(lambda q: confirmed.append(q))
+    sm.cq_mode = True
+    msg = _make_msg("R3EDI", "DA1MHH", "DA1MHH R3EDI 73", is_73=True)
+    sm.on_message_received(msg)
+    assert len(confirmed) == 1
+    assert len(completed) == 1  # immer noch 1, nicht 2!
+
+
+# ── Encoder/Protocol ─────────────────────────────────────────────────────────
+
+def test_protocol_frequencies_complete():
+    """Alle Modi haben Frequenzen fuer alle Baender."""
+    from core.protocol import BAND_FREQUENCIES
+    for mode in ["FT8", "FT4", "FT2"]:
+        freqs = BAND_FREQUENCIES.get(mode, {})
+        assert "20m" in freqs, f"{mode} hat keine 20m Frequenz"
+        assert "40m" in freqs, f"{mode} hat keine 40m Frequenz"
+
+
+def test_protocol_ft2_different_from_ft4():
+    """FT2 und FT4 haben unterschiedliche Frequenzen."""
+    from core.protocol import BAND_FREQUENCIES
+    ft4_20 = BAND_FREQUENCIES["FT4"]["20m"]
+    ft2_20 = BAND_FREQUENCIES["FT2"]["20m"]
+    assert ft4_20 != ft2_20, f"FT4 und FT2 auf 20m gleich: {ft4_20}"
+
+
 # ── Runner ───────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
