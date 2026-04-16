@@ -88,6 +88,7 @@ class RadioMixin:
         self.radio.set_frequency(freq)
         self.radio.apply_ft8_preset(band=band)
         print(f"[FlexRadio] Band: {band}, Freq: {freq:.3f} MHz")
+        self._update_statusbar()  # Statusbar sofort sichtbar nach Connect
         # DX-Preset ANT1-Gain silent laden wenn vorhanden
         preset = self.settings.get_dx_preset(band)
         if preset and "ant1_gain" in preset:
@@ -349,8 +350,16 @@ class RadioMixin:
                     self._enable_diversity(scoring_mode="dx")
                 else:
                     # Kein DX-Preset → automatische Gain-Messung starten (nach SNR)
+                    _show_info_once(self, "dx_auto_gain", "DX Gain-Messung",
+                        "DX-Modus: Gain-Messung startet automatisch.\n\n"
+                        "Im DX-Betrieb zaehlt Empfindlichkeit (SNR) statt\n"
+                        "Stationsanzahl. Die Messung findet den optimalen\n"
+                        "Preamp-Wert fuer schwache DX-Signale.\n\n"
+                        "Ergebnis wird gespeichert — beim naechsten Mal\n"
+                        "wird das DX-Preset direkt geladen.",
+                        self.settings)
                     print(f"[DX] Kein Preset fuer {band} — starte Gain-Messung (SNR)")
-                    self._pending_dx_diversity = True  # Nach Gain → Diversity starten
+                    self._pending_dx_diversity = True
                     self._start_dx_tuning(scoring_mode="snr")
             else:
                 # Standard: direkt Diversity starten

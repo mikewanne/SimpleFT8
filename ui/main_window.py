@@ -184,11 +184,7 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         _help_btn.setFixedHeight(22)
         _help_btn.clicked.connect(self._on_help_clicked)
         self.statusBar().addPermanentWidget(_help_btn)
-        # DT-Label separat (nur dieses wird gruen, nicht ganze Statusbar)
-        from PySide6.QtWidgets import QLabel as _QL
-        self._dt_label = _QL("DT: —")
-        self._dt_label.setStyleSheet("color: #888; font-family: Menlo; font-size: 11px; padding: 0 8px;")
-        self.statusBar().addPermanentWidget(self._dt_label)
+        # DT-Anzeige nur in der Statusbar-Message (kein separates Label mehr)
 
         # Fenstergeometrie wiederherstellen
         from PySide6.QtCore import QTimer as _QTimer
@@ -476,9 +472,13 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
             dt_text, dt_color = "DT: Korrektur", "#00DD66"
         else:
             dt_text, dt_color = "DT: Aktiv", "#888"
-        if hasattr(self, '_dt_label'):
-            self._dt_label.setText(dt_text)
-            self._dt_label.setStyleSheet(f"color: {dt_color}; font-family: Menlo; font-size: 11px; padding: 0 8px;")
+        # DT-Farbe in Statusbar: gruen bei Korrektur via kurzen StyleSheet-Wechsel
+        if dt_color != "#888":
+            self.statusBar().setStyleSheet(
+                f"color: {dt_color}; font-family: Menlo; font-size: 11px; background-color: #0a1a0a;")
+        else:
+            self.statusBar().setStyleSheet(
+                "color: #888; font-family: Menlo; font-size: 11px; background-color: #111;")
         # Filter-Anzeige pro Modus
         _FILTERS = {"FT8": "100-3100", "FT4": "100-3100", "FT2": "100-4000"}
         filter_str = _FILTERS.get(self.settings.mode, "100-3100")
@@ -554,6 +554,11 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self._presence_expired = False
         if was_expired:
             print("[Presence] Operator zurueck — TX freigegeben")
+            # CQ wieder starten wenn vorher aktiv war
+            if self.qso_sm._was_cq or self.qso_sm.cq_mode:
+                self.qso_sm.start_cq()
+                self.control_panel.set_cq_active(True)
+                print("[Presence] CQ automatisch wieder aufgenommen")
 
     def _on_presence_tick(self):
         """Jede Sekunde: Countdown herunterzaehlen."""
