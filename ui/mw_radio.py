@@ -333,10 +333,26 @@ class RadioMixin:
             scoring = "dx" if dlg.clickedButton() == btn_dx else "normal"
             self._rx_mode = "diversity"
             self._diversity_stations = {}
-            # Button-Text: zeigt aktiven Modus
             label = "DIVERSITY DX" if scoring == "dx" else "DIVERSITY"
             self.control_panel.btn_diversity.setText(label)
-            self._enable_diversity(scoring_mode=scoring)
+
+            if scoring == "dx":
+                # DX-Modus: Gain-Preset pruefen, ggf. automatisch messen
+                band = self.settings.band
+                dx_preset = self.settings.get_gain_preset(band, mode="dx")
+                if dx_preset:
+                    # Gespeichertes DX-Preset anwenden → direkt Diversity starten
+                    self._apply_dx_preset(dx_preset)
+                    print(f"[DX] Preset geladen: {band} Gain={dx_preset.get('gain')} dB")
+                    self._enable_diversity(scoring_mode="dx")
+                else:
+                    # Kein DX-Preset → automatische Gain-Messung starten (nach SNR)
+                    print(f"[DX] Kein Preset fuer {band} — starte Gain-Messung (SNR)")
+                    self._pending_dx_diversity = True  # Nach Gain → Diversity starten
+                    self._start_dx_tuning(scoring_mode="snr")
+            else:
+                # Standard: direkt Diversity starten
+                self._enable_diversity(scoring_mode="normal")
 
         self._update_statusbar()
 
@@ -456,10 +472,10 @@ class RadioMixin:
             )
             msg.exec()
             if msg.clickedButton() == btn_new:
-                self._start_dx_tuning()
+                self._start_dx_tuning(scoring_mode="stations")
         else:
             msg = QMessageBox(self)
-            msg.setWindowTitle("DX Tuning")
+            msg.setWindowTitle("Gain-Messung")
             msg.setIcon(QMessageBox.Icon.Question)
             msg.setText(
                 f"Kein DX Preset fuer {band}.\n\n"
@@ -477,8 +493,9 @@ class RadioMixin:
             else:
                 pass  # GAIN-MESSUNG abgebrochen — Modus unveraendert lassen
 
-    def _start_dx_tuning(self):
+    def _start_dx_tuning(self, scoring_mode: str = "snr"):
         """DX Tune Dialog — optional TUNE-Schritt + SWR-Pruefung vor Gain-Messung."""
+        self._gain_scoring_mode = scoring_mode
         from PySide6.QtWidgets import QMessageBox
         from PySide6.QtCore import QTimer
 
@@ -537,7 +554,8 @@ class RadioMixin:
         """DX Tune Dialog oeffnen — NICHT-MODAL, immer im Vordergrund, GUI gesperrt."""
         from ui.dx_tune_dialog import DXTuneDialog
         band = self.settings.band
-        dialog = DXTuneDialog(self.radio, band, parent=self)
+        scoring = getattr(self, '_gain_scoring_mode', 'snr')
+        dialog = DXTuneDialog(self.radio, band, scoring_mode=scoring, parent=self)
         self._dx_tune_dialog = dialog
 
         # Immer im Vordergrund halten (verschwindet nicht hinter der GUI)
@@ -576,6 +594,7 @@ class RadioMixin:
             return
         r = dialog.get_results()
         band = self.settings.band
+        scoring = getattr(self, '_gain_scoring_mode', 'snr')
         self.settings.save_dx_preset(
             band=band,
             rxant=r.get("best_ant", "ANT1"),
@@ -584,18 +603,24 @@ class RadioMixin:
             ant2_avg=r.get("ant2_avg", 0.0),
             ant1_gain=r.get("ant1_gain", r.get("best_gain", 0)),
             ant2_gain=r.get("ant2_gain", r.get("best_gain", 0)),
+            scoring=scoring,
         )
         ant1_g = r.get("ant1_gain", r.get("best_gain", 0))
         ant2_g = r.get("ant2_gain", r.get("best_gain", 0))
         self.control_panel.dx_info.setText(
             f"ANT1(G{ant1_g}) + ANT2(G{ant2_g})"
         )
-        # Diversity-Gains sofort aktualisieren falls gerade aktiv
-        if self._rx_mode == "diversity":
-            self._diversity_ant1_gain = ant1_g
-            self._diversity_ant2_gain = ant2_g
+        # Gains sofort anwenden
+        self._diversity_ant1_gain = ant1_g
+        self._diversity_ant2_gain = ant2_g
         self._dx_tune_dialog = None
         self._set_gain_measure_lock(False)
+
+        # DX-Diversity: nach Gain-Messung automatisch Diversity starten
+        if getattr(self, '_pending_dx_diversity', False):
+            self._pending_dx_diversity = False
+            print(f"[DX] Gain-Messung fertig → starte Diversity DX")
+            self._enable_diversity(scoring_mode="dx")
         self._update_statusbar()
 
     def _on_dx_tune_rejected(self):

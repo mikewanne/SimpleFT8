@@ -43,10 +43,11 @@ def _build_interleaved_schedule() -> list:
 class DXTuneDialog(QDialog):
     """DX Tuning Dialog — Interleaved Messung, per-Antenne Presets."""
 
-    def __init__(self, radio, band: str, parent=None):
+    def __init__(self, radio, band: str, scoring_mode: str = "snr", parent=None):
         super().__init__(parent)
         self.radio = radio
         self.band = band
+        self.scoring_mode = scoring_mode  # "snr" (DX) oder "stations" (Standard)
         self._results = {}
 
         # Messplan
@@ -279,25 +280,39 @@ class DXTuneDialog(QDialog):
         vals = self._phase_data.get(key, [])
         return None in vals
 
+    def _station_count(self, key) -> int:
+        """Gesamtzahl Stationen fuer eine (ant, gain) Kombination."""
+        vals = self._phase_data.get(key, [])
+        return len([v for v in vals if v is not None])
+
     def _finish(self):
-        """Alle 18 Zyklen fertig — besten Gain pro Antenne bestimmen."""
+        """Alle 18 Zyklen fertig — besten Gain pro Antenne bestimmen.
+
+        scoring_mode='snr': Bester Top-5 SNR → maximale Empfindlichkeit (DX)
+        scoring_mode='stations': Meiste Stationen → maximaler Durchsatz (Standard)
+        """
         self._finished = True
+        use_snr = (self.scoring_mode == "snr")
 
         for ant in ("ANT1", "ANT2"):
             best_gain = GAIN_VALUES[0]
-            best_avg = None
+            best_score = None
             for gain in GAIN_VALUES:
                 key = (ant, gain)
-                avg = self._top5_avg(key)
-                if avg is None:
-                    continue
                 if self._has_overload(key):
-                    continue  # Uebersteuerung: ignorieren
-                if best_avg is None or avg > best_avg:
-                    best_avg = avg
+                    continue
+                if use_snr:
+                    score = self._top5_avg(key)  # DX: bester SNR
+                else:
+                    score = self._station_count(key)  # Standard: meiste Stationen
+                if score is None:
+                    continue
+                if best_score is None or score > best_score:
+                    best_score = score
                     best_gain = gain
             self._results[f"{ant.lower()}_gain"] = best_gain
-            self._results[f"{ant.lower()}_avg"] = best_avg if best_avg is not None else -30.0
+            avg = self._top5_avg((ant, best_gain))
+            self._results[f"{ant.lower()}_avg"] = avg if avg is not None else -30.0
 
         # Beste Antenne gesamt (fuer DX Tuning Modus Abwaertskompatibilitaet)
         ant1_avg = self._results.get("ant1_avg", -30.0)
@@ -321,9 +336,11 @@ class DXTuneDialog(QDialog):
         ant2_gain = self._results["ant2_gain"]
         self.step_label.setText("Messung abgeschlossen!")
         self.step_label.setStyleSheet("color: #44FF44; font-size: 13px; font-weight: bold;")
+        scoring_text = "nach SNR (DX)" if use_snr else "nach Stationsanzahl"
         self.detail_label.setText(
             f"ANT1: optimaler Gain {ant1_gain} dB  |  "
-            f"ANT2: optimaler Gain {ant2_gain} dB"
+            f"ANT2: optimaler Gain {ant2_gain} dB\n"
+            f"Bewertet {scoring_text}"
         )
         self.detail_label.setStyleSheet("color: #44FF44;")
         self.progress.setValue(len(self._schedule))
