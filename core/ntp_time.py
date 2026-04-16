@@ -123,9 +123,10 @@ def update_from_decoded(dt_values: list) -> bool:
     global _correction, _phase, _cycle_count, _measure_buffer
     global _last_median_dt, _last_sample_count, _is_initial
 
-    # Ausreisser filtern
+    # Ausreisser filtern + modus-abhaengige Mindestanzahl
     valid = [dt for dt in dt_values if -2.0 <= dt <= 2.0]
-    if len(valid) < MIN_STATIONS:
+    _MIN = {"FT8": 3, "FT4": 2, "FT2": 1}.get(_mode, MIN_STATIONS)
+    if len(valid) < _MIN:
         return False
 
     median_dt = statistics.median(valid)

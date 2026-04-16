@@ -1,17 +1,16 @@
-**@reed** — you were completely right, in both comments. And I apologize for not catching it immediately.
+Fehlerliste
 
-Your Comment 1 described the exact bug: if a station transmits on Slot 1 and ANT2 is the only antenna that hears them well, the old A1-A2-A1-A2 pattern would permanently assign Slot 1 to ANT1 — that station would never be decoded. The diversity would be pointless for that station.
+1 Statusleiste unten nach verbinden mit Radio und den ersten erfassen derStationen nicht sichtbar,sobaldie ersten stationen erfasst sind ist sie wieder da.
+2 Statusleiste unten : wenn DT Zeit auf KOrrektur spring wird die schrift ALLER Einträge in der Statusleiste grün essollte aber nur die grün werden die sich ändert also DT : KOREKTUR -meldung grün alle anderen so lassen.
+3 wenn ich cq rufe steht hier im qso fenster 09:18:45 [O] →  Sende   CQ DA1MHH JO31 , was RICHTIG ist, unten in der status leiste stehen die weiderholungen wie oft ich gesendet habe , das ist auch RICHTIg. wenn ich CQ ruf beende sollte die statusleiste mit den anzehl der wiederholungen gelöscht werden um iriitationen zu vermeiden weiles ja nicht mehr aktiv ist.
+4. die dt Zeit bei FT( zum Beispiel ist bei den empfangenden Stationen ausgezeichnet durch diekorrekttur im schnitt 0,1 bis 0,2 plus.wenn ich sende , habe ich in olfen beimeinen icom 30km entfernt vonmeinen flex puls 0,3 bisplus 0,4 dt. ich bitte umAnalöyse,arbeiten wir nicht korrekt mit der korrekturzteit ? ist die latenzs software hardware zu hoch , das wir befor wir senden Zeit verlieren ( 0,1 bis 0,2 ), Sollten wir einen fixwert einbauendas man generell sagt Hard und software brauchen 0,1 sekunden die senden wir pauschalfrüher um so den DT wert beim senden zu optimier.en (vlt gefährlich bei ft2 ?)
 
-Your Comment 2 gave the exact fix.
+5 .beimodus wechselsollen dieangezeigten werte von PSK reporter gelöscht werden.wenn ich auf ft8 von 50stationen gehöhrt werden und auf ft 2 wechselirritiert das weilsi ja noch von ft8 waren 
 
-**What changed in v0.24.2 (just pushed):**
-Old 50:50: `("A1","A2")[cycle % 2]` → Even-slot stations locked to ANT1, Odd-slot stations locked to ANT2
-New 50:50: `("A1","A1","A2","A2")[cycle % 4]` → every antenna covers one Even AND one Odd slot per 4-cycle block
+6. DT Werte : wenn ich auf ft2 wechsell,kann kein dt wert geladen werden weil keiner da ist,es kann aber auch keiner mit der zeit erstellt werden weilnoch zu wenig stationen sind zur berechnung,. vorschlag anzahlder stationen angleichen ft8 vile stationen , vile zumeinmessen nehmen ft4 weniger stationen weniger nehmen zum einmessen des dt werten , ft2 ganz wenig stationen ,alle verfügbaren nehmen wenn auch nur eine zur korrektur und ermitteln des dt wertes.
 
-Now every station — regardless of its Even/Odd slot — is heard on both antennas within 60 seconds. That's genuine temporal diversity.
+7 Histrogram : geht ein aktuallisieren des histrogramms der emfangenden stationen jeden zyklus,alsonur dieanzeige rote balken vertikaljeden slot oder ist das zeitkritisch ? ,keine neue freie frequenzsuche sondern nur aktualisieren der anzeige
 
-One-line fix, real improvement. Thank you for pushing on it.
+8.TX Leistung wenn ich die leistung wechselvon 90 watt auf 70 wattz.b.dann setze ich den rf pengelweit runter.das heist ich stelle auf 70 watt , erstes senden 42 watt ,2 senden 58 watt und ich pendelmich dann hoch,sollen wir nicht den rf pegel pro watt und band immer speichern und laden und wenn der rf pegelsich zm beispielbei 70 watt von 62 auf 69prozent ändert dann überschreiben.sohaben wirimmer einen aktuellen startwert und müssen nicht einpegemldas heist wir starten vlt ein wenig zu hoch oder tief beim ersten malaber wesendlich näher dran.
 
----
-
-**Deutsch:** Du hattest in beiden Kommentaren vollständig recht — und ich entschuldige mich, dass ich es nicht sofort erkannt habe. Dein Kommentar 1 beschrieb den genauen Fehler, dein Kommentar 2 den exakten Fix. In v0.24.2 ist das jetzt korrigiert: A1-A1-A2-A2 stellt sicher, dass jede Antenne beide Slot-Typen abdeckt. Danke!
+9.Diversity messen.ich komme gerade rein mssen steht 4/8 antenne 2 antenne 1 wir nicht mehr gemssen , Ant1 0 Stationen auch keine stationen von atenne 1< im empfangsfenster einemssen geht niccht weiter muss hängen bei ant2. deshal permanet 4/8 und antenne 1 keine daten .Kann das sein das meinmessen diversity und der totmannschalter sich überschintten haben und der totmannscghalter das unterbrochen hatte ? das ist nur eine vermutung

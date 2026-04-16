@@ -14,11 +14,10 @@ from .ft8lib_decoder import get_ft8lib
 
 SAMPLE_RATE_FT8 = 12000
 
-# TX-Timing: DT-Korrektur regelt den Versatz automatisch.
-# TARGET_TX_OFFSET = 0 → kein hardcoded Offset mehr.
-# Die DT-Korrektur (ntp_time) misst den realen Versatz und korrigiert RX+TX gleich.
-# Vorher: -0.65 (handkalibriert für FlexRadio 8400M, funktionierte NUR auf diesem Setup)
-TARGET_TX_OFFSET = 0.0
+# TX-Timing: Hardware-Latenz kompensieren (VITA-49 Pipeline + PTT-Delay).
+# Negativ = frueher senden. Empirisch: FlexRadio ~0.15s Latenz.
+# DT-Korrektur regelt den Rest (Systemuhr-Versatz).
+TARGET_TX_OFFSET = -0.15
 # Trailing Silence trimmen: FT8-Nutzsignal ist 12.64s, Rest ist Stille.
 # slot+0.5 + 13.5s = slot+14.0s → 1.0s Puffer vor naechstem Slot (sicher)
 TRIM_SAMPLES = int(1.5 * SAMPLE_RATE_FT8)   # 18000 Samples @ 12kHz

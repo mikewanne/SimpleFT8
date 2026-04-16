@@ -184,6 +184,11 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         _help_btn.setFixedHeight(22)
         _help_btn.clicked.connect(self._on_help_clicked)
         self.statusBar().addPermanentWidget(_help_btn)
+        # DT-Label separat (nur dieses wird gruen, nicht ganze Statusbar)
+        from PySide6.QtWidgets import QLabel as _QL
+        self._dt_label = _QL("DT: —")
+        self._dt_label.setStyleSheet("color: #888; font-family: Menlo; font-size: 11px; padding: 0 8px;")
+        self.statusBar().addPermanentWidget(self._dt_label)
 
         # Fenstergeometrie wiederherstellen
         from PySide6.QtCore import QTimer as _QTimer
@@ -462,18 +467,18 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         }
         mode_str = mode_labels.get(self._rx_mode, "Normal")
         omni_str = "  Ω" if getattr(self, '_omni_tx', None) and self._omni_tx.active else ""
-        # DT-Korrektur Status — gruen bei Korrektur, grau bei Betrieb
+        # DT-Korrektur Status — nur DT-Label gruen, Statusbar bleibt grau
         from core import ntp_time
         dt_phase = ntp_time._phase
         if ntp_time._correction == 0.0 and ntp_time._is_initial:
-            dt_str = "  |  DT: —"
-            dt_color = "#888"
+            dt_text, dt_color = "DT: —", "#888"
         elif dt_phase == "measure":
-            dt_str = "  |  DT: Korrektur"
-            dt_color = "#00DD66"  # gruen = aktive Messung
+            dt_text, dt_color = "DT: Korrektur", "#00DD66"
         else:
-            dt_str = "  |  DT: Aktiv"
-            dt_color = "#888"
+            dt_text, dt_color = "DT: Aktiv", "#888"
+        if hasattr(self, '_dt_label'):
+            self._dt_label.setText(dt_text)
+            self._dt_label.setStyleSheet(f"color: {dt_color}; font-family: Menlo; font-size: 11px; padding: 0 8px;")
         # Filter-Anzeige pro Modus
         _FILTERS = {"FT8": "100-3100", "FT4": "100-3100", "FT2": "100-4000"}
         filter_str = _FILTERS.get(self.settings.mode, "100-3100")
@@ -489,19 +494,8 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         msg = (f"{self.settings.callsign}  |  {self.settings.locator}  |  "
                f"{self.settings.mode} {self.settings.band}  |  "
                f"{freq:.3f} MHz  |  Filter: {filter_str} Hz  |  "
-               f"{mode_str}{omni_str}{dt_str}{ap_str}")
+               f"{mode_str}{omni_str}{ap_str}")
         self.statusBar().showMessage(msg)
-        # DT-Korrektur: Statusbar gruen aufleuchten bei aktiver Messung
-        if dt_color != "#888":
-            self.statusBar().setStyleSheet(
-                f"color: {dt_color}; font-family: Menlo; font-size: 11px; "
-                f"background-color: #0a1a0a;"
-            )
-        else:
-            self.statusBar().setStyleSheet(
-                "color: #888; font-family: Menlo; font-size: 11px; "
-                "background-color: #111;"
-            )
 
     # ── Hilfsfunktionen ──────────────────────────────────────────
 
