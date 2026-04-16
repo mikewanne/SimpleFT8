@@ -494,7 +494,7 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         msg = (f"{self.settings.callsign}  |  {self.settings.locator}  |  "
                f"{self.settings.mode} {self.settings.band}  |  "
                f"{freq:.3f} MHz  |  Filter: {filter_str} Hz  |  "
-               f"{mode_str}{omni_str}{ap_str}")
+               f"{mode_str}  |  {dt_text}{omni_str}{ap_str}")
         self.statusBar().showMessage(msg)
 
     # ── Hilfsfunktionen ──────────────────────────────────────────
