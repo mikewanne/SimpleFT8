@@ -921,8 +921,8 @@ def test_cq_freq_empty_histogram():
     assert dc.get_free_cq_freq() is None
 
 
-def test_cq_freq_sweet_spot():
-    """CQ-Frequenz muss im Sweet Spot 800-2000 Hz liegen."""
+def test_cq_freq_near_activity():
+    """CQ-Frequenz muss NAHE der Aktivitaet liegen (dynamischer Sweet Spot)."""
     from core.diversity import DiversityController
     dc = DiversityController()
     # Simuliere belegte Frequenzen bei 1000-1200 Hz
@@ -930,7 +930,8 @@ def test_cq_freq_sweet_spot():
         dc.record_freq(f)
     freq = dc.get_free_cq_freq()
     if freq is not None:
-        assert 800 <= freq <= 2000, f"CQ-Freq {freq} ausserhalb Sweet Spot"
+        # Muss nahe am Median (1100 Hz) sein, nicht weit weg
+        assert 500 <= freq <= 1700, f"CQ-Freq {freq} zu weit von Aktivitaet"
 
 
 # ── Settings Roundtrip ────────────────────────────────────────────────────────

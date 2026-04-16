@@ -73,6 +73,9 @@ class QSOMixin:
             if cq_freq and cq_freq != self.encoder.audio_freq_hz:
                 self.encoder.audio_freq_hz = cq_freq
                 print(f"[CQ] TX-Frequenz auf {cq_freq} Hz (aus Histogramm)")
+                # Gelben Marker im Histogramm anzeigen
+                self.control_panel.update_freq_histogram(
+                    self._diversity_ctrl.get_histogram_data())
             # CQ: immer auf festem Slot senden (aktueller Gegenteil-Slot)
             self.encoder.tx_even = not self.timer.is_even_cycle()
             slot = "EVEN" if self.encoder.tx_even else "ODD"
