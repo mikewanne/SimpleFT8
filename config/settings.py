@@ -105,25 +105,34 @@ class Settings:
     def max_decode_freq(self):
         return self._data["max_decode_freq"]
 
-    # ── DX Presets ──────────────────────────────────────────────
+    # ── Gain Presets (getrennt: Standard + DX) ───────────────────
 
     def get_dx_preset(self, band: str) -> dict | None:
-        """DX-Preset fuer ein Band laden. None wenn keins gespeichert."""
-        presets = self._data.get("dx_presets", {})
+        """Standard-Gain-Preset laden (Scoring: Stationsanzahl). Rueckwaertskompatibel."""
+        # Legacy: "dx_presets" Key (vor v0.40 hiess es so)
+        presets = self._data.get("dx_presets", self._data.get("standard_presets", {}))
+        return presets.get(band)
+
+    def get_gain_preset(self, band: str, mode: str = "standard") -> dict | None:
+        """Gain-Preset laden. mode='standard' oder 'dx'."""
+        key = "dx_gain_presets" if mode == "dx" else "dx_presets"
+        presets = self._data.get(key, {})
         return presets.get(band)
 
     def save_dx_preset(self, band: str, rxant: str, gain: int,
                        ant1_avg: float = 0, ant2_avg: float = 0,
-                       ant1_gain: int = None, ant2_gain: int = None):
-        """DX-Preset fuer ein Band speichern.
+                       ant1_gain: int = None, ant2_gain: int = None,
+                       scoring: str = "standard"):
+        """Gain-Preset speichern. scoring='standard' (Stationen) oder 'dx' (SNR).
 
-        Neu: ant1_gain/ant2_gain separat (fuer Diversity).
-        rxant/gain bleiben fuer Rueckwaertskompatibilitaet erhalten.
+        Standard → in 'dx_presets' (Legacy-Key, Rueckwaertskompatibel)
+        DX → in 'dx_gain_presets' (neuer Key)
         """
         import time
-        if "dx_presets" not in self._data:
-            self._data["dx_presets"] = {}
-        self._data["dx_presets"][band] = {
+        key = "dx_gain_presets" if scoring == "dx" else "dx_presets"
+        if key not in self._data:
+            self._data[key] = {}
+        self._data[key][band] = {
             "rxant": rxant,
             "gain": gain,
             "ant1_gain": ant1_gain if ant1_gain is not None else gain,
@@ -131,5 +140,6 @@ class Settings:
             "ant1_avg": round(ant1_avg, 1),
             "ant2_avg": round(ant2_avg, 1),
             "measured": time.strftime("%Y-%m-%d %H:%M"),
+            "scoring": scoring,
         }
         self.save()
