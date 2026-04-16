@@ -26,6 +26,9 @@ class QSOMixin:
         if self.encoder.is_transmitting:
             print(f"[QSO] TX aktiv — Klick ignoriert, warte auf TX-Ende")
             return
+        if getattr(self, '_diversity_measuring', False):
+            print(f"[QSO] Einmessen aktiv — Hunt blockiert")
+            return
         # CQ-Modus beenden wenn aktiv
         if self.qso_sm.cq_mode:
             self.qso_sm.stop_cq()

@@ -112,7 +112,7 @@ class QSOPanel(QWidget):
         return "[E]" if int(now / slot) % 2 == 0 else "[O]"
 
     def add_tx(self, message: str):
-        """Eigene gesendete Nachricht anzeigen. CQ-Wiederholungen zusammenfassen."""
+        """Eigene gesendete Nachricht anzeigen. CQ: nur Zaehler in-place hochzaehlen."""
         now = time.time()
         slot = getattr(self, '_cycle_duration', 15.0)
         slot_start = now - (now % slot)
@@ -122,20 +122,47 @@ class QSOPanel(QWidget):
 
         if is_cq:
             self._cq_count = getattr(self, '_cq_count', 0) + 1
-            if self._cq_count > 2:
+            if self._cq_count == 1:
+                # Erste CQ-Zeile normal anzeigen
+                self._append_colored(f"{utc} {tag} →  Sende   {message}", "#FFAA00")
+            else:
+                # Ab dem 2. CQ: letzte Zeile IN-PLACE ersetzen (nur Zaehler hoch)
                 doc = self.log_view.document()
-                cursor = QTextCursor(doc)
-                cursor.movePosition(QTextCursor.MoveOperation.End)
-                cursor.movePosition(QTextCursor.MoveOperation.StartOfBlock, QTextCursor.MoveMode.KeepAnchor)
+                last_block = doc.lastBlock()
+                cursor = QTextCursor(last_block)
+                cursor.select(QTextCursor.SelectionType.BlockUnderCursor)
                 cursor.removeSelectedText()
-                cursor.deletePreviousChar()
-                self._append_colored(f"{utc} {tag} →  CQ ×{self._cq_count}", "#886600")
-                return
-            self._append_colored(f"{utc} {tag} →  Sende   {message}", "#FFAA00")
+                # Gruen fuer 3s Feedback, dann zurueck auf gedaempft
+                color = "#44FF44" if not getattr(self, '_cq_flash_off', True) else "#886600"
+                cursor.insertText(f"{utc} {tag} →  CQ ×{self._cq_count}")
+                # Farbe setzen via Format
+                fmt = cursor.charFormat()
+                fmt.setForeground(QColor("#44FF44"))
+                cursor.select(QTextCursor.SelectionType.BlockUnderCursor)
+                cursor.setCharFormat(fmt)
+                # Nach 3s zurueck auf gedaempfte Farbe
+                if not hasattr(self, '_cq_flash_timer'):
+                    self._cq_flash_timer = QTimer(self)
+                    self._cq_flash_timer.setSingleShot(True)
+                    self._cq_flash_timer.timeout.connect(self._cq_flash_reset)
+                self._cq_flash_timer.start(3000)
+            return  # Kein auto_trim bei CQ (nur 1 Zeile)
         else:
             self._cq_count = 0
             self._append_colored(f"{utc} {tag} →  Sende   {message}", "#FFAA00")
         self._auto_trim()
+
+    def _cq_flash_reset(self):
+        """CQ-Zeile zurueck auf gedaempfte Farbe nach 3s."""
+        doc = self.log_view.document()
+        last_block = doc.lastBlock()
+        text = last_block.text()
+        if "CQ ×" in text:
+            cursor = QTextCursor(last_block)
+            cursor.select(QTextCursor.SelectionType.BlockUnderCursor)
+            fmt = cursor.charFormat()
+            fmt.setForeground(QColor("#886600"))
+            cursor.setCharFormat(fmt)
 
     def add_rx(self, message: str):
         """Empfangene Antwort anzeigen."""
