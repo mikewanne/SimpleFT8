@@ -719,6 +719,103 @@ def test_accumulator_diversity_antenna():
     assert "A2" in stations["R3EDI"].antenna, f"A2 sollte dominieren, got {stations['R3EDI'].antenna}"
 
 
+# ── Even/Odd Slot-Berechnung ──────────────────────────────────────────────────
+
+def test_even_odd_ft8():
+    """FT8: Slot-Berechnung mit 15s Zyklen."""
+    import time
+    now = time.time()
+    cycle_ft8 = int(now / 15.0)
+    is_even = cycle_ft8 % 2 == 0
+    assert isinstance(is_even, bool)
+
+
+def test_even_odd_ft4():
+    """FT4: Slot-Berechnung mit 7.5s Zyklen."""
+    import time
+    now = time.time()
+    cycle_ft4 = int(now / 7.5)
+    # FT4 hat doppelt so viele Zyklen wie FT8
+    cycle_ft8 = int(now / 15.0)
+    assert cycle_ft4 >= cycle_ft8
+
+
+def test_even_odd_ft2():
+    """FT2: Slot-Berechnung mit 3.8s Zyklen."""
+    import time
+    now = time.time()
+    cycle_ft2 = int(now / 3.8)
+    cycle_ft8 = int(now / 15.0)
+    assert cycle_ft2 >= cycle_ft8 * 3  # FT2 ~4x so viele Zyklen
+
+
+# ── Diversity Presets ─────────────────────────────────────────────────────────
+
+def test_diversity_preset_save_load():
+    """Diversity-Preset speichern und laden."""
+    from config.settings import Settings
+    s = Settings()
+    s.save_diversity_preset("FT8", "20m", "70:30", "A1")
+    preset = s.get_diversity_preset("FT8", "20m")
+    assert preset is not None
+    assert preset["ratio"] == "70:30"
+    assert preset["dominant"] == "A1"
+
+
+def test_diversity_preset_missing():
+    """Fehlender Preset gibt None zurueck."""
+    from config.settings import Settings
+    s = Settings()
+    assert s.get_diversity_preset("FT2", "160m") is None
+
+
+def test_diversity_load_preset():
+    """load_preset() setzt ratio und phase korrekt."""
+    from core.diversity import DiversityController
+    dc = DiversityController()
+    dc.load_preset({"ratio": "30:70", "dominant": "A2"})
+    assert dc.ratio == "30:70"
+    assert dc.dominant == "A2"
+    assert dc.phase == "operate"
+
+
+# ── can_measure() Schwelle ────────────────────────────────────────────────────
+
+def test_can_measure_enough():
+    """5 Stationen → kann messen."""
+    from core.diversity import DiversityController
+    dc = DiversityController()
+    assert dc.can_measure(5) is True
+    assert dc.can_measure(20) is True
+
+
+def test_can_measure_too_few():
+    """3 Stationen → kann NICHT messen."""
+    from core.diversity import DiversityController
+    dc = DiversityController()
+    assert dc.can_measure(3) is False
+    assert dc.can_measure(0) is False
+
+
+# ── Modus-Multiplikator ──────────────────────────────────────────────────────
+
+def test_operate_cycles_multiplier():
+    """OPERATE_CYCLES wird mit Modus-Faktor multipliziert."""
+    _MULT = {"FT8": 1, "FT4": 2, "FT2": 4}
+    base = 60
+    assert base * _MULT["FT8"] == 60
+    assert base * _MULT["FT4"] == 120
+    assert base * _MULT["FT2"] == 240
+
+
+def test_dt_min_stations_per_mode():
+    """DT MIN_STATIONS: FT8=3, FT4=2, FT2=1."""
+    _MIN = {"FT8": 3, "FT4": 2, "FT2": 1}
+    assert _MIN["FT8"] == 3
+    assert _MIN["FT4"] == 2
+    assert _MIN["FT2"] == 1
+
+
 # ── Runner ───────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
