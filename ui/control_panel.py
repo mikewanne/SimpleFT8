@@ -395,12 +395,24 @@ class _AntenneCard(QFrame):
         lbl_a2.setStyleSheet(f"color:{_LED_BLUE};font-size:10px;font-family:{_FONT};font-weight:bold;")
         ratio_row.addWidget(lbl_a2)
         div_lay.addLayout(ratio_row)
+        phase_row = QHBoxLayout()
         self._phase_label = QLabel("")
         self._phase_label.setStyleSheet(
             f"color:#FFCC00;font-size:9px;font-family:{_FONT};font-style:italic;"
         )
         self._phase_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        div_lay.addWidget(self._phase_label)
+        phase_row.addWidget(self._phase_label)
+        self.btn_remeasure = QPushButton("NEU")
+        self.btn_remeasure.setFixedSize(36, 18)
+        self.btn_remeasure.setStyleSheet(
+            f"QPushButton {{ background: rgba(60,60,100,0.4); color: #88AACC; "
+            f"border: 1px solid #446; border-radius: 3px; font-size: 9px; "
+            f"font-family: {_FONT}; font-weight: bold; }}"
+            f"QPushButton:hover {{ background: rgba(80,80,140,0.6); }}"
+        )
+        self.btn_remeasure.setToolTip("Diversity sofort neu einmessen")
+        phase_row.addWidget(self.btn_remeasure)
+        div_lay.addLayout(phase_row)
         self._div_widget.setVisible(False)
         lay.addWidget(self._div_widget)
 
@@ -736,6 +748,7 @@ class ControlPanel(QWidget):
     rx_mode_changed = Signal(str)
     settings_clicked = Signal()
     einmessen_clicked = Signal()
+    remeasure_clicked = Signal()
 
     # ── Klassen-Konstanten ───────────────────────────────────────────────
     _RX_MODES = ["normal", "diversity"]
@@ -801,6 +814,8 @@ class ControlPanel(QWidget):
         self.btn_normal.clicked.connect(lambda: self._on_rx_mode_clicked("normal"))
         self.btn_diversity.clicked.connect(lambda: self._on_rx_mode_clicked("diversity"))
         self.btn_einmessen.clicked.connect(self.einmessen_clicked.emit)
+        self.btn_remeasure = ant_card.btn_remeasure
+        self.btn_remeasure.clicked.connect(self.remeasure_clicked.emit)
         layout.addWidget(ant_card)
 
         # ── Kachel 3: RADIO (türkis) ─────────────────────────────────────

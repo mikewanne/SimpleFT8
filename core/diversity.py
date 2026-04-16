@@ -25,6 +25,7 @@ class DiversityController:
     MEASURE_CYCLES = 8   # 4×A1 + 4×A2 (~2 Min Fenster, je even+odd pro Antenne)
     OPERATE_CYCLES = 60  # 15 Min Betrieb (vorher 80=20 Min)
     THRESHOLD = 0.08     # 8% relative Differenz fuer Antennen-Entscheidung
+    MIN_MEASURE_STATIONS = 5  # Mindestanzahl Stationen fuer Messung
     _PAT_70_A1 = ("A1","A1","A2","A1","A1","A2","A1","A1","A2","A1")  # 7×A1, 3×A2
     _PAT_70_A2 = ("A2","A2","A1","A2","A2","A1","A2","A2","A1","A2")  # 7×A2, 3×A1
 
@@ -57,6 +58,20 @@ class DiversityController:
         self.dominant = None   # "A1", "A2", oder None
         self._freq_histogram = {}  # bin_idx → Anzahl Stationen
         self._cq_freq_hz: Optional[int] = None  # Letzte berechnete CQ-Frequenz
+
+    def load_preset(self, preset: dict):
+        """Gespeichertes Preset laden — sofort Betrieb ohne Messung."""
+        self.ratio = preset.get("ratio", "50:50")
+        self.dominant = preset.get("dominant")
+        self._phase = "operate"
+        self._operate_cycles = 0
+        self._measure_step = 0
+        self._measurements = {"A1": [], "A2": []}
+        print(f"[Diversity] Preset geladen: {self.ratio} (dominant: {self.dominant})")
+
+    def can_measure(self, station_count: int) -> bool:
+        """Genug Stationen fuer zuverlaessige Messung?"""
+        return station_count >= self.MIN_MEASURE_STATIONS
 
     def choose(self) -> str:
         """Antenne fuer den naechsten Zyklus waehlen."""

@@ -143,3 +143,23 @@ class Settings:
             "scoring": scoring,
         }
         self.save()
+
+    # ── Diversity Presets (Ratio pro Modus+Band) ──────────────────
+
+    def get_diversity_preset(self, mode: str, band: str) -> dict | None:
+        """Diversity-Preset laden. Key: 'FT8_20m' etc."""
+        presets = self._data.get("diversity_presets", {})
+        return presets.get(f"{mode}_{band}")
+
+    def save_diversity_preset(self, mode: str, band: str,
+                              ratio: str, dominant: str | None):
+        """Diversity-Ergebnis speichern (nach jeder erfolgreichen Messung)."""
+        import time
+        if "diversity_presets" not in self._data:
+            self._data["diversity_presets"] = {}
+        self._data["diversity_presets"][f"{mode}_{band}"] = {
+            "ratio": ratio,
+            "dominant": dominant,
+            "measured": time.strftime("%Y-%m-%d %H:%M"),
+        }
+        self.save()

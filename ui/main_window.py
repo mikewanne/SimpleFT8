@@ -285,6 +285,7 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self.control_panel.tune_clicked.connect(self._on_tune_clicked)
         self.control_panel.rx_mode_changed.connect(self._on_rx_mode_changed)
         self.control_panel.einmessen_clicked.connect(self._handle_dx_tuning)
+        self.control_panel.remeasure_clicked.connect(self._on_diversity_remeasure)
         self.control_panel.settings_clicked.connect(self._on_settings_clicked)
 
         # QSO State Machine
