@@ -196,6 +196,8 @@ class RadioMixin:
         self.control_panel.update_decode_count(0)
         self.qso_panel.log_view.clear()
         self.qso_panel.status_label.setText(f"Modus: {mode}")
+        # PSK-Reporter zuruecksetzen bei Moduswechsel
+        self.control_panel.psk_label.setText("PSK:  —")
         # CQ stoppen bei Mode-Wechsel
         if self.qso_sm.cq_mode:
             self.qso_sm.stop_cq()

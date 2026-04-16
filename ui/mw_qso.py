@@ -82,6 +82,9 @@ class QSOMixin:
         else:
             count = self.qso_sm.cq_qso_count
             self.qso_panel.add_info(f"CQ-Modus gestoppt ({count} QSOs)")
+            self.qso_panel._cq_count = 0
+            self.qso_panel.status_label.setText(f"{count} QSO(s)")
+            self.qso_panel.status_label.setStyleSheet("color: #666; font-size: 11px; padding: 2px;")
             self.qso_sm.stop_cq()
             self.control_panel.update_qso_counter(0)
 
