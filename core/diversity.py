@@ -93,16 +93,27 @@ class DiversityController:
     def get_free_cq_freq(self) -> Optional[int]:
         """Freie CQ-Frequenz aus Histogramm berechnen.
 
-        Sucht eine Luecke im AKTIVEN Bereich (wo Stationen sind).
-        Bevorzugt 800-2000 Hz (Sweet Spot fuer CQ), nicht die leere Zone >2000 Hz.
+        Dynamischer Sweet Spot: Median der Aktivitaet ±400 Hz.
+        Wenn kein Histogramm: Fallback 800-2000 Hz.
         """
         if not self._freq_histogram:
             return None
 
-        # Aktiven Bereich bestimmen: wo sind die meisten Stationen?
-        # Bevorzuge 800-2000 Hz als CQ Sweet Spot (Grok/DeepSeek Konsens)
-        SWEET_MIN = 800
-        SWEET_MAX = 2000
+        # Dynamischer Sweet Spot: wo ist die Aktivitaet?
+        all_freqs = []
+        for bin_idx, count in self._freq_histogram.items():
+            freq = bin_idx * self.FREQ_BIN_HZ + self.FREQ_BIN_HZ // 2
+            all_freqs.extend([freq] * count)
+
+        if all_freqs:
+            import statistics
+            median_freq = statistics.median(all_freqs)
+            SWEET_MIN = max(self.FREQ_MIN_HZ, int(median_freq - 400))
+            SWEET_MAX = min(self.FREQ_MAX_HZ, int(median_freq + 400))
+        else:
+            SWEET_MIN = 800
+            SWEET_MAX = 2000
+
         min_bin = int(SWEET_MIN // self.FREQ_BIN_HZ)
         max_bin = int(SWEET_MAX // self.FREQ_BIN_HZ)
         min_gap_bins = max(1, self.FREQ_MIN_GAP_HZ // self.FREQ_BIN_HZ)

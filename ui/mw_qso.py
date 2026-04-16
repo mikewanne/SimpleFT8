@@ -68,8 +68,8 @@ class QSOMixin:
                 self._active_qso_targets.clear()
                 self.rx_panel.set_active_call("")
                 print("[CQ] Hunt-QSO abgebrochen → CQ starten")
-            # CQ-Frequenz: Diversity-Histogramm wenn vorhanden, sonst Default
-            cq_freq = self._diversity_ctrl.cq_freq_hz
+            # CQ-Frequenz: aus Histogramm berechnen (Normal + Diversity)
+            cq_freq = self._diversity_ctrl.get_free_cq_freq()
             if cq_freq and cq_freq != self.encoder.audio_freq_hz:
                 self.encoder.audio_freq_hz = cq_freq
                 print(f"[CQ] TX-Frequenz auf {cq_freq} Hz (aus Histogramm)")

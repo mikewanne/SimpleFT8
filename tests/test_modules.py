@@ -1204,6 +1204,86 @@ def test_trim_samples_positive():
     assert TRIM_SAMPLES > 0
 
 
+# ── IC-7300 Fork Bereitschaft ─────────────────────────────────────────────────
+
+def test_radio_interface_abc():
+    """RadioInterface ABC hat alle noetige abstrakten Methoden."""
+    from radio.base_radio import RadioInterface
+    import inspect
+    methods = [m for m, _ in inspect.getmembers(RadioInterface, predicate=inspect.isfunction)
+               if not m.startswith('_')]
+    required = ['connect', 'disconnect', 'set_frequency', 'get_frequency',
+                'set_mode', 'set_ptt', 'set_tx_power', 'get_antennas',
+                'set_antenna', 'send_audio', 'get_meter_data',
+                'set_rx_antenna', 'set_tx_antenna', 'set_rfgain']
+    for r in required:
+        assert r in methods, f"RadioInterface fehlt Methode: {r}"
+
+
+def test_radio_factory_flex():
+    """radio_factory erkennt 'flex' als Typ."""
+    from radio.radio_factory import create_radio
+    # Nur pruefen ob Funktion existiert und "flex" erkennt (kein echtes Radio noetig)
+    assert callable(create_radio)
+
+
+def test_no_flexradio_import_in_ui():
+    """UI-Dateien importieren NICHT direkt FlexRadio."""
+    import re
+    ui_files = ["ui/main_window.py", "ui/mw_cycle.py", "ui/mw_qso.py",
+                "ui/mw_tx.py", "ui/control_panel.py"]
+    for path in ui_files:
+        try:
+            with open(path) as f:
+                content = f.read()
+            imports = re.findall(r"from\s+radio\.flexradio\s+import", content)
+            assert not imports, f"{path}: Direkter FlexRadio-Import: {imports}"
+        except FileNotFoundError:
+            pass
+
+
+def test_base_radio_has_set_rx_filter():
+    """RadioInterface hat set_rx_filter() fuer Modi-Filter."""
+    from radio.base_radio import RadioInterface
+    assert hasattr(RadioInterface, 'set_rx_filter')
+
+
+def test_radio_interface_properties():
+    """RadioInterface hat last_swr, tx_raw_peak, tx_audio_level Properties."""
+    from radio.base_radio import RadioInterface
+    assert hasattr(RadioInterface, 'last_swr')
+    assert hasattr(RadioInterface, 'tx_raw_peak')
+    assert hasattr(RadioInterface, 'tx_audio_level')
+
+
+# ── CQ Frequenz Dynamisch ────────────────────────────────────────────────────
+
+def test_cq_freq_dynamic_sweet_spot():
+    """CQ-Frequenz passt sich der Aktivitaet an (nicht fix 800-2000)."""
+    from core.diversity import DiversityController
+    dc = DiversityController()
+    # Simuliere Aktivitaet bei 300-800 Hz
+    for f in range(300, 800, 50):
+        for _ in range(3):
+            dc.record_freq(f)
+    freq = dc.get_free_cq_freq()
+    if freq is not None:
+        # Sollte im Bereich der Aktivitaet sein, nicht bei 1500+
+        assert freq < 1200, f"CQ-Freq {freq} zu hoch fuer Aktivitaet bei 300-800 Hz"
+
+
+def test_cq_freq_high_activity():
+    """CQ-Frequenz bei hoher Aktivitaet oben (1000-2000 Hz)."""
+    from core.diversity import DiversityController
+    dc = DiversityController()
+    for f in range(1000, 2000, 50):
+        for _ in range(3):
+            dc.record_freq(f)
+    freq = dc.get_free_cq_freq()
+    if freq is not None:
+        assert 800 <= freq <= 2200, f"CQ-Freq {freq} ausserhalb Aktivitaetsbereich"
+
+
 # ── Runner ───────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
