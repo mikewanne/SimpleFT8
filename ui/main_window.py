@@ -461,12 +461,18 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         }
         mode_str = mode_labels.get(self._rx_mode, "Normal")
         omni_str = "  Ω" if getattr(self, '_omni_tx', None) and self._omni_tx.active else ""
-        # DT-Korrektur Status (nicht exakte Zeit — macht Funker nervoes)
+        # DT-Korrektur Status — gruen bei Korrektur, grau bei Betrieb
         from core import ntp_time
         dt_phase = ntp_time._phase
-        dt_str = "  |  DT: Korrektur" if dt_phase == "measure" else "  |  DT: Aktiv"
         if ntp_time._correction == 0.0 and ntp_time._is_initial:
             dt_str = "  |  DT: —"
+            dt_color = "#888"
+        elif dt_phase == "measure":
+            dt_str = "  |  DT: Korrektur"
+            dt_color = "#00DD66"  # gruen = aktive Messung
+        else:
+            dt_str = "  |  DT: Aktiv"
+            dt_color = "#888"
         # Filter-Anzeige pro Modus
         _FILTERS = {"FT8": "100-3100", "FT4": "100-3100", "FT2": "100-4000"}
         filter_str = _FILTERS.get(self.settings.mode, "100-3100")
@@ -479,12 +485,22 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
                 ap_str = f"  |  AP: {r}/{a}"
             else:
                 ap_str = "  |  AP: aktiv"
-        self.statusBar().showMessage(
-            f"{self.settings.callsign}  |  {self.settings.locator}  |  "
-            f"{self.settings.mode} {self.settings.band}  |  "
-            f"{freq:.3f} MHz  |  Filter: {filter_str} Hz  |  "
-            f"{mode_str}{omni_str}{dt_str}{ap_str}"
-        )
+        msg = (f"{self.settings.callsign}  |  {self.settings.locator}  |  "
+               f"{self.settings.mode} {self.settings.band}  |  "
+               f"{freq:.3f} MHz  |  Filter: {filter_str} Hz  |  "
+               f"{mode_str}{omni_str}{dt_str}{ap_str}")
+        self.statusBar().showMessage(msg)
+        # DT-Korrektur: Statusbar gruen aufleuchten bei aktiver Messung
+        if dt_color != "#888":
+            self.statusBar().setStyleSheet(
+                f"color: {dt_color}; font-family: Menlo; font-size: 11px; "
+                f"background-color: #0a1a0a;"
+            )
+        else:
+            self.statusBar().setStyleSheet(
+                "color: #888; font-family: Menlo; font-size: 11px; "
+                "background-color: #111;"
+            )
 
     # ── Hilfsfunktionen ──────────────────────────────────────────
 
