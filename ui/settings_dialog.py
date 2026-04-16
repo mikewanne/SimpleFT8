@@ -69,7 +69,9 @@ class SettingsDialog(QDialog):
             QLabel { color: #CCC; }
             QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox {
                 background: #222; color: #FFF; border: 1px solid #444;
-                border-radius: 3px; padding: 4px; }
+                border-radius: 3px; padding: 4px; min-width: 100px; }
+            QComboBox { min-width: 140px; }
+            QComboBox::drop-down { width: 24px; }
             QPushButton { background: #0066AA; color: white; border: none;
                 border-radius: 3px; padding: 8px 16px; font-weight: bold; }
             QPushButton:hover { background: #0088CC; }
@@ -160,9 +162,12 @@ class SettingsDialog(QDialog):
         self.max_decode_freq.setSuffix(" Hz")
         self.diversity_cycles = QComboBox()
         self.diversity_cycles.addItems(["80", "160", "240"])
+        self.language_combo = QComboBox()
+        self.language_combo.addItems(["Deutsch", "English"])
         form3.addRow("TX Audio-Frequenz:", _row_with_hint(self.audio_freq, "tx_freq"))
         form3.addRow("Max. Decode-Frequenz:", _row_with_hint(self.max_decode_freq, "max_decode"))
         form3.addRow("Neueinmessung nach:", _row_with_hint(self.diversity_cycles, "diversity_cycles"))
+        form3.addRow("Sprache / Language:", self.language_combo)
         layout.addWidget(ft8)
 
         # ── Buttons ───────────────────────────────────────────────────
@@ -216,6 +221,9 @@ class SettingsDialog(QDialog):
         # Diversity-Zyklen
         dc = self.settings.get("diversity_operate_cycles", 80)
         self.diversity_cycles.setCurrentIndex({80: 0, 160: 1, 240: 2}.get(dc, 0))
+        # Sprache
+        lang = self.settings.get("language", "de")
+        self.language_combo.setCurrentIndex(0 if lang == "de" else 1)
         # Tune-Leistung
         tp = self.settings.get("tune_power", 10)
         self._current_tune_power = tp
@@ -234,6 +242,7 @@ class SettingsDialog(QDialog):
         self.settings.set("audio_freq_hz", self.audio_freq.value())
         self.settings.set("max_decode_freq", self.max_decode_freq.value())
         self.settings.set("diversity_operate_cycles", int(self.diversity_cycles.currentText()))
+        self.settings.set("language", "de" if self.language_combo.currentIndex() == 0 else "en")
         self.settings.save()
         self.accept()
 

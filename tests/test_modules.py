@@ -511,6 +511,214 @@ def test_dt_correction_mode_switch():
     ntp_time.reset(keep_correction=False)
 
 
+# ── NTP/DT Correction Logic ──────────────────────────────────────────────────
+
+def test_dt_first_correction_full():
+    """Erstkorrektur: 100% des Medians angewendet (nicht gedaempft)."""
+    from core import ntp_time
+    ntp_time.reset(keep_correction=False)
+    ntp_time._is_initial = True
+    # 2 Zyklen mit DT +0.5
+    ntp_time.update_from_decoded([0.5, 0.5, 0.5, 0.5, 0.5])
+    ntp_time.update_from_decoded([0.5, 0.5, 0.5, 0.5, 0.5])
+    # Erstkorrektur: volle 0.5
+    assert abs(ntp_time._correction - 0.5) < 0.05, f"Erstkorrektur erwartet ~0.5, got {ntp_time._correction}"
+    assert not ntp_time._is_initial
+    ntp_time.reset(keep_correction=False)
+
+
+def test_dt_fine_correction_damped():
+    """Feinkorrektur: nur 70% des Medians (Daempfung)."""
+    from core import ntp_time
+    ntp_time.reset(keep_correction=False)
+    ntp_time._is_initial = False
+    ntp_time._correction = 0.5
+    ntp_time._phase = "measure"
+    ntp_time._cycle_count = 0
+    ntp_time._measure_buffer = []
+    # 2 Zyklen mit DT +0.2 (Restfehler)
+    ntp_time.update_from_decoded([0.2, 0.2, 0.2, 0.2, 0.2])
+    ntp_time.update_from_decoded([0.2, 0.2, 0.2, 0.2, 0.2])
+    # Feinkorrektur: 0.5 + (0.2 × 0.7) = 0.64
+    expected = 0.5 + 0.2 * 0.7
+    assert abs(ntp_time._correction - expected) < 0.05, f"Feinkorrektur erwartet ~{expected}, got {ntp_time._correction}"
+    ntp_time.reset(keep_correction=False)
+
+
+def test_dt_jump_detection():
+    """Sprung >1.5s → Reset auf 0 + neu messen."""
+    from core import ntp_time
+    ntp_time.reset(keep_correction=False)
+    ntp_time._correction = 0.5
+    ntp_time._phase = "operate"
+    ntp_time._cycle_count = 0
+    # DT ploetzlich bei +2.0 → Sprung erkannt
+    ntp_time.update_from_decoded([2.0, 2.0, 2.0, 2.0])
+    assert ntp_time._correction == 0.0, "Nach Sprung soll Korrektur 0.0 sein"
+    assert ntp_time._phase == "measure"
+    assert ntp_time._is_initial
+    ntp_time.reset(keep_correction=False)
+
+
+# ── FT8Message Parser ────────────────────────────────────────────────────────
+
+def test_parse_cq():
+    """CQ-Nachricht korrekt geparst."""
+    from core.message import parse_ft8_message
+    m = parse_ft8_message("CQ DA1MHH JO31", snr=-15, freq_hz=1000, dt=0.1)
+    assert m.is_cq
+    assert m.caller == "DA1MHH"
+    assert m.grid_or_report == "JO31"
+
+
+def test_parse_report():
+    """Report-Nachricht korrekt geparst."""
+    from core.message import parse_ft8_message
+    m = parse_ft8_message("DA1MHH R3EDI -06", snr=-15, freq_hz=1000, dt=0.1)
+    assert m.is_report
+    assert m.caller == "R3EDI"
+    assert m.target == "DA1MHH"
+
+
+def test_parse_r_report():
+    """R-Report korrekt erkannt."""
+    from core.message import parse_ft8_message
+    m = parse_ft8_message("DA1MHH R3EDI R-06", snr=-15, freq_hz=1000, dt=0.1)
+    assert m.is_report
+    assert m.is_r_report
+
+
+def test_parse_rr73():
+    """RR73 korrekt erkannt."""
+    from core.message import parse_ft8_message
+    m = parse_ft8_message("DA1MHH R3EDI RR73", snr=-15, freq_hz=1000, dt=0.1)
+    assert m.is_rr73
+
+
+def test_parse_73():
+    """73 korrekt erkannt."""
+    from core.message import parse_ft8_message
+    m = parse_ft8_message("DA1MHH R3EDI 73", snr=-15, freq_hz=1000, dt=0.1)
+    assert m.is_73
+
+
+# ── Encoder Sample Length ────────────────────────────────────────────────────
+
+def test_encoder_ft8_length():
+    """FT8 Encode: 180000 Samples (15.0s @ 12kHz)."""
+    from core.ft8lib_decoder import get_ft8lib
+    audio = get_ft8lib().encode("CQ DA1MHH JO31", freq_hz=1000.0, mode="FT8")
+    assert audio is not None
+    assert len(audio) == 180000, f"FT8 erwartet 180000, got {len(audio)}"
+
+
+def test_encoder_ft4_length():
+    """FT4 Encode: 90000 Samples (7.5s @ 12kHz)."""
+    from core.ft8lib_decoder import get_ft8lib
+    audio = get_ft8lib().encode("CQ DA1MHH JO31", freq_hz=1000.0, mode="FT4")
+    assert audio is not None
+    assert len(audio) == 90000, f"FT4 erwartet 90000, got {len(audio)}"
+
+
+def test_encoder_ft2_length():
+    """FT2 Encode: 45600 Samples (3.8s @ 12kHz)."""
+    from core.ft8lib_decoder import get_ft8lib
+    audio = get_ft8lib().encode("CQ DA1MHH JO31", freq_hz=1000.0, mode="FT2")
+    assert audio is not None
+    assert len(audio) == 45600, f"FT2 erwartet 45600, got {len(audio)}"
+
+
+# ── Decoder Protocol Switch ──────────────────────────────────────────────────
+
+def test_decoder_slot_samples_ft8():
+    """Decoder: FT8 → 180000 Slot-Samples."""
+    from core.decoder import Decoder
+    d = Decoder(mode="FT8")
+    assert d._slot_samples == 180000
+
+
+def test_decoder_slot_samples_ft4():
+    """Decoder: FT4 → 90000 Slot-Samples."""
+    from core.decoder import Decoder
+    d = Decoder(mode="FT4")
+    assert d._slot_samples == 90000
+
+
+def test_decoder_slot_samples_ft2():
+    """Decoder: FT2 → 45600 Slot-Samples."""
+    from core.decoder import Decoder
+    d = Decoder(mode="FT2")
+    assert d._slot_samples == 45600
+
+
+def test_decoder_protocol_switch():
+    """Decoder: set_protocol() aendert _slot_samples."""
+    from core.decoder import Decoder
+    d = Decoder(mode="FT8")
+    assert d._slot_samples == 180000
+    d.set_protocol("FT4")
+    assert d._slot_samples == 90000
+    d.set_protocol("FT2")
+    assert d._slot_samples == 45600
+
+
+# ── Station Accumulator ──────────────────────────────────────────────────────
+
+def test_accumulator_new_station():
+    """Neue Station wird hinzugefuegt."""
+    from core.station_accumulator import accumulate_stations
+    from core.message import parse_ft8_message
+    stations = {}
+    msgs = [parse_ft8_message("CQ R3EDI KO82", snr=-15, freq_hz=1000, dt=0.1)]
+    changed = accumulate_stations(stations, msgs, set())
+    assert changed
+    assert "R3EDI" in stations
+
+
+def test_accumulator_aging():
+    """Stationen aelter als 75s werden entfernt."""
+    import time
+    from core.station_accumulator import accumulate_stations, remove_stale
+    from core.message import parse_ft8_message
+    stations = {}
+    msgs = [parse_ft8_message("CQ R3EDI KO82", snr=-15, freq_hz=1000, dt=0.1)]
+    accumulate_stations(stations, msgs, set())
+    assert "R3EDI" in stations
+    # Kuenstlich altern
+    stations["R3EDI"]._last_heard = time.time() - 80
+    removed = remove_stale(stations, set())
+    assert "R3EDI" in removed
+    assert "R3EDI" not in stations
+
+
+def test_accumulator_active_qso_longer_aging():
+    """Aktive QSO-Station: 150s Aging statt 75s."""
+    import time
+    from core.station_accumulator import accumulate_stations, remove_stale
+    from core.message import parse_ft8_message
+    stations = {}
+    msgs = [parse_ft8_message("CQ R3EDI KO82", snr=-15, freq_hz=1000, dt=0.1)]
+    accumulate_stations(stations, msgs, {"R3EDI"})
+    stations["R3EDI"]._last_heard = time.time() - 80  # 80s > 75 aber < 150
+    removed = remove_stale(stations, {"R3EDI"})
+    assert len(removed) == 0, "Aktive QSO-Station soll 150s Aging haben"
+    assert "R3EDI" in stations
+
+
+def test_accumulator_diversity_antenna():
+    """Diversity: Antenne wird gesetzt und verglichen."""
+    from core.station_accumulator import accumulate_stations
+    from core.message import parse_ft8_message
+    stations = {}
+    msg1 = [parse_ft8_message("CQ R3EDI KO82", snr=-15, freq_hz=1000, dt=0.1)]
+    accumulate_stations(stations, msg1, set(), antenna="A1")
+    assert stations["R3EDI"].antenna == "A1"
+    # Gleiche Station auf A2 mit besserem SNR
+    msg2 = [parse_ft8_message("CQ R3EDI KO82", snr=-10, freq_hz=1000, dt=0.1)]
+    accumulate_stations(stations, msg2, set(), antenna="A2")
+    assert "A2" in stations["R3EDI"].antenna, f"A2 sollte dominieren, got {stations['R3EDI'].antenna}"
+
+
 # ── Runner ───────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
