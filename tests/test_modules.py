@@ -210,17 +210,36 @@ def test_diversity_50_50_pattern():
     assert pattern == ["A1", "A1", "A2", "A2", "A1", "A1", "A2", "A2"]
 
 
+def test_diversity_measure_even_odd():
+    """Messphase: Antennen in 2er-Paaren fuer Even+Odd Empfang."""
+    from core.diversity import DiversityController
+    dc = DiversityController()
+    dc._phase = "measure"
+    pattern = []
+    for _ in range(8):
+        pattern.append(dc.choose())
+        dc._measure_step += 1
+    # Muss in 2er-Paaren kommen: A2,A2,A1,A1,A2,A2,A1,A1
+    assert pattern == ["A2", "A2", "A1", "A1", "A2", "A2", "A1", "A1"], f"Messmuster falsch: {pattern}"
+
+
 def test_diversity_70_30_pattern():
-    """70:30 Pattern: 7× A1, 3× A2 in 10 Zyklen."""
+    """70:30 Pattern: 8× A1, 4× A2 in 12 Zyklen (2er-Paare fuer Even+Odd)."""
     from core.diversity import DiversityController
     dc = DiversityController()
     dc._phase = "operate"
     dc.ratio = "70:30"
     pattern = []
-    for _ in range(10):
+    for _ in range(12):
         pattern.append(dc.choose())
         dc._operate_cycles += 1
-    assert pattern.count("A1") == 7
+    assert pattern.count("A1") == 8, f"Erwartet 8×A1, got {pattern.count('A1')}: {pattern}"
+    assert pattern.count("A2") == 4, f"Erwartet 4×A2, got {pattern.count('A2')}: {pattern}"
+    # WICHTIG: A2 muss immer in 2er-Paaren kommen (Even+Odd Empfang)
+    for i in range(len(pattern) - 1):
+        if pattern[i] == "A2":
+            assert pattern[i+1] == "A2" or (i > 0 and pattern[i-1] == "A2"), \
+                f"A2 bei Position {i} ist nicht gepaart: {pattern}"
 
 
 # ── Radio Factory ────────────────────────────────────────────────────────────

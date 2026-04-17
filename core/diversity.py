@@ -27,8 +27,11 @@ class DiversityController:
     OPERATE_CYCLES = 60  # 15 Min Betrieb (vorher 80=20 Min)
     THRESHOLD = 0.08     # 8% relative Differenz fuer Antennen-Entscheidung
     MIN_MEASURE_STATIONS = 5  # Mindestanzahl Stationen fuer Messung
-    _PAT_70_A1 = ("A1","A1","A2","A1","A1","A2","A1","A1","A2","A1")  # 7×A1, 3×A2
-    _PAT_70_A2 = ("A2","A2","A1","A2","A2","A1","A2","A2","A1","A2")  # 7×A2, 3×A1
+    # WICHTIG: Jede Antenne MUSS mindestens 2 aufeinanderfolgende Slots bekommen
+    # damit SOWOHL Even ALS AUCH Odd empfangen wird!
+    # 70:30 ≈ 8:4 (12 Slots) = A1 bekommt 4 Paare, A2 bekommt 2 Paare
+    _PAT_70_A1 = ("A1","A1","A2","A2","A1","A1","A1","A1","A2","A2","A1","A1")  # 8×A1, 4×A2
+    _PAT_70_A2 = ("A2","A2","A1","A1","A2","A2","A2","A2","A1","A1","A2","A2")  # 8×A2, 4×A1
 
     def __init__(self, scoring_mode: str = "normal"):
         self._scoring_mode = scoring_mode  # "normal" oder "dx"
@@ -78,14 +81,19 @@ class DiversityController:
         return station_count >= self.MIN_MEASURE_STATIONS
 
     def choose(self) -> str:
-        """Antenne fuer den naechsten Zyklus waehlen."""
+        """Antenne fuer den naechsten Zyklus waehlen.
+
+        WICHTIG: Jede Antenne bekommt IMMER mindestens 2 aufeinanderfolgende
+        Slots (Even+Odd Paar) damit beide Paritaeten empfangen werden.
+        """
         if self._phase == "measure":
-            return "A2" if self._measure_step % 2 == 0 else "A1"  # A2,A1,A2,A1 (A1 war init)
+            # Messung: 2er-Paare → A2,A2,A1,A1,A2,A2,A1,A1
+            return ("A2", "A2", "A1", "A1")[self._measure_step % 4]
         if self.ratio == "70:30":
-            return self._PAT_70_A1[self._operate_cycles % 10]
+            return self._PAT_70_A1[self._operate_cycles % 12]
         if self.ratio == "30:70":
-            return self._PAT_70_A2[self._operate_cycles % 10]
-        return ("A1", "A1", "A2", "A2")[self._operate_cycles % 4]  # 50:50: 2 Zyklen pro Antenne → Even+Odd beide auf jeder Antenne
+            return self._PAT_70_A2[self._operate_cycles % 12]
+        return ("A1", "A1", "A2", "A2")[self._operate_cycles % 4]  # 50:50
 
     def record_freq(self, freq_hz: float):
         """Belegte Frequenz aus Messphase ins Histogramm eintragen."""
