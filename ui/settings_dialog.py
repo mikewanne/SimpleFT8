@@ -168,6 +168,10 @@ class SettingsDialog(QDialog):
         form3.addRow("Max. Decode-Frequenz:", _row_with_hint(self.max_decode_freq, "max_decode"))
         form3.addRow("Neueinmessung nach:", _row_with_hint(self.diversity_cycles, "diversity_cycles"))
         form3.addRow("Sprache / Language:", self.language_combo)
+        from PySide6.QtWidgets import QCheckBox
+        self.debug_console_cb = QCheckBox("Debug-Konsole anzeigen")
+        self.debug_console_cb.setToolTip("Zeigt alle Programmausgaben im unteren Fensterbereich (auch via Ctrl+D)")
+        form3.addRow("", self.debug_console_cb)
         layout.addWidget(ft8)
 
         # ── Buttons ───────────────────────────────────────────────────
@@ -229,6 +233,8 @@ class SettingsDialog(QDialog):
         self._current_tune_power = tp
         for w, btn in self._tune_btns.items():
             btn.setChecked(w == tp)
+        # Debug-Konsole
+        self.debug_console_cb.setChecked(self.settings.get("debug_console_visible", False))
 
     def _save_and_close(self):
         self.settings.set("callsign", self.callsign.text().upper().strip())
@@ -243,6 +249,7 @@ class SettingsDialog(QDialog):
         self.settings.set("max_decode_freq", self.max_decode_freq.value())
         self.settings.set("diversity_operate_cycles", int(self.diversity_cycles.currentText()))
         self.settings.set("language", "de" if self.language_combo.currentIndex() == 0 else "en")
+        self.settings.set("debug_console_visible", self.debug_console_cb.isChecked())
         self.settings.save()
         self.accept()
 
