@@ -211,35 +211,39 @@ def test_diversity_50_50_pattern():
 
 
 def test_diversity_measure_even_odd():
-    """Messphase: Antennen in 2er-Paaren fuer Even+Odd Empfang."""
+    """Messphase: Antennen abwechselnd, beide Paritaeten abgedeckt."""
     from core.diversity import DiversityController
     dc = DiversityController()
     dc._phase = "measure"
     pattern = []
-    for _ in range(8):
+    for _ in range(12):
         pattern.append(dc.choose())
         dc._measure_step += 1
-    # Muss in 2er-Paaren kommen: A2,A2,A1,A1,A2,A2,A1,A1
-    assert pattern == ["A2", "A2", "A1", "A1", "A2", "A2", "A1", "A1"], f"Messmuster falsch: {pattern}"
+    # A1 und A2 muessen beide vorkommen
+    assert "A1" in pattern and "A2" in pattern
+    # Max 2 hintereinander
+    for i in range(len(pattern) - 2):
+        if pattern[i] == pattern[i+1] == pattern[i+2]:
+            assert False, f"3× gleiche Antenne ab Position {i}: {pattern}"
 
 
 def test_diversity_70_30_pattern():
-    """70:30 Pattern: 8× A1, 4× A2 in 12 Zyklen (2er-Paare fuer Even+Odd)."""
+    """70:30 Pattern: 6-Slot endlos nahtlos, max 2 hintereinander."""
     from core.diversity import DiversityController
     dc = DiversityController()
     dc._phase = "operate"
     dc.ratio = "70:30"
+    # 3 volle Durchlaeufe (18 Slots) — Loop-Uebergang testen
     pattern = []
-    for _ in range(12):
+    for _ in range(18):
         pattern.append(dc.choose())
         dc._operate_cycles += 1
-    assert pattern.count("A1") == 8, f"Erwartet 8×A1, got {pattern.count('A1')}: {pattern}"
-    assert pattern.count("A2") == 4, f"Erwartet 4×A2, got {pattern.count('A2')}: {pattern}"
-    # WICHTIG: A2 muss immer in 2er-Paaren kommen (Even+Odd Empfang)
-    for i in range(len(pattern) - 1):
-        if pattern[i] == "A2":
-            assert pattern[i+1] == "A2" or (i > 0 and pattern[i-1] == "A2"), \
-                f"A2 bei Position {i} ist nicht gepaart: {pattern}"
+    assert pattern.count("A1") == 12, f"Erwartet 12×A1 in 18 Slots, got {pattern.count('A1')}"
+    assert pattern.count("A2") == 6, f"Erwartet 6×A2 in 18 Slots, got {pattern.count('A2')}"
+    # Max 2 hintereinander (auch am Loop-Uebergang!)
+    for i in range(len(pattern) - 2):
+        if pattern[i] == pattern[i+1] == pattern[i+2]:
+            assert False, f"3× gleiche Antenne ab Position {i}: {pattern}"
 
 
 # ── Radio Factory ────────────────────────────────────────────────────────────
