@@ -113,10 +113,15 @@ class FrequencyHistogramWidget(QWidget):
 
         # TX-Marker: gelb = CQ/vorgeschlagen, cyan = Hunt-Antwort
         marker_freq = self._tx_freq or self._cq_freq
-        marker_color = "#00CED1" if self._tx_freq and not self._cq_freq else "#FFD700"
+        marker_color = "#FFD700" if not (self._tx_freq and not self._cq_freq) else "#00CED1"
         if marker_freq and freq_lo <= marker_freq <= freq_hi:
             x = fx(marker_freq)
-            painter.setPen(QPen(QColor(marker_color), 2))
+            # Halbdurchsichtiger Glow-Streifen (auffaelliger)
+            glow = QColor(marker_color)
+            glow.setAlpha(50)
+            painter.fillRect(x - 3, 0, 7, bar_h, glow)
+            # Leuchtende Markierungslinie (4px breit)
+            painter.setPen(QPen(QColor(marker_color), 4))
             painter.drawLine(x, 0, x, bar_h - 1)
 
         # Trennlinie Balken / Label

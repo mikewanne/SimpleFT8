@@ -264,13 +264,35 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         )
         self._rx_warning_label.setVisible(False)
 
+        # Debug-Konsole (unter dem Haupt-Splitter, ein-/ausblendbar via Ctrl+D)
+        from ui.debug_console import DebugConsoleWidget
+        self._debug_console = DebugConsoleWidget()
+
+        # Vertikaler Splitter: oben Hauptbereich, unten Debug-Konsole
+        self._main_vsplitter = QSplitter(Qt.Orientation.Vertical)
+        self._main_vsplitter.addWidget(self.splitter)
+        self._main_vsplitter.addWidget(self._debug_console)
+        self._main_vsplitter.setSizes([600, 0])  # Debug standardmaessig ausgeblendet
+        self._main_vsplitter.setStretchFactor(0, 1)
+        self._main_vsplitter.setStretchFactor(1, 0)
+
+        # Debug sichtbar? Aus Settings laden
+        debug_visible = self.settings.get("debug_console_visible", False)
+        self._debug_console.setVisible(debug_visible)
+        if debug_visible:
+            self._main_vsplitter.setSizes([500, 150])
+
+        # Ctrl+D: Debug-Konsole Toggle
+        from PySide6.QtGui import QShortcut, QKeySequence
+        QShortcut(QKeySequence("Ctrl+D"), self, self._toggle_debug_console)
+
         _container = QWidget()
         _container.setStyleSheet("background: transparent;")
         _vlay = QVBoxLayout(_container)
         _vlay.setContentsMargins(0, 0, 0, 0)
         _vlay.setSpacing(0)
         _vlay.addWidget(self._rx_warning_label)
-        _vlay.addWidget(self.splitter)
+        _vlay.addWidget(self._main_vsplitter)
         self.setCentralWidget(_container)
 
     def _connect_signals(self):
@@ -304,6 +326,17 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         # Timer
         self.timer.cycle_tick.connect(self._on_cycle_tick)
         self.timer.cycle_start.connect(self._on_cycle_start)
+
+    def _toggle_debug_console(self):
+        """Debug-Konsole ein/ausblenden (Ctrl+D)."""
+        visible = not self._debug_console.isVisible()
+        self._debug_console.setVisible(visible)
+        if visible:
+            self._main_vsplitter.setSizes([500, 150])
+        else:
+            self._main_vsplitter.setSizes([600, 0])
+        self.settings.set("debug_console_visible", visible)
+        self.settings.save()
 
     def _on_help_clicked(self):
         """Hilfe-Dialog oeffnen mit Feature-Dokumentation."""

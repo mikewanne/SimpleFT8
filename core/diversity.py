@@ -155,6 +155,11 @@ class DiversityController:
         best_gap = min(gaps, key=lambda g: abs((g[0] + g[1] // 2) - median_bin))
         center_bin = best_gap[0] + best_gap[1] // 2
         freq_hz = center_bin * self.FREQ_BIN_HZ + self.FREQ_BIN_HZ // 2
+        gap_start_hz = best_gap[0] * self.FREQ_BIN_HZ
+        gap_end_hz = (best_gap[0] + best_gap[1]) * self.FREQ_BIN_HZ
+        print(f"[CQ-Freq] Median={int(median_freq)}Hz | "
+              f"Luecke={gap_start_hz}-{gap_end_hz}Hz ({best_gap[1]*self.FREQ_BIN_HZ}Hz breit) | "
+              f"TX={int(freq_hz)}Hz | {len(gaps)} Luecken gefunden")
         self._cq_freq_hz = int(freq_hz)
         return self._cq_freq_hz
 
@@ -164,9 +169,38 @@ class DiversityController:
         return self._cq_freq_hz
 
     def update_proposed_freq(self):
-        """Vorgeschlagene TX-Frequenz aktualisieren (bei jedem Histogramm-Update)."""
+        """Vorgeschlagene TX-Frequenz aktualisieren — adaptiv mit Kollisionserkennung.
+
+        Strategie "Stable unless compelled":
+        1. Kollision: aktuelle Freq belegt → sofort wechseln
+        2. Zeit-Fallback: alle 10 Zyklen neu berechnen
+        3. Minimum Dwell: mind. 3 Zyklen auf einer Freq bleiben
+        """
         self._cycles_since_recalc += 1
-        if self._cq_freq_hz is None or self._cycles_since_recalc >= self._recalc_interval:
+
+        # Erste Berechnung
+        if self._cq_freq_hz is None:
+            self.get_free_cq_freq()
+            self._cycles_since_recalc = 0
+            return
+
+        # Kollisionserkennung: ist unsere aktuelle Freq jetzt belegt?
+        if self._cycles_since_recalc >= 3:  # Minimum Dwell Time
+            with self._hist_lock:
+                current_bin = self._cq_freq_hz // self.FREQ_BIN_HZ
+                neighbors = sum(self._freq_histogram.get(current_bin + d, 0)
+                               for d in [-1, 0, 1])
+            if neighbors >= 3:
+                old_freq = self._cq_freq_hz
+                self.get_free_cq_freq()
+                self._cycles_since_recalc = 0
+                if self._cq_freq_hz != old_freq:
+                    print(f"[CQ-Freq] Kollision! {old_freq}Hz belegt ({neighbors} Stationen) → "
+                          f"wechsle auf {self._cq_freq_hz}Hz")
+                return
+
+        # Zeit-Fallback: alle 10 Zyklen (~2.5 Min)
+        if self._cycles_since_recalc >= 10:
             self.get_free_cq_freq()
             self._cycles_since_recalc = 0
 
