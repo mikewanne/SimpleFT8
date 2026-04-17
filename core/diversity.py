@@ -27,11 +27,11 @@ class DiversityController:
     OPERATE_CYCLES = 60  # 15 Min Betrieb (vorher 80=20 Min)
     THRESHOLD = 0.08     # 8% relative Differenz fuer Antennen-Entscheidung
     MIN_MEASURE_STATIONS = 5  # Mindestanzahl Stationen fuer Messung
-    # WICHTIG: Jede Antenne MUSS mindestens 2 aufeinanderfolgende Slots bekommen
-    # damit SOWOHL Even ALS AUCH Odd empfangen wird!
-    # 67:33 (12 Slots): maximale Durchmischung — A1 max 2 Paare hintereinander
-    _PAT_70_A1 = ("A1","A1","A2","A2","A1","A1","A2","A2","A1","A1","A1","A1")  # 8×A1, 4×A2
-    _PAT_70_A2 = ("A2","A2","A1","A1","A2","A2","A1","A1","A2","A2","A2","A2")  # 8×A2, 4×A1
+    # 67:33 Pattern (6 Slots, endlos nahtlos wiederholbar)
+    # A2 bekommt abwechselnd Even+Odd durch Einzelslots an Pos 2+5
+    # Max 2 hintereinander, kein Sprung am Loop-Uebergang
+    _PAT_70_A1 = ("A1","A1","A2","A1","A1","A2")  # 4×A1, 2×A2 = 67:33
+    _PAT_70_A2 = ("A2","A2","A1","A2","A2","A1")  # 4×A2, 2×A1 = 67:33
 
     def __init__(self, scoring_mode: str = "normal"):
         self._scoring_mode = scoring_mode  # "normal" oder "dx"
@@ -87,12 +87,12 @@ class DiversityController:
         Slots (Even+Odd Paar) damit beide Paritaeten empfangen werden.
         """
         if self._phase == "measure":
-            # Messung: 2er-Paare → A2,A2,A1,A1,A2,A2,A1,A1
-            return ("A2", "A2", "A1", "A1")[self._measure_step % 4]
+            # Messung: A2,A1,A1,A2 (6-Slot nahtlos, beide Paritaeten)
+            return ("A2","A1","A1","A2","A1","A1")[self._measure_step % 6]
         if self.ratio == "70:30":
-            return self._PAT_70_A1[self._operate_cycles % 12]
+            return self._PAT_70_A1[self._operate_cycles % 6]
         if self.ratio == "30:70":
-            return self._PAT_70_A2[self._operate_cycles % 12]
+            return self._PAT_70_A2[self._operate_cycles % 6]
         return ("A1", "A1", "A2", "A2")[self._operate_cycles % 4]  # 50:50
 
     def record_freq(self, freq_hz: float):
