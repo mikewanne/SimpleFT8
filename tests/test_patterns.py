@@ -157,12 +157,24 @@ def test_omni_tx_pattern():
     omni.enable()
     pattern = []
     for _ in range(10):
-        pattern.append(omni.should_tx())
+        send, _ = omni.should_tx()
+        pattern.append(send)
         omni.advance()
     tx_count = pattern.count(True)
     rx_count = pattern.count(False)
     assert tx_count == 4, f"Erwartet 4 TX in 10 Slots: {pattern}"
     assert rx_count == 6, f"Erwartet 6 RX in 10 Slots: {pattern}"
+
+def test_omni_tx_even_odd_alternation():
+    """Block 1: Even zuerst, Block 2: Odd zuerst."""
+    omni = OmniTX(block_cycles=10)
+    omni.enable()
+    # Block 1: erste TX should_tx → target_even=True (Even first)
+    send1, even1 = omni.should_tx()
+    assert send1 and even1 is True, f"Block 1 Pos 0: should be TX Even, got send={send1} even={even1}"
+    omni.advance()
+    send2, even2 = omni.should_tx()
+    assert send2 and even2 is False, f"Block 1 Pos 1: should be TX Odd, got send={send2} even={even2}"
 
 def test_omni_tx_seamless():
     """OMNI-TX Pattern muss nahtlos loopen (5-Slot Muster)."""
@@ -170,9 +182,9 @@ def test_omni_tx_seamless():
     omni.enable()
     pattern = []
     for _ in range(15):  # 3 volle Durchlaeufe
-        pattern.append(omni.should_tx())
+        send, _ = omni.should_tx()
+        pattern.append(send)
         omni.advance()
-    # Pattern: T,T,F,F,F wiederholt sich → am Uebergang: F,T,T → OK
     assert pattern == [True,True,False,False,False] * 3
 
 def test_omni_tx_block_switch():
