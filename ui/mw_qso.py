@@ -177,6 +177,13 @@ class QSOMixin:
             if self._omni_tx.active and not self._omni_tx.should_tx():
                 print(f"[OMNI-TX] Skip CQ (Slot: {self._omni_tx.slot_label})")
                 return
+            # OMNI-TX: Even/Odd Zaehler
+            if self._omni_tx.active:
+                is_even = self.timer.is_even_cycle()
+                if is_even:
+                    self._omni_tx.cq_even_count += 1
+                else:
+                    self._omni_tx.cq_odd_count += 1
         print(f"[TX] → '{message}' auf {self.encoder.audio_freq_hz} Hz")
         self.encoder.transmit(message)  # add_tx() wird via tx_started Signal aufgerufen
 

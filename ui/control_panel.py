@@ -835,6 +835,7 @@ class ControlPanel(QWidget):
         # ── Easter Egg: Versionsnummer (OMNI-TX Aktivierung) ────────────
         self._version_row = QHBoxLayout()
         self._version_row.setContentsMargins(0, 0, 4, 2)
+        self._omni_active = False
         self._omni_symbol = QLabel("Ω")
         self._omni_symbol.setStyleSheet(
             f"color: #AA44FF; font-family: {_FONT}; font-size: 11px; "
@@ -1082,6 +1083,7 @@ class ControlPanel(QWidget):
 
     def update_omni_tx(self, active: bool) -> None:
         """Ω-Symbol ein-/ausblenden je nach OMNI-TX Status."""
+        self._omni_active = active
         self._omni_symbol.setVisible(active)
         color = "#222" if active else "#333"
         self._version_label.setStyleSheet(
@@ -1214,7 +1216,9 @@ class ControlPanel(QWidget):
     # =====================================================================
     def _on_cq_clicked(self):
         self.cq_clicked.emit()
-        if self.btn_cq.isChecked():
+        if self._omni_active:
+            self.btn_cq.setText("OMNI CQ ■" if self.btn_cq.isChecked() else "OMNI CQ")
+        elif self.btn_cq.isChecked():
             self.btn_cq.setText("CQ AKTIV ■")
         else:
             self.btn_cq.setText("CQ RUFEN")
@@ -1228,7 +1232,10 @@ class ControlPanel(QWidget):
 
     def set_cq_active(self, active: bool):
         self.btn_cq.setChecked(active)
-        self.btn_cq.setText("CQ AKTIV ■" if active else "CQ RUFEN")
+        if self._omni_active:
+            self.btn_cq.setText("OMNI CQ ■" if active else "OMNI CQ")
+        else:
+            self.btn_cq.setText("CQ AKTIV ■" if active else "CQ RUFEN")
 
     def set_tx_active(self, active: bool):
         if active:

@@ -515,7 +515,11 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
             "diversity": "DIVERSITY",
         }
         mode_str = mode_labels.get(self._rx_mode, "Normal")
-        omni_str = "  Ω" if getattr(self, '_omni_tx', None) and self._omni_tx.active else ""
+        if getattr(self, '_omni_tx', None) and self._omni_tx.active:
+            omni_str = (f"  Ω Even={self._omni_tx.cq_even_count} "
+                        f"Odd={self._omni_tx.cq_odd_count}")
+        else:
+            omni_str = ""
         # DT-Korrektur Status — nur DT-Label gruen, Statusbar bleibt grau
         from core import ntp_time
         dt_phase = ntp_time._phase
