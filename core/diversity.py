@@ -8,6 +8,7 @@ Auswertung: Median ueber 4 Zyklen pro Antenne, Schwelle 8% (statt 15%).
 """
 
 import statistics
+import threading
 from typing import Optional
 
 
@@ -57,7 +58,10 @@ class DiversityController:
         self.ratio = "50:50"
         self.dominant = None   # "A1", "A2", oder None
         self._freq_histogram = {}  # bin_idx → Anzahl Stationen
+        self._hist_lock = threading.Lock()  # Thread-Safety fuer Histogram
         self._cq_freq_hz: Optional[int] = None  # Letzte berechnete CQ-Frequenz
+        self._cycles_since_recalc = 0  # Zaehler fuer Neuberechnung
+        self._recalc_interval = 20     # Alle 20 Zyklen neu berechnen (FT8 = 5 Min)
 
     def load_preset(self, preset: dict):
         """Gespeichertes Preset laden — sofort Betrieb ohne Messung."""
@@ -88,41 +92,47 @@ class DiversityController:
         if freq_hz < self.FREQ_MIN_HZ or freq_hz > self.FREQ_MAX_HZ:
             return
         bin_idx = int(freq_hz // self.FREQ_BIN_HZ)
-        self._freq_histogram[bin_idx] = self._freq_histogram.get(bin_idx, 0) + 1
+        with self._hist_lock:
+            self._freq_histogram[bin_idx] = self._freq_histogram.get(bin_idx, 0) + 1
 
     def get_free_cq_freq(self) -> Optional[int]:
-        """Freie CQ-Frequenz MITTEN in der Aktivitaet (nicht am Rand!).
+        """Freie CQ-Frequenz INNERHALB des belegten Bereichs (Sweetspot).
 
-        Sucht die Luecke die am naechsten am Median der Aktivitaet liegt.
-        Vermeidet leere Randbereiche wo niemand hinschaut.
+        Sucht die Luecke die am naechsten am Median liegt, aber NUR
+        innerhalb des tatsaechlich belegten Frequenzbereichs.
+        Vermeidet Frequenzen ausserhalb des Hotspots.
         """
-        if not self._freq_histogram:
+        with self._hist_lock:
+            hist_copy = dict(self._freq_histogram)
+        if not hist_copy:
             return None
 
         # Median der Aktivitaet berechnen
         all_freqs = []
-        for bin_idx, count in self._freq_histogram.items():
+        for bin_idx, count in hist_copy.items():
             freq = bin_idx * self.FREQ_BIN_HZ + self.FREQ_BIN_HZ // 2
             all_freqs.extend([freq] * count)
         if not all_freqs:
             return None
 
-        import statistics
         median_freq = statistics.median(all_freqs)
 
-        # Alle Luecken im aktiven Bereich (Median ±600 Hz) finden
-        SEARCH_MIN = max(self.FREQ_MIN_HZ, int(median_freq - 600))
-        SEARCH_MAX = min(self.FREQ_MAX_HZ, int(median_freq + 600))
+        # Search-Window = tatsaechlich belegter Bereich (NICHT ±600Hz vom Median)
+        occupied_bins = sorted(hist_copy.keys())
+        occupied_min_hz = occupied_bins[0] * self.FREQ_BIN_HZ
+        occupied_max_hz = (occupied_bins[-1] + 1) * self.FREQ_BIN_HZ
+        SEARCH_MIN = max(self.FREQ_MIN_HZ, occupied_min_hz)
+        SEARCH_MAX = min(self.FREQ_MAX_HZ, occupied_max_hz)
         min_bin = int(SEARCH_MIN // self.FREQ_BIN_HZ)
         max_bin = int(SEARCH_MAX // self.FREQ_BIN_HZ)
         min_gap_bins = max(1, self.FREQ_MIN_GAP_HZ // self.FREQ_BIN_HZ)
 
-        # Alle Luecken sammeln
+        # Alle Luecken innerhalb des belegten Bereichs sammeln
         gaps = []  # [(start_bin, length)]
         current_gap_start = None
         current_gap_len = 0
         for b in range(min_bin, max_bin + 1):
-            if b not in self._freq_histogram:
+            if b not in hist_copy:
                 if current_gap_start is None:
                     current_gap_start = b
                 current_gap_len += 1
@@ -135,7 +145,10 @@ class DiversityController:
             gaps.append((current_gap_start, current_gap_len))
 
         if not gaps:
-            return None
+            # Fallback: Median-Frequenz ±25Hz (Bin-Mitte)
+            fallback = int(median_freq // self.FREQ_BIN_HZ) * self.FREQ_BIN_HZ + self.FREQ_BIN_HZ // 2
+            self._cq_freq_hz = fallback
+            return self._cq_freq_hz
 
         # Luecke waehlen die am naechsten am Median liegt
         median_bin = int(median_freq // self.FREQ_BIN_HZ)
@@ -149,6 +162,13 @@ class DiversityController:
     def cq_freq_hz(self) -> Optional[int]:
         """Letzte berechnete CQ-Frequenz (Hz), oder None."""
         return self._cq_freq_hz
+
+    def update_proposed_freq(self):
+        """Vorgeschlagene TX-Frequenz aktualisieren (bei jedem Histogramm-Update)."""
+        self._cycles_since_recalc += 1
+        if self._cq_freq_hz is None or self._cycles_since_recalc >= self._recalc_interval:
+            self.get_free_cq_freq()
+            self._cycles_since_recalc = 0
 
     def get_histogram_data(self) -> dict:
         """Histogramm-Daten für Visualisierung.
@@ -166,7 +186,7 @@ class DiversityController:
         best_gap_start, best_gap_len = None, 0
         cur_start, cur_len = None, 0
         for b in range(min_bin, max_bin + 1):
-            if b not in self._freq_histogram:
+            if b not in hist_copy:
                 if cur_start is None:
                     cur_start = b
                 cur_len += 1

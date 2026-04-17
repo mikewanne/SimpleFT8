@@ -95,6 +95,7 @@ class FrequencyHistogramWidget(QWidget):
         self.setMinimumWidth(200)
         self._bins: dict       = {}
         self._cq_freq          = None
+        self._tx_freq          = None   # Aktuelle TX-Freq (Hunt oder CQ)
         self._gap_start_hz     = None
         self._gap_end_hz       = None
 
@@ -104,6 +105,11 @@ class FrequencyHistogramWidget(QWidget):
         self._cq_freq      = data.get('cq_freq')
         self._gap_start_hz = data.get('gap_start_hz')
         self._gap_end_hz   = data.get('gap_end_hz')
+        self.update()
+
+    def set_tx_freq(self, freq_hz: int | None):
+        """Aktuelle TX-Frequenz setzen (Hunt-Mode oder manuelle Auswahl)."""
+        self._tx_freq = freq_hz
         self.update()
 
     def paintEvent(self, event):  # noqa: N802
@@ -121,10 +127,11 @@ class FrequencyHistogramWidget(QWidget):
             max_idx = max(self._bins.keys())
             freq_lo = max(100, min_idx * self.BIN_HZ - 100)
             freq_hi = min(2800, max_idx * self.BIN_HZ + 200)
-            # CQ-Marker muss auch reinpassen
-            if self._cq_freq:
-                freq_lo = min(freq_lo, self._cq_freq - 50)
-                freq_hi = max(freq_hi, self._cq_freq + 50)
+            # TX-Marker muss auch reinpassen
+            show_freq = self._tx_freq or self._cq_freq
+            if show_freq:
+                freq_lo = min(freq_lo, show_freq - 50)
+                freq_hi = max(freq_hi, show_freq + 50)
             # Mindestbreite 500 Hz
             if freq_hi - freq_lo < 500:
                 center = (freq_lo + freq_hi) // 2
@@ -161,10 +168,12 @@ class FrequencyHistogramWidget(QWidget):
                     b = 0
                 painter.fillRect(x, bar_h - bh, bin_px, bh, QColor(r, g, b))
 
-        # CQ-Marker (gelbe Linie — IMMER wenn Frequenz gesetzt)
-        if self._cq_freq and freq_lo <= self._cq_freq <= freq_hi:
-            x = fx(self._cq_freq)
-            painter.setPen(QPen(QColor("#FFD700"), 2))
+        # TX-Marker: gelb = CQ/vorgeschlagen, cyan = Hunt-Antwort
+        marker_freq = self._tx_freq or self._cq_freq
+        marker_color = "#00CED1" if self._tx_freq and not self._cq_freq else "#FFD700"
+        if marker_freq and freq_lo <= marker_freq <= freq_hi:
+            x = fx(marker_freq)
+            painter.setPen(QPen(QColor(marker_color), 2))
             painter.drawLine(x, 0, x, bar_h - 1)
 
         # Trennlinie Balken / Label
@@ -177,13 +186,13 @@ class FrequencyHistogramWidget(QWidget):
         painter.drawText(1, h - 1, f"{freq_lo}")
         painter.drawText(w - 35, h - 1, f"{freq_hi}Hz")
 
-        if self._cq_freq:
-            x   = fx(self._cq_freq)
-            lbl = f"CQ {self._cq_freq}Hz"
+        if marker_freq:
+            x   = fx(marker_freq)
+            lbl = f"TX {marker_freq}Hz"
             fm  = painter.fontMetrics()
             lw  = fm.horizontalAdvance(lbl)
             tx  = max(0, min(w - lw, x - lw // 2))
-            painter.setPen(QColor("#FFD700"))
+            painter.setPen(QColor(marker_color))
             painter.drawText(tx, h - 1, lbl)
 
         painter.end()
@@ -1152,15 +1161,21 @@ class ControlPanel(QWidget):
 
     def update_psk_stats(self, spots: int, avg_km: int, max_km: int,
                           max_call: str, max_country: str,
-                          n_km: int, e_km: int, s_km: int, w_km: int):
+                          n_km: int, e_km: int, s_km: int, w_km: int,
+                          band: str = "", fetch_time: str = ""):
         """PSKReporter-Statistik aktualisieren."""
+        header = "PSK"
+        if band:
+            header += f" {band}"
+        if fetch_time:
+            header += f" | {fetch_time} UTC"
         if spots == 0:
-            self.psk_label.setText("PSK: keine Spots")
+            self.psk_label.setText(f"{header}: keine Spots")
             self.psk_label.setStyleSheet(
                 f"color: #666; font-family: {_FONT}; font-size: 10px; padding: 2px;"
             )
             return
-        text = (f"PSK: {spots} Spots | Ø {avg_km:,}km | Max: {max_km:,}km\n"
+        text = (f"{header}: {spots} Spots | Ø {avg_km:,}km | Max: {max_km:,}km\n"
                 f"N:{n_km:,} O:{e_km:,} S:{s_km:,} W:{w_km:,}\n"
                 f"{max_call} ({max_country})")
         self.psk_label.setText(text)

@@ -133,11 +133,14 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self.control_panel._set_mode(settings.mode)
         self.control_panel.set_power_preset(settings.get("power_preset", 10))
 
-        # PSKReporter Timer (alle 3 Minuten abfragen)
+        # PSKReporter Timer (erste Abfrage nach 2 Min, danach alle 3 Min)
         from PySide6.QtCore import QTimer
         self._psk_timer = QTimer(self)
         self._psk_timer.timeout.connect(self._fetch_psk_stats)
-        self._psk_timer.start(180000)  # 3 Minuten
+        self._psk_timer.start(120000)  # 2 Minuten fuer erste Abfrage
+        self._psk_first_fetch = True
+        self._psk_last_fetch_time = None
+        self._psk_band = ""
 
         # Propagation: Hintergrund-Abruf starten + UI alle 5 Minuten aktualisieren
         from core import propagation as _prop
@@ -371,17 +374,24 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
                 "color: #557766; font-family: Menlo; font-size: 10px; padding: 2px;"
             )
             return
+        # Nach erster Abfrage auf 3-Min-Intervall wechseln
+        if self._psk_first_fetch:
+            self._psk_first_fetch = False
+            self._psk_timer.setInterval(180000)  # 3 Minuten
+        self._psk_band = self.settings.band.upper()
         threading.Thread(target=self._psk_worker, daemon=True).start()
 
     def _psk_worker(self):
         import urllib.request
         import xml.etree.ElementTree as ET
+        from datetime import datetime, timezone
 
         call = self.settings.callsign
         my_grid = self.settings.locator
+        mode = self.settings.mode.upper()
         try:
             url = (f"https://retrieve.pskreporter.info/query?"
-                   f"senderCallsign={call}&flowStartSeconds=-600&mode=FT8")
+                   f"senderCallsign={call}&flowStartSeconds=-600&mode={mode}")
             req = urllib.request.Request(
                 url, headers={"User-Agent": "SimpleFT8/1.0"}
             )
@@ -432,10 +442,13 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
                 (s[0] for s in spots if 225 <= s[1] < 315), default=0
             )
 
+            self._psk_last_fetch_time = datetime.now(timezone.utc).strftime("%H:%M")
             self.control_panel.update_psk_stats(
                 len(spots), avg_km, max_spot[0],
                 max_spot[2], max_spot[3],
                 n_km, e_km, s_km, w_km,
+                band=self._psk_band,
+                fetch_time=self._psk_last_fetch_time,
             )
         except Exception as e:
             print(f"[PSK] Fehler: {e}")

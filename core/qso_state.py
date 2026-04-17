@@ -273,7 +273,8 @@ class QSOStateMachine(QObject):
         if self.state == QSOState.WAIT_73:
             self.qso.timeout_cycles += 1
             if self.qso.timeout_cycles >= 3:
-                print(f"[QSO] WAIT_73 Timeout — kein 73 empfangen, QSO war schon geloggt")
+                print(f"[QSO] WAIT_73 Timeout — kein 73 empfangen, QSO trotzdem komplett")
+                self.qso_confirmed.emit(self.qso)
                 self._resume_cq_if_needed()
             return
 

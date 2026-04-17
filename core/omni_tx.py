@@ -63,6 +63,7 @@ class OmniTX:
         self.block_cycles: int = max(10, block_cycles)
         self._cycle_count: int = 0      # Zyklen im aktuellen Block
         self._slot_index: int = 0       # Position im 5-Slot-Muster (0-4)
+        self._pending_switch: bool = False  # Block-Wechsel angefordert, wartet auf Pos 0
 
     # ─────────────────────────────────────────────────────────────────────────
     # Haupt-API
@@ -90,6 +91,10 @@ class OmniTX:
         if not self.active:
             return
         self._slot_index = (self._slot_index + 1) % 5
+        # Pending Switch: Block-Wechsel wurde angefordert aber war nicht an Muster-Grenze
+        if self._pending_switch and self._slot_index == 0:
+            self._do_switch_block()
+            return
         if not qso_active:
             self._cycle_count += 1
             if self._cycle_count >= self.block_cycles:
@@ -116,6 +121,7 @@ class OmniTX:
         self.active = True
         self._cycle_count = 0
         self._slot_index = 0
+        self._pending_switch = False
         self.block = 1
         logger.info("[OMNI-TX] Aktiviert — Even+Odd Slot-Rotation")
 
@@ -148,15 +154,20 @@ class OmniTX:
     # ─────────────────────────────────────────────────────────────────────────
 
     def _switch_block(self) -> None:
-        # Block-Wechsel NUR an natürlicher Muster-Grenze (Position 0).
-        # Sonst würde ein Wechsel z.B. bei Position 2 (RX) direkt auf TX springen.
-        if self._slot_index != 0:
-            logger.debug(f"[OMNI-TX] Block-Wechsel verzögert bis Muster-Grenze "
+        """Block-Wechsel anfordern — wird an naechster Muster-Grenze (Position 0) ausgefuehrt."""
+        if self._slot_index == 0:
+            self._do_switch_block()
+        else:
+            self._pending_switch = True
+            logger.debug(f"[OMNI-TX] Block-Wechsel angefordert, warte auf Muster-Grenze "
                          f"(aktuell Position {self._slot_index})")
-            return
+
+    def _do_switch_block(self) -> None:
+        """Block tatsaechlich wechseln (nur an Position 0)."""
         old_block = self.block
         self.block = 2 if self.block == 1 else 1
         self._cycle_count = 0
+        self._pending_switch = False
         logger.info(f"[OMNI-TX] Block {old_block} → Block {self.block} "
                     f"(nach {self.block_cycles} Zyklen)")
 

@@ -88,11 +88,11 @@ def test_ntp_positive_correction():
 def test_ntp_deadband():
     """DT unter 0.1s (Totband) → keine Korrektur."""
     from core import ntp_time
-    ntp_time.reset()
+    ntp_time.reset(keep_correction=False)  # Alles zuruecksetzen inkl. alter Korrektur
     for _ in range(4):
         ntp_time.update_from_decoded([0.05] * 10)
     assert ntp_time.get_correction() == 0.0, f"Totband: sollte 0 sein, ist {ntp_time.get_correction()}"
-    ntp_time.reset()
+    ntp_time.reset(keep_correction=False)
 
 
 # ── OMNI-TX ──────────────────────────────────────────────────────────────────
@@ -316,31 +316,43 @@ def test_no_private_radio_access():
 
 # ── QSO State Machine ────────────────────────────────────────────────────────
 
+class _TestMsg:
+    """Test-Message die Properties ueberschreibt OHNE die FT8Message-Klasse zu patchen."""
+    def __init__(self, raw, caller, target, field3="",
+                 is_grid=False, is_report=False, is_r_report=False,
+                 is_rr73=False, is_73=False):
+        self.raw = raw
+        self.field1 = target
+        self.field2 = caller
+        self.field3 = field3
+        self.snr = -15
+        self.freq_hz = 1000
+        self.dt = 0.0
+        self.antenna = ""
+        self._tx_even = True
+        self.is_grid = is_grid
+        self.is_report = is_report
+        self.is_r_report = is_r_report
+        self.is_rr73 = is_rr73
+        self.is_73 = is_73
+    @property
+    def caller(self): return self.field2
+    @property
+    def target(self): return self.field1
+    @property
+    def grid_or_report(self): return self.field3
+    @property
+    def is_cq(self): return self.field1 == "CQ"
+    @property
+    def is_directed_to(self): return not self.is_cq
+
+
 def _make_msg(caller, target, raw, grid_or_report="", is_grid=False,
               is_report=False, is_r_report=False, is_rr73=False, is_73=False):
-    """Hilfs-FT8Message fuer Tests (umgeht parse_ft8_message)."""
-    from core.message import FT8Message
-    m = FT8Message(raw=raw)
-    m.field1 = target
-    m.field2 = caller
-    m.field3 = grid_or_report
-    m.snr = -15
-    m.freq_hz = 1000
-    m.dt = 0.0
-    m._tx_even = True
-    # Properties ueberschreiben via Attribute
-    m._is_grid = is_grid
-    m._is_report = is_report
-    m._is_r_report = is_r_report
-    m._is_rr73 = is_rr73
-    m._is_73 = is_73
-    # Monkey-Patch Properties
-    type(m).is_grid = property(lambda s: getattr(s, '_is_grid', False))
-    type(m).is_report = property(lambda s: getattr(s, '_is_report', False))
-    type(m).is_r_report = property(lambda s: getattr(s, '_is_r_report', False))
-    type(m).is_rr73 = property(lambda s: getattr(s, '_is_rr73', False))
-    type(m).is_73 = property(lambda s: getattr(s, '_is_73', False))
-    type(m).grid_or_report = property(lambda s: s.field3)
+    """Hilfs-Message fuer Tests (eigene Klasse, patcht FT8Message NICHT)."""
+    return _TestMsg(raw=raw, caller=caller, target=target, field3=grid_or_report,
+                    is_grid=is_grid, is_report=is_report, is_r_report=is_r_report,
+                    is_rr73=is_rr73, is_73=is_73)
     type(m).caller = property(lambda s: s.field2)
     type(m).target = property(lambda s: s.field1)
     return m
@@ -1283,6 +1295,113 @@ def test_cq_freq_high_activity():
     freq = dc.get_free_cq_freq()
     if freq is not None:
         assert 800 <= freq <= 2200, f"CQ-Freq {freq} ausserhalb Aktivitaetsbereich"
+
+
+def test_omni_tx_pending_switch():
+    """OMNI-TX: Block-Wechsel wird korrekt verzoegert bis Position 0."""
+    from core.omni_tx import OmniTX
+    omni = OmniTX(block_cycles=10)  # Minimum ist 10 (max(10, n))
+    omni.enable()
+    # 12 Zyklen voranschreiten → Block-Wechsel muss angefordert werden
+    for _ in range(12):
+        omni.advance()
+    # Block sollte gewechselt haben (10 Zyklen + 2 extra fuer Grenze)
+    # Wenn pending_switch noch True, weiter bis Position 0
+    if omni._pending_switch:
+        while omni._slot_index != 0:
+            omni.advance()
+    assert omni.block == 2, f"Block sollte 2 sein nach Wechsel, ist {omni.block}"
+    assert not omni._pending_switch, "pending_switch muss nach Wechsel False sein"
+
+
+def test_omni_tx_qso_blocks_counter():
+    """OMNI-TX: Waehrend QSO zaehlt der Block-Counter nicht hoch."""
+    from core.omni_tx import OmniTX
+    omni = OmniTX(block_cycles=10)
+    omni.enable()
+    for _ in range(10):
+        omni.advance(qso_active=True)
+    assert omni._cycle_count == 0, f"Counter sollte 0 sein bei QSO, ist {omni._cycle_count}"
+    assert omni.block == 1, "Block sollte 1 bleiben bei dauerhaftem QSO"
+
+
+def test_cq_freq_stays_inside_occupied():
+    """TX-Frequenz darf NIE ausserhalb des belegten Bereichs liegen."""
+    from core.diversity import DiversityController
+    dc = DiversityController()
+    # Stationen nur bei 200-500 Hz — TX darf NICHT bei 600+ Hz landen
+    for f in range(200, 550, 50):
+        for _ in range(5):
+            dc.record_freq(f)
+    freq = dc.get_free_cq_freq()
+    if freq is not None:
+        assert freq <= 550, f"TX-Freq {freq} Hz ausserhalb Sweetspot (max 550)"
+        assert freq >= 200, f"TX-Freq {freq} Hz unter Sweetspot (min 200)"
+
+
+def test_cq_freq_fallback_no_gap():
+    """Wenn keine Luecke vorhanden, Fallback auf Median-Bereich."""
+    from core.diversity import DiversityController
+    dc = DiversityController()
+    # Jedes Bin belegt — keine Luecke
+    for f in range(300, 600, 50):
+        for _ in range(10):
+            dc.record_freq(f)
+    freq = dc.get_free_cq_freq()
+    assert freq is not None, "Fallback muss eine Frequenz liefern"
+    assert 200 <= freq <= 700, f"Fallback-Freq {freq} nicht im erwarteten Bereich"
+
+
+def test_proposed_freq_updates():
+    """update_proposed_freq() berechnet TX-Freq nach Intervall."""
+    from core.diversity import DiversityController
+    dc = DiversityController()
+    for f in range(400, 800, 50):
+        dc.record_freq(f)
+    assert dc.cq_freq_hz is None  # Noch nicht berechnet
+    dc.update_proposed_freq()
+    assert dc.cq_freq_hz is not None  # Jetzt berechnet
+
+
+def test_adif_ft4_submode():
+    """ADIF: FT4 → MODE=MFSK + SUBMODE=FT4."""
+    import tempfile, os
+    from log.adif import AdifWriter
+    with tempfile.TemporaryDirectory() as tmp:
+        writer = AdifWriter(tmp)
+        path = writer.log_qso(
+            call="W2XYZ", band="20M", freq_mhz=14.081, mode="FT4",
+            rst_sent="-10", rst_rcvd="-05", gridsquare="FN20",
+            my_gridsquare="JO31", my_callsign="DA1MHH", tx_power=10)
+        content = path.read_text()
+        assert "<MODE:4>MFSK" in content, "FT4 sollte MODE=MFSK haben"
+        assert "<SUBMODE:3>FT4" in content, "FT4 sollte SUBMODE=FT4 haben"
+
+
+def test_adif_subdir_created():
+    """ADIF: Unterordner adif/ wird automatisch erstellt."""
+    import tempfile
+    from log.adif import AdifWriter
+    with tempfile.TemporaryDirectory() as tmp:
+        writer = AdifWriter(tmp)
+        assert writer.directory.name == "adif"
+        assert writer.directory.exists()
+
+
+def test_adif_qrz_fields():
+    """ADIF: QRZ/LoTW Pflichtfelder vorhanden."""
+    import tempfile
+    from log.adif import AdifWriter
+    with tempfile.TemporaryDirectory() as tmp:
+        writer = AdifWriter(tmp)
+        path = writer.log_qso(
+            call="DL1ABC", band="40M", freq_mhz=7.074, mode="FT8",
+            rst_sent="+05", rst_rcvd="-03", gridsquare="JN48",
+            my_gridsquare="JO31OM", my_callsign="DA1MHH", tx_power=5)
+        content = path.read_text()
+        for field in ["CALL", "QSO_DATE", "TIME_ON", "BAND", "MODE",
+                       "STATION_CALLSIGN", "MY_GRIDSQUARE", "OPERATOR"]:
+            assert f"<{field}:" in content, f"Pflichtfeld {field} fehlt"
 
 
 # ── Runner ───────────────────────────────────────────────────────────────────
