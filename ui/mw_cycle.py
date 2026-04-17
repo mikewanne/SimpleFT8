@@ -76,6 +76,10 @@ class CycleMixin:
                 for m in (messages or []):
                     if hasattr(m, 'freq_hz') and m.freq_hz:
                         self._diversity_ctrl.record_freq(m.freq_hz)
+                self._diversity_ctrl.update_proposed_freq()
+            # Histogram LIVE aktualisieren (auch waehrend Messung)
+            self.control_panel.update_freq_histogram(
+                self._diversity_ctrl.get_histogram_data())
             self.control_panel.update_diversity_ratio(
                 self._diversity_ctrl.ratio, self._diversity_ctrl.phase,
                 measure_step=self._diversity_ctrl.measure_step,
@@ -104,6 +108,14 @@ class CycleMixin:
                 )
 
         if self._rx_mode == "diversity" and messages:
+            # Diversity: Frequenz-Histogram live aktualisieren (Betriebsphase)
+            for m in messages:
+                if hasattr(m, 'freq_hz') and m.freq_hz:
+                    self._diversity_ctrl.record_freq(m.freq_hz)
+            self._diversity_ctrl.update_proposed_freq()
+            self.control_panel.update_freq_histogram(
+                self._diversity_ctrl.get_histogram_data())
+
             # Diversity: gemeinsame Akkumulation mit Antennen-Info
             changed = accumulate_stations(
                 self._diversity_stations, messages,

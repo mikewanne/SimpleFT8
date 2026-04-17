@@ -20,6 +20,7 @@ _FEATURES = [
     ("AP-Lite Rettung", "AP-Lite Rescue", "ap-lite"),
     ("Propagation-Anzeige", "Propagation Indicators", "propagation-indicators"),
     ("Operator-Praesenz", "Operator Presence", "operator-presence"),
+    ("OMNI-TX (Slot-Rotation)", "OMNI-TX (Slot Rotation)", "omni-tx"),
 ]
 
 _DOCS_DIR = Path(__file__).parent.parent / "docs" / "explained"

@@ -117,7 +117,8 @@ class AdifWriter:
     def __init__(self, directory: str | Path | None = None):
         if directory is None:
             directory = Path.cwd()
-        self.directory = Path(directory)
+        # ADIF-Dateien in adif/ Unterordner
+        self.directory = Path(directory) / "adif"
         self.directory.mkdir(parents=True, exist_ok=True)
 
     def _logfile_path(self) -> Path:
@@ -163,21 +164,50 @@ class AdifWriter:
 
         t = time.gmtime(time_on)
 
+        # FT4: MODE=MFSK + SUBMODE=FT4 (ADIF-Standard, QRZ/LoTW kompatibel)
+        mode_upper = mode.upper()
+        if mode_upper == "FT4":
+            adif_mode = "MFSK"
+            adif_submode = "FT4"
+        elif mode_upper == "FT2":
+            adif_mode = "MFSK"
+            adif_submode = "FT2"
+        else:
+            adif_mode = mode_upper
+            adif_submode = ""
+
+        # TIME_OFF = TIME_ON + 15 Sekunden (1 FT8-Zyklus)
+        t_off = time.gmtime(time_on + 15)
+
         fields = [
             _field("CALL", call),
             _field("QSO_DATE", time.strftime("%Y%m%d", t)),
             _field("TIME_ON", time.strftime("%H%M%S", t)),
+            _field("TIME_OFF", time.strftime("%H%M%S", t_off)),
             _field("BAND", band.upper()),
             _field("FREQ", f"{freq_mhz:.6f}"),
-            _field("MODE", mode.upper()),
+            _field("MODE", adif_mode),
+        ]
+        if adif_submode:
+            fields.append(_field("SUBMODE", adif_submode))
+        fields += [
             _field("RST_SENT", str(rst_sent)),
             _field("RST_RCVD", str(rst_rcvd)),
-            _field("GRIDSQUARE", gridsquare.upper()),
-            _field("MY_GRIDSQUARE", my_gridsquare.upper()),
+            _field("OPERATOR", my_callsign.upper()),
             _field("STATION_CALLSIGN", my_callsign.upper()),
+            _field("MY_GRIDSQUARE", my_gridsquare.upper()),
             _field("TX_PWR", str(tx_power)),
+            _field("QSL_SENT", "N"),
+            _field("QSL_RCVD", "N"),
+            _field("MY_DXCC", "230"),
+            _field("MY_COUNTRY", "Germany"),
+            _field("MY_CQ_ZONE", "14"),
+            _field("MY_ITU_ZONE", "28"),
             _field("COMMENT", "SimpleFT8 v1.0"),
         ]
+        # Optionale Felder nur wenn vorhanden
+        if gridsquare:
+            fields.insert(8, _field("GRIDSQUARE", gridsquare.upper()))
 
         record = " ".join(fields) + " <EOR>\n"
 

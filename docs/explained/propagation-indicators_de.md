@@ -44,6 +44,29 @@ Das sind grobe Regeln. Echte Ausbreitung funktioniert nicht wie ein Schalter —
 - Daten aendern sich langsam (Solarindizes werden alle paar Stunden aktualisiert), daher reicht Abfrage alle 3 Stunden.
 - Bei Netzwerkfehler: Balken werden grau und verschwinden. Kein Absturz, keine veralteten Daten angezeigt.
 
+## Unterschied zu anderen Programmen (Ham Toolbox, VOACAP etc.)
+
+Die meisten Tools (Ham Toolbox, DXHeat, etc.) zeigen nur **Tag/Nacht** global an — z.B. "20m tagsüber: Good, nachts: Fair". Aber was bedeutet das um 9 Uhr morgens, wenn das Band gerade erst öffnet?
+
+**SimpleFT8 geht einen Schritt weiter:** Wir berücksichtigen die **tatsächlichen Öffnungszeiten** jedes Bandes für Mitteleuropa. Beispiele:
+
+- **20m um 8 UTC:** Ham Toolbox zeigt "Day: Good" — aber das Band ist um 8 Uhr morgens noch nicht richtig offen. SimpleFT8 stuft auf "Fair" herab.
+- **80m um 19 UTC:** Ham Toolbox zeigt "Day: Bad" — aber 80m öffnet abends bereits. SimpleFT8 nutzt den Nacht-Wert (oft "Fair" oder "Good").
+- **10m um 17 UTC:** Ham Toolbox zeigt "Day: Good" — das stimmt, 10m ist nachmittags optimal. SimpleFT8 zeigt auch "Good".
+
+**Kurz:** Andere Tools zeigen was die Sonne global macht. Wir zeigen was das Band **jetzt für dich** kann.
+
+## Warum keine Jahreszeiten?
+
+Kurze Antwort: Der Aufwand steht nicht im Verhältnis zum Nutzen.
+
+Jahreszeiten-Berücksichtigung (Sommer/Winter) würde erfordern:
+- Sonnenstand-Berechnung (Ephemeriden)
+- Geografische Position des Nutzers
+- Deutlich komplexere Modelle pro Band
+
+Die aktuellen UTC-Stundenregeln decken bereits ~80% der Fälle ab. Die restlichen 20% sind ohnehin unvorhersagbar (Sporadic-E im Sommer, Aurora, geomagnetische Stürme). Die Propagation-Balken sind eine **schnelle Orientierung**, kein Ersatz für eigene Erfahrung.
+
 ## Was es nicht kann
 
 - Sagt keine lokale Ausbreitung vorher. Ein gruener Balken auf 10m bedeutet: Solarbedingungen unterstuetzen 10m-Ausbreitung global — nicht dass du von JO31 aus gerade jemanden hoerst.

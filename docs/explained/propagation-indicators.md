@@ -44,6 +44,24 @@ These are coarse rules. Real propagation doesn't follow a switch — 20m doesn't
 - Data changes slowly (solar indices update every few hours), so polling every 3 hours is sufficient.
 - On network error: bars turn grey and disappear. No crash, no stale data displayed.
 
+## How We Differ from Other Tools (Ham Toolbox, VOACAP, etc.)
+
+Most tools show only **global day/night** labels — e.g. "20m daytime: Good, nighttime: Fair". But what does that mean at 9 AM when the band is barely opening?
+
+**SimpleFT8 goes further:** We consider the **actual opening hours** of each band for Central Europe:
+
+- **20m at 8 UTC:** Ham Toolbox says "Day: Good" — but the band isn't truly open yet. SimpleFT8 downgrades to "Fair".
+- **80m at 19 UTC:** Ham Toolbox says "Day: Bad" — but 80m is already opening for the evening. SimpleFT8 uses the night value (often "Fair" or "Good").
+- **10m at 17 UTC:** Both agree — 10m peaks in the afternoon.
+
+**In short:** Other tools show what the sun does globally. We show what the band **can do for you right now**.
+
+## Why No Seasonal Adjustment?
+
+Short answer: the effort far outweighs the benefit.
+
+Seasonal correction (summer/winter) would require solar ephemeris calculations, user geolocation, and much more complex per-band models. Our current UTC-hour rules already cover ~80% of cases. The remaining 20% are inherently unpredictable (sporadic-E in summer, aurora, geomagnetic storms). The propagation bars are a **quick orientation**, not a replacement for experience.
+
 ## What It Doesn't Do
 
 - Does not predict local propagation. A green bar on 10m means solar conditions support 10m propagation globally — it doesn't mean you will hear anyone from JO31 right now.
