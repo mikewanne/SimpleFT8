@@ -64,6 +64,8 @@ class OmniTX:
         self._cycle_count: int = 0      # Zyklen im aktuellen Block
         self._slot_index: int = 0       # Position im 5-Slot-Muster (0-4)
         self._pending_switch: bool = False  # Block-Wechsel angefordert, wartet auf Pos 0
+        self.cq_even_count: int = 0     # Zaehler: CQ auf Even gesendet
+        self.cq_odd_count: int = 0      # Zaehler: CQ auf Odd gesendet
 
     # ─────────────────────────────────────────────────────────────────────────
     # Haupt-API
