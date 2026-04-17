@@ -176,7 +176,9 @@ class DiversityController:
         Returns:
             bins: {bin_idx: count}, cq_freq: Hz, gap_start_hz: Hz, gap_end_hz: Hz
         """
-        if not self._freq_histogram:
+        with self._hist_lock:
+            bins_copy = dict(self._freq_histogram)
+        if not bins_copy:
             return {'bins': {}, 'cq_freq': self._cq_freq_hz,
                     'gap_start_hz': None, 'gap_end_hz': None}
 
@@ -186,7 +188,7 @@ class DiversityController:
         best_gap_start, best_gap_len = None, 0
         cur_start, cur_len = None, 0
         for b in range(min_bin, max_bin + 1):
-            if b not in hist_copy:
+            if b not in bins_copy:
                 if cur_start is None:
                     cur_start = b
                 cur_len += 1
@@ -201,7 +203,7 @@ class DiversityController:
         gap_end_hz = (best_gap_start + best_gap_len) * self.FREQ_BIN_HZ if best_gap_start else None
 
         return {
-            'bins': self._freq_histogram.copy(),
+            'bins': bins_copy,
             'cq_freq': self._cq_freq_hz,
             'gap_start_hz': gap_start_hz,
             'gap_end_hz': gap_end_hz,
