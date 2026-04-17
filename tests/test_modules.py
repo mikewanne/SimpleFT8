@@ -101,7 +101,8 @@ def test_omni_tx_disabled():
     """Deaktiviert → should_tx() immer True."""
     from core.omni_tx import OmniTX
     omni = OmniTX(block_cycles=10)
-    assert omni.should_tx() is True
+    send, _ = omni.should_tx()
+    assert send is True
 
 
 def test_omni_tx_pattern():
@@ -111,7 +112,8 @@ def test_omni_tx_pattern():
     omni.enable()
     pattern = []
     for _ in range(10):
-        pattern.append("TX" if omni.should_tx() else "RX")
+        send, _ = omni.should_tx()
+        pattern.append("TX" if send else "RX")
         omni.advance()
     expected = ["TX", "TX", "RX", "RX", "RX", "TX", "TX", "RX", "RX", "RX"]
     assert pattern == expected, f"Muster falsch: {pattern}"

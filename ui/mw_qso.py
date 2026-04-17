@@ -172,15 +172,24 @@ class QSOMixin:
             return
         if message.startswith("CQ "):
             self._has_sent_cq = True
-            # OMNI-TX: CQ-Slot überspringen wenn Muster es vorgibt.
-            # QSO-Schutz: nur CQ-Nachrichten unterdrücken — QSO-Nachrichten IMMER senden!
-            if self._omni_tx.active and not self._omni_tx.should_tx():
-                print(f"[OMNI-TX] Skip CQ (Slot: {self._omni_tx.slot_label})")
-                return
-            # OMNI-TX: Even/Odd Zaehler
+            # OMNI-TX: CQ-Slot-Steuerung mit Even/Odd Paritaet
             if self._omni_tx.active:
                 is_even = self.timer.is_even_cycle()
-                if is_even:
+                send_ok, target_even = self._omni_tx.should_tx(is_even)
+                if not send_ok:
+                    # RX-Slot: CQ NICHT senden, aber QSO SM NICHT als Fehlversuch zaehlen
+                    print(f"[OMNI-TX] RX-Slot → skip CQ ({self._omni_tx.slot_label})")
+                    if hasattr(self.qso_sm, 'qso') and hasattr(self.qso_sm.qso, 'calls_made'):
+                        self.qso_sm.qso.calls_made = max(0, self.qso_sm.qso.calls_made - 1)
+                    return
+                # TX-Slot: Encoder auf richtige Paritaet setzen
+                if target_even is not None:
+                    self.encoder.tx_even = target_even
+                    parity_str = "Even" if target_even else "Odd"
+                    print(f"[OMNI-TX] TX auf {parity_str} ({self._omni_tx.slot_label})")
+                # Even/Odd Zaehler
+                actual_even = target_even if target_even is not None else is_even
+                if actual_even:
                     self._omni_tx.cq_even_count += 1
                 else:
                     self._omni_tx.cq_odd_count += 1

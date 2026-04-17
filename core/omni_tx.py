@@ -71,15 +71,31 @@ class OmniTX:
     # Haupt-API
     # ─────────────────────────────────────────────────────────────────────────
 
-    def should_tx(self) -> bool:
-        """True wenn dieser Slot gesendet werden soll.
+    def should_tx(self, is_even: bool = True) -> tuple:
+        """Prueft ob dieser Slot gesendet werden soll + Ziel-Paritaet.
 
-        Gibt True zurück wenn OMNI-TX deaktiviert (= normaler Betrieb).
-        Gibt False zurück wenn dieser Slot ein Hörslot ist.
+        Returns:
+            (should_send, target_is_even)
+            - (True, True): Sende auf Even
+            - (True, False): Sende auf Odd
+            - (True, None): Normaler Betrieb (OMNI deaktiviert)
+            - (False, None): RX-Slot, nicht senden
         """
         if not self.active:
-            return True  # Deaktiviert → normaler Betrieb, immer TX
-        return _TX_PATTERN[self._slot_index]
+            return True, None  # Deaktiviert → normaler Betrieb
+
+        if not _TX_PATTERN[self._slot_index]:
+            return False, None  # RX-Slot
+
+        # TX-Slot: Paritaet bestimmen basierend auf Block + Position
+        # Block 1: Even first → Pos 0=Even, Pos 1=Odd
+        # Block 2: Odd first  → Pos 0=Odd,  Pos 1=Even
+        if self.block == 1:
+            target_even = (self._slot_index == 0)  # Pos 0=Even, Pos 1=Odd
+        else:
+            target_even = (self._slot_index == 1)  # Pos 0=Odd, Pos 1=Even
+
+        return True, target_even
 
     def advance(self, qso_active: bool = False) -> None:
         """Nächsten Zyklus voranschreiten.
