@@ -70,15 +70,16 @@ class DebugConsoleWidget(QWidget):
 
         layout.addLayout(toolbar)
 
-        # Text-Anzeige
-        self.text_edit = QTextEdit()
+        # Text-Anzeige (QPlainTextEdit fuer setMaximumBlockCount)
+        from PySide6.QtWidgets import QPlainTextEdit
+        self.text_edit = QPlainTextEdit()
         self.text_edit.setReadOnly(True)
         self.text_edit.setFont(QFont("Menlo", 9))
         self.text_edit.setStyleSheet(
-            "QTextEdit { background: #0a0a14; color: #88AA88; border: 1px solid #222; "
+            "QPlainTextEdit { background: #0a0a14; color: #88AA88; border: 1px solid #222; "
             "border-radius: 3px; }"
         )
-        self.text_edit.setMaximumBlockCount(500)  # Max 500 Zeilen
+        self.text_edit.setMaximumBlockCount(500)
         layout.addWidget(self.text_edit)
 
         # stdout + stderr umleiten
@@ -90,14 +91,10 @@ class DebugConsoleWidget(QWidget):
         sys.stderr = self._stderr_writer
 
     def _append_text(self, text: str):
-        self.text_edit.moveCursor(QTextCursor.MoveOperation.End)
-        self.text_edit.insertPlainText(text + "\n")
-        self.text_edit.moveCursor(QTextCursor.MoveOperation.End)
+        self.text_edit.appendPlainText(text)
 
     def _append_error(self, text: str):
-        self.text_edit.moveCursor(QTextCursor.MoveOperation.End)
-        self.text_edit.insertHtml(f'<span style="color:#FF5555">{text}</span><br>')
-        self.text_edit.moveCursor(QTextCursor.MoveOperation.End)
+        self.text_edit.appendPlainText(f"[ERR] {text}")
 
     def _on_copy(self):
         from PySide6.QtWidgets import QApplication

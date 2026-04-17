@@ -500,6 +500,13 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
             )
             if self.radio.ip:
                 self.radio.set_power(self.settings.get("power_preset", 15))
+            # Debug-Konsole Toggle aus Settings
+            debug_vis = self.settings.get("debug_console_visible", False)
+            self._debug_console.setVisible(debug_vis)
+            if debug_vis:
+                self._main_vsplitter.setSizes([500, 150])
+            else:
+                self._main_vsplitter.setSizes([600, 0])
 
     def _update_statusbar(self):
         freq = self.settings.frequency_mhz
