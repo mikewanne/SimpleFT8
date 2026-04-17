@@ -12,74 +12,17 @@ from PySide6.QtCore import Signal, Qt, QTimer
 from PySide6.QtGui import QFont, QPainter, QColor, QPen
 
 from config.settings import BAND_FREQUENCIES
-
-# ---------------------------------------------------------------------------
-# Konstanten
-# ---------------------------------------------------------------------------
-_BG = "#16192b"
-_TEXT = "#CCC"
-_FONT = "Menlo"
-_SEP_COLOR = "#333"
-_MIN_WIDTH = 320
-
-_LED_GREEN = "#00ee55"
-_LED_BLUE = "#00aaff"
-
-# Diversity Ratio Label Styles
-_DIV_PCT_OFF    = ("background:rgba(255,255,255,0.04);color:#666;border:1px solid #333;"
-                   "border-radius:3px;font-size:10px;font-family:Menlo;font-weight:bold;padding:1px 4px;")
-_DIV_PCT_GREEN  = ("background:rgba(0,180,60,0.22);color:#00ee55;border:1px solid rgba(0,200,80,0.6);"
-                   "border-radius:3px;font-size:10px;font-family:Menlo;font-weight:bold;padding:1px 4px;")
-_DIV_PCT_RED    = ("background:rgba(200,50,50,0.22);color:#FF5555;border:1px solid rgba(220,60,60,0.6);"
-                   "border-radius:3px;font-size:10px;font-family:Menlo;font-weight:bold;padding:1px 4px;")
-_DIV_PCT_TEAL   = ("background:rgba(0,170,200,0.18);color:#00CCFF;border:1px solid rgba(0,180,210,0.5);"
-                   "border-radius:3px;font-size:10px;font-family:Menlo;font-weight:bold;padding:1px 4px;")
-_DIV_PCT_YELLOW = ("background:rgba(200,170,0,0.18);color:#FFCC00;border:1px solid rgba(210,180,0,0.5);"
-                   "border-radius:3px;font-size:10px;font-family:Menlo;font-weight:bold;padding:1px 4px;")
-
-# ---------------------------------------------------------------------------
-# Glossy 3D Card Styles (DeepSeek-Design)
-# ---------------------------------------------------------------------------
-_BTN_BASE = """
-    QPushButton {
-        background-color: rgba(255,255,255,0.06);
-        color: #BBB;
-        border: 1px solid rgba(255,255,255,0.15);
-        border-radius: 4px;
-        font-family: Menlo;
-        font-size: 11px;
-        font-weight: bold;
-        padding: 3px 8px;
-        min-height: 22px;
-    }
-    QPushButton:checked {
-        background-color: #0066AA;
-        color: white;
-        border-color: #00AAFF;
-    }
-    QPushButton:hover {
-        background-color: rgba(255,255,255,0.12);
-    }
-"""
-
-def _card_ss(accent: str) -> str:
-    """Einheitlicher Karten-Stil: dunkler Rahmen + farbige Top-Akzent-Linie."""
-    return f"""
-QFrame#card {{
-    background-color: #111111;
-    border: 1px solid #222222;
-    border-top: 3px solid {accent};
-    border-radius: 6px;
-}}
-""" + _BTN_BASE
-
-_CARD_SS_BLUE   = _card_ss("#4477cc")
-_CARD_SS_GREEN  = _card_ss("#2a8c4a")
-_CARD_SS_TEAL   = _card_ss("#2a8c8c")
-_CARD_SS_ORANGE = _card_ss("#8c5a2a")
-
-# Legacy alias
-_CARD_SS = _CARD_SS_BLUE
+from ui.styles import (
+    BG as _BG, TEXT as _TEXT, FONT as _FONT, SEP_COLOR as _SEP_COLOR,
+    MIN_WIDTH as _MIN_WIDTH, LED_GREEN as _LED_GREEN, LED_BLUE as _LED_BLUE,
+    DIV_PCT_OFF as _DIV_PCT_OFF, DIV_PCT_GREEN as _DIV_PCT_GREEN,
+    DIV_PCT_RED as _DIV_PCT_RED, DIV_PCT_TEAL as _DIV_PCT_TEAL,
+    DIV_PCT_YELLOW as _DIV_PCT_YELLOW,
+    BTN_BASE as _BTN_BASE,
+    CARD_BLUE as _CARD_SS_BLUE, CARD_GREEN as _CARD_SS_GREEN,
+    CARD_TEAL as _CARD_SS_TEAL, CARD_ORANGE as _CARD_SS_ORANGE,
+    CARD_DEFAULT as _CARD_SS,
+)
 
 
 class FrequencyHistogramWidget(QWidget):
