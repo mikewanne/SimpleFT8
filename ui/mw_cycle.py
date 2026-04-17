@@ -155,11 +155,12 @@ class CycleMixin:
             if self._normal_stations:
                 avg_snr = round(sum(m.snr for m in self._normal_stations.values()) / len(self._normal_stations))
                 self.control_panel.update_snr(avg_snr)
-            # Histogramm live aktualisieren (auch im Normal-Modus)
+            # Histogramm + vorgeschlagene TX-Freq live aktualisieren
             if messages:
                 for m in messages:
                     if hasattr(m, 'freq_hz') and m.freq_hz:
                         self._diversity_ctrl.record_freq(m.freq_hz)
+                self._diversity_ctrl.update_proposed_freq()
                 self.control_panel.update_freq_histogram(
                     self._diversity_ctrl.get_histogram_data())
 
