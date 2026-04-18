@@ -153,6 +153,9 @@ class CycleMixin:
                 print(f"[Diversity] {total} St. | A1>A2: {ant1_wins} | "
                       f"A2>A1: {ant2_wins} ({pct}%) | "
                       f"Nur A1: {only_a1} | Nur A2: {only_a2}")
+                # Antenna Preference Store aktualisieren (DL2YMR Konzept)
+                if hasattr(self, '_antenna_prefs'):
+                    self._antenna_prefs.update_from_stations(self._diversity_stations)
                 self.control_panel.update_diversity_counts(
                     len(a1_msgs), len(a2_msgs), a1_avg, a2_avg,
                     scoring_mode=self._diversity_ctrl.scoring_mode,
@@ -316,7 +319,27 @@ class CycleMixin:
                             scoring_mode=self._diversity_ctrl.scoring_mode)
                         print("[Diversity] Automatische Neueinmessung gestartet")
 
-                self._diversity_current_ant = self._diversity_ctrl.choose()
+                # Smart Antenna: waehrend QSO auf beste Antenne forcieren (DL2YMR)
+                from core.qso_state import QSOState
+                _in_qso = self.qso_sm.state not in (
+                    QSOState.IDLE, QSOState.TIMEOUT,
+                    QSOState.CQ_CALLING, QSOState.CQ_WAIT,
+                )
+                pref_ant = None
+                if _in_qso and self.qso_sm.qso.their_call and hasattr(self, '_antenna_prefs'):
+                    pref_ant = self._antenna_prefs.get(self.qso_sm.qso.their_call)
+
+                if pref_ant:
+                    self._diversity_current_ant = pref_ant
+                    if not getattr(self, '_pref_logged', False):
+                        print(f"[Antenna] QSO mit {self.qso_sm.qso.their_call} "
+                              f"→ Praeferenz {pref_ant} (besserer SNR)")
+                        self._pref_logged = True
+                else:
+                    self._diversity_current_ant = self._diversity_ctrl.choose()
+                    if getattr(self, '_pref_logged', False):
+                        print(f"[Antenna] QSO beendet → zurueck zu Diversity-Rhythmus")
+                        self._pref_logged = False
 
                 if self._diversity_current_ant == "A1":
                     gain = getattr(self, '_diversity_ant1_gain',
