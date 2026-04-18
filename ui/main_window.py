@@ -71,9 +71,11 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self.decoder._my_call = settings.callsign
         self.adif = AdifWriter()
 
-        # Stations-Statistik Logger
+        # Stations-Statistik Logger + Warmup
+        import time as _time
         from core.station_stats import StationStatsLogger
         self._stats_logger = StationStatsLogger()
+        self._stats_warmup_until = _time.time() + 60  # 60s Warmup bei App-Start
 
         # QSO-Verzeichnis (Worked-Before)
         from log.qso_log import QSOLog
@@ -553,10 +555,14 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
                 ap_str = f"  |  AP: {r}/{a}"
             else:
                 ap_str = "  |  AP: aktiv"
+        # CQ-Freq Status
+        cq_hz = getattr(self._diversity_ctrl, 'cq_freq_hz', None)
+        recalc = getattr(self._diversity_ctrl, '_recalc_count', 0)
+        freq_str = f"  |  Freq: #{recalc} {cq_hz}Hz" if cq_hz else ""
         msg = (f"{self.settings.callsign}  |  {self.settings.locator}  |  "
                f"{self.settings.mode} {self.settings.band}  |  "
                f"{freq:.3f} MHz  |  Filter: {filter_str} Hz  |  "
-               f"{mode_str}  |  {dt_text}{omni_str}{ap_str}")
+               f"{mode_str}  |  {dt_text}{omni_str}{freq_str}{ap_str}")
         self.statusBar().showMessage(msg)
 
     # ── Hilfsfunktionen ──────────────────────────────────────────

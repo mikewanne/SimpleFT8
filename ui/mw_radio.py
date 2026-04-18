@@ -243,6 +243,10 @@ class RadioMixin:
         self.qso_panel.log_view.clear()
         self.qso_panel.status_label.setText("Bandwechsel")
 
+        # Warmup: 60s keine Stats nach Bandwechsel
+        import time as _time
+        self._stats_warmup_until = _time.time() + 60
+
         # Empfangsliste komplett leeren bei Bandwechsel
         self.rx_panel.table.setRowCount(0)
         self._diversity_stations = {}
@@ -293,6 +297,10 @@ class RadioMixin:
             return
 
         old_mode = self._rx_mode
+
+        # Warmup: 60s keine Stats nach Moduswechsel
+        import time as _time
+        self._stats_warmup_until = _time.time() + 60
 
         # Alten Modus sauber beenden + Liste immer leeren bei Wechsel
         if old_mode == "diversity":
