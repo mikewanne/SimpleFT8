@@ -6,7 +6,7 @@
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![Platform: macOS](https://img.shields.io/badge/platform-macOS-lightgrey.svg)](https://www.apple.com/macos/)
 [![Ham Radio](https://img.shields.io/badge/ham--radio-FT8%2FFT4%2FFT2-orange.svg)](https://www.physics.princeton.edu/pulsar/k1jt/wsjtx.html)
-[![Tests](https://img.shields.io/badge/tests-37%20passed-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-132%20passed-brightgreen.svg)]()
 
 > **No more manual ALC babysitting, no missed replies, no guessing the best antenna or frequency.**
 > SimpleFT8 automates your entire FT8/FT4/FT2 workflow with closed-loop power control, dual-mode diversity scoring, automatic CQ frequency optimization, and intelligent caller queuing.
@@ -95,7 +95,11 @@ Controlled test on 40m, same hardware (FLEX-8400M), 2 minutes apart:
 - ✅ **QSO State Machine**: Hunt + CQ mode, retry logic, ADIF 3.1.7 logging
 - ✅ **Integrated Logbook**: Search, DXCC counter, QSO detail overlay, delete
 - ✅ **Help Dialog**: Built-in feature docs (DE + EN) via ? button in status bar
-- ✅ **37 Unit Tests**: QSO flow, diversity, DT correction, propagation, syntax checks
+- ✅ **132 Unit Tests**: QSO, diversity patterns, DT, propagation, OMNI-TX, ADIF, histograms
+- ✅ **Station Statistics**: Per-cycle logging with hourly aggregation (Normal + Diversity). *Concept: DL2MR*
+- ✅ **Ant2 Superiority Counter**: Quantifies diversity gain (A2 > A1 frequency)
+- ✅ **Debug Console**: Ctrl+D, live filter, font 11pt, Copy/Clear buttons
+- ✅ **OMNI-TX**: Even/Odd CQ rotation for 100% operator reach (hidden Easter egg)
 
 **In Field Test:**
 - ⚠️ **AP-Lite v2.2**: Weak QSO rescue via coherent addition. Threshold 0.75 calibration in progress.
@@ -153,7 +157,8 @@ SimpleFT8/
 │   ├── help_dialog.py            # Feature docs viewer (DE/EN)
 │   └── ...                       # Control panel, RX panel, QSO panel
 ├── docs/explained/               # 10 feature docs (5 × DE + EN)
-└── tests/test_modules.py         # 37 unit tests
+├── tests/test_modules.py         # 116 unit tests
+└── tests/test_patterns.py        # 16 pattern tests (diversity + OMNI-TX)
 ```
 
 ### Radio Compatibility
@@ -232,7 +237,11 @@ MIT License (c) 2026 DA1MHH (Mike Hammerer)
 - ✅ **QSO-Zustandsmaschine**: Hunt + CQ, Retry, ADIF 3.1.7
 - ✅ **Logbuch**: Suche, DXCC, Detail-Overlay, Loeschen
 - ✅ **Hilfe-Dialog**: Feature-Doku (DE + EN) via ? Button in Statusleiste
-- ✅ **37 Unit Tests**: QSO-Ablauf, Diversity, DT, Propagation
+- ✅ **132 Unit Tests**: QSO, Diversity-Patterns, DT, Propagation, OMNI-TX, ADIF, Histogramme
+- ✅ **Stations-Statistik**: Pro-Zyklus Logging mit Stundenaggregation (Normal + Diversity). *Konzept: DL2MR*
+- ✅ **Ant2 Superiority Counter**: Quantifiziert Diversity-Gewinn (Ant2 > Ant1)
+- ✅ **Debug-Konsole**: Ctrl+D, Live-Filter, Schrift 11pt, Copy/Clear
+- ✅ **OMNI-TX**: Even/Odd CQ-Rotation fuer 100% Reichweite (verstecktes Easter Egg)
 
 **Im Feldtest:**
 - ⚠️ **AP-Lite v2.2**: Schwache QSOs retten via kohaerenter Addition. Schwellwert-Kalibrierung laeuft.
@@ -307,6 +316,7 @@ MIT License (c) 2026 DA1MHH (Mike Hammerer)
 - [Decodium / IU8LMC](https://www.ft2.it/) — FT2 protocol reference
 - [FlexRadio Systems](https://www.flexradio.com/) — SmartSDR TCP API
 - [WSJT-X](https://wsjt.sourceforge.io/) — Pioneering digital weak-signal modes
+- DL2MR — Station Statistics concept
 
 ---
 
