@@ -40,6 +40,8 @@ DEFAULTS = {
     "diversity_operate_cycles": 80,  # 80/160/240 — Betriebszyklen bis Neueinmessung
     "radio_type": "flex",            # "flex" = FlexRadio SmartSDR, "ic7300" = CI-V (zukünftig)
     "language": "de",                # "de" = Deutsch, "en" = English (Hilfe-Texte + Docs)
+    "stats_enabled": True,           # Stations-Statistik pro Zyklus loggen
+    "debug_console_visible": False,  # Debug-Konsole ein/ausblenden
 }
 
 
