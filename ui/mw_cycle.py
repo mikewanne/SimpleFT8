@@ -270,6 +270,8 @@ class CycleMixin:
 
     @Slot(int, bool)
     def _on_cycle_start(self, cycle_num: int, is_even: bool):
+        from core.qso_state import QSOState  # Einmal am Anfang importieren
+
         # ── Anzeige zurücksetzen wenn kein TX ──────────────────
         if not self.encoder.is_transmitting:
             self.control_panel.update_tx_peak(0.0)
@@ -320,7 +322,6 @@ class CycleMixin:
                         print("[Diversity] Automatische Neueinmessung gestartet")
 
                 # Smart Antenna: waehrend QSO auf beste Antenne forcieren (DL2YMR)
-                from core.qso_state import QSOState
                 _in_qso = self.qso_sm.state not in (
                     QSOState.IDLE, QSOState.TIMEOUT,
                     QSOState.CQ_CALLING, QSOState.CQ_WAIT,
