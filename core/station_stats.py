@@ -3,9 +3,9 @@
 Loggt pro FT8/FT4-Zyklus:
 - Anzahl empfangener Stationen
 - Durchschnitts-SNR
-- Band, Modus, RX-Modus
+- Band, Protokoll (FT8/FT4), RX-Modus
 
-Verzeichnis: ~/.simpleft8/statistics/<RX-Modus>/<Band>/
+Verzeichnis: Statistics/<RX-Modus>/<Band>/<Protokoll>/
 Dateien: <Datum>_<Stunde>.md (stuendlich, mit Zusammenfassung)
 Threading: async via Queue + Daemon-Thread (blockiert nie den Decoder)
 """
@@ -17,13 +17,45 @@ import time
 from pathlib import Path
 
 
+def get_active_reception_mode(rx_mode: str, scoring_mode: str = "normal") -> str:
+    """Aktiven Empfangsmodus als String fuer Verzeichnisstruktur.
+
+    Returns: "Normal", "Diversity_Normal", oder "Diversity_Dx"
+    """
+    if rx_mode == "diversity":
+        return f"Diversity_{scoring_mode.capitalize()}"
+    return "Normal"
+
+
+def get_active_protocol(ft_mode: str) -> str | None:
+    """Aktives Protokoll validieren. Gibt None zurueck bei FT2 (nicht unterstuetzt).
+
+    Returns: "FT8", "FT4", oder None
+    """
+    if ft_mode in ("FT8", "FT4"):
+        return ft_mode
+    return None
+
+
+def ensure_statistics_directory(base_dir: Path, rx_mode: str, band: str, protocol: str) -> Path:
+    """Statistik-Verzeichnis erstellen falls noetig. Gibt den Pfad zurueck.
+
+    Struktur: base_dir/<rx_mode>/<band>/<protocol>/
+    """
+    target = base_dir / rx_mode / band / protocol
+    target.mkdir(parents=True, exist_ok=True)
+    return target
+
+
 class StationStatsLogger:
     """Asynchroner Statistik-Logger fuer Empfangszyklen."""
 
     def __init__(self, base_dir: str | Path | None = None):
         if base_dir is None:
-            base_dir = Path.home() / ".simpleft8" / "statistics"
+            # Im Projektverzeichnis (sichtbar fuer den User)
+            base_dir = Path(__file__).parent.parent / "statistics"
         self._base_dir = Path(base_dir)
+        self._dir_cache: set = set()  # Gecachte existierende Verzeichnisse
         self._queue = queue.Queue(maxsize=1000)
         self._current_file = None
         self._current_hour = None
@@ -79,8 +111,13 @@ class StationStatsLogger:
 
     def _write_entry(self, entry: dict):
         """Einen Eintrag in die passende Stunden-Datei schreiben."""
-        target_dir = self._base_dir / entry["rx_mode"] / entry["band"]
-        target_dir.mkdir(parents=True, exist_ok=True)
+        dir_key = f"{entry['rx_mode']}/{entry['band']}/{entry['ft_mode']}"
+        if dir_key not in self._dir_cache:
+            target_dir = ensure_statistics_directory(
+                self._base_dir, entry["rx_mode"], entry["band"], entry["ft_mode"])
+            self._dir_cache.add(dir_key)
+        else:
+            target_dir = self._base_dir / entry["rx_mode"] / entry["band"] / entry["ft_mode"]
         target_path = target_dir / f"{entry['hour']}.md"
 
         # Stundenwechsel? Alte Datei abschliessen

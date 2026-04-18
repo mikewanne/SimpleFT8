@@ -334,18 +334,17 @@ class CycleMixin:
             return
         if not self.settings.get("stats_enabled", True):
             return  # Deaktiviert → null Overhead
-        if self.settings.mode not in ("FT8", "FT4"):
-            return
-        if self._rx_mode == "diversity":
-            scoring = getattr(self._diversity_ctrl, 'scoring_mode', 'normal')
-            rx_mode_str = f"Diversity_{scoring.capitalize()}"
-        else:
-            rx_mode_str = "Normal"
+        from core.station_stats import get_active_protocol, get_active_reception_mode
+        protocol = get_active_protocol(self.settings.mode)
+        if protocol is None:
+            return  # FT2 → nicht loggen
+        scoring = getattr(self._diversity_ctrl, 'scoring_mode', 'normal')
+        rx_mode_str = get_active_reception_mode(self._rx_mode, scoring)
         self._stats_logger.log_cycle(
             station_count=station_count,
             avg_snr=avg_snr,
             band=self.settings.band,
-            ft_mode=self.settings.mode,
+            ft_mode=protocol,
             rx_mode=rx_mode_str,
         )
 
