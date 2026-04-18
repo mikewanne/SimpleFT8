@@ -65,6 +65,7 @@ class DiversityController:
         self._cq_freq_hz: Optional[int] = None  # Letzte berechnete CQ-Frequenz
         self._cycles_since_recalc = 0  # Zaehler fuer Neuberechnung
         self._recalc_interval = 20     # Alle 20 Zyklen neu berechnen (FT8 = 5 Min)
+        self._recalc_count = 0         # Zaehler: wie oft wurde CQ-Freq neu berechnet
 
     def load_preset(self, preset: dict):
         """Gespeichertes Preset laden — sofort Betrieb ohne Messung."""
@@ -176,20 +177,28 @@ class DiversityController:
         """Letzte berechnete CQ-Frequenz (Hz), oder None."""
         return self._cq_freq_hz
 
-    def update_proposed_freq(self):
+    def update_proposed_freq(self, qso_active: bool = False):
         """Vorgeschlagene TX-Frequenz aktualisieren — adaptiv mit Kollisionserkennung.
 
         Strategie "Stable unless compelled":
-        1. Kollision: aktuelle Freq belegt → sofort wechseln
-        2. Zeit-Fallback: alle 10 Zyklen neu berechnen
-        3. Minimum Dwell: mind. 3 Zyklen auf einer Freq bleiben
+        1. QSO-Schutz: kein Wechsel waehrend aktivem QSO
+        2. Kollision: aktuelle Freq belegt → sofort wechseln
+        3. Zeit-Fallback: alle 10 Zyklen neu berechnen
+        4. Minimum Dwell: mind. 3 Zyklen auf einer Freq bleiben
         """
         self._cycles_since_recalc += 1
+
+        # QSO-Schutz: kein Frequenzwechsel waehrend aktivem QSO
+        if qso_active and self._cq_freq_hz is not None:
+            return
 
         # Erste Berechnung
         if self._cq_freq_hz is None:
             self.get_free_cq_freq()
             self._cycles_since_recalc = 0
+            self._recalc_count += 1
+            if self._cq_freq_hz:
+                print(f"[CQ-Freq] #{self._recalc_count} Erste Berechnung: →{self._cq_freq_hz}Hz")
             return
 
         # Kollisionserkennung: ist unsere aktuelle Freq jetzt belegt?
@@ -202,15 +211,24 @@ class DiversityController:
                 old_freq = self._cq_freq_hz
                 self.get_free_cq_freq()
                 self._cycles_since_recalc = 0
+                self._recalc_count += 1
                 if self._cq_freq_hz != old_freq:
-                    print(f"[CQ-Freq] Kollision! {old_freq}Hz belegt ({neighbors} Stationen) → "
-                          f"wechsle auf {self._cq_freq_hz}Hz")
+                    print(f"[CQ-Freq] #{self._recalc_count} Kollision! "
+                          f"{old_freq}Hz→{self._cq_freq_hz}Hz ({neighbors} Nachbarn)")
                 return
 
         # Zeit-Fallback: alle 10 Zyklen (~2.5 Min)
         if self._cycles_since_recalc >= 10:
+            old_freq = self._cq_freq_hz
             self.get_free_cq_freq()
             self._cycles_since_recalc = 0
+            self._recalc_count += 1
+            if self._cq_freq_hz != old_freq:
+                print(f"[CQ-Freq] #{self._recalc_count} Timer: "
+                      f"{old_freq}Hz→{self._cq_freq_hz}Hz (10 Zyklen)")
+            else:
+                print(f"[CQ-Freq] #{self._recalc_count} Timer: "
+                      f"{self._cq_freq_hz}Hz bestaetigt (10 Zyklen)")
 
     def get_histogram_data(self) -> dict:
         """Histogramm-Daten für Visualisierung.
