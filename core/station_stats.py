@@ -18,13 +18,15 @@ from pathlib import Path
 
 
 def get_active_reception_mode(rx_mode: str, scoring_mode: str = "normal") -> str | None:
-    """Aktiven Empfangsmodus pruefen. Nur Normal-Modus wird geloggt.
+    """Aktiven Empfangsmodus als Verzeichnisname.
 
-    Returns: "Normal" oder None (Diversity → kein Logging)
+    Returns: "Normal", "Diversity_Normal", "Diversity_Dx", oder None (dx_tuning)
     """
     if rx_mode == "normal":
         return "Normal"
-    return None  # Diversity → skip
+    if rx_mode == "diversity":
+        return f"Diversity_{scoring_mode.capitalize()}"
+    return None  # dx_tuning → kein Logging
 
 
 def get_active_protocol(ft_mode: str) -> str | None:

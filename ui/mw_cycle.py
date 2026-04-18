@@ -141,7 +141,8 @@ class CycleMixin:
                 len(self._diversity_stations)
             )
 
-            # Statistik: kein Logging im Diversity-Modus (verfaelscht Baseline)
+            # Statistik loggen (pausiert automatisch bei Tuning/Einmessung)
+            self._log_stats(len(self._diversity_stations), messages)
 
         elif self._rx_mode == "normal" and messages:
             # Normal: gemeinsame Akkumulation ohne Antennen-Info
@@ -327,25 +328,42 @@ class CycleMixin:
             self.control_panel.update_freq_histogram(
                 self._diversity_ctrl.get_histogram_data())
 
+    def _is_antenna_tuning_active(self) -> bool:
+        """Prueft ob Antennen-Tuning/Einmessung aktiv ist."""
+        if self._rx_mode == "dx_tuning":
+            return True
+        if getattr(self, '_diversity_measuring', False):
+            return True
+        # Diversity Messphase (nicht Betrieb)
+        if (self._rx_mode == "diversity"
+                and hasattr(self, '_diversity_ctrl')
+                and self._diversity_ctrl.phase == "measure"):
+            return True
+        return False
+
     def _log_stats(self, station_count: int, messages, avg_snr: float = -30):
-        """Empfangsstatistik loggen — NUR im Normal-Modus (kein Diversity)."""
+        """Empfangsstatistik loggen — alle Modi, pausiert bei Tuning."""
         if not hasattr(self, '_stats_logger') or self._stats_logger is None:
             return
         if not self.settings.get("stats_enabled", True):
             return
-        # NUR Normal-Modus — Diversity verfaelscht die Baseline
-        if self._rx_mode != "normal":
+        # Tuning aktiv → pausieren (keine verfaelschten Daten)
+        if self._is_antenna_tuning_active():
             return
-        from core.station_stats import get_active_protocol
+        from core.station_stats import get_active_protocol, get_active_reception_mode
         protocol = get_active_protocol(self.settings.mode)
         if protocol is None:
+            return
+        scoring = getattr(self._diversity_ctrl, 'scoring_mode', 'normal')
+        rx_mode_str = get_active_reception_mode(self._rx_mode, scoring)
+        if rx_mode_str is None:
             return
         self._stats_logger.log_cycle(
             station_count=station_count,
             avg_snr=avg_snr,
             band=self.settings.band,
             ft_mode=protocol,
-            rx_mode="Normal",
+            rx_mode=rx_mode_str,
         )
 
     def on_message_decoded(self, msg: FT8Message):
