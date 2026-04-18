@@ -248,8 +248,10 @@ class RadioMixin:
         self._diversity_stations = {}
         self._normal_stations = {}
         self.control_panel.update_decode_count(0)
-        # Diversity Controller bei Bandwechsel: Neueinmessung
+        # Diversity Controller bei Bandwechsel: Neueinmessung + Histogram leeren
         self._diversity_ctrl.on_band_change()
+        self.control_panel.update_freq_histogram(
+            self._diversity_ctrl.get_histogram_data())
         # Auto-Hunt: Cooldowns loeschen bei Bandwechsel
         if self._auto_hunt.active:
             self._auto_hunt.set_band(band)
