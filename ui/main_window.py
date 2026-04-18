@@ -74,8 +74,10 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         # Stations-Statistik Logger + Warmup
         import time as _time
         from core.station_stats import StationStatsLogger
+        from core.antenna_pref import AntennaPreferenceStore
         self._stats_logger = StationStatsLogger()
-        self._stats_warmup_until = _time.time() + 60  # 60s Warmup bei App-Start
+        self._stats_warmup_until = _time.time() + 60
+        self._antenna_prefs = AntennaPreferenceStore()
 
         # QSO-Verzeichnis (Worked-Before)
         from log.qso_log import QSOLog
@@ -555,10 +557,19 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
                 ap_str = f"  |  AP: {r}/{a}"
             else:
                 ap_str = "  |  AP: aktiv"
-        # CQ-Freq Status
+        # CQ-Freq Status + Antenna Preference
         cq_hz = getattr(self._diversity_ctrl, 'cq_freq_hz', None)
         recalc = getattr(self._diversity_ctrl, '_recalc_count', 0)
         freq_str = f"  |  Freq: #{recalc} {cq_hz}Hz" if cq_hz else ""
+        # Smart Antenna waehrend QSO
+        if (hasattr(self, '_antenna_prefs') and self.qso_sm.qso.their_call
+                and self._rx_mode == "diversity"):
+            pref = self._antenna_prefs.get(self.qso_sm.qso.their_call)
+            from core.qso_state import QSOState
+            in_qso = self.qso_sm.state not in (
+                QSOState.IDLE, QSOState.TIMEOUT, QSOState.CQ_CALLING, QSOState.CQ_WAIT)
+            if pref and in_qso:
+                freq_str += f"  |  RX: {pref} (Pref)"
         msg = (f"{self.settings.callsign}  |  {self.settings.locator}  |  "
                f"{self.settings.mode} {self.settings.band}  |  "
                f"{freq:.3f} MHz  |  Filter: {filter_str} Hz  |  "
