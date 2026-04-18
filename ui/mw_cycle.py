@@ -141,6 +141,9 @@ class CycleMixin:
                 len(self._diversity_stations)
             )
 
+            # Statistik loggen (Diversity)
+            self._log_stats(len(self._diversity_stations), messages)
+
         elif self._rx_mode == "normal" and messages:
             # Normal: gemeinsame Akkumulation ohne Antennen-Info
             changed = accumulate_stations(
@@ -152,17 +155,15 @@ class CycleMixin:
                     self.rx_panel.add_message(m)
                 self.rx_panel.reapply_sort()
             self.control_panel.update_decode_count(len(self._normal_stations))
+            avg_snr = -30
             if self._normal_stations:
                 avg_snr = round(sum(m.snr for m in self._normal_stations.values()) / len(self._normal_stations))
                 self.control_panel.update_snr(avg_snr)
-            # Histogramm + vorgeschlagene TX-Freq live aktualisieren
-            if messages:
-                for m in messages:
-                    if hasattr(m, 'freq_hz') and m.freq_hz:
-                        self._diversity_ctrl.record_freq(m.freq_hz)
-                self._diversity_ctrl.update_proposed_freq()
-                self.control_panel.update_freq_histogram(
-                    self._diversity_ctrl.get_histogram_data())
+            # Histogramm aktualisieren
+            self._update_histogram(messages)
+
+            # Statistik loggen (Normal)
+            self._log_stats(len(self._normal_stations), messages, avg_snr=avg_snr)
 
         elif messages:
             # DX Tuning: nur aktueller Zyklus
@@ -316,6 +317,35 @@ class CycleMixin:
                 self.radio.set_rx_antenna(cmd)
                 self.radio.set_rfgain(g)
             threading.Thread(target=_switch, daemon=True).start()
+
+    def _update_histogram(self, messages):
+        """Histogram + vorgeschlagene TX-Freq aktualisieren (Normal + Diversity)."""
+        if messages:
+            for m in messages:
+                if hasattr(m, 'freq_hz') and m.freq_hz:
+                    self._diversity_ctrl.record_freq(m.freq_hz)
+            self._diversity_ctrl.update_proposed_freq()
+            self.control_panel.update_freq_histogram(
+                self._diversity_ctrl.get_histogram_data())
+
+    def _log_stats(self, station_count: int, messages, avg_snr: float = -30):
+        """Empfangsstatistik loggen (async, nur FT8/FT4)."""
+        if not hasattr(self, '_stats_logger') or self._stats_logger is None:
+            return
+        if self.settings.mode not in ("FT8", "FT4"):
+            return
+        if self._rx_mode == "diversity":
+            scoring = getattr(self._diversity_ctrl, 'scoring_mode', 'normal')
+            rx_mode_str = f"Diversity_{scoring.capitalize()}"
+        else:
+            rx_mode_str = "Normal"
+        self._stats_logger.log_cycle(
+            station_count=station_count,
+            avg_snr=avg_snr,
+            band=self.settings.band,
+            ft_mode=self.settings.mode,
+            rx_mode=rx_mode_str,
+        )
 
     def on_message_decoded(self, msg: FT8Message):
         """Vom Decoder — NUR fuer QSO-Logik, NICHT fuer Tabelle!"""

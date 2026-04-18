@@ -71,6 +71,10 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self.decoder._my_call = settings.callsign
         self.adif = AdifWriter()
 
+        # Stations-Statistik Logger
+        from core.station_stats import StationStatsLogger
+        self._stats_logger = StationStatsLogger()
+
         # QSO-Verzeichnis (Worked-Before)
         from log.qso_log import QSOLog
         from pathlib import Path
