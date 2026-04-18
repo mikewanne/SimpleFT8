@@ -329,9 +329,11 @@ class CycleMixin:
                 self._diversity_ctrl.get_histogram_data())
 
     def _log_stats(self, station_count: int, messages, avg_snr: float = -30):
-        """Empfangsstatistik loggen (async, nur FT8/FT4)."""
+        """Empfangsstatistik loggen (async, nur FT8/FT4, nur wenn aktiviert)."""
         if not hasattr(self, '_stats_logger') or self._stats_logger is None:
             return
+        if not self.settings.get("stats_enabled", True):
+            return  # Deaktiviert → null Overhead
         if self.settings.mode not in ("FT8", "FT4"):
             return
         if self._rx_mode == "diversity":
