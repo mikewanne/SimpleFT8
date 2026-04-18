@@ -371,10 +371,14 @@ class CycleMixin:
 
     def _log_stats(self, station_count: int, messages, avg_snr: float = -30,
                    ant2_wins: int = 0):
-        """Empfangsstatistik loggen — alle Modi, pausiert bei Tuning."""
+        """Empfangsstatistik loggen — alle Modi, pausiert bei Tuning + Warmup."""
         if not hasattr(self, '_stats_logger') or self._stats_logger is None:
             return
         if not self.settings.get("stats_enabled", True):
+            return
+        # Warmup: 60s nach Band-/Moduswechsel keine Stats (faire Baseline)
+        import time as _time
+        if hasattr(self, '_stats_warmup_until') and _time.time() < self._stats_warmup_until:
             return
         # Tuning aktiv → pausieren (keine verfaelschten Daten)
         if self._is_antenna_tuning_active():
