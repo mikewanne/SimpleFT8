@@ -338,18 +338,11 @@ class _AntenneCard(QFrame):
             ratio_row.addWidget(lbl)
             self._a1_pct[pct] = lbl
         ratio_row.addSpacing(6)
+        # Stations-Zaehler entfernt — Info steht im Debug-Log + unteren Counter
         self._a1_count_label = QLabel("")
-        self._a1_count_label.setStyleSheet(
-            f"color:{_LED_GREEN};font-size:9px;font-family:{_FONT};font-weight:bold;"
-        )
-        self._a1_count_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        ratio_row.addWidget(self._a1_count_label)
+        self._a1_count_label.setVisible(False)
         self._a2_count_label = QLabel("")
-        self._a2_count_label.setStyleSheet(
-            f"color:{_LED_BLUE};font-size:9px;font-family:{_FONT};font-weight:bold;"
-        )
-        self._a2_count_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-        ratio_row.addWidget(self._a2_count_label)
+        self._a2_count_label.setVisible(False)
         ratio_row.addSpacing(6)
         self._a2_pct = {}
         for pct in ("30%", "50%", "70%"):
