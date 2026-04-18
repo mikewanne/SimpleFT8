@@ -4,7 +4,7 @@
 
 SimpleFT8 loggt pro FT8/FT4-Zyklus die Anzahl empfangener Stationen, Durchschnitts-SNR und Band. Die Daten werden als Markdown-Dateien gespeichert und koennen fuer Langzeitanalysen genutzt werden.
 
-*Statistik-Konzept: DL2MR*
+*Statistik-Konzept: DL2YMR*
 
 ## Verzeichnisstruktur
 

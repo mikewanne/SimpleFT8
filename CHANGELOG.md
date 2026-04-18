@@ -12,7 +12,7 @@
 - Async via Queue + Daemon-Thread (null Decoder-Impact)
 - Auto-Pause bei Antennen-Tuning/Einmessung
 - Settings-Toggle: "Statistik-Erfassung aktivieren"
-- *Statistik-Konzept: DL2MR*
+- *Statistik-Konzept: DL2YMR*
 
 **Ant2 Superiority Counter**
 - Misst wie oft Ant2 strikt besseren SNR hat als Ant1

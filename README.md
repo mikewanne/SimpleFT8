@@ -96,7 +96,7 @@ Controlled test on 40m, same hardware (FLEX-8400M), 2 minutes apart:
 - ✅ **Integrated Logbook**: Search, DXCC counter, QSO detail overlay, delete
 - ✅ **Help Dialog**: Built-in feature docs (DE + EN) via ? button in status bar
 - ✅ **132 Unit Tests**: QSO, diversity patterns, DT, propagation, OMNI-TX, ADIF, histograms
-- ✅ **Station Statistics**: Per-cycle logging with hourly aggregation (Normal + Diversity). *Concept: DL2MR*
+- ✅ **Station Statistics**: Per-cycle logging with hourly aggregation (Normal + Diversity). *Concept: DL2YMR*
 - ✅ **Ant2 Superiority Counter**: Quantifies diversity gain (A2 > A1 frequency)
 - ✅ **Debug Console**: Ctrl+D, live filter, font 11pt, Copy/Clear buttons
 - ✅ **OMNI-TX**: Even/Odd CQ rotation for 100% operator reach (hidden Easter egg)
@@ -238,7 +238,7 @@ MIT License (c) 2026 DA1MHH (Mike Hammerer)
 - ✅ **Logbuch**: Suche, DXCC, Detail-Overlay, Loeschen
 - ✅ **Hilfe-Dialog**: Feature-Doku (DE + EN) via ? Button in Statusleiste
 - ✅ **132 Unit Tests**: QSO, Diversity-Patterns, DT, Propagation, OMNI-TX, ADIF, Histogramme
-- ✅ **Stations-Statistik**: Pro-Zyklus Logging mit Stundenaggregation (Normal + Diversity). *Konzept: DL2MR*
+- ✅ **Stations-Statistik**: Pro-Zyklus Logging mit Stundenaggregation (Normal + Diversity). *Konzept: DL2YMR*
 - ✅ **Ant2 Superiority Counter**: Quantifiziert Diversity-Gewinn (Ant2 > Ant1)
 - ✅ **Debug-Konsole**: Ctrl+D, Live-Filter, Schrift 11pt, Copy/Clear
 - ✅ **OMNI-TX**: Even/Odd CQ-Rotation fuer 100% Reichweite (verstecktes Easter Egg)
@@ -316,7 +316,7 @@ MIT License (c) 2026 DA1MHH (Mike Hammerer)
 - [Decodium / IU8LMC](https://www.ft2.it/) — FT2 protocol reference
 - [FlexRadio Systems](https://www.flexradio.com/) — SmartSDR TCP API
 - [WSJT-X](https://wsjt.sourceforge.io/) — Pioneering digital weak-signal modes
-- DL2MR — Station Statistics concept
+- DL2YMR — Station Statistics concept
 
 ---
 
