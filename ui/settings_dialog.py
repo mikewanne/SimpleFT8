@@ -169,10 +169,11 @@ class SettingsDialog(QDialog):
         form3.addRow("Neueinmessung nach:", _row_with_hint(self.diversity_cycles, "diversity_cycles"))
         form3.addRow("Sprache / Language:", self.language_combo)
         from PySide6.QtWidgets import QCheckBox
-        self.stats_cb = QCheckBox("Statistik-Erfassung aktivieren")
+        self.stats_cb = QCheckBox("Statistik-Erfassung aktivieren (nur Normal-Modus)")
         self.stats_cb.setToolTip(
             "Loggt pro Zyklus die Anzahl empfangener Stationen, SNR und Band.\n"
-            "Daten in ~/.simpleft8/statistics/ (Markdown-Dateien).\n"
+            "NUR im Normal-Modus — Diversity wird nicht erfasst (verfaelscht Baseline).\n"
+            "Daten in statistics/Normal/<Band>/<Protokoll>/ (Markdown-Dateien).\n"
             "Deaktiviert = kein Hintergrund-Logging, null Overhead.")
         form3.addRow("", self.stats_cb)
         self.debug_console_cb = QCheckBox("Debug-Konsole anzeigen")

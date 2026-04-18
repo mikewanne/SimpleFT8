@@ -17,14 +17,14 @@ import time
 from pathlib import Path
 
 
-def get_active_reception_mode(rx_mode: str, scoring_mode: str = "normal") -> str:
-    """Aktiven Empfangsmodus als String fuer Verzeichnisstruktur.
+def get_active_reception_mode(rx_mode: str, scoring_mode: str = "normal") -> str | None:
+    """Aktiven Empfangsmodus pruefen. Nur Normal-Modus wird geloggt.
 
-    Returns: "Normal", "Diversity_Normal", oder "Diversity_Dx"
+    Returns: "Normal" oder None (Diversity → kein Logging)
     """
-    if rx_mode == "diversity":
-        return f"Diversity_{scoring_mode.capitalize()}"
-    return "Normal"
+    if rx_mode == "normal":
+        return "Normal"
+    return None  # Diversity → skip
 
 
 def get_active_protocol(ft_mode: str) -> str | None:

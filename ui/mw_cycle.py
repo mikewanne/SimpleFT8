@@ -141,8 +141,7 @@ class CycleMixin:
                 len(self._diversity_stations)
             )
 
-            # Statistik loggen (Diversity)
-            self._log_stats(len(self._diversity_stations), messages)
+            # Statistik: kein Logging im Diversity-Modus (verfaelscht Baseline)
 
         elif self._rx_mode == "normal" and messages:
             # Normal: gemeinsame Akkumulation ohne Antennen-Info
@@ -329,23 +328,24 @@ class CycleMixin:
                 self._diversity_ctrl.get_histogram_data())
 
     def _log_stats(self, station_count: int, messages, avg_snr: float = -30):
-        """Empfangsstatistik loggen (async, nur FT8/FT4, nur wenn aktiviert)."""
+        """Empfangsstatistik loggen — NUR im Normal-Modus (kein Diversity)."""
         if not hasattr(self, '_stats_logger') or self._stats_logger is None:
             return
         if not self.settings.get("stats_enabled", True):
-            return  # Deaktiviert → null Overhead
-        from core.station_stats import get_active_protocol, get_active_reception_mode
+            return
+        # NUR Normal-Modus — Diversity verfaelscht die Baseline
+        if self._rx_mode != "normal":
+            return
+        from core.station_stats import get_active_protocol
         protocol = get_active_protocol(self.settings.mode)
         if protocol is None:
-            return  # FT2 → nicht loggen
-        scoring = getattr(self._diversity_ctrl, 'scoring_mode', 'normal')
-        rx_mode_str = get_active_reception_mode(self._rx_mode, scoring)
+            return
         self._stats_logger.log_cycle(
             station_count=station_count,
             avg_snr=avg_snr,
             band=self.settings.band,
             ft_mode=protocol,
-            rx_mode=rx_mode_str,
+            rx_mode="Normal",
         )
 
     def on_message_decoded(self, msg: FT8Message):
