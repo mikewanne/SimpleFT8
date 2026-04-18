@@ -66,11 +66,13 @@ class StationStatsLogger:
         self._station_total = 0
         self._station_max = 0
         self._station_min = 999
+        self._ant2_wins_total = 0
         self._thread = threading.Thread(target=self._writer_loop, daemon=True)
         self._thread.start()
 
     def log_cycle(self, station_count: int, avg_snr: float,
-                  band: str, ft_mode: str, rx_mode: str):
+                  band: str, ft_mode: str, rx_mode: str,
+                  ant2_wins: int = 0):
         """Einen Zyklus loggen (non-blocking, thread-safe).
 
         Args:
@@ -79,6 +81,7 @@ class StationStatsLogger:
             band: z.B. "20m", "40m"
             ft_mode: "FT8" oder "FT4"
             rx_mode: "Normal", "Diversity_Normal", "Diversity_Dx"
+            ant2_wins: Wie oft Ant2 strikt besser als Ant1 (nur Diversity)
         """
         if ft_mode not in ("FT8", "FT4"):
             return
@@ -92,6 +95,7 @@ class StationStatsLogger:
             "band": band,
             "ft_mode": ft_mode,
             "rx_mode": rx_mode,
+            "ant2_wins": ant2_wins,
         }
         try:
             self._queue.put_nowait(entry)
@@ -131,23 +135,33 @@ class StationStatsLogger:
         if self._current_path != target_path:
             self._current_path = target_path
             self._current_hour = entry["hour"]
+            is_diversity = "Diversity" in entry["rx_mode"]
             if not target_path.exists():
                 with open(target_path, "w") as f:
                     f.write(f"# Statistik {entry['date_display']} "
                             f"{entry['hour_display']} UTC | "
                             f"{entry['ft_mode']} | {entry['band']} | "
                             f"{entry['rx_mode']}\n\n")
-                    f.write("| Zeit | Stationen | Ø SNR |\n")
-                    f.write("|------|-----------|-------|\n")
+                    if is_diversity:
+                        f.write("| Zeit | Stationen | Ø SNR | Ant2 Wins |\n")
+                        f.write("|------|-----------|-------|-----------|\n")
+                    else:
+                        f.write("| Zeit | Stationen | Ø SNR |\n")
+                        f.write("|------|-----------|-------|\n")
 
         # Zeile anfuegen
+        is_diversity = "Diversity" in entry["rx_mode"]
         with open(target_path, "a") as f:
-            f.write(f"| {entry['time']} | {entry['count']} | {entry['snr']} |\n")
+            if is_diversity:
+                f.write(f"| {entry['time']} | {entry['count']} | {entry['snr']} | {entry['ant2_wins']} |\n")
+            else:
+                f.write(f"| {entry['time']} | {entry['count']} | {entry['snr']} |\n")
 
         # Zaehler aktualisieren
         self._cycle_count += 1
         self._station_total += entry["count"]
         self._station_max = max(self._station_max, entry["count"])
+        self._ant2_wins_total += entry.get("ant2_wins", 0)
         if entry["count"] > 0:
             self._station_min = min(self._station_min, entry["count"])
 
@@ -163,6 +177,9 @@ class StationStatsLogger:
                 f.write(f"- Zyklen: {self._cycle_count}\n")
                 f.write(f"- Ø Stationen/Zyklus: {avg:.1f}\n")
                 f.write(f"- Max: {self._station_max} | Min: {min_val}\n")
+                if self._ant2_wins_total > 0:
+                    ant2_avg = self._ant2_wins_total / self._cycle_count
+                    f.write(f"- Ø Ant2 Wins/Zyklus: {ant2_avg:.1f}\n")
         except Exception:
             pass
 
@@ -171,3 +188,4 @@ class StationStatsLogger:
         self._station_total = 0
         self._station_max = 0
         self._station_min = 999
+        self._ant2_wins_total = 0
