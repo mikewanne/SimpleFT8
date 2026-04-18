@@ -76,6 +76,23 @@ Pro Zyklus wird gezaehlt wie oft Antenne 2 einen strikt besseren SNR hat als Ant
 - `A1>2`: Ant1 besser (wird nicht gezaehlt)
 - Gleicher SNR: wird nicht gezaehlt
 
+## Ausschlusskriterien (Exclusion Criteria)
+
+Statistiken werden automatisch pausiert bei:
+
+| Zustand | Grund | Dauer |
+|---------|-------|-------|
+| **Radio-Suche** | Hardware nicht verbunden | Bis Verbindung steht |
+| **Gain-Messung** | DX-Tuning / Antennen-Kalibrierung | Waehrend Messung + 60s |
+| **Diversity-Einmessung** | Antennen-Vergleich laeuft | Waehrend Messphase + 60s |
+| **Bandwechsel** | Neue Frequenz, Accumulator leer | 60s Settling |
+| **Moduswechsel** | Normal ↔ Diversity | 60s Settling |
+| **App-Start** | Erste Zyklen unzuverlaessig | 60s Settling |
+
+Die 60s Settling-Phase (Warmup) gilt fuer ALLE Modi gleichermassen — faire Vergleichsbasis zwischen Normal und Diversity.
+
+*Logik-Verfeinerung basierend auf DL2YMR Feedback.*
+
 ## Aktivierung
 
 Einstellungen → "Statistik-Erfassung aktivieren"

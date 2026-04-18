@@ -559,6 +559,8 @@ class RadioMixin:
 
     def _start_dx_tuning(self, scoring_mode: str = "snr"):
         """DX Tune Dialog — optional TUNE-Schritt + SWR-Pruefung vor Gain-Messung."""
+        import time as _time
+        self._stats_warmup_until = _time.time() + 60  # Warmup nach Gain-Messung
         self._gain_scoring_mode = scoring_mode
         from PySide6.QtWidgets import QMessageBox
         from PySide6.QtCore import QTimer

@@ -380,12 +380,14 @@ class CycleMixin:
                 self._diversity_ctrl.get_histogram_data())
 
     def _is_antenna_tuning_active(self) -> bool:
-        """Prueft ob Antennen-Tuning/Einmessung aktiv ist."""
+        """Prueft ob Antennen-Tuning/Einmessung/Radio-Suche aktiv ist."""
+        # Radio nicht verbunden = Suche laeuft
+        if not getattr(self.radio, 'ip', None):
+            return True
         if self._rx_mode == "dx_tuning":
             return True
         if getattr(self, '_diversity_measuring', False):
             return True
-        # Diversity Messphase (nicht Betrieb)
         if (self._rx_mode == "diversity"
                 and hasattr(self, '_diversity_ctrl')
                 and self._diversity_ctrl.phase == "measure"):
