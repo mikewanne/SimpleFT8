@@ -133,16 +133,33 @@ class CycleMixin:
                            if getattr(m, 'antenna', '').startswith('A2')]
                 a1_avg = sum(m.snr for m in a1_msgs) / len(a1_msgs) if a1_msgs else -30
                 a2_avg = sum(m.snr for m in a2_msgs) / len(a2_msgs) if a2_msgs else -30
+                # Ant2 Superiority: wie oft ist A2 strikt besser als A1?
+                ant2_wins = sum(1 for m in self._diversity_stations.values()
+                                if getattr(m, 'antenna', '').startswith('A2>'))
+                ant1_wins = sum(1 for m in self._diversity_stations.values()
+                                if getattr(m, 'antenna', '').startswith('A1>'))
+                only_a1 = sum(1 for m in self._diversity_stations.values()
+                              if getattr(m, 'antenna', '') == 'A1')
+                only_a2 = sum(1 for m in self._diversity_stations.values()
+                              if getattr(m, 'antenna', '') == 'A2')
+                total = len(self._diversity_stations)
+                compared = ant1_wins + ant2_wins
+                pct = round(100 * ant2_wins / compared) if compared else 0
+                print(f"[Diversity] {total} St. | A1>A2: {ant1_wins} | "
+                      f"A2>A1: {ant2_wins} ({pct}%) | "
+                      f"Nur A1: {only_a1} | Nur A2: {only_a2}")
                 self.control_panel.update_diversity_counts(
                     len(a1_msgs), len(a2_msgs), a1_avg, a2_avg,
-                    scoring_mode=self._diversity_ctrl.scoring_mode)
+                    scoring_mode=self._diversity_ctrl.scoring_mode,
+                    ant2_wins=ant2_wins, total_compared=compared)
 
             self.control_panel.update_decode_count(
                 len(self._diversity_stations)
             )
 
             # Statistik loggen (pausiert automatisch bei Tuning/Einmessung)
-            self._log_stats(len(self._diversity_stations), messages)
+            ant2w = getattr(self, '_last_ant2_wins', 0)
+            self._log_stats(len(self._diversity_stations), messages, ant2_wins=ant2w)
 
         elif self._rx_mode == "normal" and messages:
             # Normal: gemeinsame Akkumulation ohne Antennen-Info
@@ -341,7 +358,8 @@ class CycleMixin:
             return True
         return False
 
-    def _log_stats(self, station_count: int, messages, avg_snr: float = -30):
+    def _log_stats(self, station_count: int, messages, avg_snr: float = -30,
+                   ant2_wins: int = 0):
         """Empfangsstatistik loggen — alle Modi, pausiert bei Tuning."""
         if not hasattr(self, '_stats_logger') or self._stats_logger is None:
             return
@@ -364,6 +382,7 @@ class CycleMixin:
             band=self.settings.band,
             ft_mode=protocol,
             rx_mode=rx_mode_str,
+            ant2_wins=ant2_wins if self._rx_mode == "diversity" else 0,
         )
 
     def on_message_decoded(self, msg: FT8Message):

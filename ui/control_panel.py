@@ -1043,21 +1043,22 @@ class ControlPanel(QWidget):
 
     def update_diversity_counts(self, a1_count: int, a2_count: int,
                                 a1_avg_snr: float = None, a2_avg_snr: float = None,
-                                scoring_mode: str = "normal"):
-        """Diversity-Counts pro Antenne — modus-abhaengig.
+                                scoring_mode: str = "normal",
+                                ant2_wins: int = 0, total_compared: int = 0):
+        """Diversity-Counts pro Antenne + Ant2 Superiority.
 
-        Standard: nur Stationsanzahl. DX: nur SNR.
+        Standard: Stationsanzahl + Ant2-Wins. DX: SNR + Ant2-Wins.
         """
         if a1_count == 0 and a2_count == 0:
             self._a1_count_label.setText("")
             self._a2_count_label.setText("")
         elif scoring_mode == "dx" and a1_avg_snr is not None:
-            # DX: nur SNR anzeigen (Schwache Signale zaehlen)
             self._a1_count_label.setText(f"Ø{a1_avg_snr:+.0f}dB")
             self._a2_count_label.setText(f"Ø{a2_avg_snr:+.0f}dB")
         else:
-            # Standard: nur Stationsanzahl
-            self._a1_count_label.setText(f"{a1_count} St.")
+            total = a1_count + a2_count
+            pct = round(100 * ant2_wins / total_compared) if total_compared else 0
+            self._a1_count_label.setText(f"{a1_count} St. {total - a2_count - ant2_wins}")
             self._a2_count_label.setText(f"{a2_count} St.")
 
     def update_freq_histogram(self, data: dict):
