@@ -83,11 +83,11 @@ def _apply_time_correction(band: str, condition: str, utc_hour: int) -> str:
 # XML Abruf + Parsen
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _fetch_and_parse() -> Optional[Dict[str, str]]:
-    """HamQSL XML abrufen und in Bedingungen-Dict umwandeln.
+def _fetch_raw() -> Optional[Dict[str, Dict[str, str]]]:
+    """HamQSL XML abrufen und ROHDATEN speichern (ohne Zeitkorrektur).
 
     Returns:
-        Dict mit Bandnamen → 'good'/'fair'/'poor'/'grey', oder None bei Fehler.
+        Dict mit Bandnamen → {"day": condition, "night": condition}, oder None.
     """
     try:
         with urllib.request.urlopen(DATA_URL, timeout=FETCH_TIMEOUT) as resp:
@@ -96,37 +96,44 @@ def _fetch_and_parse() -> Optional[Dict[str, str]]:
         print(f"[Propagation] Fehler beim Abruf: {e}")
         return None
 
-    utc_hour = datetime.now(timezone.utc).hour
-    # HamQSL: "day" = 06-18 UTC (vereinfacht für globale Verwendung)
-    time_of_day = "day" if 6 <= utc_hour < 18 else "night"
+    raw_data: Dict[str, Dict[str, str]] = {b: {"day": "grey", "night": "grey"} for b in ALL_BANDS}
 
-    conditions: Dict[str, str] = {b: "grey" for b in ALL_BANDS}
-
-    # HamQSL: calculatedconditions ist unter solardata (rekursiv suchen)
     calc = root.find(".//calculatedconditions")
     if calc is None:
-        return conditions
+        return raw_data
 
     for elem in calc.findall("band"):
-        xml_name = elem.get("name", "")   # z.B. "80m-40m" oder "30m-20m"
-        xml_time = elem.get("time", "")   # "day" oder "night"
-        raw      = (elem.text or "").strip().lower()  # "good"/"fair"/"poor"
+        xml_name = elem.get("name", "")
+        xml_time = elem.get("time", "")
+        raw      = (elem.text or "").strip().lower()
 
-        if xml_time != time_of_day or raw not in _CONDITION_ORDER:
+        if xml_time not in ("day", "night") or raw not in _CONDITION_ORDER:
             continue
 
-        # Band-Gruppe aufloesen: "80m-40m" → ["80m", "40m"]
-        # HamQSL gruppiert: 80m-40m, 30m-20m, 17m-15m, 12m-10m
         parts = xml_name.split("-")
         if len(parts) == 2:
-            # "80m-40m" → beide Bänder bekommen den gleichen Wert
             bands_in_group = _expand_band_range(parts[0], parts[1])
         else:
             bands_in_group = [xml_name]
 
         for band in bands_in_group:
             if band in XML_BANDS:
-                conditions[band] = _apply_time_correction(band, raw, utc_hour)
+                raw_data[band][xml_time] = raw
+
+    print(f"[Propagation] Daten aktualisiert (UTC {datetime.now(timezone.utc).strftime('%H:%M')})")
+    return raw_data
+
+
+def _evaluate_conditions(raw_data: Dict[str, Dict[str, str]]) -> Dict[str, str]:
+    """Rohdaten MIT aktueller UTC-Stunde auswerten (Zeitkorrektur bei jedem Aufruf)."""
+    utc_hour = datetime.now(timezone.utc).hour
+    time_of_day = "day" if 6 <= utc_hour < 18 else "night"
+
+    conditions: Dict[str, str] = {}
+    for band in ALL_BANDS:
+        band_data = raw_data.get(band, {"day": "grey", "night": "grey"})
+        base_condition = band_data.get(time_of_day, "grey")
+        conditions[band] = _apply_time_correction(band, base_condition, utc_hour)
 
     return conditions
 
@@ -150,17 +157,17 @@ def _expand_band_range(band_from: str, band_to: str) -> list:
 # ─────────────────────────────────────────────────────────────────────────────
 
 _lock       = threading.Lock()
-_conditions: Optional[Dict[str, str]] = None   # None = noch nicht geladen / Fehler
+_raw_data: Optional[Dict[str, Dict[str, str]]] = None  # Rohdaten (day/night pro Band)
 _thread: Optional[threading.Thread] = None
 
 
 def _run_updater() -> None:
     """Hintergrund-Thread: sofort abrufen, dann alle 3 Stunden wiederholen."""
-    global _conditions
+    global _raw_data
     while True:
-        result = _fetch_and_parse()
+        result = _fetch_raw()
         with _lock:
-            _conditions = result  # None bei Fehler
+            _raw_data = result
         time.sleep(UPDATE_INTERVAL)
 
 
@@ -174,13 +181,16 @@ def start_background_updater() -> None:
 
 
 def get_conditions() -> Optional[Dict[str, str]]:
-    """Aktuelles Bedingungen-Dict oder None wenn kein Netzwerk / noch nicht geladen.
+    """Aktuelles Bedingungen-Dict MIT Live-Zeitkorrektur.
 
+    Zeitkorrektur wird bei JEDEM Aufruf neu berechnet — nicht gecacht.
     None = Balken ausblenden.
-    Dict mit 'good'/'fair'/'poor'/'grey' = Balken anzeigen.
     """
     with _lock:
-        return dict(_conditions) if _conditions is not None else None
+        raw = dict(_raw_data) if _raw_data is not None else None
+    if raw is None:
+        return None
+    return _evaluate_conditions(raw)
 
 
 def get_color(band: str) -> str:

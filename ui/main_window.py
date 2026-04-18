@@ -146,13 +146,14 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self._psk_last_fetch_time = None
         self._psk_band = ""
 
-        # Propagation: Hintergrund-Abruf starten + UI alle 5 Minuten aktualisieren
+        # Propagation: Hintergrund-Abruf starten + UI jede Minute aktualisieren
+        # (Zeitkorrektur wird bei jedem Aufruf live berechnet, nicht gecacht)
         from core import propagation as _prop
         self._prop_error_shown = False
         _prop.start_background_updater()
         self._prop_timer = QTimer(self)
         self._prop_timer.timeout.connect(self._update_propagation_ui)
-        self._prop_timer.start(5 * 60 * 1000)   # 5 Minuten
+        self._prop_timer.start(60_000)  # 1 Minute (Zeitkorrektur ist live)
         # Erster UI-Update nach kurzem Delay (Abruf läuft im Hintergrund)
         QTimer.singleShot(3000, self._update_propagation_ui)
 
