@@ -560,10 +560,24 @@ class RadioMixin:
     def _start_dx_tuning(self, scoring_mode: str = "snr"):
         """DX Tune Dialog — optional TUNE-Schritt + SWR-Pruefung vor Gain-Messung."""
         import time as _time
-        self._stats_warmup_until = _time.time() + 60  # Warmup nach Gain-Messung
+        self._stats_warmup_until = _time.time() + 60
         self._gain_scoring_mode = scoring_mode
         from PySide6.QtWidgets import QMessageBox
         from PySide6.QtCore import QTimer
+
+        # SICHERHEIT: TX SOFORT stoppen — Gain-Messung ist NUR RX!
+        if self.qso_sm.cq_mode:
+            self.qso_sm.stop_cq()
+            self.control_panel.set_cq_active(False)
+            print("[Gain] CQ-Modus gestoppt (Sicherheit)")
+        if self.qso_sm.state != QSOState.IDLE:
+            self.qso_sm.cancel()
+            print("[Gain] QSO abgebrochen (Sicherheit)")
+        if self.encoder.is_transmitting:
+            self.encoder.abort()
+            if self.radio.ip:
+                self.radio.ptt_off()
+            print("[Gain] TX abgebrochen (Sicherheit)")
 
         tune_power = self.settings.get("tune_power", 10)
         swr_limit  = self.settings.get("swr_limit", 3.0)
@@ -618,6 +632,10 @@ class RadioMixin:
 
     def _open_dx_tune_dialog(self):
         """DX Tune Dialog oeffnen — NICHT-MODAL, immer im Vordergrund, GUI gesperrt."""
+        # Letzte Sicherheitspruefung: PTT definitiv AUS
+        if self.radio.ip:
+            self.radio.ptt_off()
+
         from ui.dx_tune_dialog import DXTuneDialog
         band = self.settings.band
         scoring = getattr(self, '_gain_scoring_mode', 'snr')
