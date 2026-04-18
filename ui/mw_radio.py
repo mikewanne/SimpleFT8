@@ -706,16 +706,11 @@ class RadioMixin:
             print(f"[DX] Gain-Messung fertig → starte Diversity DX")
             self._enable_diversity(scoring_mode="dx")
 
-        # FORCE RESET: Hardware explizit auf Diversity-Betrieb zuruecksetzen
-        # (Gain-Messung kann Radio in festem Antennen-Zustand hinterlassen)
+        # FORCE RESET: Diversity komplett neu initialisieren nach Gain-Messung
         if self._rx_mode == "diversity" and self.radio.ip:
-            ant = self._diversity_ctrl.choose()
-            self._diversity_current_ant = ant
-            ant_cmd = "ANT1" if ant == "A1" else "ANT2"
-            gain = self._diversity_ant1_gain if ant == "A1" else self._diversity_ant2_gain
-            self.radio.set_rx_antenna(ant_cmd)
-            self.radio.set_rfgain(gain)
-            print(f"[Diversity] Post-Gain Reset: {ant_cmd} G{gain} — Diversity-Wechsel aktiv")
+            scoring = getattr(self._diversity_ctrl, 'scoring_mode', 'normal')
+            print(f"[Diversity] Post-Gain → Diversity komplett neu initialisieren ({scoring})")
+            self._enable_diversity(scoring_mode=scoring)
 
         self._update_statusbar()
 
@@ -723,16 +718,18 @@ class RadioMixin:
         """DX Tuning abgebrochen — zurueck auf Normal/Diversity."""
         self._dx_tune_dialog = None
         self._set_gain_measure_lock(False)
-        # Wenn Diversity aktiv war, zurueck zu Diversity — nicht zu Normal
+
+        # Sicherheit: TX/Encoder definitiv stoppen
+        if self.encoder.is_transmitting:
+            self.encoder.abort()
+        if self.radio.ip:
+            self.radio.ptt_off()
+
+        # Wenn Diversity aktiv war, KOMPLETT neu initialisieren
         if self._rx_mode == "diversity" and self.radio.ip:
-            ant = self._diversity_ctrl.choose()
-            self._diversity_current_ant = ant
-            ant_cmd = "ANT1" if ant == "A1" else "ANT2"
-            gain = getattr(self, '_diversity_ant1_gain', 10) if ant == "A1" \
-                else getattr(self, '_diversity_ant2_gain', 10)
-            self.radio.set_rx_antenna(ant_cmd)
-            self.radio.set_rfgain(gain)
-            print(f"[Diversity] Gain abgebrochen → Diversity resumed: {ant_cmd}")
+            scoring = getattr(self._diversity_ctrl, 'scoring_mode', 'normal')
+            print(f"[Diversity] Gain abgebrochen → Diversity neu initialisieren ({scoring})")
+            self._enable_diversity(scoring_mode=scoring)
         else:
             self._apply_normal_mode()
         self.control_panel.dx_info.setText("")
