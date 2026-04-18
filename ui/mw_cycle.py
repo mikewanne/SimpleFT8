@@ -112,7 +112,12 @@ class CycleMixin:
             for m in messages:
                 if hasattr(m, 'freq_hz') and m.freq_hz:
                     self._diversity_ctrl.record_freq(m.freq_hz)
-            self._diversity_ctrl.update_proposed_freq()
+            from core.qso_state import QSOState
+            qso_busy = self.qso_sm.state not in (
+                QSOState.IDLE, QSOState.TIMEOUT,
+                QSOState.CQ_CALLING, QSOState.CQ_WAIT,
+            )
+            self._diversity_ctrl.update_proposed_freq(qso_active=qso_busy)
             self.control_panel.update_freq_histogram(
                 self._diversity_ctrl.get_histogram_data())
 
@@ -341,7 +346,13 @@ class CycleMixin:
             for m in messages:
                 if hasattr(m, 'freq_hz') and m.freq_hz:
                     self._diversity_ctrl.record_freq(m.freq_hz)
-            self._diversity_ctrl.update_proposed_freq()
+            # QSO-Schutz: kein Frequenzwechsel waehrend aktivem QSO
+            from core.qso_state import QSOState
+            qso_busy = self.qso_sm.state not in (
+                QSOState.IDLE, QSOState.TIMEOUT,
+                QSOState.CQ_CALLING, QSOState.CQ_WAIT,
+            )
+            self._diversity_ctrl.update_proposed_freq(qso_active=qso_busy)
             self.control_panel.update_freq_histogram(
                 self._diversity_ctrl.get_histogram_data())
 
