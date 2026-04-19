@@ -91,7 +91,7 @@ Controlled test on 40m, same hardware (FLEX-8400M), 2 minutes apart:
 - ✅ **Smart CQ Frequency**: 800–2000 Hz sweet spot via spectrum histogram. Freq counter in status bar.
 - ✅ **Caller Waitlist**: Queue for Grid + Report callers, auto-respond after QSO
 - ✅ **RR73 Courtesy Repeat**: Auto-resend max 2× if other station didn't get it
-- ✅ **Even/Odd Slot Display**: [E]/[O] in RX list + QSO panel
+- ✅ **Even/Odd Slot Display**: [E]/[O] in RX list + QSO panel *(FT2 3.75s display sync under investigation)*
 - ✅ **Signal Processing**: 5-pass signal subtraction, spectral whitening, sinc anti-alias resampling
 - ✅ **QSO State Machine**: Hunt + CQ mode, retry logic, ADIF 3.1.7 logging
 - ✅ **Integrated Logbook**: Search, DXCC counter, QSO detail overlay, delete
@@ -100,11 +100,13 @@ Controlled test on 40m, same hardware (FLEX-8400M), 2 minutes apart:
 - ✅ **Station Statistics**: Per-cycle logging with hourly aggregation (Normal + Diversity), 60s warm-up exclusion. *Concept: DL2YMR*
 - ✅ **Ant2 Superiority Counter**: Quantifies diversity gain (A2 > A1 frequency)
 - ✅ **TX Safety**: TX halted immediately before Gain Measurement — no accidental transmit during calibration
+- ✅ **Gain Measurement**: Audio input calibration tool (GAIN-MESSUNG button). Finds optimal RX level before statistics or diversity sessions.
+- ✅ **UI Polish**: Info dialogs with "Don't show again" option. DT correction preserved across mode switches. Button labels reflect active state (e.g. "OMNI CQ" when active).
 - ✅ **Debug Console**: Ctrl+D, live filter, font 11pt, Copy/Clear buttons
-- ✅ **OMNI-TX**: Even/Odd CQ rotation for 100% operator reach (hidden Easter egg)
 
 **In Field Test:**
 - ⚠️ **AP-Lite v2.2**: Weak QSO rescue via coherent addition. Threshold 0.75 calibration in progress.
+- ⚠️ **OMNI-TX**: Even/Odd CQ rotation for 100% operator reach (hidden Easter egg). Integrated, field validation pending.
 
 ### FT2 Frequencies (Decodium-compatible)
 
@@ -235,7 +237,7 @@ MIT License (c) 2026 DA1MHH (Mike Hammerer)
 - ✅ **Smart CQ-Frequenz**: 800–2000 Hz Sweet Spot via Histogramm. Freq-Zaehler in Statusleiste.
 - ✅ **Warteliste**: Grid + Report, automatische Antwort nach QSO
 - ✅ **RR73-Hoeflichkeit**: Automatisch max 2× wiederholen
-- ✅ **Even/Odd Anzeige**: [E]/[O] in RX-Liste + QSO-Panel
+- ✅ **Even/Odd Anzeige**: [E]/[O] in RX-Liste + QSO-Panel *(FT2 3.75s Sync in Untersuchung)*
 - ✅ **Signalverarbeitung**: 5-Pass Subtraction, Whitening, Sinc-Resampling
 - ✅ **QSO-Zustandsmaschine**: Hunt + CQ, Retry, ADIF 3.1.7
 - ✅ **Logbuch**: Suche, DXCC, Detail-Overlay, Loeschen
@@ -244,11 +246,13 @@ MIT License (c) 2026 DA1MHH (Mike Hammerer)
 - ✅ **Stations-Statistik**: Pro-Zyklus Logging mit Stundenaggregation (Normal + Diversity), 60s Warmup-Ausschluss. *Konzept: DL2YMR*
 - ✅ **Ant2 Superiority Counter**: Quantifiziert Diversity-Gewinn (Ant2 > Ant1)
 - ✅ **TX-Sicherheit**: TX stoppt sofort vor Gain-Messung — kein versehentliches Senden bei Kalibrierung
+- ✅ **Gain-Messung**: Audio-Eingangspegel kalibrieren (Button "GAIN-MESSUNG"). Findet optimalen RX-Pegel vor Statistik- oder Diversity-Sitzungen.
+- ✅ **UI-Verbesserungen**: Info-Dialoge mit "Nicht mehr anzeigen". DT-Korrektur bleibt beim Modus-Wechsel erhalten. Button-Labels spiegeln den aktiven Zustand (z.B. "OMNI CQ" wenn aktiv).
 - ✅ **Debug-Konsole**: Ctrl+D, Live-Filter, Schrift 11pt, Copy/Clear
-- ✅ **OMNI-TX**: Even/Odd CQ-Rotation fuer 100% Reichweite (verstecktes Easter Egg)
 
 **Im Feldtest:**
 - ⚠️ **AP-Lite v2.2**: Schwache QSOs retten via kohaerenter Addition. Schwellwert-Kalibrierung laeuft.
+- ⚠️ **OMNI-TX**: Even/Odd CQ-Rotation fuer 100% Reichweite (verstecktes Easter Egg). Integriert, Feld-Validierung ausstehend.
 
 ### FT2-Frequenzen (Decodium-kompatibel)
 
@@ -299,7 +303,7 @@ SimpleFT8/
 │   ├── help_dialog.py            # Feature-Doku (DE/EN)
 │   └── ...                       # Control Panel, RX, QSO, Logbuch
 ├── docs/explained/               # 10 Feature-Docs (5 × DE + EN)
-└── tests/test_modules.py         # 37 Unit Tests
+└── tests/                        # 132 unit tests (test_modules.py + test_patterns.py)
 ```
 
 ### Radio-Kompatibilitaet
