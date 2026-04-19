@@ -165,9 +165,10 @@ class CycleMixin:
                 len(self._diversity_stations)
             )
 
-            # Statistik loggen (pausiert automatisch bei Tuning/Einmessung)
-            ant2w = getattr(self, '_last_ant2_wins', 0)
-            self._log_stats(len(self._diversity_stations), messages, ant2_wins=ant2w)
+            # Statistik loggen — ant2_wins aus letztem changed-Block
+            _ant2w = sum(1 for m in self._diversity_stations.values()
+                         if getattr(m, 'antenna', '').startswith('A2>'))
+            self._log_stats(len(self._diversity_stations), messages, ant2_wins=_ant2w)
 
         elif self._rx_mode == "normal" and messages:
             # Normal: gemeinsame Akkumulation ohne Antennen-Info
