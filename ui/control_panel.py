@@ -842,7 +842,7 @@ class ControlPanel(QWidget):
             "padding: 0 3px; background: transparent; border: none;"
         )
         self._omni_symbol.setVisible(False)
-        self._version_label = QLabel("SimpleFT8 v0.23")
+        self._version_label = QLabel("SimpleFT8 v0.26")
         self._version_label.setStyleSheet(
             f"color: #333; font-family: {_FONT}; font-size: 10px; "
             "border: none; background: transparent;"

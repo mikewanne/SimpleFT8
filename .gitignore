@@ -28,11 +28,26 @@ backup_*/
 
 # Private files
 mail_marcus_roskosch.txt
+forum_post_flexradio.txt
+forum_reply_reed.md
+report.md
+johnboy.ini
+HANDOFF.md
+
+# QSO Logs (personal data)
+*.adi
+adif/
+statistics/
 
 # Internal development docs (not relevant for public)
 CLAUDE.md
 UEBERGABE.md
+PROBLEME.md
 OPTIMIERUNG_ERGEBNISSE.md
 SimpleFT8_Optimierung_Briefing.md
 qso_debug.log
-statistics/
+
+# Debug binaries
+libft8simple_debug.dylib
+libft8simple_debug.dylib.dSYM/
+*.dSYM/
