@@ -72,6 +72,18 @@
   ODER aktuelle Luecke unbrauchbar (≥3 direkte Nachbarn). Verhindert nervöses "Pendeln" wenn zwei
   Luecken fast gleich gut sind. Implementierung: `if new_gap_width > current_gap_width + 50: switch()`.
 
+### Propagation (core/propagation.py)
+- [ ] **60m Propagations-Balken (HamQSL liefert keine Daten):**
+  60m (5.357 MHz) ist als Band konfiguriert und FT8-faehig (IARU-Frequenz), aber HamQSL XML
+  enthaelt kein 60m-Feld → Balken bleibt immer grau (`XML_BANDS` ohne 60m, Zeile 31).
+  Optionen:
+  (a) **Interpolation** (einfach): 60m-Wert = Mittelwert aus HamQSL 40m + 80m.
+      Begruendung: 60m liegt frequenztechnisch dazwischen, NVIS-Charakteristik aehlich 80m.
+      Implementierung: ~5 Zeilen in `_apply_time_correction()`.
+  (b) **PSKReporter API** (genauer): Echte Spots auf 5.357 MHz der letzten Stunde zaehlen →
+      0-5 Spots=poor, 5-20=fair, >20=good. Braucht zusaetzlichen HTTP-Request alle 15 Min.
+  Empfehlung: Erstmal (a) als Quick-Win, langfristig (b) als Option.
+
 ### UI-Verbesserungen (SPAETER)
 - [ ] **Statusbar DT-Anzeige:** Statt `DT: +0.78s` nur `DT: Aktiv` oder `DT: Korrektur` — exakte Zeit macht Funker nervoes
 - [ ] **Statusbar Mode+Filter:** `Mode: FT8 | Filter: 100-3100 Hz` (oder FT4/FT2 mit jeweiligem Filter) — damit jeder sieht welcher Filter aktiv ist
