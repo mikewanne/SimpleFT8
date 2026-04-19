@@ -80,14 +80,15 @@ Controlled test on 40m, same hardware (FLEX-8400M), 2 minutes apart:
 
 ### All Features
 
-**Tested & Working (v0.37):**
+**Tested & Working (v0.26):**
 - ✅ **FT8 / FT4 / FT2 modes** — all three with dedicated frequencies, auto RX filter, mode-dependent timing
 - ✅ **Auto TX Power Regulation**: Closed-loop FWDPWR feedback, clipping protection, per-band calibration
 - ✅ **Dual-Mode Diversity**: Standard (station count) + DX (weak signal count), 8% threshold, 70:30/50:50
+- ✅ **Smart Antenna Selection**: Per-station antenna preference during QSO — switches to best-SNR antenna per callsign. *Concept: DL2YMR*
 - ✅ **DT Time Correction v2**: Per-mode persistence, 2-cycle measurement, 70% damping, ±0.1s convergence
 - ✅ **Propagation Bars**: HamQSL solar data + time-of-day correction. Verified against HAM-Toolbox
 - ✅ **Operator Presence (Anti-Bot)**: 15 min timeout, mouse reset, legal requirement DE
-- ✅ **Smart CQ Frequency**: 800–2000 Hz sweet spot via spectrum histogram
+- ✅ **Smart CQ Frequency**: 800–2000 Hz sweet spot via spectrum histogram. Freq counter in status bar.
 - ✅ **Caller Waitlist**: Queue for Grid + Report callers, auto-respond after QSO
 - ✅ **RR73 Courtesy Repeat**: Auto-resend max 2× if other station didn't get it
 - ✅ **Even/Odd Slot Display**: [E]/[O] in RX list + QSO panel
@@ -96,8 +97,9 @@ Controlled test on 40m, same hardware (FLEX-8400M), 2 minutes apart:
 - ✅ **Integrated Logbook**: Search, DXCC counter, QSO detail overlay, delete
 - ✅ **Help Dialog**: Built-in feature docs (DE + EN) via ? button in status bar
 - ✅ **132 Unit Tests**: QSO, diversity patterns, DT, propagation, OMNI-TX, ADIF, histograms
-- ✅ **Station Statistics**: Per-cycle logging with hourly aggregation (Normal + Diversity). *Concept: DL2YMR*
+- ✅ **Station Statistics**: Per-cycle logging with hourly aggregation (Normal + Diversity), 60s warm-up exclusion. *Concept: DL2YMR*
 - ✅ **Ant2 Superiority Counter**: Quantifies diversity gain (A2 > A1 frequency)
+- ✅ **TX Safety**: TX halted immediately before Gain Measurement — no accidental transmit during calibration
 - ✅ **Debug Console**: Ctrl+D, live filter, font 11pt, Copy/Clear buttons
 - ✅ **OMNI-TX**: Even/Odd CQ rotation for 100% operator reach (hidden Easter egg)
 
@@ -222,14 +224,15 @@ MIT License (c) 2026 DA1MHH (Mike Hammerer)
 
 ### Alle Funktionen
 
-**Getestet & funktionsfaehig (v0.37):**
+**Getestet & funktionsfaehig (v0.26):**
 - ✅ **FT8 / FT4 / FT2** — alle drei Modi mit eigenen Frequenzen, Auto-RX-Filter, modus-abhaengigem Timing
 - ✅ **Auto TX-Leistungsregelung**: Regelkreis mit FWDPWR-Feedback, Clipping-Schutz
 - ✅ **Dual-Mode Diversity**: Standard (Stationsanzahl) + DX (schwache Signale), 8% Schwelle
+- ✅ **Smart Antenna Selection**: Pro-Station Antennen-Praeferenz waehrend QSO — wechselt auf beste SNR-Antenne je Callsign. *Konzept: DL2YMR*
 - ✅ **DT-Zeitkorrektur v2**: Pro Modus gespeichert, 2-Zyklen-Messung, 70% Daempfung
 - ✅ **Propagation-Balken**: HamQSL-Solardaten + Tageszeit-Korrektur. Geprueft gegen HAM-Toolbox
 - ✅ **Operator-Praesenz (Anti-Bot)**: 15 Min Timeout, gesetzl. Pflicht DE
-- ✅ **Smart CQ-Frequenz**: 800–2000 Hz Sweet Spot via Histogramm
+- ✅ **Smart CQ-Frequenz**: 800–2000 Hz Sweet Spot via Histogramm. Freq-Zaehler in Statusleiste.
 - ✅ **Warteliste**: Grid + Report, automatische Antwort nach QSO
 - ✅ **RR73-Hoeflichkeit**: Automatisch max 2× wiederholen
 - ✅ **Even/Odd Anzeige**: [E]/[O] in RX-Liste + QSO-Panel
@@ -238,8 +241,9 @@ MIT License (c) 2026 DA1MHH (Mike Hammerer)
 - ✅ **Logbuch**: Suche, DXCC, Detail-Overlay, Loeschen
 - ✅ **Hilfe-Dialog**: Feature-Doku (DE + EN) via ? Button in Statusleiste
 - ✅ **132 Unit Tests**: QSO, Diversity-Patterns, DT, Propagation, OMNI-TX, ADIF, Histogramme
-- ✅ **Stations-Statistik**: Pro-Zyklus Logging mit Stundenaggregation (Normal + Diversity). *Konzept: DL2YMR*
+- ✅ **Stations-Statistik**: Pro-Zyklus Logging mit Stundenaggregation (Normal + Diversity), 60s Warmup-Ausschluss. *Konzept: DL2YMR*
 - ✅ **Ant2 Superiority Counter**: Quantifiziert Diversity-Gewinn (Ant2 > Ant1)
+- ✅ **TX-Sicherheit**: TX stoppt sofort vor Gain-Messung — kein versehentliches Senden bei Kalibrierung
 - ✅ **Debug-Konsole**: Ctrl+D, Live-Filter, Schrift 11pt, Copy/Clear
 - ✅ **OMNI-TX**: Even/Odd CQ-Rotation fuer 100% Reichweite (verstecktes Easter Egg)
 
@@ -316,7 +320,7 @@ MIT License (c) 2026 DA1MHH (Mike Hammerer)
 - [Decodium / IU8LMC](https://www.ft2.it/) — FT2 protocol reference
 - [FlexRadio Systems](https://www.flexradio.com/) — SmartSDR TCP API
 - [WSJT-X](https://wsjt.sourceforge.io/) — Pioneering digital weak-signal modes
-- DL2YMR — Station Statistics concept
+- DL2YMR — Station Statistics and Smart Antenna Selection concept
 
 ---
 
