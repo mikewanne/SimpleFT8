@@ -108,18 +108,17 @@
 - [ ] **Statistik-Diagramme fuer GitHub:** matplotlib-Script das aus statistics/*.md automatisch
   SVG/PNG-Charts generiert (Normal vs Diversity_Normal vs Diversity_Dx, pro Band + Uhrzeit).
   Einbetten in README oder eigene STATISTICS.md.
-- [ ] **Tertile-Analyse statt Trimmed Mean (DeepSeek bestaetigt: bessere Methode):**
-  Statt Daten wegzuschneiden: Messwerte (Stationen/Zyklus) in drei gleich grosse Drittel aufteilen
-  und Normal vs Diversity pro Tertile separat vergleichen.
+- [ ] **Auswertung per Tertile-Analyse — KEIN Datencropping (Entscheidung final):**
+  Alle Messwerte behalten, in drei gleich grosse Drittel aufteilen, Normal vs Diversity pro Tertile
+  separat vergleichen. Kein Wegwerfen von Extremwerten.
   - Unteres Drittel (33%): Schlechte Bedingungen — bringt Diversity ueberhaupt was?
-  - Mittleres Drittel (33%): Alltagsbetrieb — typischer Gewinn
-  - Oberes Drittel (33%): Spitzentage / Sporadic-E — Sättigung oder weiterer Gewinn?
-  Warum besser als Trimmed Mean: Trimmed Mean wirft genau die Sporadic-E/DX-Tage raus die den
-  Diversity-Effekt am deutlichsten zeigen — das beschneidet das erreichte Ergebnis.
-  Tertile basiert auf Raengen (nicht Mittelwert), bimodale Verteilung ist kein Problem.
-  Implementierung: pandas.qcut(stations, q=3) → Vergleich pro Label [low/medium/high].
-  Trimmed Mean weiterhin als SEKUNDAERE Robustheitspruefung nutzen (beide Methoden gleiche Richtung = wasserdicht).
-  Script: aus statistics/*.md lesen, pro Modus+Tertile Mittelwert berechnen, Differenz in %.
+  - Mittleres Drittel (33%): Alltagsbetrieb — typischer Gewinn im Normalbetrieb
+  - Oberes Drittel (33%): Spitzentage / Sporadic-E — steigert Diversity noch weiter oder Saettigung?
+  Begruendung: Gerade die oberen Messtage (DX-Oeffnungen) zeigen den groessten Diversity-Effekt.
+  Die wegzuwerfen wuerde das erreichte Ergebnis beschneiden. Tertile behält ALLE Daten, basiert
+  auf Raengen — bimodale Verteilung (Normal-Tage vs Sporadic-E) kein Problem.
+  Implementierung: pandas.qcut(stations, q=3) → pro Label [low/medium/high] Mittelwert + Diff %.
+  Script liest aus statistics/*.md, vergleicht Modi pro Tertile, gibt Tabelle aus.
 - [ ] **WICHTIG — Gain-Bias beheben (faire Vergleiche!):** DX-Modus macht VOR dem Start IMMER
   automatisch eine Gain-Messung (optimierter Empfangspegel). Normal-Modus nur freiwillig.
   → DX startet systematisch mit besserem Gain → DX sieht im Vergleich kuenstlich besser aus.
