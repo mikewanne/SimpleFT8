@@ -108,11 +108,18 @@
 - [ ] **Statistik-Diagramme fuer GitHub:** matplotlib-Script das aus statistics/*.md automatisch
   SVG/PNG-Charts generiert (Normal vs Diversity_Normal vs Diversity_Dx, pro Band + Uhrzeit).
   Einbetten in README oder eigene STATISTICS.md.
-- [ ] **Ausreisser-Filterung (Trimmed Mean):** Beim Auswerten asymmetrisches Trimming anwenden:
-  untere 8% + obere 12% der Messwerte wegwerfen bevor Mittelwert gebildet wird.
-  Ziel: Propagation-Ausreisser (kurze Oeffnungen/Loecher) eliminieren ohne wissenschaftlichen Aufwand.
-  Aussagen wie "Diversity Normal 20m +35% mehr Stationen" bleiben aussagekraeftig auch wenn
-  es in Wahrheit 32% oder 38% sind — Rangfolge der Modi zaehlt, nicht exakte Prozentzahl.
+- [ ] **Tertile-Analyse statt Trimmed Mean (DeepSeek bestaetigt: bessere Methode):**
+  Statt Daten wegzuschneiden: Messwerte (Stationen/Zyklus) in drei gleich grosse Drittel aufteilen
+  und Normal vs Diversity pro Tertile separat vergleichen.
+  - Unteres Drittel (33%): Schlechte Bedingungen — bringt Diversity ueberhaupt was?
+  - Mittleres Drittel (33%): Alltagsbetrieb — typischer Gewinn
+  - Oberes Drittel (33%): Spitzentage / Sporadic-E — Sättigung oder weiterer Gewinn?
+  Warum besser als Trimmed Mean: Trimmed Mean wirft genau die Sporadic-E/DX-Tage raus die den
+  Diversity-Effekt am deutlichsten zeigen — das beschneidet das erreichte Ergebnis.
+  Tertile basiert auf Raengen (nicht Mittelwert), bimodale Verteilung ist kein Problem.
+  Implementierung: pandas.qcut(stations, q=3) → Vergleich pro Label [low/medium/high].
+  Trimmed Mean weiterhin als SEKUNDAERE Robustheitspruefung nutzen (beide Methoden gleiche Richtung = wasserdicht).
+  Script: aus statistics/*.md lesen, pro Modus+Tertile Mittelwert berechnen, Differenz in %.
 - [ ] **WICHTIG — Gain-Bias beheben (faire Vergleiche!):** DX-Modus macht VOR dem Start IMMER
   automatisch eine Gain-Messung (optimierter Empfangspegel). Normal-Modus nur freiwillig.
   → DX startet systematisch mit besserem Gain → DX sieht im Vergleich kuenstlich besser aus.
