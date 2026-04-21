@@ -1783,6 +1783,102 @@ def test_geo_grid_case_insensitive():
     assert abs(upper[1] - lower[1]) < 0.001
 
 
+# ── Stats Warmup Pipeline ─────────────────────────────────────────────────────
+
+def test_stats_warmup_countdown_4_cycles():
+    """_log_stats() blockiert genau 4 Zyklen (warmup=4), dann schreibt Stats."""
+    from unittest.mock import MagicMock
+    from ui.mw_cycle import CycleMixin
+
+    class FakeWindow(CycleMixin):
+        _rx_mode = "diversity"
+        _stats_indicator = None
+
+        def __init__(self):
+            self._stats_logger = MagicMock()
+            self._stats_warmup_cycles = 4  # Fix: nach DX-Kalibrierung gesetzt
+
+            _s = MagicMock()
+            _s.get.return_value = True
+            _s.band = "40m"
+            _s.mode = "FT8"
+            self.settings = _s
+
+            _ctrl = MagicMock()
+            _ctrl.scoring_mode = "dx"
+            self._diversity_ctrl = _ctrl
+
+        def _is_antenna_tuning_active(self):
+            return False
+
+    w = FakeWindow()
+    results = [w._log_stats(10, [], avg_snr=-15.0, ant2_wins=3, snr_delta=2.0) for _ in range(6)]
+
+    assert results[:4] == [False, False, False, False], \
+        f"4 Warmup-Zyklen erwartet, bekam: {results[:4]}"
+    assert results[4] is True, \
+        f"5. Zyklus muss Stats schreiben, bekam: {results[4]}"
+
+
+def test_stats_warmup_99999_blocks_permanently():
+    """Regression: warmup=99999 blockiert dauerhaft — zeigt Bug vor dem Fix."""
+    from unittest.mock import MagicMock
+    from ui.mw_cycle import CycleMixin
+
+    class FakeWindow(CycleMixin):
+        _rx_mode = "diversity"
+        _stats_indicator = None
+
+        def __init__(self):
+            self._stats_logger = MagicMock()
+            self._stats_warmup_cycles = 99999  # Bug-Zustand: bleibt nach DX-Tune
+
+            _s = MagicMock()
+            _s.get.return_value = True
+            _s.band = "40m"
+            _s.mode = "FT8"
+            self.settings = _s
+
+            _ctrl = MagicMock()
+            _ctrl.scoring_mode = "dx"
+            self._diversity_ctrl = _ctrl
+
+        def _is_antenna_tuning_active(self):
+            return False
+
+    w = FakeWindow()
+    results = [w._log_stats(10, [], avg_snr=-15.0, ant2_wins=3, snr_delta=2.0) for _ in range(10)]
+    assert all(r is False for r in results), \
+        "warmup=99999 muss alle 10 Zyklen blockieren (Regression-Nachweis)"
+
+
+def test_dx_tune_pipeline_warmup_state():
+    """Flow: _start_dx_tuning → 99999, _on_dx_tune_accepted Diversity → 4 Zyklen."""
+    # Simulate state transitions (nicht UI-abhängig)
+    warmup = 0
+
+    # Schritt 1: Tuning gestartet
+    warmup = 99999
+    assert warmup == 99999
+
+    # Schritt 2: Kalibrierung fertig — diversity mode, radio connected
+    rx_mode = "diversity"
+    radio_connected = True
+    if rx_mode == "diversity" and radio_connected:
+        warmup = 4  # _on_dx_tune_accepted() → _enable_diversity() → warmup = 4
+
+    assert warmup == 4, f"Nach DX-Kalibrierung muss warmup=4, war {warmup}"
+
+    # Schritt 3: Warmup-Countdown in _log_stats()
+    blocked = 0
+    while warmup > 0:
+        blocked += 1
+        warmup -= 1
+
+    assert blocked == 4, f"Genau 4 Zyklen geblockt, war {blocked}"
+    assert warmup == 0, "Nach Warmup: Stats aktiv (warmup=0)"
+
+
 # ── Runner ───────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":

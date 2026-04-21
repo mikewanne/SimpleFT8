@@ -687,6 +687,8 @@ class RadioMixin:
                 scoring = getattr(self._diversity_ctrl, 'scoring_mode', 'normal')
             print(f"[Diversity] Post-Gain → Diversity starten ({scoring})")
             self._enable_diversity(scoring_mode=scoring)
+            self._stats_warmup_cycles = 4
+            print(f"[Diversity] Kalibrierung fertig → 4 Zyklen Warmup")
 
         self._update_statusbar()
         self._show_calibration_done(band, ant1_g, ant2_g)
@@ -724,6 +726,7 @@ class RadioMixin:
             scoring = getattr(self._diversity_ctrl, 'scoring_mode', 'normal')
             print(f"[Diversity] Gain abgebrochen → Diversity neu initialisieren ({scoring})")
             self._enable_diversity(scoring_mode=scoring)
+            self._stats_warmup_cycles = 4
         else:
             self._apply_normal_mode()
         self.control_panel.dx_info.setText("")

@@ -460,7 +460,9 @@ class CycleMixin:
             return False
         # Warmup: N Zyklen nach Band-/Moduswechsel keine Stats (faire Baseline)
         if getattr(self, '_stats_warmup_cycles', 0) > 0:
+            remaining = self._stats_warmup_cycles
             self._stats_warmup_cycles -= 1
+            print(f"[Stats] Warmup — {remaining} Zyklen verbleibend (Band={self.settings.band})")
             _lbl = getattr(self, '_stats_indicator', None)
             if _lbl:
                 _lbl.setStyleSheet("color: #555; font-family: Menlo; font-size: 11px; padding: 0 6px;")
