@@ -139,16 +139,21 @@ class StationStatsLogger:
         for comp in comparisons:
             a1 = comp["ant1_snr"]
             a2 = comp["ant2_snr"]
-            saved = "★" if (a1 <= FT8_DECODE_THRESHOLD and a2 > FT8_DECODE_THRESHOLD) else ""
+            # Nur ANT2-Rescue-Events loggen: ANT1 unter Schwelle, ANT2 rettet
+            if not (a1 <= FT8_DECODE_THRESHOLD and a2 > FT8_DECODE_THRESHOLD):
+                continue
             rows.append({
                 "time": time_str,
                 "call": comp["call"],
                 "ant1_snr": a1,
                 "ant2_snr": a2,
                 "delta": comp["delta"],
-                "winner": comp["antenna_winner"],
-                "saved": saved,
+                "winner": "A2",
+                "saved": "★",
             })
+
+        if not rows:
+            return  # Kein Rescue in diesem Zyklus → nichts schreiben
 
         entry = {
             "type": "station_comparison",
@@ -251,21 +256,18 @@ class StationStatsLogger:
             with open(full_path, "w") as f:
                 f.write(f"# Station-Vergleiche {entry['date_display']} | "
                         f"{entry['rx_mode']} | {entry['band']} | {entry['protocol']}\n\n")
-                f.write("| Zeit | Call | ANT1 dB | ANT2 dB | Δ dB | Gewinner | Saved |\n")
-                f.write("|------|------|---------|---------|------|----------|-------|\n")
+                f.write("| Zeit | Call | ANT1 dB | ANT2 dB | Δ dB |\n")
+                f.write("|------|------|---------|---------|------|\n")
 
         # Zeilen schreiben + Zaehler aktualisieren
         with open(full_path, "a") as f:
             for row in entry["rows"]:
                 f.write(f"| {row['time']} | {row['call']} | {row['ant1_snr']} | "
-                        f"{row['ant2_snr']} | {row['delta']:+.1f} | "
-                        f"{row['winner']} | {row['saved']} |\n")
+                        f"{row['ant2_snr']} | {row['delta']:+.1f} |\n")
                 self._sc_compare_count += 1
-                if row["saved"] == "★":
-                    self._sc_saved_count += 1
-                if row["winner"] == "A2":
-                    self._sc_delta_a2_total += row["delta"]
-                    self._sc_delta_a2_count += 1
+                self._sc_saved_count += 1  # jede Zeile = ANT2-Rescue
+                self._sc_delta_a2_total += row["delta"]
+                self._sc_delta_a2_count += 1
 
         self._sc_path = full_path
 
