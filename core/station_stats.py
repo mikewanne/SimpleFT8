@@ -139,7 +139,7 @@ class StationStatsLogger:
         for comp in comparisons:
             a1 = comp["ant1_snr"]
             a2 = comp["ant2_snr"]
-            saved = "★" if (a1 <= FT8_DECODE_THRESHOLD) != (a2 <= FT8_DECODE_THRESHOLD) else ""
+            saved = "★" if (a1 <= FT8_DECODE_THRESHOLD and a2 > FT8_DECODE_THRESHOLD) else ""
             rows.append({
                 "time": time_str,
                 "call": comp["call"],
