@@ -33,10 +33,10 @@ DARK_FG = "#d4d4d4"
 DARK_GRID = "#333333"
 
 COLORS = {
-    "Normal": "#4e9af1",
-    "Diversity_Normal": "#72c77a",
-    "Diversity_Dx": "#f0a050",
-    "rescue": "#ff6060",
+    "Normal":           "#aaaaaa",  # grau — Baseline, kein Diversity
+    "Diversity_Normal": "#4e9af1",  # blau — Standard-Diversity
+    "Diversity_Dx":     "#f0a050",  # orange — DX-Diversity
+    "rescue":           "#44dd77",  # hell-grün — gerettete Stationen
 }
 
 _COL_MAP = {
@@ -68,15 +68,15 @@ EXPL_STATIONEN = (
 def _expl_diversity(band: str, protocol: str) -> str:
     return (
         "Was sehe ich?\n"
-        "  Orange = Wie viele Stationen das System pro 15-Sek.-Zyklus empfangen hat (Ø über alle Messtage).\n"
-        "  Grüne Kappe oben = Stationen, die Antenne 1 allein NICHT dekodieren konnte — Signal war unter\n"
-        "  −24 dB (FT8-Decodierschwelle). Antenne 2 hat sie gerettet. Die +Zahl zeigt wie viele das waren.\n"
+        "  Grau = Normal (1 Antenne)  |  Blau = Diversity Standard  |  Orange = Diversity DX.\n"
+        "  Grüne Kappe oben = Stationen, die ANT1 allein NICHT dekodieren konnte (Signal unter −24 dB,\n"
+        "  FT8-Decodierschwelle) — ANT2 hat sie gerettet. +N zeigt wie viele das pro Stunde waren.\n"
         "\n"
-        "FT8 ist ein Digitalfunk-Modus: Er überträgt kurze Textnachrichten über tausende Kilometer,\n"
-        "auch bei extrem schwachen Signalen. Unter −24 dB ist eine Station für einen normalen Empfänger\n"
-        "unsichtbar — Diversity rettet sie, indem es automatisch die bessere der zwei Antennen wählt.\n"
+        "Die Modi wurden an verschiedenen Tagen gemessen. Da jede UTC-Stunde über viele Tage gemittelt\n"
+        "wird (Mo 18:00, Di 18:00, ...), gleichen sich gute und schlechte Funkbedingungen für alle Modi\n"
+        "statistisch aus — der Vergleich ist fair. Diversity DX optimiert gezielt auf schwache Signale.\n"
         "\n"
-        f"Rohdaten: statistics/Diversity_Dx/{band}/{protocol}/  ·  github.com/mikewanne/SimpleFT8"
+        f"Rohdaten: statistics/{{Modus}}/{band}/{protocol}/  ·  github.com/mikewanne/SimpleFT8"
     )
 
 
@@ -181,10 +181,10 @@ def load_wins_averages(stats_dir: Path, band: str,
     return dict(result)
 
 
-def load_rescue_by_hour(stats_dir: Path, band: str,
+def load_rescue_by_hour(stats_dir: Path, mode: str, band: str,
                         protocol: str) -> dict[int, float]:
     """Rescue-Events pro Stunde des Tages, gemittelt über Messtage."""
-    stations_dir = stats_dir / "Diversity_Dx" / band / protocol / "stations"
+    stations_dir = stats_dir / mode / band / protocol / "stations"
     if not stations_dir.exists():
         return {}
     per_day_hour: dict[tuple, int] = defaultdict(int)
@@ -256,6 +256,23 @@ def _gradient_bars(ax, x_positions, heights, width: float,
     if label:
         return mpatches.Patch(facecolor=top_color, alpha=0.85, label=label)
     return None
+
+
+def _draw_rescue_caps(ax, x_positions, station_vals, rescue_vals,
+                      bar_w: float, max_val: float) -> bool:
+    """Grüne Rescue-Kappen oben auf Diversity-Balken + +N Labels."""
+    drawn = False
+    for xi, sv, rv in zip(x_positions, station_vals, rescue_vals):
+        if rv < 0.5 or sv < 0.5:
+            continue
+        base = max(0.0, sv - rv)
+        ax.bar(xi, rv, bottom=base, width=bar_w,
+               color="#44dd77", alpha=0.92, zorder=3, linewidth=0)
+        ax.text(xi, sv + max_val * 0.016, f"+{rv:.0f}",
+                ha="center", va="bottom", fontsize=7,
+                color="#55ee88", fontweight="bold", zorder=5)
+        drawn = True
+    return drawn
 
 
 # ── Achsen-Setup ──────────────────────────────────────────────────────────────
@@ -352,61 +369,93 @@ def create_stations_diagram(band: str, protocol: str):
     print(f"  ✓ {out.name}")
 
 
-# ── Diagramm 2: Diversity-Analyse (Stacked Bar: Orange + Grüne Rescue-Kappe) ──
+# ── Diagramm 2: 3-Modus Vergleich (Normal | Diversity Standard | Diversity DX) ─
+
+_MODE_ORDER  = ["Normal", "Diversity_Normal", "Diversity_Dx"]
+_MODE_LABELS = {
+    "Normal":           "Normal (1 Antenne)",
+    "Diversity_Normal": "Diversity Standard",
+    "Diversity_Dx":     "Diversity DX",
+}
+_MODE_OFFSETS = {"Normal": -0.27, "Diversity_Normal": 0.0, "Diversity_Dx": +0.27}
+
 
 def create_diversity_diagram(band: str, protocol: str):
-    hour_vals_st = load_hourly_averages(STATS_DIR, "Diversity_Dx", band, protocol)
-    if not hour_vals_st:
+    bar_w = 0.22
+
+    agg_all: dict[str, dict] = {}
+    rescue_all: dict[str, dict] = {}
+    for mode in _MODE_ORDER:
+        hv = load_hourly_averages(STATS_DIR, mode, band, protocol)
+        if hv:
+            agg_all[mode] = _aggregate(hv)
+        if mode != "Normal":
+            r = load_rescue_by_hour(STATS_DIR, mode, band, protocol)
+            if r:
+                rescue_all[mode] = r
+
+    if not agg_all:
         return
 
-    agg_st = _aggregate(hour_vals_st)
-    rescue = load_rescue_by_hour(STATS_DIR, band, protocol)
+    all_hours = sorted(set().union(*[set(a.keys()) for a in agg_all.values()]))
+    n = len(all_hours)
+    if n == 0:
+        return
 
-    hours = sorted(agg_st.keys())
-    n = len(hours)
-    x_pos = np.arange(n, dtype=float)
+    x_base = np.arange(n, dtype=float)
 
-    station_vals = [agg_st[h]["mean"] for h in hours]
-    rescue_vals  = [rescue.get(h, 0) for h in hours]
-
-    bar_w = 0.55
-
-    fig, ax = plt.subplots(figsize=(14, 6.5), facecolor=DARK_BG)
+    fig, ax = plt.subplots(figsize=(16, 6.5), facecolor=DARK_BG)
     _setup_dark_ax(ax)
 
-    max_val = max(station_vals) if station_vals else 1
-    ax.set_ylim(0, max_val * 1.22)
+    max_val = max(
+        (agg[h]["mean"] for agg in agg_all.values() for h in all_hours if h in agg),
+        default=1.0,
+    )
+    ax.set_ylim(0, max_val * 1.28)
     ax.set_xlim(-0.6, n - 0.4)
 
-    # Orange Gradient-Balken: 0 → Stationen gesamt (inkl. geretteter)
-    h_orange = _gradient_bars(ax, x_pos, station_vals, bar_w,
-                              COLORS["Diversity_Dx"], "Stationen gesamt", zorder=2)
-
-    # Grüne Kappe: (gesamt − gerettet) → gesamt  [solide, überlagert oben]
-    rescue_drawn = False
-    for xi, sv, rv in zip(x_pos, station_vals, rescue_vals):
-        if rv < 0.5 or sv < 0.5:
+    handles = []
+    for mode in _MODE_ORDER:
+        if mode not in agg_all:
             continue
-        base = max(0.0, sv - rv)
-        ax.bar(xi, rv, bottom=base, width=bar_w,
-               color="#44dd77", alpha=0.92, zorder=3, linewidth=0)
-        ax.text(xi, sv + max_val * 0.016, f"+{rv:.0f}",
-                ha="center", va="bottom", fontsize=7.5,
-                color="#55ee88", fontweight="bold", zorder=5)
-        rescue_drawn = True
+        agg = agg_all[mode]
+        x_pos = x_base + _MODE_OFFSETS[mode]
+        heights = [agg[h]["mean"] if h in agg else 0.0 for h in all_hours]
+        patch = _gradient_bars(ax, x_pos, heights, bar_w,
+                               COLORS[mode], label=_MODE_LABELS[mode], zorder=2)
+        if patch:
+            handles.append(patch)
 
-    handles = [h for h in (h_orange,) if h]
-    if rescue_drawn:
-        handles.append(mpatches.Patch(
-            facecolor="#44dd77", alpha=0.92,
-            label="davon gerettet (ANT1 unter −24 dB, ANT2 hörbar)"))
+    any_rescue = False
+    for mode in ["Diversity_Normal", "Diversity_Dx"]:
+        if mode not in agg_all:
+            continue
+        agg = agg_all[mode]
+        rescue = rescue_all.get(mode, {})
+        x_pos = x_base + _MODE_OFFSETS[mode]
+        sv_list = [agg[h]["mean"] if h in agg else 0.0 for h in all_hours]
+        rv_list  = [rescue.get(h, 0.0) for h in all_hours]
+        if _draw_rescue_caps(ax, x_pos, sv_list, rv_list, bar_w, max_val):
+            any_rescue = True
 
-    _hour_ticks_bar(ax, list(x_pos), hours)
+    if any_rescue:
+        handles.append(mpatches.Patch(facecolor="#44dd77", alpha=0.92,
+                                      label="davon gerettet (ANT1 unter −24 dB)"))
+
+    _hour_ticks_bar(ax, list(x_base), all_hours)
     ax.set_xlabel("Stunde (UTC)", color=DARK_FG, labelpad=6)
     ax.set_ylabel("Ø Stationen pro 15s-Zyklus", color=DARK_FG)
-    basis = _n_days_label(agg_st)
+
+    basis_parts = []
+    for mode in _MODE_ORDER:
+        if mode not in agg_all:
+            continue
+        n_d = max(v["n_days"] for v in agg_all[mode].values())
+        basis_parts.append(f"{_MODE_LABELS[mode]}: {n_d} Tag{'e' if n_d > 1 else ''}")
+    basis = " · ".join(basis_parts)
+
     ax.set_title(
-        f"Diversity DX-Analyse — {band} {protocol}   ({basis})",
+        f"Empfang im Vergleich — {band} {protocol}   ({basis})",
         color=DARK_FG, fontsize=13, pad=10,
     )
 
