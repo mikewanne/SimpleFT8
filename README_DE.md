@@ -25,6 +25,24 @@ Anders als WSJT-X oder aehnliche Clients, die SmartSDR benoetigen, kommuniziert 
 - **Automatische TX-Leistungsregelung**: Geschlossener Regelkreis haelt die tatsaechliche Ausgangsleistung auf dem eingestellten Wert
 - **Komplett eigenstaendiger Betrieb**: Kein SmartSDR, keine virtuellen Audiokabel, kein DAX-Panel
 
+### Die drei Empfangsmodi — kurz erklärt
+
+SimpleFT8 kann mit einer oder zwei Antennen empfangen. Du hast drei Modi zur Auswahl:
+
+- **Normal** — arbeitet wie jede andere FT8-Software mit einer Antenne. Perfekt, um zu sehen wie gut dein eigener Aufbau im Vergleich läuft.
+- **Diversity Standard (für die Masse)** — mit zwei Antennen sucht das System in jeder Runde automatisch die bessere aus. Das Ergebnis: du hörst deutlich mehr Stationen auf einmal.
+- **Diversity DX (für die Leisen)** — auch mit zwei Antennen, aber hier sucht die Software gezielt nach der Antenne, die ganz schwache Signale besser einfängt. So findest du weit entfernte Stationen, die sonst unter dem Rauschen verschwinden.
+
+| Modus | Antennen | Was er tut | Wofür |
+|-------|----------|-----------|-------|
+| **Normal** | 1 | Empfängt wie gewohnt | Vergleich mit anderer Software |
+| **Diversity Standard** | 2 | Wählt die Antenne mit den meisten Stationen | Die Masse — möglichst viele hören |
+| **Diversity DX** | 2 | Wählt die Antenne die schwache Signale besser hört | Die Leisen — weit entfernte Stationen |
+
+→ Mehr Details: **[docs/explained/diversity-modes_de.md](docs/explained/diversity-modes_de.md)**
+
+---
+
 ### Praxis-Ergebnisse
 
 Kontrollierter Test auf 40m, gleiche Hardware (FLEX-8400M), 2 Minuten Abstand:

@@ -1,6 +1,37 @@
-# Diversity-Modi — Standard vs. DX-Bewertung
+# Diversity-Modi — Normal, Standard und DX
 
-## Kurzfassung
+## Alle drei Modi auf einen Blick
+
+Welchen Modus soll ich nehmen? Kurze Antwort:
+
+| Situation | Modus |
+|-----------|-------|
+| Ich habe nur eine Antenne | **Normal** |
+| Ich will möglichst viele Stationen hören | **Diversity Standard** |
+| Ich suche gezielt weit entfernte, schwache Stationen | **Diversity DX** |
+| Ich will vergleichen wie gut SimpleFT8 vs. andere Software ist | **Normal** als Baseline |
+
+### Normal — der Vergleichsmodus
+
+Normal verwendet eine einzige Antenne und verhält sich exakt wie WSJT-X, JS8Call oder jede andere Standard-FT8-Software. Du brauchst ihn als Ausgangspunkt: Wenn du nicht weißt wie gut dein Empfang grundsätzlich ist, kannst du keinen Fortschritt messen. Mess erst mit Normal, dann schalte auf Diversity — der Unterschied ist sofort sichtbar.
+
+### Diversity Standard — für die Masse
+
+Mit zwei Antennen wählt das System jede Runde automatisch die Antenne, die gerade **mehr Stationen** dekodiert. Du hörst nicht einfach mehr von derselben Antenne — du bekommst automatisch immer das Beste aus beiden. Echte Messungen zeigen 15–30 % mehr Stationen als im Normal-Modus.
+
+### Diversity DX — für die Leisen
+
+Auch mit zwei Antennen, aber das Auswahlkriterium ist anders: Das System sucht die Antenne, die **schwache Signale am besten einfängt** — also Stationen mit einem Signal knapp über dem Rauschen (SNR unter −10 dB). Eine starke lokale Station zwei Kilometer entfernt zählt hier nicht, weil du die sowieso hörst. Es zählen die leisen Signale aus tausenden Kilometern Entfernung.
+
+**Wann Standard, wann DX?**
+Stell dir vor, du sammelst Vogel-Arten in einem Wald. Standard zählt alle Vögel — je mehr, desto besser. DX zählt nur die seltenen Arten im tiefen Wald, die kaum zu hören sind. Wenn du einfach aktiv funken und viele QSOs machen willst → Standard. Wenn du gezielt nach einem bestimmten seltenen DX-Land suchst → DX.
+
+**Warum hat Standard manchmal weniger Stationen als DX?**
+In den Messungen sieht es gelegentlich so aus als hätte DX mehr Stationen als Standard. Das liegt nicht daran, dass DX besser zählt — es liegt am Messzeitpunkt. Wenn Standard um 07:20 Uhr gemessen wird (Band gerade auf dem Höhepunkt) und DX erst um 07:50 Uhr (Band bereits schwächer), zeigt Standard mehr. Umgekehrt genau so. Über viele Messtage gleicht sich das aus. Über 6 gemeinsame Messstunden schlägt DX Normal in 5 von 6 Fällen — bei der *Stationsanzahl*, nicht nur bei schwachen Signalen.
+
+---
+
+## Kurzfassung (technisch)
 
 SimpleFT8s Diversity-Funktion schaltet jeden FT8-Zyklus zwischen zwei Antennen um, um mehr Stationen zu empfangen. Der **Bewertungsmodus** bestimmt, wie entschieden wird, welche Antenne besser ist: Standard-Modus zaehlt alle Stationen (am besten fuer CQ und Contests), DX-Modus zaehlt nur schwache Stationen unter -10 dB SNR (am besten fuer DX-Jagd).
 
