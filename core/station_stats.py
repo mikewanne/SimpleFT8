@@ -6,7 +6,13 @@ Loggt pro FT8/FT4-Zyklus:
 - Band, Protokoll (FT8/FT4), RX-Modus
 
 Verzeichnis: Statistics/<RX-Modus>/<Band>/<Protokoll>/
-Dateien: <Datum>_<Stunde>.md (stuendlich, mit Zusammenfassung)
+Dateien: <Datum>_<Stunde>.md (stündlich, NUR Rohdaten — KEINE Zusammenfassung)
+
+Design-Entscheidung: Kein ## Zusammenfassung Block in den Dateien.
+Auswertung erfolgt ausschliesslich zeilenweise im generate_plots.py Script.
+Grund: Bei Moduswechsel innerhalb einer Stunde werden Zaehler resettet,
+       was zu falschen Zusammenfassungen fuehrt. Rohdaten sind immer korrekt.
+
 Threading: async via Queue + Daemon-Thread (blockiert nie den Decoder)
 """
 
@@ -52,31 +58,19 @@ def ensure_statistics_directory(base_dir: Path, rx_mode: str, band: str, protoco
 
 
 class StationStatsLogger:
-    """Asynchroner Statistik-Logger fuer Empfangszyklen."""
+    """Asynchroner Statistik-Logger fuer Empfangszyklen.
+
+    Schreibt nur Rohdaten (eine Zeile pro Zyklus).
+    Kein Zusammenfassungs-Block — Auswertung via scripts/generate_plots.py.
+    """
 
     def __init__(self, base_dir: str | Path | None = None):
         if base_dir is None:
-            # Im Projektverzeichnis (sichtbar fuer den User)
             base_dir = Path(__file__).parent.parent / "statistics"
         self._base_dir = Path(base_dir)
-        self._dir_cache: set = set()  # Gecachte existierende Verzeichnisse
+        self._dir_cache: set = set()
         self._queue = queue.Queue(maxsize=1000)
-        self._current_file = None
-        self._current_hour = None
         self._current_path = None
-        self._cycle_count = 0
-        self._station_total = 0
-        self._station_max = 0
-        self._station_min = 999
-        self._ant2_wins_total = 0
-        self._snr_delta_total = 0.0
-        self._snr_delta_count = 0
-        # Station-Comparison Counter (eigene Stunden-Datei)
-        self._sc_path = None
-        self._sc_compare_count = 0
-        self._sc_saved_count = 0
-        self._sc_delta_a2_total = 0.0
-        self._sc_delta_a2_count = 0
         self._thread = threading.Thread(target=self._writer_loop, daemon=True)
         self._thread.start()
 
@@ -117,6 +111,8 @@ class StationStatsLogger:
                                 comparisons: list[dict]):
         """Per-Station SNR-Vergleiche loggen (non-blocking, thread-safe).
 
+        Nur ANT2-Rescue-Events (ANT1 ≤ -24 dB, ANT2 > -24 dB) werden geschrieben.
+
         Args:
             band: z.B. "20m", "40m"
             mode: "FT8" oder "FT4"
@@ -148,8 +144,6 @@ class StationStatsLogger:
                 "ant1_snr": a1,
                 "ant2_snr": a2,
                 "delta": comp["delta"],
-                "winner": "A2",
-                "saved": "★",
             })
 
         if not rows:
@@ -197,15 +191,9 @@ class StationStatsLogger:
             target_dir = self._base_dir / entry["rx_mode"] / entry["band"] / entry["ft_mode"]
         target_path = target_dir / f"{entry['hour']}.md"
 
-        # Stundenwechsel? Alte Datei abschliessen
-        if self._current_path and self._current_path != target_path:
-            self._write_summary()
-            self._reset_counters()
-
-        # Neue Datei? Header schreiben
+        # Neue Datei: Header schreiben
         if self._current_path != target_path:
             self._current_path = target_path
-            self._current_hour = entry["hour"]
             is_diversity = "Diversity" in entry["rx_mode"]
             if not target_path.exists():
                 with open(target_path, "w") as f:
@@ -220,7 +208,6 @@ class StationStatsLogger:
                         f.write("| Zeit | Stationen | Ø SNR |\n")
                         f.write("|------|-----------|-------|\n")
 
-        # Zeile anfuegen
         is_diversity = "Diversity" in entry["rx_mode"]
         with open(target_path, "a") as f:
             if is_diversity:
@@ -229,29 +216,11 @@ class StationStatsLogger:
             else:
                 f.write(f"| {entry['time']} | {entry['count']} | {entry['snr']} |\n")
 
-        # Zaehler aktualisieren
-        self._cycle_count += 1
-        self._station_total += entry["count"]
-        self._station_max = max(self._station_max, entry["count"])
-        self._ant2_wins_total += entry.get("ant2_wins", 0)
-        delta = entry.get("snr_delta", 0.0)
-        if delta != 0.0:
-            self._snr_delta_total += delta
-            self._snr_delta_count += 1
-        if entry["count"] > 0:
-            self._station_min = min(self._station_min, entry["count"])
-
     def _write_station_comparisons(self, entry: dict):
-        """Station-Vergleiche in separate Stunden-Datei schreiben."""
+        """Station-Vergleiche (Rescue-Events) in separate Stunden-Datei schreiben."""
         full_path = self._base_dir / entry["path"]
         full_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Stundenwechsel? Zusammenfassung schreiben + Reset
-        if self._sc_path and self._sc_path != full_path:
-            self._write_sc_summary()
-            self._reset_sc_counters()
-
-        # Neue Datei? Header schreiben
         if not full_path.exists():
             with open(full_path, "w") as f:
                 f.write(f"# Station-Vergleiche {entry['date_display']} | "
@@ -259,66 +228,7 @@ class StationStatsLogger:
                 f.write("| Zeit | Call | ANT1 dB | ANT2 dB | Δ dB |\n")
                 f.write("|------|------|---------|---------|------|\n")
 
-        # Zeilen schreiben + Zaehler aktualisieren
         with open(full_path, "a") as f:
             for row in entry["rows"]:
                 f.write(f"| {row['time']} | {row['call']} | {row['ant1_snr']} | "
                         f"{row['ant2_snr']} | {row['delta']:+.1f} |\n")
-                self._sc_compare_count += 1
-                self._sc_saved_count += 1  # jede Zeile = ANT2-Rescue
-                self._sc_delta_a2_total += row["delta"]
-                self._sc_delta_a2_count += 1
-
-        self._sc_path = full_path
-
-    def _write_sc_summary(self):
-        """Zusammenfassung am Ende einer Stunden-Vergleichs-Datei anfuegen."""
-        if not self._sc_path or self._sc_compare_count == 0:
-            return
-        try:
-            with open(self._sc_path, "a") as f:
-                f.write(f"\n## Zusammenfassung\n")
-                f.write(f"- Vergleiche gesamt: {self._sc_compare_count}\n")
-                f.write(f"- Saved-Events (★): {self._sc_saved_count}\n")
-                if self._sc_delta_a2_count > 0:
-                    avg = self._sc_delta_a2_total / self._sc_delta_a2_count
-                    f.write(f"- Ø Δ wenn A2 gewann: {avg:+.1f} dB\n")
-        except Exception:
-            pass
-
-    def _reset_sc_counters(self):
-        self._sc_path = None
-        self._sc_compare_count = 0
-        self._sc_saved_count = 0
-        self._sc_delta_a2_total = 0.0
-        self._sc_delta_a2_count = 0
-
-    def _write_summary(self):
-        """Zusammenfassung am Ende einer Stunde anfuegen."""
-        if not self._current_path or self._cycle_count == 0:
-            return
-        avg = self._station_total / self._cycle_count
-        min_val = self._station_min if self._station_min < 999 else 0
-        try:
-            with open(self._current_path, "a") as f:
-                f.write(f"\n## Zusammenfassung\n")
-                f.write(f"- Zyklen: {self._cycle_count}\n")
-                f.write(f"- Ø Stationen/Zyklus: {avg:.1f}\n")
-                f.write(f"- Max: {self._station_max} | Min: {min_val}\n")
-                if self._ant2_wins_total > 0:
-                    ant2_avg = self._ant2_wins_total / self._cycle_count
-                    f.write(f"- Ø Ant2 Wins/Zyklus: {ant2_avg:.1f}\n")
-                if self._snr_delta_count > 0:
-                    delta_avg = self._snr_delta_total / self._snr_delta_count
-                    f.write(f"- Ø ΔSNR (A2-A1): {delta_avg:+.1f} dB\n")
-        except Exception:
-            pass
-
-    def _reset_counters(self):
-        self._cycle_count = 0
-        self._station_total = 0
-        self._station_max = 0
-        self._station_min = 999
-        self._ant2_wins_total = 0
-        self._snr_delta_total = 0.0
-        self._snr_delta_count = 0

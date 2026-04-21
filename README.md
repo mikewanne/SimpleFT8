@@ -68,6 +68,22 @@ Controlled test on 40m, same hardware (FLEX-8400M), 2 minutes apart:
 | Farthest RX | — | Kiribati ~13,000 km |
 | Farthest TX | — | Indonesia 11,996 km |
 
+### Live Diversity Analysis — Current Data *(collection in progress)*
+
+> Generated automatically from live session data via `scripts/generate_plots.py`.
+> X-axis = UTC hour of day, averaged across all measurement days. Data grows with every session.
+
+| Diagram | Description |
+|---------|-------------|
+| [📊 Diagram 1 — Stations 40m FT8](auswertung/stationen_40m_FT8.png) | Station count over 24h UTC — Normal vs Diversity Normal vs Diversity DX. Line = daily mean, band = day-to-day spread. |
+| [📊 Diagram 2 — Diversity Analysis 40m FT8](auswertung/diversity_40m_FT8.png) | ANT2 wins per cycle (green) vs total stations (orange) vs Rescue-Events (red) — stations that ANT1 couldn't decode but ANT2 saved. |
+| [📊 Diagram 3 — Stations 20m FT8](auswertung/stationen_20m_FT8.png) | Station count over 24h UTC on 20m — Normal vs Diversity modes. |
+| [📊 Diagram 4 — Diversity Analysis 20m FT8](auswertung/diversity_20m_FT8.png) | ANT2 Diversity analysis on 20m FT8 — wins, rescues, hourly breakdown. |
+
+*⚠ Data collection in progress — diagrams update with each new session. More days = wider confidence bands.*
+
+---
+
 ### Screenshots
 
 **CQ mode with DT correction, Propagation bars, Operator Presence timer, PSKReporter spots** — DT values ±0.2 (auto-corrected), 20m band:
@@ -96,8 +112,9 @@ Controlled test on 40m, same hardware (FLEX-8400M), 2 minutes apart:
 - ✅ **QSO State Machine**: Hunt + CQ mode, retry logic, ADIF 3.1.7 logging
 - ✅ **Integrated Logbook**: Search, DXCC counter, QSO detail overlay, delete
 - ✅ **Help Dialog**: Built-in feature docs (DE + EN) via ? button in status bar
-- ✅ **159 Unit Tests**: QSO, diversity patterns, DT, propagation, OMNI-TX, ADIF, histograms
-- ✅ **Station Statistics**: Per-cycle logging with hourly aggregation (Normal + Diversity), 4-cycle warm-up exclusion. *Concept: DL2YMR*
+- ✅ **162 Unit Tests**: QSO, diversity patterns, DT, propagation, OMNI-TX, ADIF, histograms
+- ✅ **Station Statistics**: Per-cycle logging (Normal + Diversity), 6-cycle warm-up exclusion. Raw Markdown data, no in-file summaries — analyzed by `scripts/generate_plots.py`. *Concept: DL2YMR*
+- ✅ **Diversity Analysis Plots**: `python3 scripts/generate_plots.py` → `auswertung/` — dark-theme PNGs: station timeline (Normal vs Diversity) + ANT2 wins + Rescue-Events per hour. [→ Aktuelle Auswertungen](auswertung/)
 - ✅ **Per-Station SNR Logging**: Every A1↔A2 comparison logged with both SNR values, Δ dB, winner and ★ Saved-Event when one antenna is below FT8 decode threshold (−24 dB) and the other above. Proves "ANT2 made this QSO possible."
 - ✅ **Ant2 Superiority Counter**: Quantifies diversity gain (A2 > A1 frequency)
 - ✅ **TX Safety**: TX halted immediately before Gain Measurement — no accidental transmit during calibration
@@ -164,6 +181,8 @@ SimpleFT8/
 │   ├── help_dialog.py            # Feature docs viewer (DE/EN)
 │   └── ...                       # Control panel, RX panel, QSO panel
 ├── docs/explained/               # 10 feature docs (5 × DE + EN)
+├── scripts/generate_plots.py     # Auswertungs-Script: statistics/ → auswertung/ PNGs
+├── auswertung/                   # Generierte Diagramme (stationen_*.png, diversity_*.png)
 ├── tests/test_modules.py         # 116 unit tests
 └── tests/test_patterns.py        # 16 pattern tests (diversity + OMNI-TX)
 ```
@@ -206,6 +225,22 @@ MIT License (c) 2026 DA1MHH (Mike Hammerer)
 | **Zeitkorrektur** | Nur externes NTP | **DT-Autokorrektur** pro Modus, gespeichert |
 | **RX-Filter** | Manuell | **Automatisch** pro Modus (3100/4000 Hz) |
 
+### Live Diversity Auswertung — Aktuelle Daten *(Datensammlung läuft)*
+
+> Automatisch generiert aus Live-Sitzungsdaten via `scripts/generate_plots.py`.
+> X-Achse = UTC-Stunde des Tages, gemittelt über alle Messtage. Daten wachsen mit jeder Session.
+
+| Diagramm | Beschreibung |
+|----------|-------------|
+| [📊 Diagramm 1 — Stationen 40m FT8](auswertung/stationen_40m_FT8.png) | Stationszahl über 24h UTC — Normal vs Diversity Normal vs Diversity DX. Linie = Tagesmittel, Band = Tages-Schwankung. |
+| [📊 Diagramm 2 — Diversity Analyse 40m FT8](auswertung/diversity_40m_FT8.png) | ANT2-Wins/Zyklus (grün) vs Stationen gesamt (orange) vs Rescue-Events (rot) — Stationen die ANT1 nicht decodieren konnte, aber ANT2 rettete. |
+| [📊 Diagramm 3 — Stationen 20m FT8](auswertung/stationen_20m_FT8.png) | Stationszahl über 24h UTC auf 20m — Normal vs Diversity-Modi. |
+| [📊 Diagramm 4 — Diversity Analyse 20m FT8](auswertung/diversity_20m_FT8.png) | ANT2 Diversity-Auswertung auf 20m FT8 — Wins, Rescues, stündliche Aufschlüsselung. |
+
+*⚠ Datensammlung in Bearbeitung — Diagramme werden mit jeder Session aktueller. Mehr Tage = breiteres Konfidenzband.*
+
+---
+
 ### Die wichtigsten Innovationen
 
 - **FT2-Modus** — Nativer Decodium-kompatibler FT2 Decoder/Encoder (3.8s Zyklen, 4-GFSK, 288 sps). Community-Frequenzen vorkonfiguriert. QSOs erfolgreich abgeschlossen. Automatische RX-Filterverbreiterung auf 4000 Hz.
@@ -245,8 +280,9 @@ MIT License (c) 2026 DA1MHH (Mike Hammerer)
 - ✅ **QSO-Zustandsmaschine**: Hunt + CQ, Retry, ADIF 3.1.7
 - ✅ **Logbuch**: Suche, DXCC, Detail-Overlay, Loeschen
 - ✅ **Hilfe-Dialog**: Feature-Doku (DE + EN) via ? Button in Statusleiste
-- ✅ **159 Unit Tests**: QSO, Diversity-Patterns, DT, Propagation, OMNI-TX, ADIF, Histogramme
-- ✅ **Stations-Statistik**: Pro-Zyklus Logging mit Stundenaggregation (Normal + Diversity), 4-Zyklen Warmup-Ausschluss. *Konzept: DL2YMR*
+- ✅ **162 Unit Tests**: QSO, Diversity-Patterns, DT, Propagation, OMNI-TX, ADIF, Histogramme
+- ✅ **Stations-Statistik**: Pro-Zyklus Logging (Normal + Diversity), 6-Zyklen Warmup-Ausschluss. Rohdaten im Markdown, keine In-File-Zusammenfassungen — Auswertung via `scripts/generate_plots.py`. *Konzept: DL2YMR*
+- ✅ **Diversity Auswertungs-Diagramme**: `python3 scripts/generate_plots.py` → `auswertung/` — Dark-Theme PNGs: Stationen-Zeitverlauf (Normal vs Diversity) + ANT2-Wins + Rescue-Events. [→ Aktuelle Auswertungen](auswertung/)
 - ✅ **Per-Station SNR-Logging**: Jeder A1↔A2 Vergleich wird mit beiden SNR-Werten, Δ dB, Gewinner und ★ Saved-Event geloggt — wenn eine Antenne unter der FT8-Dekodierschwelle (−24 dB) liegt und die andere darüber. Beweist: "ANT2 hat dieses QSO erst möglich gemacht."
 - ✅ **Ant2 Superiority Counter**: Quantifiziert Diversity-Gewinn (Ant2 > Ant1)
 - ✅ **TX-Sicherheit**: TX stoppt sofort vor Gain-Messung — kein versehentliches Senden bei Kalibrierung
