@@ -3,12 +3,13 @@
 Strategie:
   XML von https://www.hamqsl.com/solarxml.php abrufen.
   Bereits enthält poor/fair/good pro Band für Tag UND Nacht.
-  Zusätzlich: bandspezifische UTC-Tageszeit-Korrektur (Mitteleuropa)
-  → ehrlicher als HAM-Toolbox weil Übergangsstunden abgebildet werden.
+  Zusätzlich: jahreszeitabhängige Öffnungsfenster pro Band (Mitteleuropa 48°N)
+  → ehrlicher als HAM-Toolbox (pauschale 06-18 UTC Tag/Nacht).
 
 Mehrwert:
-  HamQSL sagt "day: fair" für 80m — aber um 12 UTC ist 80m trotzdem schlecht.
-  Unsere Tageszeit-Korrektur senkt die Bewertung in Übergangsstunden um 1 Stufe.
+  HamQSL sagt "fair" für 20m um 07 UTC — aber im Winter ist 20m erst ab 06 UTC offen.
+  10m/12m/15m im Winter: praktisch tot → immer poor unabhängig von HamQSL.
+  Nachtbänder (40m/80m): nur innerhalb des echten Nacht-Öffnungsfensters bewertet.
 
 Keine API-Keys. Kein Login. Kein externer Service außer HamQSL.
 Bei Netzwerkfehler: None zurück, Balken unsichtbar.
@@ -43,40 +44,97 @@ COLORS: Dict[str, str] = {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Bandspezifische UTC-Tageszeit-Korrektur (Mitteleuropa-Faustregel)
-# Format: (stunde_von, stunde_bis_exkl, "-1" | "normal")
+# Jahreszeitabhängige Band-Öffnungsfenster (Mitteleuropa 48°N, UTC)
+# Quelle: Funkpraxis + DeepSeek-Analyse (April 2026)
+#
+# Format: (open_utc, close_utc, is_na)
+#   open_utc  — ab dieser Stunde ist DX möglich ("fair" nutzbar)
+#   close_utc — ab dieser Stunde geschlossen (wieder poor)
+#   is_na     — True = Band in dieser Jahreszeit praktisch tot (immer poor)
+#
+# Nachtbänder (40m, 80m): close_utc < open_utc = Mitternachts-Übergang
+# Außerhalb des Fensters → immer "poor", unabhängig von HamQSL-Wert.
+# Innerhalb → HamQSL-Wert unverändert (kein Boosting).
 # ─────────────────────────────────────────────────────────────────────────────
-_TIME_CORRECTIONS: Dict[str, List[Tuple[int, int, str]]] = {
-    "80m": [(0,  7, "normal"), (7,  20, "-1"), (20, 24, "normal")],
-    "40m": [(0,  7, "normal"), (7,  19, "-1"), (19, 24, "normal")],
-    "30m": [(0,  8, "-1"),     (8,  20, "normal"), (20, 24, "-1")],
-    "20m": [(0,  9, "-1"),     (9,  20, "normal"), (20, 24, "-1")],
-    "17m": [(0, 10, "-1"),     (10, 19, "normal"), (19, 24, "-1")],
-    "15m": [(0, 10, "-1"),     (10, 19, "normal"), (19, 24, "-1")],
-    "12m": [(0, 11, "-1"),     (11, 18, "normal"), (18, 24, "-1")],
-    "10m": [(0, 11, "-1"),     (11, 18, "normal"), (18, 24, "-1")],
-    # 60m: kein Eintrag → bleibt immer grey
+_SEASONAL_SCHEDULE: Dict[str, Dict[str, tuple]] = {
+    "winter": {  # Dez, Jan, Feb
+        "10m": (None, None, True),   # Band tot (kein F2-DX)
+        "12m": (None, None, True),   # Band tot
+        "15m": (None, None, True),   # Band tot (gelegentlich, aber nicht verlässlich)
+        "17m": (8,  16, False),      # 08:00–16:00
+        "20m": (6,  18, False),      # 06:00–18:00
+        "30m": (4,  20, False),      # 04:00–20:00
+        "40m": (14,  7, False),      # 14:00–07:00 (Nachtband, Mitternachts-Übergang)
+        "80m": (16,  8, False),      # 16:00–08:00 (Nachtband)
+    },
+    "spring": {  # Mär, Apr, Mai
+        "10m": (9,  17, False),      # ~09:00–17:00
+        "12m": (8,  18, False),      # ~08:00–18:00
+        "15m": (7,  20, False),      # 07:00–20:00
+        "17m": (6,  21, False),      # 06:00–21:00
+        "20m": (5,  22, False),      # 05:00–22:00
+        "30m": (3,  23, False),      # 03:00–23:00
+        "40m": (15,  8, False),      # 15:00–08:00 (Nachtband)
+        "80m": (17,  7, False),      # 17:00–07:00 (Nachtband)
+    },
+    "summer": {  # Jun, Jul, Aug
+        "10m": (8,  19, False),      # 08:00–19:00
+        "12m": (7,  20, False),      # 07:00–20:00
+        "15m": (6,  22, False),      # 06:00–22:00
+        "17m": (5,  23, False),      # 05:00–23:00
+        "20m": (4,  24, False),      # 04:00–24:00 (praktisch ganztags offen)
+        "30m": (2,  24, False),      # 02:00–24:00 (fast 24h)
+        "40m": (16,  5, False),      # 16:00–05:00 (kürzere Nacht im Sommer)
+        "80m": (18,  4, False),      # 18:00–04:00
+    },
+    "autumn": {  # Sep, Okt, Nov
+        "10m": (9,  16, False),      # ~09:00–16:00
+        "12m": (8,  17, False),      # ~08:00–17:00
+        "15m": (7,  19, False),      # 07:00–19:00
+        "17m": (6,  20, False),      # 06:00–20:00
+        "20m": (5,  21, False),      # 05:00–21:00
+        "30m": (3,  22, False),      # 03:00–22:00
+        "40m": (14,  8, False),      # 14:00–08:00 (Nachtband)
+        "80m": (16,  8, False),      # 16:00–08:00
+    },
 }
 
 
-def _step_down(condition: str) -> str:
-    """Bedingung eine Stufe verschlechtern (good→fair, fair→poor, poor→poor)."""
-    try:
-        idx = _CONDITION_ORDER.index(condition.lower())
-        return _CONDITION_ORDER[min(idx + 1, len(_CONDITION_ORDER) - 1)]
-    except ValueError:
-        return condition
+def _get_season(month: int) -> str:
+    if month in (12, 1, 2):
+        return "winter"
+    if month in (3, 4, 5):
+        return "spring"
+    if month in (6, 7, 8):
+        return "summer"
+    return "autumn"
 
 
-def _apply_time_correction(band: str, condition: str, utc_hour: int) -> str:
-    """UTC-Stunden-Korrektur für Band anwenden."""
-    rules = _TIME_CORRECTIONS.get(band)
-    if not rules:
-        return condition
-    for h_from, h_to, action in rules:
-        if h_from <= utc_hour < h_to:
-            return _step_down(condition) if action == "-1" else condition
-    return condition
+def _apply_seasonal_correction(band: str, condition: str,
+                                utc_hour: int, month: int) -> str:
+    """Jahreszeitabhängige Band-Öffnungskorrektur.
+
+    Außerhalb des Öffnungsfensters → "poor".
+    Innerhalb → HamQSL-Wert unverändert (kein Boosting).
+    N/A-Band (is_na=True) → immer "poor".
+    """
+    season = _get_season(month)
+    entry = _SEASONAL_SCHEDULE.get(season, {}).get(band)
+    if entry is None:
+        return condition  # 60m o.ä. → unverändert
+
+    open_h, close_h, is_na = entry
+
+    if is_na:
+        return "poor"
+
+    # Nachtband: close_h < open_h → Mitternachts-Übergang
+    if close_h < open_h:
+        is_open = (utc_hour >= open_h) or (utc_hour < close_h)
+    else:
+        is_open = (open_h <= utc_hour < close_h)
+
+    return condition if is_open else "poor"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -137,14 +195,16 @@ def _fetch_raw() -> Optional[Dict[str, Dict[str, str]]]:
 
 def _evaluate_conditions(raw_data: Dict[str, Dict[str, str]]) -> Dict[str, str]:
     """Rohdaten MIT aktueller UTC-Stunde auswerten (Zeitkorrektur bei jedem Aufruf)."""
-    utc_hour = datetime.now(timezone.utc).hour
+    now = datetime.now(timezone.utc)
+    utc_hour = now.hour
+    month = now.month
     time_of_day = "day" if 6 <= utc_hour < 18 else "night"
 
     conditions: Dict[str, str] = {}
     for band in ALL_BANDS:
         band_data = raw_data.get(band, {"day": "grey", "night": "grey"})
         base_condition = band_data.get(time_of_day, "grey")
-        conditions[band] = _apply_time_correction(band, base_condition, utc_hour)
+        conditions[band] = _apply_seasonal_correction(band, base_condition, utc_hour, month)
 
     return conditions
 

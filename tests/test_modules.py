@@ -290,26 +290,25 @@ def test_factory_unknown_type():
 
 # ── Propagation ──────────────────────────────────────────────────────────────
 
-def test_propagation_step_down():
-    """Stufen-Abstufung: good→fair, fair→poor, poor→poor."""
-    from core.propagation import _step_down
-    assert _step_down("good") == "fair"
-    assert _step_down("fair") == "poor"
-    assert _step_down("poor") == "poor"
+def test_propagation_seasonal_na_band():
+    """10m im Winter (N/A) → immer poor, egal was HamQSL sagt."""
+    from core.propagation import _apply_seasonal_correction
+    assert _apply_seasonal_correction("10m", "good", 12, 1) == "poor"  # Januar
+    assert _apply_seasonal_correction("10m", "fair", 10, 2) == "poor"  # Februar
 
 
-def test_propagation_time_correction_80m():
-    """80m mittags (12 UTC) → eine Stufe schlechter."""
-    from core.propagation import _apply_time_correction
-    assert _apply_time_correction("80m", "good", 12) == "fair"
-    assert _apply_time_correction("80m", "good", 2) == "good"
+def test_propagation_seasonal_80m_winter():
+    """80m Nachtband Winter: geschlossen tagsüber (12 UTC), offen nachts (03 UTC)."""
+    from core.propagation import _apply_seasonal_correction
+    assert _apply_seasonal_correction("80m", "good", 12, 1) == "poor"  # mitten am Tag
+    assert _apply_seasonal_correction("80m", "good", 3, 1) == "good"   # nachts offen
 
 
-def test_propagation_time_correction_20m():
-    """20m nachts (3 UTC) → eine Stufe schlechter."""
-    from core.propagation import _apply_time_correction
-    assert _apply_time_correction("20m", "fair", 14) == "fair"
-    assert _apply_time_correction("20m", "fair", 3) == "poor"
+def test_propagation_seasonal_20m_spring():
+    """20m Frühling: offen 05–22 UTC, außerhalb → poor."""
+    from core.propagation import _apply_seasonal_correction
+    assert _apply_seasonal_correction("20m", "fair", 14, 4) == "fair"  # April, tagsüber offen
+    assert _apply_seasonal_correction("20m", "fair", 3, 4) == "poor"   # April, 03 UTC → geschlossen
 
 
 # ── Syntax Checks ────────────────────────────────────────────────────────────
