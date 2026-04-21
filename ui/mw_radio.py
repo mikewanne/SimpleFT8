@@ -189,6 +189,8 @@ class RadioMixin:
         # Even/Odd Anzeige: Slot-Dauer fuer QSO-Panel
         _DURATIONS = {"FT8": 15.0, "FT4": 7.5, "FT2": 3.8}
         self.qso_panel._cycle_duration = _DURATIONS.get(mode, 15.0)
+        # Warmup: 6 Zyklen keine Stats nach Protokollwechsel
+        self._stats_warmup_cycles = 6
         # RX-Liste + QSO-Panel leeren bei Mode-Wechsel (neuer Modus = neuer Kontext)
         self.rx_panel.table.setRowCount(0)
         self._diversity_stations = {}
