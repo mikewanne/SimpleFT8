@@ -58,7 +58,8 @@ class DXTuneDialog(QDialog):
         self._finished = False
         self._skip_first = True  # ersten angebrochenen Zyklus ueberspringen
 
-        self.setWindowTitle(f"DX Tuning — {band}")
+        _mode_label = "Diversity DX" if scoring_mode == "snr" else "Diversity Standard"
+        self.setWindowTitle(f"{_mode_label} — Kalibrierung {band}")
         self.setFixedSize(520, 460)
         self.setModal(False)  # Non-modal damit Decoder-Signale durchkommen
         self._setup_ui()
@@ -77,7 +78,8 @@ class DXTuneDialog(QDialog):
         layout.setContentsMargins(16, 12, 16, 12)
 
         # Titel
-        title = QLabel(f"DX Tuning — {self.band}")
+        _mode_label = "Diversity DX" if self.scoring_mode == "snr" else "Diversity Standard"
+        title = QLabel(f"{_mode_label} — Kalibrierung {self.band}")
         title.setStyleSheet("color: #00AAFF; font-size: 18px; font-weight: bold;")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title)
@@ -162,20 +164,6 @@ class DXTuneDialog(QDialog):
         """)
         self.btn_cancel.clicked.connect(self._on_cancel)
         btn_row.addWidget(self.btn_cancel)
-
-        self.btn_save = QPushButton("Preset speichern")
-        self.btn_save.setFixedHeight(32)
-        self.btn_save.setStyleSheet("""
-            QPushButton { background: #003300; color: #66FF66;
-                border: 1px solid #336633; border-radius: 4px;
-                padding: 0 20px; font-size: 12px; font-weight: bold; }
-            QPushButton:hover { background: #005500; }
-            QPushButton:disabled { background: #1a1a2e; color: #444;
-                border-color: #333; }
-        """)
-        self.btn_save.setEnabled(False)
-        self.btn_save.clicked.connect(self.accept)
-        btn_row.addWidget(self.btn_save)
 
         layout.addLayout(btn_row)
 
@@ -331,7 +319,7 @@ class DXTuneDialog(QDialog):
         self.radio.set_rfgain(gain)
         self.radio.set_tx_antenna("ANT1")
 
-        # UI
+        # UI kurz aktualisieren, dann automatisch schliessen
         ant1_gain = self._results["ant1_gain"]
         ant2_gain = self._results["ant2_gain"]
         self.step_label.setText("Messung abgeschlossen!")
@@ -345,9 +333,11 @@ class DXTuneDialog(QDialog):
         self.detail_label.setStyleSheet("color: #44FF44;")
         self.progress.setValue(len(self._schedule))
         self.time_label.setText("")
-        self.btn_save.setEnabled(True)
-        self.btn_cancel.setText("Verwerfen")
+        self.btn_cancel.setVisible(False)
         self._update_results_display()
+        # Automatisch speichern und Dialog schliessen (Programm laeuft sofort weiter)
+        from PySide6.QtCore import QTimer
+        QTimer.singleShot(0, self.accept)
 
     # ── Anzeige-Helfer ──────────────────────────────────────────
 
@@ -361,11 +351,14 @@ class DXTuneDialog(QDialog):
                 count = len([v for v in self._phase_data.get(key, []) if v is not None])
                 overload = self._has_overload(key)
                 if avg is not None:
-                    marker = " ⚠OVL" if overload else ""
-                    # Nach Messung: Gewinner markieren
-                    if self._finished:
+                    if overload:
+                        marker = "  ⚠ (ausgeschlossen – Übersteuerung)" if self._finished else "  ⚠ OVL"
+                    else:
+                        marker = ""
+                    if self._finished and not overload:
                         best_g = self._results.get(f"{ant.lower()}_gain")
-                        marker += "  ←" if gain == best_g and not overload else ""
+                        if best_g is not None and gain == best_g:
+                            marker += "  ←"
                     ant_lines.append(
                         f"  {ant} Gain {gain:2d} dB:  Ø {avg:+5.1f} dB  "
                         f"({count} St.){marker}"

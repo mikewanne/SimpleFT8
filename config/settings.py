@@ -109,10 +109,13 @@ class Settings:
 
     # ── Gain Presets (getrennt: Standard + DX) ───────────────────
 
-    def get_dx_preset(self, band: str) -> dict | None:
-        """Standard-Gain-Preset laden (Scoring: Stationsanzahl). Rueckwaertskompatibel."""
-        # Legacy: "dx_presets" Key (vor v0.40 hiess es so)
+    def get_dx_preset(self, band: str, mode: str = None) -> dict | None:
+        """Standard-Gain-Preset laden. mode-spezifisch wenn vorhanden, sonst Band-Fallback."""
         presets = self._data.get("dx_presets", self._data.get("standard_presets", {}))
+        if mode:
+            specific = presets.get(f"{band}_{mode}")
+            if specific is not None:
+                return specific
         return presets.get(band)
 
     def get_gain_preset(self, band: str, mode: str = "standard") -> dict | None:
@@ -121,20 +124,42 @@ class Settings:
         presets = self._data.get(key, {})
         return presets.get(band)
 
+    def get_normal_preset(self, band: str) -> dict:
+        """Normal-Modus Gain-Preset — nie aus Diversity-Presets. Standard: PREAMP_PRESETS-Wert."""
+        from radio.presets import PREAMP_PRESETS
+        presets = self._data.get("normal_presets", {})
+        if band in presets:
+            return presets[band]
+        return {"rxant": "ANT1", "gain": PREAMP_PRESETS.get(band, 10)}
+
+    def save_normal_preset(self, band: str, gain: int, rxant: str = "ANT1"):
+        """Normal-Modus Gain-Preset speichern (nach manueller Kalibrierung)."""
+        import time
+        if "normal_presets" not in self._data:
+            self._data["normal_presets"] = {}
+        self._data["normal_presets"][band] = {
+            "rxant": rxant,
+            "gain": gain,
+            "measured": time.strftime("%Y-%m-%d %H:%M"),
+        }
+        self.save()
+
     def save_dx_preset(self, band: str, rxant: str, gain: int,
                        ant1_avg: float = 0, ant2_avg: float = 0,
                        ant1_gain: int = None, ant2_gain: int = None,
-                       scoring: str = "standard"):
+                       scoring: str = "standard", mode: str = None):
         """Gain-Preset speichern. scoring='standard' (Stationen) oder 'dx' (SNR).
 
         Standard → in 'dx_presets' (Legacy-Key, Rueckwaertskompatibel)
         DX → in 'dx_gain_presets' (neuer Key)
+        mode → bei Angabe als band_mode-Key gespeichert (z.B. '20m_FT8')
         """
         import time
         key = "dx_gain_presets" if scoring == "dx" else "dx_presets"
         if key not in self._data:
             self._data[key] = {}
-        self._data[key][band] = {
+        preset_key = f"{band}_{mode}" if mode else band
+        self._data[key][preset_key] = {
             "rxant": rxant,
             "gain": gain,
             "ant1_gain": ant1_gain if ant1_gain is not None else gain,
@@ -152,6 +177,23 @@ class Settings:
         """Diversity-Preset laden. Key: 'FT8_20m' etc."""
         presets = self._data.get("diversity_presets", {})
         return presets.get(f"{mode}_{band}")
+
+    # ── TX-Power pro Band ─────────────────────────────────────────
+
+    def save_tx_power(self, band: str, rfpower: int):
+        """rfpower-Wert pro Band speichern (nach TX-Konvergenz)."""
+        rp = self._data.setdefault("rfpower_per_band", {})
+        rp[band] = int(rfpower)
+        self.save()
+
+    def get_tx_power(self, band: str, default: int = 50) -> int:
+        """Gespeicherten rfpower-Wert für ein Band laden. Clamp 10-80%."""
+        val = self._data.get("rfpower_per_band", {}).get(band)
+        if val is None:
+            return default
+        return max(10, min(80, int(val)))
+
+    # ── Diversity Presets (Ratio pro Modus+Band) ──────────────────
 
     def save_diversity_preset(self, mode: str, band: str,
                               ratio: str, dominant: str | None):

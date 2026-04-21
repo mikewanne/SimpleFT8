@@ -10,7 +10,7 @@ import time
 
 
 def accumulate_stations(stations: dict, messages: list, active_qso_targets: set,
-                        antenna: str = "") -> bool:
+                        antenna: str = "") -> tuple[bool, list[dict]]:
     """Stationen akkumulieren — gemeinsame Logik fuer Normal + Diversity.
 
     Args:
@@ -20,12 +20,13 @@ def accumulate_stations(stations: dict, messages: list, active_qso_targets: set,
         antenna: Optional "A1"/"A2" fuer Diversity (leer fuer Normal)
 
     Returns:
-        True wenn sich was geaendert hat (Tabelle muss neu aufgebaut werden)
+        (changed, comparisons) — comparisons: A1↔A2 Vergleichs-Dicts, leer bei Normal-Modus
     """
     now = time.time()
     slot_dur = 15.0  # wird unten nicht gebraucht fuer Logik
     utc_str = time.strftime("%H%M%S", time.gmtime(now))
     changed = False
+    comparisons = []
 
     for orig_msg in (messages or []):
         key = orig_msg.caller
@@ -61,6 +62,26 @@ def accumulate_stations(stations: dict, messages: list, active_qso_targets: set,
                 # Diversity: Antennen-Vergleich
                 if ant_changed and getattr(existing, 'antenna', '') in ("A1", "A2"):
                     old_ant = existing.antenna
+                    # SNR pro Antenne speichern (für ΔSNR-Statistik), VOR SNR-Update
+                    if antenna == "A1":
+                        existing._snr_a1 = msg.snr
+                        existing._snr_a2 = existing.snr
+                    else:
+                        existing._snr_a2 = msg.snr
+                        existing._snr_a1 = existing.snr
+
+                    # Echten A1↔A2 Vergleich erfassen
+                    ant1_snr = existing._snr_a1
+                    ant2_snr = existing._snr_a2
+                    delta = ant2_snr - ant1_snr
+                    comparisons.append({
+                        "call": key,
+                        "ant1_snr": ant1_snr,
+                        "ant2_snr": ant2_snr,
+                        "delta": delta,
+                        "antenna_winner": "A2" if delta > 0 else "A1",
+                    })
+
                     if msg.snr > existing.snr:
                         existing.antenna = f"{antenna}>{old_ant[-1]}"
                     else:
@@ -79,7 +100,7 @@ def accumulate_stations(stations: dict, messages: list, active_qso_targets: set,
     if stale:
         changed = True
 
-    return changed
+    return changed, comparisons
 
 
 def remove_stale(stations: dict, active_qso_targets: set,

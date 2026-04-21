@@ -301,7 +301,7 @@ class _AntenneCard(QFrame):
         self.btn_normal.setFixedHeight(28)
         self.btn_diversity = QPushButton("DIVERSITY")
         self.btn_diversity.setFixedHeight(28)
-        self.btn_einmessen = QPushButton("GAIN-MESSUNG")
+        self.btn_einmessen = QPushButton("KALIBRIEREN")
         self.btn_einmessen.setFixedHeight(28)
         self.btn_einmessen.setStyleSheet(
             "QPushButton { background: rgba(60,140,60,0.25); color: #88CC88; "
@@ -1044,21 +1044,20 @@ class ControlPanel(QWidget):
     def update_diversity_counts(self, a1_count: int, a2_count: int,
                                 a1_avg_snr: float = None, a2_avg_snr: float = None,
                                 scoring_mode: str = "normal",
-                                ant2_wins: int = 0, total_compared: int = 0):
-        """Diversity-Counts pro Antenne + Ant2 Superiority.
+                                ant2_wins: int = 0, total_compared: int = 0,
+                                a1_weak_count: int = 0, a2_weak_count: int = 0):
+        """Diversity-Counts pro Antenne.
 
-        Standard: Stationsanzahl + Ant2-Wins. DX: SNR + Ant2-Wins.
+        Standard: 'X St.' pro Antenne. DX: 'X DX' (schwache Signale -20..-10 dB).
         """
         if a1_count == 0 and a2_count == 0:
             self._a1_count_label.setText("")
             self._a2_count_label.setText("")
-        elif scoring_mode == "dx" and a1_avg_snr is not None:
-            self._a1_count_label.setText(f"Ø{a1_avg_snr:+.0f}dB")
-            self._a2_count_label.setText(f"Ø{a2_avg_snr:+.0f}dB")
+        elif scoring_mode == "dx":
+            self._a1_count_label.setText(f"{a1_weak_count} DX" if a1_weak_count else "– DX")
+            self._a2_count_label.setText(f"{a2_weak_count} DX" if a2_weak_count else "– DX")
         else:
-            total = a1_count + a2_count
-            pct = round(100 * ant2_wins / total_compared) if total_compared else 0
-            self._a1_count_label.setText(f"{a1_count} St. {total - a2_count - ant2_wins}")
+            self._a1_count_label.setText(f"{a1_count} St.")
             self._a2_count_label.setText(f"{a2_count} St.")
 
     def update_freq_histogram(self, data: dict):

@@ -89,14 +89,13 @@ class RadioMixin:
         self.radio.apply_ft8_preset(band=band)
         print(f"[FlexRadio] Band: {band}, Freq: {freq:.3f} MHz")
         self._update_statusbar()  # Statusbar sofort sichtbar nach Connect
-        # DX-Preset ANT1-Gain silent laden wenn vorhanden
-        preset = self.settings.get_dx_preset(band)
-        if preset and "ant1_gain" in preset:
-            self.radio.set_rfgain(preset['ant1_gain'])
-            self.statusBar().showMessage(
-                f"Preset {band} geladen: ANT1 G{preset['ant1_gain']} dB", 4000
-            )
-            print(f"[FlexRadio] Preset {band}: ANT1 G{preset['ant1_gain']} dB")
+        # Normal-Preset laden (eigener Key, nie aus Diversity-Presets)
+        normal_preset = self.settings.get_normal_preset(band)
+        gain = normal_preset.get("gain", PREAMP_PRESETS.get(band, 10))
+        self.radio.set_rfgain(gain)
+        label = "kalibriert" if normal_preset.get("measured") else "Standard"
+        self.statusBar().showMessage(f"Normal Preset {band}: G{gain}dB ({label})", 4000)
+        print(f"[FlexRadio] Normal Preset {band}: G{gain}dB ({label})")
         # Leistung: konservativer Start bei 50%, Regelung regelt auf Zielwatt ein
         power_preset = self.settings.get("power_preset", 10)
         self._rfpower_current = 50
@@ -220,6 +219,14 @@ class RadioMixin:
         # DT-Korrektur: gespeicherten Wert fuer neuen Modus laden
         from core import ntp_time
         ntp_time.set_mode(mode)
+        # Warnung wenn kein mode-spezifisches Gain-Preset vorhanden
+        if self.radio.ip:
+            if self.settings.get_dx_preset(band, mode) is None:
+                self.statusBar().showMessage(
+                    f"Kein Gain-Preset für {band}/{mode} — bitte DX TUNING", 6000
+                )
+                self.control_panel.dx_info.setText(f"Kein Preset ({mode})")
+                self.control_panel.dx_info.setStyleSheet("color: #FF6600;")
         self._update_statusbar()
 
     @Slot(str)
@@ -245,7 +252,7 @@ class RadioMixin:
 
         # Warmup: 60s keine Stats nach Bandwechsel
         import time as _time
-        self._stats_warmup_until = _time.time() + 60
+        self._stats_warmup_cycles = 4
 
         # Empfangsliste komplett leeren bei Bandwechsel
         self.rx_panel.table.setRowCount(0)
@@ -276,8 +283,6 @@ class RadioMixin:
                         f"ANT1+ANT2 (Gain {gain_b})"
                     )
             elif self._rx_mode == "normal":
-                self._apply_dx_preset_for_band(band)
-            else:
                 self._apply_normal_mode()
         # Per-Band TX Level laden (Auto-Regelung speichert pro Band)
         band_levels = self.settings.get("tx_levels_per_band", {})
@@ -286,7 +291,10 @@ class RadioMixin:
         self.control_panel.tx_level_bar.setValue(saved_level)
         self.control_panel.tx_level_label.setText(f"TX-Pegel: {saved_level}%")
         self._fwdpwr_samples.clear()   # Alte Messwerte verwerfen
-        self._rfpower_current = 50    # Reset auf konservativen Start bei Bandwechsel
+        self._rfpower_current = self.settings.get_tx_power(band, default=50)
+        self._rfpower_converged = False
+        if self.radio.ip:
+            self.radio.set_power(self._rfpower_current)
         self._update_statusbar()
 
     @Slot(str)
@@ -300,12 +308,13 @@ class RadioMixin:
 
         # Warmup: 60s keine Stats nach Moduswechsel
         import time as _time
-        self._stats_warmup_until = _time.time() + 60
+        self._stats_warmup_cycles = 4
 
         # Alten Modus sauber beenden + Liste immer leeren bei Wechsel
         if old_mode == "diversity":
             self._disable_diversity()
         self.rx_panel.table.setRowCount(0)
+        self.qso_panel.log_view.clear()
         self.control_panel.update_decode_count(0)
 
         # Decode-Qualitaet automatisch: normal=schnell, diversity=tief
@@ -319,61 +328,85 @@ class RadioMixin:
             self.control_panel._freq_hist.setVisible(False)
             self.control_panel.btn_diversity.setText("DIVERSITY")  # Reset Button-Text
         elif mode == "diversity":
-            # Info-Dialog (einmalig)
-            _show_info_once(self, "diversity", "Diversity Modus",
-                "Diversity vergleicht zwei Antennen und waehlt die bessere.\n\n"
-                "Standard: Zaehlt alle dekodierten Stationen.\n"
-                "Die Antenne die mehr Stationen hoert gewinnt.\n"
-                "Ideal fuer CQ-Betrieb mit vielen QSOs.\n\n"
-                "DX: Zaehlt nur schwache Stationen (SNR < -10 dB).\n"
-                "Entfernte DX-Stationen kommen schwach rein (z.B. -24 dB).\n"
-                "Die Antenne die mehr DX-Stationen hoert gewinnt.\n\n"
-                "Messdauer: 8 Zyklen (~2 Min).\n"
-                "Ergebnis: bessere Antenne 70:30 oder gleichmaessig 50:50.",
-                self.settings)
-            # Scoring-Modus waehlen
-            dlg = QMessageBox(self)
-            dlg.setWindowTitle("Diversity — Modus waehlen")
-            dlg.setText("Welchen Scoring-Modus verwenden?")
-            btn_normal_m = dlg.addButton("Standard", QMessageBox.ButtonRole.AcceptRole)
-            btn_dx       = dlg.addButton("DX", QMessageBox.ButtonRole.AcceptRole)
-            btn_cancel   = dlg.addButton("Abbrechen", QMessageBox.ButtonRole.RejectRole)
-            dlg.exec()
-            if dlg.clickedButton() == btn_cancel:
+            # Scoring-Modus waehlen — vertikaler Custom-Dialog
+            from PySide6.QtWidgets import QDialog, QVBoxLayout, QPushButton, QLabel, QFrame
+            _dlg = QDialog(self)
+            _dlg.setWindowTitle("Diversity — Modus waehlen")
+            _dlg.setStyleSheet("""
+                QDialog { background-color: #1a1a2e; }
+                QLabel  { color: #CCCCCC; font-family: Menlo; font-size: 13px;
+                          padding: 8px 0 12px 0; }
+                QPushButton {
+                    background-color: #2a2a3e; color: #CCCCCC;
+                    border: 1px solid #444; border-radius: 5px;
+                    font-family: Menlo; font-size: 13px;
+                    padding: 10px 20px; min-width: 220px;
+                }
+                QPushButton:hover { background-color: #3a3a5e; }
+                QPushButton#btn_cancel {
+                    background-color: #1a1a1a; color: #888;
+                    border: 1px solid #333;
+                }
+                QPushButton#btn_cancel:hover { background-color: #2a2a2a; color: #AAA; }
+            """)
+            _lay = QVBoxLayout(_dlg)
+            _lay.setContentsMargins(24, 16, 24, 16)
+            _lay.setSpacing(8)
+            _lbl = QLabel("Welchen Modus verwenden?")
+            _lay.addWidget(_lbl)
+            _btn_std = QPushButton("Diversity Standard")
+            _btn_dx  = QPushButton("Diversity DX")
+            _lay.addWidget(_btn_std)
+            _lay.addWidget(_btn_dx)
+            _sep = QFrame()
+            _sep.setFrameShape(QFrame.Shape.HLine)
+            _sep.setStyleSheet("color: #333; margin: 4px 0;")
+            _lay.addWidget(_sep)
+            _btn_cancel = QPushButton("Abbruch")
+            _btn_cancel.setObjectName("btn_cancel")
+            _lay.addWidget(_btn_cancel)
+            _result = [None]
+            _btn_std.clicked.connect(lambda: (_result.__setitem__(0, "normal"), _dlg.accept()))
+            _btn_dx.clicked.connect(lambda:  (_result.__setitem__(0, "dx"),     _dlg.accept()))
+            _btn_cancel.clicked.connect(_dlg.reject)
+            _dlg.exec()
+            if _result[0] is None:
                 self.control_panel.set_rx_mode("normal")
                 self._update_statusbar()
                 return
-            scoring = "dx" if dlg.clickedButton() == btn_dx else "normal"
+            scoring = _result[0]
             self._rx_mode = "diversity"
             self._diversity_stations = {}
             label = "DIVERSITY DX" if scoring == "dx" else "DIVERSITY"
             self.control_panel.btn_diversity.setText(label)
 
-            if scoring == "dx":
-                # DX-Modus: Gain-Preset pruefen, ggf. automatisch messen
-                band = self.settings.band
-                dx_preset = self.settings.get_gain_preset(band, mode="dx")
-                if dx_preset:
-                    # Gespeichertes DX-Preset anwenden → direkt Diversity starten
-                    self._apply_dx_preset(dx_preset)
-                    print(f"[DX] Preset geladen: {band} Gain={dx_preset.get('gain')} dB")
-                    self._enable_diversity(scoring_mode="dx")
-                else:
-                    # Kein DX-Preset → automatische Gain-Messung starten (nach SNR)
-                    _show_info_once(self, "dx_auto_gain", "DX Gain-Messung",
-                        "DX-Modus: Gain-Messung startet automatisch.\n\n"
-                        "Im DX-Betrieb zaehlt Empfindlichkeit (SNR) statt\n"
-                        "Stationsanzahl. Die Messung findet den optimalen\n"
-                        "Preamp-Wert fuer schwache DX-Signale.\n\n"
-                        "Ergebnis wird gespeichert — beim naechsten Mal\n"
-                        "wird das DX-Preset direkt geladen.",
-                        self.settings)
-                    print(f"[DX] Kein Preset fuer {band} — starte Gain-Messung (SNR)")
-                    self._pending_dx_diversity = True
-                    self._start_dx_tuning(scoring_mode="snr")
-            else:
-                # Standard: direkt Diversity starten
-                self._enable_diversity(scoring_mode="normal")
+            # Cache pruefen — 2 Stunden gueltig
+            band = self.settings.band
+            cache = getattr(self, '_diversity_cache', None)
+            if cache and cache.is_valid(band, scoring):
+                age = cache.get_age_minutes(band, scoring)
+                msg = QMessageBox(self)
+                msg.setWindowTitle("Diversity Setup")
+                msg.setStyleSheet(self._msgbox_style())
+                msg.setText(
+                    f"Kalibrierungsdaten vorhanden ({age} Min. alt).\n\n"
+                    f"Weiter oder neu messen?"
+                )
+                btn_use = msg.addButton("Weiter",      QMessageBox.ButtonRole.AcceptRole)
+                btn_new = msg.addButton("Neu messen",  QMessageBox.ButtonRole.ActionRole)
+                msg.exec()
+                if msg.clickedButton() == btn_use:
+                    print(f"[Diversity] Cache gueltig ({age} Min.) — ueberspringe Pipeline")
+                    self._enable_diversity(scoring_mode=scoring)
+                    self._update_statusbar()
+                    return
+
+            # Volle Pipeline: Tunen → Gain-Messung → Einmessen
+            gain_scoring = "snr" if scoring == "dx" else "stations"
+            print(f"[Diversity] Starte Pipeline ({scoring.upper()}, Gain: {gain_scoring})")
+            self._pending_dx_diversity = True
+            self._pending_diversity_scoring = scoring
+            self._start_dx_tuning(scoring_mode=gain_scoring)
 
         self._update_statusbar()
 
@@ -464,21 +497,6 @@ class RadioMixin:
                 f"ANT1(G{self._diversity_ant1_gain}) + "
                 f"ANT2(G{self._diversity_ant2_gain})"
             )
-            # Hinweis nur wenn kein Preset existiert (nicht wenn veraltet)
-            if not preset:
-                from PySide6.QtCore import QTimer
-                QTimer.singleShot(
-                    500,
-                    lambda: QMessageBox.information(
-                        self, "Kein DX Preset",
-                        f"Kein Antennen-Preset fuer {band}.\n\n"
-                        f"Tipp: Mit DX TUNING einmessen → optimale Preamp-Werte\n"
-                        f"fuer ANT1 und ANT2 separat finden.\n\n"
-                        f"Standard-Gains werden verwendet:\n"
-                        f"  ANT1: {self._diversity_ant1_gain} dB\n"
-                        f"  ANT2: {self._diversity_ant2_gain} dB",
-                    )
-                )
             print(f"[Diversity] AKTIV — Standard-Gains, kein Preset fuer {band}")
 
     def _disable_diversity(self):
@@ -496,6 +514,8 @@ class RadioMixin:
         """NEU-Button: Diversity sofort neu einmessen (erzwungen)."""
         if self._rx_mode != "diversity":
             return
+        import time as _time
+        self._stats_warmup_cycles = 99999  # Blockiert bis nach Einmessen+Warmup
         print("[Diversity] Manuelle Neueinmessung gestartet")
         self._diversity_ctrl.start_measure()
         self._set_cq_locked(True)
@@ -505,117 +525,51 @@ class RadioMixin:
             scoring_mode=self._diversity_ctrl.scoring_mode)
 
     def _handle_dx_tuning(self):
-        """DX-Tuning Modus: Preset laden oder Messung starten."""
-        _show_info_once(self, "gain_messung", "Gain-Messung",
-            "Die Gain-Messung ermittelt optimale Preamp-Werte\n"
-            "fuer jede Antenne auf dem aktuellen Band.\n\n"
-            "Die Werte werden pro Band gespeichert und beim\n"
-            "naechsten Start automatisch geladen.\n\n"
-            "Bei DX-Verkehr oder wechselnden Bedingungen\n"
-            "sollte die Messung taeglich wiederholt werden.",
-            self.settings)
-        band = self.settings.band
-        preset = self.settings.get_dx_preset(band)
-
-        if preset:
-            self._apply_dx_preset(preset)
-            msg = QMessageBox(self)
-            msg.setWindowTitle("DX Preset")
-            msg.setIcon(QMessageBox.Icon.Information)
-            msg.setText(
-                f"DX Preset fuer {band} geladen:\n\n"
-                f"  RX-Antenne:  {preset['rxant']}\n"
-                f"  RF-Gain:     {preset['gain']} dB\n"
-                f"  Gemessen:    {preset.get('measured', '?')}\n\n"
-                f"TX bleibt auf ANT1."
-            )
-            msg.setStyleSheet(self._msgbox_style())
-            msg.addButton("OK", QMessageBox.ButtonRole.AcceptRole)
-            btn_new = msg.addButton(
-                "Neu messen", QMessageBox.ButtonRole.ActionRole
-            )
-            msg.exec()
-            if msg.clickedButton() == btn_new:
-                self._start_dx_tuning(scoring_mode="stations")
-        else:
-            msg = QMessageBox(self)
-            msg.setWindowTitle("Gain-Messung")
-            msg.setIcon(QMessageBox.Icon.Question)
-            msg.setText(
-                f"Kein DX Preset fuer {band}.\n\n"
-                f"DX Tuning starten?\n"
-                f"(Messung dauert ca. 3-5 Minuten)"
-            )
-            msg.setStyleSheet(self._msgbox_style())
-            btn_start = msg.addButton(
-                "Tuning starten", QMessageBox.ButtonRole.AcceptRole
-            )
-            msg.addButton("Abbrechen", QMessageBox.ButtonRole.RejectRole)
-            msg.exec()
-            if msg.clickedButton() == btn_start:
-                self._start_dx_tuning()
-            else:
-                pass  # GAIN-MESSUNG abgebrochen — Modus unveraendert lassen
+        """KALIBRIEREN-Button: Tunen + Gain-Messung fuer aktuelles Band, immer ueberschreiben."""
+        scoring = getattr(self._diversity_ctrl, 'scoring_mode', 'normal')
+        gain_scoring = "snr" if scoring == "dx" else "stations"
+        self._start_dx_tuning(scoring_mode=gain_scoring)
 
     def _start_dx_tuning(self, scoring_mode: str = "snr"):
-        """DX Tune Dialog — optional TUNE-Schritt + SWR-Pruefung vor Gain-Messung."""
+        """Diversity Pipeline: TUNE (automatisch) → Gain-Messung → Einmessen."""
         import time as _time
-        self._stats_warmup_until = _time.time() + 60
+        self._stats_warmup_cycles = 99999  # Blockiert bis nach Einmessen+Warmup
         self._gain_scoring_mode = scoring_mode
-        from PySide6.QtWidgets import QMessageBox
         from PySide6.QtCore import QTimer
 
-        # SICHERHEIT: TX SOFORT stoppen — Gain-Messung ist NUR RX!
+        # GUI sofort sperren — bleibt bis Einmessen fertig
+        self._set_gain_measure_lock(True)
+
+        # SICHERHEIT: TX SOFORT stoppen
         if self.qso_sm.cq_mode:
             self.qso_sm.stop_cq()
             self.control_panel.set_cq_active(False)
-            print("[Gain] CQ-Modus gestoppt (Sicherheit)")
         if self.qso_sm.state != QSOState.IDLE:
             self.qso_sm.cancel()
-            print("[Gain] QSO abgebrochen (Sicherheit)")
         if self.encoder.is_transmitting:
             self.encoder.abort()
             if self.radio.ip:
                 self.radio.ptt_off()
-            print("[Gain] TX abgebrochen (Sicherheit)")
 
         tune_power = self.settings.get("tune_power", 10)
         swr_limit  = self.settings.get("swr_limit", 3.0)
 
-        # TUNE anbieten (Antennentuner einstellen bevor Messung startet)
-        msg = QMessageBox(self)
-        msg.setWindowTitle("Vor der Gain-Messung: TUNE")
-        msg.setIcon(QMessageBox.Icon.Question)
-        msg.setText(
-            f"Vor der Gain-Messung den Tuner einstellen?\n\n"
-            f"TUNE sendet {tune_power}W auf ANT1 fuer 5 Sekunden.\n"
-            f"Bei SWR > {swr_limit:.1f} wird Gain-Messung abgebrochen."
-        )
-        msg.setStyleSheet(self._msgbox_style())
-        btn_tune  = msg.addButton("Tunen + Messen", QMessageBox.ButtonRole.AcceptRole)
-        btn_skip  = msg.addButton("Direkt messen",  QMessageBox.ButtonRole.ActionRole)
-        btn_abort = msg.addButton("Abbrechen",      QMessageBox.ButtonRole.RejectRole)
-        msg.exec()
-
-        if msg.clickedButton() == btn_abort:
-            self._on_rx_mode_changed("normal")
-            return
-
-        if msg.clickedButton() == btn_tune and self.radio.ip:
-            # TX-Leistung auf Tune-Wert setzen, TUNE starten
+        # TUNE automatisch — immer, keine Auswahl
+        if self.radio.ip:
+            self.statusBar().showMessage(
+                f"TUNEN — {tune_power}W auf ANT1 fuer 5s ...", 0)
             self.radio.set_rfpower_direct(tune_power)
             self.radio.tune_on()
 
             def _after_tune():
                 self.radio.tune_off()
                 self.radio.set_power(self.settings.get("power_preset", 15))
-                # Buffer leeren: AT hat RX-Impedanz geändert → alte Daten ungültig
                 self._normal_stations = {}
                 self._diversity_stations = {}
                 self.rx_panel.table.setRowCount(0)
-                # SWR pruefen
                 swr = self.radio.last_swr
                 if swr > swr_limit:
+                    from PySide6.QtWidgets import QMessageBox
                     QMessageBox.warning(
                         self, "SWR zu hoch",
                         f"SWR {swr:.1f} > {swr_limit:.1f} — Gain-Messung abgebrochen.\n"
@@ -627,7 +581,7 @@ class RadioMixin:
 
             QTimer.singleShot(5000, _after_tune)
         else:
-            # Direkt Gain-Messung ohne TUNE
+            # Kein Radio → direkt Gain-Messung
             self._open_dx_tune_dialog()
 
     def _open_dx_tune_dialog(self):
@@ -653,7 +607,7 @@ class RadioMixin:
         dialog.show()
 
     def _set_gain_measure_lock(self, locked: bool):
-        """GUI sperren/entsperren waehrend Gain-Messung."""
+        """GUI sperren/entsperren waehrend Diversity-Pipeline (Tune+Gain+Einmessen)."""
         # Mode-Buttons sperren
         self.control_panel.btn_ft8.setEnabled(not locked)
         self.control_panel.btn_ft4.setEnabled(not locked)
@@ -668,8 +622,13 @@ class RadioMixin:
         # Normal/Diversity sperren
         self.control_panel.btn_normal.setEnabled(not locked)
         self.control_panel.btn_diversity.setEnabled(not locked)
+        # TUNE + GAIN-MESSUNG sperren
+        if hasattr(self.control_panel, 'btn_tune'):
+            self.control_panel.btn_tune.setEnabled(not locked)
+        if hasattr(self.control_panel, 'btn_einmessen'):
+            self.control_panel.btn_einmessen.setEnabled(not locked)
         if locked:
-            self.statusBar().showMessage("GAIN-MESSUNG AKTIV — Bedienung gesperrt", 0)
+            self.statusBar().showMessage("DIVERSITY SETUP AKTIV — Bedienung gesperrt", 0)
 
     def _on_dx_tune_accepted(self):
         """DX Tuning erfolgreich — Preset speichern."""
@@ -688,6 +647,7 @@ class RadioMixin:
             ant1_gain=r.get("ant1_gain", r.get("best_gain", 0)),
             ant2_gain=r.get("ant2_gain", r.get("best_gain", 0)),
             scoring=scoring,
+            mode=self.settings.mode,
         )
         ant1_g = r.get("ant1_gain", r.get("best_gain", 0))
         ant2_g = r.get("ant2_gain", r.get("best_gain", 0))
@@ -700,19 +660,53 @@ class RadioMixin:
         self._dx_tune_dialog = None
         self._set_gain_measure_lock(False)
 
-        # DX-Diversity: nach Gain-Messung automatisch Diversity starten
-        if getattr(self, '_pending_dx_diversity', False):
-            self._pending_dx_diversity = False
-            print(f"[DX] Gain-Messung fertig → starte Diversity DX")
-            self._enable_diversity(scoring_mode="dx")
+        # Normal-Modus (KALIBRIEREN-Button): in normal_presets speichern, ANT1-Gain anwenden
+        if self._rx_mode == "normal":
+            import time as _time
+            ant1_g = r.get("ant1_gain", r.get("best_gain", 0))
+            self.settings.save_normal_preset(band=band, gain=ant1_g, rxant="ANT1")
+            if self.radio.ip:
+                self.radio.set_rx_antenna("ANT1")
+                self.radio.set_tx_antenna("ANT1")
+                self.radio.set_rfgain(ant1_g)
+            self.control_panel.dx_info.setText(f"G{ant1_g}dB (kalibriert)")
+            self.control_panel.dx_info.setStyleSheet("")
+            self._stats_warmup_cycles = 4
+            print(f"[Kalibrieren] Normal Preset {band}: G{ant1_g}dB — 4 Zyklen Warmup")
+            self._update_statusbar()
+            self._show_calibration_done(band, ant1_g, None)
+            return
 
-        # FORCE RESET: Diversity komplett neu initialisieren nach Gain-Messung
+        # Diversity nach Gain-Messung starten/neu initialisieren (einmalig)
         if self._rx_mode == "diversity" and self.radio.ip:
-            scoring = getattr(self._diversity_ctrl, 'scoring_mode', 'normal')
-            print(f"[Diversity] Post-Gain → Diversity komplett neu initialisieren ({scoring})")
+            if getattr(self, '_pending_dx_diversity', False):
+                self._pending_dx_diversity = False
+                scoring = getattr(self, '_pending_diversity_scoring',
+                                  getattr(self._diversity_ctrl, 'scoring_mode', 'normal'))
+            else:
+                scoring = getattr(self._diversity_ctrl, 'scoring_mode', 'normal')
+            print(f"[Diversity] Post-Gain → Diversity starten ({scoring})")
             self._enable_diversity(scoring_mode=scoring)
 
         self._update_statusbar()
+        self._show_calibration_done(band, ant1_g, ant2_g)
+
+    def _show_calibration_done(self, band: str, ant1_g: int, ant2_g: int | None):
+        """Non-modales Info-Popup 'Kalibrierung abgeschlossen' — blockiert nichts."""
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Kalibrierung abgeschlossen")
+        msg.setIcon(QMessageBox.Icon.Information)
+        if ant2_g is not None:
+            msg.setText(
+                f"Kalibrierung {band} gespeichert.\n\n"
+                f"ANT1: {ant1_g} dB  |  ANT2: {ant2_g} dB"
+            )
+        else:
+            msg.setText(f"Kalibrierung {band} gespeichert.\n\nANT1: {ant1_g} dB")
+        msg.setStyleSheet(self._msgbox_style())
+        msg.setStandardButtons(QMessageBox.StandardButton.Ok)
+        msg.setWindowModality(Qt.WindowModality.NonModal)
+        msg.show()
 
     def _on_dx_tune_rejected(self):
         """DX Tuning abgebrochen — zurueck auf Normal/Diversity."""
@@ -754,36 +748,32 @@ class RadioMixin:
             self.control_panel.dx_info.setText("kein Preset")
 
     def _apply_normal_mode(self):
-        """Normal-Modus: beste RX-Antenne aus DX-Preset (falls vorhanden), TX immer ANT1."""
+        """Normal-Modus: eigenes Normal-Preset (NIEMALS Diversity-Preset), TX immer ANT1."""
         band = self.settings.band
+        preset = self.settings.get_normal_preset(band)
+        gain = preset.get("gain", PREAMP_PRESETS.get(band, 10))
+        measured_str = preset.get("measured", "")
 
-        preset = self.settings.get_dx_preset(band)
-        if preset:
-            rxant = preset.get("rxant", "ANT1")
-            gain  = preset.get("gain", PREAMP_PRESETS.get(band, 10))
-            # Alter des Presets berechnen
+        if measured_str:
             import datetime
-            measured_str = preset.get("measured", "")
-            age_days = None
             try:
                 measured_dt = datetime.datetime.strptime(measured_str, "%Y-%m-%d %H:%M")
                 age_days = (datetime.datetime.now() - measured_dt).days
+                if age_days > 7:
+                    self.control_panel.dx_info.setText(f"G{gain}dB ({age_days}d alt!)")
+                    self.control_panel.dx_info.setStyleSheet("color: #FFA500;")
+                else:
+                    self.control_panel.dx_info.setText(f"G{gain}dB (kalibriert)")
+                    self.control_panel.dx_info.setStyleSheet("")
             except Exception:
-                pass
-            if age_days is not None and age_days > 7:
-                self.control_panel.dx_info.setText(f"RX:{rxant} G{gain}dB ({age_days}d alt!)")
-                self.control_panel.dx_info.setStyleSheet("color: #FFA500;")
-            else:
-                self.control_panel.dx_info.setText(f"RX:{rxant} G{gain}dB")
+                self.control_panel.dx_info.setText(f"G{gain}dB (kalibriert)")
                 self.control_panel.dx_info.setStyleSheet("")
-            print(f"[DX] Normal-Modus: RX={rxant} TX=ANT1, Gain {gain} (Preset, {age_days}d alt)")
         else:
-            rxant = "ANT1"
-            gain  = PREAMP_PRESETS.get(band, 10)
-            self.control_panel.dx_info.setText("Kein Preset")
+            self.control_panel.dx_info.setText(f"G{gain}dB (Standard)")
             self.control_panel.dx_info.setStyleSheet("color: #888888;")
-            print(f"[DX] Normal-Modus: ANT1, Gain {gain} (kein Preset)")
 
-        self.radio.set_rx_antenna(rxant)
-        self.radio.set_tx_antenna("ANT1")
-        self.radio.set_rfgain(gain)
+        if self.radio.ip:
+            self.radio.set_rx_antenna("ANT1")
+            self.radio.set_tx_antenna("ANT1")
+            self.radio.set_rfgain(gain)
+        print(f"[Normal] ANT1, Gain {gain} dB ({'kalibriert' if measured_str else 'Standard'})")

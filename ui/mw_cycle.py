@@ -18,6 +18,17 @@ from core.station_accumulator import accumulate_stations
 from radio.presets import PREAMP_PRESETS
 
 
+def _slot_from_utc(utc_str: str):
+    """Even/Odd-Slot aus HHMMSS-String für FT2 (Periode 7.5s). None bei Fehler."""
+    if not utc_str or len(utc_str) < 6:
+        return None
+    try:
+        secs = int(utc_str[:2]) * 3600 + int(utc_str[2:4]) * 60 + int(utc_str[4:6])
+        return (secs % 7.5) < 3.75
+    except (ValueError, TypeError):
+        return None
+
+
 class CycleMixin:
     """Mixin fuer Zyklusverarbeitung — wird in MainWindow eingemischt.
 
@@ -31,10 +42,17 @@ class CycleMixin:
             return
         # Slot-Parity: ft8lib dekodiert innerhalb des SELBEN Slots (< 0.3s)
         # → is_even_cycle() zeigt noch den aktuellen Slot, KEIN not nötig
+        # FT2: 3.75s Zyklen → Slot aus Nachricht-UTC berechnen (Timer-Drift zu gross)
         msg_was_even = self.timer.is_even_cycle()
+        mode = self.settings.mode
         if messages:
             for m in messages:
-                m._tx_even = msg_was_even
+                if mode == "FT2":
+                    utc = getattr(m, '_utc_str', None) or getattr(m, '_utc_display', None)
+                    slot = _slot_from_utc(utc) if utc else None
+                    m._tx_even = slot if slot is not None else msg_was_even
+                else:
+                    m._tx_even = msg_was_even
         count = len(messages) if messages else 0
         self.control_panel.update_decode_count(count)
 
@@ -90,6 +108,15 @@ class CycleMixin:
             )
             # Messung abgeschlossen → CQ freigeben + Preset speichern
             if self._diversity_ctrl.phase == "operate":
+                import time as _time
+                self._stats_warmup_cycles = 4  # 4 Zyklen Warmup nach Einmessen
+                print("[Stats] Einmessen fertig — 4 Zyklen Warmup bis Stats starten")
+                # Diversity-Cache speichern (2h gueltig)
+                cache = getattr(self, '_diversity_cache', None)
+                if cache:
+                    scoring = getattr(self._diversity_ctrl, 'scoring_mode', 'normal')
+                    cache.save(self.settings.band, scoring)
+                    print(f"[Diversity] Cache gespeichert: {self.settings.band}/{scoring}")
                 self._set_cq_locked(False)
                 self.settings.save_diversity_preset(
                     mode=self.settings.mode,
@@ -112,7 +139,6 @@ class CycleMixin:
             for m in messages:
                 if hasattr(m, 'freq_hz') and m.freq_hz:
                     self._diversity_ctrl.record_freq(m.freq_hz)
-            from core.qso_state import QSOState
             qso_busy = self.qso_sm.state not in (
                 QSOState.IDLE, QSOState.TIMEOUT,
                 QSOState.CQ_CALLING, QSOState.CQ_WAIT,
@@ -122,9 +148,23 @@ class CycleMixin:
                 self._diversity_ctrl.get_histogram_data())
 
             # Diversity: gemeinsame Akkumulation mit Antennen-Info
-            changed = accumulate_stations(
+            changed, comparisons = accumulate_stations(
                 self._diversity_stations, messages,
                 self._active_qso_targets, antenna=ant)
+
+            # Stationen pro Antenne — immer berechnen (nicht nur bei changed)
+            a1_msgs = [m for m in self._diversity_stations.values()
+                       if getattr(m, 'antenna', '').startswith('A1')]
+            a2_msgs = [m for m in self._diversity_stations.values()
+                       if getattr(m, 'antenna', '').startswith('A2')]
+            ant2_wins = sum(1 for m in self._diversity_stations.values()
+                            if getattr(m, 'antenna', '').startswith('A2>'))
+            ant1_wins = sum(1 for m in self._diversity_stations.values()
+                            if getattr(m, 'antenna', '').startswith('A1>'))
+            compared = ant1_wins + ant2_wins
+            # DX: schwache Signale (-20 < SNR < -10) pro Antenne
+            a1_weak = [m for m in a1_msgs if m.snr is not None and m.snr < -10]
+            a2_weak = [m for m in a2_msgs if m.snr is not None and m.snr < -10]
 
             # Tabelle neu aufbauen wenn sich was geaendert hat
             if changed:
@@ -132,23 +172,11 @@ class CycleMixin:
                 for m in self._diversity_stations.values():
                     self.rx_panel.add_message(m)
                 self.rx_panel.reapply_sort()
-                a1_msgs = [m for m in self._diversity_stations.values()
-                           if getattr(m, 'antenna', '').startswith('A1')]
-                a2_msgs = [m for m in self._diversity_stations.values()
-                           if getattr(m, 'antenna', '').startswith('A2')]
-                a1_avg = sum(m.snr for m in a1_msgs) / len(a1_msgs) if a1_msgs else -30
-                a2_avg = sum(m.snr for m in a2_msgs) / len(a2_msgs) if a2_msgs else -30
-                # Ant2 Superiority: wie oft ist A2 strikt besser als A1?
-                ant2_wins = sum(1 for m in self._diversity_stations.values()
-                                if getattr(m, 'antenna', '').startswith('A2>'))
-                ant1_wins = sum(1 for m in self._diversity_stations.values()
-                                if getattr(m, 'antenna', '').startswith('A1>'))
                 only_a1 = sum(1 for m in self._diversity_stations.values()
                               if getattr(m, 'antenna', '') == 'A1')
                 only_a2 = sum(1 for m in self._diversity_stations.values()
                               if getattr(m, 'antenna', '') == 'A2')
                 total = len(self._diversity_stations)
-                compared = ant1_wins + ant2_wins
                 pct = round(100 * ant2_wins / compared) if compared else 0
                 print(f"[Diversity] {total} St. | A1>A2: {ant1_wins} | "
                       f"A2>A1: {ant2_wins} ({pct}%) | "
@@ -156,40 +184,58 @@ class CycleMixin:
                 # Antenna Preference Store aktualisieren (DL2YMR Konzept)
                 if hasattr(self, '_antenna_prefs'):
                     self._antenna_prefs.update_from_stations(self._diversity_stations)
-                self.control_panel.update_diversity_counts(
-                    len(a1_msgs), len(a2_msgs), a1_avg, a2_avg,
-                    scoring_mode=self._diversity_ctrl.scoring_mode,
-                    ant2_wins=ant2_wins, total_compared=compared)
+
+            # Counts immer aktualisieren — auch wenn changed=False (Modus-Wechsel fix)
+            self.control_panel.update_diversity_counts(
+                len(a1_msgs), len(a2_msgs),
+                scoring_mode=self._diversity_ctrl.scoring_mode,
+                ant2_wins=ant2_wins, total_compared=compared,
+                a1_weak_count=len(a1_weak), a2_weak_count=len(a2_weak))
 
             self.control_panel.update_decode_count(
                 len(self._diversity_stations)
             )
 
-            # Statistik loggen — ant2_wins aus letztem changed-Block
-            _ant2w = sum(1 for m in self._diversity_stations.values()
-                         if getattr(m, 'antenna', '').startswith('A2>'))
-            self._log_stats(len(self._diversity_stations), messages, ant2_wins=_ant2w)
+            # Statistik loggen — avg_snr + ant2_wins + SNR-Delta
+            _ant2w = ant2_wins  # bereits oben berechnet
+            _delta_vals = [
+                m._snr_a2 - m._snr_a1
+                for m in self._diversity_stations.values()
+                if getattr(m, 'antenna', '') in ('A1>2', 'A2>1')
+                and getattr(m, '_snr_a2', None) is not None
+                and getattr(m, '_snr_a1', None) is not None
+            ]
+            _snr_delta = sum(_delta_vals) / len(_delta_vals) if _delta_vals else 0.0
+            _all_snrs = [m.snr for m in self._diversity_stations.values()
+                         if m.snr is not None]
+            _avg_snr = round(sum(_all_snrs) / len(_all_snrs)) if _all_snrs else -30
+            _stats_logged = self._log_stats(len(self._diversity_stations), messages,
+                                            avg_snr=_avg_snr, ant2_wins=_ant2w, snr_delta=_snr_delta)
+            if _stats_logged and comparisons:
+                scoring = getattr(self._diversity_ctrl, 'scoring_mode', 'normal')
+                self._stats_logger.log_station_comparisons(
+                    self.settings.band, self.settings.mode, scoring, comparisons)
 
-        elif self._rx_mode == "normal" and messages:
+        elif self._rx_mode == "normal":
             # Normal: gemeinsame Akkumulation ohne Antennen-Info
-            changed = accumulate_stations(
-                self._normal_stations, messages,
-                self._active_qso_targets, antenna="")
-            if changed:
-                self.rx_panel.table.setRowCount(0)
-                for m in self._normal_stations.values():
-                    self.rx_panel.add_message(m)
-                self.rx_panel.reapply_sort()
+            if messages:
+                changed, _ = accumulate_stations(
+                    self._normal_stations, messages,
+                    self._active_qso_targets, antenna="")
+                if changed:
+                    self.rx_panel.table.setRowCount(0)
+                    for m in self._normal_stations.values():
+                        self.rx_panel.add_message(m)
+                    self.rx_panel.reapply_sort()
+                self._update_histogram(messages)
             self.control_panel.update_decode_count(len(self._normal_stations))
             avg_snr = -30
             if self._normal_stations:
                 avg_snr = round(sum(m.snr for m in self._normal_stations.values()) / len(self._normal_stations))
                 self.control_panel.update_snr(avg_snr)
-            # Histogramm aktualisieren
-            self._update_histogram(messages)
 
-            # Statistik loggen (Normal)
-            self._log_stats(len(self._normal_stations), messages, avg_snr=avg_snr)
+            # Statistik loggen — auch bei leerem Zyklus (akkumulierter Stand)
+            self._log_stats(len(self._normal_stations), messages or [], avg_snr=avg_snr)
 
         elif messages:
             # DX Tuning: nur aktueller Zyklus
@@ -271,8 +317,6 @@ class CycleMixin:
 
     @Slot(int, bool)
     def _on_cycle_start(self, cycle_num: int, is_even: bool):
-        from core.qso_state import QSOState  # Einmal am Anfang importieren
-
         # ── Anzeige zurücksetzen wenn kein TX ──────────────────
         if not self.encoder.is_transmitting:
             self.control_panel.update_tx_peak(0.0)
@@ -372,7 +416,6 @@ class CycleMixin:
                 if hasattr(m, 'freq_hz') and m.freq_hz:
                     self._diversity_ctrl.record_freq(m.freq_hz)
             # QSO-Schutz: kein Frequenzwechsel waehrend aktivem QSO
-            from core.qso_state import QSOState
             qso_busy = self.qso_sm.state not in (
                 QSOState.IDLE, QSOState.TIMEOUT,
                 QSOState.CQ_CALLING, QSOState.CQ_WAIT,
@@ -382,42 +425,60 @@ class CycleMixin:
                 self._diversity_ctrl.get_histogram_data())
 
     def _is_antenna_tuning_active(self) -> bool:
-        """Prueft ob Antennen-Tuning/Einmessung/Radio-Suche aktiv ist."""
-        # Radio nicht verbunden = Suche laeuft
+        """Prueft ob RF-Tuning, Radio-Suche oder Diversity-Einmessphase aktiv.
+
+        Waehrend Einmessphase wird je Zyklus nur EINE Antenne gemessen —
+        Stats waeren verfaelscht (fehlende Stationen der anderen Antenne).
+        """
         if not getattr(self.radio, 'ip', None):
             return True
         if self._rx_mode == "dx_tuning":
             return True
-        if getattr(self, '_diversity_measuring', False):
-            return True
         if (self._rx_mode == "diversity"
                 and hasattr(self, '_diversity_ctrl')
+                and self._diversity_ctrl is not None
                 and self._diversity_ctrl.phase == "measure"):
             return True
         return False
 
     def _log_stats(self, station_count: int, messages, avg_snr: float = -30,
-                   ant2_wins: int = 0):
-        """Empfangsstatistik loggen — alle Modi, pausiert bei Tuning + Warmup."""
+                   ant2_wins: int = 0, snr_delta: float = 0.0) -> bool:
+        """Empfangsstatistik loggen — alle Modi, pausiert bei Tuning + Warmup.
+
+        Returns True wenn wirklich geloggt wurde.
+        """
         if not hasattr(self, '_stats_logger') or self._stats_logger is None:
-            return
+            return False
         if not self.settings.get("stats_enabled", True):
-            return
-        # Warmup: 60s nach Band-/Moduswechsel keine Stats (faire Baseline)
-        import time as _time
-        if hasattr(self, '_stats_warmup_until') and _time.time() < self._stats_warmup_until:
-            return
+            return False
+        # Nur Kelemen-Baender aufzeichnen (10m/15m/20m)
+        from core.diversity_cache import SUPPORTED_BANDS
+        if self.settings.band not in SUPPORTED_BANDS:
+            _lbl = getattr(self, '_stats_indicator', None)
+            if _lbl:
+                _lbl.setStyleSheet("color: #555; font-family: Menlo; font-size: 11px; padding: 0 6px;")
+            return False
+        # Warmup: N Zyklen nach Band-/Moduswechsel keine Stats (faire Baseline)
+        if getattr(self, '_stats_warmup_cycles', 0) > 0:
+            self._stats_warmup_cycles -= 1
+            _lbl = getattr(self, '_stats_indicator', None)
+            if _lbl:
+                _lbl.setStyleSheet("color: #555; font-family: Menlo; font-size: 11px; padding: 0 6px;")
+            return False
         # Tuning aktiv → pausieren (keine verfaelschten Daten)
         if self._is_antenna_tuning_active():
-            return
+            _lbl = getattr(self, '_stats_indicator', None)
+            if _lbl:
+                _lbl.setStyleSheet("color: #555; font-family: Menlo; font-size: 11px; padding: 0 6px;")
+            return False
         from core.station_stats import get_active_protocol, get_active_reception_mode
         protocol = get_active_protocol(self.settings.mode)
         if protocol is None:
-            return
+            return False
         scoring = getattr(self._diversity_ctrl, 'scoring_mode', 'normal')
         rx_mode_str = get_active_reception_mode(self._rx_mode, scoring)
         if rx_mode_str is None:
-            return
+            return False
         self._stats_logger.log_cycle(
             station_count=station_count,
             avg_snr=avg_snr,
@@ -425,7 +486,13 @@ class CycleMixin:
             ft_mode=protocol,
             rx_mode=rx_mode_str,
             ant2_wins=ant2_wins if self._rx_mode == "diversity" else 0,
+            snr_delta=snr_delta if self._rx_mode == "diversity" else 0.0,
         )
+        # Indikator gruen: Daten wurden gerade geschrieben
+        _lbl = getattr(self, '_stats_indicator', None)
+        if _lbl:
+            _lbl.setStyleSheet("color: #00CC44; font-family: Menlo; font-size: 11px; padding: 0 6px;")
+        return True
 
     def on_message_decoded(self, msg: FT8Message):
         """Vom Decoder — NUR fuer QSO-Logik, NICHT fuer Tabelle!"""

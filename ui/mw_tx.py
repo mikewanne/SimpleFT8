@@ -22,6 +22,7 @@ class TXMixin:
         self.settings.set("power_preset", power)
         self._power_target = power
         self._rfpower_current = 50  # Reset auf konservativen Start bei Power-Wechsel
+        self._rfpower_converged = False  # Neue Zielleistung → neu einpendeln
         if self.radio.ip:
             self.radio.set_power(self._rfpower_current)
 
@@ -94,10 +95,14 @@ class TXMixin:
                 step = 5
             new_rfpower = max(10, self._rfpower_current - step)
 
-        # rfpower anwenden wenn geaendert
+        # rfpower anwenden wenn geaendert; bei Stabilität einmalig pro Band speichern
         if new_rfpower != self._rfpower_current:
             self._rfpower_current = new_rfpower
             self.radio.set_power(new_rfpower)
+            self._rfpower_converged = False
+        elif not self._rfpower_converged:
+            self._rfpower_converged = True
+            self.settings.save_tx_power(self.settings.band, self._rfpower_current)
 
         # Audio anwenden wenn Aenderung > 1%
         if abs(new_audio - current_audio) >= 0.01:

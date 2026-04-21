@@ -34,6 +34,7 @@ _COLOR_DONE = QColor("#44FF44")
 _COLOR_NORMAL = QColor("#CCCCCC")
 _COLOR_SEP = QColor("#444444")
 _COLOR_ACTIVE_CALL_BG = QColor("#2A1500")   # Dunkles Amber: aktiv angerufene Station
+_COLOR_ANSWER_ME_BG  = QColor("#2A1F00")   # Dunkles Amber: eigenes Callsign angesprochen
 
 _MAX_CYCLES = 3  # Nur die letzten 3 Zyklen anzeigen
 
@@ -61,6 +62,7 @@ class RXPanel(QWidget):
         self._ant_filter: int = 0  # 0=alle, 1=A1, 2=A2
         self._active_call: str = ""  # Callsign der gerade aktiv angerufenen Station
         self._qso_log = None  # QSOLog fuer Worked-Before Filter
+        self._hidden_cols: set = set()
         self._setup_ui()
 
     def _setup_ui(self):
@@ -160,6 +162,8 @@ class RXPanel(QWidget):
         hdr.setDefaultAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         hdr.setCursor(Qt.CursorShape.PointingHandCursor)
         hdr.sectionClicked.connect(self._on_header_clicked)
+        hdr.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        hdr.customContextMenuRequested.connect(self._on_header_context_menu)
 
         # Alle Spaltenköpfe: einheitliche Farbe + explizite Vertikal-Ausrichtung
         for col in range(COL_COUNT):
@@ -237,8 +241,8 @@ class RXPanel(QWidget):
         self._apply_active_highlight()
 
     def _apply_active_highlight(self):
-        """Alle Zeilen: Hintergrund fuer _active_call setzen, Rest loeschen."""
-        empty_bg = QColor()  # transparent / kein Hintergrund
+        """Alle Zeilen: Hintergrund fuer _active_call + Answer-Me setzen, Rest loeschen."""
+        empty_bg = QColor()
         for row in range(self.table.rowCount()):
             utc_item = self.table.item(row, COL_UTC)
             if utc_item is None:
@@ -248,7 +252,14 @@ class RXPanel(QWidget):
                 continue
             is_active = bool(self._active_call and
                              getattr(msg, 'caller', '') == self._active_call)
-            bg = _COLOR_ACTIVE_CALL_BG if is_active else empty_bg
+            is_answer_me = bool(self._my_call and
+                                getattr(msg, 'target', '') == self._my_call)
+            if is_active:
+                bg = _COLOR_ACTIVE_CALL_BG
+            elif is_answer_me:
+                bg = _COLOR_ANSWER_ME_BG
+            else:
+                bg = empty_bg
             for col in range(COL_COUNT):
                 item = self.table.item(row, col)
                 if item:
@@ -261,19 +272,30 @@ class RXPanel(QWidget):
         """Neue dekodierte Nachricht hinzufuegen."""
         if not self._rx_active:
             return
-        self.table.insertRow(0)
-        self._populate_row(0, msg)
+        utc_new = getattr(msg, '_utc_display', None) or getattr(msg, '_utc_str', None) or time.strftime("%H%M%S", time.gmtime())
+        # Sorted insert: absteigende UTC-Reihenfolge (neueste oben), HHMMSS-Stringvergleich
+        insert_pos = self.table.rowCount()
+        for row in range(self.table.rowCount()):
+            item = self.table.item(row, COL_UTC)
+            if item is None:
+                insert_pos = row
+                break
+            if utc_new > item.text():
+                insert_pos = row
+                break
+        self.table.insertRow(insert_pos)
+        self._populate_row(insert_pos, msg)
         # Highlight direkt setzen wenn diese Station aktiv angerufen wird
         if self._active_call and getattr(msg, 'caller', '') == self._active_call:
             for col in range(COL_COUNT):
-                item = self.table.item(0, col)
+                item = self.table.item(insert_pos, col)
                 if item:
                     item.setBackground(_COLOR_ACTIVE_CALL_BG)
                     f = item.font()
                     f.setBold(True)
                     item.setFont(f)
         self._cycle_message_count += 1
-        self.table.setRowHidden(0, self._row_should_hide(0))
+        self.table.setRowHidden(insert_pos, self._row_should_hide(insert_pos))
 
     def add_cycle_separator(self, count: int):
         """Neuer Zyklus: ALLES LOESCHEN, nur aktuelle Stationen zeigen.
@@ -393,6 +415,13 @@ class RXPanel(QWidget):
         utc_item.setData(Qt.ItemDataRole.UserRole + 1, country)
         utc_item.setData(Qt.ItemDataRole.UserRole + 2, dist_km)
 
+        # Answer-Me: Hintergrund wenn eigenes Callsign direkt angesprochen
+        if directed_to_us:
+            for col in range(COL_COUNT):
+                it = self.table.item(row, col)
+                if it:
+                    it.setBackground(_COLOR_ANSWER_ME_BG)
+
     def _populate_separator_row(self, row: int, count: int):
         """Zyklus-Trenner-Zeile einfuegen."""
         utc = time.strftime("%H:%M:%S", time.gmtime())
@@ -433,6 +462,37 @@ class RXPanel(QWidget):
         if col in _COL_TO_SORT:
             self._set_sort(_COL_TO_SORT[col])
             self._update_sort_colors()
+
+    def _on_header_context_menu(self, pos):
+        """Rechtsklick auf Spaltenkopf: Spalten ein-/ausblenden."""
+        _TOGGLEABLE = [
+            (COL_UTC, "UTC"), (COL_DB, "dB"), (COL_DT, "DT"), (COL_FREQ, "Freq"),
+            (COL_LAND, "Land"), (COL_KM, "km"), (COL_ANT, "Ant"), (COL_SLOT, "Slot"),
+        ]
+        menu = QMenu(self)
+        menu.setStyleSheet("""
+            QMenu { background: #1a1a2e; color: #CCC; border: 1px solid #444; }
+            QMenu::item { padding: 4px 20px 4px 28px; }
+            QMenu::item:selected { background: #0066AA; }
+            QMenu::item:checked { color: #00AAFF; }
+            QMenu::indicator { width: 14px; height: 14px; }
+        """)
+        for col, label in _TOGGLEABLE:
+            action = menu.addAction(label)
+            action.setCheckable(True)
+            action.setChecked(col not in self._hidden_cols)
+            action.triggered.connect(
+                lambda checked, c=col: self._toggle_column(c, not checked)
+            )
+        menu.exec(self.table.horizontalHeader().mapToGlobal(pos))
+
+    def _toggle_column(self, col: int, hide: bool):
+        """Spalte ein-/ausblenden und Zustand merken."""
+        if hide:
+            self._hidden_cols.add(col)
+        else:
+            self._hidden_cols.discard(col)
+        self.table.setColumnHidden(col, hide)
 
     def _update_sort_colors(self):
         """Aktive Sortierung im Spaltenkopf markieren (Farbe + ▾)."""
@@ -503,7 +563,8 @@ class RXPanel(QWidget):
             messages.sort(key=lambda x: -x[2])
         elif mode == "country":
             messages.sort(key=lambda x: x[1])
-        # "time" = Originalreihenfolge (neueste zuerst, bereits so)
+        elif mode == "time":
+            messages.sort(key=lambda x: getattr(x[0], '_utc_display', None) or getattr(x[0], '_utc_str', None) or '', reverse=True)
 
         # Tabelle neu aufbauen
         self.table.setRowCount(0)

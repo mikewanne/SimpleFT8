@@ -16,6 +16,8 @@ import threading
 import time
 from pathlib import Path
 
+FT8_DECODE_THRESHOLD = -24
+
 
 def get_active_reception_mode(rx_mode: str, scoring_mode: str = "normal") -> str | None:
     """Aktiven Empfangsmodus als Verzeichnisname.
@@ -67,12 +69,20 @@ class StationStatsLogger:
         self._station_max = 0
         self._station_min = 999
         self._ant2_wins_total = 0
+        self._snr_delta_total = 0.0
+        self._snr_delta_count = 0
+        # Station-Comparison Counter (eigene Stunden-Datei)
+        self._sc_path = None
+        self._sc_compare_count = 0
+        self._sc_saved_count = 0
+        self._sc_delta_a2_total = 0.0
+        self._sc_delta_a2_count = 0
         self._thread = threading.Thread(target=self._writer_loop, daemon=True)
         self._thread.start()
 
     def log_cycle(self, station_count: int, avg_snr: float,
                   band: str, ft_mode: str, rx_mode: str,
-                  ant2_wins: int = 0):
+                  ant2_wins: int = 0, snr_delta: float = 0.0):
         """Einen Zyklus loggen (non-blocking, thread-safe).
 
         Args:
@@ -96,11 +106,63 @@ class StationStatsLogger:
             "ft_mode": ft_mode,
             "rx_mode": rx_mode,
             "ant2_wins": ant2_wins,
+            "snr_delta": snr_delta,
         }
         try:
             self._queue.put_nowait(entry)
         except queue.Full:
             pass  # Queue voll — Eintrag verwerfen (sollte nie passieren)
+
+    def log_station_comparisons(self, band: str, mode: str, scoring_mode: str,
+                                comparisons: list[dict]):
+        """Per-Station SNR-Vergleiche loggen (non-blocking, thread-safe).
+
+        Args:
+            band: z.B. "20m", "40m"
+            mode: "FT8" oder "FT4"
+            scoring_mode: "normal" oder "dx"
+            comparisons: Liste von Dicts aus accumulate_stations()
+        """
+        if not comparisons:
+            return
+        rx_mode = get_active_reception_mode("diversity", scoring_mode)
+        protocol = get_active_protocol(mode)
+        if not rx_mode or not protocol:
+            return
+
+        now_utc = time.gmtime()
+        hour_str = time.strftime("%Y-%m-%d_%H", now_utc)
+        time_str = time.strftime("%H:%M:%S", now_utc)
+        date_display = time.strftime("%Y-%m-%d", now_utc)
+
+        rows = []
+        for comp in comparisons:
+            a1 = comp["ant1_snr"]
+            a2 = comp["ant2_snr"]
+            saved = "★" if (a1 <= FT8_DECODE_THRESHOLD) != (a2 <= FT8_DECODE_THRESHOLD) else ""
+            rows.append({
+                "time": time_str,
+                "call": comp["call"],
+                "ant1_snr": a1,
+                "ant2_snr": a2,
+                "delta": comp["delta"],
+                "winner": comp["antenna_winner"],
+                "saved": saved,
+            })
+
+        entry = {
+            "type": "station_comparison",
+            "path": f"{rx_mode}/{band}/{protocol}/stations/{hour_str}.md",
+            "rx_mode": rx_mode,
+            "band": band,
+            "protocol": protocol,
+            "date_display": date_display,
+            "rows": rows,
+        }
+        try:
+            self._queue.put_nowait(entry)
+        except queue.Full:
+            pass
 
     def _writer_loop(self):
         """Hintergrund-Thread: schreibt Queue-Eintraege in .md Dateien."""
@@ -117,6 +179,10 @@ class StationStatsLogger:
 
     def _write_entry(self, entry: dict):
         """Einen Eintrag in die passende Stunden-Datei schreiben."""
+        if entry.get("type") == "station_comparison":
+            self._write_station_comparisons(entry)
+            return
+
         dir_key = f"{entry['rx_mode']}/{entry['band']}/{entry['ft_mode']}"
         if dir_key not in self._dir_cache:
             target_dir = ensure_statistics_directory(
@@ -143,8 +209,8 @@ class StationStatsLogger:
                             f"{entry['ft_mode']} | {entry['band']} | "
                             f"{entry['rx_mode']}\n\n")
                     if is_diversity:
-                        f.write("| Zeit | Stationen | Ø SNR | Ant2 Wins |\n")
-                        f.write("|------|-----------|-------|-----------|\n")
+                        f.write("| Zeit | Stationen | Ø SNR | Ant2 Wins | Ø ΔSNR |\n")
+                        f.write("|------|-----------|-------|-----------|--------|\n")
                     else:
                         f.write("| Zeit | Stationen | Ø SNR |\n")
                         f.write("|------|-----------|-------|\n")
@@ -153,7 +219,8 @@ class StationStatsLogger:
         is_diversity = "Diversity" in entry["rx_mode"]
         with open(target_path, "a") as f:
             if is_diversity:
-                f.write(f"| {entry['time']} | {entry['count']} | {entry['snr']} | {entry['ant2_wins']} |\n")
+                delta_str = f"{entry['snr_delta']:+.1f}"
+                f.write(f"| {entry['time']} | {entry['count']} | {entry['snr']} | {entry['ant2_wins']} | {delta_str} |\n")
             else:
                 f.write(f"| {entry['time']} | {entry['count']} | {entry['snr']} |\n")
 
@@ -162,8 +229,67 @@ class StationStatsLogger:
         self._station_total += entry["count"]
         self._station_max = max(self._station_max, entry["count"])
         self._ant2_wins_total += entry.get("ant2_wins", 0)
+        delta = entry.get("snr_delta", 0.0)
+        if delta != 0.0:
+            self._snr_delta_total += delta
+            self._snr_delta_count += 1
         if entry["count"] > 0:
             self._station_min = min(self._station_min, entry["count"])
+
+    def _write_station_comparisons(self, entry: dict):
+        """Station-Vergleiche in separate Stunden-Datei schreiben."""
+        full_path = self._base_dir / entry["path"]
+        full_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Stundenwechsel? Zusammenfassung schreiben + Reset
+        if self._sc_path and self._sc_path != full_path:
+            self._write_sc_summary()
+            self._reset_sc_counters()
+
+        # Neue Datei? Header schreiben
+        if not full_path.exists():
+            with open(full_path, "w") as f:
+                f.write(f"# Station-Vergleiche {entry['date_display']} | "
+                        f"{entry['rx_mode']} | {entry['band']} | {entry['protocol']}\n\n")
+                f.write("| Zeit | Call | ANT1 dB | ANT2 dB | Δ dB | Gewinner | Saved |\n")
+                f.write("|------|------|---------|---------|------|----------|-------|\n")
+
+        # Zeilen schreiben + Zaehler aktualisieren
+        with open(full_path, "a") as f:
+            for row in entry["rows"]:
+                f.write(f"| {row['time']} | {row['call']} | {row['ant1_snr']} | "
+                        f"{row['ant2_snr']} | {row['delta']:+.1f} | "
+                        f"{row['winner']} | {row['saved']} |\n")
+                self._sc_compare_count += 1
+                if row["saved"] == "★":
+                    self._sc_saved_count += 1
+                if row["winner"] == "A2":
+                    self._sc_delta_a2_total += row["delta"]
+                    self._sc_delta_a2_count += 1
+
+        self._sc_path = full_path
+
+    def _write_sc_summary(self):
+        """Zusammenfassung am Ende einer Stunden-Vergleichs-Datei anfuegen."""
+        if not self._sc_path or self._sc_compare_count == 0:
+            return
+        try:
+            with open(self._sc_path, "a") as f:
+                f.write(f"\n## Zusammenfassung\n")
+                f.write(f"- Vergleiche gesamt: {self._sc_compare_count}\n")
+                f.write(f"- Saved-Events (★): {self._sc_saved_count}\n")
+                if self._sc_delta_a2_count > 0:
+                    avg = self._sc_delta_a2_total / self._sc_delta_a2_count
+                    f.write(f"- Ø Δ wenn A2 gewann: {avg:+.1f} dB\n")
+        except Exception:
+            pass
+
+    def _reset_sc_counters(self):
+        self._sc_path = None
+        self._sc_compare_count = 0
+        self._sc_saved_count = 0
+        self._sc_delta_a2_total = 0.0
+        self._sc_delta_a2_count = 0
 
     def _write_summary(self):
         """Zusammenfassung am Ende einer Stunde anfuegen."""
@@ -180,6 +306,9 @@ class StationStatsLogger:
                 if self._ant2_wins_total > 0:
                     ant2_avg = self._ant2_wins_total / self._cycle_count
                     f.write(f"- Ø Ant2 Wins/Zyklus: {ant2_avg:.1f}\n")
+                if self._snr_delta_count > 0:
+                    delta_avg = self._snr_delta_total / self._snr_delta_count
+                    f.write(f"- Ø ΔSNR (A2-A1): {delta_avg:+.1f} dB\n")
         except Exception:
             pass
 
@@ -189,3 +318,5 @@ class StationStatsLogger:
         self._station_max = 0
         self._station_min = 999
         self._ant2_wins_total = 0
+        self._snr_delta_total = 0.0
+        self._snr_delta_count = 0

@@ -1429,6 +1429,360 @@ def test_adif_qrz_fields():
             assert f"<{field}:" in content, f"Pflichtfeld {field} fehlt"
 
 
+# ── FT2 Slot-Berechnung (UTC-basiert) ───────────────────────────────────────
+
+def test_slot_from_utc():
+    """FT2 Even/Odd-Slot aus UTC-String: (secs % 7.5) < 3.75."""
+    # Inline-Definition da mw_cycle.py PySide6 benötigt
+    def _slot(utc_str):
+        if not utc_str or len(utc_str) < 6:
+            return None
+        try:
+            secs = int(utc_str[:2]) * 3600 + int(utc_str[2:4]) * 60 + int(utc_str[4:6])
+            return (secs % 7.5) < 3.75
+        except (ValueError, TypeError):
+            return None
+
+    # Even-Slots
+    assert _slot("000000") is True   # 0s mod 7.5 = 0.0
+    assert _slot("000003") is True   # 3s mod 7.5 = 3.0
+    assert _slot("000008") is True   # 8s mod 7.5 = 0.5 (neue Periode)
+    # Odd-Slots
+    assert _slot("000004") is False  # 4s mod 7.5 = 4.0
+    assert _slot("000007") is False  # 7s mod 7.5 = 7.0
+    # Ungültige Eingaben
+    assert _slot("") is None
+    assert _slot("12") is None       # Zu kurz
+    assert _slot("ab0000") is None   # Keine Ziffern
+    assert _slot(None) is None
+
+
+# ── TX-Power pro Band ─────────────────────────────────────────────────────────
+
+def test_tx_power_save_load():
+    """rfpower pro Band: Speichern und Laden Roundtrip."""
+    from config.settings import Settings
+    s = Settings()
+    s.save_tx_power("20m", 65)
+    assert s.get_tx_power("20m") == 65
+
+
+def test_tx_power_clamp():
+    """rfpower Clamp: Werte außerhalb 10-80% werden begrenzt."""
+    from config.settings import Settings
+    s = Settings()
+    s.save_tx_power("40m", 5)    # Zu niedrig → 10
+    assert s.get_tx_power("40m") == 10
+    s.save_tx_power("80m", 95)   # Zu hoch → 80
+    assert s.get_tx_power("80m") == 80
+
+
+def test_tx_power_default():
+    """rfpower Default für unbekanntes Band."""
+    from config.settings import Settings
+    s = Settings()
+    assert s.get_tx_power("999m", default=35) == 35
+    assert s.get_tx_power("999m") == 50      # Standard-Default
+
+
+# ── Mode-aware DX Presets ─────────────────────────────────────────────────────
+
+def test_dx_preset_mode_specific():
+    """DX-Preset: Mode-spezifischer Key (20m_FT8) korrekt gespeichert."""
+    from config.settings import Settings
+    s = Settings()
+    s.save_dx_preset("20m", "ANT1", 15, mode="FT8")
+    preset = s.get_dx_preset("20m", mode="FT8")
+    assert preset is not None
+    assert preset["gain"] == 15
+
+
+def test_dx_preset_mode_fallback():
+    """DX-Preset: Kein mode-spezifischer Key → Fallback auf Band-Key."""
+    from config.settings import Settings
+    s = Settings()
+    s.save_dx_preset("20m", "ANT1", 5)              # Band-only
+    s.save_dx_preset("20m", "ANT1", 15, mode="FT8") # FT8-spezifisch
+    # FT4 hat keinen eigenen Key → Fallback auf Band-only
+    preset = s.get_dx_preset("20m", mode="FT4")
+    assert preset is not None
+    assert preset["gain"] == 5
+
+
+def test_dx_preset_mode_priority():
+    """DX-Preset: Mode-spezifischer Key hat Vorrang vor Band-only."""
+    from config.settings import Settings
+    s = Settings()
+    s.save_dx_preset("20m", "ANT1", 5)              # Band-only (gain=5)
+    s.save_dx_preset("20m", "ANT1", 15, mode="FT8") # FT8-spezifisch (gain=15)
+    assert s.get_dx_preset("20m", mode="FT8")["gain"] == 15  # Spezifisch hat Vorrang
+    assert s.get_dx_preset("20m", mode="FT4")["gain"] == 5   # FT4 fällt auf Band-only
+
+
+# ── AutoHunt ─────────────────────────────────────────────────────────────────
+
+class _MockQSOLog:
+    """Minimal-Mock eines QSO-Logs für AutoHunt-Tests."""
+    def __init__(self, worked=None, worked_on_band=None):
+        self._worked = set(worked or [])
+        self._wob = set(worked_on_band or [])  # set of (call, band) tuples
+
+    def is_worked(self, call):
+        return call in self._worked
+
+    def is_worked_on_band(self, call, band):
+        return (call, band) in self._wob
+
+
+def test_autohunt_gates():
+    """select_next() gibt None bei allen 4 blockierenden Gates."""
+    from core.auto_hunt import AutoHunt
+    hunt = AutoHunt()
+    msg = _make_msg("DL1ABC", "CQ", "CQ DL1ABC JO31")
+    assert hunt.select_next([msg], True, True) is None    # inactive
+    hunt.active = True
+    assert hunt.select_next([msg], True, False) is None   # presence_ok=False
+    assert hunt.select_next([msg], False, True) is None   # qso_idle=False
+    hunt.on_manual_qso_start()
+    assert hunt.select_next([msg], True, True) is None    # manual_override
+
+
+def test_autohunt_selects_cq():
+    """Alle Gates offen → CQ-Station zurückgegeben."""
+    from core.auto_hunt import AutoHunt
+    hunt = AutoHunt()
+    hunt.active = True
+    msg = _make_msg("DL1ABC", "CQ", "CQ DL1ABC JO31")
+    result = hunt.select_next([msg], True, True)
+    assert result is not None
+    assert result.call == "DL1ABC"
+
+
+def test_autohunt_snr_minimum():
+    """Stationen unter -21 dB SNR werden übersprungen."""
+    from core.auto_hunt import AutoHunt
+    hunt = AutoHunt()
+    hunt.active = True
+    msg = _make_msg("DL1ABC", "CQ", "CQ DL1ABC JO31")
+    msg.snr = -25  # Unter _MIN_SNR = -21
+    assert hunt.select_next([msg], True, True) is None
+
+
+def test_autohunt_scoring_new_vs_worked():
+    """Neue Station schlägt bereits gearbeitete beim Scoring."""
+    from core.auto_hunt import AutoHunt
+    hunt = AutoHunt()
+    hunt.active = True
+    hunt.set_qso_log(_MockQSOLog(
+        worked={"DL2OLD"},
+        worked_on_band={("DL2OLD", "20m")},
+    ))
+    hunt.set_band("20m")
+    new_msg = _make_msg("DL1NEW", "CQ", "CQ DL1NEW JO31")
+    old_msg = _make_msg("DL2OLD", "CQ", "CQ DL2OLD JO41")
+    result = hunt.select_next([old_msg, new_msg], True, True)
+    assert result is not None
+    assert result.call == "DL1NEW"
+
+
+def test_autohunt_cooldown():
+    """Station nach Timeout für COOLDOWN_SECS nicht auswählen."""
+    from core.auto_hunt import AutoHunt
+    hunt = AutoHunt()
+    hunt.active = True
+    hunt.on_qso_timeout("DL1ABC")
+    msg = _make_msg("DL1ABC", "CQ", "CQ DL1ABC JO31")
+    assert hunt.select_next([msg], True, True) is None
+
+
+def test_autohunt_band_change_clears_cooldown():
+    """Bandwechsel löscht Cooldowns — Station danach wieder wählbar."""
+    from core.auto_hunt import AutoHunt
+    hunt = AutoHunt()
+    hunt.active = True
+    hunt.on_qso_timeout("DL1ABC")
+    hunt.on_band_change()
+    msg = _make_msg("DL1ABC", "CQ", "CQ DL1ABC JO31")
+    result = hunt.select_next([msg], True, True)
+    assert result is not None
+    assert result.call == "DL1ABC"
+
+
+# ── AntennaPreferenceStore ────────────────────────────────────────────────────
+
+def test_antenna_pref_a2_better():
+    """'A2>1' Format → A2 als beste Antenne gespeichert."""
+    from core.antenna_pref import AntennaPreferenceStore
+    store = AntennaPreferenceStore()
+    msg = _make_msg("DL1ABC", "CQ", "")
+    msg.antenna = "A2>1"
+    store.update_from_stations({"DL1ABC": msg})
+    assert store.get("DL1ABC") == "A2"
+
+
+def test_antenna_pref_a1_better():
+    """'A1>2' Format → A1 als beste Antenne gespeichert."""
+    from core.antenna_pref import AntennaPreferenceStore
+    store = AntennaPreferenceStore()
+    msg = _make_msg("DL1ABC", "CQ", "")
+    msg.antenna = "A1>2"
+    store.update_from_stations({"DL1ABC": msg})
+    assert store.get("DL1ABC") == "A1"
+
+
+def test_antenna_pref_unknown_and_clear():
+    """Unbekanntes Callsign → None; clear() entfernt alle Einträge."""
+    from core.antenna_pref import AntennaPreferenceStore
+    store = AntennaPreferenceStore()
+    assert store.get("DL9XYZ") is None
+    msg = _make_msg("DL1ABC", "CQ", "")
+    msg.antenna = "A2>1"
+    store.update_from_stations({"DL1ABC": msg})
+    assert store.count == 1
+    store.clear()
+    assert store.count == 0
+    assert store.get("DL1ABC") is None
+
+
+# ── DXTuneDialog Pure Logic (inline, kein Qt nötig) ──────────────────────────
+
+def test_dxtune_top5_avg():
+    """_top5_avg: Top-5 Durchschnitt, None-Overload-Marker ignorieren."""
+    def _top5_avg(vals):
+        clean = [v for v in vals if v is not None]
+        if not clean:
+            return None
+        top5 = sorted(clean, reverse=True)[:5]
+        return round(sum(top5) / len(top5), 1)
+
+    assert _top5_avg([10.0, 5.0, 3.0, 1.0, -1.0, -5.0]) == 3.6  # 18/5
+    assert _top5_avg([10.0, None, 5.0, None]) == 7.5              # 15/2
+    assert _top5_avg([]) is None
+    assert _top5_avg([None, None]) is None
+
+
+def test_dxtune_has_overload():
+    """_has_overload: None in Datenliste → Übersteuerung erkannt."""
+    def _has_overload(vals):
+        return None in vals
+
+    assert _has_overload([10.0, None, 5.0]) is True
+    assert _has_overload([10.0, 5.0]) is False
+    assert _has_overload([]) is False
+
+
+def test_dxtune_detect_overload():
+    """_detect_overload: >8 starke Signale oder Varianz < 1.5."""
+    def _detect(snr_vals):
+        if not snr_vals:
+            return False
+        strong = sum(1 for s in snr_vals if s > 20)
+        if strong > 8:
+            return True
+        if len(snr_vals) >= 5:
+            avg = sum(snr_vals) / len(snr_vals)
+            variance = sum((s - avg) ** 2 for s in snr_vals) / len(snr_vals)
+            if variance < 1.5:
+                return True
+        return False
+
+    assert _detect([25] * 9) is True                    # 9 × >20 dB
+    assert _detect([25] * 8 + [-10]) is False           # nur 8 starke
+    assert _detect([10, 10, 10, 10, 10]) is True        # Varianz 0.0 < 1.5
+    assert _detect([10, -5, 0, 15, -10]) is False       # normale Varianz
+    assert _detect([]) is False
+
+
+def test_dxtune_finish_winner_excludes_overload():
+    """_finish() wählt besten gültigen Gain; übersteuerte Keys bleiben ausgeschlossen."""
+    phase_data = {
+        ("ANT1", 0):  [5.0, 4.0, 3.0],      # avg 4.0, kein Overload
+        ("ANT1", 10): [8.0, 7.0, None],      # Overload → ausschließen
+        ("ANT1", 20): [6.0, 5.5, 5.0],      # avg 5.5, kein Overload → Gewinner
+    }
+
+    def top5(key):
+        clean = [v for v in phase_data.get(key, []) if v is not None]
+        if not clean:
+            return None
+        t = sorted(clean, reverse=True)[:5]
+        return round(sum(t) / len(t), 1)
+
+    best_gain, best_score = 0, None
+    for gain in [0, 10, 20]:
+        key = ("ANT1", gain)
+        if None in phase_data.get(key, []):  # has_overload
+            continue
+        score = top5(key)
+        if score is not None and (best_score is None or score > best_score):
+            best_score, best_gain = score, gain
+
+    assert best_gain == 20  # Gain 10 trotz höherem SNR ausgeschlossen
+
+
+# ── Propagation Band-Range ────────────────────────────────────────────────────
+
+def test_propagation_expand_range():
+    """_expand_band_range: 80m→40m liefert [80m, 60m, 40m] inklusive 60m."""
+    from core.propagation import _expand_band_range
+    assert _expand_band_range("80m", "40m") == ["80m", "60m", "40m"]
+    assert _expand_band_range("40m", "80m") == ["80m", "60m", "40m"]  # Reihenfolge egal
+
+
+def test_propagation_expand_invalid_band():
+    """_expand_band_range: Unbekanntes Band → Fallback [from, to]."""
+    from core.propagation import _expand_band_range
+    assert _expand_band_range("80m", "XYZ") == ["80m", "XYZ"]
+
+
+# ── Settings: frequency_mhz + DX-Gain-Preset ─────────────────────────────────
+
+def test_settings_frequency_mhz():
+    """frequency_mhz Property: Band + Mode → korrekte Dial-Frequenz."""
+    from config.settings import Settings
+    s = Settings()
+    s.set("band", "20m")
+    s.set("mode", "FT8")
+    assert s.frequency_mhz == 14.074
+    s.set("mode", "FT4")
+    assert s.frequency_mhz == 14.080
+
+
+def test_settings_dx_gain_preset_scoring():
+    """save_dx_preset(scoring='dx') → dx_gain_presets; 'standard' → dx_presets."""
+    from config.settings import Settings
+    s = Settings()
+    s.save_dx_preset("40m", "ANT1", 20, scoring="dx")
+    s.save_dx_preset("40m", "ANT1", 10, scoring="standard")
+    assert s.get_gain_preset("40m", mode="dx")["gain"] == 20
+    assert s.get_gain_preset("40m", mode="standard")["gain"] == 10
+
+
+# ── Geo Edge Cases ────────────────────────────────────────────────────────────
+
+def test_geo_grid_too_short():
+    """grid_to_latlon: Strings unter 4 Zeichen → None."""
+    from core.geo import grid_to_latlon
+    assert grid_to_latlon("") is None
+    assert grid_to_latlon("JO") is None
+
+
+def test_geo_grid_invalid_format():
+    """grid_to_latlon: Erste Stelle muss Buchstabe sein."""
+    from core.geo import grid_to_latlon
+    assert grid_to_latlon("1O31") is None
+
+
+def test_geo_grid_case_insensitive():
+    """grid_to_latlon: Groß- und Kleinschreibung → identische Koordinaten."""
+    from core.geo import grid_to_latlon
+    upper = grid_to_latlon("JO31")
+    lower = grid_to_latlon("jo31")
+    assert upper is not None and lower is not None
+    assert abs(upper[0] - lower[0]) < 0.001
+    assert abs(upper[1] - lower[1]) < 0.001
+
+
 # ── Runner ───────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":

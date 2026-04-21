@@ -120,6 +120,17 @@ def _fetch_raw() -> Optional[Dict[str, Dict[str, str]]]:
             if band in XML_BANDS:
                 raw_data[band][xml_time] = raw
 
+    # 60m fehlt in XML → Mittelwert aus 40m+80m; Fallback: nur einer → diesen; keiner → grey
+    for time_key in ("day", "night"):
+        vals = [
+            raw_data[b][time_key]
+            for b in ("40m", "80m")
+            if raw_data[b][time_key] in _CONDITION_ORDER
+        ]
+        if vals:
+            avg_idx = round(sum(_CONDITION_ORDER.index(v) for v in vals) / len(vals))
+            raw_data["60m"][time_key] = _CONDITION_ORDER[max(0, min(avg_idx, 2))]
+
     print(f"[Propagation] Daten aktualisiert (UTC {datetime.now(timezone.utc).strftime('%H:%M')})")
     return raw_data
 

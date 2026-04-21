@@ -75,9 +75,11 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         import time as _time
         from core.station_stats import StationStatsLogger
         from core.antenna_pref import AntennaPreferenceStore
+        from core.diversity_cache import DiversityCache
         self._stats_logger = StationStatsLogger()
-        self._stats_warmup_until = _time.time() + 60
+        self._stats_warmup_cycles = 4
         self._antenna_prefs = AntennaPreferenceStore()
+        self._diversity_cache = DiversityCache(self.settings)
 
         # QSO-Verzeichnis (Worked-Before)
         from log.qso_log import QSOLog
@@ -108,6 +110,7 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self._power_target = settings.get("power_preset", 10)  # Watt-Ziel vom Button
         self._fwdpwr_samples = []   # FWDPWR Messwerte waehrend TX
         self._rfpower_current = 50  # Aktuell gesetzter rfpower-Wert (0-100)
+        self._rfpower_converged = False  # True wenn rfpower stabil → einmalig speichern
 
         # UI aufbauen
         self._setup_ui()
@@ -186,6 +189,14 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
             "color: #888; font-family: Menlo; font-size: 11px; "
             "background-color: #111;"
         )
+        # Statistik-Indikator (permanentes Widget, rechts in Statusbar)
+        from PySide6.QtWidgets import QLabel as _QLabel
+        self._stats_indicator = _QLabel("Statistik")
+        self._stats_indicator.setStyleSheet(
+            "color: #555; font-family: Menlo; font-size: 11px; padding: 0 6px;"
+        )
+        self._stats_indicator.setVisible(self.settings.get("stats_enabled", True))
+        self.statusBar().addPermanentWidget(self._stats_indicator)
         from PySide6.QtWidgets import QPushButton as _QPB
         _help_btn = _QPB(" ? ")
         _help_btn.setStyleSheet(
