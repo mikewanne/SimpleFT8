@@ -143,42 +143,41 @@ def _file_date(filepath: Path) -> str | None:
 
 # ── Daten-Aggregation ─────────────────────────────────────────────────────────
 
-def load_hourly_averages(stats_dir: Path, rx_mode: str, band: str,
-                         protocol: str) -> dict[int, list[float]]:
-    """Pro Stunde des Tages: Liste der Tagesmittelwerte (Stationen)."""
+def load_hourly_stats(stats_dir: Path, rx_mode: str, band: str,
+                      protocol: str) -> dict[int, dict]:
+    """Pro UTC-Stunde: alle Zyklen-Werte (pooled) + Tages-Granularität + Minuten-Abdeckung.
+
+    Returns dict[hour → {"cycles": [int, ...], "daily": {date: [int, ...]}, "minutes": set}].
+    Pooled Mean über alle Zyklen vermeidet den Bias, den mean-of-daily-means bei
+    unterschiedlicher Zyklenanzahl pro Tag erzeugt.
+    """
     mode_dir = stats_dir / rx_mode / band / protocol
     if not mode_dir.exists():
         return {}
-    result: dict[int, list[float]] = defaultdict(list)
+    result: dict[int, dict] = {}
     for fp in sorted(mode_dir.glob("*.md")):
         h = _file_hour(fp)
-        if h is None:
+        d = _file_date(fp)
+        if h is None or d is None:
             continue
         rows = parse_md_table(fp)
-        vals = [_to_int(r.get("stationen", "")) for r in rows]
-        vals = [v for v in vals if v is not None]
-        if vals:
-            result[h].append(sum(vals) / len(vals))
-    return dict(result)
-
-
-def load_wins_averages(stats_dir: Path, band: str,
-                       protocol: str) -> dict[int, list[float]]:
-    """Ant2 Wins pro Stunde des Tages (Diversity_Dx)."""
-    mode_dir = stats_dir / "Diversity_Dx" / band / protocol
-    if not mode_dir.exists():
-        return {}
-    result: dict[int, list[float]] = defaultdict(list)
-    for fp in sorted(mode_dir.glob("*.md")):
-        h = _file_hour(fp)
-        if h is None:
+        day_vals: list[int] = []
+        minutes_set: set[int] = set()
+        for r in rows:
+            v = _to_int(r.get("stationen", ""))
+            if v is not None:
+                day_vals.append(v)
+            t = r.get("zeit", "")
+            m = re.match(r"\d{1,2}:(\d{2}):", t)
+            if m:
+                minutes_set.add(int(m.group(1)))
+        if not day_vals:
             continue
-        rows = parse_md_table(fp)
-        vals = [_to_int(r.get("ant2_wins", "")) for r in rows]
-        vals = [v for v in vals if v is not None]
-        if vals:
-            result[h].append(sum(vals) / len(vals))
-    return dict(result)
+        bucket = result.setdefault(h, {"cycles": [], "daily": {}, "minutes": set()})
+        bucket["cycles"].extend(day_vals)
+        bucket["daily"].setdefault(d, []).extend(day_vals)
+        bucket["minutes"] |= minutes_set
+    return result
 
 
 def load_rescue_by_hour(stats_dir: Path, mode: str, band: str,
@@ -204,14 +203,23 @@ def load_rescue_by_hour(stats_dir: Path, mode: str, band: str,
     return {h: sum(v) / len(v) for h, v in hour_totals.items()}
 
 
-def _aggregate(hour_vals: dict[int, list[float]]) -> dict[int, dict]:
+def _aggregate(hour_stats: dict[int, dict]) -> dict[int, dict]:
+    """Pooled Mean (alle Zyklen) + Min/Max über Tages-Mittelwerte (für Error Bars)."""
     result = {}
-    for hour, vals in sorted(hour_vals.items()):
+    for hour, data in sorted(hour_stats.items()):
+        cycles = data.get("cycles", [])
+        if not cycles:
+            continue
+        pooled_mean = sum(cycles) / len(cycles)
+        daily_means = [sum(v) / len(v) for v in data.get("daily", {}).values() if v]
+        minutes = data.get("minutes", set())
         result[hour] = {
-            "mean": sum(vals) / len(vals),
-            "min": min(vals),
-            "max": max(vals),
-            "n_days": len(vals),
+            "mean":       pooled_mean,
+            "min":        min(daily_means) if len(daily_means) > 1 else pooled_mean,
+            "max":        max(daily_means) if len(daily_means) > 1 else pooled_mean,
+            "n_cycles":   len(cycles),
+            "n_days":     len(daily_means),
+            "coverage":   len(minutes),
         }
     return result
 
@@ -231,8 +239,9 @@ def _hours_x(agg: dict[int, dict]):
 def _n_days_label(agg: dict[int, dict]) -> str:
     if not agg:
         return ""
-    n = max(v["n_days"] for v in agg.values())
-    return f"Basis: {n} Messtag{'e' if n > 1 else ''}"
+    n_days = max(v["n_days"] for v in agg.values())
+    n_cyc  = sum(v["n_cycles"] for v in agg.values())
+    return f"Basis: {n_days} Tag{'e' if n_days > 1 else ''} / {n_cyc} Zyklen"
 
 
 # ── Gradient-Balken ───────────────────────────────────────────────────────────
@@ -324,10 +333,10 @@ def create_stations_diagram(band: str, protocol: str):
 
     has_data = False
     all_xs: list[int] = []
-    n_days_set: set[str] = set()
+    basis_parts: list[str] = []
 
     for rx_mode in RX_MODES:
-        hour_vals = load_hourly_averages(STATS_DIR, rx_mode, band, protocol)
+        hour_vals = load_hourly_stats(STATS_DIR, rx_mode, band, protocol)
         if not hour_vals:
             continue
         agg = _aggregate(hour_vals)
@@ -335,7 +344,11 @@ def create_stations_diagram(band: str, protocol: str):
         if not xs:
             continue
         all_xs.extend(xs)
-        n_days_set.add(_n_days_label(agg))
+        n_d = max(v["n_days"] for v in agg.values())
+        n_c = sum(v["n_cycles"] for v in agg.values())
+        basis_parts.append(
+            f"{rx_mode.replace('_', ' ')}: {n_d} Tag{'e' if n_d > 1 else ''} / {n_c} Z"
+        )
 
         color = COLORS[rx_mode]
         label = rx_mode.replace("_", " ")
@@ -350,7 +363,7 @@ def create_stations_diagram(band: str, protocol: str):
     _hour_ticks_line(ax, all_xs)
     ax.set_xlabel("Stunde (UTC)", color=DARK_FG, labelpad=6)
     ax.set_ylabel("Ø Stationen / 15s-Zyklus", color=DARK_FG)
-    basis = " · ".join(sorted(n_days_set))
+    basis = " · ".join(basis_parts)
     ax.set_title(
         f"Empfangene Stationen — {band} {protocol}   ({basis})",
         color=DARK_FG, fontsize=13, pad=10,
@@ -386,7 +399,7 @@ def create_diversity_diagram(band: str, protocol: str):
     agg_all: dict[str, dict] = {}
     rescue_all: dict[str, dict] = {}
     for mode in _MODE_ORDER:
-        hv = load_hourly_averages(STATS_DIR, mode, band, protocol)
+        hv = load_hourly_stats(STATS_DIR, mode, band, protocol)
         if hv:
             agg_all[mode] = _aggregate(hv)
         if mode != "Normal":
@@ -407,11 +420,22 @@ def create_diversity_diagram(band: str, protocol: str):
     fig, ax = plt.subplots(figsize=(16, 6.5), facecolor=DARK_BG)
     _setup_dark_ax(ax)
 
-    max_val = max(
-        (agg[h]["mean"] for agg in agg_all.values() for h in all_hours if h in agg),
-        default=1.0,
-    )
-    ax.set_ylim(0, max_val * 1.28)
+    # max_val inkl. Rescue-Kappen und Min/Max-Error-Bars, damit +N Labels + Whisker
+    # nicht über den ylim hinausragen
+    max_candidates = [1.0]
+    for mode in _MODE_ORDER:
+        if mode not in agg_all:
+            continue
+        rescue = rescue_all.get(mode, {})
+        for h in all_hours:
+            if h not in agg_all[mode]:
+                continue
+            a = agg_all[mode][h]
+            cap = a["mean"] + rescue.get(h, 0.0)
+            whisker_top = a["max"]  # Error-Bar oberes Ende
+            max_candidates.append(max(cap, whisker_top))
+    max_val = max(max_candidates)
+    ax.set_ylim(0, max_val * 1.30)
     ax.set_xlim(-0.6, n - 0.4)
 
     handles = []
@@ -425,6 +449,21 @@ def create_diversity_diagram(band: str, protocol: str):
                                COLORS[mode], label=_MODE_LABELS[mode], zorder=2)
         if patch:
             handles.append(patch)
+
+        # Error-Bars (Tag-zu-Tag-Variabilität) nur wenn mehrere Messtage vorhanden
+        err_x, err_mean, err_lo, err_hi = [], [], [], []
+        for idx, h in enumerate(all_hours):
+            if h not in agg or agg[h]["n_days"] < 2:
+                continue
+            a = agg[h]
+            err_x.append(x_pos[idx])
+            err_mean.append(a["mean"])
+            err_lo.append(max(0.0, a["mean"] - a["min"]))
+            err_hi.append(max(0.0, a["max"] - a["mean"]))
+        if err_x:
+            ax.errorbar(err_x, err_mean, yerr=[err_lo, err_hi], fmt="none",
+                        ecolor=DARK_FG, alpha=0.55, capsize=2.5,
+                        elinewidth=0.9, zorder=4)
 
     any_rescue = False
     for mode in ["Diversity_Normal", "Diversity_Dx"]:
@@ -450,8 +489,12 @@ def create_diversity_diagram(band: str, protocol: str):
     for mode in _MODE_ORDER:
         if mode not in agg_all:
             continue
-        n_d = max(v["n_days"] for v in agg_all[mode].values())
-        basis_parts.append(f"{_MODE_LABELS[mode]}: {n_d} Tag{'e' if n_d > 1 else ''}")
+        a = agg_all[mode]
+        n_d = max(v["n_days"] for v in a.values())
+        n_c = sum(v["n_cycles"] for v in a.values())
+        basis_parts.append(
+            f"{_MODE_LABELS[mode]}: {n_d} Tag{'e' if n_d > 1 else ''} / {n_c} Z"
+        )
     basis = " · ".join(basis_parts)
 
     ax.set_title(
