@@ -37,7 +37,6 @@ HANDOFF.md
 # QSO Logs (personal data)
 *.adi
 adif/
-statistics/
 
 # Internal development docs (not relevant for public)
 CLAUDE.md

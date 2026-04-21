@@ -65,14 +65,19 @@ EXPL_STATIONEN = (
     "automatisch die empfangsstärkere von zwei Antennen."
 )
 
-EXPL_DIVERSITY = (
-    "Was sehe ich?\n"
-    "  Orange = Ø empfangene Stationen/Zyklus  |  Grün = wie oft Antenne 2 das klarere Signal lieferte.\n"
-    "  Rot = Rescue-Events: Antenne 1 war unter −24 dB (FT8-Decodierschwelle), Antenne 2 rettete die Station.\n"
-    "\n"
-    "Ohne Diversity wären diese Stationen komplett verloren gegangen — sie waren auf Antenne 1\n"
-    "zu schwach zum Decodieren, aber auf Antenne 2 noch hörbar. Jeder rote Balken beweist das."
-)
+def _expl_diversity(band: str, protocol: str) -> str:
+    return (
+        "Was sehe ich?\n"
+        "  Orange = Wie viele Stationen das System pro 15-Sek.-Zyklus empfangen hat (Ø über alle Messtage).\n"
+        "  Grüne Kappe oben = Stationen, die Antenne 1 allein NICHT dekodieren konnte — Signal war unter\n"
+        "  −24 dB (FT8-Decodierschwelle). Antenne 2 hat sie gerettet. Die +Zahl zeigt wie viele das waren.\n"
+        "\n"
+        "FT8 ist ein Digitalfunk-Modus: Er überträgt kurze Textnachrichten über tausende Kilometer,\n"
+        "auch bei extrem schwachen Signalen. Unter −24 dB ist eine Station für einen normalen Empfänger\n"
+        "unsichtbar — Diversity rettet sie, indem es automatisch die bessere der zwei Antennen wählt.\n"
+        "\n"
+        f"Rohdaten: statistics/Diversity_Dx/{band}/{protocol}/  ·  github.com/mikewanne/SimpleFT8"
+    )
 
 
 # ── Markdown-Parser ───────────────────────────────────────────────────────────
@@ -347,16 +352,14 @@ def create_stations_diagram(band: str, protocol: str):
     print(f"  ✓ {out.name}")
 
 
-# ── Diagramm 2: 3-Balken Diversity-Analyse ────────────────────────────────────
+# ── Diagramm 2: Diversity-Analyse (Stacked Bar: Orange + Grüne Rescue-Kappe) ──
 
 def create_diversity_diagram(band: str, protocol: str):
     hour_vals_st = load_hourly_averages(STATS_DIR, "Diversity_Dx", band, protocol)
-    hour_vals_w  = load_wins_averages(STATS_DIR, band, protocol)
     if not hour_vals_st:
         return
 
     agg_st = _aggregate(hour_vals_st)
-    agg_w  = _aggregate(hour_vals_w) if hour_vals_w else {}
     rescue = load_rescue_by_hour(STATS_DIR, band, protocol)
 
     hours = sorted(agg_st.keys())
@@ -364,48 +367,46 @@ def create_diversity_diagram(band: str, protocol: str):
     x_pos = np.arange(n, dtype=float)
 
     station_vals = [agg_st[h]["mean"] for h in hours]
-    wins_vals    = [agg_w.get(h, {}).get("mean", 0) for h in hours]
     rescue_vals  = [rescue.get(h, 0) for h in hours]
 
-    bar_w = 0.26
-    offsets = [-bar_w, 0.0, bar_w]
+    bar_w = 0.55
 
     fig, ax = plt.subplots(figsize=(14, 6.5), facecolor=DARK_BG)
     _setup_dark_ax(ax)
 
-    # Y-Limits vor imshow setzen (imshow nutzt die Achsen-Koordinaten)
-    max_val = max(
-        max(station_vals) if station_vals else 0,
-        max(wins_vals)    if wins_vals    else 0,
-        max(rescue_vals)  if rescue_vals  else 0,
-    )
-    ax.set_ylim(0, max_val * 1.20)
+    max_val = max(station_vals) if station_vals else 1
+    ax.set_ylim(0, max_val * 1.22)
     ax.set_xlim(-0.6, n - 0.4)
 
-    handles = []
-    h1 = _gradient_bars(ax, x_pos + offsets[0], station_vals, bar_w,
-                        COLORS["Diversity_Dx"],    "Stationen gesamt",   zorder=2)
-    h2 = _gradient_bars(ax, x_pos + offsets[1], wins_vals,    bar_w,
-                        COLORS["Diversity_Normal"], "Ø ANT2 Wins/Zyklus", zorder=2)
-    h3 = _gradient_bars(ax, x_pos + offsets[2], rescue_vals,  bar_w,
-                        COLORS["rescue"],           "Rescue-Events (gerettet)", zorder=2)
-    for h in (h1, h2, h3):
-        if h:
-            handles.append(h)
+    # Orange Gradient-Balken: 0 → Stationen gesamt (inkl. geretteter)
+    h_orange = _gradient_bars(ax, x_pos, station_vals, bar_w,
+                              COLORS["Diversity_Dx"], "Stationen gesamt", zorder=2)
 
-    # Wert-Labels über die Rescue-Balken (weil sie klein sind)
-    for xi, rv in zip(x_pos + offsets[2], rescue_vals):
-        if rv > 0.05:
-            ax.text(xi, rv + max_val * 0.015, f"{rv:.1f}",
-                    ha="center", va="bottom", fontsize=7,
-                    color=COLORS["rescue"], zorder=5)
+    # Grüne Kappe: (gesamt − gerettet) → gesamt  [solide, überlagert oben]
+    rescue_drawn = False
+    for xi, sv, rv in zip(x_pos, station_vals, rescue_vals):
+        if rv < 0.5 or sv < 0.5:
+            continue
+        base = max(0.0, sv - rv)
+        ax.bar(xi, rv, bottom=base, width=bar_w,
+               color="#44dd77", alpha=0.92, zorder=3, linewidth=0)
+        ax.text(xi, sv + max_val * 0.016, f"+{rv:.0f}",
+                ha="center", va="bottom", fontsize=7.5,
+                color="#55ee88", fontweight="bold", zorder=5)
+        rescue_drawn = True
+
+    handles = [h for h in (h_orange,) if h]
+    if rescue_drawn:
+        handles.append(mpatches.Patch(
+            facecolor="#44dd77", alpha=0.92,
+            label="davon gerettet (ANT1 unter −24 dB, ANT2 hörbar)"))
 
     _hour_ticks_bar(ax, list(x_pos), hours)
     ax.set_xlabel("Stunde (UTC)", color=DARK_FG, labelpad=6)
-    ax.set_ylabel("Stationen / Ø Wert pro Zyklus", color=DARK_FG)
+    ax.set_ylabel("Ø Stationen pro 15s-Zyklus", color=DARK_FG)
     basis = _n_days_label(agg_st)
     ax.set_title(
-        f"ANT2 Diversity Analyse — {band} {protocol} (DX-Modus)   ({basis})",
+        f"Diversity DX-Analyse — {band} {protocol}   ({basis})",
         color=DARK_FG, fontsize=13, pad=10,
     )
 
@@ -414,9 +415,9 @@ def create_diversity_diagram(band: str, protocol: str):
     for t in leg.get_texts():
         t.set_color(DARK_FG)
 
-    _footer(fig, EXPL_DIVERSITY)
+    _footer(fig, _expl_diversity(band, protocol))
     plt.tight_layout()
-    plt.subplots_adjust(bottom=0.30, right=0.98)
+    plt.subplots_adjust(bottom=0.32, right=0.98)
 
     out = OUTPUT_DIR / f"diversity_{band}_{protocol}.png"
     fig.savefig(out, dpi=150, bbox_inches="tight", facecolor=DARK_BG)
