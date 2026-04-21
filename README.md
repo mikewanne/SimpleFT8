@@ -6,7 +6,7 @@
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![Platform: macOS](https://img.shields.io/badge/platform-macOS-lightgrey.svg)](https://www.apple.com/macos/)
 [![Ham Radio](https://img.shields.io/badge/ham--radio-FT8%2FFT4%2FFT2-orange.svg)](https://www.physics.princeton.edu/pulsar/k1jt/wsjtx.html)
-[![Tests](https://img.shields.io/badge/tests-132%20passed-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-159%20passed-brightgreen.svg)]()
 
 > **No more manual ALC babysitting, no missed replies, no guessing the best antenna or frequency.**
 > SimpleFT8 automates your entire FT8/FT4/FT2 workflow with closed-loop power control, dual-mode diversity scoring, automatic CQ frequency optimization, and intelligent caller queuing.
@@ -96,8 +96,9 @@ Controlled test on 40m, same hardware (FLEX-8400M), 2 minutes apart:
 - ✅ **QSO State Machine**: Hunt + CQ mode, retry logic, ADIF 3.1.7 logging
 - ✅ **Integrated Logbook**: Search, DXCC counter, QSO detail overlay, delete
 - ✅ **Help Dialog**: Built-in feature docs (DE + EN) via ? button in status bar
-- ✅ **132 Unit Tests**: QSO, diversity patterns, DT, propagation, OMNI-TX, ADIF, histograms
-- ✅ **Station Statistics**: Per-cycle logging with hourly aggregation (Normal + Diversity), 60s warm-up exclusion. *Concept: DL2YMR*
+- ✅ **159 Unit Tests**: QSO, diversity patterns, DT, propagation, OMNI-TX, ADIF, histograms
+- ✅ **Station Statistics**: Per-cycle logging with hourly aggregation (Normal + Diversity), 4-cycle warm-up exclusion. *Concept: DL2YMR*
+- ✅ **Per-Station SNR Logging**: Every A1↔A2 comparison logged with both SNR values, Δ dB, winner and ★ Saved-Event when one antenna is below FT8 decode threshold (−24 dB) and the other above. Proves "ANT2 made this QSO possible."
 - ✅ **Ant2 Superiority Counter**: Quantifies diversity gain (A2 > A1 frequency)
 - ✅ **TX Safety**: TX halted immediately before Gain Measurement — no accidental transmit during calibration
 - ✅ **Gain Measurement**: Audio input calibration tool (GAIN-MESSUNG button). Finds optimal RX level before statistics or diversity sessions.
@@ -142,7 +143,9 @@ SimpleFT8/
 │   ├── encoder.py                # FT8/FT4/FT2 encode → VITA-49 TX
 │   ├── qso_state.py              # QSO state machine (Hunt + CQ + Waitlist)
 │   ├── station_accumulator.py    # Shared station logic (Normal + Diversity)
+│   ├── station_stats.py          # Async cycle + per-station SNR logging
 │   ├── diversity.py              # Diversity controller (Standard/DX scoring)
+│   ├── diversity_cache.py        # 2h preset cache (skip re-calibration)
 │   ├── ntp_time.py               # DT correction v2 (per-mode persistence)
 │   ├── propagation.py            # Band conditions (HamQSL + time correction)
 │   ├── ap_lite.py                # AP-Lite v2.2 (field test)
@@ -242,8 +245,9 @@ MIT License (c) 2026 DA1MHH (Mike Hammerer)
 - ✅ **QSO-Zustandsmaschine**: Hunt + CQ, Retry, ADIF 3.1.7
 - ✅ **Logbuch**: Suche, DXCC, Detail-Overlay, Loeschen
 - ✅ **Hilfe-Dialog**: Feature-Doku (DE + EN) via ? Button in Statusleiste
-- ✅ **132 Unit Tests**: QSO, Diversity-Patterns, DT, Propagation, OMNI-TX, ADIF, Histogramme
-- ✅ **Stations-Statistik**: Pro-Zyklus Logging mit Stundenaggregation (Normal + Diversity), 60s Warmup-Ausschluss. *Konzept: DL2YMR*
+- ✅ **159 Unit Tests**: QSO, Diversity-Patterns, DT, Propagation, OMNI-TX, ADIF, Histogramme
+- ✅ **Stations-Statistik**: Pro-Zyklus Logging mit Stundenaggregation (Normal + Diversity), 4-Zyklen Warmup-Ausschluss. *Konzept: DL2YMR*
+- ✅ **Per-Station SNR-Logging**: Jeder A1↔A2 Vergleich wird mit beiden SNR-Werten, Δ dB, Gewinner und ★ Saved-Event geloggt — wenn eine Antenne unter der FT8-Dekodierschwelle (−24 dB) liegt und die andere darüber. Beweist: "ANT2 hat dieses QSO erst möglich gemacht."
 - ✅ **Ant2 Superiority Counter**: Quantifiziert Diversity-Gewinn (Ant2 > Ant1)
 - ✅ **TX-Sicherheit**: TX stoppt sofort vor Gain-Messung — kein versehentliches Senden bei Kalibrierung
 - ✅ **Gain-Messung**: Audio-Eingangspegel kalibrieren (Button "GAIN-MESSUNG"). Findet optimalen RX-Pegel vor Statistik- oder Diversity-Sitzungen.
@@ -303,7 +307,7 @@ SimpleFT8/
 │   ├── help_dialog.py            # Feature-Doku (DE/EN)
 │   └── ...                       # Control Panel, RX, QSO, Logbuch
 ├── docs/explained/               # 10 Feature-Docs (5 × DE + EN)
-└── tests/                        # 132 unit tests (test_modules.py + test_patterns.py)
+└── tests/                        # 159 unit tests (test_modules.py + test_patterns.py)
 ```
 
 ### Radio-Kompatibilitaet
