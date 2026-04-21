@@ -33,10 +33,10 @@ DARK_FG = "#d4d4d4"
 DARK_GRID = "#333333"
 
 COLORS = {
-    "Normal":           "#aaaaaa",  # grau — Baseline, kein Diversity
-    "Diversity_Normal": "#4e9af1",  # blau — Standard-Diversity
-    "Diversity_Dx":     "#f0a050",  # orange — DX-Diversity
-    "rescue":           "#44dd77",  # hell-grün — gerettete Stationen
+    "Normal":           "#b0b0b0",  # helles Grau — Baseline (neutraler, hebt sich ab)
+    "Diversity_Normal": "#5d8fd9",  # gesättigtes Blau — Standard (kühle Energie)
+    "Diversity_Dx":     "#f0a050",  # warm Orange — DX (Tableau-bewährt, unverändert)
+    "rescue":           "#4cda7a",  # kühles Grün — Rescue Cap (kontrastiert zu Blau+Orange)
 }
 
 _COL_MAP = {
@@ -276,10 +276,10 @@ def _draw_rescue_caps(ax, x_positions, station_vals, rescue_vals,
             continue
         base = max(0.0, sv - rv)
         ax.bar(xi, rv, bottom=base, width=bar_w,
-               color="#44dd77", alpha=0.92, zorder=3, linewidth=0)
+               color=COLORS["rescue"], alpha=0.92, zorder=3, linewidth=0)
         ax.text(xi, sv + max_val * 0.016, f"+{rv:.0f}",
                 ha="center", va="bottom", fontsize=7,
-                color="#55ee88", fontweight="bold", zorder=5)
+                color=COLORS["rescue"], fontweight="bold", zorder=5)
         drawn = True
     return drawn
 
@@ -478,7 +478,7 @@ def create_diversity_diagram(band: str, protocol: str):
             any_rescue = True
 
     if any_rescue:
-        handles.append(mpatches.Patch(facecolor="#44dd77", alpha=0.92,
+        handles.append(mpatches.Patch(facecolor=COLORS["rescue"], alpha=0.92,
                                       label="davon gerettet (ANT1 unter −24 dB)"))
 
     _hour_ticks_bar(ax, list(x_base), all_hours)
