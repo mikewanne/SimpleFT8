@@ -106,33 +106,30 @@ class CycleMixin:
                 operate_total=self._diversity_ctrl.OPERATE_CYCLES,
                 scoring_mode=self._diversity_ctrl.scoring_mode,
             )
-            # Messung abgeschlossen → CQ freigeben + Preset speichern
+            # Einmessen abgeschlossen → nur beim Übergang measure→operate ausführen
             if self._diversity_ctrl.phase == "operate":
-                import time as _time
-                self._stats_warmup_cycles = 6  # 6 Zyklen Warmup nach Einmessen
-                print("[Stats] Einmessen fertig — 6 Zyklen Warmup bis Stats starten")
-                # Diversity-Cache speichern (2h gueltig)
-                cache = getattr(self, '_diversity_cache', None)
-                if cache:
-                    scoring = getattr(self._diversity_ctrl, 'scoring_mode', 'normal')
-                    cache.save(self.settings.band, scoring)
-                    print(f"[Diversity] Cache gespeichert: {self.settings.band}/{scoring}")
-                self._set_cq_locked(False)
-                self.settings.save_diversity_preset(
-                    mode=self.settings.mode,
-                    band=self.settings.band,
-                    ratio=self._diversity_ctrl.ratio,
-                    dominant=self._diversity_ctrl.dominant,
-                )
-                cq_freq = self._diversity_ctrl.get_free_cq_freq()
-                if cq_freq:
-                    self.encoder.audio_freq_hz = cq_freq
-                    print(f"[Diversity] Einmessen fertig — CQ auf {cq_freq} Hz")
-                else:
-                    print("[Diversity] Einmessen fertig — CQ freigegeben")
-                self.control_panel.update_freq_histogram(
-                    self._diversity_ctrl.get_histogram_data()
-                )
+                if not getattr(self, '_diversity_in_operate', False):
+                    self._diversity_in_operate = True
+                    self._stats_warmup_cycles = 6
+                    print("[Stats] Einmessen fertig — 6 Zyklen Warmup bis Stats starten")
+                    self._set_cq_locked(False)
+                    self.settings.save_diversity_preset(
+                        mode=self.settings.mode,
+                        band=self.settings.band,
+                        ratio=self._diversity_ctrl.ratio,
+                        dominant=self._diversity_ctrl.dominant,
+                    )
+                    cq_freq = self._diversity_ctrl.get_free_cq_freq()
+                    if cq_freq:
+                        self.encoder.audio_freq_hz = cq_freq
+                        print(f"[Diversity] Einmessen fertig — CQ auf {cq_freq} Hz")
+                    else:
+                        print("[Diversity] Einmessen fertig — CQ freigegeben")
+                    self.control_panel.update_freq_histogram(
+                        self._diversity_ctrl.get_histogram_data()
+                    )
+            elif self._diversity_ctrl.phase == "measure":
+                self._diversity_in_operate = False
 
         if self._rx_mode == "diversity" and messages:
             # Diversity: Frequenz-Histogram live aktualisieren (Betriebsphase)

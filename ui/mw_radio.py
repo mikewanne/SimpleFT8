@@ -436,6 +436,7 @@ class RadioMixin:
 
     def _enable_diversity(self, scoring_mode: str = "normal"):
         """Diversity aktivieren: Antenne pro Zyklus wechseln, Stationen akkumulieren."""
+        self._diversity_in_operate = False  # Transition-Guard zurücksetzen
         self._diversity_stations = {}
         self._diversity_current_ant = "A1"
         self._diversity_ant_queue = deque()  # (ant, phase) Tupel
@@ -655,6 +656,15 @@ class RadioMixin:
             scoring=scoring,
             mode=self.settings.mode,
         )
+        # Gain-Cache: Timestamp der Messung setzen — 2h Gültigkeit ab jetzt
+        if self._rx_mode == "diversity":
+            div_scoring = (getattr(self, '_pending_diversity_scoring', None)
+                           if getattr(self, '_pending_dx_diversity', False)
+                           else getattr(self._diversity_ctrl, 'scoring_mode', 'normal'))
+            _cache = getattr(self, '_diversity_cache', None)
+            if _cache and div_scoring:
+                _cache.save(band, div_scoring)
+                print(f"[Diversity] Gain-Cache gespeichert: {band}/{div_scoring}")
         ant1_g = r.get("ant1_gain", r.get("best_gain", 0))
         ant2_g = r.get("ant2_gain", r.get("best_gain", 0))
         self.control_panel.dx_info.setText(
