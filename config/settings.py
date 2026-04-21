@@ -118,10 +118,14 @@ class Settings:
                 return specific
         return presets.get(band)
 
-    def get_gain_preset(self, band: str, mode: str = "standard") -> dict | None:
-        """Gain-Preset laden. mode='standard' oder 'dx'."""
+    def get_gain_preset(self, band: str, mode: str = "standard", ft_mode: str = None) -> dict | None:
+        """Gain-Preset laden. mode='standard'/'dx', ft_mode='FT8'/'FT4' fuer mode-spez. Key."""
         key = "dx_gain_presets" if mode == "dx" else "dx_presets"
         presets = self._data.get(key, {})
+        if ft_mode:
+            specific = presets.get(f"{band}_{ft_mode}")
+            if specific is not None:
+                return specific
         return presets.get(band)
 
     def get_normal_preset(self, band: str) -> dict:
@@ -155,7 +159,7 @@ class Settings:
         mode → bei Angabe als band_mode-Key gespeichert (z.B. '20m_FT8')
         """
         import time
-        key = "dx_gain_presets" if scoring == "dx" else "dx_presets"
+        key = "dx_gain_presets" if scoring in ("dx", "snr") else "dx_presets"
         if key not in self._data:
             self._data[key] = {}
         preset_key = f"{band}_{mode}" if mode else band

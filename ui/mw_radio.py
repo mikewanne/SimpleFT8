@@ -471,7 +471,11 @@ class RadioMixin:
             self.control_panel.update_diversity_counts(0, 0)
 
         band = self.settings.band
-        preset = self.settings.get_dx_preset(band)
+        ft_mode = self.settings.mode
+        if scoring_mode == "dx":
+            preset = self.settings.get_gain_preset(band, mode="dx", ft_mode=ft_mode)
+        else:
+            preset = self.settings.get_dx_preset(band, mode=ft_mode)
 
         if preset and "ant1_gain" in preset:
             # Preset vorhanden: per-Antenne optimierte Gains laden + sofort ans Radio
