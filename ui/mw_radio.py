@@ -252,7 +252,7 @@ class RadioMixin:
 
         # Warmup: 60s keine Stats nach Bandwechsel
         import time as _time
-        self._stats_warmup_cycles = 4
+        self._stats_warmup_cycles = 6
 
         # Empfangsliste komplett leeren bei Bandwechsel
         self.rx_panel.table.setRowCount(0)
@@ -308,7 +308,7 @@ class RadioMixin:
 
         # Warmup: 60s keine Stats nach Moduswechsel
         import time as _time
-        self._stats_warmup_cycles = 4
+        self._stats_warmup_cycles = 6
 
         # Alten Modus sauber beenden + Liste immer leeren bei Wechsel
         if old_mode == "diversity":
@@ -671,7 +671,7 @@ class RadioMixin:
                 self.radio.set_rfgain(ant1_g)
             self.control_panel.dx_info.setText(f"G{ant1_g}dB (kalibriert)")
             self.control_panel.dx_info.setStyleSheet("")
-            self._stats_warmup_cycles = 4
+            self._stats_warmup_cycles = 6
             print(f"[Kalibrieren] Normal Preset {band}: G{ant1_g}dB — 4 Zyklen Warmup")
             self._update_statusbar()
             self._show_calibration_done(band, ant1_g, None)
@@ -687,7 +687,7 @@ class RadioMixin:
                 scoring = getattr(self._diversity_ctrl, 'scoring_mode', 'normal')
             print(f"[Diversity] Post-Gain → Diversity starten ({scoring})")
             self._enable_diversity(scoring_mode=scoring)
-            self._stats_warmup_cycles = 4
+            self._stats_warmup_cycles = 6
             print(f"[Diversity] Kalibrierung fertig → 4 Zyklen Warmup")
 
         self._update_statusbar()
@@ -726,7 +726,7 @@ class RadioMixin:
             scoring = getattr(self._diversity_ctrl, 'scoring_mode', 'normal')
             print(f"[Diversity] Gain abgebrochen → Diversity neu initialisieren ({scoring})")
             self._enable_diversity(scoring_mode=scoring)
-            self._stats_warmup_cycles = 4
+            self._stats_warmup_cycles = 6
         else:
             self._apply_normal_mode()
         self.control_panel.dx_info.setText("")

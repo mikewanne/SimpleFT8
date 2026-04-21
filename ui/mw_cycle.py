@@ -109,8 +109,8 @@ class CycleMixin:
             # Messung abgeschlossen → CQ freigeben + Preset speichern
             if self._diversity_ctrl.phase == "operate":
                 import time as _time
-                self._stats_warmup_cycles = 4  # 4 Zyklen Warmup nach Einmessen
-                print("[Stats] Einmessen fertig — 4 Zyklen Warmup bis Stats starten")
+                self._stats_warmup_cycles = 6  # 6 Zyklen Warmup nach Einmessen
+                print("[Stats] Einmessen fertig — 6 Zyklen Warmup bis Stats starten")
                 # Diversity-Cache speichern (2h gueltig)
                 cache = getattr(self, '_diversity_cache', None)
                 if cache:

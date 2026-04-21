@@ -77,7 +77,7 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         from core.antenna_pref import AntennaPreferenceStore
         from core.diversity_cache import DiversityCache
         self._stats_logger = StationStatsLogger()
-        self._stats_warmup_cycles = 4
+        self._stats_warmup_cycles = 6
         self._antenna_prefs = AntennaPreferenceStore()
         self._diversity_cache = DiversityCache(self.settings)
 
