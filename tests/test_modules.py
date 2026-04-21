@@ -311,6 +311,78 @@ def test_propagation_seasonal_20m_spring():
     assert _apply_seasonal_correction("20m", "fair", 3, 4) == "poor"   # April, 03 UTC → geschlossen
 
 
+def test_propagation_seasonal_40m_winter_midnight_boundary():
+    """40m Winter (open=14, close=7): Grenzstunden exakt prüfen."""
+    from core.propagation import _apply_seasonal_correction
+    month = 1  # Januar
+    assert _apply_seasonal_correction("40m", "good", 14, month) == "good"  # open_h selbst: offen
+    assert _apply_seasonal_correction("40m", "good",  7, month) == "poor"  # close_h selbst: geschlossen
+    assert _apply_seasonal_correction("40m", "good",  6, month) == "good"  # eine vor close: noch offen
+    assert _apply_seasonal_correction("40m", "good",  8, month) == "poor"  # nach close: geschlossen
+    assert _apply_seasonal_correction("40m", "good", 13, month) == "poor"  # eine vor open: noch geschlossen
+
+
+def test_get_season_all_months():
+    """_get_season() für alle 12 Monate korrekt."""
+    from core.propagation import _get_season
+    for m in (12, 1, 2):   assert _get_season(m) == "winter"
+    for m in (3, 4, 5):    assert _get_season(m) == "spring"
+    for m in (6, 7, 8):    assert _get_season(m) == "summer"
+    for m in (9, 10, 11):  assert _get_season(m) == "autumn"
+
+
+def test_propagation_seasonal_60m_passthrough():
+    """60m fehlt in _SEASONAL_SCHEDULE → condition unverändert (kein XML-Eintrag)."""
+    from core.propagation import _apply_seasonal_correction
+    assert _apply_seasonal_correction("60m", "good",  12, 1) == "good"
+    assert _apply_seasonal_correction("60m", "fair",  14, 6) == "fair"
+    assert _apply_seasonal_correction("60m", "poor",   3, 9) == "poor"
+
+
+def test_propagation_summer_close_h24_behavior():
+    """20m Sommer (open=4, close=24): offen 04–23 UTC, geschlossen 00–03 UTC.
+
+    close_h=24 ist kein Bug — utc_hour<24 gilt für alle Stunden, open_h=4
+    schließt 0-3 UTC weiterhin aus. Bewusstes Design: '04:00–24:00'.
+    """
+    from core.propagation import _apply_seasonal_correction
+    month = 7  # Juli
+    for hour in range(4, 24):
+        assert _apply_seasonal_correction("20m", "good", hour, month) == "good", f"Stunde {hour}"
+    for hour in range(0, 4):
+        assert _apply_seasonal_correction("20m", "good", hour, month) == "poor", f"Stunde {hour}"
+
+
+def test_evaluate_conditions_no_http():
+    """_evaluate_conditions() mit Stub-raw_data — kein HTTP-Request nötig."""
+    import datetime as _dt
+    from unittest.mock import patch
+    from core.propagation import _evaluate_conditions
+
+    raw = {
+        "10m": {"day": "good",  "night": "poor"},
+        "12m": {"day": "good",  "night": "poor"},
+        "15m": {"day": "good",  "night": "poor"},
+        "17m": {"day": "fair",  "night": "poor"},
+        "20m": {"day": "good",  "night": "fair"},
+        "30m": {"day": "good",  "night": "good"},
+        "40m": {"day": "fair",  "night": "good"},
+        "60m": {"day": "fair",  "night": "fair"},
+        "80m": {"day": "poor",  "night": "good"},
+    }
+    # Winter (Januar), 12:00 UTC = day
+    mock_now = _dt.datetime(2024, 1, 15, 12, 0, 0, tzinfo=_dt.timezone.utc)
+    with patch("core.propagation.datetime") as m:
+        m.now.return_value = mock_now
+        cond = _evaluate_conditions(raw)
+
+    assert cond["10m"] == "poor"   # N/A Winter
+    assert cond["17m"] == "fair"   # offen 08–16, Stunde 12 ✓
+    assert cond["20m"] == "good"   # offen 06–18, Stunde 12 ✓
+    assert cond["40m"] == "poor"   # Nachtband 14–07, Stunde 12 außerhalb
+    assert cond["60m"] == "fair"   # passthrough (nicht in Schedule)
+
+
 # ── Syntax Checks ────────────────────────────────────────────────────────────
 
 def test_syntax_main_window():
