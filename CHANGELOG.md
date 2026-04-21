@@ -4,14 +4,12 @@
 
 ### Neue Features
 
-**Smart Antenna Selection (DL2YMR Konzept)**
+**Smart Antenna Selection**
 - Während eines QSO wechselt SimpleFT8 automatisch auf die Antenne mit besserem SNR für die Gegenstation
 - `core/antenna_pref.py` — AntennaPreferenceStore speichert beste Antenne pro Callsign
 - Statusbar zeigt "RX: A2 (Pref)" während aktivem QSO
 - Nach QSO: zurück zum normalen Diversity-Rhythmus
 - Debug: `[Antenna] QSO mit W2XYZ → Präferenz A2 (besserer SNR)`
-- *Konzept und Logik-Design: DL2YMR*
-
 **Warm-up Phase + Freq Counter in Statusbar**
 - 60s nach Band-/Moduswechsel und App-Start keine Stats → faire Vergleichsbasis
 - Statusbar zeigt aktuelle CQ-Frequenz + Recalc-Zähler: `Freq: #7 825Hz`
@@ -28,7 +26,7 @@
 
 - **A1/A2 Stations-Zähler wiederhergestellt** — Zähler war nach Ant2-Wins Stats-Refactoring verschwunden
 - **Redundanter Cycle Counter entfernt** — doppelte Anzeige zwischen A1/A2 Panels beseitigt
-- **DL2MR → DL2YMR** — Tippfehler in Attribution korrigiert
+
 
 ---
 
@@ -44,8 +42,6 @@
 - Async via Queue + Daemon-Thread (null Decoder-Impact)
 - Auto-Pause bei Antennen-Tuning/Einmessung
 - Settings-Toggle: "Statistik-Erfassung aktivieren"
-- *Statistik-Konzept: DL2YMR*
-
 **Ant2 Superiority Counter**
 - Misst wie oft Ant2 strikt besseren SNR hat als Ant1
 - Debug-Ausgabe: `[Diversity] 34 St. | A1>A2: 26 | A2>A1: 8 (24%)`

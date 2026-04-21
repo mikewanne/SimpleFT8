@@ -4,8 +4,6 @@
 
 SimpleFT8 loggt pro FT8/FT4-Zyklus die Anzahl empfangener Stationen, Durchschnitts-SNR und Band. Die Daten werden als Markdown-Dateien gespeichert und koennen fuer Langzeitanalysen genutzt werden.
 
-*Statistik-Konzept: DL2YMR*
-
 ## Verzeichnisstruktur
 
 ```
@@ -90,8 +88,6 @@ Statistiken werden automatisch pausiert bei:
 | **App-Start** | Erste Zyklen unzuverlaessig | 60s Settling |
 
 Die 60s Settling-Phase (Warmup) gilt fuer ALLE Modi gleichermassen — faire Vergleichsbasis zwischen Normal und Diversity.
-
-*Logik-Verfeinerung basierend auf DL2YMR Feedback.*
 
 ## Aktivierung
 

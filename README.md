@@ -100,7 +100,7 @@ Controlled test on 40m, same hardware (FLEX-8400M), 2 minutes apart:
 - ✅ **FT8 / FT4 / FT2 modes** — all three with dedicated frequencies, auto RX filter, mode-dependent timing
 - ✅ **Auto TX Power Regulation**: Closed-loop FWDPWR feedback, clipping protection, per-band calibration
 - ✅ **Dual-Mode Diversity**: Standard (station count) + DX (weak signal count), 8% threshold, 70:30/50:50
-- ✅ **Smart Antenna Selection**: Per-station antenna preference during QSO — switches to best-SNR antenna per callsign. *Concept: DL2YMR*
+- ✅ **Smart Antenna Selection**: Per-station antenna preference during QSO — switches to best-SNR antenna per callsign.
 - ✅ **DT Time Correction v2**: Per-mode persistence, 2-cycle measurement, 70% damping, ±0.1s convergence
 - ✅ **Propagation Bars**: HamQSL solar data + time-of-day correction. Verified against HAM-Toolbox
 - ✅ **Operator Presence (Anti-Bot)**: 15 min timeout, mouse reset, legal requirement DE
@@ -113,7 +113,7 @@ Controlled test on 40m, same hardware (FLEX-8400M), 2 minutes apart:
 - ✅ **Integrated Logbook**: Search, DXCC counter, QSO detail overlay, delete
 - ✅ **Help Dialog**: Built-in feature docs (DE + EN) via ? button in status bar
 - ✅ **162 Unit Tests**: QSO, diversity patterns, DT, propagation, OMNI-TX, ADIF, histograms
-- ✅ **Station Statistics**: Per-cycle logging (Normal + Diversity), 6-cycle warm-up exclusion. Raw Markdown data, no in-file summaries — analyzed by `scripts/generate_plots.py`. *Concept: DL2YMR*
+- ✅ **Station Statistics**: Per-cycle logging (Normal + Diversity), 6-cycle warm-up exclusion. Raw Markdown data, no in-file summaries — analyzed by `scripts/generate_plots.py`.
 - ✅ **Diversity Analysis Plots**: `python3 scripts/generate_plots.py` → `auswertung/` — dark-theme PNGs: station timeline (Normal vs Diversity) + ANT2 wins + Rescue-Events per hour. [→ Aktuelle Auswertungen](auswertung/)
 - ✅ **Per-Station SNR Logging**: Every A1↔A2 comparison logged with both SNR values, Δ dB, winner and ★ Saved-Event when one antenna is below FT8 decode threshold (−24 dB) and the other above. Proves "ANT2 made this QSO possible."
 - ✅ **Ant2 Superiority Counter**: Quantifies diversity gain (A2 > A1 frequency)
@@ -268,7 +268,7 @@ MIT License (c) 2026 DA1MHH (Mike Hammerer)
 - ✅ **FT8 / FT4 / FT2** — alle drei Modi mit eigenen Frequenzen, Auto-RX-Filter, modus-abhaengigem Timing
 - ✅ **Auto TX-Leistungsregelung**: Regelkreis mit FWDPWR-Feedback, Clipping-Schutz
 - ✅ **Dual-Mode Diversity**: Standard (Stationsanzahl) + DX (schwache Signale), 8% Schwelle
-- ✅ **Smart Antenna Selection**: Pro-Station Antennen-Praeferenz waehrend QSO — wechselt auf beste SNR-Antenne je Callsign. *Konzept: DL2YMR*
+- ✅ **Smart Antenna Selection**: Pro-Station Antennen-Praeferenz waehrend QSO — wechselt auf beste SNR-Antenne je Callsign.
 - ✅ **DT-Zeitkorrektur v2**: Pro Modus gespeichert, 2-Zyklen-Messung, 70% Daempfung
 - ✅ **Propagation-Balken**: HamQSL-Solardaten + Tageszeit-Korrektur. Geprueft gegen HAM-Toolbox
 - ✅ **Operator-Praesenz (Anti-Bot)**: 15 Min Timeout, gesetzl. Pflicht DE
@@ -281,7 +281,7 @@ MIT License (c) 2026 DA1MHH (Mike Hammerer)
 - ✅ **Logbuch**: Suche, DXCC, Detail-Overlay, Loeschen
 - ✅ **Hilfe-Dialog**: Feature-Doku (DE + EN) via ? Button in Statusleiste
 - ✅ **162 Unit Tests**: QSO, Diversity-Patterns, DT, Propagation, OMNI-TX, ADIF, Histogramme
-- ✅ **Stations-Statistik**: Pro-Zyklus Logging (Normal + Diversity), 6-Zyklen Warmup-Ausschluss. Rohdaten im Markdown, keine In-File-Zusammenfassungen — Auswertung via `scripts/generate_plots.py`. *Konzept: DL2YMR*
+- ✅ **Stations-Statistik**: Pro-Zyklus Logging (Normal + Diversity), 6-Zyklen Warmup-Ausschluss. Rohdaten im Markdown, keine In-File-Zusammenfassungen — Auswertung via `scripts/generate_plots.py`.
 - ✅ **Diversity Auswertungs-Diagramme**: `python3 scripts/generate_plots.py` → `auswertung/` — Dark-Theme PNGs: Stationen-Zeitverlauf (Normal vs Diversity) + ANT2-Wins + Rescue-Events. [→ Aktuelle Auswertungen](auswertung/)
 - ✅ **Per-Station SNR-Logging**: Jeder A1↔A2 Vergleich wird mit beiden SNR-Werten, Δ dB, Gewinner und ★ Saved-Event geloggt — wenn eine Antenne unter der FT8-Dekodierschwelle (−24 dB) liegt und die andere darüber. Beweist: "ANT2 hat dieses QSO erst möglich gemacht."
 - ✅ **Ant2 Superiority Counter**: Quantifiziert Diversity-Gewinn (Ant2 > Ant1)
@@ -364,7 +364,7 @@ MIT License (c) 2026 DA1MHH (Mike Hammerer)
 - [Decodium / IU8LMC](https://www.ft2.it/) — FT2 protocol reference
 - [FlexRadio Systems](https://www.flexradio.com/) — SmartSDR TCP API
 - [WSJT-X](https://wsjt.sourceforge.io/) — Pioneering digital weak-signal modes
-- DL2YMR — Station Statistics and Smart Antenna Selection concept
+
 
 ---
 

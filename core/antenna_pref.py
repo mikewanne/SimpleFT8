@@ -4,7 +4,6 @@ Im Diversity-Modus vergleicht der Station Accumulator SNR von Ant1 vs Ant2.
 Dieses Modul speichert die Praeferenz und steuert waehrend eines QSO
 die Hardware auf die beste Antenne.
 
-Feature-Konzept und Logik-Design: DL2YMR
 """
 
 

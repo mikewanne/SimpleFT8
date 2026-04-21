@@ -178,7 +178,7 @@ class CycleMixin:
                 print(f"[Diversity] {total} St. | A1>A2: {ant1_wins} | "
                       f"A2>A1: {ant2_wins} ({pct}%) | "
                       f"Nur A1: {only_a1} | Nur A2: {only_a2}")
-                # Antenna Preference Store aktualisieren (DL2YMR Konzept)
+                # Antenna Preference Store aktualisieren
                 if hasattr(self, '_antenna_prefs'):
                     self._antenna_prefs.update_from_stations(self._diversity_stations)
 
@@ -363,7 +363,7 @@ class CycleMixin:
                             scoring_mode=self._diversity_ctrl.scoring_mode)
                         print("[Diversity] Automatische Neueinmessung gestartet")
 
-                # Smart Antenna: waehrend QSO auf beste Antenne forcieren (DL2YMR)
+                # Smart Antenna: waehrend QSO auf beste Antenne forcieren
                 _in_qso = self.qso_sm.state not in (
                     QSOState.IDLE, QSOState.TIMEOUT,
                     QSOState.CQ_CALLING, QSOState.CQ_WAIT,
