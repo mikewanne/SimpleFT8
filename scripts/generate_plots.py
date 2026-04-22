@@ -559,48 +559,95 @@ def _combo_summary(stats_dir: Path, band: str, protocol: str) -> dict:
     return result
 
 
-# ── PDF Bericht — Professionelles Layout (heller Hintergrund) ─────────────────
+# ── PDF Bericht — Cursor-Layout (inch-basiert, kein hardcoded y) ──────────────
 
 _R_BG     = "#ffffff"
 _R_FG     = "#1a1a1a"
 _R_ACCENT = "#1a3a5c"
-_R_SUB    = "#555555"
-_R_GRID   = "#e4e4e4"
+_R_SUB    = "#666666"
+_R_GRID   = "#cccccc"
 _R_GREEN  = "#1a5c2a"
 _R_ORANGE = "#994400"
 
+_PH   = 8.27    # Seitenhöhe Zoll (A4 landscape)
+_PW   = 11.69   # Seitenbreite Zoll
+_ML   = 0.55    # linker Rand Zoll
+_HBAR = 0.78    # Header-Balkenhöhe Zoll
+_FBAR = 0.46    # Footer-Balkenhöhe Zoll
+_CTOP = _HBAR + 0.22    # Inhalt beginnt hier (Zoll von oben)
+_CBOT = _PH - _FBAR - 0.10  # Inhalt endet hier (Zoll von oben)
+
+
+def _yf(y_in: float) -> float:
+    """Zoll von oben → figure-Koordinate (0=unten, 1=oben)."""
+    return 1.0 - y_in / _PH
+
 
 def _rfig() -> plt.Figure:
-    return plt.figure(figsize=(11.69, 8.27), facecolor=_R_BG)
+    fig = plt.figure(figsize=(_PW, _PH))
+    fig.patch.set_facecolor(_R_BG)
+    return fig
 
 
 def _r_header(fig: plt.Figure, title: str, subtitle: str = "") -> None:
-    ax = fig.add_axes([0.0, 0.895, 1.0, 0.105], zorder=10)
-    ax.set_facecolor(_R_ACCENT)
-    ax.axis("off")
-    fig.text(0.04, 0.945, title, fontsize=15, color="white",
-             fontweight="bold", transform=fig.transFigure, va="center")
+    from matplotlib.patches import Rectangle
+    fig.add_artist(Rectangle((0, _yf(_HBAR)), 1, _HBAR / _PH,
+                              transform=fig.transFigure,
+                              facecolor=_R_ACCENT, edgecolor="none", zorder=5))
+    fig.text(0.04, _yf(_HBAR * 0.52), title, fontsize=15, color="white",
+             fontweight="bold", va="center", transform=fig.transFigure, zorder=6)
     if subtitle:
-        fig.text(0.04, 0.909, subtitle, fontsize=9.5, color="#aaccee",
-                 transform=fig.transFigure, va="center")
+        fig.text(0.04, _yf(_HBAR * 0.85), subtitle, fontsize=10, color="#aaccee",
+                 va="center", transform=fig.transFigure, zorder=6)
 
 
 def _r_footer(fig: plt.Figure, gen_date: str, page: str = "") -> None:
-    ax = fig.add_axes([0.0, 0.0, 1.0, 0.048], zorder=10)
-    ax.set_facecolor(_R_GRID)
-    ax.axis("off")
-    fig.text(0.04, 0.024,
+    from matplotlib.patches import Rectangle
+    fig.add_artist(Rectangle((0, 0), 1, _FBAR / _PH,
+                              transform=fig.transFigure,
+                              facecolor="#eeeeee", edgecolor="none", zorder=5))
+    fig.text(0.04, _FBAR / _PH / 2,
              f"SimpleFT8 Diversity Feldstudie — DA1MHH / Mike Hammerer  ·  {gen_date}",
-             fontsize=8, color=_R_SUB, transform=fig.transFigure, va="center")
-    right = f"github.com/mikewanne/SimpleFT8{('  ·  ' + page) if page else ''}"
-    fig.text(0.97, 0.024, right, fontsize=8, color=_R_SUB,
-             transform=fig.transFigure, va="center", ha="right")
+             fontsize=8.5, color=_R_SUB, va="center",
+             transform=fig.transFigure, zorder=6)
+    if page:
+        fig.text(0.97, _FBAR / _PH / 2, f"github.com/mikewanne/SimpleFT8  ·  {page}",
+                 fontsize=8.5, color=_R_SUB, va="center", ha="right",
+                 transform=fig.transFigure, zorder=6)
 
 
-def _r_hline(fig: plt.Figure, y: float) -> None:
-    ax = fig.add_axes([0.04, y, 0.92, 0.0015])
-    ax.set_facecolor(_R_GRID)
-    ax.axis("off")
+def _ctext(fig: plt.Figure, y_in: float, text: str, fs: float,
+           color: str = _R_FG, bold: bool = False,
+           italic: bool = False, ls: float = 1.5) -> float:
+    """Text bei y_in Zoll von oben platzieren. Gibt y_in nach dem Text zurück."""
+    n = max(1, text.count('\n') + 1)
+    fig.text(_ML / _PW, _yf(y_in), text,
+             fontsize=fs, color=color,
+             fontweight="bold" if bold else "normal",
+             style="italic" if italic else "normal",
+             va="top", linespacing=ls,
+             transform=fig.transFigure)
+    return y_in + n * fs / 72 * ls
+
+
+def _chline(fig: plt.Figure, y_in: float, gap: float = 0.06) -> float:
+    """Horizontale Trennlinie. Gibt y_in nach der Linie zurück."""
+    from matplotlib.lines import Line2D
+    yf = _yf(y_in + gap / 2)
+    fig.add_artist(Line2D([_ML / _PW, 1 - _ML / _PW], [yf, yf],
+                          transform=fig.transFigure,
+                          color=_R_GRID, linewidth=0.8, zorder=4))
+    return y_in + gap
+
+
+def _csection(fig: plt.Figure, y_in: float, title: str, body: str,
+              t_fs: float = 13, b_fs: float = 11,
+              t_color: str = _R_ACCENT, gap: float = 0.30) -> float:
+    """Vollständiger Abschnitt: Titel + Linie + Text. Cursor-Rückgabe."""
+    y_in = _ctext(fig, y_in, title, t_fs, color=t_color, bold=True)
+    y_in = _chline(fig, y_in, gap=0.07)
+    y_in = _ctext(fig, y_in, body, b_fs)
+    return y_in + gap
 
 
 def _hourly_analysis(stats_dir: Path, band: str, protocol: str) -> list[dict]:
@@ -624,20 +671,21 @@ def _hourly_analysis(stats_dir: Path, band: str, protocol: str) -> list[dict]:
 
 
 def _r_title_page(pdf: PdfPages, summary: dict, time_range: str, gen_date: str) -> None:
+    from matplotlib.patches import Rectangle
     fig = _rfig()
-    ax_hdr = fig.add_axes([0.0, 0.72, 1.0, 0.28])
-    ax_hdr.set_facecolor(_R_ACCENT)
-    ax_hdr.axis("off")
-    fig.text(0.50, 0.875, "SimpleFT8 — Zwei Antennen, ein Vergleich",
+    TH = 1.50
+    fig.add_artist(Rectangle((0, _yf(TH)), 1, TH / _PH,
+                              transform=fig.transFigure,
+                              facecolor=_R_ACCENT, edgecolor="none", zorder=5))
+    fig.text(0.50, _yf(TH * 0.40), "SimpleFT8 — Zwei Antennen, ein Vergleich",
              fontsize=22, color="white", fontweight="bold",
-             ha="center", transform=fig.transFigure)
-    fig.text(0.50, 0.818, "Was bringt Diversity wirklich? — 40m FT8, erste Messergebnisse",
-             fontsize=13, color="#aaccee", ha="center", transform=fig.transFigure)
-    total_cyc = sum(s.get("n_cycles", 0) for s in summary.values())
-    fig.text(0.50, 0.762,
-             f"Zeitraum: {time_range}   ·   Ausgewertete 15s-Zyklen: {total_cyc}",
-             fontsize=10, color="#88aacc", ha="center", transform=fig.transFigure)
+             ha="center", va="center", transform=fig.transFigure, zorder=6)
+    fig.text(0.50, _yf(TH * 0.76),
+             "Was bringt Diversity wirklich? — 40m FT8, erste Messergebnisse",
+             fontsize=13, color="#aaccee", ha="center", va="center",
+             transform=fig.transFigure, zorder=6)
 
+    total_cyc = sum(s.get("n_cycles", 0) for s in summary.values())
     n_avg = summary.get("Normal",           {}).get("avg", 0.0)
     s_avg = summary.get("Diversity_Normal", {}).get("avg", 0.0)
     d_avg = summary.get("Diversity_Dx",     {}).get("avg", 0.0)
@@ -645,35 +693,29 @@ def _r_title_page(pdf: PdfPages, summary: dict, time_range: str, gen_date: str) 
     d_rsc = summary.get("Diversity_Dx",     {}).get("avg_rescue", 0.0)
     def pct(a, b): return f"{(a / b - 1) * 100:+.0f}%" if b > 0 else "n/a"
 
-    fig.text(0.05, 0.685, "Kurz zusammengefasst:", fontsize=11, color=_R_ACCENT,
-             fontweight="bold", transform=fig.transFigure)
-    _r_hline(fig, 0.672)
-    fig.text(0.05, 0.638,
-             f"Mit Diversity Standard (blau) habe ich im Schnitt {pct(s_avg, n_avg)} mehr Stationen dekodiert als mit einer einzelnen Antenne.\n"
-             f"Zählt man die 'geretteten' Stationen dazu, die ANT1 allein nie gehört hätte, kommt man auf bis zu {pct(s_avg+s_rsc, n_avg)}.\n"
-             f"Diversity DX (orange) bringt {pct(d_avg, n_avg)} — weniger als Standard, aber dafür gezielter auf schwache DX-Signale.",
-             fontsize=10.5, color=_R_FG, transform=fig.transFigure, linespacing=1.9)
+    y = TH + 0.22
+    y = _ctext(fig, y, f"Zeitraum: {time_range}   ·   Ausgewertete 15s-Zyklen: {total_cyc}",
+               10, color=_R_SUB)
+    y += 0.18
 
-    _r_hline(fig, 0.488)
-    fig.text(0.05, 0.462,
-             "Wichtig: Das sind erst 2 Messtage, und nur die Morgenstunden (05–12 Uhr UTC). "
-             "Die Zahlen können sich noch verschieben — aber der Trend ist klar erkennbar.",
-             fontsize=9.5, color=_R_ORANGE, style="italic", transform=fig.transFigure)
+    y = _csection(fig, y, "Kurz zusammengefasst:",
+                  f"Mit Diversity Standard (blau) habe ich im Schnitt {pct(s_avg, n_avg)} mehr Stationen dekodiert als mit einer einzelnen Antenne.\n"
+                  f"Zählt man die 'geretteten' Stationen dazu, kommt man auf bis zu {pct(s_avg + s_rsc, n_avg)}.\n"
+                  f"Diversity DX (orange) bringt {pct(d_avg, n_avg)} — weniger als Standard, aber gezielter auf schwache DX-Signale.",
+                  t_fs=13, b_fs=11, gap=0.20)
 
-    fig.text(0.05, 0.400, "Was bedeuten die drei Modi?", fontsize=10, color=_R_ACCENT,
-             fontweight="bold", transform=fig.transFigure)
-    _r_hline(fig, 0.388)
-    defs = [
-        ("Normal (grau):",         "Eine Antenne, keine besondere Logik — so wie WSJT-X. Das ist die Vergleichsbasis."),
-        ("Diversity Standard (blau):", "Zwei Antennen. Das System wählt automatisch die Antenne die gerade mehr Stationen empfängt."),
-        ("Diversity DX (orange):", "Zwei Antennen. Das System wählt die Antenne mit den schwächsten empfangbaren Signalen (unter −10 dB)."),
-        ("Rescue (grüne Kappen):", "Stationen die ANT1 gar nicht hören konnte (unter −24 dB) — ANT2 hat sie trotzdem dekodiert."),
-    ]
-    for i, (lbl, desc) in enumerate(defs):
-        fig.text(0.06, 0.348 - i * 0.058, lbl, fontsize=9.5,
-                 color=_R_ACCENT, fontweight="bold", transform=fig.transFigure)
-        fig.text(0.34, 0.348 - i * 0.058, desc, fontsize=9.5,
-                 color=_R_FG, transform=fig.transFigure)
+    y = _ctext(fig, y,
+               "Wichtig: Das sind erst 2 Messtage, nur Morgenstunden (05–12 Uhr UTC). "
+               "Die Zahlen können sich noch verschieben — aber der Trend ist klar erkennbar.",
+               10.5, color=_R_ORANGE, italic=True)
+    y += 0.28
+
+    _csection(fig, y, "Was bedeuten die drei Modi?",
+              "Normal (grau): Eine Antenne, keine besondere Logik — so wie WSJT-X. Das ist die Vergleichsbasis.\n"
+              "Diversity Standard (blau): Zwei Antennen. Das System wählt automatisch die Antenne mit mehr Stationen.\n"
+              "Diversity DX (orange): Zwei Antennen. Wählt die Antenne mit den schwächsten DX-Signalen (unter −10 dB).\n"
+              "Rescue (grüne Kappen): Stationen die ANT1 nicht hören konnte — ANT2 hat sie trotzdem dekodiert.",
+              t_fs=13, b_fs=11, gap=0.15)
 
     _r_footer(fig, gen_date, "Seite 1")
     pdf.savefig(fig, facecolor=_R_BG)
@@ -691,45 +733,34 @@ def _r_methodik_page(pdf: PdfPages, summary: dict, time_range: str, gen_date: st
     d_d = summary.get('Diversity_Dx',     {}).get('n_days',   '–')
     d_c = summary.get('Diversity_Dx',     {}).get('n_cycles', '–')
 
-    fig.text(0.05, 0.845, "Das Setup", fontsize=10.5, color=_R_ACCENT,
-             fontweight="bold", transform=fig.transFigure)
-    _r_hline(fig, 0.833)
-    fig.text(0.05, 0.800,
-             f"Gemessen wurde auf 40m FT8 mit dem FlexRadio FLEX-8400M — zwei Antennenanschlüsse, gleiche Frequenz.\n"
-             f"Zeitraum: {time_range}, jeweils morgens zwischen 05:00 und 12:00 UTC. Ja, die Nacht fehlt noch — kommt noch.\n"
-             f"Zyklen ausgewertet: Normal {n_c} ({n_d} Tag/e)  |  Diversity Standard {s_c} ({s_d} Tag/e)  |  Diversity DX {d_c} ({d_d} Tag/e).\n"
-             f"Jeder FT8-Zyklus dauert 15 Sekunden — die App zählt pro Zyklus wie viele Stationen dekodiert wurden.",
-             fontsize=9.5, color=_R_FG, transform=fig.transFigure, linespacing=1.8)
+    y = _CTOP
+    y = _csection(fig, y, "Das Setup",
+                  f"Gemessen auf 40m FT8 mit dem FlexRadio FLEX-8400M — zwei Antennenanschlüsse, gleiche Frequenz.\n"
+                  f"Zeitraum: {time_range}, jeweils morgens zwischen 05:00 und 12:00 UTC. Ja, die Nacht fehlt noch — kommt noch.\n"
+                  f"Zyklen ausgewertet: Normal {n_c} ({n_d} Tag/e)  |  Diversity Standard {s_c} ({s_d} Tag/e)  |  Diversity DX {d_c} ({d_d} Tag/e).\n"
+                  f"Jeder FT8-Zyklus dauert 15 Sekunden — die App zählt pro Zyklus wie viele Stationen dekodiert wurden.",
+                  t_fs=13, b_fs=11, gap=0.25)
 
-    fig.text(0.05, 0.638, "Warum nicht einfach den Tagesdurchschnitt nehmen?", fontsize=10.5,
-             color=_R_ACCENT, fontweight="bold", transform=fig.transFigure)
-    _r_hline(fig, 0.626)
-    fig.text(0.05, 0.590,
-             "Gute Frage — ich hatte das auch erst so. Aber wenn an einem Tag nur 20 Zyklen gemessen wurden\n"
-             "und an einem anderen 500, dann würde der kurze Tag genauso stark ins Ergebnis eingehen wie der lange.\n"
-             "Das wäre unfair. Deswegen werden alle Einzelwerte direkt zusammengezählt und gemittelt — egal von welchem Tag.\n"
-             "Das ergibt ein Bild das näher an der Realität liegt.",
-             fontsize=9.5, color=_R_FG, transform=fig.transFigure, linespacing=1.8)
+    y = _csection(fig, y, "Warum nicht einfach den Tagesdurchschnitt nehmen?",
+                  "Gute Frage — ich hatte das auch erst so. Aber wenn an einem Tag nur 20 Zyklen gemessen wurden\n"
+                  "und an einem anderen 500, dann würde der kurze Tag genauso stark ins Ergebnis eingehen wie der lange.\n"
+                  "Das wäre unfair. Deswegen werden alle Einzelwerte direkt zusammengezählt und gemittelt — egal von welchem Tag.\n"
+                  "Das ergibt ein Bild das näher an der Realität liegt.",
+                  t_fs=13, b_fs=11, gap=0.25)
 
-    fig.text(0.05, 0.435, "Was sind 'gerettete Stationen' (Rescue)?", fontsize=10.5,
-             color=_R_ACCENT, fontweight="bold", transform=fig.transFigure)
-    _r_hline(fig, 0.423)
-    fig.text(0.05, 0.385,
-             "Stell dir vor eine Station sendet so schwach dass ANT1 das Signal unter −24 dB empfängt.\n"
-             "Das ist bei FT8 die Grenze — darunter kann man praktisch nicht mehr dekodieren.\n"
-             "ANT2 empfängt dieselbe Station aber mit etwas mehr Pegel — und dekodiert sie trotzdem.\n"
-             "Das nennen wir 'Rescue'. Die grünen Kappen in den Diagrammen zeigen genau diese Stationen.\n"
-             "Ob man die mitzählt oder lieber separat betrachtet — das ist Ansichtssache. Beide Werte stehen im Bericht.",
-             fontsize=9.5, color=_R_FG, transform=fig.transFigure, linespacing=1.8)
+    y = _csection(fig, y, "Was sind 'gerettete Stationen' (Rescue)?",
+                  "Stell dir vor eine Station sendet so schwach dass ANT1 das Signal unter −24 dB empfängt.\n"
+                  "Das ist bei FT8 die Grenze — darunter kann man praktisch nicht mehr dekodieren.\n"
+                  "ANT2 empfängt dieselbe Station aber mit etwas mehr Pegel — und dekodiert sie trotzdem.\n"
+                  "Das nennen wir 'Rescue'. Die grünen Kappen in den Diagrammen zeigen genau diese Stationen.\n"
+                  "Ob man die mitzählt oder lieber separat betrachtet — das ist Ansichtssache. Beide Werte stehen im Bericht.",
+                  t_fs=13, b_fs=11, gap=0.25)
 
-    fig.text(0.05, 0.188, "Wo kommen die Rohdaten her?", fontsize=10.5,
-             color=_R_ACCENT, fontweight="bold", transform=fig.transFigure)
-    _r_hline(fig, 0.176)
-    fig.text(0.05, 0.140,
-             "SimpleFT8 schreibt pro Stunde eine kleine Markdown-Datei mit allen Zykluswerten.\n"
-             "Kein vorberechneter Durchschnitt — nur Rohdaten. Das Auswertungs-Script rechnet alles frisch durch.\n"
-             "Wer nachschauen will: statistics/ im GitHub-Repo, alles offen.",
-             fontsize=9.5, color=_R_FG, transform=fig.transFigure, linespacing=1.8)
+    _csection(fig, y, "Wo kommen die Rohdaten her?",
+              "SimpleFT8 schreibt pro Stunde eine kleine Markdown-Datei mit allen Zykluswerten.\n"
+              "Kein vorberechneter Durchschnitt — nur Rohdaten. Das Auswertungs-Script rechnet alles frisch durch.\n"
+              "Wer nachschauen will: statistics/ im GitHub-Repo, alles offen.",
+              t_fs=13, b_fs=11, gap=0.15)
 
     _r_footer(fig, gen_date, "Seite 2")
     pdf.savefig(fig, facecolor=_R_BG)
@@ -769,12 +800,16 @@ def _r_ergebnisse_page(pdf: PdfPages, summary: dict, gen_date: str) -> None:
     fig = _rfig()
     _r_header(fig, "Hauptergebnisse — Vergleichstabelle", "40m FT8 · Pooled Mean")
 
-    ax = fig.add_axes([0.04, 0.22, 0.92, 0.64])
+    table_top    = _yf(_CTOP + 0.10)
+    table_bottom = _yf(6.50)
+    table_h      = table_top - table_bottom
+
+    ax = fig.add_axes([0.04, table_bottom, 0.92, table_h])
     ax.axis("off")
     tbl = ax.table(cellText=rows, colLabels=col_labels, cellLoc="center", loc="center")
     tbl.auto_set_font_size(False)
     tbl.set_fontsize(12)
-    tbl.scale(1, 3.0)
+    tbl.scale(1, 3.2)
     for (r, c), cell in tbl.get_celld().items():
         cell.set_edgecolor(_R_GRID)
         if r == 0:
@@ -785,14 +820,16 @@ def _r_ergebnisse_page(pdf: PdfPages, summary: dict, gen_date: str) -> None:
             cell.set_text_props(color=row_text[r - 1],
                                 fontweight="bold" if c in (2, 3, 4) else "normal")
 
-    fig.text(0.05, 0.175,
-             "Ø Stat./Zyklus = Mittelwert über alle Einzelzyklen direkt (nicht erst Tagesdurchschnitt).   "
-             "Rescue = ANT1 unter −24 dB, ANT2 hat trotzdem dekodiert.",
-             fontsize=9, color=_R_SUB, transform=fig.transFigure)
-    fig.text(0.05, 0.130,
-             "Noch erst 2 Messtage, nur Morgenstunden 05–12 Uhr UTC — Nacht und Abend fehlen noch. "
-             "Die Zahlen können sich mit mehr Daten noch etwas verschieben.",
-             fontsize=9, color=_R_ORANGE, style="italic", transform=fig.transFigure)
+    y = 6.55
+    y = _ctext(fig, y,
+               "Ø Stat./Zyklus = Mittelwert über alle Einzelzyklen direkt (nicht erst Tagesdurchschnitt).   "
+               "Rescue = ANT1 unter −24 dB, ANT2 hat trotzdem dekodiert.",
+               9, color=_R_SUB)
+    y += 0.06
+    _ctext(fig, y,
+           "Noch erst 2 Messtage, nur Morgenstunden 05–12 Uhr UTC — Nacht und Abend fehlen noch. "
+           "Die Zahlen können sich mit mehr Daten noch etwas verschieben.",
+           9, color=_R_ORANGE, italic=True)
 
     _r_footer(fig, gen_date, "Seite 3")
     pdf.savefig(fig, facecolor=_R_BG)
@@ -809,14 +846,15 @@ def _r_diagramm_page(pdf: PdfPages, png_path: Path, title: str,
     aspect = h_px / w_px
     fig = _rfig()
     _r_header(fig, title, subtitle)
-    img_h = 0.73
+    # Bildbereich: zwischen Footer (0.13) und Header (0.89)
+    img_h = 0.62
     img_w = min(0.92, img_h / aspect * (8.27 / 11.69))
-    ax = fig.add_axes([(1.0 - img_w) / 2, 0.115, img_w, img_h])
-    ax.imshow(img)
-    ax.axis("off")
+    ax_img = fig.add_axes([(1.0 - img_w) / 2, 0.20, img_w, img_h])
+    ax_img.imshow(img)
+    ax_img.axis("off")
     if annotation:
-        fig.text(0.05, 0.090, annotation, fontsize=8.5, color=_R_SUB,
-                 style="italic", transform=fig.transFigure)
+        fig.text(0.05, 0.155, annotation, fontsize=8.5, color=_R_SUB,
+                 style="italic", transform=fig.transFigure, wrap=True)
     _r_footer(fig, gen_date, page)
     pdf.savefig(fig, facecolor=_R_BG)
     plt.close(fig)
@@ -833,42 +871,35 @@ def _r_rescue_page(pdf: PdfPages, summary: dict, gen_date: str) -> None:
     s_rsc = summary.get("Diversity_Normal", {}).get("avg_rescue", 0.0)
     d_rsc = summary.get("Diversity_Dx",     {}).get("avg_rescue", 0.0)
 
-    fig.text(0.05, 0.845, "Worum geht's?", fontsize=10.5, color=_R_ACCENT,
-             fontweight="bold", transform=fig.transFigure)
-    _r_hline(fig, 0.833)
-    fig.text(0.05, 0.790,
-             f"Im Diversity-Diagramm sieht man oben auf manchen Balken kleine grüne Kappen mit einem +N davor.\n"
-             f"Das sind Stationen die ANT1 nicht dekodieren konnte — deren Signal war unter −24 dB, also zu schwach.\n"
-             f"ANT2 hat sie trotzdem gehört und dekodiert. Im Messzeitraum waren das im Schnitt\n"
-             f"Ø {s_rsc:.1f} solche Stationen pro Stunde bei Diversity Standard, und Ø {d_rsc:.1f}/h bei Diversity DX.",
-             fontsize=9.5, color=_R_FG, transform=fig.transFigure, linespacing=1.8)
+    y = _CTOP
+    y = _csection(fig, y, "Worum geht's?",
+                  f"Im Diversity-Diagramm sieht man oben auf manchen Balken kleine grüne Kappen mit einem +N davor.\n"
+                  f"Das sind Stationen die ANT1 nicht dekodieren konnte — deren Signal war unter −24 dB, also zu schwach.\n"
+                  f"ANT2 hat sie trotzdem gehört und dekodiert. Im Messzeitraum waren das im Schnitt\n"
+                  f"Ø {s_rsc:.1f} Stationen pro Stunde bei Diversity Standard, und Ø {d_rsc:.1f}/h bei Diversity DX.",
+                  t_fs=13, b_fs=11, gap=0.25)
 
-    fig.text(0.05, 0.628, "Warum spricht was dafür, sie mitzuzählen?", fontsize=10.5,
-             color=_R_GREEN, fontweight="bold", transform=fig.transFigure)
-    _r_hline(fig, 0.616)
-    fig.text(0.05, 0.575,
-             f"Weil das QSO für den Operator real ist — egal ob ANT1 oder ANT2 es ermöglicht hat.\n"
-             f"Diese Stationen wären mit einer einzelnen Antenne gar nicht im Log gelandet.\n"
-             f"Das ist kein Messartefakt — das ist genau der Punkt warum man eine zweite Antenne betreibt.\n"
-             f"Mit Rescue: Standard {((s_avg+s_rsc)/n_avg-1)*100:+.0f}%, DX {((d_avg+d_rsc)/n_avg-1)*100:+.0f}% — das ist das Gesamtbild.",
-             fontsize=9.5, color=_R_FG, transform=fig.transFigure, linespacing=1.8)
+    y = _csection(fig, y, "Warum spricht was dafür, sie mitzuzählen?",
+                  f"Weil das QSO für den Operator real ist — egal ob ANT1 oder ANT2 es ermöglicht hat.\n"
+                  f"Diese Stationen wären mit einer einzelnen Antenne gar nicht im Log gelandet.\n"
+                  f"Das ist kein Messartefakt — das ist genau der Punkt warum man eine zweite Antenne betreibt.\n"
+                  f"Mit Rescue: Standard {((s_avg + s_rsc) / n_avg - 1) * 100:+.0f}%, "
+                  f"DX {((d_avg + d_rsc) / n_avg - 1) * 100:+.0f}% — das ist das Gesamtbild.",
+                  t_fs=13, b_fs=11, t_color=_R_GREEN, gap=0.25)
 
-    fig.text(0.05, 0.418, "Warum kann man sie auch weglassen?", fontsize=10.5,
-             color=_R_ORANGE, fontweight="bold", transform=fig.transFigure)
-    _r_hline(fig, 0.406)
-    fig.text(0.05, 0.365,
-             "SNR-Werte schwanken innerhalb der 15 Sekunden eines Zyklus — eine Station die gerade\n"
-             "unter −24 dB liegt könnte beim nächsten Zyklus schon drüber sein.\n"
-             "Die −24 dB-Grenze ist ein Erfahrungswert, kein Naturgesetz.\n"
-             "Wer einen sauberen Vergleich mit anderen Systemen machen will, zählt lieber nur was ANT1 direkt dekodiert.",
-             fontsize=9.5, color=_R_FG, transform=fig.transFigure, linespacing=1.8)
+    y = _csection(fig, y, "Warum kann man sie auch weglassen?",
+                  "SNR-Werte schwanken innerhalb der 15 Sekunden eines Zyklus — eine Station die gerade\n"
+                  "unter −24 dB liegt könnte beim nächsten Zyklus schon drüber sein.\n"
+                  "Die −24 dB-Grenze ist ein Erfahrungswert, kein Naturgesetz.\n"
+                  "Wer einen sauberen Vergleich mit anderen Systemen machen will, "
+                  "zählt lieber nur was ANT1 direkt dekodiert.",
+                  t_fs=13, b_fs=11, t_color=_R_ORANGE, gap=0.25)
 
-    _r_hline(fig, 0.218)
-    fig.text(0.05, 0.188,
-             "Deswegen stehen in diesem Bericht immer beide Zahlen: einmal ohne Rescue (der konservative Wert)\n"
-             "und einmal mit Rescue (das was im echten Betrieb rauskommt). Jeder kann sich das raussuchen was ihm passt.",
-             fontsize=9.5, color=_R_ACCENT, style="italic",
-             transform=fig.transFigure, linespacing=1.8)
+    y = _chline(fig, y, gap=0.12)
+    _ctext(fig, y,
+           "Deswegen stehen in diesem Bericht immer beide Zahlen: einmal ohne Rescue (der konservative Wert)\n"
+           "und einmal mit Rescue (das was im echten Betrieb rauskommt). Jeder kann sich das raussuchen was ihm passt.",
+           11, color=_R_ACCENT, italic=True)
 
     _r_footer(fig, gen_date, "Seite 6")
     pdf.savefig(fig, facecolor=_R_BG)
@@ -889,48 +920,40 @@ def _r_fazit_page(pdf: PdfPages, summary: dict, hourly: list[dict],
     best_s = max((r for r in hourly if r["s_gain"] is not None),
                  key=lambda r: r["s_gain"], default=None)
 
-    fig.text(0.05, 0.840, "Was man klar sehen kann:", fontsize=10.5,
-             color=_R_ACCENT, fontweight="bold", transform=fig.transFigure)
-    _r_hline(fig, 0.828)
     fazit = (
         f"Diversity Standard bringt über beide Messtage konsistent zwischen "
-        f"{(s_avg/n_avg-1)*100:.0f}% und {((s_avg+s_rsc)/n_avg-1)*100:.0f}% mehr Stationen — je nachdem ob man\n"
-        f"die geretteten mitzählt oder nicht. Das ist kein Zufall, das wiederholt sich.\n\n"
-        f"Diversity DX liegt bei {(d_avg/n_avg-1)*100:.0f}% ohne Rescue — weniger als Standard, aber das liegt daran dass DX bewusst\n"
-        f"auf die schwächsten Signale optimiert. Wer viel DX macht und weniger auf Gesamtzahl schaut, für den macht das Sinn."
+        f"{(s_avg / n_avg - 1) * 100:.0f}% und {((s_avg + s_rsc) / n_avg - 1) * 100:.0f}% mehr Stationen — "
+        f"je nachdem ob man\ndie geretteten mitzählt oder nicht. Das ist kein Zufall, das wiederholt sich.\n"
+        f"Diversity DX liegt bei {(d_avg / n_avg - 1) * 100:.0f}% ohne Rescue — weniger als Standard, "
+        f"aber DX optimiert bewusst\nauf die schwächsten Signale. Wer viel DX macht, für den macht das Sinn."
     )
     if best_s:
         fazit += (
-            f"\n\nDer stärkste Effekt war um {best_s['hour']:02d}:00 UTC mit +{best_s['s_gain']:.0f}% — "
+            f"\nDer stärkste Effekt war um {best_s['hour']:02d}:00 UTC mit +{best_s['s_gain']:.0f}% — "
             f"das ist typisch die Zeit wo das Band gerade aufmacht oder zumacht."
         )
-    fig.text(0.05, 0.780, fazit, fontsize=9.5, color=_R_FG,
-             transform=fig.transFigure, linespacing=1.8)
 
-    fig.text(0.05, 0.520, "Was man noch nicht sagen kann:", fontsize=10.5,
-             color=_R_ORANGE, fontweight="bold", transform=fig.transFigure)
-    _r_hline(fig, 0.508)
-    fig.text(0.05, 0.468,
-             "Erst 2 Messtage — das reicht um einen Trend zu sehen, aber nicht um belastbare Aussagen zu machen.\n"
-             "Die Nacht und die Abendstunden fehlen komplett — auf 40m ist es abends oft deutlich besser.\n"
-             "Contest-Betrieb, Geo-Sturm, schlechte Bedingungen — das wurde noch nicht getestet.\n"
-             "Ob das auf anderen Transceivern genauso funktioniert — keine Ahnung, bisher nur auf dem FLEX.",
-             fontsize=9.5, color=_R_FG, transform=fig.transFigure, linespacing=1.8)
+    y = _CTOP
+    y = _csection(fig, y, "Was man klar sehen kann:", fazit, t_fs=13, b_fs=11, gap=0.25)
 
-    fig.text(0.05, 0.298, "Was kommt als nächstes:", fontsize=10.5,
-             color=_R_ACCENT, fontweight="bold", transform=fig.transFigure)
-    _r_hline(fig, 0.286)
-    fig.text(0.05, 0.245,
-             "Nacht- und Abendmessungen auf 40m — das ist der interessante Teil den ich noch nicht habe.\n"
-             "Mehr Tage damit die Balken im Diagramm stabiler werden und die Schwankungen kleiner.\n"
-             "20m kommt irgendwann auch — aber erst wenn genug Daten da sind. Nicht vorher.\n"
-             "Dieser Bericht aktualisiert sich automatisch sobald neue Daten reinkommen.",
-             fontsize=9.5, color=_R_FG, transform=fig.transFigure, linespacing=1.8)
+    y = _csection(fig, y, "Was man noch nicht sagen kann:",
+                  "Erst 2 Messtage — das reicht um einen Trend zu sehen, aber nicht um belastbare Aussagen zu machen.\n"
+                  "Die Nacht und die Abendstunden fehlen komplett — auf 40m ist es abends oft deutlich besser.\n"
+                  "Contest-Betrieb, Geo-Sturm, schlechte Bedingungen — das wurde noch nicht getestet.\n"
+                  "Ob das auf anderen Transceivern genauso funktioniert — keine Ahnung, bisher nur auf dem FLEX.",
+                  t_fs=13, b_fs=11, t_color=_R_ORANGE, gap=0.25)
 
-    _r_hline(fig, 0.068)
-    fig.text(0.05, 0.048,
-             "Wer in die Rohdaten schauen will: statistics/  im Repo  ·  github.com/mikewanne/SimpleFT8  ·  DA1MHH",
-             fontsize=8.5, color=_R_SUB, style="italic", transform=fig.transFigure)
+    y = _csection(fig, y, "Was kommt als nächstes:",
+                  "Nacht- und Abendmessungen auf 40m — das ist der interessante Teil den ich noch nicht habe.\n"
+                  "Mehr Tage damit die Balken im Diagramm stabiler werden und die Schwankungen kleiner.\n"
+                  "20m kommt irgendwann auch — aber erst wenn genug Daten da sind. Nicht vorher.\n"
+                  "Dieser Bericht aktualisiert sich automatisch sobald neue Daten reinkommen.",
+                  t_fs=13, b_fs=11, gap=0.20)
+
+    y = _chline(fig, y, gap=0.12)
+    _ctext(fig, y,
+           "Wer in die Rohdaten schauen will: statistics/  im Repo  ·  github.com/mikewanne/SimpleFT8  ·  DA1MHH",
+           9, color=_R_SUB, italic=True)
 
     _r_footer(fig, gen_date, "Seite 7")
     pdf.savefig(fig, facecolor=_R_BG)
