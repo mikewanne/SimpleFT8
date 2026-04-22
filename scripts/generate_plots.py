@@ -628,14 +628,14 @@ def _r_title_page(pdf: PdfPages, summary: dict, time_range: str, gen_date: str) 
     ax_hdr = fig.add_axes([0.0, 0.72, 1.0, 0.28])
     ax_hdr.set_facecolor(_R_ACCENT)
     ax_hdr.axis("off")
-    fig.text(0.50, 0.875, "SimpleFT8 — Dual-Antenna Diversity",
-             fontsize=24, color="white", fontweight="bold",
+    fig.text(0.50, 0.875, "SimpleFT8 — Zwei Antennen, ein Vergleich",
+             fontsize=22, color="white", fontweight="bold",
              ha="center", transform=fig.transFigure)
-    fig.text(0.50, 0.820, "Vorläufige Feldstudie — 40m FT8",
-             fontsize=15, color="#aaccee", ha="center", transform=fig.transFigure)
+    fig.text(0.50, 0.818, "Was bringt Diversity wirklich? — 40m FT8, erste Messergebnisse",
+             fontsize=13, color="#aaccee", ha="center", transform=fig.transFigure)
     total_cyc = sum(s.get("n_cycles", 0) for s in summary.values())
     fig.text(0.50, 0.762,
-             f"Messzeitraum: {time_range}   ·   Ausgewertete Zyklen: {total_cyc}",
+             f"Zeitraum: {time_range}   ·   Ausgewertete 15s-Zyklen: {total_cyc}",
              fontsize=10, color="#88aacc", ha="center", transform=fig.transFigure)
 
     n_avg = summary.get("Normal",           {}).get("avg", 0.0)
@@ -643,42 +643,36 @@ def _r_title_page(pdf: PdfPages, summary: dict, time_range: str, gen_date: str) 
     d_avg = summary.get("Diversity_Dx",     {}).get("avg", 0.0)
     s_rsc = summary.get("Diversity_Normal", {}).get("avg_rescue", 0.0)
     d_rsc = summary.get("Diversity_Dx",     {}).get("avg_rescue", 0.0)
-
     def pct(a, b): return f"{(a / b - 1) * 100:+.0f}%" if b > 0 else "n/a"
 
-    fig.text(0.05, 0.685, "Kernaussagen:", fontsize=11, color=_R_ACCENT,
+    fig.text(0.05, 0.685, "Kurz zusammengefasst:", fontsize=11, color=_R_ACCENT,
              fontweight="bold", transform=fig.transFigure)
     _r_hline(fig, 0.672)
-    findings = [
-        f"Diversity Standard:  {pct(s_avg, n_avg)} mehr Stationen (ohne Rescue)  —  "
-        f"{pct(s_avg + s_rsc, n_avg)} inkl. geretteter Stationen",
-        f"Diversity DX:           {pct(d_avg, n_avg)} mehr Stationen (ohne Rescue)  —  "
-        f"{pct(d_avg + d_rsc, n_avg)} inkl. geretteter Stationen",
-        f"Rescue allein:          Standard {pct(s_rsc, n_avg)}  |  DX {pct(d_rsc, n_avg)}"
-        f"   (nur durch ANT2 dekodierbar — ANT1 unter −24 dB)",
-    ]
-    for i, txt in enumerate(findings):
-        fig.text(0.06, 0.635 - i * 0.072, f"▶  {txt}",
-                 fontsize=10.5, color=_R_FG, transform=fig.transFigure)
+    fig.text(0.05, 0.638,
+             f"Mit Diversity Standard (blau) habe ich im Schnitt {pct(s_avg, n_avg)} mehr Stationen dekodiert als mit einer einzelnen Antenne.\n"
+             f"Zählt man die 'geretteten' Stationen dazu, die ANT1 allein nie gehört hätte, kommt man auf bis zu {pct(s_avg+s_rsc, n_avg)}.\n"
+             f"Diversity DX (orange) bringt {pct(d_avg, n_avg)} — weniger als Standard, aber dafür gezielter auf schwache DX-Signale.",
+             fontsize=10.5, color=_R_FG, transform=fig.transFigure, linespacing=1.9)
 
-    _r_hline(fig, 0.437)
-    fig.text(0.05, 0.413,
-             "⚠  Vorläufige Daten: 2 Messtage, ausschließlich 05:00–12:00 UTC. "
-             "Nacht- und Abendstunden fehlen noch — Zahlen werden sich verschieben.",
+    _r_hline(fig, 0.488)
+    fig.text(0.05, 0.462,
+             "Wichtig: Das sind erst 2 Messtage, und nur die Morgenstunden (05–12 Uhr UTC). "
+             "Die Zahlen können sich noch verschieben — aber der Trend ist klar erkennbar.",
              fontsize=9.5, color=_R_ORANGE, style="italic", transform=fig.transFigure)
 
-    fig.text(0.05, 0.352, "Modi-Definitionen:", fontsize=10, color=_R_ACCENT,
+    fig.text(0.05, 0.400, "Was bedeuten die drei Modi?", fontsize=10, color=_R_ACCENT,
              fontweight="bold", transform=fig.transFigure)
+    _r_hline(fig, 0.388)
     defs = [
-        ("Normal",             "1 Antenne — keine Diversity-Logik. Baseline wie WSJT-X."),
-        ("Diversity Standard", "2 Antennen — wählt automatisch die Antenne mit mehr dekodierten Stationen."),
-        ("Diversity DX",       "2 Antennen — wählt die Antenne mit mehr Schwachsignalen (SNR < −10 dB)."),
-        ("Rescue",             "Stationen, die ANT1 (≤ −24 dB) nicht dekodieren konnte, ANT2 aber schon."),
+        ("Normal (grau):",         "Eine Antenne, keine besondere Logik — so wie WSJT-X. Das ist die Vergleichsbasis."),
+        ("Diversity Standard (blau):", "Zwei Antennen. Das System wählt automatisch die Antenne die gerade mehr Stationen empfängt."),
+        ("Diversity DX (orange):", "Zwei Antennen. Das System wählt die Antenne mit den schwächsten empfangbaren Signalen (unter −10 dB)."),
+        ("Rescue (grüne Kappen):", "Stationen die ANT1 gar nicht hören konnte (unter −24 dB) — ANT2 hat sie trotzdem dekodiert."),
     ]
     for i, (lbl, desc) in enumerate(defs):
-        fig.text(0.06, 0.312 - i * 0.055, f"{lbl}:", fontsize=9.5,
+        fig.text(0.06, 0.348 - i * 0.058, lbl, fontsize=9.5,
                  color=_R_ACCENT, fontweight="bold", transform=fig.transFigure)
-        fig.text(0.25, 0.312 - i * 0.055, desc, fontsize=9.5,
+        fig.text(0.34, 0.348 - i * 0.058, desc, fontsize=9.5,
                  color=_R_FG, transform=fig.transFigure)
 
     _r_footer(fig, gen_date, "Seite 1")
@@ -688,51 +682,54 @@ def _r_title_page(pdf: PdfPages, summary: dict, time_range: str, gen_date: str) 
 
 def _r_methodik_page(pdf: PdfPages, summary: dict, time_range: str, gen_date: str) -> None:
     fig = _rfig()
-    _r_header(fig, "Datenbasis & Methodik", "40m FT8 — Pooled-Mean-Auswertung")
+    _r_header(fig, "Wie wurde gemessen?", "Setup, Zeitraum und ein bisschen Hintergrund")
 
-    sections = [
-        ("Datenbasis", [
-            f"Band / Protokoll:    40m  FT8",
-            f"Messzeitraum:        {time_range}",
-            f"Erfasste Stunden:    05:00–12:00 UTC  (Morgen / Vormittag)",
-            f"Messtage / Zyklen:   Normal {summary.get('Normal',{}).get('n_days','–')} Tage / "
-            f"{summary.get('Normal',{}).get('n_cycles','–')} Z   |   "
-            f"Standard {summary.get('Diversity_Normal',{}).get('n_days','–')} Tage / "
-            f"{summary.get('Diversity_Normal',{}).get('n_cycles','–')} Z   |   "
-            f"DX {summary.get('Diversity_Dx',{}).get('n_days','–')} Tage / "
-            f"{summary.get('Diversity_Dx',{}).get('n_cycles','–')} Z",
-            "Hardware:            FLEX-8400M, zwei Antennenanschlüsse, gleiche Frequenz",
-        ]),
-        ("Pooled Mean — warum nicht Tagesdurchschnitt?", [
-            "Klassisch: Tagesdurchschnitt bilden, dann Mittelwert der Tage.",
-            "Problem:   Tage mit wenigen Zyklen erhalten das gleiche Gewicht wie Tage mit 500 Zyklen → Bias.",
-            "Pooled:    Alle Einzelzyklen aller Tage direkt mitteln. Gewichtung proportional zur Messzeit.",
-            "Ergebnis:  Robuster gegen ungleiche Sessionlängen — repräsentativer für echten Betrieb.",
-        ]),
-        ("Rescue-Definition", [
-            "ANT1-SNR ≤ −24 dB  UND  ANT2-SNR > −24 dB  →  Station gilt als 'gerettet'.",
-            "−24 dB ist die empirische FT8-Decodierschwelle (nach WSJT-X Dokumentation).",
-            "Nur Zyklen in denen das Diversity-System aktiv ANT2 gewählt hat werden gezählt.",
-            "Rescue-Events pro UTC-Stunde gezählt, über Messtage gemittelt, dann gewichtet nach Zyklen.",
-        ]),
-        ("Statistik-Dateien", [
-            "Rohdaten:  statistics/{Modus}/{Band}/{Proto}/YYYY-MM-DD_HH.md  (pro Stunde, pro Tag)",
-            "Stations:  statistics/{Modus}/{Band}/{Proto}/stations/YYYY-MM-DD_HH.md  (SNR-Vergleiche)",
-            "Kein In-File-Summary — alle Aggregationen werden beim Aufruf von generate_plots.py berechnet.",
-        ]),
-    ]
-    y = 0.845
-    for title, lines in sections:
-        fig.text(0.05, y, title, fontsize=10.5, color=_R_ACCENT,
-                 fontweight="bold", transform=fig.transFigure)
-        y -= 0.028
-        _r_hline(fig, y + 0.006)
-        y -= 0.008
-        for line in lines:
-            fig.text(0.06, y, line, fontsize=9, color=_R_FG,
-                     transform=fig.transFigure, family="monospace")
-            y -= 0.038
-        y -= 0.016
+    n_d = summary.get('Normal',           {}).get('n_days',   '–')
+    n_c = summary.get('Normal',           {}).get('n_cycles', '–')
+    s_d = summary.get('Diversity_Normal', {}).get('n_days',   '–')
+    s_c = summary.get('Diversity_Normal', {}).get('n_cycles', '–')
+    d_d = summary.get('Diversity_Dx',     {}).get('n_days',   '–')
+    d_c = summary.get('Diversity_Dx',     {}).get('n_cycles', '–')
+
+    fig.text(0.05, 0.845, "Das Setup", fontsize=10.5, color=_R_ACCENT,
+             fontweight="bold", transform=fig.transFigure)
+    _r_hline(fig, 0.833)
+    fig.text(0.05, 0.800,
+             f"Gemessen wurde auf 40m FT8 mit dem FlexRadio FLEX-8400M — zwei Antennenanschlüsse, gleiche Frequenz.\n"
+             f"Zeitraum: {time_range}, jeweils morgens zwischen 05:00 und 12:00 UTC. Ja, die Nacht fehlt noch — kommt noch.\n"
+             f"Zyklen ausgewertet: Normal {n_c} ({n_d} Tag/e)  |  Diversity Standard {s_c} ({s_d} Tag/e)  |  Diversity DX {d_c} ({d_d} Tag/e).\n"
+             f"Jeder FT8-Zyklus dauert 15 Sekunden — die App zählt pro Zyklus wie viele Stationen dekodiert wurden.",
+             fontsize=9.5, color=_R_FG, transform=fig.transFigure, linespacing=1.8)
+
+    fig.text(0.05, 0.638, "Warum nicht einfach den Tagesdurchschnitt nehmen?", fontsize=10.5,
+             color=_R_ACCENT, fontweight="bold", transform=fig.transFigure)
+    _r_hline(fig, 0.626)
+    fig.text(0.05, 0.590,
+             "Gute Frage — ich hatte das auch erst so. Aber wenn an einem Tag nur 20 Zyklen gemessen wurden\n"
+             "und an einem anderen 500, dann würde der kurze Tag genauso stark ins Ergebnis eingehen wie der lange.\n"
+             "Das wäre unfair. Deswegen werden alle Einzelwerte direkt zusammengezählt und gemittelt — egal von welchem Tag.\n"
+             "Das ergibt ein Bild das näher an der Realität liegt.",
+             fontsize=9.5, color=_R_FG, transform=fig.transFigure, linespacing=1.8)
+
+    fig.text(0.05, 0.435, "Was sind 'gerettete Stationen' (Rescue)?", fontsize=10.5,
+             color=_R_ACCENT, fontweight="bold", transform=fig.transFigure)
+    _r_hline(fig, 0.423)
+    fig.text(0.05, 0.385,
+             "Stell dir vor eine Station sendet so schwach dass ANT1 das Signal unter −24 dB empfängt.\n"
+             "Das ist bei FT8 die Grenze — darunter kann man praktisch nicht mehr dekodieren.\n"
+             "ANT2 empfängt dieselbe Station aber mit etwas mehr Pegel — und dekodiert sie trotzdem.\n"
+             "Das nennen wir 'Rescue'. Die grünen Kappen in den Diagrammen zeigen genau diese Stationen.\n"
+             "Ob man die mitzählt oder lieber separat betrachtet — das ist Ansichtssache. Beide Werte stehen im Bericht.",
+             fontsize=9.5, color=_R_FG, transform=fig.transFigure, linespacing=1.8)
+
+    fig.text(0.05, 0.188, "Wo kommen die Rohdaten her?", fontsize=10.5,
+             color=_R_ACCENT, fontweight="bold", transform=fig.transFigure)
+    _r_hline(fig, 0.176)
+    fig.text(0.05, 0.140,
+             "SimpleFT8 schreibt pro Stunde eine kleine Markdown-Datei mit allen Zykluswerten.\n"
+             "Kein vorberechneter Durchschnitt — nur Rohdaten. Das Auswertungs-Script rechnet alles frisch durch.\n"
+             "Wer nachschauen will: statistics/ im GitHub-Repo, alles offen.",
+             fontsize=9.5, color=_R_FG, transform=fig.transFigure, linespacing=1.8)
 
     _r_footer(fig, gen_date, "Seite 2")
     pdf.savefig(fig, facecolor=_R_BG)
@@ -789,12 +786,12 @@ def _r_ergebnisse_page(pdf: PdfPages, summary: dict, gen_date: str) -> None:
                                 fontweight="bold" if c in (2, 3, 4) else "normal")
 
     fig.text(0.05, 0.175,
-             "Ø Stat./Zyklus = Pooled Mean über alle Einzelzyklen.   "
-             "Rescue = ANT1 ≤ −24 dB, ANT2 > −24 dB (nur durch ANT2 dekodierbar).",
+             "Ø Stat./Zyklus = Mittelwert über alle Einzelzyklen direkt (nicht erst Tagesdurchschnitt).   "
+             "Rescue = ANT1 unter −24 dB, ANT2 hat trotzdem dekodiert.",
              fontsize=9, color=_R_SUB, transform=fig.transFigure)
     fig.text(0.05, 0.130,
-             "⚠  Vorläufig: 2 Messtage, 05:00–12:00 UTC. "
-             "Abend- und Nachtstunden nicht erfasst. Zahlen können sich verschieben.",
+             "Noch erst 2 Messtage, nur Morgenstunden 05–12 Uhr UTC — Nacht und Abend fehlen noch. "
+             "Die Zahlen können sich mit mehr Daten noch etwas verschieben.",
              fontsize=9, color=_R_ORANGE, style="italic", transform=fig.transFigure)
 
     _r_footer(fig, gen_date, "Seite 3")
@@ -827,8 +824,8 @@ def _r_diagramm_page(pdf: PdfPages, png_path: Path, title: str,
 
 def _r_rescue_page(pdf: PdfPages, summary: dict, gen_date: str) -> None:
     fig = _rfig()
-    _r_header(fig, "Rescue-Daten — Diskussion",
-              "Sollten gerettete Stationen mitzählen?")
+    _r_header(fig, "Die grünen Kappen — zählen oder nicht?",
+              "Rescue-Stationen: Was steckt dahinter und was sagen sie aus?")
 
     n_avg = summary.get("Normal",           {}).get("avg", 0.0)
     s_avg = summary.get("Diversity_Normal", {}).get("avg", 0.0)
@@ -836,47 +833,44 @@ def _r_rescue_page(pdf: PdfPages, summary: dict, gen_date: str) -> None:
     s_rsc = summary.get("Diversity_Normal", {}).get("avg_rescue", 0.0)
     d_rsc = summary.get("Diversity_Dx",     {}).get("avg_rescue", 0.0)
 
-    fig.text(0.05, 0.845, "Was sind Rescue-Stationen?", fontsize=10.5,
-             color=_R_ACCENT, fontweight="bold", transform=fig.transFigure)
+    fig.text(0.05, 0.845, "Worum geht's?", fontsize=10.5, color=_R_ACCENT,
+             fontweight="bold", transform=fig.transFigure)
     _r_hline(fig, 0.833)
-    fig.text(0.05, 0.808,
-             f"Rescue-Events entstehen wenn ANT1-SNR ≤ −24 dB und ANT2-SNR > −24 dB für dieselbe Station."
-             f" Im Messzeitraum: Ø {s_rsc:.1f} Rescue/h (Standard), Ø {d_rsc:.1f} Rescue/h (DX).",
-             fontsize=9.5, color=_R_FG, transform=fig.transFigure)
+    fig.text(0.05, 0.790,
+             f"Im Diversity-Diagramm sieht man oben auf manchen Balken kleine grüne Kappen mit einem +N davor.\n"
+             f"Das sind Stationen die ANT1 nicht dekodieren konnte — deren Signal war unter −24 dB, also zu schwach.\n"
+             f"ANT2 hat sie trotzdem gehört und dekodiert. Im Messzeitraum waren das im Schnitt\n"
+             f"Ø {s_rsc:.1f} solche Stationen pro Stunde bei Diversity Standard, und Ø {d_rsc:.1f}/h bei Diversity DX.",
+             fontsize=9.5, color=_R_FG, transform=fig.transFigure, linespacing=1.8)
 
-    fig.text(0.05, 0.752, "▲  PRO — Rescue-Stationen mitzählen", fontsize=10.5,
+    fig.text(0.05, 0.628, "Warum spricht was dafür, sie mitzuzählen?", fontsize=10.5,
              color=_R_GREEN, fontweight="bold", transform=fig.transFigure)
-    _r_hline(fig, 0.740)
-    for i, txt in enumerate([
-        "Echter physikalischer Nachweis: ANT2 hat ein QSO erst ermöglicht — ANT1 hätte nie dekodiert.",
-        "Für den Operator zählt das QSO, egal welche Antenne. Rescue = realer Mehrwert im Betrieb.",
-        "Rescue-Rate steigt bei schlechten Bedingungen — Diversity hilft genau dort am meisten.",
-        f"Mit Rescue: Standard +{((s_avg+s_rsc)/n_avg-1)*100:.0f}%, DX +{((d_avg+d_rsc)/n_avg-1)*100:.0f}%"
-        f" — vollständiges Bild der Systemleistung.",
-    ]):
-        fig.text(0.06, 0.706 - i * 0.048, f"✓  {txt}", fontsize=9.5,
-                 color=_R_FG, transform=fig.transFigure)
+    _r_hline(fig, 0.616)
+    fig.text(0.05, 0.575,
+             f"Weil das QSO für den Operator real ist — egal ob ANT1 oder ANT2 es ermöglicht hat.\n"
+             f"Diese Stationen wären mit einer einzelnen Antenne gar nicht im Log gelandet.\n"
+             f"Das ist kein Messartefakt — das ist genau der Punkt warum man eine zweite Antenne betreibt.\n"
+             f"Mit Rescue: Standard {((s_avg+s_rsc)/n_avg-1)*100:+.0f}%, DX {((d_avg+d_rsc)/n_avg-1)*100:+.0f}% — das ist das Gesamtbild.",
+             fontsize=9.5, color=_R_FG, transform=fig.transFigure, linespacing=1.8)
 
-    fig.text(0.05, 0.488, "▼  CONTRA — Rescue-Stationen separat betrachten", fontsize=10.5,
+    fig.text(0.05, 0.418, "Warum kann man sie auch weglassen?", fontsize=10.5,
              color=_R_ORANGE, fontweight="bold", transform=fig.transFigure)
-    _r_hline(fig, 0.476)
-    for i, txt in enumerate([
-        "SNR-Schwankungen im 15s-Zyklus können Schwellenüberschreitung kurzfristig erzeugen.",
-        "Die −24 dB-Grenze ist empirisch, kein physikalisches Gesetz — Grenzfälle sind möglich.",
-        "Für Vergleich mit anderen Systemen: nur direkt dekodierte Stationen zählen.",
-        "Rescue setzt korrektes ANT2-Timing voraus — vollständige Kausalität noch nicht bewiesen.",
-    ]):
-        fig.text(0.06, 0.440 - i * 0.048, f"⚠  {txt}", fontsize=9.5,
-                 color=_R_FG, transform=fig.transFigure)
+    _r_hline(fig, 0.406)
+    fig.text(0.05, 0.365,
+             "SNR-Werte schwanken innerhalb der 15 Sekunden eines Zyklus — eine Station die gerade\n"
+             "unter −24 dB liegt könnte beim nächsten Zyklus schon drüber sein.\n"
+             "Die −24 dB-Grenze ist ein Erfahrungswert, kein Naturgesetz.\n"
+             "Wer einen sauberen Vergleich mit anderen Systemen machen will, zählt lieber nur was ANT1 direkt dekodiert.",
+             fontsize=9.5, color=_R_FG, transform=fig.transFigure, linespacing=1.8)
 
-    _r_hline(fig, 0.238)
-    fig.text(0.05, 0.212,
-             "Empfehlung: Beide Werte werden ausgewiesen — 'ohne Rescue' als konservativer Vergleichswert,\n"
-             "'inkl. Rescue' als Systemleistung unter realen Betriebsbedingungen.",
+    _r_hline(fig, 0.218)
+    fig.text(0.05, 0.188,
+             "Deswegen stehen in diesem Bericht immer beide Zahlen: einmal ohne Rescue (der konservative Wert)\n"
+             "und einmal mit Rescue (das was im echten Betrieb rauskommt). Jeder kann sich das raussuchen was ihm passt.",
              fontsize=9.5, color=_R_ACCENT, style="italic",
-             transform=fig.transFigure, linespacing=1.7)
+             transform=fig.transFigure, linespacing=1.8)
 
-    _r_footer(fig, gen_date, "Seite 5")
+    _r_footer(fig, gen_date, "Seite 6")
     pdf.savefig(fig, facecolor=_R_BG)
     plt.close(fig)
 
@@ -884,8 +878,8 @@ def _r_rescue_page(pdf: PdfPages, summary: dict, gen_date: str) -> None:
 def _r_fazit_page(pdf: PdfPages, summary: dict, hourly: list[dict],
                   gen_date: str) -> None:
     fig = _rfig()
-    _r_header(fig, "Vorläufige Schlussfolgerungen & Ausblick",
-              "40m FT8 — Stand: 2 Messtage, 05:00–12:00 UTC")
+    _r_header(fig, "Was kann man daraus mitnehmen?",
+              "Fazit und was als nächstes gemessen wird")
 
     n_avg = summary.get("Normal",           {}).get("avg", 0.0)
     s_avg = summary.get("Diversity_Normal", {}).get("avg", 0.0)
@@ -895,57 +889,50 @@ def _r_fazit_page(pdf: PdfPages, summary: dict, hourly: list[dict],
     best_s = max((r for r in hourly if r["s_gain"] is not None),
                  key=lambda r: r["s_gain"], default=None)
 
-    fig.text(0.05, 0.840, "Gesicherte Erkenntnisse", fontsize=10.5,
+    fig.text(0.05, 0.840, "Was man klar sehen kann:", fontsize=10.5,
              color=_R_ACCENT, fontweight="bold", transform=fig.transFigure)
     _r_hline(fig, 0.828)
-    flist = [
-        f"Diversity Standard: konsistent +{(s_avg/n_avg-1)*100:.0f}% (konservativ) bis "
-        f"+{((s_avg+s_rsc)/n_avg-1)*100:.0f}% (inkl. Rescue). Reproduzierbar über beide Messtage.",
-        f"Diversity DX: geringerer Gesamtgewinn (+{(d_avg/n_avg-1)*100:.0f}%), aber "
-        f"stärkerer Fokus auf schwache DX-Signale — sinnvoll für Conteste / Rare-DX.",
-        f"Rescue-Anteil: Standard Ø {s_rsc:.1f} Stat./h, DX Ø {d_rsc:.1f} Stat./h — "
-        f"physischer Diversity-Effekt jenseits reiner Schaltlogik belegt.",
-    ]
+    fazit = (
+        f"Diversity Standard bringt über beide Messtage konsistent zwischen "
+        f"{(s_avg/n_avg-1)*100:.0f}% und {((s_avg+s_rsc)/n_avg-1)*100:.0f}% mehr Stationen — je nachdem ob man\n"
+        f"die geretteten mitzählt oder nicht. Das ist kein Zufall, das wiederholt sich.\n\n"
+        f"Diversity DX liegt bei {(d_avg/n_avg-1)*100:.0f}% ohne Rescue — weniger als Standard, aber das liegt daran dass DX bewusst\n"
+        f"auf die schwächsten Signale optimiert. Wer viel DX macht und weniger auf Gesamtzahl schaut, für den macht das Sinn."
+    )
     if best_s:
-        flist.append(
-            f"Stärkster Standard-Gewinn: {best_s['hour']:02d}:00 UTC "
-            f"(+{best_s['s_gain']:.0f}%) — typisch für Bandöffnungs- oder Schlussphasen."
+        fazit += (
+            f"\n\nDer stärkste Effekt war um {best_s['hour']:02d}:00 UTC mit +{best_s['s_gain']:.0f}% — "
+            f"das ist typisch die Zeit wo das Band gerade aufmacht oder zumacht."
         )
-    for i, txt in enumerate(flist):
-        fig.text(0.06, 0.796 - i * 0.058, f"✓  {txt}", fontsize=9.5,
-                 color=_R_FG, transform=fig.transFigure)
+    fig.text(0.05, 0.780, fazit, fontsize=9.5, color=_R_FG,
+             transform=fig.transFigure, linespacing=1.8)
 
-    fig.text(0.05, 0.565, "Einschränkungen", fontsize=10.5,
+    fig.text(0.05, 0.520, "Was man noch nicht sagen kann:", fontsize=10.5,
              color=_R_ORANGE, fontweight="bold", transform=fig.transFigure)
-    _r_hline(fig, 0.553)
-    for i, txt in enumerate([
-        "Nur 2 Messtage — Konfidenzintervalle breit, statistische Signifikanz begrenzt.",
-        "Nur 05:00–12:00 UTC — Abend/Nacht-Propagation auf 40m (typisch besser) fehlt komplett.",
-        "Vergleichbare Bedingungen beide Tage — extremes DX, Contest-Betrieb noch nicht gemessen.",
-        "Hardware FLEX-8400M — Übertragbarkeit auf andere Transceiver offen.",
-    ]):
-        fig.text(0.06, 0.518 - i * 0.053, f"⚠  {txt}", fontsize=9.5,
-                 color=_R_FG, transform=fig.transFigure)
+    _r_hline(fig, 0.508)
+    fig.text(0.05, 0.468,
+             "Erst 2 Messtage — das reicht um einen Trend zu sehen, aber nicht um belastbare Aussagen zu machen.\n"
+             "Die Nacht und die Abendstunden fehlen komplett — auf 40m ist es abends oft deutlich besser.\n"
+             "Contest-Betrieb, Geo-Sturm, schlechte Bedingungen — das wurde noch nicht getestet.\n"
+             "Ob das auf anderen Transceivern genauso funktioniert — keine Ahnung, bisher nur auf dem FLEX.",
+             fontsize=9.5, color=_R_FG, transform=fig.transFigure, linespacing=1.8)
 
-    fig.text(0.05, 0.298, "Nächste Schritte", fontsize=10.5,
+    fig.text(0.05, 0.298, "Was kommt als nächstes:", fontsize=10.5,
              color=_R_ACCENT, fontweight="bold", transform=fig.transFigure)
     _r_hline(fig, 0.286)
-    for i, txt in enumerate([
-        "Nacht/Abend (20:00–04:00 UTC) sammeln — auf 40m typisch bessere DX-Bedingungen.",
-        "Mindestens 5–7 Messtage für belastbare Fehlerbalken und statistische Signifikanz.",
-        "Verschiedene Bandbedingungen: SFI hoch/niedrig, K-Index 0–3, Geo-Sturm.",
-        "20m-Band: noch zu wenig Daten (< 3 Tage) — erst dann aussagekräftig auswertbar.",
-    ]):
-        fig.text(0.06, 0.248 - i * 0.053, f"→  {txt}", fontsize=9.5,
-                 color=_R_FG, transform=fig.transFigure)
+    fig.text(0.05, 0.245,
+             "Nacht- und Abendmessungen auf 40m — das ist der interessante Teil den ich noch nicht habe.\n"
+             "Mehr Tage damit die Balken im Diagramm stabiler werden und die Schwankungen kleiner.\n"
+             "20m kommt irgendwann auch — aber erst wenn genug Daten da sind. Nicht vorher.\n"
+             "Dieser Bericht aktualisiert sich automatisch sobald neue Daten reinkommen.",
+             fontsize=9.5, color=_R_FG, transform=fig.transFigure, linespacing=1.8)
 
-    _r_hline(fig, 0.065)
+    _r_hline(fig, 0.068)
     fig.text(0.05, 0.048,
-             "Rohdaten: statistics/  ·  Auswertung: scripts/generate_plots.py  ·  "
-             "github.com/mikewanne/SimpleFT8",
+             "Wer in die Rohdaten schauen will: statistics/  im Repo  ·  github.com/mikewanne/SimpleFT8  ·  DA1MHH",
              fontsize=8.5, color=_R_SUB, style="italic", transform=fig.transFigure)
 
-    _r_footer(fig, gen_date, "Seite 6")
+    _r_footer(fig, gen_date, "Seite 7")
     pdf.savefig(fig, facecolor=_R_BG)
     plt.close(fig)
 
@@ -976,16 +963,19 @@ def create_pdf_report(combos: set[tuple[str, str]]) -> None:
         _r_ergebnisse_page(pdf, summary, gen_date)                  # S.3
         _r_diagramm_page(                                           # S.4
             pdf, OUTPUT_DIR / f"stationen_{band}_{protocol}.png",
-            "Empfangene Stationen über 24h UTC",
-            f"{band} {protocol} — Linie = Pooled Mean, Band = Tages-Schwankung",
-            "Hinweis: Daten nur 05:00–12:00 UTC. Kurven zeigen Morgen/Vormittagsbetrieb.",
+            "Stationen pro Stunde — alle drei Modi im Vergleich",
+            f"{band} {protocol} — Linie = Mittelwert, schattiertes Band = Schwankung zwischen den Messtagen",
+            "Man sieht gut wie die graue Linie (Normal, eine Antenne) fast immer unter blau und orange liegt. "
+            "Das schattierte Band zeigt die Schwankung zwischen den beiden Messtagen — je mehr Tage dazukommen, desto enger wird das.",
             gen_date, "Seite 4",
         )
-        _r_diagramm_page(                                           # S.5 → nach Rescue
+        _r_diagramm_page(                                           # S.5
             pdf, OUTPUT_DIR / f"diversity_{band}_{protocol}.png",
-            "Diversity-Vergleich — Stationen pro Zyklus",
-            f"{band} {protocol} — Normal (grau) | Standard (blau) | DX (orange) | Rescue (grün)",
-            "Grüne Kappen (+N): durch ANT2 gerettete Stationen — ANT1-SNR war ≤ −24 dB.",
+            "Direktvergleich — Balken pro Stunde, drei Modi nebeneinander",
+            f"{band} {protocol} — Normal (grau) | Diversity Standard (blau) | Diversity DX (orange) | Rescue-Kappen (grün)",
+            "Die grünen Kappen (+N) oben auf den Balken zeigen Stationen die ANT1 nicht dekodieren konnte — "
+            "Signal unter −24 dB. ANT2 hat sie trotzdem gerettet. Ob man die mitzählt oder nicht — Ansichtssache. "
+            "Weiße Fehlerbalken zeigen die Schwankung zwischen den Messtagen.",
             gen_date, "Seite 5",
         )
         _r_rescue_page(pdf, summary, gen_date)                      # S.6
