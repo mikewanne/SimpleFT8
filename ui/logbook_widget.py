@@ -5,7 +5,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QTableWidget, QTableWidgetItem, QLineEdit, QHeaderView, QMessageBox,
 )
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QTimer
 from PySide6.QtGui import QColor, QFont
 from ui.styles import MSGBOX_STYLE
 
@@ -15,15 +15,21 @@ from core.geo import callsign_to_country
 _FONT = "Menlo"
 _BG = "#0d0d1a"
 
-# Spalten-Definition: (ADIF-Key, Header-Text, Breite)
+# Spalten-Definition: (ADIF-Key, Header-Text, min-Breite)
 _COLUMNS = [
     ("_DATETIME",  "Datum",        68),
     ("CALL",       "Call",         75),
-    ("BAND",       "Band",        40),
-    ("MODE",       "Mode",        38),
-    ("_COUNTRY",   "Land",        90),
-    ("_KM",        "km",          50),
+    ("BAND",       "Band",         40),
+    ("MODE",       "Mode",         38),
+    ("_COUNTRY",   "Land",         90),
+    ("_KM",        "km",           50),
 ]
+
+# Min-Breiten pro Spalten-Index (muss zu _COLUMNS passen)
+_COL_MIN_W = tuple(w for _, _, w in _COLUMNS)
+
+# Versteck-Reihenfolge: km → Mode → Band (immer sichtbar: Datum, Call, Land)
+_HIDE_ORDER = (5, 3, 2)
 
 
 def _format_datetime(record: dict) -> str:
@@ -68,7 +74,12 @@ class LogbookWidget(QWidget):
         self._adif_dir = adif_directory or Path.cwd()
         self._all_records = []
         self._filtered_records = []
+        self._resize_timer = QTimer(self)
+        self._resize_timer.setSingleShot(True)
+        self._resize_timer.setInterval(40)
+        self._resize_timer.timeout.connect(self._adapt_columns)
         self._setup_ui()
+        QTimer.singleShot(0, self._adapt_columns)
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
@@ -140,11 +151,12 @@ class LogbookWidget(QWidget):
         self.table.verticalHeader().setDefaultSectionSize(22)
         self.table.setSortingEnabled(True)
 
-        # Spaltenbreiten
+        # Spaltenbreiten — adaptiv via _adapt_columns()
         header = self.table.horizontalHeader()
-        for i, (_, _, width) in enumerate(_COLUMNS):
-            self.table.setColumnWidth(i, width)
-        header.setStretchLastSection(True)
+        header.setStretchLastSection(False)
+        for i in range(len(_COLUMNS)):
+            header.setSectionResizeMode(i, QHeaderView.ResizeMode.Fixed)
+            self.table.setColumnWidth(i, _COL_MIN_W[i])
 
         self.table.setStyleSheet(f"""
             QTableWidget {{
@@ -179,6 +191,48 @@ class LogbookWidget(QWidget):
         self.table.cellClicked.connect(self._on_row_clicked)
         self.table.itemSelectionChanged.connect(self._on_selection_changed)
         layout.addWidget(self.table)
+
+    # ── Adaptive Spaltenbreiten ───────────────────────────────────────────────
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._resize_timer.start()   # debounce 40 ms
+
+    def _adapt_columns(self):
+        """Spalten je nach verfügbarer Breite ein-/ausblenden und gleichmäßig verteilen."""
+        avail = self.table.viewport().width()
+        if avail < 50:
+            return
+
+        # Schritt 1: alle optional-Spalten einblenden (Reset)
+        for col in _HIDE_ORDER:
+            self.table.setColumnHidden(col, False)
+
+        # Schritt 2: ausblenden bis alles passt (km → Mode → Band)
+        for col in _HIDE_ORDER:
+            total_min = sum(
+                _COL_MIN_W[i] for i in range(len(_COLUMNS))
+                if not self.table.isColumnHidden(i)
+            )
+            if total_min <= avail:
+                break
+            self.table.setColumnHidden(col, True)
+
+        # Schritt 3: übrigen Platz gleichmäßig auf sichtbare Spalten verteilen
+        visible = [i for i in range(len(_COLUMNS)) if not self.table.isColumnHidden(i)]
+        if not visible:
+            return
+
+        total_min_v = sum(_COL_MIN_W[i] for i in visible)
+        extra = max(0, avail - total_min_v)
+        bonus = extra // len(visible)
+        remainder = extra - bonus * len(visible)
+
+        for idx, col in enumerate(visible):
+            w = _COL_MIN_W[col] + bonus + (1 if idx < remainder else 0)
+            self.table.setColumnWidth(col, w)
+
+    # ─────────────────────────────────────────────────────────────────────────
 
     def load_adif(self, directory: Path = None):
         """Alle ADIF-Dateien laden und Tabelle fuellen."""
