@@ -90,6 +90,12 @@ class FrequencyHistogramWidget(QWidget):
         # Hintergrund
         painter.fillRect(0, 0, w, bar_h, QColor("#0a0a14"))
 
+        # Horizontale Referenz-Linien (33% / 66%)
+        painter.setPen(QPen(QColor("#1c1c2a"), 1))
+        for pct in (0.33, 0.66):
+            y = int(bar_h * (1.0 - pct))
+            painter.drawLine(0, y, w, y)
+
         # Bins (grau → orange → rot je Belegungsgrad)
         if self._bins:
             max_c   = max(self._bins.values(), default=1)

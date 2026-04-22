@@ -713,14 +713,14 @@ class RadioMixin:
         """Non-modales Info-Popup 'Kalibrierung abgeschlossen' — blockiert nichts."""
         msg = QMessageBox(self)
         msg.setWindowTitle("Kalibrierung abgeschlossen")
-        msg.setIcon(QMessageBox.Icon.Information)
+        msg.setIcon(QMessageBox.Icon.NoIcon)
         if ant2_g is not None:
             msg.setText(
-                f"Kalibrierung {band} gespeichert.\n\n"
+                f"✓  Kalibrierung {band} gespeichert.\n\n"
                 f"ANT1: {ant1_g} dB  |  ANT2: {ant2_g} dB"
             )
         else:
-            msg.setText(f"Kalibrierung {band} gespeichert.\n\nANT1: {ant1_g} dB")
+            msg.setText(f"✓  Kalibrierung {band} gespeichert.\n\nANT1: {ant1_g} dB")
         msg.setStyleSheet(self._msgbox_style())
         msg.setStandardButtons(QMessageBox.StandardButton.Ok)
         msg.setWindowModality(Qt.WindowModality.NonModal)

@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt
 
 from config.settings import Settings, DEFAULTS
+from ui.styles import MSGBOX_STYLE
 
 # Info-Texte fuer die (i)-Buttons
 _HINTS = {
@@ -205,7 +206,7 @@ class SettingsDialog(QDialog):
             msg.setWindowTitle("Tune-Leistung")
             msg.setIcon(QMessageBox.Icon.Warning)
             msg.setText(f"Tune-Leistung auf {watt}W erhoehen?\n\nHohere Leistung kann Antenne/Tuner beschaedigen.")
-            msg.setStyleSheet("QMessageBox { background:#1a1a2e; color:#CCC; }")
+            msg.setStyleSheet(MSGBOX_STYLE)
             btn_yes = msg.addButton("Ja", QMessageBox.ButtonRole.AcceptRole)
             msg.addButton("Nein", QMessageBox.ButtonRole.RejectRole)
             msg.exec()
@@ -269,7 +270,7 @@ class SettingsDialog(QDialog):
         msg.setIcon(QMessageBox.Icon.Question)
         msg.setText("Alle Einstellungen auf Werkseinstellungen zuruecksetzen?\n\n"
                     "Rufzeichen und Locator bleiben erhalten.")
-        msg.setStyleSheet("QMessageBox { background:#1a1a2e; color:#CCC; }")
+        msg.setStyleSheet(MSGBOX_STYLE)
         btn_yes = msg.addButton("Zuruecksetzen", QMessageBox.ButtonRole.AcceptRole)
         msg.addButton("Abbrechen", QMessageBox.ButtonRole.RejectRole)
         msg.exec()

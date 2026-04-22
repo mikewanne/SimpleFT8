@@ -73,3 +73,49 @@ CARD_GREEN  = card_style("#2a8c4a")
 CARD_TEAL   = card_style("#2a8c8c")
 CARD_ORANGE = card_style("#8c5a2a")
 CARD_DEFAULT = CARD_BLUE   # Legacy alias
+
+# ── QMessageBox Dark Theme ────────────────────────────────────────────────────
+MSGBOX_STYLE = """
+    QMessageBox {
+        background-color: #16192b;
+        border: 1px solid #2a2d45;
+        border-radius: 8px;
+        padding: 20px;
+    }
+    QMessageBox QLabel {
+        color: #CCC;
+        font-family: Menlo;
+        font-size: 12px;
+        line-height: 1.4;
+        margin-top: 4px;
+    }
+    QMessageBox QLabel#qt_msgboxex_icon_label {
+        min-width: 0px; min-height: 0px;
+        max-width: 0px; max-height: 0px;
+    }
+    QPushButton {
+        background-color: rgba(255,255,255,0.08);
+        color: #CCC;
+        border: 1px solid rgba(255,255,255,0.2);
+        border-radius: 6px;
+        padding: 7px 20px;
+        font-family: Menlo;
+        font-size: 12px;
+        margin: 4px;
+    }
+    QPushButton:hover {
+        background-color: rgba(255,255,255,0.14);
+        border-color: rgba(255,255,255,0.3);
+    }
+    QPushButton:pressed {
+        background-color: rgba(0,100,200,0.3);
+    }
+    QPushButton:default {
+        background-color: rgba(40,80,160,0.45);
+        border-color: #3a5a9a;
+        font-weight: bold;
+    }
+    QPushButton:default:hover {
+        background-color: rgba(50,100,180,0.55);
+    }
+"""

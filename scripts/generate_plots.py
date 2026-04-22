@@ -56,25 +56,20 @@ _COL_MAP = {
 # ── Erklärungstexte (rechtsbündig, mit \n strukturiert) ──────────────────────
 
 EXPL_STATIONEN = (
-    "Was sehe ich?\n"
-    "  Jede Kurve = ein Empfangsmodus, Linie = Mittelwert aller Sitzungen zu dieser UTC-Stunde.\n"
-    "  Schattiertes Band = Schwankung zwischen verschiedenen Messtagen.\n"
-    "\n"
-    "FT8 ist ein digitaler Funkmodus — er überträgt auch extrem schwache Signale über tausende Kilometer.\n"
-    "Mehr Stationen = Band offen (Ionosphäre reflektiert gut). Diversity = System wählt\n"
-    "automatisch die empfangsstärkere von zwei Antennen."
+    "Normal (grau): 1 Antenne, wie WSJT-X — Vergleichsbasis.\n"
+    "Diversity Standard (blau): 2 Antennen, wählt automatisch die mit mehr Stationen.\n"
+    "Diversity DX (orange): 2 Antennen, wählt die mit mehr schwachen DX-Signalen.\n"
+    "Schattiertes Band: Schwankung zwischen Messtagen — Linie = Mittelwert.\n"
+    "Mehr Stationen = Band offen (Ionosphäre reflektiert Signale aus aller Welt). Diversity = System wählt automatisch die bessere Antenne."
 )
 
 def _expl_diversity(band: str, protocol: str) -> str:
     return (
-        "Was sehe ich?\n"
-        "  Grau = Normal (1 Antenne)  |  Blau = Diversity Standard  |  Orange = Diversity DX.\n"
-        "  Grüne Kappe oben = Stationen, die ANT1 allein NICHT dekodieren konnte (Signal unter −24 dB,\n"
-        "  FT8-Decodierschwelle) — ANT2 hat sie gerettet. +N zeigt wie viele das pro Stunde waren.\n"
-        "\n"
-        "Die Modi wurden an verschiedenen Tagen gemessen. Da jede UTC-Stunde über viele Tage gemittelt\n"
-        "wird (Mo 18:00, Di 18:00, ...), gleichen sich gute und schlechte Funkbedingungen für alle Modi\n"
-        "statistisch aus — der Vergleich ist fair. Diversity DX optimiert gezielt auf schwache Signale.\n"
+        "Normal (grau): 1 Antenne, wie WSJT-X — dient als Vergleichsbasis.\n"
+        "Diversity Standard (blau): 2 Antennen — wählt automatisch die Antenne, die mehr Stationen empfängt.\n"
+        "Diversity DX (orange): 2 Antennen — wählt die Antenne mit mehr schwachen DX-Signalen (SNR unter −10 dB).\n"
+        "Fehlerbalken (weiße Striche): Schwankung zwischen Messtagen — je mehr Tage, desto stabiler der Wert.\n"
+        "Grüne Kappe (+N): Stationen, die ANT1 allein nicht dekodieren konnte — ANT2 hat sie gerettet (Signal unter −24 dB).\n"
         "\n"
         f"Rohdaten: statistics/{{Modus}}/{band}/{protocol}/  ·  github.com/mikewanne/SimpleFT8"
     )
@@ -509,7 +504,7 @@ def create_diversity_diagram(band: str, protocol: str):
 
     _footer(fig, _expl_diversity(band, protocol))
     plt.tight_layout()
-    plt.subplots_adjust(bottom=0.32, right=0.98)
+    plt.subplots_adjust(bottom=0.36, right=0.98)
 
     out = OUTPUT_DIR / f"diversity_{band}_{protocol}.png"
     fig.savefig(out, dpi=150, bbox_inches="tight", facecolor=DARK_BG)

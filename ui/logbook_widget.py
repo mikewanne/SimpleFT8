@@ -7,6 +7,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor, QFont
+from ui.styles import MSGBOX_STYLE
 
 from log.adif import parse_all_adif_files, delete_qso
 from core.geo import callsign_to_country
@@ -307,13 +308,7 @@ class LogbookWidget(QWidget):
             f"  Band:   {band}  {mode}\n\n"
             f"Diese Aktion kann nicht rückgängig gemacht werden!"
         )
-        msg.setStyleSheet("""
-            QMessageBox { background-color: #1a1a2e; }
-            QMessageBox QLabel { color: #CCC; font-family: Menlo; font-size: 12px; }
-            QPushButton { background: #333; color: #CCC; border: 1px solid #555;
-                border-radius: 4px; padding: 6px 16px; font-size: 12px; min-width: 80px; }
-            QPushButton:hover { background: #444; }
-        """)
+        msg.setStyleSheet(MSGBOX_STYLE)
         btn_yes = msg.addButton("Ja, löschen", QMessageBox.ButtonRole.DestructiveRole)
         msg.addButton("Abbrechen", QMessageBox.ButtonRole.RejectRole)
         msg.exec()

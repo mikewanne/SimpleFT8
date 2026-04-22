@@ -34,6 +34,7 @@ from .mw_cycle import CycleMixin
 from .mw_qso import QSOMixin
 from .mw_radio import RadioMixin
 from .mw_tx import TXMixin
+from . import styles
 
 
 class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
@@ -591,23 +592,7 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
 
     @staticmethod
     def _msgbox_style() -> str:
-        return """
-            QMessageBox {
-                background-color: #1a1a2e;
-            }
-            QMessageBox QLabel {
-                color: #CCC;
-                font-family: Menlo;
-                font-size: 12px;
-            }
-            QPushButton {
-                background: #333; color: #CCC;
-                border: 1px solid #555; border-radius: 4px;
-                padding: 6px 16px; font-size: 12px;
-                min-width: 80px;
-            }
-            QPushButton:hover { background: #444; }
-        """
+        return styles.MSGBOX_STYLE
 
     def _restore_geometry(self):
         """Fenstergeometrie + Splitter-Breiten aus Settings laden."""
