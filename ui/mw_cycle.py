@@ -113,6 +113,16 @@ class CycleMixin:
                     self._stats_warmup_cycles = 6
                     print("[Stats] Einmessen fertig — 6 Zyklen Warmup bis Stats starten")
                     self._set_cq_locked(False)
+                    # Ratio in PresetStore ergänzen (Timestamp von Gain-Messung bleibt)
+                    _scoring = getattr(self._diversity_ctrl, 'scoring_mode', 'normal')
+                    _store = getattr(self, '_dx_store', None) if _scoring == "dx" else getattr(self, '_standard_store', None)
+                    if _store:
+                        _store.save_ratio(
+                            self.settings.band, self.settings.mode,
+                            ratio=self._diversity_ctrl.ratio,
+                            dominant=self._diversity_ctrl.dominant,
+                        )
+                    # Rückwärtskompatibilität
                     self.settings.save_diversity_preset(
                         mode=self.settings.mode,
                         band=self.settings.band,

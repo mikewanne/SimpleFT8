@@ -223,9 +223,10 @@ class RadioMixin:
         ntp_time.set_mode(mode)
         # Warnung wenn kein mode-spezifisches Gain-Preset vorhanden
         if self.radio.ip:
-            if self.settings.get_dx_preset(band, mode) is None:
+            _std_store = getattr(self, '_standard_store', None)
+            if _std_store and _std_store.get(band, mode) is None:
                 self.statusBar().showMessage(
-                    f"Kein Gain-Preset für {band}/{mode} — bitte DX TUNING", 6000
+                    f"Kein Gain-Preset für {band}/{mode} — bitte KALIBRIEREN", 6000
                 )
                 self.control_panel.dx_info.setText(f"Kein Preset ({mode})")
                 self.control_panel.dx_info.setStyleSheet("color: #FF6600;")
@@ -338,6 +339,11 @@ class RadioMixin:
                 QDialog { background-color: #1a1a2e; }
                 QLabel  { color: #CCCCCC; font-family: Menlo; font-size: 13px;
                           padding: 8px 0 12px 0; }
+                QLabel#lbl_mode_title {
+                    color: #88AACC; background-color: #1a1a2e;
+                    padding: 10px 0px; border-radius: 4px;
+                    qproperty-alignment: AlignCenter;
+                }
                 QPushButton {
                     background-color: #2a2a3e; color: #CCCCCC;
                     border: 1px solid #444; border-radius: 5px;
@@ -355,6 +361,8 @@ class RadioMixin:
             _lay.setContentsMargins(24, 16, 24, 16)
             _lay.setSpacing(8)
             _lbl = QLabel("Welchen Modus verwenden?")
+            _lbl.setObjectName("lbl_mode_title")
+            _lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
             _lay.addWidget(_lbl)
             _btn_std = QPushButton("Diversity Standard")
             _btn_dx  = QPushButton("Diversity DX")
@@ -382,23 +390,54 @@ class RadioMixin:
             label = "DIVERSITY DX" if scoring == "dx" else "DIVERSITY"
             self.control_panel.btn_diversity.setText(label)
 
-            # Cache pruefen — 2 Stunden gueltig
+            # Preset-Store pruefen — 2h-Frist pro Band+FTMode
             band = self.settings.band
-            cache = getattr(self, '_diversity_cache', None)
-            if cache and cache.is_valid(band, scoring):
-                age = cache.get_age_minutes(band, scoring)
-                msg = QMessageBox(self)
-                msg.setWindowTitle("Diversity Setup")
-                msg.setStyleSheet(self._msgbox_style())
-                msg.setText(
-                    f"Kalibrierungsdaten vorhanden ({age} Min. alt).\n\n"
-                    f"Weiter oder neu messen?"
-                )
-                btn_use = msg.addButton("Weiter",      QMessageBox.ButtonRole.AcceptRole)
-                btn_new = msg.addButton("Neu messen",  QMessageBox.ButtonRole.ActionRole)
-                msg.exec()
-                if msg.clickedButton() == btn_use:
-                    print(f"[Diversity] Cache gueltig ({age} Min.) — ueberspringe Pipeline")
+            ft_mode = self.settings.mode
+            store = getattr(self, '_dx_store', None) if scoring == "dx" else getattr(self, '_standard_store', None)
+            if store and store.is_valid(band, ft_mode):
+                age = store.get_age_minutes(band, ft_mode)
+                mode_label = "Diversity DX" if scoring == "dx" else "Diversity Standard"
+                from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel
+                _dlg = QDialog(self)
+                _dlg.setWindowTitle("Diversity Setup")
+                _dlg.setStyleSheet("""
+                    QDialog, QWidget { background-color: #1a1a2e; }
+                    QLabel { color: #CCCCCC; font-family: Menlo; font-size: 13px; background-color: #1a1a2e; }
+                    QLabel#lbl_title { color: #88AACC; font-size: 14px; font-weight: bold; padding-bottom: 4px; }
+                    QPushButton {
+                        background-color: #2a2a3e; color: #CCCCCC;
+                        border: 1px solid #444; border-radius: 5px;
+                        font-family: Menlo; font-size: 13px;
+                        padding: 8px 20px; min-width: 120px;
+                    }
+                    QPushButton:hover { background-color: #3a3a5e; }
+                    QPushButton#btn_weiter { background-color: #1a3a6e; border-color: #4488cc; }
+                    QPushButton#btn_weiter:hover { background-color: #2a4a8e; }
+                """)
+                _lay = QVBoxLayout(_dlg)
+                _lay.setContentsMargins(24, 20, 24, 20)
+                _lay.setSpacing(10)
+                lbl_title = QLabel(f"{band} {ft_mode} — {mode_label}")
+                lbl_title.setObjectName("lbl_title")
+                lbl_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                lbl_msg = QLabel(f"Kalibrierungsdaten vorhanden ({age} Min. alt).\nWeiter oder neu messen?")
+                lbl_msg.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                _lay.addWidget(lbl_title)
+                _lay.addWidget(lbl_msg)
+                _btn_row = QHBoxLayout()
+                _btn_row.setSpacing(12)
+                btn_new  = QPushButton("Neu messen")
+                btn_use  = QPushButton("Weiter")
+                btn_use.setObjectName("btn_weiter")
+                _btn_row.addWidget(btn_new)
+                _btn_row.addWidget(btn_use)
+                _lay.addLayout(_btn_row)
+                _choice = [False]
+                btn_use.clicked.connect(lambda: (_choice.__setitem__(0, True), _dlg.accept()))
+                btn_new.clicked.connect(lambda: _dlg.accept())
+                _dlg.exec()
+                if _choice[0]:
+                    print(f"[Diversity] Preset gueltig ({age} Min.) — ueberspringe Pipeline")
                     self._enable_diversity(scoring_mode=scoring)
                     self._update_statusbar()
                     return
@@ -448,11 +487,13 @@ class RadioMixin:
         self._diversity_ctrl.MEASURE_CYCLES = 8 * _MULT.get(mode, 1)
         self._diversity_ctrl.scoring_mode = scoring_mode
 
-        # Gespeichertes Preset laden? → sofort Betrieb statt Messung
+        # Gespeichertes Preset laden (ein Eintrag enthält Gain + Ratio)
         mode = self.settings.mode
         band = self.settings.band
-        preset = self.settings.get_diversity_preset(mode, band)
-        if preset:
+        store = getattr(self, '_dx_store', None) if scoring_mode == "dx" else getattr(self, '_standard_store', None)
+        preset = store.get(band, mode) if store else None
+
+        if preset and "ratio" in preset:
             self._diversity_ctrl.load_preset(preset)
             self._diversity_ctrl.OPERATE_CYCLES = base * _MULT.get(mode, 1)
             self._diversity_ctrl.MEASURE_CYCLES = 8 * _MULT.get(mode, 1)
@@ -464,21 +505,16 @@ class RadioMixin:
                 scoring_mode=scoring_mode)
             self.control_panel.update_diversity_counts(0, 0)
         else:
-            # Kein Preset → normal einmessen
+            # Kein Ratio-Preset → einmessen
             self._diversity_ctrl.reset()
             self._set_cq_locked(True)
-            print(f"[Diversity] Kein Preset — starte Messung ({scoring_mode.upper()})")
+            print(f"[Diversity] Kein Ratio-Preset — starte Messung ({scoring_mode.upper()})")
             self.control_panel.update_diversity_ratio("50:50", "measure", 0,
                                                       self._diversity_ctrl.MEASURE_CYCLES,
                                                       scoring_mode=scoring_mode)
             self.control_panel.update_diversity_counts(0, 0)
 
-        band = self.settings.band
-        ft_mode = self.settings.mode
-        if scoring_mode == "dx":
-            preset = self.settings.get_gain_preset(band, mode="dx", ft_mode=ft_mode)
-        else:
-            preset = self.settings.get_dx_preset(band, mode=ft_mode)
+        ft_mode = mode  # bereits oben gesetzt
 
         if preset and "ant1_gain" in preset:
             # Preset vorhanden: per-Antenne optimierte Gains laden + sofort ans Radio
@@ -644,7 +680,21 @@ class RadioMixin:
             return
         r = dialog.get_results()
         band = self.settings.band
-        scoring = getattr(self, '_gain_scoring_mode', 'snr')
+        ft_mode = self.settings.mode
+        gain_mode = getattr(self, '_gain_scoring_mode', 'snr')
+        div_scoring = "dx" if gain_mode == "snr" else "normal"
+        store = getattr(self, '_dx_store', None) if div_scoring == "dx" else getattr(self, '_standard_store', None)
+        if store:
+            store.save_gain(
+                band, ft_mode,
+                rxant=r.get("best_ant", "ANT1"),
+                ant1_gain=r.get("ant1_gain", r.get("best_gain", 0)),
+                ant2_gain=r.get("ant2_gain", r.get("best_gain", 0)),
+                ant1_avg=r.get("ant1_avg", 0.0),
+                ant2_avg=r.get("ant2_avg", 0.0),
+            )
+        # Rückwärtskompatibilität: auch in Settings speichern (für alten Code)
+        scoring = gain_mode
         self.settings.save_dx_preset(
             band=band,
             rxant=r.get("best_ant", "ANT1"),
@@ -654,17 +704,8 @@ class RadioMixin:
             ant1_gain=r.get("ant1_gain", r.get("best_gain", 0)),
             ant2_gain=r.get("ant2_gain", r.get("best_gain", 0)),
             scoring=scoring,
-            mode=self.settings.mode,
+            mode=ft_mode,
         )
-        # Gain-Cache: Timestamp der Messung setzen — 2h Gültigkeit ab jetzt
-        if self._rx_mode == "diversity":
-            div_scoring = (getattr(self, '_pending_diversity_scoring', None)
-                           if getattr(self, '_pending_dx_diversity', False)
-                           else getattr(self._diversity_ctrl, 'scoring_mode', 'normal'))
-            _cache = getattr(self, '_diversity_cache', None)
-            if _cache and div_scoring:
-                _cache.save(band, div_scoring)
-                print(f"[Diversity] Gain-Cache gespeichert: {band}/{div_scoring}")
         ant1_g = r.get("ant1_gain", r.get("best_gain", 0))
         ant2_g = r.get("ant2_gain", r.get("best_gain", 0))
         self.control_panel.dx_info.setText(
@@ -711,20 +752,46 @@ class RadioMixin:
 
     def _show_calibration_done(self, band: str, ant1_g: int, ant2_g: int | None):
         """Non-modales Info-Popup 'Kalibrierung abgeschlossen' — blockiert nichts."""
-        msg = QMessageBox(self)
-        msg.setWindowTitle("Kalibrierung abgeschlossen")
-        msg.setIcon(QMessageBox.Icon.NoIcon)
+        from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Kalibrierung abgeschlossen")
+        dlg.setWindowModality(Qt.WindowModality.NonModal)
+        dlg.setStyleSheet(
+            "QDialog, QWidget { background-color: #16192b; }"
+        )
+        lay = QVBoxLayout(dlg)
+        lay.setContentsMargins(24, 20, 24, 16)
+        lay.setSpacing(10)
+
+        lbl_title = QLabel(f"✓  Kalibrierung {band} gespeichert.")
+        lbl_title.setStyleSheet(
+            "color: #00CC66; font-family: Menlo; font-size: 13px; font-weight: bold;"
+        )
+        lay.addWidget(lbl_title)
+
         if ant2_g is not None:
-            msg.setText(
-                f"✓  Kalibrierung {band} gespeichert.\n\n"
-                f"ANT1: {ant1_g} dB  |  ANT2: {ant2_g} dB"
-            )
+            lbl_info = QLabel(f"ANT1: {ant1_g} dB  |  ANT2: {ant2_g} dB")
         else:
-            msg.setText(f"✓  Kalibrierung {band} gespeichert.\n\nANT1: {ant1_g} dB")
-        msg.setStyleSheet(self._msgbox_style())
-        msg.setStandardButtons(QMessageBox.StandardButton.Ok)
-        msg.setWindowModality(Qt.WindowModality.NonModal)
-        msg.show()
+            lbl_info = QLabel(f"ANT1: {ant1_g} dB")
+        lbl_info.setStyleSheet(
+            "color: #AAAACC; font-family: Menlo; font-size: 12px; padding: 4px 0;"
+        )
+        lay.addWidget(lbl_info)
+
+        btn = QPushButton("OK")
+        btn.setStyleSheet(
+            "QPushButton { background-color: rgba(40,80,160,0.45); color: #CCC; "
+            "border: 1px solid #3a5a9a; border-radius: 6px; padding: 7px 24px; "
+            "font-family: Menlo; font-size: 12px; font-weight: bold; }"
+            "QPushButton:hover { background-color: rgba(50,100,180,0.55); }"
+        )
+        btn.clicked.connect(dlg.accept)
+        hlay = QHBoxLayout()
+        hlay.addStretch()
+        hlay.addWidget(btn)
+        lay.addLayout(hlay)
+
+        dlg.show()
 
     def _on_dx_tune_rejected(self):
         """DX Tuning abgebrochen — zurueck auf Normal/Diversity."""
@@ -760,7 +827,10 @@ class RadioMixin:
 
     def _apply_dx_preset_for_band(self, band: str):
         """DX-Preset fuer ein bestimmtes Band laden (nach Bandwechsel)."""
-        preset = self.settings.get_dx_preset(band)
+        ft_mode = self.settings.mode
+        scoring = getattr(self._diversity_ctrl, 'scoring_mode', 'normal')
+        store = getattr(self, '_dx_store', None) if scoring == "dx" else getattr(self, '_standard_store', None)
+        preset = store.get(band, ft_mode) if store else None
         if preset:
             self._apply_dx_preset(preset)
         else:

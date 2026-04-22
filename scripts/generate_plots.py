@@ -20,6 +20,8 @@ matplotlib.use('Agg')
 import matplotlib.colors as mc
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
+from matplotlib.backends.backend_pdf import PdfPages
 import numpy as np
 
 BASE_DIR = Path(__file__).parent.parent
@@ -356,6 +358,7 @@ def create_stations_diagram(band: str, protocol: str):
         return
 
     _hour_ticks_line(ax, all_xs)
+    ax.yaxis.set_major_locator(mticker.MultipleLocator(10))
     ax.set_xlabel("Stunde (UTC)", color=DARK_FG, labelpad=6)
     ax.set_ylabel("Ø Stationen / 15s-Zyklus", color=DARK_FG)
     basis = " · ".join(basis_parts)
@@ -477,6 +480,7 @@ def create_diversity_diagram(band: str, protocol: str):
                                       label="davon gerettet (ANT1 unter −24 dB)"))
 
     _hour_ticks_bar(ax, list(x_base), all_hours)
+    ax.yaxis.set_major_locator(mticker.MultipleLocator(10))
     ax.set_xlabel("Stunde (UTC)", color=DARK_FG, labelpad=6)
     ax.set_ylabel("Ø Stationen pro 15s-Zyklus", color=DARK_FG)
 
@@ -512,6 +516,169 @@ def create_diversity_diagram(band: str, protocol: str):
     print(f"  ✓ {out.name}")
 
 
+# ── PDF-Bericht ───────────────────────────────────────────────────────────────
+
+def _extract_time_range(stats_dir: Path) -> str:
+    dates = []
+    for md_file in stats_dir.rglob("*.md"):
+        d = _file_date(md_file)
+        if d:
+            dates.append(d)
+    if not dates:
+        return "keine Daten"
+    ds = sorted(set(dates))
+    return ds[0] if len(ds) == 1 else f"{ds[0]} bis {ds[-1]}"
+
+
+def _combo_summary(stats_dir: Path, band: str, protocol: str) -> dict:
+    """Pooled Mean + gewichteter Rescue-Schnitt pro Modus."""
+    result: dict[str, dict] = {}
+    for mode in RX_MODES:
+        hv = load_hourly_stats(stats_dir, mode, band, protocol)
+        if not hv:
+            continue
+        agg = _aggregate(hv)
+        if not agg:
+            continue
+        total_w = sum(v["mean"] * v["n_cycles"] for v in agg.values())
+        total_c = sum(v["n_cycles"] for v in agg.values())
+        n_days  = max(v["n_days"] for v in agg.values())
+        result[mode] = {
+            "avg":      total_w / total_c if total_c else 0.0,
+            "n_days":   n_days,
+            "n_cycles": total_c,
+        }
+        if mode != "Normal":
+            rescue = load_rescue_by_hour(stats_dir, mode, band, protocol)
+            if rescue:
+                r_w = sum(rescue[h] * agg[h]["n_cycles"] for h in rescue if h in agg)
+                r_c = sum(agg[h]["n_cycles"] for h in rescue if h in agg)
+                result[mode]["avg_rescue"] = r_w / r_c if r_c else 0.0
+            else:
+                result[mode]["avg_rescue"] = 0.0
+    return result
+
+
+def _pdf_title_page(pdf: PdfPages, time_range: str, gen_date: str) -> None:
+    fig = plt.figure(figsize=(11.69, 8.27), facecolor=DARK_BG)
+    kw = dict(ha="center", transform=fig.transFigure)
+    fig.text(0.5, 0.82, "SimpleFT8 — Diversity Auswertungsbericht",
+             fontsize=22, color=DARK_FG, fontweight="bold", **kw)
+    fig.text(0.5, 0.72,
+             f"Generiert: {gen_date}   ·   Messzeitraum: {time_range}",
+             fontsize=13, color="#aaaaaa", **kw)
+    fig.text(0.5, 0.55,
+             "Normal          = 1 Antenne, keine Diversity-Logik — Baseline wie WSJT-X\n"
+             "Div. Standard  = 2 Antennen, wählt die Antenne mit mehr Stationen\n"
+             "Div. DX           = 2 Antennen, wählt die Antenne mit mehr Schwachsignalen (SNR < −10 dB)\n"
+             "Rescue            = Stationen die ANT1 nicht dekodierte (≤ −24 dB), aber ANT2 schon",
+             fontsize=11, color=DARK_FG, linespacing=2.3, **kw)
+    fig.text(0.5, 0.14,
+             "Daten werden laufend erfasst — Bericht aktualisiert sich automatisch mit jeder neuen Session.\n"
+             "github.com/mikewanne/SimpleFT8  ·  DA1MHH / Mike Hammerer",
+             fontsize=9, color="#888888", style="italic", linespacing=1.8, **kw)
+    pdf.savefig(fig, facecolor=DARK_BG)
+    plt.close(fig)
+
+
+def _pdf_summary_page(pdf: PdfPages, band: str, protocol: str, summary: dict) -> None:
+    normal_avg = summary.get("Normal", {}).get("avg", 0.0)
+    mode_labels = {
+        "Normal":           "Normal (1 Antenne)",
+        "Diversity_Normal": "Diversity Standard",
+        "Diversity_Dx":     "Diversity DX",
+    }
+    row_bg = {
+        "Normal":           "#242424",
+        "Diversity_Normal": "#162040",
+        "Diversity_Dx":     "#251408",
+    }
+    col_labels = ["Modus", "Ø Stat./Zyklus", "vs Normal", "vs Normal\n+ Rescue", "Rescue\nallein", "Tage", "Zyklen"]
+    rows: list[list[str]] = []
+    row_colors: list[str] = []
+    for mode in RX_MODES:
+        if mode not in summary:
+            continue
+        s = summary[mode]
+        avg = s["avg"]
+        if mode == "Normal" or normal_avg <= 0:
+            vs_str, vsr_str, r_str = "—", "—", "—"
+        else:
+            rescue = s.get("avg_rescue", 0.0)
+            vs_str  = f"+{(avg / normal_avg - 1) * 100:.0f}%"
+            vsr_str = f"+{((avg + rescue) / normal_avg - 1) * 100:.0f}%"
+            r_str   = f"+{(rescue / normal_avg) * 100:.0f}%"
+        rows.append([mode_labels[mode], f"{avg:.1f}", vs_str, vsr_str,
+                     r_str, str(s["n_days"]), str(s["n_cycles"])])
+        row_colors.append(row_bg[mode])
+
+    if not rows:
+        return
+
+    fig = plt.figure(figsize=(11.69, 8.27), facecolor=DARK_BG)
+    fig.text(0.5, 0.92, f"Zusammenfassung — {band} {protocol}",
+             ha="center", fontsize=18, color=DARK_FG, fontweight="bold",
+             transform=fig.transFigure)
+
+    ax = fig.add_axes([0.04, 0.28, 0.92, 0.58])
+    ax.axis("off")
+    tbl = ax.table(cellText=rows, colLabels=col_labels, cellLoc="center", loc="center")
+    tbl.auto_set_font_size(False)
+    tbl.set_fontsize(11)
+    tbl.scale(1, 2.6)
+    for (r, c), cell in tbl.get_celld().items():
+        cell.set_edgecolor(DARK_GRID)
+        if r == 0:
+            cell.set_facecolor("#1a3a5c")
+            cell.set_text_props(color=DARK_FG, fontweight="bold")
+        else:
+            cell.set_facecolor(row_colors[r - 1])
+            cell.set_text_props(color=DARK_FG)
+
+    fig.text(0.5, 0.13,
+             "Ø Stat./Zyklus = Pooled Mean (gewichteter Mittelwert über alle Zyklen und Stunden)\n"
+             "Rescue = Stationen, die ANT1 nicht dekodieren konnte (≤ −24 dB), ANT2 jedoch schon\n"
+             "Mehr Messtage → stabilere Werte und engere Konfidenzintervalle",
+             ha="center", fontsize=9, color="#aaaaaa", linespacing=1.8,
+             transform=fig.transFigure)
+    pdf.savefig(fig, facecolor=DARK_BG)
+    plt.close(fig)
+
+
+def _pdf_embed_png(pdf: PdfPages, png_path: Path) -> None:
+    if not png_path.exists():
+        return
+    img = plt.imread(str(png_path))
+    fig = plt.figure(figsize=(11.69, 8.27), facecolor=DARK_BG)
+    ax = fig.add_axes([0.01, 0.01, 0.98, 0.98])
+    ax.imshow(img)
+    ax.axis("off")
+    pdf.savefig(fig, facecolor=DARK_BG)
+    plt.close(fig)
+
+
+def create_pdf_report(combos: set[tuple[str, str]]) -> None:
+    pdf_path   = OUTPUT_DIR / "SimpleFT8_Bericht.pdf"
+    time_range = _extract_time_range(STATS_DIR)
+    gen_date   = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+    with PdfPages(str(pdf_path)) as pdf:
+        _pdf_title_page(pdf, time_range, gen_date)
+        for band, protocol in sorted(combos):
+            summary = _combo_summary(STATS_DIR, band, protocol)
+            if not summary:
+                continue
+            _pdf_summary_page(pdf, band, protocol, summary)
+            for diag_type in ("stationen", "diversity"):
+                _pdf_embed_png(pdf, OUTPUT_DIR / f"{diag_type}_{band}_{protocol}.png")
+        d = pdf.infodict()
+        d["Title"]   = "SimpleFT8 Diversity Auswertungsbericht"
+        d["Author"]  = "DA1MHH / Mike Hammerer"
+        d["Subject"] = "Diversity Antenna Analysis"
+
+    print(f"  ✓ PDF Bericht: {pdf_path.name}")
+
+
 # ── Haupt ─────────────────────────────────────────────────────────────────────
 
 def discover_bands_protocols() -> set[tuple[str, str]]:
@@ -540,7 +707,9 @@ def main():
         print(f"\n=== {band} / {protocol} ===")
         create_stations_diagram(band, protocol)
         create_diversity_diagram(band, protocol)
-    print("\nFertig. Diagramme in:", OUTPUT_DIR)
+    print("\n=== PDF Bericht ===")
+    create_pdf_report(combos)
+    print("\nFertig. Ausgabe in:", OUTPUT_DIR)
 
 
 if __name__ == "__main__":

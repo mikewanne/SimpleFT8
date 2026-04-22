@@ -73,14 +73,24 @@ Controlled test on 40m, same hardware (FLEX-8400M), 2 minutes apart:
 > Generated automatically from live session data via `scripts/generate_plots.py`.
 > X-axis = UTC hour of day, averaged across all measurement days. Data grows with every session.
 
+**Live measurement results — 40m FT8, 2 measurement days:**
+
+| Mode | vs Normal (without rescue) | vs Normal (incl. rescue) | Rescue alone |
+|------|:---:|:---:|:---:|
+| Diversity Standard | **+53%** | **+82%** | +29% |
+| Diversity DX | **+27%** | **+45%** | +18% |
+
+*Rescue = stations that ANT1 could not decode (≤ −24 dB SNR) but ANT2 saved. 40m, 2 measurement days, trend clearly visible.*
+
+![Diversity Comparison 40m FT8](auswertung/diversity_40m_FT8.png)
+
 | Diagram | Description |
 |---------|-------------|
 | [📊 Diagram 1 — Stations 40m FT8](auswertung/stationen_40m_FT8.png) | Station count over 24h UTC — Normal vs Diversity Normal vs Diversity DX. Line = daily mean, band = day-to-day spread. |
-| [📊 Diagram 2 — Diversity Analysis 40m FT8](auswertung/diversity_40m_FT8.png) | ANT2 wins per cycle (green) vs total stations (orange) vs Rescue-Events (red) — stations that ANT1 couldn't decode but ANT2 saved. |
-| [📊 Diagram 3 — Stations 20m FT8](auswertung/stationen_20m_FT8.png) | Station count over 24h UTC on 20m — Normal vs Diversity modes. |
-| [📊 Diagram 4 — Diversity Analysis 20m FT8](auswertung/diversity_20m_FT8.png) | ANT2 Diversity analysis on 20m FT8 — wins, rescues, hourly breakdown. |
+| [📊 Diagram 2 — Diversity Analysis 40m FT8](auswertung/diversity_40m_FT8.png) | Station count per cycle: Normal (grey), Diversity Standard (blue), Diversity DX (orange) + green rescue caps (+N) = stations ANT1 couldn't decode but ANT2 saved. |
+| [📊 Detailed PDF Report](auswertung/SimpleFT8_Bericht.pdf) | Full analysis report with summary table, all diagrams, and methodology notes. Auto-updated with each session. |
 
-*⚠ Data collection in progress — diagrams update with each new session. More days = wider confidence bands.*
+*⚠ Data collection in progress — diagrams and PDF update with each new session. More days = wider confidence bands.*
 
 ---
 
@@ -230,14 +240,24 @@ MIT License (c) 2026 DA1MHH (Mike Hammerer)
 > Automatisch generiert aus Live-Sitzungsdaten via `scripts/generate_plots.py`.
 > X-Achse = UTC-Stunde des Tages, gemittelt über alle Messtage. Daten wachsen mit jeder Session.
 
+**Live-Messergebnisse — 40m FT8, 2 Messtage:**
+
+| Modus | vs Normal (ohne Rescue) | vs Normal (inkl. Rescue) | Rescue allein |
+|-------|:---:|:---:|:---:|
+| Diversity Standard | **+53%** | **+82%** | +29% |
+| Diversity DX | **+27%** | **+45%** | +18% |
+
+*Rescue = Stationen, die ANT1 nicht decodieren konnte (≤ −24 dB SNR), aber ANT2 rettete. 40m, 2 Messtage, Trend klar erkennbar.*
+
+![Diversity Vergleich 40m FT8](auswertung/diversity_40m_FT8.png)
+
 | Diagramm | Beschreibung |
 |----------|-------------|
 | [📊 Diagramm 1 — Stationen 40m FT8](auswertung/stationen_40m_FT8.png) | Stationszahl über 24h UTC — Normal vs Diversity Normal vs Diversity DX. Linie = Tagesmittel, Band = Tages-Schwankung. |
-| [📊 Diagramm 2 — Diversity Analyse 40m FT8](auswertung/diversity_40m_FT8.png) | ANT2-Wins/Zyklus (grün) vs Stationen gesamt (orange) vs Rescue-Events (rot) — Stationen die ANT1 nicht decodieren konnte, aber ANT2 rettete. |
-| [📊 Diagramm 3 — Stationen 20m FT8](auswertung/stationen_20m_FT8.png) | Stationszahl über 24h UTC auf 20m — Normal vs Diversity-Modi. |
-| [📊 Diagramm 4 — Diversity Analyse 20m FT8](auswertung/diversity_20m_FT8.png) | ANT2 Diversity-Auswertung auf 20m FT8 — Wins, Rescues, stündliche Aufschlüsselung. |
+| [📊 Diagramm 2 — Diversity Analyse 40m FT8](auswertung/diversity_40m_FT8.png) | Stationen/Zyklus: Normal (grau), Diversity Standard (blau), Diversity DX (orange) + grüne Rescue-Kappen (+N) = Stationen die ANT1 nicht decodieren konnte, aber ANT2 rettete. |
+| [📊 Ausführlicher PDF-Bericht](auswertung/SimpleFT8_Bericht.pdf) | Vollständiger Auswertungsbericht mit Zusammenfassungstabelle, allen Diagrammen und Methodik-Hinweisen. Wird automatisch mit jeder Session aktualisiert. |
 
-*⚠ Datensammlung in Bearbeitung — Diagramme werden mit jeder Session aktueller. Mehr Tage = breiteres Konfidenzband.*
+*⚠ Datensammlung in Bearbeitung — Diagramme und PDF werden mit jeder Session aktueller. Mehr Tage = breiteres Konfidenzband.*
 
 ---
 

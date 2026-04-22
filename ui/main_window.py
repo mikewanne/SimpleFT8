@@ -76,11 +76,16 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         import time as _time
         from core.station_stats import StationStatsLogger
         from core.antenna_pref import AntennaPreferenceStore
-        from core.diversity_cache import DiversityCache
+        from core.preset_store import PresetStore
         self._stats_logger = StationStatsLogger()
         self._stats_warmup_cycles = 6
         self._antenna_prefs = AntennaPreferenceStore()
-        self._diversity_cache = DiversityCache(self.settings)
+        # Getrennte Preset-Dateien für Standard und DX (2h-Frist pro Band+FTMode)
+        self._standard_store = PresetStore("presets_standard.json")
+        self._dx_store = PresetStore("presets_dx.json")
+        # Einmalige Migration aus altem config.json-Format
+        self._standard_store.migrate_from_settings(self.settings._data, mode="standard")
+        self._dx_store.migrate_from_settings(self.settings._data, mode="dx")
 
         # QSO-Verzeichnis (Worked-Before)
         from log.qso_log import QSOLog
@@ -221,8 +226,8 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
             country_filter=self.settings.get("country_filter", []),
         )
         self.qso_panel = QSOPanel()
-        # Logbuch mit ADIF-Dateien laden
-        self.qso_panel.logbook.load_adif(Path.cwd())
+        # Logbuch mit ADIF-Dateien laden (AdifWriter schreibt in adif/ Unterordner)
+        self.qso_panel.logbook.load_adif(Path.cwd() / "adif")
         self.qso_panel.upload_qrz.connect(self._on_qrz_upload)
         self.qso_panel.logbook.qso_clicked.connect(self._on_logbook_qso_clicked)
         # Tab-Wechsel: Detail-Overlay zuruecksetzen wenn User vom Logbuch weg navigiert
