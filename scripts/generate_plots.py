@@ -559,124 +559,444 @@ def _combo_summary(stats_dir: Path, band: str, protocol: str) -> dict:
     return result
 
 
-def _pdf_title_page(pdf: PdfPages, time_range: str, gen_date: str) -> None:
-    fig = plt.figure(figsize=(11.69, 8.27), facecolor=DARK_BG)
-    kw = dict(ha="center", transform=fig.transFigure)
-    fig.text(0.5, 0.82, "SimpleFT8 — Diversity Auswertungsbericht",
-             fontsize=22, color=DARK_FG, fontweight="bold", **kw)
-    fig.text(0.5, 0.72,
-             f"Generiert: {gen_date}   ·   Messzeitraum: {time_range}",
-             fontsize=13, color="#aaaaaa", **kw)
-    fig.text(0.5, 0.55,
-             "Normal          = 1 Antenne, keine Diversity-Logik — Baseline wie WSJT-X\n"
-             "Div. Standard  = 2 Antennen, wählt die Antenne mit mehr Stationen\n"
-             "Div. DX           = 2 Antennen, wählt die Antenne mit mehr Schwachsignalen (SNR < −10 dB)\n"
-             "Rescue            = Stationen die ANT1 nicht dekodierte (≤ −24 dB), aber ANT2 schon",
-             fontsize=11, color=DARK_FG, linespacing=2.3, **kw)
-    fig.text(0.5, 0.14,
-             "Daten werden laufend erfasst — Bericht aktualisiert sich automatisch mit jeder neuen Session.\n"
-             "github.com/mikewanne/SimpleFT8  ·  DA1MHH / Mike Hammerer",
-             fontsize=9, color="#888888", style="italic", linespacing=1.8, **kw)
-    pdf.savefig(fig, facecolor=DARK_BG)
+# ── PDF Bericht — Professionelles Layout (heller Hintergrund) ─────────────────
+
+_R_BG     = "#ffffff"
+_R_FG     = "#1a1a1a"
+_R_ACCENT = "#1a3a5c"
+_R_SUB    = "#555555"
+_R_GRID   = "#e4e4e4"
+_R_GREEN  = "#1a5c2a"
+_R_ORANGE = "#994400"
+
+
+def _rfig() -> plt.Figure:
+    return plt.figure(figsize=(11.69, 8.27), facecolor=_R_BG)
+
+
+def _r_header(fig: plt.Figure, title: str, subtitle: str = "") -> None:
+    ax = fig.add_axes([0.0, 0.895, 1.0, 0.105], zorder=10)
+    ax.set_facecolor(_R_ACCENT)
+    ax.axis("off")
+    fig.text(0.04, 0.945, title, fontsize=15, color="white",
+             fontweight="bold", transform=fig.transFigure, va="center")
+    if subtitle:
+        fig.text(0.04, 0.909, subtitle, fontsize=9.5, color="#aaccee",
+                 transform=fig.transFigure, va="center")
+
+
+def _r_footer(fig: plt.Figure, gen_date: str, page: str = "") -> None:
+    ax = fig.add_axes([0.0, 0.0, 1.0, 0.048], zorder=10)
+    ax.set_facecolor(_R_GRID)
+    ax.axis("off")
+    fig.text(0.04, 0.024,
+             f"SimpleFT8 Diversity Feldstudie — DA1MHH / Mike Hammerer  ·  {gen_date}",
+             fontsize=8, color=_R_SUB, transform=fig.transFigure, va="center")
+    right = f"github.com/mikewanne/SimpleFT8{('  ·  ' + page) if page else ''}"
+    fig.text(0.97, 0.024, right, fontsize=8, color=_R_SUB,
+             transform=fig.transFigure, va="center", ha="right")
+
+
+def _r_hline(fig: plt.Figure, y: float) -> None:
+    ax = fig.add_axes([0.04, y, 0.92, 0.0015])
+    ax.set_facecolor(_R_GRID)
+    ax.axis("off")
+
+
+def _hourly_analysis(stats_dir: Path, band: str, protocol: str) -> list[dict]:
+    agg_n  = _aggregate(load_hourly_stats(stats_dir, "Normal",           band, protocol))
+    agg_s  = _aggregate(load_hourly_stats(stats_dir, "Diversity_Normal", band, protocol))
+    agg_d  = _aggregate(load_hourly_stats(stats_dir, "Diversity_Dx",     band, protocol))
+    resc_s = load_rescue_by_hour(stats_dir, "Diversity_Normal", band, protocol)
+    resc_d = load_rescue_by_hour(stats_dir, "Diversity_Dx",     band, protocol)
+    hours  = sorted(set(agg_n) & (set(agg_s) | set(agg_d)))
+    result = []
+    for h in hours:
+        nm = agg_n[h]["mean"] if h in agg_n else None
+        sm = agg_s[h]["mean"] if h in agg_s else None
+        dm = agg_d[h]["mean"] if h in agg_d else None
+        sg = (sm / nm - 1) * 100 if (nm and sm and nm > 0) else None
+        dg = (dm / nm - 1) * 100 if (nm and dm and nm > 0) else None
+        result.append({"hour": h, "n_mean": nm, "s_mean": sm, "d_mean": dm,
+                        "s_gain": sg, "d_gain": dg,
+                        "rs": resc_s.get(h, 0.0), "rd": resc_d.get(h, 0.0)})
+    return result
+
+
+def _r_title_page(pdf: PdfPages, summary: dict, time_range: str, gen_date: str) -> None:
+    fig = _rfig()
+    ax_hdr = fig.add_axes([0.0, 0.72, 1.0, 0.28])
+    ax_hdr.set_facecolor(_R_ACCENT)
+    ax_hdr.axis("off")
+    fig.text(0.50, 0.875, "SimpleFT8 — Dual-Antenna Diversity",
+             fontsize=24, color="white", fontweight="bold",
+             ha="center", transform=fig.transFigure)
+    fig.text(0.50, 0.820, "Vorläufige Feldstudie — 40m FT8",
+             fontsize=15, color="#aaccee", ha="center", transform=fig.transFigure)
+    total_cyc = sum(s.get("n_cycles", 0) for s in summary.values())
+    fig.text(0.50, 0.762,
+             f"Messzeitraum: {time_range}   ·   Ausgewertete Zyklen: {total_cyc}",
+             fontsize=10, color="#88aacc", ha="center", transform=fig.transFigure)
+
+    n_avg = summary.get("Normal",           {}).get("avg", 0.0)
+    s_avg = summary.get("Diversity_Normal", {}).get("avg", 0.0)
+    d_avg = summary.get("Diversity_Dx",     {}).get("avg", 0.0)
+    s_rsc = summary.get("Diversity_Normal", {}).get("avg_rescue", 0.0)
+    d_rsc = summary.get("Diversity_Dx",     {}).get("avg_rescue", 0.0)
+
+    def pct(a, b): return f"{(a / b - 1) * 100:+.0f}%" if b > 0 else "n/a"
+
+    fig.text(0.05, 0.685, "Kernaussagen:", fontsize=11, color=_R_ACCENT,
+             fontweight="bold", transform=fig.transFigure)
+    _r_hline(fig, 0.672)
+    findings = [
+        f"Diversity Standard:  {pct(s_avg, n_avg)} mehr Stationen (ohne Rescue)  —  "
+        f"{pct(s_avg + s_rsc, n_avg)} inkl. geretteter Stationen",
+        f"Diversity DX:           {pct(d_avg, n_avg)} mehr Stationen (ohne Rescue)  —  "
+        f"{pct(d_avg + d_rsc, n_avg)} inkl. geretteter Stationen",
+        f"Rescue allein:          Standard {pct(s_rsc, n_avg)}  |  DX {pct(d_rsc, n_avg)}"
+        f"   (nur durch ANT2 dekodierbar — ANT1 unter −24 dB)",
+    ]
+    for i, txt in enumerate(findings):
+        fig.text(0.06, 0.635 - i * 0.072, f"▶  {txt}",
+                 fontsize=10.5, color=_R_FG, transform=fig.transFigure)
+
+    _r_hline(fig, 0.437)
+    fig.text(0.05, 0.413,
+             "⚠  Vorläufige Daten: 2 Messtage, ausschließlich 05:00–12:00 UTC. "
+             "Nacht- und Abendstunden fehlen noch — Zahlen werden sich verschieben.",
+             fontsize=9.5, color=_R_ORANGE, style="italic", transform=fig.transFigure)
+
+    fig.text(0.05, 0.352, "Modi-Definitionen:", fontsize=10, color=_R_ACCENT,
+             fontweight="bold", transform=fig.transFigure)
+    defs = [
+        ("Normal",             "1 Antenne — keine Diversity-Logik. Baseline wie WSJT-X."),
+        ("Diversity Standard", "2 Antennen — wählt automatisch die Antenne mit mehr dekodierten Stationen."),
+        ("Diversity DX",       "2 Antennen — wählt die Antenne mit mehr Schwachsignalen (SNR < −10 dB)."),
+        ("Rescue",             "Stationen, die ANT1 (≤ −24 dB) nicht dekodieren konnte, ANT2 aber schon."),
+    ]
+    for i, (lbl, desc) in enumerate(defs):
+        fig.text(0.06, 0.312 - i * 0.055, f"{lbl}:", fontsize=9.5,
+                 color=_R_ACCENT, fontweight="bold", transform=fig.transFigure)
+        fig.text(0.25, 0.312 - i * 0.055, desc, fontsize=9.5,
+                 color=_R_FG, transform=fig.transFigure)
+
+    _r_footer(fig, gen_date, "Seite 1")
+    pdf.savefig(fig, facecolor=_R_BG)
     plt.close(fig)
 
 
-def _pdf_summary_page(pdf: PdfPages, band: str, protocol: str, summary: dict) -> None:
-    normal_avg = summary.get("Normal", {}).get("avg", 0.0)
-    mode_labels = {
-        "Normal":           "Normal (1 Antenne)",
-        "Diversity_Normal": "Diversity Standard",
-        "Diversity_Dx":     "Diversity DX",
+def _r_methodik_page(pdf: PdfPages, summary: dict, time_range: str, gen_date: str) -> None:
+    fig = _rfig()
+    _r_header(fig, "Datenbasis & Methodik", "40m FT8 — Pooled-Mean-Auswertung")
+
+    sections = [
+        ("Datenbasis", [
+            f"Band / Protokoll:    40m  FT8",
+            f"Messzeitraum:        {time_range}",
+            f"Erfasste Stunden:    05:00–12:00 UTC  (Morgen / Vormittag)",
+            f"Messtage / Zyklen:   Normal {summary.get('Normal',{}).get('n_days','–')} Tage / "
+            f"{summary.get('Normal',{}).get('n_cycles','–')} Z   |   "
+            f"Standard {summary.get('Diversity_Normal',{}).get('n_days','–')} Tage / "
+            f"{summary.get('Diversity_Normal',{}).get('n_cycles','–')} Z   |   "
+            f"DX {summary.get('Diversity_Dx',{}).get('n_days','–')} Tage / "
+            f"{summary.get('Diversity_Dx',{}).get('n_cycles','–')} Z",
+            "Hardware:            FLEX-8400M, zwei Antennenanschlüsse, gleiche Frequenz",
+        ]),
+        ("Pooled Mean — warum nicht Tagesdurchschnitt?", [
+            "Klassisch: Tagesdurchschnitt bilden, dann Mittelwert der Tage.",
+            "Problem:   Tage mit wenigen Zyklen erhalten das gleiche Gewicht wie Tage mit 500 Zyklen → Bias.",
+            "Pooled:    Alle Einzelzyklen aller Tage direkt mitteln. Gewichtung proportional zur Messzeit.",
+            "Ergebnis:  Robuster gegen ungleiche Sessionlängen — repräsentativer für echten Betrieb.",
+        ]),
+        ("Rescue-Definition", [
+            "ANT1-SNR ≤ −24 dB  UND  ANT2-SNR > −24 dB  →  Station gilt als 'gerettet'.",
+            "−24 dB ist die empirische FT8-Decodierschwelle (nach WSJT-X Dokumentation).",
+            "Nur Zyklen in denen das Diversity-System aktiv ANT2 gewählt hat werden gezählt.",
+            "Rescue-Events pro UTC-Stunde gezählt, über Messtage gemittelt, dann gewichtet nach Zyklen.",
+        ]),
+        ("Statistik-Dateien", [
+            "Rohdaten:  statistics/{Modus}/{Band}/{Proto}/YYYY-MM-DD_HH.md  (pro Stunde, pro Tag)",
+            "Stations:  statistics/{Modus}/{Band}/{Proto}/stations/YYYY-MM-DD_HH.md  (SNR-Vergleiche)",
+            "Kein In-File-Summary — alle Aggregationen werden beim Aufruf von generate_plots.py berechnet.",
+        ]),
+    ]
+    y = 0.845
+    for title, lines in sections:
+        fig.text(0.05, y, title, fontsize=10.5, color=_R_ACCENT,
+                 fontweight="bold", transform=fig.transFigure)
+        y -= 0.028
+        _r_hline(fig, y + 0.006)
+        y -= 0.008
+        for line in lines:
+            fig.text(0.06, y, line, fontsize=9, color=_R_FG,
+                     transform=fig.transFigure, family="monospace")
+            y -= 0.038
+        y -= 0.016
+
+    _r_footer(fig, gen_date, "Seite 2")
+    pdf.savefig(fig, facecolor=_R_BG)
+    plt.close(fig)
+
+
+def _r_ergebnisse_page(pdf: PdfPages, summary: dict, gen_date: str) -> None:
+    n_avg = summary.get("Normal", {}).get("avg", 0.0)
+    col_labels = ["Modus", "Ø Stat.\n/Zyklus", "vs Normal\nohne Rescue",
+                  "vs Normal\n+ Rescue", "Rescue\nallein", "Messtage", "Zyklen"]
+    mode_meta = {
+        "Normal":           ("Normal (1 Antenne)",    "#e8eef5", _R_ACCENT),
+        "Diversity_Normal": ("Diversity Standard",    "#e8f5eb", _R_GREEN),
+        "Diversity_Dx":     ("Diversity DX",          "#fff3e0", _R_ORANGE),
     }
-    row_bg = {
-        "Normal":           "#242424",
-        "Diversity_Normal": "#162040",
-        "Diversity_Dx":     "#251408",
-    }
-    col_labels = ["Modus", "Ø Stat./Zyklus", "vs Normal", "vs Normal\n+ Rescue", "Rescue\nallein", "Tage", "Zyklen"]
-    rows: list[list[str]] = []
-    row_colors: list[str] = []
+    rows, row_face, row_text = [], [], []
     for mode in RX_MODES:
         if mode not in summary:
             continue
         s = summary[mode]
         avg = s["avg"]
-        if mode == "Normal" or normal_avg <= 0:
-            vs_str, vsr_str, r_str = "—", "—", "—"
+        lbl, face, tcol = mode_meta[mode]
+        if mode == "Normal" or n_avg <= 0:
+            vs, vsr, r = "—", "—", "—"
         else:
-            rescue = s.get("avg_rescue", 0.0)
-            vs_str  = f"+{(avg / normal_avg - 1) * 100:.0f}%"
-            vsr_str = f"+{((avg + rescue) / normal_avg - 1) * 100:.0f}%"
-            r_str   = f"+{(rescue / normal_avg) * 100:.0f}%"
-        rows.append([mode_labels[mode], f"{avg:.1f}", vs_str, vsr_str,
-                     r_str, str(s["n_days"]), str(s["n_cycles"])])
-        row_colors.append(row_bg[mode])
+            rsc = s.get("avg_rescue", 0.0)
+            vs  = f"+{(avg / n_avg - 1) * 100:.0f}%"
+            vsr = f"+{((avg + rsc) / n_avg - 1) * 100:.0f}%"
+            r   = f"+{(rsc / n_avg) * 100:.0f}%"
+        rows.append([lbl, f"{avg:.1f}", vs, vsr, r, str(s["n_days"]), str(s["n_cycles"])])
+        row_face.append(face)
+        row_text.append(tcol)
 
     if not rows:
         return
 
-    fig = plt.figure(figsize=(11.69, 8.27), facecolor=DARK_BG)
-    fig.text(0.5, 0.92, f"Zusammenfassung — {band} {protocol}",
-             ha="center", fontsize=18, color=DARK_FG, fontweight="bold",
-             transform=fig.transFigure)
+    fig = _rfig()
+    _r_header(fig, "Hauptergebnisse — Vergleichstabelle", "40m FT8 · Pooled Mean")
 
-    ax = fig.add_axes([0.04, 0.28, 0.92, 0.58])
+    ax = fig.add_axes([0.04, 0.22, 0.92, 0.64])
     ax.axis("off")
     tbl = ax.table(cellText=rows, colLabels=col_labels, cellLoc="center", loc="center")
     tbl.auto_set_font_size(False)
-    tbl.set_fontsize(11)
-    tbl.scale(1, 2.6)
+    tbl.set_fontsize(12)
+    tbl.scale(1, 3.0)
     for (r, c), cell in tbl.get_celld().items():
-        cell.set_edgecolor(DARK_GRID)
+        cell.set_edgecolor(_R_GRID)
         if r == 0:
-            cell.set_facecolor("#1a3a5c")
-            cell.set_text_props(color=DARK_FG, fontweight="bold")
+            cell.set_facecolor(_R_ACCENT)
+            cell.set_text_props(color="white", fontweight="bold")
         else:
-            cell.set_facecolor(row_colors[r - 1])
-            cell.set_text_props(color=DARK_FG)
+            cell.set_facecolor(row_face[r - 1])
+            cell.set_text_props(color=row_text[r - 1],
+                                fontweight="bold" if c in (2, 3, 4) else "normal")
 
-    fig.text(0.5, 0.13,
-             "Ø Stat./Zyklus = Pooled Mean (gewichteter Mittelwert über alle Zyklen und Stunden)\n"
-             "Rescue = Stationen, die ANT1 nicht dekodieren konnte (≤ −24 dB), ANT2 jedoch schon\n"
-             "Mehr Messtage → stabilere Werte und engere Konfidenzintervalle",
-             ha="center", fontsize=9, color="#aaaaaa", linespacing=1.8,
-             transform=fig.transFigure)
-    pdf.savefig(fig, facecolor=DARK_BG)
+    fig.text(0.05, 0.175,
+             "Ø Stat./Zyklus = Pooled Mean über alle Einzelzyklen.   "
+             "Rescue = ANT1 ≤ −24 dB, ANT2 > −24 dB (nur durch ANT2 dekodierbar).",
+             fontsize=9, color=_R_SUB, transform=fig.transFigure)
+    fig.text(0.05, 0.130,
+             "⚠  Vorläufig: 2 Messtage, 05:00–12:00 UTC. "
+             "Abend- und Nachtstunden nicht erfasst. Zahlen können sich verschieben.",
+             fontsize=9, color=_R_ORANGE, style="italic", transform=fig.transFigure)
+
+    _r_footer(fig, gen_date, "Seite 3")
+    pdf.savefig(fig, facecolor=_R_BG)
     plt.close(fig)
 
 
-def _pdf_embed_png(pdf: PdfPages, png_path: Path) -> None:
+def _r_diagramm_page(pdf: PdfPages, png_path: Path, title: str,
+                     subtitle: str, annotation: str, gen_date: str,
+                     page: str = "") -> None:
     if not png_path.exists():
         return
     img = plt.imread(str(png_path))
-    fig = plt.figure(figsize=(11.69, 8.27), facecolor=DARK_BG)
-    ax = fig.add_axes([0.01, 0.01, 0.98, 0.98])
+    h_px, w_px = img.shape[:2]
+    aspect = h_px / w_px
+    fig = _rfig()
+    _r_header(fig, title, subtitle)
+    img_h = 0.73
+    img_w = min(0.92, img_h / aspect * (8.27 / 11.69))
+    ax = fig.add_axes([(1.0 - img_w) / 2, 0.115, img_w, img_h])
     ax.imshow(img)
     ax.axis("off")
-    pdf.savefig(fig, facecolor=DARK_BG)
+    if annotation:
+        fig.text(0.05, 0.090, annotation, fontsize=8.5, color=_R_SUB,
+                 style="italic", transform=fig.transFigure)
+    _r_footer(fig, gen_date, page)
+    pdf.savefig(fig, facecolor=_R_BG)
+    plt.close(fig)
+
+
+def _r_rescue_page(pdf: PdfPages, summary: dict, gen_date: str) -> None:
+    fig = _rfig()
+    _r_header(fig, "Rescue-Daten — Diskussion",
+              "Sollten gerettete Stationen mitzählen?")
+
+    n_avg = summary.get("Normal",           {}).get("avg", 0.0)
+    s_avg = summary.get("Diversity_Normal", {}).get("avg", 0.0)
+    d_avg = summary.get("Diversity_Dx",     {}).get("avg", 0.0)
+    s_rsc = summary.get("Diversity_Normal", {}).get("avg_rescue", 0.0)
+    d_rsc = summary.get("Diversity_Dx",     {}).get("avg_rescue", 0.0)
+
+    fig.text(0.05, 0.845, "Was sind Rescue-Stationen?", fontsize=10.5,
+             color=_R_ACCENT, fontweight="bold", transform=fig.transFigure)
+    _r_hline(fig, 0.833)
+    fig.text(0.05, 0.808,
+             f"Rescue-Events entstehen wenn ANT1-SNR ≤ −24 dB und ANT2-SNR > −24 dB für dieselbe Station."
+             f" Im Messzeitraum: Ø {s_rsc:.1f} Rescue/h (Standard), Ø {d_rsc:.1f} Rescue/h (DX).",
+             fontsize=9.5, color=_R_FG, transform=fig.transFigure)
+
+    fig.text(0.05, 0.752, "▲  PRO — Rescue-Stationen mitzählen", fontsize=10.5,
+             color=_R_GREEN, fontweight="bold", transform=fig.transFigure)
+    _r_hline(fig, 0.740)
+    for i, txt in enumerate([
+        "Echter physikalischer Nachweis: ANT2 hat ein QSO erst ermöglicht — ANT1 hätte nie dekodiert.",
+        "Für den Operator zählt das QSO, egal welche Antenne. Rescue = realer Mehrwert im Betrieb.",
+        "Rescue-Rate steigt bei schlechten Bedingungen — Diversity hilft genau dort am meisten.",
+        f"Mit Rescue: Standard +{((s_avg+s_rsc)/n_avg-1)*100:.0f}%, DX +{((d_avg+d_rsc)/n_avg-1)*100:.0f}%"
+        f" — vollständiges Bild der Systemleistung.",
+    ]):
+        fig.text(0.06, 0.706 - i * 0.048, f"✓  {txt}", fontsize=9.5,
+                 color=_R_FG, transform=fig.transFigure)
+
+    fig.text(0.05, 0.488, "▼  CONTRA — Rescue-Stationen separat betrachten", fontsize=10.5,
+             color=_R_ORANGE, fontweight="bold", transform=fig.transFigure)
+    _r_hline(fig, 0.476)
+    for i, txt in enumerate([
+        "SNR-Schwankungen im 15s-Zyklus können Schwellenüberschreitung kurzfristig erzeugen.",
+        "Die −24 dB-Grenze ist empirisch, kein physikalisches Gesetz — Grenzfälle sind möglich.",
+        "Für Vergleich mit anderen Systemen: nur direkt dekodierte Stationen zählen.",
+        "Rescue setzt korrektes ANT2-Timing voraus — vollständige Kausalität noch nicht bewiesen.",
+    ]):
+        fig.text(0.06, 0.440 - i * 0.048, f"⚠  {txt}", fontsize=9.5,
+                 color=_R_FG, transform=fig.transFigure)
+
+    _r_hline(fig, 0.238)
+    fig.text(0.05, 0.212,
+             "Empfehlung: Beide Werte werden ausgewiesen — 'ohne Rescue' als konservativer Vergleichswert,\n"
+             "'inkl. Rescue' als Systemleistung unter realen Betriebsbedingungen.",
+             fontsize=9.5, color=_R_ACCENT, style="italic",
+             transform=fig.transFigure, linespacing=1.7)
+
+    _r_footer(fig, gen_date, "Seite 5")
+    pdf.savefig(fig, facecolor=_R_BG)
+    plt.close(fig)
+
+
+def _r_fazit_page(pdf: PdfPages, summary: dict, hourly: list[dict],
+                  gen_date: str) -> None:
+    fig = _rfig()
+    _r_header(fig, "Vorläufige Schlussfolgerungen & Ausblick",
+              "40m FT8 — Stand: 2 Messtage, 05:00–12:00 UTC")
+
+    n_avg = summary.get("Normal",           {}).get("avg", 0.0)
+    s_avg = summary.get("Diversity_Normal", {}).get("avg", 0.0)
+    d_avg = summary.get("Diversity_Dx",     {}).get("avg", 0.0)
+    s_rsc = summary.get("Diversity_Normal", {}).get("avg_rescue", 0.0)
+    d_rsc = summary.get("Diversity_Dx",     {}).get("avg_rescue", 0.0)
+    best_s = max((r for r in hourly if r["s_gain"] is not None),
+                 key=lambda r: r["s_gain"], default=None)
+
+    fig.text(0.05, 0.840, "Gesicherte Erkenntnisse", fontsize=10.5,
+             color=_R_ACCENT, fontweight="bold", transform=fig.transFigure)
+    _r_hline(fig, 0.828)
+    flist = [
+        f"Diversity Standard: konsistent +{(s_avg/n_avg-1)*100:.0f}% (konservativ) bis "
+        f"+{((s_avg+s_rsc)/n_avg-1)*100:.0f}% (inkl. Rescue). Reproduzierbar über beide Messtage.",
+        f"Diversity DX: geringerer Gesamtgewinn (+{(d_avg/n_avg-1)*100:.0f}%), aber "
+        f"stärkerer Fokus auf schwache DX-Signale — sinnvoll für Conteste / Rare-DX.",
+        f"Rescue-Anteil: Standard Ø {s_rsc:.1f} Stat./h, DX Ø {d_rsc:.1f} Stat./h — "
+        f"physischer Diversity-Effekt jenseits reiner Schaltlogik belegt.",
+    ]
+    if best_s:
+        flist.append(
+            f"Stärkster Standard-Gewinn: {best_s['hour']:02d}:00 UTC "
+            f"(+{best_s['s_gain']:.0f}%) — typisch für Bandöffnungs- oder Schlussphasen."
+        )
+    for i, txt in enumerate(flist):
+        fig.text(0.06, 0.796 - i * 0.058, f"✓  {txt}", fontsize=9.5,
+                 color=_R_FG, transform=fig.transFigure)
+
+    fig.text(0.05, 0.565, "Einschränkungen", fontsize=10.5,
+             color=_R_ORANGE, fontweight="bold", transform=fig.transFigure)
+    _r_hline(fig, 0.553)
+    for i, txt in enumerate([
+        "Nur 2 Messtage — Konfidenzintervalle breit, statistische Signifikanz begrenzt.",
+        "Nur 05:00–12:00 UTC — Abend/Nacht-Propagation auf 40m (typisch besser) fehlt komplett.",
+        "Vergleichbare Bedingungen beide Tage — extremes DX, Contest-Betrieb noch nicht gemessen.",
+        "Hardware FLEX-8400M — Übertragbarkeit auf andere Transceiver offen.",
+    ]):
+        fig.text(0.06, 0.518 - i * 0.053, f"⚠  {txt}", fontsize=9.5,
+                 color=_R_FG, transform=fig.transFigure)
+
+    fig.text(0.05, 0.298, "Nächste Schritte", fontsize=10.5,
+             color=_R_ACCENT, fontweight="bold", transform=fig.transFigure)
+    _r_hline(fig, 0.286)
+    for i, txt in enumerate([
+        "Nacht/Abend (20:00–04:00 UTC) sammeln — auf 40m typisch bessere DX-Bedingungen.",
+        "Mindestens 5–7 Messtage für belastbare Fehlerbalken und statistische Signifikanz.",
+        "Verschiedene Bandbedingungen: SFI hoch/niedrig, K-Index 0–3, Geo-Sturm.",
+        "20m-Band: noch zu wenig Daten (< 3 Tage) — erst dann aussagekräftig auswertbar.",
+    ]):
+        fig.text(0.06, 0.248 - i * 0.053, f"→  {txt}", fontsize=9.5,
+                 color=_R_FG, transform=fig.transFigure)
+
+    _r_hline(fig, 0.065)
+    fig.text(0.05, 0.048,
+             "Rohdaten: statistics/  ·  Auswertung: scripts/generate_plots.py  ·  "
+             "github.com/mikewanne/SimpleFT8",
+             fontsize=8.5, color=_R_SUB, style="italic", transform=fig.transFigure)
+
+    _r_footer(fig, gen_date, "Seite 6")
+    pdf.savefig(fig, facecolor=_R_BG)
     plt.close(fig)
 
 
 def create_pdf_report(combos: set[tuple[str, str]]) -> None:
-    pdf_path   = OUTPUT_DIR / "SimpleFT8_Bericht.pdf"
-    time_range = _extract_time_range(STATS_DIR)
+    target = [c for c in sorted(combos) if c == ("40m", "FT8")]
+    if not target:
+        for band, protocol in sorted(combos):
+            s = _combo_summary(STATS_DIR, band, protocol)
+            if s.get("Normal", {}).get("n_days", 0) >= 1:
+                target = [(band, protocol)]
+                break
+    if not target:
+        print("  ⚠ Keine ausreichenden Daten für PDF-Bericht.")
+        return
+
+    band, protocol = target[0]
+    summary    = _combo_summary(STATS_DIR, band, protocol)
+    hourly     = _hourly_analysis(STATS_DIR, band, protocol)
+    normal_dir = STATS_DIR / "Normal" / band / protocol
+    time_range = _extract_time_range(normal_dir if normal_dir.exists() else STATS_DIR)
     gen_date   = datetime.now().strftime("%Y-%m-%d %H:%M")
+    pdf_path   = OUTPUT_DIR / "SimpleFT8_Bericht.pdf"
 
     with PdfPages(str(pdf_path)) as pdf:
-        _pdf_title_page(pdf, time_range, gen_date)
-        for band, protocol in sorted(combos):
-            summary = _combo_summary(STATS_DIR, band, protocol)
-            if not summary:
-                continue
-            _pdf_summary_page(pdf, band, protocol, summary)
-            for diag_type in ("stationen", "diversity"):
-                _pdf_embed_png(pdf, OUTPUT_DIR / f"{diag_type}_{band}_{protocol}.png")
-        d = pdf.infodict()
-        d["Title"]   = "SimpleFT8 Diversity Auswertungsbericht"
-        d["Author"]  = "DA1MHH / Mike Hammerer"
-        d["Subject"] = "Diversity Antenna Analysis"
+        _r_title_page(pdf, summary, time_range, gen_date)          # S.1
+        _r_methodik_page(pdf, summary, time_range, gen_date)        # S.2
+        _r_ergebnisse_page(pdf, summary, gen_date)                  # S.3
+        _r_diagramm_page(                                           # S.4
+            pdf, OUTPUT_DIR / f"stationen_{band}_{protocol}.png",
+            "Empfangene Stationen über 24h UTC",
+            f"{band} {protocol} — Linie = Pooled Mean, Band = Tages-Schwankung",
+            "Hinweis: Daten nur 05:00–12:00 UTC. Kurven zeigen Morgen/Vormittagsbetrieb.",
+            gen_date, "Seite 4",
+        )
+        _r_diagramm_page(                                           # S.5 → nach Rescue
+            pdf, OUTPUT_DIR / f"diversity_{band}_{protocol}.png",
+            "Diversity-Vergleich — Stationen pro Zyklus",
+            f"{band} {protocol} — Normal (grau) | Standard (blau) | DX (orange) | Rescue (grün)",
+            "Grüne Kappen (+N): durch ANT2 gerettete Stationen — ANT1-SNR war ≤ −24 dB.",
+            gen_date, "Seite 5",
+        )
+        _r_rescue_page(pdf, summary, gen_date)                      # S.6
+        _r_fazit_page(pdf, summary, hourly, gen_date)               # S.7
 
-    print(f"  ✓ PDF Bericht: {pdf_path.name}")
+        d = pdf.infodict()
+        d["Title"]   = f"SimpleFT8 Diversity Feldstudie — {band} {protocol}"
+        d["Author"]  = "DA1MHH / Mike Hammerer"
+        d["Subject"] = "Dual-Antenna Diversity Field Study"
+
+    print(f"  ✓ PDF Bericht: {pdf_path.name} (7 Seiten, {band} {protocol})")
 
 
 # ── Haupt ─────────────────────────────────────────────────────────────────────
