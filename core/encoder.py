@@ -14,10 +14,15 @@ from .ft8lib_decoder import get_ft8lib
 
 SAMPLE_RATE_FT8 = 12000
 
-# TX-Timing: KEIN hardcoded Offset.
-# DT-Korrektur (ntp_time) regelt alles — pro Modus gespeichert + geladen.
-# Hardware-Latenz wird durch DT-Messung automatisch erkannt und kompensiert.
-TARGET_TX_OFFSET = 0.0
+# TX-Timing: Fester WSJT-X Protokoll-Offset (0.5s = TX startet bei t=0.5s im Slot).
+# Die DT-Korrektur (ntp_time) gilt NUR fuer RX (Audio-Buffer-Shift im Decoder).
+# TX hat keine Decoder-Buffer-Verzoegerung — die 0.77s RX-Korrektur darf hier
+# nicht abgezogen werden, sonst sendet TX 0.67s zu frueh.
+# TX-Timing: WSJT-X Protokoll-Offset (0.5s) minus FlexRadio TX-VITA-49-Buffer-Latenz (1.3s).
+# FlexRadio puffert eingehende TX-Samples 1.3s bevor sie als RF rausgehen (konstant gemessen).
+# -0.8 = 0.5 (Protokoll) - 1.3 (Hardware-Buffer)
+# → Audio startet bei boundary-0.8s → RF bei boundary+0.5s → DT≈0
+TARGET_TX_OFFSET = -0.8
 # Trailing Silence trimmen: FT8-Nutzsignal ist 12.64s, Rest ist Stille.
 # slot+0.5 + 13.5s = slot+14.0s → 1.0s Puffer vor naechstem Slot (sicher)
 TRIM_SAMPLES = int(1.5 * SAMPLE_RATE_FT8)   # 18000 Samples @ 12kHz
@@ -177,8 +182,8 @@ class Encoder(QObject):
         # 2. Naechste passende Slot-Grenze berechnen
         next_boundary = self._next_slot_boundary()
 
-        # 3. Grob bis 500ms VOR Slot-Grenze schlafen
-        #    (langer Sleep = zuverlaessig, GIL-Jitter egal)
+        # 3. Bis zur Slot-Grenze schlafen (TARGET_TX_OFFSET=0.5 → sleep bis boundary,
+        #    dann 0.5s Silence → TX startet bei boundary+0.5s = WSJT-X Protokoll)
         sleep_dur = (next_boundary + TARGET_TX_OFFSET - 0.5) - time.time()
         if sleep_dur > 0.001:
             time.sleep(sleep_dur)
@@ -191,11 +196,9 @@ class Encoder(QObject):
         # 4. Silence-Padding berechnen (jetzt praezise, da nahe am Ziel)
         #    Stille absorbiert den restlichen Jitter des OS-Schedulers
         now = time.time()
-        # DT-Korrektur auch fürs Senden: gleicher Zeitschlitz-Versatz wie RX
-        # Positive Korrektur = wir sind "zu spät" → FRÜHER senden → abziehen
-        from core import ntp_time
-        dt_adj = ntp_time.get_correction()
-        silence_secs = max(0.0, (next_boundary + TARGET_TX_OFFSET - dt_adj) - now)
+        # TX-Timing: NUR der feste WSJT-X Protokoll-Offset (TARGET_TX_OFFSET=0.5s).
+        # KEINE ntp_time Korrektur hier — die gilt nur fuer RX Audio-Buffer-Shift.
+        silence_secs = max(0.0, (next_boundary + TARGET_TX_OFFSET) - now)
 
         # Kaltstart-Guard: nur springen wenn weit daneben (>5s), sonst sofort senden
         # Bei CQ-Resends ist silence≈0 normal (on_cycle_end feuert am Slot-Rand)

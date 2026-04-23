@@ -107,6 +107,10 @@ class RadioMixin:
         self.control_panel.tx_level_bar.setValue(tx_level)
         self.control_panel.tx_level_label.setText(f"TX-Pegel: {tx_level}%")
         self.decoder.set_quality(self._rx_mode)  # Qualität vom aktiven Modus abhängig
+        # DT-Korrektur initialisieren mit aktuellem Modus+Band
+        mode = self.settings.get("mode", "FT8")
+        from core import ntp_time as _ntp
+        _ntp.set_mode(mode, band)
         self.decoder.start()
         self.radio.create_tx_stream()
         # Meter an GUI koppeln
@@ -211,16 +215,16 @@ class RadioMixin:
         if band in mode_freqs and self.radio.ip:
             freq = mode_freqs[band]
             self.radio.set_frequency(freq)
-            self.control_panel.freq_label.setText(f"{freq:.3f} MHz")
+            self.control_panel.freq_label.setText(f"{freq * 1000:.3f} kHz")
             print(f"[Mode] {mode} auf {band}: {freq:.3f} MHz")
         # RX-Filter pro Modus: FT2 braucht breiteren Filter (150 Hz Signalbreite)
         _FILTERS = {"FT8": (100, 3100), "FT4": (100, 3100), "FT2": (100, 4000)}
         flo, fhi = _FILTERS.get(mode, (100, 3100))
         if self.radio.ip:
             self.radio.set_rx_filter(flo, fhi)
-        # DT-Korrektur: gespeicherten Wert fuer neuen Modus laden
+        # DT-Korrektur: gespeicherten Wert fuer neuen Modus+Band laden
         from core import ntp_time
-        ntp_time.set_mode(mode)
+        ntp_time.set_mode(mode, band)
         # Warnung wenn kein mode-spezifisches Gain-Preset vorhanden
         if self.radio.ip:
             _std_store = getattr(self, '_standard_store', None)
@@ -298,6 +302,9 @@ class RadioMixin:
         self._rfpower_converged = False
         if self.radio.ip:
             self.radio.set_power(self._rfpower_current)
+        # DT-Korrektur: gespeicherten Wert fuer neues Band laden
+        from core import ntp_time as _ntp
+        _ntp.set_band(band)
         self._update_statusbar()
 
     @Slot(str)
