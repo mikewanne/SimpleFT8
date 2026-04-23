@@ -177,6 +177,11 @@ class RadioMixin:
             threading.Thread(target=_reset_ant, daemon=True).start()
             with self._diversity_lock:
                 self._diversity_current_ant = "A1"
+        # RX-Liste + QSO-Panel leeren bei RX ON/OFF (Antennen-Wechsel oder Neustart)
+        self.rx_panel.table.setRowCount(0)
+        self._diversity_stations = {}
+        self._normal_stations = {}
+        self.qso_panel.log_view.clear()
         self.control_panel.update_decode_count(0)
         self.control_panel.set_rx_active(active)
         # Rotes Banner im Fenster wenn RX deaktiviert
@@ -508,7 +513,12 @@ class RadioMixin:
     def _enable_diversity(self, scoring_mode: str = "normal"):
         """Diversity aktivieren: Antenne pro Zyklus wechseln, Stationen akkumulieren."""
         self._diversity_in_operate = False  # Transition-Guard zurücksetzen
+        # RX-Liste + QSO-Panel leeren bei Antennen-Modus-Wechsel
+        self.rx_panel.table.setRowCount(0)
         self._diversity_stations = {}
+        self._normal_stations = {}
+        self.qso_panel.log_view.clear()
+        self.control_panel.update_decode_count(0)
         self._diversity_current_ant = "A1"
         self._diversity_ant_queue = deque()  # (ant, phase) Tupel
         # Settings-Wert × Modus-Multiplikator (gleiche ZEIT fuer alle Modi)
@@ -576,7 +586,12 @@ class RadioMixin:
 
     def _disable_diversity(self):
         """Diversity deaktivieren: zurueck auf ANT1."""
+        # RX-Liste + QSO-Panel leeren bei Antennen-Modus-Wechsel
+        self.rx_panel.table.setRowCount(0)
         self._diversity_stations = {}
+        self._normal_stations = {}
+        self.qso_panel.log_view.clear()
+        self.control_panel.update_decode_count(0)
         self._diversity_ctrl.reset()
         self._rx_mode = "normal"
         self._apply_normal_mode()

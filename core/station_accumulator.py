@@ -105,16 +105,28 @@ def accumulate_stations(stations: dict, messages: list, active_qso_targets: set,
 
 def remove_stale(stations: dict, active_qso_targets: set,
                  now: float = None) -> list:
-    """Abgelaufene Stationen entfernen (75s normal, 150s wenn aktiv angerufen).
+    """Abgelaufene Stationen entfernen.
+
+    Aging-Limits:
+      - 150s wenn aktiv angerufen (active_qso_targets)
+      - 300s fuer CQ-Rufer (damit CQ-Liste nicht zuschnellt verschwindet, aber >5min weg)
+      - 75s fuer alle anderen (QSO-Partner, Relay-Verkehr)
 
     Returns:
         Liste der entfernten Callsigns
     """
     if now is None:
         now = time.time()
+
+    def _limit(k: str, m) -> int:
+        if k in active_qso_targets:
+            return 150
+        if getattr(m, 'is_cq', False):
+            return 300
+        return 75
+
     stale = [k for k, m in stations.items()
-             if now - getattr(m, '_last_heard', now) > (
-                 150 if k in active_qso_targets else 75)]
+             if now - getattr(m, '_last_heard', now) > _limit(k, m)]
     for k in stale:
         del stations[k]
     return stale

@@ -784,7 +784,24 @@ def test_accumulator_new_station():
 
 
 def test_accumulator_aging():
-    """Stationen aelter als 75s werden entfernt."""
+    """Nicht-CQ-Stationen aelter als 75s werden entfernt (CQ-Rufer bekommen 300s)."""
+    import time
+    from core.station_accumulator import accumulate_stations, remove_stale
+    from core.message import parse_ft8_message
+    stations = {}
+    # QSO-Partner (kein CQ) — sollte nach 75s weg sein
+    msgs = [parse_ft8_message("DA1MHH R3EDI -10", snr=-15, freq_hz=1000, dt=0.1)]
+    accumulate_stations(stations, msgs, set())
+    assert "R3EDI" in stations
+    assert stations["R3EDI"].is_cq is False
+    stations["R3EDI"]._last_heard = time.time() - 80
+    removed = remove_stale(stations, set())
+    assert "R3EDI" in removed
+    assert "R3EDI" not in stations
+
+
+def test_accumulator_cq_longer_aging():
+    """CQ-Rufer bleiben 300s (5 Min) statt 75s — nach 5 Min entfernt."""
     import time
     from core.station_accumulator import accumulate_stations, remove_stale
     from core.message import parse_ft8_message
@@ -792,8 +809,14 @@ def test_accumulator_aging():
     msgs = [parse_ft8_message("CQ R3EDI KO82", snr=-15, freq_hz=1000, dt=0.1)]
     accumulate_stations(stations, msgs, set())
     assert "R3EDI" in stations
-    # Kuenstlich altern
+    assert stations["R3EDI"].is_cq is True
+    # Nach 80s: noch da (CQ-Limit 300s)
     stations["R3EDI"]._last_heard = time.time() - 80
+    removed = remove_stale(stations, set())
+    assert "R3EDI" not in removed
+    assert "R3EDI" in stations
+    # Nach 310s: weg
+    stations["R3EDI"]._last_heard = time.time() - 310
     removed = remove_stale(stations, set())
     assert "R3EDI" in removed
     assert "R3EDI" not in stations

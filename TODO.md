@@ -73,16 +73,9 @@
   Luecken fast gleich gut sind. Implementierung: `if new_gap_width > current_gap_width + 50: switch()`.
 
 ### Propagation (core/propagation.py)
-- [ ] **60m Propagations-Balken (HamQSL liefert keine Daten):**
-  60m (5.357 MHz) ist als Band konfiguriert und FT8-faehig (IARU-Frequenz), aber HamQSL XML
-  enthaelt kein 60m-Feld → Balken bleibt immer grau (`XML_BANDS` ohne 60m, Zeile 31).
-  Optionen:
-  (a) **Interpolation** (einfach): 60m-Wert = Mittelwert aus HamQSL 40m + 80m.
-      Begruendung: 60m liegt frequenztechnisch dazwischen, NVIS-Charakteristik aehlich 80m.
-      Implementierung: ~5 Zeilen in `_apply_time_correction()`.
-  (b) **PSKReporter API** (genauer): Echte Spots auf 5.357 MHz der letzten Stunde zaehlen →
-      0-5 Spots=poor, 5-20=fair, >20=good. Braucht zusaetzlichen HTTP-Request alle 15 Min.
-  Empfehlung: Erstmal (a) als Quick-Win, langfristig (b) als Option.
+- [x] **60m Propagations-Balken:** Interpolation aus 40m+80m implementiert in
+  `core/propagation.py::_fetch_raw()` (L181-190). Mittelwert per _CONDITION_ORDER-Index,
+  day+night getrennt. (23.04.2026 erledigt)
 
 ### UI-Verbesserungen (SPAETER)
 - [ ] **Statusbar DT-Anzeige:** Statt `DT: +0.78s` nur `DT: Aktiv` oder `DT: Korrektur` — exakte Zeit macht Funker nervoes
@@ -95,8 +88,9 @@
   Optionen (Mike entscheidet):
   (a) CQ-Rufe ins QSO-Panel verschieben: erste Zeile "CQ", ab 5× nur noch "CQ ×6" mit aktualisierter Zahl
   (b) CQ-Rufe komplett aus RX-Liste entfernen (sauberere Liste, weniger Ablenkung)
-- [ ] **Alte CQ-Rufe automatisch loeschen:** Unbeantwortete CQ-Rufe nach 2-5 Min aus der Liste entfernen.
-  Haelt die Liste uebersichtlich, verhindert "tote Zeilen" von Stationen die laengst weg sind.
+- [x] **Alte CQ-Rufe automatisch loeschen:** CQ-Rufer bekommen 300s Aging (5 Min) in
+  `core/station_accumulator.py::remove_stale`, nicht-CQ bleibt bei 75s, active_qso bei 150s.
+  Test: `test_accumulator_cq_longer_aging`. (23.04.2026 erledigt)
 
 - [ ] **Answer-Me Highlighting (DeepSeek-Idee):** Wenn eine Station unser Callsign in ihrer Nachricht
   sendet (z.B. "DA1MHH -07"), Zeile in der RX-Liste GELB hinterlegen. Verhindert dass wir ein QSO-Angebot
@@ -145,12 +139,10 @@
   auch OHNE vorher beide Gain-Messungen abzugleichen. Komplex aber elegant — für spätere Phase.
 
 ### Bugs
-- [ ] **RX-Liste + QSO-Fenster nicht geleert bei Wechsel (BUG):**
-  Beim Wechsel von Band, Modus (FT8/FT4/FT2), Antenne oder Diversity-Modus (Normal/Standard/DX)
-  bleiben alte Stationen in der RX-Liste und im QSO-Fenster stehen.
-  Beispiel: 12m → 10m Bandwechsel → RX-Liste zeigt noch 12m-Stationen.
-  Fix: Bei JEDEM dieser Wechsel RX-Liste UND QSO-Fenster komplett leeren.
-  Betroffene Trigger: Band, Modus, Antennenwahl, Diversity-Modus.
+- [x] **RX-Liste + QSO-Fenster nicht geleert bei Wechsel (BUG):**
+  Jetzt gelöscht in: Band-Wechsel, Modus-Wechsel, Normal↔Diversity
+  (_on_rx_mode_changed), _enable_diversity, _disable_diversity,
+  RX ON/OFF (_on_rx_panel_toggled). (23.04.2026 erledigt)
 
 - [ ] **Even/Odd Slot-Anzeige asynchron (FT2/FT4/FT8 pruefen):** Die Even/Odd-Anzeige oben im
   QSO-Fenster springt bei FT2 (3,75s Zyklen) moeglicherweise nicht exakt mit der echten Slot-Zeit um.
@@ -178,6 +170,15 @@
   GitHub: Darf als Feature "Optimierter CQ-Ruf (OMNI-TX)" erwaehnt werden, aber NICHT wie man es aktiviert.
   TODO: EN+DE README/Hilfe-Seite erstellen mit: Was ist OMNI-TX, wie funktioniert es (Even+Odd abwechselnd),
   was erwartet man (mehr Chancen gehoert zu werden), Einschraenkungen (Double-TX-Pausen).
+
+### TX-Optimierungen
+- [ ] **Per-Station DT-Offset beim QSO-Anruf (encoder._station_dt_offset):**
+  Wenn Station X mit DT=+1.2s angerufen wird, die eigene TX um +1.2s verschieben →
+  Signal landet im Zentrum ihres Decode-Fensters. Globale DT-Korrektur (ntp_time) bleibt
+  unberührt. Nach QSO-Ende/Abbruch automatisch reset auf 0.0.
+  Implementierung: `encoder._station_dt_offset = station.dt` beim Ansprechen,
+  `encoder._station_dt_offset = 0.0` in qso_state auf IDLE/TIMEOUT.
+  Kein Diversity-Feature — reine TX-Pfad-Optimierung.
 
 ### Langfristig
 - [ ] IC-7300 Fork: `radio/ic7300.py` implementieren

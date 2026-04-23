@@ -29,7 +29,7 @@ core/
   antenna_pref.py     AntennaPreferenceStore: {best_ant, delta_db} pro Callsign,
                       1dB Hysterese, kein Timeout (jeder Zyklus überschreibt)
   propagation.py      HamQSL + _apply_seasonal_correction(band, condition, utc_hour, month)
-                      60m fehlt in XML → Interpolation 40m/80m OFFEN
+                      60m fehlt in XML → Interpolation aus 40m+80m (day+night getrennt)
   ap_lite.py          ⛔ UNGETESTET — Feldtest ausstehend (SCORE_THRESHOLD=0.75)
   omni_tx.py          ⛔ DEAKTIVIERT — Feldtest ausstehend (Klick auf Versionsnummer)
   auto_hunt.py        Auto-Hunt Logik
@@ -195,22 +195,17 @@ Nacht-Daten für Diversity_Normal + Diversity_Dx fehlen noch!
 
 ## Offene TODOs (nach Schwierigkeit)
 
-**SEHR EINFACH — nächste Session:**
-1. **60m Propagation** — Interpolation 40m+80m in core/propagation.py
-2. **RX-Liste leeren** — fehlende Trigger: Antennen-Wechsel + Diversity-Modus-Wechsel
-3. **Alte CQ-Rufe auto-löschen** — CQ-Zeilen > 5 Min aus RX-Tabelle
-
 **EINFACH:**
-4. **Per-Station DT-Offset TX** — encoder._station_dt_offset (siehe TODO.md)
-5. **Even/Odd dedizierter Timer** — unabhängig vom Decoder-Thread
-6. **Gain-Bias beheben** — Normal-Modus Gain-Messung wenn Stats aktiv
+1. **Per-Station DT-Offset TX** — encoder._station_dt_offset (siehe TODO.md)
+2. **Even/Odd dedizierter Timer** — unabhängig vom Decoder-Thread
+3. **Gain-Bias beheben** — Normal-Modus Gain-Messung wenn Stats aktiv
 
 **MITTEL:**
-7. **CQ-Freq Algorithmus** — Score-basiert, Sweet-Spot 800-2000Hz, Dwell-Time FT4/FT2
+4. **CQ-Freq Algorithmus** — Score-basiert, Sweet-Spot 800-2000Hz, Dwell-Time FT4/FT2
 
 **LANGFRISTIG:**
-8. **IC-7300 Fork** — TARGET_TX_OFFSET dort separat messen!
-9. **Warteliste-Screenshot** — sobald DL3AQJ antwortet
+5. **IC-7300 Fork** — TARGET_TX_OFFSET dort separat messen!
+6. **Warteliste-Screenshot** — sobald DL3AQJ antwortet
 
 ---
 
