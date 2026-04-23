@@ -305,6 +305,31 @@ class RadioMixin:
         # DT-Korrektur: gespeicherten Wert fuer neues Band laden
         from core import ntp_time as _ntp
         _ntp.set_band(band)
+        # PSK-Reporter: alte Band-Daten löschen + Timer neu starten (2 Min Delay)
+        self.control_panel.psk_label.setText("PSK:  —")
+        _psk_t = getattr(self, '_psk_timer', None)
+        if _psk_t:
+            _psk_t.stop()
+            self._psk_first_fetch = True
+            _psk_t.setInterval(120000)
+            _psk_t.start()
+        # Diversity: Preset für neues Band laden oder Warnung zeigen
+        if self._rx_mode == "diversity":
+            mode = self.settings.get("mode", "FT8")
+            _store = getattr(self, '_standard_store', None)
+            if self._diversity_ctrl.scoring_mode == "dx":
+                _store = getattr(self, '_dx_store', None)
+            if _store:
+                preset = _store.get(band, mode)
+                if preset:
+                    self._diversity_ctrl.load_preset(preset)
+                    print(f"[Diversity] Preset {band}/{mode} geladen")
+                else:
+                    self.statusBar().showMessage(
+                        f"Kein Diversity-Preset für {band}/{mode} — bitte KALIBRIEREN", 6000
+                    )
+                    self.control_panel.dx_info.setText(f"Kein Preset ({band})")
+                    self.control_panel.dx_info.setStyleSheet("color: #FF6600;")
         self._update_statusbar()
 
     @Slot(str)

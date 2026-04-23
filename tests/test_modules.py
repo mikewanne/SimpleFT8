@@ -1175,12 +1175,13 @@ def test_protocol_ft2_different_from_ft4():
 # ── DT Pro-Modus Persistence ──────────────────────────────────────────────────
 
 def test_dt_save_load_file():
-    """DT-Werte werden in JSON gespeichert und geladen."""
+    """DT-Werte werden in JSON gespeichert und geladen (Key: Modus_Band)."""
     from core import ntp_time
     ntp_time._correction = 0.55
     ntp_time._mode = "FT8"
+    ntp_time._band = "20m"
     ntp_time._save_current()
-    assert ntp_time._saved.get("FT8") == 0.55
+    assert ntp_time._saved.get("FT8_20m") == 0.55
     # Datei existiert
     assert ntp_time._DT_FILE.exists()
     ntp_time.reset(keep_correction=False)
@@ -1209,13 +1210,14 @@ def test_dt_set_mode_no_saved():
 
 
 def test_dt_set_mode_saves_old():
-    """set_mode() speichert alten Wert bevor gewechselt wird."""
+    """set_mode() speichert alten Wert bevor gewechselt wird (Key: Modus_Band)."""
     from core import ntp_time
     ntp_time._mode = "FT8"
+    ntp_time._band = "20m"
     ntp_time._correction = 0.65
     ntp_time._saved = {}
     ntp_time.set_mode("FT4")
-    assert ntp_time._saved.get("FT8") == 0.65
+    assert ntp_time._saved.get("FT8_20m") == 0.65
     ntp_time.reset(keep_correction=False)
 
 
@@ -1293,10 +1295,10 @@ def test_adif_freq_present():
 
 # ── Encoder TX-Timing ────────────────────────────────────────────────────────
 
-def test_target_tx_offset_zero():
-    """TARGET_TX_OFFSET muss 0.0 sein (kein hardcoded Offset)."""
+def test_target_tx_offset():
+    """TARGET_TX_OFFSET kompensiert FlexRadio TX-Buffer (0.5 Protokoll - 1.3s Buffer = -0.8)."""
     from core.encoder import TARGET_TX_OFFSET
-    assert TARGET_TX_OFFSET == 0.0, f"Offset {TARGET_TX_OFFSET} != 0.0"
+    assert TARGET_TX_OFFSET == -0.8, f"Offset {TARGET_TX_OFFSET} != -0.8"
 
 
 def test_encoder_has_mode():

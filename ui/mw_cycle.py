@@ -19,12 +19,12 @@ from radio.presets import PREAMP_PRESETS
 
 
 def _slot_from_utc(utc_str: str):
-    """Even/Odd-Slot aus HHMMSS-String für FT2 (Periode 7.5s). None bei Fehler."""
+    """Even/Odd-Slot aus HHMMSS-String für FT2 (Periode 3.8s). None bei Fehler."""
     if not utc_str or len(utc_str) < 6:
         return None
     try:
         secs = int(utc_str[:2]) * 3600 + int(utc_str[2:4]) * 60 + int(utc_str[4:6])
-        return (secs % 7.5) < 3.75
+        return (int(secs / 3.8) % 2) == 0
     except (ValueError, TypeError):
         return None
 
@@ -479,6 +479,10 @@ class CycleMixin:
             _lbl = getattr(self, '_stats_indicator', None)
             if _lbl:
                 _lbl.setStyleSheet("color: #555; font-family: Menlo; font-size: 11px; padding: 0 6px;")
+            return False
+        # CQ oder aktives QSO → pausieren (nur 1 Slot RX, Statistik wäre verzerrt)
+        _qsm = getattr(self, 'qso_sm', None)
+        if _qsm and (_qsm.cq_mode or _qsm.state not in (QSOState.IDLE, QSOState.TIMEOUT)):
             return False
         from core.station_stats import get_active_protocol, get_active_reception_mode
         protocol = get_active_protocol(self.settings.mode)

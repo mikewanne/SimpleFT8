@@ -28,11 +28,32 @@ class TXMixin:
 
     @Slot(bool)
     def _on_tune_clicked(self, on: bool):
-        if self.radio.ip:
-            if on:
-                self.radio.tune_on()
+        if not self.radio.ip:
+            return
+        from config.settings import get_tune_freq_mhz
+        if on:
+            tune_freq = get_tune_freq_mhz(self.settings.band, self.settings.mode)
+            # _tune_active VOR set_frequency setzen (verhindert Race mit Radio-Callback)
+            self._tune_active = True
+            if tune_freq is not None:
+                self._tune_freq_mhz = tune_freq
+                self.radio.set_frequency(tune_freq)
+                print(f"[Tune] VFO temporaer auf {tune_freq * 1000:.3f} kHz "
+                      f"({self.settings.band}/{self.settings.mode})")
             else:
-                self.radio.tune_off()
+                self._tune_freq_mhz = self.settings.frequency_mhz
+                print(f"[Tune] Kein Offset-Wert fuer {self.settings.band}/{self.settings.mode} "
+                      f"— tune auf Arbeitsfrequenz")
+            self.radio.tune_on()
+            self._update_statusbar()
+        else:
+            self.radio.tune_off()
+            self._tune_active = False
+            self._tune_freq_mhz = None
+            work_freq = self.settings.frequency_mhz
+            self.radio.set_frequency(work_freq)
+            self._update_statusbar()
+            print(f"[Tune] VFO zurueck auf {work_freq * 1000:.3f} kHz")
 
     @Slot(float)
     def _on_swr_alarm(self, swr: float):

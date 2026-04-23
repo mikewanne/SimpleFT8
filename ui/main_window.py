@@ -111,6 +111,8 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self._diversity_ctrl = DiversityController()
         self._active_qso_targets: set = set()  # Stationen im aktiven QSO → 150s Aging
         self._diversity_lock = threading.Lock()  # Race Condition Guard
+        self._tune_active = False
+        self._tune_freq_mhz = None
 
         # Auto TX Level Regelung (zweistufig: rfpower primär, audio sekundär)
         self._power_target = settings.get("power_preset", 10)  # Watt-Ziel vom Button
@@ -156,6 +158,7 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self._psk_timer.timeout.connect(self._fetch_psk_stats)
         self._psk_timer.start(120000)  # 2 Minuten fuer erste Abfrage
         self._psk_first_fetch = True
+        self._psk_repeat_interval = 300000  # 5 Minuten (PSKReporter Rate-Limit)
         self._psk_last_fetch_time = None
         self._psk_band = ""
 
@@ -436,7 +439,7 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         # Nach erster Abfrage auf 3-Min-Intervall wechseln
         if self._psk_first_fetch:
             self._psk_first_fetch = False
-            self._psk_timer.setInterval(180000)  # 3 Minuten
+            self._psk_timer.setInterval(self._psk_repeat_interval)  # 5 Minuten
         self._psk_band = self.settings.band.upper()
         threading.Thread(target=self._psk_worker, daemon=True).start()
 
@@ -535,7 +538,12 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
                 self._main_vsplitter.setSizes([600, 0])
 
     def _update_statusbar(self):
-        freq = self.settings.frequency_mhz
+        work_freq = self.settings.frequency_mhz
+        if getattr(self, '_tune_active', False) and getattr(self, '_tune_freq_mhz', None):
+            freq_display = f"TUNE: {self._tune_freq_mhz * 1000:.3f} kHz"
+        else:
+            freq_display = f"{work_freq * 1000:.3f} kHz"
+        freq = work_freq  # Rückwärtskompatibilität für restliche Nutzung
         mode_labels = {
             "normal": "Normal",
             "diversity": "DIVERSITY",
@@ -579,17 +587,25 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         recalc = getattr(self._diversity_ctrl, '_recalc_count', 0)
         freq_str = f"  |  Freq: #{recalc} {cq_hz}Hz" if cq_hz else ""
         # Smart Antenna waehrend QSO
-        if (hasattr(self, '_antenna_prefs') and self.qso_sm.qso.their_call
-                and self._rx_mode == "diversity"):
-            pref = self._antenna_prefs.get(self.qso_sm.qso.their_call)
-            from core.qso_state import QSOState
-            in_qso = self.qso_sm.state not in (
-                QSOState.IDLE, QSOState.TIMEOUT, QSOState.CQ_CALLING, QSOState.CQ_WAIT)
-            if pref and in_qso:
-                freq_str += f"  |  RX: {pref} (Pref)"
+        from core.qso_state import QSOState
+        _in_qso = self.qso_sm.state not in (
+            QSOState.IDLE, QSOState.TIMEOUT, QSOState.CQ_CALLING, QSOState.CQ_WAIT)
+        if _in_qso and self.qso_sm.qso.their_call:
+            if (self._rx_mode == "diversity"
+                    and hasattr(self, '_antenna_prefs')):
+                pref_entry = self._antenna_prefs.get_pref(self.qso_sm.qso.their_call)
+                if pref_entry:
+                    delta = pref_entry['delta_db']
+                    if delta is None:
+                        freq_str += f"  |  RX: {pref_entry['best_ant']}"
+                    else:
+                        freq_str += (f"  |  RX: {pref_entry['best_ant']} "
+                                     f"({delta:+.1f} dB)")
+            elif self._rx_mode == "normal":
+                freq_str += "  |  RX: ANT1"
         msg = (f"{self.settings.callsign}  |  {self.settings.locator}  |  "
                f"{self.settings.mode} {self.settings.band}  |  "
-               f"{freq:.3f} MHz  |  Filter: {filter_str} Hz  |  "
+               f"{freq_display}  |  Filter: {filter_str} Hz  |  "
                f"{mode_str}  |  {dt_text}{omni_str}{freq_str}{ap_str}")
         self.statusBar().showMessage(msg)
 
