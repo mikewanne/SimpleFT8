@@ -98,7 +98,8 @@ Controlled test on 40m, same hardware (FLEX-8400M), 2 minutes apart:
 | [📊 Diagram 2 — Diversity Analysis 40m FT8](auswertung/diversity_40m_FT8.png) | Station count per cycle: Normal (grey), Diversity Standard (blue), Diversity DX (orange) + green rescue caps (+N) = stations ANT1 couldn't decode but ANT2 saved. |
 | [📊 Detailed PDF Report](auswertung/SimpleFT8_Bericht.pdf) | Full analysis report with summary table, all diagrams, and methodology notes. Auto-updated with each session. |
 
-*⚠ Data collection in progress — diagrams and PDF update with each new session. More days = wider confidence bands.*
+> **📊 Statistics in progress — target: minimum 6 measurement days for reliable results.**
+> Current: 3–4 days. Charts and PDF update automatically with each new session. The more days, the more stable the lines.
 
 ---
 
@@ -276,7 +277,8 @@ MIT License (c) 2026 DA1MHH (Mike Hammerer)
 | [📊 Diagramm 2 — Diversity Analyse 40m FT8](auswertung/diversity_40m_FT8.png) | Stationen/Zyklus: Normal (grau), Diversity Standard (blau), Diversity DX (orange) + grüne Rescue-Kappen (+N) = Stationen die ANT1 nicht decodieren konnte, aber ANT2 rettete. |
 | [📊 Ausführlicher PDF-Bericht](auswertung/SimpleFT8_Bericht.pdf) | Vollständiger Auswertungsbericht mit Zusammenfassungstabelle, allen Diagrammen und Methodik-Hinweisen. Wird automatisch mit jeder Session aktualisiert. |
 
-*⚠ Datensammlung in Bearbeitung — Diagramme und PDF werden mit jeder Session aktueller. Mehr Tage = breiteres Konfidenzband.*
+> **📊 Statistiken in Arbeit — Ziel: mindestens 6 Messtage für belastbare Ergebnisse.**
+> Aktuell: 3–4 Tage. Diagramme und PDF aktualisieren sich automatisch mit jeder neuen Session. Je mehr Tage, desto stabiler die Linien.
 
 ---
 
