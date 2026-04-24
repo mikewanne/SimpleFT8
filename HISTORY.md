@@ -149,3 +149,18 @@ In `_on_station_clicked` (manueller Klick auf Station während CQ):
 - `mw_qso.py::_on_tx_started()` — liest `qso_sm.qso.their_call` + `_antenna_prefs.get_pref()`
 
 **Tests:** 168 passed
+
+---
+
+## 2026-04-24 v0.48 — CQ-Freq nur noch im belegten Bandbereich
+
+**Betroffene Dateien:** `core/diversity.py`, `tests/test_modules.py`
+
+### Bugfix
+- `get_free_cq_freq()` suchte bisher im vollen [150–2800 Hz] Fenster
+- Resultat: TX landete bei 2125 Hz obwohl alle Stationen bei 400–1100 Hz clusterten
+- **Fix:** Search-Window = `[min(belegte Bins) – 2, max(belegte Bins) + 2]`, geclippt auf absolute Grenzen
+- 2-Bin Rand (100 Hz) damit auch die allererste/letzte Lücke knapp außerhalb noch gefunden wird
+- Test `test_proposed_freq_updates` auf Stationen mit echter innerer Lücke umgestellt
+
+**Tests:** 168 passed
