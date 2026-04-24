@@ -83,6 +83,16 @@ Controlled test on 40m, same hardware (FLEX-8400M), 2 minutes apart:
 
 *Rescue = stations that ANT1 could not decode (≤ −24 dB SNR) but ANT2 saved. Pooled mean over all cycles — not cherry-picked, not a single good day.*
 
+> **Note on Interpretation**
+> ANT1 (Kelemen DP-201510) is operated off-band on 40m and therefore significantly
+> less efficient on this band. ANT2 (house gutter, ~15m) falls between λ/4 and λ/2
+> for 40m and works comparatively well. The measured gains (+93%/+118% stations)
+> represent an **upper bound** — with two well-matched 40m-optimized antennas, a lower
+> but still significant diversity gain is expected.
+> Follow-up tests on **20m** are planned, where the Kelemen DP-201510 operates within
+> its design band and receives considerably more efficiently. The 20m band (14 MHz) is
+> generally easier to receive than 40m. Measurements are ongoing.
+
 **Station timeline — 40m FT8, all three modes over 24h UTC:**
 *(Dashed lines = Rescue Stations: received by ANT1 below −24 dB — ANT2 boosts the signal above the decoding threshold)*
 
@@ -101,6 +111,25 @@ Controlled test on 40m, same hardware (FLEX-8400M), 2 minutes apart:
 
 > **📊 Statistics in progress — target: minimum 6 measurement days for reliable results.**
 > Current: 3–4 days. Charts and PDF update automatically with each new session. The more days, the more stable the lines.
+
+### Antenna Setup
+
+| Photo | Annotated |
+|:-----:|:---------:|
+| ![Antenna Overview](docs/fotos/Gesamt.png) | ![Antenna Annotated](docs/fotos/Gesamt_Farbe.png) |
+| Full view — gutter downspout (ANT2) on the left, feed point of ANT1 upper right at the dormer. | Yellow = Kelemen DP-201510 (inverted-V, green dot = feed point). Red = complete gutter path (roof → downspout → entrance). |
+
+**ANT1 — Kelemen DP-201510 (fan dipole for 20m / 15m / 10m)**
+Feed point at the dormer window, 3rd floor, through a 1:1 balun (matching transformer
+between balanced dipole and coaxial cable). One arm runs diagonally up to the roof
+ridge, the other diagonally down via the porch roof to the balcony — classic inverted-V.
+*On 40m this antenna operates off its design band — see interpretation note above.*
+
+**ANT2 — House gutter (random wire antenna, ~15m)**
+Never installed as an antenna — just clamped on. The gutter runs ~5m horizontal along
+the roof edge, ~8m vertical as the downspout, ~2m horizontal toward the front entrance.
+This L-shape falls between λ/4 and λ/2 for 40m (7 MHz). Different geometry, different
+polarization, building-coupled mounting — the ideal complement for diversity reception.
 
 ---
 
@@ -263,6 +292,17 @@ MIT License (c) 2026 DA1MHH (Mike Hammerer)
 
 *Rescue = Stationen, die ANT1 nicht decodieren konnte (≤ −24 dB SNR), aber ANT2 rettete. Pooled Mean über alle Zyklen — kein Cherry-Picking, kein einzelner guter Tag.*
 
+> **Hinweis zur Interpretation**
+> ANT1 (Kelemen DP-201510) ist auf 40m außerhalb seines Auslegungsbandes und damit
+> deutlich suboptimal für diesen Frequenzbereich. ANT2 (Regenrinne, ~15m) liegt
+> zwischen λ/4 und λ/2 für 40m und arbeitet dort vergleichsweise gut. Die gemessenen
+> Gewinne (+93%/+118% Stationen) sind als **Obergrenze** zu verstehen — bei zwei
+> gleichwertigen, für 40m optimierten Antennen ist ein geringerer, aber dennoch
+> signifikanter Diversity-Gewinn zu erwarten.
+> Folgetests auf **20m** sind geplant, wo der Kelemen DP-201510 in seinem Auslegungsband
+> arbeitet und deutlich effizienter empfängt. Das 20m-Band (14 MHz) ist generell besser
+> zu empfangen als 40m. Die Messreihe läuft.
+
 **Stationen über 24h UTC — 40m FT8, alle drei Modi:**
 *(Gestrichelte Linien = Rescue Stationen: von ANT1 unter −24 dB empfangen — ANT2 hebt das Signal über die Dekodiergrenze)*
 
@@ -281,6 +321,26 @@ MIT License (c) 2026 DA1MHH (Mike Hammerer)
 
 > **📊 Statistiken in Arbeit — Ziel: mindestens 6 Messtage für belastbare Ergebnisse.**
 > Aktuell: 3–4 Tage. Diagramme und PDF aktualisieren sich automatisch mit jeder neuen Session. Je mehr Tage, desto stabiler die Linien.
+
+### Antennensetup
+
+| Foto | Annotiert |
+|:----:|:---------:|
+| ![Antennenübersicht](docs/fotos/Gesamt.png) | ![Antenne annotiert](docs/fotos/Gesamt_Farbe.png) |
+| Gesamtansicht — Regenrinnen-Fallrohr (ANT2) links, Einspeisepunkt ANT1 oben rechts an der Dachgaube. | Gelb = Kelemen DP-201510 (Inverted-V, grüner Punkt = Einspeisepunkt). Rot = vollständiger Regenrinnen-Verlauf (Dachkante → Fallrohr → Hauseingang). |
+
+**ANT1 — Kelemen DP-201510 (Fächer-Dipol für 20m / 15m / 10m)**
+Einspeisepunkt an der Dachgaube im 3. OG, gespeist über einen 1:1-Balun (Anpassglied
+zwischen symmetrischem Dipol und Koaxialkabel). Ein Arm führt schräg nach oben zur
+Dachspitze, der andere schräg nach unten über das Vordach zum Balkon — klassische
+Inverted-V-Form.
+*Auf 40m arbeitet diese Antenne außerhalb ihres Auslegungsbandes — siehe Interpretationshinweis oben.*
+
+**ANT2 — Regenrinne des Hauses (Zufalls-Längenantenne, ~15m)**
+Nie als Antenne installiert — einfach angeklemmt. Die Regenrinne verläuft ~5m waagerecht
+entlang der Dachkante, ~8m senkrecht als Fallrohr, ~2m waagerecht zum Hauseingang.
+Diese L-Form liegt zwischen λ/4 und λ/2 für das 40m-Band (7 MHz). Andere Geometrie,
+andere Polarisierung, gebäudegebundene Befestigung — die ideale Ergänzung für Diversity.
 
 ---
 
