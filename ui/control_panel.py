@@ -389,6 +389,17 @@ class _AntenneCard(QFrame):
         self.btn_remeasure.setToolTip("Diversity sofort neu einmessen")
         phase_row.addWidget(self.btn_remeasure)
         div_lay.addLayout(phase_row)
+        self._operate_bar = QProgressBar()
+        self._operate_bar.setRange(0, 60)
+        self._operate_bar.setValue(60)
+        self._operate_bar.setTextVisible(False)
+        self._operate_bar.setFixedHeight(6)
+        self._operate_bar.setStyleSheet(
+            "QProgressBar { border: none; border-radius: 2px; background: #1a2a1a; }"
+            "QProgressBar::chunk { background: #558866; border-radius: 2px; }"
+        )
+        self._operate_bar.setVisible(False)
+        div_lay.addWidget(self._operate_bar)
         self._div_widget.setVisible(False)
         lay.addWidget(self._div_widget)
 
@@ -785,6 +796,7 @@ class ControlPanel(QWidget):
         self._a1_count_label = ant_card._a1_count_label
         self._a2_count_label = ant_card._a2_count_label
         self._freq_hist = ant_card._freq_hist
+        self._operate_bar = ant_card._operate_bar
         self.btn_normal.setStyleSheet(self._rx_btn_style(self._RX_STYLE_ACTIVE))
         self.btn_diversity.setStyleSheet(self._rx_btn_style(self._RX_STYLE_INACTIVE))
         self.btn_normal.clicked.connect(lambda: self._on_rx_mode_clicked("normal"))
@@ -1028,6 +1040,7 @@ class ControlPanel(QWidget):
             self._phase_label.setStyleSheet(
                 f"color:#FF6600;font-size:9px;font-family:{_FONT};font-weight:bold;"
             )
+            self._operate_bar.setVisible(False)
             self._a1_pct["50%"].setStyleSheet(_DIV_PCT_YELLOW)
             self._a2_pct["50%"].setStyleSheet(_DIV_PCT_YELLOW)
         elif phase == "measure":
@@ -1036,20 +1049,31 @@ class ControlPanel(QWidget):
             self._phase_label.setStyleSheet(
                 f"color:#FFCC00;font-size:9px;font-family:{_FONT};font-style:italic;"
             )
+            self._operate_bar.setVisible(False)
             self._a1_pct["50%"].setStyleSheet(_DIV_PCT_YELLOW)
             self._a2_pct["50%"].setStyleSheet(_DIV_PCT_YELLOW)
         else:
             remaining = operate_total - operate_cycles
             if remaining <= 5:
                 color = "#FF8800"
+                bar_color = "#FF8800"
             elif remaining <= 15:
                 color = "#FFCC00"
+                bar_color = "#BBAA00"
             else:
                 color = "#558866"
-            self._phase_label.setText(f"Neu in {remaining} Zyklen")
+                bar_color = "#558866"
+            self._phase_label.setText(f"Neucheck in {remaining}")
             self._phase_label.setStyleSheet(
                 f"color:{color};font-size:9px;font-family:{_FONT};font-style:italic;"
             )
+            self._operate_bar.setRange(0, operate_total)
+            self._operate_bar.setValue(remaining)
+            self._operate_bar.setStyleSheet(
+                "QProgressBar { border: none; border-radius: 2px; background: #1a2a1a; }"
+                f"QProgressBar::chunk {{ background: {bar_color}; border-radius: 2px; }}"
+            )
+            self._operate_bar.setVisible(True)
             if ratio == "70:30":
                 self._a1_pct["70%"].setStyleSheet(_DIV_PCT_GREEN)
                 self._a2_pct["30%"].setStyleSheet(_DIV_PCT_RED)

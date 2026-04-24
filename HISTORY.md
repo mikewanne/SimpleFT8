@@ -167,6 +167,22 @@ In `_on_station_clicked` (manueller Klick auf Station während CQ):
 
 ---
 
+## 2026-04-24 v0.51 — Diversity Countdown-Balken + besseres Label
+
+**Betroffene Dateien:** `ui/control_panel.py`
+
+### Feature
+- OPERATE-Phase: Label `"Neu in X Zyklen"` → `"Neucheck in X"` (verständlich für den Funker)
+- Neuer schmaler Countdown-Balken (6 px) unter dem Label — schrumpft von 60→0
+- Farbwechsel synchron mit Text: grün (>15), gelb (≤15), orange (≤5)
+- Balken verschwindet automatisch in MESSEN- und NEUEINMESSUNG-Phase
+- `QProgressBar` mit dynamischem Stylesheet, kein Custom-Widget nötig
+- Proxy-Anbindung über `ant_card._operate_bar` in `ControlPanel.__init__()`
+
+**Tests:** 168 passed
+
+---
+
 ## 2026-04-24 v0.50 — freq_label Farbwechsel Grün ↔ Gelb (Tune-Feedback)
 
 **Betroffene Dateien:** `ui/control_panel.py`, `ui/mw_radio.py`, `ui/mw_tx.py`
