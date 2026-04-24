@@ -61,7 +61,7 @@ class RadioMixin:
             lambda msg: self.control_panel.set_tx_active(True)
         )
         self.encoder.tx_started.connect(
-            lambda msg: self.qso_panel.add_tx(msg),
+            self._on_tx_started,
             Qt.ConnectionType.QueuedConnection,
         )
         self.encoder.tx_finished.connect(self._on_tx_finished)

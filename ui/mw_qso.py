@@ -20,6 +20,36 @@ class QSOMixin:
     Enthaelt: Station anklicken, CQ, QSO-State Callbacks, QRZ Upload.
     """
 
+    def _antenna_pref_label(self, call: str) -> str:
+        """'(ANT2, +6.3 dB)' in Diversity, '(ANT1)' in Normal-Modus."""
+        if self._rx_mode == "normal":
+            return " (ANT1)"
+        if not hasattr(self, '_antenna_prefs'):
+            return ""
+        pref = self._antenna_prefs.get_pref(call)
+        if not pref:
+            return ""
+        ant_num = "1" if pref["best_ant"] == "A1" else "2"
+        delta = pref["delta_db"]
+        if delta is None:
+            return f" (ANT{ant_num})"
+        return f" (ANT{ant_num}, {delta:+.1f} dB)"
+
+    @Slot(str)
+    def _on_tx_started(self, message: str):
+        """TX begonnen — Nachricht mit optionalem Antennen-Label ins QSO-Panel."""
+        ant_label = ""
+        if not message.startswith("CQ "):
+            if hasattr(self, 'qso_sm') and self.qso_sm.qso:
+                call = self.qso_sm.qso.their_call
+                if call and self._rx_mode == "diversity" and hasattr(self, '_antenna_prefs'):
+                    pref = self._antenna_prefs.get_pref(call)
+                    if pref and pref.get("delta_db") is not None:
+                        ant_num = "1" if pref["best_ant"] == "A1" else "2"
+                        delta = abs(pref["delta_db"])
+                        ant_label = f"ANT{ant_num} \u0394{delta:.1f}dB"
+        self.qso_panel.add_tx(message, ant_label)
+
     @Slot(object)
     def _on_station_clicked(self, msg: FT8Message):
         """User hat eine Station in der Empfangsliste angeklickt."""
@@ -29,8 +59,11 @@ class QSOMixin:
         if getattr(self, '_diversity_measuring', False):
             print(f"[QSO] Einmessen aktiv — Hunt blockiert")
             return
-        # CQ-Modus beenden wenn aktiv
-        if self.qso_sm.cq_mode:
+        # CQ-Modus beenden wenn aktiv — _was_cq VOR stop_cq() sichern!
+        # stop_cq() setzt cq_mode=False; start_qso() würde dann _was_cq=False speichern
+        # → _resume_cq_if_needed() würde CQ nach QSO NICHT wiederaufnehmen (Bug)
+        _cq_was_active = self.qso_sm.cq_mode
+        if _cq_was_active:
             self.qso_sm.stop_cq()
             self.control_panel.set_cq_active(False)
         # Auto-Hunt pausieren bei manuellem Klick
@@ -38,7 +71,7 @@ class QSOMixin:
             self._auto_hunt.on_manual_qso_start()
         self._active_qso_targets.add(msg.caller)  # 150s Aging fuer angerufene Station
         self.rx_panel.set_active_call(msg.caller)  # Zeile im RX-Panel hervorheben
-        self.qso_panel.add_info(f"Rufe {msg.caller}...")
+        self.qso_panel.add_info(f"Rufe {msg.caller}...{self._antenna_pref_label(msg.caller)}")
         self.qso_sm.max_calls = self.settings.get("max_calls", 3)
         # Even/Odd: sende im GEGENTEILIGEN Slot der Gegenstation
         their_even = getattr(msg, '_tx_even', None)
@@ -52,6 +85,10 @@ class QSOMixin:
             their_grid=msg.grid_or_report if msg.is_grid else "",
             freq_hz=msg.freq_hz,
         )
+        # Fix: start_qso() hat _was_cq=False gespeichert (cq_mode war schon False durch stop_cq)
+        # → CQ-Status nachträglich korrigieren damit _resume_cq_if_needed() richtig handelt
+        if _cq_was_active:
+            self.qso_sm._was_cq = True
 
     def _on_country_filter_changed(self, country_filter: list):
         """Länder-Filter in Settings speichern."""
@@ -153,9 +190,8 @@ class QSOMixin:
 
         if self.qso_sm.cq_mode:
             self.control_panel.update_qso_counter(self.qso_sm.cq_qso_count)
-            # CQ-Button aktiv halten wenn CQ-Modus laeuft (auch nach QSO-Resume)
-            if state in (QSOState.CQ_CALLING, QSOState.CQ_WAIT):
-                self.control_panel.set_cq_active(True)
+            # CQ-Button immer aktiv wenn cq_mode=True — auch während QSO-Sequenz
+            self.control_panel.set_cq_active(True)
 
     def _on_tx_finished(self):
         """TX abgeschlossen — PTT aus, zurueck zu RX."""
@@ -225,12 +261,29 @@ class QSOMixin:
         )
         self.qso_log.add_qso(qso_data.their_call, band)
 
+        # Antennen-Statistik pro QSO loggen — immer schreiben, "–" wenn kein Pref
+        if hasattr(self, '_stats_logger') and self._stats_logger is not None:
+            pref = None
+            if self._rx_mode == "diversity" and hasattr(self, '_antenna_prefs'):
+                pref = self._antenna_prefs.get_pref(qso_data.their_call)
+            self._stats_logger.log_antenna_qso(
+                call=qso_data.their_call,
+                band=self.settings.band,
+                ft_mode=self.settings.mode,
+                best_ant=pref["best_ant"] if pref else None,
+                delta_db=pref["delta_db"] if pref else None,
+            )
+
     @Slot(object)
     def _on_qso_confirmed(self, qso_data):
         """73 empfangen — QSO wirklich komplett, ✓ anzeigen."""
         self.qso_panel.add_qso_complete(qso_data.their_call)
         # Logbuch aktualisieren (neues QSO wurde in ADIF geschrieben)
         self.qso_panel.logbook.refresh()
+        # CQ-Modus läuft weiter — visuell bestätigen
+        if self.qso_sm.cq_mode:
+            self.control_panel.set_cq_active(True)
+            self.qso_panel.add_info("CQ-Modus läuft weiter...")
 
     def _get_qrz_client(self):
         """QRZ Client lazy initialisieren."""
@@ -355,6 +408,10 @@ class QSOMixin:
             self.encoder.tx_even = not their_even
             slot_str = "ODD" if their_even else "EVEN"
             print(f"[TX] CQ-Reply {msg.caller}: sie={('EVEN' if their_even else 'ODD')} → wir={slot_str}")
+        # Antennen-Praeferenz anzeigen, falls vorhanden
+        label = self._antenna_pref_label(msg.caller)
+        if label:
+            self.qso_panel.add_info(f"Antworte {msg.caller}{label}")
 
     def _on_qso_tab_changed(self, index: int):
         """Tab-Wechsel im QSO-Panel: Detail-Overlay schliessen wenn nicht mehr im Logbuch."""
