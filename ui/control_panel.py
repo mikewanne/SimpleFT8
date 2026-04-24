@@ -202,7 +202,7 @@ class _ModeBandCard(QFrame):
         freq_lay.setContentsMargins(6, 0, 6, 0)
         self.freq_label = QLabel("14074.000 kHz")
         self.freq_label.setStyleSheet(
-            f"color: #FFD700; font-size: 13pt; font-weight: bold; "
+            f"color: #00CC66; font-size: 13pt; font-weight: bold; "
             f"font-family: {_FONT}; border: none; background: transparent;"
         )
         self.freq_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -953,7 +953,19 @@ class ControlPanel(QWidget):
     def _update_frequency(self):
         mode_key = self._current_mode.lower()
         freq = BAND_FREQUENCIES.get(self._current_band, {}).get(mode_key, 0)
-        self.freq_label.setText(f"{freq * 1000:.3f} kHz")
+        self.set_freq_display(freq, tune_active=False)
+
+    def set_freq_display(self, freq_mhz: float, tune_active: bool = False):
+        """Frequenzanzeige + Farbe nach Betriebszustand.
+        tune_active=True  → Gelb (#FFD700) + Tune-Freq
+        tune_active=False → Grün (#00CC66) + Arbeitsfreq
+        """
+        color = "#FFD700" if tune_active else "#00CC66"
+        self.freq_label.setStyleSheet(
+            f"color: {color}; font-size: 13pt; font-weight: bold; "
+            f"font-family: {_FONT}; border: none; background: transparent;"
+        )
+        self.freq_label.setText(f"{freq_mhz * 1000:.3f} kHz")
 
     # =====================================================================
     # RX Modus (Antenne)

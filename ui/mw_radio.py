@@ -220,7 +220,7 @@ class RadioMixin:
         if band in mode_freqs and self.radio.ip:
             freq = mode_freqs[band]
             self.radio.set_frequency(freq)
-            self.control_panel.freq_label.setText(f"{freq * 1000:.3f} kHz")
+            self.control_panel.set_freq_display(freq, tune_active=False)
             print(f"[Mode] {mode} auf {band}: {freq:.3f} MHz")
         # RX-Filter pro Modus: FT2 braucht breiteren Filter (150 Hz Signalbreite)
         _FILTERS = {"FT8": (100, 3100), "FT4": (100, 3100), "FT2": (100, 4000)}

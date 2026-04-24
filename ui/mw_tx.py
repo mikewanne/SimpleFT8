@@ -46,6 +46,8 @@ class TXMixin:
                       f"— tune auf Arbeitsfrequenz")
             self.radio.tune_on()
             self._update_statusbar()
+            display_freq = tune_freq if tune_freq is not None else self.settings.frequency_mhz
+            self.control_panel.set_freq_display(display_freq, tune_active=True)
         else:
             self.radio.tune_off()
             self._tune_active = False
@@ -53,6 +55,7 @@ class TXMixin:
             work_freq = self.settings.frequency_mhz
             self.radio.set_frequency(work_freq)
             self._update_statusbar()
+            self.control_panel.set_freq_display(work_freq, tune_active=False)
             print(f"[Tune] VFO zurueck auf {work_freq * 1000:.3f} kHz")
 
     @Slot(float)

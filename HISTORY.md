@@ -167,6 +167,24 @@ In `_on_station_clicked` (manueller Klick auf Station während CQ):
 
 ---
 
+## 2026-04-24 v0.50 — freq_label Farbwechsel Grün ↔ Gelb (Tune-Feedback)
+
+**Betroffene Dateien:** `ui/control_panel.py`, `ui/mw_radio.py`, `ui/mw_tx.py`
+
+### Feature
+- `freq_label` (oben links) zeigt Frequenz jetzt farbcodiert:
+  - **Normal:** Grün (#00CC66) + Arbeitsfrequenz
+  - **Tune aktiv:** Gelb (#FFD700) + Tune-Frequenz (z.B. -2 kHz Offset)
+- Neue Methode `control_panel.set_freq_display(freq_mhz, tune_active=False)` — zentrales Farb-Update
+- `_update_frequency()` delegiert an `set_freq_display()` (Band/Mode-Wechsel → automatisch Grün)
+- `_on_mode_changed()` in mw_radio.py → `set_freq_display(..., False)`
+- `_on_tune_clicked()` in mw_tx.py → `set_freq_display(..., True/False)` je nach Tune-State
+- Tune-Sonderfall `tune_freq=None` (60m ohne Offset) → Gelb + Arbeitsfreq (korrekt)
+
+**Tests:** 168 passed
+
+---
+
 ## 2026-04-24 v0.49 — Versionsanzeige UI automatisch synchron
 
 **Betroffene Dateien:** `ui/control_panel.py`, `main.py`
