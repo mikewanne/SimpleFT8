@@ -167,6 +167,22 @@ In `_on_station_clicked` (manueller Klick auf Station während CQ):
 
 ---
 
+## 2026-04-24 v0.53 — Diversity-Panel UI-Politur
+
+**Betroffene Dateien:** `ui/control_panel.py`
+
+### Fixes & Verbesserungen
+- **Label:** "Diversity Neuberechnung in X Zyklen" (fehlende "in" ergänzt)
+- **Zentrierung:** 36px Spacer links in phase_row balanciert NEU-Button → Text exakt mittig
+- **Nähe:** `phase_row` ohne oberen Margin — Label näher an Ratio-Zeile
+- **DX-Counts:** `35 DX  01 DX` Format (2-stellig, Leerzeichen vor "DX", `--` wenn kein Wert noch)
+- **Balkenfarbe:** Dunkelrot `#882222` → Mittelrot `#CC3333` → Hellrot `#FF5555` (heller = dringender)
+- **Hintergrund Balken:** `#1a1010` (passt zu Rotton statt Grün-Dunkel)
+
+**Tests:** 168 passed
+
+---
+
 ## 2026-04-24 v0.52 — CQ-Freq zeitbasiert + Platz-Suche-Balken + Antennenwahl-Label
 
 **Betroffene Dateien:** `core/diversity.py`, `ui/control_panel.py`, `ui/mw_cycle.py`

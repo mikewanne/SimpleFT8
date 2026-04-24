@@ -328,8 +328,8 @@ class _AntenneCard(QFrame):
         # Diversity Ratio Display
         self._div_widget = QWidget()
         div_lay = QVBoxLayout(self._div_widget)
-        div_lay.setContentsMargins(0, 2, 0, 2)
-        div_lay.setSpacing(2)
+        div_lay.setContentsMargins(0, 0, 0, 2)
+        div_lay.setSpacing(1)
         ratio_row = QHBoxLayout()
         ratio_row.setSpacing(3)
         lbl_a1 = QLabel("ANT1")
@@ -372,6 +372,9 @@ class _AntenneCard(QFrame):
         ratio_row.addWidget(lbl_a2)
         div_lay.addLayout(ratio_row)
         phase_row = QHBoxLayout()
+        phase_row.setContentsMargins(0, 0, 0, 0)
+        # 36px Spacer links balanciert den NEU-Button rechts → echte Zentrierung
+        phase_row.addSpacing(36)
         self._phase_label = QLabel("")
         self._phase_label.setStyleSheet(
             f"color:#FFCC00;font-size:9px;font-family:{_FONT};font-style:italic;"
@@ -389,17 +392,6 @@ class _AntenneCard(QFrame):
         self.btn_remeasure.setToolTip("Diversity sofort neu einmessen")
         phase_row.addWidget(self.btn_remeasure)
         div_lay.addLayout(phase_row)
-        self._operate_bar = QProgressBar()
-        self._operate_bar.setRange(0, 60)
-        self._operate_bar.setValue(60)
-        self._operate_bar.setTextVisible(False)
-        self._operate_bar.setFixedHeight(6)
-        self._operate_bar.setStyleSheet(
-            "QProgressBar { border: none; border-radius: 2px; background: #1a2a1a; }"
-            "QProgressBar::chunk { background: #558866; border-radius: 2px; }"
-        )
-        self._operate_bar.setVisible(False)
-        div_lay.addWidget(self._operate_bar)
         self._div_widget.setVisible(False)
         lay.addWidget(self._div_widget)
 
@@ -408,25 +400,29 @@ class _AntenneCard(QFrame):
         self._freq_hist.setVisible(False)
         lay.addWidget(self._freq_hist)
 
-        # CQ-Freq Countdown: Platz-Suche in Xs (zeitbasiert, 120s)
-        self._cq_freq_lbl = QLabel("Platz-Suche in --")
+        # CQ-Freq Countdown: Label + Balken in einer Zeile (horizontal)
+        cq_row_layout = QHBoxLayout()
+        cq_row_layout.setContentsMargins(2, 1, 2, 1)
+        cq_row_layout.setSpacing(6)
+        self._cq_freq_lbl = QLabel("Freie TX Frequenz in -- Sek.")
         self._cq_freq_lbl.setStyleSheet(
-            f"color:#558866;font-size:9px;font-family:{_FONT};font-style:italic;"
+            f"color:#882222;font-size:9px;font-family:{_FONT};font-style:italic;"
         )
-        self._cq_freq_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        cq_row_layout.addWidget(self._cq_freq_lbl)
         self._cq_freq_bar = QProgressBar()
         self._cq_freq_bar.setRange(0, 120)
         self._cq_freq_bar.setValue(120)
         self._cq_freq_bar.setTextVisible(False)
         self._cq_freq_bar.setFixedHeight(6)
         self._cq_freq_bar.setStyleSheet(
-            "QProgressBar { border: none; border-radius: 2px; background: #1a2a1a; }"
-            "QProgressBar::chunk { background: #558866; border-radius: 2px; }"
+            "QProgressBar { border: none; border-radius: 2px; background: #1a1010; }"
+            "QProgressBar::chunk { background: #882222; border-radius: 2px; }"
         )
-        self._cq_freq_lbl.setVisible(False)
-        self._cq_freq_bar.setVisible(False)
-        lay.addWidget(self._cq_freq_lbl)
-        lay.addWidget(self._cq_freq_bar)
+        cq_row_layout.addWidget(self._cq_freq_bar, stretch=1)
+        self._cq_row = QWidget()
+        self._cq_row.setLayout(cq_row_layout)
+        self._cq_row.setVisible(False)
+        lay.addWidget(self._cq_row)
 
 
 class _RadioCard(QFrame):
@@ -816,9 +812,9 @@ class ControlPanel(QWidget):
         self._a1_count_label = ant_card._a1_count_label
         self._a2_count_label = ant_card._a2_count_label
         self._freq_hist = ant_card._freq_hist
-        self._operate_bar = ant_card._operate_bar
         self._cq_freq_lbl = ant_card._cq_freq_lbl
         self._cq_freq_bar = ant_card._cq_freq_bar
+        self._cq_row = ant_card._cq_row
         self.btn_normal.setStyleSheet(self._rx_btn_style(self._RX_STYLE_ACTIVE))
         self.btn_diversity.setStyleSheet(self._rx_btn_style(self._RX_STYLE_INACTIVE))
         self.btn_normal.clicked.connect(lambda: self._on_rx_mode_clicked("normal"))
@@ -1062,7 +1058,6 @@ class ControlPanel(QWidget):
             self._phase_label.setStyleSheet(
                 f"color:#FF6600;font-size:9px;font-family:{_FONT};font-weight:bold;"
             )
-            self._operate_bar.setVisible(False)
             self._a1_pct["50%"].setStyleSheet(_DIV_PCT_YELLOW)
             self._a2_pct["50%"].setStyleSheet(_DIV_PCT_YELLOW)
         elif phase == "measure":
@@ -1071,31 +1066,20 @@ class ControlPanel(QWidget):
             self._phase_label.setStyleSheet(
                 f"color:#FFCC00;font-size:9px;font-family:{_FONT};font-style:italic;"
             )
-            self._operate_bar.setVisible(False)
             self._a1_pct["50%"].setStyleSheet(_DIV_PCT_YELLOW)
             self._a2_pct["50%"].setStyleSheet(_DIV_PCT_YELLOW)
         else:
             remaining = operate_total - operate_cycles
             if remaining <= 5:
                 color = "#FF8800"
-                bar_color = "#FF8800"
             elif remaining <= 15:
                 color = "#FFCC00"
-                bar_color = "#BBAA00"
             else:
-                color = "#558866"
-                bar_color = "#558866"
-            self._phase_label.setText(f"Antennenwahl in {remaining}")
+                color = "#888888"
+            self._phase_label.setText(f"Diversity Neuberechnung in {remaining} Zyklen")
             self._phase_label.setStyleSheet(
                 f"color:{color};font-size:9px;font-family:{_FONT};font-style:italic;"
             )
-            self._operate_bar.setRange(0, operate_total)
-            self._operate_bar.setValue(remaining)
-            self._operate_bar.setStyleSheet(
-                "QProgressBar { border: none; border-radius: 2px; background: #1a2a1a; }"
-                f"QProgressBar::chunk {{ background: {bar_color}; border-radius: 2px; }}"
-            )
-            self._operate_bar.setVisible(True)
             if ratio == "70:30":
                 self._a1_pct["70%"].setStyleSheet(_DIV_PCT_GREEN)
                 self._a2_pct["30%"].setStyleSheet(_DIV_PCT_RED)
@@ -1116,11 +1100,13 @@ class ControlPanel(QWidget):
         Standard: 'X St.' pro Antenne. DX: 'X DX' (schwache Signale -20..-10 dB).
         """
         if a1_count == 0 and a2_count == 0:
-            self._a1_count_label.setText("")
-            self._a2_count_label.setText("")
+            self._a1_count_label.setText("--")
+            self._a2_count_label.setText("  --")
         elif scoring_mode == "dx":
-            self._a1_count_label.setText(f"{a1_weak_count} DX" if a1_weak_count else "– DX")
-            self._a2_count_label.setText(f"{a2_weak_count} DX" if a2_weak_count else "– DX")
+            a1_txt = f"{a1_weak_count:02d} DX" if a1_weak_count is not None else "--"
+            a2_txt = f"  {a2_weak_count:02d} DX" if a2_weak_count is not None else "  --"
+            self._a1_count_label.setText(a1_txt)
+            self._a2_count_label.setText(a2_txt)
         else:
             self._a1_count_label.setText(f"{a1_count} St.")
             self._a2_count_label.setText(f"{a2_count} St.")
@@ -1134,15 +1120,15 @@ class ControlPanel(QWidget):
     def update_cq_freq_countdown(self, remaining_s: int) -> None:
         """CQ-Frequenz Countdown-Balken aktualisieren (0-120 Sekunden)."""
         if remaining_s <= 10:
-            color_txt = "#FF8800"
-            bar_color = "#FF8800"
+            color_txt = "#FF5555"
+            bar_color = "#FF5555"
         elif remaining_s <= 30:
-            color_txt = "#FFCC00"
-            bar_color = "#BBAA00"
+            color_txt = "#CC3333"
+            bar_color = "#CC3333"
         else:
-            color_txt = "#558866"
-            bar_color = "#558866"
-        self._cq_freq_lbl.setText(f"Platz-Suche in {remaining_s}s")
+            color_txt = "#882222"
+            bar_color = "#882222"
+        self._cq_freq_lbl.setText(f"Freie TX Frequenz in {remaining_s} Sek.")
         self._cq_freq_lbl.setStyleSheet(
             f"color:{color_txt};font-size:9px;font-family:{_FONT};font-style:italic;"
         )
@@ -1151,8 +1137,7 @@ class ControlPanel(QWidget):
             "QProgressBar { border: none; border-radius: 2px; background: #1a2a1a; }"
             f"QProgressBar::chunk {{ background: {bar_color}; border-radius: 2px; }}"
         )
-        self._cq_freq_lbl.setVisible(True)
-        self._cq_freq_bar.setVisible(True)
+        self._cq_row.setVisible(True)
 
     def update_presence(self, remaining_secs: int) -> None:
         """Operator Presence Balken aktualisieren (0-900 Sekunden)."""
