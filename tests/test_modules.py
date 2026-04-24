@@ -1469,13 +1469,14 @@ def test_cq_freq_fallback_no_gap():
 
 
 def test_proposed_freq_updates():
-    """update_proposed_freq() berechnet TX-Freq nach Intervall."""
+    """update_proposed_freq() berechnet TX-Freq wenn Luecke im Cluster vorhanden."""
     from core.diversity import DiversityController
     dc = DiversityController()
-    dc.sync_from_stations(_make_stations(*range(400, 800, 50)))
+    # Stationen bei 400-550 Hz und 800-950 Hz → Luecke 600-750 Hz (3 Bins = 150 Hz)
+    dc.sync_from_stations(_make_stations(400, 450, 500, 550, 800, 850, 900, 950))
     assert dc.cq_freq_hz is None  # Noch nicht berechnet
     dc.update_proposed_freq()
-    assert dc.cq_freq_hz is not None  # Jetzt berechnet
+    assert dc.cq_freq_hz is not None  # Jetzt berechnet (Luecke gefunden)
 
 
 def test_adif_ft4_submode():

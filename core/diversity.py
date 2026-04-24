@@ -103,9 +103,11 @@ class DiversityController:
                 self._freq_histogram[bin_idx] = self._freq_histogram.get(bin_idx, 0) + 1
 
     def get_free_cq_freq(self) -> Optional[int]:
-        """Freie CQ-Frequenz im gesamten Nutzbereich (150–2800 Hz).
+        """Freie CQ-Frequenz zwischen erster und letzter belegter Station.
 
-        Sucht die Luecke die am naechsten am Median liegt.
+        Sucht die Luecke die am naechsten am Median liegt — NUR innerhalb
+        des tatsaechlich belegten Frequenzbereichs (+ 2-Bin Rand). So wird
+        verhindert dass wir am stillen Ende des Bandes landen wo niemand zuhoert.
         Gibt None zurueck wenn keine Luecke gefunden — TX-Frequenz unveraendert.
         """
         hist_copy = dict(self._freq_histogram)
@@ -122,9 +124,13 @@ class DiversityController:
 
         median_freq = statistics.median(all_freqs)
 
-        # Search-Window = gesamter Nutzbereich (150–2800 Hz)
-        min_bin = int(self.FREQ_MIN_HZ // self.FREQ_BIN_HZ)
-        max_bin = int(self.FREQ_MAX_HZ // self.FREQ_BIN_HZ)
+        # Search-Window = belegter Bereich + 2-Bin Rand (kein Sprung ans leere Ende!)
+        occupied_bins = list(hist_copy.keys())
+        abs_min = int(self.FREQ_MIN_HZ // self.FREQ_BIN_HZ)
+        abs_max = int(self.FREQ_MAX_HZ // self.FREQ_BIN_HZ)
+        _MARGIN = 2
+        min_bin = max(abs_min, min(occupied_bins) - _MARGIN)
+        max_bin = min(abs_max, max(occupied_bins) + _MARGIN)
         min_gap_bins = max(1, self.FREQ_MIN_GAP_HZ // self.FREQ_BIN_HZ)
 
         # Alle freien Luecken im Nutzbereich sammeln
