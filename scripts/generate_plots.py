@@ -784,7 +784,7 @@ def create_stations_diagram(band: str, protocol: str, output_dir: Path,
 
         color = COLORS[rx_mode]
         ax.plot(xs, means, color=color, label=label, linewidth=2.5, zorder=3)
-        ax.fill_between(xs, mins, maxs, color=color, alpha=0.15, zorder=2)
+        ax.fill_between(xs, mins, maxs, color=color, alpha=0.03, zorder=2)
         has_data = True
 
         # Gestrichelte Rescue-Linie (mean + Rescue) für Diversity-Modi
