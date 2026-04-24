@@ -49,6 +49,12 @@ COLORS = {
     "rescue":           "#4cda7a",  # kühles Grün — Rescue Cap (kontrastiert zu Blau+Orange)
 }
 
+# Dunklere Varianten für gestrichelte Rescue-Linien im Stationen-Diagramm
+COLORS_RESCUE = {
+    "Diversity_Normal": "#3a6098",  # 30% dunkler als #5d8fd9
+    "Diversity_Dx":     "#a07030",  # 30% dunkler als #f0a050
+}
+
 _COL_MAP = {
     "zeit": "zeit",
     "stationen": "stationen",
@@ -776,6 +782,17 @@ def create_stations_diagram(band: str, protocol: str, output_dir: Path,
         ax.plot(xs, means, color=color, label=label, linewidth=2.5, zorder=3)
         ax.fill_between(xs, mins, maxs, color=color, alpha=0.15, zorder=2)
         has_data = True
+
+        # Gestrichelte Rescue-Linie (mean + Rescue) für Diversity-Modi
+        if rx_mode in COLORS_RESCUE:
+            rescue = load_rescue_by_hour(STATS_DIR, rx_mode, band, protocol)
+            if rescue:
+                xs_r = [h for h in xs if h in agg]
+                ys_r = [agg[h]["mean"] + rescue.get(h, 0.0) for h in xs_r]
+                dark = COLORS_RESCUE[rx_mode]
+                ax.plot(xs_r, ys_r, color=dark, linewidth=1.2, linestyle="--",
+                        alpha=0.80, zorder=3,
+                        label=f"{base_label}\n+ Rescue")
 
     if not has_data:
         plt.close(fig)
