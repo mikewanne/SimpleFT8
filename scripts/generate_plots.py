@@ -97,6 +97,7 @@ TEXTS = {
 
         # Rescue-Legende
         "rescue_legend":    "davon gerettet (ANT1 unter −24 dB)",
+        "rescue_line":      "+ Rescue Stationen",
 
         # Erklärungs-Fußzeile Stationen-Diagramm
         "expl_stations": (
@@ -104,6 +105,7 @@ TEXTS = {
             "Diversity Standard (blau): 2 Antennen, wählt automatisch die mit mehr Stationen.\n"
             "Diversity DX (orange): 2 Antennen, wählt die mit mehr schwachen DX-Signalen.\n"
             "Schattiertes Band: Schwankung zwischen Messtagen — Linie = Mittelwert.\n"
+            "Rescue Stationen (gestrichelt): Von ANT1 unter −24 dB empfangen — ANT2 hebt das Signal über die Dekodiergrenze.\n"
             "Mehr Stationen = Band offen (Ionosphäre reflektiert Signale aus aller Welt). "
             "Diversity = System wählt automatisch die bessere Antenne."
         ),
@@ -308,6 +310,7 @@ TEXTS = {
 
         # Rescue-Legende
         "rescue_legend":    "rescued (ANT1 below −24 dB)",
+        "rescue_line":      "+ Rescue Stations",
 
         # Erklärungs-Fußzeile Stationen-Diagramm
         "expl_stations": (
@@ -315,6 +318,7 @@ TEXTS = {
             "Diversity Standard (blue): 2 antennas, automatically selects the one with more decoded stations.\n"
             "Diversity DX (orange): 2 antennas, selects the one with more weak DX signals.\n"
             "Shaded band: Day-to-day variation — line = mean value.\n"
+            "Rescue Stations (dashed): Received by ANT1 below −24 dB — ANT2 boosts signal above the decoding threshold.\n"
             "More stations = band open. Diversity = system automatically picks the better antenna."
         ),
 
@@ -792,7 +796,7 @@ def create_stations_diagram(band: str, protocol: str, output_dir: Path,
                 dark = COLORS_RESCUE[rx_mode]
                 ax.plot(xs_r, ys_r, color=dark, linewidth=1.2, linestyle="--",
                         alpha=0.80, zorder=3,
-                        label=f"{base_label}\n+ Rescue")
+                        label=f"{base_label}\n{T['rescue_line']}")
 
     if not has_data:
         plt.close(fig)
@@ -806,13 +810,21 @@ def create_stations_diagram(band: str, protocol: str, output_dir: Path,
         T["title_stations"].format(band=band, protocol=protocol),
         color=DARK_FG, fontsize=13, pad=10,
     )
-    leg = ax.legend(facecolor="#2a2a2a", edgecolor=DARK_GRID, framealpha=0.9)
+    leg = ax.legend(
+        ncol=5,
+        loc="upper left",
+        bbox_to_anchor=(0, -0.22, 1, 0),
+        mode="expand",
+        facecolor="#2a2a2a",
+        edgecolor=DARK_GRID,
+        framealpha=0.9,
+    )
     for t in leg.get_texts():
         t.set_color(DARK_FG)
 
     _footer(fig, T["expl_stations"])
     plt.tight_layout()
-    plt.subplots_adjust(bottom=0.30, right=0.98)
+    plt.subplots_adjust(bottom=0.48, right=0.98)
 
     out = output_dir / f"stationen_{band}_{protocol}.png"
     fig.savefig(out, dpi=150, bbox_inches="tight", facecolor=DARK_BG)

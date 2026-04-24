@@ -83,11 +83,18 @@ Controlled test on 40m, same hardware (FLEX-8400M), 2 minutes apart:
 
 *Rescue = stations that ANT1 could not decode (≤ −24 dB SNR) but ANT2 saved. 40m, 2 measurement days, trend clearly visible.*
 
+**Station timeline — 40m FT8, all three modes over 24h UTC:**
+*(Dashed lines = Rescue Stations: received by ANT1 below −24 dB — ANT2 boosts the signal above the decoding threshold)*
+
+![Stations 40m FT8](auswertung/stationen_40m_FT8.png)
+
+**Direct mode comparison — stations per cycle, per hour:**
+
 ![Diversity Comparison 40m FT8](auswertung/diversity_40m_FT8.png)
 
 | Diagram | Description |
 |---------|-------------|
-| [📊 Diagram 1 — Stations 40m FT8](auswertung/stationen_40m_FT8.png) | Station count over 24h UTC — Normal vs Diversity Normal vs Diversity DX. Line = daily mean, band = day-to-day spread. |
+| [📊 Diagram 1 — Stations 40m FT8](auswertung/stationen_40m_FT8.png) | Station count over 24h UTC — Normal vs Diversity Normal vs Diversity DX. Line = mean, dashed = + Rescue Stations (ANT1 below −24 dB, saved by ANT2). |
 | [📊 Diagram 2 — Diversity Analysis 40m FT8](auswertung/diversity_40m_FT8.png) | Station count per cycle: Normal (grey), Diversity Standard (blue), Diversity DX (orange) + green rescue caps (+N) = stations ANT1 couldn't decode but ANT2 saved. |
 | [📊 Detailed PDF Report](auswertung/SimpleFT8_Bericht.pdf) | Full analysis report with summary table, all diagrams, and methodology notes. Auto-updated with each session. |
 
@@ -254,11 +261,18 @@ MIT License (c) 2026 DA1MHH (Mike Hammerer)
 
 *Rescue = Stationen, die ANT1 nicht decodieren konnte (≤ −24 dB SNR), aber ANT2 rettete. 40m, 2 Messtage, Trend klar erkennbar.*
 
+**Stationen über 24h UTC — 40m FT8, alle drei Modi:**
+*(Gestrichelte Linien = Rescue Stationen: von ANT1 unter −24 dB empfangen — ANT2 hebt das Signal über die Dekodiergrenze)*
+
+![Stationen 40m FT8](auswertung/stationen_40m_FT8.png)
+
+**Direktvergleich — Stationen pro Zyklus, stündlich:**
+
 ![Diversity Vergleich 40m FT8](auswertung/diversity_40m_FT8.png)
 
 | Diagramm | Beschreibung |
 |----------|-------------|
-| [📊 Diagramm 1 — Stationen 40m FT8](auswertung/stationen_40m_FT8.png) | Stationszahl über 24h UTC — Normal vs Diversity Normal vs Diversity DX. Linie = Tagesmittel, Band = Tages-Schwankung. |
+| [📊 Diagramm 1 — Stationen 40m FT8](auswertung/stationen_40m_FT8.png) | Stationszahl über 24h UTC — Normal vs Diversity Normal vs Diversity DX. Linie = Mittelwert, gestrichelt = + Rescue Stationen (ANT1 unter −24 dB, von ANT2 gerettet). |
 | [📊 Diagramm 2 — Diversity Analyse 40m FT8](auswertung/diversity_40m_FT8.png) | Stationen/Zyklus: Normal (grau), Diversity Standard (blau), Diversity DX (orange) + grüne Rescue-Kappen (+N) = Stationen die ANT1 nicht decodieren konnte, aber ANT2 rettete. |
 | [📊 Ausführlicher PDF-Bericht](auswertung/SimpleFT8_Bericht.pdf) | Vollständiger Auswertungsbericht mit Zusammenfassungstabelle, allen Diagrammen und Methodik-Hinweisen. Wird automatisch mit jeder Session aktualisiert. |
 
