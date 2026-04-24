@@ -104,10 +104,8 @@ TEXTS = {
             "Normal (grau): 1 Antenne, wie WSJT-X — Vergleichsbasis.\n"
             "Diversity Standard (blau): 2 Antennen, wählt automatisch die mit mehr Stationen.\n"
             "Diversity DX (orange): 2 Antennen, wählt die mit mehr schwachen DX-Signalen.\n"
-            "Schattiertes Band: Schwankung zwischen Messtagen — Linie = Mittelwert.\n"
             "Rescue Stationen (gestrichelt): Von ANT1 unter −24 dB empfangen — ANT2 hebt das Signal über die Dekodiergrenze.\n"
-            "Mehr Stationen = Band offen (Ionosphäre reflektiert Signale aus aller Welt). "
-            "Diversity = System wählt automatisch die bessere Antenne."
+            "Linie = Pooled Mean über alle Messpunkte. Mehr Tage = stabilere Linie."
         ),
 
         # Erklärungs-Fußzeile Diversity-Diagramm (Platzhalter {band} und {protocol})
@@ -317,9 +315,8 @@ TEXTS = {
             "Normal (grey): 1 antenna, like WSJT-X — baseline reference.\n"
             "Diversity Standard (blue): 2 antennas, automatically selects the one with more decoded stations.\n"
             "Diversity DX (orange): 2 antennas, selects the one with more weak DX signals.\n"
-            "Shaded band: Day-to-day variation — line = mean value.\n"
             "Rescue Stations (dashed): Received by ANT1 below −24 dB — ANT2 boosts signal above the decoding threshold.\n"
-            "More stations = band open. Diversity = system automatically picks the better antenna."
+            "Line = pooled mean over all measurement points. More days = more stable line."
         ),
 
         # Erklärungs-Fußzeile Diversity-Diagramm (Platzhalter {band} und {protocol})
@@ -784,7 +781,6 @@ def create_stations_diagram(band: str, protocol: str, output_dir: Path,
 
         color = COLORS[rx_mode]
         ax.plot(xs, means, color=color, label=label, linewidth=2.5, zorder=3)
-        ax.fill_between(xs, mins, maxs, color=color, alpha=0.08, zorder=2)
         has_data = True
 
         # Gestrichelte Rescue-Linie (mean + Rescue) für Diversity-Modi
