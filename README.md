@@ -117,12 +117,13 @@ Controlled test on 40m, same hardware (FLEX-8400M), 2 minutes apart:
 | Photo | Annotated |
 |:-----:|:---------:|
 | ![Antenna Overview](docs/fotos/Gesamt.png) | ![Antenna Annotated](docs/fotos/Gesamt_Farbe.png) |
-| Full view — gutter downspout (ANT2) on the left, feed point of ANT1 upper right at the dormer. | Yellow = Kelemen DP-201510 (inverted-V, green dot = feed point). Red = complete gutter path (roof → downspout → entrance). |
+| Full view — gutter downspout (ANT2) on the left, feed point of ANT1 upper right at the dormer. | Yellow = Kelemen DP-201510 (vertical half-wave dipole, green dot = feed point). Red = complete gutter path (roof → downspout → entrance). |
 
 **ANT1 — Kelemen DP-201510 (fan dipole for 20m / 15m / 10m)**
 Feed point at the dormer window, 3rd floor, through a 1:1 balun (matching transformer
 between balanced dipole and coaxial cable). One arm runs diagonally up to the roof
-ridge, the other diagonally down via the porch roof to the balcony — classic inverted-V.
+ridge, the other diagonally down via the porch roof to the balcony — a vertically-oriented
+multiband half-wave dipole with the feed point at the center.
 *On 40m this antenna operates off its design band — see interpretation note above.*
 
 **ANT2 — House gutter (random wire antenna, ~15m)**
@@ -327,13 +328,13 @@ MIT License (c) 2026 DA1MHH (Mike Hammerer)
 | Foto | Annotiert |
 |:----:|:---------:|
 | ![Antennenübersicht](docs/fotos/Gesamt.png) | ![Antenne annotiert](docs/fotos/Gesamt_Farbe.png) |
-| Gesamtansicht — Regenrinnen-Fallrohr (ANT2) links, Einspeisepunkt ANT1 oben rechts an der Dachgaube. | Gelb = Kelemen DP-201510 (Inverted-V, grüner Punkt = Einspeisepunkt). Rot = vollständiger Regenrinnen-Verlauf (Dachkante → Fallrohr → Hauseingang). |
+| Gesamtansicht — Regenrinnen-Fallrohr (ANT2) links, Einspeisepunkt ANT1 oben rechts an der Dachgaube. | Gelb = Kelemen DP-201510 (vertikal gespannter Halbwellendipol, grüner Punkt = Einspeisepunkt). Rot = vollständiger Regenrinnen-Verlauf (Dachkante → Fallrohr → Hauseingang). |
 
 **ANT1 — Kelemen DP-201510 (Fächer-Dipol für 20m / 15m / 10m)**
 Einspeisepunkt an der Dachgaube im 3. OG, gespeist über einen 1:1-Balun (Anpassglied
 zwischen symmetrischem Dipol und Koaxialkabel). Ein Arm führt schräg nach oben zur
 Dachspitze, der andere schräg nach unten über das Vordach zum Balkon — klassische
-Inverted-V-Form.
+vertikal gespannter Mehrband-Halbwellendipol mit Einspeisepunkt in der Mitte.
 *Auf 40m arbeitet diese Antenne außerhalb ihres Auslegungsbandes — siehe Interpretationshinweis oben.*
 
 **ANT2 — Regenrinne des Hauses (Zufalls-Längenantenne, ~15m)**
