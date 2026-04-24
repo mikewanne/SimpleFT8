@@ -192,6 +192,11 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self._presence_poll_timer.timeout.connect(self._poll_mouse_activity)
         self._presence_poll_timer.start(500)
 
+        # CQ-Freq Countdown: sekündlich aktualisieren (unabhängig vom Decode-Zyklus)
+        self._cq_countdown_timer = QTimer(self)
+        self._cq_countdown_timer.timeout.connect(self._tick_cq_countdown)
+        self._cq_countdown_timer.start(1000)
+
         # Statusbar + Hilfe-Button
         self._update_statusbar()
         self.statusBar().setStyleSheet(
@@ -614,6 +619,14 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
     @staticmethod
     def _msgbox_style() -> str:
         return styles.MSGBOX_STYLE
+
+    def _tick_cq_countdown(self):
+        """Sekündlicher Update des CQ-Freq-Countdown-Balkens."""
+        if self._rx_mode == "diversity" and self._diversity_ctrl.cq_freq_hz is not None:
+            self.control_panel.update_cq_freq_countdown(
+                self._diversity_ctrl.seconds_until_next_check)
+        else:
+            self.control_panel.set_cq_countdown_visible(False)
 
     def _restore_geometry(self):
         """Fenstergeometrie + Splitter-Breiten aus Settings laden."""

@@ -66,6 +66,7 @@ class DiversityController:
         self._cq_freq_hz: Optional[int] = None  # Letzte berechnete CQ-Frequenz
         self._last_recalc_time: float = 0.0    # Zeitstempel letzter Zeit-Fallback
         self._last_change_time: float = 0.0    # Zeitstempel letzter Freq-Wechsel (Dwell-Guard)
+        self._last_check_time: float = 0.0     # Zeitstempel letzter Kollisions-Check (Display)
         self._recalc_count = 0                  # Zaehler: wie oft wurde CQ-Freq neu berechnet
 
     def load_preset(self, preset: dict):
@@ -182,6 +183,12 @@ class DiversityController:
         elapsed = time.time() - self._last_recalc_time
         return max(0, int(self.RECALC_INTERVAL_S - elapsed))
 
+    @property
+    def seconds_until_next_check(self) -> int:
+        """Sekunden bis zum naechsten Kollisions-Check (0-15, Display-Countdown)."""
+        elapsed = time.time() - self._last_check_time
+        return max(0, int(self.MIN_DWELL_S - elapsed))
+
     def update_proposed_freq(self, qso_active: bool = False):
         """Vorgeschlagene TX-Frequenz aktualisieren — adaptiv mit Kollisionserkennung.
 
@@ -201,6 +208,7 @@ class DiversityController:
             self.get_free_cq_freq()
             self._last_recalc_time = now
             self._last_change_time = now
+            self._last_check_time = now
             self._recalc_count += 1
             if self._cq_freq_hz:
                 print(f"[CQ-Freq] #{self._recalc_count} Erste Berechnung: →{self._cq_freq_hz}Hz")
@@ -209,6 +217,7 @@ class DiversityController:
         # Kollisionserkennung: ist unsere aktuelle Freq jetzt belegt?
         # Erst pruefen nach MIN_DWELL_S (verhindert sofortigen Bounce-Back)
         if now - self._last_change_time >= self.MIN_DWELL_S:
+            self._last_check_time = now  # Display-Countdown reset (unabhaengig vom Ergebnis)
             current_bin = self._cq_freq_hz // self.FREQ_BIN_HZ
             neighbors = sum(self._freq_histogram.get(current_bin + d, 0)
                            for d in [-1, 0, 1])

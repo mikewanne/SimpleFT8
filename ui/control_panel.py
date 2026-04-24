@@ -404,14 +404,14 @@ class _AntenneCard(QFrame):
         cq_row_layout = QHBoxLayout()
         cq_row_layout.setContentsMargins(2, 1, 2, 1)
         cq_row_layout.setSpacing(6)
-        self._cq_freq_lbl = QLabel("Freie TX Frequenz in -- Sek.")
+        self._cq_freq_lbl = QLabel("Prüfe nächste freie TX Frequenz in: -- Sek.")
         self._cq_freq_lbl.setStyleSheet(
             f"color:#882222;font-size:9px;font-family:{_FONT};font-style:italic;"
         )
         cq_row_layout.addWidget(self._cq_freq_lbl)
         self._cq_freq_bar = QProgressBar()
-        self._cq_freq_bar.setRange(0, 120)
-        self._cq_freq_bar.setValue(120)
+        self._cq_freq_bar.setRange(0, 15)
+        self._cq_freq_bar.setValue(15)
         self._cq_freq_bar.setTextVisible(False)
         self._cq_freq_bar.setFixedHeight(6)
         self._cq_freq_bar.setStyleSheet(
@@ -1118,26 +1118,30 @@ class ControlPanel(QWidget):
             self._freq_hist.setVisible(True)
 
     def update_cq_freq_countdown(self, remaining_s: int) -> None:
-        """CQ-Frequenz Countdown-Balken aktualisieren (0-120 Sekunden)."""
-        if remaining_s <= 10:
+        """CQ-Frequenz Countdown-Balken aktualisieren (0-15 Sekunden)."""
+        if remaining_s <= 5:
             color_txt = "#FF5555"
             bar_color = "#FF5555"
-        elif remaining_s <= 30:
+        elif remaining_s <= 10:
             color_txt = "#CC3333"
             bar_color = "#CC3333"
         else:
             color_txt = "#882222"
             bar_color = "#882222"
-        self._cq_freq_lbl.setText(f"Freie TX Frequenz in {remaining_s} Sek.")
+        self._cq_freq_lbl.setText(f"Prüfe nächste freie TX Frequenz in: {remaining_s} Sek.")
         self._cq_freq_lbl.setStyleSheet(
             f"color:{color_txt};font-size:9px;font-family:{_FONT};font-style:italic;"
         )
         self._cq_freq_bar.setValue(remaining_s)
         self._cq_freq_bar.setStyleSheet(
-            "QProgressBar { border: none; border-radius: 2px; background: #1a2a1a; }"
+            "QProgressBar { border: none; border-radius: 2px; background: #1a1010; }"
             f"QProgressBar::chunk {{ background: {bar_color}; border-radius: 2px; }}"
         )
         self._cq_row.setVisible(True)
+
+    def set_cq_countdown_visible(self, visible: bool) -> None:
+        """CQ-Freq-Countdown-Zeile ein-/ausblenden."""
+        self._cq_row.setVisible(visible)
 
     def update_presence(self, remaining_secs: int) -> None:
         """Operator Presence Balken aktualisieren (0-900 Sekunden)."""

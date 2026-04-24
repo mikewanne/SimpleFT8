@@ -3,8 +3,11 @@ Lies nach dieser Datei sofort auch HANDOFF.md und bestätige beide mit je einer 
 # SimpleFT8 — Claude Kontext
 
 **Start:** `cd "/Users/mikehammerer/Documents/KI N8N Projekte/FT8/SimpleFT8" && ./venv/bin/python3 main.py`
-**Tests:** `./venv/bin/python3 -m pytest tests/ -q` → 167 passed
+**Tests:** `./venv/bin/python3 -m pytest tests/ -q` → 168 passed
 **Diagramme:** `./venv/bin/python3 scripts/generate_plots.py`
+→ Generiert IMMER beide Sprachen: DE → `auswertung/` + EN → `auswertung/en/`
+→ DE: `SimpleFT8_Bericht.pdf` (7 S.) | EN: `SimpleFT8_Report.pdf` (7 p.)
+→ Regel: Statistiken und PDFs IMMER auf Deutsch UND Englisch erstellen!
 **Git:** branch `main`, Repo aktiv, Statistics-Daten committed
 
 ---
@@ -18,18 +21,20 @@ core/
   encoder.py          FT8/FT4/FT2 encode → VITA-49 TX
                       TARGET_TX_OFFSET=-0.8s (kompensiert FlexRadio TX-Buffer 1.3s)
   qso_state.py        State Machine: Hunt, CQ, Waitlist, RR73 Courtesy (max 2×)
+                      _was_cq: in start_qso() UND _process_cq_reply() gesetzt (Bug-Fix!)
   diversity.py        Controller: Standard(Stationsanzahl) / DX(SNR<-10dB)
   diversity_merger.py Merged A1/A2 Dekodierungen
   ntp_time.py         DT-Korrektur v3: pro Modus+Band (Key "FT8_20m"), set_band(),
                       2-Zyklen-Messen, 70% Dämpfung, engere Grenzen pro Modus,
                       gedämpfte Erstkorrektur bei ≤2 Stationen
   station_accumulator.py Gemeinsame Logik Normal+Diversity
+                      Aging: 75s normal / 150s active_qso / 300s CQ-Rufer
   station_stats.py    Async Queue+Daemon-Thread Logging → statistics/<Modus>/<Band>/<Proto>/
                       + Entry-Typ antenna_qso → statistics/antenna_qso/YYYY-MM-DD.md
   antenna_pref.py     AntennaPreferenceStore: {best_ant, delta_db} pro Callsign,
                       1dB Hysterese, kein Timeout (jeder Zyklus überschreibt)
   propagation.py      HamQSL + _apply_seasonal_correction(band, condition, utc_hour, month)
-                      60m fehlt in XML → Interpolation aus 40m+80m (day+night getrennt)
+                      60m fehlt in XML → Interpolation 40m/80m (day+night getrennt, implementiert)
   ap_lite.py          ⛔ UNGETESTET — Feldtest ausstehend (SCORE_THRESHOLD=0.75)
   omni_tx.py          ⛔ DEAKTIVIERT — Feldtest ausstehend (Klick auf Versionsnummer)
   auto_hunt.py        Auto-Hunt Logik
@@ -45,11 +50,13 @@ radio/
 ui/
   main_window.py      3-Panel + Statusbar; _tune_active/_tune_freq_mhz State-Vars
   mw_cycle.py         Cycle Processing; _diversity_in_operate Flag (Transition Guard!)
+                      _log_stats Guard: btn_cq.isChecked() + cq_mode + state (3-fach robust)
   mw_radio.py         Band/Modus/Diversity, _diversity_in_operate Reset bei _enable_diversity()
                       set_band()/set_mode() bei Wechsel + Radio-Connect (DT-Korrektur!)
   mw_tx.py            TX-Regelung: rfpower konvergiert → save_tx_power();
                       _on_tune_clicked() setzt _tune_active/_tune_freq_mhz + _update_statusbar()
   mw_qso.py           QSO Callbacks, CQ, Logbuch;
+                      _on_station_clicked: _cq_was_active VOR stop_cq() sichern → _was_cq fix
                       _antenna_pref_label() → "(ANT1)" in Normal, "(ANT2, +6.3 dB)" in Diversity
   control_panel.py    UI Controls (57 KB — größte UI-Datei); Frequenz in kHz
   rx_panel.py         RX-Tabelle; Answer-Me-Highlighting; Spalten per Rechtsklick
@@ -193,6 +200,19 @@ Nacht-Daten für Diversity_Normal + Diversity_Dx fehlen noch!
 
 ---
 
+## Änderungshistorie
+
+**HISTORY.md** — lückenlose Aufzeichnung aller Änderungen, Bugfixes und Features.
+- Datei: `SimpleFT8/HISTORY.md`
+- Regel: **Nur anhängen, niemals löschen oder überschreiben.**
+- Bei jeder Session: Änderungen am Ende eintragen (Feierabend-Routine Schritt 3).
+- **Versionsnummer IMMER mitführen!** Format: `## YYYY-MM-DD vX.YY — Kurztitel`
+  - `APP_VERSION` steht in `main.py` (erste Konstante nach den Imports)
+  - Bei neuen Features: Patch-Version +0.01 erhöhen, bei Bugfix-only: unverändert lassen
+  - So ist für jedes Appsicherungen-Backup sofort klar, welcher HISTORY-Eintrag dazugehört
+
+---
+
 ## Offene TODOs (nach Schwierigkeit)
 
 **EINFACH:**
@@ -214,7 +234,7 @@ Nacht-Daten für Diversity_Normal + Diversity_Dx fehlen noch!
 - **cache.save() nie im Cycle-Loop** — refresht Timestamp → 2h Gültigkeit wird sinnlos
 - **_diversity_in_operate vergessen** — once-only Code läuft sonst jeden Zyklus
 - **Gain-Messung** — sperrt GUI always-on-top; TX vorher stoppen
-- **Stats Warmup** — `_stats_warmup_until` an 3 Stellen in mw_radio.py
+- **Stats Warmup** — `_stats_warmup_cycles` an mehreren Stellen in mw_radio.py
 - **Statusbar Race** — nach Radio-Connect kurz unsichtbar; Workaround: QTimer.singleShot(200, ...)
 - **_r_hline existiert nicht mehr** — ersetzt durch `_chline` in generate_plots.py (nie wieder einbauen)
 - **`_tune_active` + `_tune_freq_mhz`** — in `main_window.__init__` initialisiert; `_update_statusbar()` liest beide für `TUNE: xx kHz` Anzeige
@@ -222,3 +242,5 @@ Nacht-Daten für Diversity_Normal + Diversity_Dx fehlen noch!
 - **DT_BUFFER_OFFSET** — FT8=2.0, FT4=1.0, FT2=0.8 (WSJT-X 0.5s eingerechnet!) — bei Modus-Änderungen immer prüfen
 - **TARGET_TX_OFFSET = -0.8** — FlexRadio-spezifisch! IC-7300 Fork braucht eigenen Wert
 - **dt_corrections.json Key-Format** — "FT8_20m" (Modus_Band), Migration von "FT8" automatisch
+- **_was_cq Bug (gefixt)** — `_on_station_clicked` rief `stop_cq()` VOR `start_qso()` → `_was_cq=False` → CQ resumte nicht nach manuellem QSO; Fix: `_cq_was_active` vor stop_cq() sichern, nach start_qso() als `_was_cq=True` setzen
+- **Stats Guard (3-fach)** — `btn_cq.isChecked()` + `cq_mode` + `state not in IDLE/TIMEOUT` → robuster gegen desynchronisierte States

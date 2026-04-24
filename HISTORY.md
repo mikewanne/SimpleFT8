@@ -252,3 +252,28 @@ In `_on_station_clicked` (manueller Klick auf Station während CQ):
 - `main.py` APP_VERSION auf 0.49 erhöht
 
 **Tests:** 168 passed
+
+---
+
+## 2026-04-24 v0.54 — CQ-Freq Countdown sekündlich + glatt
+
+**Betroffene Dateien:** `core/diversity.py`, `ui/control_panel.py`, `ui/mw_cycle.py`, `ui/main_window.py`
+
+### Problem vorher
+Countdown sprang z.B. 119→108→119 weil per-Zyklus-Updates die 120s-Range unregelmäßig aktualisierten (FT8=15s, FT4=7.5s, FT2=3.8s). Kein gleichmäßiges Runterzählen.
+
+### Lösung
+- **Neues Property `seconds_until_next_check`** in `diversity.py` — zählt 15→0 ab `_last_check_time`
+- **`_last_check_time`** in `reset()` ergänzt; in `update_proposed_freq()` gesetzt:
+  - Bei Erstberechnung
+  - Jedes Mal wenn MIN_DWELL_S abgelaufen ist (ob Kollision oder nicht) → Display immer zurück auf 15
+- **1-Sekunden QTimer** (`_cq_countdown_timer`) in `main_window.__init__()` → `_tick_cq_countdown()`
+  - Aktiv nur wenn `_rx_mode == "diversity"` und `cq_freq_hz is not None`
+  - Sonst: Widget ausgeblendet via `set_cq_countdown_visible(False)`
+- **3 per-Zyklus-Calls** `update_cq_freq_countdown()` aus `mw_cycle.py` entfernt
+- **Range** 0-120 → 0-15, Label: `"Prüfe nächste freie TX Frequenz in: X Sek."`
+- **Neue Methode** `control_panel.set_cq_countdown_visible(bool)`
+- **Farb-Schwellen** angepasst: ≤5s → #FF5555, ≤10s → #CC3333, sonst #882222
+- **Hintergrund** korrigiert: `#1a1010` (war fälschlich `#1a2a1a`)
+
+**Tests:** 168 passed

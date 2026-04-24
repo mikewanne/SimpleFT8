@@ -96,8 +96,6 @@ class CycleMixin:
             # Histogram LIVE aktualisieren (auch waehrend Messung)
             self.control_panel.update_freq_histogram(
                 self._diversity_ctrl.get_histogram_data())
-            self.control_panel.update_cq_freq_countdown(
-                self._diversity_ctrl.seconds_until_recalc)
             self.control_panel.update_diversity_ratio(
                 self._diversity_ctrl.ratio, self._diversity_ctrl.phase,
                 measure_step=self._diversity_ctrl.measure_step,
@@ -157,8 +155,6 @@ class CycleMixin:
             self._diversity_ctrl.update_proposed_freq(qso_active=qso_busy)
             self.control_panel.update_freq_histogram(
                 self._diversity_ctrl.get_histogram_data())
-            self.control_panel.update_cq_freq_countdown(
-                self._diversity_ctrl.seconds_until_recalc)
 
             # Stationen pro Antenne — immer berechnen (nicht nur bei changed)
             a1_msgs = [m for m in self._diversity_stations.values()
@@ -428,8 +424,6 @@ class CycleMixin:
         self._diversity_ctrl.update_proposed_freq(qso_active=qso_busy)
         self.control_panel.update_freq_histogram(
             self._diversity_ctrl.get_histogram_data())
-        self.control_panel.update_cq_freq_countdown(
-            self._diversity_ctrl.seconds_until_recalc)
 
     def _is_antenna_tuning_active(self) -> bool:
         """Prueft ob RF-Tuning, Radio-Suche oder Diversity-Einmessphase aktiv.

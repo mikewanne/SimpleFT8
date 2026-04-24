@@ -2,8 +2,12 @@
 """SimpleFT8 Auswertungs-Script — PNG-Diagramme aus statistics/ Markdown-Dateien.
 
 Aufruf: python3 scripts/generate_plots.py
-Output: auswertung/stationen_<band>_<proto>.png
-        auswertung/diversity_<band>_<proto>.png
+Output: auswertung/stationen_<band>_<proto>.png          (DE)
+        auswertung/en/stationen_<band>_<proto>.png        (EN)
+        auswertung/diversity_<band>_<proto>.png           (DE)
+        auswertung/en/diversity_<band>_<proto>.png        (EN)
+        auswertung/SimpleFT8_Bericht.pdf                  (DE)
+        auswertung/en/SimpleFT8_Report.pdf                (EN)
 
 X-Achse: Stunde des Tages (00–23 UTC), gemittelt über alle Messtage.
 Konfidenzband: Min–Max der Tages-Mittelwerte (Tag-zu-Tag-Variabilität).
@@ -27,6 +31,10 @@ import numpy as np
 BASE_DIR = Path(__file__).parent.parent
 STATS_DIR = BASE_DIR / "statistics"
 OUTPUT_DIR = BASE_DIR / "auswertung"
+OUTPUT_DIR_EN = BASE_DIR / "auswertung" / "en"
+
+# Language → output directory mapping
+LANG_DIR = {"de": OUTPUT_DIR, "en": OUTPUT_DIR_EN}
 
 RX_MODES = ["Normal", "Diversity_Normal", "Diversity_Dx"]
 
@@ -55,27 +63,431 @@ _COL_MAP = {
     "saved": "saved",
 }
 
-# ── Erklärungstexte (rechtsbündig, mit \n strukturiert) ──────────────────────
+# ── Lokalisierungs-Texte / Localisation strings ───────────────────────────────
 
-EXPL_STATIONEN = (
-    "Normal (grau): 1 Antenne, wie WSJT-X — Vergleichsbasis.\n"
-    "Diversity Standard (blau): 2 Antennen, wählt automatisch die mit mehr Stationen.\n"
-    "Diversity DX (orange): 2 Antennen, wählt die mit mehr schwachen DX-Signalen.\n"
-    "Schattiertes Band: Schwankung zwischen Messtagen — Linie = Mittelwert.\n"
-    "Mehr Stationen = Band offen (Ionosphäre reflektiert Signale aus aller Welt). Diversity = System wählt automatisch die bessere Antenne."
+TEXTS = {
+    "de": {
+        # Achsenbeschriftungen / Axis labels
+        "x_label":          "Stunde (UTC)",
+        "y_label_line":     "Ø Stationen / 15s-Zyklus",
+        "y_label_bar":      "Ø Stationen pro 15s-Zyklus",
+
+        # Diagramm-Titel / Chart titles
+        "title_stations":   "Empfangene Stationen — {band} {protocol}   ({basis})",
+        "title_diversity":  "Empfang im Vergleich — {band} {protocol}   ({basis})",
+
+        # Basis-Label (Legende) / Basis label (legend)
+        "basis_entry":      "{label}: {n_d} Tag{pl} / {n_c} Z",
+        "day_plural_1":     "",       # Singular-Suffix: "1 Tag" (kein Suffix)
+        "day_plural_n":     "e",      # Plural-Suffix:   "2 Tage"
+
+        # Modusbezeichnungen / Mode labels
+        "mode_labels": {
+            "Normal":           "Normal (1 Antenne)",
+            "Diversity_Normal": "Diversity Standard",
+            "Diversity_Dx":     "Diversity DX",
+        },
+
+        # Rescue-Legende
+        "rescue_legend":    "davon gerettet (ANT1 unter −24 dB)",
+
+        # Erklärungs-Fußzeile Stationen-Diagramm
+        "expl_stations": (
+            "Normal (grau): 1 Antenne, wie WSJT-X — Vergleichsbasis.\n"
+            "Diversity Standard (blau): 2 Antennen, wählt automatisch die mit mehr Stationen.\n"
+            "Diversity DX (orange): 2 Antennen, wählt die mit mehr schwachen DX-Signalen.\n"
+            "Schattiertes Band: Schwankung zwischen Messtagen — Linie = Mittelwert.\n"
+            "Mehr Stationen = Band offen (Ionosphäre reflektiert Signale aus aller Welt). "
+            "Diversity = System wählt automatisch die bessere Antenne."
+        ),
+
+        # Erklärungs-Fußzeile Diversity-Diagramm (Platzhalter {band} und {protocol})
+        "expl_diversity": (
+            "Normal (grau): 1 Antenne, wie WSJT-X — dient als Vergleichsbasis.\n"
+            "Diversity Standard (blau): 2 Antennen — wählt automatisch die Antenne, die mehr Stationen empfängt.\n"
+            "Diversity DX (orange): 2 Antennen — wählt die Antenne mit mehr schwachen DX-Signalen (SNR unter −10 dB).\n"
+            "Fehlerbalken (weiße Striche): Schwankung zwischen Messtagen — je mehr Tage, desto stabiler der Wert.\n"
+            "Grüne Kappe (+N): Stationen, die ANT1 allein nicht dekodieren konnte — ANT2 hat sie gerettet (Signal unter −24 dB).\n"
+            "\n"
+            "Rohdaten: statistics/{{Modus}}/{band}/{protocol}/  ·  github.com/mikewanne/SimpleFT8"
+        ),
+
+        # Zeitbereich / Time range
+        "no_data":  "keine Daten",
+        "date_to":  "bis",
+
+        # PDF Footer
+        "footer_left": "SimpleFT8 Diversity Feldstudie — DA1MHH / Mike Hammerer  ·  {gen_date}",
+
+        # Seitenzahl-Label / Page number label
+        "page":     "Seite {n}",
+
+        # PDF Name
+        "pdf_name": "SimpleFT8_Bericht.pdf",
+
+        # ── Titelseite (S.1) ────────────────────────────────────────────────
+        "p1_title":    "SimpleFT8 — Zwei Antennen, ein Vergleich",
+        "p1_subtitle": "Was bringt Diversity wirklich? — 40m FT8, erste Messergebnisse",
+        "p1_period_label": "Zeitraum: {time_range}   ·   Ausgewertete 15s-Zyklen: {total_cyc}",
+        "p1_summary_title": "Kurz zusammengefasst:",
+        "p1_summary_body": (
+            "Mit Diversity Standard (blau) habe ich im Schnitt {s_gain} mehr Stationen dekodiert als mit einer einzelnen Antenne.\n"
+            "Zählt man die 'geretteten' Stationen dazu, kommt man auf bis zu {s_gain_r}.\n"
+            "Diversity DX (orange) bringt {d_gain} — weniger als Standard, aber gezielter auf schwache DX-Signale."
+        ),
+        "p1_caveat": (
+            "Wichtig: Das sind erst 2 Messtage, nur Morgenstunden (05–12 Uhr UTC). "
+            "Die Zahlen können sich noch verschieben — aber der Trend ist klar erkennbar."
+        ),
+        "p1_modes_title": "Was bedeuten die drei Modi?",
+        "p1_modes_body": (
+            "Normal (grau): Eine Antenne, keine besondere Logik — so wie WSJT-X. Das ist die Vergleichsbasis.\n"
+            "Diversity Standard (blau): Zwei Antennen. Das System wählt automatisch die Antenne mit mehr Stationen.\n"
+            "Diversity DX (orange): Zwei Antennen. Wählt die Antenne mit den schwächsten DX-Signalen (unter −10 dB).\n"
+            "Rescue (grüne Kappen): Stationen die ANT1 nicht hören konnte — ANT2 hat sie trotzdem dekodiert."
+        ),
+
+        # ── Methodik-Seite (S.2) ────────────────────────────────────────────
+        "p2_header_title":    "Wie wurde gemessen?",
+        "p2_header_subtitle": "Setup, Zeitraum und ein bisschen Hintergrund",
+        "p2_setup_title": "Das Setup",
+        "p2_setup_body": (
+            "Gemessen auf 40m FT8 mit dem FlexRadio FLEX-8400M — zwei Antennenanschlüsse, gleiche Frequenz.\n"
+            "Zeitraum: {time_range}, jeweils morgens zwischen 05:00 und 12:00 UTC. Ja, die Nacht fehlt noch — kommt noch.\n"
+            "Zyklen ausgewertet: Normal {n_c} ({n_d} Tag/e)  |  Diversity Standard {s_c} ({s_d} Tag/e)  |  Diversity DX {d_c} ({d_d} Tag/e).\n"
+            "Jeder FT8-Zyklus dauert 15 Sekunden — die App zählt pro Zyklus wie viele Stationen dekodiert wurden."
+        ),
+        "p2_pooled_title": "Warum nicht einfach den Tagesdurchschnitt nehmen?",
+        "p2_pooled_body": (
+            "Gute Frage — ich hatte das auch erst so. Aber wenn an einem Tag nur 20 Zyklen gemessen wurden\n"
+            "und an einem anderen 500, dann würde der kurze Tag genauso stark ins Ergebnis eingehen wie der lange.\n"
+            "Das wäre unfair. Deswegen werden alle Einzelwerte direkt zusammengezählt und gemittelt — egal von welchem Tag.\n"
+            "Das ergibt ein Bild das näher an der Realität liegt."
+        ),
+        "p2_rescue_title": "Was sind 'gerettete Stationen' (Rescue)?",
+        "p2_rescue_body": (
+            "Stell dir vor eine Station sendet so schwach dass ANT1 das Signal unter −24 dB empfängt.\n"
+            "Das ist bei FT8 die Grenze — darunter kann man praktisch nicht mehr dekodieren.\n"
+            "ANT2 empfängt dieselbe Station aber mit etwas mehr Pegel — und dekodiert sie trotzdem.\n"
+            "Das nennen wir 'Rescue'. Die grünen Kappen in den Diagrammen zeigen genau diese Stationen.\n"
+            "Ob man die mitzählt oder lieber separat betrachtet — das ist Ansichtssache. Beide Werte stehen im Bericht."
+        ),
+        "p2_rawdata_title": "Wo kommen die Rohdaten her?",
+        "p2_rawdata_body": (
+            "SimpleFT8 schreibt pro Stunde eine kleine Markdown-Datei mit allen Zykluswerten.\n"
+            "Kein vorberechneter Durchschnitt — nur Rohdaten. Das Auswertungs-Script rechnet alles frisch durch.\n"
+            "Wer nachschauen will: statistics/ im GitHub-Repo, alles offen."
+        ),
+
+        # ── Ergebnisse-Seite (S.3) ──────────────────────────────────────────
+        "p3_header_title":    "Hauptergebnisse — Vergleichstabelle",
+        "p3_header_subtitle": "40m FT8 · Pooled Mean",
+        "p3_col_labels": [
+            "Modus", "Ø Stat.\n/Zyklus", "vs Normal\nohne Rescue",
+            "vs Normal\n+ Rescue", "Rescue\nallein", "Messtage", "Zyklen",
+        ],
+        "p3_note1": (
+            "Ø Stat./Zyklus = Mittelwert über alle Einzelzyklen direkt (nicht erst Tagesdurchschnitt).   "
+            "Rescue = ANT1 unter −24 dB, ANT2 hat trotzdem dekodiert."
+        ),
+        "p3_note2": (
+            "Noch erst 2 Messtage, nur Morgenstunden 05–12 Uhr UTC — Nacht und Abend fehlen noch. "
+            "Die Zahlen können sich mit mehr Daten noch etwas verschieben."
+        ),
+
+        # ── Diagramm-Seite Stationen (S.4) ──────────────────────────────────
+        "p4_title":      "Stationen pro Stunde — alle drei Modi im Vergleich",
+        "p4_subtitle":   "{band} {protocol} — Linie = Mittelwert, schattiertes Band = Schwankung zwischen den Messtagen",
+        "p4_annotation": (
+            "Man sieht gut wie die graue Linie (Normal, eine Antenne) fast immer unter blau und orange liegt. "
+            "Das schattierte Band zeigt die Schwankung zwischen den beiden Messtagen — je mehr Tage dazukommen, desto enger wird das."
+        ),
+
+        # ── Diagramm-Seite Diversity (S.5) ──────────────────────────────────
+        "p5_title":      "Direktvergleich — Balken pro Stunde, drei Modi nebeneinander",
+        "p5_subtitle":   "{band} {protocol} — Normal (grau) | Diversity Standard (blau) | Diversity DX (orange) | Rescue-Kappen (grün)",
+        "p5_annotation": (
+            "Die grünen Kappen (+N) oben auf den Balken zeigen Stationen die ANT1 nicht dekodieren konnte — "
+            "Signal unter −24 dB. ANT2 hat sie trotzdem gerettet. Ob man die mitzählt oder nicht — Ansichtssache. "
+            "Weiße Fehlerbalken zeigen die Schwankung zwischen den Messtagen."
+        ),
+
+        # ── Rescue-Seite (S.6) ──────────────────────────────────────────────
+        "p6_header_title":    "Die grünen Kappen — zählen oder nicht?",
+        "p6_header_subtitle": "Rescue-Stationen: Was steckt dahinter und was sagen sie aus?",
+        "p6_about_title": "Worum geht's?",
+        "p6_about_body": (
+            "Im Diversity-Diagramm sieht man oben auf manchen Balken kleine grüne Kappen mit einem +N davor.\n"
+            "Das sind Stationen die ANT1 nicht dekodieren konnte — deren Signal war unter −24 dB, also zu schwach.\n"
+            "ANT2 hat sie trotzdem gehört und dekodiert. Im Messzeitraum waren das im Schnitt\n"
+            "Ø {s_rsc:.1f} Stationen pro Stunde bei Diversity Standard, und Ø {d_rsc:.1f}/h bei Diversity DX."
+        ),
+        "p6_pro_title": "Warum spricht was dafür, sie mitzuzählen?",
+        "p6_pro_body": (
+            "Weil das QSO für den Operator real ist — egal ob ANT1 oder ANT2 es ermöglicht hat.\n"
+            "Diese Stationen wären mit einer einzelnen Antenne gar nicht im Log gelandet.\n"
+            "Das ist kein Messartefakt — das ist genau der Punkt warum man eine zweite Antenne betreibt.\n"
+            "Mit Rescue: Standard {s_gain_r}, DX {d_gain_r} — das ist das Gesamtbild."
+        ),
+        "p6_con_title": "Warum kann man sie auch weglassen?",
+        "p6_con_body": (
+            "SNR-Werte schwanken innerhalb der 15 Sekunden eines Zyklus — eine Station die gerade\n"
+            "unter −24 dB liegt könnte beim nächsten Zyklus schon drüber sein.\n"
+            "Die −24 dB-Grenze ist ein Erfahrungswert, kein Naturgesetz.\n"
+            "Wer einen sauberen Vergleich mit anderen Systemen machen will, "
+            "zählt lieber nur was ANT1 direkt dekodiert."
+        ),
+        "p6_closing": (
+            "Deswegen stehen in diesem Bericht immer beide Zahlen: einmal ohne Rescue (der konservative Wert)\n"
+            "und einmal mit Rescue (das was im echten Betrieb rauskommt). Jeder kann sich das raussuchen was ihm passt."
+        ),
+
+        # ── Fazit-Seite (S.7) ───────────────────────────────────────────────
+        "p7_header_title":    "Was kann man daraus mitnehmen?",
+        "p7_header_subtitle": "Fazit und was als nächstes gemessen wird",
+        "p7_visible_title": "Was man klar sehen kann:",
+        "p7_fazit_body": (
+            "Diversity Standard bringt über beide Messtage konsistent zwischen "
+            "{gain_lo:.0f}% und {gain_hi:.0f}% mehr Stationen — "
+            "je nachdem ob man\ndie geretteten mitzählt oder nicht. Das ist kein Zufall, das wiederholt sich.\n"
+            "Diversity DX liegt bei {d_gain:.0f}% ohne Rescue — weniger als Standard, "
+            "aber DX optimiert bewusst\nauf die schwächsten Signale. Wer viel DX macht, für den macht das Sinn."
+        ),
+        "p7_fazit_best": (
+            "\nDer stärkste Effekt war um {hour:02d}:00 UTC mit +{s_gain:.0f}% — "
+            "das ist typisch die Zeit wo das Band gerade aufmacht oder zumacht."
+        ),
+        "p7_cannot_title": "Was man noch nicht sagen kann:",
+        "p7_cannot_body": (
+            "Erst 2 Messtage — das reicht um einen Trend zu sehen, aber nicht um belastbare Aussagen zu machen.\n"
+            "Die Nacht und die Abendstunden fehlen komplett — auf 40m ist es abends oft deutlich besser.\n"
+            "Contest-Betrieb, Geo-Sturm, schlechte Bedingungen — das wurde noch nicht getestet.\n"
+            "Ob das auf anderen Transceivern genauso funktioniert — keine Ahnung, bisher nur auf dem FLEX."
+        ),
+        "p7_next_title": "Was kommt als nächstes:",
+        "p7_next_body": (
+            "Nacht- und Abendmessungen auf 40m — das ist der interessante Teil den ich noch nicht habe.\n"
+            "Mehr Tage damit die Balken im Diagramm stabiler werden und die Schwankungen kleiner.\n"
+            "20m kommt irgendwann auch — aber erst wenn genug Daten da sind. Nicht vorher.\n"
+            "Dieser Bericht aktualisiert sich automatisch sobald neue Daten reinkommen."
+        ),
+        "p7_raw_link": (
+            "Wer in die Rohdaten schauen will: statistics/  im Repo  ·  github.com/mikewanne/SimpleFT8  ·  DA1MHH"
+        ),
+    },
+
+    "en": {
+        # Achsenbeschriftungen / Axis labels
+        "x_label":          "Hour (UTC)",
+        "y_label_line":     "Avg. Stations / 15s Cycle",
+        "y_label_bar":      "Avg. Stations per 15s Cycle",
+
+        # Diagramm-Titel / Chart titles
+        "title_stations":   "Decoded Stations — {band} {protocol}   ({basis})",
+        "title_diversity":  "Reception Comparison — {band} {protocol}   ({basis})",
+
+        # Basis-Label (Legende) / Basis label (legend)
+        "basis_entry":      "{label}: {n_d} day{pl} / {n_c} cyc",
+        "day_plural_1":     "",    # singular suffix: "1 day" (no suffix)
+        "day_plural_n":     "s",   # plural suffix:   "2 days"
+
+        # Modusbezeichnungen / Mode labels
+        "mode_labels": {
+            "Normal":           "Normal (1 Antenna)",
+            "Diversity_Normal": "Diversity Standard",
+            "Diversity_Dx":     "Diversity DX",
+        },
+
+        # Rescue-Legende
+        "rescue_legend":    "rescued (ANT1 below −24 dB)",
+
+        # Erklärungs-Fußzeile Stationen-Diagramm
+        "expl_stations": (
+            "Normal (grey): 1 antenna, like WSJT-X — baseline reference.\n"
+            "Diversity Standard (blue): 2 antennas, automatically selects the one with more decoded stations.\n"
+            "Diversity DX (orange): 2 antennas, selects the one with more weak DX signals.\n"
+            "Shaded band: Day-to-day variation — line = mean value.\n"
+            "More stations = band open. Diversity = system automatically picks the better antenna."
+        ),
+
+        # Erklärungs-Fußzeile Diversity-Diagramm (Platzhalter {band} und {protocol})
+        "expl_diversity": (
+            "Normal (grey): 1 antenna, like WSJT-X — baseline reference.\n"
+            "Diversity Standard (blue): 2 antennas — automatically selects the antenna decoding more stations.\n"
+            "Diversity DX (orange): 2 antennas — selects the antenna with more weak DX signals (SNR below −10 dB).\n"
+            "Error bars (white marks): Day-to-day variation — the more days, the more stable the result.\n"
+            "Green cap (+N): Stations ANT1 alone couldn't decode — ANT2 rescued them (signal below −24 dB).\n"
+            "\n"
+            "Raw data: statistics/{{mode}}/{band}/{protocol}/  ·  github.com/mikewanne/SimpleFT8"
+        ),
+
+        # Zeitbereich / Time range
+        "no_data":  "no data",
+        "date_to":  "to",
+
+        # PDF Footer
+        "footer_left": "SimpleFT8 Diversity Field Study — DA1MHH / Mike Hammerer  ·  {gen_date}",
+
+        # Seitenzahl-Label / Page number label
+        "page":     "Page {n}",
+
+        # PDF Name
+        "pdf_name": "SimpleFT8_Report.pdf",
+
+        # ── Title page (p.1) ─────────────────────────────────────────────────
+        "p1_title":    "SimpleFT8 — Two Antennas, One Comparison",
+        "p1_subtitle": "What does Diversity actually deliver? — 40m FT8, first field results",
+        "p1_period_label": "Period: {time_range}   ·   15s cycles evaluated: {total_cyc}",
+        "p1_summary_title": "Summary:",
+        "p1_summary_body": (
+            "With Diversity Standard (blue) I decoded on average {s_gain} more stations than with a single antenna.\n"
+            "Including 'rescued' stations, this rises to up to {s_gain_r}.\n"
+            "Diversity DX (orange) delivers {d_gain} — less than Standard, but targeted at weak DX signals."
+        ),
+        "p1_caveat": (
+            "Note: These are only 2 measurement days, morning hours only (05–12 UTC). "
+            "The numbers may shift — but the trend is already clear."
+        ),
+        "p1_modes_title": "What do the three modes mean?",
+        "p1_modes_body": (
+            "Normal (grey): One antenna, no special logic — just like WSJT-X. This is the reference baseline.\n"
+            "Diversity Standard (blue): Two antennas. The system automatically picks the antenna with more stations.\n"
+            "Diversity DX (orange): Two antennas. Picks the antenna with the weakest DX signals (below −10 dB).\n"
+            "Rescue (green caps): Stations ANT1 couldn't hear — ANT2 decoded them anyway."
+        ),
+
+        # ── Methodology page (p.2) ───────────────────────────────────────────
+        "p2_header_title":    "How was it measured?",
+        "p2_header_subtitle": "Setup, time period and a bit of background",
+        "p2_setup_title": "The Setup",
+        "p2_setup_body": (
+            "Measured on 40m FT8 using a FlexRadio FLEX-8400M — two antenna ports, same frequency.\n"
+            "Period: {time_range}, mornings between 05:00 and 12:00 UTC. Yes, nights are still missing — coming soon.\n"
+            "Cycles: Normal {n_c} ({n_d} day/s) | Diversity Standard {s_c} ({s_d} day/s) | Diversity DX {d_c} ({d_d} day/s).\n"
+            "Each FT8 cycle lasts 15 seconds — the app counts decoded stations per cycle."
+        ),
+        "p2_pooled_title": "Why not just use the daily average?",
+        "p2_pooled_body": (
+            "Good question — I did it that way at first too. But if one day had only 20 cycles and another had 500,\n"
+            "the short day would carry the same weight. That's unfair. So all individual values are pooled and\n"
+            "averaged directly — regardless of which day. This gives a picture much closer to reality."
+        ),
+        "p2_rescue_title": "What are 'rescued stations' (Rescue)?",
+        "p2_rescue_body": (
+            "Imagine a station transmitting so weakly that ANT1 receives it below −24 dB.\n"
+            "That is the FT8 decoding threshold — below that, decoding is practically impossible.\n"
+            "ANT2 receives the same station with slightly more signal and decodes it anyway.\n"
+            "We call this 'Rescue'. The green caps in the charts show exactly these stations.\n"
+            "Whether you count them or treat them separately — that's up to you. Both values are in this report."
+        ),
+        "p2_rawdata_title": "Where does the raw data come from?",
+        "p2_rawdata_body": (
+            "SimpleFT8 writes a small Markdown file per hour containing all cycle values.\n"
+            "No pre-computed averages — raw data only. The analysis script calculates everything fresh.\n"
+            "Want to check? statistics/ in the GitHub repo, all public."
+        ),
+
+        # ── Results page (p.3) ───────────────────────────────────────────────
+        "p3_header_title":    "Main Results — Comparison Table",
+        "p3_header_subtitle": "40m FT8 · Pooled Mean",
+        "p3_col_labels": [
+            "Mode", "Avg Sta.\n/Cycle", "vs Normal\nw/o Rescue",
+            "vs Normal\n+ Rescue", "Rescue\nonly", "Days", "Cycles",
+        ],
+        "p3_note1": (
+            "Avg Sta./Cycle = mean over all individual cycles directly (not first day averages).   "
+            "Rescue = ANT1 below −24 dB, ANT2 decoded anyway."
+        ),
+        "p3_note2": (
+            "Only 2 measurement days so far, mornings 05–12 UTC only — nights and evenings still missing. "
+            "Numbers may shift as more data comes in."
+        ),
+
+        # ── Stations diagram page (p.4) ──────────────────────────────────────
+        "p4_title":      "Stations per Hour — all three modes compared",
+        "p4_subtitle":   "{band} {protocol} — line = mean, shaded band = day-to-day variation",
+        "p4_annotation": (
+            "You can clearly see how the grey line (Normal, one antenna) almost always falls below blue and orange. "
+            "The shaded band shows day-to-day variation — as more days are added, the band will narrow."
+        ),
+
+        # ── Diversity diagram page (p.5) ─────────────────────────────────────
+        "p5_title":      "Direct Comparison — bars per hour, three modes side by side",
+        "p5_subtitle":   "{band} {protocol} — Normal (grey) | Diversity Standard (blue) | Diversity DX (orange) | Rescue caps (green)",
+        "p5_annotation": (
+            "Green caps (+N) on top of bars show stations that ANT1 couldn't decode — signal below −24 dB. "
+            "ANT2 rescued them anyway. Whether to count them or not — your call. "
+            "White error bars show day-to-day variation."
+        ),
+
+        # ── Rescue page (p.6) ────────────────────────────────────────────────
+        "p6_header_title":    "The Green Caps — count them or not?",
+        "p6_header_subtitle": "Rescue stations: What are they and what do they tell us?",
+        "p6_about_title": "What's this about?",
+        "p6_about_body": (
+            "In the diversity chart you can see small green caps with a +N on top of some bars.\n"
+            "These are stations ANT1 couldn't decode — their signal was below −24 dB, too weak.\n"
+            "ANT2 still received and decoded them. Over the measurement period this averaged\n"
+            "Ø {s_rsc:.1f} stations per hour for Diversity Standard, and Ø {d_rsc:.1f}/h for Diversity DX."
+        ),
+        "p6_pro_title": "Why should you count them in?",
+        "p6_pro_body": (
+            "Because the QSO is real for the operator — regardless of whether ANT1 or ANT2 made it possible.\n"
+            "These stations would never have made it into the log with a single antenna.\n"
+            "This is not a measurement artifact — it's exactly the point of running a second antenna.\n"
+            "With Rescue: Standard {s_gain_r}, DX {d_gain_r} — that's the full picture."
+        ),
+        "p6_con_title": "Why might you leave them out?",
+        "p6_con_body": (
+            "SNR values fluctuate within the 15 seconds of a cycle — a station just\n"
+            "below −24 dB might be above that threshold in the next cycle.\n"
+            "The −24 dB threshold is an empirical value, not a law of nature.\n"
+            "For a clean comparison with other systems, counting only what ANT1 directly decoded is more conservative."
+        ),
+        "p6_closing": (
+            "That's why this report always shows both numbers: without Rescue (the conservative value) and "
+            "with Rescue (what you get in real operation). Take whichever fits your perspective."
+        ),
+
+        # ── Conclusion page (p.7) ────────────────────────────────────────────
+        "p7_header_title":    "What can you take away from this?",
+        "p7_header_subtitle": "Conclusions and what gets measured next",
+        "p7_visible_title": "What is clearly visible:",
+        "p7_fazit_body": (
+            "Diversity Standard consistently delivers between {gain_lo:.0f}% and {gain_hi:.0f}% more stations "
+            "across both measurement days —\ndepending on whether you count rescued stations or not. "
+            "This is not coincidence, it repeats.\n"
+            "Diversity DX sits at {d_gain:.0f}% without Rescue — less than Standard, but DX deliberately "
+            "optimises\nfor the weakest signals. If you do a lot of DX, that makes sense."
+        ),
+        "p7_fazit_best": (
+            "\nThe strongest effect was at {hour:02d}:00 UTC with +{s_gain:.0f}% — "
+            "typically the time when the band is just opening or closing."
+        ),
+        "p7_cannot_title": "What cannot be said yet:",
+        "p7_cannot_body": (
+            "Only 2 measurement days — enough to see a trend, but not enough for robust conclusions.\n"
+            "Night and evening hours are completely missing — 40m is often significantly better in the evening.\n"
+            "Contest operation, geomagnetic storms, poor conditions — not yet tested.\n"
+            "Whether this works the same on other transceivers — unknown, tested only on the FLEX so far."
+        ),
+        "p7_next_title": "What comes next:",
+        "p7_next_body": (
+            "Night and evening measurements on 40m — that's the interesting part I don't have yet.\n"
+            "More days so the bars in the chart stabilize and variation decreases.\n"
+            "20m will come at some point — but only when there is enough data. Not before.\n"
+            "This report updates automatically whenever new data comes in."
+        ),
+        "p7_raw_link": (
+            "Raw data: statistics/  in the repo  ·  github.com/mikewanne/SimpleFT8  ·  DA1MHH"
+        ),
+    },
+}
+
+# Sanity check: both language dicts must have the same keys
+assert TEXTS["de"].keys() == TEXTS["en"].keys(), (
+    "Language key mismatch between 'de' and 'en' — fix TEXTS dict!"
 )
-
-def _expl_diversity(band: str, protocol: str) -> str:
-    return (
-        "Normal (grau): 1 Antenne, wie WSJT-X — dient als Vergleichsbasis.\n"
-        "Diversity Standard (blau): 2 Antennen — wählt automatisch die Antenne, die mehr Stationen empfängt.\n"
-        "Diversity DX (orange): 2 Antennen — wählt die Antenne mit mehr schwachen DX-Signalen (SNR unter −10 dB).\n"
-        "Fehlerbalken (weiße Striche): Schwankung zwischen Messtagen — je mehr Tage, desto stabiler der Wert.\n"
-        "Grüne Kappe (+N): Stationen, die ANT1 allein nicht dekodieren konnte — ANT2 hat sie gerettet (Signal unter −24 dB).\n"
-        "\n"
-        f"Rohdaten: statistics/{{Modus}}/{band}/{protocol}/  ·  github.com/mikewanne/SimpleFT8"
-    )
-
 
 # ── Markdown-Parser ───────────────────────────────────────────────────────────
 
@@ -233,12 +645,14 @@ def _hours_x(agg: dict[int, dict]):
     return xs, means, mins, maxs
 
 
-def _n_days_label(agg: dict[int, dict]) -> str:
+def _n_days_label(agg: dict[int, dict], T: dict, label: str = "") -> str:
+    """Returns a formatted basis entry using T['basis_entry'] template."""
     if not agg:
         return ""
     n_days = max(v["n_days"] for v in agg.values())
     n_cyc  = sum(v["n_cycles"] for v in agg.values())
-    return f"Basis: {n_days} Tag{'e' if n_days > 1 else ''} / {n_cyc} Zyklen"
+    pl = T["day_plural_1"] if n_days == 1 else T["day_plural_n"]
+    return T["basis_entry"].format(label=label, n_d=n_days, pl=pl, n_c=n_cyc)
 
 
 # ── Gradient-Balken ───────────────────────────────────────────────────────────
@@ -324,7 +738,15 @@ def _footer(fig, text: str):
 
 # ── Diagramm 1: Stationen über 24h ───────────────────────────────────────────
 
-def create_stations_diagram(band: str, protocol: str):
+_MODE_ORDER   = ["Normal", "Diversity_Normal", "Diversity_Dx"]
+_MODE_OFFSETS = {"Normal": -0.27, "Diversity_Normal": 0.0, "Diversity_Dx": +0.27}
+
+
+def create_stations_diagram(band: str, protocol: str, output_dir: Path,
+                             lang: str = "de"):
+    T = TEXTS[lang]
+    mode_labels = T["mode_labels"]
+
     fig, ax = plt.subplots(figsize=(14, 6.5), facecolor=DARK_BG)
     _setup_dark_ax(ax)
 
@@ -343,12 +765,13 @@ def create_stations_diagram(band: str, protocol: str):
         all_xs.extend(xs)
         n_d = max(v["n_days"] for v in agg.values())
         n_c = sum(v["n_cycles"] for v in agg.values())
+        pl = T["day_plural_1"] if n_d == 1 else T["day_plural_n"]
+        label = mode_labels.get(rx_mode, rx_mode.replace("_", " "))
         basis_parts.append(
-            f"{rx_mode.replace('_', ' ')}: {n_d} Tag{'e' if n_d > 1 else ''} / {n_c} Z"
+            T["basis_entry"].format(label=label, n_d=n_d, pl=pl, n_c=n_c)
         )
 
         color = COLORS[rx_mode]
-        label = rx_mode.replace("_", " ")
         ax.plot(xs, means, color=color, label=label, linewidth=2.5, zorder=3)
         ax.fill_between(xs, mins, maxs, color=color, alpha=0.15, zorder=2)
         has_data = True
@@ -359,39 +782,33 @@ def create_stations_diagram(band: str, protocol: str):
 
     _hour_ticks_line(ax, all_xs)
     ax.yaxis.set_major_locator(mticker.MultipleLocator(10))
-    ax.set_xlabel("Stunde (UTC)", color=DARK_FG, labelpad=6)
-    ax.set_ylabel("Ø Stationen / 15s-Zyklus", color=DARK_FG)
+    ax.set_xlabel(T["x_label"], color=DARK_FG, labelpad=6)
+    ax.set_ylabel(T["y_label_line"], color=DARK_FG)
     basis = " · ".join(basis_parts)
     ax.set_title(
-        f"Empfangene Stationen — {band} {protocol}   ({basis})",
+        T["title_stations"].format(band=band, protocol=protocol, basis=basis),
         color=DARK_FG, fontsize=13, pad=10,
     )
     leg = ax.legend(facecolor="#2a2a2a", edgecolor=DARK_GRID, framealpha=0.9)
     for t in leg.get_texts():
         t.set_color(DARK_FG)
 
-    _footer(fig, EXPL_STATIONEN)
+    _footer(fig, T["expl_stations"])
     plt.tight_layout()
     plt.subplots_adjust(bottom=0.30, right=0.98)
 
-    out = OUTPUT_DIR / f"stationen_{band}_{protocol}.png"
+    out = output_dir / f"stationen_{band}_{protocol}.png"
     fig.savefig(out, dpi=150, bbox_inches="tight", facecolor=DARK_BG)
     plt.close(fig)
-    print(f"  ✓ {out.name}")
+    print(f"  ✓ {out.relative_to(BASE_DIR)}")
 
 
 # ── Diagramm 2: 3-Modus Vergleich (Normal | Diversity Standard | Diversity DX) ─
 
-_MODE_ORDER  = ["Normal", "Diversity_Normal", "Diversity_Dx"]
-_MODE_LABELS = {
-    "Normal":           "Normal (1 Antenne)",
-    "Diversity_Normal": "Diversity Standard",
-    "Diversity_Dx":     "Diversity DX",
-}
-_MODE_OFFSETS = {"Normal": -0.27, "Diversity_Normal": 0.0, "Diversity_Dx": +0.27}
-
-
-def create_diversity_diagram(band: str, protocol: str):
+def create_diversity_diagram(band: str, protocol: str, output_dir: Path,
+                              lang: str = "de"):
+    T = TEXTS[lang]
+    mode_labels = T["mode_labels"]
     bar_w = 0.22
 
     agg_all: dict[str, dict] = {}
@@ -430,7 +847,7 @@ def create_diversity_diagram(band: str, protocol: str):
                 continue
             a = agg_all[mode][h]
             cap = a["mean"] + rescue.get(h, 0.0)
-            whisker_top = a["max"]  # Error-Bar oberes Ende
+            whisker_top = a["max"]
             max_candidates.append(max(cap, whisker_top))
     max_val = max(max_candidates)
     ax.set_ylim(0, max_val * 1.30)
@@ -443,8 +860,9 @@ def create_diversity_diagram(band: str, protocol: str):
         agg = agg_all[mode]
         x_pos = x_base + _MODE_OFFSETS[mode]
         heights = [agg[h]["mean"] if h in agg else 0.0 for h in all_hours]
+        label = mode_labels.get(mode, mode.replace("_", " "))
         patch = _gradient_bars(ax, x_pos, heights, bar_w,
-                               COLORS[mode], label=_MODE_LABELS[mode], zorder=2)
+                               COLORS[mode], label=label, zorder=2)
         if patch:
             handles.append(patch)
 
@@ -477,12 +895,12 @@ def create_diversity_diagram(band: str, protocol: str):
 
     if any_rescue:
         handles.append(mpatches.Patch(facecolor=COLORS["rescue"], alpha=0.92,
-                                      label="davon gerettet (ANT1 unter −24 dB)"))
+                                      label=T["rescue_legend"]))
 
     _hour_ticks_bar(ax, list(x_base), all_hours)
     ax.yaxis.set_major_locator(mticker.MultipleLocator(10))
-    ax.set_xlabel("Stunde (UTC)", color=DARK_FG, labelpad=6)
-    ax.set_ylabel("Ø Stationen pro 15s-Zyklus", color=DARK_FG)
+    ax.set_xlabel(T["x_label"], color=DARK_FG, labelpad=6)
+    ax.set_ylabel(T["y_label_bar"], color=DARK_FG)
 
     basis_parts = []
     for mode in _MODE_ORDER:
@@ -491,13 +909,15 @@ def create_diversity_diagram(band: str, protocol: str):
         a = agg_all[mode]
         n_d = max(v["n_days"] for v in a.values())
         n_c = sum(v["n_cycles"] for v in a.values())
+        pl = T["day_plural_1"] if n_d == 1 else T["day_plural_n"]
+        label = mode_labels.get(mode, mode.replace("_", " "))
         basis_parts.append(
-            f"{_MODE_LABELS[mode]}: {n_d} Tag{'e' if n_d > 1 else ''} / {n_c} Z"
+            T["basis_entry"].format(label=label, n_d=n_d, pl=pl, n_c=n_c)
         )
     basis = " · ".join(basis_parts)
 
     ax.set_title(
-        f"Empfang im Vergleich — {band} {protocol}   ({basis})",
+        T["title_diversity"].format(band=band, protocol=protocol, basis=basis),
         color=DARK_FG, fontsize=13, pad=10,
     )
 
@@ -506,28 +926,29 @@ def create_diversity_diagram(band: str, protocol: str):
     for t in leg.get_texts():
         t.set_color(DARK_FG)
 
-    _footer(fig, _expl_diversity(band, protocol))
+    expl = T["expl_diversity"].format(band=band, protocol=protocol)
+    _footer(fig, expl)
     plt.tight_layout()
     plt.subplots_adjust(bottom=0.36, right=0.98)
 
-    out = OUTPUT_DIR / f"diversity_{band}_{protocol}.png"
+    out = output_dir / f"diversity_{band}_{protocol}.png"
     fig.savefig(out, dpi=150, bbox_inches="tight", facecolor=DARK_BG)
     plt.close(fig)
-    print(f"  ✓ {out.name}")
+    print(f"  ✓ {out.relative_to(BASE_DIR)}")
 
 
 # ── PDF-Bericht ───────────────────────────────────────────────────────────────
 
-def _extract_time_range(stats_dir: Path) -> str:
+def _extract_time_range(stats_dir: Path, T: dict) -> str:
     dates = []
     for md_file in stats_dir.rglob("*.md"):
         d = _file_date(md_file)
         if d:
             dates.append(d)
     if not dates:
-        return "keine Daten"
+        return T["no_data"]
     ds = sorted(set(dates))
-    return ds[0] if len(ds) == 1 else f"{ds[0]} bis {ds[-1]}"
+    return ds[0] if len(ds) == 1 else f"{ds[0]} {T['date_to']} {ds[-1]}"
 
 
 def _combo_summary(stats_dir: Path, band: str, protocol: str) -> dict:
@@ -601,13 +1022,13 @@ def _r_header(fig: plt.Figure, title: str, subtitle: str = "") -> None:
                  va="center", transform=fig.transFigure, zorder=6)
 
 
-def _r_footer(fig: plt.Figure, gen_date: str, page: str = "") -> None:
+def _r_footer(fig: plt.Figure, gen_date: str, T: dict, page: str = "") -> None:
     from matplotlib.patches import Rectangle
     fig.add_artist(Rectangle((0, 0), 1, _FBAR / _PH,
                               transform=fig.transFigure,
                               facecolor="#eeeeee", edgecolor="none", zorder=5))
     fig.text(0.04, _FBAR / _PH / 2,
-             f"SimpleFT8 Diversity Feldstudie — DA1MHH / Mike Hammerer  ·  {gen_date}",
+             T["footer_left"].format(gen_date=gen_date),
              fontsize=8.5, color=_R_SUB, va="center",
              transform=fig.transFigure, zorder=6)
     if page:
@@ -670,18 +1091,18 @@ def _hourly_analysis(stats_dir: Path, band: str, protocol: str) -> list[dict]:
     return result
 
 
-def _r_title_page(pdf: PdfPages, summary: dict, time_range: str, gen_date: str) -> None:
+def _r_title_page(pdf: PdfPages, summary: dict, time_range: str,
+                  gen_date: str, T: dict) -> None:
     from matplotlib.patches import Rectangle
     fig = _rfig()
     TH = 1.50
     fig.add_artist(Rectangle((0, _yf(TH)), 1, TH / _PH,
                               transform=fig.transFigure,
                               facecolor=_R_ACCENT, edgecolor="none", zorder=5))
-    fig.text(0.50, _yf(TH * 0.40), "SimpleFT8 — Zwei Antennen, ein Vergleich",
+    fig.text(0.50, _yf(TH * 0.40), T["p1_title"],
              fontsize=22, color="white", fontweight="bold",
              ha="center", va="center", transform=fig.transFigure, zorder=6)
-    fig.text(0.50, _yf(TH * 0.76),
-             "Was bringt Diversity wirklich? — 40m FT8, erste Messergebnisse",
+    fig.text(0.50, _yf(TH * 0.76), T["p1_subtitle"],
              fontsize=13, color="#aaccee", ha="center", va="center",
              transform=fig.transFigure, zorder=6)
 
@@ -694,37 +1115,34 @@ def _r_title_page(pdf: PdfPages, summary: dict, time_range: str, gen_date: str) 
     def pct(a, b): return f"{(a / b - 1) * 100:+.0f}%" if b > 0 else "n/a"
 
     y = TH + 0.22
-    y = _ctext(fig, y, f"Zeitraum: {time_range}   ·   Ausgewertete 15s-Zyklen: {total_cyc}",
+    y = _ctext(fig, y,
+               T["p1_period_label"].format(time_range=time_range, total_cyc=total_cyc),
                10, color=_R_SUB)
     y += 0.18
 
-    y = _csection(fig, y, "Kurz zusammengefasst:",
-                  f"Mit Diversity Standard (blau) habe ich im Schnitt {pct(s_avg, n_avg)} mehr Stationen dekodiert als mit einer einzelnen Antenne.\n"
-                  f"Zählt man die 'geretteten' Stationen dazu, kommt man auf bis zu {pct(s_avg + s_rsc, n_avg)}.\n"
-                  f"Diversity DX (orange) bringt {pct(d_avg, n_avg)} — weniger als Standard, aber gezielter auf schwache DX-Signale.",
+    y = _csection(fig, y, T["p1_summary_title"],
+                  T["p1_summary_body"].format(
+                      s_gain=pct(s_avg, n_avg),
+                      s_gain_r=pct(s_avg + s_rsc, n_avg),
+                      d_gain=pct(d_avg, n_avg),
+                  ),
                   t_fs=13, b_fs=11, gap=0.20)
 
-    y = _ctext(fig, y,
-               "Wichtig: Das sind erst 2 Messtage, nur Morgenstunden (05–12 Uhr UTC). "
-               "Die Zahlen können sich noch verschieben — aber der Trend ist klar erkennbar.",
-               10.5, color=_R_ORANGE, italic=True)
+    y = _ctext(fig, y, T["p1_caveat"], 10.5, color=_R_ORANGE, italic=True)
     y += 0.28
 
-    _csection(fig, y, "Was bedeuten die drei Modi?",
-              "Normal (grau): Eine Antenne, keine besondere Logik — so wie WSJT-X. Das ist die Vergleichsbasis.\n"
-              "Diversity Standard (blau): Zwei Antennen. Das System wählt automatisch die Antenne mit mehr Stationen.\n"
-              "Diversity DX (orange): Zwei Antennen. Wählt die Antenne mit den schwächsten DX-Signalen (unter −10 dB).\n"
-              "Rescue (grüne Kappen): Stationen die ANT1 nicht hören konnte — ANT2 hat sie trotzdem dekodiert.",
+    _csection(fig, y, T["p1_modes_title"], T["p1_modes_body"],
               t_fs=13, b_fs=11, gap=0.15)
 
-    _r_footer(fig, gen_date, "Seite 1")
+    _r_footer(fig, gen_date, T, T["page"].format(n=1))
     pdf.savefig(fig, facecolor=_R_BG)
     plt.close(fig)
 
 
-def _r_methodik_page(pdf: PdfPages, summary: dict, time_range: str, gen_date: str) -> None:
+def _r_methodik_page(pdf: PdfPages, summary: dict, time_range: str,
+                     gen_date: str, T: dict) -> None:
     fig = _rfig()
-    _r_header(fig, "Wie wurde gemessen?", "Setup, Zeitraum und ein bisschen Hintergrund")
+    _r_header(fig, T["p2_header_title"], T["p2_header_subtitle"])
 
     n_d = summary.get('Normal',           {}).get('n_days',   '–')
     n_c = summary.get('Normal',           {}).get('n_cycles', '–')
@@ -734,47 +1152,35 @@ def _r_methodik_page(pdf: PdfPages, summary: dict, time_range: str, gen_date: st
     d_c = summary.get('Diversity_Dx',     {}).get('n_cycles', '–')
 
     y = _CTOP
-    y = _csection(fig, y, "Das Setup",
-                  f"Gemessen auf 40m FT8 mit dem FlexRadio FLEX-8400M — zwei Antennenanschlüsse, gleiche Frequenz.\n"
-                  f"Zeitraum: {time_range}, jeweils morgens zwischen 05:00 und 12:00 UTC. Ja, die Nacht fehlt noch — kommt noch.\n"
-                  f"Zyklen ausgewertet: Normal {n_c} ({n_d} Tag/e)  |  Diversity Standard {s_c} ({s_d} Tag/e)  |  Diversity DX {d_c} ({d_d} Tag/e).\n"
-                  f"Jeder FT8-Zyklus dauert 15 Sekunden — die App zählt pro Zyklus wie viele Stationen dekodiert wurden.",
+    y = _csection(fig, y, T["p2_setup_title"],
+                  T["p2_setup_body"].format(
+                      time_range=time_range,
+                      n_c=n_c, n_d=n_d, s_c=s_c, s_d=s_d, d_c=d_c, d_d=d_d,
+                  ),
                   t_fs=13, b_fs=11, gap=0.25)
 
-    y = _csection(fig, y, "Warum nicht einfach den Tagesdurchschnitt nehmen?",
-                  "Gute Frage — ich hatte das auch erst so. Aber wenn an einem Tag nur 20 Zyklen gemessen wurden\n"
-                  "und an einem anderen 500, dann würde der kurze Tag genauso stark ins Ergebnis eingehen wie der lange.\n"
-                  "Das wäre unfair. Deswegen werden alle Einzelwerte direkt zusammengezählt und gemittelt — egal von welchem Tag.\n"
-                  "Das ergibt ein Bild das näher an der Realität liegt.",
+    y = _csection(fig, y, T["p2_pooled_title"], T["p2_pooled_body"],
                   t_fs=13, b_fs=11, gap=0.25)
 
-    y = _csection(fig, y, "Was sind 'gerettete Stationen' (Rescue)?",
-                  "Stell dir vor eine Station sendet so schwach dass ANT1 das Signal unter −24 dB empfängt.\n"
-                  "Das ist bei FT8 die Grenze — darunter kann man praktisch nicht mehr dekodieren.\n"
-                  "ANT2 empfängt dieselbe Station aber mit etwas mehr Pegel — und dekodiert sie trotzdem.\n"
-                  "Das nennen wir 'Rescue'. Die grünen Kappen in den Diagrammen zeigen genau diese Stationen.\n"
-                  "Ob man die mitzählt oder lieber separat betrachtet — das ist Ansichtssache. Beide Werte stehen im Bericht.",
+    y = _csection(fig, y, T["p2_rescue_title"], T["p2_rescue_body"],
                   t_fs=13, b_fs=11, gap=0.25)
 
-    _csection(fig, y, "Wo kommen die Rohdaten her?",
-              "SimpleFT8 schreibt pro Stunde eine kleine Markdown-Datei mit allen Zykluswerten.\n"
-              "Kein vorberechneter Durchschnitt — nur Rohdaten. Das Auswertungs-Script rechnet alles frisch durch.\n"
-              "Wer nachschauen will: statistics/ im GitHub-Repo, alles offen.",
+    _csection(fig, y, T["p2_rawdata_title"], T["p2_rawdata_body"],
               t_fs=13, b_fs=11, gap=0.15)
 
-    _r_footer(fig, gen_date, "Seite 2")
+    _r_footer(fig, gen_date, T, T["page"].format(n=2))
     pdf.savefig(fig, facecolor=_R_BG)
     plt.close(fig)
 
 
-def _r_ergebnisse_page(pdf: PdfPages, summary: dict, gen_date: str) -> None:
+def _r_ergebnisse_page(pdf: PdfPages, summary: dict, gen_date: str, T: dict) -> None:
     n_avg = summary.get("Normal", {}).get("avg", 0.0)
-    col_labels = ["Modus", "Ø Stat.\n/Zyklus", "vs Normal\nohne Rescue",
-                  "vs Normal\n+ Rescue", "Rescue\nallein", "Messtage", "Zyklen"]
+    mode_labels = T["mode_labels"]
+    col_labels = T["p3_col_labels"]
     mode_meta = {
-        "Normal":           ("Normal (1 Antenne)",    "#e8eef5", _R_ACCENT),
-        "Diversity_Normal": ("Diversity Standard",    "#e8f5eb", _R_GREEN),
-        "Diversity_Dx":     ("Diversity DX",          "#fff3e0", _R_ORANGE),
+        "Normal":           (mode_labels["Normal"],           "#e8eef5", _R_ACCENT),
+        "Diversity_Normal": (mode_labels["Diversity_Normal"], "#e8f5eb", _R_GREEN),
+        "Diversity_Dx":     (mode_labels["Diversity_Dx"],    "#fff3e0", _R_ORANGE),
     }
     rows, row_face, row_text = [], [], []
     for mode in RX_MODES:
@@ -798,7 +1204,7 @@ def _r_ergebnisse_page(pdf: PdfPages, summary: dict, gen_date: str) -> None:
         return
 
     fig = _rfig()
-    _r_header(fig, "Hauptergebnisse — Vergleichstabelle", "40m FT8 · Pooled Mean")
+    _r_header(fig, T["p3_header_title"], T["p3_header_subtitle"])
 
     table_top    = _yf(_CTOP + 0.10)
     table_bottom = _yf(6.50)
@@ -821,23 +1227,17 @@ def _r_ergebnisse_page(pdf: PdfPages, summary: dict, gen_date: str) -> None:
                                 fontweight="bold" if c in (2, 3, 4) else "normal")
 
     y = 6.55
-    y = _ctext(fig, y,
-               "Ø Stat./Zyklus = Mittelwert über alle Einzelzyklen direkt (nicht erst Tagesdurchschnitt).   "
-               "Rescue = ANT1 unter −24 dB, ANT2 hat trotzdem dekodiert.",
-               9, color=_R_SUB)
+    y = _ctext(fig, y, T["p3_note1"], 9, color=_R_SUB)
     y += 0.06
-    _ctext(fig, y,
-           "Noch erst 2 Messtage, nur Morgenstunden 05–12 Uhr UTC — Nacht und Abend fehlen noch. "
-           "Die Zahlen können sich mit mehr Daten noch etwas verschieben.",
-           9, color=_R_ORANGE, italic=True)
+    _ctext(fig, y, T["p3_note2"], 9, color=_R_ORANGE, italic=True)
 
-    _r_footer(fig, gen_date, "Seite 3")
+    _r_footer(fig, gen_date, T, T["page"].format(n=3))
     pdf.savefig(fig, facecolor=_R_BG)
     plt.close(fig)
 
 
 def _r_diagramm_page(pdf: PdfPages, png_path: Path, title: str,
-                     subtitle: str, annotation: str, gen_date: str,
+                     subtitle: str, annotation: str, gen_date: str, T: dict,
                      page: str = "") -> None:
     if not png_path.exists():
         return
@@ -846,7 +1246,6 @@ def _r_diagramm_page(pdf: PdfPages, png_path: Path, title: str,
     aspect = h_px / w_px
     fig = _rfig()
     _r_header(fig, title, subtitle)
-    # Bildbereich: zwischen Footer (0.13) und Header (0.89)
     img_h = 0.62
     img_w = min(0.92, img_h / aspect * (8.27 / 11.69))
     ax_img = fig.add_axes([(1.0 - img_w) / 2, 0.20, img_w, img_h])
@@ -855,62 +1254,49 @@ def _r_diagramm_page(pdf: PdfPages, png_path: Path, title: str,
     if annotation:
         fig.text(0.05, 0.155, annotation, fontsize=8.5, color=_R_SUB,
                  style="italic", transform=fig.transFigure, wrap=True)
-    _r_footer(fig, gen_date, page)
+    _r_footer(fig, gen_date, T, page)
     pdf.savefig(fig, facecolor=_R_BG)
     plt.close(fig)
 
 
-def _r_rescue_page(pdf: PdfPages, summary: dict, gen_date: str) -> None:
+def _r_rescue_page(pdf: PdfPages, summary: dict, gen_date: str, T: dict) -> None:
     fig = _rfig()
-    _r_header(fig, "Die grünen Kappen — zählen oder nicht?",
-              "Rescue-Stationen: Was steckt dahinter und was sagen sie aus?")
+    _r_header(fig, T["p6_header_title"], T["p6_header_subtitle"])
 
     n_avg = summary.get("Normal",           {}).get("avg", 0.0)
     s_avg = summary.get("Diversity_Normal", {}).get("avg", 0.0)
     d_avg = summary.get("Diversity_Dx",     {}).get("avg", 0.0)
     s_rsc = summary.get("Diversity_Normal", {}).get("avg_rescue", 0.0)
     d_rsc = summary.get("Diversity_Dx",     {}).get("avg_rescue", 0.0)
+    def pct(a, b): return f"{(a / b - 1) * 100:+.0f}%" if b > 0 else "n/a"
 
     y = _CTOP
-    y = _csection(fig, y, "Worum geht's?",
-                  f"Im Diversity-Diagramm sieht man oben auf manchen Balken kleine grüne Kappen mit einem +N davor.\n"
-                  f"Das sind Stationen die ANT1 nicht dekodieren konnte — deren Signal war unter −24 dB, also zu schwach.\n"
-                  f"ANT2 hat sie trotzdem gehört und dekodiert. Im Messzeitraum waren das im Schnitt\n"
-                  f"Ø {s_rsc:.1f} Stationen pro Stunde bei Diversity Standard, und Ø {d_rsc:.1f}/h bei Diversity DX.",
+    y = _csection(fig, y, T["p6_about_title"],
+                  T["p6_about_body"].format(s_rsc=s_rsc, d_rsc=d_rsc),
                   t_fs=13, b_fs=11, gap=0.25)
 
-    y = _csection(fig, y, "Warum spricht was dafür, sie mitzuzählen?",
-                  f"Weil das QSO für den Operator real ist — egal ob ANT1 oder ANT2 es ermöglicht hat.\n"
-                  f"Diese Stationen wären mit einer einzelnen Antenne gar nicht im Log gelandet.\n"
-                  f"Das ist kein Messartefakt — das ist genau der Punkt warum man eine zweite Antenne betreibt.\n"
-                  f"Mit Rescue: Standard {((s_avg + s_rsc) / n_avg - 1) * 100:+.0f}%, "
-                  f"DX {((d_avg + d_rsc) / n_avg - 1) * 100:+.0f}% — das ist das Gesamtbild.",
+    y = _csection(fig, y, T["p6_pro_title"],
+                  T["p6_pro_body"].format(
+                      s_gain_r=pct(s_avg + s_rsc, n_avg),
+                      d_gain_r=pct(d_avg + d_rsc, n_avg),
+                  ),
                   t_fs=13, b_fs=11, t_color=_R_GREEN, gap=0.25)
 
-    y = _csection(fig, y, "Warum kann man sie auch weglassen?",
-                  "SNR-Werte schwanken innerhalb der 15 Sekunden eines Zyklus — eine Station die gerade\n"
-                  "unter −24 dB liegt könnte beim nächsten Zyklus schon drüber sein.\n"
-                  "Die −24 dB-Grenze ist ein Erfahrungswert, kein Naturgesetz.\n"
-                  "Wer einen sauberen Vergleich mit anderen Systemen machen will, "
-                  "zählt lieber nur was ANT1 direkt dekodiert.",
+    y = _csection(fig, y, T["p6_con_title"], T["p6_con_body"],
                   t_fs=13, b_fs=11, t_color=_R_ORANGE, gap=0.25)
 
     y = _chline(fig, y, gap=0.12)
-    _ctext(fig, y,
-           "Deswegen stehen in diesem Bericht immer beide Zahlen: einmal ohne Rescue (der konservative Wert)\n"
-           "und einmal mit Rescue (das was im echten Betrieb rauskommt). Jeder kann sich das raussuchen was ihm passt.",
-           11, color=_R_ACCENT, italic=True)
+    _ctext(fig, y, T["p6_closing"], 11, color=_R_ACCENT, italic=True)
 
-    _r_footer(fig, gen_date, "Seite 6")
+    _r_footer(fig, gen_date, T, T["page"].format(n=6))
     pdf.savefig(fig, facecolor=_R_BG)
     plt.close(fig)
 
 
 def _r_fazit_page(pdf: PdfPages, summary: dict, hourly: list[dict],
-                  gen_date: str) -> None:
+                  gen_date: str, T: dict) -> None:
     fig = _rfig()
-    _r_header(fig, "Was kann man daraus mitnehmen?",
-              "Fazit und was als nächstes gemessen wird")
+    _r_header(fig, T["p7_header_title"], T["p7_header_subtitle"])
 
     n_avg = summary.get("Normal",           {}).get("avg", 0.0)
     s_avg = summary.get("Diversity_Normal", {}).get("avg", 0.0)
@@ -920,47 +1306,34 @@ def _r_fazit_page(pdf: PdfPages, summary: dict, hourly: list[dict],
     best_s = max((r for r in hourly if r["s_gain"] is not None),
                  key=lambda r: r["s_gain"], default=None)
 
-    fazit = (
-        f"Diversity Standard bringt über beide Messtage konsistent zwischen "
-        f"{(s_avg / n_avg - 1) * 100:.0f}% und {((s_avg + s_rsc) / n_avg - 1) * 100:.0f}% mehr Stationen — "
-        f"je nachdem ob man\ndie geretteten mitzählt oder nicht. Das ist kein Zufall, das wiederholt sich.\n"
-        f"Diversity DX liegt bei {(d_avg / n_avg - 1) * 100:.0f}% ohne Rescue — weniger als Standard, "
-        f"aber DX optimiert bewusst\nauf die schwächsten Signale. Wer viel DX macht, für den macht das Sinn."
-    )
+    gain_lo = (s_avg / n_avg - 1) * 100 if n_avg > 0 else 0.0
+    gain_hi = ((s_avg + s_rsc) / n_avg - 1) * 100 if n_avg > 0 else 0.0
+    d_gain  = (d_avg / n_avg - 1) * 100 if n_avg > 0 else 0.0
+
+    fazit = T["p7_fazit_body"].format(gain_lo=gain_lo, gain_hi=gain_hi, d_gain=d_gain)
     if best_s:
-        fazit += (
-            f"\nDer stärkste Effekt war um {best_s['hour']:02d}:00 UTC mit +{best_s['s_gain']:.0f}% — "
-            f"das ist typisch die Zeit wo das Band gerade aufmacht oder zumacht."
-        )
+        fazit += T["p7_fazit_best"].format(hour=best_s["hour"], s_gain=best_s["s_gain"])
 
     y = _CTOP
-    y = _csection(fig, y, "Was man klar sehen kann:", fazit, t_fs=13, b_fs=11, gap=0.25)
+    y = _csection(fig, y, T["p7_visible_title"], fazit, t_fs=13, b_fs=11, gap=0.25)
 
-    y = _csection(fig, y, "Was man noch nicht sagen kann:",
-                  "Erst 2 Messtage — das reicht um einen Trend zu sehen, aber nicht um belastbare Aussagen zu machen.\n"
-                  "Die Nacht und die Abendstunden fehlen komplett — auf 40m ist es abends oft deutlich besser.\n"
-                  "Contest-Betrieb, Geo-Sturm, schlechte Bedingungen — das wurde noch nicht getestet.\n"
-                  "Ob das auf anderen Transceivern genauso funktioniert — keine Ahnung, bisher nur auf dem FLEX.",
+    y = _csection(fig, y, T["p7_cannot_title"], T["p7_cannot_body"],
                   t_fs=13, b_fs=11, t_color=_R_ORANGE, gap=0.25)
 
-    y = _csection(fig, y, "Was kommt als nächstes:",
-                  "Nacht- und Abendmessungen auf 40m — das ist der interessante Teil den ich noch nicht habe.\n"
-                  "Mehr Tage damit die Balken im Diagramm stabiler werden und die Schwankungen kleiner.\n"
-                  "20m kommt irgendwann auch — aber erst wenn genug Daten da sind. Nicht vorher.\n"
-                  "Dieser Bericht aktualisiert sich automatisch sobald neue Daten reinkommen.",
+    y = _csection(fig, y, T["p7_next_title"], T["p7_next_body"],
                   t_fs=13, b_fs=11, gap=0.20)
 
     y = _chline(fig, y, gap=0.12)
-    _ctext(fig, y,
-           "Wer in die Rohdaten schauen will: statistics/  im Repo  ·  github.com/mikewanne/SimpleFT8  ·  DA1MHH",
-           9, color=_R_SUB, italic=True)
+    _ctext(fig, y, T["p7_raw_link"], 9, color=_R_SUB, italic=True)
 
-    _r_footer(fig, gen_date, "Seite 7")
+    _r_footer(fig, gen_date, T, T["page"].format(n=7))
     pdf.savefig(fig, facecolor=_R_BG)
     plt.close(fig)
 
 
-def create_pdf_report(combos: set[tuple[str, str]]) -> None:
+def create_pdf_report(combos: set[tuple[str, str]], output_dir: Path,
+                      lang: str = "de") -> None:
+    T = TEXTS[lang]
     target = [c for c in sorted(combos) if c == ("40m", "FT8")]
     if not target:
         for band, protocol in sorted(combos):
@@ -969,47 +1342,46 @@ def create_pdf_report(combos: set[tuple[str, str]]) -> None:
                 target = [(band, protocol)]
                 break
     if not target:
-        print("  ⚠ Keine ausreichenden Daten für PDF-Bericht.")
+        print(f"  [!] No sufficient data for PDF report ({lang}).")
         return
 
     band, protocol = target[0]
     summary    = _combo_summary(STATS_DIR, band, protocol)
     hourly     = _hourly_analysis(STATS_DIR, band, protocol)
     normal_dir = STATS_DIR / "Normal" / band / protocol
-    time_range = _extract_time_range(normal_dir if normal_dir.exists() else STATS_DIR)
+    time_range = _extract_time_range(
+        normal_dir if normal_dir.exists() else STATS_DIR, T
+    )
     gen_date   = datetime.now().strftime("%Y-%m-%d %H:%M")
-    pdf_path   = OUTPUT_DIR / "SimpleFT8_Bericht.pdf"
+    pdf_path   = output_dir / T["pdf_name"]
 
     with PdfPages(str(pdf_path)) as pdf:
-        _r_title_page(pdf, summary, time_range, gen_date)          # S.1
-        _r_methodik_page(pdf, summary, time_range, gen_date)        # S.2
-        _r_ergebnisse_page(pdf, summary, gen_date)                  # S.3
-        _r_diagramm_page(                                           # S.4
-            pdf, OUTPUT_DIR / f"stationen_{band}_{protocol}.png",
-            "Stationen pro Stunde — alle drei Modi im Vergleich",
-            f"{band} {protocol} — Linie = Mittelwert, schattiertes Band = Schwankung zwischen den Messtagen",
-            "Man sieht gut wie die graue Linie (Normal, eine Antenne) fast immer unter blau und orange liegt. "
-            "Das schattierte Band zeigt die Schwankung zwischen den beiden Messtagen — je mehr Tage dazukommen, desto enger wird das.",
-            gen_date, "Seite 4",
+        _r_title_page(pdf, summary, time_range, gen_date, T)           # p.1
+        _r_methodik_page(pdf, summary, time_range, gen_date, T)        # p.2
+        _r_ergebnisse_page(pdf, summary, gen_date, T)                  # p.3
+        _r_diagramm_page(                                               # p.4
+            pdf, output_dir / f"stationen_{band}_{protocol}.png",
+            T["p4_title"],
+            T["p4_subtitle"].format(band=band, protocol=protocol),
+            T["p4_annotation"],
+            gen_date, T, T["page"].format(n=4),
         )
-        _r_diagramm_page(                                           # S.5
-            pdf, OUTPUT_DIR / f"diversity_{band}_{protocol}.png",
-            "Direktvergleich — Balken pro Stunde, drei Modi nebeneinander",
-            f"{band} {protocol} — Normal (grau) | Diversity Standard (blau) | Diversity DX (orange) | Rescue-Kappen (grün)",
-            "Die grünen Kappen (+N) oben auf den Balken zeigen Stationen die ANT1 nicht dekodieren konnte — "
-            "Signal unter −24 dB. ANT2 hat sie trotzdem gerettet. Ob man die mitzählt oder nicht — Ansichtssache. "
-            "Weiße Fehlerbalken zeigen die Schwankung zwischen den Messtagen.",
-            gen_date, "Seite 5",
+        _r_diagramm_page(                                               # p.5
+            pdf, output_dir / f"diversity_{band}_{protocol}.png",
+            T["p5_title"],
+            T["p5_subtitle"].format(band=band, protocol=protocol),
+            T["p5_annotation"],
+            gen_date, T, T["page"].format(n=5),
         )
-        _r_rescue_page(pdf, summary, gen_date)                      # S.6
-        _r_fazit_page(pdf, summary, hourly, gen_date)               # S.7
+        _r_rescue_page(pdf, summary, gen_date, T)                      # p.6
+        _r_fazit_page(pdf, summary, hourly, gen_date, T)               # p.7
 
         d = pdf.infodict()
-        d["Title"]   = f"SimpleFT8 Diversity Feldstudie — {band} {protocol}"
+        d["Title"]   = f"SimpleFT8 Diversity — {band} {protocol}"
         d["Author"]  = "DA1MHH / Mike Hammerer"
         d["Subject"] = "Dual-Antenna Diversity Field Study"
 
-    print(f"  ✓ PDF Bericht: {pdf_path.name} (7 Seiten, {band} {protocol})")
+    print(f"  ✓ PDF ({lang.upper()}): {pdf_path.relative_to(BASE_DIR)} (7 pages, {band} {protocol})")
 
 
 # ── Haupt ─────────────────────────────────────────────────────────────────────
@@ -1031,18 +1403,24 @@ def discover_bands_protocols() -> set[tuple[str, str]]:
 
 
 def main():
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     combos = discover_bands_protocols()
     if not combos:
         print(f"Keine Daten in {STATS_DIR}.")
         sys.exit(0)
-    for band, protocol in sorted(combos):
-        print(f"\n=== {band} / {protocol} ===")
-        create_stations_diagram(band, protocol)
-        create_diversity_diagram(band, protocol)
-    print("\n=== PDF Bericht ===")
-    create_pdf_report(combos)
-    print("\nFertig. Ausgabe in:", OUTPUT_DIR)
+
+    for lang, out_dir in LANG_DIR.items():
+        out_dir.mkdir(parents=True, exist_ok=True)
+        print(f"\n{'='*50}")
+        print(f"  Generating {lang.upper()} output → {out_dir.relative_to(BASE_DIR)}/")
+        print(f"{'='*50}")
+        for band, protocol in sorted(combos):
+            print(f"\n  --- {band} / {protocol} ---")
+            create_stations_diagram(band, protocol, out_dir, lang=lang)
+            create_diversity_diagram(band, protocol, out_dir, lang=lang)
+        print(f"\n  --- PDF ({lang.upper()}) ---")
+        create_pdf_report(combos, out_dir, lang=lang)
+
+    print(f"\nDone. Output in: {OUTPUT_DIR}  and  {OUTPUT_DIR_EN}")
 
 
 if __name__ == "__main__":
