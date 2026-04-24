@@ -143,8 +143,13 @@ TEXTS = {
             "Diversity DX (orange) bringt {d_gain} — weniger als Standard, aber gezielter auf schwache DX-Signale."
         ),
         "p1_caveat": (
-            "Wichtig: Das sind erst 2 Messtage, nur Morgenstunden (05–12 Uhr UTC). "
-            "Die Zahlen können sich noch verschieben — aber der Trend ist klar erkennbar."
+            "Hinweis zum Antennensetup: ANT1 ist ein Kelemen DP-201510 (Fächer-Dipol für 20m/15m/10m) — "
+            "auf 40m außerhalb seines Auslegungsbandes und damit suboptimal. "
+            "ANT2 ist die Regenrinne des Hauses (~15m L-Form) — durch Länge und Geometrie auf 40m besser geeignet als ANT1. "
+            "Das erklärt den besonders großen Diversity-Gewinn. "
+            "Die Ergebnisse sind als Obergrenze für diese Antennenkombination zu verstehen — "
+            "andere Setups werden andere Werte zeigen. "
+            "Folgetests auf 20m sind geplant, wo ANT1 in seinem Auslegungsband arbeitet."
         ),
         "p1_modes_title": "Was bedeuten die drei Modi?",
         "p1_modes_body": (
@@ -160,7 +165,7 @@ TEXTS = {
         "p2_setup_title": "Das Setup",
         "p2_setup_body": (
             "Gemessen auf 40m FT8 mit dem FlexRadio FLEX-8400M — zwei Antennenanschlüsse, gleiche Frequenz.\n"
-            "Zeitraum: {time_range}, jeweils morgens zwischen 05:00 und 12:00 UTC. Ja, die Nacht fehlt noch — kommt noch.\n"
+            "Zeitraum: {time_range}. Daten über den ganzen Tag (05–23 UTC), Nachtmessungen laufen noch.\n"
             "Zyklen ausgewertet: Normal {n_c} ({n_d} Tag/e)  |  Diversity Standard {s_c} ({s_d} Tag/e)  |  Diversity DX {d_c} ({d_d} Tag/e).\n"
             "Jeder FT8-Zyklus dauert 15 Sekunden — die App zählt pro Zyklus wie viele Stationen dekodiert wurden."
         ),
@@ -198,8 +203,9 @@ TEXTS = {
             "Rescue = ANT1 unter −24 dB, ANT2 hat trotzdem dekodiert."
         ),
         "p3_note2": (
-            "Noch erst 2 Messtage, nur Morgenstunden 05–12 Uhr UTC — Nacht und Abend fehlen noch. "
-            "Die Zahlen können sich mit mehr Daten noch etwas verschieben."
+            "Hinweis: ANT1 (Kelemen DP-201510) ist auf 40m außerhalb seines Auslegungsbandes (20m/15m/10m) — "
+            "ANT2 (Regenrinne ~15m) ist auf 40m zufällig besser geeignet. "
+            "Die Gewinne sind als Obergrenze für diese Kombination zu verstehen. Folgetests auf 20m folgen."
         ),
 
         # ── Diagramm-Seite Stationen (S.4) ──────────────────────────────────
@@ -254,7 +260,7 @@ TEXTS = {
         "p7_header_subtitle": "Fazit und was als nächstes gemessen wird",
         "p7_visible_title": "Was man klar sehen kann:",
         "p7_fazit_body": (
-            "Diversity Standard bringt über beide Messtage konsistent zwischen "
+            "Diversity Standard bringt über alle Messtage konsistent zwischen "
             "{gain_lo:.0f}% und {gain_hi:.0f}% mehr Stationen — "
             "je nachdem ob man\ndie geretteten mitzählt oder nicht. Das ist kein Zufall, das wiederholt sich.\n"
             "Diversity DX liegt bei {d_gain:.0f}% ohne Rescue — weniger als Standard, "
@@ -266,16 +272,18 @@ TEXTS = {
         ),
         "p7_cannot_title": "Was man noch nicht sagen kann:",
         "p7_cannot_body": (
-            "Erst 2 Messtage — das reicht um einen Trend zu sehen, aber nicht um belastbare Aussagen zu machen.\n"
-            "Die Nacht und die Abendstunden fehlen komplett — auf 40m ist es abends oft deutlich besser.\n"
-            "Contest-Betrieb, Geo-Sturm, schlechte Bedingungen — das wurde noch nicht getestet.\n"
-            "Ob das auf anderen Transceivern genauso funktioniert — keine Ahnung, bisher nur auf dem FLEX."
+            "Ob die Ergebnisse 1:1 auf andere Antennenkombinationen übertragbar sind — wahrscheinlich nicht.\n"
+            "ANT1 arbeitet auf 40m außerhalb seines Auslegungsbandes, ANT2 ist dort zufällig besser geeignet.\n"
+            "Das erklärt den besonders großen Gewinn — bei zwei gleichwertigen 40m-Antennen wäre er kleiner.\n"
+            "Contest-Betrieb, Geo-Sturm, schlechte Bedingungen — noch nicht systematisch getestet.\n"
+            "Ob das auf anderen Transceivern genauso funktioniert — bisher nur auf dem FLEX getestet."
         ),
         "p7_next_title": "Was kommt als nächstes:",
         "p7_next_body": (
-            "Nacht- und Abendmessungen auf 40m — das ist der interessante Teil den ich noch nicht habe.\n"
+            "Nachtmessungen auf 40m laufen noch — auf 40m ist es abends oft deutlich besser.\n"
             "Mehr Tage damit die Balken im Diagramm stabiler werden und die Schwankungen kleiner.\n"
-            "20m kommt irgendwann auch — aber erst wenn genug Daten da sind. Nicht vorher.\n"
+            "20m-Tests sind geplant — dort arbeitet ANT1 im Auslegungsband (20m/15m/10m), "
+            "das 20m-Band ist generell besser zu empfangen. Anderer Vergleich, andere Zahlen.\n"
             "Dieser Bericht aktualisiert sich automatisch sobald neue Daten reinkommen."
         ),
         "p7_raw_link": (
@@ -354,8 +362,13 @@ TEXTS = {
             "Diversity DX (orange) delivers {d_gain} — less than Standard, but targeted at weak DX signals."
         ),
         "p1_caveat": (
-            "Note: These are only 2 measurement days, morning hours only (05–12 UTC). "
-            "The numbers may shift — but the trend is already clear."
+            "Note on antenna setup: ANT1 is a Kelemen DP-201510 (fan dipole for 20m/15m/10m) — "
+            "operated off-band on 40m and therefore suboptimal on this frequency. "
+            "ANT2 is the house gutter (~15m L-shape) — better suited for 40m due to its length and geometry. "
+            "This explains the particularly large diversity gain observed. "
+            "Results represent an upper bound for this antenna combination — "
+            "other setups will produce different numbers. "
+            "Follow-up tests on 20m are planned, where ANT1 operates within its design band."
         ),
         "p1_modes_title": "What do the three modes mean?",
         "p1_modes_body": (
@@ -371,7 +384,7 @@ TEXTS = {
         "p2_setup_title": "The Setup",
         "p2_setup_body": (
             "Measured on 40m FT8 using a FlexRadio FLEX-8400M — two antenna ports, same frequency.\n"
-            "Period: {time_range}, mornings between 05:00 and 12:00 UTC. Yes, nights are still missing — coming soon.\n"
+            "Period: {time_range}. Data available across the full day (05–23 UTC), night measurements ongoing.\n"
             "Cycles: Normal {n_c} ({n_d} day/s) | Diversity Standard {s_c} ({s_d} day/s) | Diversity DX {d_c} ({d_d} day/s).\n"
             "Each FT8 cycle lasts 15 seconds — the app counts decoded stations per cycle."
         ),
@@ -408,8 +421,9 @@ TEXTS = {
             "Rescue = ANT1 below −24 dB, ANT2 decoded anyway."
         ),
         "p3_note2": (
-            "Only 2 measurement days so far, mornings 05–12 UTC only — nights and evenings still missing. "
-            "Numbers may shift as more data comes in."
+            "Note: ANT1 (Kelemen DP-201510) is operated off-band on 40m (design band: 20m/15m/10m) — "
+            "ANT2 (house gutter ~15m) happens to be better suited for 40m. "
+            "Gains represent an upper bound for this combination. Follow-up tests on 20m are planned."
         ),
 
         # ── Stations diagram page (p.4) ──────────────────────────────────────
@@ -464,7 +478,7 @@ TEXTS = {
         "p7_visible_title": "What is clearly visible:",
         "p7_fazit_body": (
             "Diversity Standard consistently delivers between {gain_lo:.0f}% and {gain_hi:.0f}% more stations "
-            "across both measurement days —\ndepending on whether you count rescued stations or not. "
+            "across all measurement days —\ndepending on whether you count rescued stations or not. "
             "This is not coincidence, it repeats.\n"
             "Diversity DX sits at {d_gain:.0f}% without Rescue — less than Standard, but DX deliberately "
             "optimises\nfor the weakest signals. If you do a lot of DX, that makes sense."
@@ -475,16 +489,18 @@ TEXTS = {
         ),
         "p7_cannot_title": "What cannot be said yet:",
         "p7_cannot_body": (
-            "Only 2 measurement days — enough to see a trend, but not enough for robust conclusions.\n"
-            "Night and evening hours are completely missing — 40m is often significantly better in the evening.\n"
-            "Contest operation, geomagnetic storms, poor conditions — not yet tested.\n"
-            "Whether this works the same on other transceivers — unknown, tested only on the FLEX so far."
+            "Whether results transfer 1:1 to other antenna combinations — probably not.\n"
+            "ANT1 operates off-band on 40m, ANT2 happens to be better suited there.\n"
+            "This explains the particularly large gain — with two matched 40m antennas it would be smaller.\n"
+            "Contest operation, geomagnetic storms, poor conditions — not yet systematically tested.\n"
+            "Whether this works identically on other transceivers — tested only on the FLEX so far."
         ),
         "p7_next_title": "What comes next:",
         "p7_next_body": (
-            "Night and evening measurements on 40m — that's the interesting part I don't have yet.\n"
+            "Night measurements on 40m are ongoing — 40m is often significantly better in the evening.\n"
             "More days so the bars in the chart stabilize and variation decreases.\n"
-            "20m will come at some point — but only when there is enough data. Not before.\n"
+            "20m tests are planned — there ANT1 operates within its design band (20m/15m/10m) "
+            "and the 20m band is generally easier to receive. Different comparison, different numbers.\n"
             "This report updates automatically whenever new data comes in."
         ),
         "p7_raw_link": (

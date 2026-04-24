@@ -74,7 +74,7 @@ Controlled test on 40m, same hardware (FLEX-8400M), 2 minutes apart:
 > Generated automatically from live session data via `scripts/generate_plots.py`.
 > X-axis = UTC hour of day, averaged across all measurement days. Data grows with every session.
 
-**Live measurement results — 40m FT8, 3–4 measurement days, 11.896 cycles:**
+**Live measurement results — 40m FT8, 4–5 measurement days, 18.425 cycles:**
 
 | Mode | vs Normal (without rescue) | vs Normal (incl. rescue) | Rescue alone |
 |------|:---:|:---:|:---:|
@@ -110,7 +110,7 @@ Controlled test on 40m, same hardware (FLEX-8400M), 2 minutes apart:
 | [🗂 Raw Data (statistics/)](statistics/) | All raw cycle data as Markdown files — one file per hour per mode. Format: `statistics/<Mode>/<Band>/<Protocol>/YYYY-MM-DD_HH.md`. 214 files, every single cycle logged. Reproduce any number yourself. |
 
 > **📊 Statistics in progress — target: minimum 6 measurement days for reliable results.**
-> Current: 3–4 days. Charts and PDF update automatically with each new session. The more days, the more stable the lines.
+> Current: 4–5 days. Charts and PDF update automatically with each new session. The more days, the more stable the lines.
 
 ### Antenna Setup
 
@@ -284,7 +284,7 @@ MIT License (c) 2026 DA1MHH (Mike Hammerer)
 > Automatisch generiert aus Live-Sitzungsdaten via `scripts/generate_plots.py`.
 > X-Achse = UTC-Stunde des Tages, gemittelt über alle Messtage. Daten wachsen mit jeder Session.
 
-**Live-Messergebnisse — 40m FT8, 3–4 Messtage, 11.896 Zyklen:**
+**Live-Messergebnisse — 40m FT8, 4–5 Messtage, 18.425 Zyklen:**
 
 | Modus | vs Normal (ohne Rescue) | vs Normal (inkl. Rescue) | Rescue allein |
 |-------|:---:|:---:|:---:|
@@ -321,7 +321,7 @@ MIT License (c) 2026 DA1MHH (Mike Hammerer)
 | [🗂 Rohdaten (statistics/)](statistics/) | Alle Rohdaten als Markdown-Dateien — eine Datei pro Stunde pro Modus. Format: `statistics/<Modus>/<Band>/<Protokoll>/YYYY-MM-DD_HH.md`. 214 Dateien, jeder einzelne Zyklus geloggt. Jede Zahl ist nachrechenbar. |
 
 > **📊 Statistiken in Arbeit — Ziel: mindestens 6 Messtage für belastbare Ergebnisse.**
-> Aktuell: 3–4 Tage. Diagramme und PDF aktualisieren sich automatisch mit jeder neuen Session. Je mehr Tage, desto stabiler die Linien.
+> Aktuell: 4–5 Tage. Diagramme und PDF aktualisieren sich automatisch mit jeder neuen Session. Je mehr Tage, desto stabiler die Linien.
 
 ### Antennensetup
 
