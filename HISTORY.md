@@ -167,6 +167,30 @@ In `_on_station_clicked` (manueller Klick auf Station während CQ):
 
 ---
 
+## 2026-04-24 v0.52 — CQ-Freq zeitbasiert + Platz-Suche-Balken + Antennenwahl-Label
+
+**Betroffene Dateien:** `core/diversity.py`, `ui/control_panel.py`, `ui/mw_cycle.py`
+
+### Features
+- **Label-Umbenennung:** "Neucheck in X" → "Antennenwahl in X" — verständlich für Funker
+- **Neuer Countdown-Balken:** "Platz-Suche in Xs" — zeigt wann die freie TX-Frequenz neu berechnet wird (Sekunden, schrumpfend 120→0)
+- **CQ-Freq Timing zeitbasiert:** Statt zyklus-basiert (FT2: 10×3.8s=38s!) jetzt:
+  - Zeit-Fallback: 120s (für alle Modi gleich — FT8/FT4/FT2)
+  - Minimum Dwell: 15s (kein Bounce-Back bei Kollision)
+  - Kollisionserkennung: jedes Zyklus prüfen, bei ≥3 Nachbarn + 15s Dwell reagieren
+
+### Technische Details
+- `diversity.py`: `import time` + `RECALC_INTERVAL_S=120`, `MIN_DWELL_S=15`
+- `diversity.py`: `_cycles_since_recalc` → `_last_recalc_time` + `_last_change_time` (float Unix-Zeit)
+- `diversity.py`: neues Property `seconds_until_recalc` → int 0–120
+- `control_panel.py`: `_cq_freq_lbl` + `_cq_freq_bar` im AntCard, Proxy in ControlPanel
+- `control_panel.py`: neue Methode `update_cq_freq_countdown(remaining_s)`
+- `mw_cycle.py`: 3 Aufrufstellen ergänzt (measure, operate, normal)
+
+**Tests:** 168 passed
+
+---
+
 ## 2026-04-24 v0.51 — Diversity Countdown-Balken + besseres Label
 
 **Betroffene Dateien:** `ui/control_panel.py`

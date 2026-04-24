@@ -408,6 +408,26 @@ class _AntenneCard(QFrame):
         self._freq_hist.setVisible(False)
         lay.addWidget(self._freq_hist)
 
+        # CQ-Freq Countdown: Platz-Suche in Xs (zeitbasiert, 120s)
+        self._cq_freq_lbl = QLabel("Platz-Suche in --")
+        self._cq_freq_lbl.setStyleSheet(
+            f"color:#558866;font-size:9px;font-family:{_FONT};font-style:italic;"
+        )
+        self._cq_freq_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._cq_freq_bar = QProgressBar()
+        self._cq_freq_bar.setRange(0, 120)
+        self._cq_freq_bar.setValue(120)
+        self._cq_freq_bar.setTextVisible(False)
+        self._cq_freq_bar.setFixedHeight(6)
+        self._cq_freq_bar.setStyleSheet(
+            "QProgressBar { border: none; border-radius: 2px; background: #1a2a1a; }"
+            "QProgressBar::chunk { background: #558866; border-radius: 2px; }"
+        )
+        self._cq_freq_lbl.setVisible(False)
+        self._cq_freq_bar.setVisible(False)
+        lay.addWidget(self._cq_freq_lbl)
+        lay.addWidget(self._cq_freq_bar)
+
 
 class _RadioCard(QFrame):
     """Kachel 3 (türkis) — RADIO Controls (PSK, Freq, Power, TUNE, ALC, TX)."""
@@ -797,6 +817,8 @@ class ControlPanel(QWidget):
         self._a2_count_label = ant_card._a2_count_label
         self._freq_hist = ant_card._freq_hist
         self._operate_bar = ant_card._operate_bar
+        self._cq_freq_lbl = ant_card._cq_freq_lbl
+        self._cq_freq_bar = ant_card._cq_freq_bar
         self.btn_normal.setStyleSheet(self._rx_btn_style(self._RX_STYLE_ACTIVE))
         self.btn_diversity.setStyleSheet(self._rx_btn_style(self._RX_STYLE_INACTIVE))
         self.btn_normal.clicked.connect(lambda: self._on_rx_mode_clicked("normal"))
@@ -1063,7 +1085,7 @@ class ControlPanel(QWidget):
             else:
                 color = "#558866"
                 bar_color = "#558866"
-            self._phase_label.setText(f"Neucheck in {remaining}")
+            self._phase_label.setText(f"Antennenwahl in {remaining}")
             self._phase_label.setStyleSheet(
                 f"color:{color};font-size:9px;font-family:{_FONT};font-style:italic;"
             )
@@ -1108,6 +1130,29 @@ class ControlPanel(QWidget):
         self._freq_hist.update_data(data)
         if data.get('bins') or data.get('cq_freq'):
             self._freq_hist.setVisible(True)
+
+    def update_cq_freq_countdown(self, remaining_s: int) -> None:
+        """CQ-Frequenz Countdown-Balken aktualisieren (0-120 Sekunden)."""
+        if remaining_s <= 10:
+            color_txt = "#FF8800"
+            bar_color = "#FF8800"
+        elif remaining_s <= 30:
+            color_txt = "#FFCC00"
+            bar_color = "#BBAA00"
+        else:
+            color_txt = "#558866"
+            bar_color = "#558866"
+        self._cq_freq_lbl.setText(f"Platz-Suche in {remaining_s}s")
+        self._cq_freq_lbl.setStyleSheet(
+            f"color:{color_txt};font-size:9px;font-family:{_FONT};font-style:italic;"
+        )
+        self._cq_freq_bar.setValue(remaining_s)
+        self._cq_freq_bar.setStyleSheet(
+            "QProgressBar { border: none; border-radius: 2px; background: #1a2a1a; }"
+            f"QProgressBar::chunk {{ background: {bar_color}; border-radius: 2px; }}"
+        )
+        self._cq_freq_lbl.setVisible(True)
+        self._cq_freq_bar.setVisible(True)
 
     def update_presence(self, remaining_secs: int) -> None:
         """Operator Presence Balken aktualisieren (0-900 Sekunden)."""
