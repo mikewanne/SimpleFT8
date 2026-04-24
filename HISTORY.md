@@ -164,3 +164,17 @@ In `_on_station_clicked` (manueller Klick auf Station während CQ):
 - Test `test_proposed_freq_updates` auf Stationen mit echter innerer Lücke umgestellt
 
 **Tests:** 168 passed
+
+---
+
+## 2026-04-24 v0.49 — Versionsanzeige UI automatisch synchron
+
+**Betroffene Dateien:** `ui/control_panel.py`, `main.py`
+
+### Fix
+- Versionsanzeige unten rechts zeigte hardcodiert "v0.26"
+- `control_panel.py` importiert jetzt `APP_VERSION` aus `main.py`
+- Label: `f"SimpleFT8 v{APP_VERSION}"` — ab jetzt automatisch korrekt
+- `main.py` APP_VERSION auf 0.49 erhöht
+
+**Tests:** 168 passed
