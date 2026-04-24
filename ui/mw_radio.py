@@ -230,7 +230,12 @@ class RadioMixin:
         # DT-Korrektur: gespeicherten Wert fuer neuen Modus+Band laden
         from core import ntp_time
         ntp_time.set_mode(mode, band)
-        # Warnung wenn kein mode-spezifisches Gain-Preset vorhanden
+        # Diversity: Preset-Check mit Dialog + ggf. Pipeline
+        if self._rx_mode == "diversity":
+            scoring = getattr(self._diversity_ctrl, 'scoring_mode', 'normal')
+            self._check_diversity_preset(band, mode, scoring)
+            return  # _check_diversity_preset ruft _update_statusbar auf
+        # Normal-Modus: Warnung wenn kein mode-spezifisches Gain-Preset vorhanden
         if self.radio.ip:
             _std_store = getattr(self, '_standard_store', None)
             if _std_store and _std_store.get(band, mode) is None:
@@ -318,23 +323,12 @@ class RadioMixin:
             self._psk_first_fetch = True
             _psk_t.setInterval(120000)
             _psk_t.start()
-        # Diversity: Preset für neues Band laden oder Warnung zeigen
+        # Diversity: Preset-Check mit Dialog + ggf. Pipeline
         if self._rx_mode == "diversity":
-            mode = self.settings.get("mode", "FT8")
-            _store = getattr(self, '_standard_store', None)
-            if self._diversity_ctrl.scoring_mode == "dx":
-                _store = getattr(self, '_dx_store', None)
-            if _store:
-                preset = _store.get(band, mode)
-                if preset:
-                    self._diversity_ctrl.load_preset(preset)
-                    print(f"[Diversity] Preset {band}/{mode} geladen")
-                else:
-                    self.statusBar().showMessage(
-                        f"Kein Diversity-Preset für {band}/{mode} — bitte KALIBRIEREN", 6000
-                    )
-                    self.control_panel.dx_info.setText(f"Kein Preset ({band})")
-                    self.control_panel.dx_info.setStyleSheet("color: #FF6600;")
+            ft_mode = self.settings.get("mode", "FT8")
+            scoring = getattr(self._diversity_ctrl, 'scoring_mode', 'normal')
+            self._check_diversity_preset(band, ft_mode, scoring)
+            return  # _check_diversity_preset ruft _update_statusbar auf
         self._update_statusbar()
 
     @Slot(str)
@@ -613,6 +607,73 @@ class RadioMixin:
             "50:50", "measure", 0,
             self._diversity_ctrl.MEASURE_CYCLES,
             scoring_mode=self._diversity_ctrl.scoring_mode)
+
+    def _check_diversity_preset(self, band: str, ft_mode: str, scoring: str) -> None:
+        """Preset-Check bei Band/Modus-Wechsel mit aktiver Diversity.
+
+        is_valid + < 2h → Dialog (Weiter / Neu messen).
+        Kein Preset oder abgelaufen → sofort Pipeline starten.
+        """
+        if not getattr(self, 'radio', None) or not self.radio.ip:
+            return
+        store = (getattr(self, '_dx_store', None) if scoring == "dx"
+                 else getattr(self, '_standard_store', None))
+        if store and store.is_valid(band, ft_mode):
+            age = store.get_age_minutes(band, ft_mode)
+            mode_label = "Diversity DX" if scoring == "dx" else "Diversity Standard"
+            from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel
+            _dlg = QDialog(self)
+            _dlg.setWindowTitle("Diversity Setup")
+            _dlg.setStyleSheet("""
+                QDialog, QWidget { background-color: #1a1a2e; }
+                QLabel { color: #CCCCCC; font-family: Menlo; font-size: 13px; background-color: #1a1a2e; }
+                QLabel#lbl_title { color: #88AACC; font-size: 14px; font-weight: bold; padding-bottom: 4px; }
+                QPushButton {
+                    background-color: #2a2a3e; color: #CCCCCC;
+                    border: 1px solid #444; border-radius: 5px;
+                    font-family: Menlo; font-size: 13px;
+                    padding: 8px 20px; min-width: 120px;
+                }
+                QPushButton:hover { background-color: #3a3a5e; }
+                QPushButton#btn_weiter { background-color: #1a3a6e; border-color: #4488cc; }
+                QPushButton#btn_weiter:hover { background-color: #2a4a8e; }
+            """)
+            _lay = QVBoxLayout(_dlg)
+            _lay.setContentsMargins(24, 20, 24, 20)
+            _lay.setSpacing(10)
+            lbl_title = QLabel(f"{band} {ft_mode} — {mode_label}")
+            lbl_title.setObjectName("lbl_title")
+            lbl_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            lbl_msg = QLabel(
+                f"Kalibrierungsdaten vorhanden ({age} Min. alt).\n"
+                f"Weiter oder neu messen?"
+            )
+            lbl_msg.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            _lay.addWidget(lbl_title)
+            _lay.addWidget(lbl_msg)
+            _btn_row = QHBoxLayout()
+            _btn_row.setSpacing(12)
+            btn_new = QPushButton("Neu messen")
+            btn_use = QPushButton("Weiter")
+            btn_use.setObjectName("btn_weiter")
+            _btn_row.addWidget(btn_new)
+            _btn_row.addWidget(btn_use)
+            _lay.addLayout(_btn_row)
+            _choice = [False]
+            btn_use.clicked.connect(lambda: (_choice.__setitem__(0, True), _dlg.accept()))
+            btn_new.clicked.connect(lambda: _dlg.accept())
+            _dlg.exec()
+            if _choice[0]:
+                print(f"[Diversity] {band}/{ft_mode}: Preset ({age} Min.) übernommen")
+                self._enable_diversity(scoring_mode=scoring)
+                self._update_statusbar()
+                return
+        # Kein Preset, abgelaufen oder "Neu messen" → volle Pipeline
+        gain_scoring = "snr" if scoring == "dx" else "stations"
+        print(f"[Diversity] {band}/{ft_mode}: kein/abgelaufenes Preset → Pipeline")
+        self._pending_dx_diversity = True
+        self._pending_diversity_scoring = scoring
+        self._start_dx_tuning(scoring_mode=gain_scoring)
 
     def _handle_dx_tuning(self):
         """KALIBRIEREN-Button: Tunen + Gain-Messung fuer aktuelles Band, immer ueberschreiben."""
