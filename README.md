@@ -105,6 +105,10 @@ Controlled test on 40m, same hardware (FLEX-8400M), 2 minutes apart:
 |:-:|:-:|
 | ![Diversity 20m](docs/screenshots/diversity_20m_dt_corrected.png) | ![Comparison](docs/screenshots/diversity_37stations_40m.png) |
 
+**Caller Waitlist in action** — F1IQH calls while QSO with DL3AQJ is in progress → automatically queued → served next. Real QSO, 40m FT8. *(Screenshot courtesy of DL3AQJ — thank you!)*
+
+![Warteliste QSO](docs/screenshots/warteliste_qso.png)
+
 ### All Features
 
 **Tested & Working (v0.26):**

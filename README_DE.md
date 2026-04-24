@@ -69,6 +69,10 @@ Siehe [Test-Screenshots und Methodik](docs/DIVERSITY_DE.md) fuer Details.
 |:-:|:-:|
 | ![Diversity 20m](docs/screenshots/diversity_20m_dt_corrected.png) | ![Vergleich](docs/screenshots/diversity_37stations_40m.png) |
 
+**Warteliste in Aktion** — F1IQH ruft während laufendem QSO mit DL3AQJ → automatisch eingereiht → danach automatisch beantwortet. Echtes QSO, 40m FT8. *(Screenshot mit freundlicher Genehmigung von DL3AQJ — Danke!)*
+
+![Warteliste QSO](docs/screenshots/warteliste_qso.png)
+
 ---
 
 ## Kern-Innovationen
