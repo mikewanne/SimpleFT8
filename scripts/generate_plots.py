@@ -73,13 +73,14 @@ TEXTS = {
         "y_label_bar":      "Ø Stationen pro 15s-Zyklus",
 
         # Diagramm-Titel / Chart titles
-        "title_stations":   "Empfangene Stationen — {band} {protocol}   ({basis})",
-        "title_diversity":  "Empfang im Vergleich — {band} {protocol}   ({basis})",
+        "title_stations":   "Empfangene Stationen — {band} {protocol}",
+        "title_diversity":  "Empfang im Vergleich — {band} {protocol}",
 
         # Basis-Label (Legende) / Basis label (legend)
-        "basis_entry":      "{label}: {n_d} Tag{pl} / {n_c} Z",
+        "basis_entry":      "{label}\n{n_d} Tag{pl} · {n_c_fmt} Messpunkte",
         "day_plural_1":     "",       # Singular-Suffix: "1 Tag" (kein Suffix)
         "day_plural_n":     "e",      # Plural-Suffix:   "2 Tage"
+        "thousands_sep":    ".",      # Tausender-Trennzeichen DE: 6.585
 
         # Modusbezeichnungen / Mode labels
         "mode_labels": {
@@ -283,13 +284,14 @@ TEXTS = {
         "y_label_bar":      "Avg. Stations per 15s Cycle",
 
         # Diagramm-Titel / Chart titles
-        "title_stations":   "Decoded Stations — {band} {protocol}   ({basis})",
-        "title_diversity":  "Reception Comparison — {band} {protocol}   ({basis})",
+        "title_stations":   "Decoded Stations — {band} {protocol}",
+        "title_diversity":  "Reception Comparison — {band} {protocol}",
 
         # Basis-Label (Legende) / Basis label (legend)
-        "basis_entry":      "{label}: {n_d} day{pl} / {n_c} cyc",
+        "basis_entry":      "{label}\n{n_d} day{pl} · {n_c_fmt} data points",
         "day_plural_1":     "",    # singular suffix: "1 day" (no suffix)
         "day_plural_n":     "s",   # plural suffix:   "2 days"
+        "thousands_sep":    ",",   # thousands separator EN: 6,585
 
         # Modusbezeichnungen / Mode labels
         "mode_labels": {
@@ -752,7 +754,6 @@ def create_stations_diagram(band: str, protocol: str, output_dir: Path,
 
     has_data = False
     all_xs: list[int] = []
-    basis_parts: list[str] = []
 
     for rx_mode in RX_MODES:
         hour_vals = load_hourly_stats(STATS_DIR, rx_mode, band, protocol)
@@ -766,10 +767,10 @@ def create_stations_diagram(band: str, protocol: str, output_dir: Path,
         n_d = max(v["n_days"] for v in agg.values())
         n_c = sum(v["n_cycles"] for v in agg.values())
         pl = T["day_plural_1"] if n_d == 1 else T["day_plural_n"]
-        label = mode_labels.get(rx_mode, rx_mode.replace("_", " "))
-        basis_parts.append(
-            T["basis_entry"].format(label=label, n_d=n_d, pl=pl, n_c=n_c)
-        )
+        sep = T["thousands_sep"]
+        n_c_fmt = f"{n_c:,}".replace(",", sep)
+        base_label = mode_labels.get(rx_mode, rx_mode.replace("_", " "))
+        label = T["basis_entry"].format(label=base_label, n_d=n_d, pl=pl, n_c_fmt=n_c_fmt)
 
         color = COLORS[rx_mode]
         ax.plot(xs, means, color=color, label=label, linewidth=2.5, zorder=3)
@@ -784,9 +785,8 @@ def create_stations_diagram(band: str, protocol: str, output_dir: Path,
     ax.yaxis.set_major_locator(mticker.MultipleLocator(10))
     ax.set_xlabel(T["x_label"], color=DARK_FG, labelpad=6)
     ax.set_ylabel(T["y_label_line"], color=DARK_FG)
-    basis = " · ".join(basis_parts)
     ax.set_title(
-        T["title_stations"].format(band=band, protocol=protocol, basis=basis),
+        T["title_stations"].format(band=band, protocol=protocol),
         color=DARK_FG, fontsize=13, pad=10,
     )
     leg = ax.legend(facecolor="#2a2a2a", edgecolor=DARK_GRID, framealpha=0.9)
@@ -860,7 +860,13 @@ def create_diversity_diagram(band: str, protocol: str, output_dir: Path,
         agg = agg_all[mode]
         x_pos = x_base + _MODE_OFFSETS[mode]
         heights = [agg[h]["mean"] if h in agg else 0.0 for h in all_hours]
-        label = mode_labels.get(mode, mode.replace("_", " "))
+        n_d = max(v["n_days"] for v in agg.values())
+        n_c = sum(v["n_cycles"] for v in agg.values())
+        pl = T["day_plural_1"] if n_d == 1 else T["day_plural_n"]
+        sep = T["thousands_sep"]
+        n_c_fmt = f"{n_c:,}".replace(",", sep)
+        base_label = mode_labels.get(mode, mode.replace("_", " "))
+        label = T["basis_entry"].format(label=base_label, n_d=n_d, pl=pl, n_c_fmt=n_c_fmt)
         patch = _gradient_bars(ax, x_pos, heights, bar_w,
                                COLORS[mode], label=label, zorder=2)
         if patch:
@@ -902,22 +908,8 @@ def create_diversity_diagram(band: str, protocol: str, output_dir: Path,
     ax.set_xlabel(T["x_label"], color=DARK_FG, labelpad=6)
     ax.set_ylabel(T["y_label_bar"], color=DARK_FG)
 
-    basis_parts = []
-    for mode in _MODE_ORDER:
-        if mode not in agg_all:
-            continue
-        a = agg_all[mode]
-        n_d = max(v["n_days"] for v in a.values())
-        n_c = sum(v["n_cycles"] for v in a.values())
-        pl = T["day_plural_1"] if n_d == 1 else T["day_plural_n"]
-        label = mode_labels.get(mode, mode.replace("_", " "))
-        basis_parts.append(
-            T["basis_entry"].format(label=label, n_d=n_d, pl=pl, n_c=n_c)
-        )
-    basis = " · ".join(basis_parts)
-
     ax.set_title(
-        T["title_diversity"].format(band=band, protocol=protocol, basis=basis),
+        T["title_diversity"].format(band=band, protocol=protocol),
         color=DARK_FG, fontsize=13, pad=10,
     )
 
