@@ -12,6 +12,7 @@ from PySide6.QtCore import Signal, Qt, QTimer
 from PySide6.QtGui import QFont, QPainter, QColor, QPen
 
 from config.settings import BAND_FREQUENCIES
+from main import APP_VERSION
 from ui.styles import (
     BG as _BG, TEXT as _TEXT, FONT as _FONT, SEP_COLOR as _SEP_COLOR,
     MIN_WIDTH as _MIN_WIDTH, LED_GREEN as _LED_GREEN, LED_BLUE as _LED_BLUE,
@@ -848,7 +849,7 @@ class ControlPanel(QWidget):
             "padding: 0 3px; background: transparent; border: none;"
         )
         self._omni_symbol.setVisible(False)
-        self._version_label = QLabel("SimpleFT8 v0.26")
+        self._version_label = QLabel(f"SimpleFT8 v{APP_VERSION}")
         self._version_label.setStyleSheet(
             f"color: #333; font-family: {_FONT}; font-size: 10px; "
             "border: none; background: transparent;"
