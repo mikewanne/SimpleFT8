@@ -110,6 +110,7 @@ Die 0.77s sind **KONSTANT** und hardware/protokoll-bedingt.
 - [x] FT8 TX DT gemessen (Icom): **+1.3s konstant** → FlexRadio TX-VITA-49-Buffer = 1.3s ✓
 - [x] Fix: TARGET_TX_OFFSET = 0.5 - 1.3 = **-0.8s** → Audio 1.3s früher senden ✓
 - [x] FT8 TX DT nach Fix gemessen (Icom): **0.0s** ✓✓
+- [x] 40m Bandwechsel: RX 0.24s geladen, Stationen 0.0–0.2, TX 0.0s ✓✓
 - [ ] FT4 TX DT prüfen → war -0.5 bis -1.1, soll ≈ 0 sein nach Fix
 
 ### Weitere geplante Verbesserungen (noch nicht umgesetzt):

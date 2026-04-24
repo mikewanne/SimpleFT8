@@ -78,8 +78,10 @@
   day+night getrennt. (23.04.2026 erledigt)
 
 ### UI-Verbesserungen (SPAETER)
-- [ ] **Statusbar DT-Anzeige:** Statt `DT: +0.78s` nur `DT: Aktiv` oder `DT: Korrektur` — exakte Zeit macht Funker nervoes
-- [ ] **Statusbar Mode+Filter:** `Mode: FT8 | Filter: 100-3100 Hz` (oder FT4/FT2 mit jeweiligem Filter) — damit jeder sieht welcher Filter aktiv ist
+- [x] **Statusbar DT-Anzeige:** Zeigt `DT: —` / `DT: Korrektur` (grün) / `DT: Aktiv` —
+  kein exakter Wert mehr. Implementiert in main_window.py::_update_statusbar() (Zeile 558-565).
+- [x] **Statusbar Mode+Filter:** Zeigt `FT8 40m | 14074.000 kHz | Filter: 100-3100 Hz` —
+  Filter-String pro Modus in _FILTERS dict. Implementiert in _update_statusbar() (Zeile 573-609).
 - [ ] **Spalten-Konfig in Settings:** RX-Spalten ein/ausblendbar + gespeichert/geladen (Slot, Ant, DT, etc.)
 
 ### RX-Liste (UI)

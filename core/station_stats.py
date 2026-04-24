@@ -163,6 +163,35 @@ class StationStatsLogger:
         except queue.Full:
             pass
 
+    def log_antenna_qso(self, call: str, band: str, ft_mode: str,
+                        best_ant: str | None, delta_db: float | None):
+        """QSO-Ende loggen: welche Antenne war beste Wahl, Delta dB.
+
+        Schreibt nach statistics/antenna_qso/YYYY-MM-DD.md (taegliche Datei).
+        best_ant/delta_db duerfen None sein (kein Pref-Wert zum Zeitpunkt des QSO).
+
+        Args:
+            call: Rufzeichen der Gegenstation
+            band: z.B. "20m", "40m"
+            ft_mode: "FT8", "FT4", "FT2"
+            best_ant: "A1" / "A2" / None (keine Pref-Daten vorhanden)
+            delta_db: SNR-Differenz A2-A1 in dB, None wenn unbekannt
+        """
+        entry = {
+            "type": "antenna_qso",
+            "time": time.strftime("%H:%M:%S", time.gmtime()),
+            "date": time.strftime("%Y-%m-%d", time.gmtime()),
+            "call": call,
+            "band": band,
+            "ft_mode": ft_mode,
+            "best_ant": best_ant,
+            "delta_db": delta_db,
+        }
+        try:
+            self._queue.put_nowait(entry)
+        except queue.Full:
+            pass
+
     def _writer_loop(self):
         """Hintergrund-Thread: schreibt Queue-Eintraege in .md Dateien."""
         while True:
@@ -180,6 +209,9 @@ class StationStatsLogger:
         """Einen Eintrag in die passende Stunden-Datei schreiben."""
         if entry.get("type") == "station_comparison":
             self._write_station_comparisons(entry)
+            return
+        if entry.get("type") == "antenna_qso":
+            self._write_antenna_qso(entry)
             return
 
         dir_key = f"{entry['rx_mode']}/{entry['band']}/{entry['ft_mode']}"
@@ -215,6 +247,27 @@ class StationStatsLogger:
                 f.write(f"| {entry['time']} | {entry['count']} | {entry['snr']} | {entry['ant2_wins']} | {delta_str} |\n")
             else:
                 f.write(f"| {entry['time']} | {entry['count']} | {entry['snr']} |\n")
+
+    def _write_antenna_qso(self, entry: dict):
+        """QSO-Antennen-Nutzung in tageweise Datei schreiben."""
+        target_dir = self._base_dir / "antenna_qso"
+        target_dir.mkdir(parents=True, exist_ok=True)
+        target_path = target_dir / f"{entry['date']}.md"
+
+        if not target_path.exists():
+            with open(target_path, "w") as f:
+                f.write(f"# QSO-Antennen-Nutzung {entry['date']}\n\n")
+                f.write("| Zeit (UTC) | Rufzeichen | Band | Modus | Antenne | Δ dB |\n")
+                f.write("|------------|------------|------|-------|---------|------|\n")
+
+        ant = entry["best_ant"] if entry["best_ant"] else "–"
+        if entry["delta_db"] is None:
+            delta_str = "–"
+        else:
+            delta_str = f"{entry['delta_db']:+.1f}"
+        with open(target_path, "a") as f:
+            f.write(f"| {entry['time']} | {entry['call']} | {entry['band']} | "
+                    f"{entry['ft_mode']} | {ant} | {delta_str} |\n")
 
     def _write_station_comparisons(self, entry: dict):
         """Station-Vergleiche (Rescue-Events) in separate Stunden-Datei schreiben."""

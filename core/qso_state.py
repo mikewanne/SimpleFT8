@@ -186,6 +186,7 @@ class QSOStateMachine(QObject):
             print(f"[QSO] {msg.caller} sendet 73/RR73 als CQ-Antwort — ignoriert")
             return
 
+        self._was_cq = True  # CQ war aktiv (cq_mode=True hier garantiert)
         self._dbg.reset(msg.caller)
         self._dbg.log("RX", f"CQ-Antwort von {msg.caller}: '{msg.raw}' "
                        f"grid={msg.is_grid} report={msg.is_report} r_report={msg.is_r_report}")

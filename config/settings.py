@@ -22,6 +22,30 @@ BAND_FREQUENCIES = {
     "10m": {"ft8": 28.074, "ft4": 28.180, "ft2": 28.184},
 }
 
+# Tune-Frequenzen: Nebenfrequenz -2 kHz (grob), stoert keine Weltfrequenz.
+# FT2 nutzt den gleichen Offset wie FT8 des Bands.
+TUNE_FREQS = {
+    "80m_FT8": 3.571,   "80m_FT4": 3.573,
+    "40m_FT8": 7.072,   "40m_FT4": 7.0455,
+    "30m_FT8": 10.134,  "30m_FT4": 10.138,
+    "20m_FT8": 14.072,  "20m_FT4": 14.078,
+    "17m_FT8": 18.098,  "17m_FT4": 18.102,
+    "15m_FT8": 21.072,  "15m_FT4": 21.138,
+    "12m_FT8": 24.913,  "12m_FT4": 24.917,
+    "10m_FT8": 28.072,  "10m_FT4": 28.178,
+}
+
+
+def get_tune_freq_mhz(band: str, mode: str) -> float | None:
+    """Tune-Frequenz fuer Band+Modus. FT2 faellt auf FT8-Wert zurueck.
+
+    Returns None wenn kein Offset-Wert hinterlegt (z.B. 60m).
+    """
+    m = mode.upper()
+    if m == "FT2":
+        m = "FT8"
+    return TUNE_FREQS.get(f"{band}_{m}")
+
 DEFAULTS = {
     "callsign": "DA1MHH",
     "locator": "JO31",

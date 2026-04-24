@@ -128,6 +128,28 @@ Die LED-Leiste oder das Verhaeltnis-Label aendert die Farbe je nach Status:
 - Teal/Blau: 50:50, beide Antennen aehnlich
 - Gelb: Messung laeuft
 
+## Antenna-Pref — das lernende Gedaechtnis
+
+Diversity ist kein simpler Schalter. Nach jedem Dekodier-Zyklus merkt sich SimpleFT8 pro Rufzeichen, welche Antenne diese Station gerade besser empfangen hat — und um wieviel dB.
+
+Das ist der Punkt: Die globale Diversity-Entscheidung (welche Antenne hat gerade mehr Stationen / mehr schwache Signale) ist ein Durchschnitt ueber alle. Aber wenn DL3AQJ aus Norddeutschland kommt und deine ANT2 nach Norden zeigt, ist ANT2 fuer diese eine Station vielleicht 6 dB besser — egal was der Rest des Bandes sagt.
+
+**So funktioniert es:**
+
+Ohne Diversity:      Immer Antenne 1 — egal was gerade los ist.
+Diversity Standard:  Alle 15s: welche Antenne empfaengt gerade mehr Stationen? Die nehmen.
+Diversity DX:        Alle 15s: welche Antenne hoert die schwaechsten Signale? Die nehmen.
++ Antenna-Pref:      System merkt sich — "DL3AQJ kommt immer besser auf ANT2".
+                     Beim QSO-Aufbau sofort die richtige Antenne, automatisch.
+
+**Wann wird umgeschaltet?** Nur am Anfang eines Zyklus (nie mitten im Dekodieren). Waehrend eines laufenden QSOs bleibt die Antenne fest, das globale Diversity-Rhythmus wird temporaer ueberlagert. Nach QSO-Ende: zurueck in den normalen Zyklus.
+
+**Kein Speicher, kein Timeout.** Wird eine Station empfangen, ist der Wert maximal 15 Sekunden alt — praeziser geht es nicht. Wird sie nicht empfangen, gibt es auch nichts anzurufen. Historische Werte braucht niemand.
+
+**Warteliste:** Wenn mehrere Stationen gleichzeitig rufen, wechselt SimpleFT8 zwischen den Stationen — und jedes Mal auf die passende Antennen-Praeferenz.
+
+Im QSO-Fenster siehst du, welche Antenne genommen wurde: `Antworte DL3AQJ (ANT2, +6.3 dB)`. In der Statusleiste: `RX: A2 (+6.3 dB)`.
+
 ## Tipps fuer den Betrieb
 
 - **Starte mit Standard-Modus** fuer deine erste Session. Wechsle nur zu DX-Modus, wenn du aktiv DX jagst.

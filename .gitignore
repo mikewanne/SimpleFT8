@@ -14,6 +14,7 @@ venv_broken/
 # Backups (development snapshots, not needed in repo)
 backup/
 backup_*/
+Appsicherungen/
 
 # macOS
 .DS_Store

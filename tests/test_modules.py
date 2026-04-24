@@ -1045,6 +1045,13 @@ def test_callsign_to_distance():
 
 # ── CQ Frequency ─────────────────────────────────────────────────────────────
 
+def _make_stations(*freq_list):
+    """Hilfsfunktion: Mock-Stationen mit freq_hz fuer CQ-Freq Tests."""
+    class MockMsg:
+        def __init__(self, f): self.freq_hz = f
+    return {f"S{i}": MockMsg(f) for i, f in enumerate(freq_list)}
+
+
 def test_cq_freq_empty_histogram():
     """Leeres Histogramm → None."""
     from core.diversity import DiversityController
@@ -1056,12 +1063,9 @@ def test_cq_freq_near_activity():
     """CQ-Frequenz muss NAHE der Aktivitaet liegen (dynamischer Sweet Spot)."""
     from core.diversity import DiversityController
     dc = DiversityController()
-    # Simuliere belegte Frequenzen bei 1000-1200 Hz
-    for f in range(1000, 1200, 50):
-        dc.record_freq(f)
+    dc.sync_from_stations(_make_stations(*range(1000, 1200, 50)))
     freq = dc.get_free_cq_freq()
     if freq is not None:
-        # Muss nahe am Median (1100 Hz) sein, nicht weit weg
         assert 500 <= freq <= 1700, f"CQ-Freq {freq} zu weit von Aktivitaet"
 
 
@@ -1396,26 +1400,22 @@ def test_cq_freq_dynamic_sweet_spot():
     """CQ-Frequenz passt sich der Aktivitaet an (nicht fix 800-2000)."""
     from core.diversity import DiversityController
     dc = DiversityController()
-    # Simuliere Aktivitaet bei 300-800 Hz
-    for f in range(300, 800, 50):
-        for _ in range(3):
-            dc.record_freq(f)
+    dc.sync_from_stations(_make_stations(*range(300, 800, 50)))
     freq = dc.get_free_cq_freq()
     if freq is not None:
-        # Sollte im Bereich der Aktivitaet sein, nicht bei 1500+
+        # Naechste freie Luecke liegt unter 300 Hz oder nah darueber
         assert freq < 1200, f"CQ-Freq {freq} zu hoch fuer Aktivitaet bei 300-800 Hz"
 
 
 def test_cq_freq_high_activity():
-    """CQ-Frequenz bei hoher Aktivitaet oben (1000-2000 Hz)."""
+    """CQ-Frequenz liegt ausserhalb des dicht belegten Bereichs."""
     from core.diversity import DiversityController
     dc = DiversityController()
-    for f in range(1000, 2000, 50):
-        for _ in range(3):
-            dc.record_freq(f)
+    dc.sync_from_stations(_make_stations(*range(1000, 2000, 50)))
     freq = dc.get_free_cq_freq()
     if freq is not None:
-        assert 800 <= freq <= 2200, f"CQ-Freq {freq} ausserhalb Aktivitaetsbereich"
+        # Gap liegt ausserhalb des belegten Bereichs (unter 1000 oder ueber 2000)
+        assert freq < 1000 or freq > 2000, f"CQ-Freq {freq} liegt im belegten Bereich"
 
 
 def test_omni_tx_pending_switch():
@@ -1446,39 +1446,33 @@ def test_omni_tx_qso_blocks_counter():
     assert omni.block == 1, "Block sollte 1 bleiben bei dauerhaftem QSO"
 
 
-def test_cq_freq_stays_inside_occupied():
-    """TX-Frequenz darf NIE ausserhalb des belegten Bereichs liegen."""
+def test_cq_freq_finds_gap_outside_occupied():
+    """TX-Frequenz liegt in einer freien Luecke — ggf. ausserhalb des belegten Bereichs."""
     from core.diversity import DiversityController
     dc = DiversityController()
-    # Stationen nur bei 200-500 Hz — TX darf NICHT bei 600+ Hz landen
-    for f in range(200, 550, 50):
-        for _ in range(5):
-            dc.record_freq(f)
+    dc.sync_from_stations(_make_stations(*range(200, 550, 50)))
     freq = dc.get_free_cq_freq()
     if freq is not None:
-        assert freq <= 550, f"TX-Freq {freq} Hz ausserhalb Sweetspot (max 550)"
-        assert freq >= 200, f"TX-Freq {freq} Hz unter Sweetspot (min 200)"
+        # Freq liegt NICHT mitten im belegten Bereich
+        assert freq < 200 or freq >= 550, f"TX-Freq {freq} liegt im belegten Bereich"
+        assert dc.FREQ_MIN_HZ <= freq <= dc.FREQ_MAX_HZ
 
 
 def test_cq_freq_fallback_no_gap():
-    """Wenn keine Luecke vorhanden, Fallback auf Median-Bereich."""
+    """Wenn alle Bins belegt sind, gibt get_free_cq_freq() None zurueck."""
     from core.diversity import DiversityController
     dc = DiversityController()
-    # Jedes Bin belegt — keine Luecke
-    for f in range(300, 600, 50):
-        for _ in range(10):
-            dc.record_freq(f)
+    # Alle Bins von 150-2850 Hz belegen → keine Luecke im gesamten Suchbereich
+    dc.sync_from_stations(_make_stations(*range(150, 2851, 50)))
     freq = dc.get_free_cq_freq()
-    assert freq is not None, "Fallback muss eine Frequenz liefern"
-    assert 200 <= freq <= 700, f"Fallback-Freq {freq} nicht im erwarteten Bereich"
+    assert freq is None, f"Keine Luecke erwartet, aber {freq} Hz zurueckgegeben"
 
 
 def test_proposed_freq_updates():
     """update_proposed_freq() berechnet TX-Freq nach Intervall."""
     from core.diversity import DiversityController
     dc = DiversityController()
-    for f in range(400, 800, 50):
-        dc.record_freq(f)
+    dc.sync_from_stations(_make_stations(*range(400, 800, 50)))
     assert dc.cq_freq_hz is None  # Noch nicht berechnet
     dc.update_proposed_freq()
     assert dc.cq_freq_hz is not None  # Jetzt berechnet

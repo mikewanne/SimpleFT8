@@ -91,9 +91,7 @@ class CycleMixin:
                     avg_snr=avg_snr,
                     dx_weak_count=weak_count,
                 )
-                for m in (messages or []):
-                    if hasattr(m, 'freq_hz') and m.freq_hz:
-                        self._diversity_ctrl.record_freq(m.freq_hz)
+                self._diversity_ctrl.sync_from_stations(self._diversity_stations)
                 self._diversity_ctrl.update_proposed_freq()
             # Histogram LIVE aktualisieren (auch waehrend Messung)
             self.control_panel.update_freq_histogram(
@@ -142,22 +140,21 @@ class CycleMixin:
                 self._diversity_in_operate = False
 
         if self._rx_mode == "diversity" and messages:
-            # Diversity: Frequenz-Histogram live aktualisieren (Betriebsphase)
-            for m in messages:
-                if hasattr(m, 'freq_hz') and m.freq_hz:
-                    self._diversity_ctrl.record_freq(m.freq_hz)
             qso_busy = self.qso_sm.state not in (
                 QSOState.IDLE, QSOState.TIMEOUT,
                 QSOState.CQ_CALLING, QSOState.CQ_WAIT,
             )
-            self._diversity_ctrl.update_proposed_freq(qso_active=qso_busy)
-            self.control_panel.update_freq_histogram(
-                self._diversity_ctrl.get_histogram_data())
 
             # Diversity: gemeinsame Akkumulation mit Antennen-Info
             changed, comparisons = accumulate_stations(
                 self._diversity_stations, messages,
                 self._active_qso_targets, antenna=ant)
+
+            # Histogramm 1:1 aus aktuellem RX-Fenster (station_accumulator)
+            self._diversity_ctrl.sync_from_stations(self._diversity_stations)
+            self._diversity_ctrl.update_proposed_freq(qso_active=qso_busy)
+            self.control_panel.update_freq_histogram(
+                self._diversity_ctrl.get_histogram_data())
 
             # Stationen pro Antenne — immer berechnen (nicht nur bei changed)
             a1_msgs = [m for m in self._diversity_stations.values()
@@ -417,19 +414,16 @@ class CycleMixin:
             threading.Thread(target=_switch, daemon=True).start()
 
     def _update_histogram(self, messages):
-        """Histogram + vorgeschlagene TX-Freq aktualisieren (Normal + Diversity)."""
-        if messages:
-            for m in messages:
-                if hasattr(m, 'freq_hz') and m.freq_hz:
-                    self._diversity_ctrl.record_freq(m.freq_hz)
-            # QSO-Schutz: kein Frequenzwechsel waehrend aktivem QSO
-            qso_busy = self.qso_sm.state not in (
-                QSOState.IDLE, QSOState.TIMEOUT,
-                QSOState.CQ_CALLING, QSOState.CQ_WAIT,
-            )
-            self._diversity_ctrl.update_proposed_freq(qso_active=qso_busy)
-            self.control_panel.update_freq_histogram(
-                self._diversity_ctrl.get_histogram_data())
+        """Histogram + vorgeschlagene TX-Freq aktualisieren (Normal-Modus)."""
+        # 1:1 aus aktuellem RX-Fenster (station_accumulator, inkl. Aging)
+        self._diversity_ctrl.sync_from_stations(self._normal_stations)
+        qso_busy = self.qso_sm.state not in (
+            QSOState.IDLE, QSOState.TIMEOUT,
+            QSOState.CQ_CALLING, QSOState.CQ_WAIT,
+        )
+        self._diversity_ctrl.update_proposed_freq(qso_active=qso_busy)
+        self.control_panel.update_freq_histogram(
+            self._diversity_ctrl.get_histogram_data())
 
     def _is_antenna_tuning_active(self) -> bool:
         """Prueft ob RF-Tuning, Radio-Suche oder Diversity-Einmessphase aktiv.
@@ -481,8 +475,12 @@ class CycleMixin:
                 _lbl.setStyleSheet("color: #555; font-family: Menlo; font-size: 11px; padding: 0 6px;")
             return False
         # CQ oder aktives QSO → pausieren (nur 1 Slot RX, Statistik wäre verzerrt)
+        # Robuster Check: State-Machine UND UI-Button — falls cq_mode durch Bug False ist
         _qsm = getattr(self, 'qso_sm', None)
-        if _qsm and (_qsm.cq_mode or _qsm.state not in (QSOState.IDLE, QSOState.TIMEOUT)):
+        _cp = getattr(self, 'control_panel', None)
+        _cq_btn = getattr(_cp, 'btn_cq', None) if _cp else None
+        _cq_ui = _cq_btn is not None and _cq_btn.isChecked()
+        if _qsm and (_cq_ui or _qsm.cq_mode or _qsm.state not in (QSOState.IDLE, QSOState.TIMEOUT)):
             return False
         from core.station_stats import get_active_protocol, get_active_reception_mode
         protocol = get_active_protocol(self.settings.mode)

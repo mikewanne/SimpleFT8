@@ -36,13 +36,32 @@ Inhalt:
 - Test-Suite Status
 - Letzter bekannter guter Zustand
 
-## 3. Bestätigung ausgeben
+## 3. HISTORY.md ergänzen (PFLICHT — niemals löschen!)
+
+Datei: `/Users/mikehammerer/Documents/KI N8N Projekte/FT8/SimpleFT8/HISTORY.md`
+
+**Regel:** Nur anhängen (append), niemals bestehende Einträge entfernen oder überschreiben.
+
+**Format mit Versionsnummer:** `## YYYY-MM-DD vX.YY — Kurztitel`
+- `APP_VERSION` aus `main.py` lesen (erste Konstante nach den Imports)
+- Neue Features: APP_VERSION um +0.01 erhöhen UND in main.py eintragen
+- Nur Bugfixes ohne neue Funktionalität: Version unverändert lassen
+- **Warum:** Jeder HISTORY-Eintrag muss eindeutig einer Appsicherung zuordenbar sein
+
+Inhalt pro Eintrag:
+- Was wurde geändert (Datei + Beschreibung)
+- Welche Bugs wurden gefixt
+- Neue Features / Docs
+- Test-Status (z. B. `168 passed`)
+
+## 4. Bestätigung ausgeben
 
 Gib exakt das aus:
 
 ```
 ✅ CLAUDE.md aktualisiert – SimpleFT8 + FT8/
 ✅ HANDOFF.md aktualisiert – SimpleFT8 + FT8/ (identische Kopie)
+✅ HISTORY.md ergänzt – lückenlose Änderungshistorie
 ✅ Terminal schließen
 ✅ Morgen: cd SimpleFT8 ODER cd FT8 → claude1 → lädt automatisch
 ```

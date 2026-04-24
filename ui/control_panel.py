@@ -199,7 +199,7 @@ class _ModeBandCard(QFrame):
         freq_frame.setFixedHeight(30)
         freq_lay = QHBoxLayout(freq_frame)
         freq_lay.setContentsMargins(6, 0, 6, 0)
-        self.freq_label = QLabel("14.074 MHz")
+        self.freq_label = QLabel("14074.000 kHz")
         self.freq_label.setStyleSheet(
             f"color: #FFD700; font-size: 13pt; font-weight: bold; "
             f"font-family: {_FONT}; border: none; background: transparent;"
@@ -952,7 +952,7 @@ class ControlPanel(QWidget):
     def _update_frequency(self):
         mode_key = self._current_mode.lower()
         freq = BAND_FREQUENCIES.get(self._current_band, {}).get(mode_key, 0)
-        self.freq_label.setText(f"{freq:.3f} MHz")
+        self.freq_label.setText(f"{freq * 1000:.3f} kHz")
 
     # =====================================================================
     # RX Modus (Antenne)
