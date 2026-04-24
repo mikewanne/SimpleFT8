@@ -74,14 +74,14 @@ Controlled test on 40m, same hardware (FLEX-8400M), 2 minutes apart:
 > Generated automatically from live session data via `scripts/generate_plots.py`.
 > X-axis = UTC hour of day, averaged across all measurement days. Data grows with every session.
 
-**Live measurement results — 40m FT8, 2 measurement days:**
+**Live measurement results — 40m FT8, 3–4 measurement days, 11.896 cycles:**
 
 | Mode | vs Normal (without rescue) | vs Normal (incl. rescue) | Rescue alone |
 |------|:---:|:---:|:---:|
-| Diversity Standard | **+53%** | **+82%** | +29% |
-| Diversity DX | **+27%** | **+45%** | +18% |
+| Diversity Standard | **+93%** | **+132%** | +39% |
+| Diversity DX | **+118%** | **+157%** | +39% |
 
-*Rescue = stations that ANT1 could not decode (≤ −24 dB SNR) but ANT2 saved. 40m, 2 measurement days, trend clearly visible.*
+*Rescue = stations that ANT1 could not decode (≤ −24 dB SNR) but ANT2 saved. Pooled mean over all cycles — not cherry-picked, not a single good day.*
 
 **Station timeline — 40m FT8, all three modes over 24h UTC:**
 *(Dashed lines = Rescue Stations: received by ANT1 below −24 dB — ANT2 boosts the signal above the decoding threshold)*
@@ -253,14 +253,14 @@ MIT License (c) 2026 DA1MHH (Mike Hammerer)
 > Automatisch generiert aus Live-Sitzungsdaten via `scripts/generate_plots.py`.
 > X-Achse = UTC-Stunde des Tages, gemittelt über alle Messtage. Daten wachsen mit jeder Session.
 
-**Live-Messergebnisse — 40m FT8, 2 Messtage:**
+**Live-Messergebnisse — 40m FT8, 3–4 Messtage, 11.896 Zyklen:**
 
 | Modus | vs Normal (ohne Rescue) | vs Normal (inkl. Rescue) | Rescue allein |
 |-------|:---:|:---:|:---:|
-| Diversity Standard | **+53%** | **+82%** | +29% |
-| Diversity DX | **+27%** | **+45%** | +18% |
+| Diversity Standard | **+93%** | **+132%** | +39% |
+| Diversity DX | **+118%** | **+157%** | +39% |
 
-*Rescue = Stationen, die ANT1 nicht decodieren konnte (≤ −24 dB SNR), aber ANT2 rettete. 40m, 2 Messtage, Trend klar erkennbar.*
+*Rescue = Stationen, die ANT1 nicht decodieren konnte (≤ −24 dB SNR), aber ANT2 rettete. Pooled Mean über alle Zyklen — kein Cherry-Picking, kein einzelner guter Tag.*
 
 **Stationen über 24h UTC — 40m FT8, alle drei Modi:**
 *(Gestrichelte Linien = Rescue Stationen: von ANT1 unter −24 dB empfangen — ANT2 hebt das Signal über die Dekodiergrenze)*
