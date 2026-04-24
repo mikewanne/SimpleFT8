@@ -277,3 +277,41 @@ Countdown sprang z.B. 119→108→119 weil per-Zyklus-Updates die 120s-Range unr
 - **Hintergrund** korrigiert: `#1a1010` (war fälschlich `#1a2a1a`)
 
 **Tests:** 168 passed
+
+---
+
+## 2026-04-24 v0.54 — README Antennenfotos + Transparenz-Caveat + PDF-Update
+
+**Betroffene Dateien:** `README.md`, `scripts/generate_plots.py`, `docs/fotos/`
+
+### README
+- Neue Sektion "Antenna Setup" / "Antennensetup" (DE+EN) mit 2 Fotos:
+  - `docs/fotos/Gesamt.png` — Gesamtansicht Haus, beide Antennen sichtbar
+  - `docs/fotos/Gesamt_Farbe.png` — Annotiert: Gelb=ANT1, Rot=ANT2
+- ANT1: Kelemen DP-201510, vertikal gespannter Mehrband-Halbwellendipol (20m/15m/10m),
+  Einspeisepunkt an Dachgaube, 1:1-Balun, ein Arm hoch zur Dachspitze, einer runter
+- ANT2: Regenrinne ~15m L-Form (5m waagerecht + 8m senkrecht + 2m waagerecht),
+  zwischen λ/4 und λ/2 für 40m, nie als Antenne installiert — einfach angeklemmt
+- Rohdaten-Link: `statistics/` Ordner (214 Dateien, jeder Zyklus geloggt)
+- Messtage aktualisiert: 11.896 → 18.425 Zyklen, 3-4 → 4-5 Messtage
+
+### Transparenz-Caveat (DE+EN, README + PDF)
+- ANT1 auf 40m außerhalb Auslegungsband (20m/15m/10m) → suboptimal
+- ANT2 (Regenrinne) auf 40m günstiger durch Länge/Form → erklärt großen Gewinn
+- Ergebnisse als Obergrenze deklariert — nicht übertragbar auf andere Setups
+- 20m-Folgetests angekündigt (ANT1 dort resonant, 20m generell besser)
+
+### generate_plots.py PDF-Texte
+- `p1_caveat`: Antennencaveat auf Titelseite (DE+EN)
+- `p2_setup_body`: "mornings only" entfernt, aktueller Tagesbereich 05-23 UTC
+- `p3_note2`: Obergrenze-Hinweis bei Ergebnistabelle (DE+EN)
+- `p7_cannot_body`: Übertragbarkeit explizit verneint (DE+EN)
+- `p7_next_body`: 20m-Folgetests angekündigt (DE+EN)
+- "über beide Messtage" → "über alle Messtage" (DE+EN)
+
+### Strategie für weitere Datensammlung
+- Abfrage alle 2-3h welcher Modus die dünnste Abdeckung hat
+- Ziel: Lücken bei 15-23 UTC für alle drei Modi schließen
+- Diversity Standard als nächstes (14-16 UTC, 15h+16h = je 1 Tag)
+
+**Tests:** 168 passed
