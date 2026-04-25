@@ -5,6 +5,40 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-04-25 v0.57 — Answer-Me Highlighting + Gain-Messung Logging
+
+**Betroffene Dateien:** `ui/rx_panel.py`, `ui/mw_radio.py`, `main.py`
+
+### Änderungen
+
+**`ui/rx_panel.py` — Answer-Me visuell sichtbar machen:**
+- Farbe `_COLOR_ANSWER_ME_BG`: `#2A1F00` (fast identisch mit Active-Call `#2A1500`) → `#5A4A10` (klares Gold) — endlich unterscheidbar im dunklen UI
+- Bold-Logik in `_apply_active_highlight` (L268): `setBold(is_active)` → `setBold(is_active or is_answer_me)` — bei zyklischem Refresh
+- Bold beim direkten Einfügen in `_populate_row` (L419-426) — Answer-Me ist sofort sichtbar, nicht erst nach dem nächsten Highlight-Refresh
+
+**`ui/mw_radio.py` — Gain-Messung Logging:**
+- Top-Level Import: `from pathlib import Path`
+- Neue Methode `_log_gain_result(r, band, ft_mode)` am Klassenende: append-only Markdown-Eintrag in `~/.simpleft8/gain_log.md` mit UTC-Zeitstempel, Band, FT-Mode, Diversity/Standard-Scoring-Label, ANT1/ANT2-Gains, beste Antenne, ANT1/ANT2 Ø SNR
+- Aufruf in `_on_dx_tune_accepted` direkt nach `_set_gain_measure_lock(False)` und VOR dem `if self._rx_mode == "normal":` Block — beide Modi (Normal-Kalibrierung + Diversity-Messung) werden geloggt
+- Cancel/Reject loggt NICHT (Hook nur in `_on_dx_tune_accepted`, nicht `_on_dx_tune_rejected`)
+- Format: menschenlesbares Markdown, Mike kann es im Editor öffnen für Drift-Analyse über Wochen/Monate
+
+**`main.py`:**
+- `APP_VERSION = "0.56"` → `"0.57"`
+
+### DeepSeek-Review (deepseek-chat, thinking high)
+0 Issues. Bold-Reset bei State-Übergängen sauber, defensive `r.get()`-Defaults verhindern KeyError, UTF-8 explizit für Ø-Zeichen, Hook-Position richtig vor early-return. `~/.simpleft8/` wird durch `main.py:18-19` zuverlässig angelegt. Threading nicht relevant (Qt-UI-Thread, eine App-Instanz).
+
+### Tests
+197 passed (keine Regression — kein App-Code in Test-Pfaden geändert, nur UI-Erweiterungen).
+
+### Atomare Commits
+1. `fix(ui): Answer-Me Highlighting — Farbe #5A4A10 + Bold an 3 Stellen`
+2. `feat(radio): Gain-Messung Logging → ~/.simpleft8/gain_log.md`
+3. `chore(release): bump APP_VERSION 0.56 → 0.57 + HISTORY + TODO`
+
+---
+
 ## 2026-04-25 v0.56 — PDF S.3: Erklärung funkerverständlich (kein Jargon)
 
 **Betroffene Dateien:** `scripts/generate_plots.py`, `auswertung/Auswertung-40m-FT8.pdf`, `auswertung/en/Report-40m-FT8.pdf`
