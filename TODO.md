@@ -139,7 +139,7 @@
 - [ ] **Spalten-Konfig in Settings:** RX-Spalten ein/ausblendbar + gespeichert/geladen (Slot, Ant, DT, etc.)
 
 ### RX-Liste (UI)
-- [ ] **Sortierung UTC absteigend:** Neueste Station oben, aelteste unten. Derzeit unsortiert/aufsteigend.
+- [x] **Sortierung UTC absteigend:** Bereits implementiert — `rx_panel.py:276` sorted insert mit absteigendem HHMMSS-Vergleich + `_set_sort("time", reverse=True)`. (2026-04-25 verifiziert)
 - [ ] **CQ-Zusammenfassung ueberarbeiten:** Aktuell werden CQ-Rufe zu "CQ ×N" zusammengefasst — kaum sichtbar.
   Optionen (Mike entscheidet):
   (a) CQ-Rufe ins QSO-Panel verschieben: erste Zeile "CQ", ab 5× nur noch "CQ ×6" mit aktualisierter Zahl
@@ -195,6 +195,16 @@
   auch OHNE vorher beide Gain-Messungen abzugleichen. Komplex aber elegant — für spätere Phase.
 
 ### Bugs
+- [ ] **VERMUTLICHER BUG — Freie TX-Frequenz im Normal-Modus (unregelmäßig):**
+  Beobachtung (Mike, 2026-04-25): Im Normal-Modus wird die freie TX-Frequenz aus dem
+  Histogramm manchmal NICHT gesetzt — kein Marker im Histogramm sichtbar, TX bleibt auf
+  alter Frequenz. Im CQ-Modus funktioniert `get_free_cq_freq()` + Histogramm-Marker
+  zuverlässig (`mw_qso.py:109–115`).
+  Verdacht: Timing-Problem oder Überschneidung mit Band/Modus-Wechsel — noch nicht
+  reproduzierbar. **Kein Code-Fix bis weiteres Auftreten dokumentiert ist.**
+  Nächste Schritte: Konsolen-Ausgabe `[CQ] TX-Frequenz auf X Hz` beobachten, ob
+  `get_free_cq_freq()` None zurückgibt oder der Wert gleich dem aktuellen ist.
+
 - [x] **RX-Liste + QSO-Fenster nicht geleert bei Wechsel (BUG):**
   Jetzt gelöscht in: Band-Wechsel, Modus-Wechsel, Normal↔Diversity
   (_on_rx_mode_changed), _enable_diversity, _disable_diversity,
@@ -227,7 +237,7 @@
   TODO: EN+DE README/Hilfe-Seite erstellen mit: Was ist OMNI-TX, wie funktioniert es (Even+Odd abwechselnd),
   was erwartet man (mehr Chancen gehoert zu werden), Einschraenkungen (Double-TX-Pausen).
 
-### TX-Optimierungen
+### TX-Optimierungen — PRIO NIEDRIG
 - [ ] **Per-Station DT-Offset beim QSO-Anruf (encoder._station_dt_offset):**
   Wenn Station X mit DT=+1.2s angerufen wird, die eigene TX um +1.2s verschieben →
   Signal landet im Zentrum ihres Decode-Fensters. Globale DT-Korrektur (ntp_time) bleibt
@@ -235,6 +245,7 @@
   Implementierung: `encoder._station_dt_offset = station.dt` beim Ansprechen,
   `encoder._station_dt_offset = 0.0` in qso_state auf IDLE/TIMEOUT.
   Kein Diversity-Feature — reine TX-Pfad-Optimierung.
+  > Mike-Entscheidung 2026-04-25: PRIO NIEDRIG — erst nach mehr Feldtest-Daten.
 
 ### Langfristig
 - [ ] IC-7300 Fork: `radio/ic7300.py` implementieren

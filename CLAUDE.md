@@ -5,6 +5,12 @@ Lies nach dieser Datei sofort auch HANDOFF.md und bestätige beide mit je einer 
 **Start:** `cd "/Users/mikehammerer/Documents/KI N8N Projekte/FT8/SimpleFT8" && ./venv/bin/python3 main.py`
 **Tests:** `./venv/bin/python3 -m pytest tests/ -q` → 197 passed
 **Vor Commits:** Tests grün + bei nicht-trivialen Änderungen DeepSeek-Review (`pal codereview` model `deepseek-chat`) — bereits durch globale §0 + Projektregeln gefordert.
+
+⚠️ **DeepSeek V4 (deepseek-chat) — Neues Modell, Verhalten noch unbestätigt (Stand 2026-04-25):**
+DeepSeek-Antworten IMMER kritisch prüfen — Vorschläge nicht blind übernehmen.
+Bekanntes Risiko: KI kann plausibel klingende aber falsche Zeilen-/Datei-Angaben machen.
+Vorgehen: DeepSeek-Review als Zweitmeinung nutzen, Claude verifiziert jeden Vorschlag
+am tatsächlichen Code bevor er übernommen wird. Bei Widerspruch: Code ist Referenz.
 **Diagramme:** `./venv/bin/python3 scripts/generate_plots.py`
 → Generiert IMMER beide Sprachen: DE → `auswertung/` + EN → `auswertung/en/`
 → DE: `SimpleFT8_Bericht.pdf` (7 S.) | EN: `SimpleFT8_Report.pdf` (7 p.)
