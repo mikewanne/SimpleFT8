@@ -1639,7 +1639,7 @@ def test_reset_clears_sticky_state():
 
 
 def test_collision_2_in_direct_neighbors():
-    """2 Stationen in +/-1 Bin um current → collision = True."""
+    """2 Stationen in +/-1 Bin um current → Kollision erzwingt Frequenzwechsel."""
     from core.diversity import DiversityController
     import time as _time
     dc = DiversityController()
@@ -1656,10 +1656,9 @@ def test_collision_2_in_direct_neighbors():
     f_plus = (cb + 1) * dc.FREQ_BIN_HZ
     dc.sync_from_stations(_make_stations(f_minus, f_plus, 800, 850, 1900, 1950))
     dc.update_proposed_freq()
-    # Frequenz sollte gewechselt haben oder gleich bleiben (je nach Sticky)
-    # Wichtig: collision wurde erkannt → get_free_cq_freq() wurde aufgerufen.
-    # Das pruefen wir indirekt: _last_change_time wurde aktualisiert.
-    assert dc._last_change_time > _time.time() - 1
+    # Sticky-Schwelle matched die Kollisions-Schwelle → muss gewechselt haben
+    assert dc._cq_freq_hz != first, \
+        f"Kollision n_direct=2 muss Wechsel erzwingen: blieb bei {first}"
 
 
 def test_collision_3_in_extended_band():

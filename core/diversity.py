@@ -125,6 +125,27 @@ class DiversityController:
         self._min_dwell_s = cycle_s * dwell_cycles
         self._recalc_interval_s = 5 * self._min_dwell_s
 
+    def _measure_gap_around(self, bin_idx: int) -> int:
+        """Breite der freien Luecke im Sweet-Spot um bin_idx (in Hz).
+
+        Wird nach Sticky-Treffer aufgerufen, damit _current_gap_width_hz die
+        echte aktuelle Lueck-Breite reflektiert (nicht den Wert von der
+        urspruenglichen Auswahl). Sonst wird die +50Hz-Schwelle gegen einen
+        veralteten Referenzwert verglichen.
+        """
+        min_bin = self.SWEET_SPOT_MIN_HZ // self.FREQ_BIN_HZ
+        max_bin = self.SWEET_SPOT_MAX_HZ // self.FREQ_BIN_HZ
+        if (bin_idx in self._freq_histogram
+                or bin_idx < min_bin or bin_idx > max_bin):
+            return 0
+        left = bin_idx
+        while left - 1 >= min_bin and (left - 1) not in self._freq_histogram:
+            left -= 1
+        right = bin_idx
+        while right + 1 <= max_bin and (right + 1) not in self._freq_histogram:
+            right += 1
+        return (right - left + 1) * self.FREQ_BIN_HZ
+
     def _score_gap(self, gap_start_bin: int, gap_len_bins: int, median_bin: int) -> float:
         """Score: hoeher = besser. Auswahl per max(score), Tiebreak per Distance zum Median.
 
@@ -199,16 +220,23 @@ class DiversityController:
         freq_hz = center_bin * self.FREQ_BIN_HZ + self.FREQ_BIN_HZ // 2
 
         # Sticky: nur wechseln wenn signifikant breiter ODER aktuelle Lueck unbrauchbar
-        # ODER aktuelle Frequenz ausserhalb Sweet-Spot (Legacy/Drift-Schutz)
+        # ODER aktuelle Frequenz ausserhalb Sweet-Spot (Legacy/Drift-Schutz).
+        # WICHTIG: Schwelle "current_unbrauchbar" matched die Kollisions-Schwelle
+        # in update_proposed_freq (n_direct >= 2 ODER n_in_band >= 3) — sonst
+        # erkennt der Kollisions-Pfad was der Sticky-Pfad ueberstimmt.
         if self._cq_freq_hz is not None and self._current_gap_width_hz > 0:
             current_bin = self._cq_freq_hz // self.FREQ_BIN_HZ
-            n_direct = sum(self._freq_histogram.get(current_bin + d, 0) for d in (-1, +1))
-            current_unbrauchbar = (n_direct >= 3)
+            hist = self._freq_histogram
+            n_direct = sum(hist.get(current_bin + d, 0) for d in (-1, +1))
+            n_in_band = sum(hist.get(current_bin + d, 0) for d in (-2, -1, 0, +1, +2))
+            current_unbrauchbar = (n_direct >= 2 or n_in_band >= 3)
             aktuelle_in_sweet_spot = (
                 self.SWEET_SPOT_MIN_HZ <= self._cq_freq_hz <= self.SWEET_SPOT_MAX_HZ
             )
             significantly_better = (best_width_hz > self._current_gap_width_hz + 50)
             if aktuelle_in_sweet_spot and not current_unbrauchbar and not significantly_better:
+                # Sticky-Hit: aktuelle Lueck-Breite refreshen, sonst veralteter Vergleich
+                self._current_gap_width_hz = self._measure_gap_around(current_bin)
                 return self._cq_freq_hz  # bleiben
 
         gap_start_hz = best_gap[0] * self.FREQ_BIN_HZ
@@ -267,7 +295,7 @@ class DiversityController:
         if now - self._last_change_time >= self._min_dwell_s:
             self._last_check_time = now  # Display-Countdown reset (unabhaengig vom Ergebnis)
             current_bin = self._cq_freq_hz // self.FREQ_BIN_HZ
-            hist = self._freq_histogram
+            hist = dict(self._freq_histogram)  # defensive Snapshot — sync laeuft im selben Thread, aber Re-Assign in sync_from_stations koennte zwischen Reads umschalten
             n_direct = sum(hist.get(current_bin + d, 0) for d in (-1, +1))
             n_in_band = sum(hist.get(current_bin + d, 0) for d in (-2, -1, 0, +1, +2))
             collision = (n_direct >= 2 or n_in_band >= 3)
