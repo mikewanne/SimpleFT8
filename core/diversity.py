@@ -41,12 +41,11 @@ class DiversityController:
         self.set_mode("FT8")  # Default — von mw_radio.py spaeter ueberschrieben
 
     # CQ-Frequenzwahl: 50-Hz-Histogramm der belegten Subfrequenzen
-    FREQ_BIN_HZ = 50        # Bin-Breite in Hz
-    FREQ_MIN_HZ = 150       # Untergrenze Sicherheitsabstand
-    FREQ_MAX_HZ = 2800      # Obergrenze Sicherheitsabstand
-    FREQ_MIN_GAP_HZ = 150   # Mindestbreite einer freien Lücke
-    SWEET_SPOT_MIN_HZ = 800   # Untergrenze "wo Stationen zuhoeren"
-    SWEET_SPOT_MAX_HZ = 2000  # Obergrenze "wo Stationen zuhoeren"
+    FREQ_BIN_HZ = 50         # Bin-Breite in Hz
+    FREQ_MIN_HZ = 150        # Absolute Untergrenze (Hardware-Sicherheit)
+    FREQ_MAX_HZ = 2800       # Absolute Obergrenze (Hardware-Sicherheit)
+    FREQ_MIN_GAP_HZ = 150    # Mindestbreite einer freien Lücke
+    SEARCH_MARGIN_BINS = 2   # +/- 2 Bins (100 Hz) Margin um den belegten Bereich
 
     @property
     def scoring_mode(self) -> str:
@@ -126,15 +125,23 @@ class DiversityController:
         self._recalc_interval_s = 5 * self._min_dwell_s
 
     def _measure_gap_around(self, bin_idx: int) -> int:
-        """Breite der freien Luecke im Sweet-Spot um bin_idx (in Hz).
+        """Breite der freien Luecke um bin_idx im aktuellen dynamischen Suchbereich.
 
         Wird nach Sticky-Treffer aufgerufen, damit _current_gap_width_hz die
         echte aktuelle Lueck-Breite reflektiert (nicht den Wert von der
         urspruenglichen Auswahl). Sonst wird die +50Hz-Schwelle gegen einen
         veralteten Referenzwert verglichen.
+
+        Bounds = aktiver Bereich +/- SEARCH_MARGIN_BINS (gleiche Logik wie
+        get_free_cq_freq), gefallback auf abs_min/max wenn Histogramm leer.
         """
-        min_bin = self.SWEET_SPOT_MIN_HZ // self.FREQ_BIN_HZ
-        max_bin = self.SWEET_SPOT_MAX_HZ // self.FREQ_BIN_HZ
+        if not self._freq_histogram:
+            return 0
+        occupied_bins = list(self._freq_histogram.keys())
+        abs_min = self.FREQ_MIN_HZ // self.FREQ_BIN_HZ
+        abs_max = self.FREQ_MAX_HZ // self.FREQ_BIN_HZ
+        min_bin = max(abs_min, min(occupied_bins) - self.SEARCH_MARGIN_BINS)
+        max_bin = min(abs_max, max(occupied_bins) + self.SEARCH_MARGIN_BINS)
         if (bin_idx in self._freq_histogram
                 or bin_idx < min_bin or bin_idx > max_bin):
             return 0
@@ -161,11 +168,11 @@ class DiversityController:
         return gap_width_hz - neighbor_penalty_hz - 0.01 * median_distance_hz
 
     def get_free_cq_freq(self) -> Optional[int]:
-        """Freie CQ-Frequenz im Sweet-Spot 800-2000 Hz (wo Stationen zuhoeren).
+        """Freie CQ-Frequenz im DYNAMISCHEN Suchbereich min..max der Stationen.
 
-        Sucht NUR im festen Sweet-Spot 800-2000 Hz (nicht mehr dynamisch um die
-        belegten Bereiche herum). Auswahl per Score-Funktion: Lueckenbreite minus
-        Nachbar-Penalty, Median-Distance nur als Tiebreaker.
+        Suchbereich = min(stationen)..max(stationen) +/- SEARCH_MARGIN_BINS.
+        Begründung: TX gehört dort hin wo Stationen tatsaechlich zuhoeren —
+        also in den belegten Aktivitätsbereich, nicht ans stille Bandende.
         Gibt None zurueck wenn keine ausreichend breite Luecke gefunden.
         """
         hist_copy = dict(self._freq_histogram)
@@ -173,24 +180,21 @@ class DiversityController:
             # Kein RX-Verkehr → keine Auswahl moeglich (Aufrufer behaelt aktuelle Freq)
             return None
 
-        # Such-Range fest auf Sweet-Spot
-        min_bin = self.SWEET_SPOT_MIN_HZ // self.FREQ_BIN_HZ
-        max_bin = self.SWEET_SPOT_MAX_HZ // self.FREQ_BIN_HZ
+        # Such-Range dynamisch aus aktivem Bereich + Margin
+        occupied_bins = list(hist_copy.keys())
+        abs_min = self.FREQ_MIN_HZ // self.FREQ_BIN_HZ
+        abs_max = self.FREQ_MAX_HZ // self.FREQ_BIN_HZ
+        min_bin = max(abs_min, min(occupied_bins) - self.SEARCH_MARGIN_BINS)
+        max_bin = min(abs_max, max(occupied_bins) + self.SEARCH_MARGIN_BINS)
         min_gap_bins = max(1, self.FREQ_MIN_GAP_HZ // self.FREQ_BIN_HZ)
 
-        # Median NUR auf Sweet-Spot-Stationen (sonst verzerrt sich der Tiebreaker)
-        sweet_freqs = []
+        # Median ueber alle aktiven Stationen (Suchbereich-Filter unnötig, alle drin)
+        all_freqs = []
         for bin_idx, count in hist_copy.items():
-            if min_bin <= bin_idx <= max_bin:
-                freq = bin_idx * self.FREQ_BIN_HZ + self.FREQ_BIN_HZ // 2
-                sweet_freqs.extend([freq] * count)
-        if sweet_freqs:
-            median_freq = statistics.median(sweet_freqs)
-            median_bin = int(median_freq // self.FREQ_BIN_HZ)
-        else:
-            # Sweet-Spot leer → Median irrelevant, nimm Mitte als Default
-            median_bin = (min_bin + max_bin) // 2
-            median_freq = median_bin * self.FREQ_BIN_HZ + self.FREQ_BIN_HZ // 2
+            freq = bin_idx * self.FREQ_BIN_HZ + self.FREQ_BIN_HZ // 2
+            all_freqs.extend([freq] * count)
+        median_freq = statistics.median(all_freqs)
+        median_bin = int(median_freq // self.FREQ_BIN_HZ)
 
         # Alle freien Luecken im Sweet-Spot sammeln
         gaps = []  # [(start_bin, length)]
@@ -220,7 +224,7 @@ class DiversityController:
         freq_hz = center_bin * self.FREQ_BIN_HZ + self.FREQ_BIN_HZ // 2
 
         # Sticky: nur wechseln wenn signifikant breiter ODER aktuelle Lueck unbrauchbar
-        # ODER aktuelle Frequenz ausserhalb Sweet-Spot (Legacy/Drift-Schutz).
+        # ODER aktuelle Frequenz ausserhalb des dynamischen Suchbereichs (Drift-Schutz).
         # WICHTIG: Schwelle "current_unbrauchbar" matched die Kollisions-Schwelle
         # in update_proposed_freq (n_direct >= 2 ODER n_in_band >= 3) — sonst
         # erkennt der Kollisions-Pfad was der Sticky-Pfad ueberstimmt.
@@ -230,11 +234,13 @@ class DiversityController:
             n_direct = sum(hist.get(current_bin + d, 0) for d in (-1, +1))
             n_in_band = sum(hist.get(current_bin + d, 0) for d in (-2, -1, 0, +1, +2))
             current_unbrauchbar = (n_direct >= 2 or n_in_band >= 3)
-            aktuelle_in_sweet_spot = (
-                self.SWEET_SPOT_MIN_HZ <= self._cq_freq_hz <= self.SWEET_SPOT_MAX_HZ
+            search_min_hz = min_bin * self.FREQ_BIN_HZ
+            search_max_hz = (max_bin + 1) * self.FREQ_BIN_HZ
+            aktuelle_im_suchbereich = (
+                search_min_hz <= self._cq_freq_hz <= search_max_hz
             )
             significantly_better = (best_width_hz > self._current_gap_width_hz + 50)
-            if aktuelle_in_sweet_spot and not current_unbrauchbar and not significantly_better:
+            if aktuelle_im_suchbereich and not current_unbrauchbar and not significantly_better:
                 # Sticky-Hit: aktuelle Lueck-Breite refreshen, sonst veralteter Vergleich
                 self._current_gap_width_hz = self._measure_gap_around(current_bin)
                 return self._cq_freq_hz  # bleiben

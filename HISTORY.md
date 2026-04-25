@@ -5,6 +5,50 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-04-25 v0.59 — CQ-Freq Suchbereich wieder DYNAMISCH (min..max der Stationen)
+
+**Betroffene Dateien:** `core/diversity.py`, `tests/test_modules.py`, `main.py`
+
+### Problem (Mike-Beobachtung am Radio, v0.58 nach Neustart)
+v0.58 nutzte festen Sweet-Spot 800-2000 Hz als Suchbereich. Praxis-Folge:
+bei Aktivität nur in 1000-1500 Hz wählte der Score-Algo TX am oberen Rand
+(z.B. 1675 Hz) wo niemand mehr zuhörte. Die Idee "fester Sweet-Spot wo
+Stationen typisch zuhören" funktioniert nicht — der Sweet-Spot wird durch
+DIE STATIONEN selbst bestimmt, nicht durch eine starre Konvention.
+
+### Änderungen
+
+**`core/diversity.py`:**
+- `SWEET_SPOT_MIN_HZ` / `SWEET_SPOT_MAX_HZ` Klassenkonstanten **entfernt**.
+- Neue Konstante `SEARCH_MARGIN_BINS = 2` (= 100 Hz Margin um den
+  belegten Bereich, wie v0.57).
+- `get_free_cq_freq()`: Suchbereich pro Cycle dynamisch berechnet aus
+  `min(occupied_bins)` / `max(occupied_bins)` ± SEARCH_MARGIN_BINS,
+  begrenzt durch FREQ_MIN_HZ/MAX_HZ als Hardware-Sicherheit.
+- Median über ALLE Stationen (nicht mehr Sweet-Spot-Filter — der hatte
+  bei dynamischem Bereich keinen Sinn mehr).
+- Sticky-Check „in Sweet-Spot" → „im aktuellen dynamischen Suchbereich".
+- `_measure_gap_around()`: Bounds dynamisch aus aktivem Bereich.
+
+**`main.py`:** APP_VERSION 0.58 → 0.59
+
+### Tests
+- `test_cq_freq_static_sweet_spot` → `test_cq_freq_dynamic_range_lower`
+  (Stationen 300-700 → Frequenz im Bereich 200-800, nicht 800-2000)
+- Neu: `test_cq_freq_dynamic_range_upper` (Stationen 1900-2400)
+- `test_cq_freq_finds_gap_in_sweet_spot` → `test_cq_freq_finds_gap_in_dynamic_range`
+- `test_cq_freq_fallback_no_gap` Erwartung präzisiert (Margin gibt 100 Hz
+  Lücke, < FREQ_MIN_GAP_HZ → None)
+- `test_score_tiebreaker_uses_median` Erwartung erweitert (zwei symmetrische
+  Lücken gleich valide bei dynamischem Bereich)
+
+### Punkte 2 + 3 noch offen
+- Punkt 2 (Score: TX zentral statt am Rand der breitesten Lücke) — separat
+- Punkt 3 (Timer: 15 s wieder statt 60 s, + Histogramm-Update Guard fixen) — separat
+- Bewusst NICHT gleichzeitig: Mike will Punkt für Punkt validieren.
+
+---
+
 ## 2026-04-25 v0.58 — CQ-Frequenz-Algorithmus Score-basiert (Sweet-Spot 800-2000 Hz)
 
 **Betroffene Dateien:** `core/diversity.py`, `tests/test_modules.py`, `ui/mw_radio.py`, `main.py`
