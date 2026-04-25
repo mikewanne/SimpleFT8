@@ -315,3 +315,21 @@ Countdown sprang z.B. 119→108→119 weil per-Zyklus-Updates die 120s-Range unr
 - Diversity Standard als nächstes (14-16 UTC, 15h+16h = je 1 Tag)
 
 **Tests:** 168 passed
+
+---
+
+## 2026-04-25 v0.54 — 20m Messungen gestartet + Nachtdaten Diversity DX
+
+**Keine Code-Änderungen — nur Datensammlung**
+
+### Datenlage Stand 25.04.2026 Vormittag
+- **Diversity DX 40m**: Nachtlücke geschlossen — 15 neue Stunden (18–09 UTC)
+- **20m gestartet**: Normal + Diversity parallel zu 40m
+- **40m gesamt**: 22.251 Zyklen (Normal 6.793 / Div.Standard 6.542 / Div.DX 8.916)
+
+### Strategie
+- Alle 2-3h Modus prüfen, Lücken in Berliner Zeit (CEST=UTC+2) schließen
+- 40m Restlücken: 08 CEST (Div.Standard), 12-13 CEST (Div.Standard), 21-23 CEST (Normal+Div.Standard)
+- 20m: Tagsüber Normal sammeln, dann Diversity
+
+**Tests:** 168 passed
