@@ -26,7 +26,11 @@
 
 ---
 
-## ⛔ PRIO HOCH (Stand 2026-04-25)
+## PRIO NIEDRIG — Doku/Test-Pipeline (Stand 2026-04-25)
+
+> Mike-Entscheidung: „lassen wir so weil es super und robust schon seit Tagen läuft."
+> Nur Doku korrigieren wenn ohnehin am GitHub gearbeitet wird; Test-Pipeline später,
+> wenn AP-Lite real angefasst wird. Code bleibt unverändert.
 
 ### 1. Doku korrigieren: „UCB1 Bandit" ist im Code NICHT implementiert
 **Betroffen:** `docs/DIVERSITY_DE.md`, `docs/DIVERSITY.md`, `README.md`, `README_DE.md` (alle GitHub-sichtbar!)
@@ -234,8 +238,12 @@
 
 ### Langfristig
 - [ ] IC-7300 Fork: `radio/ic7300.py` implementieren
-- [ ] Band Map (visuelle Frequenz-Belegung)
 - [ ] QSO-Resume bei App-Neustart
+
+> "Band Map (visuelle Frequenz-Belegung)" gestrichen 2026-04-25 — das vorhandene
+> Diversity-Histogramm mit TX-Cursor (control_panel) deckt den FT8-relevanten
+> 100–1550 Hz-Bereich bereits ab. Ein separater Wasserfall über das gesamte Band
+> ist für FT8 nicht nötig.
 - [x] **RF-Power-Presets pro Band+Watt (lernendes System):** ERLEDIGT in v0.56 (2026-04-25)
   Implementierung: `core/rf_preset_store.py` mit Hybrid-Lade-Strategie (exakter Treffer →
   lineare Interpolation/Extrapolation → Default), atomic JSON-Write, Plausibilitäts-Warnung,
