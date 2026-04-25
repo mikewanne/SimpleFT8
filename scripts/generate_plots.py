@@ -141,7 +141,7 @@ TEXTS = {
             "Mit Diversity Standard (blau) habe ich im Schnitt {s_gain} mehr Stationen dekodiert als mit einer einzelnen Antenne.\n"
             "Zählt man die 'geretteten' Stationen dazu, kommt man auf bis zu {s_gain_r}.\n"
             "Diversity DX (orange) bringt {d_gain} — weniger als Standard, aber gezielter auf schwache DX-Signale.\n"
-            "Basis: Pooled Mean über alle Messzyklen aus mehreren Messtagen und allen Tageszeiten."
+            "Basis: Durchschnitt über alle Messpunkte aus 4 Messtagen, alle Tageszeiten — echter Tagesdurchschnitt."
         ),
         "p1_caveat": (
             "Hinweis zum Antennensetup: ANT1 ist ein Kelemen DP-201510 (Fächer-Dipol für 20m/15m/10m) — "
@@ -194,16 +194,16 @@ TEXTS = {
 
         # ── Ergebnisse-Seite (S.3) ──────────────────────────────────────────
         "p3_header_title":    "Hauptergebnisse — Vergleichstabelle",
-        "p3_header_subtitle": "40m FT8 · Pooled Mean über alle Messtage",
+        "p3_header_subtitle": "40m FT8 · Tagesdurchschnitt über 4 Messtage, alle Tageszeiten",
         "p3_col_labels": [
-            "Modus", "Ø Stat.\n/Zyklus", "vs Normal\nohne Rescue",
+            "Modus", "Ø Sta.\n/15s-Zyklus", "vs Normal\nohne Rescue",
             "vs Normal\n+ Rescue", "Rescue\nallein", "Mess-\ntage", "Zyklen",
         ],
         "p3_note1": (
-            "Ø Stat./Zyklus = Pooled Mean über ALLE Messzyklen aus mehreren Messtagen und allen Tageszeiten — "
-            "kein Stunden-Filter, kein Cherry-Picking. Der Wert entspricht dem typischen Stunden-Durchschnitt "
-            "eines ganzen Messtages. Je mehr Tage, desto stabiler.   "
-            "Rescue = ANT1 unter −24 dB, ANT2 hat trotzdem dekodiert."
+            "Ø Sta./15s-Zyklus: So viele Stationen wurden im Schnitt pro 15-Sekunden-FT8-Zyklus gleichzeitig dekodiert — "
+            "gemittelt über alle Messpunkte (Zyklen) aus 4 Messtagen und allen Tageszeiten (morgens, mittags, abends). "
+            "Das ist der echte Tagesdurchschnitt — kein Filter, keine Auswahl einer bestimmten Tageszeit. "
+            "Rescue: Stationen, die ANT1 unter −24 dB nicht dekodieren konnte, ANT2 aber schon."
         ),
         "p3_note2": (
             "Hinweis: ANT1 (Kelemen DP-201510) ist auf 40m außerhalb seines Auslegungsbandes (20m/15m/10m) — "
@@ -363,7 +363,7 @@ TEXTS = {
             "With Diversity Standard (blue) I decoded on average {s_gain} more stations than with a single antenna.\n"
             "Including 'rescued' stations, this rises to up to {s_gain_r}.\n"
             "Diversity DX (orange) delivers {d_gain} — less than Standard, but targeted at weak DX signals.\n"
-            "Basis: Pooled Mean across all cycles from multiple measurement days and all hours of the day."
+            "Basis: average over all measurement points from 4 days, all hours of the day — true daily average."
         ),
         "p1_caveat": (
             "Note on antenna setup: ANT1 is a Kelemen DP-201510 (fan dipole for 20m/15m/10m) — "
@@ -415,16 +415,16 @@ TEXTS = {
 
         # ── Results page (p.3) ───────────────────────────────────────────────
         "p3_header_title":    "Main Results — Comparison Table",
-        "p3_header_subtitle": "40m FT8 · Pooled Mean across all measurement days",
+        "p3_header_subtitle": "40m FT8 · Daily average across 4 measurement days, all hours of day",
         "p3_col_labels": [
-            "Mode", "Avg Sta.\n/Cycle", "vs Normal\nw/o Rescue",
+            "Mode", "Avg Sta.\n/15s Cycle", "vs Normal\nw/o Rescue",
             "vs Normal\n+ Rescue", "Rescue\nonly", "Meas.\nDays", "Cycles",
         ],
         "p3_note1": (
-            "Avg Sta./Cycle = Pooled Mean across ALL measurement cycles from multiple days and all hours of the day — "
-            "no time-of-day filter, no cherry-picking. The value represents the typical hourly average "
-            "of a full measurement day. More days = more stable result.   "
-            "Rescue = ANT1 below −24 dB, ANT2 decoded anyway."
+            "Avg Sta./15s Cycle: How many stations were decoded simultaneously per 15-second FT8 cycle on average — "
+            "averaged over all measurement points (cycles) from 4 measurement days and all hours of the day "
+            "(morning, noon, evening). This is the true daily average — no time filter, no cherry-picking. "
+            "Rescue: stations ANT1 couldn't decode (below −24 dB) but ANT2 decoded anyway."
         ),
         "p3_note2": (
             "Note: ANT1 (Kelemen DP-201510) is operated off-band on 40m (design band: 20m/15m/10m) — "
