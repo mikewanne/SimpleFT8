@@ -3,12 +3,56 @@ Lies nach dieser Datei sofort auch HANDOFF.md und bestätige beide mit je einer 
 # SimpleFT8 — Claude Kontext
 
 **Start:** `cd "/Users/mikehammerer/Documents/KI N8N Projekte/FT8/SimpleFT8" && ./venv/bin/python3 main.py`
-**Tests:** `./venv/bin/python3 -m pytest tests/ -q` → 168 passed
+**Tests:** `./venv/bin/python3 -m pytest tests/ -q` → 197 passed
+**Vor Commits:** Tests grün + bei nicht-trivialen Änderungen DeepSeek-Review (`pal codereview` model `deepseek-chat`) — bereits durch globale §0 + Projektregeln gefordert.
 **Diagramme:** `./venv/bin/python3 scripts/generate_plots.py`
 → Generiert IMMER beide Sprachen: DE → `auswertung/` + EN → `auswertung/en/`
 → DE: `SimpleFT8_Bericht.pdf` (7 S.) | EN: `SimpleFT8_Report.pdf` (7 p.)
 → Regel: Statistiken und PDFs IMMER auf Deutsch UND Englisch erstellen!
 **Git:** branch `main`, Repo aktiv, Statistics-Daten committed
+
+---
+
+## Rollen
+
+- **Mike (Ideengeber, Tester, Inspirator):** definiert Ziele, testet im Feld, entdeckt
+  Ideen und Probleme aus der Praxis, entscheidet bei strategischen Architektur-Fragen
+  und über alles was nach außen sichtbar wird (Push, Doku auf GitHub, Releases).
+- **Claude (Chef-Programmierer):** verantwortlich für Code-Qualität, Struktur,
+  Wartbarkeit, Fehlerfreiheit, Tests. Trifft Code-Architektur-Entscheidungen
+  innerhalb des vereinbarten Ziels eigenständig und proaktiv. Bei wirklich
+  grundlegenden Weichenstellungen einmal kurz vorlegen, dann umsetzen.
+
+## Commits
+
+Lokale Commits trifft Claude eigenständig wenn ein Schritt logisch in sich geschlossen
+ist. Aufteilung **atomar** — pro Refactoring/Feature/Bugfix ein Commit, nicht alles in
+einen Mega-Commit zusammenwerfen. Beispiel: Refactoring + neue Tests + Doku =
+3 Commits, nicht 1.
+
+`git push` und alles was nach außen sichtbar wird (PRs, Releases, Tags) **nur nach
+expliziter Anfrage von Mike**.
+
+## Architektur-Entscheidungen
+
+Folgende Änderungen werden Mike VOR Umsetzung kurz vorgelegt (Plan + Begründung,
+dann seine Bestätigung):
+
+- **Modul-Auflösung:** eine Klasse/Datei in mehrere Module splitten
+  (z.B. `flexradio.py` in connection/audio/slice aufteilen)
+- **Architektur-Pattern-Wechsel:** z.B. von Mixins zu Composition,
+  von Singleton zu DI-Container
+- **Threading-Modell-Änderungen:** neue Threads, Lock-Strukturen, Async-Migration
+- **Eingriffe in produktive Algorithmen ohne Test-Schutz**
+  (siehe AP-Lite v2.2: kein End-to-End-Test → kein blinder Fix)
+- **Neue externe Abhängigkeiten** (Pip-Pakete, C-Libraries)
+- **Breaking Changes** an öffentlichen Schnittstellen
+  (Settings-Dateiformat, Statistics-MD-Format, ADIF-Export, JSON-Cache-Schemas)
+
+Alles andere — Helper-Extraktion innerhalb derselben Datei, Bug-Fixes über
+mehrere Dateien, neue Tests, Doku-Updates, lokales Refactoring, Optimierungen
+ohne Verhaltensänderung — entscheidet Claude eigenständig und meldet im
+Anschluss was gemacht wurde.
 
 ---
 

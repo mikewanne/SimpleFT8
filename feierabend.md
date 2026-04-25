@@ -42,6 +42,10 @@ Datei: `/Users/mikehammerer/Documents/KI N8N Projekte/FT8/SimpleFT8/HISTORY.md`
 
 **Regel:** Nur anhängen (append), niemals bestehende Einträge entfernen oder überschreiben.
 
+**WICHTIG:** Trage ALLE Ergänzungen, Verbesserungen und neuen Implementierungen der
+aktuellen Session vollständig ein — keine Lücken. Auch kleinere Refactorings,
+Bugfixes und Doku-Änderungen gehören rein.
+
 **Format mit Versionsnummer:** `## YYYY-MM-DD vX.YY — Kurztitel`
 - `APP_VERSION` aus `main.py` lesen (erste Konstante nach den Imports)
 - Neue Features: APP_VERSION um +0.01 erhöhen UND in main.py eintragen
