@@ -156,14 +156,17 @@ class DiversityController:
     def _score_gap(self, gap_start_bin: int, gap_len_bins: int, median_bin: int) -> float:
         """Score: hoeher = besser. Auswahl per max(score), Tiebreak per Distance zum Median.
 
-        Lueckenbreite dominiert (1 Hz = 1 Punkt), Nachbarn in +/-1 Bin kosten 50 Hz pro Station,
-        Nachbarn in +/-2 Bins kosten halb so viel. Median-Distance ist NUR Tiebreaker (0.01).
+        Lueckenbreite dominiert (1 Hz = 1 Punkt), Stationen direkt im TX-Bin kosten 100 Hz
+        pro Station (schlimmste Kollision), Nachbarn in +/-1 Bin kosten 50 Hz, Nachbarn in
+        +/-2 Bins kosten 25 Hz. Median-Distance ist NUR Tiebreaker (0.01).
+        Bei Notfall-Lueck mit max_count>=1 erlaubt → n_self bestraft Treffer im TX-Bin.
         """
         gap_width_hz = gap_len_bins * self.FREQ_BIN_HZ
         center_bin = gap_start_bin + gap_len_bins // 2
+        n_self = self._freq_histogram.get(center_bin, 0)
         n_close = sum(self._freq_histogram.get(center_bin + d, 0) for d in (-1, +1))
         n_near = sum(self._freq_histogram.get(center_bin + d, 0) for d in (-2, +2))
-        neighbor_penalty_hz = 50 * n_close + 25 * n_near
+        neighbor_penalty_hz = 100 * n_self + 50 * n_close + 25 * n_near
         median_distance_hz = abs(center_bin - median_bin) * self.FREQ_BIN_HZ
         return gap_width_hz - neighbor_penalty_hz - 0.01 * median_distance_hz
 
@@ -173,7 +176,11 @@ class DiversityController:
         Suchbereich = min(stationen)..max(stationen) +/- SEARCH_MARGIN_BINS.
         Begründung: TX gehört dort hin wo Stationen tatsaechlich zuhoeren —
         also in den belegten Aktivitätsbereich, nicht ans stille Bandende.
-        Gibt None zurueck wenn keine ausreichend breite Luecke gefunden.
+
+        GRADUELLE LUECKEN-TOLERANZ: probiert erst 150 Hz Mindestbreite, dann
+        100 Hz, dann 50 Hz. So wird bei vollem Band trotzdem die beste
+        verfuegbare Position gewaehlt statt auf alter (jetzt voller) Freq
+        haengen zu bleiben. Erst wenn kein einziger freier Bin existiert → None.
         """
         hist_copy = dict(self._freq_histogram)
         if not hist_copy:
@@ -186,7 +193,6 @@ class DiversityController:
         abs_max = self.FREQ_MAX_HZ // self.FREQ_BIN_HZ
         min_bin = max(abs_min, min(occupied_bins) - self.SEARCH_MARGIN_BINS)
         max_bin = min(abs_max, max(occupied_bins) + self.SEARCH_MARGIN_BINS)
-        min_gap_bins = max(1, self.FREQ_MIN_GAP_HZ // self.FREQ_BIN_HZ)
 
         # Median ueber alle aktiven Stationen (Suchbereich-Filter unnötig, alle drin)
         all_freqs = []
@@ -196,26 +202,42 @@ class DiversityController:
         median_freq = statistics.median(all_freqs)
         median_bin = int(median_freq // self.FREQ_BIN_HZ)
 
-        # Alle freien Luecken im Sweet-Spot sammeln
-        gaps = []  # [(start_bin, length)]
-        current_gap_start = None
-        current_gap_len = 0
-        for b in range(min_bin, max_bin + 1):
-            if b not in hist_copy:
-                if current_gap_start is None:
-                    current_gap_start = b
-                current_gap_len += 1
-            else:
-                if current_gap_len >= min_gap_bins:
-                    gaps.append((current_gap_start, current_gap_len))
-                current_gap_start = None
-                current_gap_len = 0
-        if current_gap_len >= min_gap_bins:
-            gaps.append((current_gap_start, current_gap_len))
+        # Stufenweise Lueck-Toleranz fuer volles Band:
+        # (max_count_per_bin, min_gap_bins)
+        # Stufe 1-3: nur echte Leerstellen (count=0), Breite reduziert
+        # Stufe 4-5: schwach belegte Bins (count<=1) als Lueck akzeptieren
+        # Score bestraft Stationen im eigenen Bereich, daher landet TX trotzdem
+        # auf der ruhigsten Position
+        SEARCH_STAGES = [(0, 3), (0, 2), (0, 1), (1, 3), (1, 2)]
+        gaps = []
+        used_max_count, used_min_bins = 0, 0
+        for try_max_count, try_min_bins in SEARCH_STAGES:
+            gaps = []
+            current_gap_start = None
+            current_gap_len = 0
+            for b in range(min_bin, max_bin + 1):
+                if hist_copy.get(b, 0) <= try_max_count:
+                    if current_gap_start is None:
+                        current_gap_start = b
+                    current_gap_len += 1
+                else:
+                    if current_gap_len >= try_min_bins:
+                        gaps.append((current_gap_start, current_gap_len))
+                    current_gap_start = None
+                    current_gap_len = 0
+            if current_gap_len >= try_min_bins:
+                gaps.append((current_gap_start, current_gap_len))
+            if gaps:
+                used_max_count, used_min_bins = try_max_count, try_min_bins
+                break
 
         if not gaps:
-            # Keine ausreichend breite Luecke → aktuelle Frequenz behalten
+            # Selbst mit Toleranz keine Lueck → Band wirklich dicht
             return None
+
+        if used_max_count > 0 or used_min_bins < 3:
+            print(f"[CQ-Freq] Band voll → Notfall-Toleranz: "
+                  f"max {used_max_count} Stat./Bin, min {used_min_bins*self.FREQ_BIN_HZ} Hz Breite")
 
         # Score-basierte Auswahl (max statt min)
         best_gap = max(gaps, key=lambda g: self._score_gap(g[0], g[1], median_bin))

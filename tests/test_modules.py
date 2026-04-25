@@ -1400,13 +1400,12 @@ def test_cq_freq_dynamic_range_lower():
     """Suchbereich folgt der Aktivitaet — Stationen 300-700 → Freq nahe Aktivitaet."""
     from core.diversity import DiversityController
     dc = DiversityController()
-    # Aktivitaet bei 300-700 Hz → Suchbereich = 200-800 (mit Margin)
-    # → Frequenz MUSS in dem Bereich liegen, NICHT im Sweet-Spot 800-2000
+    # Aktivitaet bei 300-700 Hz → Suchbereich = 200-850 (Margin 2 Bins, +/- mid-bin)
     dc.sync_from_stations(_make_stations(*range(300, 750, 50)))
     freq = dc.get_free_cq_freq()
-    if freq is not None:
-        # Frequenz liegt im aktiven Bereich + Margin (2 Bins = 100 Hz)
-        assert 200 <= freq <= 800, f"CQ-Freq {freq} ausserhalb dynamischem Suchbereich 200-800"
+    assert freq is not None, "Bei diesem Cluster mit Toleranz-Stufen muss Lueck gefunden werden"
+    # Bereich 100..850 (occupied 300-700 +/- 2 Bins Margin = 200..800, +50 mid-bin Toleranz)
+    assert 100 <= freq <= 850, f"CQ-Freq {freq} ausserhalb dynamischem Suchbereich"
 
 
 def test_cq_freq_dynamic_range_upper():
@@ -1415,9 +1414,9 @@ def test_cq_freq_dynamic_range_upper():
     dc = DiversityController()
     dc.sync_from_stations(_make_stations(*range(1900, 2450, 50)))
     freq = dc.get_free_cq_freq()
-    if freq is not None:
-        # Suchbereich = 1800-2500 (mit Margin)
-        assert 1800 <= freq <= 2500, f"CQ-Freq {freq} ausserhalb dynamischem Suchbereich 1800-2500"
+    assert freq is not None
+    # Suchbereich 1800..2500 + 50 mid-bin Toleranz
+    assert 1800 <= freq <= 2550, f"CQ-Freq {freq} ausserhalb dynamischem Suchbereich"
 
 
 def test_omni_tx_pending_switch():
@@ -1460,15 +1459,22 @@ def test_cq_freq_finds_gap_in_dynamic_range():
         assert 100 <= freq <= 650, f"TX-Freq {freq} ausserhalb dynamischem Suchbereich"
 
 
-def test_cq_freq_fallback_no_gap():
-    """Wenn aktiver Bereich komplett belegt ist, gibt get_free_cq_freq() None zurueck."""
+def test_cq_freq_fallback_finds_position_when_band_full():
+    """Bei vollem Band findet die graduelle Toleranz immer noch eine Position
+    (Margin-Lueck oder schwach-belegter Bin) — niemand sitzt dauerhaft auf voller Freq fest."""
     from core.diversity import DiversityController
     dc = DiversityController()
-    # Bereich 800-2000 komplett dicht belegen → Suchbereich = 700-2100 (mit Margin)
-    # Margin links/rechts gibt nur 100 Hz Lueck, < FREQ_MIN_GAP_HZ (150) → None
     dc.sync_from_stations(_make_stations(*range(800, 2001, 50)))
     freq = dc.get_free_cq_freq()
-    assert freq is None, f"Keine ausreichend breite Luecke erwartet, aber {freq} Hz zurueckgegeben"
+    # Margin links 750-800 oder rechts 2050-2100 = 1-Bin-Lueck (Stufe 3 trifft)
+    assert freq is not None, "Toleranz-Stufen muessen Position finden auch bei vollem Band"
+
+
+def test_cq_freq_no_position_when_histogram_empty():
+    """Leeres Histogramm → None (keine Daten = keine Auswahl)."""
+    from core.diversity import DiversityController
+    dc = DiversityController()
+    assert dc.get_free_cq_freq() is None
 
 
 def test_proposed_freq_updates():
