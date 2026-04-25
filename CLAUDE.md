@@ -211,9 +211,9 @@ Speicherung: ~/.simpleft8/dt_corrections.json → Key "FT8_20m" (pro Modus+Band)
 
 - **Kein Push anderer Bänder ohne ausreichende Datenbasis** — Minimum: Normal + Diversity_Standard
   + Diversity_Dx je ≥ 2 Messtage, Stunden über den ganzen Tag verteilt (mind. 06–22 UTC).
-- **Auswertungs-Methodik:** nur gemeinsame Stunden (Normal + Diversity gleichzeitig gemessen) —
-  kein Gesamt-Pool über verschiedene Tageszeiten → Tageszeit-Bias verfälscht den Vergleich.
-- Ergebnis von 40m: Normal↔Div.Std 21h → +35.5%, Normal↔Div.DX 18h → +58.0%.
+- **Auswertungs-Methodik:** Pooled Mean über ALLE Messzyklen aller Messtage und Tageszeiten —
+  kein Stunden-Filter. Je mehr Tage, desto stabiler. Monatlich wachsende Datenbasis.
+- Ergebnis 40m FT8 (Pooled Mean, global, Stand 25.04.2026): Diversity Standard +88%, Diversity DX +123%.
 
 ---
 

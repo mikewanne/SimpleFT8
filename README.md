@@ -76,20 +76,19 @@ Controlled test on 40m, same hardware (FLEX-8400M), 2 minutes apart:
 
 **Live measurement results — 40m FT8, 4–5 measurement days, 22,618 cycles:**
 
-| Mode | vs Normal (w/o rescue) | vs Normal (incl. rescue) | Rescue alone | Common Hours |
+| Mode | vs Normal (w/o rescue) | vs Normal (incl. rescue) | Rescue alone | Days |
 |------|:---:|:---:|:---:|:---:|
-| Diversity Standard | **+88%** | **+122%** | +35% | 24h |
-| Diversity DX | **+123%** | **+157%** | +33% | 24h |
+| Diversity Standard | **+88%** | **+122%** | +34% | 4 |
+| Diversity DX | **+123%** | **+157%** | +34% | 4 |
 
 *Rescue = stations that ANT1 could not decode (≤ −24 dB SNR) but ANT2 saved. Pooled mean over all cycles — not cherry-picked, not a single good day.*
-*"Common Hours" = hours where Normal AND the respective Diversity mode were measured simultaneously (time-fair basis).*
+*Values = typical hourly average of a full measurement day, pooled across all days and all hours of the day.*
 
-> **Note on methodology update (2026-04-25)**
-> These numbers now use a time-fair comparison: only UTC hours where both Normal and
-> the respective Diversity mode were measured simultaneously are included. In the current
-> dataset (4–5 days, all modes covering 24h), this equals the full dataset — but the
-> methodology prevents future time-of-day bias when modes are measured at different times.
-> The PDF report (S.3) shows the same table with detailed cycle counts.
+> **Note on methodology**
+> All cycles from all measurement days and all hours of the day are pooled directly —
+> no time-of-day filter, no cherry-picking. The result is the typical hourly station count
+> averaged across a full day of operation. The more measurement days, the more stable the numbers.
+> The PDF report (p.3) shows the same table with full cycle counts and day counts.
 
 > **Note on Interpretation**
 > ANT1 (Kelemen DP-201510) is operated off-band on 40m and therefore significantly
@@ -294,20 +293,19 @@ MIT License (c) 2026 DA1MHH (Mike Hammerer)
 
 **Live-Messergebnisse — 40m FT8, 4–5 Messtage, 22.618 Zyklen:**
 
-| Modus | vs Normal (ohne Rescue) | vs Normal (inkl. Rescue) | Rescue allein | Gem. Stunden |
+| Modus | vs Normal (ohne Rescue) | vs Normal (inkl. Rescue) | Rescue allein | Tage |
 |-------|:---:|:---:|:---:|:---:|
-| Diversity Standard | **+88%** | **+122%** | +35% | 24h |
-| Diversity DX | **+123%** | **+157%** | +33% | 24h |
+| Diversity Standard | **+88%** | **+122%** | +34% | 4 |
+| Diversity DX | **+123%** | **+157%** | +34% | 4 |
 
 *Rescue = Stationen, die ANT1 nicht decodieren konnte (≤ −24 dB SNR), aber ANT2 rettete. Pooled Mean über alle Zyklen — kein Cherry-Picking, kein einzelner guter Tag.*
-*„Gem. Stunden" = Stunden, in denen Normal UND der jeweilige Diversity-Modus gleichzeitig gemessen wurden (zeitfaire Basis).*
+*Wert = typischer Stunden-Durchschnitt eines ganzen Messtages, gepoolt über alle Tage und alle Tageszeiten.*
 
-> **Hinweis zur Methodik (Stand 2026-04-25)**
-> Diese Zahlen verwenden nun einen zeitfairen Vergleich: Nur UTC-Stunden, in denen Normal
-> und der jeweilige Diversity-Modus gleichzeitig gemessen wurden, fließen ein. Im aktuellen
-> Datensatz (4–5 Tage, alle Modi mit 24h Abdeckung) ist das identisch mit dem Gesamtdatensatz —
-> aber die Methodik verhindert Tageszeit-Bias sobald Modi zu unterschiedlichen Zeiten gemessen werden.
-> Die detaillierte Vergleichstabelle mit Zyklenanzahlen ist im PDF-Bericht (S.3) zu finden.
+> **Hinweis zur Methodik**
+> Alle Messzyklen aus allen Messtagen und allen Tageszeiten werden direkt zusammengezählt und gemittelt —
+> kein Stunden-Filter, kein Cherry-Picking. Das Ergebnis ist der typische Stunden-Durchschnitt
+> eines ganzen Betriebstages. Je mehr Messtage, desto stabiler die Zahlen.
+> Die detaillierte Vergleichstabelle mit Zyklen- und Tagesanzahlen ist im PDF-Bericht (S.3) zu finden.
 
 > **Hinweis zur Interpretation**
 > ANT1 (Kelemen DP-201510) ist auf 40m außerhalb seines Auslegungsbandes und damit

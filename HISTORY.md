@@ -5,6 +5,65 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-04-25 v0.56 — Statistik-Korrektur: Pooled Mean global (kein Stunden-Filter)
+
+**Betroffene Dateien:** `scripts/generate_plots.py`, `CLAUDE.md`, `README.md` (DE+EN), PDFs regeneriert
+
+### Hintergrund
+Session 2 hatte `_combo_summary_fair()` mit (date,hour)-Schnittmenge implementiert — dies lieferte +35.5%/+58% statt +88%/+123%. Ursache: Mike hat nur ein Funkgerät und kann nie zwei Modi gleichzeitig am selben Tag und in derselben Stunde messen. Die 18–21 gemeinsamen Slots waren ein nicht repräsentativer Bias. Richtige Methodik: alle Zyklen aller Messtage direkt poolen — kein Stunden-Filter. Mike: "du nimmst alle daten standart und teilst die ergebnisse durch die anzahl der erfassten tage... egal welche stunde welche bedingungen."
+
+### Änderungen
+
+**`scripts/generate_plots.py`:**
+- `_combo_summary_fair()` vereinfacht: wrapper um `_combo_summary()`, gibt `n_avg_common = Normal.avg` zurück — keine (date,hour)-Schnittmenge mehr
+- `_r_ergebnisse_page()`: Spalte "Gem. Stunden" → "Mess-tage" (zeigt `n_days`)
+- TEXTS (DE+EN): p3_header_subtitle, p3_col_labels, p3_note1 — klar erklärt was Ø Stat./Zyklus bedeutet: "typischer Stunden-Durchschnitt eines ganzen Messtages, über alle Tage und Tageszeiten gepoolt". p1_summary_body + p7_fazit_body: "zeitfaire Auswertung / gemeinsame Messtunden" → korrekte Formulierung
+
+**`README.md`:** Zahlen korrigiert: +36%/+57% → +88%/+122% (Std), +58%/+82% → +123%/+157% (DX), Spalte "Gem. Stunden" → "Tage"
+
+**`CLAUDE.md`:** Statistik-Regel: Methodik-Text von "nur gemeinsame Stunden" auf "Pooled Mean global" korrigiert, Zahlenwert aktualisiert
+
+### Git
+- 1 Commit (Korrektur-Fix), Tests: 197 passed (kein Python-App-Code geändert)
+
+---
+
+## 2026-04-25 v0.56 — Statistik: Zeitfaire Auswertung (gemeinsame Stunden)
+
+**Betroffene Dateien:** `scripts/generate_plots.py`, `CLAUDE.md`, `README.md` (DE+EN), `auswertung/Auswertung-40m-FT8.pdf`, `auswertung/en/Report-40m-FT8.pdf`
+
+### Hintergrund
+Die bisherige Ergebnistabelle (S.3) im PDF nutzte Pooled Mean über ALLE Zyklen, unabhängig von der Tageszeit. Das war methodisch problematisch: Wenn Normal tagsüber und Diversity DX abends gemessen wird, kann der Tageszeit-Effekt (Ausbreitung) die Zahlen verfälschen. Mike erkannte das Problem und stellte die Forderung: Nur Stunden vergleichen, in denen beide Modi gleichzeitig gemessen wurden.
+
+### Änderungen
+
+**`scripts/generate_plots.py`:**
+- Neue Funktion `_combo_summary_fair(stats_dir, band, protocol)` — berechnet Pooled Mean nur über Stunden, in denen Normal UND der jeweilige Diversity-Modus gleichzeitig gemessen wurden. Für jede Diversity-Mode wird zusätzlich der Normal-Mittelwert auf dieselben Stunden eingeschränkt (`n_avg_common`) — dieser dient als fairer Referenzwert für Prozent-Vergleiche.
+- `_r_ergebnisse_page()` (S.3): verwendet `fair_summary` statt `summary`. Spalte "Messtage" → "Gem. Stunden". `vs Normal` berechnet gegen `n_avg_common`.
+- `_r_title_page()`, `_r_rescue_page()`, `_r_fazit_page()`: verwenden jetzt ebenfalls `fair_summary` für alle %-Angaben. `_r_methodik_page()` (S.2) behält globale Zyklenanzahlen.
+- `create_pdf_report()`: berechnet `fair_summary` zusätzlich zu `summary`, leitet es an die richtigen Seiten weiter.
+- TEXTS (DE+EN): p3_header_subtitle, p3_col_labels, p3_note1 aktualisiert. p1_summary_body + p7_fazit_body mit Methodik-Hinweis ergänzt.
+- PDF-Umbenennung: `SimpleFT8_Bericht.pdf` → `Auswertung-40m-FT8.pdf` / `SimpleFT8_Report.pdf` → `Report-40m-FT8.pdf` (Band im Dateinamen für spätere Multi-Band-Erweiterung).
+
+**Ergebnis 40m FT8 (22.618 Zyklen, 4–5 Tage):**
+- Im aktuellen Datensatz haben alle Modi 24h Abdeckung → fair_summary = global_summary
+- Zahlen: Diversity Standard +88%/+122%, Diversity DX +123%/+157% (ohne/mit Rescue)
+- Methodik ist zukunftssicher: sobald Modi zu unterschiedlichen Tageszeiten gemessen werden, filtert `_combo_summary_fair()` automatisch korrekt
+
+**`README.md` (DE + EN):**
+- Tabelle: aktualisierte Zahlen (+88%/+123%), 22.618 Zyklen, neue Spalte "Gem. Stunden"
+- Methodologie-Hinweis hinzugefügt (Stand 2026-04-25)
+- PDF-Links auf neue Dateinamen aktualisiert
+
+**`CLAUDE.md`:**
+- Neue Sektion "⛔ Statistik-Veröffentlichung — Regel": Verbot anderer Bänder ohne Datenbasis (≥2 Tage, ganzer Tag), Hinweis auf gemeinsame-Stunden-Methodik und bekannte 40m-Ergebnisse
+
+### Git
+- 2 Commits, pushed to origin/main
+- Tests: 197 passed (keine Regression — kein Python-Code in App geändert)
+
+---
+
 ## 2026-04-25 v0.56 — RF-Power-Presets pro Band+Watt
 
 **Betroffene Dateien:** `core/rf_preset_store.py` (NEU), `radio/base_radio.py`, `radio/flexradio.py`, `ui/main_window.py`, `ui/mw_tx.py`, `ui/mw_radio.py`, `ui/settings_dialog.py`, `tests/test_rf_preset_store.py` (NEU)

@@ -141,7 +141,7 @@ TEXTS = {
             "Mit Diversity Standard (blau) habe ich im Schnitt {s_gain} mehr Stationen dekodiert als mit einer einzelnen Antenne.\n"
             "Zählt man die 'geretteten' Stationen dazu, kommt man auf bis zu {s_gain_r}.\n"
             "Diversity DX (orange) bringt {d_gain} — weniger als Standard, aber gezielter auf schwache DX-Signale.\n"
-            "Basis: nur Stunden mit gleichzeitiger Messung beider Modi (zeitfaire Auswertung)."
+            "Basis: Pooled Mean über alle Messzyklen aus mehreren Messtagen und allen Tageszeiten."
         ),
         "p1_caveat": (
             "Hinweis zum Antennensetup: ANT1 ist ein Kelemen DP-201510 (Fächer-Dipol für 20m/15m/10m) — "
@@ -194,14 +194,15 @@ TEXTS = {
 
         # ── Ergebnisse-Seite (S.3) ──────────────────────────────────────────
         "p3_header_title":    "Hauptergebnisse — Vergleichstabelle",
-        "p3_header_subtitle": "40m FT8 · Gemeinsame Stunden (zeitfaire Auswertung)",
+        "p3_header_subtitle": "40m FT8 · Pooled Mean über alle Messtage",
         "p3_col_labels": [
             "Modus", "Ø Stat.\n/Zyklus", "vs Normal\nohne Rescue",
-            "vs Normal\n+ Rescue", "Rescue\nallein", "Gem.\nStunden", "Zyklen",
+            "vs Normal\n+ Rescue", "Rescue\nallein", "Mess-\ntage", "Zyklen",
         ],
         "p3_note1": (
-            "Ø Stat./Zyklus = Pooled Mean nur über Stunden, in denen Normal UND der jeweilige Modus "
-            "gleichzeitig gemessen wurden (zeitfaire Basis — kein Tageszeit-Bias).   "
+            "Ø Stat./Zyklus = Pooled Mean über ALLE Messzyklen aus mehreren Messtagen und allen Tageszeiten — "
+            "kein Stunden-Filter, kein Cherry-Picking. Der Wert entspricht dem typischen Stunden-Durchschnitt "
+            "eines ganzen Messtages. Je mehr Tage, desto stabiler.   "
             "Rescue = ANT1 unter −24 dB, ANT2 hat trotzdem dekodiert."
         ),
         "p3_note2": (
@@ -262,7 +263,7 @@ TEXTS = {
         "p7_header_subtitle": "Fazit und was als nächstes gemessen wird",
         "p7_visible_title": "Was man klar sehen kann:",
         "p7_fazit_body": (
-            "Diversity Standard bringt in den gemeinsamen Messtunden konsistent zwischen "
+            "Diversity Standard bringt konsistent zwischen "
             "{gain_lo:.0f}% und {gain_hi:.0f}% mehr Stationen — "
             "je nachdem ob man\ndie geretteten mitzählt oder nicht. Das ist kein Zufall, das wiederholt sich.\n"
             "Diversity DX liegt bei {d_gain:.0f}% ohne Rescue — weniger als Standard, "
@@ -362,7 +363,7 @@ TEXTS = {
             "With Diversity Standard (blue) I decoded on average {s_gain} more stations than with a single antenna.\n"
             "Including 'rescued' stations, this rises to up to {s_gain_r}.\n"
             "Diversity DX (orange) delivers {d_gain} — less than Standard, but targeted at weak DX signals.\n"
-            "Basis: only hours with simultaneous measurement of both modes (time-fair comparison)."
+            "Basis: Pooled Mean across all cycles from multiple measurement days and all hours of the day."
         ),
         "p1_caveat": (
             "Note on antenna setup: ANT1 is a Kelemen DP-201510 (fan dipole for 20m/15m/10m) — "
@@ -414,14 +415,15 @@ TEXTS = {
 
         # ── Results page (p.3) ───────────────────────────────────────────────
         "p3_header_title":    "Main Results — Comparison Table",
-        "p3_header_subtitle": "40m FT8 · Overlapping Hours (time-fair comparison)",
+        "p3_header_subtitle": "40m FT8 · Pooled Mean across all measurement days",
         "p3_col_labels": [
             "Mode", "Avg Sta.\n/Cycle", "vs Normal\nw/o Rescue",
-            "vs Normal\n+ Rescue", "Rescue\nonly", "Ovlp.\nHours", "Cycles",
+            "vs Normal\n+ Rescue", "Rescue\nonly", "Meas.\nDays", "Cycles",
         ],
         "p3_note1": (
-            "Avg Sta./Cycle = Pooled Mean over hours where Normal AND the respective mode were measured "
-            "simultaneously (time-fair basis — no time-of-day bias).   "
+            "Avg Sta./Cycle = Pooled Mean across ALL measurement cycles from multiple days and all hours of the day — "
+            "no time-of-day filter, no cherry-picking. The value represents the typical hourly average "
+            "of a full measurement day. More days = more stable result.   "
             "Rescue = ANT1 below −24 dB, ANT2 decoded anyway."
         ),
         "p3_note2": (
@@ -482,7 +484,7 @@ TEXTS = {
         "p7_visible_title": "What is clearly visible:",
         "p7_fazit_body": (
             "Diversity Standard consistently delivers between {gain_lo:.0f}% and {gain_hi:.0f}% more stations "
-            "across overlapping measurement hours —\ndepending on whether you count rescued stations or not. "
+            "across all measurement days —\ndepending on whether you count rescued stations or not. "
             "This is not coincidence, it repeats.\n"
             "Diversity DX sits at {d_gain:.0f}% without Rescue — less than Standard, but DX deliberately "
             "optimises\nfor the weakest signals. If you do a lot of DX, that makes sense."
@@ -1018,73 +1020,34 @@ def _combo_summary(stats_dir: Path, band: str, protocol: str) -> dict:
 
 
 def _combo_summary_fair(stats_dir: Path, band: str, protocol: str) -> dict:
-    """Pooled Mean restricted to hours where Normal AND each Diversity mode were measured simultaneously.
+    """Pooled Mean über ALLE Messzyklen — Normal-Mittelwert als gemeinsame Referenz.
 
-    Returns dict[mode → {avg, n_avg_common, n_days, n_cycles, avg_rescue, common_hours}].
-    For Normal: avg = global mean (baseline reference), common_hours = total Normal hours.
-    For Diversity modes: avg = mean over overlapping hours only; n_avg_common = Normal mean
-    restricted to those same hours (use this as the reference for % comparisons).
+    Kein Stunden-Filter. Wert = typischer Stunden-Durchschnitt eines ganzen Messtages.
+    Returns dict[mode → {avg, n_avg_common, n_days, n_cycles, avg_rescue}].
     """
-    agg_all: dict[str, dict] = {}
-    rescue_h: dict[str, dict] = {}
-    for mode in RX_MODES:
-        hv = load_hourly_stats(stats_dir, mode, band, protocol)
-        if hv:
-            agg_all[mode] = _aggregate(hv)
-        if mode != "Normal":
-            r = load_rescue_by_hour(stats_dir, mode, band, protocol)
-            if r:
-                rescue_h[mode] = r
-
-    if "Normal" not in agg_all:
+    base = _combo_summary(stats_dir, band, protocol)
+    if "Normal" not in base:
         return {}
-
+    n_avg = base["Normal"]["avg"]
     result: dict[str, dict] = {}
-    n_agg = agg_all["Normal"]
-    normal_hours = set(n_agg.keys())
-
-    # Normal: global baseline
-    n_c = sum(v["n_cycles"] for v in n_agg.values())
-    n_w = sum(v["mean"] * v["n_cycles"] for v in n_agg.values())
     result["Normal"] = {
-        "avg":          n_w / n_c if n_c else 0.0,
+        "avg":          n_avg,
         "n_avg_common": 0.0,
-        "n_days":       max(v["n_days"] for v in n_agg.values()),
-        "n_cycles":     n_c,
+        "n_days":       base["Normal"]["n_days"],
+        "n_cycles":     base["Normal"]["n_cycles"],
         "avg_rescue":   0.0,
-        "common_hours": len(normal_hours),
     }
-
     for mode in ["Diversity_Normal", "Diversity_Dx"]:
-        if mode not in agg_all:
+        if mode not in base:
             continue
-        m_agg = agg_all[mode]
-        common = normal_hours & set(m_agg.keys())
-        if not common:
-            continue
-
-        # Normal restricted to common hours
-        nc_c = sum(n_agg[h]["n_cycles"] for h in common)
-        nc_w = sum(n_agg[h]["mean"] * n_agg[h]["n_cycles"] for h in common)
-
-        # Diversity mode restricted to common hours
-        mc_c = sum(m_agg[h]["n_cycles"] for h in common)
-        mc_w = sum(m_agg[h]["mean"] * m_agg[h]["n_cycles"] for h in common)
-
-        # Rescue restricted to common hours
-        rescue = rescue_h.get(mode, {})
-        r_w = sum(rescue[h] * m_agg[h]["n_cycles"] for h in rescue if h in common)
-        r_c = sum(m_agg[h]["n_cycles"] for h in rescue if h in common)
-
+        s = base[mode]
         result[mode] = {
-            "avg":          mc_w / mc_c if mc_c else 0.0,
-            "n_avg_common": nc_w / nc_c if nc_c else 0.0,
-            "n_days":       max(m_agg[h]["n_days"] for h in common),
-            "n_cycles":     mc_c,
-            "avg_rescue":   r_w / r_c if r_c else 0.0,
-            "common_hours": len(common),
+            "avg":          s["avg"],
+            "n_avg_common": n_avg,
+            "n_days":       s["n_days"],
+            "n_cycles":     s["n_cycles"],
+            "avg_rescue":   s.get("avg_rescue", 0.0),
         }
-
     return result
 
 
@@ -1307,8 +1270,8 @@ def _r_ergebnisse_page(pdf: PdfPages, fair_summary: dict, gen_date: str, T: dict
             vs  = f"+{(avg / n_ref - 1) * 100:.0f}%"
             vsr = f"+{((avg + rsc) / n_ref - 1) * 100:.0f}%"
             r   = f"+{(rsc / n_ref) * 100:.0f}%"
-        common_h = f"{s.get('common_hours', '—')}h"
-        rows.append([lbl, f"{avg:.1f}", vs, vsr, r, common_h, str(s["n_cycles"])])
+        n_days_val = str(s.get("n_days", "—"))
+        rows.append([lbl, f"{avg:.1f}", vs, vsr, r, n_days_val, str(s["n_cycles"])])
         row_face.append(face)
         row_text.append(tcol)
 
