@@ -250,16 +250,18 @@ Beispiel Normal: 6.744 Zyklen × ~18.5 Sta./Zyklus
 
 ---
 
-## Datenlage (Stand 23.04.2026)
+## Datenlage (Stand 25.04.2026)
 
-| Modus            | Band | Tage | Stunden abgedeckt     |
-|------------------|------|------|-----------------------|
-| Normal           | 40m  | 3+   | 05–23 UTC + 00–05 UTC |
-| Diversity_Normal | 40m  | 2    | 05–12 UTC (nur morgens)|
-| Diversity_Dx     | 40m  | 2    | 15–22 UTC             |
-| Normal           | 20m  | 1    | 14–15 UTC             |
+| Modus            | Band | Tage | Stunden abgedeckt | Zyklen |
+|------------------|------|------|-------------------|--------|
+| Normal           | 40m  | 4    | 24h Abdeckung     | 6.744  |
+| Diversity_Normal | 40m  | 4    | 24h Abdeckung     | 6.827  |
+| Diversity_Dx     | 40m  | 4    | 24h Abdeckung     | 9.125  |
+| Normal           | 20m  | 1+   | 14–17 UTC         | wachsend |
 
-Nacht-Daten für Diversity_Normal + Diversity_Dx fehlen noch!
+**40m FT8 Ergebnis (Pooled Mean global, 22.696 Zyklen):**
+- Diversity Standard: **+88% / +122%** (ohne/mit Rescue), Rescue allein +35%
+- Diversity DX:       **+124% / +158%** (ohne/mit Rescue), Rescue allein +34%
 
 ---
 
@@ -296,23 +298,28 @@ Nacht-Daten für Diversity_Normal + Diversity_Dx fehlen noch!
 
 ## Offene TODOs (nach Schwierigkeit)
 
-**NÄCHSTE SESSION — Prompt bereit (v0.57):**
-- Answer-Me Highlighting: `rx_panel.py` Farbe `#5A4A10` + Bold an 3 Stellen (L37, L268, L421)
-- Gain-Messung Logging: `mw_radio.py::_log_gain_result()` → `~/.simpleft8/gain_log.md`
+**NÄCHSTE SESSION — Prompt bereit (v0.58 — CQ-Frequenz-Algorithmus):**
+- Datei: `~/Desktop/cq_freq_prompt_v0.58.md`
+- 5 Sub-Tasks: Score-basierte Auswahl, fester Sweet-Spot 800-2000Hz, modus-abhängige
+  Dwell, verfeinerte Kollisionserkennung, Sticky Gap mit reset()-Fix
+- 14 neue Tests (197 → ≥214), 4 atomare Commits
+- Stats-Modus-Sperre bewusst NICHT in Scope (Mike-Entscheidung 25.04.: Variance kein Bias)
 
 **EINFACH:**
-1. **Even/Odd dedizierter Timer** — unabhängig vom Decoder-Thread
+1. **Even/Odd dedizierter Timer** — unabhängig vom Decoder-Thread (FT2 kritischsten)
 2. **Gain-Bias beheben** — Normal-Modus Gain-Messung wenn Stats aktiv erzwingen
 
 **MITTEL:**
-3. **CQ-Freq Algorithmus** — Score-basiert, Sweet-Spot 800-2000Hz, Dwell-Time FT4/FT2
+3. **CQ-Zusammenfassung RX-Liste** — DeepSeek-Idee: ins QSO-Panel verschieben oder ganz raus
+4. **Tertile-Analyse Statistik** — kein Datencropping, alle Werte in 3 Drittel
 
 **PRIO NIEDRIG:**
-4. **Per-Station DT-Offset TX** — encoder._station_dt_offset (erst nach mehr Feldtest-Daten)
+5. **AP-Lite Test-Pipeline** — synthetische E2E-Tests vor jedem Code-Fix
+6. **Per-Station DT-Offset TX** — encoder._station_dt_offset (erst nach mehr Feldtest-Daten)
 
 **LANGFRISTIG:**
-5. **IC-7300 Fork** — TARGET_TX_OFFSET dort separat messen!
-6. **Warteliste-Screenshot** — sobald DL3AQJ antwortet
+7. **IC-7300 Fork** — TARGET_TX_OFFSET dort separat messen!
+8. **Warteliste-Screenshot** — sobald DL3AQJ antwortet
 
 **VERMUTLICHER BUG (beobachten):**
 - TX-Frequenz Normal-Modus manchmal ohne Histogramm-Marker — noch nicht reproduzierbar

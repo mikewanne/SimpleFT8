@@ -1,66 +1,102 @@
-# HANDOFF — SimpleFT8 — 2026-04-25
+# HANDOFF — SimpleFT8 — 2026-04-25 (Session 3)
 
 ## Heute erledigt
 
-### v0.56 — RF-Power-Presets pro Band+Watt (lernendes System)
-- `core/rf_preset_store.py` (NEU): Hybrid-Lade-Strategie — exakter Treffer → lineare
-  Interpolation/Extrapolation → Default. Atomic JSON-Write, Plausibilitäts-Warnung >20% Δ,
-  Migration aus altem `rfpower_per_band`-Eintrag in config.json.
-- `radio/base_radio.py` + `radio/flexradio.py`: `radio_type` Klassen-Konstante als Top-Level-Key
-- `ui/mw_tx.py`: `_apply_rf_preset()`, Race-Schutz `_was_converged`, Save-Trigger refactored
-- `ui/mw_radio.py`: `_apply_rf_preset()` bei Radio-Connect + Bandwechsel
-- `ui/settings_dialog.py`: GroupBox "RF-Presets" — Tabelle + Reset-Buttons (disabled mid-TX)
-- Tests: 168 → 197 passed (19 neue RFPresetStore-Tests)
+### Statistik-Methodik korrigiert (Pooled Mean global, kein Stunden-Filter)
+- `scripts/generate_plots.py`: `_combo_summary_fair()` zu schlankem Wrapper um
+  `_combo_summary()` umgebaut — keine (date,hour)-Schnittmenge mehr. Grund: 1 Radio
+  = nie 2 Modi gleichzeitig am selben Tag. Die 18-21 gemeinsamen Slots waren ein
+  nicht repräsentativer Bias (+35% war falsch).
+- Spalte „Gem. Stunden" → „Mess-tage" (zeigt `n_days`).
+- README.md (DE+EN): Zahlen korrigiert auf **+88%/+122% Standard**, **+124%/+158% DX**,
+  Total **22.696 Zyklen** (4 Messtage).
+- 2 Commits gepusht: `0ac6788`, `3d292bf`.
 
-### Refactoring + Tests
-- `ui/mw_cycle.py`: 5 Helper-Methoden aus `_on_cycle_decoded` extrahiert
-- `tests/test_modules.py`: 7× `DiversityController._evaluate` + 1× AP-Lite Costas-Test
+### PDF-Erklärung funkerverständlich (kein Jargon)
+- Spaltenheader: `Ø Stat./Zyklus` → `Ø Sta./15s-Zyklus` (Dauer explizit).
+- `p3_header_subtitle`: „Pooled Mean über alle Messtage" → „Tagesdurchschnitt über
+  4 Messtage, alle Tageszeiten".
+- `p3_note1`: plain language — „So viele Stationen pro 15s-Zyklus im Schnitt,
+  gemittelt über alle Messpunkte aus 4 Messtagen und allen Tageszeiten — echter
+  Tagesdurchschnitt".
+- `p1_summary_body` (DE+EN): „Pooled Mean" → „Durchschnitt über alle Messpunkte".
+- Commit `208e26f` gepusht.
 
-### Doku & Prozess
-- `CLAUDE.md`: Rollen, Commit-Richtlinien, DeepSeek-V4-Warnung
-- `feierabend.md`: HISTORY.md-Pflicht-Hinweis präzisiert
-- `TODO.md`: 5 Punkte aktualisiert (RX-Sort [x], DT-Offset PRIO NIEDRIG, TX-Freq-Bug)
+### Berechnungsmethodik in CLAUDE.md dokumentiert
+- Neuer Abschnitt „Berechnungsmethodik (Tagesdurchschnitt)" erklärt exakt wie
+  `Ø Sta./15s-Zyklus` berechnet wird (Summe ÷ Anzahl Zyklen, alle Tage × alle
+  Stunden), mit Negativ-Beispiel („nicht Stationen/Stunde").
+- Commit `e2f97fc` gepusht.
 
-### Statistiken
-- 40m + 20m Messungen 25.04 committed; PDFs (DE+EN) neu generiert
+### v0.57 Implementation: Answer-Me Highlighting + Gain-Messung Logging
+- `ui/rx_panel.py`: Farbe `_COLOR_ANSWER_ME_BG` `#2A1F00` → `#5A4A10` (Gold,
+  klar gegen Active-Call `#2A1500` abhebbar). Bold-Logik in `_apply_active_highlight`
+  (L268) erweitert: `setBold(is_active or is_answer_me)`. Bold beim direkten Einfügen
+  in `_populate_row` (L419-426).
+- `ui/mw_radio.py`: Neue Methode `_log_gain_result(r, band, ft_mode)` schreibt
+  Append-Only-Eintrag nach `~/.simpleft8/gain_log.md` mit UTC + Band/Mode +
+  Diversity/Standard-Scoring + ANT1/ANT2 Gains + Ø SNRs. Aufruf in
+  `_on_dx_tune_accepted` direkt nach `_set_gain_measure_lock(False)` und VOR dem
+  `if rx_mode == "normal"` early-return → beide Modi loggen. `from pathlib import Path`
+  zu Top-Level Imports.
+- `main.py`: APP_VERSION 0.56 → 0.57.
+- DeepSeek-Review (deepseek-chat, thinking high): 0 Issues.
+- 3 Commits gepusht: `81e731e`, `5ab484e`, `3872b60`.
+
+### Prompt v0.58 für nächste Session erstellt
+Datei: `~/Desktop/cq_freq_prompt_v0.58.md` (auch unter `/tmp/cq_freq_prompt_FINAL.md`).
+- Score-basierte Lückenauswahl (Gewichte 50/25/0.01)
+- Fester Sweet-Spot 800-2000Hz
+- Modus-abhängige Dwell-Time (FT8=4z, FT4=8z, FT2=16z = ~60s einheitlich)
+- Verfeinerte Kollisionserkennung (≥2 in ±1 ODER ≥3 in ±2)
+- Sticky Gap (50Hz-Schwelle)
+- Stats-Modus-Sperre **bewusst NICHT** in Scope (Mike: Variance kein Bias)
+- DeepSeek-Review (deepseek-chat, thinking high) durchlaufen — `reset()`-Bug erkannt
+  und in v4 eingebaut (`_current_gap_width_hz` muss in `reset()` zurückgesetzt werden).
 
 ---
 
-## Offen / Nächste Session
+## Offen / Nächste Schritte
 
-### Prompt v0.57 — BEREIT ZUR UMSETZUNG
-Datei: im letzten Claude-Chat gespeichert (Answer-Me + Gain-Log)
+### v0.58 — BEREIT ZUR UMSETZUNG (in neuer Session)
+Prompt: `~/Desktop/cq_freq_prompt_v0.58.md`
+- 5 atomare Sub-Tasks (Score, Sweet-Spot, Mode-Dwell, Kollision, Sticky)
+- 14 neue Tests (197 → ≥214)
+- 4 atomare Commits geplant
 
-**Aufgabe 1 — `ui/rx_panel.py` (3 Stellen, trivial):**
-- L37: `_COLOR_ANSWER_ME_BG` → `QColor("#5A4A10")` (dunkles Gold)
-- L268: `f.setBold(is_active)` → `f.setBold(is_active or is_answer_me)`
-- L421-423: Bold beim direkten Einfügen (`_populate_row`) setzen
-
-**Aufgabe 2 — `ui/mw_radio.py` (neue Methode):**
-- `_log_gain_result(r, band, ft_mode)` → Append `~/.simpleft8/gain_log.md`
-- Aufruf nach `self._set_gain_measure_lock(False)` in `_on_dx_tune_accepted()`
-- APP_VERSION → 0.57, HISTORY.md ergänzen, TODO [x]
-
-### Offene TODOs (priorisiert)
-1. **v0.57 Prompt** — sofort umsetzbar (siehe oben)
-2. **CQ-Freq Algorithmus** — Score-basiert, Sweet-Spot, Dwell-Time (MITTEL)
+### Offene TODOs (priorisiert nach Mike's Bewertung)
+1. **v0.58 Prompt** — sofort umsetzbar (siehe oben)
+2. **Even/Odd Timer** — eigener dedizierter Timer unabhängig vom Decoder-Thread
+   (FT2 am kritischsten)
 3. **Gain-Bias beheben** — Stats-Modus erzwingt Gain-Messung für alle Modi (EINFACH)
-4. **Even/Odd Timer** — eigener dedizierter Timer unabhängig vom Decoder-Thread
-5. **Per-Station DT-Offset TX** — PRIO NIEDRIG (erst nach mehr Feldtest-Daten)
+4. **CQ-Zusammenfassung RX-Liste** überarbeiten (DeepSeek-Idee)
+5. **Tertile-Analyse** für Statistik (kein Datencropping)
+6. **AP-Lite Test-Pipeline** vor jedem Code-Fix (PRIO NIEDRIG)
+7. **IC-7300 Fork** (LANGFRISTIG)
 
-### Vermutliche Bugs (noch nicht reproduzierbar)
-- **TX-Frequenz Normal-Modus** — manchmal kein Histogramm-Marker, TX bleibt auf alter Freq.
-  Konsole beobachten: `[CQ] TX-Frequenz auf X Hz` — tritt es auf oder nicht?
+### Statistik Nächste Schritte
+- Nachtmessungen auf 40m → Diagrammlinie stabiler
+- 20m Daten sammeln (mind. 2 Tage Normal + 2 Tage Diversity_Std + 2 Tage Diversity_DX)
+  VOR Veröffentlichung auf GitHub: CLAUDE.md-Regel beachten!
 
 ---
 
 ## Warnungen & Fallen
 
-- **DeepSeek V4** — neues Modell, Verhalten unbestätigt. Antworten immer am Code verifizieren.
-- **AP-Lite** — `AP_LITE_ENABLED = True` aber ungetestet. Nicht anfassen ohne Test-Pipeline.
-- **OMNI-TX** — deaktiviert (Easter Egg: Klick auf Versionsnummer). Nicht auf GitHub wie man es aktiviert.
+- **DeepSeek V4** — neues Modell (deepseek-chat), Verhalten unbestätigt. Antworten
+  immer am tatsächlichen Code verifizieren — KI kann plausibel klingende aber
+  falsche Zeilen-Angaben machen.
+- **AP-Lite** — `AP_LITE_ENABLED = True` aber ungetestet. Nicht anfassen ohne
+  Test-Pipeline.
+- **OMNI-TX** — deaktiviert (Easter Egg: Klick auf Versionsnummer). NICHT auf
+  GitHub wie aktiviert.
 - **cache.save() nie im Cycle-Loop** — refresht Timestamp → 2h Gültigkeit sinnlos
-- **TARGET_TX_OFFSET = -0.8** — FlexRadio-spezifisch! IC-7300 Fork braucht eigenen Wert
+- **TARGET_TX_OFFSET = -0.8** — FlexRadio-spezifisch! IC-7300 Fork braucht eigenen
+  Wert
+- **Statistik-Veröffentlichung** — Andere Bänder NUR pushen wenn: Normal +
+  Div_Std + Div_DX je ≥2 Tage, ganzer Tag (06-22 UTC). Regel steht in CLAUDE.md.
+- **Tagesdurchschnitt-Methodik** — Pooled Mean über ALLE Zyklen aller Messtage und
+  Tageszeiten (kein Stunden-Filter). Berechnung dokumentiert in CLAUDE.md.
 
 ---
 
@@ -68,5 +104,7 @@ Datei: im letzten Claude-Chat gespeichert (Answer-Me + Gain-Log)
 `./venv/bin/python3 -m pytest tests/ -q` → **197 passed** ✅
 
 ## Letzter bekannter guter Zustand
-Git-Branch `main`, 8 Commits ahead of origin. App startet, RFPresetStore lädt/speichert
-korrekt, Statistiken laufen, PDFs (DE+EN) aktuell mit 25.04-Daten.
+Git-Branch `main`, alle Commits gepusht (origin/main = lokal, kein Lag). App startet,
+v0.57 läuft (Answer-Me Highlighting Gold + Bold, Gain-Log nach
+`~/.simpleft8/gain_log.md`), Statistiken laufen, PDFs (DE+EN) aktuell mit 25.04-Daten
+(22.696 Zyklen, +88%/+124%).
