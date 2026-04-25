@@ -26,6 +26,56 @@
 
 ---
 
+## ⛔ PRIO HOCH (Stand 2026-04-25)
+
+### 1. Doku korrigieren: „UCB1 Bandit" ist im Code NICHT implementiert
+**Betroffen:** `docs/DIVERSITY_DE.md`, `docs/DIVERSITY.md`, `README.md`, `README_DE.md` (alle GitHub-sichtbar!)
+
+**Problem:** Doku verkauft die Diversity-Antennen-Wahl als „UCB1 (Upper Confidence Bound) Multi-Armed-Bandit". Tatsächlich implementiert `core/diversity.py::_evaluate()` jedoch **Median über 4 Messungen pro Antenne + 8 %-Schwellwert** (siehe Zeile 348-378). Kein Reward-Tracking, keine Confidence-Bound-Formel, kein kontinuierliches Lernen.
+
+**Was tatsächlich passiert:**
+- 8 Mess-Zyklen (4× A1, 4× A2)
+- Median pro Antenne (robust gegen Ausreißer)
+- `|s1-s2|/peak < 8%` → 50:50, sonst 70:30 zur besseren Antenne
+- Nach 60 Operate-Zyklen → Neueinmessung
+
+**Aufgabe:**
+- DIVERSITY_DE.md / DIVERSITY.md: Abschnitt „UCB1 Adaptives Verhältnis" umschreiben → ehrlich „Median + 8 %-Schwellwert" benennen
+- README.md / README_DE.md: gleiche Stellen prüfen + korrigieren
+- UEBERGABE.md: Erwähnung „Temporal Polarization Diversity" bleibt (ist OK), nur Bandit-Sprache raus
+- **Marke „Temporal Polarization Diversity" bleibt** — das Antennen-Wechsel-Konzept stimmt, nur die Bezeichnung der Entscheidungslogik ist Marketing-Quark
+
+**Begründung Code lassen:** Aktuelle Logik läuft seit Tagen robust und stabil; UCB1 würde bei nur 2 Antennen + hoher Reward-Varianz (Fading) keinen spürbaren Vorteil bringen, aber Wartung erschweren.
+
+**Tests:** Bereits ab v0.55 abgesichert — 7 neue Tests in `tests/test_modules.py` decken `_evaluate()` ab (Threshold-Verhalten, A1/A2-Dominanz, DX-Mode, Phase-Übergänge, Operate-Filter).
+
+**Aufwand:** ~30 Min reine Doku-Arbeit, kein Code.
+
+---
+
+### 2. AP-Lite v2.2 Test-Pipeline bauen (vor jeglichem Code-Fix!)
+**Betroffen:** `core/ap_lite.py`, `tests/test_modules.py` (neue Datei `tests/test_ap_lite_pipeline.py` denkbar)
+
+**Problem:** AP-Lite ist live (`AP_LITE_ENABLED = True`) aber laut eigenem Docstring + CLAUDE.md komplett ungetestet. Im Code stehen drei explizite TODOs vom Autor:
+1. `_build_costas_reference`: „Aktuell: vereinfachte Näherung" — kein echtes 7×3-Costas-Pattern mit FSK-Tönen
+2. `align_buffers`: „Validieren! Insbesondere Phasenkorrektur für kohärente Addition" — Phase wird aktuell NICHT korrigiert; bei kohärenter Addition kritisch (sonst Auslöschung statt Verstärkung)
+3. `SCORE_THRESHOLD = 0.75` — geraten, nie kalibriert
+4. Zusatz-Verdacht: `encoder.generate_reference_wave()` muss echte FT8-Symbole produzieren — Stub-Verhalten würde Korrelation zu Müll machen
+
+**Reihenfolge unverhandelbar:**
+1. **ZUERST** synthetische End-to-End-Tests bauen — verrauschtes FT8-Signal generieren → 2 Slots erzeugen → durch `try_rescue` schicken → prüfen ob die richtige Nachricht rauskommt
+2. Dann zeigen die Tests welcher der 4 Verdachtspunkte tatsächlich Bugs sind
+3. Dann gezielt fixen mit Test als Schutznetz
+4. Erst dann Feldtest
+
+**Warum nicht direkt fixen:** Ohne Test ist jede „Verbesserung" Schuss ins Blaue — könnte einen funktionierenden Teil kaputt machen oder einen anderen Bug übersehen.
+
+**Aufwand Pipeline:** ~1-2 h. Brauchen FT8-Signal-Generator (vermutlich über vorhandenen `Encoder.generate_reference_wave`), AWGN-Rauschen-Helfer, Test-Cases mit unterschiedlichen SNR-Bereichen.
+
+**Aufgabe für nächste Session:** Test-Pipeline aufsetzen und als Baseline laufen lassen — dann sehen wir was wirklich kaputt ist.
+
+---
+
 ## OFFEN — Naechste Schritte
 
 ### CQ-Frequenz-Algorithmus (core/diversity.py)
@@ -186,19 +236,13 @@
 - [ ] IC-7300 Fork: `radio/ic7300.py` implementieren
 - [ ] Band Map (visuelle Frequenz-Belegung)
 - [ ] QSO-Resume bei App-Neustart
-- [ ] **RF-Power-Presets pro Band+Watt (lernendes System):**
-  Aktuell tastet sich die Closed-Loop-Regelung (FWDPWR-Feedback) 3-4 Zyklen (~45-60s) an die
-  Ziel-Watt heran. Idee: pro (Band, Ziel-Watt) den letzten stabilen RF-Wert in config.json
-  speichern und beim Band-/Wattwechsel sofort laden als Startpunkt — Regelung laeuft weiter
-  aber startet nah am Ziel statt bei 0.
-  DeepSeek-Empfehlung:
-  - Pro (Band, Watt-Stufe) speichern, NICHT nur pro Band (RF-Kennlinie nicht linear)
-  - Als "stabil" gilt: 3 aufeinanderfolgende Zyklen mit Abweichung < 5% vom Zielwert
-  - Gespeicherten Wert nach 7 Tagen als "veraltet" markieren (Temperatur-/SWR-Drift)
-  - Einfacher Einstieg: Nur RF-Wert + Timestamp, ohne Temperatur/Antennen-Metadaten
-  Vorteil: Nach wenigen Sessions fuer jede Band+Watt-Kombi sofort in der Naehe der Zielleistung.
-  Hinweis (bis Feature fertig): Vor Normal-Messungen MANUELL Tune + Gain-Messung machen,
-  damit Vergleich mit DX-Modus (automatisch Gain) fair bleibt.
+- [x] **RF-Power-Presets pro Band+Watt (lernendes System):** ERLEDIGT in v0.56 (2026-04-25)
+  Implementierung: `core/rf_preset_store.py` mit Hybrid-Lade-Strategie (exakter Treffer →
+  lineare Interpolation/Extrapolation → Default), atomic JSON-Write, Plausibilitäts-Warnung,
+  Migration aus altem `rfpower_per_band`-Eintrag. Pro Radio (FlexRadio jetzt, IC-7300 später)
+  separate Tabelle. UI: SettingsDialog-Section "RF-Presets" mit Tabelle + Reset-Buttons
+  (disabled während aktivem TX). Selbstheilend: bei jedem Konvergenz-Übergang wird
+  überschrieben. Tests 178 → 197 grün. Siehe HISTORY.md "v0.56".
 
 ---
 

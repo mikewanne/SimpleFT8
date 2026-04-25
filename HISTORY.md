@@ -5,6 +5,111 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-04-25 v0.56 — RF-Power-Presets pro Band+Watt
+
+**Betroffene Dateien:** `core/rf_preset_store.py` (NEU), `radio/base_radio.py`, `radio/flexradio.py`, `ui/main_window.py`, `ui/mw_tx.py`, `ui/mw_radio.py`, `ui/settings_dialog.py`, `tests/test_rf_preset_store.py` (NEU)
+
+### Hintergrund
+Closed-Loop FWDPWR-Feedback tastet pro Band/Watt-Wechsel von rfpower=50 hoch zur Zielleistung. Dauert 3–4 Zyklen (~45–60 s FT8) bis Konvergenz — schlecht für QSO-Erfolg, ineffizient. Mike hat den Wunsch geäußert, den konvergierten rfpower-Wert pro (Band, Watt-Stufe) zu persistieren, sodass beim nächsten Wechsel direkt der bekannte Wert geladen werden kann. System ist selbstheilend: bei Vereisung/Tauwetter/Kabelwackler überschreibt die nächste Konvergenz den alten Wert. IC-7300-Fork-tauglich durch separaten Top-Level-Key pro Radio.
+
+### Architektur (5 Schichten)
+1. **`core/rf_preset_store.py` (NEU):** `RFPresetStore` mit Hybrid-Lade-Strategie (exakter Treffer / lineare Interpolation+Extrapolation / None), atomic JSON-Write via `os.replace`, Plausibilitäts-Warnung bei >20% Δ zwischen gespeichert vs interpoliert, Migration aus altem `rfpower_per_band` (idempotent), Validierung 0 ≤ rf ≤ 100, `.bak.YYYYMMDD-HHMMSS` bei korruptem JSON.
+2. **`radio/base_radio.py` + `flexradio.py`:** Klassen-Konstante `radio_type: str = "flexradio"` (ABC default `"unknown"`) — Top-Level-Key in `rf_presets.json`.
+3. **`ui/main_window.py::_init_power_state`:** RFPresetStore-Instanz + neue `_was_converged` Hilfsvar + Migration-Aufruf.
+4. **`ui/mw_tx.py`:** Neuer Helper `_apply_rf_preset()`, Lade-Trigger bei Watt-Wechsel mit Race-Schutz für alten (band, watts), Save-Trigger refactored mit `_was_converged` (1× pro Konvergenz-Zyklus), `settings.save_tx_power()` bleibt für Backward-Compat.
+5. **`ui/mw_radio.py`:** Lade-Trigger an Bandwechsel + Radio-Connect.
+6. **`ui/settings_dialog.py`:** Neue GroupBox "RF-Presets pro Band+Watt" — Tabelle (Band / Watt / RF / Letzte Speicherung), "Band löschen" + "Alle löschen" mit Bestätigungs-Dialog, Buttons disabled während aktivem TX (1 s Polling).
+
+### Datenformat `~/.simpleft8/rf_presets.json`
+```json
+{
+  "flexradio": {
+    "40m": {"30": {"rf": 24, "ts": 1735203015.5},
+            "80": {"rf": 67, "ts": 1735206015.0}}
+  },
+  "ic7300": {}
+}
+```
+
+### DeepSeek codereview (deepseek-chat, thinking high)
+1× Low-Severity Bug bestätigt: `getattr(...) or settings.get(...)` falsy-Trap bei watts=0 → ersetzt durch explizites `is None`-Check. Andere DeepSeek-Hinweise (kritisch laut Tool) waren False Positives — Reihenfolge in `_on_power_changed` ist korrekt (alter `_power_target` + alter `_rfpower_current` werden vor Settings-Update gespeichert).
+
+### Tests 178 → 197 grün
+Neue `tests/test_rf_preset_store.py` mit 19 Tests: exact_match, empty, interpolation, extrapolation oben/unten, single_point_fallback, overwrite, radio_isolation, clear_band, clear_all, plausibility_warning, corrupt_json+bak, atomic_write, invalid_rf, oscillation, band_change_isolation, range_clipping, migration, persistence.
+
+### Atomare Commits
+1. `feat(core): RFPresetStore — pro (radio, band, watt) konvergierten rf-Wert persistieren`
+2. `feat(radio): radio_type Klassen-Konstante als Top-Level-Key`
+3. `feat(tx): RFPresetStore in TX-Closed-Loop integriert (load + save bei Konvergenz)`
+4. `feat(ui): SettingsDialog — Section "RF-Presets" mit Reset-Buttons`
+5. `chore(release): bump APP_VERSION 0.55 → 0.56 + HISTORY + TODO`
+
+### Out of Scope (für spätere Versionen)
+- Polynom-/Spline-Fit über ≥3 Stützpunkte (KISS, linear reicht; bei IC-7300-Fork prüfen)
+- Temperatur-/SWR-Tagging der Werte
+- Auto-Detection Antennen-Tausch
+- Event-Bus / RFPresetController-Schicht (Overengineering, direkter Aufruf in mw_tx genügt)
+
+---
+
+## 2026-04-25 — Prozess/Doku (kein Code-Change)
+
+**Betroffene Dateien:** `CLAUDE.md`, `TODO.md`, `tests/test_modules.py`
+
+### CLAUDE.md erweitert
+- **Rollen** definiert: Mike = Ideengeber/Tester/Inspirator, Claude = Chef-Programmierer (verantwortlich für Code-Qualität, Struktur, Wartbarkeit)
+- **Commits** Regel: lokale Commits autonom + atomar (1 Refactor/Feature/Bugfix = 1 Commit), `git push` nur auf explizite Anfrage
+- **Architektur-Entscheidungen** Liste: was Mike vorgelegt wird (Modul-Auflösung, Pattern-Wechsel, Threading-Änderungen, Eingriffe in produktive Algorithmen ohne Tests, neue Abhängigkeiten, Breaking Changes) vs was Claude eigenständig entscheidet
+- **Vor Commits**-Zeile ergänzt: Tests grün + DeepSeek-Review bei nicht-trivialen Änderungen (verweist auf §0)
+
+### TODO.md PRIO HOCH (Stand 2026-04-25)
+- **Punkt 1: Doku „UCB1 Bandit" korrigieren** — Code implementiert tatsächlich Median+8%-Schwelle, nicht UCB1. 5 Dateien betroffen (DIVERSITY_DE/EN, README_DE/EN, UEBERGABE). ~30 Min reine Doku.
+- **Punkt 2: AP-Lite v2.2 Test-Pipeline** — vor jeglichem Code-Fix synthetische End-to-End-Tests bauen (FT8-Generator + AWGN). Erst dann zeigen Tests welche der 4 Verdachtspunkte echte Bugs sind. ~1-2 h.
+
+### Tests aufgestockt 168 → 178
+- 7 neue Tests für `core/diversity.py::_evaluate()`: Threshold-Verhalten, A1/A2-Dominanz, DX-Mode, Phase-Übergänge, Operate-Filter
+- 3 neue Tests für AP-Lite v2.2: `_correlate` ohne Encoder, `_align_buffers` Costas-Reference, Costas-Pattern-Position
+
+### DeepSeek V4-Setup
+- DeepSeek V4 ist am 24.04.2026 erschienen (zwei Modelle: `deepseek-v4-flash`, `deepseek-v4-pro` Reasoning)
+- `~/.claude/custom_models.json` neu angelegt für Pal-MCP-Routing
+- `~/.claude/settings.json` aktualisiert: `permissions.defaultMode: "plan"`, `effortLevel: "xhigh"`, `model: "opusplan"`
+
+---
+
+## 2026-04-25 v0.55 — Refactoring: Mega-Methoden zerlegt
+
+**Betroffene Dateien:** `ui/mw_cycle.py`, `ui/main_window.py`
+
+### Hintergrund
+DeepSeek V4-Pro (Reasoning-Modell, neu erschienen 24.04.) wurde für Architektur-Review hinzugezogen. V4-Pro identifizierte zwei Mega-Methoden als gröbste Verstöße gegen Lesbarkeit; Vorschlag: 1:1-Auslagerung in private Helper, ohne Verhaltensänderung. Drei weitere Refactoring-Kandidaten (flexradio.py aufsplitten, qso_state.on_message_received zerlegen, generate_plots.py modularisieren) wurden bewusst abgelehnt — premature abstraction, hohes Regressionsrisiko ohne Tests.
+
+### Änderungen
+- `ui/mw_cycle.py::_on_cycle_decoded()` von **276 Zeilen → 27 Zeilen**, 9 Helper extrahiert:
+  - `_assign_slot_parity`, `_update_dt_correction`, `_pop_diversity_queue`
+  - `_handle_diversity_measure`, `_handle_diversity_operate`
+  - `_handle_normal_mode`, `_handle_dx_tune_mode`
+  - `_run_ap_lite_rescue`, `_run_auto_hunt`
+- `ui/main_window.py::__init__()` von **186 Zeilen → 42 Zeilen**, 12 Helper extrahiert:
+  - `_apply_dark_theme`, `_init_core_components`, `_init_qso_log`
+  - `_init_radio_state`, `_init_diversity_state`, `_init_power_state`
+  - `_init_optional_features`, `_init_psk_polling`, `_init_propagation_polling`
+  - `_init_presence_watchdog`, `_init_cq_countdown_timer`, `_init_statusbar`
+
+### Garantien
+- **Verhalten identisch:** alle 168 Tests grün vor und nach Refactoring
+- **Reihenfolge erhalten:** alle State-Initialisierungen in Original-Sequenz
+- **Bekannte Fallen unberührt:** Diversity-Transition-Guard `_diversity_in_operate`, Stats-Guard 3-fach (btn_cq + cq_mode + state), `cache.save()` nur in `_on_dx_tune_accepted`
+- **Backup:** `Appsicherungen/2026-04-25_vor_mw_cycle_refactor/` (mw_cycle.py + main_window.py)
+
+### Was NICHT angefasst wurde (begründete Ablehnung)
+- `radio/flexradio.py` — 50 Methoden teilen TCP/UDP-State, kein Test, Aufsplittung wäre premature abstraction
+- `core/qso_state.py::on_message_received` (157 L) — sitzt direkt im geschäftskritischen QSO-Pfad; keine Methodenebene-Tests, Refactoring ohne Schutznetz zu riskant
+- `scripts/generate_plots.py` — Standalone-Script, kein Test, kein externer Mehrwert durch Modularisierung
+- `ui/control_panel.py` Card-Klassen — sinnvoller nächster Schritt, aber 2 h Aufwand + Regressionsrisiko ohne UI-Tests; auf später vertagt
+
+---
+
 ## 2026-04-23 (Abend) — DT-Timing vollständig korrigiert
 
 **Betroffene Dateien:** `core/decoder.py`, `core/encoder.py`, `core/ntp_time.py`, `ui/mw_radio.py`
