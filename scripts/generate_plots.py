@@ -6,8 +6,8 @@ Output: auswertung/stationen_<band>_<proto>.png          (DE)
         auswertung/en/stationen_<band>_<proto>.png        (EN)
         auswertung/diversity_<band>_<proto>.png           (DE)
         auswertung/en/diversity_<band>_<proto>.png        (EN)
-        auswertung/SimpleFT8_Bericht.pdf                  (DE)
-        auswertung/en/SimpleFT8_Report.pdf                (EN)
+        auswertung/Auswertung-40m-FT8.pdf                 (DE)
+        auswertung/en/Report-40m-FT8.pdf                  (EN)
 
 X-Achse: Stunde des Tages (00–23 UTC), gemittelt über alle Messtage.
 Konfidenzband: Min–Max der Tages-Mittelwerte (Tag-zu-Tag-Variabilität).
@@ -130,7 +130,7 @@ TEXTS = {
         "page":     "Seite {n}",
 
         # PDF Name
-        "pdf_name": "SimpleFT8_Bericht.pdf",
+        "pdf_name": "Auswertung-40m-FT8.pdf",
 
         # ── Titelseite (S.1) ────────────────────────────────────────────────
         "p1_title":    "SimpleFT8 — Zwei Antennen, ein Vergleich",
@@ -140,7 +140,8 @@ TEXTS = {
         "p1_summary_body": (
             "Mit Diversity Standard (blau) habe ich im Schnitt {s_gain} mehr Stationen dekodiert als mit einer einzelnen Antenne.\n"
             "Zählt man die 'geretteten' Stationen dazu, kommt man auf bis zu {s_gain_r}.\n"
-            "Diversity DX (orange) bringt {d_gain} — weniger als Standard, aber gezielter auf schwache DX-Signale."
+            "Diversity DX (orange) bringt {d_gain} — weniger als Standard, aber gezielter auf schwache DX-Signale.\n"
+            "Basis: nur Stunden mit gleichzeitiger Messung beider Modi (zeitfaire Auswertung)."
         ),
         "p1_caveat": (
             "Hinweis zum Antennensetup: ANT1 ist ein Kelemen DP-201510 (Fächer-Dipol für 20m/15m/10m) — "
@@ -193,13 +194,14 @@ TEXTS = {
 
         # ── Ergebnisse-Seite (S.3) ──────────────────────────────────────────
         "p3_header_title":    "Hauptergebnisse — Vergleichstabelle",
-        "p3_header_subtitle": "40m FT8 · Pooled Mean",
+        "p3_header_subtitle": "40m FT8 · Gemeinsame Stunden (zeitfaire Auswertung)",
         "p3_col_labels": [
             "Modus", "Ø Stat.\n/Zyklus", "vs Normal\nohne Rescue",
-            "vs Normal\n+ Rescue", "Rescue\nallein", "Messtage", "Zyklen",
+            "vs Normal\n+ Rescue", "Rescue\nallein", "Gem.\nStunden", "Zyklen",
         ],
         "p3_note1": (
-            "Ø Stat./Zyklus = Mittelwert über alle Einzelzyklen direkt (nicht erst Tagesdurchschnitt).   "
+            "Ø Stat./Zyklus = Pooled Mean nur über Stunden, in denen Normal UND der jeweilige Modus "
+            "gleichzeitig gemessen wurden (zeitfaire Basis — kein Tageszeit-Bias).   "
             "Rescue = ANT1 unter −24 dB, ANT2 hat trotzdem dekodiert."
         ),
         "p3_note2": (
@@ -260,7 +262,7 @@ TEXTS = {
         "p7_header_subtitle": "Fazit und was als nächstes gemessen wird",
         "p7_visible_title": "Was man klar sehen kann:",
         "p7_fazit_body": (
-            "Diversity Standard bringt über alle Messtage konsistent zwischen "
+            "Diversity Standard bringt in den gemeinsamen Messtunden konsistent zwischen "
             "{gain_lo:.0f}% und {gain_hi:.0f}% mehr Stationen — "
             "je nachdem ob man\ndie geretteten mitzählt oder nicht. Das ist kein Zufall, das wiederholt sich.\n"
             "Diversity DX liegt bei {d_gain:.0f}% ohne Rescue — weniger als Standard, "
@@ -349,7 +351,7 @@ TEXTS = {
         "page":     "Page {n}",
 
         # PDF Name
-        "pdf_name": "SimpleFT8_Report.pdf",
+        "pdf_name": "Report-40m-FT8.pdf",
 
         # ── Title page (p.1) ─────────────────────────────────────────────────
         "p1_title":    "SimpleFT8 — Two Antennas, One Comparison",
@@ -359,7 +361,8 @@ TEXTS = {
         "p1_summary_body": (
             "With Diversity Standard (blue) I decoded on average {s_gain} more stations than with a single antenna.\n"
             "Including 'rescued' stations, this rises to up to {s_gain_r}.\n"
-            "Diversity DX (orange) delivers {d_gain} — less than Standard, but targeted at weak DX signals."
+            "Diversity DX (orange) delivers {d_gain} — less than Standard, but targeted at weak DX signals.\n"
+            "Basis: only hours with simultaneous measurement of both modes (time-fair comparison)."
         ),
         "p1_caveat": (
             "Note on antenna setup: ANT1 is a Kelemen DP-201510 (fan dipole for 20m/15m/10m) — "
@@ -411,13 +414,14 @@ TEXTS = {
 
         # ── Results page (p.3) ───────────────────────────────────────────────
         "p3_header_title":    "Main Results — Comparison Table",
-        "p3_header_subtitle": "40m FT8 · Pooled Mean",
+        "p3_header_subtitle": "40m FT8 · Overlapping Hours (time-fair comparison)",
         "p3_col_labels": [
             "Mode", "Avg Sta.\n/Cycle", "vs Normal\nw/o Rescue",
-            "vs Normal\n+ Rescue", "Rescue\nonly", "Days", "Cycles",
+            "vs Normal\n+ Rescue", "Rescue\nonly", "Ovlp.\nHours", "Cycles",
         ],
         "p3_note1": (
-            "Avg Sta./Cycle = mean over all individual cycles directly (not first day averages).   "
+            "Avg Sta./Cycle = Pooled Mean over hours where Normal AND the respective mode were measured "
+            "simultaneously (time-fair basis — no time-of-day bias).   "
             "Rescue = ANT1 below −24 dB, ANT2 decoded anyway."
         ),
         "p3_note2": (
@@ -478,7 +482,7 @@ TEXTS = {
         "p7_visible_title": "What is clearly visible:",
         "p7_fazit_body": (
             "Diversity Standard consistently delivers between {gain_lo:.0f}% and {gain_hi:.0f}% more stations "
-            "across all measurement days —\ndepending on whether you count rescued stations or not. "
+            "across overlapping measurement hours —\ndepending on whether you count rescued stations or not. "
             "This is not coincidence, it repeats.\n"
             "Diversity DX sits at {d_gain:.0f}% without Rescue — less than Standard, but DX deliberately "
             "optimises\nfor the weakest signals. If you do a lot of DX, that makes sense."
@@ -1013,6 +1017,77 @@ def _combo_summary(stats_dir: Path, band: str, protocol: str) -> dict:
     return result
 
 
+def _combo_summary_fair(stats_dir: Path, band: str, protocol: str) -> dict:
+    """Pooled Mean restricted to hours where Normal AND each Diversity mode were measured simultaneously.
+
+    Returns dict[mode → {avg, n_avg_common, n_days, n_cycles, avg_rescue, common_hours}].
+    For Normal: avg = global mean (baseline reference), common_hours = total Normal hours.
+    For Diversity modes: avg = mean over overlapping hours only; n_avg_common = Normal mean
+    restricted to those same hours (use this as the reference for % comparisons).
+    """
+    agg_all: dict[str, dict] = {}
+    rescue_h: dict[str, dict] = {}
+    for mode in RX_MODES:
+        hv = load_hourly_stats(stats_dir, mode, band, protocol)
+        if hv:
+            agg_all[mode] = _aggregate(hv)
+        if mode != "Normal":
+            r = load_rescue_by_hour(stats_dir, mode, band, protocol)
+            if r:
+                rescue_h[mode] = r
+
+    if "Normal" not in agg_all:
+        return {}
+
+    result: dict[str, dict] = {}
+    n_agg = agg_all["Normal"]
+    normal_hours = set(n_agg.keys())
+
+    # Normal: global baseline
+    n_c = sum(v["n_cycles"] for v in n_agg.values())
+    n_w = sum(v["mean"] * v["n_cycles"] for v in n_agg.values())
+    result["Normal"] = {
+        "avg":          n_w / n_c if n_c else 0.0,
+        "n_avg_common": 0.0,
+        "n_days":       max(v["n_days"] for v in n_agg.values()),
+        "n_cycles":     n_c,
+        "avg_rescue":   0.0,
+        "common_hours": len(normal_hours),
+    }
+
+    for mode in ["Diversity_Normal", "Diversity_Dx"]:
+        if mode not in agg_all:
+            continue
+        m_agg = agg_all[mode]
+        common = normal_hours & set(m_agg.keys())
+        if not common:
+            continue
+
+        # Normal restricted to common hours
+        nc_c = sum(n_agg[h]["n_cycles"] for h in common)
+        nc_w = sum(n_agg[h]["mean"] * n_agg[h]["n_cycles"] for h in common)
+
+        # Diversity mode restricted to common hours
+        mc_c = sum(m_agg[h]["n_cycles"] for h in common)
+        mc_w = sum(m_agg[h]["mean"] * m_agg[h]["n_cycles"] for h in common)
+
+        # Rescue restricted to common hours
+        rescue = rescue_h.get(mode, {})
+        r_w = sum(rescue[h] * m_agg[h]["n_cycles"] for h in rescue if h in common)
+        r_c = sum(m_agg[h]["n_cycles"] for h in rescue if h in common)
+
+        result[mode] = {
+            "avg":          mc_w / mc_c if mc_c else 0.0,
+            "n_avg_common": nc_w / nc_c if nc_c else 0.0,
+            "n_days":       max(m_agg[h]["n_days"] for h in common),
+            "n_cycles":     mc_c,
+            "avg_rescue":   r_w / r_c if r_c else 0.0,
+            "common_hours": len(common),
+        }
+
+    return result
+
+
 # ── PDF Bericht — Cursor-Layout (inch-basiert, kein hardcoded y) ──────────────
 
 _R_BG     = "#ffffff"
@@ -1124,7 +1199,7 @@ def _hourly_analysis(stats_dir: Path, band: str, protocol: str) -> list[dict]:
     return result
 
 
-def _r_title_page(pdf: PdfPages, summary: dict, time_range: str,
+def _r_title_page(pdf: PdfPages, summary: dict, fair_summary: dict, time_range: str,
                   gen_date: str, T: dict) -> None:
     from matplotlib.patches import Rectangle
     fig = _rfig()
@@ -1140,11 +1215,14 @@ def _r_title_page(pdf: PdfPages, summary: dict, time_range: str,
              transform=fig.transFigure, zorder=6)
 
     total_cyc = sum(s.get("n_cycles", 0) for s in summary.values())
-    n_avg = summary.get("Normal",           {}).get("avg", 0.0)
-    s_avg = summary.get("Diversity_Normal", {}).get("avg", 0.0)
-    d_avg = summary.get("Diversity_Dx",     {}).get("avg", 0.0)
-    s_rsc = summary.get("Diversity_Normal", {}).get("avg_rescue", 0.0)
-    d_rsc = summary.get("Diversity_Dx",     {}).get("avg_rescue", 0.0)
+    s_fair = fair_summary.get("Diversity_Normal", {})
+    d_fair = fair_summary.get("Diversity_Dx",     {})
+    s_avg  = s_fair.get("avg", 0.0)
+    d_avg  = d_fair.get("avg", 0.0)
+    s_rsc  = s_fair.get("avg_rescue", 0.0)
+    d_rsc  = d_fair.get("avg_rescue", 0.0)
+    s_nref = s_fair.get("n_avg_common", 0.0)
+    d_nref = d_fair.get("n_avg_common", 0.0)
     def pct(a, b): return f"{(a / b - 1) * 100:+.0f}%" if b > 0 else "n/a"
 
     y = TH + 0.22
@@ -1155,9 +1233,9 @@ def _r_title_page(pdf: PdfPages, summary: dict, time_range: str,
 
     y = _csection(fig, y, T["p1_summary_title"],
                   T["p1_summary_body"].format(
-                      s_gain=pct(s_avg, n_avg),
-                      s_gain_r=pct(s_avg + s_rsc, n_avg),
-                      d_gain=pct(d_avg, n_avg),
+                      s_gain=pct(s_avg, s_nref),
+                      s_gain_r=pct(s_avg + s_rsc, s_nref),
+                      d_gain=pct(d_avg, d_nref),
                   ),
                   t_fs=13, b_fs=11, gap=0.20)
 
@@ -1206,8 +1284,7 @@ def _r_methodik_page(pdf: PdfPages, summary: dict, time_range: str,
     plt.close(fig)
 
 
-def _r_ergebnisse_page(pdf: PdfPages, summary: dict, gen_date: str, T: dict) -> None:
-    n_avg = summary.get("Normal", {}).get("avg", 0.0)
+def _r_ergebnisse_page(pdf: PdfPages, fair_summary: dict, gen_date: str, T: dict) -> None:
     mode_labels = T["mode_labels"]
     col_labels = T["p3_col_labels"]
     mode_meta = {
@@ -1217,19 +1294,21 @@ def _r_ergebnisse_page(pdf: PdfPages, summary: dict, gen_date: str, T: dict) -> 
     }
     rows, row_face, row_text = [], [], []
     for mode in RX_MODES:
-        if mode not in summary:
+        if mode not in fair_summary:
             continue
-        s = summary[mode]
+        s = fair_summary[mode]
         avg = s["avg"]
         lbl, face, tcol = mode_meta[mode]
-        if mode == "Normal" or n_avg <= 0:
+        n_ref = s.get("n_avg_common", 0.0)  # Normal restricted to same hours
+        if mode == "Normal" or n_ref <= 0:
             vs, vsr, r = "—", "—", "—"
         else:
             rsc = s.get("avg_rescue", 0.0)
-            vs  = f"+{(avg / n_avg - 1) * 100:.0f}%"
-            vsr = f"+{((avg + rsc) / n_avg - 1) * 100:.0f}%"
-            r   = f"+{(rsc / n_avg) * 100:.0f}%"
-        rows.append([lbl, f"{avg:.1f}", vs, vsr, r, str(s["n_days"]), str(s["n_cycles"])])
+            vs  = f"+{(avg / n_ref - 1) * 100:.0f}%"
+            vsr = f"+{((avg + rsc) / n_ref - 1) * 100:.0f}%"
+            r   = f"+{(rsc / n_ref) * 100:.0f}%"
+        common_h = f"{s.get('common_hours', '—')}h"
+        rows.append([lbl, f"{avg:.1f}", vs, vsr, r, common_h, str(s["n_cycles"])])
         row_face.append(face)
         row_text.append(tcol)
 
@@ -1292,15 +1371,18 @@ def _r_diagramm_page(pdf: PdfPages, png_path: Path, title: str,
     plt.close(fig)
 
 
-def _r_rescue_page(pdf: PdfPages, summary: dict, gen_date: str, T: dict) -> None:
+def _r_rescue_page(pdf: PdfPages, fair_summary: dict, gen_date: str, T: dict) -> None:
     fig = _rfig()
     _r_header(fig, T["p6_header_title"], T["p6_header_subtitle"])
 
-    n_avg = summary.get("Normal",           {}).get("avg", 0.0)
-    s_avg = summary.get("Diversity_Normal", {}).get("avg", 0.0)
-    d_avg = summary.get("Diversity_Dx",     {}).get("avg", 0.0)
-    s_rsc = summary.get("Diversity_Normal", {}).get("avg_rescue", 0.0)
-    d_rsc = summary.get("Diversity_Dx",     {}).get("avg_rescue", 0.0)
+    s_fair = fair_summary.get("Diversity_Normal", {})
+    d_fair = fair_summary.get("Diversity_Dx",     {})
+    s_avg  = s_fair.get("avg", 0.0)
+    d_avg  = d_fair.get("avg", 0.0)
+    s_rsc  = s_fair.get("avg_rescue", 0.0)
+    d_rsc  = d_fair.get("avg_rescue", 0.0)
+    s_nref = s_fair.get("n_avg_common", 0.0)
+    d_nref = d_fair.get("n_avg_common", 0.0)
     def pct(a, b): return f"{(a / b - 1) * 100:+.0f}%" if b > 0 else "n/a"
 
     y = _CTOP
@@ -1310,8 +1392,8 @@ def _r_rescue_page(pdf: PdfPages, summary: dict, gen_date: str, T: dict) -> None
 
     y = _csection(fig, y, T["p6_pro_title"],
                   T["p6_pro_body"].format(
-                      s_gain_r=pct(s_avg + s_rsc, n_avg),
-                      d_gain_r=pct(d_avg + d_rsc, n_avg),
+                      s_gain_r=pct(s_avg + s_rsc, s_nref),
+                      d_gain_r=pct(d_avg + d_rsc, d_nref),
                   ),
                   t_fs=13, b_fs=11, t_color=_R_GREEN, gap=0.25)
 
@@ -1326,22 +1408,24 @@ def _r_rescue_page(pdf: PdfPages, summary: dict, gen_date: str, T: dict) -> None
     plt.close(fig)
 
 
-def _r_fazit_page(pdf: PdfPages, summary: dict, hourly: list[dict],
+def _r_fazit_page(pdf: PdfPages, fair_summary: dict, hourly: list[dict],
                   gen_date: str, T: dict) -> None:
     fig = _rfig()
     _r_header(fig, T["p7_header_title"], T["p7_header_subtitle"])
 
-    n_avg = summary.get("Normal",           {}).get("avg", 0.0)
-    s_avg = summary.get("Diversity_Normal", {}).get("avg", 0.0)
-    d_avg = summary.get("Diversity_Dx",     {}).get("avg", 0.0)
-    s_rsc = summary.get("Diversity_Normal", {}).get("avg_rescue", 0.0)
-    d_rsc = summary.get("Diversity_Dx",     {}).get("avg_rescue", 0.0)
+    s_fair = fair_summary.get("Diversity_Normal", {})
+    d_fair = fair_summary.get("Diversity_Dx",     {})
+    s_avg  = s_fair.get("avg", 0.0)
+    d_avg  = d_fair.get("avg", 0.0)
+    s_rsc  = s_fair.get("avg_rescue", 0.0)
+    s_nref = s_fair.get("n_avg_common", 0.0)
+    d_nref = d_fair.get("n_avg_common", 0.0)
     best_s = max((r for r in hourly if r["s_gain"] is not None),
                  key=lambda r: r["s_gain"], default=None)
 
-    gain_lo = (s_avg / n_avg - 1) * 100 if n_avg > 0 else 0.0
-    gain_hi = ((s_avg + s_rsc) / n_avg - 1) * 100 if n_avg > 0 else 0.0
-    d_gain  = (d_avg / n_avg - 1) * 100 if n_avg > 0 else 0.0
+    gain_lo = (s_avg / s_nref - 1) * 100 if s_nref > 0 else 0.0
+    gain_hi = ((s_avg + s_rsc) / s_nref - 1) * 100 if s_nref > 0 else 0.0
+    d_gain  = (d_avg / d_nref - 1) * 100 if d_nref > 0 else 0.0
 
     fazit = T["p7_fazit_body"].format(gain_lo=gain_lo, gain_hi=gain_hi, d_gain=d_gain)
     if best_s:
@@ -1379,35 +1463,36 @@ def create_pdf_report(combos: set[tuple[str, str]], output_dir: Path,
         return
 
     band, protocol = target[0]
-    summary    = _combo_summary(STATS_DIR, band, protocol)
-    hourly     = _hourly_analysis(STATS_DIR, band, protocol)
-    normal_dir = STATS_DIR / "Normal" / band / protocol
-    time_range = _extract_time_range(
+    summary      = _combo_summary(STATS_DIR, band, protocol)
+    fair_summary = _combo_summary_fair(STATS_DIR, band, protocol)
+    hourly       = _hourly_analysis(STATS_DIR, band, protocol)
+    normal_dir   = STATS_DIR / "Normal" / band / protocol
+    time_range   = _extract_time_range(
         normal_dir if normal_dir.exists() else STATS_DIR, T
     )
-    gen_date   = datetime.now().strftime("%Y-%m-%d %H:%M")
-    pdf_path   = output_dir / T["pdf_name"]
+    gen_date     = datetime.now().strftime("%Y-%m-%d %H:%M")
+    pdf_path     = output_dir / T["pdf_name"]
 
     with PdfPages(str(pdf_path)) as pdf:
-        _r_title_page(pdf, summary, time_range, gen_date, T)           # p.1
-        _r_methodik_page(pdf, summary, time_range, gen_date, T)        # p.2
-        _r_ergebnisse_page(pdf, summary, gen_date, T)                  # p.3
-        _r_diagramm_page(                                               # p.4
+        _r_title_page(pdf, summary, fair_summary, time_range, gen_date, T)  # p.1
+        _r_methodik_page(pdf, summary, time_range, gen_date, T)              # p.2 (global counts)
+        _r_ergebnisse_page(pdf, fair_summary, gen_date, T)                   # p.3 (fair)
+        _r_diagramm_page(                                                     # p.4
             pdf, output_dir / f"stationen_{band}_{protocol}.png",
             T["p4_title"],
             T["p4_subtitle"].format(band=band, protocol=protocol),
             T["p4_annotation"],
             gen_date, T, T["page"].format(n=4),
         )
-        _r_diagramm_page(                                               # p.5
+        _r_diagramm_page(                                                     # p.5
             pdf, output_dir / f"diversity_{band}_{protocol}.png",
             T["p5_title"],
             T["p5_subtitle"].format(band=band, protocol=protocol),
             T["p5_annotation"],
             gen_date, T, T["page"].format(n=5),
         )
-        _r_rescue_page(pdf, summary, gen_date, T)                      # p.6
-        _r_fazit_page(pdf, summary, hourly, gen_date, T)               # p.7
+        _r_rescue_page(pdf, fair_summary, gen_date, T)                       # p.6 (fair)
+        _r_fazit_page(pdf, fair_summary, hourly, gen_date, T)                # p.7 (fair)
 
         d = pdf.infodict()
         d["Title"]   = f"SimpleFT8 Diversity — {band} {protocol}"
