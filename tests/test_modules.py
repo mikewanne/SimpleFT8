@@ -1505,6 +1505,26 @@ def test_score_penalizes_close_neighbors():
     assert 1300 <= freq <= 1900, f"Erwartet breitere Lueck B, bekam {freq}"
 
 
+def test_set_mode_changes_dwell():
+    """set_mode('FT4') setzt _min_dwell_s = 8 Zyklen × 7.5s = 60s."""
+    from core.diversity import DiversityController
+    dc = DiversityController()
+    dc.set_mode("FT4")
+    assert dc._min_dwell_s == 60.0, f"FT4 Min-Dwell: {dc._min_dwell_s} != 60.0"
+    dc.set_mode("FT2")
+    assert abs(dc._min_dwell_s - 60.8) < 0.01, f"FT2 Min-Dwell: {dc._min_dwell_s} != 60.8"
+
+
+def test_set_mode_changes_recalc():
+    """set_mode('FT8') setzt _recalc_interval_s = 5 × 60s = 300s."""
+    from core.diversity import DiversityController
+    dc = DiversityController()
+    dc.set_mode("FT8")
+    assert dc._recalc_interval_s == 300.0, f"FT8 Recalc: {dc._recalc_interval_s} != 300.0"
+    dc.set_mode("FT4")
+    assert dc._recalc_interval_s == 300.0, f"FT4 Recalc: {dc._recalc_interval_s} != 300.0"
+
+
 def test_score_tiebreaker_uses_median():
     """Score: zwei gleich breite Luecken → Median-Distance entscheidet."""
     from core.diversity import DiversityController

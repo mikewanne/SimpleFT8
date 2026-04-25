@@ -113,6 +113,8 @@ class RadioMixin:
         mode = self.settings.get("mode", "FT8")
         from core import ntp_time as _ntp
         _ntp.set_mode(mode, band)
+        # CQ-Freq Dwell/Recalc-Intervall fuer aktuellen Modus
+        self._diversity_ctrl.set_mode(mode)
         self.decoder.start()
         self.radio.create_tx_stream()
         # Meter an GUI koppeln
@@ -193,6 +195,8 @@ class RadioMixin:
     def _on_mode_changed(self, mode: str):
         self.settings.set("mode", mode)
         self.timer.set_mode(mode)
+        # CQ-Freq Dwell/Recalc-Intervall an neuen Modus anpassen
+        self._diversity_ctrl.set_mode(mode)
         # Decoder + Encoder auf neues Protokoll umschalten
         self.decoder.set_protocol(mode)
         self.encoder.set_protocol(mode)

@@ -38,6 +38,7 @@ class DiversityController:
     def __init__(self, scoring_mode: str = "normal"):
         self._scoring_mode = scoring_mode  # "normal" oder "dx"
         self.reset()
+        self.set_mode("FT8")  # Default — von mw_radio.py spaeter ueberschrieben
 
     # CQ-Frequenzwahl: 50-Hz-Histogramm der belegten Subfrequenzen
     FREQ_BIN_HZ = 50        # Bin-Breite in Hz
@@ -108,6 +109,20 @@ class DiversityController:
             if freq and self.FREQ_MIN_HZ <= freq <= self.FREQ_MAX_HZ:
                 bin_idx = int(freq // self.FREQ_BIN_HZ)
                 self._freq_histogram[bin_idx] = self._freq_histogram.get(bin_idx, 0) + 1
+
+    def set_mode(self, mode: str) -> None:
+        """Modus setzen — beeinflusst Dwell-Time und Recalc-Intervall.
+
+        Mike-Spec: FT8=4 Zyklen, FT4=8 Zyklen, FT2=16 Zyklen Min-Dwell → ~60s
+        einheitlich. Recalc = 5x Min-Dwell → ~300s.
+        Aufruf bei jeder Modusaenderung in mw_radio.py + bei Initialisierung.
+        Aendert NICHT _current_gap_width_hz (Sticky bleibt stabil ueber Mode-Switch
+        — Frequenz-Landschaft ist gleich, nur Zykluszeit aendert sich)."""
+        cycle_s = {"FT8": 15.0, "FT4": 7.5, "FT2": 3.8}.get(mode, 15.0)
+        dwell_cycles = {"FT8": 4, "FT4": 8, "FT2": 16}.get(mode, 4)
+        self._mode = mode
+        self._min_dwell_s = cycle_s * dwell_cycles
+        self._recalc_interval_s = 5 * self._min_dwell_s
 
     def _score_gap(self, gap_start_bin: int, gap_len_bins: int, median_bin: int) -> float:
         """Score: hoeher = besser. Auswahl per max(score), Tiebreak per Distance zum Median.
@@ -196,23 +211,23 @@ class DiversityController:
 
     @property
     def seconds_until_recalc(self) -> int:
-        """Sekunden bis zum naechsten CQ-Freq-Zeit-Fallback (0-120)."""
+        """Sekunden bis zum naechsten CQ-Freq-Zeit-Fallback (modus-abhaengig)."""
         elapsed = time.time() - self._last_recalc_time
-        return max(0, int(self.RECALC_INTERVAL_S - elapsed))
+        return max(0, int(self._recalc_interval_s - elapsed))
 
     @property
     def seconds_until_next_check(self) -> int:
-        """Sekunden bis zum naechsten Kollisions-Check (0-15, Display-Countdown)."""
+        """Sekunden bis zum naechsten Kollisions-Check (modus-abhaengiger Display-Countdown)."""
         elapsed = time.time() - self._last_check_time
-        return max(0, int(self.MIN_DWELL_S - elapsed))
+        return max(0, int(self._min_dwell_s - elapsed))
 
     def update_proposed_freq(self, qso_active: bool = False):
         """Vorgeschlagene TX-Frequenz aktualisieren — adaptiv mit Kollisionserkennung.
 
-        Strategie "Stable unless compelled" (zeitbasiert, modus-unabhaengig):
+        Strategie "Stable unless compelled" (zeitbasiert, modus-abhaengig):
         1. QSO-Schutz: kein Wechsel waehrend aktivem QSO
-        2. Kollision: aktuelle Freq belegt → wechseln (nach MIN_DWELL_S=15s)
-        3. Zeit-Fallback: alle RECALC_INTERVAL_S=120s neu berechnen
+        2. Kollision: aktuelle Freq belegt → wechseln (nach _min_dwell_s)
+        3. Zeit-Fallback: alle _recalc_interval_s neu berechnen
         """
         now = time.time()
 
@@ -232,8 +247,8 @@ class DiversityController:
             return
 
         # Kollisionserkennung: ist unsere aktuelle Freq jetzt belegt?
-        # Erst pruefen nach MIN_DWELL_S (verhindert sofortigen Bounce-Back)
-        if now - self._last_change_time >= self.MIN_DWELL_S:
+        # Erst pruefen nach _min_dwell_s (verhindert sofortigen Bounce-Back)
+        if now - self._last_change_time >= self._min_dwell_s:
             self._last_check_time = now  # Display-Countdown reset (unabhaengig vom Ergebnis)
             current_bin = self._cq_freq_hz // self.FREQ_BIN_HZ
             neighbors = sum(self._freq_histogram.get(current_bin + d, 0)
@@ -249,18 +264,18 @@ class DiversityController:
                           f"{old_freq}Hz→{self._cq_freq_hz}Hz ({neighbors} Nachbarn)")
                 return
 
-        # Zeit-Fallback: alle 120s (unabhaengig vom Modus FT8/FT4/FT2)
-        if now - self._last_recalc_time >= self.RECALC_INTERVAL_S:
+        # Zeit-Fallback: alle _recalc_interval_s (modus-abhaengig)
+        if now - self._last_recalc_time >= self._recalc_interval_s:
             old_freq = self._cq_freq_hz
             self.get_free_cq_freq()
             self._last_recalc_time = now
             self._last_change_time = now
             self._recalc_count += 1
             if self._cq_freq_hz != old_freq:
-                print(f"[CQ-Freq] #{self._recalc_count} Timer 120s: "
+                print(f"[CQ-Freq] #{self._recalc_count} Timer {int(self._recalc_interval_s)}s: "
                       f"{old_freq}Hz→{self._cq_freq_hz}Hz")
             else:
-                print(f"[CQ-Freq] #{self._recalc_count} Timer 120s: "
+                print(f"[CQ-Freq] #{self._recalc_count} Timer {int(self._recalc_interval_s)}s: "
                       f"{self._cq_freq_hz}Hz bestaetigt")
 
     def get_histogram_data(self) -> dict:
