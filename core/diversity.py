@@ -45,7 +45,7 @@ class DiversityController:
     FREQ_MIN_HZ = 150        # Absolute Untergrenze (Hardware-Sicherheit)
     FREQ_MAX_HZ = 2800       # Absolute Obergrenze (Hardware-Sicherheit)
     FREQ_MIN_GAP_HZ = 150    # Mindestbreite einer freien Lücke
-    SEARCH_MARGIN_BINS = 2   # +/- 2 Bins (100 Hz) Margin um den belegten Bereich
+    SEARCH_MARGIN_BINS = 0   # KEINE Erweiterung — Suchbereich exakt min..max der Stationen
 
     @property
     def scoring_mode(self) -> str:
