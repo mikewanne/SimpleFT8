@@ -3,7 +3,7 @@ Lies nach dieser Datei sofort auch HANDOFF.md und bestätige beide mit je einer 
 # SimpleFT8 — Claude Kontext
 
 **Start:** `cd "/Users/mikehammerer/Documents/KI N8N Projekte/FT8/SimpleFT8" && ./venv/bin/python3 main.py`
-**Tests:** `./venv/bin/python3 -m pytest tests/ -q` → 197 passed
+**Tests:** `./venv/bin/python3 -m pytest tests/ -q` → 211 passed
 **Vor Commits:** Tests grün + bei nicht-trivialen Änderungen DeepSeek-Review (`pal codereview` model `deepseek-chat`) — bereits durch globale §0 + Projektregeln gefordert.
 
 ⚠️ **DeepSeek V4 (deepseek-chat) — Neues Modell, Verhalten noch unbestätigt (Stand 2026-04-25):**
@@ -195,19 +195,29 @@ Speicherung: ~/.simpleft8/dt_corrections.json → Key "FT8_20m" (pro Modus+Band)
 - Median über 4 Zyklen
 - Stats-Warmup: 60s nach Band/Modus-/App-Start
 
-### CQ-Frequenz-Algorithmus (v0.58, Score-basiert)
-- **Sweet-Spot fest:** `SWEET_SPOT_MIN_HZ=800`, `SWEET_SPOT_MAX_HZ=2000` — TX nur hier.
-- **Score:** `gap_width_hz - 50·n_close - 25·n_near - 0.01·median_distance_hz`
-  - Lückenbreite dominiert, Nachbarn ±1 Bin = 50 Hz Strafe pro Station, ±2 Bins halb so viel
-  - Median-Distance nur Tiebreaker (0.01) — Median wird nur über Sweet-Spot-Stationen berechnet
-- **Sticky Gap:** bleibt bei aktueller Frequenz wenn im Sweet-Spot, keine Kollisions-Schwelle
-  erreicht (`n_direct >= 2` ODER `n_in_band >= 3`) und neue Lücke nicht > +50 Hz breiter.
+### CQ-Frequenz-Algorithmus (v0.59, dynamisch + slot-synchron)
+- **Suchbereich DYNAMISCH:** `min(occupied_bins)..max(occupied_bins)` + `SEARCH_MARGIN_BINS=0`.
+  TX landet immer ZWISCHEN niedrigster und höchster Station (= dort wo zugehört wird).
+  Kein fester Sweet-Spot mehr (war v0.58-Sackgasse, in v0.59 verworfen).
+- **Graduelle Lücken-Toleranz:** stufenweise `(max_count_per_bin, min_gap_bins)`:
+  `(0,3)` → `(0,2)` → `(0,1)` → `(1,3)` → `(1,2)`. Bei vollem Band findet der Algo IMMER
+  noch eine Position (notfalls in schwach-belegtem Bereich), nie mehr None außer leerem Histogramm.
+- **Score:** `gap_width − 100·n_self − 50·n_close − 25·n_near − 0.01·median_distance`
+  - `n_self` (Stationen IM TX-Bin) = höchste Strafe (100 Hz/Station) — für Notfall-Stufen
+  - `n_close` (±1 Bin) = 50 Hz/Station, `n_near` (±2 Bin) = 25 Hz/Station
+  - Median-Distance nur Tiebreaker (0.01)
+- **Sticky Gap:** bleibt bei aktueller Frequenz wenn im dynamischen Suchbereich, keine Kollisions-
+  Schwelle erreicht (`n_direct >= 2` ODER `n_in_band >= 3`) und neue Lücke nicht > +50 Hz breiter.
   `_measure_gap_around()` refresht `_current_gap_width_hz` nach Sticky-Hit.
-- **Kollisionserkennung:** `n_direct >= 2` ODER `n_in_band >= 3` (inkl. `current_bin`).
-  Sticky-Schwelle MUSS gleich bleiben — sonst verpufft Kollision (HIGH-Bug aus DeepSeek-Review).
-- **Modus-abhängige Dwell:** `set_mode()` setzt FT8=4z, FT4=8z, FT2=16z = ~60 s Min-Dwell.
-  Recalc = 5 × Dwell = ~300 s. Aufruf in `mw_radio.py::_on_mode_changed` und `_on_radio_connected`.
-- **`reset()` muss `_current_gap_width_hz = 0` setzen** — sonst Bandwechsel-Bug (alte Breite hängt nach).
+- **Such-Trigger SLOT-SYNCHRON (v0.59 Punkt 3):** `_search_slots_remaining` Counter, modus-abhängig
+  initialisiert via `_SEARCH_INTERVAL_SLOTS = {FT8:4, FT4:8, FT2:16}` = ~60 s alle Modi.
+  `tick_slot()` dekrementiert pro Slot, bei 0 → Such-Trigger + auto-reset.
+  Anzeige `seconds_until_search` = `remaining_slots × cycle_s`. Wert friert bei App-Pause ein (gut).
+- **Pro-Slot-Aufruf:** `mw_cycle._refresh_diversity_freq_view()` läuft JEDEN Slot in
+  `_on_cycle_decoded`, UNABHÄNGIG vom messages-Inhalt. Hinter `if messages:` Guard darf NIE
+  was hin was UI/Such-Logik betrifft (P1-Bug aus v0.54-v0.58, fixed in v0.59).
+- **`reset()` muss `_current_gap_width_hz = 0` und `_search_slots_remaining` setzen** —
+  sonst Bandwechsel-Bug.
 
 ---
 
@@ -312,11 +322,13 @@ Beispiel Normal: 6.744 Zyklen × ~18.5 Sta./Zyklus
 
 ## Offene TODOs (nach Schwierigkeit)
 
-**v0.58 — UMGESETZT (CQ-Frequenz-Algorithmus):**
-- 5 Sub-Tasks (Score, Sweet-Spot 800-2000, modus-abh. Dwell, Kollision, Sticky+reset()) implementiert
-- 14 neue Tests (197 → 211 grün)
-- 4 atomare Commits + 1 DeepSeek-Review-Fix-Commit (Sticky/Kollision Logik-Konflikt + Threading)
-- Stats-Modus-Sperre VERWORFEN (Mike-Entscheidung 25.04.: Variance kein Bias)
+**v0.59 — UMGESETZT (CQ-Freq Praxis-Tuning):**
+- Punkt 1: Suchbereich dynamisch min..max der Stationen (kein fester Sweet-Spot mehr)
+- Punkt 1b: graduelle Lücken-Toleranz (5 Stufen) — niemals mehr None außer leerem Histogramm
+- Punkt 1c: SEARCH_MARGIN_BINS=0 — TX exakt zwischen niedrigster und höchster Station
+- Punkt 3: Slot-Counter (`tick_slot()`) statt elapsed-time-Logik. Histogramm-Refresh jeden Slot
+  (P1-Guard implizit gefixt, 40 Zeilen Code raus)
+- 4 atomare Commits, 211 Tests grün
 
 **EINFACH:**
 1. **Even/Odd dedizierter Timer** — unabhängig vom Decoder-Thread (FT2 kritischsten)
@@ -354,3 +366,6 @@ Beispiel Normal: 6.744 Zyklen × ~18.5 Sta./Zyklus
 - **dt_corrections.json Key-Format** — "FT8_20m" (Modus_Band), Migration von "FT8" automatisch
 - **_was_cq Bug (gefixt)** — `_on_station_clicked` rief `stop_cq()` VOR `start_qso()` → `_was_cq=False` → CQ resumte nicht nach manuellem QSO; Fix: `_cq_was_active` vor stop_cq() sichern, nach start_qso() als `_was_cq=True` setzen
 - **Stats Guard (3-fach)** — `btn_cq.isChecked()` + `cq_mode` + `state not in IDLE/TIMEOUT` → robuster gegen desynchronisierte States
+- **Histogramm-/Freq-View Update muss IMMER pro Slot laufen** (v0.59 Punkt 3 / P1-Bug-Fix). Niemals einen `if messages:` Guard um `_refresh_diversity_freq_view()` legen — sonst Counter-Drift, hängende Anzeige, TX-Position veraltet
+- **CQ-Such-Periode = 60 s konstant** alle Modi (DeepSeek + WSJT-X-Praxis: < 30 s killt QSO-Aufbau weil antwortende Station auf alter TX-Frequenz fixiert ist)
+- **`SWEET_SPOT_MIN_HZ`/`MAX_HZ` Klassenkonstanten gibt's NICHT mehr** (v0.58-Sackgasse, v0.59 entfernt). Falls in altem Code Verweis auftaucht: Suchbereich ist dynamisch, nicht fest

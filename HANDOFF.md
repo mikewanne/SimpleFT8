@@ -1,110 +1,116 @@
-# HANDOFF — SimpleFT8 — 2026-04-25 (Session 3)
+# HANDOFF — SimpleFT8 — 2026-04-25 (Session 4, Abend)
 
 ## Heute erledigt
 
-### Statistik-Methodik korrigiert (Pooled Mean global, kein Stunden-Filter)
-- `scripts/generate_plots.py`: `_combo_summary_fair()` zu schlankem Wrapper um
-  `_combo_summary()` umgebaut — keine (date,hour)-Schnittmenge mehr. Grund: 1 Radio
-  = nie 2 Modi gleichzeitig am selben Tag. Die 18-21 gemeinsamen Slots waren ein
-  nicht repräsentativer Bias (+35% war falsch).
-- Spalte „Gem. Stunden" → „Mess-tage" (zeigt `n_days`).
-- README.md (DE+EN): Zahlen korrigiert auf **+88%/+122% Standard**, **+124%/+158% DX**,
-  Total **22.696 Zyklen** (4 Messtage).
-- 2 Commits gepusht: `0ac6788`, `3d292bf`.
+### v0.59 — CQ-Frequenz-Algorithmus Praxis-Tuning (3 Punkte + Bug-Fix)
 
-### PDF-Erklärung funkerverständlich (kein Jargon)
-- Spaltenheader: `Ø Stat./Zyklus` → `Ø Sta./15s-Zyklus` (Dauer explizit).
-- `p3_header_subtitle`: „Pooled Mean über alle Messtage" → „Tagesdurchschnitt über
-  4 Messtage, alle Tageszeiten".
-- `p3_note1`: plain language — „So viele Stationen pro 15s-Zyklus im Schnitt,
-  gemittelt über alle Messpunkte aus 4 Messtagen und allen Tageszeiten — echter
-  Tagesdurchschnitt".
-- `p1_summary_body` (DE+EN): „Pooled Mean" → „Durchschnitt über alle Messpunkte".
-- Commit `208e26f` gepusht.
+Nach v0.58-Feldtest am Radio (DA1MHH, 20 m FT8 Diversity DX) hatte Mike drei
+funkpraktische Probleme gefunden. Komplett überarbeitet, Punkt für Punkt
+validiert:
 
-### Berechnungsmethodik in CLAUDE.md dokumentiert
-- Neuer Abschnitt „Berechnungsmethodik (Tagesdurchschnitt)" erklärt exakt wie
-  `Ø Sta./15s-Zyklus` berechnet wird (Summe ÷ Anzahl Zyklen, alle Tage × alle
-  Stunden), mit Negativ-Beispiel („nicht Stationen/Stunde").
-- Commit `e2f97fc` gepusht.
+**Punkt 1 — Suchbereich dynamisch (`334a246`):**
+- `SWEET_SPOT_MIN_HZ` / `SWEET_SPOT_MAX_HZ` Klassenkonstanten entfernt
+- Suchbereich pro Cycle = `min(occupied_bins)..max(occupied_bins)` + Margin
+- Median über alle Stationen, Sticky-Check folgt dynamischem Bereich
+- v0.58-Idee "fester Sweet-Spot 800-2000 Hz" funkpraktisch verworfen — TX
+  landete am leeren Rand statt bei der Aktivität
 
-### v0.57 Implementation: Answer-Me Highlighting + Gain-Messung Logging
-- `ui/rx_panel.py`: Farbe `_COLOR_ANSWER_ME_BG` `#2A1F00` → `#5A4A10` (Gold,
-  klar gegen Active-Call `#2A1500` abhebbar). Bold-Logik in `_apply_active_highlight`
-  (L268) erweitert: `setBold(is_active or is_answer_me)`. Bold beim direkten Einfügen
-  in `_populate_row` (L419-426).
-- `ui/mw_radio.py`: Neue Methode `_log_gain_result(r, band, ft_mode)` schreibt
-  Append-Only-Eintrag nach `~/.simpleft8/gain_log.md` mit UTC + Band/Mode +
-  Diversity/Standard-Scoring + ANT1/ANT2 Gains + Ø SNRs. Aufruf in
-  `_on_dx_tune_accepted` direkt nach `_set_gain_measure_lock(False)` und VOR dem
-  `if rx_mode == "normal"` early-return → beide Modi loggen. `from pathlib import Path`
-  zu Top-Level Imports.
-- `main.py`: APP_VERSION 0.56 → 0.57.
-- DeepSeek-Review (deepseek-chat, thinking high): 0 Issues.
-- 3 Commits gepusht: `81e731e`, `5ab484e`, `3872b60`.
+**Punkt 1b — Graduelle Lücken-Toleranz (`c4fa032`):**
+- Bei 70+ Stationen gab's keine Lücke ≥150 Hz mehr → `None` → kein Wechsel
+  → TX hängte auf voller Position fest
+- Stufen `(max_count_per_bin, min_gap_bins)`: `(0,3)`→`(0,2)`→`(0,1)`→
+  `(1,3)`→`(1,2)`. Findet IMMER Position außer leerem Histogramm
+- Score-Funktion erweitert: `n_self` (Stationen IM TX-Bin) = 100 Hz Strafe
+  pro Station — verhindert dass TX in Notfall-Stufe auf Station landet
 
-### Prompt v0.58 für nächste Session erstellt
-Datei: `~/Desktop/cq_freq_prompt_v0.58.md` (auch unter `/tmp/cq_freq_prompt_FINAL.md`).
-- Score-basierte Lückenauswahl (Gewichte 50/25/0.01)
-- Fester Sweet-Spot 800-2000Hz
-- Modus-abhängige Dwell-Time (FT8=4z, FT4=8z, FT2=16z = ~60s einheitlich)
-- Verfeinerte Kollisionserkennung (≥2 in ±1 ODER ≥3 in ±2)
-- Sticky Gap (50Hz-Schwelle)
-- Stats-Modus-Sperre **bewusst NICHT** in Scope (Mike: Variance kein Bias)
-- DeepSeek-Review (deepseek-chat, thinking high) durchlaufen — `reset()`-Bug erkannt
-  und in v4 eingebaut (`_current_gap_width_hz` muss in `reset()` zurückgesetzt werden).
+**Punkt 1c — `SEARCH_MARGIN_BINS = 0` (`419ab52`):**
+- v0.59 v2 hatte Margin = 2 Bins → TX landete 100 Hz außerhalb der letzten Station
+- Mike-Anforderung: TX strikt zwischen niedrigster und höchster Station
+- Margin auf 0 = exakt min..max
 
----
+**Punkt 3 — Slot-Counter + Histogramm-Refresh jeden Slot (`af9dfb8`):**
+- Mike's Idee 1:1: einfacher Loop `x = 60: tick: x-1: if x=0 then suche: reset`
+- DeepSeek bestätigte: Slot-Counter > Wallclock-Timer (kein Drift, friert
+  bei App-Pause korrekt ein)
+- `_SEARCH_INTERVAL_SLOTS = {FT8:4, FT4:8, FT2:16}` = ~60 s alle Modi
+- `tick_slot()` + `seconds_until_search` property
+- `update_proposed_freq()` 40 Zeilen kürzer (elapsed-time-Logik weg)
+- `_min_dwell_s` / `_recalc_interval_s` / `_last_check_time` etc. entfernt
+- `mw_cycle._refresh_diversity_freq_view()` läuft JEDEN Slot in
+  `_on_cycle_decoded` UNABHÄNGIG vom messages-Inhalt → fixt P1 (Histogramm-
+  Update Guard) implizit. Ein Bug der seit v0.54 drin war.
+- ProgressBar Range 0-15 → 0-60, Farbschwellen 5/10 → 15/30
+
+### Statistiken aktualisiert
+- `scripts/generate_plots.py` ausgeführt → DE + EN PDFs neu generiert
+- 40m + 20m + diverse Modi
+- Datenstand 25.04.2026: 22.696 Zyklen, Diversity Standard +88%, DX +124%
+
+### DeepSeek-Konsultationen (alle deepseek-chat, thinking medium-high)
+1. CQ-Frequenz-Auswahl-Algorithmus-Konzept (vor Punkt 1 Recherche)
+2. CQ-Frequenz-Wechselrate Funkpraxis (vor Punkt 3 Entscheidung 60s vs Slot)
+3. Slot-Counter vs Wallclock Sanity-Check (vor Punkt 3 Implementation)
+Alle drei lieferten praxistaugliche Empfehlungen, jede am Code verifiziert
+(DeepSeek V4 ist neu — keine blinde Übernahme).
+
+### Internet-Recherche
+- FT8/FT4/FT2 Splatter, Bandbreite, Operating-Praxis recherchiert
+- Konsens: 30-60 s Min-Dwell ist Standard, < 30 s killt QSO-Aufbau
+- WSJT-X stock hat keinerlei automatisches Frequency-Hopping
+- Bestätigt Mike's Praxiserfahrung am Radio
 
 ## Offen / Nächste Schritte
 
-### v0.58 — BEREIT ZUR UMSETZUNG (in neuer Session)
-Prompt: `~/Desktop/cq_freq_prompt_v0.58.md`
-- 5 atomare Sub-Tasks (Score, Sweet-Spot, Mode-Dwell, Kollision, Sticky)
-- 14 neue Tests (197 → ≥214)
-- 4 atomare Commits geplant
+### Punkt 2 (Score-Tuning für TX-Position) — NICHT umgesetzt
+Mike's Beobachtung mit v0.58: TX landete bei 1675 Hz am Rand der breitesten
+Lücke statt zentral. Das war v0.58-Score "by design" (Lückenbreite dominiert).
+In v0.59 ist das durch Punkt 1+1b+1c teilweise gelöst (kein Rand mehr durch
+dynamischen Bereich), aber die zentralere Position innerhalb einer Lücke
+ist noch offen. Aktuell: Mitte der besten Lücke. Praxis zeigt ob das reicht.
 
-### Offene TODOs (priorisiert nach Mike's Bewertung)
-1. **v0.58 Prompt** — sofort umsetzbar (siehe oben)
-2. **Even/Odd Timer** — eigener dedizierter Timer unabhängig vom Decoder-Thread
-   (FT2 am kritischsten)
-3. **Gain-Bias beheben** — Stats-Modus erzwingt Gain-Messung für alle Modi (EINFACH)
-4. **CQ-Zusammenfassung RX-Liste** überarbeiten (DeepSeek-Idee)
-5. **Tertile-Analyse** für Statistik (kein Datencropping)
-6. **AP-Lite Test-Pipeline** vor jedem Code-Fix (PRIO NIEDRIG)
-7. **IC-7300 Fork** (LANGFRISTIG)
+### Beobachtungen am Radio (v0.59 v4 nach Neustart)
+- TX-Suche funktioniert "top, astrein" (Mike-Zitat)
+- 60 s Countdown läuft ehrlich slot-synchron
+- Histogramm refresht jeden Slot
+- Anzeige geht 60→0, dann Suche, dann reset
+- Kein Hängen mehr auf voller Position
 
-### Statistik Nächste Schritte
-- Nachtmessungen auf 40m → Diagrammlinie stabiler
-- 20m Daten sammeln (mind. 2 Tage Normal + 2 Tage Diversity_Std + 2 Tage Diversity_DX)
-  VOR Veröffentlichung auf GitHub: CLAUDE.md-Regel beachten!
-
----
+### Nicht-CQ-Freq-bezogene offene Punkte (aus älterem TODO)
+1. **Even/Odd dedizierter Timer** — unabhängig vom Decoder-Thread (FT2 kritisch)
+2. **Gain-Bias beheben** — Normal-Modus Gain-Messung wenn Stats aktiv erzwingen
+3. **CQ-Zusammenfassung RX-Liste** — DeepSeek-Idee: ins QSO-Panel verschieben
+4. **Tertile-Analyse Statistik** — kein Datencropping, alle Werte in 3 Drittel
+5. **AP-Lite Test-Pipeline** — synthetische E2E-Tests vor jedem Code-Fix
+6. **IC-7300 Fork** — TARGET_TX_OFFSET dort separat messen
+7. **Warteliste-Screenshot** — sobald DL3AQJ antwortet
 
 ## Warnungen & Fallen
 
-- **DeepSeek V4** — neues Modell (deepseek-chat), Verhalten unbestätigt. Antworten
-  immer am tatsächlichen Code verifizieren — KI kann plausibel klingende aber
-  falsche Zeilen-Angaben machen.
-- **AP-Lite** — `AP_LITE_ENABLED = True` aber ungetestet. Nicht anfassen ohne
-  Test-Pipeline.
-- **OMNI-TX** — deaktiviert (Easter Egg: Klick auf Versionsnummer). NICHT auf
-  GitHub wie aktiviert.
+- **DeepSeek V4** — neues Modell, jede Antwort am Code verifizieren
+- **`SWEET_SPOT_MIN_HZ`/`MAX_HZ` gibt's nicht mehr** — falls in altem Code/Test
+  Verweis auftaucht: war v0.58-Sackgasse, v0.59 entfernt
+- **Histogramm-Refresh muss IMMER pro Slot laufen** — niemals einen
+  `if messages:` Guard um `_refresh_diversity_freq_view()` legen, sonst
+  P1-Bug zurück (hängende Anzeige, Counter-Drift)
+- **CQ-Such-Periode = 60 s konstant alle Modi** — < 30 s killt QSO-Aufbau
+  weil antwortende Stationen auf alter TX-Frequenz fixiert sind
+- **`_search_slots_remaining` muss in `set_mode()` UND `reset()` gesetzt** —
+  Bandwechsel/Modus-Wechsel braucht harten Reset
+- **AP-Lite** — `AP_LITE_ENABLED = True` aber ungetestet, nicht anfassen
+- **OMNI-TX** — deaktiviert (Easter Egg: Klick auf Versionsnummer)
+- **TARGET_TX_OFFSET = -0.8** — FlexRadio-spezifisch, IC-7300 braucht eigenen Wert
 - **cache.save() nie im Cycle-Loop** — refresht Timestamp → 2h Gültigkeit sinnlos
-- **TARGET_TX_OFFSET = -0.8** — FlexRadio-spezifisch! IC-7300 Fork braucht eigenen
-  Wert
-- **Statistik-Veröffentlichung** — Andere Bänder NUR pushen wenn: Normal +
-  Div_Std + Div_DX je ≥2 Tage, ganzer Tag (06-22 UTC). Regel steht in CLAUDE.md.
-- **Tagesdurchschnitt-Methodik** — Pooled Mean über ALLE Zyklen aller Messtage und
-  Tageszeiten (kein Stunden-Filter). Berechnung dokumentiert in CLAUDE.md.
-
----
 
 ## Test-Suite Status
-`./venv/bin/python3 -m pytest tests/ -q` → **197 passed** ✅
+`./venv/bin/python3 -m pytest tests/ -q` → **211 passed** ✓
 
 ## Letzter bekannter guter Zustand
-Git-Branch `main`, alle Commits gepusht (origin/main = lokal, kein Lag). App startet,
-v0.57 läuft (Answer-Me Highlighting Gold + Bold, Gain-Log nach
-`~/.simpleft8/gain_log.md`), Statistiken laufen, PDFs (DE+EN) aktuell mit 25.04-Daten
-(22.696 Zyklen, +88%/+124%).
+- Branch `main`, alle Commits lokal (kein Push ohne Mike-Freigabe)
+- App v0.59 läuft, 20 m FT8 Diversity DX getestet
+- TX-Suche funktioniert glatt slot-synchron
+- Statistik-PDFs (DE + EN) aktuell mit 25.04-Daten
+
+## Nicht gepusht (lokal seit `66f44c8` Feierabend Session 3)
+- v0.58: 5 Commits (`b7a06b5`, `b15c62a`, `255b0f9`, `06afbd8`, `392eb17`)
+- v0.59: 4 Commits (`334a246`, `c4fa032`, `419ab52`, `af9dfb8`)
+- Total 9 Commits ungepusht — warten auf Mike-Freigabe

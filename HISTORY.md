@@ -5,47 +5,74 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
-## 2026-04-25 v0.59 — CQ-Freq Suchbereich wieder DYNAMISCH (min..max der Stationen)
+## 2026-04-25 v0.59 — CQ-Freq Praxis-Tuning (3 Punkte + 1 Bug-Fix)
 
-**Betroffene Dateien:** `core/diversity.py`, `tests/test_modules.py`, `main.py`
+**Betroffene Dateien:** `core/diversity.py`, `ui/mw_cycle.py`, `ui/main_window.py`, `ui/control_panel.py`, `tests/test_modules.py`, `main.py`
 
-### Problem (Mike-Beobachtung am Radio, v0.58 nach Neustart)
-v0.58 nutzte festen Sweet-Spot 800-2000 Hz als Suchbereich. Praxis-Folge:
-bei Aktivität nur in 1000-1500 Hz wählte der Score-Algo TX am oberen Rand
-(z.B. 1675 Hz) wo niemand mehr zuhörte. Die Idee "fester Sweet-Spot wo
-Stationen typisch zuhören" funktioniert nicht — der Sweet-Spot wird durch
-DIE STATIONEN selbst bestimmt, nicht durch eine starre Konvention.
+### Problem (Mike-Beobachtung am Radio, v0.58 nach Feldtest)
+v0.58 hatte 5 Sub-Tasks A-E + DeepSeek-Fixes — mechanisch sauber, aber funkpraktisch nicht. Drei Punkte mussten Punkt-für-Punkt überarbeitet werden:
 
-### Änderungen
+1. Fester Sweet-Spot 800-2000 Hz war Quatsch — TX landete am leeren Rand statt bei der Aktivität
+2. Algorithmus blieb bei vollem Band auf alter (jetzt vollen) Position hängen
+3. Timer-Anzeige sprang chaotisch wegen elapsed-time-Logik die nur bei messages != [] tickte
 
-**`core/diversity.py`:**
-- `SWEET_SPOT_MIN_HZ` / `SWEET_SPOT_MAX_HZ` Klassenkonstanten **entfernt**.
-- Neue Konstante `SEARCH_MARGIN_BINS = 2` (= 100 Hz Margin um den
-  belegten Bereich, wie v0.57).
-- `get_free_cq_freq()`: Suchbereich pro Cycle dynamisch berechnet aus
-  `min(occupied_bins)` / `max(occupied_bins)` ± SEARCH_MARGIN_BINS,
-  begrenzt durch FREQ_MIN_HZ/MAX_HZ als Hardware-Sicherheit.
-- Median über ALLE Stationen (nicht mehr Sweet-Spot-Filter — der hatte
-  bei dynamischem Bereich keinen Sinn mehr).
-- Sticky-Check „in Sweet-Spot" → „im aktuellen dynamischen Suchbereich".
-- `_measure_gap_around()`: Bounds dynamisch aus aktivem Bereich.
+### Punkt 1 — Suchbereich dynamisch (Commit 334a246)
 
-**`main.py`:** APP_VERSION 0.58 → 0.59
+`SWEET_SPOT_MIN_HZ` / `SWEET_SPOT_MAX_HZ` Klassenkonstanten entfernt. Suchbereich pro Cycle berechnet aus `min(occupied_bins)..max(occupied_bins)` + `SEARCH_MARGIN_BINS`. Median über alle Stationen, Sticky-Check folgt dem dynamischen Bereich.
+
+### Punkt 1b — Graduelle Lücken-Toleranz für volles Band (Commit c4fa032)
+
+Bei 70+ Stationen gab's keine Lücke ≥150 Hz mehr → `None` → kein Wechsel → TX hängte fest. Fix: stufenweise `(max_count_per_bin, min_gap_bins)` Toleranz:
+- (0, 3) Standard 150 Hz echt frei
+- (0, 2) 100 Hz echt frei
+- (0, 1) 50 Hz echt frei (Notfall)
+- (1, 3) 150 Hz mit max 1 Stat./Bin (Sehr-Notfall)
+- (1, 2) 100 Hz mit max 1 Stat./Bin (Extreme)
+
+Score-Funktion erweitert: Stationen IM eigenen Bin (`n_self`) kosten 100 Hz pro Station (schlimmste Kollision). Damit landet TX in der Notfall-Stufe NICHT auf einer Station.
+
+### Punkt 1c — SEARCH_MARGIN_BINS = 0 (Commit 419ab52)
+
+Mike-Beobachtung: TX landete rechts von der letzten Station weil Margin = 2 den Bereich künstlich um 100 Hz erweiterte. Margin auf 0 = exakt min..max der Stationen.
+
+### Punkt 3 — Slot-Counter + Histogramm-Refresh jeden Slot (Commit af9dfb8)
+
+Mike's Idee 1:1: einfacher Loop `x = 60: tick: x-1: if x=0 then suche: reset`. DeepSeek bestätigte: Variante "Slot-Counter" ist sauberer als Wallclock-basierte Lösung (kein Drift, friert bei App-Pause korrekt ein).
+
+`core/diversity.py`:
+- `_SEARCH_INTERVAL_SLOTS = {"FT8": 4, "FT4": 8, "FT2": 16}` (=~60 s alle Modi)
+- `_CYCLE_S` lookup für Sekunden-Umrechnung
+- `tick_slot()` -> bool, dekrementiert + auto-reset
+- `seconds_until_search` property = `remaining_slots * cycle_s`
+- `set_mode()` macht harten Reset des Counters
+- `update_proposed_freq()` vereinfacht: keine elapsed-time-Logik mehr (40 Zeilen Code raus)
+- Entfernt: `_min_dwell_s`, `_recalc_interval_s`, `_last_check_time`, `_last_change_time`, `_last_recalc_time`
+
+`ui/mw_cycle.py`:
+- Neue Methode `_refresh_diversity_freq_view()` läuft JEDEN Slot in `_on_cycle_decoded`, UNABHÄNGIG vom messages-Inhalt → fixt P1 (Histogramm-Update Guard) implizit
+- `sync_from_stations` + `tick_slot` + ggf. `update_proposed_freq` + UI-Update
+- Doppel-Calls in `_handle_diversity_operate` entfernt
+
+`ui/main_window.py`: `_tick_cq_countdown` liest `seconds_until_search`.
+`ui/control_panel.py`: ProgressBar Range 0-15 → 0-60, Farbschwellen 5/10 → 15/30.
 
 ### Tests
-- `test_cq_freq_static_sweet_spot` → `test_cq_freq_dynamic_range_lower`
-  (Stationen 300-700 → Frequenz im Bereich 200-800, nicht 800-2000)
-- Neu: `test_cq_freq_dynamic_range_upper` (Stationen 1900-2400)
-- `test_cq_freq_finds_gap_in_sweet_spot` → `test_cq_freq_finds_gap_in_dynamic_range`
-- `test_cq_freq_fallback_no_gap` Erwartung präzisiert (Margin gibt 100 Hz
-  Lücke, < FREQ_MIN_GAP_HZ → None)
-- `test_score_tiebreaker_uses_median` Erwartung erweitert (zwei symmetrische
-  Lücken gleich valide bei dynamischem Bereich)
+197 (v0.57) → 211 grün. Test-Anpassungen pro Punkt:
+- Punkt 1: 4 Tests umgeschrieben (Sweet-Spot statisch → dynamisch), 1 neu
+- Punkt 1b: 3 Tests umgebaut (Erwartung "None" → "findet immer Position")
+- Punkt 3: 5 alte Tests (`_min_dwell_s`, Kollisions-Logik) durch 4 neue (`tick_slot`, `seconds_until_search`, QSO-Schutz) ersetzt
 
-### Punkte 2 + 3 noch offen
-- Punkt 2 (Score: TX zentral statt am Rand der breitesten Lücke) — separat
-- Punkt 3 (Timer: 15 s wieder statt 60 s, + Histogramm-Update Guard fixen) — separat
-- Bewusst NICHT gleichzeitig: Mike will Punkt für Punkt validieren.
+### Funkpraktisch
+- 60 s konstant für alle Modi (DeepSeek + Internet-Konsens: < 30 s killt QSO-Aufbau)
+- Suche slot-synchron, keine Wallclock-Drift
+- Anzeige tickt ehrlich 60→0
+- Kein QSO mehr verloren weil TX hängt: Algorithmus findet IMMER eine Position (notfalls mit ≤1 Station drumherum)
+
+### Atomare Commits
+- `334a246` Punkt 1 (dynamischer Suchbereich)
+- `c4fa032` Punkt 1b (graduelle Toleranz)
+- `419ab52` Margin = 0
+- `af9dfb8` Punkt 3 (Slot-Counter + P1-Fix)
 
 ---
 
