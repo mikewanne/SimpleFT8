@@ -19,12 +19,48 @@ class TXMixin:
 
     @Slot(int)
     def _on_power_changed(self, power: int):
+        # 1. Race-Schutz: alte (band, watts)-Konvergenz speichern bevor sie verloren geht
+        if self._rfpower_converged and not self._was_converged and self.radio is not None:
+            old_watts = getattr(self, "_power_target", None)
+            if old_watts:
+                self.rf_preset_store.save(
+                    self.radio.radio_type,
+                    self.settings.band,
+                    old_watts,
+                    self._rfpower_current,
+                )
+                self._was_converged = True
+        # 2. neuen Watt-Wert übernehmen
         self.settings.set("power_preset", power)
         self._power_target = power
-        self._rfpower_current = 50  # Reset auf konservativen Start bei Power-Wechsel
-        self._rfpower_converged = False  # Neue Zielleistung → neu einpendeln
+        # 3. Preset für neuen Wert laden (oder Settings-Default)
+        self._apply_rf_preset()
+        # 4. Radio aktualisieren
         if self.radio.ip:
             self.radio.set_power(self._rfpower_current)
+
+    def _apply_rf_preset(self):
+        """Lädt RF-Preset für aktuelle (radio, band, watts) — None → Settings-Default.
+        Setzt _rfpower_converged + _was_converged zurück (neuer Konvergenz-Zyklus).
+        """
+        if self.radio is None:
+            self._rfpower_current = 50
+            self._rfpower_converged = False
+            self._was_converged = False
+            return
+        band = self.settings.band
+        # `or`-Fallback nicht — `_power_target=0` wäre falsy aber semantisch invalid
+        watts = getattr(self, "_power_target", None)
+        if watts is None:
+            watts = self.settings.get("power_preset", 10)
+        saved = self.rf_preset_store.load(self.radio.radio_type, band, watts)
+        if saved is not None:
+            self._rfpower_current = saved
+            print(f"[RF-Preset] geladen: {band}_{watts}W → rf={saved}")
+        else:
+            self._rfpower_current = self.settings.get_tx_power(band, default=50)
+        self._rfpower_converged = False
+        self._was_converged = False
 
     @Slot(bool)
     def _on_tune_clicked(self, on: bool):
@@ -119,14 +155,22 @@ class TXMixin:
                 step = 5
             new_rfpower = max(10, self._rfpower_current - step)
 
-        # rfpower anwenden wenn geaendert; bei Stabilität einmalig pro Band speichern
+        # rfpower anwenden wenn geaendert; bei Stabilität einmalig pro (band, watts) speichern
         if new_rfpower != self._rfpower_current:
             self._rfpower_current = new_rfpower
             self.radio.set_power(new_rfpower)
             self._rfpower_converged = False
-        elif not self._rfpower_converged:
+            self._was_converged = False
+        elif not self._was_converged:
+            # Konvergenz erkannt: 1× speichern pro (band, watts)-Zyklus
             self._rfpower_converged = True
-            self.settings.save_tx_power(self.settings.band, self._rfpower_current)
+            self._was_converged = True
+            band = self.settings.band
+            watts = self._power_target
+            self.rf_preset_store.save(
+                self.radio.radio_type, band, watts, self._rfpower_current
+            )
+            self.settings.save_tx_power(band, self._rfpower_current)  # backward-compat
 
         # Audio anwenden wenn Aenderung > 1%
         if abs(new_audio - current_audio) >= 0.01:

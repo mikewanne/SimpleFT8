@@ -46,8 +46,51 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self.setWindowTitle(f"SimpleFT8 — {settings.callsign}")
         self.setMinimumSize(1200, 600)
         self.resize(1400, 700)
+        self._apply_dark_theme()
 
-        # Dark Theme
+        # Initialisierung in fester Reihenfolge — siehe Helper-Docstrings.
+        self._init_core_components()
+        self._init_qso_log()
+        self._init_radio_state()
+        self._init_diversity_state()
+        self._init_power_state()
+
+        # UI aufbauen (benötigt Core + Diversity + Power State)
+        self._setup_ui()
+        self._connect_signals()
+        self.rx_panel.set_qso_log(self.qso_log)
+
+        # Optionale Features (NACH _setup_ui, weil Easter-Egg-Signal verbunden wird)
+        self._init_optional_features()
+
+        # Timer + Radio starten (NACH OMNI-TX/Auto-Hunt/AP-Lite Init!)
+        self.timer.start()
+        self._start_radio()
+
+        # UI mit gespeicherten Settings synchronisieren
+        self.control_panel._set_band(settings.band)
+        self.control_panel._set_mode(settings.mode)
+        self.control_panel.set_power_preset(settings.get("power_preset", 10))
+
+        # Hintergrund-Timer
+        self._init_psk_polling()
+        self._init_propagation_polling()
+        self._init_presence_watchdog()
+        self._init_cq_countdown_timer()
+
+        # Statusbar + Geometry
+        self._init_statusbar()
+        from PySide6.QtCore import QTimer as _QTimer
+        _QTimer.singleShot(0, self._restore_geometry)
+
+    # ───────────────────────────────────────────────────────────────────
+    # Init-Helper — extrahiert für Lesbarkeit. 1:1 Auslagerung der Original-
+    # Blöcke aus __init__, keine Verhaltensänderung. Reihenfolge ist kritisch
+    # (Optionale Features brauchen control_panel; _start_radio braucht alles).
+    # ───────────────────────────────────────────────────────────────────
+
+    def _apply_dark_theme(self):
+        """Dark-Theme StyleSheet auf MainWindow anwenden."""
         self.setStyleSheet("""
             QMainWindow {
                 background-color: #16192b;
@@ -64,7 +107,9 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
             }
         """)
 
-        # Core-Komponenten
+    def _init_core_components(self):
+        """Core: Timer, QSO-State-Machine, Encoder/Decoder, ADIF, Stats, Antennen-Prefs, PresetStores."""
+        settings = self.settings
         self.timer = FT8Timer(settings.mode)
         self.qso_sm = QSOStateMachine(settings.callsign, settings.locator)
         self.encoder = Encoder(settings.audio_freq_hz)
@@ -73,7 +118,6 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self.adif = AdifWriter()
 
         # Stations-Statistik Logger + Warmup
-        import time as _time
         from core.station_stats import StationStatsLogger
         from core.antenna_pref import AntennaPreferenceStore
         from core.preset_store import PresetStore
@@ -87,9 +131,9 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self._standard_store.migrate_from_settings(self.settings._data, mode="standard")
         self._dx_store.migrate_from_settings(self.settings._data, mode="dx")
 
-        # QSO-Verzeichnis (Worked-Before)
+    def _init_qso_log(self):
+        """QSO-Verzeichnis (Worked-Before) aus aktuellem Pfad + adif_import_path laden."""
         from log.qso_log import QSOLog
-        from pathlib import Path
         self.qso_log = QSOLog()
         self.qso_log.load_directory(Path.cwd())
         import_path = self.settings.get("adif_import_path")
@@ -97,13 +141,16 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
             self.qso_log.load_directory(Path(import_path))
         print(f"[QSOLog] {self.qso_log.worked_count()} unique Calls, {self.qso_log.qso_count()} QSOs")
 
-        # Radio — via Factory (unterstützt flex + zukünftig ic7300)
-        self.radio = create_radio(settings)
-
+    def _init_radio_state(self):
+        """Radio via Factory + Reconnect-Counter + DX-Tune-Dialog Slot."""
+        self.radio = create_radio(self.settings)
         self._reconnect_attempts = 0
         self._reconnect_countdown = 0
         self._dx_tune_dialog = None  # Aktiver DX-Tune Dialog
         self._has_sent_cq = False    # PSKReporter nur nach CQ anzeigen
+
+    def _init_diversity_state(self):
+        """Diversity-Variablen + Stations-Dicts + Tune-Anzeige-State."""
         # Diversity (simpel: Antenne pro Zyklus wechseln)
         self._rx_mode = "normal"  # "normal", "diversity", "dx_tuning"
         self._diversity_stations = {}  # key → FT8Message (akkumuliert)
@@ -114,17 +161,22 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self._tune_active = False
         self._tune_freq_mhz = None
 
-        # Auto TX Level Regelung (zweistufig: rfpower primär, audio sekundär)
-        self._power_target = settings.get("power_preset", 10)  # Watt-Ziel vom Button
+    def _init_power_state(self):
+        """Auto TX Level Regelung (zweistufig: rfpower primär, audio sekundär)."""
+        from core.rf_preset_store import RFPresetStore
+        self._power_target = self.settings.get("power_preset", 10)  # Watt-Ziel vom Button
         self._fwdpwr_samples = []   # FWDPWR Messwerte waehrend TX
         self._rfpower_current = 50  # Aktuell gesetzter rfpower-Wert (0-100)
-        self._rfpower_converged = False  # True wenn rfpower stabil → einmalig speichern
+        self._rfpower_converged = False  # True wenn rfpower stabil
+        self._was_converged = False  # True wenn aktuelle Konvergenz schon gespeichert
+        self.rf_preset_store = RFPresetStore()
+        # Migration aus altem rfpower_per_band-Eintrag (idempotent)
+        self.rf_preset_store.migrate_from_settings(
+            self.settings._data, radio="flexradio", default_watts=self._power_target
+        )
 
-        # UI aufbauen
-        self._setup_ui()
-        self._connect_signals()
-        self.rx_panel.set_qso_log(self.qso_log)
-
+    def _init_optional_features(self):
+        """OMNI-TX (Easter Egg, Feldtest), Auto-Hunt, AP-Lite — alle deaktiviert by default."""
         # OMNI-TX: Initialisieren (deaktiviert), Easter Egg verbinden
         from core import omni_tx as _omni
         _block_cycles = max(10, self.settings.get("diversity_operate_cycles", 80) // 2)
@@ -135,24 +187,14 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         from core.auto_hunt import AutoHunt
         self._auto_hunt = AutoHunt()
         self._auto_hunt.set_qso_log(self.qso_log)
-        self._auto_hunt.set_band(settings.band)
+        self._auto_hunt.set_band(self.settings.band)
 
         # AP-Lite: Initialisieren (deaktiviert, AP_LITE_ENABLED=False)
         from core import ap_lite as _ap
         self._ap_lite = _ap.get_instance(encoder=self.encoder)
 
-        # Timer starten
-        self.timer.start()
-
-        # FlexRadio + Decoder starten (NACH OMNI-TX/Auto-Hunt/AP-Lite Init!)
-        self._start_radio()
-
-        # UI mit gespeicherten Settings synchronisieren
-        self.control_panel._set_band(settings.band)
-        self.control_panel._set_mode(settings.mode)
-        self.control_panel.set_power_preset(settings.get("power_preset", 10))
-
-        # PSKReporter Timer (erste Abfrage nach 2 Min, danach alle 3 Min)
+    def _init_psk_polling(self):
+        """PSKReporter Timer (erste Abfrage nach 2 Min, danach alle 5 Min Rate-Limit)."""
         from PySide6.QtCore import QTimer
         self._psk_timer = QTimer(self)
         self._psk_timer.timeout.connect(self._fetch_psk_stats)
@@ -162,8 +204,9 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self._psk_last_fetch_time = None
         self._psk_band = ""
 
-        # Propagation: Hintergrund-Abruf starten + UI jede Minute aktualisieren
-        # (Zeitkorrektur wird bei jedem Aufruf live berechnet, nicht gecacht)
+    def _init_propagation_polling(self):
+        """Propagation: Hintergrund-Abruf + UI-Update jede Minute (Zeitkorrektur live)."""
+        from PySide6.QtCore import QTimer
         from core import propagation as _prop
         self._prop_error_shown = False
         _prop.start_background_updater()
@@ -173,10 +216,15 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         # Erster UI-Update nach kurzem Delay (Abruf läuft im Hintergrund)
         QTimer.singleShot(3000, self._update_propagation_ui)
 
-        # ── Operator Presence (Totmannschalter) ───────────────────
-        # Gesetzliche Pflicht (DE): Operator muss anwesend sein.
-        # Fest 15 Min, nicht konfigurierbar, nicht umgehbar.
-        # Bei Ablauf: CQ stoppt, kein neuer TX. Laufendes QSO wird zu Ende gefuehrt.
+    def _init_presence_watchdog(self):
+        """Operator Presence (Totmannschalter, gesetzliche Pflicht DE).
+
+        Fest 15 Min, nicht konfigurierbar, nicht umgehbar.
+        Bei Ablauf: CQ stoppt, kein neuer TX. Laufendes QSO wird zu Ende gefuehrt.
+        Maus reicht als Operator-Nachweis — 15 Min ohne Mausbewegung = nicht am Rechner.
+        """
+        from PySide6.QtCore import QTimer
+        from PySide6.QtGui import QCursor
         _PRESENCE_TIMEOUT = 900  # 15 Minuten in Sekunden
         self._presence_remaining = _PRESENCE_TIMEOUT
         self._presence_timeout = _PRESENCE_TIMEOUT
@@ -185,19 +233,20 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self._presence_timer.timeout.connect(self._on_presence_tick)
         self._presence_timer.start(1000)  # Jede Sekunde
         # Presence-Reset: Maus-Polling (alle 500ms QCursor.pos() pruefen)
-        # Maus reicht als Operator-Nachweis — 15 Min ohne Mausbewegung = nicht am Rechner.
-        from PySide6.QtGui import QCursor
         self._presence_last_mouse_pos = QCursor.pos()
         self._presence_poll_timer = QTimer(self)
         self._presence_poll_timer.timeout.connect(self._poll_mouse_activity)
         self._presence_poll_timer.start(500)
 
-        # CQ-Freq Countdown: sekündlich aktualisieren (unabhängig vom Decode-Zyklus)
+    def _init_cq_countdown_timer(self):
+        """CQ-Freq Countdown: sekündlich aktualisieren (unabhängig vom Decode-Zyklus)."""
+        from PySide6.QtCore import QTimer
         self._cq_countdown_timer = QTimer(self)
         self._cq_countdown_timer.timeout.connect(self._tick_cq_countdown)
         self._cq_countdown_timer.start(1000)
 
-        # Statusbar + Hilfe-Button
+    def _init_statusbar(self):
+        """Statusbar + Statistik-Indikator + Hilfe-Button."""
         self._update_statusbar()
         self.statusBar().setStyleSheet(
             "color: #888; font-family: Menlo; font-size: 11px; "
@@ -222,10 +271,6 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         _help_btn.clicked.connect(self._on_help_clicked)
         self.statusBar().addPermanentWidget(_help_btn)
         # DT-Anzeige nur in der Statusbar-Message (kein separates Label mehr)
-
-        # Fenstergeometrie wiederherstellen
-        from PySide6.QtCore import QTimer as _QTimer
-        _QTimer.singleShot(0, self._restore_geometry)
 
     def _setup_ui(self):
         self.rx_panel = RXPanel(

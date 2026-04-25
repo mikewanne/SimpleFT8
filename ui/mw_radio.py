@@ -96,9 +96,10 @@ class RadioMixin:
         label = "kalibriert" if normal_preset.get("measured") else "Standard"
         self.statusBar().showMessage(f"Normal Preset {band}: G{gain}dB ({label})", 4000)
         print(f"[FlexRadio] Normal Preset {band}: G{gain}dB ({label})")
-        # Leistung: konservativer Start bei 50%, Regelung regelt auf Zielwatt ein
+        # Leistung: RF-Preset laden (oder Settings-Default falls noch nichts gespeichert)
         power_preset = self.settings.get("power_preset", 10)
-        self._rfpower_current = 50
+        self._power_target = power_preset
+        self._apply_rf_preset()
         self.radio.set_power(self._rfpower_current)
         self.control_panel.set_power_preset(power_preset)
         # TX Audio-Drive (mic_level) setzen — steuert wieviel Leistung die PA tatsaechlich abgibt
@@ -308,8 +309,7 @@ class RadioMixin:
         self.control_panel.tx_level_bar.setValue(saved_level)
         self.control_panel.tx_level_label.setText(f"TX-Pegel: {saved_level}%")
         self._fwdpwr_samples.clear()   # Alte Messwerte verwerfen
-        self._rfpower_current = self.settings.get_tx_power(band, default=50)
-        self._rfpower_converged = False
+        self._apply_rf_preset()  # lädt aus RFPresetStore (mit Hybrid-Strategie) oder Settings-Default
         if self.radio.ip:
             self.radio.set_power(self._rfpower_current)
         # DT-Korrektur: gespeicherten Wert fuer neues Band laden
