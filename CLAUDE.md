@@ -265,17 +265,26 @@ Nacht-Daten für Diversity_Normal + Diversity_Dx fehlen noch!
 
 ## Offene TODOs (nach Schwierigkeit)
 
+**NÄCHSTE SESSION — Prompt bereit (v0.57):**
+- Answer-Me Highlighting: `rx_panel.py` Farbe `#5A4A10` + Bold an 3 Stellen (L37, L268, L421)
+- Gain-Messung Logging: `mw_radio.py::_log_gain_result()` → `~/.simpleft8/gain_log.md`
+
 **EINFACH:**
-1. **Per-Station DT-Offset TX** — encoder._station_dt_offset (siehe TODO.md)
-2. **Even/Odd dedizierter Timer** — unabhängig vom Decoder-Thread
-3. **Gain-Bias beheben** — Normal-Modus Gain-Messung wenn Stats aktiv
+1. **Even/Odd dedizierter Timer** — unabhängig vom Decoder-Thread
+2. **Gain-Bias beheben** — Normal-Modus Gain-Messung wenn Stats aktiv erzwingen
 
 **MITTEL:**
-4. **CQ-Freq Algorithmus** — Score-basiert, Sweet-Spot 800-2000Hz, Dwell-Time FT4/FT2
+3. **CQ-Freq Algorithmus** — Score-basiert, Sweet-Spot 800-2000Hz, Dwell-Time FT4/FT2
+
+**PRIO NIEDRIG:**
+4. **Per-Station DT-Offset TX** — encoder._station_dt_offset (erst nach mehr Feldtest-Daten)
 
 **LANGFRISTIG:**
 5. **IC-7300 Fork** — TARGET_TX_OFFSET dort separat messen!
 6. **Warteliste-Screenshot** — sobald DL3AQJ antwortet
+
+**VERMUTLICHER BUG (beobachten):**
+- TX-Frequenz Normal-Modus manchmal ohne Histogramm-Marker — noch nicht reproduzierbar
 
 ---
 

@@ -438,3 +438,36 @@ Countdown sprang z.B. 119→108→119 weil per-Zyklus-Updates die 120s-Range unr
 - 20m: Tagsüber Normal sammeln, dann Diversity
 
 **Tests:** 168 passed
+
+---
+
+## 2026-04-25 v0.56 — Session-Abschluss: Doku, Refactoring, Prompt v0.57
+
+**Keine neuen Features — Version bleibt 0.56**
+
+### Code-Änderungen
+- `ui/mw_cycle.py`: CycleMixin refactored — `_on_cycle_decoded` in 5 Helper-Methoden
+  aufgeteilt (`_assign_slot_parity`, `_update_dt_correction`, `_pop_diversity_queue`,
+  `_handle_diversity_measure`, `_handle_diversity_operate`). Gleiche Logik, besser lesbar.
+- `tests/test_modules.py`: 8 neue Tests — 7× `DiversityController._evaluate`
+  (Median+8%-Schwelle, A1/A2-Dominanz, DX-Mode, Phase-Übergänge) + 1× AP-Lite
+  `_build_costas_reference` Energie-Test. **197 passed** (vorher 168→178→197).
+
+### Doku & Prozess
+- `feierabend.md`: Explizit "ALLE Ergänzungen der Session in HISTORY.md" ergänzt
+- `CLAUDE.md`: Rollen + Commit-Richtlinien + DeepSeek-V4-Warnung (neues Modell,
+  Antworten kritisch prüfen) + Tests→197 aktualisiert
+- `TODO.md`: RX-Sortierung als [x] (war bereits implementiert), Per-Station DT-Offset
+  auf PRIO NIEDRIG, vermutlicher Bug TX-Freq Normal-Modus als offener Punkt eingetragen,
+  Band Map gestrichen, RF-Presets als [x] abgehakt
+
+### Statistiken & Auswertung
+- Neue Messungen 25.04.2026: Diversity_Normal/40m (09–12h), Diversity_Dx/40m (08–14h),
+  Diversity_Dx/20m (12–15h), Diversity_Normal/20m (12–15h), Normal/20m (12–15h) UTC
+- PDFs neu generiert: `auswertung/SimpleFT8_Bericht.pdf` (DE) +
+  `auswertung/en/SimpleFT8_Report.pdf` (EN) mit allen 25.04-Daten
+
+### Nächste Session — Implementierungs-Prompt v0.57 bereit
+- Aufgabe 1: Answer-Me Highlighting — `rx_panel.py` Farbe `#5A4A10` + Bold an 3 Stellen
+- Aufgabe 2: Gain-Messung Logging → `~/.simpleft8/gain_log.md`
+- Prompt vollständig, DeepSeek-reviewed, commitbereit

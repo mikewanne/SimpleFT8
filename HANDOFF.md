@@ -1,126 +1,72 @@
-# HANDOFF — SimpleFT8 — 2026-04-23 (Nacht II)
+# HANDOFF — SimpleFT8 — 2026-04-25
 
 ## Heute erledigt
 
-### Stats-Guard Bug gefixt (Root Cause durch DeepSeek-Analyse)
+### v0.56 — RF-Power-Presets pro Band+Watt (lernendes System)
+- `core/rf_preset_store.py` (NEU): Hybrid-Lade-Strategie — exakter Treffer → lineare
+  Interpolation/Extrapolation → Default. Atomic JSON-Write, Plausibilitäts-Warnung >20% Δ,
+  Migration aus altem `rfpower_per_band`-Eintrag in config.json.
+- `radio/base_radio.py` + `radio/flexradio.py`: `radio_type` Klassen-Konstante als Top-Level-Key
+- `ui/mw_tx.py`: `_apply_rf_preset()`, Race-Schutz `_was_converged`, Save-Trigger refactored
+- `ui/mw_radio.py`: `_apply_rf_preset()` bei Radio-Connect + Bandwechsel
+- `ui/settings_dialog.py`: GroupBox "RF-Presets" — Tabelle + Reset-Buttons (disabled mid-TX)
+- Tests: 168 → 197 passed (19 neue RFPresetStore-Tests)
 
-**Bug:** Statistiken wurden während CQ-Modus und laufendem QSO geloggt trotz Guard.
+### Refactoring + Tests
+- `ui/mw_cycle.py`: 5 Helper-Methoden aus `_on_cycle_decoded` extrahiert
+- `tests/test_modules.py`: 7× `DiversityController._evaluate` + 1× AP-Lite Costas-Test
 
-**Root Cause:** In `_on_station_clicked` (manueller Klick auf Station während CQ):
-1. `stop_cq()` setzte `cq_mode=False`
-2. `start_qso()` speicherte `_was_cq = self.cq_mode = False` (schon False!)
-3. Nach QSO-Ende: `_resume_cq_if_needed()` sah beide False → `state=IDLE` → CQ **nicht** resumed + Stats geloggt
+### Doku & Prozess
+- `CLAUDE.md`: Rollen, Commit-Richtlinien, DeepSeek-V4-Warnung
+- `feierabend.md`: HISTORY.md-Pflicht-Hinweis präzisiert
+- `TODO.md`: 5 Punkte aktualisiert (RX-Sort [x], DT-Offset PRIO NIEDRIG, TX-Freq-Bug)
 
-**3 Fixes:**
-- `mw_qso.py::_on_station_clicked` — `_cq_was_active` VOR `stop_cq()` sichern, nach `start_qso()` als `_was_cq=True` setzen
-- `qso_state.py::_process_cq_reply` — `self._was_cq = True` explizit setzen (CQ-Antwort, cq_mode=True garantiert)
-- `mw_cycle.py::_log_stats` — Guard um `btn_cq.isChecked()` erweitert (3-fach robust: Button + cq_mode + State)
-
-**Tests: 168 passed** (unverändert, kein neuer Test da Bug im Feld entdeckt)
-
-### Statistics aktualisiert
-- `scripts/generate_plots.py` ausgeführt → 8 PNGs + SimpleFT8_Bericht.pdf (7 Seiten)
-
----
-
-# HANDOFF — SimpleFT8 — 2026-04-23 (Nacht)
-
-## Nacht-Session 2026-04-23 — 3 "Sehr einfach"-Features erledigt
-
-1. **60m Propagation** — war bereits in `core/propagation.py` (L181-190) implementiert:
-   Interpolation aus 40m+80m (day/night getrennt) per _CONDITION_ORDER-Index-Median.
-   → Nur Docs angepasst (CLAUDE.md + HANDOFF.md + TODO-Liste bereinigt).
-
-2. **RX-Liste leeren bei Antennen/Diversity-Wechsel** — `ui/mw_radio.py`:
-   - `_on_rx_panel_toggled` (RX ON/OFF) → Tabelle + QSO-Panel + Dicts leeren
-   - `_enable_diversity` → Tabelle + QSO-Panel + Dicts leeren (beide Aufrufpfade: Preset-valid + Post-Gain)
-   - `_disable_diversity` → Tabelle + QSO-Panel + Dicts leeren
-
-3. **Alte CQ-Rufe auto-löschen (>5 Min)** — `core/station_accumulator.py::remove_stale`:
-   - Neues Aging-Limit pro Station-Typ: 150s (active_qso) / **300s für CQ-Rufer** / 75s sonst
-   - Test-Fix: `test_accumulator_aging` auf nicht-CQ-Message geändert + neuer Test `test_accumulator_cq_longer_aging`
-   - Tests: **168 passed** (+1 vs. Baseline 167)
+### Statistiken
+- 40m + 20m Messungen 25.04 committed; PDFs (DE+EN) neu generiert
 
 ---
 
-# HANDOFF — SimpleFT8 — 2026-04-23 (Abend)
+## Offen / Nächste Session
 
-## Heute erledigt
+### Prompt v0.57 — BEREIT ZUR UMSETZUNG
+Datei: im letzten Claude-Chat gespeichert (Answer-Me + Gain-Log)
 
-### DT-Timing vollständig korrigiert (Major Milestone)
-- RX: DT_BUFFER_OFFSET FT8=2.0, FT4=1.0, FT2=0.8 (WSJT-X 0.5s eingerechnet)
-- Korrektur konvergiert auf ~0.24s (FlexRadio VITA-49 RX-Hardware)
-- TX: TARGET_TX_OFFSET=-0.8s (kompensiert 1.3s FlexRadio TX-Buffer)
-- Validiert: 8 TX-Zyklen 0.0s DT am Icom, 20m + 40m getestet
-- ntp_time: per-Band+Modus-Speicherung "FT8_20m", set_band(), engere Grenzen
-- mw_radio: set_band()/set_mode(mode, band) korrekt verdrahtet
+**Aufgabe 1 — `ui/rx_panel.py` (3 Stellen, trivial):**
+- L37: `_COLOR_ANSWER_ME_BG` → `QColor("#5A4A10")` (dunkles Gold)
+- L268: `f.setBold(is_active)` → `f.setBold(is_active or is_answer_me)`
+- L421-423: Bold beim direkten Einfügen (`_populate_row`) setzen
 
-### 6 Bugs gefixt
-- FT2 Even/Odd: `_slot_from_utc()` auf 3.8s-Arithmetik korrigiert (war 7.5s)
-- Tune-Anzeige: `_tune_active` VOR `set_frequency()` gesetzt; immer "TUNE:" in Statusbar
-- PSK bei Bandwechsel: gelöscht + Timer-Reset + Interval 300s (5min Rate-Limit)
-- Stats-Guard: pausiert bei CQ-Modus und laufendem QSO
-- 15m Diversity: Preset laden oder Warnung "bitte KALIBRIEREN"
-- 3 veraltete Tests auf neues Key-Format angepasst → 167 passed
+**Aufgabe 2 — `ui/mw_radio.py` (neue Methode):**
+- `_log_gain_result(r, band, ft_mode)` → Append `~/.simpleft8/gain_log.md`
+- Aufruf nach `self._set_gain_measure_lock(False)` in `_on_dx_tune_accepted()`
+- APP_VERSION → 0.57, HISTORY.md ergänzen, TODO [x]
 
-### Dokumentation
-- dt.md erstellt (Theorie, Änderungen, Messergebnisse)
-- CLAUDE.md + HANDOFF.md aktualisiert
-- TODO.md: Per-Station DT-Offset Feature eingetragen
+### Offene TODOs (priorisiert)
+1. **v0.57 Prompt** — sofort umsetzbar (siehe oben)
+2. **CQ-Freq Algorithmus** — Score-basiert, Sweet-Spot, Dwell-Time (MITTEL)
+3. **Gain-Bias beheben** — Stats-Modus erzwingt Gain-Messung für alle Modi (EINFACH)
+4. **Even/Odd Timer** — eigener dedizierter Timer unabhängig vom Decoder-Thread
+5. **Per-Station DT-Offset TX** — PRIO NIEDRIG (erst nach mehr Feldtest-Daten)
 
----
-
-## Offen / Nächste Schritte (nach Schwierigkeit sortiert)
-
-### Einfach
-1. Per-Station DT-Offset TX — `encoder._station_dt_offset` (TODO.md)
-2. Even/Odd dedizierter Timer — unabhängig vom Decoder-Thread
-3. Gain-Bias beheben (Normal-Modus Gain-Messung wenn Stats aktiv)
-
-### Mittel
-4. CQ Sweet-Spot 800–2000 Hz fest
-5. Kollisionserkennung verfeinern
-6. Modus-abhängige Dwell-Time FT4/FT2
-7. RF-Power-Presets pro Band+Watt
-
-### Aufwändig
-8. CQ-Freq Score-basierte Lückenwahl
-9. Tertile-Analyse Statistik
-10. AP-Lite Threshold Feldtest
-
-### Feldtest-abhängig
-11. FT2 ausführlicher Feldtest
-12. OMNI-TX Feldtest
-
-### Langfristig
-13. IC-7300 Fork, Band Map, QSO-Resume
+### Vermutliche Bugs (noch nicht reproduzierbar)
+- **TX-Frequenz Normal-Modus** — manchmal kein Histogramm-Marker, TX bleibt auf alter Freq.
+  Konsole beobachten: `[CQ] TX-Frequenz auf X Hz` — tritt es auf oder nicht?
 
 ---
 
 ## Warnungen & Fallen
 
-- **DT_BUFFER_OFFSET** — FT8=2.0, FT4=1.0, FT2=0.8 — nie zurücksetzen!
-- **TARGET_TX_OFFSET = -0.8** — FlexRadio-spezifisch! IC-7300 braucht eigenen Wert
-- **dt_corrections.json Key-Format** — "FT8_20m" (Modus_Band)
-- **cache.save() NIE im Cycle-Loop**
-- **`_diversity_in_operate`** bei `_enable_diversity()` auf False setzen
-- **`_r_hline` existiert nicht mehr** — heisst `_chline`
-- **`_tune_active` + `_tune_freq_mhz`** in `main_window.__init__` initialisiert
-- **`_was_cq` in `_on_station_clicked`** — immer NACH start_qso() auf True setzen wenn CQ vorher aktiv war
+- **DeepSeek V4** — neues Modell, Verhalten unbestätigt. Antworten immer am Code verifizieren.
+- **AP-Lite** — `AP_LITE_ENABLED = True` aber ungetestet. Nicht anfassen ohne Test-Pipeline.
+- **OMNI-TX** — deaktiviert (Easter Egg: Klick auf Versionsnummer). Nicht auf GitHub wie man es aktiviert.
+- **cache.save() nie im Cycle-Loop** — refresht Timestamp → 2h Gültigkeit sinnlos
+- **TARGET_TX_OFFSET = -0.8** — FlexRadio-spezifisch! IC-7300 Fork braucht eigenen Wert
 
 ---
 
 ## Test-Suite Status
-
-```
-./venv/bin/python3 -m pytest tests/ -q → 168 passed
-```
-
----
+`./venv/bin/python3 -m pytest tests/ -q` → **197 passed** ✅
 
 ## Letzter bekannter guter Zustand
-
-- Git: `main`, commit `9b36565` (Stats-Guard-Fix noch nicht committed)
-- Tests: 168 passed
-- RX: ~0.24s konvergiert ✓ | TX: 0.0s Icom validiert ✓
-- Sicherung: `Appsicherungen/2026-04-23_vor_dt_optimierung_core/`
+Git-Branch `main`, 8 Commits ahead of origin. App startet, RFPresetStore lädt/speichert
+korrekt, Statistiken laufen, PDFs (DE+EN) aktuell mit 25.04-Daten.
