@@ -207,6 +207,16 @@ Speicherung: ~/.simpleft8/dt_corrections.json → Key "FT8_20m" (pro Modus+Band)
 
 ---
 
+## ⛔ Statistik-Veröffentlichung — Regel
+
+- **Kein Push anderer Bänder ohne ausreichende Datenbasis** — Minimum: Normal + Diversity_Standard
+  + Diversity_Dx je ≥ 2 Messtage, Stunden über den ganzen Tag verteilt (mind. 06–22 UTC).
+- **Auswertungs-Methodik:** nur gemeinsame Stunden (Normal + Diversity gleichzeitig gemessen) —
+  kein Gesamt-Pool über verschiedene Tageszeiten → Tageszeit-Bias verfälscht den Vergleich.
+- Ergebnis von 40m: Normal↔Div.Std 21h → +35.5%, Normal↔Div.DX 18h → +58.0%.
+
+---
+
 ## generate_plots.py — PDF-Layout (cursor-basiert)
 
 - **Inch-Koordinaten:** `_yf(y_in) = 1.0 - y_in / _PH` konvertiert Zoll→figure-coord

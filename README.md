@@ -74,19 +74,27 @@ Controlled test on 40m, same hardware (FLEX-8400M), 2 minutes apart:
 > Generated automatically from live session data via `scripts/generate_plots.py`.
 > X-axis = UTC hour of day, averaged across all measurement days. Data grows with every session.
 
-**Live measurement results — 40m FT8, 4–5 measurement days, 18.425 cycles:**
+**Live measurement results — 40m FT8, 4–5 measurement days, 22,618 cycles:**
 
-| Mode | vs Normal (without rescue) | vs Normal (incl. rescue) | Rescue alone |
-|------|:---:|:---:|:---:|
-| Diversity Standard | **+93%** | **+132%** | +39% |
-| Diversity DX | **+118%** | **+157%** | +39% |
+| Mode | vs Normal (w/o rescue) | vs Normal (incl. rescue) | Rescue alone | Common Hours |
+|------|:---:|:---:|:---:|:---:|
+| Diversity Standard | **+88%** | **+122%** | +35% | 24h |
+| Diversity DX | **+123%** | **+157%** | +33% | 24h |
 
 *Rescue = stations that ANT1 could not decode (≤ −24 dB SNR) but ANT2 saved. Pooled mean over all cycles — not cherry-picked, not a single good day.*
+*"Common Hours" = hours where Normal AND the respective Diversity mode were measured simultaneously (time-fair basis).*
+
+> **Note on methodology update (2026-04-25)**
+> These numbers now use a time-fair comparison: only UTC hours where both Normal and
+> the respective Diversity mode were measured simultaneously are included. In the current
+> dataset (4–5 days, all modes covering 24h), this equals the full dataset — but the
+> methodology prevents future time-of-day bias when modes are measured at different times.
+> The PDF report (S.3) shows the same table with detailed cycle counts.
 
 > **Note on Interpretation**
 > ANT1 (Kelemen DP-201510) is operated off-band on 40m and therefore significantly
 > less efficient on this band. ANT2 (house gutter, ~15m) falls between λ/4 and λ/2
-> for 40m and works comparatively well. The measured gains (+93%/+118% stations)
+> for 40m and works comparatively well. The measured gains (+88%/+123% stations)
 > represent an **upper bound** — with two well-matched 40m-optimized antennas, a lower
 > but still significant diversity gain is expected.
 > Follow-up tests on **20m** are planned, where the Kelemen DP-201510 operates within
@@ -106,7 +114,7 @@ Controlled test on 40m, same hardware (FLEX-8400M), 2 minutes apart:
 |---------|-------------|
 | [📊 Diagram 1 — Stations 40m FT8](auswertung/stationen_40m_FT8.png) | Station count over 24h UTC — Normal vs Diversity Normal vs Diversity DX. Line = mean, dashed = + Rescue Stations (ANT1 below −24 dB, saved by ANT2). |
 | [📊 Diagram 2 — Diversity Analysis 40m FT8](auswertung/diversity_40m_FT8.png) | Station count per cycle: Normal (grey), Diversity Standard (blue), Diversity DX (orange) + green rescue caps (+N) = stations ANT1 couldn't decode but ANT2 saved. |
-| [📊 Detailed PDF Report](auswertung/SimpleFT8_Bericht.pdf) | Full analysis report with summary table, all diagrams, and methodology notes. Auto-updated with each session. |
+| [📊 Detailed PDF Report](auswertung/Auswertung-40m-FT8.pdf) | Full analysis report with summary table, all diagrams, and methodology notes. Auto-updated with each session. |
 | [🗂 Raw Data (statistics/)](statistics/) | All raw cycle data as Markdown files — one file per hour per mode. Format: `statistics/<Mode>/<Band>/<Protocol>/YYYY-MM-DD_HH.md`. 214 files, every single cycle logged. Reproduce any number yourself. |
 
 > **📊 Statistics in progress — target: minimum 6 measurement days for reliable results.**
@@ -284,20 +292,28 @@ MIT License (c) 2026 DA1MHH (Mike Hammerer)
 > Automatisch generiert aus Live-Sitzungsdaten via `scripts/generate_plots.py`.
 > X-Achse = UTC-Stunde des Tages, gemittelt über alle Messtage. Daten wachsen mit jeder Session.
 
-**Live-Messergebnisse — 40m FT8, 4–5 Messtage, 18.425 Zyklen:**
+**Live-Messergebnisse — 40m FT8, 4–5 Messtage, 22.618 Zyklen:**
 
-| Modus | vs Normal (ohne Rescue) | vs Normal (inkl. Rescue) | Rescue allein |
-|-------|:---:|:---:|:---:|
-| Diversity Standard | **+93%** | **+132%** | +39% |
-| Diversity DX | **+118%** | **+157%** | +39% |
+| Modus | vs Normal (ohne Rescue) | vs Normal (inkl. Rescue) | Rescue allein | Gem. Stunden |
+|-------|:---:|:---:|:---:|:---:|
+| Diversity Standard | **+88%** | **+122%** | +35% | 24h |
+| Diversity DX | **+123%** | **+157%** | +33% | 24h |
 
 *Rescue = Stationen, die ANT1 nicht decodieren konnte (≤ −24 dB SNR), aber ANT2 rettete. Pooled Mean über alle Zyklen — kein Cherry-Picking, kein einzelner guter Tag.*
+*„Gem. Stunden" = Stunden, in denen Normal UND der jeweilige Diversity-Modus gleichzeitig gemessen wurden (zeitfaire Basis).*
+
+> **Hinweis zur Methodik (Stand 2026-04-25)**
+> Diese Zahlen verwenden nun einen zeitfairen Vergleich: Nur UTC-Stunden, in denen Normal
+> und der jeweilige Diversity-Modus gleichzeitig gemessen wurden, fließen ein. Im aktuellen
+> Datensatz (4–5 Tage, alle Modi mit 24h Abdeckung) ist das identisch mit dem Gesamtdatensatz —
+> aber die Methodik verhindert Tageszeit-Bias sobald Modi zu unterschiedlichen Zeiten gemessen werden.
+> Die detaillierte Vergleichstabelle mit Zyklenanzahlen ist im PDF-Bericht (S.3) zu finden.
 
 > **Hinweis zur Interpretation**
 > ANT1 (Kelemen DP-201510) ist auf 40m außerhalb seines Auslegungsbandes und damit
 > deutlich suboptimal für diesen Frequenzbereich. ANT2 (Regenrinne, ~15m) liegt
 > zwischen λ/4 und λ/2 für 40m und arbeitet dort vergleichsweise gut. Die gemessenen
-> Gewinne (+93%/+118% Stationen) sind als **Obergrenze** zu verstehen — bei zwei
+> Gewinne (+88%/+123% Stationen) sind als **Obergrenze** zu verstehen — bei zwei
 > gleichwertigen, für 40m optimierten Antennen ist ein geringerer, aber dennoch
 > signifikanter Diversity-Gewinn zu erwarten.
 > Folgetests auf **20m** sind geplant, wo der Kelemen DP-201510 in seinem Auslegungsband
@@ -317,7 +333,7 @@ MIT License (c) 2026 DA1MHH (Mike Hammerer)
 |----------|-------------|
 | [📊 Diagramm 1 — Stationen 40m FT8](auswertung/stationen_40m_FT8.png) | Stationszahl über 24h UTC — Normal vs Diversity Normal vs Diversity DX. Linie = Mittelwert, gestrichelt = + Rescue Stationen (ANT1 unter −24 dB, von ANT2 gerettet). |
 | [📊 Diagramm 2 — Diversity Analyse 40m FT8](auswertung/diversity_40m_FT8.png) | Stationen/Zyklus: Normal (grau), Diversity Standard (blau), Diversity DX (orange) + grüne Rescue-Kappen (+N) = Stationen die ANT1 nicht decodieren konnte, aber ANT2 rettete. |
-| [📊 Ausführlicher PDF-Bericht](auswertung/SimpleFT8_Bericht.pdf) | Vollständiger Auswertungsbericht mit Zusammenfassungstabelle, allen Diagrammen und Methodik-Hinweisen. Wird automatisch mit jeder Session aktualisiert. |
+| [📊 Ausführlicher PDF-Bericht](auswertung/Auswertung-40m-FT8.pdf) | Vollständiger Auswertungsbericht mit Zusammenfassungstabelle, allen Diagrammen und Methodik-Hinweisen. Wird automatisch mit jeder Session aktualisiert. |
 | [🗂 Rohdaten (statistics/)](statistics/) | Alle Rohdaten als Markdown-Dateien — eine Datei pro Stunde pro Modus. Format: `statistics/<Modus>/<Band>/<Protokoll>/YYYY-MM-DD_HH.md`. 214 Dateien, jeder einzelne Zyklus geloggt. Jede Zahl ist nachrechenbar. |
 
 > **📊 Statistiken in Arbeit — Ziel: mindestens 6 Messtage für belastbare Ergebnisse.**
