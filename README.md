@@ -74,12 +74,12 @@ Controlled test on 40m, same hardware (FLEX-8400M), 2 minutes apart:
 > Generated automatically from live session data via `scripts/generate_plots.py`.
 > X-axis = UTC hour of day, averaged across all measurement days. Data grows with every session.
 
-**Live measurement results — 40m FT8, 4–5 measurement days, 22,618 cycles:**
+**Live measurement results — 40m FT8, 4 measurement days, 22,696 cycles:**
 
 | Mode | vs Normal (w/o rescue) | vs Normal (incl. rescue) | Rescue alone | Days |
 |------|:---:|:---:|:---:|:---:|
-| Diversity Standard | **+88%** | **+122%** | +34% | 4 |
-| Diversity DX | **+123%** | **+157%** | +34% | 4 |
+| Diversity Standard | **+88%** | **+122%** | +35% | 4 |
+| Diversity DX | **+124%** | **+158%** | +34% | 4 |
 
 *Rescue = stations that ANT1 could not decode (≤ −24 dB SNR) but ANT2 saved. Pooled mean over all cycles — not cherry-picked, not a single good day.*
 *Values = typical hourly average of a full measurement day, pooled across all days and all hours of the day.*
@@ -291,12 +291,12 @@ MIT License (c) 2026 DA1MHH (Mike Hammerer)
 > Automatisch generiert aus Live-Sitzungsdaten via `scripts/generate_plots.py`.
 > X-Achse = UTC-Stunde des Tages, gemittelt über alle Messtage. Daten wachsen mit jeder Session.
 
-**Live-Messergebnisse — 40m FT8, 4–5 Messtage, 22.618 Zyklen:**
+**Live-Messergebnisse — 40m FT8, 4 Messtage, 22.696 Zyklen:**
 
 | Modus | vs Normal (ohne Rescue) | vs Normal (inkl. Rescue) | Rescue allein | Tage |
 |-------|:---:|:---:|:---:|:---:|
-| Diversity Standard | **+88%** | **+122%** | +34% | 4 |
-| Diversity DX | **+123%** | **+157%** | +34% | 4 |
+| Diversity Standard | **+88%** | **+122%** | +35% | 4 |
+| Diversity DX | **+124%** | **+158%** | +34% | 4 |
 
 *Rescue = Stationen, die ANT1 nicht decodieren konnte (≤ −24 dB SNR), aber ANT2 rettete. Pooled Mean über alle Zyklen — kein Cherry-Picking, kein einzelner guter Tag.*
 *Wert = typischer Stunden-Durchschnitt eines ganzen Messtages, gepoolt über alle Tage und alle Tageszeiten.*
