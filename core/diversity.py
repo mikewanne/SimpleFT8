@@ -67,6 +67,7 @@ class DiversityController:
         self.dominant = None   # "A1", "A2", oder None
         self._freq_histogram = {}  # bin_idx → Anzahl Stationen (sync aus station_accumulator)
         self._cq_freq_hz: Optional[int] = None  # Letzte berechnete CQ-Frequenz
+        self._current_gap_width_hz: int = 0     # Sticky-State: Breite der aktuellen Lueck
         self._last_recalc_time: float = 0.0    # Zeitstempel letzter Zeit-Fallback
         self._last_change_time: float = 0.0    # Zeitstempel letzter Freq-Wechsel (Dwell-Guard)
         self._last_check_time: float = 0.0     # Zeitstempel letzter Kollisions-Check (Display)
@@ -196,12 +197,27 @@ class DiversityController:
         best_width_hz = best_gap[1] * self.FREQ_BIN_HZ
         center_bin = best_gap[0] + best_gap[1] // 2
         freq_hz = center_bin * self.FREQ_BIN_HZ + self.FREQ_BIN_HZ // 2
+
+        # Sticky: nur wechseln wenn signifikant breiter ODER aktuelle Lueck unbrauchbar
+        # ODER aktuelle Frequenz ausserhalb Sweet-Spot (Legacy/Drift-Schutz)
+        if self._cq_freq_hz is not None and self._current_gap_width_hz > 0:
+            current_bin = self._cq_freq_hz // self.FREQ_BIN_HZ
+            n_direct = sum(self._freq_histogram.get(current_bin + d, 0) for d in (-1, +1))
+            current_unbrauchbar = (n_direct >= 3)
+            aktuelle_in_sweet_spot = (
+                self.SWEET_SPOT_MIN_HZ <= self._cq_freq_hz <= self.SWEET_SPOT_MAX_HZ
+            )
+            significantly_better = (best_width_hz > self._current_gap_width_hz + 50)
+            if aktuelle_in_sweet_spot and not current_unbrauchbar and not significantly_better:
+                return self._cq_freq_hz  # bleiben
+
         gap_start_hz = best_gap[0] * self.FREQ_BIN_HZ
         gap_end_hz = (best_gap[0] + best_gap[1]) * self.FREQ_BIN_HZ
         print(f"[CQ-Freq] Median={int(median_freq)}Hz | "
               f"Luecke={gap_start_hz}-{gap_end_hz}Hz ({best_width_hz}Hz breit) | "
               f"TX={int(freq_hz)}Hz | {len(gaps)} Luecken gefunden")
         self._cq_freq_hz = int(freq_hz)
+        self._current_gap_width_hz = best_width_hz
         return self._cq_freq_hz
 
     @property
@@ -246,14 +262,16 @@ class DiversityController:
                 print(f"[CQ-Freq] #{self._recalc_count} Erste Berechnung: →{self._cq_freq_hz}Hz")
             return
 
-        # Kollisionserkennung: ist unsere aktuelle Freq jetzt belegt?
+        # Kollisionserkennung verfeinert: 2 in +/-1 ODER 3 in +/-2 (inkl. current_bin)
         # Erst pruefen nach _min_dwell_s (verhindert sofortigen Bounce-Back)
         if now - self._last_change_time >= self._min_dwell_s:
             self._last_check_time = now  # Display-Countdown reset (unabhaengig vom Ergebnis)
             current_bin = self._cq_freq_hz // self.FREQ_BIN_HZ
-            neighbors = sum(self._freq_histogram.get(current_bin + d, 0)
-                           for d in [-1, 0, 1])
-            if neighbors >= 3:
+            hist = self._freq_histogram
+            n_direct = sum(hist.get(current_bin + d, 0) for d in (-1, +1))
+            n_in_band = sum(hist.get(current_bin + d, 0) for d in (-2, -1, 0, +1, +2))
+            collision = (n_direct >= 2 or n_in_band >= 3)
+            if collision:
                 old_freq = self._cq_freq_hz
                 self.get_free_cq_freq()
                 self._last_change_time = now
@@ -261,7 +279,8 @@ class DiversityController:
                 self._recalc_count += 1
                 if self._cq_freq_hz != old_freq:
                     print(f"[CQ-Freq] #{self._recalc_count} Kollision! "
-                          f"{old_freq}Hz→{self._cq_freq_hz}Hz ({neighbors} Nachbarn)")
+                          f"{old_freq}Hz→{self._cq_freq_hz}Hz "
+                          f"(direkt={n_direct}, band={n_in_band})")
                 return
 
         # Zeit-Fallback: alle _recalc_interval_s (modus-abhaengig)
