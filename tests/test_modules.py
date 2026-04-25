@@ -1970,6 +1970,164 @@ def test_dx_tune_pipeline_warmup_state():
     assert warmup == 0, "Nach Warmup: Stats aktiv (warmup=0)"
 
 
+# ── Diversity._evaluate — Antennen-Entscheidungslogik ────────────────────────
+# Hinweis: DIVERSITY_DE.md beschreibt das Verfahren als "UCB1 Bandit" — der
+# Code ist tatsaechlich Median+8%-Schwellwert (kein UCB1). Diese Tests pruefen
+# die tatsaechlich implementierte Logik in DiversityController._evaluate().
+
+def test_diversity_evaluate_below_threshold_stays_50_50():
+    """Differenz < 8% → 50:50, kein Dominant."""
+    from core.diversity import DiversityController
+    dc = DiversityController()
+    dc._phase = "measure"
+    # A1=10, A2=10 → diff=0% < 8% → 50:50
+    for _ in range(4):
+        dc._measurements["A1"].append(10.0)
+        dc._measurements["A2"].append(10.0)
+    dc._evaluate()
+    assert dc.ratio == "50:50"
+    assert dc.dominant is None
+    assert dc.phase == "operate"
+
+
+def test_diversity_evaluate_a1_dominant_70_30():
+    """A1 deutlich besser → 70:30, dominant=A1."""
+    from core.diversity import DiversityController
+    dc = DiversityController()
+    dc._phase = "measure"
+    for _ in range(4):
+        dc._measurements["A1"].append(20.0)
+        dc._measurements["A2"].append(10.0)
+    dc._evaluate()
+    # diff = 10/20 = 50% >> 8% → 70:30, A1 dominant
+    assert dc.ratio == "70:30"
+    assert dc.dominant == "A1"
+
+
+def test_diversity_evaluate_a2_dominant_30_70():
+    """A2 deutlich besser → 30:70, dominant=A2."""
+    from core.diversity import DiversityController
+    dc = DiversityController()
+    dc._phase = "measure"
+    for _ in range(4):
+        dc._measurements["A1"].append(8.0)
+        dc._measurements["A2"].append(15.0)
+    dc._evaluate()
+    # diff = 7/15 = 46.7% >> 8% → 30:70, A2 dominant
+    assert dc.ratio == "30:70"
+    assert dc.dominant == "A2"
+
+
+def test_diversity_evaluate_too_few_data_falls_back_to_50_50():
+    """peak <= 1.0 (zu wenig Daten) → 50:50 ohne Dominant."""
+    from core.diversity import DiversityController
+    dc = DiversityController()
+    dc._phase = "measure"
+    for _ in range(4):
+        dc._measurements["A1"].append(0.0)
+        dc._measurements["A2"].append(1.0)
+    dc._evaluate()
+    assert dc.ratio == "50:50"
+    assert dc.dominant is None
+
+
+def test_diversity_dx_mode_uses_weak_count():
+    """DX-Modus zaehlt schwache Stationen (SNR < -10), Standard-Modus alle."""
+    from core.diversity import DiversityController
+    dc_dx = DiversityController(scoring_mode="dx")
+    dc_dx._phase = "measure"
+    # In DX-Modus: dx_weak_count wird gespeichert
+    dc_dx.record_measurement("A1", score=0.0, station_count=20, dx_weak_count=2)
+    dc_dx.record_measurement("A2", score=0.0, station_count=5, dx_weak_count=8)
+    assert dc_dx._measurements["A1"] == [2.0]
+    assert dc_dx._measurements["A2"] == [8.0]
+
+    dc_std = DiversityController(scoring_mode="normal")
+    dc_std._phase = "measure"
+    dc_std.record_measurement("A1", score=0.0, station_count=20, dx_weak_count=2)
+    dc_std.record_measurement("A2", score=0.0, station_count=5, dx_weak_count=8)
+    assert dc_std._measurements["A1"] == [20.0]
+    assert dc_std._measurements["A2"] == [5.0]
+
+
+def test_diversity_phase_transition_after_8_measurements():
+    """Nach MEASURE_CYCLES (8) Messungen → automatisch zu phase=operate."""
+    from core.diversity import DiversityController
+    dc = DiversityController()
+    dc._phase = "measure"
+    assert dc.phase == "measure"
+    # 7 Messungen → noch measure
+    for i in range(7):
+        ant = "A1" if i % 2 == 0 else "A2"
+        dc.record_measurement(ant, score=0.0, station_count=10)
+    assert dc.phase == "measure", f"Nach 7 Messungen: phase={dc.phase}"
+    # 8. Messung → _evaluate triggert → phase=operate
+    dc.record_measurement("A2", score=0.0, station_count=10)
+    assert dc.phase == "operate"
+    assert dc._operate_cycles == 0
+
+
+def test_diversity_record_measurement_ignored_in_operate_phase():
+    """Aufzeichnung in operate-Phase ist No-Op (nur measure-Phase aktiv)."""
+    from core.diversity import DiversityController
+    dc = DiversityController()
+    dc._phase = "operate"
+    dc.record_measurement("A1", score=99.0, station_count=99)
+    assert dc._measurements["A1"] == []
+    assert dc._measurements["A2"] == []
+
+
+# ── AP-Lite v2.2 — kohärente Addition (Sanity-Checks) ────────────────────────
+
+def test_ap_lite_correlate_no_encoder_returns_zero():
+    """correlate_candidate ohne Encoder → 0.0 (kein Crash, sicherer Default)."""
+    import numpy as _np
+    from core.ap_lite import correlate_candidate, SAMPLE_RATE, SLOT_SECONDS
+    buf = _np.zeros(int(SAMPLE_RATE * SLOT_SECONDS), dtype=_np.float32)
+    score = correlate_candidate(buf, "DA1MHH DK5ON 73", 1500.0, encoder=None)
+    assert score == 0.0
+
+
+def test_ap_lite_align_identical_costas_buffers_zero_offset():
+    """Identische Costas-Referenz-Buffer → dt=0, df=0 (Self-Alignment).
+
+    Verwendet die echte Costas-Referenz statt eines reinen Sinus, damit der
+    Korrelations-Score auf Sync-Positionen ein eindeutiges Maximum hat.
+    """
+    from core.ap_lite import (
+        align_buffers, _build_costas_reference, N_SYMBOLS, SYMBOL_SAMPLES,
+    )
+    n = N_SYMBOLS * SYMBOL_SAMPLES
+    ref = _build_costas_reference(freq_hz=1500.0, n_samples=n)
+    aligned, dt_samples, df_hz = align_buffers(ref, ref.copy(), freq_hz=1500.0)
+    assert dt_samples == 0, f"Erwartet dt=0 bei Self-Alignment, got {dt_samples}"
+    assert abs(df_hz) < 0.2, f"Erwartet df≈0 Hz bei Self-Alignment, got {df_hz}"
+    assert aligned.shape == ref.shape
+
+
+def test_ap_lite_costas_reference_has_signal_at_costas_positions():
+    """_build_costas_reference erzeugt Energie bei Costas-Positionen, nicht dazwischen."""
+    import numpy as _np
+    from core.ap_lite import (
+        _build_costas_reference, COSTAS_POSITIONS, SYMBOL_SAMPLES, N_SYMBOLS,
+    )
+    n = N_SYMBOLS * SYMBOL_SAMPLES
+    ref = _build_costas_reference(freq_hz=1500.0, n_samples=n)
+    assert ref.shape == (n,)
+    # Energie an einer Costas-Position muss > 0 sein
+    pos_energy = float(_np.sum(ref[
+        COSTAS_POSITIONS[0] * SYMBOL_SAMPLES:
+        (COSTAS_POSITIONS[0] + 1) * SYMBOL_SAMPLES
+    ] ** 2))
+    assert pos_energy > 0, "Costas-Position muss Signal-Energie haben"
+    # Energie zwischen Costas-Bloecken muss 0 sein (Pos 7-35 sind Daten, kein Costas)
+    gap_energy = float(_np.sum(ref[
+        7 * SYMBOL_SAMPLES:
+        36 * SYMBOL_SAMPLES
+    ] ** 2))
+    assert gap_energy == 0.0, "Daten-Bloecke muessen 0 sein im Costas-Referenzsignal"
+
+
 # ── Runner ───────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
