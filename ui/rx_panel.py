@@ -34,7 +34,7 @@ _COLOR_DONE = QColor("#44FF44")
 _COLOR_NORMAL = QColor("#CCCCCC")
 _COLOR_SEP = QColor("#444444")
 _COLOR_ACTIVE_CALL_BG = QColor("#2A1500")   # Dunkles Amber: aktiv angerufene Station
-_COLOR_ANSWER_ME_BG  = QColor("#2A1F00")   # Dunkles Amber: eigenes Callsign angesprochen
+_COLOR_ANSWER_ME_BG  = QColor("#5A4A10")   # Dunkles Gold: eigenes Callsign angesprochen
 
 _MAX_CYCLES = 3  # Nur die letzten 3 Zyklen anzeigen
 
@@ -265,7 +265,7 @@ class RXPanel(QWidget):
                 if item:
                     item.setBackground(bg)
                     f = item.font()
-                    f.setBold(is_active)
+                    f.setBold(is_active or is_answer_me)
                     item.setFont(f)
 
     def add_message(self, msg: FT8Message):
@@ -415,12 +415,15 @@ class RXPanel(QWidget):
         utc_item.setData(Qt.ItemDataRole.UserRole + 1, country)
         utc_item.setData(Qt.ItemDataRole.UserRole + 2, dist_km)
 
-        # Answer-Me: Hintergrund wenn eigenes Callsign direkt angesprochen
+        # Answer-Me: Hintergrund + Bold wenn eigenes Callsign direkt angesprochen
         if directed_to_us:
             for col in range(COL_COUNT):
                 it = self.table.item(row, col)
                 if it:
                     it.setBackground(_COLOR_ANSWER_ME_BG)
+                    f = it.font()
+                    f.setBold(True)
+                    it.setFont(f)
 
     def _populate_separator_row(self, row: int, count: int):
         """Zyklus-Trenner-Zeile einfuegen."""
