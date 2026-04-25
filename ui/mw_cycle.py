@@ -59,11 +59,35 @@ class CycleMixin:
         elif messages:
             self._handle_dx_tune_mode(messages)
 
+        # Slot-synchroner Such-Trigger + Histogramm-Refresh JEDEN Slot
+        # (unabhaengig von messages-Inhalt — _diversity_stations mit Aging ist
+        # Quelle der Wahrheit). Das fixt P1 (Histogramm-Update Guard) gleich mit.
+        if self._rx_mode == "diversity" and was_phase == "operate":
+            self._refresh_diversity_freq_view()
+
         if self._dx_tune_dialog is not None:
             self._dx_tune_dialog.feed_cycle(messages)
 
         self._run_ap_lite_rescue(messages)
         self._run_auto_hunt(messages)
+
+    def _refresh_diversity_freq_view(self):
+        """Pro Slot: Histogramm refreshen + ggf. Such-Trigger.
+
+        Slot-Counter (_search_slots_remaining) tickt bei jedem Aufruf. Wenn er
+        0 erreicht → Suche aktiv ausgeloest. Sonst nur Histogramm-Update damit
+        die UI-Bins live bleiben."""
+        qso_busy = self.qso_sm.state not in (
+            QSOState.IDLE, QSOState.TIMEOUT,
+            QSOState.CQ_CALLING, QSOState.CQ_WAIT,
+        )
+        with self._diversity_lock:
+            self._diversity_ctrl.sync_from_stations(self._diversity_stations)
+            search_due = self._diversity_ctrl.tick_slot()
+            if search_due:
+                self._diversity_ctrl.update_proposed_freq(qso_active=qso_busy)
+        self.control_panel.update_freq_histogram(
+            self._diversity_ctrl.get_histogram_data())
 
     # ───────────────────────────────────────────────────────────────────
     # Helper-Methoden für _on_cycle_decoded — extrahiert für Lesbarkeit.
@@ -190,11 +214,8 @@ class CycleMixin:
             self._diversity_stations, messages,
             self._active_qso_targets, antenna=ant)
 
-        # Histogramm 1:1 aus aktuellem RX-Fenster (station_accumulator)
-        self._diversity_ctrl.sync_from_stations(self._diversity_stations)
-        self._diversity_ctrl.update_proposed_freq(qso_active=qso_busy)
-        self.control_panel.update_freq_histogram(
-            self._diversity_ctrl.get_histogram_data())
+        # Histogramm + Freq-Suche kommen jetzt aus _refresh_diversity_freq_view
+        # (laeuft slot-synchron in _on_cycle_decoded, unabhaengig von messages)
 
         # Stationen pro Antenne — immer berechnen (nicht nur bei changed)
         a1_msgs = [m for m in self._diversity_stations.values()

@@ -666,10 +666,11 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         return styles.MSGBOX_STYLE
 
     def _tick_cq_countdown(self):
-        """Sekündlicher Update des CQ-Freq-Countdown-Balkens."""
+        """Sekündlicher Update des CQ-Freq-Countdown-Balkens.
+        Wert kommt aus slot-synchronem Such-Counter (~60s, friert bei Pause ein)."""
         if self._rx_mode == "diversity" and self._diversity_ctrl.cq_freq_hz is not None:
             self.control_panel.update_cq_freq_countdown(
-                self._diversity_ctrl.seconds_until_next_check)
+                self._diversity_ctrl.seconds_until_search)
         else:
             self.control_panel.set_cq_countdown_visible(False)
 

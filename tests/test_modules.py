@@ -1516,24 +1516,41 @@ def test_score_penalizes_close_neighbors():
     assert 1300 <= freq <= 1900, f"Erwartet breitere Lueck B, bekam {freq}"
 
 
-def test_set_mode_changes_dwell():
-    """set_mode('FT4') setzt _min_dwell_s = 8 Zyklen × 7.5s = 60s."""
-    from core.diversity import DiversityController
-    dc = DiversityController()
-    dc.set_mode("FT4")
-    assert dc._min_dwell_s == 60.0, f"FT4 Min-Dwell: {dc._min_dwell_s} != 60.0"
-    dc.set_mode("FT2")
-    assert abs(dc._min_dwell_s - 60.8) < 0.01, f"FT2 Min-Dwell: {dc._min_dwell_s} != 60.8"
-
-
-def test_set_mode_changes_recalc():
-    """set_mode('FT8') setzt _recalc_interval_s = 5 × 60s = 300s."""
+def test_set_mode_resets_search_slots():
+    """set_mode setzt _search_slots_remaining auf den modus-spezifischen Wert."""
     from core.diversity import DiversityController
     dc = DiversityController()
     dc.set_mode("FT8")
-    assert dc._recalc_interval_s == 300.0, f"FT8 Recalc: {dc._recalc_interval_s} != 300.0"
+    assert dc._search_slots_remaining == 4, f"FT8: {dc._search_slots_remaining} != 4"
     dc.set_mode("FT4")
-    assert dc._recalc_interval_s == 300.0, f"FT4 Recalc: {dc._recalc_interval_s} != 300.0"
+    assert dc._search_slots_remaining == 8, f"FT4: {dc._search_slots_remaining} != 8"
+    dc.set_mode("FT2")
+    assert dc._search_slots_remaining == 16, f"FT2: {dc._search_slots_remaining} != 16"
+
+
+def test_seconds_until_search_per_mode():
+    """seconds_until_search = remaining_slots * cycle_s, ~60s alle Modi."""
+    from core.diversity import DiversityController
+    dc = DiversityController()
+    dc.set_mode("FT8")
+    assert dc.seconds_until_search == 60, f"FT8 initial: {dc.seconds_until_search}"
+    dc.set_mode("FT4")
+    assert dc.seconds_until_search == 60, f"FT4 initial: {dc.seconds_until_search}"
+    dc.set_mode("FT2")
+    # 16 * 3.8 = 60.8 → int truncate = 60
+    assert dc.seconds_until_search == 60, f"FT2 initial: {dc.seconds_until_search}"
+
+
+def test_tick_slot_decrements_and_triggers():
+    """tick_slot() dekrementiert und returnt True wenn Counter erreicht 0."""
+    from core.diversity import DiversityController
+    dc = DiversityController()
+    dc.set_mode("FT8")  # 4 Slots
+    assert dc.tick_slot() is False  # 3 verbleibend
+    assert dc.tick_slot() is False  # 2
+    assert dc.tick_slot() is False  # 1
+    assert dc.tick_slot() is True   # 0 → trigger + reset
+    assert dc._search_slots_remaining == 4  # auto-reset
 
 
 def test_score_tiebreaker_uses_median():
@@ -1647,64 +1664,20 @@ def test_reset_clears_sticky_state():
     assert dc._cq_freq_hz is None
 
 
-def test_collision_2_in_direct_neighbors():
-    """2 Stationen in +/-1 Bin um current → Kollision erzwingt Frequenzwechsel."""
+def test_qso_protection_overrides_search():
+    """qso_active=True → update_proposed_freq macht KEINEN Wechsel."""
     from core.diversity import DiversityController
-    import time as _time
     dc = DiversityController()
-    # Erste Berechnung etabliert eine Frequenz
     dc.sync_from_stations(_make_stations(800, 850, 1900, 1950))
     dc.update_proposed_freq()
     first = dc._cq_freq_hz
     assert first is not None
-    # Dwell-Time umgehen: _last_change_time weit zurueck
-    dc._last_change_time = _time.time() - dc._min_dwell_s - 1
-    # 2 Stationen in +/-1 Bin der aktuellen Freq → n_direct >= 2
+    # Histogramm aendert sich (Stationen direkt auf alter Freq) → wuerde sonst wechseln
     cb = first // dc.FREQ_BIN_HZ
     f_minus = (cb - 1) * dc.FREQ_BIN_HZ
     f_plus = (cb + 1) * dc.FREQ_BIN_HZ
     dc.sync_from_stations(_make_stations(f_minus, f_plus, 800, 850, 1900, 1950))
-    dc.update_proposed_freq()
-    # Sticky-Schwelle matched die Kollisions-Schwelle → muss gewechselt haben
-    assert dc._cq_freq_hz != first, \
-        f"Kollision n_direct=2 muss Wechsel erzwingen: blieb bei {first}"
-
-
-def test_collision_3_in_extended_band():
-    """3 Stationen in +/-2 Bins (inkl. current) → collision = True."""
-    from core.diversity import DiversityController
-    import time as _time
-    dc = DiversityController()
-    dc.sync_from_stations(_make_stations(800, 850, 1900, 1950))
-    dc.update_proposed_freq()
-    first = dc._cq_freq_hz
-    assert first is not None
-    dc._last_change_time = _time.time() - dc._min_dwell_s - 1
-    # 3 Stationen in +/-2 Bins (z.B. -2, +1, +2) → n_in_band >= 3
-    cb = first // dc.FREQ_BIN_HZ
-    f_m2 = (cb - 2) * dc.FREQ_BIN_HZ
-    f_p1 = (cb + 1) * dc.FREQ_BIN_HZ
-    f_p2 = (cb + 2) * dc.FREQ_BIN_HZ
-    dc.sync_from_stations(_make_stations(f_m2, f_p1, f_p2, 800, 850, 1900, 1950))
-    dc.update_proposed_freq()
-    assert dc._last_change_time > _time.time() - 1
-
-
-def test_qso_protection_overrides_collision():
-    """qso_active=True + Kollision → kein Wechsel."""
-    from core.diversity import DiversityController
-    import time as _time
-    dc = DiversityController()
-    dc.sync_from_stations(_make_stations(800, 850, 1900, 1950))
-    dc.update_proposed_freq()
-    first = dc._cq_freq_hz
-    assert first is not None
-    dc._last_change_time = _time.time() - dc._min_dwell_s - 1
-    cb = first // dc.FREQ_BIN_HZ
-    f_minus = (cb - 1) * dc.FREQ_BIN_HZ
-    f_plus = (cb + 1) * dc.FREQ_BIN_HZ
-    dc.sync_from_stations(_make_stations(f_minus, f_plus, 800, 850, 1900, 1950))
-    # qso_active=True → fruehestens kein Wechsel
+    # qso_active=True → blockt Wechsel komplett
     dc.update_proposed_freq(qso_active=True)
     assert dc._cq_freq_hz == first, "QSO-Schutz: keine Aenderung waehrend QSO"
 

@@ -410,8 +410,8 @@ class _AntenneCard(QFrame):
         )
         cq_row_layout.addWidget(self._cq_freq_lbl)
         self._cq_freq_bar = QProgressBar()
-        self._cq_freq_bar.setRange(0, 15)
-        self._cq_freq_bar.setValue(15)
+        self._cq_freq_bar.setRange(0, 60)
+        self._cq_freq_bar.setValue(60)
         self._cq_freq_bar.setTextVisible(False)
         self._cq_freq_bar.setFixedHeight(6)
         self._cq_freq_bar.setStyleSheet(
@@ -1118,11 +1118,11 @@ class ControlPanel(QWidget):
             self._freq_hist.setVisible(True)
 
     def update_cq_freq_countdown(self, remaining_s: int) -> None:
-        """CQ-Frequenz Countdown-Balken aktualisieren (0-15 Sekunden)."""
-        if remaining_s <= 5:
+        """CQ-Frequenz Countdown-Balken aktualisieren (0-60 Sekunden, slot-synchron)."""
+        if remaining_s <= 15:
             color_txt = "#FF5555"
             bar_color = "#FF5555"
-        elif remaining_s <= 10:
+        elif remaining_s <= 30:
             color_txt = "#CC3333"
             bar_color = "#CC3333"
         else:
