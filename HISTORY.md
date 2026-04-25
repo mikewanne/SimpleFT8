@@ -5,6 +5,22 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-04-25 v0.56 — PDF S.3: Erklärung funkerverständlich (kein Jargon)
+
+**Betroffene Dateien:** `scripts/generate_plots.py`, `auswertung/Auswertung-40m-FT8.pdf`, `auswertung/en/Report-40m-FT8.pdf`
+
+### Hintergrund
+S.3-Tabelle war für einen Funker-Leser nicht selbsterklärend: Spalte hieß "/Zyklus" aber Note sprach von "Stunden-Durchschnitt" → Widerspruch. Dazu Statistik-Jargon ("Pooled Mean") der außerhalb der Fachliteratur nicht bekannt ist.
+
+### Änderungen
+- Spaltenheader: `Ø Stat./Zyklus` → `Ø Sta./15s-Zyklus` (Zykluslänge explizit)
+- `p3_header_subtitle`: "Pooled Mean über alle Messtage" → "Tagesdurchschnitt über 4 Messtage, alle Tageszeiten"
+- `p3_note1`: Klar auf Deutsch: "So viele Stationen pro 15s-Zyklus im Schnitt, gemittelt über alle Messpunkte aus 4 Messtagen und allen Tageszeiten (morgens, mittags, abends). Das ist der echte Tagesdurchschnitt — kein Filter."
+- `p1_summary_body` (DE+EN): "Pooled Mean" → "Durchschnitt über alle Messpunkte, 4 Messtage, alle Tageszeiten"
+- PDFs (DE+EN) neu generiert und gepusht
+
+---
+
 ## 2026-04-25 v0.56 — Statistik-Korrektur: Pooled Mean global (kein Stunden-Filter)
 
 **Betroffene Dateien:** `scripts/generate_plots.py`, `CLAUDE.md`, `README.md` (DE+EN), PDFs regeneriert

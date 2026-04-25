@@ -217,14 +217,35 @@ Speicherung: ~/.simpleft8/dt_corrections.json → Key "FT8_20m" (pro Modus+Band)
 
 ---
 
-## generate_plots.py — PDF-Layout (cursor-basiert)
+## generate_plots.py — Berechnungsmethodik (Tagesdurchschnitt)
 
+**Wie der Ø Sta./15s-Zyklus berechnet wird:**
+
+```
+statistics/<Modus>/<Band>/<Proto>/YYYY-MM-DD_HH.md
+  → jede Datei = 1 UTC-Stunde, 1 Modus, 1 Band
+  → jede Zeile = 1 FT8-Zyklus (15s) mit Spalte "stationen" (Anzahl dekodierter Stationen)
+
+Ø Sta./15s = Summe aller Stationswerte ÷ Anzahl aller Zyklen
+             (über ALLE Dateien = alle Tage × alle Stunden × alle Zyklen)
+
+Beispiel Normal: 6.744 Zyklen × ~18.5 Sta./Zyklus
+  → Das entspricht dem Tagesdurchschnitt wenn man morgens, mittags, abends misst
+  → KEIN Tageszeit-Filter, KEINE Gewichtung nach Stunde oder Tag
+  → Je mehr Messpunkte (Zyklen), desto stabiler der Wert
+```
+
+**Was der Wert NICHT ist:**
+- ❌ Nicht Stationen pro Stunde (wäre 18.5 × 240 = 4.440/h)
+- ❌ Nicht der Spitzenwert einer bestimmten Tageszeit
+- ✅ Der Durchschnitt über einen ganzen typischen Betriebstag
+
+**Weitere PDF-Layout-Details:**
 - **Inch-Koordinaten:** `_yf(y_in) = 1.0 - y_in / _PH` konvertiert Zoll→figure-coord
 - **Cursor-Helpers:** `_ctext(fig, y, text, fs)` → gibt neues y zurück; `_chline` → Linie; `_csection` → Titel+Linie+Body
 - **Seitenhöhe:** A4 landscape: `_PH=8.27`, `_PW=11.69`, `_CTOP=1.00`, `_CBOT=7.71`
 - **Body 11pt / Titel 13pt** — nie hardcoded figure-y, nie `_r_hline` (veraltet, gelöscht)
 - **Rescue-Kappen:** grün, nur Diversity-Modi, `load_rescue_by_hour(stats_dir, mode, band, proto)`
-- **Pooled Mean** (alle Zyklen direkt, nicht mean-of-daily-means)
 - Statistics-Daten: `statistics/<Modus>/<Band>/<Proto>/YYYY-MM-DD_HH.md`
 
 ---
