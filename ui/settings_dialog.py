@@ -1,11 +1,14 @@
 """SimpleFT8 Settings Dialog — Einstellungen bearbeiten und in config.json speichern."""
 
+import time
+
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel,
     QLineEdit, QSpinBox, QDoubleSpinBox, QPushButton, QGroupBox,
     QComboBox, QMessageBox, QToolButton,
+    QTableWidget, QTableWidgetItem, QHeaderView,
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 
 from config.settings import Settings, DEFAULTS
 from ui.styles import MSGBOX_STYLE
@@ -151,6 +154,54 @@ class SettingsDialog(QDialog):
         top.addLayout(right)
         layout.addLayout(top)
 
+        # ── RF-Power-Presets (pro Band+Watt, pro Radio) ──────────────
+        rf_box = QGroupBox("RF-Presets pro Band+Watt")
+        rf_layout = QVBoxLayout(rf_box)
+        self._rf_info_label = QLabel("Aktives Radio: —")
+        self._rf_info_label.setStyleSheet("color: #888; padding: 0 0 4px 0;")
+        rf_layout.addWidget(self._rf_info_label)
+
+        self.rf_table = QTableWidget(0, 4)
+        self.rf_table.setHorizontalHeaderLabels(
+            ["Band", "Watt", "RF (0-100)", "Letzte Speicherung"]
+        )
+        self.rf_table.horizontalHeader().setSectionResizeMode(
+            QHeaderView.ResizeMode.Stretch
+        )
+        self.rf_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.rf_table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
+        self.rf_table.verticalHeader().setVisible(False)
+        self.rf_table.setStyleSheet(
+            "QTableWidget { background:#1a1a2e; color:#CCC; gridline-color:#333; }"
+            "QHeaderView::section { background:#222; color:#00AAFF; "
+            "padding:4px; border:1px solid #333; }"
+        )
+        self.rf_table.setMaximumHeight(140)
+        rf_layout.addWidget(self.rf_table)
+
+        rf_btn_row = QHBoxLayout()
+        rf_btn_row.addWidget(QLabel("Band:"))
+        self._rf_band_combo = QComboBox()
+        self._rf_band_combo.setMinimumWidth(80)
+        rf_btn_row.addWidget(self._rf_band_combo)
+        self.btn_rf_clear_band = QPushButton("Band löschen")
+        self.btn_rf_clear_band.setObjectName("reset")
+        self.btn_rf_clear_band.clicked.connect(self._on_rf_clear_band)
+        rf_btn_row.addWidget(self.btn_rf_clear_band)
+        rf_btn_row.addStretch()
+        self.btn_rf_clear_all = QPushButton("Alle löschen")
+        self.btn_rf_clear_all.setObjectName("reset")
+        self.btn_rf_clear_all.clicked.connect(self._on_rf_clear_all)
+        rf_btn_row.addWidget(self.btn_rf_clear_all)
+        rf_layout.addLayout(rf_btn_row)
+
+        layout.addWidget(rf_box)
+
+        # TX-Status-Polling (1 s) → Reset-Buttons disabled wenn TX aktiv
+        self._tx_status_timer = QTimer(self)
+        self._tx_status_timer.timeout.connect(self._update_rf_buttons_tx_state)
+        self._tx_status_timer.start(1000)
+
         # ── Unterer Bereich: volle Breite — FT8 & Antennen ───────────
         ft8 = QGroupBox("FT8 & Antennen")
         form3 = QFormLayout(ft8)
@@ -244,6 +295,108 @@ class SettingsDialog(QDialog):
         # Statistik + Debug-Konsole
         self.stats_cb.setChecked(self.settings.get("stats_enabled", True))
         self.debug_console_cb.setChecked(self.settings.get("debug_console_visible", False))
+        # RF-Presets-Tabelle initial befüllen
+        self._refresh_rf_table()
+        self._update_rf_buttons_tx_state()
+
+    # ── RF-Presets ────────────────────────────────────────────────
+
+    def _get_rf_preset_store(self):
+        parent = self.parent()
+        if parent is None or not hasattr(parent, "rf_preset_store"):
+            return None
+        return parent.rf_preset_store
+
+    def _get_radio_type(self) -> str:
+        parent = self.parent()
+        if parent is None or not hasattr(parent, "radio") or parent.radio is None:
+            return "unknown"
+        return getattr(parent.radio, "radio_type", "unknown")
+
+    def _is_tx_active(self) -> bool:
+        parent = self.parent()
+        if parent is None or not hasattr(parent, "encoder") or parent.encoder is None:
+            return False
+        return bool(getattr(parent.encoder, "is_transmitting", False))
+
+    def _refresh_rf_table(self):
+        store = self._get_rf_preset_store()
+        radio_type = self._get_radio_type()
+        self._rf_info_label.setText(f"Aktives Radio: {radio_type}")
+        self.rf_table.setRowCount(0)
+        self._rf_band_combo.clear()
+        if store is None:
+            return
+        presets = store.get_all(radio_type)
+        if not presets:
+            return
+        self._rf_band_combo.addItems(sorted(presets.keys()))
+        rows = []
+        for band, watts_dict in presets.items():
+            for watt, entry in watts_dict.items():
+                ts = entry.get("ts", 0) or 0
+                ts_str = (
+                    time.strftime("%d.%m. %H:%M", time.localtime(ts)) if ts else "—"
+                )
+                rows.append((band, int(watt), int(entry["rf"]), ts_str))
+        rows.sort(key=lambda r: (r[0], r[1]))
+        self.rf_table.setRowCount(len(rows))
+        for i, (band, watt, rf, ts_str) in enumerate(rows):
+            self.rf_table.setItem(i, 0, QTableWidgetItem(band))
+            self.rf_table.setItem(i, 1, QTableWidgetItem(f"{watt} W"))
+            self.rf_table.setItem(i, 2, QTableWidgetItem(str(rf)))
+            self.rf_table.setItem(i, 3, QTableWidgetItem(ts_str))
+
+    def _update_rf_buttons_tx_state(self):
+        tx_active = self._is_tx_active()
+        self.btn_rf_clear_band.setEnabled(not tx_active)
+        self.btn_rf_clear_all.setEnabled(not tx_active)
+        tip = "Während aktivem TX nicht verfügbar" if tx_active else ""
+        self.btn_rf_clear_band.setToolTip(tip)
+        self.btn_rf_clear_all.setToolTip(tip)
+
+    def _on_rf_clear_band(self):
+        band = self._rf_band_combo.currentText()
+        if not band:
+            return
+        msg = QMessageBox(self)
+        msg.setWindowTitle("RF-Preset löschen")
+        msg.setIcon(QMessageBox.Icon.Question)
+        msg.setText(
+            f"RF-Presets für {band} wirklich löschen?\n\n"
+            "Closed-Loop muss bei nächster TX-Aktivierung neu von Null hochtasten."
+        )
+        msg.setStyleSheet(MSGBOX_STYLE)
+        btn_yes = msg.addButton("Löschen", QMessageBox.ButtonRole.DestructiveRole)
+        msg.addButton("Abbrechen", QMessageBox.ButtonRole.RejectRole)
+        msg.exec()
+        if msg.clickedButton() != btn_yes:
+            return
+        store = self._get_rf_preset_store()
+        radio_type = self._get_radio_type()
+        if store and radio_type and radio_type != "unknown":
+            store.clear_band(radio_type, band)
+            self._refresh_rf_table()
+
+    def _on_rf_clear_all(self):
+        radio_type = self._get_radio_type()
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Alle RF-Presets löschen")
+        msg.setIcon(QMessageBox.Icon.Warning)
+        msg.setText(
+            f"Alle RF-Presets für {radio_type} wirklich löschen?\n\n"
+            "Closed-Loop muss bei nächster TX-Aktivierung neu von Null hochtasten."
+        )
+        msg.setStyleSheet(MSGBOX_STYLE)
+        btn_yes = msg.addButton("Alle löschen", QMessageBox.ButtonRole.DestructiveRole)
+        msg.addButton("Abbrechen", QMessageBox.ButtonRole.RejectRole)
+        msg.exec()
+        if msg.clickedButton() != btn_yes:
+            return
+        store = self._get_rf_preset_store()
+        if store and radio_type and radio_type != "unknown":
+            store.clear_all(radio_type)
+            self._refresh_rf_table()
 
     def _save_and_close(self):
         self.settings.set("callsign", self.callsign.text().upper().strip())
