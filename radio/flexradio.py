@@ -33,6 +33,8 @@ class FlexRadio(QObject):
         error: (str) — Fehler
     """
 
+    radio_type: str = "flexradio"
+
     connected = Signal()
     disconnected = Signal()
     frequency_changed = Signal(float)

@@ -22,6 +22,10 @@ class RadioInterface(ABC):
     ausschließlich diese Methoden.
     """
 
+    # Subclasses überschreiben mit eindeutigem String (z.B. "flexradio", "ic7300").
+    # Wird vom RFPresetStore als Top-Level-Key in rf_presets.json verwendet.
+    radio_type: str = "unknown"
+
     # ── Verbindung ─────────────────────────────────────────────────
 
     @abstractmethod
