@@ -83,48 +83,21 @@
 ## OFFEN — Naechste Schritte
 
 ### CQ-Frequenz-Algorithmus (core/diversity.py)
-- [ ] **Auswahllogik verbessern: Breiteste/ruhigste Luecke statt median-naechste.**
-  Aktuell: `best_gap = min(gaps, key=lambda g: abs(gap_center - median_bin))` → waehlt immer
-  die Luecke in der Mitte des belegten Bereichs. User sieht TX immer zentral, nie in freien Randbereichen.
-  Fix: Score-basierte Bewertung mit Prioritaet:
-  1. Lueckenbreite (groesste Gewichtung)
-  2. Anzahl Nachbar-Stationen in Bins ±1 und ±2 (Stoerer-Penalty)
-  3. Erst dann: Abstand zum Median (kleinste Gewichtung)
-  Fuer DX-Betrieb besonders wichtig: freiste Luecke schlaegt zentrale Position.
-
-- [ ] **Suchbereich: Fester Sweet-Spot 800-2000Hz statt occupied_min/max.**
-  Aktuell: FREQ_MIN_HZ=150, FREQ_MAX_HZ=2800 → SEARCH_MIN/MAX auf belegten Bereich begrenzt.
-  Problem: Unter 800Hz oder ueber 2000Hz werden wir von anderen Stationen ignoriert (ausserhalb
-  des FT8-Sweet-Spots). Andererseits: Bereiche INNERHALB 800-2000Hz ausserhalb der aktuellen
-  Stationsmasse werden auch nicht durchsucht.
-  Fix: FREQ_MIN_HZ=800, SEARCH_MIN=800, SEARCH_MAX=2000 (fest) — gesamten Sweet-Spot durchsuchen,
-  aber nie darueber hinaus. Damit bekommt auch der Randbereich 800-900Hz eine Chance wenn er frei ist.
-
-- [ ] **Modus-abhaengige Dwell-Time und Neuberechnungs-Intervall.**
-  Aktuell: recalc_interval=20 Zyklen (passt fuer FT8=5 Min), dwell=3 Zyklen (=45s FT8).
-  Problem: FT4 und FT2 haben kuerzere Zyklen → gleiche Zyklenanzahl = viel kuerzere Zeit.
-  Zu haeufiges Springen macht uns "unbeliebt" — wer uns einmal gehoert hat findet uns nicht mehr.
-  Ziel: Einheitlich ~1 Min Minimum Dwell-Time und ~5 Min Routine-Intervall in allen Modi.
-  Konkrete Werte (DeepSeek + Analyse):
-  | Modus | Zykluszeit | Min Dwell | Timer-Intervall | Max Wechsel/h |
-  | FT8   | 15s        | 4 Zyklen  | 20 Zyklen       | 6-8           |
-  | FT4   | 7,5s       | 8 Zyklen  | 40 Zyklen       | 6-8           |
-  | FT2   | 3,75s      | 16 Zyklen | 80 Zyklen       | 6-8           |
-  Implementierung: Klasse muss aktiven Modus kennen und Werte dynamisch setzen.
-
-- [ ] **Frequenzwechsel im Statistics-Modus sperren.**
-  Waehrend einer Mess-Session (Statistics aktiv) TX-Frequenz festhalten — Wechsel verfaelscht
-  den Vergleich (andere Stationen hoeren uns, andere QRM-Umgebung).
-  Fix: Im Stats-Modus nur bei schwerer Kollision (≥5 Nachbarn) wechseln, sonst einfrieren.
-
-- [ ] **Kollisionserkennung verfeinern.**
-  Aktuell: ≥3 Stationen in Nachbar-Bins nach ≥3 Zyklen Dwell-Time.
-  Fix: ≥2 in direkten Nachbarn (±1 Bin) ODER ≥3 in erweitertem Bereich (±2 Bins).
-  QSO-Schutz bleibt wie er ist (qso_active → kein Wechsel, auch bei Kollision) — korrekt!
-
-- [ ] **Sticky Gap (DeepSeek-Idee):** Nur wechseln wenn neue Luecke >50Hz breiter ist ALS die aktuelle
-  ODER aktuelle Luecke unbrauchbar (≥3 direkte Nachbarn). Verhindert nervöses "Pendeln" wenn zwei
-  Luecken fast gleich gut sind. Implementierung: `if new_gap_width > current_gap_width + 50: switch()`.
+- [x] **Auswahllogik Score-basiert (v0.58):** `_score_gap()` ersetzt Median-Distance — Lückenbreite
+  dominiert (1 Hz = 1 Punkt), Nachbarn ±1 Bin = 50 Hz Strafe pro Station, ±2 Bins halb so viel,
+  Median-Distance nur als 0.01-Tiebreaker.
+- [x] **Fester Sweet-Spot 800-2000 Hz (v0.58):** `SWEET_SPOT_MIN_HZ=800` / `MAX_HZ=2000` —
+  TX-Frequenz nur noch im Sweet-Spot. Median wird nur über Sweet-Spot-Stationen berechnet.
+- [x] **Modus-abhängige Dwell + Recalc (v0.58):** `set_mode()` setzt FT8=4z, FT4=8z, FT2=16z
+  Dwell (~60 s einheitlich), Recalc = 5 × Dwell = ~300 s.
+- [~] **Frequenzwechsel im Statistics-Modus sperren — VERWORFEN (Mike-Entscheidung 25.04.2026):**
+  Variance, kein Bias. Wechsel mitteln sich über 22.000+ Zyklen raus, treffen alle Modi gleich.
+  Sticky-Gap (50 Hz) + verfeinerte Kollision reduzieren Wechsel-Frequenz ausreichend.
+- [x] **Kollisionserkennung verfeinert (v0.58):** `n_direct >= 2` ODER `n_in_band >= 3`
+  (n_in_band inkl. current_bin). QSO-Schutz unverändert.
+- [x] **Sticky Gap (v0.58):** Bleibt bei aktueller Frequenz wenn im Sweet-Spot, keine
+  Kollisions-Schwelle erreicht und neue Lücke nicht > +50 Hz breiter. `_measure_gap_around()`
+  refresht aktuelle Lück-Breite nach Sticky-Hit. `reset()` setzt `_current_gap_width_hz=0`.
 
 ### Propagation (core/propagation.py)
 - [x] **60m Propagations-Balken:** Interpolation aus 40m+80m implementiert in

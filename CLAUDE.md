@@ -195,6 +195,20 @@ Speicherung: ~/.simpleft8/dt_corrections.json → Key "FT8_20m" (pro Modus+Band)
 - Median über 4 Zyklen
 - Stats-Warmup: 60s nach Band/Modus-/App-Start
 
+### CQ-Frequenz-Algorithmus (v0.58, Score-basiert)
+- **Sweet-Spot fest:** `SWEET_SPOT_MIN_HZ=800`, `SWEET_SPOT_MAX_HZ=2000` — TX nur hier.
+- **Score:** `gap_width_hz - 50·n_close - 25·n_near - 0.01·median_distance_hz`
+  - Lückenbreite dominiert, Nachbarn ±1 Bin = 50 Hz Strafe pro Station, ±2 Bins halb so viel
+  - Median-Distance nur Tiebreaker (0.01) — Median wird nur über Sweet-Spot-Stationen berechnet
+- **Sticky Gap:** bleibt bei aktueller Frequenz wenn im Sweet-Spot, keine Kollisions-Schwelle
+  erreicht (`n_direct >= 2` ODER `n_in_band >= 3`) und neue Lücke nicht > +50 Hz breiter.
+  `_measure_gap_around()` refresht `_current_gap_width_hz` nach Sticky-Hit.
+- **Kollisionserkennung:** `n_direct >= 2` ODER `n_in_band >= 3` (inkl. `current_bin`).
+  Sticky-Schwelle MUSS gleich bleiben — sonst verpufft Kollision (HIGH-Bug aus DeepSeek-Review).
+- **Modus-abhängige Dwell:** `set_mode()` setzt FT8=4z, FT4=8z, FT2=16z = ~60 s Min-Dwell.
+  Recalc = 5 × Dwell = ~300 s. Aufruf in `mw_radio.py::_on_mode_changed` und `_on_radio_connected`.
+- **`reset()` muss `_current_gap_width_hz = 0` setzen** — sonst Bandwechsel-Bug (alte Breite hängt nach).
+
 ---
 
 ## Cycle-Zeiten
@@ -298,12 +312,11 @@ Beispiel Normal: 6.744 Zyklen × ~18.5 Sta./Zyklus
 
 ## Offene TODOs (nach Schwierigkeit)
 
-**NÄCHSTE SESSION — Prompt bereit (v0.58 — CQ-Frequenz-Algorithmus):**
-- Datei: `~/Desktop/cq_freq_prompt_v0.58.md`
-- 5 Sub-Tasks: Score-basierte Auswahl, fester Sweet-Spot 800-2000Hz, modus-abhängige
-  Dwell, verfeinerte Kollisionserkennung, Sticky Gap mit reset()-Fix
-- 14 neue Tests (197 → ≥214), 4 atomare Commits
-- Stats-Modus-Sperre bewusst NICHT in Scope (Mike-Entscheidung 25.04.: Variance kein Bias)
+**v0.58 — UMGESETZT (CQ-Frequenz-Algorithmus):**
+- 5 Sub-Tasks (Score, Sweet-Spot 800-2000, modus-abh. Dwell, Kollision, Sticky+reset()) implementiert
+- 14 neue Tests (197 → 211 grün)
+- 4 atomare Commits + 1 DeepSeek-Review-Fix-Commit (Sticky/Kollision Logik-Konflikt + Threading)
+- Stats-Modus-Sperre VERWORFEN (Mike-Entscheidung 25.04.: Variance kein Bias)
 
 **EINFACH:**
 1. **Even/Odd dedizierter Timer** — unabhängig vom Decoder-Thread (FT2 kritischsten)

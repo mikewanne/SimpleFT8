@@ -5,6 +5,45 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-04-25 v0.58 — CQ-Frequenz-Algorithmus Score-basiert (Sweet-Spot 800-2000 Hz)
+
+**Betroffene Dateien:** `core/diversity.py`, `tests/test_modules.py`, `ui/mw_radio.py`, `main.py`
+
+### Änderungen
+
+**`core/diversity.py` — fünf Sub-Tasks (A-E):**
+- **A) Score-Funktion `_score_gap()`**: ersetzt die Median-Distance-Auswahl. Score = Lückenbreite (Hz) − 50·n_close − 25·n_near − 0.01·median_distance_hz. Lückenbreite dominiert, Nachbarn in ±1 Bin kosten 50 Hz pro Station, Nachbarn in ±2 Bins halb so viel; Median-Distance ist nur Tiebreaker.
+- **B) Fester Sweet-Spot 800-2000 Hz** (`SWEET_SPOT_MIN_HZ`/`MAX_HZ`): TX-Frequenz wird nur noch im Sweet-Spot gewählt, nicht mehr dynamisch um die belegten Bins herum. Median wird nur über Stationen IM Sweet-Spot berechnet (sonst Verzerrung). Sweet-Spot komplett leer → Mitte als Default-Median.
+- **C) `set_mode(mode)` API + modus-abhängige Dwell**: FT8=4 Zyklen, FT4=8, FT2=16 → ~60 s einheitlich. Recalc = 5 × Dwell → ~300 s. `_min_dwell_s` und `_recalc_interval_s` werden modus-abhängig gesetzt; Klassenkonstanten `MIN_DWELL_S`/`RECALC_INTERVAL_S` bleiben als Fallback-Defaults.
+- **D) Verfeinerte Kollisionserkennung**: alte Schwelle `>=3 Nachbarn in ±1 Bin` ersetzt durch `n_direct >= 2 ODER n_in_band >= 3` (n_in_band inkl. current_bin). Schlägt früher an wenn Nachbarsignale auftauchen.
+- **E) Sticky Gap mit reset()-Fix**: `_current_gap_width_hz` neu im State, in `reset()` auf 0 gesetzt. Sticky bleibt bei aktueller Frequenz solange sie im Sweet-Spot ist, keine Kollisions-Schwelle erreicht und neue Lücke nicht > +50 Hz breiter ist. `_measure_gap_around()` misst die echte aktuelle Lücke nach Sticky-Hit (sonst veralteter Vergleichswert).
+
+**`ui/mw_radio.py` — `set_mode()` Aufrufe:**
+- `_on_mode_changed()`: nach `self.settings.set("mode", mode)` und `self.timer.set_mode(mode)` neu `self._diversity_ctrl.set_mode(mode)` aufgerufen.
+- `_on_radio_connected()`: nach `_ntp.set_mode(mode, band)` neu `self._diversity_ctrl.set_mode(mode)` für Verbindungs-Initialisierung.
+
+**`main.py`:**
+- `APP_VERSION = "0.57"` → `"0.58"`
+
+### DeepSeek-Review (deepseek-chat, thinking high)
+3 Issues gefunden, alle gefixt vor Release-Bump:
+1. **HIGH** — Sticky-Schwelle (`n_direct >= 3`) und Kollisions-Schwelle (`n_direct >= 2 ODER n_in_band >= 3`) waren inkonsistent → bei n_direct == 2 verpuffte Kollision ohne Frequenzwechsel. Fix: Sticky übernimmt die Kollisions-Schwelle exakt.
+2. **MEDIUM** — Sticky-Pfad refreshte `_current_gap_width_hz` nicht → bei aufeinanderfolgenden Sticky-Hits Vergleich gegen veralteten Wert. Fix: neue Helper `_measure_gap_around(bin_idx)` aktualisiert die echte Lück-Breite im Sweet-Spot.
+3. **LOW (Test)** — `test_collision_2_in_direct_neighbors` prüfte nur `_last_change_time`. Mit dem HIGH-Fix nun stärker: prüft Frequenz-Wechsel.
+4. **CRITICAL (defensiv)** — `update_proposed_freq` greift auf `self._freq_histogram` ohne Lock zu. Aktuell sicher (sync läuft im selben Thread), aber `dict()`-Snapshot kostet nichts und schützt vor zukünftigen Threading-Änderungen.
+
+### Tests
+197 → 211 grün (14 neue: 3 Score, 2 set_mode, 6 Sticky, 2 Kollision, 1 QSO-Schutz). Plan im Prompt sagte "≥214" — Rechenfehler im Prompt (14 + 197 = 211, nicht 214).
+
+### Atomare Commits
+- `b7a06b5` Sub-Task A+B (Score + Sweet-Spot)
+- `b15c62a` Sub-Task C (modus-abhängige Dwell + set_mode())
+- `255b0f9` Sub-Tasks D+E (Kollision + Sticky + reset()-Fix)
+- `06afbd8` DeepSeek-Review-Fixes (Logik-Konflikt + Sticky-Width + Test + Threading)
+- `___` (dieser Commit) Release-Bump 0.58 + HISTORY/TODO/CLAUDE
+
+---
+
 ## 2026-04-25 v0.57 — Answer-Me Highlighting + Gain-Messung Logging
 
 **Betroffene Dateien:** `ui/rx_panel.py`, `ui/mw_radio.py`, `main.py`
