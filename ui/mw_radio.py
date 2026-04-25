@@ -5,6 +5,7 @@ from __future__ import annotations
 import threading
 import time
 from collections import deque
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import Qt, Slot
@@ -825,6 +826,8 @@ class RadioMixin:
         self._dx_tune_dialog = None
         self._set_gain_measure_lock(False)
 
+        self._log_gain_result(r, band, ft_mode)
+
         # Normal-Modus (KALIBRIEREN-Button): in normal_presets speichern, ANT1-Gain anwenden
         if self._rx_mode == "normal":
             import time as _time
@@ -974,3 +977,30 @@ class RadioMixin:
             self.radio.set_tx_antenna("ANT1")
             self.radio.set_rfgain(gain)
         print(f"[Normal] ANT1, Gain {gain} dB ({'kalibriert' if measured_str else 'Standard'})")
+
+    def _log_gain_result(self, r: dict, band: str, ft_mode: str) -> None:
+        """Append-only Logging jeder erfolgreichen Gain-Messung in
+        ~/.simpleft8/gain_log.md — fuer spaetere Drift-Analyse ueber Wochen."""
+        import time as _time
+        log_path = Path.home() / ".simpleft8" / "gain_log.md"
+        utc = _time.strftime("%Y-%m-%d %H:%M UTC", _time.gmtime())
+        gain_mode = getattr(self, '_gain_scoring_mode', 'snr')
+        rx_mode   = getattr(self, '_rx_mode', 'normal')
+        mode_label = (
+            f"{rx_mode.capitalize()} / "
+            f"{'DX-Scoring' if gain_mode == 'snr' else 'Standard'}"
+        )
+        lines = [
+            f"\n## {utc} — {band} {ft_mode} — {mode_label}",
+            f"- ANT1-Gain: {r.get('ant1_gain', '?')} dB  "
+            f"ANT2-Gain: {r.get('ant2_gain', '?')} dB",
+            f"- Beste Antenne: {r.get('best_ant', '?')}  "
+            f"(best_gain={r.get('best_gain', '?')} dB)",
+            f"- ANT1-Ø SNR: {r.get('ant1_avg', 0.0):.1f} dB  "
+            f"ANT2-Ø SNR: {r.get('ant2_avg', 0.0):.1f} dB",
+        ]
+        with open(log_path, "a", encoding="utf-8") as fh:
+            fh.write("\n".join(lines) + "\n")
+        print(f"[Gain-Log] {band} {ft_mode}: "
+              f"ANT1={r.get('ant1_gain')} ANT2={r.get('ant2_gain')} "
+              f"→ {r.get('best_ant')} — gain_log.md")
