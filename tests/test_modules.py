@@ -1060,13 +1060,13 @@ def test_cq_freq_empty_histogram():
 
 
 def test_cq_freq_near_activity():
-    """CQ-Frequenz muss NAHE der Aktivitaet liegen (dynamischer Sweet Spot)."""
+    """CQ-Frequenz liegt im festen Sweet-Spot 800-2000 Hz."""
     from core.diversity import DiversityController
     dc = DiversityController()
     dc.sync_from_stations(_make_stations(*range(1000, 1200, 50)))
     freq = dc.get_free_cq_freq()
     if freq is not None:
-        assert 500 <= freq <= 1700, f"CQ-Freq {freq} zu weit von Aktivitaet"
+        assert 800 <= freq <= 2000, f"CQ-Freq {freq} ausserhalb Sweet-Spot 800-2000"
 
 
 # ── Settings Roundtrip ────────────────────────────────────────────────────────
@@ -1396,26 +1396,26 @@ def test_radio_interface_properties():
 
 # ── CQ Frequenz Dynamisch ────────────────────────────────────────────────────
 
-def test_cq_freq_dynamic_sweet_spot():
-    """CQ-Frequenz passt sich der Aktivitaet an (nicht fix 800-2000)."""
+def test_cq_freq_static_sweet_spot():
+    """CQ-Frequenz bleibt im Sweet-Spot 800-2000 auch bei Aktivitaet ausserhalb."""
     from core.diversity import DiversityController
     dc = DiversityController()
-    dc.sync_from_stations(_make_stations(*range(300, 800, 50)))
+    # Aktivitaet bei 300-700 Hz → Frequenz MUSS trotzdem in 800-2000 liegen
+    dc.sync_from_stations(_make_stations(*range(300, 750, 50)))
     freq = dc.get_free_cq_freq()
-    if freq is not None:
-        # Naechste freie Luecke liegt unter 300 Hz oder nah darueber
-        assert freq < 1200, f"CQ-Freq {freq} zu hoch fuer Aktivitaet bei 300-800 Hz"
+    assert freq is not None, "Sweet-Spot ist leer → muss eine Lueck gefunden werden"
+    assert 800 <= freq <= 2000, f"CQ-Freq {freq} ausserhalb Sweet-Spot trotz leerem Sweet-Spot"
 
 
 def test_cq_freq_high_activity():
-    """CQ-Frequenz liegt ausserhalb des dicht belegten Bereichs."""
+    """Stationen aussehralb Sweet-Spot → Frequenz trotzdem in 800-2000."""
     from core.diversity import DiversityController
     dc = DiversityController()
-    dc.sync_from_stations(_make_stations(*range(1000, 2000, 50)))
+    # Stationen bei 200-700 Hz (komplett unterhalb Sweet-Spot)
+    dc.sync_from_stations(_make_stations(*range(200, 750, 50)))
     freq = dc.get_free_cq_freq()
     if freq is not None:
-        # Gap liegt ausserhalb des belegten Bereichs (unter 1000 oder ueber 2000)
-        assert freq < 1000 or freq > 2000, f"CQ-Freq {freq} liegt im belegten Bereich"
+        assert 800 <= freq <= 2000, f"CQ-Freq {freq} ausserhalb Sweet-Spot"
 
 
 def test_omni_tx_pending_switch():
@@ -1446,24 +1446,22 @@ def test_omni_tx_qso_blocks_counter():
     assert omni.block == 1, "Block sollte 1 bleiben bei dauerhaftem QSO"
 
 
-def test_cq_freq_finds_gap_outside_occupied():
-    """TX-Frequenz liegt in einer freien Luecke — ggf. ausserhalb des belegten Bereichs."""
+def test_cq_freq_finds_gap_in_sweet_spot():
+    """Stationen unter 800 Hz → Frequenz im freien Sweet-Spot 800-2000."""
     from core.diversity import DiversityController
     dc = DiversityController()
     dc.sync_from_stations(_make_stations(*range(200, 550, 50)))
     freq = dc.get_free_cq_freq()
-    if freq is not None:
-        # Freq liegt NICHT mitten im belegten Bereich
-        assert freq < 200 or freq >= 550, f"TX-Freq {freq} liegt im belegten Bereich"
-        assert dc.FREQ_MIN_HZ <= freq <= dc.FREQ_MAX_HZ
+    assert freq is not None, "Sweet-Spot komplett leer → MUSS Lueck finden"
+    assert 800 <= freq <= 2000, f"TX-Freq {freq} ausserhalb Sweet-Spot"
 
 
 def test_cq_freq_fallback_no_gap():
-    """Wenn alle Bins belegt sind, gibt get_free_cq_freq() None zurueck."""
+    """Wenn Sweet-Spot komplett belegt ist, gibt get_free_cq_freq() None zurueck."""
     from core.diversity import DiversityController
     dc = DiversityController()
-    # Alle Bins von 150-2850 Hz belegen → keine Luecke im gesamten Suchbereich
-    dc.sync_from_stations(_make_stations(*range(150, 2851, 50)))
+    # Sweet-Spot 800-2000 komplett dicht belegen → keine Lueck >= 150 Hz
+    dc.sync_from_stations(_make_stations(*range(800, 2001, 50)))
     freq = dc.get_free_cq_freq()
     assert freq is None, f"Keine Luecke erwartet, aber {freq} Hz zurueckgegeben"
 
@@ -1472,11 +1470,58 @@ def test_proposed_freq_updates():
     """update_proposed_freq() berechnet TX-Freq wenn Luecke im Cluster vorhanden."""
     from core.diversity import DiversityController
     dc = DiversityController()
-    # Stationen bei 400-550 Hz und 800-950 Hz → Luecke 600-750 Hz (3 Bins = 150 Hz)
-    dc.sync_from_stations(_make_stations(400, 450, 500, 550, 800, 850, 900, 950))
+    # Stationen bei 800-950 Hz und 1700-1950 Hz → Lueck 1000-1700 Hz im Sweet-Spot
+    dc.sync_from_stations(_make_stations(800, 850, 900, 950, 1700, 1750, 1800, 1850, 1900, 1950))
     assert dc.cq_freq_hz is None  # Noch nicht berechnet
     dc.update_proposed_freq()
     assert dc.cq_freq_hz is not None  # Jetzt berechnet (Luecke gefunden)
+
+
+# ── CQ-Freq Score-basierte Auswahl (v0.58) ─────────────────────────────────
+
+def test_score_prefers_widest_gap():
+    """Score: zwei Luecken im Sweet-Spot, die breitere muss gewinnen."""
+    from core.diversity import DiversityController
+    dc = DiversityController()
+    # Stationen: 800-850 (2), Lueck1=900-1100 (4 Bins, 200Hz),
+    # 1150-1200 (2), Lueck2=1250-1900 (13 Bins, 650Hz), 1950 (1)
+    dc.sync_from_stations(_make_stations(800, 850, 1150, 1200, 1950))
+    freq = dc.get_free_cq_freq()
+    assert freq is not None
+    # Breitere Lueck = 1250-1900 → Mitte ~1575 Hz
+    assert 1300 <= freq <= 1900, f"Erwartet breitere Lueck, bekam {freq}"
+
+
+def test_score_penalizes_close_neighbors():
+    """Score: schmale Lueck nahe Stationen vs breitere Lueck fern → fernere wird gewaehlt."""
+    from core.diversity import DiversityController
+    dc = DiversityController()
+    # Lueck A: 850-1050 (4 Bins, 200Hz) zwischen Aktivitaet bei 800/850 und 1100/1150/1200
+    # Lueck B: 1300-1900 (12 Bins, 600Hz) breiter und ohne enge Nachbarn
+    dc.sync_from_stations(_make_stations(800, 850, 1100, 1150, 1200, 1250, 1950))
+    freq = dc.get_free_cq_freq()
+    assert freq is not None
+    # Breite Lueck B (1300-1900) muss gewaehlt werden
+    assert 1300 <= freq <= 1900, f"Erwartet breitere Lueck B, bekam {freq}"
+
+
+def test_score_tiebreaker_uses_median():
+    """Score: zwei gleich breite Luecken → Median-Distance entscheidet."""
+    from core.diversity import DiversityController
+    dc = DiversityController()
+    # Sweet-Spot 800-2000. Stationen bei 1450,1500,1550 → Median ~1500
+    # Lueck links 800-1400 (12 Bins) und Lueck rechts 1600-2000 (8 Bins)
+    # Beide haben unterschiedliche Breite, aber bauen wir gleichbreite Luecken:
+    # Stationen bei 1100-1150 + 1450-1500-1550 + 1850-1900
+    # → Lueck1 = 800-1050 (5 Bins), Lueck2 = 1200-1400 (4 Bins),
+    #   Lueck3 = 1600-1800 (4 Bins), Lueck4 = 1950-2000 (1 Bin, < min)
+    # Lueck2 und Lueck3 haben gleiche Breite (200Hz), aber Lueck1 ist breiter (250Hz)
+    # → Lueck1 muss gewaehlt werden trotz Median-Distance
+    dc.sync_from_stations(_make_stations(1100, 1150, 1450, 1500, 1550, 1850, 1900))
+    freq = dc.get_free_cq_freq()
+    assert freq is not None
+    # Lueck1 800-1050 hat 5 Bins (250 Hz), gewinnt klar nach Score
+    assert 800 <= freq <= 1100, f"Erwartet breiteste Lueck1 (800-1050), bekam {freq}"
 
 
 def test_adif_ft4_submode():

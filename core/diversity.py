@@ -44,6 +44,8 @@ class DiversityController:
     FREQ_MIN_HZ = 150       # Untergrenze Sicherheitsabstand
     FREQ_MAX_HZ = 2800      # Obergrenze Sicherheitsabstand
     FREQ_MIN_GAP_HZ = 150   # Mindestbreite einer freien Lücke
+    SWEET_SPOT_MIN_HZ = 800   # Untergrenze "wo Stationen zuhoeren"
+    SWEET_SPOT_MAX_HZ = 2000  # Obergrenze "wo Stationen zuhoeren"
 
     @property
     def scoring_mode(self) -> str:
@@ -107,38 +109,53 @@ class DiversityController:
                 bin_idx = int(freq // self.FREQ_BIN_HZ)
                 self._freq_histogram[bin_idx] = self._freq_histogram.get(bin_idx, 0) + 1
 
-    def get_free_cq_freq(self) -> Optional[int]:
-        """Freie CQ-Frequenz zwischen erster und letzter belegter Station.
+    def _score_gap(self, gap_start_bin: int, gap_len_bins: int, median_bin: int) -> float:
+        """Score: hoeher = besser. Auswahl per max(score), Tiebreak per Distance zum Median.
 
-        Sucht die Luecke die am naechsten am Median liegt — NUR innerhalb
-        des tatsaechlich belegten Frequenzbereichs (+ 2-Bin Rand). So wird
-        verhindert dass wir am stillen Ende des Bandes landen wo niemand zuhoert.
-        Gibt None zurueck wenn keine Luecke gefunden — TX-Frequenz unveraendert.
+        Lueckenbreite dominiert (1 Hz = 1 Punkt), Nachbarn in +/-1 Bin kosten 50 Hz pro Station,
+        Nachbarn in +/-2 Bins kosten halb so viel. Median-Distance ist NUR Tiebreaker (0.01).
+        """
+        gap_width_hz = gap_len_bins * self.FREQ_BIN_HZ
+        center_bin = gap_start_bin + gap_len_bins // 2
+        n_close = sum(self._freq_histogram.get(center_bin + d, 0) for d in (-1, +1))
+        n_near = sum(self._freq_histogram.get(center_bin + d, 0) for d in (-2, +2))
+        neighbor_penalty_hz = 50 * n_close + 25 * n_near
+        median_distance_hz = abs(center_bin - median_bin) * self.FREQ_BIN_HZ
+        return gap_width_hz - neighbor_penalty_hz - 0.01 * median_distance_hz
+
+    def get_free_cq_freq(self) -> Optional[int]:
+        """Freie CQ-Frequenz im Sweet-Spot 800-2000 Hz (wo Stationen zuhoeren).
+
+        Sucht NUR im festen Sweet-Spot 800-2000 Hz (nicht mehr dynamisch um die
+        belegten Bereiche herum). Auswahl per Score-Funktion: Lueckenbreite minus
+        Nachbar-Penalty, Median-Distance nur als Tiebreaker.
+        Gibt None zurueck wenn keine ausreichend breite Luecke gefunden.
         """
         hist_copy = dict(self._freq_histogram)
         if not hist_copy:
+            # Kein RX-Verkehr → keine Auswahl moeglich (Aufrufer behaelt aktuelle Freq)
             return None
 
-        # Median der Aktivitaet berechnen
-        all_freqs = []
-        for bin_idx, count in hist_copy.items():
-            freq = bin_idx * self.FREQ_BIN_HZ + self.FREQ_BIN_HZ // 2
-            all_freqs.extend([freq] * count)
-        if not all_freqs:
-            return None
-
-        median_freq = statistics.median(all_freqs)
-
-        # Search-Window = belegter Bereich + 2-Bin Rand (kein Sprung ans leere Ende!)
-        occupied_bins = list(hist_copy.keys())
-        abs_min = int(self.FREQ_MIN_HZ // self.FREQ_BIN_HZ)
-        abs_max = int(self.FREQ_MAX_HZ // self.FREQ_BIN_HZ)
-        _MARGIN = 2
-        min_bin = max(abs_min, min(occupied_bins) - _MARGIN)
-        max_bin = min(abs_max, max(occupied_bins) + _MARGIN)
+        # Such-Range fest auf Sweet-Spot
+        min_bin = self.SWEET_SPOT_MIN_HZ // self.FREQ_BIN_HZ
+        max_bin = self.SWEET_SPOT_MAX_HZ // self.FREQ_BIN_HZ
         min_gap_bins = max(1, self.FREQ_MIN_GAP_HZ // self.FREQ_BIN_HZ)
 
-        # Alle freien Luecken im Nutzbereich sammeln
+        # Median NUR auf Sweet-Spot-Stationen (sonst verzerrt sich der Tiebreaker)
+        sweet_freqs = []
+        for bin_idx, count in hist_copy.items():
+            if min_bin <= bin_idx <= max_bin:
+                freq = bin_idx * self.FREQ_BIN_HZ + self.FREQ_BIN_HZ // 2
+                sweet_freqs.extend([freq] * count)
+        if sweet_freqs:
+            median_freq = statistics.median(sweet_freqs)
+            median_bin = int(median_freq // self.FREQ_BIN_HZ)
+        else:
+            # Sweet-Spot leer → Median irrelevant, nimm Mitte als Default
+            median_bin = (min_bin + max_bin) // 2
+            median_freq = median_bin * self.FREQ_BIN_HZ + self.FREQ_BIN_HZ // 2
+
+        # Alle freien Luecken im Sweet-Spot sammeln
         gaps = []  # [(start_bin, length)]
         current_gap_start = None
         current_gap_len = 0
@@ -156,18 +173,18 @@ class DiversityController:
             gaps.append((current_gap_start, current_gap_len))
 
         if not gaps:
-            # Keine Luecke → aktuelle Frequenz behalten
+            # Keine ausreichend breite Luecke → aktuelle Frequenz behalten
             return None
 
-        # Luecke waehlen die am naechsten am Median liegt
-        median_bin = int(median_freq // self.FREQ_BIN_HZ)
-        best_gap = min(gaps, key=lambda g: abs((g[0] + g[1] // 2) - median_bin))
+        # Score-basierte Auswahl (max statt min)
+        best_gap = max(gaps, key=lambda g: self._score_gap(g[0], g[1], median_bin))
+        best_width_hz = best_gap[1] * self.FREQ_BIN_HZ
         center_bin = best_gap[0] + best_gap[1] // 2
         freq_hz = center_bin * self.FREQ_BIN_HZ + self.FREQ_BIN_HZ // 2
         gap_start_hz = best_gap[0] * self.FREQ_BIN_HZ
         gap_end_hz = (best_gap[0] + best_gap[1]) * self.FREQ_BIN_HZ
         print(f"[CQ-Freq] Median={int(median_freq)}Hz | "
-              f"Luecke={gap_start_hz}-{gap_end_hz}Hz ({best_gap[1]*self.FREQ_BIN_HZ}Hz breit) | "
+              f"Luecke={gap_start_hz}-{gap_end_hz}Hz ({best_width_hz}Hz breit) | "
               f"TX={int(freq_hz)}Hz | {len(gaps)} Luecken gefunden")
         self._cq_freq_hz = int(freq_hz)
         return self._cq_freq_hz
