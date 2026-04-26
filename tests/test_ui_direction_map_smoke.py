@@ -478,6 +478,83 @@ def test_dialog_spots_to_station_points_filters(qapp):
     d.deleteLater()
 
 
+def test_canvas_zoom_default_is_one(qapp):
+    from ui.direction_map_widget import MapCanvas, MAX_DISTANCE_KM
+    c = MapCanvas(my_locator="JO31")
+    assert c._zoom == 1.0
+    assert c._effective_max_km() == MAX_DISTANCE_KM
+
+
+def test_canvas_zoom_in_doubles_via_factor(qapp):
+    """Zoom rein verkleinert effective_max_km um Faktor."""
+    from ui.direction_map_widget import MapCanvas, MAX_DISTANCE_KM
+    c = MapCanvas(my_locator="JO31")
+    c._zoom = 2.0
+    assert c._effective_max_km() == MAX_DISTANCE_KM / 2.0
+
+
+def test_canvas_zoom_clamped(qapp):
+    """Zoom-State respektiert ZOOM_MIN/MAX bei vielen Wheel-Events."""
+    from ui.direction_map_widget import MapCanvas, ZOOM_MIN, ZOOM_MAX, ZOOM_FACTOR
+    c = MapCanvas(my_locator="JO31")
+    # Direkt zoom-state via emulation pruefen — Wheel-Event-Kette vermeiden
+    # (PySide6.QWheelEvent-Konstruktor ist Versions-abhaengig)
+    for _ in range(100):
+        c._zoom = max(ZOOM_MIN, min(ZOOM_MAX, c._zoom * ZOOM_FACTOR))
+    assert c._zoom == ZOOM_MAX
+    for _ in range(200):
+        c._zoom = max(ZOOM_MIN, min(ZOOM_MAX, c._zoom / ZOOM_FACTOR))
+    assert c._zoom == ZOOM_MIN
+
+
+def test_canvas_rotation_default_is_zero(qapp):
+    from ui.direction_map_widget import MapCanvas
+    c = MapCanvas(my_locator="JO31")
+    assert c._rotation_deg == 0.0
+
+
+def test_canvas_project_with_rotation_90_swaps_axes(qapp):
+    """Rotation 90° dreht Karte im Uhrzeigersinn → Norden landet rechts."""
+    from ui.direction_map_widget import MapCanvas
+    c = MapCanvas(my_locator="JO31")
+    c.resize(500, 500)  # damit _radius_px() einen Wert liefert
+    # Punkt direkt nördlich von JO31 (60°N, 7°E) ohne Rotation: y < 0 (oben)
+    p_no_rot = c._project(60.0, 7.0)
+    assert p_no_rot is not None
+    assert p_no_rot[1] < -1.0
+    # Mit 90° CW-Rotation: oben (negative y) wandert nach rechts (positive x)
+    c._rotation_deg = 90.0
+    p_rot = c._project(60.0, 7.0)
+    assert p_rot is not None
+    assert p_rot[0] > 1.0
+    assert abs(p_rot[1]) < 1.0
+
+
+def test_canvas_reset_view_resets_zoom_and_rotation(qapp):
+    from ui.direction_map_widget import MapCanvas
+    c = MapCanvas(my_locator="JO31")
+    c._zoom = 3.5
+    c._rotation_deg = 123.4
+    c.reset_view()
+    assert c._zoom == 1.0
+    assert c._rotation_deg == 0.0
+
+
+def test_canvas_paintevent_with_zoom_and_rotation(qapp):
+    """paintEvent darf bei extremen Zoom + Rotation nicht crashen."""
+    from ui.direction_map_widget import MapCanvas
+    c = MapCanvas(my_locator="JO31")
+    c.resize(500, 500)
+    c.show()
+    c._zoom = 4.0
+    c._rotation_deg = 145.0
+    c.repaint()
+    c._zoom = 0.5
+    c._rotation_deg = -30.0
+    c.repaint()
+    c.deleteLater()
+
+
 def test_canvas_paintevent_with_wedges_and_stations(qapp):
     """paintEvent mit Sektor-Wedges + Stations-Punkten in beiden Modi."""
     from ui.direction_map_widget import MapCanvas

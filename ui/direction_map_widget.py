@@ -68,6 +68,10 @@ COMPASS_LABELS = ("N", "NE", "E", "SE", "S", "SW", "W", "NW")
 RESIZE_DEBOUNCE_MS = 200
 MAX_DISTANCE_KM = 18000.0
 MAP_RADIUS_FRACTION = 0.45  # Anteil der min(width,height) als Karten-Radius
+ZOOM_MIN = 0.3
+ZOOM_MAX = 6.0
+ZOOM_FACTOR = 1.15  # pro Mausrad-Notch
+ROTATE_DEBOUNCE_MS = 30  # Background-Pixmap-Throttle waehrend Drag
 
 DEFAULT_DIALOG_SIZE = QSize(720, 720)
 DIALOG_MIN_SIZE = QSize(500, 500)
@@ -229,13 +233,26 @@ class MapCanvas(QWidget):
         self._show_sectors = True
         self._show_stations = True
 
+        # Zoom + Rotation State
+        self._zoom = 1.0  # 1.0 = MAX_DISTANCE_KM (ganze Welt), >1 = Zoom rein
+        self._rotation_deg = 0.0  # 0 = Norden oben, im Uhrzeigersinn
+        self._drag_start_pos: QPointF | None = None
+        self._drag_start_rotation: float = 0.0
+
         self.setMinimumSize(300, 300)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.setMouseTracking(False)
+        self.setCursor(Qt.OpenHandCursor)
 
         # Resize-Debounce: bei mehrfachem Resize nur einmal Background rebuilden
         self._resize_timer = QTimer(self)
         self._resize_timer.setSingleShot(True)
         self._resize_timer.timeout.connect(self._invalidate_background)
+        # Rotation-Debounce: waehrend Drag nicht bei jedem mouseMoveEvent
+        # das Background-Pixmap rebuilden (zu teuer mit 5143 Coastline-Punkten)
+        self._rotation_timer = QTimer(self)
+        self._rotation_timer.setSingleShot(True)
+        self._rotation_timer.timeout.connect(self._invalidate_background)
 
     # ── Public API ────────────────────────────────────────
 
@@ -282,14 +299,33 @@ class MapCanvas(QWidget):
     def _radius_px(self) -> float:
         return min(self.width(), self.height()) * MAP_RADIUS_FRACTION
 
+    def _effective_max_km(self) -> float:
+        """Skaliert MAX_DISTANCE_KM mit dem Zoom-Faktor.
+        zoom=1 → 18000 km Rand, zoom=2 → 9000 km Rand (näher heran)."""
+        return MAX_DISTANCE_KM / self._zoom
+
     def _project(self, lat: float, lon: float) -> tuple[float, float] | None:
-        """Lat/Lon → Pixel-Offset (dx, dy) vom Karten-Center."""
+        """Lat/Lon → Pixel-Offset (dx, dy) vom Karten-Center.
+        Beruecksichtigt Karten-Rotation (alle Punkte werden um den Center
+        gegen den Uhrzeigersinn um rotation_deg gedreht — entspricht
+        einem Bearing-Offset)."""
         if not self._my_pos:
             return None
-        return azimuthal_equidistant_project(
+        p = azimuthal_equidistant_project(
             self._my_pos[0], self._my_pos[1], lat, lon,
-            radius_px=self._radius_px(), max_distance_km=MAX_DISTANCE_KM,
+            radius_px=self._radius_px(),
+            max_distance_km=self._effective_max_km(),
         )
+        if p is None:
+            return None
+        if self._rotation_deg == 0.0:
+            return p
+        # 2D-Rotation um Center (Pixel-Koord-System: y nach unten,
+        # daher Vorzeichen für mathematischen CCW-Sinn drehen)
+        rad = math.radians(self._rotation_deg)
+        cos_r, sin_r = math.cos(rad), math.sin(rad)
+        x, y = p
+        return (x * cos_r - y * sin_r, x * sin_r + y * cos_r)
 
     # ── Resize ────────────────────────────────────────────
 
@@ -301,6 +337,75 @@ class MapCanvas(QWidget):
     def _invalidate_background(self) -> None:
         self._bg_pixmap = None
         self.update()
+
+    # ── Zoom (Mausrad) ────────────────────────────────────
+
+    def wheelEvent(self, event):  # noqa: N802
+        delta = event.angleDelta().y()
+        if delta == 0:
+            return
+        factor = ZOOM_FACTOR if delta > 0 else 1.0 / ZOOM_FACTOR
+        new_zoom = self._zoom * factor
+        new_zoom = max(ZOOM_MIN, min(ZOOM_MAX, new_zoom))
+        if abs(new_zoom - self._zoom) < 1e-6:
+            return
+        self._zoom = new_zoom
+        self._invalidate_background()
+        event.accept()
+
+    # ── Drag-to-rotate (linke Maustaste halten + bewegen) ─
+
+    def mousePressEvent(self, event):  # noqa: N802
+        if event.button() == Qt.LeftButton and self._my_pos:
+            self._drag_start_pos = event.position()
+            self._drag_start_rotation = self._rotation_deg
+            self.setCursor(Qt.ClosedHandCursor)
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):  # noqa: N802
+        if self._drag_start_pos is None:
+            return super().mouseMoveEvent(event)
+        cx, cy = self._center_px()
+        dx0 = self._drag_start_pos.x() - cx
+        dy0 = self._drag_start_pos.y() - cy
+        dx1 = event.position().x() - cx
+        dy1 = event.position().y() - cy
+        # Winkel zwischen Maus-Vektoren relativ zum Center.
+        # atan2(x, -y): 0=oben(N), 90=rechts(E), 180=unten(S), -90=links(W)
+        a0 = math.degrees(math.atan2(dx0, -dy0))
+        a1 = math.degrees(math.atan2(dx1, -dy1))
+        delta = a1 - a0
+        self._rotation_deg = (self._drag_start_rotation + delta) % 360.0
+        # Live-Update der Karte; Background-Pixmap-Rebuild via Throttle
+        if not self._rotation_timer.isActive():
+            self._rotation_timer.start(ROTATE_DEBOUNCE_MS)
+        self.update()
+        event.accept()
+
+    def mouseReleaseEvent(self, event):  # noqa: N802
+        if event.button() == Qt.LeftButton and self._drag_start_pos is not None:
+            self._drag_start_pos = None
+            self.setCursor(Qt.OpenHandCursor)
+            self._invalidate_background()
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
+
+    def reset_view(self) -> None:
+        """Zoom auf 1.0, Rotation auf 0° zuruecksetzen."""
+        self._zoom = 1.0
+        self._rotation_deg = 0.0
+        self._invalidate_background()
+
+    def mouseDoubleClickEvent(self, event):  # noqa: N802
+        """Doppelklick auf die Karte → reset zu Norden oben + voller Zoom."""
+        if event.button() == Qt.LeftButton:
+            self.reset_view()
+            event.accept()
+            return
+        super().mouseDoubleClickEvent(event)
 
     # ── paintEvent ────────────────────────────────────────
 
@@ -372,13 +477,16 @@ class MapCanvas(QWidget):
     def _paint_distance_rings(self, painter: QPainter) -> None:
         cx, cy = self._center_px()
         radius = self._radius_px()
+        max_km = self._effective_max_km()
         pen = QPen(QColor(COLOR_RINGS))
         pen.setStyle(Qt.DashLine)
         pen.setWidthF(0.8)
         painter.setPen(pen)
         painter.setBrush(Qt.NoBrush)
         for km in DISTANCE_RINGS_KM:
-            r = radius * (km / MAX_DISTANCE_KM)
+            if km > max_km:
+                continue  # Ring liegt ausserhalb des sichtbaren Bereichs
+            r = radius * (km / max_km)
             painter.drawEllipse(QPointF(cx, cy), r, r)
 
     def _paint_sector_lines(self, painter: QPainter) -> None:
@@ -388,7 +496,7 @@ class MapCanvas(QWidget):
         pen.setWidthF(0.5)
         painter.setPen(pen)
         for i in range(SECTOR_COUNT):
-            angle_deg = i * SECTOR_WIDTH_DEG - SECTOR_WIDTH_DEG / 2.0
+            angle_deg = i * SECTOR_WIDTH_DEG - SECTOR_WIDTH_DEG / 2.0 + self._rotation_deg
             rad = math.radians(angle_deg)
             x = cx + radius * math.sin(rad)
             y = cy - radius * math.cos(rad)
@@ -399,13 +507,13 @@ class MapCanvas(QWidget):
         radius = self._radius_px()
         painter.setPen(QColor(COLOR_COMPASS))
         painter.setFont(QFont("Menlo", 10, QFont.Bold))
-        # 8 Compass-Punkte, jeweils 45°
+        # 8 Compass-Punkte, jeweils 45° — Position rotiert mit Karte,
+        # Text bleibt aufrecht (lesbar)
         for i, label in enumerate(COMPASS_LABELS):
-            angle_deg = i * 45.0
+            angle_deg = i * 45.0 + self._rotation_deg
             rad = math.radians(angle_deg)
             x = cx + (radius + 14) * math.sin(rad)
             y = cy - (radius + 14) * math.cos(rad)
-            # Text mittig um (x,y) ausrichten
             metrics = painter.fontMetrics()
             tw = metrics.horizontalAdvance(label)
             th = metrics.height()
@@ -440,8 +548,8 @@ class MapCanvas(QWidget):
                 continue
             # Wedge-Radius proportional zur unique-Calls-Anzahl im Sektor
             r = radius * 0.95 * (b.count / max_count)
-            # Sektor-Mitte Bearing: index * 22.5° (0 = Norden)
-            mid_deg = b.index * SECTOR_WIDTH_DEG
+            # Sektor-Mitte Bearing: index * 22.5° + Karten-Rotation
+            mid_deg = b.index * SECTOR_WIDTH_DEG + self._rotation_deg
             # QPainter.drawPie erwartet startAngle in 1/16°, gemessen ab 3-Uhr (Osten)
             # Konvertierung: Karten-Norden (0°) = Qt-90°, Karten-Osten (90°) = Qt-0°
             qt_start_deg = 90.0 - mid_deg - SECTOR_WIDTH_DEG / 2.0
@@ -680,8 +788,8 @@ class DirectionMapDialog(QDialog):
         filter_row.addStretch()
         layout.addLayout(filter_row)
 
-        # ── Status-Label ──────────────────────────────────
-        self.status_label = QLabel("Bereit.")
+        # ── Status-Label + Bedienhinweis ─────────────────
+        self.status_label = QLabel("Bereit. Mausrad = Zoom, ziehen = drehen, Doppelklick = Reset.")
         self.status_label.setStyleSheet("color: #889; padding: 2px 4px;")
         layout.addWidget(self.status_label)
 
