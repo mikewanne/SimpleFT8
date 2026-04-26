@@ -54,12 +54,12 @@ COLOR_USER = "#FFE600"           # Neon-Gelb
 COLOR_USER_GLOW = "#FFFFAA"      # Halo um den Diamanten
 COLOR_HINT = "#7788AA"
 
-RX_COLOR_ANT1 = QColor("#4488FF")
-RX_COLOR_ANT2 = QColor("#00CCAA")
-RX_COLOR_RESCUE = QColor("#44FF44")
-RX_COLOR_DEFAULT = QColor("#888888")
-TX_COLOR_LOW = QColor("#884400")    # ~-25 dB
-TX_COLOR_HIGH = QColor("#FFEE00")   # ~+5 dB
+RX_COLOR_ANT1 = QColor("#00BFFF")    # Neon-Blau
+RX_COLOR_ANT2 = QColor("#00FFCC")    # Neon-Cyan
+RX_COLOR_RESCUE = QColor("#39FF14")  # Neon-Gruen (Rescue-Punch)
+RX_COLOR_DEFAULT = QColor("#AAAACC")
+TX_COLOR_LOW = QColor("#884400")     # ~-25 dB → dunkles Orange
+TX_COLOR_HIGH = QColor("#FFEE00")    # ~+5 dB  → Hellgelb
 SECTOR_ALPHA = 100  # 0..255 (~0.4)
 STATION_MIN_PX = 3
 STATION_MAX_PX = 8
@@ -634,11 +634,13 @@ class MapCanvas(QWidget):
     # ── Live-Layer: Stations-Punkte ───────────────────────
 
     def _paint_stations(self, painter: QPainter) -> None:
+        """Stationen als Leuchtkugeln: RadialGradient hell→Farbe, plus 1px Outer-Ring."""
         if not self._stations:
             return
+        from PySide6.QtGui import QRadialGradient
         cx, cy = self._center_px()
-        # Aufrufer hat schon dedupliziert, aber sicherheitshalber pro Call nur 1×
         seen: set[str] = set()
+        painter.setPen(Qt.NoPen)  # Gradient-Kugeln, kein harter Stroke
         for s in self._stations:
             if s.call in seen:
                 continue
@@ -651,8 +653,22 @@ class MapCanvas(QWidget):
             y = cy + dy
             color = self._station_color(s)
             size = self._station_size(s.snr)
-            painter.setPen(QPen(color.darker(150), 0.5))
-            painter.setBrush(QBrush(color))
+            # Outer-Halo Glow (zusaetzliche 2px aussen, sehr transparent)
+            halo = QColor(color)
+            halo.setAlpha(60)
+            painter.setBrush(QBrush(halo))
+            painter.drawEllipse(QPointF(x, y), size + 2.0, size + 2.0)
+            # Hauptkugel: RadialGradient hell→Farbe → "Leuchtkugel"
+            grad = QRadialGradient(QPointF(x, y), size)
+            light = QColor(255, 255, 255, 220)
+            grad.setColorAt(0.0, light)
+            mid = QColor(color)
+            mid.setAlpha(220)
+            grad.setColorAt(0.4, mid)
+            edge = QColor(color)
+            edge.setAlpha(150)
+            grad.setColorAt(1.0, edge)
+            painter.setBrush(QBrush(grad))
             painter.drawEllipse(QPointF(x, y), size, size)
 
     def _station_color(self, s: StationPoint) -> QColor:
