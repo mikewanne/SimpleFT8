@@ -44,12 +44,15 @@ from core.geo import (
 # ── Layout-Konstanten ─────────────────────────────────────
 
 COLOR_BG = "#0A0A14"
-COLOR_COAST = "#666666"
-COLOR_RINGS = "#333333"
-COLOR_COMPASS = "#888888"
-COLOR_SECTOR_LINES = "#222222"
-COLOR_USER = "#FFCC00"
-COLOR_HINT = "#888888"
+COLOR_BG_CENTER = "#0A1030"      # Aurora-Mitte: leichtes Blau
+COLOR_COAST_HALO = "#00FFAA"     # Cyan-Halo aussen
+COLOR_COAST_CORE = "#88FFCC"     # Cyan hell innen
+COLOR_RINGS = "#1F2A3A"          # leicht blaeulich statt nur grau
+COLOR_COMPASS = "#88AACC"        # blau-cyan statt grau
+COLOR_SECTOR_LINES = "#1A2030"
+COLOR_USER = "#FFE600"           # Neon-Gelb
+COLOR_USER_GLOW = "#FFFFAA"      # Halo um den Diamanten
+COLOR_HINT = "#7788AA"
 
 RX_COLOR_ANT1 = QColor("#4488FF")
 RX_COLOR_ANT2 = QColor("#00CCAA")
@@ -443,6 +446,7 @@ class MapCanvas(QWidget):
         painter = QPainter(pix)
         painter.setRenderHint(QPainter.Antialiasing)
         try:
+            self._paint_aurora(painter)
             self._paint_coastlines(painter)
             self._paint_distance_rings(painter)
             self._paint_compass(painter)
@@ -451,28 +455,64 @@ class MapCanvas(QWidget):
             painter.end()
         return pix
 
+    def _paint_aurora(self, painter: QPainter) -> None:
+        """Subtiler RadialGradient von leicht-blau in der Mitte zu fast-schwarz aussen.
+        Bricht die Monotonie des Hintergrunds ohne Daten zu ueberlagern."""
+        from PySide6.QtGui import QRadialGradient
+        cx, cy = self._center_px()
+        radius = max(self.width(), self.height())
+        grad = QRadialGradient(QPointF(cx, cy), radius)
+        # Mitte: dezent blaues Glow, Rand: voll dunkel
+        center_color = QColor(COLOR_BG_CENTER)
+        center_color.setAlpha(140)
+        edge_color = QColor(COLOR_BG)
+        edge_color.setAlpha(0)
+        grad.setColorAt(0.0, center_color)
+        grad.setColorAt(0.55, QColor(COLOR_BG_CENTER) if False else QColor(20, 25, 50, 60))
+        grad.setColorAt(1.0, edge_color)
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QBrush(grad))
+        painter.drawRect(0, 0, self.width(), self.height())
+
     def _paint_coastlines(self, painter: QPainter) -> None:
+        """Glowing Coastlines: erst breiter Halo (Cyan, Alpha 0.18), dann
+        schmaler Core (Cyan-Hell, Alpha 0.7) — Dual-Stroke ohne teuren Blur-Filter."""
         if not self._coastlines:
             return
         cx, cy = self._center_px()
-        pen = QPen(QColor(COLOR_COAST))
-        pen.setWidthF(0.7)
-        painter.setPen(pen)
+        # Polygone projezieren — pro Linie einmal, beide Strokes verwenden gleiche Polys
+        polys: list[QPolygonF] = []
         for line in self._coastlines:
             poly = QPolygonF()
             for lon, lat in line:
                 projected = self._project(lat, lon)
                 if projected is None:
-                    # Projektion abgeschnitten (Antipode-Bereich) → Linie
-                    # bis hier zeichnen, dann neu starten
                     if poly.size() >= 2:
-                        painter.drawPolyline(poly)
+                        polys.append(poly)
                     poly = QPolygonF()
                     continue
                 dx, dy = projected
                 poly.append(QPointF(cx + dx, cy + dy))
             if poly.size() >= 2:
-                painter.drawPolyline(poly)
+                polys.append(poly)
+        # Pass 1: Halo (breit, transparent)
+        halo_color = QColor(COLOR_COAST_HALO)
+        halo_color.setAlpha(40)
+        halo_pen = QPen(halo_color)
+        halo_pen.setWidthF(2.5)
+        halo_pen.setCapStyle(Qt.RoundCap)
+        halo_pen.setJoinStyle(Qt.RoundJoin)
+        painter.setPen(halo_pen)
+        for p in polys:
+            painter.drawPolyline(p)
+        # Pass 2: Core (schmal, hell)
+        core_color = QColor(COLOR_COAST_CORE)
+        core_color.setAlpha(180)
+        core_pen = QPen(core_color)
+        core_pen.setWidthF(0.7)
+        painter.setPen(core_pen)
+        for p in polys:
+            painter.drawPolyline(p)
 
     def _paint_distance_rings(self, painter: QPainter) -> None:
         cx, cy = self._center_px()
@@ -644,6 +684,17 @@ class MapCanvas(QWidget):
 
     def _paint_user_marker(self, painter: QPainter) -> None:
         cx, cy = self._center_px()
+        # Halo-Layer: weicher gelber RadialGradient unter dem Diamanten
+        from PySide6.QtGui import QRadialGradient
+        halo_grad = QRadialGradient(QPointF(cx, cy), 14)
+        halo_color = QColor(COLOR_USER_GLOW)
+        halo_color.setAlpha(120)
+        halo_grad.setColorAt(0.0, halo_color)
+        halo_grad.setColorAt(1.0, QColor(255, 230, 0, 0))
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QBrush(halo_grad))
+        painter.drawEllipse(QPointF(cx, cy), 14, 14)
+        # Diamant
         painter.setPen(QPen(QColor(COLOR_USER), 1.5))
         painter.setBrush(QBrush(QColor(COLOR_USER)))
         size = 6
@@ -654,11 +705,15 @@ class MapCanvas(QWidget):
             QPointF(cx - size, cy),
         ])
         painter.drawPolygon(diamond)
+        # Innerer weisser Kern fuer Tiefe
+        painter.setBrush(QBrush(QColor("#FFFFFF")))
+        painter.setPen(Qt.NoPen)
+        painter.drawEllipse(QPointF(cx, cy), 2, 2)
         # Locator-Label rechts vom Marker
-        painter.setFont(QFont("Menlo", 9))
+        painter.setFont(QFont("Menlo", 9, QFont.Bold))
         painter.setBrush(Qt.NoBrush)
-        painter.setPen(QColor("#FFCC00"))
-        painter.drawText(QPointF(cx + size + 4, cy + 3), self._my_locator)
+        painter.setPen(QColor(COLOR_USER))
+        painter.drawText(QPointF(cx + size + 6, cy + 3), self._my_locator)
 
 
 # ── DirectionMapDialog — Container ────────────────────────
