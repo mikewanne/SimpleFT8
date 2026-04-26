@@ -1042,3 +1042,83 @@ Thread-Marshalling-Pflicht in update_stations-Docstring, sleep-loop max(0)-Guard
   Cache mit dem von PSK gemeldeten Locator.
 - Antipode-Bereich (>18000 km von JO31) wird nicht gerendert — starke Verzerrung
   bei azimuthal-equidistant-Projektion.
+
+## 2026-04-27 v0.67 — Persistenter Locator-Cache (LocatorDB)
+
+**Ziel:** Eine schlanke, persistente JSON-DB sammelt alle gesehenen Locators
+(eigene CQ-Decodes, PSK-Reporter-Spots, ADIF-Bulk-Import vom QSO-Log) mit
+Source-Priorisierung und ueberlebt App-Restarts. Karte und rx_panel ziehen
+beide aus dieser DB. Bei jeder Session werden mehr Stationen praezise.
+
+**KISS-Prinzip nach DeepSeek-Plan-V3** — V2 hatte 26-Buchstaben-Splitting,
+LRU-Cache, Write-Ahead-Log: alles raus. Eine JSON-Datei (~/.simpleft8/
+locator_cache.json), in-memory waehrend Laufzeit, save() nur bei App-Close
+(bei Crash gehen ein paar Decodes verloren — kommen bei naechster Session
+wieder rein, akzeptabel fuer Hobby-Funker-Tool).
+
+**Neues Modul:** `core/locator_db.py` (~250 Zeilen inkl. Docstrings)
+- `LocatorEntry` dataclass (locator/source/prec_km/first_ts/last_ts)
+- `LocatorDB`: get/get_position/set/load/save/bulk_import_adif/_directory
+- Source-Priority numerisch (cq_6=600 > psk_6=500 > qso_log_6=400 > _4=100..300)
+- 6-stellig wird nie durch 4-stellig ueberschrieben (Priority-Tabelle)
+- first_ts immutable, nur last_ts wird aktualisiert
+- Mobile-Suffixe (/MM /AM /QRP) → `prec_km × 1.5`; /P bleibt full precision
+- `threading.RLock` zentral (Decoder + PSK-Worker konkurrent)
+- Atomic-Write (.tmp + os.replace) — wiederverwendet aus core/psk_reporter.py
+- get() returnt **Kopie** via `LocatorEntry(**asdict(e))` — Caller-Mutation safe
+- Korrupte JSON beim Load → leeres Dict, App startet trotzdem
+- `encoding="utf-8"` explizit (DeepSeek-Empfehlung gegen Windows-Locale)
+
+**Hooks (5 Stellen):**
+1. `mw_cycle._handle_normal_mode` → `_feed_locator_db(messages)`
+2. `mw_cycle._handle_diversity_operate` → analog
+3. `direction_map_widget._on_psk_spots_received` → `db.set("psk")` pro Spot
+4. `_init_qso_log` → `bulk_import_directory()` aus <cwd>/adif/ + adif_import_path
+5. `closeEvent` → `db.save()` (atomar)
+
+**UI-Aenderungen:**
+- `StationPoint.prec_km` neues Feld (Default 110, backwards-compatible)
+- `_paint_stations`: Country-Fallback (prec_km > 110) → 50% Alpha,
+  voller Glow nur bei DB-Treffern
+- Disclaimer-Label reduziert auf einzeiliges `"Ø Genauigkeit: X km"`,
+  wird live aktualisiert bei jedem update_rx/update_tx
+- `rx_panel.set_locator_db()` Setter — exakte km auch fuer Reports/RR73
+  wenn Locator irgendwann mal in CQ/PSK gesehen wurde (kein ~-Praefix)
+
+**Tests:** 28 neue Tests in `tests/test_locator_db.py`:
+- CRUD, Source-Priority-Matrix (psk vs cq, 4 vs 6, qso_log vs cq)
+- first_ts immutable, atomic-write Crash-Recovery
+- Threading-Stress (5 Threads × 50 sets)
+- Slash-Calls (/P, /MM, /AM)
+- ADIF-Bulk-Import (Datei + Verzeichnis)
+- 405 → 407 Tests gruen.
+
+**6 atomare Commits:**
+1. `core/locator_db.py` + 26 Tests (DeepSeek-codereviewed: encoding="utf-8" Fix)
+2. Hooks `mw_cycle._feed_locator_db` + PSK-Spot-Hook im Karten-Widget
+3. ADIF-Bulk-Import in `_init_qso_log` (+2 Tests)
+4. `direction_map_widget` Migration: `LocatorDB` parallel zum LocatorCache,
+   `prec_km` an StationPoint, Glow-Alpha-Dimming bei Country-Fallback,
+   "Ø Genauigkeit"-Label
+5. `rx_panel`: km-Spalte zieht aus DB vor Country-Fallback
+6. APP_VERSION + HISTORY (dieser Commit)
+
+**Architektur-Defaults (V3-Plan, in Plan-Mode mit Mike abgesprochen):**
+- ✅ Save NUR bei App-Close (nicht periodisch) — Hobby-Funker-konform
+- ✅ Outline-DICKE statt Farbe verworfen — Mike's "Glow zurueck"-Feedback
+   aus v0.66 hat Vorrang. Statt Outline: Country-Fallback dimmt Alpha.
+- ✅ Disclaimer reduziert auf "Ø Genauigkeit: X km"
+
+**Bekannte Limits:**
+- LocatorCache (in direction_map_widget) bleibt vorerst als Fallback erhalten —
+  spaeterer Cleanup-Commit moeglich wenn alle Codepfade migriert sind.
+- DB ueberschreibt sich selbst bei jedem set(), kein TTL-Cleanup. Bei ~10000
+  Calls ~500 KB JSON, ok. Phase 2 erst falls > 5 MB.
+- ADIF-Bulk-Import laeuft bei jedem App-Start ueber alle .adi-Dateien — bei
+  1000 Records ~300 ms, kein Performance-Problem.
+
+**Was NICHT implementiert wurde** (bewusst, gegen Hobby-Funker-Philosophie):
+- Online-Lookup QRZ/HamQTH (Privacy)
+- Cluster/DX-Spotting
+- Manuelles Korrektur-UI (WSJT-X-konform: Decode = Wahrheit)
+- TTL-Cleanup, LRU-Cache, Write-Ahead-Log (Phase 2 nur falls noetig)

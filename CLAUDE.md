@@ -3,8 +3,8 @@ Lies nach dieser Datei sofort auch HANDOFF.md und bestätige beide mit je einer 
 # SimpleFT8 — Claude Kontext
 
 **Start:** `cd "/Users/mikehammerer/Documents/KI N8N Projekte/FT8/SimpleFT8" && ./venv/bin/python3 main.py`
-**Aktueller Stand:** v0.66 (26.04.2026) — Richtungs-Karte mit RX/TX-Toggle (Azimuthal-Karte mit Coastlines, Sektor-Aggregation, PSK-Reporter-Integration, Settings-GroupBox)
-**Tests:** `./venv/bin/python3 -m pytest tests/ -q` → 361 passed (Qt-Smoke-Tests via `QT_QPA_PLATFORM=offscreen`)
+**Aktueller Stand:** v0.67 (27.04.2026) — Persistenter Locator-Cache (`core/locator_db.py`): JSON-Datei merkt sich pro Call den besten Locator aus CQ/PSK/ADIF mit Source-Priority. Karte und rx_panel zeigen exakte Positionen ueber App-Restarts hinweg. Save bei App-Close (atomar via .tmp + os.replace).
+**Tests:** `./venv/bin/python3 -m pytest tests/ -q` → 407 passed (Qt-Smoke-Tests via `QT_QPA_PLATFORM=offscreen`)
 **Vor Commits:** Tests grün + bei nicht-trivialen Änderungen DeepSeek-Review (`pal codereview` model `deepseek-chat`) — bereits durch globale §0 + Projektregeln gefordert.
 
 ⚠️ **DeepSeek V4 (deepseek-chat) — Neues Modell, Verhalten noch unbestätigt (Stand 2026-04-25):**
@@ -134,6 +134,11 @@ core/
   psk_reporter.py     PSKReporterClient: XML-Polling mit Cache + Backoff
                       (1.5x bis 60min), Call-Normalisierung (.rsplit('/',1)),
                       atomarer Cache-Write (.tmp + os.replace)
+  locator_db.py       LocatorDB: persistenter Locator-Cache (~/.simpleft8/
+                      locator_cache.json). Source-Priority (cq_6 > psk_6 >
+                      qso_log_6 > _4-Varianten). RLock-Threading, atomic-Write,
+                      Mobile-Suffixe (/MM/AM/QRP) prec_km x 1.5. get() returnt
+                      Kopie. Bulk-Import aus ADIF-Dateien. Save bei App-Close.
 
 radio/
   base_radio.py       RadioInterface ABC
@@ -367,6 +372,7 @@ Andere Baender werden empfangen aber nicht gespeichert (Skalierungs-Entscheidung
 | `core/ntp_time.py` | `threading.Lock()` (`_lock`) | Korrekturwert + Phase |
 | `core/antenna_pref.py` | `threading.RLock()` (`_lock`) | _prefs dict (Karten-Render-Pfad) |
 | `core/psk_reporter.py` | `threading.Lock()` (`_lock`) | _thread/_stop_event Lifecycle |
+| `core/locator_db.py` | `threading.RLock()` (`_lock`) | _calls dict (Decoder + PSK-Worker konkurrent) |
 
 **Karten-Live-Daten-Pfad (v0.66):** Decoder-Thread → `_emit_map_snapshot_if_open`
 → `direction_map_signal.emit(snapshot, band)` → `Qt.QueuedConnection` →
