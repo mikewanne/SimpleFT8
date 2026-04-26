@@ -122,6 +122,34 @@ def azimuthal_equidistant_project(
     return (x, y)
 
 
+def orthographic_project(
+    view_lat: float, view_lon: float,
+    lat: float, lon: float,
+    radius_px: float,
+) -> tuple[float, float] | None:
+    """Orthographische Projektion — Erd-Ansicht von außen wie ein 3D-Globus.
+
+    Returnt None, wenn der Punkt auf der Rueckseite der Kugel liegt
+    (von der Beobachter-Position (view_lat, view_lon) aus nicht sichtbar).
+    Die polare Achse bleibt vertikal in der Welt, der Beobachter bewegt
+    sich auf einer Kugelschale um die Erde.
+
+    Pixel-Koord: x positiv = Osten, y positiv = Sueden (Qt-Konvention).
+    """
+    lat0 = math.radians(view_lat)
+    lon0 = math.radians(view_lon)
+    la = math.radians(lat)
+    lo = math.radians(lon)
+    cos_c = (math.sin(lat0) * math.sin(la) +
+             math.cos(lat0) * math.cos(la) * math.cos(lo - lon0))
+    if cos_c < 0:  # Rueckseite der Kugel
+        return None
+    x = radius_px * math.cos(la) * math.sin(lo - lon0)
+    y = radius_px * (math.cos(lat0) * math.sin(la)
+                      - math.sin(lat0) * math.cos(la) * math.cos(lo - lon0))
+    return (x, -y)  # Qt: y nach unten = invertieren
+
+
 # ── Callsign → Land (Prefix-Lookup) ───────────────────────
 
 # Haeufigste Prefixe — deckt >95% des FT8-Verkehrs ab

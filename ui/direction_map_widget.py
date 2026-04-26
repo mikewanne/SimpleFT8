@@ -38,7 +38,8 @@ from core.direction_pattern import (
 )
 from core.geo import (
     _COUNTRY_COORDS, _PREFIX_MAP,
-    azimuthal_equidistant_project, distance_km, safe_locator_to_latlon,
+    azimuthal_equidistant_project, distance_km, orthographic_project,
+    safe_locator_to_latlon,
 )
 
 
@@ -64,8 +65,8 @@ TX_COLOR_HIGH = QColor("#FFEE00")    # ~+5 dB  → Hellgelb
 SECTOR_ALPHA = 100  # 0..255 (~0.4)
 HEATMAP_COLOR_LOW = QColor("#2D004F")    # dunkles Violett (1 Station)
 HEATMAP_COLOR_HIGH = QColor("#FF6B00")   # Neon-Orange (≥10 Stationen)
-HEATMAP_MIN_RADIUS_PX = 18.0
-HEATMAP_MAX_RADIUS_PX = 80.0
+HEATMAP_MIN_RADIUS_PX = 10.0
+HEATMAP_MAX_RADIUS_PX = 40.0
 HEATMAP_MAX_COUNT = 10  # ab 10 Stations sat. Farbe
 STATION_MIN_PX = 3
 STATION_MAX_PX = 8
@@ -298,13 +299,16 @@ class MapCanvas(QWidget):
         self._show_sectors = True
         self._show_stations = True
 
-        # Zoom + 3D-Globus-Rotation State
-        self._zoom = 1.0  # 1.0 = MAX_DISTANCE_KM (ganze Welt), >1 = Zoom rein
-        # Welt-Rotation als Quaternion (w, x, y, z). JO31 bleibt fix am Bildschirm-
-        # Center — die Welt rotiert um eine Achse durch JO31. Default = identity.
-        self._world_rot: tuple[float, float, float, float] = (1.0, 0.0, 0.0, 0.0)
+        # Zoom + 3D-Globus State (Orthographic-Projektion)
+        self._zoom = 1.0  # 1.0 = Globus fuellt min(width,height)*RADIUS_FRACTION
+        # Beobachter-Position auf Erdkugel (View-Center). Globus dreht sich
+        # um seine Polar-Achse → Lon aendert sich. Beobachter kippt → Lat aendert sich.
+        # Initial: schaut JO31 direkt an.
+        self._view_lat: float = self._my_pos[0] if self._my_pos else 0.0
+        self._view_lon: float = self._my_pos[1] if self._my_pos else 0.0
         self._drag_start_pos: QPointF | None = None
-        self._drag_start_world_rot: tuple = self._world_rot
+        self._drag_start_view_lat: float = self._view_lat
+        self._drag_start_view_lon: float = self._view_lon
 
         self.setMinimumSize(300, 300)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -328,9 +332,9 @@ class MapCanvas(QWidget):
             return
         self._my_locator = locator
         self._my_pos = safe_locator_to_latlon(locator)
-        # Bei neuem Locator: Welt-Rotation zuruecksetzen (alte Achse galt durch
-        # alten Locator, neue Rotation muss durch den neuen Locator gehen)
-        self._world_rot = (1.0, 0.0, 0.0, 0.0)
+        # Bei neuem Locator: View auf den neuen User-Locator zentrieren
+        if self._my_pos:
+            self._view_lat, self._view_lon = self._my_pos
         self._sectors = []
         self._invalidate_background()
 
@@ -367,42 +371,28 @@ class MapCanvas(QWidget):
         return self.width() // 2, self.height() // 2
 
     def _radius_px(self) -> float:
-        return min(self.width(), self.height()) * MAP_RADIUS_FRACTION
-
-    def _effective_max_km(self) -> float:
-        """Skaliert MAX_DISTANCE_KM mit dem Zoom-Faktor.
-        zoom=1 → 18000 km Rand, zoom=2 → 9000 km Rand (näher heran)."""
-        return MAX_DISTANCE_KM / self._zoom
+        """Globus-Radius in Pixeln, skaliert mit Zoom."""
+        return min(self.width(), self.height()) * MAP_RADIUS_FRACTION * self._zoom
 
     def _project(self, lat: float, lon: float) -> tuple[float, float] | None:
-        """Lat/Lon → Pixel-Offset (dx, dy) vom Bildschirm-Center.
-
-        Schritt 1: Welt-Punkt durch _world_rot rotieren (Globus-Drehung).
-                   JO31 liegt auf der Rotationsachse → bleibt invariant.
-        Schritt 2: Azimuthal-Equidistant-Projektion mit JO31 als fixem Center.
-        """
+        """Orthographische Projektion: Erd-Ansicht von außen wie 3D-Globus.
+        Returnt None für Punkte auf der Rückseite der Kugel."""
         if not self._my_pos:
             return None
-        # 1. Welt-Punkt rotieren (sphaerisch)
-        if self._world_rot == (1.0, 0.0, 0.0, 0.0):
-            rot_lat, rot_lon = lat, lon
-        else:
-            xyz = _latlon_to_xyz(lat, lon)
-            rx, ry, rz = _quat_rotate(self._world_rot, xyz)
-            rot_lat, rot_lon = _xyz_to_latlon(rx, ry, rz)
-        # 2. Azimuthal-Equidistant um JO31
-        return azimuthal_equidistant_project(
-            self._my_pos[0], self._my_pos[1], rot_lat, rot_lon,
+        return orthographic_project(
+            self._view_lat, self._view_lon, lat, lon,
             radius_px=self._radius_px(),
-            max_distance_km=self._effective_max_km(),
         )
 
     def _user_screen_pos(self) -> tuple[float, float] | None:
-        """JO31 ist mathematisch fix am Bildschirm-Center — bleibt auf der
-        Welt-Rotations-Achse, also invariant. Vereinfachte Variante."""
+        """User-Locator auf dem Globus. None wenn auf Rueckseite."""
         if not self._my_pos:
             return None
-        return self._center_px()
+        projected = self._project(self._my_pos[0], self._my_pos[1])
+        if projected is None:
+            return None
+        cx, cy = self._center_px()
+        return (cx + projected[0], cy + projected[1])
 
     # ── Resize ────────────────────────────────────────────
 
@@ -430,12 +420,13 @@ class MapCanvas(QWidget):
         self._invalidate_background()
         event.accept()
 
-    # ── Drag-to-rotate: Erde dreht um Achsen durch JO31 ─
+    # ── Drag-to-rotate: Globus dreht um polare + horizontale Achse ─
 
     def mousePressEvent(self, event):  # noqa: N802
         if event.button() == Qt.LeftButton and self._my_pos:
             self._drag_start_pos = event.position()
-            self._drag_start_world_rot = self._world_rot
+            self._drag_start_view_lat = self._view_lat
+            self._drag_start_view_lon = self._view_lon
             self.setCursor(Qt.ClosedHandCursor)
             event.accept()
             return
@@ -444,34 +435,22 @@ class MapCanvas(QWidget):
     def mouseMoveEvent(self, event):  # noqa: N802
         if self._drag_start_pos is None or not self._my_pos:
             return super().mouseMoveEvent(event)
-        # Pixel-Delta seit Drag-Start
         dx_px = event.position().x() - self._drag_start_pos.x()
         dy_px = event.position().y() - self._drag_start_pos.y()
-        sens = math.radians(GLOBE_SENSITIVITY_DEG_PER_PX / self._zoom)
-
-        # Achsen tangential zur Erdkugel an JO31:
-        # - East-Achse (zeigt nach Osten): senkrecht zur polaren Achse + JO31-Lon
-        # - North-Achse (zeigt nach Norden): cross(JO31_xyz, East)
-        my_lat, my_lon = self._my_pos
-        my_xyz = _latlon_to_xyz(my_lat, my_lon)
-        lon_r = math.radians(my_lon)
-        east_axis = (-math.sin(lon_r), math.cos(lon_r), 0.0)
-        # north = cross(my_xyz, east) — zeigt zum noerdlichen Pol-Tangent durch JO31
-        mx, my, mz = my_xyz
-        ex, ey, ez = east_axis
-        north_axis = (my * ez - mz * ey, mz * ex - mx * ez, mx * ey - my * ex)
-
-        # Yaw (horizontale Maus): Welt rotiert um North-Achse
-        # → westliche Punkte wandern nach Osten am Bildschirm (Inhalt folgt Maus)
-        yaw_q = _quat_from_axis_angle(*north_axis, dx_px * sens)
-        # Pitch (vertikale Maus): Welt rotiert um East-Achse
-        # → noerdliche Punkte wandern nach Sueden, wenn Maus nach unten
-        pitch_q = _quat_from_axis_angle(*east_axis, -dy_px * sens)
-
-        # Komponiere: erst Drag-Start-Rotation, darauf Yaw, darauf Pitch
-        delta = _quat_mul(pitch_q, yaw_q)
-        self._world_rot = _quat_mul(delta, self._drag_start_world_rot)
-
+        sens = GLOBE_SENSITIVITY_DEG_PER_PX / self._zoom
+        # Maus rechts → Globus rotiert nach rechts (wir gucken auf eine
+        # westlichere Stelle, view_lon nimmt ab). Inhalt folgt Maus.
+        new_lon_raw = self._drag_start_view_lon - dx_px * sens
+        new_lon = ((new_lon_raw + 180.0) % 360.0) - 180.0
+        # Maus runter → Globus kippt nach unten (wir gucken auf eine
+        # noerdlichere Stelle, view_lat nimmt zu). Bis ±85° (Pol-Singularitaet).
+        new_lat_raw = self._drag_start_view_lat + dy_px * sens
+        new_lat = max(-85.0, min(85.0, new_lat_raw))
+        if (abs(new_lat - self._view_lat) < 0.01
+                and abs(new_lon - self._view_lon) < 0.01):
+            return
+        self._view_lat = new_lat
+        self._view_lon = new_lon
         if not self._rotation_timer.isActive():
             self._rotation_timer.start(ROTATE_DEBOUNCE_MS)
         self.update()
@@ -487,9 +466,10 @@ class MapCanvas(QWidget):
         super().mouseReleaseEvent(event)
 
     def reset_view(self) -> None:
-        """Zoom auf 1.0, Welt-Rotation auf identity (Norden oben)."""
+        """Zoom auf 1.0, Beobachter zurueck auf JO31."""
         self._zoom = 1.0
-        self._world_rot = (1.0, 0.0, 0.0, 0.0)
+        if self._my_pos:
+            self._view_lat, self._view_lon = self._my_pos
         self._invalidate_background()
 
     def mouseDoubleClickEvent(self, event):  # noqa: N802
@@ -512,10 +492,12 @@ class MapCanvas(QWidget):
         if self._bg_pixmap is None or self._bg_pixmap.size() != self.size():
             self._bg_pixmap = self._build_background_pixmap()
         painter.drawPixmap(0, 0, self._bg_pixmap)
-        # Live-Layer-Reihenfolge: Heatmap (unter allem) → Sektor-Wedges →
-        # Connection-Lines → Punkte → User-Marker
+        # Live-Layer (Globus-Vordergrund). User-zentrierte Layer (Rings,
+        # Sektoren, Lines) nur wenn JO31 aktuell auf der sichtbaren Hemisphaere.
         if self._show_stations:
             self._paint_country_heatmap(painter)
+        self._paint_user_distance_rings(painter)
+        self._paint_user_sector_lines(painter)
         if self._show_sectors:
             self._paint_sector_wedges(painter)
         if self._show_stations:
@@ -541,13 +523,34 @@ class MapCanvas(QWidget):
         painter.setRenderHint(QPainter.Antialiasing)
         try:
             self._paint_aurora(painter)
+            self._paint_globe_disk(painter)
             self._paint_coastlines(painter)
-            self._paint_distance_rings(painter)
             self._paint_compass(painter)
-            self._paint_sector_lines(painter)
         finally:
             painter.end()
         return pix
+
+    def _paint_globe_disk(self, painter: QPainter) -> None:
+        """Die sichtbare Halbkugel als gefuellten Kreis: Ozean-Blau mit
+        leichtem Gradient von Mitte (heller) zu Rand (dunkler) — gibt der
+        Erde ihre 3D-Wirkung wie auf einem Globus-Foto."""
+        from PySide6.QtGui import QRadialGradient
+        cx, cy = self._center_px()
+        r = self._radius_px()
+        grad = QRadialGradient(QPointF(cx - r * 0.2, cy - r * 0.25), r * 1.2)
+        # Hellere Mitte (Reflexion), dunkler zum Rand (Tiefe)
+        grad.setColorAt(0.0, QColor(40, 70, 130, 220))
+        grad.setColorAt(0.6, QColor(20, 40, 90, 220))
+        grad.setColorAt(1.0, QColor(8, 15, 35, 220))
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QBrush(grad))
+        painter.drawEllipse(QPointF(cx, cy), r, r)
+        # Daruem ein duenner Highlight-Ring (Atmospheric Limb)
+        painter.setBrush(Qt.NoBrush)
+        pen = QPen(QColor(120, 180, 255, 100))
+        pen.setWidthF(1.2)
+        painter.setPen(pen)
+        painter.drawEllipse(QPointF(cx, cy), r + 0.5, r + 0.5)
 
     def _paint_aurora(self, painter: QPainter) -> None:
         """Subtiler RadialGradient von leicht-blau in der Mitte zu fast-schwarz aussen.
@@ -608,38 +611,62 @@ class MapCanvas(QWidget):
         for p in polys:
             painter.drawPolyline(p)
 
-    def _paint_distance_rings(self, painter: QPainter) -> None:
-        # Distanzringe sind User-zentriert (Distanzen zum User-Locator).
-        # Bei aktivem Globus-Pan landet der User nicht mehr in der Mitte.
-        user_pos = self._user_screen_pos() or self._center_px()
+    def _paint_user_distance_rings(self, painter: QPainter) -> None:
+        """Distance-Rings am User-Marker. Nur wenn User auf sichtbarer Hemisphaere.
+        Pixel-Skala: 1° Großkreis ≈ pi*radius/180 px (Naeherung am User-Punkt)."""
+        user_pos = self._user_screen_pos()
+        if user_pos is None:
+            return
         ux, uy = user_pos
-        radius = self._radius_px()
-        max_km = self._effective_max_km()
+        globe_r = self._radius_px()
+        # Erdumfang: 40075 km = 360°. 1° = 111.32 km.
+        # Auf der Globus-Sphaere: 1° entspricht globe_r * pi/180 Pixeln (am Punkt selbst).
         pen = QPen(QColor(COLOR_RINGS))
         pen.setStyle(Qt.DashLine)
         pen.setWidthF(0.8)
         painter.setPen(pen)
         painter.setBrush(Qt.NoBrush)
+        # Clip auf Globus-Disk (Distanzring darf nicht ueber den Globus-Rand)
+        cx, cy = self._center_px()
+        painter.save()
+        from PySide6.QtGui import QPainterPath
+        clip = QPainterPath()
+        clip.addEllipse(QPointF(cx, cy), globe_r, globe_r)
+        painter.setClipPath(clip)
         for km in DISTANCE_RINGS_KM:
-            if km > max_km:
+            # km auf Sphaere → Bogen-Winkel in rad → Pixel auf Tangentialebene
+            ang_rad = (km / 6371.0)  # Erdradius
+            r_px = globe_r * math.sin(ang_rad)  # Orthographic: Sehnen-Projektion
+            if r_px > globe_r * 1.2:
                 continue
-            r = radius * (km / max_km)
-            painter.drawEllipse(QPointF(ux, uy), r, r)
+            painter.drawEllipse(QPointF(ux, uy), r_px, r_px)
+        painter.restore()
 
-    def _paint_sector_lines(self, painter: QPainter) -> None:
-        # Sektor-Linien sind User-zentriert (zeigen Antennen-Richtungen).
-        user_pos = self._user_screen_pos() or self._center_px()
+    def _paint_user_sector_lines(self, painter: QPainter) -> None:
+        """Sektor-Linien um den User. Nur wenn User auf sichtbarer Hemisphaere."""
+        user_pos = self._user_screen_pos()
+        if user_pos is None:
+            return
         ux, uy = user_pos
-        radius = self._radius_px()
+        globe_r = self._radius_px()
+        # Sektoren als kurze Linien (15% des Globus-Radius, sonst Verzerrung)
+        line_len = globe_r * 0.15
         pen = QPen(QColor(COLOR_SECTOR_LINES))
         pen.setWidthF(0.5)
         painter.setPen(pen)
+        cx, cy = self._center_px()
+        painter.save()
+        from PySide6.QtGui import QPainterPath
+        clip = QPainterPath()
+        clip.addEllipse(QPointF(cx, cy), globe_r, globe_r)
+        painter.setClipPath(clip)
         for i in range(SECTOR_COUNT):
             angle_deg = i * SECTOR_WIDTH_DEG - SECTOR_WIDTH_DEG / 2.0
             rad = math.radians(angle_deg)
-            x = ux + radius * math.sin(rad)
-            y = uy - radius * math.cos(rad)
+            x = ux + line_len * math.sin(rad)
+            y = uy - line_len * math.cos(rad)
             painter.drawLine(QPointF(ux, uy), QPointF(x, y))
+        painter.restore()
 
     def _paint_compass(self, painter: QPainter) -> None:
         # Compass bleibt am Bildschirm-Center: zeigt N/E/S/W relative zur
@@ -676,18 +703,27 @@ class MapCanvas(QWidget):
     def _paint_sector_wedges(self, painter: QPainter) -> None:
         if not self._sectors:
             return
-        # Wedges sind User-zentriert (Antennen-Richtungs-Aktivitaet).
-        user_pos = self._user_screen_pos() or self._center_px()
+        user_pos = self._user_screen_pos()
+        if user_pos is None:
+            return  # User auf Globus-Rueckseite
         ux, uy = user_pos
-        radius = self._radius_px()
+        globe_r = self._radius_px()
+        # Wedges sind klein gehalten (max 30% Globus-Radius), bleiben in der
+        # Globus-Disk damit es nicht ueber den Rand klatscht.
+        max_wedge_r = globe_r * 0.30
         max_count = max((b.count for b in self._sectors), default=0)
         if max_count == 0:
             return
-
+        cx, cy = self._center_px()
+        painter.save()
+        from PySide6.QtGui import QPainterPath
+        clip = QPainterPath()
+        clip.addEllipse(QPointF(cx, cy), globe_r, globe_r)
+        painter.setClipPath(clip)
         for b in self._sectors:
             if b.count == 0:
                 continue
-            r = radius * 0.95 * (b.count / max_count)
+            r = max_wedge_r * (b.count / max_count)
             mid_deg = b.index * SECTOR_WIDTH_DEG
             qt_start_deg = 90.0 - mid_deg - SECTOR_WIDTH_DEG / 2.0
             qt_span_deg = SECTOR_WIDTH_DEG
@@ -698,6 +734,7 @@ class MapCanvas(QWidget):
                 int(ux - r), int(uy - r), int(2 * r), int(2 * r),
                 int(qt_start_deg * 16), int(qt_span_deg * 16),
             )
+        painter.restore()
 
     def _sector_color(self, bucket: SectorBucket) -> QColor:
         """Sektor-Farbton aus Antenna-Counter mischen (RX-Modus).

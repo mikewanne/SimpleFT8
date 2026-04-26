@@ -479,18 +479,20 @@ def test_dialog_spots_to_station_points_filters(qapp):
 
 
 def test_canvas_zoom_default_is_one(qapp):
-    from ui.direction_map_widget import MapCanvas, MAX_DISTANCE_KM
+    from ui.direction_map_widget import MapCanvas
     c = MapCanvas(my_locator="JO31")
     assert c._zoom == 1.0
-    assert c._effective_max_km() == MAX_DISTANCE_KM
 
 
-def test_canvas_zoom_in_doubles_via_factor(qapp):
-    """Zoom rein verkleinert effective_max_km um Faktor."""
-    from ui.direction_map_widget import MapCanvas, MAX_DISTANCE_KM
+def test_canvas_zoom_doubles_globe_radius(qapp):
+    """Zoom rein verdoppelt Globus-Radius (Orthographic)."""
+    from ui.direction_map_widget import MapCanvas
     c = MapCanvas(my_locator="JO31")
+    c.resize(500, 500)
+    r1 = c._radius_px()
     c._zoom = 2.0
-    assert c._effective_max_km() == MAX_DISTANCE_KM / 2.0
+    r2 = c._radius_px()
+    assert abs(r2 - 2.0 * r1) < 0.5
 
 
 def test_canvas_zoom_clamped(qapp):
@@ -507,14 +509,17 @@ def test_canvas_zoom_clamped(qapp):
     assert c._zoom == ZOOM_MIN
 
 
-def test_canvas_world_rot_default_is_identity(qapp):
+def test_canvas_view_default_is_user_pos(qapp):
+    """View startet mit Beobachter direkt auf JO31 (User in der Mitte)."""
     from ui.direction_map_widget import MapCanvas
     c = MapCanvas(my_locator="JO31")
-    assert c._world_rot == (1.0, 0.0, 0.0, 0.0)
+    assert c._my_pos is not None
+    assert c._view_lat == c._my_pos[0]
+    assert c._view_lon == c._my_pos[1]
 
 
-def test_canvas_user_always_at_center(qapp):
-    """JO31 bleibt immer fix am Bildschirm-Center — Erde rotiert drumherum."""
+def test_canvas_user_at_center_when_view_is_user_pos(qapp):
+    """View == JO31 → User-Marker fix in der Mitte."""
     from ui.direction_map_widget import MapCanvas
     c = MapCanvas(my_locator="JO31")
     c.resize(500, 500)
@@ -525,59 +530,77 @@ def test_canvas_user_always_at_center(qapp):
     assert abs(user[1] - cy) < 1.0
 
 
-def test_canvas_user_stays_at_center_after_world_rotation(qapp):
-    """Auch bei nicht-trivialer Welt-Rotation muss JO31 fix am Center bleiben."""
+def test_canvas_user_offsets_when_view_pans(qapp):
+    """Wenn View 30° nach Westen wandert, User-Marker landet im rechten Halbkreis."""
     from ui.direction_map_widget import MapCanvas
-    from ui.direction_map_widget import _quat_from_axis_angle
-    import math
     c = MapCanvas(my_locator="JO31")
     c.resize(500, 500)
-    # 45° um beliebige Achse drehen
-    c._world_rot = _quat_from_axis_angle(0.5, 0.5, 0.5, math.radians(45))
-    cx, cy = c._center_px()
-    # JO31 wird durch _project mit world_rot transformiert,
-    # aber liegt nicht zwingend auf der Achse → kann sich verschieben.
-    # Daher pruefen wir nur, dass _user_screen_pos noch das Center liefert
-    # (vereinfachte API). Der echte Test ist: bei Drag um JO31-Achse bleibt JO31 fix.
+    cx, _ = c._center_px()
+    c._view_lon = c._view_lon - 30.0
     user = c._user_screen_pos()
     assert user is not None
-    assert user == (cx, cy)
+    assert user[0] > cx + 10
 
 
-def test_canvas_world_rot_around_jo31_axis_keeps_jo31_invariant(qapp):
-    """Rotation um eine Achse durch JO31 → JO31's projezierte Position bleibt
-    am Bildschirm-Center (Punkt auf Rotationsachse ist invariant)."""
-    from ui.direction_map_widget import MapCanvas, _latlon_to_xyz, _quat_from_axis_angle
-    import math
+def test_canvas_user_invisible_when_on_far_side(qapp):
+    """View auf Antipode (lat negiert, lon+180) → User ist auf Rueckseite, invisible."""
+    from ui.direction_map_widget import MapCanvas
     c = MapCanvas(my_locator="JO31")
     c.resize(500, 500)
     my_lat, my_lon = c._my_pos
-    # Achse durch JO31 (vom Erdmittelpunkt zu JO31 auf der Sphäre)
-    ax, ay, az = _latlon_to_xyz(my_lat, my_lon)
-    c._world_rot = _quat_from_axis_angle(ax, ay, az, math.radians(60))
-    # JO31 selbst rotiert nicht (liegt auf Achse), Projektion gibt (0,0)
-    p = c._project(my_lat, my_lon)
-    assert p is not None
-    assert abs(p[0]) < 0.5
-    assert abs(p[1]) < 0.5
+    # Antipode-Ansicht
+    c._view_lat = -my_lat
+    c._view_lon = ((my_lon + 180.0) + 180.0) % 360.0 - 180.0
+    user = c._user_screen_pos()
+    assert user is None  # User auf Globus-Rueckseite
 
 
-def test_canvas_reset_view_resets_zoom_and_world_rot(qapp):
+def test_canvas_reset_view_resets_to_user_pos(qapp):
     from ui.direction_map_widget import MapCanvas
     c = MapCanvas(my_locator="JO31")
     c._zoom = 3.5
-    c._world_rot = (0.7, 0.5, 0.3, 0.4)
+    c._view_lat = 12.3
+    c._view_lon = -45.6
     c.reset_view()
     assert c._zoom == 1.0
-    assert c._world_rot == (1.0, 0.0, 0.0, 0.0)
+    assert c._view_lat == c._my_pos[0]
+    assert c._view_lon == c._my_pos[1]
 
 
-def test_canvas_set_locator_resets_world_rot(qapp):
+def test_canvas_set_locator_recenters_view(qapp):
     from ui.direction_map_widget import MapCanvas
     c = MapCanvas(my_locator="JO31")
-    c._world_rot = (0.7, 0.5, 0.3, 0.4)
+    c._view_lat = 0.0
+    c._view_lon = 0.0
     c.set_locator("KO82")
-    assert c._world_rot == (1.0, 0.0, 0.0, 0.0)
+    assert c._view_lat == c._my_pos[0]
+    assert c._view_lon == c._my_pos[1]
+
+
+def test_orthographic_project_basic():
+    """Punkt = view_center → projeziert auf (0, 0)."""
+    from core.geo import orthographic_project
+    p = orthographic_project(51.5, 7.0, 51.5, 7.0, radius_px=200.0)
+    assert p is not None
+    assert abs(p[0]) < 1e-6
+    assert abs(p[1]) < 1e-6
+
+
+def test_orthographic_project_back_side_returns_none():
+    """Punkt auf Antipode → None."""
+    from core.geo import orthographic_project
+    p = orthographic_project(0.0, 0.0, 0.0, 180.0, radius_px=200.0)
+    assert p is None
+
+
+def test_orthographic_project_quarter_globe_at_radius():
+    """Punkt 90° entfernt vom view-center → liegt am Rand der Disk (r=radius_px)."""
+    from core.geo import orthographic_project
+    import math
+    p = orthographic_project(0.0, 0.0, 0.0, 90.0, radius_px=200.0)
+    assert p is not None
+    r_actual = math.hypot(p[0], p[1])
+    assert abs(r_actual - 200.0) < 1.0
 
 
 def test_canvas_call_to_country_known(qapp):
@@ -613,18 +636,19 @@ def test_canvas_heatmap_color_lerp(qapp):
     assert HEATMAP_COLOR_LOW.red() <= cm.red() <= HEATMAP_COLOR_HIGH.red()
 
 
-def test_canvas_paintevent_with_zoom_and_world_rot(qapp):
-    """paintEvent darf bei extremen Zoom + Welt-Rotation nicht crashen."""
-    from ui.direction_map_widget import MapCanvas, _quat_from_axis_angle
-    import math
+def test_canvas_paintevent_with_zoom_and_view_pan(qapp):
+    """paintEvent darf bei extremen Zoom + View-Pan nicht crashen."""
+    from ui.direction_map_widget import MapCanvas
     c = MapCanvas(my_locator="JO31")
     c.resize(500, 500)
     c.show()
     c._zoom = 4.0
-    c._world_rot = _quat_from_axis_angle(1.0, 0.5, 0.2, math.radians(120))
+    c._view_lat = 30.0
+    c._view_lon = -100.0
     c.repaint()
     c._zoom = 0.5
-    c._world_rot = _quat_from_axis_angle(0.0, 1.0, 0.5, math.radians(-90))
+    c._view_lat = -45.0
+    c._view_lon = 150.0
     c.repaint()
     c.deleteLater()
 
