@@ -773,3 +773,53 @@ Schwelle / A1 deutlich besser).
 
 **Statistiken:** auswertung/Bericht-*.pdf (DE) + auswertung/en/Report-*.pdf (EN)
 neu generiert, alle Baender + Modi.
+
+## 2026-04-26 v0.62 — Normal-Modus = WSJT-X-Standard (manuelle TX-Frequenz)
+
+**Mike's Argumentation:** Normal-Modus soll wie WSJT-X funktionieren. Dort waehlt
+der Funker die TX-Frequenz manuell. Auto-Suche ist USP des Diversity-Modus —
+keine Mischung. Statistik-Vergleich wird sauberer wenn Normal "nackt" laeuft.
+Histogramm bleibt im Normal sichtbar als Wasserfall-Ersatz (alle 15s).
+
+**Aenderungen:**
+
+1. **FrequencyHistogramWidget** (`control_panel.py`):
+   - Neues Signal `tx_freq_clicked(int)` — Klick-Position → TX-Freq in Hz.
+   - `mousePressEvent`: rundet auf 50-Hz-Bin-Raster (wie WSJT-X).
+   - `set_clickable(bool)`: Pointer-Cursor + Tooltip im Normal, Standard im Diversity.
+   - `_last_freq_lo/hi` werden im paintEvent gemerkt fuer Klick→Hz-Konvertierung.
+
+2. **Spinbox unter Histogramm** (`_AntennaCard`):
+   - QSpinBox 150-2800 Hz, Step 50, Default 1500 (WSJT-X-Default).
+   - Pfeile hoch/runter zur Feinjustierung.
+   - Forwarding `_tx_freq_row` + `_tx_freq_spin` im ControlPanel.
+
+3. **Modus-abhaengige UI** (`_apply_rx_mode_visibility`):
+   - Normal: Spinbox sichtbar, Histogramm klickbar, kein CQ-Auto-Countdown.
+   - Diversity: Spinbox versteckt, Histogramm nicht klickbar (Auto-Suche), CQ-Countdown sichtbar.
+   - Initial-Aufruf in ControlPanel.__init__ damit Normal-Modus von Start an
+     korrekt konfiguriert ist.
+
+4. **Persistenz pro Band** (`config/settings.py`):
+   - `get_normal_tx_freq(band)` / `save_normal_tx_freq(band, hz)`.
+   - Default 1500 Hz (faellt auf globalen `audio_freq_hz` zurueck).
+   - Speicherort: `normal_tx_freq_per_band` dict in config.json.
+
+5. **Auto-Suche im Normal-Modus deaktiviert**:
+   - `mw_cycle._update_histogram`: kein `update_proposed_freq()` mehr im Normal.
+     TX-Marker wird auf `encoder.audio_freq_hz` (manuell) gesetzt.
+   - `mw_qso._on_cq_clicked`: nur Diversity nutzt `get_free_cq_freq()`.
+     Im Normal-Modus laeuft CQ auf der manuell gewaehlten Frequenz.
+
+6. **Slots in `mw_radio`**:
+   - `_on_normal_tx_freq_clicked` / `_on_normal_tx_freq_spin_changed`.
+   - `_set_normal_tx_freq(hz, source)` synchronisiert Klick + Spinbox via
+     `blockSignals` (kein Endlos-Loop).
+   - `_apply_normal_mode` laedt gespeicherte Frequenz pro Band.
+
+**Tests:** 218 grün (216 + 2 neue: `test_normal_tx_freq_default` +
+`test_normal_tx_freq_per_band_save_load`). GUI-Smoke-Test verifiziert
+Mode-Switching (Klick-Modus an/aus).
+
+**DeepSeek-Review:** Issues betrafen pre-existing diversity.py (Sticky-/
+Kollisions-Schwellen) — nicht v0.62. Code-Quality-Bewertung: solide Modularitaet.

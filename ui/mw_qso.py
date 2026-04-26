@@ -113,14 +113,17 @@ class QSOMixin:
                 self._active_qso_targets.clear()
                 self.rx_panel.set_active_call("")
                 print("[CQ] Hunt-QSO abgebrochen → CQ starten")
-            # CQ-Frequenz: aus Histogramm berechnen (Normal + Diversity)
-            cq_freq = self._diversity_ctrl.get_free_cq_freq()
-            if cq_freq and cq_freq != self.encoder.audio_freq_hz:
-                self.encoder.audio_freq_hz = cq_freq
-                print(f"[CQ] TX-Frequenz auf {cq_freq} Hz (aus Histogramm)")
-                # Gelben Marker im Histogramm anzeigen
-                self.control_panel.update_freq_histogram(
-                    self._diversity_ctrl.get_histogram_data())
+            # CQ-Frequenz: nur Diversity nutzt Auto-Suche; Normal-Modus = WSJT-X-Standard,
+            # User waehlt manuell ueber Klick/Spinbox (encoder.audio_freq_hz schon gesetzt).
+            if self._rx_mode == "diversity":
+                cq_freq = self._diversity_ctrl.get_free_cq_freq()
+                if cq_freq and cq_freq != self.encoder.audio_freq_hz:
+                    self.encoder.audio_freq_hz = cq_freq
+                    print(f"[CQ] TX-Frequenz auf {cq_freq} Hz (aus Auto-Suche)")
+                    self.control_panel.update_freq_histogram(
+                        self._diversity_ctrl.get_histogram_data())
+            else:
+                print(f"[CQ] Normal-Modus → manuelle TX-Frequenz {self.encoder.audio_freq_hz} Hz")
             # CQ: immer auf festem Slot senden (aktueller Gegenteil-Slot)
             self.encoder.tx_even = not self.timer.is_even_cycle()
             slot = "EVEN" if self.encoder.tx_even else "ODD"

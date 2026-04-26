@@ -951,9 +951,51 @@ class RadioMixin:
         else:
             self.control_panel.dx_info.setText("kein Preset")
 
+    @Slot(int)
+    def _on_normal_tx_freq_clicked(self, freq_hz: int):
+        """Klick im Histogramm (Normal-Modus) → TX-Frequenz setzen."""
+        self._set_normal_tx_freq(freq_hz, source="click")
+
+    @Slot(int)
+    def _on_normal_tx_freq_spin_changed(self, freq_hz: int):
+        """Spinbox-Wert geaendert (Normal-Modus) → TX-Frequenz setzen."""
+        self._set_normal_tx_freq(freq_hz, source="spin")
+
+    def _set_normal_tx_freq(self, freq_hz: int, source: str = "click"):
+        """Manuelle TX-Frequenz im Normal-Modus uebernehmen.
+
+        Wird sowohl von Klick im Histogramm als auch Spinbox-Aenderung
+        getriggert. Synchronisiert beide UIs, encoder.audio_freq_hz und
+        die Persistenz pro Band.
+        """
+        if self._rx_mode != "normal":
+            return  # Im Diversity-Modus ignorieren (Auto-Suche aktiv)
+        freq_hz = int(freq_hz)
+        # Spinbox synchron halten (ohne Endlos-Loop dank blockSignals)
+        spin = self.control_panel._tx_freq_spin
+        if source != "spin":
+            spin.blockSignals(True)
+            spin.setValue(freq_hz)
+            spin.blockSignals(False)
+        # Encoder + Histogramm-Marker
+        self.encoder.audio_freq_hz = freq_hz
+        hist_data = self._diversity_ctrl.get_histogram_data()
+        hist_data['cq_freq'] = freq_hz
+        self.control_panel.update_freq_histogram(hist_data)
+        # Persistenz pro Band
+        self.settings.save_normal_tx_freq(self.settings.band, freq_hz)
+        print(f"[Normal] TX-Freq manuell auf {freq_hz} Hz ({source})")
+
     def _apply_normal_mode(self):
         """Normal-Modus: eigenes Normal-Preset (NIEMALS Diversity-Preset), TX immer ANT1."""
         band = self.settings.band
+        # Manuelle TX-Frequenz fuer dieses Band laden (per default 1500 Hz)
+        tx_freq = self.settings.get_normal_tx_freq(band)
+        self.encoder.audio_freq_hz = tx_freq
+        spin = self.control_panel._tx_freq_spin
+        spin.blockSignals(True)
+        spin.setValue(tx_freq)
+        spin.blockSignals(False)
         preset = self.settings.get_normal_preset(band)
         gain = preset.get("gain", PREAMP_PRESETS.get(band, 10))
         measured_str = preset.get("measured", "")

@@ -487,16 +487,19 @@ class CycleMixin:
             threading.Thread(target=_switch, daemon=True).start()
 
     def _update_histogram(self, messages):
-        """Histogram + vorgeschlagene TX-Freq aktualisieren (Normal-Modus)."""
+        """Histogramm aktualisieren (Normal-Modus = Wasserfall-Ersatz).
+
+        Im Normal-Modus laeuft KEINE automatische CQ-Frequenz-Suche
+        (wie WSJT-X). Der User waehlt die TX-Frequenz manuell ueber
+        Klick im Histogramm oder Spinbox. Hier nur Histogramm-Refresh
+        damit der User sieht wo Lueck und Aktivitaet ist.
+        """
         # 1:1 aus aktuellem RX-Fenster (station_accumulator, inkl. Aging)
         self._diversity_ctrl.sync_from_stations(self._normal_stations)
-        qso_busy = self.qso_sm.state not in (
-            QSOState.IDLE, QSOState.TIMEOUT,
-            QSOState.CQ_CALLING, QSOState.CQ_WAIT,
-        )
-        self._diversity_ctrl.update_proposed_freq(qso_active=qso_busy)
-        self.control_panel.update_freq_histogram(
-            self._diversity_ctrl.get_histogram_data())
+        # TX-Marker zeigt manuell gewaehlte Frequenz aus encoder
+        hist_data = self._diversity_ctrl.get_histogram_data()
+        hist_data['cq_freq'] = self.encoder.audio_freq_hz  # Marker = manuell
+        self.control_panel.update_freq_histogram(hist_data)
 
     def _is_antenna_tuning_active(self) -> bool:
         """Prueft ob RF-Tuning, Radio-Suche oder Diversity-Einmessphase aktiv.

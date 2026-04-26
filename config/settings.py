@@ -172,6 +172,22 @@ class Settings:
         }
         self.save()
 
+    def get_normal_tx_freq(self, band: str) -> int:
+        """Manuell eingestellte TX-Frequenz pro Band fuer Normal-Modus.
+
+        Wird bei Bandwechsel geladen und beim Klick im Histogramm /
+        Spinbox-Aenderung gespeichert. Default 1500 Hz (WSJT-X-Default).
+        """
+        per_band = self._data.get("normal_tx_freq_per_band", {})
+        return int(per_band.get(band, self._data.get("audio_freq_hz", 1500)))
+
+    def save_normal_tx_freq(self, band: str, freq_hz: int):
+        """TX-Frequenz fuer Band speichern (Normal-Modus, manuelle Auswahl)."""
+        if "normal_tx_freq_per_band" not in self._data:
+            self._data["normal_tx_freq_per_band"] = {}
+        self._data["normal_tx_freq_per_band"][band] = int(freq_hz)
+        self.save()
+
     def save_dx_preset(self, band: str, rxant: str, gain: int,
                        ant1_avg: float = 0, ant2_avg: float = 0,
                        ant1_gain: int = None, ant2_gain: int = None,

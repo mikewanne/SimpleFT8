@@ -6,10 +6,10 @@ Dark Theme Redesign mit LED-Balance-Indikator.
 import time
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QSlider, QFrame, QGridLayout, QButtonGroup, QProgressBar,
+    QSlider, QFrame, QGridLayout, QButtonGroup, QProgressBar, QSpinBox,
 )
 from PySide6.QtCore import Signal, Qt, QTimer
-from PySide6.QtGui import QFont, QPainter, QColor, QPen
+from PySide6.QtGui import QFont, QPainter, QColor, QPen, QCursor
 
 from config.settings import BAND_FREQUENCIES
 from main import APP_VERSION
@@ -27,11 +27,19 @@ from ui.styles import (
 
 
 class FrequencyHistogramWidget(QWidget):
-    """50-Hz-Bin Frequenz-Histogramm: belegte Frequenzen + freie Lücke + CQ-Marker."""
+    """50-Hz-Bin Frequenz-Histogramm: belegte Frequenzen + freie Lücke + CQ-Marker.
+
+    Im Normal-Modus klickbar: User klickt ins Histogramm um die TX-Frequenz
+    manuell zu setzen (wie WSJT-X). Im Diversity-Modus laeuft die Auto-Suche,
+    Klicks sind dort deaktiviert (kein Mouse-Tracking, Standard-Cursor).
+    """
 
     FREQ_MIN = 150
     FREQ_MAX = 2800
     BIN_HZ   = 50
+
+    # Signal: User hat ins Histogramm geklickt → gewuenschte TX-Freq in Hz
+    tx_freq_clicked = Signal(int)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -42,6 +50,10 @@ class FrequencyHistogramWidget(QWidget):
         self._tx_freq          = None   # Aktuelle TX-Freq (Hunt oder CQ)
         self._gap_start_hz     = None
         self._gap_end_hz       = None
+        self._clickable        = False  # True nur im Normal-Modus
+        # Letzte Anzeige-Range fuer Klick→Hz-Konvertierung (paintEvent setzt)
+        self._last_freq_lo     = self.FREQ_MIN
+        self._last_freq_hi     = self.FREQ_MAX
 
     def update_data(self, data: dict):
         """Daten aus DiversityController.get_histogram_data() übernehmen."""
@@ -55,6 +67,32 @@ class FrequencyHistogramWidget(QWidget):
         """Aktuelle TX-Frequenz setzen (Hunt-Mode oder manuelle Auswahl)."""
         self._tx_freq = freq_hz
         self.update()
+
+    def set_clickable(self, clickable: bool):
+        """Klick-Modus an/aus. Im Normal-Modus an (manuelle TX-Freq-Auswahl),
+        im Diversity-Modus aus (Auto-Suche)."""
+        self._clickable = clickable
+        if clickable:
+            self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+            self.setToolTip("Klicken um TX-Frequenz manuell zu setzen")
+        else:
+            self.setCursor(QCursor(Qt.CursorShape.ArrowCursor))
+            self.setToolTip("")
+
+    def mousePressEvent(self, event):  # noqa: N802
+        """Klick: x-Koordinate → TX-Frequenz in Hz, auf Bin-Breite gerundet."""
+        if not self._clickable or event.button() != Qt.MouseButton.LeftButton:
+            return super().mousePressEvent(event)
+        w = max(1, self.width())
+        x = max(0, min(w, event.position().x()))
+        freq_rng = max(1, self._last_freq_hi - self._last_freq_lo)
+        hz = int(self._last_freq_lo + (x / w) * freq_rng)
+        # Auf Bin-Breite runden (50 Hz Raster, wie WSJT-X)
+        hz = int(round(hz / self.BIN_HZ) * self.BIN_HZ)
+        # Auf Hardware-Grenzen begrenzen
+        hz = max(self.FREQ_MIN, min(self.FREQ_MAX, hz))
+        self.tx_freq_clicked.emit(hz)
+        super().mousePressEvent(event)
 
     def paintEvent(self, event):  # noqa: N802
         if not self._bins and self._cq_freq is None:
@@ -83,6 +121,9 @@ class FrequencyHistogramWidget(QWidget):
         else:
             freq_lo, freq_hi = self.FREQ_MIN, self.FREQ_MAX
 
+        # Range merken fuer Klick→Hz-Konvertierung in mousePressEvent
+        self._last_freq_lo = freq_lo
+        self._last_freq_hi = freq_hi
         freq_rng = max(1, freq_hi - freq_lo)
 
         def fx(hz: float) -> int:
@@ -399,6 +440,32 @@ class _AntenneCard(QFrame):
         self._freq_hist = FrequencyHistogramWidget(self)
         self._freq_hist.setVisible(False)
         lay.addWidget(self._freq_hist)
+
+        # TX-Freq Manuell-Eingabe (nur Normal-Modus sichtbar) — Spinbox + Pfeile
+        # Klick im Histogramm uebernimmt Wert hier rein, User kann manuell feintunen.
+        self._tx_freq_row = QWidget()
+        _tx_lay = QHBoxLayout(self._tx_freq_row)
+        _tx_lay.setContentsMargins(2, 2, 2, 2)
+        _tx_lay.setSpacing(6)
+        _tx_lbl = QLabel("TX-Freq:")
+        _tx_lbl.setStyleSheet(f"color:#CCCCCC;font-family:{_FONT};font-size:10px;")
+        _tx_lay.addWidget(_tx_lbl)
+        self._tx_freq_spin = QSpinBox()
+        self._tx_freq_spin.setRange(150, 2800)
+        self._tx_freq_spin.setSingleStep(50)
+        self._tx_freq_spin.setValue(1500)
+        self._tx_freq_spin.setSuffix(" Hz")
+        self._tx_freq_spin.setFixedWidth(110)
+        self._tx_freq_spin.setStyleSheet(
+            f"QSpinBox {{ background:#0a0a14; color:#FFD700; "
+            f"border:1px solid #444; border-radius:3px; padding:2px 4px; "
+            f"font-family:{_FONT}; font-size:11px; font-weight:bold; }}"
+            "QSpinBox::up-button, QSpinBox::down-button { width:14px; }"
+        )
+        _tx_lay.addWidget(self._tx_freq_spin)
+        _tx_lay.addStretch()
+        self._tx_freq_row.setVisible(False)
+        lay.addWidget(self._tx_freq_row)
 
         # CQ-Freq Countdown: Label + Balken in einer Zeile (horizontal)
         cq_row_layout = QHBoxLayout()
@@ -774,6 +841,9 @@ class ControlPanel(QWidget):
         self.setAutoFillBackground(True)
         self.setStyleSheet("ControlPanel { background-color: #06060c; color: #CCC; font-family: Menlo; }")
         self._setup_ui()
+        # Initial: Normal-Modus → Histogramm klickbar, Spinbox sichtbar.
+        # _apply_rx_mode_visibility braucht _setup_ui (UI-Elemente muessen existieren).
+        self._apply_rx_mode_visibility(is_div=False)
         self._start_clock()
 
     # =====================================================================
@@ -815,6 +885,9 @@ class ControlPanel(QWidget):
         self._cq_freq_lbl = ant_card._cq_freq_lbl
         self._cq_freq_bar = ant_card._cq_freq_bar
         self._cq_row = ant_card._cq_row
+        # Manuelle TX-Freq-Eingabe (Normal-Modus)
+        self._tx_freq_row = ant_card._tx_freq_row
+        self._tx_freq_spin = ant_card._tx_freq_spin
         self.btn_normal.setStyleSheet(self._rx_btn_style(self._RX_STYLE_ACTIVE))
         self.btn_diversity.setStyleSheet(self._rx_btn_style(self._RX_STYLE_INACTIVE))
         self.btn_normal.clicked.connect(lambda: self._on_rx_mode_clicked("normal"))
@@ -1012,11 +1085,22 @@ class ControlPanel(QWidget):
             self.btn_normal.setStyleSheet(self._rx_btn_style(self._RX_STYLE_INACTIVE))
             self.btn_diversity.setStyleSheet(self._rx_btn_style(self._RX_STYLE_DIVERSITY_ACTIVE))
         self._current_rx_mode = mode
-        is_div = (mode == "diversity")
-        self._div_widget.setVisible(is_div)
-        if not is_div:
+        self._apply_rx_mode_visibility(mode == "diversity")
+        if mode != "diversity":
             self.dx_info.setText("")
         self.rx_mode_changed.emit(mode)
+
+    def _apply_rx_mode_visibility(self, is_div: bool):
+        """UI-Elemente fuer den jeweiligen Modus ein-/ausblenden.
+
+        Diversity: Diversity-Widget + CQ-Auto-Suche-Countdown sichtbar.
+        Normal:    TX-Freq-Spinbox sichtbar, Histogramm klickbar (manuelle
+                   Frequenz-Wahl wie WSJT-X).
+        """
+        self._div_widget.setVisible(is_div)
+        self._tx_freq_row.setVisible(not is_div)
+        self._freq_hist.set_clickable(not is_div)
+        self._cq_row.setVisible(is_div)
 
     def set_rx_mode(self, mode: str):
         """RX-Modus programmatisch setzen (ohne Signal auszuloesen)."""
@@ -1031,8 +1115,7 @@ class ControlPanel(QWidget):
             self.btn_normal.setStyleSheet(self._rx_btn_style(self._RX_STYLE_INACTIVE))
             self.btn_diversity.setStyleSheet(self._rx_btn_style(self._RX_STYLE_DIVERSITY_ACTIVE))
         self._current_rx_mode = mode
-        is_div = (mode == "diversity")
-        self._div_widget.setVisible(is_div)
+        self._apply_rx_mode_visibility(mode == "diversity")
 
     # =====================================================================
     # Diversity Ratio Display
@@ -1112,9 +1195,14 @@ class ControlPanel(QWidget):
             self._a2_count_label.setText(f"{a2_count} St.")
 
     def update_freq_histogram(self, data: dict):
-        """Frequenz-Histogramm aktualisieren und anzeigen."""
+        """Frequenz-Histogramm aktualisieren und anzeigen.
+
+        Im Normal-Modus IMMER sichtbar (Wasserfall-Ersatz, auch ohne Daten),
+        im Diversity-Modus erst nach erstem Daten-Update (wie bisher)."""
         self._freq_hist.update_data(data)
-        if data.get('bins') or data.get('cq_freq'):
+        if self._current_rx_mode != "diversity":
+            self._freq_hist.setVisible(True)
+        elif data.get('bins') or data.get('cq_freq'):
             self._freq_hist.setVisible(True)
 
     def update_cq_freq_countdown(self, remaining_s: int) -> None:
@@ -1137,7 +1225,8 @@ class ControlPanel(QWidget):
             "QProgressBar { border: none; border-radius: 2px; background: #1a1010; }"
             f"QProgressBar::chunk {{ background: {bar_color}; border-radius: 2px; }}"
         )
-        self._cq_row.setVisible(True)
+        # CQ-Auto-Suche-Anzeige nur im Diversity-Modus relevant
+        self._cq_row.setVisible(self._current_rx_mode == "diversity")
 
     def set_cq_countdown_visible(self, visible: bool) -> None:
         """CQ-Freq-Countdown-Zeile ein-/ausblenden."""

@@ -2026,6 +2026,31 @@ def test_antenna_pref_a1_clearly_better():
     assert pref["delta_db"] == -3.0
 
 
+# ── Normal-Modus TX-Frequenz Persistenz ──────────────────────────────────────
+
+def test_normal_tx_freq_default():
+    """Ohne gespeicherten Wert → audio_freq_hz Default (1500)."""
+    from config.settings import Settings
+    s = Settings.__new__(Settings)
+    s._data = {"audio_freq_hz": 1500}
+    assert s.get_normal_tx_freq("20m") == 1500
+    assert s.get_normal_tx_freq("40m") == 1500
+
+
+def test_normal_tx_freq_per_band_save_load():
+    """save_normal_tx_freq pro Band → get liefert korrekten Wert.
+    Ungesetztes Band faellt auf Default zurueck (kein Cross-Band-Leak)."""
+    from config.settings import Settings
+    s = Settings.__new__(Settings)
+    s._data = {"audio_freq_hz": 1500}
+    # save() braucht filesystem — wir testen nur die Lese-/Schreib-Logik
+    # auf _data direkt (Persistenz-Test wuerde temp-config brauchen).
+    s._data["normal_tx_freq_per_band"] = {"20m": 1750, "40m": 1325}
+    assert s.get_normal_tx_freq("20m") == 1750
+    assert s.get_normal_tx_freq("40m") == 1325
+    assert s.get_normal_tx_freq("15m") == 1500  # Default fuer ungesetztes Band
+
+
 # ── DXTuneDialog Pure Logic (inline, kein Qt nötig) ──────────────────────────
 
 def test_dxtune_top5_avg():
