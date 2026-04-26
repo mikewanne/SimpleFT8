@@ -315,6 +315,28 @@ def test_bulk_import_missing_file_returns_zero(tmp_path: Path):
     assert db.bulk_import_adif(tmp_path / "nope.adi") == 0
 
 
+def test_bulk_import_directory(tmp_path: Path):
+    """Mehrere .adi-Dateien in einem Verzeichnis werden zusammen importiert."""
+    adif_dir = tmp_path / "adif"
+    adif_dir.mkdir()
+    (adif_dir / "log1.adi").write_text(
+        "<EOH>\n<CALL:6>DA1MHH <GRIDSQUARE:6>JO31qf <EOR>\n"
+    )
+    (adif_dir / "log2.adi").write_text(
+        "<EOH>\n<CALL:5>K1ABC <GRIDSQUARE:4>FN42 <EOR>\n"
+    )
+    db = LocatorDB(tmp_path / "loc.json")
+    n = db.bulk_import_directory(adif_dir)
+    assert n == 2
+    assert db.get("DA1MHH").source == "qso_log_6"
+    assert db.get("K1ABC").source == "qso_log_4"
+
+
+def test_bulk_import_directory_missing_returns_zero(tmp_path: Path):
+    db = LocatorDB(tmp_path / "loc.json")
+    assert db.bulk_import_directory(tmp_path / "nonexistent") == 0
+
+
 # ── Diagnostik ─────────────────────────────────────────────
 
 def test_average_precision_km(tmp_path: Path):

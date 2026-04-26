@@ -148,7 +148,12 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self._dx_store.migrate_from_settings(self.settings._data, mode="dx")
 
     def _init_qso_log(self):
-        """QSO-Verzeichnis (Worked-Before) aus aktuellem Pfad + adif_import_path laden."""
+        """QSO-Verzeichnis (Worked-Before) aus aktuellem Pfad + adif_import_path laden.
+
+        Speist anschliessend die Locator-DB einmalig aus den ADIF-Dateien —
+        damit existierende QSOs als qso_log_4/_6-Quellen sofort verfuegbar sind
+        (priorisiert UNTER cq und psk, also ueberschreiben CQ-Decodes spaeter).
+        """
         from log.qso_log import QSOLog
         self.qso_log = QSOLog()
         self.qso_log.load_directory(Path.cwd())
@@ -156,6 +161,19 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         if import_path:
             self.qso_log.load_directory(Path(import_path))
         print(f"[QSOLog] {self.qso_log.worked_count()} unique Calls, {self.qso_log.qso_count()} QSOs")
+
+        # ADIF-Daten in die Locator-DB pushen (qso_log-Source, prec_km 5/110).
+        # Bei wiederholten App-Starts ueberschreibt cq_6/psk_6 hoeher-priorisiert.
+        # AdifWriter speichert in <cwd>/adif/, also dort als Default suchen.
+        adif_dir = Path.cwd() / "adif"
+        n_loc = 0
+        if adif_dir.is_dir():
+            n_loc += self.locator_db.bulk_import_directory(adif_dir)
+        if import_path:
+            n_loc += self.locator_db.bulk_import_directory(Path(import_path))
+        if n_loc:
+            print(f"[LocatorDB] {n_loc} Locators aus ADIF importiert "
+                  f"({len(self.locator_db)} total in DB)")
 
     def _init_radio_state(self):
         """Radio via Factory + Reconnect-Counter + DX-Tune-Dialog Slot."""
