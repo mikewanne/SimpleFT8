@@ -23,7 +23,7 @@ import json
 import math
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer, QPointF, QSize
+from PySide6.QtCore import Qt, QTimer, QPointF, QSize, Signal, Slot
 from PySide6.QtGui import (
     QBrush, QColor, QFont, QPainter, QPen, QPixmap, QPolygonF,
 )
@@ -558,10 +558,16 @@ class MapCanvas(QWidget):
 class DirectionMapDialog(QDialog):
     """Container-Dialog mit Toggle, Filter, Status, eingebettetem MapCanvas."""
 
+    # Cross-Thread-Signal fuer PSK-Spots: Worker-Thread → GUI-Thread.
+    _psk_spots_signal = Signal(list)
+    _psk_error_signal = Signal(str)
+
     def __init__(
         self,
         my_locator: str = "",
         default_mode: str = "rx",
+        callsign: str = "",
+        mode: str = "FT8",
         parent: QWidget | None = None,
     ):
         super().__init__(parent)
@@ -570,9 +576,25 @@ class DirectionMapDialog(QDialog):
         self.setMinimumSize(DIALOG_MIN_SIZE)
         self.resize(DEFAULT_DIALOG_SIZE)
 
+        self._my_locator = my_locator
+        self._callsign = callsign
+        self._ft_mode = mode
         self._mode = default_mode if default_mode in ("rx", "tx") else "rx"
+        self._psk_client = None  # type: ignore[var-annotated]
+        self._tx_locator_cache = LocatorCache()
+
         self._setup_ui(my_locator)
         self._sync_toggle_state()
+
+        # Worker → GUI-Thread Marshalling
+        self._psk_spots_signal.connect(self._on_psk_spots_received,
+                                        Qt.QueuedConnection)
+        self._psk_error_signal.connect(self._on_psk_error,
+                                        Qt.QueuedConnection)
+
+        # Wenn TX als Default: direkt Polling starten
+        if self._mode == "tx":
+            self._start_tx_polling()
 
     def _setup_ui(self, my_locator: str) -> None:
         self.setStyleSheet("""
@@ -653,13 +675,20 @@ class DirectionMapDialog(QDialog):
     def _on_mode_toggled(self, mode: str) -> None:
         # Doppel-Klick auf aktiven Mode: einfach State-Sync und Status refreshen.
         # checkable QPushButton wuerde sonst aktiven Button uncheck'en.
+        prev = self._mode
         self._mode = mode
         self._sync_toggle_state()
         self.canvas.set_mode(mode)
+        # Beim Wechsel das andere Datenset sofort wegraeumen, sonst zeigt
+        # die Karte alte RX-Daten waehrend TX-Polling laeuft (verwirrend).
+        if prev != mode:
+            self.canvas.update_stations([])
         if mode == "rx":
             self.set_status("EMPFANG: warte auf Live-Daten …")
+            self._stop_tx_polling()
         else:
-            self.set_status("SENDEN: PSK-Reporter wird in Schritt 8 angeschlossen.")
+            self.set_status("SENDEN: starte PSK-Reporter Polling …")
+            self._start_tx_polling()
 
     def _sync_toggle_state(self) -> None:
         self.btn_rx.setChecked(self._mode == "rx")
@@ -675,10 +704,112 @@ class DirectionMapDialog(QDialog):
             self.set_status(f"EMPFANG: {len(stations)} Stationen.")
 
     def update_tx_spots(self, stations: list[StationPoint]) -> None:
-        """Wird vom PSKReporterClient-Callback aufgerufen."""
+        """Wird vom PSKReporterClient-Callback aufgerufen.
+
+        Aufrufer muss aus dem GUI-Thread kommen (oder via _psk_spots_signal
+        marshallen wie _start_tx_polling es tut)."""
         if self._mode == "tx":
             self.canvas.update_stations(stations)
             self.set_status(f"SENDEN: {len(stations)} Reception-Reports.")
+
+    # ── TX-Modus: PSK-Reporter Polling ────────────────────
+
+    def set_callsign(self, callsign: str, mode: str = "FT8") -> None:
+        """Wird vor open_direction_map vom MainWindow aufgerufen."""
+        self._callsign = callsign
+        self._ft_mode = mode
+
+    def _start_tx_polling(self) -> None:
+        if not self._callsign:
+            self.set_status("SENDEN: kein Callsign in Einstellungen — Polling deaktiviert.")
+            return
+        if self._psk_client is not None and self._psk_client.is_running:
+            return
+        from core.psk_reporter import PSKReporterClient
+        if self._psk_client is None:
+            self._psk_client = PSKReporterClient(
+                callsign=self._callsign, mode=self._ft_mode,
+            )
+        # Cache zuerst zeigen (sofort, ohne API-Wartezeit)
+        self._render_cached_spots()
+        self._psk_client.start_polling(
+            on_spots=lambda spots: self._psk_spots_signal.emit(spots),
+            on_error=lambda e: self._psk_error_signal.emit(str(e)),
+            window_min=self.time_window_min,
+        )
+        self.set_status("SENDEN: PSK-Reporter Polling laeuft …")
+
+    def _stop_tx_polling(self) -> None:
+        if self._psk_client is not None and self._psk_client.is_running:
+            self._psk_client.stop(timeout_s=2.0)
+
+    def _render_cached_spots(self) -> None:
+        """Beim Wechsel zu TX: gecachte Spots SOFORT zeigen, ohne API zu warten."""
+        if self._psk_client is None:
+            return
+        spots = self._psk_client.cached_spots()
+        if not spots:
+            return
+        points = self._spots_to_station_points(spots)
+        if self._mode == "tx":
+            self.canvas.update_stations(points)
+            self.set_status(f"SENDEN: {len(points)} Reports aus Cache, neue API-Abfrage laeuft …")
+
+    @Slot(list)
+    def _on_psk_spots_received(self, spots: list) -> None:
+        """GUI-Thread: PSK-Reporter Spots → StationPoints → Karte."""
+        if self._mode != "tx":
+            return  # User hat zu RX gewechselt, ignorieren
+        points = self._spots_to_station_points(spots)
+        self.canvas.update_stations(points)
+        self.set_status(f"SENDEN: {len(points)} Reports von {len(spots)} Spots.")
+
+    @Slot(str)
+    def _on_psk_error(self, msg: str) -> None:
+        if self._mode != "tx":
+            return
+        # Verkuerztes Error-Label, kein Stack-Trace
+        short = msg if len(msg) < 60 else msg[:57] + "…"
+        self.set_status(f"SENDEN: PSK-Reporter offline — {short}")
+
+    def _spots_to_station_points(self, spots: list) -> list[StationPoint]:
+        """PSK-Spots in StationPoints konvertieren (Locator → Lat/Lon).
+
+        normalize_call strippt /P /MM /QRP — danach ist is_mobile() immer False.
+        Im TX-Pfad ist Mobile-Filter ueberfluessig: die PSK-API liefert pro Spot
+        einen eigenen Locator, anders als der RX-Pfad wo CQ-Locator erst aus
+        dem Stream lernen.
+        """
+        from core.psk_reporter import normalize_call
+        points: list[StationPoint] = []
+        seen: set[str] = set()
+        for s in spots:
+            call = normalize_call(s.rx_call)
+            if not call or call in seen:
+                continue
+            self._tx_locator_cache.update(call, s.rx_locator)
+            loc = self._tx_locator_cache.get(call)
+            if not loc:
+                continue
+            latlon = safe_locator_to_latlon(loc)
+            if latlon is None:
+                continue
+            seen.add(call)
+            points.append(StationPoint(
+                call=call,
+                locator=loc,
+                lat=latlon[0],
+                lon=latlon[1],
+                snr=float(s.snr_db) if s.snr_db is not None else -30.0,
+                antenna="",  # TX hat keine Antennen-Info
+                timestamp=float(s.timestamp),
+            ))
+        return points
+
+    def closeEvent(self, event):  # noqa: N802
+        # Polling sauber stoppen, sonst laeuft daemon-Thread weiter
+        self._stop_tx_polling()
+        super().closeEvent(event)
 
     def set_status(self, text: str) -> None:
         self.status_label.setText(text)

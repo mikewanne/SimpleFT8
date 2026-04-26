@@ -811,9 +811,14 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
             self._direction_map_dialog = DirectionMapDialog(
                 my_locator=self.settings.locator,
                 default_mode=default_mode,
+                callsign=self.settings.callsign,
+                mode=self.settings.mode,
                 parent=self,
             )
         self._direction_map_dialog.set_locator(self.settings.locator)
+        self._direction_map_dialog.set_callsign(
+            self.settings.callsign, self.settings.mode
+        )
         self._direction_map_dialog.show()
         self._direction_map_dialog.raise_()
 

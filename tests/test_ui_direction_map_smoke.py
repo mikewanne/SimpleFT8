@@ -406,6 +406,78 @@ def test_canvas_layer_toggles_state(qapp):
     assert c._show_sectors
 
 
+def test_dialog_set_callsign(qapp):
+    from ui.direction_map_widget import DirectionMapDialog
+    d = DirectionMapDialog(my_locator="JO31")
+    d.set_callsign("DA1MHH", "FT8")
+    assert d._callsign == "DA1MHH"
+    assert d._ft_mode == "FT8"
+    d.deleteLater()
+
+
+def test_dialog_tx_polling_does_nothing_without_callsign(qapp):
+    """TX-Toggle ohne Callsign in Settings → Status-Hinweis statt Crash."""
+    from ui.direction_map_widget import DirectionMapDialog
+    d = DirectionMapDialog(my_locator="JO31")  # callsign default ""
+    d.btn_tx.click()
+    # Polling-Client darf nicht laufen
+    assert d._psk_client is None or not d._psk_client.is_running
+    assert "kein Callsign" in d.status_label.text() or "deaktiviert" in d.status_label.text()
+    d.deleteLater()
+
+
+def test_dialog_tx_to_rx_stops_polling(qapp):
+    """Wechsel TX→RX muss Polling sauber stoppen."""
+    from ui.direction_map_widget import DirectionMapDialog
+    d = DirectionMapDialog(my_locator="JO31", callsign="DA1MHH",
+                           default_mode="rx")
+    d.btn_tx.click()
+    # Polling-Client gestartet
+    assert d._psk_client is not None
+    d.btn_rx.click()
+    # Nach Toggle-Back: kein laufender Client mehr
+    import time
+    time.sleep(0.2)  # stop() hat 2s Timeout
+    assert not d._psk_client.is_running
+    d.deleteLater()
+
+
+def test_dialog_close_stops_polling(qapp):
+    from ui.direction_map_widget import DirectionMapDialog
+    d = DirectionMapDialog(my_locator="JO31", callsign="DA1MHH",
+                           default_mode="tx")
+    assert d._psk_client is not None
+    d.close()
+    assert not d._psk_client.is_running
+
+
+def test_dialog_spots_to_station_points_filters(qapp):
+    """Conversion PSK-Spot → StationPoint: dedup + invalid-locator-skip,
+    /P-Suffix wird via normalize_call abgeschnitten (Plain-Call-Match)."""
+    from ui.direction_map_widget import DirectionMapDialog
+    from core.psk_reporter import Spot
+    d = DirectionMapDialog(my_locator="JO31", callsign="DA1MHH")
+    spots = [
+        Spot(rx_call="DK4ABC", rx_locator="JO40", snr_db=-12.0,
+             frequency_hz=14074000, timestamp=1234.5,
+             mode="FT8", sender_call="DA1MHH"),
+        Spot(rx_call="W1XYZ/P", rx_locator="FN42", snr_db=-8.0,
+             frequency_hz=14074000, timestamp=1235.0,
+             mode="FT8", sender_call="DA1MHH"),  # /P wird gestrippt → W1XYZ
+        Spot(rx_call="K2BAD", rx_locator="garbage", snr_db=-10.0,
+             frequency_hz=14074000, timestamp=1236.0,
+             mode="FT8", sender_call="DA1MHH"),  # bad locator → skip
+        Spot(rx_call="DK4ABC", rx_locator="JO40", snr_db=-9.0,
+             frequency_hz=14074000, timestamp=1237.0,
+             mode="FT8", sender_call="DA1MHH"),  # dupe → skip
+    ]
+    points = d._spots_to_station_points(spots)
+    assert len(points) == 2
+    calls = sorted(p.call for p in points)
+    assert calls == ["DK4ABC", "W1XYZ"]
+    d.deleteLater()
+
+
 def test_canvas_paintevent_with_wedges_and_stations(qapp):
     """paintEvent mit Sektor-Wedges + Stations-Punkten in beiden Modi."""
     from ui.direction_map_widget import MapCanvas
