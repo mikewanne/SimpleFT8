@@ -14,8 +14,12 @@ empfangen wird, ist der Wert max. einen Zyklus alt — praeziser geht nicht.
 Alter Eintrag wird bei jedem Dekodier-Zyklus einfach ueberschrieben.
 """
 
-# Hysterese: erst ab |delta_db| > 1.0 wechseln, sonst A1 als Default lassen.
+# Hysterese: ab delta_db >= 1.0 auf A2 wechseln, sonst A1 als Default lassen.
 # Verhindert Flattern zwischen A1/A2 bei fast gleichen Signalen.
+# WICHTIG: >= statt >, damit delta=+1.0 (haeufiger Praxisfall) korrekt auf A2 wechselt.
+# Asymmetrie ist gewollt: A1 ist Default-Antenne, daher braucht NUR A2 eine
+# Schwelle. Bei delta < 1.0 ODER negativ bleibt A1 — das ist kein Bug, sondern
+# bewusste Praeferenz fuer die TX-Antenne als Default.
 HYSTERESIS_DB = 1.0
 
 
@@ -55,10 +59,10 @@ class AntennaPreferenceStore:
                     self._prefs[call] = {"best_ant": best, "delta_db": None}
                 continue
             delta = float(a2) - float(a1)
-            if delta > HYSTERESIS_DB:
+            if delta >= HYSTERESIS_DB:
                 best = "A2"
             else:
-                # Default A1 bei |delta| <= Hysterese ODER A1 besser
+                # Default A1 bei delta < Hysterese ODER A1 besser
                 best = "A1"
             self._prefs[call] = {"best_ant": best, "delta_db": delta}
 

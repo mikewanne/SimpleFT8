@@ -1985,6 +1985,47 @@ def test_antenna_pref_unknown_and_clear():
     assert store.get("DL1ABC") is None
 
 
+def test_antenna_pref_hysterese_inclusive_at_threshold():
+    """delta=+1.0 dB (genau Hysterese-Schwelle) → A2 wird gewaehlt (>= statt >).
+    Das war vor v0.61 ein Bug: bei delta=+1.0 fiel es faelschlich auf A1 zurueck,
+    obwohl die RX-Liste 'A2>1' anzeigte. Jetzt korrekt: ab Schwelle inkl."""
+    from core.antenna_pref import AntennaPreferenceStore
+    store = AntennaPreferenceStore()
+    msg = _make_msg("DL1ABC", "CQ", "")
+    msg._snr_a1 = -15.0
+    msg._snr_a2 = -14.0  # delta = +1.0 (genau Schwelle)
+    store.update_from_stations({"DL1ABC": msg})
+    pref = store.get_pref("DL1ABC")
+    assert pref["best_ant"] == "A2", f"delta=+1.0 muss A2 ergeben, bekam {pref}"
+    assert pref["delta_db"] == 1.0
+
+
+def test_antenna_pref_hysterese_below_threshold():
+    """delta=+0.9 dB (unter Schwelle) → A1 bleibt Default (kein Wackel)."""
+    from core.antenna_pref import AntennaPreferenceStore
+    store = AntennaPreferenceStore()
+    msg = _make_msg("DL1ABC", "CQ", "")
+    msg._snr_a1 = -15.0
+    msg._snr_a2 = -14.1  # delta = +0.9
+    store.update_from_stations({"DL1ABC": msg})
+    pref = store.get_pref("DL1ABC")
+    assert pref["best_ant"] == "A1"
+    assert abs(pref["delta_db"] - 0.9) < 0.01
+
+
+def test_antenna_pref_a1_clearly_better():
+    """delta=-3.0 dB (A1 deutlich besser) → A1 mit negativem delta."""
+    from core.antenna_pref import AntennaPreferenceStore
+    store = AntennaPreferenceStore()
+    msg = _make_msg("DL1ABC", "CQ", "")
+    msg._snr_a1 = -10.0
+    msg._snr_a2 = -13.0  # delta = -3.0
+    store.update_from_stations({"DL1ABC": msg})
+    pref = store.get_pref("DL1ABC")
+    assert pref["best_ant"] == "A1"
+    assert pref["delta_db"] == -3.0
+
+
 # ── DXTuneDialog Pure Logic (inline, kein Qt nötig) ──────────────────────────
 
 def test_dxtune_top5_avg():

@@ -730,3 +730,46 @@ merkmal mit der vollen Auto-Pipeline.
 - Aufrufstelle: `_apply_normal_mode()` wird bei App-Start, Bandwechsel und
   Modus-Wechsel zu Normal aufgerufen — Dialog greift an allen drei Stellen.
 - Tests: 213 grün (UI-Dialog ohne Tests — manuelle Verifikation am Radio).
+
+## 2026-04-26 v0.61 — Antenna-Pref Fix + Live-QSO-Anzeige
+
+**Bug (Mike's Feldbeobachtung):** Im Diversity-Modus zeigte die RX-Liste fuer
+viele Stationen 'A2>1' (ANT2 1 dB besser als ANT1) — beim Anrufen erschien aber
+'(ANT1, +1.0 dB)'. Empfangsantenne wurde NICHT auf ANT2 umgeschaltet, der
+Diversity-Vorteil ging verloren.
+
+**Root Cause:** Hysterese in `core/antenna_pref.py` nutzte strict `>` statt `>=`.
+Bei delta_db=+1.0 (sehr haeufiger Praxisfall, genau auf der 1-dB-Schwelle) fiel
+der Code zurueck auf A1, obwohl der station_accumulator korrekt 'A2>1' geliefert
+hatte. Inkonsistenz zwischen RX-Liste und Pref-Store.
+
+**3-fach Fix:**
+
+1. **Hysterese korrigiert** (`core/antenna_pref.py`):
+   - `if delta > HYSTERESIS_DB` → `>=`. Bei delta=+1.0 wird jetzt korrekt A2 gewaehlt.
+   - Docstring erweitert: Asymmetrie ist gewollt (A1=Default, nur A2 braucht Schwelle).
+
+2. **Label-Format vereinheitlicht** (3 Stellen, alle DRY ueber `_antenna_pref_label`):
+   - ANT1-Default: `(ANT1)` — schlicht, kein dB
+   - ANT2 ueber Schwelle: `(ANT2 ↑X.X dB)` — Pfeil ↑ = Diversity-Gewinn
+   - Statt verwirrendem `(ANT1, +1.0 dB)` (mehrdeutig) und `ANT1 Δ1.0dB` (kryptisch).
+   - `_on_tx_started` (mw_qso.py) nutzt jetzt `_antenna_pref_label` statt eigene Logik.
+   - Statusbar (main_window.py) gleiche Logik.
+
+3. **Live-Anzeige im QSO-Panel** (`main_window._update_statusbar`):
+   - Waehrend aktivem QSO ueberschreibt `qso_panel.status_label`:
+     `→ CALL  |  RX: ANT2 ↑1.0 dB` (gruen, fett wenn ANT2-Gewinn)
+     `→ CALL  |  RX: ANT1` (grau wenn ANT1-Default)
+   - Update pro Cycle — Pref-Wert kann sich waehrend QSO aendern.
+   - Reset uebernimmt `qso_panel.add_qso_complete` (setzt Counter + grauen Style).
+
+**Cleanup (DeepSeek-Review-Punkt):**
+- `qso_panel._cq_flash_timer` wird in `add_tx` (Non-CQ-Pfad) und
+  `add_qso_complete` gestoppt — sonst koennte er nach 2s die Live-QSO-Anzeige
+  ueberschreiben mit dem CQ-orange-Style.
+
+**Tests:** 216 passed (213 + 3 neue: Hysterese genau auf Schwelle / unter
+Schwelle / A1 deutlich besser).
+
+**Statistiken:** auswertung/Bericht-*.pdf (DE) + auswertung/en/Report-*.pdf (EN)
+neu generiert, alle Baender + Modi.

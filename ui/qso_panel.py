@@ -179,6 +179,10 @@ class QSOPanel(QWidget):
             if self._cq_count > 0:
                 self.status_label.setStyleSheet("color: #666; font-size: 11px; padding: 2px;")
             self._cq_count = 0
+            # CQ-Flash-Timer stoppen — sonst koennte er nach 2s das status_label
+            # neu stylen und die Live-QSO-Anzeige (gruen) wieder auf CQ-orange setzen.
+            if hasattr(self, '_cq_flash_timer') and self._cq_flash_timer.isActive():
+                self._cq_flash_timer.stop()
             line = f"{utc} {tag} →  Sende   {message}"
             if ant_label:
                 self._append_two_color(line, "#FFAA00", f"   {ant_label}", "#888888")
@@ -201,7 +205,12 @@ class QSOPanel(QWidget):
         self._qso_count += 1
         self._append_colored(f"       ✓ QSO mit {their_call} komplett", "#44FF44")
         self._append_colored("─" * 30, "#333333")
+        # CQ-Flash-Timer stoppen falls noch aktiv (haengt sonst Style auf orange).
+        if hasattr(self, '_cq_flash_timer') and self._cq_flash_timer.isActive():
+            self._cq_flash_timer.stop()
+        # Reset Style nach moeglicher Live-QSO-Anzeige (war gruen, fett).
         self.status_label.setText(f"{self._qso_count} QSO(s) diese Session")
+        self.status_label.setStyleSheet("color: #666; font-size: 11px; padding: 2px;")
 
     def add_timeout(self, their_call: str):
         """Timeout anzeigen."""

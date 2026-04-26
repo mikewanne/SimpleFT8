@@ -647,12 +647,15 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
                     and hasattr(self, '_antenna_prefs')):
                 pref_entry = self._antenna_prefs.get_pref(self.qso_sm.qso.their_call)
                 if pref_entry:
-                    delta = pref_entry['delta_db']
-                    if delta is None:
-                        freq_str += f"  |  RX: {pref_entry['best_ant']}"
+                    # Einheitliches Format: ANT1 schlicht, ANT2 mit ↑Gewinn
+                    if pref_entry['best_ant'] == "A1":
+                        freq_str += "  |  RX: ANT1"
                     else:
-                        freq_str += (f"  |  RX: {pref_entry['best_ant']} "
-                                     f"({delta:+.1f} dB)")
+                        delta = pref_entry.get('delta_db')
+                        if delta is None:
+                            freq_str += "  |  RX: ANT2"
+                        else:
+                            freq_str += f"  |  RX: ANT2 ↑{abs(delta):.1f} dB"
             elif self._rx_mode == "normal":
                 freq_str += "  |  RX: ANT1"
         msg = (f"{self.settings.callsign}  |  {self.settings.locator}  |  "
@@ -660,6 +663,28 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
                f"{freq_display}  |  Filter: {filter_str} Hz  |  "
                f"{mode_str}  |  {dt_text}{omni_str}{freq_str}{ap_str}")
         self.statusBar().showMessage(msg)
+
+        # Live-QSO-Status oben im QSO-Panel — waehrend aktivem QSO sichtbar
+        # welche RX-Antenne mit wieviel Gewinn genutzt wird (User muss nicht
+        # in die Statusbar schauen). Reset uebernimmt qso_panel.add_qso_complete.
+        if _in_qso and self.qso_sm.qso.their_call:
+            their_call = self.qso_sm.qso.their_call
+            ant_text = "RX: ANT1"
+            ant_color = "#888888"
+            if (self._rx_mode == "diversity"
+                    and hasattr(self, '_antenna_prefs')):
+                pref_entry = self._antenna_prefs.get_pref(their_call)
+                if pref_entry and pref_entry['best_ant'] == "A2":
+                    delta = pref_entry.get('delta_db')
+                    if delta is None:
+                        ant_text = "RX: ANT2"
+                    else:
+                        ant_text = f"RX: ANT2 ↑{abs(delta):.1f} dB"
+                    ant_color = "#44FF88"  # gruen — Diversity bringt was
+            self.qso_panel.status_label.setText(f"→ {their_call}  |  {ant_text}")
+            self.qso_panel.status_label.setStyleSheet(
+                f"color: {ant_color}; font-size: 11px; padding: 2px; font-weight: bold;"
+            )
 
     # ── Hilfsfunktionen ──────────────────────────────────────────
 

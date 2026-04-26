@@ -21,7 +21,11 @@ class QSOMixin:
     """
 
     def _antenna_pref_label(self, call: str) -> str:
-        """'(ANT2, +6.3 dB)' in Diversity, '(ANT1)' in Normal-Modus."""
+        """Vereinheitlichtes Format fuer alle Anzeigen:
+          - Normal-Modus oder ANT1 als beste Antenne → ' (ANT1)'
+          - Diversity + ANT2 ist Hysterese-Schwelle besser → ' (ANT2 ↑X.X dB)'
+        Pfeil ↑ = Diversity bringt messbaren Gewinn.
+        """
         if self._rx_mode == "normal":
             return " (ANT1)"
         if not hasattr(self, '_antenna_prefs'):
@@ -29,25 +33,29 @@ class QSOMixin:
         pref = self._antenna_prefs.get_pref(call)
         if not pref:
             return ""
-        ant_num = "1" if pref["best_ant"] == "A1" else "2"
-        delta = pref["delta_db"]
+        if pref["best_ant"] == "A1":
+            return " (ANT1)"
+        # ANT2 wurde gewaehlt → Hysterese-Schwelle ueberschritten = echter Gewinn
+        delta = pref.get("delta_db")
         if delta is None:
-            return f" (ANT{ant_num})"
-        return f" (ANT{ant_num}, {delta:+.1f} dB)"
+            return " (ANT2)"
+        return f" (ANT2 ↑{abs(delta):.1f} dB)"
 
     @Slot(str)
     def _on_tx_started(self, message: str):
-        """TX begonnen — Nachricht mit optionalem Antennen-Label ins QSO-Panel."""
+        """TX begonnen — Nachricht mit einheitlichem Antennen-Label ins QSO-Panel.
+
+        Verwendet `_antenna_pref_label` damit Format identisch zu Rufe...-Eintrag
+        und Statusbar ist (verhindert Verwirrung wie z.B. 'ANT1 Δ1.0dB').
+        """
         ant_label = ""
         if not message.startswith("CQ "):
             if hasattr(self, 'qso_sm') and self.qso_sm.qso:
                 call = self.qso_sm.qso.their_call
-                if call and self._rx_mode == "diversity" and hasattr(self, '_antenna_prefs'):
-                    pref = self._antenna_prefs.get_pref(call)
-                    if pref and pref.get("delta_db") is not None:
-                        ant_num = "1" if pref["best_ant"] == "A1" else "2"
-                        delta = abs(pref["delta_db"])
-                        ant_label = f"ANT{ant_num} \u0394{delta:.1f}dB"
+                if call:
+                    # _antenna_pref_label liefert " (ANT...)" → fuehrendes Leerzeichen
+                    # entfernen, qso_panel.add_tx setzt eigene Trennspaces.
+                    ant_label = self._antenna_pref_label(call).lstrip()
         self.qso_panel.add_tx(message, ant_label)
 
     @Slot(object)
