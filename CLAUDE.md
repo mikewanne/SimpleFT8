@@ -3,8 +3,8 @@ Lies nach dieser Datei sofort auch HANDOFF.md und bestätige beide mit je einer 
 # SimpleFT8 — Claude Kontext
 
 **Start:** `cd "/Users/mikehammerer/Documents/KI N8N Projekte/FT8/SimpleFT8" && ./venv/bin/python3 main.py`
-**Aktueller Stand:** v0.65 (26.04.2026) — Antenna-Pref Hysterese-Fix, manuelle TX-Frequenz Normal-Modus, 20m FT8 PDF, Aging-Bug-Fix, CSV-Export Diversity-Daten
-**Tests:** `./venv/bin/python3 -m pytest tests/ -q` → 220 passed
+**Aktueller Stand:** v0.66 (26.04.2026) — Richtungs-Karte mit RX/TX-Toggle (Azimuthal-Karte mit Coastlines, Sektor-Aggregation, PSK-Reporter-Integration, Settings-GroupBox)
+**Tests:** `./venv/bin/python3 -m pytest tests/ -q` → 361 passed (Qt-Smoke-Tests via `QT_QPA_PLATFORM=offscreen`)
 **Vor Commits:** Tests grün + bei nicht-trivialen Änderungen DeepSeek-Review (`pal codereview` model `deepseek-chat`) — bereits durch globale §0 + Projektregeln gefordert.
 
 ⚠️ **DeepSeek V4 (deepseek-chat) — Neues Modell, Verhalten noch unbestätigt (Stand 2026-04-25):**
@@ -92,6 +92,15 @@ core/
   timing.py           UTC-Takt, modus-abh. Zyklen
   protocol.py         FTX_PROTOCOL_FT8/FT4/FT2
   ft8lib_decoder.py   C-Library Wrapper
+  geo.py              Maidenhead, Haversine, Großkreis-Bearing (atan2),
+                      Azimuthal-Equidistant-Projektion (Karten-Render),
+                      safe_locator_to_latlon (None-safe Wrapper)
+  direction_pattern.py Sektor-Aggregation (16x 22.5°), Mobile-Filter,
+                      StationPoint/SectorBucket Datenklassen,
+                      NaN/Inf-Schutz fuer korrupte externe Inputs
+  psk_reporter.py     PSKReporterClient: XML-Polling mit Cache + Backoff
+                      (1.5x bis 60min), Call-Normalisierung (.rsplit('/',1)),
+                      atomarer Cache-Write (.tmp + os.replace)
 
 radio/
   base_radio.py       RadioInterface ABC
@@ -112,6 +121,12 @@ ui/
   control_panel.py    UI Controls (57 KB — größte UI-Datei); Frequenz in kHz
   rx_panel.py         RX-Tabelle; Answer-Me-Highlighting; Spalten per Rechtsklick
   dx_tune_dialog.py   18-Zyklus interleaved Messung; cache.save() HIER nach Messung!
+  direction_map_widget.py  Azimuthal-Karte mit RX/TX-Toggle (v0.66).
+                      MapCanvas (paintEvent + QPixmap-Background-Cache, Resize-
+                      Debounce 200ms) + DirectionMapDialog (non-modal QDialog,
+                      Toggle, Filter-Bar, Status). LocatorCache fuer FT8 (CQ
+                      ist die einzige Quelle fuer Locators). Aufruf via
+                      Settings-Dialog → "Karte oeffnen ..."-Button.
 
 scripts/
   generate_plots.py   3-Modus Vergleich, pooled mean, Error Bars
@@ -317,6 +332,13 @@ Andere Baender werden empfangen aber nicht gespeichert (Skalierungs-Entscheidung
 | `core/diversity.py` | `threading.Lock()` (`_hist_lock`) | Histogramm-Daten |
 | `core/station_stats.py` | `queue.Queue` + Daemon-Thread | File-Writes |
 | `core/ntp_time.py` | `threading.Lock()` (`_lock`) | Korrekturwert + Phase |
+| `core/antenna_pref.py` | `threading.RLock()` (`_lock`) | _prefs dict (Karten-Render-Pfad) |
+| `core/psk_reporter.py` | `threading.Lock()` (`_lock`) | _thread/_stop_event Lifecycle |
+
+**Karten-Live-Daten-Pfad (v0.66):** Decoder-Thread → `_emit_map_snapshot_if_open`
+→ `direction_map_signal.emit(snapshot, band)` → `Qt.QueuedConnection` →
+`_on_direction_map_snapshot` (GUI-Thread) → `canvas.update_stations`. Niemals
+direkt aus dem Decoder-Thread Widget-Methoden aufrufen — immer ueber das Signal.
 
 ---
 
@@ -335,14 +357,17 @@ Andere Baender werden empfangen aber nicht gespeichert (Skalierungs-Entscheidung
 
 ## Offene TODOs (nach Schwierigkeit)
 
-**v0.60-v0.65 (26.04.2026) — UMGESETZT:**
+**v0.60-v0.66 (26.04.2026) — UMGESETZT:**
 - v0.60: CQ-Counter QSO-Reset (kein Mid-QSO-Sprung) + Info-Box Normal-Preset alt
 - v0.61: Antenna-Pref Hysterese `>=` Fix + Live-QSO-Anzeige + Label `(ANT2 ↑X.X dB)`
 - v0.62: Normal-Modus = WSJT-X-Standard (manuelle TX-Frequenz, Klick im Histogramm)
 - v0.63: 20m FT8 PDF (DE+EN) + Stats-Filter (nur 20m+40m FT8)
 - v0.64: Aging-Bug-Fix — Aging in Slots statt Sekunden (FT2 jetzt sauber)
 - v0.65: CSV-Export Diversity-Daten + UI-Integration im Settings-Dialog
-- 220 Tests grün
+- v0.66: Richtungs-Karte mit RX/TX-Toggle (Azimuthal-Karte, Coastlines, 16
+  Sektoren à 22.5°, RX-Live-Layer aus mw_cycle, TX-Modus mit PSK-Reporter,
+  Settings-Button); 10 atomare Commits, +141 Tests, alle Module DeepSeek-reviewed
+- 361 Tests grün
 
 **Naechste Features (siehe TODO.md fuer Details):**
 - B) Band-Indikatoren live mit PSK-Reporter ergaenzen (1-2 Tage)

@@ -945,3 +945,100 @@ sowohl von CLI als auch UI nutzbar. Standalone-Script bleibt als Power-User-Back
 
 Tests: 220 passed (unveraendert, Script-Standalone ohne Test-Pflicht — Output verifiziert
 + GUI-Smoke-Test der Settings-Dialog-Integration ok).
+
+---
+
+## 2026-04-26 v0.66 — Richtungs-Karte mit RX/TX-Toggle (Feature C+D)
+
+Neues USP-Feature: Azimuthal-Equidistant-Welt-Karte mit eigenem Locator als Center,
+zwei Modi (EMPFANG/SENDEN), Sektor-Aggregation in 16 Wedges à 22.5°. Karte ist
+nicht-modal, parallel zum Hauptfenster nutzbar, vom Einstellungs-Dialog aus zu
+oeffnen ("Richtungs-Karte" GroupBox → "Karte oeffnen ..."-Button).
+
+**Implementiert in 10 atomaren Commits ueber 1 Session:**
+
+1. **`core/geo.py`** erweitert um `great_circle_bearing`, `azimuthal_equidistant_project`,
+   `safe_locator_to_latlon` (None-safe Wrapper). 26 neue Tests (Bearing-Quadranten,
+   360°-Range, Antipode-Clip, Locator-Edge-Cases). DeepSeek-Codereview eingearbeitet.
+
+2. **`core/antenna_pref.py`** Thread-Safety nachgeruestet. `threading.RLock` schuetzt
+   alle Methoden, neue `snapshot()`-Methode liefert unabhaengige dict-of-dict-Kopie
+   fuer Render-Pfade. 7 neue Tests (concurrent read/write, snapshot-Independence,
+   clear-mid-update Konsistenz).
+
+3. **Coastline-Asset** `assets/ne_110m_land_antimeridian_split.geojson` (116 KB, 129
+   LineStrings, 5143 Punkte). Build-Script `tools/build_coastlines.py` generiert
+   das Asset aus Natural Earth 110m via urllib + json (Pure Python, kein shapely
+   noetig). Antimeridian-Splits: lon-Sprung > 180° → Linie auftrennen.
+
+4. **`core/psk_reporter.py`** wiederverwendbarer XML-Polling-Client mit Cache,
+   Backoff (1.5x bis 60min Cap), Call-Normalisierung (`.rsplit('/',1)[0]` strippt
+   /P /MM /QRP). Atomarer Cache-Write (.tmp + os.replace). 35 Tests inkl.
+   XML-Parser mit/ohne Namespace, Backoff-Sequenz, Thread-Lifecycle, Callback-
+   Crash-Robustness. Bestehender `main_window._psk_worker` bleibt unangetastet.
+
+5. **`core/direction_pattern.py`** Sektor-Aggregation. `aggregate_sectors()`
+   mit Call-Dedup pro Sektor, `is_mobile()` regex-Filter, NaN/Inf-Schutz.
+   `StationPoint`/`SectorBucket` dataclasses. 27 Tests.
+
+6. **`ui/direction_map_widget.py`** UI-Skeleton: `MapCanvas` (QWidget mit paintEvent,
+   QPixmap-Background-Cache, Resize-Debounce 200ms) + `DirectionMapDialog` (QDialog
+   non-modal, Toggle RX/TX, Filter-Bar Zeit/Band/Layer-Checkboxes, Status-Label).
+   Coastlines + Distanzringe + Compass + Sektorlinien werden in Background-Pixmap
+   gecached. 21 Smoke-Tests in QT_QPA_PLATFORM=offscreen.
+
+7. **Live-Layer + RX-Hook (7a + 7b):**
+   - 7a: paintEvent erweitert um Sektor-Wedges (16 drawPie, count→Laenge, gewichteter
+     ANT1/ANT2/Rescue-Farb-Mix) und Stations-Punkte (Farbe nach Antenne, Groesse
+     nach SNR linear 3..8px). LocatorCache (Session-stabil, FT8 hat Locator nur
+     in CQ-Nachrichten). `snapshot_to_station_points` mit Mobile-Filter, Rescue-
+     Klassifikation (snr_a1 ≤ -24 UND snr_a2 > -24).
+   - 7b: `MainWindow.direction_map_signal` als Cross-Thread-Bridge
+     (Decoder-Thread → GUI-Thread, Qt.QueuedConnection). `_build_map_snapshot`
+     liest aktuelle Stations-Akkumulatoren, `_emit_map_snapshot_if_open` nur
+     wenn Dialog visible. Hooks am Ende von `_handle_diversity_operate` und
+     `_handle_normal_mode`.
+
+8. **TX-Modus mit PSK-Reporter integriert.** SENDEN-Toggle startet PSKReporterClient,
+   Cache-Spots werden sofort gerendert (kein API-Wait). `_psk_spots_signal` /
+   `_psk_error_signal` mit QueuedConnection fuer Worker→GUI-Marshalling.
+   `_spots_to_station_points` mit normalize_call + Locator-Cache + Dedup.
+   closeEvent stoppt Polling sauber. 5 neue Tests.
+
+9. **Settings-GroupBox + Karten-Button + Geometrie-Persistenz.** Neue GroupBox
+   "Richtungs-Karte" im Einstellungs-Dialog (analog zu Datenexport-GroupBox v0.65).
+   Klick auf "Karte oeffnen …" → MainWindow.open_direction_map mit default_mode
+   aus Settings. Karten-Geometrie wird in `direction_map_geometry` (hex-bytes)
+   und `direction_map_default_mode` persistiert.
+
+10. **Doku** — APP_VERSION 0.65 → 0.66, HISTORY.md, CLAUDE.md aktualisiert.
+
+**DeepSeek-Codereview** wurde fuer **alle 5** nicht-trivialen Module durchgefuehrt
+(geo, antenna_pref, psk_reporter, direction_pattern, direction_map_widget).
+Findings systematisch eingearbeitet — u.a. NaN-Inf-Schutz in aggregate_sectors,
+on_spots-Callback try/except in _run_loop, RLock-Begruendung im Code dokumentiert,
+Thread-Marshalling-Pflicht in update_stations-Docstring, sleep-loop max(0)-Guard.
+
+**Architektur-Stops mit Mike abgesprochen:**
+- shapely als Dev-Only (build_coastlines.py) — spaeter sogar weggelassen, Pure-Python
+- RLock vs Lock fuer AntennaPreferenceStore: RLock gewaehlt (defensive)
+
+**Was NICHT implementiert wurde** (bewusst):
+- OpenStreetMap-Tiles, QtWebEngine, pyproj, shapely-Runtime
+- JSONP-API (XML-API existing _psk_worker erweitert)
+- requests-Library (urllib stattdessen, konsistent zur Codebase)
+- Initial-Lade aus historischen `statistics/`-Daten (Locator-Lookup luecken-haft)
+- Migration des bestehenden `_psk_worker` zu `core/psk_reporter` — separater Folge-Commit
+
+**Tests:** 361 passed (220 → 361, +141 neu).
+
+**Bekannte Limitations:**
+- TX-Modus zeigt nur Stationen wo Locator im PSK-Report enthalten ist (sehr
+  haeufig der Fall, aber nicht 100%).
+- RX-Modus baut Locator-Cache aus CQ-Nachrichten. Stationen die nie CQ rufen
+  (nur Antworten) erscheinen erst auf der Karte wenn Mike sie via QSO erfasst.
+- Mobile/Maritime Calls (/P /MM /AM /QRP) werden im RX-Modus gefiltert; im
+  TX-Modus strippt normalize_call das Suffix → Stations-Plain-Call landet im
+  Cache mit dem von PSK gemeldeten Locator.
+- Antipode-Bereich (>18000 km von JO31) wird nicht gerendert — starke Verzerrung
+  bei azimuthal-equidistant-Projektion.
