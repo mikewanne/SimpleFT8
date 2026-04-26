@@ -573,6 +573,10 @@ class DirectionMapDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Richtungs-Karte")
         self.setModal(False)  # Decoder-Signale muessen durchkommen
+        # Always-on-top als eigenes Tool-Fenster — bleibt sichtbar bis Mike es schliesst,
+        # auch wenn er das Hauptfenster wieder fokussiert.
+        self.setWindowFlag(Qt.Tool, True)
+        self.setWindowFlag(Qt.WindowStaysOnTopHint, True)
         self.setMinimumSize(DIALOG_MIN_SIZE)
         # Geometrie aus Parent-Settings restaurieren falls vorhanden
         restored = False

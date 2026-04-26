@@ -409,6 +409,7 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self.control_panel.einmessen_clicked.connect(self._handle_dx_tuning)
         self.control_panel.remeasure_clicked.connect(self._on_diversity_remeasure)
         self.control_panel.settings_clicked.connect(self._on_settings_clicked)
+        self.control_panel.map_clicked.connect(lambda: self.open_direction_map())
         # Manuelle TX-Frequenz im Normal-Modus: Klick im Histogramm + Spinbox
         self.control_panel._freq_hist.tx_freq_clicked.connect(self._on_normal_tx_freq_clicked)
         self.control_panel._tx_freq_spin.valueChanged.connect(self._on_normal_tx_freq_spin_changed)

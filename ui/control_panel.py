@@ -819,6 +819,7 @@ class ControlPanel(QWidget):
     settings_clicked = Signal()
     einmessen_clicked = Signal()
     remeasure_clicked = Signal()
+    map_clicked = Signal()  # Map-Button im PSK-Frame → MainWindow.open_direction_map
 
     # ── Klassen-Konstanten ───────────────────────────────────────────────
     _RX_MODES = ["normal", "diversity"]
@@ -1269,11 +1270,10 @@ class ControlPanel(QWidget):
     # PSK Reporter
     # =====================================================================
     def _open_psk_map(self):
-        """PSKReporter im Browser oeffnen mit eigenem Call."""
-        import webbrowser
-        webbrowser.open(
-            f"https://pskreporter.info/pskmap.html?callsign={self._callsign}"
-        )
+        """Richtungs-Karte (intern) oeffnen via MainWindow-Signal.
+        Frueher: Browser-Link zu pskreporter.info — abgeloest durch v0.66 Karte.
+        """
+        self.map_clicked.emit()
 
     def update_psk_stats(self, spots: int, avg_km: int, max_km: int,
                           max_call: str, max_country: str,
