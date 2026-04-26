@@ -33,9 +33,12 @@ from PySide6.QtWidgets import (
 )
 
 from core.direction_pattern import (
-    SECTOR_COUNT, SECTOR_WIDTH_DEG, SectorBucket, StationPoint, aggregate_sectors,
+    SECTOR_COUNT, SECTOR_WIDTH_DEG, SectorBucket, StationPoint,
+    aggregate_sectors, is_mobile,
 )
-from core.geo import azimuthal_equidistant_project, safe_locator_to_latlon
+from core.geo import (
+    azimuthal_equidistant_project, distance_km, safe_locator_to_latlon,
+)
 
 
 # ── Layout-Konstanten ─────────────────────────────────────
@@ -48,6 +51,18 @@ COLOR_SECTOR_LINES = "#222222"
 COLOR_USER = "#FFCC00"
 COLOR_HINT = "#888888"
 
+RX_COLOR_ANT1 = QColor("#4488FF")
+RX_COLOR_ANT2 = QColor("#00CCAA")
+RX_COLOR_RESCUE = QColor("#44FF44")
+RX_COLOR_DEFAULT = QColor("#888888")
+TX_COLOR_LOW = QColor("#884400")    # ~-25 dB
+TX_COLOR_HIGH = QColor("#FFEE00")   # ~+5 dB
+SECTOR_ALPHA = 100  # 0..255 (~0.4)
+STATION_MIN_PX = 3
+STATION_MAX_PX = 8
+STATION_SNR_MIN = -25.0
+STATION_SNR_MAX = 5.0
+
 DISTANCE_RINGS_KM = (3000, 6000, 9000, 12000, 15000)
 COMPASS_LABELS = ("N", "NE", "E", "SE", "S", "SW", "W", "NW")
 RESIZE_DEBOUNCE_MS = 200
@@ -58,7 +73,120 @@ DEFAULT_DIALOG_SIZE = QSize(720, 720)
 DIALOG_MIN_SIZE = QSize(500, 500)
 
 
+# ── Locator-Cache ─────────────────────────────────────────
+
+class LocatorCache:
+    """Merkt sich pro Callsign den zuletzt gesehenen Locator.
+
+    FT8-Nachrichten enthalten den Locator nur in CQ-Nachrichten ("CQ DA1MHH JO31").
+    Direkte QSO-Nachrichten haben Report/RR73/73 statt Locator. Dieser Cache
+    sammelt Locators ueber die Session, damit Stationen die wir aktuell hoeren
+    (aber nicht in CQ) trotzdem auf der Karte landen wenn sie frueher CQ riefen.
+
+    Keine Persistenz, keine Limits — typischerweise weniger als 1000 Calls pro
+    Session, selbst auf 40m am Abend.
+    """
+
+    def __init__(self):
+        self._cache: dict[str, str] = {}
+
+    def update(self, call: str, locator: str) -> None:
+        """Locator merken. Leere oder ungueltige Werte werden silent geskippt."""
+        if not call or not locator:
+            return
+        # Nur 4 oder 6-stellige Locators akzeptieren
+        if not (len(locator) >= 4 and locator[0].isalpha() and locator[1].isalpha()
+                and locator[2].isdigit() and locator[3].isdigit()):
+            return
+        self._cache[call.upper()] = locator
+
+    def get(self, call: str) -> str | None:
+        if not call:
+            return None
+        return self._cache.get(call.upper())
+
+    def __len__(self) -> int:
+        return len(self._cache)
+
+    def clear(self) -> None:
+        self._cache.clear()
+
+
+def snapshot_to_station_points(
+    snapshot: dict,
+    locator_cache: LocatorCache,
+    band: str = "",
+) -> list[StationPoint]:
+    """Snapshot-Dict aus mw_cycle in StationPoint-Liste umwandeln.
+
+    Snapshot-Format (aus mw_cycle._build_map_snapshot):
+        {call: {"snr": float, "freq_hz": int, "antenna": str,
+                "snr_a1": float|None, "snr_a2": float|None,
+                "ts": float, "locator": str|None}}
+
+    Stationen ohne Locator (nicht im Cache, kein Locator im Snapshot) werden
+    silent geskippt — die Karte zeigt nur Stationen mit bekannter Position.
+    Mobile-Calls (/P, /MM, /AM, /QRP, /M) werden ausgefiltert.
+
+    Antenna-Klassifikation:
+        - snr_a1 ≤ -24 UND snr_a2 > -24 → "rescue" (ANT2 rettet schwachen ANT1)
+        - sonst antenna-Feld direkt aus Snapshot ("A1"/"A2"/leer)
+    """
+    points: list[StationPoint] = []
+    for call, data in snapshot.items():
+        if is_mobile(call):
+            continue
+
+        # Locator-Lookup: erst Snapshot, dann Cache
+        loc = data.get("locator") or locator_cache.get(call)
+        if loc:
+            locator_cache.update(call, loc)  # Snapshot-Locator merken
+
+        if not loc:
+            continue
+
+        latlon = safe_locator_to_latlon(loc)
+        if latlon is None:
+            continue
+        lat, lon = latlon
+
+        # Rescue-Klassifikation
+        snr_a1 = data.get("snr_a1")
+        snr_a2 = data.get("snr_a2")
+        antenna = data.get("antenna", "")
+        if (snr_a1 is not None and snr_a2 is not None
+                and snr_a1 <= -24.0 and snr_a2 > -24.0):
+            antenna = "rescue"
+
+        points.append(StationPoint(
+            call=call,
+            locator=loc,
+            lat=lat,
+            lon=lon,
+            snr=float(data.get("snr", -30.0)),
+            antenna=antenna,
+            timestamp=float(data.get("ts", 0.0)),
+            band=band,
+        ))
+    return points
+
+
 # ── Asset-Loader ──────────────────────────────────────────
+
+def _interpolate_color(
+    c_low: QColor, c_high: QColor,
+    value: float, v_min: float, v_max: float, alpha: int = 255,
+) -> QColor:
+    """Linear zwischen c_low (bei v_min) und c_high (bei v_max) interpolieren."""
+    if v_max == v_min:
+        return QColor(c_high)
+    frac = (value - v_min) / (v_max - v_min)
+    frac = max(0.0, min(1.0, frac))
+    r = c_low.red() + frac * (c_high.red() - c_low.red())
+    g = c_low.green() + frac * (c_high.green() - c_low.green())
+    b = c_low.blue() + frac * (c_high.blue() - c_low.blue())
+    return QColor(int(r), int(g), int(b), alpha)
+
 
 def load_coastlines() -> list[list[tuple[float, float]]]:
     """Coastlines aus assets/ne_110m_land_antimeridian_split.geojson laden.
@@ -98,6 +226,8 @@ class MapCanvas(QWidget):
         self._stations: list[StationPoint] = []
         self._sectors: list[SectorBucket] = []
         self._mode = "rx"  # "rx" oder "tx"
+        self._show_sectors = True
+        self._show_stations = True
 
         self.setMinimumSize(300, 300)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -184,7 +314,11 @@ class MapCanvas(QWidget):
         if self._bg_pixmap is None or self._bg_pixmap.size() != self.size():
             self._bg_pixmap = self._build_background_pixmap()
         painter.drawPixmap(0, 0, self._bg_pixmap)
-        # Live-Layer kommt in Schritt 7 (RX-Wedges + Stations) und Schritt 8 (TX)
+        # Live-Layer (Schritt 7): Sektor-Wedges → Punkte → User-Marker
+        if self._show_sectors:
+            self._paint_sector_wedges(painter)
+        if self._show_stations:
+            self._paint_stations(painter)
         self._paint_user_marker(painter)
 
     def _paint_no_locator(self, painter: QPainter) -> None:
@@ -278,6 +412,125 @@ class MapCanvas(QWidget):
             painter.drawText(
                 QPointF(x - tw / 2.0, y + th / 4.0), label
             )
+
+    # ── Layer-Toggles ─────────────────────────────────────
+
+    def set_show_sectors(self, on: bool) -> None:
+        self._show_sectors = bool(on)
+        self.update()
+
+    def set_show_stations(self, on: bool) -> None:
+        self._show_stations = bool(on)
+        self.update()
+
+    # ── Live-Layer: Sektor-Wedges ─────────────────────────
+
+    def _paint_sector_wedges(self, painter: QPainter) -> None:
+        if not self._sectors:
+            return
+        cx, cy = self._center_px()
+        radius = self._radius_px()
+        # max count fuer relative Wedge-Laenge
+        max_count = max((b.count for b in self._sectors), default=0)
+        if max_count == 0:
+            return
+
+        for b in self._sectors:
+            if b.count == 0:
+                continue
+            # Wedge-Radius proportional zur unique-Calls-Anzahl im Sektor
+            r = radius * 0.95 * (b.count / max_count)
+            # Sektor-Mitte Bearing: index * 22.5° (0 = Norden)
+            mid_deg = b.index * SECTOR_WIDTH_DEG
+            # QPainter.drawPie erwartet startAngle in 1/16°, gemessen ab 3-Uhr (Osten)
+            # Konvertierung: Karten-Norden (0°) = Qt-90°, Karten-Osten (90°) = Qt-0°
+            qt_start_deg = 90.0 - mid_deg - SECTOR_WIDTH_DEG / 2.0
+            qt_span_deg = SECTOR_WIDTH_DEG
+            color = self._sector_color(b)
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(QBrush(color))
+            painter.drawPie(
+                int(cx - r), int(cy - r), int(2 * r), int(2 * r),
+                int(qt_start_deg * 16), int(qt_span_deg * 16),
+            )
+
+    def _sector_color(self, bucket: SectorBucket) -> QColor:
+        """Sektor-Farbton aus Antenna-Counter mischen (RX-Modus).
+
+        TX-Modus: einheitlich orange/gelb je nach max-SNR im Sektor.
+        """
+        a = SECTOR_ALPHA
+        if self._mode == "tx":
+            # SNR-Skala mappen → Farbe
+            snr = bucket.avg_snr
+            return _interpolate_color(TX_COLOR_LOW, TX_COLOR_HIGH, snr,
+                                      STATION_SNR_MIN, STATION_SNR_MAX, a)
+        # RX-Modus: ANT1 vs ANT2 vs Rescue
+        n_a1 = bucket.ant1_count
+        n_a2 = bucket.ant2_count
+        n_rescue = bucket.rescue_count
+        total = n_a1 + n_a2 + n_rescue
+        if total == 0:
+            c = QColor(RX_COLOR_DEFAULT)
+            c.setAlpha(a)
+            return c
+        # gewichteter Mix
+        r = (RX_COLOR_ANT1.red() * n_a1 + RX_COLOR_ANT2.red() * n_a2
+             + RX_COLOR_RESCUE.red() * n_rescue) / total
+        g = (RX_COLOR_ANT1.green() * n_a1 + RX_COLOR_ANT2.green() * n_a2
+             + RX_COLOR_RESCUE.green() * n_rescue) / total
+        bl = (RX_COLOR_ANT1.blue() * n_a1 + RX_COLOR_ANT2.blue() * n_a2
+              + RX_COLOR_RESCUE.blue() * n_rescue) / total
+        return QColor(int(r), int(g), int(bl), a)
+
+    # ── Live-Layer: Stations-Punkte ───────────────────────
+
+    def _paint_stations(self, painter: QPainter) -> None:
+        if not self._stations:
+            return
+        cx, cy = self._center_px()
+        # Aufrufer hat schon dedupliziert, aber sicherheitshalber pro Call nur 1×
+        seen: set[str] = set()
+        for s in self._stations:
+            if s.call in seen:
+                continue
+            seen.add(s.call)
+            projected = self._project(s.lat, s.lon)
+            if projected is None:
+                continue
+            dx, dy = projected
+            x = cx + dx
+            y = cy + dy
+            color = self._station_color(s)
+            size = self._station_size(s.snr)
+            painter.setPen(QPen(color.darker(150), 0.5))
+            painter.setBrush(QBrush(color))
+            painter.drawEllipse(QPointF(x, y), size, size)
+
+    def _station_color(self, s: StationPoint) -> QColor:
+        if self._mode == "tx":
+            return _interpolate_color(
+                TX_COLOR_LOW, TX_COLOR_HIGH, s.snr,
+                STATION_SNR_MIN, STATION_SNR_MAX, alpha=255,
+            )
+        # RX
+        if s.antenna == "rescue":
+            return QColor(RX_COLOR_RESCUE)
+        if s.antenna == "A2":
+            return QColor(RX_COLOR_ANT2)
+        if s.antenna == "A1":
+            return QColor(RX_COLOR_ANT1)
+        return QColor(RX_COLOR_DEFAULT)
+
+    @staticmethod
+    def _station_size(snr: float) -> float:
+        # Linear: -25 dB → 3px, +5 dB → 8px
+        if snr <= STATION_SNR_MIN:
+            return STATION_MIN_PX
+        if snr >= STATION_SNR_MAX:
+            return STATION_MAX_PX
+        frac = (snr - STATION_SNR_MIN) / (STATION_SNR_MAX - STATION_SNR_MIN)
+        return STATION_MIN_PX + frac * (STATION_MAX_PX - STATION_MIN_PX)
 
     # ── User-Marker (Diamant im Zentrum) ──────────────────
 
@@ -381,10 +634,10 @@ class DirectionMapDialog(QDialog):
         filter_row.addSpacing(16)
         self.cb_show_stations = QCheckBox("Stationen")
         self.cb_show_stations.setChecked(True)
-        self.cb_show_stations.toggled.connect(lambda _: self.canvas.update())
+        self.cb_show_stations.toggled.connect(self.canvas.set_show_stations)
         self.cb_show_sectors = QCheckBox("Sektoren")
         self.cb_show_sectors.setChecked(True)
-        self.cb_show_sectors.toggled.connect(lambda _: self.canvas.update())
+        self.cb_show_sectors.toggled.connect(self.canvas.set_show_sectors)
         filter_row.addWidget(self.cb_show_stations)
         filter_row.addWidget(self.cb_show_sectors)
         filter_row.addStretch()
