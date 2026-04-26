@@ -894,7 +894,10 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         if self._direction_map_dialog is None:
             return
         from ui.direction_map_widget import snapshot_to_station_points
-        points = snapshot_to_station_points(snapshot, self._locator_cache, band=band)
+        points = snapshot_to_station_points(
+            snapshot, self._locator_cache, band=band,
+            locator_db=self.locator_db,
+        )
         if self._direction_map_dialog.mode == "rx":
             self._direction_map_dialog.update_rx_stations(points)
         # TX-Modus wird in Schritt 8 ueber PSKReporter befuellt, nicht hier.

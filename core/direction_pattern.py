@@ -41,6 +41,7 @@ class StationPoint:
     timestamp: float = 0.0
     band: str = ""
     distance_km: float = 0.0
+    prec_km: int = 110       # Lokalisierungs-Genauigkeit; 5=6-stellig, 110=Country/4-stellig
 
 
 @dataclass

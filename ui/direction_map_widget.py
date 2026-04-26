@@ -134,6 +134,7 @@ def snapshot_to_station_points(
     snapshot: dict,
     locator_cache: LocatorCache,
     band: str = "",
+    locator_db=None,
 ) -> list[StationPoint]:
     """Snapshot-Dict aus mw_cycle in StationPoint-Liste umwandeln.
 
@@ -142,33 +143,48 @@ def snapshot_to_station_points(
                 "snr_a1": float|None, "snr_a2": float|None,
                 "ts": float, "locator": str|None}}
 
-    Stationen ohne Locator (nicht im Cache, kein Locator im Snapshot) werden
-    silent geskippt — die Karte zeigt nur Stationen mit bekannter Position.
-    Mobile-Calls (/P, /MM, /AM, /QRP, /M) werden ausgefiltert.
+    Locator-Lookup-Reihenfolge:
+        1. locator_db (persistent, Source-priorisiert) wenn gegeben
+        2. Snapshot-Feld "locator"
+        3. locator_cache (Session-fluechtig, Bestandscode)
 
-    Antenna-Klassifikation:
-        - snr_a1 ≤ -24 UND snr_a2 > -24 → "rescue" (ANT2 rettet schwachen ANT1)
-        - sonst antenna-Feld direkt aus Snapshot ("A1"/"A2"/leer)
+    Wenn db-Treffer: prec_km wird aus der DB uebernommen → Outline-Dicke.
+    Sonst Default 110 (4-stellig oder Country-Fallback).
+
+    Stationen ohne Locator/Position werden silent geskippt.
+    Mobile-Calls (/P, /MM, /AM, /QRP, /M) werden ausgefiltert.
     """
     points: list[StationPoint] = []
     for call, data in snapshot.items():
         if is_mobile(call):
             continue
 
-        # Locator-Lookup: erst Snapshot, dann Cache
-        loc = data.get("locator") or locator_cache.get(call)
-        if loc:
-            locator_cache.update(call, loc)  # Snapshot-Locator merken
+        # 1) DB-Lookup (priorisiert, mit Genauigkeitsangabe)
+        lat = lon = None
+        prec_km = 110
+        loc = ""
+        if locator_db is not None:
+            pos = locator_db.get_position(call)
+            if pos is not None:
+                lat, lon, prec_km = pos
+                entry = locator_db.get(call)
+                loc = entry.locator if entry else ""
 
-        if not loc:
-            continue
+        # 2) Fallback: Snapshot-Feld + Session-Cache
+        if lat is None:
+            loc = data.get("locator") or locator_cache.get(call) or ""
+            if loc:
+                locator_cache.update(call, loc)
+            if not loc:
+                continue
+            latlon = safe_locator_to_latlon(loc)
+            if latlon is None:
+                continue
+            lat, lon = latlon
+            # 6-stellig=5km, 4-stellig=110km
+            prec_km = 5 if len(loc) >= 6 else 110
 
-        latlon = safe_locator_to_latlon(loc)
-        if latlon is None:
-            continue
-        lat, lon = latlon
-
-        # Rescue-Klassifikation
+        # Rescue-Klassifikation (Antenna)
         snr_a1 = data.get("snr_a1")
         snr_a2 = data.get("snr_a2")
         antenna = data.get("antenna", "")
@@ -185,6 +201,7 @@ def snapshot_to_station_points(
             antenna=antenna,
             timestamp=float(data.get("ts", 0.0)),
             band=band,
+            prec_km=prec_km,
         ))
     return points
 
@@ -1075,7 +1092,11 @@ class MapCanvas(QWidget):
     # ── Live-Layer: Stations-Punkte ───────────────────────
 
     def _paint_stations(self, painter: QPainter) -> None:
-        """Stationen als Leuchtkugeln: RadialGradient hell→Farbe, plus 1px Outer-Ring."""
+        """Stationen als Leuchtkugeln: RadialGradient hell→Farbe.
+
+        Genauigkeit ueber Alpha: prec_km <= 110 (DB-Treffer) → voller Glow,
+        prec_km > 110 (Country-Fallback) → Alpha halbiert, subtil unscharf.
+        """
         if not self._stations:
             return
         from PySide6.QtGui import QRadialGradient
@@ -1094,25 +1115,27 @@ class MapCanvas(QWidget):
             y = cy + dy
             color = self._station_color(s)
             size = self._station_size(s.snr)
-            # Outer-Halo Glow — staerker als vorher (Cyberpunk-Glow-Effekt)
-            # Zwei Schichten: weiter aussen schwach, naeher am Punkt staerker
+            # Country-Fallback (prec_km > 110): Alpha halbieren — Punkt sichtbar
+            # aber subtil unscharf, signalisiert "ungefaehre Position"
+            alpha_mul = 0.5 if s.prec_km > 110 else 1.0
+            # Outer-Halo Glow — Cyberpunk-Glow-Effekt
             halo_outer = QColor(color)
-            halo_outer.setAlpha(50)
+            halo_outer.setAlpha(int(50 * alpha_mul))
             painter.setBrush(QBrush(halo_outer))
             painter.drawEllipse(QPointF(x, y), size + 4.0, size + 4.0)
             halo_inner = QColor(color)
-            halo_inner.setAlpha(100)
+            halo_inner.setAlpha(int(100 * alpha_mul))
             painter.setBrush(QBrush(halo_inner))
             painter.drawEllipse(QPointF(x, y), size + 2.0, size + 2.0)
             # Hauptkugel: RadialGradient weiss-Mitte → Farbe → "Leuchtkugel"
             grad = QRadialGradient(QPointF(x, y), size)
-            light = QColor(255, 255, 255, 240)
+            light = QColor(255, 255, 255, int(240 * alpha_mul))
             grad.setColorAt(0.0, light)
             mid = QColor(color)
-            mid.setAlpha(230)
+            mid.setAlpha(int(230 * alpha_mul))
             grad.setColorAt(0.5, mid)
             edge = QColor(color)
-            edge.setAlpha(180)
+            edge.setAlpha(int(180 * alpha_mul))
             grad.setColorAt(1.0, edge)
             painter.setBrush(QBrush(grad))
             painter.drawEllipse(QPointF(x, y), size, size)
@@ -1313,13 +1336,8 @@ class DirectionMapDialog(QDialog):
         self.status_label = QLabel("Bereit. Mausrad = Zoom, ziehen = Globus drehen, Doppelklick = Reset.")
         self.status_label.setStyleSheet("color: #889; padding: 2px 4px;")
         layout.addWidget(self.status_label)
-        # Disclaimer: Lokalisierungs-Genauigkeit
-        self.disclaimer_label = QLabel(
-            "ℹ Stations-Position basiert auf 4-stelligem Maidenhead-Locator (Genauigkeit "
-            "~110 km) bzw. Country-Coords wenn kein Locator bekannt — Punkte koennen "
-            "im Wasser landen oder leicht abweichen. Praezisere Lokalisierung folgt."
-        )
-        self.disclaimer_label.setWordWrap(True)
+        # Genauigkeits-Anzeige (kompakt, einzeilig)
+        self.disclaimer_label = QLabel("Ø Genauigkeit: — km")
         self.disclaimer_label.setStyleSheet(
             "color: #667; padding: 2px 4px; font-size: 10px; font-style: italic;"
         )
@@ -1358,6 +1376,7 @@ class DirectionMapDialog(QDialog):
         if self._mode == "rx":
             self.canvas.update_stations(stations)
             self.set_status(f"EMPFANG: {len(stations)} Stationen.")
+            self._update_precision_label(stations)
 
     def update_tx_spots(self, stations: list[StationPoint]) -> None:
         """Wird vom PSKReporterClient-Callback aufgerufen.
@@ -1367,6 +1386,15 @@ class DirectionMapDialog(QDialog):
         if self._mode == "tx":
             self.canvas.update_stations(stations)
             self.set_status(f"SENDEN: {len(stations)} Reception-Reports.")
+            self._update_precision_label(stations)
+
+    def _update_precision_label(self, stations: list[StationPoint]) -> None:
+        """Durchschnittliche Lokalisierungs-Genauigkeit in km anzeigen."""
+        if not stations:
+            self.disclaimer_label.setText("Ø Genauigkeit: — km")
+            return
+        avg = sum(s.prec_km for s in stations) / len(stations)
+        self.disclaimer_label.setText(f"Ø Genauigkeit: {avg:.0f} km")
 
     # ── TX-Modus: PSK-Reporter Polling ────────────────────
 
@@ -1432,6 +1460,7 @@ class DirectionMapDialog(QDialog):
         points = self._spots_to_station_points(spots)
         self.canvas.update_stations(points)
         self.set_status(f"SENDEN: {len(points)} Reports von {len(spots)} Spots.")
+        self._update_precision_label(points)
 
     @Slot(str)
     def _on_psk_error(self, msg: str) -> None:
@@ -1464,6 +1493,13 @@ class DirectionMapDialog(QDialog):
             if latlon is None:
                 continue
             seen.add(call)
+            # prec_km aus DB falls vorhanden (PSK liefert manchmal 6-stellige
+            # Locators, manchmal nur 4 — DB hat den hoechstwertigen)
+            prec_km = 5 if len(loc) >= 6 else 110
+            if self._locator_db is not None:
+                pos = self._locator_db.get_position(call)
+                if pos is not None:
+                    prec_km = pos[2]
             points.append(StationPoint(
                 call=call,
                 locator=loc,
@@ -1472,6 +1508,7 @@ class DirectionMapDialog(QDialog):
                 snr=float(s.snr_db) if s.snr_db is not None else -30.0,
                 antenna="",  # TX hat keine Antennen-Info
                 timestamp=float(s.timestamp),
+                prec_km=prec_km,
             ))
         return points
 
