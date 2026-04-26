@@ -422,10 +422,12 @@ class MapCanvas(QWidget):
         if self._bg_pixmap is None or self._bg_pixmap.size() != self.size():
             self._bg_pixmap = self._build_background_pixmap()
         painter.drawPixmap(0, 0, self._bg_pixmap)
-        # Live-Layer (Schritt 7): Sektor-Wedges → Punkte → User-Marker
+        # Live-Layer-Reihenfolge: Sektor-Wedges → Connection-Lines → Punkte → User-Marker
+        # (Lines unter Punkten, sonst Pfeile/Punkte werden ueberzeichnet)
         if self._show_sectors:
             self._paint_sector_wedges(painter)
         if self._show_stations:
+            self._paint_connection_lines(painter)
             self._paint_stations(painter)
         self._paint_user_marker(painter)
 
@@ -630,6 +632,45 @@ class MapCanvas(QWidget):
         bl = (RX_COLOR_ANT1.blue() * n_a1 + RX_COLOR_ANT2.blue() * n_a2
               + RX_COLOR_RESCUE.blue() * n_rescue) / total
         return QColor(int(r), int(g), int(bl), a)
+
+    # ── Live-Layer: Connection Lines (Spider-Web) ─────────
+
+    def _paint_connection_lines(self, painter: QPainter) -> None:
+        """Linien vom User-Center zu jeder Station. Farbe + Alpha + Linienstaerke
+        nach Antenne und SNR. Erzeugt den klassischen "Radar/Spider"-Look von
+        PSK-Reporter & Co.
+        """
+        if not self._stations:
+            return
+        cx, cy = self._center_px()
+        center = QPointF(cx, cy)
+        seen: set[str] = set()
+        # Pen pro Pass setzen reduziert state-changes — wir sortieren hier nicht,
+        # bei <200 Punkten ist setPen pro Linie billig genug
+        for s in self._stations:
+            if s.call in seen:
+                continue
+            seen.add(s.call)
+            projected = self._project(s.lat, s.lon)
+            if projected is None:
+                continue
+            dx, dy = projected
+            color = QColor(self._station_color(s))
+            # Alpha nach SNR-Stufe: 90..200 (starke Stationen praegnanter)
+            snr = s.snr
+            if snr <= STATION_SNR_MIN:
+                alpha = 70
+            elif snr >= STATION_SNR_MAX:
+                alpha = 200
+            else:
+                frac = (snr - STATION_SNR_MIN) / (STATION_SNR_MAX - STATION_SNR_MIN)
+                alpha = int(70 + frac * 130)
+            color.setAlpha(alpha)
+            pen = QPen(color)
+            # Linienstaerke ebenfalls SNR-skaliert (0.4..1.6 px)
+            pen.setWidthF(0.4 + (alpha / 200.0) * 1.2)
+            painter.setPen(pen)
+            painter.drawLine(center, QPointF(cx + dx, cy + dy))
 
     # ── Live-Layer: Stations-Punkte ───────────────────────
 
