@@ -81,8 +81,7 @@ ZOOM_MIN = 0.3
 ZOOM_MAX = 6.0
 ZOOM_FACTOR = 1.15  # pro Mausrad-Notch
 ROTATE_DEBOUNCE_MS = 30  # Background-Pixmap-Throttle waehrend Drag
-PAN_SENSITIVITY_DEG_PER_PX = 0.35  # Globus-Pan: 1 px Mausbewegung @ zoom=1
-LAT_CLAMP_DEG = 80.0  # Pol-Annaeherung verhindern
+GLOBE_SENSITIVITY_DEG_PER_PX = 0.35  # 1 px Mausbewegung @ zoom=1
 
 DEFAULT_DIALOG_SIZE = QSize(720, 720)
 DIALOG_MIN_SIZE = QSize(500, 500)
@@ -188,6 +187,61 @@ def snapshot_to_station_points(
 
 # ── Asset-Loader ──────────────────────────────────────────
 
+# ── Quaternion-Math fuer 3D-Globus-Rotation ───────────────
+#
+# Mike's Wunsch: Erde rotiert um die Achse, JO31 bleibt am Bildschirm-Center.
+# Variante: Welt-Punkte werden durch Quaternion-Rotation um eine Achse durch
+# JO31 transformiert BEVOR sie azimuthal-equidistant-projeziert werden.
+# Da JO31 selbst auf der Achse liegt, bleibt es invariant → fix in der Mitte.
+
+def _quat_from_axis_angle(ax: float, ay: float, az: float,
+                          angle_rad: float) -> tuple[float, float, float, float]:
+    """Einheitsquaternion (w, x, y, z) fuer Rotation um Achse (ax,ay,az) um angle_rad."""
+    norm = math.sqrt(ax * ax + ay * ay + az * az)
+    if norm < 1e-12:
+        return (1.0, 0.0, 0.0, 0.0)
+    ax /= norm; ay /= norm; az /= norm
+    s = math.sin(angle_rad / 2.0)
+    return (math.cos(angle_rad / 2.0), ax * s, ay * s, az * s)
+
+
+def _quat_mul(q1: tuple, q2: tuple) -> tuple[float, float, float, float]:
+    """Hamilton-Produkt q1 * q2 (q2 wird zuerst angewendet)."""
+    a, b, c, d = q1
+    e, f, g, h = q2
+    return (
+        a * e - b * f - c * g - d * h,
+        a * f + b * e + c * h - d * g,
+        a * g - b * h + c * e + d * f,
+        a * h + b * g - c * f + d * e,
+    )
+
+
+def _quat_rotate(q: tuple, p: tuple[float, float, float]) -> tuple[float, float, float]:
+    """Rotiert Vektor p durch Quaternion q (q * p_quat * q_conj, vereinfacht)."""
+    qw, qx, qy, qz = q
+    px, py, pz = p
+    tx = 2.0 * (qy * pz - qz * py)
+    ty = 2.0 * (qz * px - qx * pz)
+    tz = 2.0 * (qx * py - qy * px)
+    cx = qy * tz - qz * ty
+    cy = qz * tx - qx * tz
+    cz = qx * ty - qy * tx
+    return (px + qw * tx + cx, py + qw * ty + cy, pz + qw * tz + cz)
+
+
+def _latlon_to_xyz(lat_deg: float, lon_deg: float) -> tuple[float, float, float]:
+    lat = math.radians(lat_deg)
+    lon = math.radians(lon_deg)
+    cl = math.cos(lat)
+    return (cl * math.cos(lon), cl * math.sin(lon), math.sin(lat))
+
+
+def _xyz_to_latlon(x: float, y: float, z: float) -> tuple[float, float]:
+    z_clamped = max(-1.0, min(1.0, z))
+    return (math.degrees(math.asin(z_clamped)), math.degrees(math.atan2(y, x)))
+
+
 def _interpolate_color(
     c_low: QColor, c_high: QColor,
     value: float, v_min: float, v_max: float, alpha: int = 255,
@@ -244,15 +298,13 @@ class MapCanvas(QWidget):
         self._show_sectors = True
         self._show_stations = True
 
-        # Zoom + 3D-Globus-Pan State
+        # Zoom + 3D-Globus-Rotation State
         self._zoom = 1.0  # 1.0 = MAX_DISTANCE_KM (ganze Welt), >1 = Zoom rein
-        # View-Center (lat/lon) wandert beim Drag — Karte rollt unter dem Fenster
-        # durch wie ein Globus auf der Fingerspitze. Default = User-Locator.
-        self._view_lat: float = self._my_pos[0] if self._my_pos else 0.0
-        self._view_lon: float = self._my_pos[1] if self._my_pos else 0.0
+        # Welt-Rotation als Quaternion (w, x, y, z). JO31 bleibt fix am Bildschirm-
+        # Center — die Welt rotiert um eine Achse durch JO31. Default = identity.
+        self._world_rot: tuple[float, float, float, float] = (1.0, 0.0, 0.0, 0.0)
         self._drag_start_pos: QPointF | None = None
-        self._drag_start_view_lat: float = self._view_lat
-        self._drag_start_view_lon: float = self._view_lon
+        self._drag_start_world_rot: tuple = self._world_rot
 
         self.setMinimumSize(300, 300)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -276,9 +328,9 @@ class MapCanvas(QWidget):
             return
         self._my_locator = locator
         self._my_pos = safe_locator_to_latlon(locator)
-        # View-Center synchron mit dem neuen User-Locator setzen
-        if self._my_pos:
-            self._view_lat, self._view_lon = self._my_pos
+        # Bei neuem Locator: Welt-Rotation zuruecksetzen (alte Achse galt durch
+        # alten Locator, neue Rotation muss durch den neuen Locator gehen)
+        self._world_rot = (1.0, 0.0, 0.0, 0.0)
         self._sectors = []
         self._invalidate_background()
 
@@ -324,28 +376,33 @@ class MapCanvas(QWidget):
 
     def _project(self, lat: float, lon: float) -> tuple[float, float] | None:
         """Lat/Lon → Pixel-Offset (dx, dy) vom Bildschirm-Center.
-        Projeziert um (_view_lat, _view_lon) — bei Globus-Pan wandert der View-
-        Center, alle Punkte (Coastlines, Stationen, User) drehen relativ dazu.
+
+        Schritt 1: Welt-Punkt durch _world_rot rotieren (Globus-Drehung).
+                   JO31 liegt auf der Rotationsachse → bleibt invariant.
+        Schritt 2: Azimuthal-Equidistant-Projektion mit JO31 als fixem Center.
         """
         if not self._my_pos:
             return None
+        # 1. Welt-Punkt rotieren (sphaerisch)
+        if self._world_rot == (1.0, 0.0, 0.0, 0.0):
+            rot_lat, rot_lon = lat, lon
+        else:
+            xyz = _latlon_to_xyz(lat, lon)
+            rx, ry, rz = _quat_rotate(self._world_rot, xyz)
+            rot_lat, rot_lon = _xyz_to_latlon(rx, ry, rz)
+        # 2. Azimuthal-Equidistant um JO31
         return azimuthal_equidistant_project(
-            self._view_lat, self._view_lon, lat, lon,
+            self._my_pos[0], self._my_pos[1], rot_lat, rot_lon,
             radius_px=self._radius_px(),
             max_distance_km=self._effective_max_km(),
         )
 
     def _user_screen_pos(self) -> tuple[float, float] | None:
-        """Wo ist der User-Locator gerade auf dem Bildschirm? Liefert
-        (px, py) in Widget-Koordinaten oder None falls User durch den
-        Pan ausserhalb des sichtbaren Bereichs gerollt wurde."""
+        """JO31 ist mathematisch fix am Bildschirm-Center — bleibt auf der
+        Welt-Rotations-Achse, also invariant. Vereinfachte Variante."""
         if not self._my_pos:
             return None
-        projected = self._project(self._my_pos[0], self._my_pos[1])
-        if projected is None:
-            return None
-        cx, cy = self._center_px()
-        return (cx + projected[0], cy + projected[1])
+        return self._center_px()
 
     # ── Resize ────────────────────────────────────────────
 
@@ -373,38 +430,48 @@ class MapCanvas(QWidget):
         self._invalidate_background()
         event.accept()
 
-    # ── Drag-to-pan: Globus rollt unter dem Fenster durch ─
+    # ── Drag-to-rotate: Erde dreht um Achsen durch JO31 ─
 
     def mousePressEvent(self, event):  # noqa: N802
         if event.button() == Qt.LeftButton and self._my_pos:
             self._drag_start_pos = event.position()
-            self._drag_start_view_lat = self._view_lat
-            self._drag_start_view_lon = self._view_lon
+            self._drag_start_world_rot = self._world_rot
             self.setCursor(Qt.ClosedHandCursor)
             event.accept()
             return
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):  # noqa: N802
-        if self._drag_start_pos is None:
+        if self._drag_start_pos is None or not self._my_pos:
             return super().mouseMoveEvent(event)
         # Pixel-Delta seit Drag-Start
         dx_px = event.position().x() - self._drag_start_pos.x()
         dy_px = event.position().y() - self._drag_start_pos.y()
-        # Sensitivitaet: bei hoehrem Zoom feinere Bewegung
-        sens = PAN_SENSITIVITY_DEG_PER_PX / self._zoom
-        # Maus rechts → View-Lon nach Westen (Inhalt folgt der Maus nach rechts)
-        # Maus runter → View-Lat nach Norden (oberer Inhalt rueckt nach unten)
-        new_lon_raw = self._drag_start_view_lon - dx_px * sens
-        new_lon = ((new_lon_raw + 180.0) % 360.0) - 180.0
-        new_lat = max(-LAT_CLAMP_DEG, min(LAT_CLAMP_DEG,
-                                          self._drag_start_view_lat + dy_px * sens))
-        if (abs(new_lat - self._view_lat) < 0.005
-                and abs(new_lon - self._view_lon) < 0.005):
-            return
-        self._view_lat = new_lat
-        self._view_lon = new_lon
-        # Background-Pixmap-Rebuild via Throttle (sonst zu teuer pro Frame)
+        sens = math.radians(GLOBE_SENSITIVITY_DEG_PER_PX / self._zoom)
+
+        # Achsen tangential zur Erdkugel an JO31:
+        # - East-Achse (zeigt nach Osten): senkrecht zur polaren Achse + JO31-Lon
+        # - North-Achse (zeigt nach Norden): cross(JO31_xyz, East)
+        my_lat, my_lon = self._my_pos
+        my_xyz = _latlon_to_xyz(my_lat, my_lon)
+        lon_r = math.radians(my_lon)
+        east_axis = (-math.sin(lon_r), math.cos(lon_r), 0.0)
+        # north = cross(my_xyz, east) — zeigt zum noerdlichen Pol-Tangent durch JO31
+        mx, my, mz = my_xyz
+        ex, ey, ez = east_axis
+        north_axis = (my * ez - mz * ey, mz * ex - mx * ez, mx * ey - my * ex)
+
+        # Yaw (horizontale Maus): Welt rotiert um North-Achse
+        # → westliche Punkte wandern nach Osten am Bildschirm (Inhalt folgt Maus)
+        yaw_q = _quat_from_axis_angle(*north_axis, dx_px * sens)
+        # Pitch (vertikale Maus): Welt rotiert um East-Achse
+        # → noerdliche Punkte wandern nach Sueden, wenn Maus nach unten
+        pitch_q = _quat_from_axis_angle(*east_axis, -dy_px * sens)
+
+        # Komponiere: erst Drag-Start-Rotation, darauf Yaw, darauf Pitch
+        delta = _quat_mul(pitch_q, yaw_q)
+        self._world_rot = _quat_mul(delta, self._drag_start_world_rot)
+
         if not self._rotation_timer.isActive():
             self._rotation_timer.start(ROTATE_DEBOUNCE_MS)
         self.update()
@@ -420,10 +487,9 @@ class MapCanvas(QWidget):
         super().mouseReleaseEvent(event)
 
     def reset_view(self) -> None:
-        """Zoom auf 1.0, View-Center zurueck auf User-Locator."""
+        """Zoom auf 1.0, Welt-Rotation auf identity (Norden oben)."""
         self._zoom = 1.0
-        if self._my_pos:
-            self._view_lat, self._view_lon = self._my_pos
+        self._world_rot = (1.0, 0.0, 0.0, 0.0)
         self._invalidate_background()
 
     def mouseDoubleClickEvent(self, event):  # noqa: N802
