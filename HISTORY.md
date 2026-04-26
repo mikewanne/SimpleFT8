@@ -823,3 +823,49 @@ Mode-Switching (Klick-Modus an/aus).
 
 **DeepSeek-Review:** Issues betrafen pre-existing diversity.py (Sticky-/
 Kollisions-Schwellen) — nicht v0.62. Code-Quality-Bewertung: solide Modularitaet.
+
+## 2026-04-26 v0.63 — 20m FT8 PDF + Stats-Filter (nur 20m+40m FT8)
+
+**Mike's Strategie-Entscheidung:** Nur noch 20m + 40m FT8 protokollieren.
+Andere Baender und Modi werden zwar weiterhin empfangen, aber nicht mehr in
+statistics/ gespeichert. Skaliert sonst nicht (Aufwand fuer PDF-Auswertung).
+
+**Aenderungen:**
+
+1. **Stats-Filter** (`core/station_stats.py`):
+   - Klassen-Konstante `LOGGED_BANDS = {"20m", "40m"}`.
+   - `log_cycle`, `log_station_comparisons`, `log_antenna_qso` returnen
+     fruehzeitig wenn `band not in LOGGED_BANDS`.
+
+2. **20m FT8 PDF** (`scripts/generate_plots.py`):
+   - Neues Override-Layer `TEXTS_20M_OVERRIDE` mit komplett anderem Narrativ
+     (DE + EN). Auf 20m ist ANT1 RESONANT — kein Antennen-Mismatch wie auf 40m.
+     Diversity-Gewinn entsteht durch echte Polarisations-/Pattern-Diversity.
+   - `_texts_for(band, lang)` mergt Default-Texte mit Band-Override.
+   - `create_pdf_report` nimmt `band, protocol` als Parameter.
+   - `main()` generiert beide PDFs (40m + 20m) pro Sprache.
+
+3. **20m-Narrativ** (Schwerpunkte):
+   - Asymmetrischer Vorteil: Resonante TX (Stationen hoeren mich) + RX-Diversity
+     (ich hoere sie zurueck) → loest klassisches asymmetrisches QSO-Problem.
+   - ANT2 (Regenrinne) gewinnt 79-86% der Doppelempfaenge mit Ø +4 dB —
+     trotz resonantem ANT1.
+   - Theorie: Faraday-Rotation skaliert mit f² → Polarisations-Diversity wirkt
+     auf 20m staerker als auf 40m.
+   - Qualitativ wertvoller als 40m: weniger absoluter Gewinn, aber bei
+     bereits guter Antenne erzielt → uebertragbar auf andere Setups.
+   - Caveat: 20m-Datenbasis noch duenner, waechst weiter.
+
+**PDFs neu generiert:**
+- `auswertung/Auswertung-40m-FT8.pdf` (DE)
+- `auswertung/Auswertung-20m-FT8.pdf` (DE) ← NEU
+- `auswertung/en/Report-40m-FT8.pdf` (EN)
+- `auswertung/en/Report-20m-FT8.pdf` (EN) ← NEU
+
+**Tests:** 218 passed (unveraendert — keine Logik-Aenderungen die Tests treffen).
+
+**Statistik-Daten (20m FT8 Stand 2026-04-26):**
+- Normal: 5 Tage, 688 Zyklen
+- Diversity_Normal: 2 Tage, 364 Zyklen
+- Diversity_Dx: 4 Tage, 2469 Zyklen
+- ANT2-Win-Rate Doppelempfang: 79% (Std), 86% (Dx) — **Diversity wirkt auch bei resonanter ANT1!**

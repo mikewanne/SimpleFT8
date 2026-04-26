@@ -62,7 +62,15 @@ class StationStatsLogger:
 
     Schreibt nur Rohdaten (eine Zeile pro Zyklus).
     Kein Zusammenfassungs-Block — Auswertung via scripts/generate_plots.py.
+
+    BAND-FILTER: Nur 20m und 40m FT8 werden protokolliert. Mike's Entscheidung
+    (2026-04-26 v0.63): Auswertung waechst sonst zu schnell, Aufwand fuer
+    PDFs nicht skalierbar. Andere Baender empfangen normal — werden nur
+    nicht in statistics/ gespeichert.
     """
+
+    # Welche Baender werden protokolliert (alle anderen werden ignoriert)
+    LOGGED_BANDS = frozenset({"20m", "40m"})
 
     def __init__(self, base_dir: str | Path | None = None):
         if base_dir is None:
@@ -89,6 +97,8 @@ class StationStatsLogger:
         """
         if ft_mode not in ("FT8", "FT4"):
             return
+        if band not in self.LOGGED_BANDS:
+            return  # Band-Filter (siehe Klassen-Docstring)
         entry = {
             "time": time.strftime("%H:%M:%S", time.gmtime()),
             "hour": time.strftime("%Y-%m-%d_%H", time.gmtime()),
@@ -121,6 +131,8 @@ class StationStatsLogger:
         """
         if not comparisons:
             return
+        if band not in self.LOGGED_BANDS:
+            return  # Band-Filter (siehe Klassen-Docstring)
         rx_mode = get_active_reception_mode("diversity", scoring_mode)
         protocol = get_active_protocol(mode)
         if not rx_mode or not protocol:
@@ -177,6 +189,8 @@ class StationStatsLogger:
             best_ant: "A1" / "A2" / None (keine Pref-Daten vorhanden)
             delta_db: SNR-Differenz A2-A1 in dB, None wenn unbekannt
         """
+        if band not in self.LOGGED_BANDS:
+            return  # Band-Filter (siehe Klassen-Docstring)
         entry = {
             "type": "antenna_qso",
             "time": time.strftime("%H:%M:%S", time.gmtime()),
