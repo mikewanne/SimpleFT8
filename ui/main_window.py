@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
     QMainWindow, QSplitter, QWidget, QVBoxLayout,
     QMessageBox, QScrollArea, QLabel,
 )
-from PySide6.QtCore import Qt, Slot
+from PySide6.QtCore import Qt, Slot, Signal
 
 from config.settings import Settings, BAND_FREQUENCIES
 from core.timing import FT8Timer
@@ -39,6 +39,10 @@ from . import styles
 
 class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
     """SimpleFT8 Hauptfenster — 3 Panels horizontal."""
+
+    # Cross-Thread-Signal fuer Karten-Update: Decoder-Thread → GUI-Thread.
+    # Payload: snapshot-dict, band-string. Empfaenger: _on_direction_map_snapshot.
+    direction_map_signal = Signal(dict, str)
 
     def __init__(self, settings: Settings):
         super().__init__()
@@ -124,6 +128,11 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self._stats_logger = StationStatsLogger()
         self._stats_warmup_cycles = 6
         self._antenna_prefs = AntennaPreferenceStore()
+
+        # Karten-Widget (Lazy create, Schritt 9 verbindet Button im Settings-Dialog)
+        from ui.direction_map_widget import LocatorCache
+        self._locator_cache = LocatorCache()
+        self._direction_map_dialog = None
         # Getrennte Preset-Dateien für Standard und DX (2h-Frist pro Band+FTMode)
         self._standard_store = PresetStore("presets_standard.json")
         self._dx_store = PresetStore("presets_dx.json")
@@ -377,6 +386,12 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self.setCentralWidget(_container)
 
     def _connect_signals(self):
+        # Karten-Snapshot: Decoder-Thread → GUI-Thread (QueuedConnection erzwingt
+        # Marshalling, Slot laeuft GUI-thread-seitig)
+        self.direction_map_signal.connect(
+            self._on_direction_map_snapshot, Qt.QueuedConnection
+        )
+
         # RX Panel → QSO starten + RX-Toggle
         self.rx_panel.station_clicked.connect(self._on_station_clicked)
         self.rx_panel.rx_toggled.connect(self._on_rx_panel_toggled)
@@ -786,6 +801,72 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
             return True
         return False
 
+    # ── Richtungs-Karte (lazy create, Schritt 7+9) ─────────────
+
+    def open_direction_map(self, default_mode: str = "rx") -> None:
+        """Karten-Dialog oeffnen (lazy create). Wird in Schritt 9 vom Settings-
+        Button aufgerufen."""
+        if self._direction_map_dialog is None:
+            from ui.direction_map_widget import DirectionMapDialog
+            self._direction_map_dialog = DirectionMapDialog(
+                my_locator=self.settings.locator,
+                default_mode=default_mode,
+                parent=self,
+            )
+        self._direction_map_dialog.set_locator(self.settings.locator)
+        self._direction_map_dialog.show()
+        self._direction_map_dialog.raise_()
+
+    def _build_map_snapshot(self) -> dict:
+        """Snapshot aus aktuellen Stations-Akkumulatoren bauen.
+
+        Liest Locator wenn vorhanden auch direkt aus FT8Message.field3 (CQ-Calls)
+        und fuettert _locator_cache. Damit landen Stationen die wir vorher mal
+        in CQ gesehen haben spaeter trotzdem auf der Karte, auch wenn sie aktuell
+        nur Reports senden.
+        """
+        import time as _t
+        if self._rx_mode == "diversity":
+            stations = self._diversity_stations
+        else:
+            stations = self._normal_stations
+
+        snap = {}
+        for call, msg in stations.items():
+            # Locator aus aktueller Message (CQ → field3 ist Locator)
+            if getattr(msg, "is_grid", False):
+                self._locator_cache.update(call, msg.field3)
+            loc = self._locator_cache.get(call)
+            snap[call] = {
+                "snr": float(msg.snr),
+                "freq_hz": int(msg.freq_hz),
+                "antenna": getattr(msg, "antenna", "") or "",
+                "snr_a1": getattr(msg, "_snr_a1", None),
+                "snr_a2": getattr(msg, "_snr_a2", None),
+                "ts": _t.time(),
+                "locator": loc,
+            }
+        return snap
+
+    def _emit_map_snapshot_if_open(self) -> None:
+        """Wird aus mw_cycle gerufen — emittiert Signal nur wenn Karte offen."""
+        if self._direction_map_dialog is None or not self._direction_map_dialog.isVisible():
+            return
+        snapshot = self._build_map_snapshot()
+        # Qt.QueuedConnection — sicheres Marshalling Decoder-Thread → GUI-Thread
+        self.direction_map_signal.emit(snapshot, self.settings.band)
+
+    @Slot(dict, str)
+    def _on_direction_map_snapshot(self, snapshot: dict, band: str) -> None:
+        """GUI-Thread Slot. Delegiert ans Widget je nach aktivem Mode."""
+        if self._direction_map_dialog is None:
+            return
+        from ui.direction_map_widget import snapshot_to_station_points
+        points = snapshot_to_station_points(snapshot, self._locator_cache, band=band)
+        if self._direction_map_dialog.mode == "rx":
+            self._direction_map_dialog.update_rx_stations(points)
+        # TX-Modus wird in Schritt 8 ueber PSKReporter befuellt, nicht hier.
+
     def closeEvent(self, event):
         # Fenstergeometrie + Splitter-Breiten speichern
         geom = self.geometry()
@@ -801,6 +882,9 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self.radio.abort_reconnect()
         if hasattr(self, '_countdown_timer'):
             self._countdown_timer.stop()
+        # Karten-Dialog schliessen (falls offen)
+        if self._direction_map_dialog is not None:
+            self._direction_map_dialog.close()
         self.decoder.stop()
         self.radio.disconnect()
         self.settings.save()

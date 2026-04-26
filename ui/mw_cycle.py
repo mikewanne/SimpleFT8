@@ -289,6 +289,9 @@ class CycleMixin:
             self._stats_logger.log_station_comparisons(
                 self.settings.band, self.settings.mode, scoring, comparisons)
 
+        # Richtungs-Karten-Hook: Snapshot via Qt.QueuedConnection in GUI-Thread
+        self._emit_map_snapshot_if_open()
+
     def _handle_normal_mode(self, messages):
         """Normal-Modus: gemeinsame Akkumulation ohne Antennen-Info + Stats."""
         if messages:
@@ -310,6 +313,9 @@ class CycleMixin:
 
         # Statistik loggen — auch bei leerem Zyklus (akkumulierter Stand)
         self._log_stats(len(self._normal_stations), messages or [], avg_snr=avg_snr)
+
+        # Richtungs-Karten-Hook: Snapshot via Qt.QueuedConnection in GUI-Thread
+        self._emit_map_snapshot_if_open()
 
     def _handle_dx_tune_mode(self, messages):
         """DX-Tuning-Modus: nur aktueller Zyklus, keine Akkumulation."""
