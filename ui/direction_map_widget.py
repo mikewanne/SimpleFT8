@@ -80,6 +80,7 @@ COMPASS_LABELS = ("N", "NE", "E", "SE", "S", "SW", "W", "NW")
 RESIZE_DEBOUNCE_MS = 200
 MAX_DISTANCE_KM = 18000.0
 MAP_RADIUS_FRACTION = 0.45  # Anteil der min(width,height) als Karten-Radius
+STATION_TTL_S = 30 * 60  # Stationen 30 Min in der Karte sichtbar (RX + TX)
 ZOOM_MIN = 0.3
 ZOOM_MAX = 6.0
 ZOOM_FACTOR = 1.15  # pro Mausrad-Notch
@@ -306,6 +307,8 @@ class MapCanvas(QWidget):
         self._landmasses = load_landmasses()
         self._bg_pixmap: QPixmap | None = None
         self._stations: list[StationPoint] = []
+        # History pro Call mit Timestamp — TTL 30 Min (siehe STATION_TTL_S)
+        self._station_history: dict[str, tuple[float, StationPoint]] = {}
         self._sectors: list[SectorBucket] = []
         self._mode = "rx"  # "rx" oder "tx"
         self._show_sectors = True
@@ -359,13 +362,27 @@ class MapCanvas(QWidget):
     def update_stations(self, stations: list[StationPoint]) -> None:
         """Live-Update vom RX-Hook oder TX-Polling.
 
-        WICHTIG: muss aus dem GUI-Thread aufgerufen werden, sonst racet die
-        Mutation von _stations/_sectors mit dem laufenden paintEvent. Wenn
-        der Aufrufer in einem Worker-Thread laeuft (Decoder, PSK-Polling),
-        muss er via Qt-Signal/Slot mit Qt.QueuedConnection in den GUI-Thread
-        marshallen — siehe Schritt 7 (mw_cycle-Hook ueber pyqtSignal).
+        Stationen werden in einem History-Dict akkumuliert (call → StationPoint
+        mit timestamp). Stationen aelter als STATION_TTL_S (30 Min) fallen
+        beim Render raus. So bleiben kurzzeitige QSO-Pausen sichtbar — bei
+        FT8 mit 15s-Cycles wuerde sonst nach jedem stillen Slot die Karte
+        leer wirken.
+
+        Aus GUI-Thread aufrufen — sonst racet Mutation mit paintEvent.
         """
-        self._stations = list(stations)
+        import time as _t
+        now = _t.time()
+        # Neue Stations einmischen — gleicher Call ueberschreibt aelteren Eintrag
+        for s in stations:
+            self._station_history[s.call] = (now, s)
+        # TTL-Filter: alte Eintraege rauswerfen
+        cutoff = now - STATION_TTL_S
+        self._station_history = {
+            call: (ts, sp) for call, (ts, sp) in self._station_history.items()
+            if ts >= cutoff
+        }
+        # _stations Liste fuer paint
+        self._stations = [sp for _, sp in self._station_history.values()]
         if self._my_pos:
             self._sectors = aggregate_sectors(
                 self._stations, self._my_pos[0], self._my_pos[1]
@@ -573,44 +590,49 @@ class MapCanvas(QWidget):
     def _clip_polygon_to_hemisphere(
         self, poly: list[tuple[float, float]]
     ) -> list[list[tuple[float, float]]]:
-        """Schneidet ein Polygon am Hemisphaeren-Rand. Returnt Liste von
-        Sub-Polygonen in Pixel-Offset-Koordinaten (dx, dy vom Center).
-
-        Bei Uebergang sichtbar↔unsichtbar wird via Bisektion in lat/lon-Space
-        ein Punkt am Rand der sichtbaren Hemisphaere eingefuegt — so wirkt
-        das Polygon korrekt am Rand abgeschnitten."""
+        """Schneidet ein Polygon am Hemisphaeren-Rand.
+        Performance-Optimierung: Fast-Path fuer all-visible / all-hidden.
+        Nur bei gemischten Polygonen wird die Bisektion angeworfen."""
         if len(poly) < 3:
             return []
-
-        # Pro Punkt: (sichtbar, projection oder None)
+        # Pass 1: alle Punkte projezieren, sichtbar-Counter
         states: list[tuple[bool, tuple[float, float] | None]] = []
+        n_visible = 0
         for lon, lat in poly:
             p = self._project(lat, lon)
-            states.append((p is not None, p))
+            visible = p is not None
+            if visible:
+                n_visible += 1
+            states.append((visible, p))
 
+        # Fast-Path 1: kein Punkt sichtbar → skip
+        if n_visible == 0:
+            return []
+        # Fast-Path 2: alle sichtbar → ein Sub-Polygon ohne Bisektion
+        if n_visible == len(poly):
+            return [[s[1] for s in states]]  # type: ignore[misc]
+
+        # Slow-Path: gemischt — Bisektion an den Uebergaengen
         sub_polys: list[list[tuple[float, float]]] = []
         current: list[tuple[float, float]] = []
         n = len(poly)
         for i in range(n):
             vis, p = states[i]
-            prev_vis, prev_p = states[i - 1]
+            prev_vis, _ = states[i - 1]
             if vis and prev_vis:
                 current.append(p)  # type: ignore[arg-type]
             elif vis and not prev_vis:
-                # Eintritt — interpolierter Rand-Punkt + aktueller Punkt
                 edge = self._horizon_crossing(poly[i - 1], poly[i])
                 if edge is not None:
                     current.append(edge)
                 current.append(p)  # type: ignore[arg-type]
             elif not vis and prev_vis:
-                # Austritt — interpolierter Rand-Punkt, dann Sub-Polygon abschliessen
                 edge = self._horizon_crossing(poly[i - 1], poly[i])
                 if edge is not None:
                     current.append(edge)
                 if len(current) >= 3:
                     sub_polys.append(current)
                 current = []
-            # else: beide unsichtbar — skip
         if len(current) >= 3:
             sub_polys.append(current)
         return sub_polys
@@ -633,7 +655,7 @@ class MapCanvas(QWidget):
             lo, hi = 1.0, 0.0
         else:
             return None  # nicht erwartet — beide gleich
-        for _ in range(12):  # 12 Iterationen → ~0.025% Genauigkeit
+        for _ in range(6):  # 6 Iter ≈ 1.5% Genauigkeit, fuer Pixel reicht's
             mid = (lo + hi) / 2.0
             lat_m = lat1 + mid * (lat2 - lat1)
             lon_m = lon1 + mid * (lon2 - lon1)
@@ -1119,17 +1141,10 @@ class DirectionMapDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Richtungs-Karte")
         self.setModal(False)  # Decoder-Signale muessen durchkommen
-        # Always-on-top als eigenstaendiges Fenster (Qt.Tool versagt auf macOS:
-        # bei Fokus-Verlust verschwindet es; Qt.Window mit StaysOnTopHint ist
-        # zuverlaessig, behaelt minimize/maximize Buttons).
-        self.setWindowFlags(
-            Qt.Window
-            | Qt.WindowStaysOnTopHint
-            | Qt.CustomizeWindowHint
-            | Qt.WindowTitleHint
-            | Qt.WindowCloseButtonHint
-            | Qt.WindowMinMaxButtonsHint
-        )
+        # Always-on-top: nur das WindowStaysOnTopHint-Flag setzen, NICHT
+        # alle Flags ueberschreiben (das hat auf macOS den Dialog unsichtbar
+        # gemacht — siehe Mike-Bug Map-Button oeffnet nichts).
+        self.setWindowFlag(Qt.WindowStaysOnTopHint, True)
         self.setMinimumSize(DIALOG_MIN_SIZE)
         # Geometrie aus Parent-Settings restaurieren falls vorhanden
         restored = False
@@ -1258,9 +1273,10 @@ class DirectionMapDialog(QDialog):
         self._mode = mode
         self._sync_toggle_state()
         self.canvas.set_mode(mode)
-        # Beim Wechsel das andere Datenset sofort wegraeumen, sonst zeigt
-        # die Karte alte RX-Daten waehrend TX-Polling laeuft (verwirrend).
+        # Beim Wechsel die History komplett leeren, sonst mischt 30-Min-RX-Cache
+        # mit gerade eintreffenden TX-Spots (ist sichtbar verwirrend)
         if prev != mode:
+            self.canvas._station_history.clear()
             self.canvas.update_stations([])
         if mode == "rx":
             self.set_status("EMPFANG: warte auf Live-Daten …")
