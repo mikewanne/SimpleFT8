@@ -297,6 +297,15 @@ class DiversityController:
             return True
         return False
 
+    def reset_search_counter(self) -> None:
+        """Such-Counter auf Vollwert zuruecksetzen — bei aktivem QSO pro Slot
+        aufzurufen, damit nach QSO-Ende wieder volle ~60s Karenzzeit verfuegbar
+        sind und kein Mid-QSO-Frequenzsprung passiert.
+        """
+        self._search_slots_remaining = self._SEARCH_INTERVAL_SLOTS.get(
+            getattr(self, '_mode', 'FT8'), 4
+        )
+
     def update_proposed_freq(self, qso_active: bool = False):
         """Vorgeschlagene TX-Frequenz aktualisieren — slot-getriggert von mw_cycle.
 

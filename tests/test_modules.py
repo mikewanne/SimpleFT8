@@ -1553,6 +1553,53 @@ def test_tick_slot_decrements_and_triggers():
     assert dc._search_slots_remaining == 4  # auto-reset
 
 
+def test_reset_search_counter_restores_full_value():
+    """reset_search_counter() setzt den Counter zurueck auf den modus-spezifischen
+    Vollwert — wird bei aktivem QSO pro Slot aufgerufen, damit kein Mid-QSO-
+    Frequenzsprung passiert."""
+    from core.diversity import DiversityController
+    dc = DiversityController()
+    # FT8: 4 Slots Vollwert
+    dc.set_mode("FT8")
+    dc.tick_slot()  # 3
+    dc.tick_slot()  # 2
+    dc.tick_slot()  # 1 — gleich Trigger
+    assert dc._search_slots_remaining == 1
+    dc.reset_search_counter()
+    assert dc._search_slots_remaining == 4
+    # FT4: 8 Slots
+    dc.set_mode("FT4")
+    dc.tick_slot()
+    dc.reset_search_counter()
+    assert dc._search_slots_remaining == 8
+    # FT2: 16 Slots
+    dc.set_mode("FT2")
+    dc.tick_slot()
+    dc.tick_slot()
+    dc.reset_search_counter()
+    assert dc._search_slots_remaining == 16
+
+
+def test_reset_search_counter_prevents_mid_qso_jump():
+    """Szenario: 3 von 4 Slots abgelaufen, dann QSO startet → Counter wird
+    pro Slot resettet. Nach 5 QSO-Slots ist Counter immer noch auf 4 (kein
+    Trigger waehrend QSO)."""
+    from core.diversity import DiversityController
+    dc = DiversityController()
+    dc.set_mode("FT8")
+    dc.tick_slot()  # 3
+    dc.tick_slot()  # 2
+    dc.tick_slot()  # 1
+    assert dc._search_slots_remaining == 1
+    # Jetzt QSO aktiv: pro Slot wird resettet
+    for _ in range(5):
+        dc.reset_search_counter()
+    assert dc._search_slots_remaining == 4
+    # QSO endet: erst jetzt darf wieder getickt werden, voller Karenzzeit
+    assert dc.tick_slot() is False
+    assert dc._search_slots_remaining == 3
+
+
 def test_score_tiebreaker_uses_median():
     """Score: zwei gleich breite Luecken naeher/weiter vom Median → naehere gewinnt."""
     from core.diversity import DiversityController

@@ -76,16 +76,24 @@ class CycleMixin:
 
         Slot-Counter (_search_slots_remaining) tickt bei jedem Aufruf. Wenn er
         0 erreicht → Suche aktiv ausgeloest. Sonst nur Histogramm-Update damit
-        die UI-Bins live bleiben."""
+        die UI-Bins live bleiben.
+
+        QSO-Schutz: Bei aktivem QSO wird der Such-Counter pro Slot
+        ZURUECKGESETZT (nicht dekrementiert) — damit nach QSO-Ende wieder
+        volle ~60s Karenzzeit verfuegbar sind und kein Mid-QSO-Frequenz-
+        sprung passiert.
+        """
         qso_busy = self.qso_sm.state not in (
             QSOState.IDLE, QSOState.TIMEOUT,
             QSOState.CQ_CALLING, QSOState.CQ_WAIT,
         )
         with self._diversity_lock:
             self._diversity_ctrl.sync_from_stations(self._diversity_stations)
-            search_due = self._diversity_ctrl.tick_slot()
-            if search_due:
-                self._diversity_ctrl.update_proposed_freq(qso_active=qso_busy)
+            if qso_busy:
+                self._diversity_ctrl.reset_search_counter()
+            else:
+                if self._diversity_ctrl.tick_slot():
+                    self._diversity_ctrl.update_proposed_freq(qso_active=False)
         self.control_panel.update_freq_histogram(
             self._diversity_ctrl.get_histogram_data())
 

@@ -690,3 +690,25 @@ Countdown sprang z.B. 119→108→119 weil per-Zyklus-Updates die 120s-Range unr
 - Aufgabe 1: Answer-Me Highlighting — `rx_panel.py` Farbe `#5A4A10` + Bold an 3 Stellen
 - Aufgabe 2: Gain-Messung Logging → `~/.simpleft8/gain_log.md`
 - Prompt vollständig, DeepSeek-reviewed, commitbereit
+
+## 2026-04-26 v0.60 — CQ-Counter QSO-Reset (Punkt 3)
+
+**Problem (Mike's Feldbeobachtung):** Der 60s-Slot-Counter (`_search_slots_remaining`)
+in `DiversityController` tickte auch waehrend aktivem QSO weiter. Wenn er auf 0 fiel,
+wurde zwar via `qso_active=True` der Frequenzwechsel verhindert, ABER der Counter
+wurde auto-resettet — danach konnte sehr bald (Restslots) wieder gewechselt werden.
+Risiko: Frequenzsprung mitten im laufenden QSO.
+
+**Fix:**
+- `core/diversity.py`: neue Methode `reset_search_counter()` setzt
+  `_search_slots_remaining` auf modus-spezifischen Vollwert (FT8=4, FT4=8, FT2=16).
+- `ui/mw_cycle.py:_refresh_diversity_freq_view()`: bei `qso_busy=True` wird
+  `reset_search_counter()` aufgerufen statt `tick_slot()`. Damit hat der Funker
+  nach QSO-Ende immer volle ~60s Karenzzeit, kein Mid-QSO-Frequenzsprung mehr
+  moeglich.
+- Tests: 2 neue Tests (`test_reset_search_counter_restores_full_value` +
+  `test_reset_search_counter_prevents_mid_qso_jump`). Suite 213 grün.
+
+**DeepSeek-Review:** kritisch geprueft, "Critical Race Condition" verworfen
+(das Pattern ist konsistent mit bestehendem `tick_slot()` — Lock haelt der Caller).
+Andere Issues betrafen Pre-existing Code, nicht den Fix.
