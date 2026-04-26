@@ -1,4 +1,233 @@
-# SimpleFT8 TODO — Stand 15.04.2026, Session 2
+# SimpleFT8 TODO — Stand 26.04.2026
+
+---
+
+## NEXT FEATURES — Plan vom 26.04.2026 (Brainstorming Mike + Claude + DeepSeek)
+
+Reihenfolge nach Priorität. Quick-Wins zuerst, USP-Killer-Features parallel als Strategie.
+
+---
+
+### A) Aging in Slots statt Sekunden (Bug-Fix) — **0.5 Tag**
+
+**Problem:** `core/station_accumulator.py` nutzt Aging in Sekunden:
+- 75s normal / 150s active_qso / 300s CQ-Rufer
+- FT8 (15s/Slot) → 5/10/20 Slots ✓
+- FT4 (7.5s) → 10/20/40 Slots ✓
+- FT2 (3.8s) → **20/40/79 Slots** ❌ deutlich zu lang!
+
+**Fix:** Aging in SLOTS umrechnen. Konstanten:
+```python
+AGING_SLOTS_NORMAL    = 5   # 5 Slots = 75s FT8 / 37.5s FT4 / 19s FT2
+AGING_SLOTS_ACTIVE    = 10
+AGING_SLOTS_CQ_CALLER = 20
+```
+Bei jedem Decode-Cycle aktuelle Slot-Nummer einfließen lassen statt timestamp.
+
+**Test:** Es gibt bereits Aging-Tests — anpassen (Slot-Counter statt time.time).
+
+---
+
+### B) Band-Indikatoren live mit PSK-Reporter ergänzen — **1-2 Tage**
+
+**Status quo:** Bestehende kleine Balken UNTER den Band-Buttons (rot/gelb/grün)
+basieren nur auf HamQSL Solar Flux + Tageszeit + saisonale Korrektur (`core/propagation.py`).
+
+**Neu:** PSK-Reporter Live-Aktivität dazu:
+- Zeigt nicht nur "theoretisch sollte das offen sein" sondern "weltweit X Stationen GERADE aktiv, Trend ↗/↘"
+
+**API (verifiziert mit DeepSeek):**
+- Endpoint: `https://pskreporter.info/cgi-bin/psk-find.pl?mode=FT8&lastMinutes=5&callback=json`
+- 1 Request liefert ALLE Bänder → Client-seitig pro Band aggregieren
+- Polling: alle 2 Min (safe, JTAlert/GridTracker machen es genauso)
+- Pro Spot: `senderCallsign`, `band`, `timestamp`, `receiverLocator`, `snr`
+
+**Trend-Erkennung:**
+- 2-Fenster-Approach: `last_5_min` vs `prev_5_min` (unique Calls)
+- Ratio > 1.15 → "rising" (Band öffnet)
+- Ratio < 0.85 → "falling" (Band macht zu)
+
+**Visualisierung — neu (Mike's Idee):**
+- Bestehende Farb-Balken bleiben (HamQSL-Berechnung)
+- Bei steigendem Trend → **pulsierender Balken**, je näher zur "Öffnung" desto schneller
+- `QPropertyAnimation` auf eigenes `QWidget.paintEvent` (kein setStyleSheet wegen Performance)
+- Speed: 300-2000ms Cycle, mit Trend-Stärke skaliert
+
+**Code-Skeleton aus DeepSeek:**
+```python
+# core/psk_reporter.py — neu
+class PSKReporterClient:
+    POLL_S = 120
+    URL = "https://pskreporter.info/cgi-bin/psk-find.pl"
+    
+    def fetch_global_activity(self, mode="FT8", minutes=5):
+        # JSONP parsen, Spots pro Band aggregieren
+        ...
+    
+    def get_band_trend(self, band): ...  # rising/falling/stable
+    def get_band_count(self, band): ...  # aktuelle unique Calls
+```
+
+```python
+# ui/band_indicator.py — neu
+class BandIndicatorWidget(QWidget):
+    pulse_factor = Property(float, ...)
+    def set_trend(self, strength: float): ...  # -1.0 bis +1.0
+    def paintEvent(self, e): ...  # Alpha-pulsierende Farbe
+```
+
+---
+
+### C) Richtungs-Keulen-Karte — TX-Pattern (Mike's USP-Killer-Idee) — **2-3 Tage**
+
+**Idee Mike:** Statt PSK-Reporter Punkte/Kreise zu zeigen → Stationen nach **Großkreis-Richtung gruppieren in 16 Sektoren** (à 22.5°). Jeder Sektor wird zu einer **Keule**.
+
+**Was du daraus lernst:**
+- "Heute Süd-Ausbreitung dominiert — 25 Stationen, max 8000 km"
+- "Nichts nach W → 10m sinnlos"
+- "Skip-Zone heute bei 1500-3000km in Sektor 4"
+
+**Datenquelle: PSK-Reporter Reverse-Lookup**
+- Endpoint: `?callsign=DA1MHH&mode=FT8&lastMinutes=60` → wer hat MICH gehört
+- Pro Spot: `receiverLocator` + `snr`
+- Sub-Minute Latenz (5-30s typisch)
+
+**Algorithmus:**
+1. Maidenhead-Locator → Lat/Lon (Standard-Formel)
+2. Großkreis-Azimut von JO31 → empfänger-Lat/Lon
+3. Sektor-Bin: `int(bearing / 22.5) % 16`
+4. Pro Sektor: Anzahl Empfänger, Ø SNR, max Entfernung
+
+**Rendering (Optionen, Mike entscheidet):**
+- (a) **Polar-Diagramm** (Rosenkreis): kompakt, sauber
+- (b) **Weltkarte mit Sektor-Overlay**: Keulen vom Zentrum (Herne) als gefüllte Kegel
+- (c) **Hybrid**: Karte mit Punkten + Polar-Histogramm in der Ecke
+- Empfehlung: **(b) — visuell stärkster Effekt**, QPainter-basiert
+
+**Bonus: TX-Pattern zeigt was ANT1 (Sender) leistet** — durch Resonanz zeigt die TX-Keule auch die optimal genutzten Lobes des Kelemen-Dipols.
+
+---
+
+### D) Richtungs-Keulen — ANT2 RX-Pattern aus eigenen Daten (Diversity-USP) — **1-2 Tage zusätzlich**
+
+**Idee Mike:** Für ANT2 KEINE PSK-Reporter-Daten (wir senden nicht über ANT2!) sondern **lokale Rescue-Daten** visualisieren.
+
+**Was zeigen:**
+- Wo hört ANT2 was ANT1 NICHT hört? (= Rescue: ANT1 < -24 dB, ANT2 dekodiert)
+- Diese Stationen pro Sektor zählen → Keule
+
+**Datenquelle (lokal!):**
+- `core/antenna_pref.py` hat bereits `_snr_a1` / `_snr_a2` pro Call
+- `statistics/Diversity_*/{band}/FT8/stations/*.md` hat Rescue-Spots historisch
+- Filter: `a1_snr <= -24 AND a2_snr > -24`
+
+**Rendering:**
+- Gleiches Sektor-Diagramm wie C, aber mit ANT2-Farbe (kontrastierend zu TX-Pattern)
+- Idealerweise im **selben Diagramm** überlagert: ANT1-TX-Keule + ANT2-RX-Rescue-Keule
+- Zeigt sofort: "ANT1 strahlt nach SO, aber ANT2 fängt Norden ab"
+
+**Algorithmus-Code-Skeleton (DeepSeek):**
+```python
+# core/rx_pattern.py — neu
+class RXPatternAnalyzer:
+    SECTORS = 16
+    
+    def update_from_rescue_spots(self, decoded_stations):
+        for s in decoded_stations:
+            if not s.locator: continue
+            bearing = grid_bearing(MY_GRID, s.locator)
+            sector = int(bearing / (360 / self.SECTORS)) % self.SECTORS
+            if s.snr_ant1 <= -24 and s.snr_ant2 > -24:
+                self.sectors[sector]["rescue"] += 1
+```
+
+---
+
+### E) CSV-Export Diversity-Daten — **1-2 Tage**
+
+**Idee:** Pro QSO eine CSV-Zeile mit allen Diversity-Metadaten:
+```
+callsign, mode, band, timestamp_utc, freq_hz, ant1_snr, ant2_snr, 
+selected_ant, delta_db, dt_correction, qso_complete
+```
+
+**Use Cases:**
+- Wissenschaftliche Auswertung (Paper über 79-86% ANT2-Win-Rate trotz resonanter ANT1!)
+- Externe Visualisierungs-Tools (Excel, Tableau, Pandas)
+- Antennen-Optimierungs-Hinweise sammeln
+
+**Implementierung:**
+- Erweitern: `core/station_stats.py` um `export_diversity_csv(path, band, mode, days)`
+- Menüpunkt im UI: "Datei → Diversity-Daten exportieren..."
+- Default-Pfad: `~/Documents/SimpleFT8_Export/diversity_{band}_{date}.csv`
+
+**ADIF-Vendor-Extension VERWERFEN** (DeepSeek-Vorschlag): andere Tools wie HRD/DXLab ignorieren das eh. Reines CSV reicht.
+
+---
+
+### F) Audio-Export per Slot (für Forschung/Debug) — **<1 Tag**
+
+**Idee:** Roh-IQ pro Slot (4 sec PCM WAV) optional mitschneiden.
+
+**Use Cases:**
+- AP-Lite Feldtest: "warum hat AP-Lite die Station verpasst?" → Audio nachhören
+- Antennen-Vergleich: Slot von ANT1 + Slot von ANT2 als WAV → Spektrum-Analyse offline
+- Inspectrum / Audacity / Matlab Forschung
+
+**Implementierung:**
+- Toggle in Settings: "Roh-IQ-Audio mitschreiben (groß!)"
+- Pfad: `audio_dump/{band}_{mode}/{YYYY-MM-DD_HH-MM-SS}_{ant}.wav`
+- 4 Sekunden Slot-Capture-Buffer im `radio/flexradio.py` ergänzen
+- Ringpuffer mit max 7 Tagen (alte Files automatisch löschen)
+- Alternativ: nur bei "interessanten" Decodes (Rescue, neuer DXCC, Mike's Wahl)
+
+---
+
+## ABHAENGIGKEITEN / REIHENFOLGE
+
+```
+A (Aging-Bug)              ←  völlig unabhängig, jederzeit
+B (PSK-Indikatoren)        ←  Basis für C
+C (TX-Pattern-Karte)       ←  braucht B (PSK-Reporter Client)
+D (RX-Pattern ANT2)        ←  parallel zu C möglich, kein PSK-Reporter
+E (CSV-Export)             ←  unabhängig, jederzeit
+F (Audio-Export)           ←  unabhängig, jederzeit
+```
+
+**Mein Vorschlag — Reihenfolge für Mike:**
+1. **A** (Quick-Win Bug-Fix, 0.5 Tag, sauber abschließen)
+2. **B** (PSK-Reporter Foundation, 1-2 Tage, baut Infrastruktur für C)
+3. **C + D parallel** (Visualisierungs-Killer-Feature, USP)
+4. **E** (CSV-Export, niedrige Komplexität)
+5. **F** (Audio-Export, optional Forschungs-Feature)
+
+**Geschätzter Gesamt-Aufwand:** ca. 1-1.5 Wochen verteilte Arbeit für alle 6 Features.
+
+---
+
+## NICHT WEITERVERFOLGT (verworfen am 26.04.2026)
+
+- ❌ Smart CQ Prediction (DeepSeek): Daten zu dünn, würde False-Confidence erzeugen
+- ❌ RX-Mute Anzeige während TX (DeepSeek): unnötig, FT8-Funker wissen das eh
+- ❌ Cross-Band-Empfehlung "geh auf 40m": Architektur unterstützt nur 1 Band aktiv
+- ❌ ADIF-Vendor-Extension: andere Tools ignorieren proprietäre Felder
+- ❌ DT-Heatmap im Histogramm: für FT8 bei DT<2s nicht praxis-kritisch (zurückgestellt, evtl. später)
+- ❌ Antennen-Pref Hysterese auf 2 dB anheben: nach Feldtest entscheiden, aktuell `>=` 1 dB OK
+- ❌ Band-Aktivität Sparkline (15-min): Idee von DeepSeek, durch B+Pulsation faktisch schon ersetzt
+
+---
+
+## OFFENE TODO (alte Liste, weiter aktuell)
+
+- [ ] Even/Odd dedizierter Timer — unabhängig vom Decoder-Thread (FT2 kritisch)
+- [ ] Gain-Bias beheben — Normal-Modus Gain-Messung wenn Stats aktiv erzwingen
+- [ ] CQ-Zusammenfassung RX-Liste — DeepSeek-Idee: ins QSO-Panel verschieben oder ganz raus
+- [ ] Tertile-Analyse Statistik — kein Datencropping, alle Werte in 3 Drittel
+- [ ] AP-Lite Test-Pipeline — synthetische E2E-Tests vor jedem Code-Fix
+- [ ] Per-Station DT-Offset TX — encoder._station_dt_offset (nach mehr Feldtest-Daten)
+- [ ] IC-7300 Fork — TARGET_TX_OFFSET dort separat messen!
+- [ ] Warteliste-Screenshot — sobald DL3AQJ antwortet
+- [ ] **NEU 26.04.:** TX-Frequenz Normal-Modus manchmal ohne Histogramm-Marker (Bug, noch nicht reproduzierbar)
 
 ---
 
