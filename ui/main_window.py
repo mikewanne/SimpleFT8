@@ -63,6 +63,7 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self._setup_ui()
         self._connect_signals()
         self.rx_panel.set_qso_log(self.qso_log)
+        self.rx_panel.set_locator_db(self.locator_db)
 
         # Optionale Features (NACH _setup_ui, weil Easter-Egg-Signal verbunden wird)
         self._init_optional_features()

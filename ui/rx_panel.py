@@ -62,6 +62,7 @@ class RXPanel(QWidget):
         self._ant_filter: int = 0  # 0=alle, 1=A1, 2=A2
         self._active_call: str = ""  # Callsign der gerade aktiv angerufenen Station
         self._qso_log = None  # QSOLog fuer Worked-Before Filter
+        self._locator_db = None  # LocatorDB fuer exakte km-Berechnung pro Call
         self._hidden_cols: set = set()
         self._setup_ui()
 
@@ -235,6 +236,10 @@ class RXPanel(QWidget):
         """QSOLog setzen fuer Worked-Before Filter."""
         self._qso_log = qso_log
 
+    def set_locator_db(self, locator_db):
+        """LocatorDB setzen — wird fuer exakte km-Berechnung pro Call genutzt."""
+        self._locator_db = locator_db
+
     def set_active_call(self, callsign: str):
         """Aktiv angerufene Station hervorheben (amber Hintergrund + bold)."""
         self._active_call = callsign or ""
@@ -338,7 +343,22 @@ class RXPanel(QWidget):
         if msg.is_cq and msg.is_grid and self._my_grid:
             km = grid_distance(self._my_grid, msg.grid_or_report)
             dist_km = km if km is not None else 0
-        # 2. Sonst: Ungefaehre Entfernung aus Callsign-Prefix
+        # 2. Locator-DB: persistenter Cache aus CQ/PSK/ADIF — exakte km wenn Treffer
+        if (dist_km == 0 and self._locator_db is not None
+                and lookup_call and lookup_call != "<....>" and self._my_grid):
+            try:
+                pos = self._locator_db.get_position(lookup_call)
+            except Exception:
+                pos = None
+            if pos is not None:
+                from core.geo import grid_to_latlon, distance_km
+                my_pos = grid_to_latlon(self._my_grid)
+                if my_pos is not None:
+                    km = int(distance_km(my_pos[0], my_pos[1], pos[0], pos[1]))
+                    dist_km = km
+                    # 5km-Genauigkeit = exakt; 110km = approx
+                    dist_approx = pos[2] > 5
+        # 3. Sonst: Ungefaehre Entfernung aus Callsign-Prefix (Country-Fallback)
         if dist_km == 0 and lookup_call and lookup_call != "<....>" and self._my_grid:
             km = callsign_to_distance(lookup_call, self._my_grid)
             if km is not None:
