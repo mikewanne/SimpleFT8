@@ -56,6 +56,72 @@ def grid_distance(my_grid: str, dx_grid: str) -> int | None:
     return int(distance_km(pos1[0], pos1[1], pos2[0], pos2[1]))
 
 
+def safe_locator_to_latlon(locator) -> tuple[float, float] | None:
+    """None-safe Wrapper um grid_to_latlon. Returnt None bei None/leer/ungueltig.
+
+    Akzeptiert beliebigen Input-Typ und schluckt ValueError/IndexError/AttributeError.
+    Fuer Karten-Code: ein einziger Aufrufpfad pro Station, keine try/except am Call-Site.
+    """
+    if not isinstance(locator, str) or not locator.strip():
+        return None
+    try:
+        return grid_to_latlon(locator)
+    except (ValueError, IndexError, AttributeError):
+        return None
+
+
+# ── Großkreis-Bearing & Azimuthal-Equidistant-Projektion ──
+
+def great_circle_bearing(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Initial-Großkreis-Bearing (Azimut) von (lat1,lon1) nach (lat2,lon2) in Grad [0, 360).
+
+    0° = Norden, 90° = Osten, 180° = Sueden, 270° = Westen.
+    Bei identischen Punkten → 0.0 (atan2(0,0)).
+    Hinweis: Bei lat1=±90° (Pol) ist Bearing mathematisch nicht definiert; die Funktion
+    liefert dann einen formal korrekten, semantisch willkuerlichen Wert.
+    """
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    dlon = math.radians(lon2 - lon1)
+    y = math.sin(dlon) * math.cos(phi2)
+    x = math.cos(phi1) * math.sin(phi2) - math.sin(phi1) * math.cos(phi2) * math.cos(dlon)
+    return (math.degrees(math.atan2(y, x)) + 360.0) % 360.0
+
+
+def azimuthal_equidistant_project(
+    my_lat: float, my_lon: float,
+    lat: float, lon: float,
+    radius_px: float,
+    max_distance_km: float = 18000.0,
+) -> tuple[float, float] | None:
+    """Azimuthal-Equidistant-Projektion mit User-Locator als Center.
+
+    Pixel-Koordinaten relativ zum Center: x positiv = Osten, y positiv = Sueden
+    (passt zum Qt-Koordinatensystem, in dem y nach unten waechst).
+
+    Args:
+        my_lat, my_lon: Karten-Mittelpunkt (User-Locator).
+        lat, lon: Zielpunkt.
+        radius_px: Radius des Karten-Kreises in Pixeln (entspricht max_distance_km).
+        max_distance_km: Distanz, die dem Rand entspricht (Default 18000 km).
+            Punkte jenseits werden als None zurueckgegeben (Antipode-Clip,
+            dort wird die Projektion stark verzerrt).
+
+    Returns:
+        (x, y) in Pixeln, oder None bei Antipode-Clip oder ungueltiger max_distance_km.
+    """
+    if max_distance_km <= 0:
+        return None
+    d = distance_km(my_lat, my_lon, lat, lon)
+    if d > max_distance_km:
+        return None
+    bearing_rad = math.radians(great_circle_bearing(my_lat, my_lon, lat, lon))
+    r = (d / max_distance_km) * radius_px
+    x = r * math.sin(bearing_rad)
+    y = -r * math.cos(bearing_rad)  # Norden = -y (Qt-Koord-System)
+    return (x, y)
+
+
 # ── Callsign → Land (Prefix-Lookup) ───────────────────────
 
 # Haeufigste Prefixe — deckt >95% des FT8-Verkehrs ab
