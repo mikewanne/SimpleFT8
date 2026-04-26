@@ -16,6 +16,11 @@ am tatsächlichen Code bevor er übernommen wird. Bei Widerspruch: Code ist Refe
 → Generiert IMMER beide Sprachen: DE → `auswertung/` + EN → `auswertung/en/`
 → DE: `SimpleFT8_Bericht.pdf` (7 S.) | EN: `SimpleFT8_Report.pdf` (7 p.)
 → Regel: Statistiken und PDFs IMMER auf Deutsch UND Englisch erstellen!
+
+**⚠ Tages-/Pooled-Mean-Auswertungen:** ZUERST `auswertung.md` lesen!
+Format-Stolpersteine (3 vs 5 Tabellenspalten, Rescue extern in `stations/`,
+DX-Modus zählt nur SNR<-10) sind dort dokumentiert inkl. Code-Vorlage.
+Mike's „Tagestrend"-Anfragen → stundenweise Tabelle, nicht nur Pooled-Mean.
 **Git:** branch `main`, Repo aktiv, Statistics-Daten committed
 
 ---
