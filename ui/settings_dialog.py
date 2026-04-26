@@ -254,6 +254,25 @@ class SettingsDialog(QDialog):
         export_lay.addLayout(export_btn_row)
         layout.addWidget(export_box)
 
+        # ── Richtungs-Karte ──────────────────────────────────────────
+        map_box = QGroupBox("Richtungs-Karte")
+        map_lay = QVBoxLayout(map_box)
+        map_lbl = QLabel(
+            "Azimuthal-Karte mit eigenem Locator als Center. EMPFANG zeigt "
+            "wo Stationen gehoert werden (Antennen-Farbcode), SENDEN zeigt "
+            "PSK-Reporter Reverse-Lookup wer mich gehoert hat."
+        )
+        map_lbl.setWordWrap(True)
+        map_lbl.setStyleSheet("color: #888; padding: 0 0 6px 0;")
+        map_lay.addWidget(map_lbl)
+        map_btn_row = QHBoxLayout()
+        self._map_open_btn = QPushButton("Karte oeffnen …")
+        self._map_open_btn.clicked.connect(self._on_map_open_clicked)
+        map_btn_row.addWidget(self._map_open_btn)
+        map_btn_row.addStretch()
+        map_lay.addLayout(map_btn_row)
+        layout.addWidget(map_box)
+
         # ── Buttons ───────────────────────────────────────────────────
         btn_row = QHBoxLayout()
         btn_reset = QPushButton("Grundeinstellungen")
@@ -461,6 +480,22 @@ class SettingsDialog(QDialog):
         for w, btn in self._tune_btns.items():
             btn.setChecked(w == 10)
         self.diversity_cycles.setCurrentIndex(0)  # 80 Zyklen
+
+    def _on_map_open_clicked(self):
+        """Richtungs-Karte oeffnen. Default-Modus aus Settings (rx/tx)."""
+        # MainWindow ist parent → open_direction_map() aufrufen
+        mw = self.parent()
+        if mw is None or not hasattr(mw, "open_direction_map"):
+            QMessageBox.warning(
+                self, "Karte nicht verfuegbar",
+                "Karte kann nur aus dem Hauptfenster geoeffnet werden."
+            )
+            return
+        default_mode = self.settings.get("direction_map_default_mode", "rx")
+        if default_mode not in ("rx", "tx"):
+            default_mode = "rx"
+        # Settings-Dialog NICHT schliessen — User kann Karte parallel offen haben
+        mw.open_direction_map(default_mode=default_mode)
 
     def _on_export_csv_clicked(self):
         """CSV-Export der Diversity-Daten — User waehlt Ziel-Verzeichnis."""

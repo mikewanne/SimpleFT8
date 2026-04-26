@@ -574,7 +574,18 @@ class DirectionMapDialog(QDialog):
         self.setWindowTitle("Richtungs-Karte")
         self.setModal(False)  # Decoder-Signale muessen durchkommen
         self.setMinimumSize(DIALOG_MIN_SIZE)
-        self.resize(DEFAULT_DIALOG_SIZE)
+        # Geometrie aus Parent-Settings restaurieren falls vorhanden
+        restored = False
+        if parent is not None and hasattr(parent, "settings"):
+            geom_hex = parent.settings.get("direction_map_geometry", "")
+            if geom_hex:
+                try:
+                    self.restoreGeometry(bytes.fromhex(geom_hex))
+                    restored = True
+                except (ValueError, TypeError):
+                    pass
+        if not restored:
+            self.resize(DEFAULT_DIALOG_SIZE)
 
         self._my_locator = my_locator
         self._callsign = callsign
@@ -809,6 +820,17 @@ class DirectionMapDialog(QDialog):
     def closeEvent(self, event):  # noqa: N802
         # Polling sauber stoppen, sonst laeuft daemon-Thread weiter
         self._stop_tx_polling()
+        # Geometrie persistieren ueber MainWindow.settings
+        parent = self.parent()
+        if parent is not None and hasattr(parent, "settings"):
+            try:
+                parent.settings.set(
+                    "direction_map_geometry",
+                    bytes(self.saveGeometry()).hex()
+                )
+                parent.settings.set("direction_map_default_mode", self._mode)
+            except Exception:
+                pass
         super().closeEvent(event)
 
     def set_status(self, text: str) -> None:
