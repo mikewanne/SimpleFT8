@@ -591,8 +591,11 @@ class MapCanvas(QWidget):
         self, poly: list[tuple[float, float]]
     ) -> list[list[tuple[float, float]]]:
         """Schneidet ein Polygon am Hemisphaeren-Rand.
-        Performance-Optimierung: Fast-Path fuer all-visible / all-hidden.
-        Nur bei gemischten Polygonen wird die Bisektion angeworfen."""
+
+        Sub-Polygone die durch Hemisphaere-Cuts entstehen werden mit Bogen-Punkten
+        ENTLANG der Disk-Grenze verbunden — sonst entstehen blaue Dreiecks-Luecken
+        wo die geraden Schnittkanten den Land-Fill verfaelschen.
+        """
         if len(poly) < 3:
             return []
         # Pass 1: alle Punkte projezieren, sichtbar-Counter
@@ -608,65 +611,117 @@ class MapCanvas(QWidget):
         # Fast-Path 1: kein Punkt sichtbar → skip
         if n_visible == 0:
             return []
-        # Fast-Path 2: alle sichtbar → ein Sub-Polygon ohne Bisektion
+        # Fast-Path 2: alle sichtbar → ein Polygon ohne Bisektion
         if n_visible == len(poly):
             return [[s[1] for s in states]]  # type: ignore[misc]
 
-        # Slow-Path: gemischt — Bisektion an den Uebergaengen
-        sub_polys: list[list[tuple[float, float]]] = []
-        current: list[tuple[float, float]] = []
+        # Slow-Path: gemischt — Bisektion + Bogen-Verbindung am Disk-Rand
+        result: list[tuple[float, float]] = []
+        last_exit_edge: tuple[float, float] | None = None
+        first_entry_edge: tuple[float, float] | None = None
+        globe_r = self._radius_px()
         n = len(poly)
         for i in range(n):
             vis, p = states[i]
             prev_vis, _ = states[i - 1]
             if vis and prev_vis:
-                current.append(p)  # type: ignore[arg-type]
+                result.append(p)  # type: ignore[arg-type]
             elif vis and not prev_vis:
-                edge = self._horizon_crossing(poly[i - 1], poly[i])
-                if edge is not None:
-                    current.append(edge)
-                current.append(p)  # type: ignore[arg-type]
+                # Eintritt — Bogen vom letzten Austritt + Edge-Punkt + aktueller Punkt
+                entry_edge = self._horizon_crossing(poly[i - 1], poly[i])
+                if entry_edge is not None:
+                    if last_exit_edge is not None:
+                        result.extend(self._arc_along_disk(
+                            last_exit_edge, entry_edge, globe_r
+                        ))
+                    result.append(entry_edge)
+                    if first_entry_edge is None:
+                        first_entry_edge = entry_edge
+                last_exit_edge = None
+                result.append(p)  # type: ignore[arg-type]
             elif not vis and prev_vis:
-                edge = self._horizon_crossing(poly[i - 1], poly[i])
-                if edge is not None:
-                    current.append(edge)
-                if len(current) >= 3:
-                    sub_polys.append(current)
-                current = []
-        if len(current) >= 3:
-            sub_polys.append(current)
-        return sub_polys
+                # Austritt — Edge-Punkt einfuegen, last_exit merken
+                exit_edge = self._horizon_crossing(poly[i - 1], poly[i])
+                if exit_edge is not None:
+                    result.append(exit_edge)
+                    last_exit_edge = exit_edge
+            # else: beide unsichtbar — skip
+        # Polygon-Schluss: wenn wir mit Austritt endeten und das erste sichtbare
+        # Sub-Poly mit einem Eintritts-Edge anfing, Bogen vom letzten Austritt
+        # zum ersten Eintritt am Anfang einfuegen
+        if last_exit_edge is not None and first_entry_edge is not None:
+            result.extend(self._arc_along_disk(
+                last_exit_edge, first_entry_edge, globe_r
+            ))
+        return [result] if len(result) >= 3 else []
+
+    @staticmethod
+    def _arc_along_disk(
+        p1: tuple[float, float], p2: tuple[float, float], radius: float,
+    ) -> list[tuple[float, float]]:
+        """Bogenpunkte entlang der Globus-Disk-Grenze von p1 zu p2 (kuerzere
+        Richtung). p1, p2 sind Pixel-Offsets vom Bildschirm-Center."""
+        angle1 = math.atan2(p1[1], p1[0])
+        angle2 = math.atan2(p2[1], p2[0])
+        diff = ((angle2 - angle1) + 2 * math.pi) % (2 * math.pi)
+        if diff > math.pi:
+            diff -= 2 * math.pi  # andere Richtung ist kuerzer
+        # ein Punkt alle ~5°
+        n = max(2, int(abs(diff) / math.radians(5.0)))
+        arc: list[tuple[float, float]] = []
+        for i in range(1, n):
+            a = angle1 + diff * i / n
+            arc.append((radius * math.cos(a), radius * math.sin(a)))
+        return arc
 
     def _horizon_crossing(
         self, p1: tuple[float, float], p2: tuple[float, float],
     ) -> tuple[float, float] | None:
-        """Findet via Bisektion in lat/lon-Space den Punkt zwischen p1 und p2
-        am Rand der sichtbaren Hemisphaere (cos_c == 0). Returnt projezierte
-        Pixel-Offset-Koordinaten."""
+        """Findet via Bisektion auf der Sphaere (Slerp in XYZ-Space) den Punkt
+        zwischen p1 und p2 am Rand der sichtbaren Hemisphaere.
+
+        Lat/lon-Bisektion versagt bei Antimeridian-Sprung (179° → -179° gibt 0°).
+        Slerp im XYZ-Space berechnet immer die kuerzere Bogen-Verbindung auf
+        der Kugel-Oberflaeche → korrekter Mittelpunkt.
+        """
         lon1, lat1 = p1
         lon2, lat2 = p2
-        # Bisektion: lo ist sichtbar (oder unbekannt), hi ist unsichtbar
-        # Bestimmen welche Seite welche ist
         v1 = self._project(lat1, lon1)
         v2 = self._project(lat2, lon2)
-        if v1 is not None and v2 is None:
-            lo, hi = 0.0, 1.0
-        elif v1 is None and v2 is not None:
-            lo, hi = 1.0, 0.0
+        if not ((v1 is None) ^ (v2 is None)):
+            return None  # beide gleich (sichtbar oder beide unsichtbar)
+        # XYZ-Endpunkte
+        xyz1 = _latlon_to_xyz(lat1, lon1)
+        xyz2 = _latlon_to_xyz(lat2, lon2)
+        # Bisektion: t in [0..1], 0=p1, 1=p2 — Bisektion sucht Grenze sichtbar
+        if v1 is not None:
+            t_vis, t_inv = 0.0, 1.0
         else:
-            return None  # nicht erwartet — beide gleich
-        for _ in range(6):  # 6 Iter ≈ 1.5% Genauigkeit, fuer Pixel reicht's
-            mid = (lo + hi) / 2.0
-            lat_m = lat1 + mid * (lat2 - lat1)
-            lon_m = lon1 + mid * (lon2 - lon1)
+            t_vis, t_inv = 1.0, 0.0
+        for _ in range(6):
+            t_mid = (t_vis + t_inv) / 2.0
+            # Linear in XYZ + Normalize approx. Slerp (genau genug bei nahen Punkten)
+            mx = xyz1[0] + t_mid * (xyz2[0] - xyz1[0])
+            my = xyz1[1] + t_mid * (xyz2[1] - xyz1[1])
+            mz = xyz1[2] + t_mid * (xyz2[2] - xyz1[2])
+            norm = math.sqrt(mx * mx + my * my + mz * mz)
+            if norm < 1e-12:
+                return None
+            mx /= norm; my /= norm; mz /= norm
+            lat_m, lon_m = _xyz_to_latlon(mx, my, mz)
             p = self._project(lat_m, lon_m)
             if p is not None:
-                lo = mid
+                t_vis = t_mid
             else:
-                hi = mid
+                t_inv = t_mid
         # Letzter sichtbarer Punkt
-        lat_m = lat1 + lo * (lat2 - lat1)
-        lon_m = lon1 + lo * (lon2 - lon1)
+        mx = xyz1[0] + t_vis * (xyz2[0] - xyz1[0])
+        my = xyz1[1] + t_vis * (xyz2[1] - xyz1[1])
+        mz = xyz1[2] + t_vis * (xyz2[2] - xyz1[2])
+        norm = math.sqrt(mx * mx + my * my + mz * mz)
+        if norm < 1e-12:
+            return None
+        lat_m, lon_m = _xyz_to_latlon(mx / norm, my / norm, mz / norm)
         return self._project(lat_m, lon_m)
 
     def _paint_globe_disk(self, painter: QPainter) -> None:

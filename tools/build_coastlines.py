@@ -101,16 +101,20 @@ def main() -> int:
         for poly in polys:
             n_polygons += 1
             outer_ring = poly[0] if poly else []
-            # Polygone mit Antimeridian-Crossing splittet das Build-Script in
-            # mehrere Sub-Polygone — fuer Globus-Render alle-Punkte-sichtbar Filter
-            poly_segments = split_at_antimeridian(outer_ring)
-            for seg in poly_segments:
-                # Ring schliessen falls noetig
-                if len(seg) >= 3 and seg[0] != seg[-1]:
-                    seg = seg + [seg[0]]
-                if len(seg) >= 4:
-                    out_polygons.append(seg)
-            # Lines (Coastlines) auch raus geben: alle Ringe (outer + holes)
+            # POLYGONE ohne Antimeridian-Split speichern — der Globus-Render
+            # nutzt Slerp-Bisektion in XYZ-Space, da ist der 179°→-179° Sprung
+            # mathematisch kein Problem. Ein gesplittetes Polygon wuerde dagegen
+            # am 180°-Meridian eine sichtbare Luecke zeigen wenn der Globus so
+            # rotiert ist dass der Antimeridian durchs Bild laeuft.
+            if len(outer_ring) >= 3:
+                ring = outer_ring
+                if ring[0] != ring[-1]:
+                    ring = ring + [ring[0]]
+                if len(ring) >= 4:
+                    out_polygons.append(ring)
+            # Lines (Coastlines) bleiben antimeridian-gesplittet — die werden
+            # einzeln pro Liniensegment gezeichnet, ein durchgehender Sprung
+            # wuerde quer ueber den Globus gehen.
             for ring in poly:
                 segments = split_at_antimeridian(ring)
                 if len(segments) > 1:
