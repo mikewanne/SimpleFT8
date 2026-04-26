@@ -231,19 +231,86 @@ zeigt nur die zeitliche Verteilung.
 
 ---
 
-## 10. Wenn Mike sagt „Tagestrend"
+## 10. Wenn Mike sagt „Stundenschnitt / mehr-oder-weniger pro Stunde" — DEFAULT-VARIANTE!
 
-Mike will dann **stundenweise** den Verlauf sehen, nicht nur einen Pooled-Mean.
-Ergänzung: pro UTC-Stunde Ø Sta./Zyklus pro Modus tabellarisch oder als
-ASCII-Sparkline. Beispiel-Layout:
+**Das ist Mike's bevorzugte Variante** für den Tagestrend. Pro Stunde:
+- Normal = 100 % (Baseline)
+- Diversity Standard / DX als +/− % davon
+- Mit + ohne Rescue als getrennte Spalten
+
+Nur Stunden zeigen wo Normal gemessen hat (sonst fehlt die Baseline).
+
+**Code-Vorlage:**
+
+```python
+import re
+from pathlib import Path
+from collections import defaultdict
+
+DATE = "YYYY-MM-DD"; BAND = "20m"
+ROW_RE = re.compile(r"^\|\s*(\d{2}):(\d{2}):(\d{2})\s*\|\s*(\d+)\s*\|")
+STATION_RE = re.compile(
+    r"^\|\s*(\d{2}):(\d{2}):(\d{2})\s*\|\s*\S+\s*\|\s*(-?\d+)\s*\|\s*(-?\d+)\s*\|"
+)
+
+def collect_per_hour(mode_dir):
+    base = Path(f"statistics/{mode_dir}/{BAND}/FT8")
+    per_h = defaultdict(lambda: [0, 0, 0])  # [n_cycles, sum_st, n_resc]
+    for f in sorted(base.glob(f"{DATE}_*.md")):
+        for line in f.read_text(encoding="utf-8").splitlines():
+            m = ROW_RE.match(line)
+            if m and not line.startswith("|------"):
+                per_h[int(m.group(1))][0] += 1
+                per_h[int(m.group(1))][1] += int(m.group(4))
+    sdir = base / "stations"
+    if sdir.exists():
+        for f in sorted(sdir.glob(f"{DATE}_*.md")):
+            for line in f.read_text(encoding="utf-8").splitlines():
+                m = STATION_RE.match(line)
+                if m:
+                    a1, a2 = int(m.group(4)), int(m.group(5))
+                    if a1 <= -24 and a2 > -24:
+                        per_h[int(m.group(1))][2] += 1
+    return per_h
+
+normal = collect_per_hour("Normal")
+divN   = collect_per_hour("Diversity_Normal")
+divDx  = collect_per_hour("Diversity_Dx")
+
+# Pro Stunde: Normal=100%, Diversity in % davon (mit + ohne Rescue)
+for h in sorted(normal.keys()):
+    n_n, s_n, _ = normal[h]
+    if n_n == 0:
+        continue
+    norm_avg = s_n / n_n
+    # Div Standard
+    if h in divN and divN[h][0] > 0:
+        n, s, r = divN[h]
+        avg, avg_r = s/n, (s+r)/n
+        d_pct = avg/norm_avg*100 - 100
+        d_pct_r = avg_r/norm_avg*100 - 100
+    # ... analog fuer Div Dx, dann Tabelle ausgeben
+```
+
+**Antwort-Format:**
 
 ```
-Stunde | Normal | Div_Std | Div_Dx | Trend
-  05   |  36.9  |  41.0   |  36.2  | morgens noch dünn
-  07   |  46.2  |  50.1   |  42.6  | klassische 20m-Öffnung
-  10   |  46.8  |  59.0   |  49.2  | Diversity-Peak
-  ...
+| Stunde | Normal Ø | DivStd Ø | DivStd % | +Rescue | DivDx Ø | DivDx % | +Rescue |
+|--------|----------|----------|----------|---------|---------|---------|---------|
+|  05    |  36.86   |  41.00   |  +11.2%  | +11.2%  |  36.20  |  -1.8%  |  -1.6%  |
+| Schnitt|          |          |  +9.9%   | +10.0%  |         |  -1.1%  |  -1.0%  |
 ```
 
-Der Tagestrend zeigt Mike, ob Diversity zu bestimmten Tageszeiten besonders viel
-bringt (z.B. um die Skip-Zone) oder gleichmäßig wirkt.
+Schnitt-Zeile am Ende: arithmetisches Mittel der %-Werte über alle Stunden mit Daten.
+
+**Trend-Aussage in der Antwort:**
+- Welche Stunde war der Diversity-Peak?
+- Welche Stunde war negativ (Diversity unter Normal)?
+- Bringt Rescue heute was oder ist Δ zwischen mit/ohne Rescue klein?
+
+---
+
+## 11. Wenn Mike sagt „Tagestrend" (allgemein, ohne Spezifikation)
+
+Defaultet zu Sektion 10 (Stundenschnitt mit Normal=100%). Nur wenn Mike
+explizit „Pooled Mean" oder „Anteil am Tag" sagt → Sektion 8 / 9.
