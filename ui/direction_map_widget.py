@@ -47,6 +47,8 @@ from core.geo import (
 
 COLOR_BG = "#0A0A14"
 COLOR_BG_CENTER = "#0A1030"      # Aurora-Mitte: leichtes Blau
+COLOR_LAND_FILL = "#5A4A2C"      # warmes Sepia/Bronze fuer Land
+COLOR_LAND_FILL_HIGH = "#8B6F47" # heller fuer Mitten-Highlight
 COLOR_COAST_HALO = "#00FFAA"     # Cyan-Halo aussen
 COLOR_COAST_CORE = "#88FFCC"     # Cyan hell innen
 COLOR_RINGS = "#1F2A3A"          # leicht blaeulich statt nur grau
@@ -259,12 +261,7 @@ def _interpolate_color(
 
 
 def load_coastlines() -> list[list[tuple[float, float]]]:
-    """Coastlines aus assets/ne_110m_land_antimeridian_split.geojson laden.
-
-    Returnt Liste von LineStrings (jeder = Liste von (lon, lat)). Bei jedem
-    Fehler (Datei fehlt, Korruption) leere Liste — Karte rendert dann ohne
-    Coastlines, aber stuerzt nicht ab.
-    """
+    """Coastline-LineStrings aus dem Asset (fuer Outline-Render)."""
     try:
         asset_path = (
             Path(__file__).parent.parent / "assets" /
@@ -273,6 +270,20 @@ def load_coastlines() -> list[list[tuple[float, float]]]:
         with open(asset_path) as f:
             data = json.load(f)
         return [[(pt[0], pt[1]) for pt in line] for line in data.get("lines", [])]
+    except (OSError, json.JSONDecodeError, KeyError, TypeError):
+        return []
+
+
+def load_landmasses() -> list[list[tuple[float, float]]]:
+    """Land-Polygone (geschlossene Aussenringe) fuer Globus-Land-Fill."""
+    try:
+        asset_path = (
+            Path(__file__).parent.parent / "assets" /
+            "ne_110m_land_antimeridian_split.geojson"
+        )
+        with open(asset_path) as f:
+            data = json.load(f)
+        return [[(pt[0], pt[1]) for pt in poly] for poly in data.get("polygons", [])]
     except (OSError, json.JSONDecodeError, KeyError, TypeError):
         return []
 
@@ -292,6 +303,7 @@ class MapCanvas(QWidget):
         self._my_locator = my_locator
         self._my_pos = safe_locator_to_latlon(my_locator)
         self._coastlines = load_coastlines()
+        self._landmasses = load_landmasses()
         self._bg_pixmap: QPixmap | None = None
         self._stations: list[StationPoint] = []
         self._sectors: list[SectorBucket] = []
@@ -524,11 +536,47 @@ class MapCanvas(QWidget):
         try:
             self._paint_aurora(painter)
             self._paint_globe_disk(painter)
+            self._paint_landmasses(painter)
             self._paint_coastlines(painter)
             self._paint_compass(painter)
         finally:
             painter.end()
         return pix
+
+    def _paint_landmasses(self, painter: QPainter) -> None:
+        """Land-Polygone als gefuellte Flaechen — gibt dem Globus den klassischen
+        Look mit Land/Wasser-Unterscheidung. Polygone die teilweise auf der
+        Rueckseite liegen werden nicht gerendert (Lücke am Hemisphaeren-Rand
+        wird durch das Wasser-Globus-Hintergrund gefuellt)."""
+        if not self._landmasses:
+            return
+        cx, cy = self._center_px()
+        globe_r = self._radius_px()
+        # Clip auf die Globus-Disk (Land soll nicht ueber den Rand klatschen)
+        painter.save()
+        from PySide6.QtGui import QPainterPath
+        clip = QPainterPath()
+        clip.addEllipse(QPointF(cx, cy), globe_r, globe_r)
+        painter.setClipPath(clip)
+        # Land-Farbe mit subtilem Gradient: heller in Globus-Mitte, dunkler aussen
+        # — gibt 3D-Wirkung wie auf einem echten Globus
+        painter.setPen(Qt.NoPen)
+        land_color = QColor(COLOR_LAND_FILL)
+        painter.setBrush(QBrush(land_color))
+        for poly in self._landmasses:
+            # Alle Punkte projezieren — wenn alle sichtbar, Polygon rendern
+            projected = []
+            all_visible = True
+            for lon, lat in poly:
+                p = self._project(lat, lon)
+                if p is None:
+                    all_visible = False
+                    break
+                dx, dy = p
+                projected.append(QPointF(cx + dx, cy + dy))
+            if all_visible and len(projected) >= 3:
+                painter.drawPolygon(QPolygonF(projected))
+        painter.restore()
 
     def _paint_globe_disk(self, painter: QPainter) -> None:
         """Die sichtbare Halbkugel als gefuellten Kreis: Ozean-Blau mit
@@ -1113,6 +1161,17 @@ class DirectionMapDialog(QDialog):
         self.status_label = QLabel("Bereit. Mausrad = Zoom, ziehen = Globus drehen, Doppelklick = Reset.")
         self.status_label.setStyleSheet("color: #889; padding: 2px 4px;")
         layout.addWidget(self.status_label)
+        # Disclaimer: Lokalisierungs-Genauigkeit
+        self.disclaimer_label = QLabel(
+            "ℹ Stations-Position basiert auf 4-stelligem Maidenhead-Locator (Genauigkeit "
+            "~110 km) bzw. Country-Coords wenn kein Locator bekannt — Punkte koennen "
+            "im Wasser landen oder leicht abweichen. Praezisere Lokalisierung folgt."
+        )
+        self.disclaimer_label.setWordWrap(True)
+        self.disclaimer_label.setStyleSheet(
+            "color: #667; padding: 2px 4px; font-size: 10px; font-style: italic;"
+        )
+        layout.addWidget(self.disclaimer_label)
 
     # ── Toggle-Logik ──────────────────────────────────────
 

@@ -83,6 +83,7 @@ def main() -> int:
         return 1
 
     out_lines: list = []
+    out_polygons: list = []  # Geschlossene Aussenringe fuer Land-Fill (Globus-Look)
     n_features = 0
     n_polygons = 0
     n_splits = 0
@@ -99,7 +100,18 @@ def main() -> int:
         n_features += 1
         for poly in polys:
             n_polygons += 1
-            for ring in poly:  # outer ring + interior holes
+            outer_ring = poly[0] if poly else []
+            # Polygone mit Antimeridian-Crossing splittet das Build-Script in
+            # mehrere Sub-Polygone — fuer Globus-Render alle-Punkte-sichtbar Filter
+            poly_segments = split_at_antimeridian(outer_ring)
+            for seg in poly_segments:
+                # Ring schliessen falls noetig
+                if len(seg) >= 3 and seg[0] != seg[-1]:
+                    seg = seg + [seg[0]]
+                if len(seg) >= 4:
+                    out_polygons.append(seg)
+            # Lines (Coastlines) auch raus geben: alle Ringe (outer + holes)
+            for ring in poly:
                 segments = split_at_antimeridian(ring)
                 if len(segments) > 1:
                     n_splits += 1
@@ -113,16 +125,19 @@ def main() -> int:
         "url": URL,
         "license": "Public Domain (Natural Earth)",
         "n_lines": len(out_lines),
+        "n_polygons": len(out_polygons),
         "lines": out_lines,
+        "polygons": out_polygons,
     }
     with open(out_path, "w") as f:
         json.dump(out, f, separators=(",", ":"))
 
     size = os.path.getsize(out_path)
-    print(f"  Features verarbeitet:  {n_features}")
-    print(f"  Polygone insgesamt:    {n_polygons}")
-    print(f"  Ringe mit AM-Split:    {n_splits}")
-    print(f"  LineStrings im Output: {len(out_lines)}")
+    print(f"  Features verarbeitet:   {n_features}")
+    print(f"  Polygone insgesamt:     {n_polygons}")
+    print(f"  Ringe mit AM-Split:     {n_splits}")
+    print(f"  LineStrings im Output:  {len(out_lines)}")
+    print(f"  Polygone (Land-Fill):   {len(out_polygons)}")
     print(f"  Output: {out_path}  ({size:,} Bytes)")
     return 0
 

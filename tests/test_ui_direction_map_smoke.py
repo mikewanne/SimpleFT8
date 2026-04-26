@@ -63,6 +63,17 @@ def test_load_coastlines_total_points_plausible():
     assert total > 1000, f"nur {total} Coastline-Punkte — Asset zu klein?"
 
 
+def test_load_landmasses_returns_list():
+    from ui.direction_map_widget import load_landmasses
+    polys = load_landmasses()
+    assert isinstance(polys, list)
+    assert len(polys) > 50  # ~128 Land-Polygone erwartet
+    # Jedes Polygon hat >= 4 Punkte, geschlossen (erster = letzter)
+    for p in polys[:5]:
+        assert len(p) >= 4
+        assert p[0] == p[-1], "Polygon muss geschlossen sein"
+
+
 # ── MapCanvas — instantiieren und API ─────────────────────
 
 def test_canvas_instantiate_with_valid_locator(qapp):
