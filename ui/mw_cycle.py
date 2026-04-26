@@ -220,7 +220,8 @@ class CycleMixin:
         # Diversity: gemeinsame Akkumulation mit Antennen-Info
         changed, comparisons = accumulate_stations(
             self._diversity_stations, messages,
-            self._active_qso_targets, antenna=ant)
+            self._active_qso_targets, antenna=ant,
+            slot_duration_s=self.timer.cycle_duration)
 
         # Histogramm + Freq-Suche kommen jetzt aus _refresh_diversity_freq_view
         # (laeuft slot-synchron in _on_cycle_decoded, unabhaengig von messages)
@@ -293,7 +294,8 @@ class CycleMixin:
         if messages:
             changed, _ = accumulate_stations(
                 self._normal_stations, messages,
-                self._active_qso_targets, antenna="")
+                self._active_qso_targets, antenna="",
+                slot_duration_s=self.timer.cycle_duration)
             if changed:
                 self.rx_panel.table.setRowCount(0)
                 for m in self._normal_stations.values():

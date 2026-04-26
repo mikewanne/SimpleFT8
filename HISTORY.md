@@ -869,3 +869,43 @@ statistics/ gespeichert. Skaliert sonst nicht (Aufwand fuer PDF-Auswertung).
 - Diversity_Normal: 2 Tage, 364 Zyklen
 - Diversity_Dx: 4 Tage, 2469 Zyklen
 - ANT2-Win-Rate Doppelempfang: 79% (Std), 86% (Dx) — **Diversity wirkt auch bei resonanter ANT1!**
+
+## 2026-04-26 v0.64 — Aging-Bug-Fix: Aging in Slots statt Sekunden
+
+**Problem (DeepSeek-Befund):** Aging-Schwellen in `core/station_accumulator.py`
+waren in fixen Sekunden hartkodiert (75/150/300s normal/active/CQ). Bei
+verschiedenen Modi ergab das stark unterschiedliche Slot-Anzahlen:
+
+| Modus | Slot-Dauer | Alte Aging-Slots | Problem |
+|-------|-----------|------------------|---------|
+| FT8 | 15.0s | 5/10/20 | OK (Design-Wert) |
+| FT4 | 7.5s | 10/20/40 | doppelt zu lang |
+| FT2 | 3.8s | ~20/40/79 | DEUTLICH zu lang — Liste verstopft! |
+
+Bei FT2-Betrieb behielt die Liste ~80 Slots alte Eintraege. Konsequenz:
+veraltete Decodes ueberlagerten aktuelle Aktivitaet.
+
+**Fix:**
+- `core/station_accumulator.py`: Konstanten in SLOTS, modus-konsistent.
+  - `AGING_SLOTS_NORMAL    = 7`   (~3.5 verpasste Sende-Zyklen)
+  - `AGING_SLOTS_ACTIVE    = 14`
+  - `AGING_SLOTS_CQ_CALLER = 20`
+- Neuer Helper `_aging_limit_seconds(call, msg, active_qso_targets, slot_duration_s)`.
+- `remove_stale(...)` + `accumulate_stations(...)` um Parameter `slot_duration_s` erweitert
+  (Default 15.0 fuer Rueckwaerts-Test-Kompatibilitaet).
+- `ui/mw_cycle.py`: 2 Aufrufstellen uebergeben jetzt `self.timer.cycle_duration`.
+
+**DeepSeek-Validierung (continuation_id 625b1dab):**
+- Werte 7/14/20 statt 5/10/20: meine erste Idee waere auf FT4 zu aggressiv
+  gewesen (RR73-Hoeflichkeits-Sequenz braucht 6-8 Slots).
+- Architektur-Option (b) "Parameter durchreichen" einstimmig empfohlen
+  gegenueber globalen Settings oder Hardcoding.
+
+**Modus-Wechsel-Robustheit:** `_last_heard` bleibt Sekunden-Timestamp. Beim
+Vergleich wird die Aging-Schwelle aus AKTUELLER Slot-Dauer berechnet.
+FT8→FT2-Wechsel raeumt schnell auf — bewusstes Verhalten.
+
+**Tests:** 220 grün (218 + 2 neue).
+- `test_accumulator_aging_ft2_short_window` — bei FT2 nach 30s weg, bei FT8 nicht.
+- `test_accumulator_aging_mode_switch_robustness` — Stationen verschwinden korrekt nach Modus-Wechsel.
+- `test_accumulator_aging` angepasst (110s statt 80s wegen 7-Slot-Schwelle bei FT8).

@@ -784,18 +784,22 @@ def test_accumulator_new_station():
 
 
 def test_accumulator_aging():
-    """Nicht-CQ-Stationen aelter als 75s werden entfernt (CQ-Rufer bekommen 300s)."""
+    """Nicht-CQ-Stationen aelter als 7 Slots (FT8: 105s) werden entfernt.
+
+    v0.64: Aging in Slots statt Sekunden. FT8-Default = 7×15s = 105s.
+    """
     import time
     from core.station_accumulator import accumulate_stations, remove_stale
     from core.message import parse_ft8_message
     stations = {}
-    # QSO-Partner (kein CQ) — sollte nach 75s weg sein
+    # QSO-Partner (kein CQ) — sollte nach 7 FT8-Slots (105s) weg sein
     msgs = [parse_ft8_message("DA1MHH R3EDI -10", snr=-15, freq_hz=1000, dt=0.1)]
     accumulate_stations(stations, msgs, set())
     assert "R3EDI" in stations
     assert stations["R3EDI"].is_cq is False
-    stations["R3EDI"]._last_heard = time.time() - 80
-    removed = remove_stale(stations, set())
+    # 110s (>105s Limit) → muss entfernt werden
+    stations["R3EDI"]._last_heard = time.time() - 110
+    removed = remove_stale(stations, set(), slot_duration_s=15.0)
     assert "R3EDI" in removed
     assert "R3EDI" not in stations
 
@@ -848,6 +852,54 @@ def test_accumulator_diversity_antenna():
     msg2 = [parse_ft8_message("CQ R3EDI KO82", snr=-10, freq_hz=1000, dt=0.1)]
     accumulate_stations(stations, msg2, set(), antenna="A2")
     assert "A2" in stations["R3EDI"].antenna, f"A2 sollte dominieren, got {stations['R3EDI'].antenna}"
+
+
+def test_accumulator_aging_ft2_short_window():
+    """v0.64: Bei FT2 (3.8s/Slot) ist Aging deutlich kuerzer als bei FT8.
+
+    Vorher (Sekunden hartcodiert): 75s = 20 FT2-Slots → Liste verstopft.
+    Jetzt: 7 Slots = 26.6s. Eine Station die vor 30s gehoert wurde ist weg.
+    """
+    import time
+    from core.station_accumulator import accumulate_stations, remove_stale
+    from core.message import parse_ft8_message
+    stations = {}
+    msgs = [parse_ft8_message("DA1MHH R3EDI -10", snr=-15, freq_hz=1000, dt=0.1)]
+    accumulate_stations(stations, msgs, set(), slot_duration_s=3.8)
+    assert "R3EDI" in stations
+    # 30s alt: bei FT2 (7×3.8=26.6s) → Limit ueberschritten → weg
+    stations["R3EDI"]._last_heard = time.time() - 30.0
+    removed = remove_stale(stations, set(), slot_duration_s=3.8)
+    assert "R3EDI" in removed, "Bei FT2 muss Station nach 30s weg sein (vorher 75s)"
+    # Gegenprobe: bei FT8 (7×15=105s) waere 30s zu kurz → Station bleibt
+    stations2 = {}
+    accumulate_stations(stations2, msgs, set(), slot_duration_s=15.0)
+    stations2["R3EDI"]._last_heard = time.time() - 30.0
+    removed2 = remove_stale(stations2, set(), slot_duration_s=15.0)
+    assert "R3EDI" not in removed2, "Bei FT8 muss Station nach 30s noch da sein (Limit 105s)"
+
+
+def test_accumulator_aging_mode_switch_robustness():
+    """v0.64: Modus-Wechsel FT8→FT2 mit alten _last_heard Timestamps.
+
+    Stationen aus FT8-Zeit (z.B. vor 50s gehoert) werden nach Wechsel auf FT2
+    schnell aus der Liste entfernt — das ist das gewuenschte Verhalten.
+    Bei FT2 ist 50s = 13 Slots → ueber dem 7-Slot-Limit.
+    """
+    import time
+    from core.station_accumulator import accumulate_stations, remove_stale
+    from core.message import parse_ft8_message
+    stations = {}
+    # In FT8 gehoert (Default 15s slot)
+    msgs = [parse_ft8_message("DA1MHH R3EDI -10", snr=-15, freq_hz=1000, dt=0.1)]
+    accumulate_stations(stations, msgs, set(), slot_duration_s=15.0)
+    # 50s vergehen — bei FT8 noch nicht weg (50s < 105s)
+    stations["R3EDI"]._last_heard = time.time() - 50.0
+    removed_ft8 = remove_stale({"R3EDI": stations["R3EDI"]}, set(), slot_duration_s=15.0)
+    assert "R3EDI" not in removed_ft8, "Bei FT8 noch da (50s < 105s)"
+    # Wechsel auf FT2: 50s > 26.6s Limit → Station fliegt raus
+    removed_ft2 = remove_stale(stations, set(), slot_duration_s=3.8)
+    assert "R3EDI" in removed_ft2, "Nach Wechsel auf FT2 muss Station weg sein (50s > 26.6s)"
 
 
 # ── Even/Odd Slot-Berechnung ──────────────────────────────────────────────────
