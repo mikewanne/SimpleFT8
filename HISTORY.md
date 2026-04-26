@@ -712,3 +712,21 @@ Risiko: Frequenzsprung mitten im laufenden QSO.
 **DeepSeek-Review:** kritisch geprueft, "Critical Race Condition" verworfen
 (das Pattern ist konsistent mit bestehendem `tick_slot()` — Lock haelt der Caller).
 Andere Issues betrafen Pre-existing Code, nicht den Fix.
+
+## 2026-04-26 v0.60 — Info-Box Normal-Preset alt (Punkt 1)
+
+**Idee (Mike):** Beim Wechsel zum Normal-Modus soll ein Hinweis erscheinen wenn
+das letzte Einmessen lange her ist. KALIBRIEREN-Button bleibt manuell —
+nur eine Info-Box, kein Auto-Eingriff. Diversity bleibt das Alleinstellungs-
+merkmal mit der vollen Auto-Pipeline.
+
+**Implementation:**
+- `ui/main_window.py:_init_radio_state()`: neues Set `_normal_preset_warned_bands`
+  (pro Session/Band einmal warnen, kein Spam bei jedem Bandwechsel).
+- `ui/mw_radio.py:_apply_normal_mode()`: bei `age_days > 30` → Info-Dialog mit
+  Empfehlung den KALIBRIEREN-Button zu druecken. Bestehende 7-Tage-Markierung
+  in `dx_info` (orange "Xd alt!") bleibt unveraendert.
+- `_show_normal_preset_age_info()`: QMessageBox mit dem Dark-Theme der App.
+- Aufrufstelle: `_apply_normal_mode()` wird bei App-Start, Bandwechsel und
+  Modus-Wechsel zu Normal aufgerufen — Dialog greift an allen drei Stellen.
+- Tests: 213 grün (UI-Dialog ohne Tests — manuelle Verifikation am Radio).

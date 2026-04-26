@@ -958,6 +958,7 @@ class RadioMixin:
         gain = preset.get("gain", PREAMP_PRESETS.get(band, 10))
         measured_str = preset.get("measured", "")
 
+        age_days = None
         if measured_str:
             import datetime
             try:
@@ -981,6 +982,41 @@ class RadioMixin:
             self.radio.set_tx_antenna("ANT1")
             self.radio.set_rfgain(gain)
         print(f"[Normal] ANT1, Gain {gain} dB ({'kalibriert' if measured_str else 'Standard'})")
+
+        # Info-Box bei sehr alter Kalibrierung (>30 Tage) — pro Band einmal pro Session
+        if age_days is not None and age_days > 30:
+            warned = getattr(self, '_normal_preset_warned_bands', None)
+            if warned is not None and band not in warned:
+                warned.add(band)
+                self._show_normal_preset_age_info(band, age_days, measured_str)
+
+    def _show_normal_preset_age_info(self, band: str, age_days: int, measured_str: str):
+        """Info-Dialog: Normal-Preset >30 Tage alt — KALIBRIEREN-Button empfohlen."""
+        from PySide6.QtWidgets import QMessageBox
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Kalibrierung empfohlen")
+        msg.setIcon(QMessageBox.Icon.Information)
+        msg.setText(
+            f"Normal-Modus {band}: letzte Kalibrierung vor {age_days} Tagen "
+            f"({measured_str})."
+        )
+        msg.setInformativeText(
+            "Eine neue Einmessung wird empfohlen.\n"
+            "Klicke dazu im Kontroll-Panel auf den KALIBRIEREN-Button."
+        )
+        msg.setStandardButtons(QMessageBox.StandardButton.Ok)
+        msg.setStyleSheet("""
+            QMessageBox { background-color: #1a1a2e; }
+            QLabel { color: #CCCCCC; font-family: Menlo; font-size: 13px; }
+            QPushButton {
+                background-color: #2a2a3e; color: #CCCCCC;
+                border: 1px solid #444; border-radius: 5px;
+                font-family: Menlo; font-size: 13px;
+                padding: 6px 18px; min-width: 80px;
+            }
+            QPushButton:hover { background-color: #3a3a5e; }
+        """)
+        msg.exec()
 
     def _log_gain_result(self, r: dict, band: str, ft_mode: str) -> None:
         """Append-only Logging jeder erfolgreichen Gain-Messung in
