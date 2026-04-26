@@ -17,25 +17,27 @@ SimpleFT8 ist ein eigenstaendiger FT8/FT4 Client, der dein FlexRadio direkt uebe
 
 ---
 
-## Was macht SimpleFT8 anders?
+## Warum gibt es SimpleFT8?
 
-Anders als WSJT-X oder aehnliche Clients, die SmartSDR benoetigen, kommuniziert SimpleFT8 **direkt** mit deinem FlexRadio ueber TCP (Port 4992) und streamt VITA-49 Audio ueber UDP (Port 4991). Das ermoeglicht:
+SimpleFT8 ist für den Feierabend-Funk entstanden. Kein stundenlanges Konfigurieren, kein manuelles Antennen-Rangieren, kein Dauer-Blick auf den ALC-Pegel. Die Software spricht direkt mit dem FlexRadio (TCP Port 4992 + VITA-49 UDP 4991), wählt automatisch die bessere von zwei Antennen aus, regelt die Sendeleistung im geschlossenen Regelkreis und sucht sich selbstständig eine freie CQ-Frequenz. Mehrere Anrufer landen in einer Warteschlange und werden nacheinander bedient. Dazu gibt's eine Live-Karte mit drehbarem Globus, die zeigt, wo man gehört wird — und ein Locator-Cache, der Stationen auch nach einem Neustart nicht vergisst. Einfach anschalten, ein paar QSOs machen, Feierabend.
+
+Was die Software unter der Haube hat:
 
 - **Temporale Polarisations-Diversity**: Wechsel zwischen zwei Antennen pro FT8-Zyklus, Stationen beider Antennen werden akkumuliert
 - **Automatische TX-Leistungsregelung**: Geschlossener Regelkreis haelt die tatsaechliche Ausgangsleistung auf dem eingestellten Wert
-- **Komplett eigenstaendiger Betrieb**: Kein SmartSDR, keine virtuellen Audiokabel, kein DAX-Panel
+- **Komplett eigenstaendiger Betrieb**: Direkt am FlexRadio, kein extra GUI noetig, keine virtuellen Audiokabel
 
 ### Die drei Empfangsmodi — kurz erklärt
 
 SimpleFT8 kann mit einer oder zwei Antennen empfangen. Du hast drei Modi zur Auswahl:
 
-- **Normal** — arbeitet wie jede andere FT8-Software mit einer Antenne. Perfekt, um zu sehen wie gut dein eigener Aufbau im Vergleich läuft.
+- **Normal** — klassisches Single-Antenna-Setup. Eine Antenne, alles wie gewohnt.
 - **Diversity Standard (für die Masse)** — mit zwei Antennen sucht das System in jeder Runde automatisch die bessere aus. Das Ergebnis: du hörst deutlich mehr Stationen auf einmal.
 - **Diversity DX (für die Leisen)** — auch mit zwei Antennen, aber hier sucht die Software gezielt nach der Antenne, die ganz schwache Signale besser einfängt. So findest du weit entfernte Stationen, die sonst unter dem Rauschen verschwinden.
 
 | Modus | Antennen | Was er tut | Wofür |
 |-------|----------|-----------|-------|
-| **Normal** | 1 | Empfängt wie gewohnt | Vergleich mit anderer Software |
+| **Normal** | 1 | Empfängt wie gewohnt | Vergleichsbasis |
 | **Diversity Standard** | 2 | Wählt die Antenne mit den meisten Stationen | Die Masse — möglichst viele hören |
 | **Diversity DX** | 2 | Wählt die Antenne die schwache Signale besser hört | Die Leisen — weit entfernte Stationen |
 
@@ -45,17 +47,15 @@ SimpleFT8 kann mit einer oder zwei Antennen empfangen. Du hast drei Modi zur Aus
 
 ### Praxis-Ergebnisse
 
-Kontrollierter Test auf 40m, gleiche Hardware (FLEX-8400M), 2 Minuten Abstand:
+Live-Auswertung 40m FT8, 4 Messtage, 22.696 Zyklen (Pooled Mean über alle Zyklen, alle Tageszeiten):
 
-| Messwert | SimpleFT8 Normal | SimpleFT8 Diversity |
-|----------|:---:|:---:|
-| 40m, gute Bedingungen | 27 | **37** (+37%) |
-| 40m, schlechte Bedingungen (4 min) | 9 | **13** (+44%) |
-| PSKReporter Spots (TX, 15m) | -- | **190** |
-| Weitester RX | -- | Kiribati ~13.000 km |
-| Weitester TX | -- | Indonesien 11.996 km |
+| Modus | vs Normal (ohne Rescue) | vs Normal (inkl. Rescue) |
+|-------|:---:|:---:|
+| **Diversity Standard** | **+88%** | **+122%** |
+| **Diversity DX** | **+124%** | **+158%** |
 
-Siehe [Test-Screenshots und Methodik](docs/DIVERSITY_DE.md) fuer Details.
+*Rescue = Stationen, die ANT1 nicht decodieren konnte (≤ −24 dB), aber ANT2 rettete.*
+Voller Bericht mit Diagrammen: [auswertung/Auswertung-40m-FT8.pdf](auswertung/Auswertung-40m-FT8.pdf).
 
 ---
 

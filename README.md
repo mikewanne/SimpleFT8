@@ -6,7 +6,7 @@
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![Platform: macOS](https://img.shields.io/badge/platform-macOS-lightgrey.svg)](https://www.apple.com/macos/)
 [![Ham Radio](https://img.shields.io/badge/ham--radio-FT8%2FFT4%2FFT2-orange.svg)](https://www.physics.princeton.edu/pulsar/k1jt/wsjtx.html)
-[![Tests](https://img.shields.io/badge/tests-159%20passed-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-407%20passed-brightgreen.svg)]()
 
 > **No more manual ALC babysitting, no missed replies, no guessing the best antenna or frequency.**
 > SimpleFT8 automates your entire FT8/FT4/FT2 workflow with closed-loop power control, dual-mode diversity scoring, automatic CQ frequency optimization, and intelligent caller queuing.
@@ -22,18 +22,15 @@
 <a name="english"></a>
 ## English
 
-### Why SimpleFT8 vs. WSJT-X?
+### Why SimpleFT8?
 
-| Feature | WSJT‑X / JS8Call | SimpleFT8 |
-|:---|:---|:---|
-| **Modes** | FT8 + FT4 | **FT8 + FT4 + FT2** (Decodium-compatible) |
-| **TX Power Control** | Manual ALC monitoring | **Automatic closed‑loop** FWDPWR feedback |
-| **Antenna Selection** | Manual switching | **Dual-mode Diversity** (Standard + DX scoring) |
-| **CQ Frequency** | Manual waterfall scan | **Smart CQ** in 800–2000 Hz sweet spot |
-| **Simultaneous Callers** | Second station ignored | **Queued & answered** (Grid + Report accepted) |
-| **SmartSDR Required** | Yes (most clients) | **No — direct VITA‑49 + TCP** standalone |
-| **Time Correction** | External NTP only | **DT auto-correction** per mode, stored & loaded |
-| **RX Filter** | Manual | **Auto-switching** per mode (3100/4000 Hz) |
+SimpleFT8 was built for the after-work operator. No endless configuration,
+no manual antenna switching, no staring at ALC levels. It talks directly to
+the FlexRadio, automatically picks the better of two antennas, regulates TX
+power in a closed loop, and finds a clear CQ frequency on its own. Multiple
+callers are queued and answered in turn. There's a live map with a rotatable
+globe showing where you're being heard, and a locator cache that remembers
+stations across app restarts. Fire it up, make a few QSOs, call it a day.
 
 ### Key Innovations
 
@@ -56,18 +53,6 @@
 - **RR73 Courtesy Repeat** — After QSO complete, if the other station keeps sending R-Report (didn't receive our RR73), we resend RR73 automatically (max 2×).
 
 - **Even/Odd Slot Display** — [E]/[O] tags in both RX list and QSO panel. Immediately visible which slot each station uses and which slot we transmit in.
-
-### Real-World Performance
-
-Controlled test on 40m, same hardware (FLEX-8400M), 2 minutes apart:
-
-| Metric | SimpleFT8 Normal | SimpleFT8 Diversity |
-|--------|:---:|:---:|
-| Stations decoded (good conditions) | 27 | **37 (+37%)** |
-| Stations decoded (poor conditions, 4 min) | 9 | **13 (+44%)** |
-| PSKReporter Spots (TX, 15 min) | — | **190** |
-| Farthest RX | — | Kiribati ~13,000 km |
-| Farthest TX | — | Indonesia 11,996 km |
 
 ### Live Diversity Analysis — Current Data *(collection in progress)*
 
@@ -126,11 +111,13 @@ Controlled test on 40m, same hardware (FLEX-8400M), 2 minutes apart:
 | ![Antenna Overview](docs/fotos/Gesamt.png) | ![Antenna Annotated](docs/fotos/Gesamt_Farbe.png) |
 | Full view — gutter downspout (ANT2) on the left, feed point of ANT1 upper right at the dormer. | Yellow = Kelemen DP-201510 (vertical half-wave dipole, green dot = feed point). Red = complete gutter path (roof → downspout → entrance). |
 
-**ANT1 — Kelemen DP-201510 (fan dipole for 20m / 15m / 10m)**
-Feed point at the dormer window, 3rd floor, through a 1:1 balun (matching transformer
-between balanced dipole and coaxial cable). One arm runs diagonally up to the roof
-ridge, the other diagonally down via the porch roof to the balcony — a vertically-oriented
-multiband half-wave dipole with the feed point at the center.
+**ANT1 — Kelemen DP-201510 (multiband trap dipole for 20m / 15m / 10m)**
+A center-fed multiband dipole with coaxial trap resonators (Sperrkreise) — *not* a
+fan dipole. Each band uses only the wire section up to the corresponding trap, all
+three bands resonant on 50 Ω directly via a 1:1 balun (no tuner needed). Feed point
+at the dormer window, 3rd floor: one arm runs diagonally up to the roof ridge, the
+other diagonally down via the porch roof to the balcony — a vertically-oriented
+half-wave dipole with the feed point at the center.
 *On 40m this antenna operates off its design band — see interpretation note above.*
 
 **ANT2 — House gutter (random wire antenna, ~15m)**
@@ -157,7 +144,7 @@ polarization, building-coupled mounting — the ideal complement for diversity r
 
 ### All Features
 
-**Tested & Working (v0.26):**
+**Tested & Working (v0.67):**
 - ✅ **FT8 / FT4 / FT2 modes** — all three with dedicated frequencies, auto RX filter, mode-dependent timing
 - ✅ **Auto TX Power Regulation**: Closed-loop FWDPWR feedback, clipping protection, per-band calibration
 - ✅ **Dual-Mode Diversity**: Standard (station count) + DX (weak signal count), 8% threshold, 70:30/50:50
@@ -173,7 +160,9 @@ polarization, building-coupled mounting — the ideal complement for diversity r
 - ✅ **QSO State Machine**: Hunt + CQ mode, retry logic, ADIF 3.1.7 logging
 - ✅ **Integrated Logbook**: Search, DXCC counter, QSO detail overlay, delete
 - ✅ **Help Dialog**: Built-in feature docs (DE + EN) via ? button in status bar
-- ✅ **162 Unit Tests**: QSO, diversity patterns, DT, propagation, OMNI-TX, ADIF, histograms
+- ✅ **Direction Map (v0.66)**: Live azimuthal/orthographic projection with rotatable globe, 16-sector aggregation, RX antenna color-coding, TX mode with PSK-Reporter integration. Coastlines + sepia land fill, glowing stations.
+- ✅ **Persistent Locator Cache (v0.67)**: JSON-backed locator database (`~/.simpleft8/locator_cache.json`) — collects locators from CQ decodes, PSK-Reporter spots, and ADIF imports with source priority. Stations stay precisely located across app restarts; `rx_panel` shows exact km without `~` prefix once a locator is known.
+- ✅ **407 Unit Tests**: QSO, diversity patterns, DT, propagation, OMNI-TX, ADIF, histograms, locator-DB, threading
 - ✅ **Station Statistics**: Per-cycle logging (Normal + Diversity), 6-cycle warm-up exclusion. Raw Markdown data, no in-file summaries — analyzed by `scripts/generate_plots.py`.
 - ✅ **Diversity Analysis Plots**: `python3 scripts/generate_plots.py` → `auswertung/` — dark-theme PNGs: station timeline (Normal vs Diversity) + ANT2 wins + Rescue-Events per hour. [→ Aktuelle Auswertungen](auswertung/)
 - ✅ **Per-Station SNR Logging**: Every A1↔A2 comparison logged with both SNR values, Δ dB, winner and ★ Saved-Event when one antenna is below FT8 decode threshold (−24 dB) and the other above. Proves "ANT2 made this QSO possible."
@@ -244,8 +233,7 @@ SimpleFT8/
 ├── docs/explained/               # 10 feature docs (5 × DE + EN)
 ├── scripts/generate_plots.py     # Auswertungs-Script: statistics/ → auswertung/ PNGs
 ├── auswertung/                   # Generierte Diagramme (stationen_*.png, diversity_*.png)
-├── tests/test_modules.py         # 116 unit tests
-└── tests/test_patterns.py        # 16 pattern tests (diversity + OMNI-TX)
+└── tests/                        # 407 unit tests (Locator-DB, Diversity, QSO, Threading, ...)
 ```
 
 ### Radio Compatibility
@@ -273,18 +261,17 @@ MIT License (c) 2026 DA1MHH (Mike Hammerer)
 <a name="deutsch"></a>
 ## Deutsch
 
-### Warum SimpleFT8 statt WSJT-X?
+### Warum gibt es SimpleFT8?
 
-| Funktion | WSJT‑X / JS8Call | SimpleFT8 |
-|:---|:---|:---|
-| **Modi** | FT8 + FT4 | **FT8 + FT4 + FT2** (Decodium-kompatibel) |
-| **TX‑Leistungsregelung** | Manuelles ALC‑Monitoring | **Automatischer Regelkreis** mit FWDPWR‑Feedback |
-| **Antennenwahl** | Manuelles Umschalten | **Dual-Mode Diversity** (Standard + DX Scoring) |
-| **CQ‑Frequenzwahl** | Manueller Wasserfall‑Scan | **Smart CQ** im 800–2000 Hz Sweet Spot |
-| **Gleichzeitige Anrufer** | Zweite Station ignoriert | **Warteliste** (Grid + Report akzeptiert) |
-| **SmartSDR erforderlich** | Ja (die meisten Clients) | **Nein — direkt VITA‑49 + TCP** |
-| **Zeitkorrektur** | Nur externes NTP | **DT-Autokorrektur** pro Modus, gespeichert |
-| **RX-Filter** | Manuell | **Automatisch** pro Modus (3100/4000 Hz) |
+SimpleFT8 ist für den Feierabend-Funk entstanden. Kein stundenlanges
+Konfigurieren, kein manuelles Antennen-Rangieren, kein Dauer-Blick auf den
+ALC-Pegel. Die Software spricht direkt mit dem FlexRadio, wählt automatisch
+die bessere von zwei Antennen aus, regelt die Sendeleistung im geschlossenen
+Regelkreis und sucht sich selbstständig eine freie CQ-Frequenz. Mehrere
+Anrufer landen in einer Warteschlange und werden nacheinander bedient. Dazu
+gibt's eine Live-Karte mit drehbarem Globus, die zeigt, wo man gehört wird —
+und ein Locator-Cache, der Stationen auch nach einem Neustart nicht vergisst.
+Einfach anschalten, ein paar QSOs machen, Feierabend.
 
 ### Live Diversity Auswertung — Aktuelle Daten *(Datensammlung läuft)*
 
@@ -344,11 +331,13 @@ MIT License (c) 2026 DA1MHH (Mike Hammerer)
 | ![Antennenübersicht](docs/fotos/Gesamt.png) | ![Antenne annotiert](docs/fotos/Gesamt_Farbe.png) |
 | Gesamtansicht — Regenrinnen-Fallrohr (ANT2) links, Einspeisepunkt ANT1 oben rechts an der Dachgaube. | Gelb = Kelemen DP-201510 (vertikal gespannter Halbwellendipol, grüner Punkt = Einspeisepunkt). Rot = vollständiger Regenrinnen-Verlauf (Dachkante → Fallrohr → Hauseingang). |
 
-**ANT1 — Kelemen DP-201510 (Fächer-Dipol für 20m / 15m / 10m)**
-Einspeisepunkt an der Dachgaube im 3. OG, gespeist über einen 1:1-Balun (Anpassglied
-zwischen symmetrischem Dipol und Koaxialkabel). Ein Arm führt schräg nach oben zur
-Dachspitze, der andere schräg nach unten über das Vordach zum Balkon — klassische
-vertikal gespannter Mehrband-Halbwellendipol mit Einspeisepunkt in der Mitte.
+**ANT1 — Kelemen DP-201510 (Multiband-Sperrkreisdipol für 20m / 15m / 10m)**
+Ein zentral gespeister Multiband-Dipol mit koaxialen Sperrkreisen (Trap-Dipol) —
+*kein* Fächer-Dipol. Pro Band wirkt nur der Drahtabschnitt bis zum jeweils
+resonanten Sperrkreis, alle drei Bänder direkt 50 Ω über einen 1:1-Balun (kein
+Tuner nötig). Einspeisepunkt an der Dachgaube im 3. OG: ein Arm führt schräg
+nach oben zur Dachspitze, der andere schräg nach unten über das Vordach zum
+Balkon — vertikal gespannter Halbwellendipol mit Einspeisepunkt in der Mitte.
 *Auf 40m arbeitet diese Antenne außerhalb ihres Auslegungsbandes — siehe Interpretationshinweis oben.*
 
 **ANT2 — Regenrinne des Hauses (Zufalls-Längenantenne, ~15m)**
@@ -383,7 +372,7 @@ andere Polarisierung, gebäudegebundene Befestigung — die ideale Ergänzung f�
 
 ### Alle Funktionen
 
-**Getestet & funktionsfaehig (v0.26):**
+**Getestet & funktionsfaehig (v0.67):**
 - ✅ **FT8 / FT4 / FT2** — alle drei Modi mit eigenen Frequenzen, Auto-RX-Filter, modus-abhaengigem Timing
 - ✅ **Auto TX-Leistungsregelung**: Regelkreis mit FWDPWR-Feedback, Clipping-Schutz
 - ✅ **Dual-Mode Diversity**: Standard (Stationsanzahl) + DX (schwache Signale), 8% Schwelle
@@ -399,7 +388,9 @@ andere Polarisierung, gebäudegebundene Befestigung — die ideale Ergänzung f�
 - ✅ **QSO-Zustandsmaschine**: Hunt + CQ, Retry, ADIF 3.1.7
 - ✅ **Logbuch**: Suche, DXCC, Detail-Overlay, Loeschen
 - ✅ **Hilfe-Dialog**: Feature-Doku (DE + EN) via ? Button in Statusleiste
-- ✅ **162 Unit Tests**: QSO, Diversity-Patterns, DT, Propagation, OMNI-TX, ADIF, Histogramme
+- ✅ **Richtungs-Karte (v0.66)**: Live-Karte mit drehbarem Globus (Orthographic-Projection), 16 Richtungs-Sektoren, RX-Antennen-Farbcodierung, TX-Modus mit PSK-Reporter-Anbindung. Coastlines + sepia Landflächen, leuchtende Stationen.
+- ✅ **Persistenter Locator-Cache (v0.67)**: JSON-Datei (`~/.simpleft8/locator_cache.json`) sammelt Locators aus CQ-Decodes, PSK-Reporter-Spots und ADIF-Imports mit Source-Priorität. Stationen bleiben über App-Restarts präzise lokalisiert; `rx_panel` zeigt exakte km ohne `~`-Präfix sobald ein Locator bekannt ist.
+- ✅ **407 Unit Tests**: QSO, Diversity-Patterns, DT, Propagation, OMNI-TX, ADIF, Histogramme, Locator-DB, Threading
 - ✅ **Stations-Statistik**: Pro-Zyklus Logging (Normal + Diversity), 6-Zyklen Warmup-Ausschluss. Rohdaten im Markdown, keine In-File-Zusammenfassungen — Auswertung via `scripts/generate_plots.py`.
 - ✅ **Diversity Auswertungs-Diagramme**: `python3 scripts/generate_plots.py` → `auswertung/` — Dark-Theme PNGs: Stationen-Zeitverlauf (Normal vs Diversity) + ANT2-Wins + Rescue-Events. [→ Aktuelle Auswertungen](auswertung/)
 - ✅ **Per-Station SNR-Logging**: Jeder A1↔A2 Vergleich wird mit beiden SNR-Werten, Δ dB, Gewinner und ★ Saved-Event geloggt — wenn eine Antenne unter der FT8-Dekodierschwelle (−24 dB) liegt und die andere darüber. Beweist: "ANT2 hat dieses QSO erst möglich gemacht."
@@ -462,7 +453,7 @@ SimpleFT8/
 │   ├── help_dialog.py            # Feature-Doku (DE/EN)
 │   └── ...                       # Control Panel, RX, QSO, Logbuch
 ├── docs/explained/               # 10 Feature-Docs (5 × DE + EN)
-└── tests/                        # 159 unit tests (test_modules.py + test_patterns.py)
+└── tests/                        # 407 unit tests (Locator-DB, Diversity, QSO, Threading, ...)
 ```
 
 ### Radio-Kompatibilitaet
