@@ -2,10 +2,12 @@
 
 import time
 
+from pathlib import Path
+
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel,
     QLineEdit, QSpinBox, QDoubleSpinBox, QPushButton, QGroupBox,
-    QComboBox, QMessageBox, QToolButton,
+    QComboBox, QMessageBox, QToolButton, QFileDialog,
     QTableWidget, QTableWidgetItem, QHeaderView,
 )
 from PySide6.QtCore import Qt, QTimer
@@ -233,6 +235,25 @@ class SettingsDialog(QDialog):
         form3.addRow("", self.debug_console_cb)
         layout.addWidget(ft8)
 
+        # ── Datenexport (Diversity-Vergleichsdaten als CSV) ──────────
+        export_box = QGroupBox("Datenexport")
+        export_lay = QVBoxLayout(export_box)
+        export_lbl = QLabel(
+            "Exportiert die Antennen-Vergleichsdaten (ANT1 vs ANT2 SNR pro "
+            "Station) als CSV-Dateien. Pro Band und Modus eine Datei. "
+            "Geeignet für Excel, Pandas, R oder eigene Auswertungen."
+        )
+        export_lbl.setWordWrap(True)
+        export_lbl.setStyleSheet("color: #888; padding: 0 0 6px 0;")
+        export_lay.addWidget(export_lbl)
+        export_btn_row = QHBoxLayout()
+        self._export_csv_btn = QPushButton("Diversity-Daten exportieren …")
+        self._export_csv_btn.clicked.connect(self._on_export_csv_clicked)
+        export_btn_row.addWidget(self._export_csv_btn)
+        export_btn_row.addStretch()
+        export_lay.addLayout(export_btn_row)
+        layout.addWidget(export_box)
+
         # ── Buttons ───────────────────────────────────────────────────
         btn_row = QHBoxLayout()
         btn_reset = QPushButton("Grundeinstellungen")
@@ -440,3 +461,64 @@ class SettingsDialog(QDialog):
         for w, btn in self._tune_btns.items():
             btn.setChecked(w == 10)
         self.diversity_cycles.setCurrentIndex(0)  # 80 Zyklen
+
+    def _on_export_csv_clicked(self):
+        """CSV-Export der Diversity-Daten — User waehlt Ziel-Verzeichnis."""
+        # Default: zuletzt genutztes Export-Verzeichnis oder ~/Documents
+        last_dir = self.settings.get("csv_export_dir", "")
+        if not last_dir or not Path(last_dir).is_dir():
+            last_dir = str(Path.home() / "Documents")
+
+        chosen = QFileDialog.getExistingDirectory(
+            self, "Ziel-Verzeichnis für CSV-Export wählen",
+            last_dir,
+            QFileDialog.Option.ShowDirsOnly
+        )
+        if not chosen:
+            return  # User hat abgebrochen
+
+        # Pfad merken fuer naechsten Aufruf
+        self.settings.set("csv_export_dir", chosen)
+        self.settings.save()
+
+        # Export starten — laeuft im GUI-Thread (typisch 200-500ms, kein QThread noetig)
+        self._export_csv_btn.setEnabled(False)
+        self._export_csv_btn.setText("Exportiere …")
+        try:
+            from scripts.export_diversity_csv import export_all
+            files_written, total_rows, paths = export_all(Path(chosen))
+        except Exception as e:
+            QMessageBox.critical(
+                self, "Export-Fehler",
+                f"Beim Export ist ein Fehler aufgetreten:\n\n{e}"
+            )
+            return
+        finally:
+            self._export_csv_btn.setEnabled(True)
+            self._export_csv_btn.setText("Diversity-Daten exportieren …")
+
+        # Ergebnis-Dialog
+        if files_written == 0:
+            msg = QMessageBox(self)
+            msg.setWindowTitle("Keine Daten")
+            msg.setIcon(QMessageBox.Icon.Information)
+            msg.setText(
+                "Keine Diversity-Vergleichsdaten gefunden.\n\n"
+                "Hinweis: Die Statistik-Erfassung muss aktiviert sein und es "
+                "müssen Diversity-Modus-Sessions auf 20m oder 40m FT8 stattgefunden haben."
+            )
+            msg.setStyleSheet(MSGBOX_STYLE)
+            msg.exec()
+            return
+
+        files_list = "\n".join(f"  • {p.name}" for p in paths)
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Export abgeschlossen")
+        msg.setIcon(QMessageBox.Icon.Information)
+        msg.setText(
+            f"{files_written} CSV-Dateien geschrieben "
+            f"({total_rows} Datensätze gesamt):\n\n{files_list}\n\n"
+            f"Verzeichnis:\n{chosen}"
+        )
+        msg.setStyleSheet(MSGBOX_STYLE)
+        msg.exec()

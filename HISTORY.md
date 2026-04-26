@@ -909,3 +909,39 @@ FT8→FT2-Wechsel raeumt schnell auf — bewusstes Verhalten.
 - `test_accumulator_aging_ft2_short_window` — bei FT2 nach 30s weg, bei FT8 nicht.
 - `test_accumulator_aging_mode_switch_robustness` — Stationen verschwinden korrekt nach Modus-Wechsel.
 - `test_accumulator_aging` angepasst (110s statt 80s wegen 7-Slot-Schwelle bei FT8).
+
+## 2026-04-26 v0.65 — CSV-Export Diversity-Daten + Stats-Update
+
+**Feature:** Standalone-Script `scripts/export_diversity_csv.py` exportiert
+alle Antennen-Vergleichs-Daten aus `statistics/Diversity_*/{band}/FT8/stations/`
+nach CSV. Use Cases:
+- Wissenschaftliche Auswertung (Pandas, R, Excel) der 79-86% ANT2-Win-Rate
+- Veroeffentlichung der Daten als Funkamateur-Paper
+- Antennen-Optimierungs-Analysen offline
+
+**Format:** `date, time_utc, callsign, ant1_snr_db, ant2_snr_db, delta_db,
+band, mode, scoring_mode, antenna_winner`. Hysterese 1.0 dB → A2-Winner ab Δ ≥ +1.0.
+
+**Output (Test-Lauf 26.04.2026):**
+- `auswertung/diversity_data_20m_FT8_Diversity_Normal.csv` — 34 Zeilen
+- `auswertung/diversity_data_20m_FT8_Diversity_Dx.csv` — 97 Zeilen
+- `auswertung/diversity_data_40m_FT8_Diversity_Normal.csv` — 228 Zeilen
+- `auswertung/diversity_data_40m_FT8_Diversity_Dx.csv` — 316 Zeilen
+- **Gesamt: 675 Datensaetze**
+
+**Aufruf (CLI):** `./venv/bin/python3 scripts/export_diversity_csv.py`
+
+**UI-Integration (Mike's Idee waehrend der Session):** Im Einstellungs-Dialog
+neue GroupBox "Datenexport" mit Button "Diversity-Daten exportieren …".
+Klick → `QFileDialog.getExistingDirectory` → Verzeichnis-Auswahl → Export
+laeuft im GUI-Thread (typisch 200-500ms) → Ergebnis-Dialog mit Anzahl
+Dateien + Datensaetze. Letzter Pfad wird in `csv_export_dir` Setting
+persistiert.
+
+**Refactor:** `export_diversity_csv.py` `export_all(output_dir)` Helper extrahiert,
+sowohl von CLI als auch UI nutzbar. Standalone-Script bleibt als Power-User-Backup.
+
+**Stats-Updates:** PDFs neu generiert (DE+EN, 40m+20m FT8) mit aktuellem Datenstand.
+
+Tests: 220 passed (unveraendert, Script-Standalone ohne Test-Pflicht — Output verifiziert
++ GUI-Smoke-Test der Settings-Dialog-Integration ok).
