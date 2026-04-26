@@ -64,7 +64,7 @@ RX_COLOR_RESCUE = QColor("#39FF14")  # Neon-Gruen (Rescue-Punch)
 RX_COLOR_DEFAULT = QColor("#00FFFF") # Pure Cyan — auffaellig im Normal-Modus
 TX_COLOR_LOW = QColor("#884400")     # ~-25 dB → dunkles Orange
 TX_COLOR_HIGH = QColor("#FFEE00")    # ~+5 dB  → Hellgelb
-SECTOR_ALPHA = 150  # 0..255 (~0.6) — sichtbar genug auch ohne Stations-Mix
+SECTOR_ALPHA = 110  # 0..255 (~0.43) — sichtbar aber dezent
 HEATMAP_COLOR_LOW = QColor("#2D004F")    # dunkles Violett (1 Station)
 HEATMAP_COLOR_HIGH = QColor("#FF6B00")   # Neon-Orange (≥10 Stationen)
 HEATMAP_MIN_RADIUS_PX = 10.0
@@ -1094,33 +1094,28 @@ class MapCanvas(QWidget):
             y = cy + dy
             color = self._station_color(s)
             size = self._station_size(s.snr)
-            # Outer-Halo Glow (zusaetzliche 2px aussen, sehr transparent)
-            halo = QColor(color)
-            halo.setAlpha(60)
-            painter.setBrush(QBrush(halo))
+            # Outer-Halo Glow — staerker als vorher (Cyberpunk-Glow-Effekt)
+            # Zwei Schichten: weiter aussen schwach, naeher am Punkt staerker
+            halo_outer = QColor(color)
+            halo_outer.setAlpha(50)
+            painter.setBrush(QBrush(halo_outer))
+            painter.drawEllipse(QPointF(x, y), size + 4.0, size + 4.0)
+            halo_inner = QColor(color)
+            halo_inner.setAlpha(100)
+            painter.setBrush(QBrush(halo_inner))
             painter.drawEllipse(QPointF(x, y), size + 2.0, size + 2.0)
-            # Hauptkugel: RadialGradient hell→Farbe → "Leuchtkugel"
+            # Hauptkugel: RadialGradient weiss-Mitte → Farbe → "Leuchtkugel"
             grad = QRadialGradient(QPointF(x, y), size)
-            light = QColor(255, 255, 255, 220)
+            light = QColor(255, 255, 255, 240)
             grad.setColorAt(0.0, light)
             mid = QColor(color)
-            mid.setAlpha(220)
-            grad.setColorAt(0.4, mid)
+            mid.setAlpha(230)
+            grad.setColorAt(0.5, mid)
             edge = QColor(color)
-            edge.setAlpha(150)
+            edge.setAlpha(180)
             grad.setColorAt(1.0, edge)
             painter.setBrush(QBrush(grad))
             painter.drawEllipse(QPointF(x, y), size, size)
-            # 1px Outline-Ring in Stations-Farbe — gibt klare Struktur,
-            # hebt den Punkt vom Hintergrund ab ohne Animation noetig
-            ring_color = QColor(color)
-            ring_color.setAlpha(180)
-            ring_pen = QPen(ring_color)
-            ring_pen.setWidthF(1.0)
-            painter.setPen(ring_pen)
-            painter.setBrush(Qt.NoBrush)
-            painter.drawEllipse(QPointF(x, y), size, size)
-            painter.setPen(Qt.NoPen)  # zuruecksetzen fuer naechsten Punkt
 
     def _station_color(self, s: StationPoint) -> QColor:
         if self._mode == "tx":
