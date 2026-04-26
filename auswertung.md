@@ -3,6 +3,9 @@
 **Wann lesen:** SOFORT bei jeder Mike-Anfrage Richtung „werte mal aus", „Tagesauswertung",
 „20m heute", „Pooled Mean", „mit/ohne Rescue", „Normal vs Diversity".
 
+**⚠ DEFAULT-FRAGE bei „Stundenschnitt am Tag":** siehe Sektion 12 (Stationen pro Stunde).
+Das ist Mike's Standard-Format. Liefer EINE Tabelle, KEINE Diskussion.
+
 **Warum diese Datei existiert:** Claude stolpert jedes Mal über drei Fakten:
 (1) Tabellenformat pro Modus unterschiedlich, (2) Rescue liegt extern, (3) DX-Modus
 ist NICHT direkt mit Normal vergleichbar. Hier steht die Kurzfassung.
@@ -314,3 +317,72 @@ Schnitt-Zeile am Ende: arithmetisches Mittel der %-Werte über alle Stunden mit 
 
 Defaultet zu Sektion 10 (Stundenschnitt mit Normal=100%). Nur wenn Mike
 explizit „Pooled Mean" oder „Anteil am Tag" sagt → Sektion 8 / 9.
+
+---
+
+## 12. ⭐ DEFAULT-VARIANTE: „Stundenschnitt am Tag" / „Stationen pro Stunde"
+
+**Mike's Standard-Frage. Wenn unsicher: DIESE Variante liefern.**
+
+Pro Modus: alle Stationen-Counts aller Cycles aller Mess-Stunden aufaddieren,
+durch Anzahl der Mess-Stunden teilen → "Stationen pro durchschnittliche Mess-Stunde".
+
+Verhältnis: Normal = 100 %.
+
+**Code-Vorlage (kompakt):**
+
+```python
+import re
+from pathlib import Path
+
+DATE = "YYYY-MM-DD"; BAND = "20m"
+ROW_RE = re.compile(r"^\|\s*(\d{2}):(\d{2}):(\d{2})\s*\|\s*(\d+)\s*\|")
+STATION_RE = re.compile(
+    r"^\|\s*(\d{2}):(\d{2}):(\d{2})\s*\|\s*\S+\s*\|\s*(-?\d+)\s*\|\s*(-?\d+)\s*\|"
+)
+
+def collect(mode_dir):
+    base = Path(f"statistics/{mode_dir}/{BAND}/FT8")
+    sum_st, hours = 0, set()
+    for f in sorted(base.glob(f"{DATE}_*.md")):
+        h = int(f.stem.split("_")[1])
+        for line in f.read_text(encoding="utf-8").splitlines():
+            m = ROW_RE.match(line)
+            if m and not line.startswith("|------"):
+                sum_st += int(m.group(4))
+                hours.add(h)
+    n_resc = 0
+    sdir = base / "stations"
+    if sdir.exists():
+        for f in sorted(sdir.glob(f"{DATE}_*.md")):
+            for line in f.read_text(encoding="utf-8").splitlines():
+                m = STATION_RE.match(line)
+                if m:
+                    a1, a2 = int(m.group(4)), int(m.group(5))
+                    if a1 <= -24 and a2 > -24:
+                        n_resc += 1
+    return sum_st, len(hours), n_resc
+
+# Σ pro Modus / Mess-Stunden = Sta./Stunde-Schnitt
+# Normal=100%, Diversity in % davon
+```
+
+**Antwort-Format (NUR diese 2 Tabellen, KEINE Diskussion):**
+
+```
+| Modus              | Σ Stationen | Mess-Std. | Sta./Stunde | mit Rescue |
+| Normal             |    XXXXX    |     X     |    XXXX     |    XXXX    |
+| Diversity Standard |    XXXXX    |     X     |    XXXX     |    XXXX    |
+| Diversity DX       |    XXXXX    |     X     |    XXXX     |    XXXX    |
+
+Normal = 100 %:
+| Modus              | ohne Rescue | mit Rescue |
+| Diversity Standard |    +X.X %   |    +X.X %  |
+| Diversity DX       |    +X.X %   |    +X.X %  |
+```
+
+**Regeln für die Antwort:**
+- KEINE „Caveats" oder „aber bedenke ..."
+- KEINE Diskussion über DX-Filter, Tageszeit-Verteilung, Resonanz, etc.
+- KEINE Empfehlungen
+- Nur Zahlen liefern. Mike zieht die Schlüsse selbst.
