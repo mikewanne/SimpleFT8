@@ -101,7 +101,7 @@ TEXTS = {
 
         # Erklärungs-Fußzeile Stationen-Diagramm
         "expl_stations": (
-            "Normal (grau): 1 Antenne, wie WSJT-X — Vergleichsbasis.\n"
+            "Normal (grau): 1 Antenne, klassisches Single-Antenna-Setup — Vergleichsbasis.\n"
             "Diversity Standard (blau): 2 Antennen, wählt automatisch die mit mehr Stationen.\n"
             "Diversity DX (orange): 2 Antennen, wählt die mit mehr schwachen DX-Signalen.\n"
             "Rescue Stationen (gestrichelt): Von ANT1 unter −24 dB empfangen — ANT2 hebt das Signal über die Dekodiergrenze.\n"
@@ -110,7 +110,7 @@ TEXTS = {
 
         # Erklärungs-Fußzeile Diversity-Diagramm (Platzhalter {band} und {protocol})
         "expl_diversity": (
-            "Normal (grau): 1 Antenne, wie WSJT-X — dient als Vergleichsbasis.\n"
+            "Normal (grau): 1 Antenne, klassisches Single-Antenna-Setup — Vergleichsbasis.\n"
             "Diversity Standard (blau): 2 Antennen — wählt automatisch die Antenne, die mehr Stationen empfängt.\n"
             "Diversity DX (orange): 2 Antennen — wählt die Antenne mit mehr schwachen DX-Signalen (SNR unter −10 dB).\n"
             "Fehlerbalken (weiße Striche): Schwankung zwischen Messtagen — je mehr Tage, desto stabiler der Wert.\n"
@@ -144,7 +144,7 @@ TEXTS = {
             "Basis: Durchschnitt über alle Messpunkte aus 4 Messtagen, alle Tageszeiten — echter Tagesdurchschnitt."
         ),
         "p1_caveat": (
-            "Hinweis zum Antennensetup: ANT1 ist ein Kelemen DP-201510 (Fächer-Dipol für 20m/15m/10m) — "
+            "Hinweis zum Antennensetup: ANT1 ist ein Kelemen DP-201510 (Sperrkreis-/Trap-Dipol für 20m/15m/10m) — "
             "auf 40m außerhalb seines Auslegungsbandes und damit suboptimal. "
             "ANT2 ist die Regenrinne des Hauses (~15m L-Form) — durch Länge und Geometrie auf 40m besser geeignet als ANT1. "
             "Das erklärt den besonders großen Diversity-Gewinn. "
@@ -154,7 +154,7 @@ TEXTS = {
         ),
         "p1_modes_title": "Was bedeuten die drei Modi?",
         "p1_modes_body": (
-            "Normal (grau): Eine Antenne, keine besondere Logik — so wie WSJT-X. Das ist die Vergleichsbasis.\n"
+            "Normal (grau): Eine Antenne, keine besondere Logik — klassisches Single-Antenna-Setup. Das ist die Vergleichsbasis.\n"
             "Diversity Standard (blau): Zwei Antennen. Das System wählt automatisch die Antenne mit mehr Stationen.\n"
             "Diversity DX (orange): Zwei Antennen. Wählt die Antenne mit den schwächsten DX-Signalen (unter −10 dB).\n"
             "Rescue (grüne Kappen): Stationen die ANT1 nicht hören konnte — ANT2 hat sie trotzdem dekodiert."
@@ -323,7 +323,7 @@ TEXTS = {
 
         # Erklärungs-Fußzeile Stationen-Diagramm
         "expl_stations": (
-            "Normal (grey): 1 antenna, like WSJT-X — baseline reference.\n"
+            "Normal (grey): 1 antenna, classic single-antenna setup — baseline reference.\n"
             "Diversity Standard (blue): 2 antennas, automatically selects the one with more decoded stations.\n"
             "Diversity DX (orange): 2 antennas, selects the one with more weak DX signals.\n"
             "Rescue Stations (dashed): Received by ANT1 below −24 dB — ANT2 boosts signal above the decoding threshold.\n"
@@ -332,7 +332,7 @@ TEXTS = {
 
         # Erklärungs-Fußzeile Diversity-Diagramm (Platzhalter {band} und {protocol})
         "expl_diversity": (
-            "Normal (grey): 1 antenna, like WSJT-X — baseline reference.\n"
+            "Normal (grey): 1 antenna, classic single-antenna setup — baseline reference.\n"
             "Diversity Standard (blue): 2 antennas — automatically selects the antenna decoding more stations.\n"
             "Diversity DX (orange): 2 antennas — selects the antenna with more weak DX signals (SNR below −10 dB).\n"
             "Error bars (white marks): Day-to-day variation — the more days, the more stable the result.\n"
@@ -366,7 +366,7 @@ TEXTS = {
             "Basis: average over all measurement points from 4 days, all hours of the day — true daily average."
         ),
         "p1_caveat": (
-            "Note on antenna setup: ANT1 is a Kelemen DP-201510 (fan dipole for 20m/15m/10m) — "
+            "Note on antenna setup: ANT1 is a Kelemen DP-201510 (trap dipole for 20m/15m/10m) — "
             "operated off-band on 40m and therefore suboptimal on this frequency. "
             "ANT2 is the house gutter (~15m L-shape) — better suited for 40m due to its length and geometry. "
             "This explains the particularly large diversity gain observed. "
@@ -376,7 +376,7 @@ TEXTS = {
         ),
         "p1_modes_title": "What do the three modes mean?",
         "p1_modes_body": (
-            "Normal (grey): One antenna, no special logic — just like WSJT-X. This is the reference baseline.\n"
+            "Normal (grey): One antenna, no special logic — classic single-antenna setup. This is the reference baseline.\n"
             "Diversity Standard (blue): Two antennas. The system automatically picks the antenna with more stations.\n"
             "Diversity DX (orange): Two antennas. Picks the antenna with the weakest DX signals (below −10 dB).\n"
             "Rescue (green caps): Stations ANT1 couldn't hear — ANT2 decoded them anyway."
@@ -541,7 +541,7 @@ TEXTS_20M_OVERRIDE = {
             "Asymmetrischer Vorteil: TX resonant (Stationen hören mich) + RX-Diversity (ich höre sie zurück)."
         ),
         "p1_caveat": (
-            "Hinweis zum Setup: ANT1 (Kelemen DP-201510 Fächer-Dipol) ist auf 20m in seinem Auslegungsband — "
+            "Hinweis zum Setup: ANT1 (Kelemen DP-201510 Sperrkreis-Dipol) ist auf 20m in seinem Auslegungsband — "
             "eine erstklassige resonante Antenne. ANT2 (Regenrinne ~15m L-Form) ist eine Quasi-Vertikal mit "
             "anderer Polarisation, anderem Pattern und anderem Take-off-Winkel. Der Diversity-Gewinn entsteht "
             "hier NICHT durch 'schlechtes ANT1 vs besseres ANT2' (wie auf 40m off-band) sondern durch echte "
@@ -550,7 +550,7 @@ TEXTS_20M_OVERRIDE = {
             "bedeutsamer als die 40m-Werte: weniger absolut, aber bei BEREITS resonanter Antenne erzielt."
         ),
         "p1_modes_body": (
-            "Normal (grau): Eine Antenne, keine besondere Logik — wie WSJT-X. Vergleichsbasis.\n"
+            "Normal (grau): Eine Antenne, keine besondere Logik — klassisches Single-Antenna-Setup. Vergleichsbasis.\n"
             "Diversity Standard (blau): Zwei Antennen. Wählt automatisch die mit mehr Stationen.\n"
             "Diversity DX (orange): Zwei Antennen. Wählt die mit mehr schwachen DX-Signalen (unter −10 dB).\n"
             "Rescue (grüne Kappen): Stationen die ANT1 nicht hören konnte — ANT2 hat sie trotzdem dekodiert."
@@ -628,7 +628,7 @@ TEXTS_20M_OVERRIDE = {
             "Asymmetric advantage: resonant TX (stations hear me) + RX diversity (I hear them back)."
         ),
         "p1_caveat": (
-            "Note on setup: ANT1 (Kelemen DP-201510 fan dipole) operates within its design band on 20m — "
+            "Note on setup: ANT1 (Kelemen DP-201510 trap dipole) operates within its design band on 20m — "
             "a first-class resonant antenna. ANT2 (house gutter ~15m L-shape) is a quasi-vertical with "
             "different polarization, different pattern and different take-off angle. The diversity gain "
             "here does NOT come from 'bad ANT1 vs better ANT2' (as on 40m off-band), but from genuine "
@@ -638,7 +638,7 @@ TEXTS_20M_OVERRIDE = {
             "resonant antenna."
         ),
         "p1_modes_body": (
-            "Normal (grey): One antenna, no special logic — like WSJT-X. Reference baseline.\n"
+            "Normal (grey): One antenna, no special logic — classic single-antenna setup. Reference baseline.\n"
             "Diversity Standard (blue): Two antennas. Auto-selects the one with more stations.\n"
             "Diversity DX (orange): Two antennas. Selects the one with more weak DX signals (below −10 dB).\n"
             "Rescue (green caps): Stations ANT1 couldn't hear — ANT2 decoded them anyway."
