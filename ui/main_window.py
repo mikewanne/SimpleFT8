@@ -125,9 +125,16 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         from core.station_stats import StationStatsLogger
         from core.antenna_pref import AntennaPreferenceStore
         from core.preset_store import PresetStore
+        from core.locator_db import LocatorDB
         self._stats_logger = StationStatsLogger()
         self._stats_warmup_cycles = 6
         self._antenna_prefs = AntennaPreferenceStore()
+
+        # Persistenter Locator-Cache: gefuettert aus CQ-Decodes (mw_cycle), PSK-
+        # Reporter-Spots (direction_map_widget) und ADIF-Imports (qso_log).
+        # Save bei closeEvent, Load hier.
+        self.locator_db = LocatorDB()
+        self.locator_db.load()
 
         # Karten-Widget (Lazy create, Schritt 9 verbindet Button im Settings-Dialog)
         from ui.direction_map_widget import LocatorCache
@@ -820,6 +827,7 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self._direction_map_dialog.set_callsign(
             self.settings.callsign, self.settings.mode
         )
+        self._direction_map_dialog.set_locator_db(self.locator_db)
         self._direction_map_dialog.show()
         self._direction_map_dialog.raise_()
 
@@ -893,5 +901,10 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
             self._direction_map_dialog.close()
         self.decoder.stop()
         self.radio.disconnect()
+        # Locator-DB persistieren (in-memory waehrend Laufzeit, JSON beim Close)
+        try:
+            self.locator_db.save()
+        except OSError as e:
+            print(f"[LocatorDB] Save fehlgeschlagen: {e}")
         self.settings.save()
         event.accept()

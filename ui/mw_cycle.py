@@ -210,8 +210,25 @@ class CycleMixin:
         elif self._diversity_ctrl.phase == "measure":
             self._diversity_in_operate = False
 
+    def _feed_locator_db(self, messages):
+        """Decoder-Hook: pro is_grid()-Message Locator in die Locator-DB pushen.
+
+        CQ-Calls fuehren ihren 4-stelligen Locator als field3. Die DB
+        priorisiert intern: cq_6 > psk_6 > qso_log_6 > _4-Varianten.
+        """
+        db = getattr(self, "locator_db", None)
+        if db is None or not messages:
+            return
+        for m in messages:
+            try:
+                if m.is_grid():
+                    db.set(m.caller, m.field3, "cq")
+            except (AttributeError, TypeError):
+                continue
+
     def _handle_diversity_operate(self, messages, ant):
         """Diversity-Operate-Phase: Stationen akkumulieren + Stats-Logging."""
+        self._feed_locator_db(messages)
         qso_busy = self.qso_sm.state not in (
             QSOState.IDLE, QSOState.TIMEOUT,
             QSOState.CQ_CALLING, QSOState.CQ_WAIT,
@@ -294,6 +311,7 @@ class CycleMixin:
 
     def _handle_normal_mode(self, messages):
         """Normal-Modus: gemeinsame Akkumulation ohne Antennen-Info + Stats."""
+        self._feed_locator_db(messages)
         if messages:
             changed, _ = accumulate_stations(
                 self._normal_stations, messages,

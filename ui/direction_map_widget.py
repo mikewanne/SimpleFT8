@@ -1225,6 +1225,7 @@ class DirectionMapDialog(QDialog):
         self._mode = default_mode if default_mode in ("rx", "tx") else "rx"
         self._psk_client = None  # type: ignore[var-annotated]
         self._tx_locator_cache = LocatorCache()
+        self._locator_db = None  # type: ignore[var-annotated]
 
         self._setup_ui(my_locator)
         self._sync_toggle_state()
@@ -1374,6 +1375,12 @@ class DirectionMapDialog(QDialog):
         self._callsign = callsign
         self._ft_mode = mode
 
+    def set_locator_db(self, db) -> None:
+        """LocatorDB-Instanz vom MainWindow injizieren — PSK-Spots werden
+        beim Empfang in die DB geschrieben, damit andere Codepfade (rx_panel,
+        Karte im RX-Modus) profitieren."""
+        self._locator_db = db
+
     def _start_tx_polling(self) -> None:
         if not self._callsign:
             self.set_status("SENDEN: kein Callsign in Einstellungen — Polling deaktiviert.")
@@ -1413,6 +1420,13 @@ class DirectionMapDialog(QDialog):
     @Slot(list)
     def _on_psk_spots_received(self, spots: list) -> None:
         """GUI-Thread: PSK-Reporter Spots → StationPoints → Karte."""
+        # Spots in die persistente Locator-DB pushen, unabhaengig vom aktiven Mode
+        if self._locator_db is not None:
+            for spot in spots:
+                rx_call = getattr(spot, "rx_call", "")
+                rx_loc = getattr(spot, "rx_locator", "")
+                if rx_call and rx_loc:
+                    self._locator_db.set(rx_call, rx_loc, "psk")
         if self._mode != "tx":
             return  # User hat zu RX gewechselt, ignorieren
         points = self._spots_to_station_points(spots)
