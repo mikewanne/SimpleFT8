@@ -504,12 +504,12 @@ class MapCanvas(QWidget):
         if self._bg_pixmap is None or self._bg_pixmap.size() != self.size():
             self._bg_pixmap = self._build_background_pixmap()
         painter.drawPixmap(0, 0, self._bg_pixmap)
-        # Live-Layer (Globus-Vordergrund). User-zentrierte Layer (Rings,
-        # Sektoren, Lines) nur wenn JO31 aktuell auf der sichtbaren Hemisphaere.
+        # Live-Layer (Globus-Vordergrund). Distance-Rings + Sektor-Linien
+        # entfallen beim Globus — Pixel-Kreise um den User stimmen nicht
+        # mit der Sphaere ueberein, das gab Striche durch die Laender.
+        # Die Sektor-Wedges (kleine Pies) bleiben — die sind kompakt am User.
         if self._show_stations:
             self._paint_country_heatmap(painter)
-        self._paint_user_distance_rings(painter)
-        self._paint_user_sector_lines(painter)
         if self._show_sectors:
             self._paint_sector_wedges(painter)
         if self._show_stations:
@@ -545,38 +545,107 @@ class MapCanvas(QWidget):
 
     def _paint_landmasses(self, painter: QPainter) -> None:
         """Land-Polygone als gefuellte Flaechen — gibt dem Globus den klassischen
-        Look mit Land/Wasser-Unterscheidung. Polygone die teilweise auf der
-        Rueckseite liegen werden nicht gerendert (Lücke am Hemisphaeren-Rand
-        wird durch das Wasser-Globus-Hintergrund gefuellt)."""
+        Look mit Land/Wasser-Unterscheidung.
+
+        Polygone die teilweise auf der Rueckseite liegen werden am Hemisphaeren-
+        Rand abgeschnitten (Bisektion zwischen letztem sichtbaren und erstem
+        unsichtbaren Punkt). Sub-Polygone werden separat gefuellt."""
         if not self._landmasses:
             return
         cx, cy = self._center_px()
         globe_r = self._radius_px()
-        # Clip auf die Globus-Disk (Land soll nicht ueber den Rand klatschen)
         painter.save()
         from PySide6.QtGui import QPainterPath
         clip = QPainterPath()
         clip.addEllipse(QPointF(cx, cy), globe_r, globe_r)
         painter.setClipPath(clip)
-        # Land-Farbe mit subtilem Gradient: heller in Globus-Mitte, dunkler aussen
-        # — gibt 3D-Wirkung wie auf einem echten Globus
         painter.setPen(Qt.NoPen)
-        land_color = QColor(COLOR_LAND_FILL)
-        painter.setBrush(QBrush(land_color))
+        painter.setBrush(QBrush(QColor(COLOR_LAND_FILL)))
+
         for poly in self._landmasses:
-            # Alle Punkte projezieren — wenn alle sichtbar, Polygon rendern
-            projected = []
-            all_visible = True
-            for lon, lat in poly:
-                p = self._project(lat, lon)
-                if p is None:
-                    all_visible = False
-                    break
-                dx, dy = p
-                projected.append(QPointF(cx + dx, cy + dy))
-            if all_visible and len(projected) >= 3:
-                painter.drawPolygon(QPolygonF(projected))
+            sub_polys = self._clip_polygon_to_hemisphere(poly)
+            for sub in sub_polys:
+                if len(sub) >= 3:
+                    points = [QPointF(cx + dx, cy + dy) for dx, dy in sub]
+                    painter.drawPolygon(QPolygonF(points))
         painter.restore()
+
+    def _clip_polygon_to_hemisphere(
+        self, poly: list[tuple[float, float]]
+    ) -> list[list[tuple[float, float]]]:
+        """Schneidet ein Polygon am Hemisphaeren-Rand. Returnt Liste von
+        Sub-Polygonen in Pixel-Offset-Koordinaten (dx, dy vom Center).
+
+        Bei Uebergang sichtbar↔unsichtbar wird via Bisektion in lat/lon-Space
+        ein Punkt am Rand der sichtbaren Hemisphaere eingefuegt — so wirkt
+        das Polygon korrekt am Rand abgeschnitten."""
+        if len(poly) < 3:
+            return []
+
+        # Pro Punkt: (sichtbar, projection oder None)
+        states: list[tuple[bool, tuple[float, float] | None]] = []
+        for lon, lat in poly:
+            p = self._project(lat, lon)
+            states.append((p is not None, p))
+
+        sub_polys: list[list[tuple[float, float]]] = []
+        current: list[tuple[float, float]] = []
+        n = len(poly)
+        for i in range(n):
+            vis, p = states[i]
+            prev_vis, prev_p = states[i - 1]
+            if vis and prev_vis:
+                current.append(p)  # type: ignore[arg-type]
+            elif vis and not prev_vis:
+                # Eintritt — interpolierter Rand-Punkt + aktueller Punkt
+                edge = self._horizon_crossing(poly[i - 1], poly[i])
+                if edge is not None:
+                    current.append(edge)
+                current.append(p)  # type: ignore[arg-type]
+            elif not vis and prev_vis:
+                # Austritt — interpolierter Rand-Punkt, dann Sub-Polygon abschliessen
+                edge = self._horizon_crossing(poly[i - 1], poly[i])
+                if edge is not None:
+                    current.append(edge)
+                if len(current) >= 3:
+                    sub_polys.append(current)
+                current = []
+            # else: beide unsichtbar — skip
+        if len(current) >= 3:
+            sub_polys.append(current)
+        return sub_polys
+
+    def _horizon_crossing(
+        self, p1: tuple[float, float], p2: tuple[float, float],
+    ) -> tuple[float, float] | None:
+        """Findet via Bisektion in lat/lon-Space den Punkt zwischen p1 und p2
+        am Rand der sichtbaren Hemisphaere (cos_c == 0). Returnt projezierte
+        Pixel-Offset-Koordinaten."""
+        lon1, lat1 = p1
+        lon2, lat2 = p2
+        # Bisektion: lo ist sichtbar (oder unbekannt), hi ist unsichtbar
+        # Bestimmen welche Seite welche ist
+        v1 = self._project(lat1, lon1)
+        v2 = self._project(lat2, lon2)
+        if v1 is not None and v2 is None:
+            lo, hi = 0.0, 1.0
+        elif v1 is None and v2 is not None:
+            lo, hi = 1.0, 0.0
+        else:
+            return None  # nicht erwartet — beide gleich
+        for _ in range(12):  # 12 Iterationen → ~0.025% Genauigkeit
+            mid = (lo + hi) / 2.0
+            lat_m = lat1 + mid * (lat2 - lat1)
+            lon_m = lon1 + mid * (lon2 - lon1)
+            p = self._project(lat_m, lon_m)
+            if p is not None:
+                lo = mid
+            else:
+                hi = mid
+        # Letzter sichtbarer Punkt
+        lat_m = lat1 + lo * (lat2 - lat1)
+        lon_m = lon1 + lo * (lon2 - lon1)
+        return self._project(lat_m, lon_m)
 
     def _paint_globe_disk(self, painter: QPainter) -> None:
         """Die sichtbare Halbkugel als gefuellten Kreis: Ozean-Blau mit
@@ -1050,10 +1119,17 @@ class DirectionMapDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Richtungs-Karte")
         self.setModal(False)  # Decoder-Signale muessen durchkommen
-        # Always-on-top als eigenes Tool-Fenster — bleibt sichtbar bis Mike es schliesst,
-        # auch wenn er das Hauptfenster wieder fokussiert.
-        self.setWindowFlag(Qt.Tool, True)
-        self.setWindowFlag(Qt.WindowStaysOnTopHint, True)
+        # Always-on-top als eigenstaendiges Fenster (Qt.Tool versagt auf macOS:
+        # bei Fokus-Verlust verschwindet es; Qt.Window mit StaysOnTopHint ist
+        # zuverlaessig, behaelt minimize/maximize Buttons).
+        self.setWindowFlags(
+            Qt.Window
+            | Qt.WindowStaysOnTopHint
+            | Qt.CustomizeWindowHint
+            | Qt.WindowTitleHint
+            | Qt.WindowCloseButtonHint
+            | Qt.WindowMinMaxButtonsHint
+        )
         self.setMinimumSize(DIALOG_MIN_SIZE)
         # Geometrie aus Parent-Settings restaurieren falls vorhanden
         restored = False
