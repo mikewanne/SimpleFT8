@@ -12,6 +12,34 @@ DeepSeek-Antworten IMMER kritisch prüfen — Vorschläge nicht blind übernehme
 Bekanntes Risiko: KI kann plausibel klingende aber falsche Zeilen-/Datei-Angaben machen.
 Vorgehen: DeepSeek-Review als Zweitmeinung nutzen, Claude verifiziert jeden Vorschlag
 am tatsächlichen Code bevor er übernommen wird. Bei Widerspruch: Code ist Referenz.
+## ⛔ Projekt-Philosophie (PFLICHT bei Architektur-Entscheidungen!)
+
+**SimpleFT8 ist ein Hobby-Funker-Tool. KEIN Contest-Tool.** Diese Leitlinien
+gelten fuer Claude UND DeepSeek bei Feature-Vorschlaegen, Architektur-Beratung,
+Implementierungen:
+
+- **Zielgruppe:** Hobby-Funker. Nicht Pileup-Jaeger, nicht Contest-Operatoren,
+  keine 1000-QSO-pro-Tag-Stationen.
+- **Use-Case:** App starten → ein bisschen FT8/FT4/FT2 funken → fertig.
+  Keine Stunden-langen Sessions mit komplexer Konfiguration.
+- **UX-Prinzip:** Einfache Bedienung > Vollstaendigkeit. Lieber 3 gut funktio-
+  nierende Features als 30 die Mike erst lernen muss.
+- **Visueller Stil:** Modern (dunkles Theme, Neon-Akzente, weiche Verlaeufe).
+  Nicht 90er-Jahre-Funktionalitaets-UI wie WSJT-X / JTDX.
+- **NICHT geplant:** Contest-Modi, Multi-Operator, RTTY/CW/SSB, Skimmer-
+  Integration, Pileup-Tools, komplexe Filter-Macros, Cluster-Spotting fuer
+  DX-Hunting. Wenn ein DeepSeek-Vorschlag in diese Richtung geht: ablehnen.
+- **Was modern bedeutet:** 3D-Globus statt platter PSK-Reporter-Karte,
+  Live-Diversity-Visualisierung, Antennen-Farb-Coding, glow-Effekte —
+  Dinge die in 2026 selbstverstaendlich sind aber im Funker-Tool-Alltag fehlen.
+
+**Wenn DeepSeek oder ich ein Feature vorschlagen, immer pruefen:** „Hilft das
+einem Hobby-Funker beim Hobby-Funken? Oder waere das nur fuer Power-User /
+Contester sinnvoll?" — bei letzterem: NICHT umsetzen, in eine optionale
+Erweiterung ausgliedern oder ganz verwerfen.
+
+---
+
 **Diagramme:** `./venv/bin/python3 scripts/generate_plots.py`
 → Generiert IMMER beide Sprachen: DE → `auswertung/` + EN → `auswertung/en/`
 → DE: `SimpleFT8_Bericht.pdf` (7 S.) | EN: `SimpleFT8_Report.pdf` (7 p.)
