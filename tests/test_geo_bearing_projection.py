@@ -127,6 +127,15 @@ def test_bearing_identical_points_returns_zero():
     assert b == 0.0
 
 
+def test_bearing_pole_input_does_not_crash():
+    # Vom Nordpol aus ist Bearing semantisch nicht definiert; Funktion darf nicht crashen.
+    # Docstring dokumentiert: Wert ist semantisch willkuerlich, aber [0, 360).
+    b = great_circle_bearing(90.0, 0.0, 51.5, 7.0)
+    assert 0.0 <= b < 360.0
+    b = great_circle_bearing(-90.0, 0.0, 51.5, 7.0)
+    assert 0.0 <= b < 360.0
+
+
 # ── azimuthal_equidistant_project ─────────────────────────
 
 def test_projection_center_is_origin():
