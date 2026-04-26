@@ -81,6 +81,8 @@ ZOOM_MIN = 0.3
 ZOOM_MAX = 6.0
 ZOOM_FACTOR = 1.15  # pro Mausrad-Notch
 ROTATE_DEBOUNCE_MS = 30  # Background-Pixmap-Throttle waehrend Drag
+PAN_SENSITIVITY_DEG_PER_PX = 0.35  # Globus-Pan: 1 px Mausbewegung @ zoom=1
+LAT_CLAMP_DEG = 80.0  # Pol-Annaeherung verhindern
 
 DEFAULT_DIALOG_SIZE = QSize(720, 720)
 DIALOG_MIN_SIZE = QSize(500, 500)
@@ -242,11 +244,15 @@ class MapCanvas(QWidget):
         self._show_sectors = True
         self._show_stations = True
 
-        # Zoom + Rotation State
+        # Zoom + 3D-Globus-Pan State
         self._zoom = 1.0  # 1.0 = MAX_DISTANCE_KM (ganze Welt), >1 = Zoom rein
-        self._rotation_deg = 0.0  # 0 = Norden oben, im Uhrzeigersinn
+        # View-Center (lat/lon) wandert beim Drag — Karte rollt unter dem Fenster
+        # durch wie ein Globus auf der Fingerspitze. Default = User-Locator.
+        self._view_lat: float = self._my_pos[0] if self._my_pos else 0.0
+        self._view_lon: float = self._my_pos[1] if self._my_pos else 0.0
         self._drag_start_pos: QPointF | None = None
-        self._drag_start_rotation: float = 0.0
+        self._drag_start_view_lat: float = self._view_lat
+        self._drag_start_view_lon: float = self._view_lon
 
         self.setMinimumSize(300, 300)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -270,6 +276,9 @@ class MapCanvas(QWidget):
             return
         self._my_locator = locator
         self._my_pos = safe_locator_to_latlon(locator)
+        # View-Center synchron mit dem neuen User-Locator setzen
+        if self._my_pos:
+            self._view_lat, self._view_lon = self._my_pos
         self._sectors = []
         self._invalidate_background()
 
@@ -314,27 +323,29 @@ class MapCanvas(QWidget):
         return MAX_DISTANCE_KM / self._zoom
 
     def _project(self, lat: float, lon: float) -> tuple[float, float] | None:
-        """Lat/Lon → Pixel-Offset (dx, dy) vom Karten-Center.
-        Beruecksichtigt Karten-Rotation (alle Punkte werden um den Center
-        gegen den Uhrzeigersinn um rotation_deg gedreht — entspricht
-        einem Bearing-Offset)."""
+        """Lat/Lon → Pixel-Offset (dx, dy) vom Bildschirm-Center.
+        Projeziert um (_view_lat, _view_lon) — bei Globus-Pan wandert der View-
+        Center, alle Punkte (Coastlines, Stationen, User) drehen relativ dazu.
+        """
         if not self._my_pos:
             return None
-        p = azimuthal_equidistant_project(
-            self._my_pos[0], self._my_pos[1], lat, lon,
+        return azimuthal_equidistant_project(
+            self._view_lat, self._view_lon, lat, lon,
             radius_px=self._radius_px(),
             max_distance_km=self._effective_max_km(),
         )
-        if p is None:
+
+    def _user_screen_pos(self) -> tuple[float, float] | None:
+        """Wo ist der User-Locator gerade auf dem Bildschirm? Liefert
+        (px, py) in Widget-Koordinaten oder None falls User durch den
+        Pan ausserhalb des sichtbaren Bereichs gerollt wurde."""
+        if not self._my_pos:
             return None
-        if self._rotation_deg == 0.0:
-            return p
-        # 2D-Rotation um Center (Pixel-Koord-System: y nach unten,
-        # daher Vorzeichen für mathematischen CCW-Sinn drehen)
-        rad = math.radians(self._rotation_deg)
-        cos_r, sin_r = math.cos(rad), math.sin(rad)
-        x, y = p
-        return (x * cos_r - y * sin_r, x * sin_r + y * cos_r)
+        projected = self._project(self._my_pos[0], self._my_pos[1])
+        if projected is None:
+            return None
+        cx, cy = self._center_px()
+        return (cx + projected[0], cy + projected[1])
 
     # ── Resize ────────────────────────────────────────────
 
@@ -362,12 +373,13 @@ class MapCanvas(QWidget):
         self._invalidate_background()
         event.accept()
 
-    # ── Drag-to-rotate (linke Maustaste halten + bewegen) ─
+    # ── Drag-to-pan: Globus rollt unter dem Fenster durch ─
 
     def mousePressEvent(self, event):  # noqa: N802
         if event.button() == Qt.LeftButton and self._my_pos:
             self._drag_start_pos = event.position()
-            self._drag_start_rotation = self._rotation_deg
+            self._drag_start_view_lat = self._view_lat
+            self._drag_start_view_lon = self._view_lon
             self.setCursor(Qt.ClosedHandCursor)
             event.accept()
             return
@@ -376,18 +388,23 @@ class MapCanvas(QWidget):
     def mouseMoveEvent(self, event):  # noqa: N802
         if self._drag_start_pos is None:
             return super().mouseMoveEvent(event)
-        cx, cy = self._center_px()
-        dx0 = self._drag_start_pos.x() - cx
-        dy0 = self._drag_start_pos.y() - cy
-        dx1 = event.position().x() - cx
-        dy1 = event.position().y() - cy
-        # Winkel zwischen Maus-Vektoren relativ zum Center.
-        # atan2(x, -y): 0=oben(N), 90=rechts(E), 180=unten(S), -90=links(W)
-        a0 = math.degrees(math.atan2(dx0, -dy0))
-        a1 = math.degrees(math.atan2(dx1, -dy1))
-        delta = a1 - a0
-        self._rotation_deg = (self._drag_start_rotation + delta) % 360.0
-        # Live-Update der Karte; Background-Pixmap-Rebuild via Throttle
+        # Pixel-Delta seit Drag-Start
+        dx_px = event.position().x() - self._drag_start_pos.x()
+        dy_px = event.position().y() - self._drag_start_pos.y()
+        # Sensitivitaet: bei hoehrem Zoom feinere Bewegung
+        sens = PAN_SENSITIVITY_DEG_PER_PX / self._zoom
+        # Maus rechts → View-Lon nach Westen (Inhalt folgt der Maus nach rechts)
+        # Maus runter → View-Lat nach Norden (oberer Inhalt rueckt nach unten)
+        new_lon_raw = self._drag_start_view_lon - dx_px * sens
+        new_lon = ((new_lon_raw + 180.0) % 360.0) - 180.0
+        new_lat = max(-LAT_CLAMP_DEG, min(LAT_CLAMP_DEG,
+                                          self._drag_start_view_lat + dy_px * sens))
+        if (abs(new_lat - self._view_lat) < 0.005
+                and abs(new_lon - self._view_lon) < 0.005):
+            return
+        self._view_lat = new_lat
+        self._view_lon = new_lon
+        # Background-Pixmap-Rebuild via Throttle (sonst zu teuer pro Frame)
         if not self._rotation_timer.isActive():
             self._rotation_timer.start(ROTATE_DEBOUNCE_MS)
         self.update()
@@ -403,9 +420,10 @@ class MapCanvas(QWidget):
         super().mouseReleaseEvent(event)
 
     def reset_view(self) -> None:
-        """Zoom auf 1.0, Rotation auf 0° zuruecksetzen."""
+        """Zoom auf 1.0, View-Center zurueck auf User-Locator."""
         self._zoom = 1.0
-        self._rotation_deg = 0.0
+        if self._my_pos:
+            self._view_lat, self._view_lon = self._my_pos
         self._invalidate_background()
 
     def mouseDoubleClickEvent(self, event):  # noqa: N802
@@ -525,7 +543,10 @@ class MapCanvas(QWidget):
             painter.drawPolyline(p)
 
     def _paint_distance_rings(self, painter: QPainter) -> None:
-        cx, cy = self._center_px()
+        # Distanzringe sind User-zentriert (Distanzen zum User-Locator).
+        # Bei aktivem Globus-Pan landet der User nicht mehr in der Mitte.
+        user_pos = self._user_screen_pos() or self._center_px()
+        ux, uy = user_pos
         radius = self._radius_px()
         max_km = self._effective_max_km()
         pen = QPen(QColor(COLOR_RINGS))
@@ -535,32 +556,35 @@ class MapCanvas(QWidget):
         painter.setBrush(Qt.NoBrush)
         for km in DISTANCE_RINGS_KM:
             if km > max_km:
-                continue  # Ring liegt ausserhalb des sichtbaren Bereichs
+                continue
             r = radius * (km / max_km)
-            painter.drawEllipse(QPointF(cx, cy), r, r)
+            painter.drawEllipse(QPointF(ux, uy), r, r)
 
     def _paint_sector_lines(self, painter: QPainter) -> None:
-        cx, cy = self._center_px()
+        # Sektor-Linien sind User-zentriert (zeigen Antennen-Richtungen).
+        user_pos = self._user_screen_pos() or self._center_px()
+        ux, uy = user_pos
         radius = self._radius_px()
         pen = QPen(QColor(COLOR_SECTOR_LINES))
         pen.setWidthF(0.5)
         painter.setPen(pen)
         for i in range(SECTOR_COUNT):
-            angle_deg = i * SECTOR_WIDTH_DEG - SECTOR_WIDTH_DEG / 2.0 + self._rotation_deg
+            angle_deg = i * SECTOR_WIDTH_DEG - SECTOR_WIDTH_DEG / 2.0
             rad = math.radians(angle_deg)
-            x = cx + radius * math.sin(rad)
-            y = cy - radius * math.cos(rad)
-            painter.drawLine(QPointF(cx, cy), QPointF(x, y))
+            x = ux + radius * math.sin(rad)
+            y = uy - radius * math.cos(rad)
+            painter.drawLine(QPointF(ux, uy), QPointF(x, y))
 
     def _paint_compass(self, painter: QPainter) -> None:
+        # Compass bleibt am Bildschirm-Center: zeigt N/E/S/W relative zur
+        # View-Center-Projektion. Bei Globus-Pan ist Norden weiterhin oben am
+        # Bildschirm — aber die Sektor-Wedges (User-zentriert) wandern mit dem User.
         cx, cy = self._center_px()
         radius = self._radius_px()
         painter.setPen(QColor(COLOR_COMPASS))
         painter.setFont(QFont("Menlo", 10, QFont.Bold))
-        # 8 Compass-Punkte, jeweils 45° — Position rotiert mit Karte,
-        # Text bleibt aufrecht (lesbar)
         for i, label in enumerate(COMPASS_LABELS):
-            angle_deg = i * 45.0 + self._rotation_deg
+            angle_deg = i * 45.0
             rad = math.radians(angle_deg)
             x = cx + (radius + 14) * math.sin(rad)
             y = cy - (radius + 14) * math.cos(rad)
@@ -586,9 +610,10 @@ class MapCanvas(QWidget):
     def _paint_sector_wedges(self, painter: QPainter) -> None:
         if not self._sectors:
             return
-        cx, cy = self._center_px()
+        # Wedges sind User-zentriert (Antennen-Richtungs-Aktivitaet).
+        user_pos = self._user_screen_pos() or self._center_px()
+        ux, uy = user_pos
         radius = self._radius_px()
-        # max count fuer relative Wedge-Laenge
         max_count = max((b.count for b in self._sectors), default=0)
         if max_count == 0:
             return
@@ -596,19 +621,15 @@ class MapCanvas(QWidget):
         for b in self._sectors:
             if b.count == 0:
                 continue
-            # Wedge-Radius proportional zur unique-Calls-Anzahl im Sektor
             r = radius * 0.95 * (b.count / max_count)
-            # Sektor-Mitte Bearing: index * 22.5° + Karten-Rotation
-            mid_deg = b.index * SECTOR_WIDTH_DEG + self._rotation_deg
-            # QPainter.drawPie erwartet startAngle in 1/16°, gemessen ab 3-Uhr (Osten)
-            # Konvertierung: Karten-Norden (0°) = Qt-90°, Karten-Osten (90°) = Qt-0°
+            mid_deg = b.index * SECTOR_WIDTH_DEG
             qt_start_deg = 90.0 - mid_deg - SECTOR_WIDTH_DEG / 2.0
             qt_span_deg = SECTOR_WIDTH_DEG
             color = self._sector_color(b)
             painter.setPen(Qt.NoPen)
             painter.setBrush(QBrush(color))
             painter.drawPie(
-                int(cx - r), int(cy - r), int(2 * r), int(2 * r),
+                int(ux - r), int(uy - r), int(2 * r), int(2 * r),
                 int(qt_start_deg * 16), int(qt_span_deg * 16),
             )
 
@@ -716,14 +737,16 @@ class MapCanvas(QWidget):
     # ── Live-Layer: Connection Lines (Spider-Web) ─────────
 
     def _paint_connection_lines(self, painter: QPainter) -> None:
-        """Linien vom User-Center zu jeder Station. Farbe + Alpha + Linienstaerke
-        nach Antenne und SNR. Erzeugt den klassischen "Radar/Spider"-Look von
-        PSK-Reporter & Co.
-        """
+        """Linien vom User-Locator (am Bildschirm) zu jeder Station. Bei Globus-
+        Pan landet der User-Locator nicht mehr im Center — die Lines starten
+        immer am User."""
         if not self._stations:
             return
+        user_pos = self._user_screen_pos()
+        if user_pos is None:
+            return  # User aus Sicht-Bereich gerollt
         cx, cy = self._center_px()
-        center = QPointF(cx, cy)
+        center = QPointF(*user_pos)
         seen: set[str] = set()
         # Pen pro Pass setzen reduziert state-changes — wir sortieren hier nicht,
         # bei <200 Punkten ist setPen pro Linie billig genug
@@ -820,7 +843,10 @@ class MapCanvas(QWidget):
     # ── User-Marker (Diamant im Zentrum) ──────────────────
 
     def _paint_user_marker(self, painter: QPainter) -> None:
-        cx, cy = self._center_px()
+        user_pos = self._user_screen_pos()
+        if user_pos is None:
+            return  # User durch Pan ausserhalb der Sicht
+        cx, cy = user_pos
         # Halo-Layer: weicher gelber RadialGradient unter dem Diamanten
         from PySide6.QtGui import QRadialGradient
         halo_grad = QRadialGradient(QPointF(cx, cy), 14)
@@ -981,7 +1007,7 @@ class DirectionMapDialog(QDialog):
         layout.addLayout(filter_row)
 
         # ── Status-Label + Bedienhinweis ─────────────────
-        self.status_label = QLabel("Bereit. Mausrad = Zoom, ziehen = drehen, Doppelklick = Reset.")
+        self.status_label = QLabel("Bereit. Mausrad = Zoom, ziehen = Globus drehen, Doppelklick = Reset.")
         self.status_label.setStyleSheet("color: #889; padding: 2px 4px;")
         layout.addWidget(self.status_label)
 

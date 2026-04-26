@@ -507,37 +507,60 @@ def test_canvas_zoom_clamped(qapp):
     assert c._zoom == ZOOM_MIN
 
 
-def test_canvas_rotation_default_is_zero(qapp):
+def test_canvas_view_center_default_is_user_pos(qapp):
     from ui.direction_map_widget import MapCanvas
     c = MapCanvas(my_locator="JO31")
-    assert c._rotation_deg == 0.0
+    assert c._my_pos is not None
+    assert c._view_lat == c._my_pos[0]
+    assert c._view_lon == c._my_pos[1]
 
 
-def test_canvas_project_with_rotation_90_swaps_axes(qapp):
-    """Rotation 90° dreht Karte im Uhrzeigersinn → Norden landet rechts."""
+def test_canvas_user_screen_pos_at_center_when_no_pan(qapp):
+    """Ohne Pan landet der User-Marker im Bildschirm-Center."""
     from ui.direction_map_widget import MapCanvas
     c = MapCanvas(my_locator="JO31")
-    c.resize(500, 500)  # damit _radius_px() einen Wert liefert
-    # Punkt direkt nördlich von JO31 (60°N, 7°E) ohne Rotation: y < 0 (oben)
-    p_no_rot = c._project(60.0, 7.0)
-    assert p_no_rot is not None
-    assert p_no_rot[1] < -1.0
-    # Mit 90° CW-Rotation: oben (negative y) wandert nach rechts (positive x)
-    c._rotation_deg = 90.0
-    p_rot = c._project(60.0, 7.0)
-    assert p_rot is not None
-    assert p_rot[0] > 1.0
-    assert abs(p_rot[1]) < 1.0
+    c.resize(500, 500)
+    cx, cy = c._center_px()
+    user = c._user_screen_pos()
+    assert user is not None
+    assert abs(user[0] - cx) < 1.0
+    assert abs(user[1] - cy) < 1.0
 
 
-def test_canvas_reset_view_resets_zoom_and_rotation(qapp):
+def test_canvas_user_screen_pos_offsets_with_pan(qapp):
+    """View-Lon nach Westen → User-Marker wandert nach rechts."""
+    from ui.direction_map_widget import MapCanvas
+    c = MapCanvas(my_locator="JO31")
+    c.resize(500, 500)
+    cx, _ = c._center_px()
+    # 30° Verschiebung damit der Effekt deutlich messbar ist
+    c._view_lon = c._view_lon - 30.0
+    user = c._user_screen_pos()
+    assert user is not None
+    assert user[0] > cx + 10  # nach rechts gewandert
+
+
+def test_canvas_reset_view_resets_zoom_and_view_center(qapp):
     from ui.direction_map_widget import MapCanvas
     c = MapCanvas(my_locator="JO31")
     c._zoom = 3.5
-    c._rotation_deg = 123.4
+    c._view_lat = 12.3
+    c._view_lon = -45.6
     c.reset_view()
     assert c._zoom == 1.0
-    assert c._rotation_deg == 0.0
+    assert c._view_lat == c._my_pos[0]
+    assert c._view_lon == c._my_pos[1]
+
+
+def test_canvas_set_locator_resets_view_center(qapp):
+    from ui.direction_map_widget import MapCanvas
+    c = MapCanvas(my_locator="JO31")
+    c._view_lat = 0.0
+    c._view_lon = 0.0
+    c.set_locator("KO82")
+    assert c._my_pos is not None
+    assert c._view_lat == c._my_pos[0]
+    assert c._view_lon == c._my_pos[1]
 
 
 def test_canvas_call_to_country_known(qapp):
@@ -573,17 +596,19 @@ def test_canvas_heatmap_color_lerp(qapp):
     assert HEATMAP_COLOR_LOW.red() <= cm.red() <= HEATMAP_COLOR_HIGH.red()
 
 
-def test_canvas_paintevent_with_zoom_and_rotation(qapp):
-    """paintEvent darf bei extremen Zoom + Rotation nicht crashen."""
+def test_canvas_paintevent_with_zoom_and_pan(qapp):
+    """paintEvent darf bei extremen Zoom + View-Pan nicht crashen."""
     from ui.direction_map_widget import MapCanvas
     c = MapCanvas(my_locator="JO31")
     c.resize(500, 500)
     c.show()
     c._zoom = 4.0
-    c._rotation_deg = 145.0
+    c._view_lat = 30.0
+    c._view_lon = -100.0
     c.repaint()
     c._zoom = 0.5
-    c._rotation_deg = -30.0
+    c._view_lat = -45.0
+    c._view_lon = 150.0
     c.repaint()
     c.deleteLater()
 
