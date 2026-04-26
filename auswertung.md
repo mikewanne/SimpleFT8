@@ -194,7 +194,44 @@ Wenn Mike sich über „nur +2 %" auf 20m wundert: das ist physikalisch konsiste
 
 ---
 
-## 9. Wenn Mike sagt „Tagestrend"
+## 9. Wenn Mike sagt „alles aufaddieren / Anteil am Tag"
+
+Mike will dann **KEIN Stunden-Filter, KEINEN Pooled-Mean-Vergleich** —
+sondern die rohen Total-Summen der Stationen pro Modus und das prozentuale
+Verhältnis zueinander auf den ganzen Tag bezogen.
+
+```python
+# Pro Modus alle Zyklen UND alle Stationen aufaddieren (ohne Stunden-Filter)
+n_cyc, sum_st = 0, 0
+for f in sorted(base.glob(f"{DATE}_*.md")):
+    for line in f.read_text(encoding="utf-8").splitlines():
+        m = ROW_RE.match(line)
+        if m and not line.startswith("|------"):
+            n_cyc += 1
+            sum_st += int(m.group(2))
+
+# Anteil am Tagestotal (Normal + Div_Norm + Div_Dx = 100%)
+total = sum_st_normal + sum_st_div_norm + sum_st_div_dx
+anteil_normal = sum_st_normal / total * 100
+```
+
+**Antwort-Format:**
+
+| Modus | Zyklen | Σ Stationen | Anteil am Tag |
+|---|---|---|---|
+| Normal | … | … | X % |
+| Diversity Standard | … | … | Y % |
+| Diversity DX | … | … | Z % |
+| GESAMT | … | … | 100 % |
+
+**Caveat klar nennen:** Der Anteil hängt davon ab wie LANGE Mike pro Modus
+gemessen hat. DX-Modus läuft oft nachts durch (mehr Zyklen-Anteil), Normal
+oft nur tagsüber. Anteil am Tag ist KEIN Diversity-Performance-Maß, sondern
+zeigt nur die zeitliche Verteilung.
+
+---
+
+## 10. Wenn Mike sagt „Tagestrend"
 
 Mike will dann **stundenweise** den Verlauf sehen, nicht nur einen Pooled-Mean.
 Ergänzung: pro UTC-Stunde Ø Sta./Zyklus pro Modus tabellarisch oder als
