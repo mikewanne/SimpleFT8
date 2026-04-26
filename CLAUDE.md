@@ -3,7 +3,8 @@ Lies nach dieser Datei sofort auch HANDOFF.md und bestätige beide mit je einer 
 # SimpleFT8 — Claude Kontext
 
 **Start:** `cd "/Users/mikehammerer/Documents/KI N8N Projekte/FT8/SimpleFT8" && ./venv/bin/python3 main.py`
-**Tests:** `./venv/bin/python3 -m pytest tests/ -q` → 211 passed
+**Aktueller Stand:** v0.65 (26.04.2026) — Antenna-Pref Hysterese-Fix, manuelle TX-Frequenz Normal-Modus, 20m FT8 PDF, Aging-Bug-Fix, CSV-Export Diversity-Daten
+**Tests:** `./venv/bin/python3 -m pytest tests/ -q` → 220 passed
 **Vor Commits:** Tests grün + bei nicht-trivialen Änderungen DeepSeek-Review (`pal codereview` model `deepseek-chat`) — bereits durch globale §0 + Projektregeln gefordert.
 
 ⚠️ **DeepSeek V4 (deepseek-chat) — Neues Modell, Verhalten noch unbestätigt (Stand 2026-04-25):**
@@ -274,18 +275,30 @@ Beispiel Normal: 6.744 Zyklen × ~18.5 Sta./Zyklus
 
 ---
 
-## Datenlage (Stand 25.04.2026)
+## Datenlage (Stand 26.04.2026)
 
-| Modus            | Band | Tage | Stunden abgedeckt | Zyklen |
-|------------------|------|------|-------------------|--------|
-| Normal           | 40m  | 4    | 24h Abdeckung     | 6.744  |
-| Diversity_Normal | 40m  | 4    | 24h Abdeckung     | 6.827  |
-| Diversity_Dx     | 40m  | 4    | 24h Abdeckung     | 9.125  |
-| Normal           | 20m  | 1+   | 14–17 UTC         | wachsend |
+**WICHTIG:** Statistik-Filter v0.63 — nur 20m + 40m FT8 werden noch protokolliert.
+Andere Baender werden empfangen aber nicht gespeichert (Skalierungs-Entscheidung).
+
+| Modus            | Band | Tage | Zyklen | Bemerkung |
+|------------------|------|------|--------|-----------|
+| Normal           | 40m  | 4    | 6.744  | 24h Abdeckung |
+| Diversity_Normal | 40m  | 4    | 6.827  | 24h Abdeckung |
+| Diversity_Dx     | 40m  | 4    | 9.125  | 24h Abdeckung |
+| Normal           | 20m  | 5    | 688    | 13 Stunden, waechst |
+| Diversity_Normal | 20m  | 2    | 364    | 5 Stunden, schwach |
+| Diversity_Dx     | 20m  | 4    | 2.469  | 18 Stunden |
 
 **40m FT8 Ergebnis (Pooled Mean global, 22.696 Zyklen):**
 - Diversity Standard: **+88% / +122%** (ohne/mit Rescue), Rescue allein +35%
 - Diversity DX:       **+124% / +158%** (ohne/mit Rescue), Rescue allein +34%
+
+**20m FT8 Ergebnis (Pooled Mean Stunden-Vergleich, Stand 26.04.):**
+- Diversity_Normal: +15-30% im Tageshoch (12-16 UTC) — KEIN Antennen-Mismatch
+  wie auf 40m, sondern echte Pol-/Pattern-Diversity (ANT1 ist resonant!)
+- Diversity_Dx: +59% beim Tag→Nacht-Uebergang (18 UTC) — DX-Modus glaenzt am Skip-Zonen-Rand
+- ANT2-Win-Rate Doppelempfaenge: 79% (Std), 86% (Dx) trotz resonantem Kelemen-Dipol auf ANT1
+- Datenbasis waechst noch — siehe `Auswertung-20m-FT8.pdf` mit eigenem Narrativ
 
 ---
 
@@ -322,27 +335,28 @@ Beispiel Normal: 6.744 Zyklen × ~18.5 Sta./Zyklus
 
 ## Offene TODOs (nach Schwierigkeit)
 
-**v0.59 — UMGESETZT (CQ-Freq Praxis-Tuning):**
-- Punkt 1: Suchbereich dynamisch min..max der Stationen (kein fester Sweet-Spot mehr)
-- Punkt 1b: graduelle Lücken-Toleranz (5 Stufen) — niemals mehr None außer leerem Histogramm
-- Punkt 1c: SEARCH_MARGIN_BINS=0 — TX exakt zwischen niedrigster und höchster Station
-- Punkt 3: Slot-Counter (`tick_slot()`) statt elapsed-time-Logik. Histogramm-Refresh jeden Slot
-  (P1-Guard implizit gefixt, 40 Zeilen Code raus)
-- 4 atomare Commits, 211 Tests grün
+**v0.60-v0.65 (26.04.2026) — UMGESETZT:**
+- v0.60: CQ-Counter QSO-Reset (kein Mid-QSO-Sprung) + Info-Box Normal-Preset alt
+- v0.61: Antenna-Pref Hysterese `>=` Fix + Live-QSO-Anzeige + Label `(ANT2 ↑X.X dB)`
+- v0.62: Normal-Modus = WSJT-X-Standard (manuelle TX-Frequenz, Klick im Histogramm)
+- v0.63: 20m FT8 PDF (DE+EN) + Stats-Filter (nur 20m+40m FT8)
+- v0.64: Aging-Bug-Fix — Aging in Slots statt Sekunden (FT2 jetzt sauber)
+- v0.65: CSV-Export Diversity-Daten + UI-Integration im Settings-Dialog
+- 220 Tests grün
 
-**EINFACH:**
-1. **Even/Odd dedizierter Timer** — unabhängig vom Decoder-Thread (FT2 kritischsten)
+**Naechste Features (siehe TODO.md fuer Details):**
+- B) Band-Indikatoren live mit PSK-Reporter ergaenzen (1-2 Tage)
+- C) Richtungs-Keulen TX-Pattern-Karte (2-3 Tage) — USP-Killer
+- D) Richtungs-Keulen ANT2 RX-Rescue (1-2 Tage zusaetzlich)
+- F) Audio-Export per Slot (<1 Tag, optional)
+
+**OFFEN AUS ALTER TODO-LISTE:**
+1. **Even/Odd dedizierter Timer** — unabhaengig vom Decoder-Thread (FT2 kritischsten)
 2. **Gain-Bias beheben** — Normal-Modus Gain-Messung wenn Stats aktiv erzwingen
-
-**MITTEL:**
 3. **CQ-Zusammenfassung RX-Liste** — DeepSeek-Idee: ins QSO-Panel verschieben oder ganz raus
 4. **Tertile-Analyse Statistik** — kein Datencropping, alle Werte in 3 Drittel
-
-**PRIO NIEDRIG:**
 5. **AP-Lite Test-Pipeline** — synthetische E2E-Tests vor jedem Code-Fix
 6. **Per-Station DT-Offset TX** — encoder._station_dt_offset (erst nach mehr Feldtest-Daten)
-
-**LANGFRISTIG:**
 7. **IC-7300 Fork** — TARGET_TX_OFFSET dort separat messen!
 8. **Warteliste-Screenshot** — sobald DL3AQJ antwortet
 
