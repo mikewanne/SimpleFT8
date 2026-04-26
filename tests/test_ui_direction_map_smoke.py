@@ -540,6 +540,39 @@ def test_canvas_reset_view_resets_zoom_and_rotation(qapp):
     assert c._rotation_deg == 0.0
 
 
+def test_canvas_call_to_country_known(qapp):
+    from ui.direction_map_widget import MapCanvas
+    assert MapCanvas._call_to_country("DA1MHH") == "DE"
+    assert MapCanvas._call_to_country("W1XYZ") == "US"
+    assert MapCanvas._call_to_country("JA1ABC") == "JP"
+
+
+def test_canvas_call_to_country_unknown(qapp):
+    from ui.direction_map_widget import MapCanvas
+    assert MapCanvas._call_to_country("XQ1XYZ") in (None, "XQ1XYZ"[:2])
+
+
+def test_canvas_call_to_country_strips_slash(qapp):
+    from ui.direction_map_widget import MapCanvas
+    # /P wird abgeschnitten, Hauptcall bleibt
+    assert MapCanvas._call_to_country("DA1MHH/P") == "DE"
+
+
+def test_canvas_heatmap_color_lerp(qapp):
+    from ui.direction_map_widget import MapCanvas, HEATMAP_COLOR_LOW, HEATMAP_COLOR_HIGH
+    c0 = MapCanvas._heatmap_color(0.0)
+    c1 = MapCanvas._heatmap_color(1.0)
+    cm = MapCanvas._heatmap_color(0.5)
+    assert (c0.red(), c0.green(), c0.blue()) == (
+        HEATMAP_COLOR_LOW.red(), HEATMAP_COLOR_LOW.green(), HEATMAP_COLOR_LOW.blue()
+    )
+    assert (c1.red(), c1.green(), c1.blue()) == (
+        HEATMAP_COLOR_HIGH.red(), HEATMAP_COLOR_HIGH.green(), HEATMAP_COLOR_HIGH.blue()
+    )
+    # Mid sollte irgendwo dazwischen liegen
+    assert HEATMAP_COLOR_LOW.red() <= cm.red() <= HEATMAP_COLOR_HIGH.red()
+
+
 def test_canvas_paintevent_with_zoom_and_rotation(qapp):
     """paintEvent darf bei extremen Zoom + Rotation nicht crashen."""
     from ui.direction_map_widget import MapCanvas

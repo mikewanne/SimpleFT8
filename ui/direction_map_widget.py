@@ -37,6 +37,7 @@ from core.direction_pattern import (
     aggregate_sectors, is_mobile,
 )
 from core.geo import (
+    _COUNTRY_COORDS, _PREFIX_MAP,
     azimuthal_equidistant_project, distance_km, safe_locator_to_latlon,
 )
 
@@ -61,6 +62,11 @@ RX_COLOR_DEFAULT = QColor("#AAAACC")
 TX_COLOR_LOW = QColor("#884400")     # ~-25 dB → dunkles Orange
 TX_COLOR_HIGH = QColor("#FFEE00")    # ~+5 dB  → Hellgelb
 SECTOR_ALPHA = 100  # 0..255 (~0.4)
+HEATMAP_COLOR_LOW = QColor("#2D004F")    # dunkles Violett (1 Station)
+HEATMAP_COLOR_HIGH = QColor("#FF6B00")   # Neon-Orange (≥10 Stationen)
+HEATMAP_MIN_RADIUS_PX = 18.0
+HEATMAP_MAX_RADIUS_PX = 80.0
+HEATMAP_MAX_COUNT = 10  # ab 10 Stations sat. Farbe
 STATION_MIN_PX = 3
 STATION_MAX_PX = 8
 STATION_SNR_MIN = -25.0
@@ -422,8 +428,10 @@ class MapCanvas(QWidget):
         if self._bg_pixmap is None or self._bg_pixmap.size() != self.size():
             self._bg_pixmap = self._build_background_pixmap()
         painter.drawPixmap(0, 0, self._bg_pixmap)
-        # Live-Layer-Reihenfolge: Sektor-Wedges → Connection-Lines → Punkte → User-Marker
-        # (Lines unter Punkten, sonst Pfeile/Punkte werden ueberzeichnet)
+        # Live-Layer-Reihenfolge: Heatmap (unter allem) → Sektor-Wedges →
+        # Connection-Lines → Punkte → User-Marker
+        if self._show_stations:
+            self._paint_country_heatmap(painter)
         if self._show_sectors:
             self._paint_sector_wedges(painter)
         if self._show_stations:
@@ -632,6 +640,78 @@ class MapCanvas(QWidget):
         bl = (RX_COLOR_ANT1.blue() * n_a1 + RX_COLOR_ANT2.blue() * n_a2
               + RX_COLOR_RESCUE.blue() * n_rescue) / total
         return QColor(int(r), int(g), int(bl), a)
+
+    # ── Live-Layer: Country-Heatmap ───────────────────────
+
+    def _paint_country_heatmap(self, painter: QPainter) -> None:
+        """Pro Land mit aktiven Stations: RadialGradient-Glow an den Country-
+        Koordinaten. Groesse + Farbe nach Stations-Anzahl pro Land. Nutzt
+        _COUNTRY_COORDS aus core/geo (Hauptstadt-Position pro Land).
+        """
+        if not self._stations:
+            return
+        # Aktivitaet pro Country-Code aggregieren (call → prefix → country)
+        counts: dict[str, int] = {}
+        seen: set[str] = set()
+        for s in self._stations:
+            if s.call in seen:
+                continue
+            seen.add(s.call)
+            country = self._call_to_country(s.call)
+            if not country or country not in _COUNTRY_COORDS:
+                continue
+            counts[country] = counts.get(country, 0) + 1
+        if not counts:
+            return
+
+        from PySide6.QtGui import QRadialGradient
+        cx, cy = self._center_px()
+        painter.setPen(Qt.NoPen)
+        for country, count in counts.items():
+            lat, lon = _COUNTRY_COORDS[country]
+            projected = self._project(lat, lon)
+            if projected is None:
+                continue
+            dx, dy = projected
+            x = cx + dx
+            y = cy + dy
+            # Skala: 1..HEATMAP_MAX_COUNT auf 0..1 mappen
+            frac = min(1.0, count / HEATMAP_MAX_COUNT)
+            radius = HEATMAP_MIN_RADIUS_PX + frac * (HEATMAP_MAX_RADIUS_PX - HEATMAP_MIN_RADIUS_PX)
+            color = self._heatmap_color(frac)
+            grad = QRadialGradient(QPointF(x, y), radius)
+            inner = QColor(color)
+            inner.setAlpha(int(60 + frac * 80))  # 60..140
+            grad.setColorAt(0.0, inner)
+            edge = QColor(color)
+            edge.setAlpha(0)
+            grad.setColorAt(1.0, edge)
+            painter.setBrush(QBrush(grad))
+            painter.drawEllipse(QPointF(x, y), radius, radius)
+
+    @staticmethod
+    def _call_to_country(call: str) -> str | None:
+        """Callsign → 2-/3-Letter Country-Code via _PREFIX_MAP."""
+        if not call:
+            return None
+        c = call.upper().strip().lstrip("<").rstrip(">")
+        if "/" in c:
+            parts = c.split("/")
+            c = max(parts, key=len)
+        for plen in (3, 2, 1):
+            prefix = c[:plen]
+            if prefix in _PREFIX_MAP:
+                return _PREFIX_MAP[prefix]
+        return None
+
+    @staticmethod
+    def _heatmap_color(frac: float) -> QColor:
+        """Lerp zwischen HEATMAP_COLOR_LOW (frac=0) und HEATMAP_COLOR_HIGH (frac=1)."""
+        f = max(0.0, min(1.0, frac))
+        r = HEATMAP_COLOR_LOW.red() + f * (HEATMAP_COLOR_HIGH.red() - HEATMAP_COLOR_LOW.red())
+        g = HEATMAP_COLOR_LOW.green() + f * (HEATMAP_COLOR_HIGH.green() - HEATMAP_COLOR_LOW.green())
+        b = HEATMAP_COLOR_LOW.blue() + f * (HEATMAP_COLOR_HIGH.blue() - HEATMAP_COLOR_LOW.blue())
+        return QColor(int(r), int(g), int(b))
 
     # ── Live-Layer: Connection Lines (Spider-Web) ─────────
 
