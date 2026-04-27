@@ -63,6 +63,54 @@ Mike's „Tagestrend"-Anfragen → stundenweise Tabelle, nicht nur Pooled-Mean.
   innerhalb des vereinbarten Ziels eigenständig und proaktiv. Bei wirklich
   grundlegenden Weichenstellungen einmal kurz vorlegen, dann umsetzen.
 
+## Mehrstufiger Prompt-Workflow (PFLICHT bei nicht-trivialen Features/Bugs)
+
+Vor jeder nicht-trivialen Umsetzung (>5 Zeilen, neues Modul, Architekturfrage,
+mehrere Probleme zugleich) durchlaufen wir gemeinsam diesen Ablauf — KEIN
+direkter Sprung in `/plan`:
+
+1. **Probleme erkennen + Prompt V1 entwerfen** (Claude)
+   — Symptome präzise beschreiben, Datei:Zeile-Referenzen, Akzeptanzkriterien.
+2. **Rolle frischer KI: Self-Review → V2** (Claude)
+   — Was fehlt? Was ist mehrdeutig? Was übersieht V1? Lücken füllen, V2 schreiben.
+3. **V2 an DeepSeek** (`pal chat` model `deepseek-chat`)
+   — DeepSeek bekommt explizit den Auftrag den Prompt zu kritisieren und
+   konkret zu verbessern (nicht das Problem zu lösen).
+4. **DeepSeek-Findings einarbeiten → V3** (Claude)
+   — Kritisch prüfen (siehe DeepSeek-Caveat oben), V3 schreiben.
+5. **Mike vorlegen** — Mike liest V3, gibt Freigabe oder Korrekturen.
+6. **Planungsmodus + Umsetzung** — erst dann `/plan`, dann atomare Commits.
+
+**Trigger-Sätze von Mike** für diesen Workflow:
+- „selbe vervahrensweise wieder" / „wie bei Locator-DB"
+- „erst V1 dann zu deepseek" / „prompt entwerfen"
+
+**Wann der volle V1→V2→V3-Workflow lohnt (Trigger-Schwelle):**
+Mindestens EINES der folgenden Kriterien erfüllt → vollen Workflow fahren:
+- Task hat ≥2 unabhaengige Akzeptanzkriterien
+- Mathematisch/geometrisch (Projektion, Rotation, Filter, Algorithmen)
+- Beruehrt ≥2 Dateien oder fuehrt neues Modul ein
+- Threading/Persistence/IO neu beteiligt
+- Architektur-Entscheidung (siehe „Architektur-Entscheidungen" oben)
+
+**Wann V1 direkt reicht (Workflow uebersprungen):**
+- Tippfehler, Umbenennungen, <5 Zeilen
+- Lokaler Patch in EINER Methode ohne Architekturwirkung
+- Reines Doku-Update, Test-Anpassung an bestehende API
+- Bugfix mit klarer Datei:Zeile-Diagnose und einzigem Akzeptanzkriterium
+
+→ Bei Grenzfall lieber Workflow fahren als Sackgasse riskieren.
+   Beispiel-Mehrwert siehe v0.66 Map-UI (Sektor-Rotation): DeepSeek fand
+   1°→5°-Stabilitaetsproblem, Helper-Extraktion, Test-Reduktion.
+
+**Bei Plan-Mode selbst:** nur die Plan-Datei editieren. Read/Grep/Glob zum
+Verifizieren von Code-Behauptungen ist ok. Plan-Datei mit konkreten
+Datei:Zeile-Referenzen versehen — Subagents können das schnell verifizieren.
+
+**Begründung:** Mehrstufige Validierung verhindert Over-Engineering.
+Beispiel v0.67-Locator-DB: V2 hatte 26-Buchstaben-Splitting, LRU-Cache,
+Write-Ahead-Log — DeepSeek hat die Komplexität auf 1/4 reduziert.
+
 ## Commits
 
 Lokale Commits trifft Claude eigenständig wenn ein Schritt logisch in sich geschlossen
