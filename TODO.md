@@ -1,4 +1,4 @@
-# SimpleFT8 TODO — Stand 27.04.2026 (v0.68)
+# SimpleFT8 TODO — Stand 27.04.2026 (v0.69)
 
 ---
 
@@ -8,76 +8,32 @@
 - ✅ Punkt 3 (Zeit-Dropdown) — erledigt v0.68
 - ✅ Punkt 4 (Band-Dropdown) — erledigt v0.68
 - ✅ Punkt 5 (Sektor-Rotation) — erledigt v0.68 + Folgekorrektur
-- 🔜 **Punkt 1 — Propagations-Balken Pulsieren (NÄCHSTES FEATURE)**
-
-  **Spec (Stand 27.04.2026 nach Mike+Claude-Brainstorming, vor V1):**
-
-  *Was:* Propagations-Farbbalken unter dem Band-Button **fadet** weich
-  zwischen aktueller Farbe und Trend-Farbe wenn Bandöffnung/-schließung
-  bevorsteht. Visuelles Signal "gleich passiert was" — beruhigt statt
-  zu nerven.
-
-  *Was nicht:* hartes Blinken (Mike: "kriegt man einen an der Murmel"),
-  neue Farben (wir bleiben bei good=#00CC00 / fair=#FFAA00 / poor=#CC0000),
-  Animation auf inaktiven Bändern.
-
-  *Trigger-Logik (KISS, ~20 Zeilen):*
-  ```python
-  cond_now = _apply_seasonal_correction(band, hamqsl, hour, month)
-  cond_60  = _apply_seasonal_correction(band, hamqsl, hour+1, month)
-  if cond_now == cond_60:
-      static  # kein Trend, keine Animation
-  else:
-      fade(cond_now ↔ cond_60)
-  ```
-  Hysterese unnötig (Werte sind diskret good/fair/poor → klar oder klar nicht).
-  HamQSL-Sprünge brauchen keinen Spezialcode — sie ändern das Grundniveau,
-  Trend-Berechnung läuft automatisch neu.
-
-  *Begründung Lookahead 60min:* HamQSL-Update-Intervall ist 1-3h, NOAA
-  rechnet mit Stunden-Vorlauf — spontane Sonnenstürme um 12:10 schlagen
-  nicht um 12:10 in HamQSL durch. Tageszeit-Übergänge (40m abends,
-  20m nachts) sind 60min vorher absehbar.
-
-  *Animation:*
-  - **Cross-Fade**, kein hartes Blinken (QPropertyAnimation auf
-    `palette()` oder QGraphicsColorEffect)
-  - 3s aktuelle Farbe → 1s Übergang → 3s Trend-Farbe → 1s Übergang ...
-  - Bei Trend-Wechsel < 30min entfernt: Tempo verdoppeln (1.5s / 0.5s)
-  - Wenn Trend eingetreten: hart die neue Farbe, Animation aus
-
-  *Scope:*
-  - **NUR aktuelles Band** animieren (laut Mike's Wunsch)
-  - Andere Bänder: statisch wie heute
-  - Stabile Bänder: keine Animation (good bleibt einfach grün)
-
-  *Workflow:*
-  V1→V2 (Self-Review)→V3 (DeepSeek) wie bei Map-Bugfix v0.68.
-  Ergibt Sinn weil Animation-Komplexität (Easing, Threshold, State-Machine)
-  und Trend-Berechnung (`_apply_seasonal_correction` neu nutzen) >5 Zeilen
-  und mathematisch.
-
-  *Berührte Dateien (vermutlich):*
-  - `core/propagation.py` — neue `propagation_trend(band, hamqsl, hour, month)
-    -> ("up"|"down"|"stable", current_color, trend_color)`
-  - `ui/control_panel.py` — `_BandCard.update_propagation()` erweitern um
-    Trend-Animation, QPropertyAnimation pro `prop_bars[band]`
-  - `tests/test_propagation_trend.py` (neu) — Trend-Berechnung pro Band
-    × Tageszeit testen
-
-  *Aufwand-Schätzung:* 0.5-1 Tag (V1→V3 plus Implementation).
-- 🔜 **Punkt 2 — PSK-Reporter Reichweiten-Sektoren im TX-Modus**
+- ✅ **Punkt 1 — Propagations-Balken Pulsieren — erledigt v0.69**
+  (`_PulseBar` Custom-Widget + `get_conditions_at(minutes_ahead)` +
+  Cross-Fade-Animation auf aktivem Band, slow/fast je nach Naehe zum
+  Uebergang. Field-Test ausstehend: ob Animation-Tempo subjektiv passt
+  oder `fade=2000`/`hold=4000` langsamer sein sollte.)
+- 🔜 **Punkt 2 — PSK-Reporter Reichweiten-Sektoren im TX-Modus
+  (NÄCHSTES FEATURE)**
   Statt nur Punkte/Linien: Sektor-Aggregation analog RX-Modus, zeigt
-  Richtungs-Empfangsmuster ("wo werde ich gehoert"). Foundation steht.
+  Richtungs-Empfangsmuster ("wo werde ich gehoert"). Foundation steht
+  in `core/psk_reporter.py` + `core/direction_pattern.py`. Workflow
+  V1→V2→V3 lohnt nicht zwingend (klare Akzeptanzkriterien, Single-File-
+  Aenderung in `direction_map_widget.py`), aber bei Aufwand >0.5 Tag
+  trotzdem.
 - 🔜 **Punkt 6 — Stations-Count Diff (Karte 37 vs RX-Panel 46)**
   Tooltip-Loesung: "37 mit Position / 46 dekodiert" statt Verhalten zu
-  aendern. Trivial-Fix.
+  aendern. Trivial-Fix (<5 Zeilen, kein Workflow noetig).
 
-**Field-Test Locator-DB (v0.67) noch offen:**
-- App eine Stunde laufen lassen, FT8 funken → wieviele Stationen sind nach
-  einer Stunde präzise lokalisiert (prec_km <= 5)?
-- Nach App-Restart: ist `~/.simpleft8/locator_cache.json` da?
-- Bei Bug oder Auffälligkeit: Issue im Memory loggen.
+**Field-Test offen:**
+- **v0.67 Locator-DB:** App eine Stunde laufen lassen, FT8 funken →
+  wieviele Stationen sind nach einer Stunde praezise lokalisiert
+  (`prec_km <= 5`)? Nach App-Restart: ist `~/.simpleft8/locator_cache.json`
+  da?
+- **v0.69 Pulsier-Animation:** subjektiv-Test bei Tageszeit-Uebergang
+  (z.B. 16-17 UTC fuer 40m winter close): fuehlt sich der Cross-Fade
+  beruhigend an? Falls zu auffaellig: `fade=2000`/`hold=4000` in
+  `_start_pulse` (`ui/control_panel.py:_ModeBandCard._start_pulse`).
 
 ---
 
