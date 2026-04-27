@@ -37,6 +37,51 @@
 
 ---
 
+## 🔬 Antennen-Diversity Daten-Sammlung (Prio NIEDRIG, Stand 27.04.2026)
+
+**Stand der Erkenntnis (n=2 Baender):**
+- 40m FT8 (off-band fuer ANT1 Kelemen Trap-Dipol): Diversity Standard
+  +88 %, Diversity DX +124 % vs Normal. Robuste Datenbasis (~22.700 Zyklen).
+- 20m FT8 (resonant ANT1): Diversity Standard −23 %, Diversity DX −33 %.
+  Daten noch duenn (~3.000-3.600 Zyklen je Modus, schiefe Stunden).
+
+**Mike-These:** „Auf resonanter ANT1 verliert Diversity, off-band gewinnt
+sie." DeepSeek-Bedenken (gerechtfertigt):
+- Pol-Diversity bei HF-Skywave ist durch Faraday-Rotation eh randomisiert
+  → vert/horz-Argument schwaecher als gedacht
+- Regenrinne 15 m hat band-abhaengige Pattern (1.4 λ auf 20m vs 2.1 λ auf
+  15m) — koennte ANT2-Performance pro Band stark verschieben
+- Wetter (nasse Rinne) verschiebt Wirkungsgrad um 1-2 dB → schwer zu
+  isolieren ohne Wetter-Tracking
+
+**Test-Roadmap (kein Zeitdruck — Daten sammeln wenn Mike sowieso funkt):**
+
+| Band | ANT1-Status | Erwartung | Prio | Daten-Soll |
+|---|---|---|---|---|
+| **17m FT8** | off-band | Diversity gewinnt (wie 40m) | hoch | 3+ Tage, 06–22 UTC |
+| **15m FT8** | **resonant** | Diversity verliert (wie 20m) — kritischer Test | hoch | 3+ Tage, 08–18 UTC |
+| **12m FT8** | off-band | Diversity gewinnt | mittel | 2+ Tage |
+| **80m FT8** | off-band | Diversity gewinnt | mittel | 2+ Tage Nacht |
+| **10m FT8** | resonant | nur bei Bandoeffnung — Spo-E saisonal | niedrig | gelegentlich |
+
+Wichtig: **Statistik-Filter v0.63 prueft nur 20m/40m FT8.** Fuer die anderen
+Baender muss Mike entscheiden ob das geaendert wird (Filter erweitern auf
+{17m, 15m, 12m, 80m, 10m}) oder ob die Daten als CSV-Export reichen.
+→ **TODO bei Beginn der 17m-Phase:** Stats-Filter erweitern.
+
+**Entscheidungs-Punkt nach 5 Baendern:**
+Wenn die Heuristik „off-band gewinnt, resonant verliert" sich
+bestaetigt → kleinen Info-Tooltip an Diversity-Aktivierung
+(neutral formuliert, kein Verhaltenseingriff). Wenn nicht → gar nichts
+implementieren, App bleibt neutral.
+
+DeepSeek-Empfehlung dokumentiert: **Tooltip-Text wenn implementiert wird:**
+> „Der Diversity-Vorteil haengt stark von deiner Antennen-Kombination,
+> Band, Wetter und Tageszeit ab. Am besten testest du selbst pro Band,
+> ob es dir hilft."
+
+---
+
 ## NEXT FEATURES — Plan vom 26.04.2026 (Brainstorming Mike + Claude + DeepSeek)
 
 Reihenfolge nach Priorität. Quick-Wins zuerst, USP-Killer-Features parallel als Strategie.
