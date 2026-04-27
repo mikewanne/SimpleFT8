@@ -1,4 +1,4 @@
-# SimpleFT8 TODO — Stand 27.04.2026 (v0.70)
+# SimpleFT8 TODO — Stand 27.04.2026 (v0.71)
 
 ---
 
@@ -10,6 +10,15 @@
 - ✅ Punkt 5 (Sektor-Rotation) — erledigt v0.68 + Folgekorrektur
 - ✅ Punkt 1 (Propagations-Balken Pulsieren) — erledigt v0.69
 - ✅ Punkt 6 (Stations-Count Tooltip "37 / 46 Stationen") — erledigt v0.70
+- ✅ Punkt 2 (PSK-Reporter Reichweiten-Sektoren TX) — erledigt v0.71
+
+**v0.71 Release-Bilanz (27.04.2026):**
+- 🌍 **TX-Reichweiten-Sektoren:** Karten-TX-Modus zeigt Sektor-Wedge-Laenge
+  jetzt nach max-Distanz pro Sektor statt Cluster-Dichte. VK6-Spot (16000 km)
+  erzeugt langen Wedge, dichter Iberien-Cluster bleibt bescheiden.
+- 🛡️ NaN/Inf-Guard in `SectorBucket.max_distance_km` — DeepSeek-Review hat
+  echten Edge-Case gefunden (NaN propagiert sonst durch paintEvent).
+- 🧪 4 neue Tests, 422 → 426 gruen.
 
 **v0.70 Release-Bilanz (27.04.2026):**
 - 🐛 **Kritischer Bugfix:** `is_grid` Property-Aufruf mit Klammern → seit v0.67
@@ -21,13 +30,9 @@
 - 📊 LocatorDB-Stand: **7.991 Calls** aus DA1MHH+DO4MHH-ADIF (854 KB JSON)
 
 **Naechstes Feature:**
-- 🔜 **Punkt 2 — PSK-Reporter Reichweiten-Sektoren im TX-Modus**
-  Statt nur Punkte/Linien: Sektor-Aggregation analog RX-Modus, zeigt
-  Richtungs-Empfangsmuster ("wo werde ich gehoert"). Foundation steht
-  in `core/psk_reporter.py` + `core/direction_pattern.py`. Workflow
-  V1→V2→V3 lohnt nicht zwingend (klare Akzeptanzkriterien, Single-File-
-  Aenderung in `direction_map_widget.py`), aber bei Aufwand >0.5 Tag
-  trotzdem.
+- 🔜 **Feature B — Band-Indikatoren live mit PSK-Reporter** (1-2 Tage,
+  Foundation `core/psk_reporter.py` steht). Bestehende Farb-Balken unter
+  Band-Buttons (HamQSL Solar Flux) durch PSK-Live-Aktivitaet ergaenzen.
 
 **Field-Test offen:**
 - ✅ **v0.67 Locator-DB Praezisionstest:** sichtbar in der Karte — 50/53
@@ -40,6 +45,11 @@
 - **v0.70 Live-Locator-Feed:** ueber laengere Empfangs-Session
   beobachten ob die DB sichtbar waechst. Erwartung: pro Stunde 5-15
   neue Calls mit prec_km=5 (CQ-Calls + Antworten mit Grid).
+- **v0.71 TX-Reichweiten-Pattern:** Karte → SENDEN-Modus an einer
+  guten 40m-Abend-Session. Erwartung: dunkler-orange Iberien-Wedge
+  (kurze Distanz, viele Stationen), leuchtend-gelber USA-Wedge (lange
+  Distanz, weniger Spots). Falls TX-Sektoren bei wenigen Spots zu
+  unruhig wirken: Min-Floor (z.B. 20% max_wedge_r) erwaegen.
 
 ---
 

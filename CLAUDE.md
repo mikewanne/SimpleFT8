@@ -3,8 +3,8 @@ Lies nach dieser Datei sofort auch HANDOFF.md und bestätige beide mit je einer 
 # SimpleFT8 — Claude Kontext
 
 **Start:** `cd "/Users/mikehammerer/Documents/KI N8N Projekte/FT8/SimpleFT8" && ./venv/bin/python3 main.py`
-**Aktueller Stand:** v0.70 (27.04.2026) — LocatorDB Live-Feed (kritischer Bugfix): `is_grid` ist `@property`, wurde mit Klammern aufgerufen → seit v0.67 SILENT TypeError, kein Live-Decode landete in DB. Plus: Auto-Save alle 5 Min (kein Datenverlust bei Hard-Kill via kill_old_instances), Stations-Count Tooltip auf Karte, Ant-Spalte 'A1' im Normal-Modus. LocatorDB enthaelt jetzt 7.991 Calls aus DA1MHH+DO4MHH-ADIF und waechst live mit jedem CQ/Antwort.
-**Tests:** `./venv/bin/python3 -m pytest tests/ -q` → 422 passed (Qt-Smoke-Tests via `QT_QPA_PLATFORM=offscreen`)
+**Aktueller Stand:** v0.71 (27.04.2026) — TX-Reichweiten-Sektoren: PSK-Reporter Sektor-Wedges im Karten-TX-Modus zeigen jetzt **Reichweiten-Pattern** (max-Distanz pro Sektor) statt Cluster-Dichte. Spot aus VK6 (16000 km) erzeugt langen Wedge, Iberien-Cluster bleibt bescheiden. Mike sieht auf einen Blick wo sein Signal hingeht. RX-Modus unveraendert. NaN/Inf-Guards in `SectorBucket.max_distance_km`. 4 atomare Commits, V1→V2→V3-Workflow mit DeepSeek-Reviewer.
+**Tests:** `./venv/bin/python3 -m pytest tests/ -q` → 426 passed (Qt-Smoke-Tests via `QT_QPA_PLATFORM=offscreen`)
 **Vor Commits:** Tests grün + bei nicht-trivialen Änderungen DeepSeek-Review (`pal codereview` model `deepseek-chat`) — bereits durch globale §0 + Projektregeln gefordert.
 
 ⚠️ **DeepSeek V4 (deepseek-chat) — Neues Modell, Verhalten noch unbestätigt (Stand 2026-04-25):**

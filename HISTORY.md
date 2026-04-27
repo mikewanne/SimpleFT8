@@ -1476,3 +1476,71 @@ Commit: `7b117a8` fix(map): v0.68 Folgekorrekturen — Popup-Padding + Sektor-He
 **Lehre fuer kuenftige UI-Fixes:** AdjustToContents reicht NIE allein —
 Popup-View braucht eigenes setMinimumWidth. Bei Bearing-aus-Pixel-Helfer
 groesseren Hebel waehlen (10-15°) als naive Mathematik suggeriert.
+
+
+## 2026-04-27 v0.71 — TX-Reichweiten-Sektoren (PSK-Reporter Distanz-Mapping)
+
+**TODO Punkt 2 erledigt** — Karten-Sektor-Wedges im SENDEN-Modus zeigen
+jetzt **Reichweiten-Pattern** statt Cluster-Dichte.
+
+### Was ist neu
+
+**Vorher (v0.70):** TX-Sektor-Wedge-Laenge skalierte mit Anzahl gehoerter
+Stationen pro Sektor — identisch zu RX. Resultat: PSK-Reporter Cluster
+wie Iberien/UK dominierten optisch, ein Spot aus VK6 (16000 km)
+verschwand neben 50 Spots aus 1500 km.
+
+**Jetzt (v0.71):** TX-Wedge-Laenge skaliert mit der **maximalen Distanz**
+der Stationen im Sektor. Mike sieht auf einen Blick wo sein Signal
+hinkommt — nicht wer es zufaellig oft empfaengt. Spot aus Australien
+ergibt langen Wedge, dichter Iberien-Cluster bleibt bescheiden.
+RX-Modus unveraendert (count-basiert ist dort die richtige Metrik).
+
+### Architektur (4 atomare Commits)
+
+1. **`feat(direction_pattern)`** — `SectorBucket.max_distance_km` neu,
+   gefuellt in `aggregate_sectors()` als max ueber dedupliziertes Call-
+   Set. NaN/Inf-Guard zwingend (sonst propagiert NaN durch paintEvent).
+   4 neue Tests in `test_direction_pattern.py`.
+
+2. **`fix(direction_map)`** — `distance_km` zwingend in `StationPoints`
+   populiert, direkt im Canvas in `update_stations()` (NACH Konvertierung,
+   da `_my_pos` dort bereits verfuegbar ist). Spart Konverter-API-
+   Aenderung + Test-Updates.
+
+3. **`feat(direction_map)`** — `_paint_sector_wedges` mode-aware:
+   - TX: `r = max_wedge_r * (b.max_distance_km / global_max)`
+   - RX: `r = max_wedge_r * (b.count / max_count)` (unveraendert)
+   - Farb-Lerp avg_snr → TX_COLOR_LOW/HIGH unveraendert.
+
+4. **`chore(release)`** — APP_VERSION 0.70→0.71, Doku.
+
+### Workflow
+
+V1 → V2 (Self-Review: NaN-Guards, Edge-Cases, Konverter-Pfade ergaenzt)
+→ DeepSeek-Reviewer-Auftrag (3 echte Punkte: NaN-Guard zwingend,
+AK3 Over-Engineering streichen, log10-Tradeoff diskutiert →
+linear bleibt fuer Mike's "gross = weit"-Intuition) → V3 → Umsetzung.
+
+DeepSeek-Halluzination: behauptete Wedge-Cache-Invalidate-Risk und
+Commit-Aufteilung wegen RX-Test-Bruch. Beides per Code-Verifikation
+widerlegt — kein Wedge-Cache vorhanden, RX-Tests greifen `distance_km`
+nicht ab. **Code ist Referenz, DeepSeek ist Berater.**
+
+### Tests
+
+422 → 426 gruen (+4):
+- `test_aggregate_sectors_max_distance` — max ueber 3 Stationen
+- `test_aggregate_sectors_max_distance_zero_when_no_stations`
+- `test_aggregate_sectors_max_distance_dedup_first_wins`
+- `test_aggregate_sectors_max_distance_skips_non_finite` — NaN/Inf-Robustheit
+
+### Field-Test offen
+
+- TX-Reichweiten-Pattern bei Live-PSK-Daten beobachten — typische
+  40m-Abendsession sollte dunkler-orange Iberien-Wedge (kurze Distanz,
+  viele Stationen) gegen leuchtend-gelben USA-Wedge (lange Distanz,
+  wenige Spots) zeigen.
+- Falls TX-Sektoren bei wenigen Spots zu unruhig wirken: weiches
+  Min-Floor (z.B. 20% max_wedge_r) erwaegen — fuer's erste linear
+  belassen.
