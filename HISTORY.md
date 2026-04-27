@@ -1122,3 +1122,59 @@ wieder rein, akzeptabel fuer Hobby-Funker-Tool).
 - Cluster/DX-Spotting
 - Manuelles Korrektur-UI (WSJT-X-konform: Decode = Wahrheit)
 - TTL-Cleanup, LRU-Cache, Write-Ahead-Log (Phase 2 nur falls noetig)
+
+## 2026-04-27 — Doku-Updates + Statistik (v0.67, kein Version-Bump)
+
+Nach v0.67-Implementierung kamen noch drei dokumentations-getriebene Commits
+und ein Push:
+
+- **Statistik-Update + PDF-Regeneration:** Neue 20m FT8-Daten von 26.04.2026
+  (Diversity_Normal/Diversity_Dx/Normal). PDFs (DE+EN) frisch generiert.
+
+- **Antennen-Bezeichnung korrigiert (Mike-Feedback):** Recherche bestaetigte
+  Kelemen DP-201510 ist ein Multiband-**Trap-Dipol** (Sperrkreis-Dipol) mit
+  koaxialen Sperrkreisen, *kein* Faecher-Dipol. Korrektur in:
+  - `scripts/generate_plots.py` (alle DE+EN-Strings)
+  - `README.md` (englische + deutsche Section)
+  - PDF-Berichte (DE+EN) neu generiert mit korrektem Wording
+  Quellen: WiMo (Hersteller), Funktechnik Dathe, Funkshop, DX Engineering.
+
+- **WSJT-X-Vergleichstabellen entfernt** — Hobby-Funker-Philosophie:
+  - "Why SimpleFT8 vs. WSJT-X?" / "Warum SimpleFT8 statt WSJT-X?" Sections
+    durch lockeren Hobby-Funker-Vorstellungstext ersetzt (DeepSeek-Umformulierung).
+  - Neuer Header: "Why SimpleFT8?" / "Warum gibt es SimpleFT8?"
+  - "Normal: 1 Antenne, wie WSJT-X" → "klassisches Single-Antenna-Setup"
+    (in Plot-Erklaerungen DE+EN).
+  - WSJT-X-Acknowledgments behalten als Hommage an die Pioniere.
+
+- **Test-Counts + Versionsnummern** im README aktualisiert: 159/162 → 407,
+  v0.26 → v0.67. Neue Features (Karte v0.66, Locator-DB v0.67) in Tested-
+  Working-Listen ergaenzt.
+
+- **Push:** 38 Commits (v0.66 + v0.67 + Stats + README) auf GitHub
+  https://github.com/mikewanne/SimpleFT8 main.
+
+**Stand:** v0.67, 407 Tests gruen, GitHub aktuell.
+
+## 2026-04-27 — Statistik-Update + Feierabend (v0.67, kein Version-Bump)
+
+**Statistiken aktualisiert:**
+- Neue 20m FT8 Daten von 26.04. (Stunde 23) und 27.04. (Stunden 00-06,
+  Diversity_Normal) — Nachtmessung von Mike.
+- 40m FT8: 22.696 Zyklen, 4 Messtage (unveraendert seit v0.66).
+- 20m FT8: 8.461 Zyklen, Zeitraum bis 27.04. (waechst kontinuierlich).
+- PDFs (DE+EN) frisch generiert via `scripts/generate_plots.py`.
+
+**Feierabend-Routine:**
+- HANDOFF.md (beide Pfade: `SimpleFT8/` + `FT8/`) komplett neu fuer v0.67 mit
+  Architektur-Diagramm Locator-DB + Test-Status + Warnungen + Naechste Schritte.
+- TODO.md auf v0.67-Stand: neuer "MORGEN ALS NAECHSTES"-Block mit Field-Test-
+  Plan fuer LocatorDB.
+- CLAUDE.md (beide Pfade) bestaetigt identisch + aktuell.
+- Memory aktualisiert:
+  * `project_antenna_setup.md` korrigiert (Trap-Dipol statt Faecher-Dipol)
+  * NEU `feedback_plan_mode_workflow.md` — Mike's V1→V2→DeepSeek→V3→/plan
+  * NEU `feedback_github_browser_cache.md` — bei "GitHub nicht aktuell"
+    erst WebFetch checken, Negationen vermeiden
+
+**Stand:** v0.67, 407 Tests gruen, alle Doku-Dateien fuer Feierabend up-to-date.

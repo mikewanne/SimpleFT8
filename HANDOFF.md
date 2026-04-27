@@ -1,98 +1,144 @@
-# HANDOFF — SimpleFT8 — 2026-04-26
+# HANDOFF — SimpleFT8 — 2026-04-27 (v0.67)
 
-## Heute erledigt — 5 Versionen, 11 Commits, alle gepusht
+## Heute erledigt — Locator-DB Feature + GitHub-Push (v0.66 + v0.67)
 
-**v0.60 — CQ-Counter QSO-Reset + Info-Box Normal-Preset alt** (commit `68cb208`, `b9ed2eb`)
-- Bei aktivem QSO wird der 60s-CQ-Such-Counter pro Slot zurueckgesetzt → kein Mid-QSO-Frequenzsprung
-- Bei Wechsel zum Normal-Modus mit Preset > 30 Tage: einmaliger Info-Dialog mit Empfehlung KALIBRIEREN-Button
+**v0.67 — Persistenter Locator-Cache (LocatorDB)** — 6 atomare Commits, alle gruen.
 
-**v0.61 — Antenna-Pref Hysterese + Live-QSO-Anzeige** (commit `5138cce`)
-- `core/antenna_pref.py`: `if delta > HYSTERESIS_DB` → `>=`. Bei delta=+1.0 (haeufig) wird jetzt korrekt A2 gewaehlt.
-- Label-Format vereinheitlicht ueber `_antenna_pref_label`: `(ANT2 ↑X.X dB)` mit Pfeil = Diversity-Gewinn
-- Live-Anzeige im QSO-Panel `status_label`: waehrend aktivem QSO `→ CALL  |  RX: ANT2 ↑1.0 dB` (gruen, fett)
-- 3 neue Tests fuer Hysterese-Edge-Cases
+KISS-Prinzip nach DeepSeek-Plan-V3 (V2 hatte 26-Buchstaben-Splitting, LRU,
+Write-Ahead-Log — alles raus). Eine JSON-Datei `~/.simpleft8/locator_cache.json`,
+in-memory waehrend Laufzeit, save() bei App-Close.
 
-**v0.62 — Normal-Modus = WSJT-X-Standard** (commit `e007dc4`)
-- Auto-CQ-Frequenz-Suche im Normal-Modus entfernt
-- Klick im Histogramm setzt TX-Marker, QSpinBox unter Histogramm zur Feinjustierung
-- Persistenz pro Band: `normal_tx_freq_per_band`
-- Diversity-Modus bleibt mit Auto-Suche (USP)
+1. `4b9ba64` — `core/locator_db.py` neues Modul + 26 Tests (DeepSeek-codereviewed,
+   `encoding="utf-8"` Fix uebernommen)
+2. `6dcb275` — Hooks in `mw_cycle._handle_normal_mode` + `_handle_diversity_operate`
+   und `direction_map_widget._on_psk_spots_received`
+3. `38a1990` — ADIF-Bulk-Import beim App-Start aus `<cwd>/adif/` + adif_import_path
+4. `265a918` — `direction_map_widget`: Karte nutzt LocatorDB + prec_km-Feld an
+   StationPoint, Country-Fallback dimmt auf 50% Alpha, Disclaimer reduziert auf
+   "Ø Genauigkeit: X km"
+5. `57beb00` — `rx_panel`: km-Spalte zieht aus DB vor Country-Fallback (kein
+   `~`-Praefix wenn Locator irgendwann mal in CQ/PSK gesehen wurde)
+6. `f397ec9` — Doku: APP_VERSION 0.66 → 0.67, HISTORY.md, CLAUDE.md
 
-**v0.63 — 20m FT8 PDF + Stats-Filter** (commit `8693ee2`)
-- Stats-Filter: nur 20m + 40m FT8 werden in `statistics/` protokolliert (Skalierungs-Entscheidung)
-- 20m FT8 PDF (DE+EN) mit eigenem Narrativ: resonante TX + Diversity-RX = asymmetrischer Vorteil
-- Theorie-Block: Faraday-Rotation skaliert mit f² → 20m-Diversity wirkt staerker als 40m
+**Bilanz:**
+- **361 → 407 Tests** (+46), alle gruen
+- **DeepSeek-Codereview** vor Modul-Commit (encoding="utf-8" einziger konkreter Fix)
+- **5 Hooks** verbinden Decoder + PSK + ADIF + Karte + rx_panel mit der DB
 
-**v0.64 — Aging-Bug-Fix** (commit `47f96aa`)
-- Aging in SLOTS statt Sekunden: `7/14/20` Slots fuer normal/active_qso/cq_caller
-- DeepSeek-Korrektur: `7/14/20` statt urspruenglich `5/10/20` (auf FT4 zu aggressiv gewesen)
-- FT2 jetzt sauber: 27s Aging statt vorher 75s = 20 Slots
-- Architektur: `slot_duration_s` als Parameter durchgereicht
-- 2 neue Tests + 1 angepasst, 220 grün
+## Push + GitHub-Updates (Mike-Freigabe)
 
-**v0.65 — CSV-Export Diversity-Daten + UI-Integration** (commit `3315ff6`)
-- Standalone-Script `scripts/export_diversity_csv.py`: 4 CSVs, 675 Datensaetze
-- UI-Integration im Settings-Dialog: GroupBox "Datenexport" + QFileDialog → Verzeichnis-Wahl
-- Refactor `export_all(output_dir)` Helper, vom Script und UI nutzbar
-- Letzter Pfad in `csv_export_dir` Setting persistiert
+Mike hat freigegeben: **38 Commits** lokal seit letztem Push → `git push origin main`.
 
-**Brainstorming + TODO-Plan dokumentiert** (commit `61eee49`)
-- DeepSeek-Beratung zu Verbesserungen + Architektur (continuation_id 625b1dab)
-- 6 Features priorisiert in TODO.md: Aging-Fix(✓), PSK-Reporter, Richtungs-Keulen TX/RX, CSV(✓), Audio-Export
-- PSK-Reporter API technisch verifiziert (Endpoints, Polling, Trend-Detection)
+Zusaetzliche README-/Doku-Arbeit auf Mike-Anfrage (kein Version-Bump):
+- Statistik-PDFs frisch generiert (DE+EN)
+- **Antennen-Bezeichnung korrigiert:** Kelemen DP-201510 ist Trap-Dipol
+  (Sperrkreisdipol), KEIN Faecher-Dipol. Recherche bestaetigt — Quellen:
+  WiMo (Hersteller), Funktechnik Dathe, Funkshop, DX Engineering.
+  Korrektur in `scripts/generate_plots.py`, `README.md` (DE+EN),
+  PDF-Berichte regeneriert.
+- **WSJT-X-Vergleichstabellen entfernt** — Hobby-Funker-Philosophie:
+  - DE+EN Tabellen weg, ersetzt durch lockeren Hobby-Funker-Text
+    ("Feierabend-Funk" / "after-work operator")
+  - DeepSeek-Umformulierung, Mike-validiert
+  - WSJT-X bleibt nur als Acknowledgment (Hommage)
+- **Test-Counts + Versionsnummern:** 159/162 → 407, v0.26 → v0.67
+- Karte (v0.66) + Locator-DB (v0.67) als neue Features in der Tested-Liste
+
+**Push insgesamt:** v0.66 (Karte) + v0.67 (LocatorDB) + Stats + README → online.
+GitHub: https://github.com/mikewanne/SimpleFT8
+
+## Architektur-Ueberblick (LocatorDB)
+
+```
+Decoder-Thread                        GUI-Thread / App-Lifecycle
+─────────────                         ─────────────────────────
+mw_cycle._handle_*                    main_window.__init__
+  ├── accumulate_stations               └── locator_db.load()
+  └── _feed_locator_db ──────┐
+                             │        main_window.closeEvent
+PSK-Worker (daemon)          │          └── locator_db.save() (atomar)
+  └── _on_psk_spots_received │
+        └── db.set("psk")    │        rx_panel._on_message
+                             ▼          └── db.get_position(call) → exakte km
+                       LocatorDB
+                       (RLock)         direction_map_widget.snapshot_to_*
+                             ▲          └── db.get_position(call) → Karte
+qso_log_init                 │
+  └── bulk_import_adif ──────┘
+```
 
 ## Offen / Naechste Schritte (priorisiert)
 
-Siehe `TODO.md` fuer detaillierten Plan und Code-Skeletons.
+1. **Karten-Live-Test im Feld** (durch Mike) — wie viele Stationen sind nach
+   einer Stunde Funken praezise lokalisiert (prec_km <= 5)? Wieviele bleiben
+   Country-Fallback (transparente Punkte)? Disclaimer "Ø Genauigkeit: X km"
+   plausibel?
 
-1. **B) Band-Indikatoren live mit PSK-Reporter** (1-2 Tage)
-   - Bestehende HamQSL-Indikatoren unter Band-Buttons ergaenzen mit Live-Aktivitaets-Daten
-   - Pulsierender Balken bei Trend (oeffnet/schliesst) — je staerker desto schneller
-   - QPropertyAnimation auf eigenem Widget mit paintEvent
-   - PSK-Reporter API: `psk-find.pl?mode=FT8&lastMinutes=5` — 1 Request alle Baender
+2. **rx_panel km-Spalte beobachten** — exakte km ohne `~`-Praefix bei DB-
+   Treffern, mit `~` bei Country-Fallback. Wenn DA1MHH oft mit JO31 gesehen
+   wird, sollte das nach App-Restart sofort exakt sein (qso_log_4 → 110 km
+   default, aber durch CQ-Decode wahrscheinlich schnell auf cq_4/cq_6).
 
-2. **C) Richtungs-Keulen TX-Pattern** (2-3 Tage) — **USP-Killer**
-   - Welche Sektoren haben mich gehoert? PSK-Reporter Reverse-Lookup
-   - Maidenhead → Lat/Lon → Großkreis-Azimut von JO31 → 16-Sektor-Bin
-   - Visualisierung: Weltkarte mit Sektor-Overlay (Keulen) oder Polar-Diagramm
+3. **Naechste Features (TODO.md):**
+   - **B) Band-Indikatoren live mit PSK-Reporter** — 1-2 Tage. Foundation
+     `core/psk_reporter.py` steht. Brauchen `fetch_global_activity()` und
+     pulsierende Balken bei steigendem Trend.
+   - **C) Richtungs-Keulen TX-Pattern-Karte** — 2-3 Tage, USP-Killer.
+   - **D) ANT2 RX-Rescue-Keulen** — 1-2 Tage zusaetzlich auf C aufsetzbar.
 
-3. **D) Richtungs-Keulen ANT2 RX-Rescue** (1-2 Tage zusaetzlich)
-   - Lokale Rescue-Daten (ANT1 ≤ -24, ANT2 dekodiert) → Sektor-Verteilung
-   - Im selben Diagramm wie C ueberlagert (TX vs RX-Diversity)
+4. **Migration `main_window._psk_worker` → `core/psk_reporter`** —
+   Konsolidierung des bestehenden PSK-Workers. Separater Refactor-Commit.
 
-4. **F) Audio-Export per Slot** (<1 Tag, optional)
+5. **Bug beobachten:** TX-Frequenz Normal-Modus manchmal ohne Histogramm-
+   Marker — noch nicht reproduzierbar.
 
-5. Aus alter Liste: Even/Odd Timer, Gain-Bias, Tertile-Analyse, IC-7300 Fork
+6. **Cleanup-Idee:** `LocatorCache` (in `direction_map_widget.py:96–131`)
+   bleibt vorerst als Fallback. Wenn alle Codepfade migriert sind, kann
+   die Klasse + Loader-Funktion komplett raus (~30 Zeilen Reduktion).
 
-## Warnungen & Fallen (heute neu)
+## Warnungen & Fallen
 
-- **Aging-Bug-Fix v0.64:** Wenn Tests irgendwo `accumulate_stations()` ohne `slot_duration_s` aufrufen,
-  wird Default 15.0 (FT8) genommen. Bei FT2-Tests muss `slot_duration_s=3.8` uebergeben werden.
-- **CSV-Export Output-Dir:** Default ist `auswertung/` im Repo. Im UI waehlt User Verzeichnis,
-  Pfad wird in `csv_export_dir` Setting persistiert (mehrfach-Klicks merken letzte Wahl).
-- **DeepSeek Continuation-IDs:** bei Folge-Fragen kann es zur Verwechslung kommen wenn vorheriger
-  Kontext noch im Thread ist. Ggf. neuen Thread starten ohne `continuation_id`.
-- **20m-Datenbasis duenn:** PDF zeigt das ehrlich mit "Datenbasis waechst noch"-Caveat. Stunden
-  06-09 UTC und 20-23 UTC sind unterrepraesentiert — gezielt messen.
+- **Locator-DB bei App-Crash:** Save passiert nur bei `closeEvent`. Wenn die
+  App crasht, gehen Decodes der Session verloren. Akzeptiert — neue Session
+  laedt sie wieder rein. KEIN periodisches Auto-Save eingebaut (Hobby-Funker-
+  Konsens).
+
+- **6-stellig wird nie durch 4-stellig ueberschrieben** (Source-Priority).
+  Wenn ein Call einmal mit cq_6 in der DB ist, kann ihn auch ein psk_4 nicht
+  verdraengen — nur ein psk_6 oder cq_6 mit anderem Locator.
+
+- **`LocatorDB.get()` returnt eine Kopie** — Caller-Mutation aendert die DB
+  nicht. Wer Original-Referenz haben will: `_calls` direkt (nicht empfohlen).
+
+- **`_locator_db.set()` kann False zurueckgeben** — bei (a) ungueltigem
+  Locator (nicht durch `safe_locator_to_latlon` validierbar), (b) niedrigerer
+  Priority als bestehender Eintrag, (c) leerem Call.
+
+- **`bulk_import_directory()` laeuft synchron im Init-Thread** — bei 1000
+  ADIF-Records ~300 ms, kein UI-Freeze. Bei groesseren Logs (10k+) ggf.
+  Loading-Splash anzeigen.
 
 ## Test-Suite Status
 
-`./venv/bin/python3 -m pytest tests/ -q` → **220 passed**
+```
+./venv/bin/python3 -m pytest tests/ -q
+407 passed in ~7s
+```
+
+Neu seit v0.66:
+- `tests/test_locator_db.py` (28 Tests: CRUD, Source-Priority, Persist,
+  Threading-Stress, Slash-Calls, ADIF-Bulk-Import)
 
 ## Letzter bekannter guter Zustand
 
-- Branch `main`, alle Commits gepusht (`66f44c8` → `3315ff6`)
-- App v0.65 laeuft, alle 5 Features stabil (Live-Anzeige, manuelle TX, Antenna-Pref, Aging, CSV-Export)
-- Statistiken aktuell, PDFs DE+EN fuer 40m+20m generiert
-- TODO-Plan in `TODO.md` mit DeepSeek-validierter Naechste-Schritte-Reihenfolge
+- **Branch:** main, gepusht
+- **HEAD:** `0a5061a` docs: README v0.67 — Hobby-Funker-Umformulierung
+- **Tag:** kein neuer Tag heute (Mike entscheidet wann)
+- **Tests:** 407/407 gruen
+- **App-Start:** OK (`./venv/bin/python3 main.py`)
+- **JSON-Cache:** wird beim ersten Close angelegt
+  (`~/.simpleft8/locator_cache.json`)
 
-## Heute insgesamt
+---
 
-- **5 Versionen** (v0.60 → v0.65)
-- **11 Commits** auf main, alle gepusht
-- **220 Tests grün** (vorher 211)
-- **9 neue Tests** (Hysterese, Aging-Edge-Cases, Settings-tx_freq)
-- **2 neue PDFs** (20m DE + EN)
-- **4 neue CSV-Exports** (675 Datensaetze)
-- **1 strategische TODO-Liste** mit 6 priorisierten Next-Features
-- **DeepSeek-Beratung** durchgaengig genutzt, Vorschlaege immer kritisch verifiziert
+Morgen: `cd SimpleFT8` → `claude1` → laedt automatisch alle Memories + CLAUDE.md.

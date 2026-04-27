@@ -1,4 +1,21 @@
-# SimpleFT8 TODO — Stand 26.04.2026
+# SimpleFT8 TODO — Stand 27.04.2026 (v0.67)
+
+---
+
+## ⭐ MORGEN ALS NÄCHSTES (Priorität)
+
+**Field-Test Locator-DB (v0.67):**
+- App eine Stunde laufen lassen, FT8 funken → wieviele Stationen sind nach
+  einer Stunde präzise lokalisiert (prec_km <= 5)? Wieviele bleiben Country-
+  Fallback (transparente Punkte auf der Karte)?
+- Disclaimer "Ø Genauigkeit: X km" beobachten — plausibel? Nach 30 Min funken
+  sollte sich der Wert nach unten bewegen.
+- Nach App-Restart: ist die JSON-Datei `~/.simpleft8/locator_cache.json` da?
+  Sind die Stationen sofort ohne ~ in der km-Spalte?
+- Bei Bug oder Auffälligkeit: Issue im Memory loggen.
+
+**Wenn Field-Test ok: nächstes Feature = B) Band-Indikatoren** (siehe unten,
+Foundation steht, 1-2 Tage).
 
 ---
 
@@ -8,7 +25,21 @@ Reihenfolge nach Priorität. Quick-Wins zuerst, USP-Killer-Features parallel als
 
 ---
 
-### A) Aging in Slots statt Sekunden (Bug-Fix) — **0.5 Tag**
+### A0) Locator-DB persistent (v0.67) — ✅ **ERLEDIGT 27.04.2026**
+
+Persistenter Locator-Cache aus CQ/PSK/ADIF mit Source-Priority. 6 atomare
+Commits, 28 Tests, DeepSeek-codereviewed. Karte und rx_panel ziehen aus
+der DB. Save bei App-Close (atomar). Siehe HISTORY.md v0.67.
+
+---
+
+### A) Aging in Slots statt Sekunden (Bug-Fix) — ✅ **ERLEDIGT v0.64 (26.04.2026)**
+
+Umgesetzt mit Werten 7/14/20 (DeepSeek-Korrektur, 5/10/20 waere auf FT4 zu aggressiv).
+
+---
+
+### A-OLD-DOC) Aging Original-Plan (zur Doku)
 
 **Problem:** `core/station_accumulator.py` nutzt Aging in Sekunden:
 - 75s normal / 150s active_qso / 300s CQ-Rufer
@@ -28,7 +59,13 @@ Bei jedem Decode-Cycle aktuelle Slot-Nummer einfließen lassen statt timestamp.
 
 ---
 
-### B) Band-Indikatoren live mit PSK-Reporter ergänzen — **1-2 Tage**
+### B) Band-Indikatoren live mit PSK-Reporter ergänzen — **1-2 Tage** *(als nächstes — Foundation steht!)*
+
+**Foundation ist mit v0.66 schon da:** `core/psk_reporter.py` (XML-Polling, Cache,
+Backoff, Threading) ist wiederverwendbar. Brauchen nur eine zweite Query-Variante
+mit `mode=FT8&lastMinutes=5` (ohne senderCallsign-Filter) für Aktivitaets-
+Aggregat pro Band — das passt in eine erweiterte `PSKReporterClient.fetch_activity()`-
+Methode.
 
 **Status quo:** Bestehende kleine Balken UNTER den Band-Buttons (rot/gelb/grün)
 basieren nur auf HamQSL Solar Flux + Tageszeit + saisonale Korrektur (`core/propagation.py`).
@@ -78,7 +115,29 @@ class BandIndicatorWidget(QWidget):
 
 ---
 
-### C) Richtungs-Keulen-Karte — TX-Pattern (Mike's USP-Killer-Idee) — **2-3 Tage**
+### C) Richtungs-Keulen-Karte — TX-Pattern — ✅ **ERLEDIGT v0.66 (26.04.2026)**
+
+Umgesetzt als Variante (b) **Weltkarte mit Sektor-Overlay** (Azimuthal-Equidistant-
+Projektion mit JO31 als Center, 16 Sektoren à 22.5°, Coastlines aus Natural Earth
+110m). TX-Modus nutzt PSK-Reporter Reverse-Lookup (`senderCallsign=...&mode=FT8`).
+SNR-Skala dunkles Orange → Hellgelb. Aufruf via Settings → "Karte oeffnen ..."
+
+Architektur in 10 atomaren Commits (siehe HISTORY.md v0.66):
+- `core/geo.py` erweitert (Bearing, Projektion, safe_locator)
+- `core/psk_reporter.py` (Polling, Cache, Backoff, Call-Normalisierung)
+- `core/direction_pattern.py` (Sektor-Aggregation, Mobile-Filter)
+- `core/antenna_pref.py` Thread-Safe (RLock + snapshot)
+- `assets/ne_110m_land_antimeridian_split.geojson` (116 KB, 5143 Punkte)
+- `tools/build_coastlines.py` (Pure-Python, kein shapely-Dev-Dep)
+- `ui/direction_map_widget.py` (MapCanvas + DirectionMapDialog)
+- Hook in `mw_cycle._handle_diversity_operate` + `_handle_normal_mode`
+- Cross-Thread-Signal `direction_map_signal` mit Qt.QueuedConnection
+
++141 Tests (220 → 361). Alle Module DeepSeek-codereviewed.
+
+---
+
+### C-OLD-DOC) TX-Pattern-Karte Original-Plan (zur Doku)
 
 **Idee Mike:** Statt PSK-Reporter Punkte/Kreise zu zeigen → Stationen nach **Großkreis-Richtung gruppieren in 16 Sektoren** (à 22.5°). Jeder Sektor wird zu einer **Keule**.
 
@@ -108,7 +167,20 @@ class BandIndicatorWidget(QWidget):
 
 ---
 
-### D) Richtungs-Keulen — ANT2 RX-Pattern aus eigenen Daten (Diversity-USP) — **1-2 Tage zusätzlich**
+### D) Richtungs-Keulen — ANT2 RX-Pattern — ✅ **ERLEDIGT v0.66 (26.04.2026)**
+
+Als EMPFANG-Modus im selben Karten-Widget umgesetzt. Live-Daten kommen
+aus `mw_cycle` (Diversity + Normal). Antenna-Farbcode pro Station:
+- Blau `#4488FF` = nur ANT1
+- Cyan-Grün `#00CCAA` = ANT2 dominiert
+- Leuchtgrün `#44FF44` = Rescue (snr_a1 ≤ -24 UND snr_a2 > -24)
+
+Sektor-Wedges mischen Antennen-Farben gewichtet. LocatorCache merkt sich
+Locator pro Call ueber die Session (FT8 hat Locator nur in CQ-Nachrichten).
+
+---
+
+### D-OLD-DOC) RX-Pattern Original-Plan (zur Doku)
 
 **Idee Mike:** Für ANT2 KEINE PSK-Reporter-Daten (wir senden nicht über ANT2!) sondern **lokale Rescue-Daten** visualisieren.
 
@@ -143,7 +215,14 @@ class RXPatternAnalyzer:
 
 ---
 
-### E) CSV-Export Diversity-Daten — **1-2 Tage**
+### E) CSV-Export Diversity-Daten — ✅ **ERLEDIGT v0.65 (26.04.2026)**
+
+Umgesetzt: Standalone-Script `scripts/export_diversity_csv.py` PLUS UI-Integration
+im Settings-Dialog mit QFileDialog → Verzeichnis-Wahl. 4 CSVs, 675 Datensaetze.
+
+---
+
+### E-OLD-DOC) CSV-Export Original-Plan (zur Doku)
 
 **Idee:** Pro QSO eine CSV-Zeile mit allen Diversity-Metadaten:
 ```
@@ -186,22 +265,18 @@ selected_ant, delta_db, dt_correction, qso_complete
 ## ABHAENGIGKEITEN / REIHENFOLGE
 
 ```
-A (Aging-Bug)              ←  völlig unabhängig, jederzeit
-B (PSK-Indikatoren)        ←  Basis für C
-C (TX-Pattern-Karte)       ←  braucht B (PSK-Reporter Client)
-D (RX-Pattern ANT2)        ←  parallel zu C möglich, kein PSK-Reporter
-E (CSV-Export)             ←  unabhängig, jederzeit
+A (Aging-Bug)              ✅ erledigt v0.64
+B (PSK-Indikatoren)        ←  als nächstes — Foundation steht (psk_reporter.py)
+C (TX-Pattern-Karte)       ✅ erledigt v0.66
+D (RX-Pattern ANT2)        ✅ erledigt v0.66 (im selben Widget)
+E (CSV-Export)             ✅ erledigt v0.65
 F (Audio-Export)           ←  unabhängig, jederzeit
 ```
 
-**Mein Vorschlag — Reihenfolge für Mike:**
-1. **A** (Quick-Win Bug-Fix, 0.5 Tag, sauber abschließen)
-2. **B** (PSK-Reporter Foundation, 1-2 Tage, baut Infrastruktur für C)
-3. **C + D parallel** (Visualisierungs-Killer-Feature, USP)
-4. **E** (CSV-Export, niedrige Komplexität)
-5. **F** (Audio-Export, optional Forschungs-Feature)
-
-**Geschätzter Gesamt-Aufwand:** ca. 1-1.5 Wochen verteilte Arbeit für alle 6 Features.
+**Aktueller Stand 26.04.2026:** 4 von 6 Plan-Features umgesetzt. Verbleibend:
+- **B** als Nächstes (1-2 Tage) — Live-Aktivitaets-Indikatoren unter den
+  Band-Buttons. Foundation `core/psk_reporter.py` ist da.
+- **F** als optionales Forschungs-Feature.
 
 ---
 
@@ -219,6 +294,22 @@ F (Audio-Export)           ←  unabhängig, jederzeit
 
 ## OFFENE TODO (alte Liste, weiter aktuell)
 
+### Karten-Feature v0.66 — Folgemassnahmen
+- [ ] **Migration `main_window._psk_worker` → `core/psk_reporter`** —
+  bewusst zurueckgestellt im Karten-Sprint (out-of-scope-Markierung im Code).
+  Beide Pfade nutzen jetzt parallel die XML-API. Konsolidierung sinnvoll
+  bevor Feature B (Band-Indikatoren) das dritte Mal denselben Code braucht.
+- [ ] **Karten-Live-Test im Feld** — App starten, RX-Modus auf 40m FT8 abends,
+  prüfen: Coastlines korrekt orientiert? Punkte plausible Locator-Position?
+  Antenna-Farbcode wechselt sichtbar zwischen Stationen?
+- [ ] **TX-Modus Live-Test** — DA1MHH/CQ rufen, dann TX-Toggle, schauen ob
+  PSK-Reporter Spots in 1-2 Min erscheinen.
+- [ ] **Mobile-Filter-Edge-Case dokumentieren** — Region-Calls wie `K1ABC/W2`
+  werden mit-gefiltert (regex `/[A-Z0-9]{1,4}$`). Bewusst akzeptiert, im
+  Docstring vermerkt. Falls in Praxis ein Region-Call regelmaessig fehlt:
+  Whitelist statt Regex.
+
+### Andere offene TODOs
 - [ ] Even/Odd dedizierter Timer — unabhängig vom Decoder-Thread (FT2 kritisch)
 - [ ] Gain-Bias beheben — Normal-Modus Gain-Messung wenn Stats aktiv erzwingen
 - [ ] CQ-Zusammenfassung RX-Liste — DeepSeek-Idee: ins QSO-Panel verschieben oder ganz raus
