@@ -925,9 +925,11 @@ class MapCanvas(QWidget):
         if u is None:
             return 0.0
         lat, lon = self._my_pos
-        if abs(lat) > 85.0:  # Nord- oder Suedpol → "Norden" mehrdeutig
+        if abs(lat) > 80.0:  # Nord- oder Suedpol → "Norden" mehrdeutig
             return 0.0
-        n = self._project(min(lat + 5.0, 89.9), lon)
+        # 10° Hebel: bei 400px Globus-Radius ~44 Pixel Versatz → atan2 stabil
+        # auf <1° (5° gab nur ~22 Pixel Hebel, optisch sichtbare Toleranz).
+        n = self._project(min(lat + 10.0, 89.9), lon)
         if n is None:
             return 0.0  # Hilfspunkt auf Globus-Rueckseite
         cx, cy = self._center_px()
@@ -1339,6 +1341,11 @@ class DirectionMapDialog(QDialog):
         for label, val in [("10 Min", 10), ("30 Min", 30), ("60 Min", 60), ("3 Std", 180)]:
             self.window_combo.addItem(label, val)
         self.window_combo.setCurrentIndex(2)  # 60 Min default
+        # Popup-Liste so breit wie laengstes Item (sonst schneidet das Popup
+        # auf macOS die Items ab, auch wenn die geschlossene Combo passt).
+        self.window_combo.view().setMinimumWidth(
+            self.window_combo.view().sizeHintForColumn(0) + 30
+        )
         filter_row.addWidget(self.window_combo)
 
         filter_row.addSpacing(16)
@@ -1347,6 +1354,9 @@ class DirectionMapDialog(QDialog):
         self.band_combo.setSizeAdjustPolicy(QComboBox.AdjustToContents)
         self.band_combo.addItem("Aktuelles", "current")
         self.band_combo.addItem("Alle", "all")
+        self.band_combo.view().setMinimumWidth(
+            self.band_combo.view().sizeHintForColumn(0) + 30
+        )
         filter_row.addWidget(self.band_combo)
 
         filter_row.addSpacing(16)
