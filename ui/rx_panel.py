@@ -135,13 +135,13 @@ class RXPanel(QWidget):
         self.btn_ant_filter.clicked.connect(self._on_ant_filter_clicked)
         header_row.addWidget(self.btn_ant_filter)
 
-        # NEW-Filter: nur ungearbeitete Stationen
-        self.btn_new_filter = QPushButton("NEW")
+        # NEUE-Filter: nur ungearbeitete Stationen (nicht im ADIF-Logbuch)
+        self.btn_new_filter = QPushButton("NEUE")
         self.btn_new_filter.setCheckable(True)
         self.btn_new_filter.setChecked(False)
         self.btn_new_filter.setFixedHeight(20)
-        self.btn_new_filter.setFixedWidth(40)
-        self.btn_new_filter.setToolTip("Nur neue Stationen (schon gearbeitete ausblenden)")
+        self.btn_new_filter.setFixedWidth(50)
+        self.btn_new_filter.setToolTip("Nur neue Stationen — schon gefunkte (laut ADIF-Logbuch) ausblenden")
         self.btn_new_filter.setStyleSheet(_FILTER_STYLE)
         self.btn_new_filter.clicked.connect(self._apply_filters)
         header_row.addWidget(self.btn_new_filter)
