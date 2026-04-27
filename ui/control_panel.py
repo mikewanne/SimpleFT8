@@ -8,8 +8,8 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QSlider, QFrame, QGridLayout, QButtonGroup, QProgressBar, QSpinBox,
 )
-from PySide6.QtCore import Signal, Qt, QTimer
-from PySide6.QtGui import QFont, QPainter, QColor, QPen, QCursor
+from PySide6.QtCore import Signal, Qt, QTimer, Property
+from PySide6.QtGui import QFont, QPainter, QColor, QPen, QBrush, QCursor
 
 from config.settings import BAND_FREQUENCIES
 from main import APP_VERSION
@@ -194,6 +194,35 @@ class FrequencyHistogramWidget(QWidget):
         painter.end()
 
 
+class _PulseBar(QWidget):
+    """4 px hoher Farbbalken mit animierbarer color-Property.
+
+    Ersetzt QFrame+setStyleSheet fuer Propagations-Balken: erlaubt
+    QPropertyAnimation auf der `color`-Property (Cross-Fade in v0.69+).
+    """
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedHeight(4)
+        self._color = QColor("#555555")
+
+    def get_color(self) -> QColor:
+        return self._color
+
+    def set_color(self, c: QColor) -> None:
+        self._color = c
+        self.update()
+
+    color = Property(QColor, get_color, set_color)
+
+    def paintEvent(self, ev):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        p.setBrush(QBrush(self._color))
+        p.setPen(Qt.NoPen)
+        p.drawRoundedRect(self.rect(), 2, 2)
+
+
 class _ModeBandCard(QFrame):
     """Kachel 1 (blau) — Modus (FT8/FT4) + Band-Auswahl."""
 
@@ -263,9 +292,7 @@ class _ModeBandCard(QFrame):
             btn.setFixedHeight(28)
             self.band_buttons[b] = btn
             grid.addWidget(btn, 1, col + 1)
-            bar = QFrame()
-            bar.setFixedHeight(4)
-            bar.setStyleSheet("background: #555555; border: none; border-radius: 2px;")
+            bar = _PulseBar()
             bar.setVisible(False)
             self.prop_bars[b] = bar
             grid.addWidget(bar, 2, col + 1)
@@ -278,9 +305,7 @@ class _ModeBandCard(QFrame):
             btn.setFixedHeight(28)
             self.band_buttons[b] = btn
             grid.addWidget(btn, 3, col + 1)
-            bar = QFrame()
-            bar.setFixedHeight(4)
-            bar.setStyleSheet("background: #555555; border: none; border-radius: 2px;")
+            bar = _PulseBar()
             bar.setVisible(False)
             self.prop_bars[b] = bar
             grid.addWidget(bar, 4, col + 1)
@@ -310,10 +335,7 @@ class _ModeBandCard(QFrame):
             if cond is None:
                 bar.setVisible(False)
             else:
-                bar.setStyleSheet(
-                    f"background: {_COLORS.get(cond, '#555555')}; "
-                    "border: none; border-radius: 2px;"
-                )
+                bar.set_color(QColor(_COLORS.get(cond, "#555555")))
                 bar.setVisible(True)
 
 
