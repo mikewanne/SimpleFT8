@@ -211,19 +211,25 @@ class CycleMixin:
             self._diversity_in_operate = False
 
     def _feed_locator_db(self, messages):
-        """Decoder-Hook: pro is_grid()-Message Locator in die Locator-DB pushen.
+        """Decoder-Hook: pro is_grid-Message Locator in die Locator-DB pushen.
 
-        CQ-Calls fuehren ihren 4-stelligen Locator als field3. Die DB
-        priorisiert intern: cq_6 > psk_6 > qso_log_6 > _4-Varianten.
+        Greift sowohl bei CQ ("CQ R9CA LO97" → R9CA/LO97) als auch bei
+        Antworten mit Locator ("RA4ALY DL6YJB JO31" → DL6YJB/JO31).
+        caller=field2 ist immer der Sender. Die DB priorisiert intern:
+        cq_6 > psk_6 > qso_log_6 > _4-Varianten.
         """
         db = getattr(self, "locator_db", None)
         if db is None or not messages:
             return
         for m in messages:
             try:
-                if m.is_grid():
+                # is_grid ist Property (nicht callable) — kein () !
+                # is_rr73 zuerst pruefen: 'RR73' matcht is_grid struktur-
+                # gleich (Letter+Letter+Digit+Digit), ist aber Bestaetigung
+                # nicht Locator.
+                if m.is_grid and not m.is_rr73 and m.field3 != "73":
                     db.set(m.caller, m.field3, "cq")
-            except (AttributeError, TypeError):
+            except AttributeError:
                 continue
 
     def _handle_diversity_operate(self, messages, ant):
