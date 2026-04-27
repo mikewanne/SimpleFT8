@@ -81,6 +81,7 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self._init_psk_polling()
         self._init_propagation_polling()
         self._init_presence_watchdog()
+        self._init_locator_db_autosave()
         self._init_cq_countdown_timer()
 
         # Statusbar + Geometry
@@ -240,6 +241,25 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self._psk_repeat_interval = 300000  # 5 Minuten (PSKReporter Rate-Limit)
         self._psk_last_fetch_time = None
         self._psk_band = ""
+
+    def _init_locator_db_autosave(self):
+        """LocatorDB alle 5 Min auf Disk schreiben.
+
+        Schuetzt vor Datenverlust bei App-Crash oder Hard-Kill (z.B. durch
+        kill_old_instances beim naechsten Start, das closeEvent ueberspringt).
+        Atomic-Write im LocatorDB.save() macht das crash-sicher (.tmp + replace).
+        """
+        from PySide6.QtCore import QTimer
+        self._locator_save_timer = QTimer(self)
+        self._locator_save_timer.timeout.connect(self._autosave_locator_db)
+        self._locator_save_timer.start(300_000)  # 5 Minuten
+
+    def _autosave_locator_db(self):
+        """Wird vom Timer aufgerufen — Save mit try/except (kein Crash bei IO-Fehler)."""
+        try:
+            self.locator_db.save()
+        except OSError as e:
+            print(f"[LocatorDB] Auto-Save fehlgeschlagen: {e}")
 
     def _init_propagation_polling(self):
         """Propagation: Hintergrund-Abruf + UI-Update jede Minute (Zeitkorrektur live)."""
