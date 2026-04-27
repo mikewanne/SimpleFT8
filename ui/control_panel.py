@@ -8,7 +8,8 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QSlider, QFrame, QGridLayout, QButtonGroup, QProgressBar, QSpinBox,
 )
-from PySide6.QtCore import Signal, Qt, QTimer, Property
+from typing import Optional
+from PySide6.QtCore import Signal, Qt, QTimer, Property, QPropertyAnimation, QEasingCurve
 from PySide6.QtGui import QFont, QPainter, QColor, QPen, QBrush, QCursor
 
 from config.settings import BAND_FREQUENCIES
@@ -232,6 +233,10 @@ class _ModeBandCard(QFrame):
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setStyleSheet(_CARD_SS_BLUE)
 
+        # Pulsier-State pro Band: {band: {"state": (cond_now, cond_60, fast),
+        # "anim": QPropertyAnimation}} — leer wenn statisch.
+        self._pulse: dict = {}
+
         lay = QVBoxLayout(self)
         lay.setContentsMargins(10, 10, 10, 10)
         lay.setSpacing(8)
@@ -319,24 +324,88 @@ class _ModeBandCard(QFrame):
 
         lay.addLayout(grid)
 
-    def update_propagation(self, conditions: dict) -> None:
-        """Propagations-Balken aktualisieren. conditions=None → alle ausblenden."""
+    def update_propagation(self, conditions: dict,
+                           active_band: Optional[str] = None) -> None:
+        """Propagations-Balken aktualisieren.
+
+        conditions=None/leer → alle ausblenden.
+        active_band: Wenn fuer dieses Band ein 60-min-Trend ansteht
+        (cond_now != cond_60), pulsiert sein Balken weich zwischen den
+        beiden Farben. Andere Baender bleiben statisch.
+        """
+        from core import propagation
+
         _COLORS = {
             "good": "#00CC00",
             "fair": "#FFAA00",
             "poor": "#CC0000",
             "grey": "#555555",
         }
+
         for band, bar in self.prop_bars.items():
             if not conditions:
                 bar.setVisible(False)
+                self._stop_pulse(band)
                 continue
-            cond = conditions.get(band)
-            if cond is None:
+            cond_now = conditions.get(band)
+            if cond_now is None:
                 bar.setVisible(False)
-            else:
-                bar.set_color(QColor(_COLORS.get(cond, "#555555")))
-                bar.setVisible(True)
+                self._stop_pulse(band)
+                continue
+            bar.setVisible(True)
+
+            # nicht aktives Band oder unsichere Daten → statisch
+            if band != active_band or cond_now == "grey":
+                bar.set_color(QColor(_COLORS.get(cond_now, "#555555")))
+                self._stop_pulse(band)
+                continue
+
+            # aktives Band — Trend pruefen
+            cond_30_dict = propagation.get_conditions_at(30) or {}
+            cond_60_dict = propagation.get_conditions_at(60) or {}
+            cond_30 = cond_30_dict.get(band, cond_now)
+            cond_60 = cond_60_dict.get(band, cond_now)
+
+            if cond_now == cond_60 or cond_60 == "grey":
+                bar.set_color(QColor(_COLORS[cond_now]))
+                self._stop_pulse(band)
+                continue
+
+            fast = (cond_30 != cond_now and cond_30 == cond_60)
+            new_state = (cond_now, cond_60, fast)
+            if self._pulse.get(band, {}).get("state") == new_state:
+                continue  # Animation laeuft bereits → kein Restart-Flacker
+
+            self._stop_pulse(band)
+            self._start_pulse(band, _COLORS[cond_now], _COLORS[cond_60], fast)
+            self._pulse[band]["state"] = new_state
+
+    def _start_pulse(self, band: str, hex_a: str, hex_b: str, fast: bool) -> None:
+        """Endlose Cross-Fade-Animation a→b→a auf prop_bars[band]."""
+        bar = self.prop_bars[band]
+        fade = 500 if fast else 1000
+        hold = 1500 if fast else 3000
+        total = (hold + fade) * 2
+        a = QColor(hex_a)
+        b = QColor(hex_b)
+        anim = QPropertyAnimation(bar, b"color", self)
+        anim.setDuration(total)
+        anim.setLoopCount(-1)
+        anim.setEasingCurve(QEasingCurve.InOutSine)
+        anim.setKeyValueAt(0.0, a)
+        anim.setKeyValueAt(hold / total, a)
+        anim.setKeyValueAt((hold + fade) / total, b)
+        anim.setKeyValueAt((hold + fade + hold) / total, b)
+        anim.setKeyValueAt(1.0, a)
+        anim.start()
+        self._pulse[band] = {"state": None, "anim": anim}
+
+    def _stop_pulse(self, band: str) -> None:
+        """Animation stoppen + entry aufraeumen (idempotent)."""
+        entry = self._pulse.pop(band, None)
+        if entry and entry.get("anim"):
+            entry["anim"].stop()
+            entry["anim"].deleteLater()
 
 
 def _sep_line() -> QFrame:
@@ -1280,13 +1349,14 @@ class ControlPanel(QWidget):
             "border: none; background: transparent;"
         )
 
-    def update_propagation(self, conditions) -> None:
+    def update_propagation(self, conditions, active_band: Optional[str] = None) -> None:
         """Propagations-Balken unter Band-Buttons aktualisieren.
 
         Args:
             conditions: Dict {'80m': 'good', ...} oder None (→ Balken ausblenden).
+            active_band: Aktuelles Band — Trend-Pulsieren nur auf diesem.
         """
-        self._mode_band_card.update_propagation(conditions or {})
+        self._mode_band_card.update_propagation(conditions or {}, active_band)
 
     # =====================================================================
     # PSK Reporter

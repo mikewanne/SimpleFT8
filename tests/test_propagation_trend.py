@@ -1,5 +1,13 @@
-"""Tests fuer get_conditions_at(minutes_ahead) — Trend-Lookahead."""
+"""Tests fuer get_conditions_at(minutes_ahead) — Trend-Lookahead.
+
+Plus Tests fuer _ModeBandCard Pulsier-Logik (active_band, _pulse-State).
+"""
+import os
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
 from datetime import datetime, timezone
+
+import pytest
 
 from core import propagation
 
@@ -40,3 +48,52 @@ def test_get_conditions_at_60min_band_opens(monkeypatch):
     assert cond_now["40m"] == "poor"
     # +60 min = 14:30 UTC → 40m offen → HamQSL-Wert "good"
     assert cond_60["40m"] == "good"
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Pulsier-Logik in _ModeBandCard
+# ─────────────────────────────────────────────────────────────────────────
+
+@pytest.fixture
+def qapp():
+    from PySide6.QtWidgets import QApplication
+    app = QApplication.instance() or QApplication([])
+    yield app
+
+
+def test_pulse_started_only_for_active_band(qapp, monkeypatch):
+    """Nur das aktive Band bekommt eine laufende Animation."""
+    from PySide6.QtCore import QAbstractAnimation
+    from ui.control_panel import _ModeBandCard
+
+    # 40m: cond_now=good, cond_30=poor, cond_60=poor → Trend → animieren
+    # 20m: cond_now=poor, cond_30=good, cond_60=good → Trend → wuerde
+    #      animiert, ist aber nicht active_band
+    def fake_at(minutes):
+        if minutes == 0:
+            return {"40m": "good", "20m": "poor"}
+        return {"40m": "poor", "20m": "good"}  # 30 und 60 zeigen Trend
+
+    monkeypatch.setattr(propagation, "get_conditions_at", fake_at)
+
+    card = _ModeBandCard()
+    card.update_propagation({"40m": "good", "20m": "poor"}, active_band="40m")
+
+    assert "40m" in card._pulse, "active band sollte pulsieren"
+    assert card._pulse["40m"]["anim"].state() == QAbstractAnimation.State.Running
+    assert "20m" not in card._pulse, "non-active band darf nicht pulsieren"
+
+
+def test_no_pulse_when_trend_equals_now(qapp, monkeypatch):
+    """Aktives Band ohne Trend (cond_now == cond_60) → keine Animation."""
+    from ui.control_panel import _ModeBandCard
+
+    def fake_at(minutes):
+        return {"40m": "good"}  # alle Zeitpunkte gleich → kein Trend
+
+    monkeypatch.setattr(propagation, "get_conditions_at", fake_at)
+
+    card = _ModeBandCard()
+    card.update_propagation({"40m": "good"}, active_band="40m")
+
+    assert "40m" not in card._pulse, "kein Trend → keine Animation"

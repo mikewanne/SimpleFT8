@@ -328,6 +328,11 @@ class RadioMixin:
             self._psk_first_fetch = True
             _psk_t.setInterval(120000)
             _psk_t.start()
+        # Propagations-Balken sofort fuer neues Band aktualisieren
+        # (sonst 60s Lag bis zum naechsten Polling-Tick → Pulsier-Animation
+        # wuerde am alten Band haengen)
+        self._update_propagation_ui()
+
         # Diversity: Preset-Check mit Dialog + ggf. Pipeline
         if self._rx_mode == "diversity":
             ft_mode = self.settings.get("mode", "FT8")

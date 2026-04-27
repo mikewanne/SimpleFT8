@@ -522,7 +522,8 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
                 )
         else:
             self._prop_error_shown = False   # Reset für nächsten Fehler
-            self.control_panel.update_propagation(conditions)
+            self.control_panel.update_propagation(
+                conditions, active_band=self.settings.band)
 
     # ── PSKReporter ──────────────────────────────────────────────
 
