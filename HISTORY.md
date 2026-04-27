@@ -5,6 +5,102 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-04-27 v0.69 — Propagations-Trend-Pulsieren
+
+**Betroffene Dateien:** `core/propagation.py`, `ui/control_panel.py`,
+`ui/main_window.py`, `ui/mw_radio.py`, `tests/test_propagation_trend.py` (neu),
+`main.py`, `CLAUDE.md`.
+
+### Problem (Mike-Anfrage 27.04.2026)
+Mike wollte bei den Propagations-Farbbalken unter den Band-Buttons ein
+visuelles Signal wenn in der naechsten Stunde eine Bandoeffnung oder
+-schliessung bevorsteht. Hartes Blinken wurde explizit abgelehnt
+(„kriegt man einen an der Murmel"). Loesung: weicher Cross-Fade
+zwischen Ist-Farbe und Trend-Farbe — beruhigend, nicht nervtoetend.
+
+### Workflow (V1 → V2 → V3 → Plan-Mode → Implementation)
+Mehrstufiger Prompt-Workflow gemaess CLAUDE.md durchlaufen:
+1. **V1:** erster Prompt-Entwurf (Claude). Datei:Zeile-Refs verifiziert
+2. **V2 (Self-Review):** drei eigene Findings korrigiert — Drift-Risk
+   `get_conditions_at(0)` ↔ `get_conditions()`, Bandwechsel-Lag (60s),
+   Anim-Restart-Flacker-Risk. Lookahead-Granularitaet von Stunden auf
+   Minuten umgestellt.
+3. **V3 (DeepSeek-Review):** DeepSeek fand 2/9 Punkte berechtigt
+   (KISS-Reuse via `if minutes_ahead==0`, Single-Animation statt
+   SequentialGroup). 1× Halluzination — DeepSeek behauptete
+   `_apply_seasonal_correction` existiere nicht (existiert bei
+   `core/propagation.py:113`). Mike's CLAUDE.md-Warnung bewahrheitete sich.
+4. **Plan-Mode:** Plan-Datei erstellt + genehmigt
+5. **Pre-Commit-Codereview** vor Commit 3: DeepSeek fand 7 Punkte —
+   ALLE als falsch/over-defensiv eingestuft (Threading-Spekulation
+   verifiziert: alles GUI-Thread; State-Vergleich missverstanden
+   als QColor.rgba() statt String-Tupel; bereits stop+start_pulse-
+   Sequenz nicht erkannt). Keine Aenderungen uebernommen.
+
+### Architektur
+
+**Hook A — `core/propagation.py`:** neue Public-API
+`get_conditions_at(minutes_ahead: int = 0) -> Optional[Dict[str, str]]`.
+- minutes_ahead=0 → `_evaluate_conditions(raw)` reuse (drift-frei)
+- minutes_ahead>0 → `target = now + timedelta(minutes_ahead)`,
+  day/night-Flag und `_apply_seasonal_correction` mit verschobenem
+  `utc_hour`/`month`
+- `get_conditions()` als 1-Zeilen-Wrapper
+
+**Hook B — `_PulseBar` Custom Widget (control_panel.py):**
+QFrame+setStyleSheet ist nicht mit QPropertyAnimation kompatibel.
+Loesung: QWidget-Subclass mit `color`-QProperty (QColor) + paintEvent
+mit drawRoundedRect. Ersetzt 2× QFrame in `_ModeBandCard.prop_bars`.
+Reines Refactor (Commit 2 isoliert): Tests bleiben gruen.
+
+**Hook C — Trend-Logik (`_ModeBandCard.update_propagation`):**
+- neue Signatur `(conditions, active_band: Optional[str] = None)`
+- pro Band:
+  - inaktives Band ODER `cond_now == "grey"` → statisch + `_stop_pulse`
+  - aktives Band: `cond_30/cond_60 = get_conditions_at(30/60)`
+  - `cond_now == cond_60` → statisch + `_stop_pulse`
+  - `fast = (cond_30 != cond_now AND cond_30 == cond_60)`
+  - State-Vergleich `_pulse[band]['state'] == new_state` →
+    `continue` (kein Restart-Flacker beim 60s-Polling)
+  - sonst: `_stop_pulse` + `_start_pulse`
+- `_start_pulse`: einzelne QPropertyAnimation mit 5 Keyframes
+  (a → a-hold → b → b-hold → a) + InOutSine + LoopCount(-1)
+- `_stop_pulse`: idempotent via `pop+deleteLater`
+- Cycle-Times: slow 3 s/1 s, fast 1.5 s/0.5 s
+
+**Hook D — `ui/main_window.py:525`:** `active_band=self.settings.band`
+durchreichen an `update_propagation`.
+
+**Hook E — `ui/mw_radio.py:_on_band_changed`:**
+`self._update_propagation_ui()` direkt vor dem Diversity-Branch —
+verhindert 60s-Lag bis zur naechsten Animation-Aktualisierung.
+
+### Tests
+411 → 416 (+5 in `tests/test_propagation_trend.py`):
+- T1 `test_get_conditions_at_zero_equals_now` — Reuse-Verifikation
+- T2 `test_get_conditions_at_60min_band_opens` — 40m winter
+  open_h=14, FakeDatetime auf 13:30 UTC: now=poor, +60=good
+- T3 `test_get_conditions_at_returns_none_without_cache`
+- T4 `test_pulse_started_only_for_active_band` — nur active_band
+  hat laufende `QAbstractAnimation.State.Running`
+- T5 `test_no_pulse_when_trend_equals_now` — kein Trend → kein Pulse
+
+### Out-of-Scope (bewusst)
+- HamQSL Polling-Intervall reduzieren (3 h bleibt)
+- Trend-Animation fuer NICHT-aktive Baender
+- Sonnensturm-Notfall-Indikator / orange Sonderfarbe
+- >2 Geschwindigkeitsstufen
+- Alpha-Pulsation oder Glow-Effekte
+
+### Lehre fuer kuenftige V3-Workflows
+Bei Pre-Commit-Codereview kann DeepSeek auch dann nichts Wertvolles
+finden, wenn V1→V2→V3 sauber durchlaufen ist. Die echten Funde kamen
+bei der Plan-Phase (V3). Pre-Commit nur dann nochmal lohnenswert wenn
+sich die Implementation gegenueber dem Plan deutlich aendert. Sonst:
+einsparen, Tests gruen reichen.
+
+---
+
 ## 2026-04-25 v0.59 — CQ-Freq Praxis-Tuning (3 Punkte + 1 Bug-Fix)
 
 **Betroffene Dateien:** `core/diversity.py`, `ui/mw_cycle.py`, `ui/main_window.py`, `ui/control_panel.py`, `tests/test_modules.py`, `main.py`
