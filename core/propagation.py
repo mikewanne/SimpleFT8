@@ -20,7 +20,7 @@ import time
 import xml.etree.ElementTree as ET
 import urllib.request
 import urllib.error
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Optional, Tuple
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -251,17 +251,34 @@ def start_background_updater() -> None:
     _thread.start()
 
 
-def get_conditions() -> Optional[Dict[str, str]]:
-    """Aktuelles Bedingungen-Dict MIT Live-Zeitkorrektur.
+def get_conditions_at(minutes_ahead: int = 0) -> Optional[Dict[str, str]]:
+    """Konditionen jetzt oder in N Minuten, basierend auf _raw_data.
 
-    Zeitkorrektur wird bei JEDEM Aufruf neu berechnet — nicht gecacht.
-    None = Balken ausblenden.
+    minutes_ahead == 0 → identisch zu get_conditions() (gleicher Pfad).
+    None bei leerem Cache (vor erstem HamQSL-Abruf).
     """
     with _lock:
         raw = dict(_raw_data) if _raw_data is not None else None
     if raw is None:
         return None
-    return _evaluate_conditions(raw)
+    if minutes_ahead == 0:
+        return _evaluate_conditions(raw)
+
+    target = datetime.now(timezone.utc) + timedelta(minutes=minutes_ahead)
+    utc_hour = target.hour
+    month = target.month
+    time_of_day = "day" if 6 <= utc_hour < 18 else "night"
+    conditions: Dict[str, str] = {}
+    for band in ALL_BANDS:
+        band_data = raw.get(band, {"day": "grey", "night": "grey"})
+        base = band_data.get(time_of_day, "grey")
+        conditions[band] = _apply_seasonal_correction(band, base, utc_hour, month)
+    return conditions
+
+
+def get_conditions() -> Optional[Dict[str, str]]:
+    """Aktuelles Bedingungen-Dict MIT Live-Zeitkorrektur. None = Balken ausblenden."""
+    return get_conditions_at(0)
 
 
 def get_color(band: str) -> str:
