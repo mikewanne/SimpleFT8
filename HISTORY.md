@@ -1255,3 +1255,26 @@ Bei reinen Tippfehlern / Lokal-Patches: V1 reicht.
   (Sektoren bleiben in 30 % der Disc, Verzerrung optisch unauffaellig).
 
 **Stand:** v0.68, 411 Tests gruen (+4 ggue. v0.67). Map-UI ist drag-fest.
+
+### Field-Test-Folgekorrekturen (v0.68 hotfix, gleicher Tag)
+Nach App-Restart fand Mike zwei Restprobleme die ich am Schreibtisch nicht
+verifizieren konnte:
+
+1. **Dropdown-Popup-Items immer noch abgeschnitten** — `AdjustToContents`
+   regelte nur die geschlossene Combo, nicht die Popup-View. Workaround:
+   `view().setMinimumWidth(view().sizeHintForColumn(0) + 30)` nach allen
+   `addItem`-Aufrufen. +30 statt initialer +16, weil "Aktuelles" wegen
+   des Pfeil-Indikators mehr Platz braucht.
+
+2. **Sektor-Toleranz optisch zu gross beim Drehen** — der 5°-Hilfspunkt
+   gab bei 400px-Globus nur ~22 Pixel Hebel. Pixel-Quantisierung im
+   `atan2` verlor dadurch 2-3° Genauigkeit. Mike sah die obere Station
+   mal links, mal rechts vom Sektor.
+   → 10°-Hilfspunkt: ~44 Pixel Hebel, Genauigkeit < 1°. Pol-Cutoff von
+   85° auf 80° angepasst (10° + 80° = 90° max, sicher).
+
+Commit: `7b117a8` fix(map): v0.68 Folgekorrekturen — Popup-Padding + Sektor-Hebel.
+
+**Lehre fuer kuenftige UI-Fixes:** AdjustToContents reicht NIE allein —
+Popup-View braucht eigenes setMinimumWidth. Bei Bearing-aus-Pixel-Helfer
+groesseren Hebel waehlen (10-15°) als naive Mathematik suggeriert.

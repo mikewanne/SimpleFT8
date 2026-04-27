@@ -1,21 +1,30 @@
-# SimpleFT8 TODO — Stand 27.04.2026 (v0.67)
+# SimpleFT8 TODO — Stand 27.04.2026 (v0.68)
 
 ---
 
-## ⭐ MORGEN ALS NÄCHSTES (Priorität)
+## ⭐ ALS NÄCHSTES (Priorität)
 
-**Field-Test Locator-DB (v0.67):**
+**Mike's offene Map-UI-Punkte aus v0.68-Field-Test:**
+- ✅ Punkt 3 (Zeit-Dropdown) — erledigt v0.68
+- ✅ Punkt 4 (Band-Dropdown) — erledigt v0.68
+- ✅ Punkt 5 (Sektor-Rotation) — erledigt v0.68 + Folgekorrektur
+- 🔜 **Punkt 1 — Propagations-Balken Pulsieren bei Bandöffnung**
+  Mike's Vorschlag: zwei Animations-Stufen (langsam → schnell) als Vorlauf
+  zur finalen rot/grün-Faerbung. Idee: Übergangsfarben + Blinken vermitteln
+  "es passiert gerade was". Erst V1→V3-Workflow durchlaufen wegen
+  Animations-Komplexitaet (Easing, Frequenz, Threshold pro Band).
+- 🔜 **Punkt 2 — PSK-Reporter Reichweiten-Sektoren im TX-Modus**
+  Statt nur Punkte/Linien: Sektor-Aggregation analog RX-Modus, zeigt
+  Richtungs-Empfangsmuster ("wo werde ich gehoert"). Foundation steht.
+- 🔜 **Punkt 6 — Stations-Count Diff (Karte 37 vs RX-Panel 46)**
+  Tooltip-Loesung: "37 mit Position / 46 dekodiert" statt Verhalten zu
+  aendern. Trivial-Fix.
+
+**Field-Test Locator-DB (v0.67) noch offen:**
 - App eine Stunde laufen lassen, FT8 funken → wieviele Stationen sind nach
-  einer Stunde präzise lokalisiert (prec_km <= 5)? Wieviele bleiben Country-
-  Fallback (transparente Punkte auf der Karte)?
-- Disclaimer "Ø Genauigkeit: X km" beobachten — plausibel? Nach 30 Min funken
-  sollte sich der Wert nach unten bewegen.
-- Nach App-Restart: ist die JSON-Datei `~/.simpleft8/locator_cache.json` da?
-  Sind die Stationen sofort ohne ~ in der km-Spalte?
+  einer Stunde präzise lokalisiert (prec_km <= 5)?
+- Nach App-Restart: ist `~/.simpleft8/locator_cache.json` da?
 - Bei Bug oder Auffälligkeit: Issue im Memory loggen.
-
-**Wenn Field-Test ok: nächstes Feature = B) Band-Indikatoren** (siehe unten,
-Foundation steht, 1-2 Tage).
 
 ---
 
