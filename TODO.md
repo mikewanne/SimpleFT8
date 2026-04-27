@@ -1,39 +1,45 @@
-# SimpleFT8 TODO — Stand 27.04.2026 (v0.69)
+# SimpleFT8 TODO — Stand 27.04.2026 (v0.70)
 
 ---
 
 ## ⭐ ALS NÄCHSTES (Priorität)
 
-**Mike's offene Map-UI-Punkte aus v0.68-Field-Test:**
+**Mike's offene Map-UI-Punkte aus v0.68-Field-Test — ALLE ERLEDIGT:**
 - ✅ Punkt 3 (Zeit-Dropdown) — erledigt v0.68
 - ✅ Punkt 4 (Band-Dropdown) — erledigt v0.68
 - ✅ Punkt 5 (Sektor-Rotation) — erledigt v0.68 + Folgekorrektur
-- ✅ **Punkt 1 — Propagations-Balken Pulsieren — erledigt v0.69**
-  (`_PulseBar` Custom-Widget + `get_conditions_at(minutes_ahead)` +
-  Cross-Fade-Animation auf aktivem Band, slow/fast je nach Naehe zum
-  Uebergang. Field-Test ausstehend: ob Animation-Tempo subjektiv passt
-  oder `fade=2000`/`hold=4000` langsamer sein sollte.)
-- 🔜 **Punkt 2 — PSK-Reporter Reichweiten-Sektoren im TX-Modus
-  (NÄCHSTES FEATURE)**
+- ✅ Punkt 1 (Propagations-Balken Pulsieren) — erledigt v0.69
+- ✅ Punkt 6 (Stations-Count Tooltip "37 / 46 Stationen") — erledigt v0.70
+
+**v0.70 Release-Bilanz (27.04.2026):**
+- 🐛 **Kritischer Bugfix:** `is_grid` Property-Aufruf mit Klammern → seit v0.67
+  silent TypeError, Live-Locator-Feed komplett tot. **Jetzt aktiv** — DB
+  waechst live mit jedem CQ/Antwort.
+- 💾 Auto-Save LocatorDB alle 5 Min — kein Datenverlust bei Hard-Kill
+- 🪟 Ant-Spalte 'A1' im Normal-Modus
+- 🔍 Stations-Count Tooltip auf Karte
+- 📊 LocatorDB-Stand: **7.991 Calls** aus DA1MHH+DO4MHH-ADIF (854 KB JSON)
+
+**Naechstes Feature:**
+- 🔜 **Punkt 2 — PSK-Reporter Reichweiten-Sektoren im TX-Modus**
   Statt nur Punkte/Linien: Sektor-Aggregation analog RX-Modus, zeigt
   Richtungs-Empfangsmuster ("wo werde ich gehoert"). Foundation steht
   in `core/psk_reporter.py` + `core/direction_pattern.py`. Workflow
   V1→V2→V3 lohnt nicht zwingend (klare Akzeptanzkriterien, Single-File-
   Aenderung in `direction_map_widget.py`), aber bei Aufwand >0.5 Tag
   trotzdem.
-- 🔜 **Punkt 6 — Stations-Count Diff (Karte 37 vs RX-Panel 46)**
-  Tooltip-Loesung: "37 mit Position / 46 dekodiert" statt Verhalten zu
-  aendern. Trivial-Fix (<5 Zeilen, kein Workflow noetig).
 
 **Field-Test offen:**
-- **v0.67 Locator-DB:** App eine Stunde laufen lassen, FT8 funken →
-  wieviele Stationen sind nach einer Stunde praezise lokalisiert
-  (`prec_km <= 5`)? Nach App-Restart: ist `~/.simpleft8/locator_cache.json`
-  da?
+- ✅ **v0.67 Locator-DB Praezisionstest:** sichtbar in der Karte — 50/53
+  Stationen mit Position nach Restart, Ø Genauigkeit 74 km. JSON
+  persistiert. Erfolgreich.
 - **v0.69 Pulsier-Animation:** subjektiv-Test bei Tageszeit-Uebergang
   (z.B. 16-17 UTC fuer 40m winter close): fuehlt sich der Cross-Fade
   beruhigend an? Falls zu auffaellig: `fade=2000`/`hold=4000` in
   `_start_pulse` (`ui/control_panel.py:_ModeBandCard._start_pulse`).
+- **v0.70 Live-Locator-Feed:** ueber laengere Empfangs-Session
+  beobachten ob die DB sichtbar waechst. Erwartung: pro Stunde 5-15
+  neue Calls mit prec_km=5 (CQ-Calls + Antworten mit Grid).
 
 ---
 
