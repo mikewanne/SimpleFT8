@@ -8,11 +8,64 @@
 - ✅ Punkt 3 (Zeit-Dropdown) — erledigt v0.68
 - ✅ Punkt 4 (Band-Dropdown) — erledigt v0.68
 - ✅ Punkt 5 (Sektor-Rotation) — erledigt v0.68 + Folgekorrektur
-- 🔜 **Punkt 1 — Propagations-Balken Pulsieren bei Bandöffnung**
-  Mike's Vorschlag: zwei Animations-Stufen (langsam → schnell) als Vorlauf
-  zur finalen rot/grün-Faerbung. Idee: Übergangsfarben + Blinken vermitteln
-  "es passiert gerade was". Erst V1→V3-Workflow durchlaufen wegen
-  Animations-Komplexitaet (Easing, Frequenz, Threshold pro Band).
+- 🔜 **Punkt 1 — Propagations-Balken Pulsieren (NÄCHSTES FEATURE)**
+
+  **Spec (Stand 27.04.2026 nach Mike+Claude-Brainstorming, vor V1):**
+
+  *Was:* Propagations-Farbbalken unter dem Band-Button **fadet** weich
+  zwischen aktueller Farbe und Trend-Farbe wenn Bandöffnung/-schließung
+  bevorsteht. Visuelles Signal "gleich passiert was" — beruhigt statt
+  zu nerven.
+
+  *Was nicht:* hartes Blinken (Mike: "kriegt man einen an der Murmel"),
+  neue Farben (wir bleiben bei good=#00CC00 / fair=#FFAA00 / poor=#CC0000),
+  Animation auf inaktiven Bändern.
+
+  *Trigger-Logik (KISS, ~20 Zeilen):*
+  ```python
+  cond_now = _apply_seasonal_correction(band, hamqsl, hour, month)
+  cond_60  = _apply_seasonal_correction(band, hamqsl, hour+1, month)
+  if cond_now == cond_60:
+      static  # kein Trend, keine Animation
+  else:
+      fade(cond_now ↔ cond_60)
+  ```
+  Hysterese unnötig (Werte sind diskret good/fair/poor → klar oder klar nicht).
+  HamQSL-Sprünge brauchen keinen Spezialcode — sie ändern das Grundniveau,
+  Trend-Berechnung läuft automatisch neu.
+
+  *Begründung Lookahead 60min:* HamQSL-Update-Intervall ist 1-3h, NOAA
+  rechnet mit Stunden-Vorlauf — spontane Sonnenstürme um 12:10 schlagen
+  nicht um 12:10 in HamQSL durch. Tageszeit-Übergänge (40m abends,
+  20m nachts) sind 60min vorher absehbar.
+
+  *Animation:*
+  - **Cross-Fade**, kein hartes Blinken (QPropertyAnimation auf
+    `palette()` oder QGraphicsColorEffect)
+  - 3s aktuelle Farbe → 1s Übergang → 3s Trend-Farbe → 1s Übergang ...
+  - Bei Trend-Wechsel < 30min entfernt: Tempo verdoppeln (1.5s / 0.5s)
+  - Wenn Trend eingetreten: hart die neue Farbe, Animation aus
+
+  *Scope:*
+  - **NUR aktuelles Band** animieren (laut Mike's Wunsch)
+  - Andere Bänder: statisch wie heute
+  - Stabile Bänder: keine Animation (good bleibt einfach grün)
+
+  *Workflow:*
+  V1→V2 (Self-Review)→V3 (DeepSeek) wie bei Map-Bugfix v0.68.
+  Ergibt Sinn weil Animation-Komplexität (Easing, Threshold, State-Machine)
+  und Trend-Berechnung (`_apply_seasonal_correction` neu nutzen) >5 Zeilen
+  und mathematisch.
+
+  *Berührte Dateien (vermutlich):*
+  - `core/propagation.py` — neue `propagation_trend(band, hamqsl, hour, month)
+    -> ("up"|"down"|"stable", current_color, trend_color)`
+  - `ui/control_panel.py` — `_BandCard.update_propagation()` erweitern um
+    Trend-Animation, QPropertyAnimation pro `prop_bars[band]`
+  - `tests/test_propagation_trend.py` (neu) — Trend-Berechnung pro Band
+    × Tageszeit testen
+
+  *Aufwand-Schätzung:* 0.5-1 Tag (V1→V3 plus Implementation).
 - 🔜 **Punkt 2 — PSK-Reporter Reichweiten-Sektoren im TX-Modus**
   Statt nur Punkte/Linien: Sektor-Aggregation analog RX-Modus, zeigt
   Richtungs-Empfangsmuster ("wo werde ich gehoert"). Foundation steht.
