@@ -901,7 +901,8 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
             locator_db=self.locator_db,
         )
         if self._direction_map_dialog.mode == "rx":
-            self._direction_map_dialog.update_rx_stations(points)
+            self._direction_map_dialog.update_rx_stations(
+                points, total_decoded=len(snapshot))
         # TX-Modus wird in Schritt 8 ueber PSKReporter befuellt, nicht hier.
 
     def closeEvent(self, event):

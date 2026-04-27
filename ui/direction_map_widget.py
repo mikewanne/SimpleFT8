@@ -1409,12 +1409,27 @@ class DirectionMapDialog(QDialog):
 
     # ── Public API fuer Live-Daten (Schritt 7+8) ─────────
 
-    def update_rx_stations(self, stations: list[StationPoint]) -> None:
+    def update_rx_stations(self, stations: list[StationPoint],
+                           total_decoded: int = 0) -> None:
         """Wird vom mw_cycle-Hook aus dem Decoder-Thread gerufen.
-        Aufrufer marshallt ggf. via Qt-Signal in den GUI-Thread."""
+        Aufrufer marshallt ggf. via Qt-Signal in den GUI-Thread.
+
+        total_decoded > len(stations) → Diff = Stationen ohne bekannten
+        Locator. Wird im Status angezeigt + via Tooltip erklaert.
+        """
         if self._mode == "rx":
             self.canvas.update_stations(stations)
-            self.set_status(f"EMPFANG: {len(stations)} Stationen.")
+            n = len(stations)
+            if total_decoded > n:
+                self.set_status(f"EMPFANG: {n} / {total_decoded} Stationen.")
+                self.status_label.setToolTip(
+                    f"{n} Stationen mit bekannter Position (Locator aus CQ/PSK/ADIF)\n"
+                    f"{total_decoded - n} dekodiert aber ohne bekannten Locator\n"
+                    f"= {total_decoded} insgesamt dekodiert"
+                )
+            else:
+                self.set_status(f"EMPFANG: {n} Stationen.")
+                self.status_label.setToolTip("")
             self._update_precision_label(stations)
 
     def update_tx_spots(self, stations: list[StationPoint]) -> None:
