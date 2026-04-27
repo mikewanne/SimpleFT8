@@ -54,6 +54,7 @@ class SectorBucket:
     ant2_count: int = 0
     rescue_count: int = 0
     last_update: float = 0.0
+    max_distance_km: float = 0.0  # max distance_km der deduplizierten Stations
     _calls: set = field(default_factory=set, repr=False)
     _snr_sum: float = field(default=0.0, repr=False)
 
@@ -126,6 +127,9 @@ def aggregate_sectors(
         b._snr_sum += s.snr
         if s.timestamp > b.last_update:
             b.last_update = s.timestamp
+        # NaN/Inf-Guard: max() ueber NaN propagiert NaN durchs paintEvent
+        if math.isfinite(s.distance_km) and s.distance_km > b.max_distance_km:
+            b.max_distance_km = s.distance_km
         if s.antenna == "A1":
             b.ant1_count += 1
         elif s.antenna == "A2":

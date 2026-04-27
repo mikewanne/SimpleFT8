@@ -229,3 +229,53 @@ def test_aggregate_skips_nan_or_inf_coords():
     assert total == 1
     assert buckets[0].count == 1
     assert "VALID" in buckets[0]._calls
+
+
+# ── max_distance_km ──────────────────────────────────────
+
+def _sp_dist(call: str, lat: float, lon: float,
+             distance_km: float, snr: float = -10.0) -> StationPoint:
+    return StationPoint(call=call, locator="", lat=lat, lon=lon, snr=snr,
+                        distance_km=distance_km)
+
+
+def test_aggregate_sectors_max_distance():
+    # 3 Stationen im selben Sektor (alle nordwaerts), Distanzen 1500/8000/3000.
+    stations = [
+        _sp_dist("AAA", 60.0, 7.0, distance_km=1500.0),
+        _sp_dist("BBB", 61.0, 7.5, distance_km=8000.0),
+        _sp_dist("CCC", 62.0, 7.2, distance_km=3000.0),
+    ]
+    buckets = aggregate_sectors(stations, 51.5, 7.0)
+    assert buckets[0].max_distance_km == 8000.0
+
+
+def test_aggregate_sectors_max_distance_zero_when_no_stations():
+    buckets = aggregate_sectors([], 51.5, 7.0)
+    for b in buckets:
+        assert b.max_distance_km == 0.0
+
+
+def test_aggregate_sectors_max_distance_dedup_first_wins():
+    # Gleicher Call zweimal mit unterschiedlicher Distanz: erste Sichtung
+    # gewinnt (analog count + avg_snr).
+    stations = [
+        _sp_dist("AAA", 60.0, 7.0, distance_km=1500.0),
+        _sp_dist("AAA", 60.0, 7.0, distance_km=9000.0),
+    ]
+    buckets = aggregate_sectors(stations, 51.5, 7.0)
+    assert buckets[0].count == 1
+    assert buckets[0].max_distance_km == 1500.0
+
+
+def test_aggregate_sectors_max_distance_skips_non_finite():
+    # NaN/Inf in distance_km darf nicht in max() propagieren.
+    stations = [
+        _sp_dist("AAA", 60.0, 7.0, distance_km=float("nan")),
+        _sp_dist("BBB", 61.0, 7.5, distance_km=float("inf")),
+        _sp_dist("CCC", 62.0, 7.2, distance_km=2000.0),
+    ]
+    buckets = aggregate_sectors(stations, 51.5, 7.0)
+    # NaN/Inf werden ueberlesen, CCC ergibt max=2000
+    assert buckets[0].count == 3  # alle 3 lat/lon sind finit, count zaehlt
+    assert buckets[0].max_distance_km == 2000.0
