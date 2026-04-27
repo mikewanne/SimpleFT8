@@ -29,10 +29,38 @@
 - 🔍 Stations-Count Tooltip auf Karte
 - 📊 LocatorDB-Stand: **7.991 Calls** aus DA1MHH+DO4MHH-ADIF (854 KB JSON)
 
-**Naechstes Feature:**
-- 🔜 **Feature B — Band-Indikatoren live mit PSK-Reporter** (1-2 Tage,
-  Foundation `core/psk_reporter.py` steht). Bestehende Farb-Balken unter
-  Band-Buttons (HamQSL Solar Flux) durch PSK-Live-Aktivitaet ergaenzen.
+**Naechstes Feature:** offen — siehe Liste unten ("Andere offene TODOs").
+
+**ENTFALLEN — Feature B (PSK-Reporter Band-Indikatoren) gestrichen:**
+Bei der V1→V2-Workflow-Diskussion am 27.04. mit Mike kam raus, dass das
+gesuchte „pulsierende Bandoeffnungs/-schliessungs"-Feature bereits in
+**v0.69** vollstaendig implementiert ist:
+- Saison-Fenster pro Band+Saison in `core/propagation.py:_SEASONAL_SCHEDULE`
+- Lookahead 60 Min via `get_conditions_at(60)`
+- Pulsation NUR fuer aktives Band, andere statisch
+- Cross-Fade Ist-Farbe ↔ Trend-Farbe
+
+PSK-Reporter Live-Daten sind dafuer **nicht noetig**. Wenn HamQSL-Daten
+ungenau wirken: Saison-Fenster in `_SEASONAL_SCHEDULE` justieren (rein
+Werte-Aenderung, kein Code).
+
+**Field-Test offen:**
+- v0.69-Pulsation in der Praxis beobachten an einer Bandoeffnungs- oder
+  -schliessungsstunde. Pulsations-Zeiten Spring (April-Mai), Berlin-Zeit
+  UTC+2:
+  | Band | Oeffnen | Schliessen |
+  |------|---------|------------|
+  | 10m  | 10-11 MESZ | 18-19 MESZ |
+  | 12m  | 09-10 MESZ | 19-20 MESZ |
+  | 15m  | 08-09 MESZ | 21-22 MESZ |
+  | 17m  | 07-08 MESZ | 22-23 MESZ |
+  | 20m  | 06-07 MESZ | 23-00 MESZ |
+  | 30m  | 04-05 MESZ | 00-01 MESZ |
+  | 40m  | 16-17 MESZ | 09-10 MESZ |
+  | 80m  | 18-19 MESZ | 08-09 MESZ |
+  Caveat: Pulse triggert nur wenn HamQSL fuer dieses Band innerhalb-
+  Fenster „good" oder „fair" liefert (sonst poor↔poor = kein Wechsel
+  sichtbar).
 
 **Field-Test offen:**
 - ✅ **v0.67 Locator-DB Praezisionstest:** sichtbar in der Karte — 50/53
@@ -138,9 +166,16 @@ Bei jedem Decode-Cycle aktuelle Slot-Nummer einfließen lassen statt timestamp.
 
 ---
 
-### B) Band-Indikatoren live mit PSK-Reporter ergänzen — **1-2 Tage** *(als nächstes — Foundation steht!)*
+### B) Band-Indikatoren live mit PSK-Reporter ergänzen — ✅ **GESTRICHEN 27.04.2026** (v0.69 deckt Use-Case bereits ab)
 
-**Foundation ist mit v0.66 schon da:** `core/psk_reporter.py` (XML-Polling, Cache,
+> Mike's eigentlicher Wunsch (pulsierende Bandoeffnungs-/Schliessungs-
+> Indikatoren am aktiven Band) ist bereits in v0.69 vollstaendig
+> implementiert via `core/propagation.py:_SEASONAL_SCHEDULE` + Lookahead
+> 60 Min. Live-PSK-Daten sind dafuer **nicht noetig**. Bei ungenauen
+> HamQSL-Werten: Saison-Fenster in `_SEASONAL_SCHEDULE` justieren.
+> Original-Plan unten zur Doku, NICHT umsetzen.
+
+**[Original-Plan zur Doku] Foundation ist mit v0.66 schon da:** `core/psk_reporter.py` (XML-Polling, Cache,
 Backoff, Threading) ist wiederverwendbar. Brauchen nur eine zweite Query-Variante
 mit `mode=FT8&lastMinutes=5` (ohne senderCallsign-Filter) für Aktivitaets-
 Aggregat pro Band — das passt in eine erweiterte `PSKReporterClient.fetch_activity()`-

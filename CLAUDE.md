@@ -1,4 +1,12 @@
-Lies nach dieser Datei sofort auch HANDOFF.md und bestätige beide mit je einer Zeile.
+Lies nach dieser Datei sofort auch HANDOFF.md **und HISTORY.md** und bestätige alle drei mit je einer Zeile.
+
+⛔ **HISTORY.md ZWINGEND beim Session-Start lesen!** — Sie ist die einzige
+verlaessliche Quelle dafuer welche Features in welchen Versionen tatsaechlich
+implementiert wurden. Wer das ueberspringt, plant Features doppelt (Beispiel
+27.04.: V1→V2→V3-Prompt-Zyklus fuer „Live-PSK-Bandindikator" in DeepSeek-
+Review entworfen — nutzlose Stunde, weil v0.69 das Feature schon vollstaendig
+abdeckt). Bei jedem „lass uns ein Feature X bauen" zuerst grep in
+HISTORY.md ob X nicht schon drin ist.
 
 # SimpleFT8 — Claude Kontext
 

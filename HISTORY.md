@@ -109,6 +109,16 @@ ob neutraler Info-Tooltip implementiert wird oder App neutral bleibt.
 
 ## 2026-04-27 v0.69 — Propagations-Trend-Pulsieren
 
+> ⭐ **WICHTIG fuer kuenftige Sessions:** dieser Eintrag dokumentiert
+> das **Bandoeffnungs-/Bandschliessungs-Pulsations-Feature** unter den
+> Band-Buttons. **NUR das aktive Band pulsiert** — andere Baender springen
+> nur in der Farbe um. Pulsation = weicher Cross-Fade Ist-Farbe ↔ Trend-
+> Farbe. Triggert 60 Min vor Wechsel an Saison-Fenster-Boundary
+> (`core/propagation.py:_SEASONAL_SCHEDULE`). Live-PSK-Daten oder externe
+> APIs sind dafuer NICHT noetig — alles laeuft aus HamQSL + lokaler
+> Saison-Heuristik. Wenn jemand nochmal anfaengt einen „Live-Band-Indikator"
+> mit PSK-Reporter zu planen: stop, das System ist schon da.
+
 **Betroffene Dateien:** `core/propagation.py`, `ui/control_panel.py`,
 `ui/main_window.py`, `ui/mw_radio.py`, `tests/test_propagation_trend.py` (neu),
 `main.py`, `CLAUDE.md`.
