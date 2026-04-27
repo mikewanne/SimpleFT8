@@ -389,6 +389,13 @@ class MapCanvas(QWidget):
         """
         import time as _t
         now = _t.time()
+        # distance_km fuer eingehende Stations setzen, falls noch nicht gesetzt
+        # (Konverter geben distance_km=0.0 — wir kennen _my_pos hier).
+        if self._my_pos:
+            my_lat, my_lon = self._my_pos
+            for s in stations:
+                if s.distance_km == 0.0:
+                    s.distance_km = distance_km(my_lat, my_lon, s.lat, s.lon)
         # Neue Stations einmischen — gleicher Call ueberschreibt aelteren Eintrag
         for s in stations:
             self._station_history[s.call] = (now, s)
