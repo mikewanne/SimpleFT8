@@ -957,9 +957,19 @@ class MapCanvas(QWidget):
         # Wedges sind klein gehalten (max 30% Globus-Radius), bleiben in der
         # Globus-Disk damit es nicht ueber den Rand klatscht.
         max_wedge_r = globe_r * 0.30
-        max_count = max((b.count for b in self._sectors), default=0)
-        if max_count == 0:
-            return
+        # TX-Modus: Wedge-Laenge nach max-Reichweite des Sektors. Mike-Logik:
+        # ein Spot aus VK6 (16000 km) ist informativer als 50 Spots aus 1500 km.
+        # RX-Modus: Wedge-Laenge nach count (Anzahl gehoerter Stationen).
+        if self._mode == "tx":
+            global_max = max(
+                (b.max_distance_km for b in self._sectors), default=0.0
+            )
+            if global_max <= 0.0:
+                return
+        else:
+            max_count = max((b.count for b in self._sectors), default=0)
+            if max_count == 0:
+                return
         screen_north = self._screen_north_deg()
         cx, cy = self._center_px()
         painter.save()
@@ -970,7 +980,11 @@ class MapCanvas(QWidget):
         for b in self._sectors:
             if b.count == 0:
                 continue
-            r = max_wedge_r * (b.count / max_count)
+            if self._mode == "tx":
+                # max_distance_km == 0 → r == 0 → unsichtbar (kein Guard noetig)
+                r = max_wedge_r * (b.max_distance_km / global_max)
+            else:
+                r = max_wedge_r * (b.count / max_count)
             mid_deg = b.index * SECTOR_WIDTH_DEG + screen_north
             qt_start_deg = 90.0 - mid_deg - SECTOR_WIDTH_DEG / 2.0
             qt_span_deg = SECTOR_WIDTH_DEG
