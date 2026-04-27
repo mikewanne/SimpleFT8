@@ -1178,3 +1178,80 @@ und ein Push:
     erst WebFetch checken, Negationen vermeiden
 
 **Stand:** v0.67, 407 Tests gruen, alle Doku-Dateien fuer Feierabend up-to-date.
+
+---
+
+## 2026-04-27 v0.68 — Map-UI Bugfixes (Dropdowns + Sektor-Rotation)
+
+Drei UI-Bugs in der Richtungs-Karte (v0.66) behoben. V1→V2→V3-Workflow mit
+DeepSeek-Review durchlaufen, anschliessend Plan-Mode + atomare Commits.
+Workflow-Etablierung in `CLAUDE.md` dokumentiert (inkl. Trigger-Schwelle:
+voller Workflow ab >=2 Akzeptanzkriterien ODER Mathe ODER >=2 Dateien).
+
+### Aufgabe 3+4 — Filter-Dropdowns abgeschnitten
+- `window_combo` ("3 Std") und `band_combo` ("Aktuelles") wurden vorher
+  abgeschnitten weil keine `setSizeAdjustPolicy()` gesetzt war.
+- Fix: beide ComboBoxes in `ui/direction_map_widget.py` auf
+  `QComboBox.AdjustToContents` — wachsen automatisch mit dem laengsten Item,
+  robust gegen DPI-Skalierung.
+- Test: `test_dialog_dropdowns_adjust_to_contents`.
+
+### Aufgabe 5 — Sektoren rotieren nicht mit Globus
+- Vorher: Sektor-Wedges in `_paint_sector_wedges()` zeichneten mit absoluten
+  Bildschirmkoordinaten (`mid_deg = b.index * SECTOR_WIDTH_DEG`) — Norden war
+  immer Bildschirm-oben, ignorierte Globus-Drehung.
+- Bug-Symptom: Beim Drehen der Karte zeigten die Sektoren weiter nach oben
+  obwohl die geographische Verteilung der Stationen gedreht war.
+- Fix: Neuer Helper `_screen_north_deg()` projiziert einen 5°-Hilfspunkt
+  nordwaerts vom User mit `_project()` und leitet aus der Bildschirm-Differenz
+  das aktuelle Bildschirm-Bearing des Nordens ab. Wert wird in
+  `_paint_sector_wedges()` einmal pro Frame als Offset auf
+  `b.index * SECTOR_WIDTH_DEG` addiert.
+- Edge-Cases:
+  - User auf Globus-Rueckseite: `_user_screen_pos()` ist None → existierender
+    Skip greift.
+  - User nahe Pol (`abs(lat) > 85°`): Fallback Norden=oben.
+  - 5°-Hilfspunkt verdeckt: Fallback Norden=oben.
+- Tests:
+  - `test_screen_north_aligned_default_view` — Default-View → Norden ~ 0°
+  - `test_screen_north_changes_with_globe_rotation` — `_view_lon += 90°` →
+    Norden > 30° vom Bildschirm-oben weg
+  - `test_paint_sector_wedges_safe_when_user_hidden` — `_view_lat = -85°` →
+    User unsichtbar, kein Crash
+
+### DeepSeek-Codereview vor Commit 2
+DeepSeek fand einen Bug: `lat > 85.0` ist asymmetrisch — der Suedpol war
+nicht abgedeckt. Fix: `abs(lat) > 85.0`. Funktion liefert jetzt fuer Nord-
+und Suedpol denselben Fallback. Rest des Helpers war mathematisch korrekt
+(atan2-Vorzeichen, Y-down-Konvention).
+
+### CLAUDE.md / Workflow-Doku
+Mehrstufiger Prompt-Workflow festgehalten:
+1. Probleme erkennen + V1 entwerfen
+2. Self-Review als frische KI → V2
+3. V2 an DeepSeek (Prompt-Critique, nicht Implementierung)
+4. DeepSeek-Findings einarbeiten → V3
+5. Mike vorlegen
+6. Plan-Mode + atomare Commits
+
+Trigger-Schwelle definiert: voller Workflow nur wenn nicht-trivial.
+Bei reinen Tippfehlern / Lokal-Patches: V1 reicht.
+
+### Commits
+- `400eb03` docs(claude): mehrstufigen Prompt-Workflow + Trigger-Schwelle
+- `5ab1763` fix(map): Dropdowns Zeit/Band auf AdjustToContents
+- `2d08282` fix(map): Sektoren folgen Globus-Rotation
+- `<HEAD>` chore(release): v0.68 — APP_VERSION + HISTORY + CLAUDE.md
+
+### Bewusst NICHT umgesetzt (Out-of-Scope)
+- Punkt 1 (Mike): Pulsieren der Propagations-Balken bei Bandoeffnung —
+  separates Feature, eigener Plan
+- Punkt 2 (Mike): PSK-Reporter Reichweiten-Sektoren im TX-Modus
+  (TX-Pattern-Karte, USP-Killer) — separater Plan
+- Punkt 6 (Mike): Stations-Count 37 vs 46 (Karte filtert nach Locator,
+  rx_panel zaehlt alle Decodes) — vermutlich Tooltip-Loesung,
+  separater Plan
+- QPainterPath fuer Sektor-Verzerrung am Globus-Rand — KISS, akzeptiert
+  (Sektoren bleiben in 30 % der Disc, Verzerrung optisch unauffaellig).
+
+**Stand:** v0.68, 411 Tests gruen (+4 ggue. v0.67). Map-UI ist drag-fest.

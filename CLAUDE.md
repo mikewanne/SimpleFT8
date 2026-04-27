@@ -3,8 +3,8 @@ Lies nach dieser Datei sofort auch HANDOFF.md und bestätige beide mit je einer 
 # SimpleFT8 — Claude Kontext
 
 **Start:** `cd "/Users/mikehammerer/Documents/KI N8N Projekte/FT8/SimpleFT8" && ./venv/bin/python3 main.py`
-**Aktueller Stand:** v0.67 (27.04.2026) — Persistenter Locator-Cache (`core/locator_db.py`): JSON-Datei merkt sich pro Call den besten Locator aus CQ/PSK/ADIF mit Source-Priority. Karte und rx_panel zeigen exakte Positionen ueber App-Restarts hinweg. Save bei App-Close (atomar via .tmp + os.replace).
-**Tests:** `./venv/bin/python3 -m pytest tests/ -q` → 407 passed (Qt-Smoke-Tests via `QT_QPA_PLATFORM=offscreen`)
+**Aktueller Stand:** v0.68 (27.04.2026) — Map-UI-Bugfixes: Filter-Dropdowns Zeit/Band auf `AdjustToContents` (kein Text mehr abgeschnitten), Sektoren rotieren jetzt mit dem Globus mit (neuer Helper `_screen_north_deg()` projiziert 5°-Hilfspunkt fuer Bildschirm-Norden am User-Punkt). DeepSeek-Codereview vor Commit fand asymmetrischen Pol-Check (`lat > 85` → `abs(lat) > 85`).
+**Tests:** `./venv/bin/python3 -m pytest tests/ -q` → 411 passed (Qt-Smoke-Tests via `QT_QPA_PLATFORM=offscreen`)
 **Vor Commits:** Tests grün + bei nicht-trivialen Änderungen DeepSeek-Review (`pal codereview` model `deepseek-chat`) — bereits durch globale §0 + Projektregeln gefordert.
 
 ⚠️ **DeepSeek V4 (deepseek-chat) — Neues Modell, Verhalten noch unbestätigt (Stand 2026-04-25):**
