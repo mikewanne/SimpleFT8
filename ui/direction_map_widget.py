@@ -1308,6 +1308,7 @@ class DirectionMapDialog(QDialog):
         filter_row = QHBoxLayout()
         filter_row.addWidget(QLabel("Zeit:"))
         self.window_combo = QComboBox()
+        self.window_combo.setSizeAdjustPolicy(QComboBox.AdjustToContents)
         for label, val in [("10 Min", 10), ("30 Min", 30), ("60 Min", 60), ("3 Std", 180)]:
             self.window_combo.addItem(label, val)
         self.window_combo.setCurrentIndex(2)  # 60 Min default
@@ -1316,6 +1317,7 @@ class DirectionMapDialog(QDialog):
         filter_row.addSpacing(16)
         filter_row.addWidget(QLabel("Band:"))
         self.band_combo = QComboBox()
+        self.band_combo.setSizeAdjustPolicy(QComboBox.AdjustToContents)
         self.band_combo.addItem("Aktuelles", "current")
         self.band_combo.addItem("Alle", "all")
         filter_row.addWidget(self.band_combo)

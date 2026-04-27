@@ -685,3 +685,21 @@ def test_canvas_paintevent_with_wedges_and_stations(qapp):
     c.set_mode("tx")
     c.repaint()
     c.deleteLater()
+
+
+# ── Filter-Bar Dropdowns ──────────────────────────────────
+
+def test_dialog_dropdowns_adjust_to_contents(qapp):
+    """v0.68: window_combo + band_combo wachsen mit ihren Items mit,
+    damit "3 Std" / "Aktuelles" nicht abgeschnitten werden."""
+    from PySide6.QtWidgets import QComboBox
+    from ui.direction_map_widget import DirectionMapDialog
+    d = DirectionMapDialog(my_locator="JO31")
+    assert d.window_combo.sizeAdjustPolicy() == QComboBox.AdjustToContents
+    assert d.band_combo.sizeAdjustPolicy() == QComboBox.AdjustToContents
+    # sizeHint muss das laengste Item samt Pfeil-Indikator aufnehmen
+    fm_w = d.window_combo.fontMetrics().horizontalAdvance("60 Min")
+    fm_b = d.band_combo.fontMetrics().horizontalAdvance("Aktuelles")
+    assert d.window_combo.sizeHint().width() >= fm_w
+    assert d.band_combo.sizeHint().width() >= fm_b
+    d.close()
