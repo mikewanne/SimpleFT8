@@ -911,6 +911,32 @@ class MapCanvas(QWidget):
 
     # ── Live-Layer: Sektor-Wedges ─────────────────────────
 
+    def _screen_north_deg(self) -> float:
+        """Bildschirm-Bearing (0=oben, im Uhrzeigersinn) des geographischen
+        Nordens am User-Punkt. 0.0 wenn User unsichtbar oder Pol-Fallback.
+
+        Wird einmal pro Frame in _paint_sector_wedges aufgerufen, damit die
+        Sektoren mit der Globus-Rotation mitwandern (statt bei Bildschirm-oben
+        zu bleiben).
+        """
+        if not self._my_pos:
+            return 0.0
+        u = self._user_screen_pos()
+        if u is None:
+            return 0.0
+        lat, lon = self._my_pos
+        if abs(lat) > 85.0:  # Nord- oder Suedpol → "Norden" mehrdeutig
+            return 0.0
+        n = self._project(min(lat + 5.0, 89.9), lon)
+        if n is None:
+            return 0.0  # Hilfspunkt auf Globus-Rueckseite
+        cx, cy = self._center_px()
+        nx, ny = cx + n[0], cy + n[1]
+        ux, uy = u
+        # screen_y waechst nach unten → uy-ny dreht Vorzeichen, atan2(x,y) gibt
+        # Bearing 0=oben im Uhrzeigersinn.
+        return math.degrees(math.atan2(nx - ux, uy - ny)) % 360.0
+
     def _paint_sector_wedges(self, painter: QPainter) -> None:
         if not self._sectors:
             return
@@ -925,6 +951,7 @@ class MapCanvas(QWidget):
         max_count = max((b.count for b in self._sectors), default=0)
         if max_count == 0:
             return
+        screen_north = self._screen_north_deg()
         cx, cy = self._center_px()
         painter.save()
         from PySide6.QtGui import QPainterPath
@@ -935,7 +962,7 @@ class MapCanvas(QWidget):
             if b.count == 0:
                 continue
             r = max_wedge_r * (b.count / max_count)
-            mid_deg = b.index * SECTOR_WIDTH_DEG
+            mid_deg = b.index * SECTOR_WIDTH_DEG + screen_north
             qt_start_deg = 90.0 - mid_deg - SECTOR_WIDTH_DEG / 2.0
             qt_span_deg = SECTOR_WIDTH_DEG
             color = self._sector_color(b)

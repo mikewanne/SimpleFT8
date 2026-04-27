@@ -703,3 +703,57 @@ def test_dialog_dropdowns_adjust_to_contents(qapp):
     assert d.window_combo.sizeHint().width() >= fm_w
     assert d.band_combo.sizeHint().width() >= fm_b
     d.close()
+
+
+# ── Sektor-Rotation mit Globus (v0.68) ─────────────────────
+
+def test_screen_north_aligned_default_view(qapp):
+    """Default-View (Globus zentriert auf User-QTH) → geographischer
+    Norden zeigt fast Bildschirm-oben (0°)."""
+    from ui.direction_map_widget import MapCanvas
+    c = MapCanvas(my_locator="JO31")
+    c.resize(400, 400)
+    # Default _view_lat/_view_lon ist auf User-QTH gesetzt → Norden ~ oben
+    bearing = c._screen_north_deg()
+    # Toleranz: ±2° fuer Floating-Point-Rauschen, plus moegliche
+    # Wrap-Around-Werte 358-360
+    assert bearing < 2.0 or bearing > 358.0, \
+        f"erwartet ~0°, bekam {bearing:.2f}°"
+    c.deleteLater()
+
+
+def test_screen_north_changes_with_globe_rotation(qapp):
+    """Nach _view_lon += 90° wandert Bildschirm-Norden deutlich weg
+    von 0° — beweist, dass Sektoren der Rotation folgen."""
+    from ui.direction_map_widget import MapCanvas
+    c = MapCanvas(my_locator="JO31")
+    c.resize(400, 400)
+    # Manuell stark nach Osten drehen
+    c._view_lon += 90.0
+    bearing = c._screen_north_deg()
+    # Norden darf nicht mehr ~0° sein (wuerde bedeuten Sektoren bleiben oben)
+    # Akzeptanz: > 30° ODER < 330° (also "deutlich nicht oben")
+    delta = min(bearing, 360.0 - bearing)
+    assert delta > 30.0, \
+        f"nach 90°-Drehung sollte Norden > 30° vom Bildschirm-oben weg sein, bekam {bearing:.2f}°"
+    c.deleteLater()
+
+
+def test_paint_sector_wedges_safe_when_user_hidden(qapp):
+    """User auf Globus-Rueckseite → _paint_sector_wedges wirft nicht,
+    rendert nichts. Sektoren-Skip ist Vorbedingung fuer
+    keine-Wedges-am-Bildschirmrand-Bug."""
+    from PySide6.QtGui import QPixmap, QPainter
+    from ui.direction_map_widget import MapCanvas
+    c = MapCanvas(my_locator="JO31")
+    c.resize(400, 400)
+    # Auf Suedpol gucken — JO31 (Nord-Halbkugel) ist dann auf Rueckseite
+    c._view_lat = -85.0
+    c._view_lon = 7.0
+    assert c._user_screen_pos() is None
+    # Sollte ohne Crash zurueckkehren
+    pm = QPixmap(400, 400)
+    painter = QPainter(pm)
+    c._paint_sector_wedges(painter)  # darf nicht crashen
+    painter.end()
+    c.deleteLater()
