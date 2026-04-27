@@ -316,12 +316,13 @@ class CycleMixin:
         self._emit_map_snapshot_if_open()
 
     def _handle_normal_mode(self, messages):
-        """Normal-Modus: gemeinsame Akkumulation ohne Antennen-Info + Stats."""
+        """Normal-Modus: gemeinsame Akkumulation + Stats. Ant-Spalte zeigt 'A1'
+        (Normal-Modus laeuft immer ueber ANT1, siehe mw_radio._apply_normal_mode)."""
         self._feed_locator_db(messages)
         if messages:
             changed, _ = accumulate_stations(
                 self._normal_stations, messages,
-                self._active_qso_targets, antenna="",
+                self._active_qso_targets, antenna="A1",
                 slot_duration_s=self.timer.cycle_duration)
             if changed:
                 self.rx_panel.table.setRowCount(0)
