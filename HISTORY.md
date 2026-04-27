@@ -5,6 +5,108 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-04-27 v0.70 — Locator-DB Live-Feed (Bugfix) + Auto-Save + Map-Quality
+
+**Betroffene Dateien:** `ui/mw_cycle.py`, `ui/main_window.py`,
+`ui/direction_map_widget.py`, `tests/test_feed_locator_db.py` (neu),
+`main.py`, `HISTORY.md`, `CLAUDE.md`.
+
+### Kritischer Bugfix — Live-Locator-Feed war seit v0.67 tot
+
+Mike-Beobachtung: Karte zeigte beim Empfang von `RA4ALY DL6YJB JO31`
+weiterhin `~216` (Country-Fallback) statt der bekannten exakten Position
+fuer JO31. Erwartet: Locator wird live aus der Decode-Message extrahiert
+und in `LocatorDB` geschrieben.
+
+**Root-Cause:** `core/message.py:72` definiert `is_grid` als `@property`
+(nicht callable). `ui/mw_cycle.py:_feed_locator_db` rief aber
+`m.is_grid()` MIT Klammern → bei jedem einzelnen Decode flog ein
+`TypeError: 'bool' object is not callable`, der vom umschliessenden
+`except (AttributeError, TypeError)` SILENT geschluckt wurde. Resultat:
+seit v0.67 (LocatorDB-Einfuehrung) kam **nichts** aus Live-Decodes in
+die DB — sie wuchs nur durch ADIF-Bulk-Import beim App-Start.
+
+**Fix:**
+- `m.is_grid` ohne Klammern (Property-Zugriff)
+- Zusatzfilter `not m.is_rr73 and m.field3 != "73"` — `RR73` matcht
+  is_grid struktur-gleich (Letter+Letter+Digit+Digit), ist aber
+  FT8-Bestaetigung nicht Locator
+- `except` nur noch `AttributeError` — TypeError wuerde ab jetzt zum
+  echten Bug-Symptom statt zu schweigen
+
+**Tests:** `tests/test_feed_locator_db.py` neu mit 6 Regressions-Tests:
+CQ-Message schreibt Locator, directed-Reply mit Grid (haeufigster Fall)
+schreibt Locator, Report/RR73/73 schreiben NICHT, locator_db=None kein
+Crash, leere Liste kein Call.
+
+### Neues Feature — Auto-Save LocatorDB alle 5 Min
+
+Mike-Anforderung: bei stundenlanger Empfangs-Session sammeln sich viele
+Live-Locator-Daten an. Vorher wurde das nur bei sauberem `closeEvent`
+persistiert — `kill_old_instances()` macht beim naechsten App-Start
+SIGKILL, was closeEvent ueberspringt. Resultat: bei jedem Restart gingen
+Live-Decodes der Session verloren.
+
+**Loesung:** `ui/main_window.py:_init_locator_db_autosave()` —
+QTimer alle 300 s ruft `locator_db.save()`. Atomic-Write (.tmp + replace)
+im LocatorDB ist crash-sicher. War im v0.67-Plan bewusst rausgelassen
+("Hobby-Funker-Konsens, App crasht selten") — bei Mike's tatsaechlichem
+Use-Case (mehrstuendige Sessions + haeufige App-Restarts) jetzt
+substanziell wertvoll.
+
+### Map-Tooltip — Stations-Count Diff (Mike's Punkt 6)
+
+Karte zeigte 37 Stationen mit Position obwohl rx_panel 46 dekodierte —
+Diff sind Stationen ohne bekannten Locator (kein CQ-Empfang, kein
+PSK-Spot, kein ADIF-Eintrag). Statt das Verhalten zu aendern: Tooltip-
+Loesung am Status-Label.
+
+`ui/direction_map_widget.py:update_rx_stations(stations, total_decoded=0)`:
+- bei Diff: Status `"EMPFANG: 37 / 46 Stationen."` + Tooltip-Erklaerung
+  ("X mit bekannter Position aus CQ/PSK/ADIF, Y dekodiert ohne Locator,
+  Z gesamt")
+- ohne Diff: Status wie bisher, Tooltip leer
+
+`ui/main_window.py:_on_direction_map_snapshot` reicht
+`total_decoded=len(snapshot)` durch.
+
+### UI-Detail — Ant-Spalte im Normal-Modus
+
+Mike-Wunsch: RX-Tabelle soll auch im Normal-Modus die Antenne zeigen
+(nicht leer). Im Normal-Modus laeuft alles ueber ANT1 (hardcoded in
+`_apply_normal_mode:1028`). `ui/mw_cycle.py:_handle_normal_mode` setzt
+`antenna="A1"` statt `""` in `accumulate_stations()`. 1-Zeilen-Fix.
+
+### Datenbasis nach v0.70
+
+LocatorDB nach DA1MHH+DO4MHH-ADIF-Import:
+- **7.991 unique Calls** in `~/.simpleft8/locator_cache.json` (854 KB)
+- 4.768 mit 6-stelligem Locator (Praezision 5 km)
+- 3.223 mit 4-stelligem Locator (Praezision 110 km)
+- ab jetzt waechst die DB live mit jedem CQ + Antwort mit Grid
+
+**Tests:** 416 → 422 (+6 Regressions-Tests).
+**Workflow-Note:** Trivial-Fixes waren is_grid (1-Zeichen + Filter),
+Auto-Save (10 Zeilen), Ant-Spalte (1-Zeichen), Tooltip (~10 Zeilen).
+Kein V1→V2→V3-Workflow, keine DeepSeek-Codereviews — Trigger-Schwelle
+nicht erreicht. Stattdessen Pre-Commit-Codereview bei v0.69 (Pulsier-
+Logik) bestaetigt: bei sauberem V3-Plan findet Pre-Commit-Review oft
+nichts Wertvolles mehr.
+
+### Diversity-Auswertung Stand 27.04.2026
+
+- **40m FT8** (off-band ANT1 Trap-Dipol): Diversity Standard +88 %,
+  Diversity DX +124 % vs Normal — robuste Datenbasis (~22.700 Zyklen)
+- **20m FT8** (resonant ANT1): Diversity Standard −23 %, Diversity DX
+  −33 % — Datenbasis duenn (~3.000-3.600 Zyklen je Modus, schiefe
+  Stunden-Verteilung), Aussage wackelt noch
+
+Test-Roadmap fuer Heuristik-Validierung in TODO.md festgehalten:
+17m/12m/80m (off-band), 15m (resonant) → bei n=5 Baendern entscheiden
+ob neutraler Info-Tooltip implementiert wird oder App neutral bleibt.
+
+---
+
 ## 2026-04-27 v0.69 — Propagations-Trend-Pulsieren
 
 **Betroffene Dateien:** `core/propagation.py`, `ui/control_panel.py`,
