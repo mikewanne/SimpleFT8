@@ -1671,6 +1671,11 @@ def create_pdf_report(combos: set[tuple[str, str]], output_dir: Path,
 # ── Haupt ─────────────────────────────────────────────────────────────────────
 
 def discover_bands_protocols() -> set[tuple[str, str]]:
+    """Existing Band/Protocol-Kombinationen finden — nur FT8.
+
+    Stand v0.72: FT4 wird nicht mehr neu geloggt (LOGGED_FT_MODES={"FT8"}).
+    Alte FT4-Daten bleiben auf der Platte, generieren aber keine Diagramme
+    mehr — sonst entstehen Phantom-PDFs aus historischen Resten."""
     combos: set[tuple[str, str]] = set()
     if not STATS_DIR.exists():
         return combos
@@ -1681,8 +1686,11 @@ def discover_bands_protocols() -> set[tuple[str, str]]:
             if not band_dir.is_dir():
                 continue
             for proto_dir in band_dir.iterdir():
-                if proto_dir.is_dir() and proto_dir.name != "stations":
-                    combos.add((band_dir.name, proto_dir.name))
+                if not proto_dir.is_dir() or proto_dir.name == "stations":
+                    continue
+                if proto_dir.name != "FT8":
+                    continue  # FT4/FT2 nicht mehr generieren
+                combos.add((band_dir.name, proto_dir.name))
     return combos
 
 

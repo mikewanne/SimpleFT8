@@ -561,9 +561,13 @@ class CycleMixin:
             return False
         if not self.settings.get("stats_enabled", True):
             return False
-        # Nur Kelemen-Baender aufzeichnen (10m/15m/20m)
-        from core.diversity_cache import SUPPORTED_BANDS
-        if self.settings.band not in SUPPORTED_BANDS:
+        # Stats-Filter: aktive Liste der zu loggenden Baender (siehe
+        # core/station_stats.py LOGGED_BANDS). Konsistent mit dem
+        # eigentlichen Log-Filter in StationStats.log_cycle, damit der
+        # _stats_indicator-Status korrekt ist (nicht gruen blinkt waehrend
+        # log_cycle intern abbricht).
+        from core.station_stats import StationStatsLogger
+        if self.settings.band not in StationStatsLogger.LOGGED_BANDS:
             _lbl = getattr(self, '_stats_indicator', None)
             if _lbl:
                 _lbl.setStyleSheet("color: #555; font-family: Menlo; font-size: 11px; padding: 0 6px;")
