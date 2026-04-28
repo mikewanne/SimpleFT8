@@ -54,10 +54,15 @@ PSK-Reporter Live-Daten sind dafuer **nicht noetig**. Wenn HamQSL-Daten
 ungenau wirken: Saison-Fenster in `_SEASONAL_SCHEDULE` justieren (rein
 Werte-Aenderung, kein Code).
 
-**Field-Test offen:**
-- v0.69-Pulsation in der Praxis beobachten an einer Bandoeffnungs- oder
-  -schliessungsstunde. Pulsations-Zeiten Spring (April-Mai), Berlin-Zeit
-  UTC+2:
+**Field-Test BESTANDEN ✅ (28.04.2026, Mike):**
+- ✅ **v0.69-Pulsation auf 40m sichtbar** — Mike hat den Bandwechsel-
+  Pulse beim Wechsel auf 40m im Feld bestaetigt. Feature funktioniert
+  wie spezifiziert.
+- ✅ **v0.72 Dark-Mode auf Karte** — „erdkugel map sieht geil aus
+  funktioniert auch super" (Mike-Original-Quote). Theme-Toggle +
+  Persistenz live verifiziert.
+
+**Pulsations-Zeiten Spring (April-Mai), Berlin-Zeit UTC+2 (Referenz):**
   | Band | Oeffnen | Schliessen |
   |------|---------|------------|
   | 10m  | 10-11 MESZ | 18-19 MESZ |

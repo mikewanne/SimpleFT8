@@ -211,6 +211,13 @@ bei der Plan-Phase (V3). Pre-Commit nur dann nochmal lohnenswert wenn
 sich die Implementation gegenueber dem Plan deutlich aendert. Sonst:
 einsparen, Tests gruen reichen.
 
+### Field-Test BESTANDEN ✅ (28.04.2026)
+Mike hat den Bandwechsel-Pulse auf 40m im Feld gesehen — Cross-Fade
+zwischen Ist-Farbe und Trend-Farbe funktioniert. Damit ist auch die
+Diskussion vom 28.04. (Mike's „Live-Band-Indikator"-Wunsch, der
+faelschlich als neues Feature B geplant wurde) endgueltig erledigt:
+das System ist da, sichtbar, und tut was es soll.
+
 ---
 
 ## 2026-04-25 v0.59 — CQ-Freq Praxis-Tuning (3 Punkte + 1 Bug-Fix)
@@ -1612,9 +1619,8 @@ use_3d_disk Skip, QComboBox statt Toggle-Button, Commits aufgeteilt
 Heatmap, Sektor-Wedges sind NICHT theme-aware (KISS — funktionieren
 auf beiden Hintergruenden).
 
-### Field-Test offen
+### Field-Test BESTANDEN ✅ (28.04.2026)
 
-- Karte oeffnen → Theme auf Dark wechseln. Erwartung: schwarzes
-  Land, graues BG, gelber User-Stern bleibt, Stations-Glow bleibt
-  Cyan/Antennen-Farben, Coastlines dezent grau.
-- Restart-Test: Theme-Wahl persistiert ueber App-Neustart.
+Mike hat das Theme-Toggle live verifiziert — Originalzitat:
+„erdkugel map sieht geil aus funktioniert auch super". Wechsel
+sofort sichtbar, Persistenz ueber Restart bestaetigt.
