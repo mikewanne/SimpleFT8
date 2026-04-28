@@ -49,7 +49,14 @@
 - 🔍 Stations-Count Tooltip auf Karte
 - 📊 LocatorDB-Stand: **7.991 Calls** aus DA1MHH+DO4MHH-ADIF (854 KB JSON)
 
-**Naechstes Feature:** offen — siehe Liste unten ("Andere offene TODOs").
+**Naechstes Feature:**
+- 🔜 **Settings-Dialog auf Tabs umstellen** (28.04.2026) — aktuell 6 GroupBoxes
+  vertikal gestapelt (Station/TX/RF-Presets/FT8/Export/Karte), Hoehe ~900-1000 px,
+  passt nicht auf Mike's 1440×900 Display. Plan: 3 Tabs (Station / TX / FT8)
+  mit max 500-600 px pro Tab. Aufwand 1-2 h. *Nach Bug-Fix Diversity-
+  Bandwechsel.*
+
+**Andere offene TODOs:** siehe Liste unten.
 
 **ENTFALLEN — Feature B (PSK-Reporter Band-Indikatoren) gestrichen:**
 Bei der V1→V2-Workflow-Diskussion am 27.04. mit Mike kam raus, dass das
