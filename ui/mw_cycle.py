@@ -232,9 +232,50 @@ class CycleMixin:
             except AttributeError:
                 continue
 
+    def _feed_rx_history(self, messages, antenna: str = "") -> None:
+        """Decoder-Hook: pro Decode einen RxEntry in den RX-History-Cache.
+
+        None-safe: wenn rx_history_store noch nicht initialisiert (frueher
+        Cycle waehrend App-Start), silent return — kein Crash.
+
+        Pro Empfang ein Entry mit aktuellem Locator (falls msg ein Grid
+        traegt) bzw None (wird beim Karten-Open via locator_db ergaenzt).
+        Antenne wird durchgereicht: Diversity uebergibt 'A1'/'A2', Normal
+        haengt 'A1' an (Mike-Konvention v0.70).
+        """
+        store = getattr(self, "rx_history_store", None)
+        if store is None or not messages:
+            return
+        from core.rx_history import RxEntry
+        import time as _t
+        band = self.settings.band
+        mode = self.settings.mode
+        now = _t.time()
+        for m in messages:
+            try:
+                if m.is_grid and not m.is_rr73 and m.field3 != "73":
+                    loc = m.field3
+                else:
+                    loc = None
+            except AttributeError:
+                loc = None
+            try:
+                entry = RxEntry(
+                    ts=now,
+                    call=m.caller,
+                    locator=loc,
+                    snr=float(m.snr),
+                    antenna=antenna or getattr(m, "antenna", "") or "",
+                    freq_hz=int(m.freq_hz),
+                )
+            except (AttributeError, TypeError, ValueError):
+                continue
+            store.add_entry(band, mode, entry)
+
     def _handle_diversity_operate(self, messages, ant):
         """Diversity-Operate-Phase: Stationen akkumulieren + Stats-Logging."""
         self._feed_locator_db(messages)
+        self._feed_rx_history(messages, antenna=ant)
         qso_busy = self.qso_sm.state not in (
             QSOState.IDLE, QSOState.TIMEOUT,
             QSOState.CQ_CALLING, QSOState.CQ_WAIT,
@@ -319,6 +360,7 @@ class CycleMixin:
         """Normal-Modus: gemeinsame Akkumulation + Stats. Ant-Spalte zeigt 'A1'
         (Normal-Modus laeuft immer ueber ANT1, siehe mw_radio._apply_normal_mode)."""
         self._feed_locator_db(messages)
+        self._feed_rx_history(messages, antenna="A1")
         if messages:
             changed, _ = accumulate_stations(
                 self._normal_stations, messages,
