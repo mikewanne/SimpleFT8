@@ -5,6 +5,62 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-04-29 — Tooling: DeepSeek Direkt-API + R1 als Default
+
+**Betroffene Dateien:** `tools/deepseek_review.py` (neu), `CLAUDE.md`,
+`~/.deepseek_key` (chmod 600, ausserhalb Repo).
+
+### Hintergrund
+
+Bei v0.74-Review (28.04.) zeigte sich der pal-MCP-Engpass: File-Attachments
+sind auf 7077 Tokens limitiert, kompletter `mw_radio.py` (43 KB) passt
+nicht rein. Wir mussten Inline-Snippets in den Prompt einbauen — funktionierte,
+aber nicht skalierbar fuer groessere Reviews.
+
+### Loesung: Direkt-API-Helper
+
+`tools/deepseek_review.py` — Pure-stdlib (urllib + json), liest Prompt aus
+stdin, haengt optionale Files mit Pfad-Header an, schickt direkt an
+`api.deepseek.com/v1/chat/completions`. **65K Context** (~260 KB Code) statt
+7077 Tokens — kompletter `mw_radio.py` + `diversity.py` + `preset_store.py`
+passen problemlos rein.
+
+```bash
+cat prompt.md | ./venv/bin/python3 tools/deepseek_review.py file1.py file2.py
+cat prompt.md | ./venv/bin/python3 tools/deepseek_review.py --chat file.py
+```
+
+Key liegt in `~/.deepseek_key` (chmod 600). Niemals im Repo.
+
+### Modell-Wahl: R1 als Default (Mike-Entscheidung)
+
+| Modell | Default? | Antwort-Zeit | Kosten | Stark fuer |
+|---|---|---|---|---|
+| **`deepseek-reasoner` (R1)** | ✅ JA | 6-30s | ~$0.005 | Code-Review, Architektur, Race-Conditions, KISS-Trade-offs, mathematische Korrektheit |
+| `deepseek-chat` (V4) via `--chat` | Opt-in | 2-5s | ~$0.001 | Trivial-Fragen ("Ist X im Code?"), Tippfehler, Pure Verifikation |
+
+**Mike-Begruendung 28.04.2026:** „Quality > Speed, ~3 EUR/Monat-Differenz
+egal gegen einen Bug der Stunden frisst."
+
+V0.74-Bilanz mit V4: 5 echte Findings + 1 Halluzination („Phase haengt
+ewig" — falscher Alarm, durch Code-Verifikation in `mw_cycle.py:159`
+widerlegt). R1 sollte Halluzinations-Rate senken weil R1 Code-Pfade
+intern verifiziert. Bewahrheitet sich erst ueber mehrere Reviews.
+
+### `pal chat`-MCP weiter nutzbar
+
+Fuer einfache Multi-Turn-Sessions mit Continuation-IDs. Aber: ernste Reviews
+mit grossen Files immer ueber Direkt-API.
+
+### Verifikation
+
+Smoke-Test mit 3 Files (1799 Zeilen, 20K Tokens) sauber durchgelaufen.
+Identische Schlussfolgerung von V4 und R1 bei einfacher Verifikations-Frage
+("ist load_preset weg?"). R1-Antwort: 6.2s, knapper formuliert mit
+mehr internem Reasoning.
+
+---
+
 ## 2026-04-28 v0.74 — Diversity-Bandwechsel: Ratio-Cache-Bug behoben
 
 **Betroffene Dateien:** `ui/main_window.py`, `ui/mw_radio.py`, `ui/mw_cycle.py`,
