@@ -952,16 +952,6 @@ def test_diversity_preset_missing():
     assert s.get_diversity_preset("FT2", "160m") is None
 
 
-def test_diversity_load_preset():
-    """load_preset() setzt ratio und phase korrekt."""
-    from core.diversity import DiversityController
-    dc = DiversityController()
-    dc.load_preset({"ratio": "30:70", "dominant": "A2"})
-    assert dc.ratio == "30:70"
-    assert dc.dominant == "A2"
-    assert dc.phase == "operate"
-
-
 # ── can_measure() Schwelle ────────────────────────────────────────────────────
 
 def test_can_measure_enough():

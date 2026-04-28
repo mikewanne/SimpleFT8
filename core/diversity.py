@@ -71,16 +71,6 @@ class DiversityController:
         self._search_slots_remaining = 4        # Slot-Counter (default FT8 = 4)
         self._recalc_count = 0                  # Zaehler: wie oft wurde CQ-Freq neu berechnet
 
-    def load_preset(self, preset: dict):
-        """Gespeichertes Preset laden — sofort Betrieb ohne Messung."""
-        self.ratio = preset.get("ratio", "50:50")
-        self.dominant = preset.get("dominant")
-        self._phase = "operate"
-        self._operate_cycles = 0
-        self._measure_step = 0
-        self._measurements = {"A1": [], "A2": []}
-        print(f"[Diversity] Preset geladen: {self.ratio} (dominant: {self.dominant})")
-
     def can_measure(self, station_count: int) -> bool:
         """Genug Stationen fuer zuverlaessige Messung?"""
         return station_count >= self.MIN_MEASURE_STATIONS
