@@ -6,7 +6,7 @@
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![Platform: macOS](https://img.shields.io/badge/platform-macOS-lightgrey.svg)](https://www.apple.com/macos/)
 [![Ham Radio](https://img.shields.io/badge/ham--radio-FT8%2FFT4%2FFT2-orange.svg)](https://www.physics.princeton.edu/pulsar/k1jt/wsjtx.html)
-[![Tests](https://img.shields.io/badge/tests-407%20passed-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-442%20passed-brightgreen.svg)]()
 
 > **No more manual ALC babysitting, no missed replies, no guessing the best antenna or frequency.**
 > SimpleFT8 automates your entire FT8/FT4/FT2 workflow with closed-loop power control, dual-mode diversity scoring, automatic CQ frequency optimization, and intelligent caller queuing.
@@ -16,6 +16,13 @@
 > In-app help: Press **?** in the status bar for built-in feature documentation with language switcher.
 
 > **Optimize yes — Automate no.** SimpleFT8 is an operator-in-the-loop tool. All automated features — dead man's switch (15 min), semi-automatic CQ mode, manual hunt mode — ensure the operator retains final control. This reflects our commitment to responsible amateur radio software and regulatory compliance.
+
+---
+
+https://github.com/mikewanne/SimpleFT8/raw/main/docs/videos/map.mp4
+
+*Live globe visualization: 16-sector propagation wedges per decoded station, color-coded by antenna (ANT1 / ANT2 / rescue), with 60-minute history retention. Recorded during a 40m FT8 session.*
+*Live-Karte mit 16 Richtungs-Sektor-Wedges pro Decode, Antennen-Farbcodierung (ANT1 / ANT2 / Rescue), 60-Min-Historie. Aufgenommen waehrend einer 40m-FT8-Session.*
 
 ---
 
@@ -31,6 +38,10 @@ power in a closed loop, and finds a clear CQ frequency on its own. Multiple
 callers are queued and answered in turn. There's a live map with a rotatable
 globe showing where you're being heard, and a locator cache that remembers
 stations across app restarts. Fire it up, make a few QSOs, call it a day.
+
+> **How is this different?** Focuses on live propagation visualization and
+> locator mining without configuration overhead. Not a WSJT-X replacement —
+> runs alongside it.
 
 ### Key Innovations
 
@@ -334,6 +345,10 @@ Anrufer landen in einer Warteschlange und werden nacheinander bedient. Dazu
 gibt's eine Live-Karte mit drehbarem Globus, die zeigt, wo man gehört wird —
 und ein Locator-Cache, der Stationen auch nach einem Neustart nicht vergisst.
 Einfach anschalten, ein paar QSOs machen, Feierabend.
+
+> **Was ist anders?** Fokus auf Live-Propagations-Visualisierung und
+> Locator-Mining ohne Konfigurations-Overhead. Kein WSJT-X-Ersatz —
+> laeuft daneben.
 
 ### Live Diversity Auswertung — Aktuelle Daten *(Datensammlung läuft)*
 
