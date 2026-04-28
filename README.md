@@ -168,7 +168,7 @@ data lives in `statistics/`, all PDFs auto-update with `python3 scripts/generate
 
 | Photo | Annotated |
 |:-----:|:---------:|
-| ![Antenna Overview](docs/fotos/Gesamt.png) | ![Antenna Annotated](docs/fotos/Gesamt_Farbe.png) |
+| ![Antenna Overview](docs/fotos/Ansicht.png) | ![Antenna Annotated](docs/fotos/Ansicht_Farbe.png) |
 | Full view — gutter downspout (ANT2) on the left, feed point of ANT1 upper right at the dormer. | Yellow = Kelemen DP-201510 (vertical half-wave dipole, green dot = feed point). Red = complete gutter path (roof → downspout → entrance). |
 
 **ANT1 — Kelemen DP-201510 (multiband trap dipole for 20m / 15m / 10m)**
@@ -450,7 +450,7 @@ mit `python3 scripts/generate_plots.py`.
 
 | Foto | Annotiert |
 |:----:|:---------:|
-| ![Antennenübersicht](docs/fotos/Gesamt.png) | ![Antenne annotiert](docs/fotos/Gesamt_Farbe.png) |
+| ![Antennenübersicht](docs/fotos/Ansicht.png) | ![Antenne annotiert](docs/fotos/Ansicht_Farbe.png) |
 | Gesamtansicht — Regenrinnen-Fallrohr (ANT2) links, Einspeisepunkt ANT1 oben rechts an der Dachgaube. | Gelb = Kelemen DP-201510 (vertikal gespannter Halbwellendipol, grüner Punkt = Einspeisepunkt). Rot = vollständiger Regenrinnen-Verlauf (Dachkante → Fallrohr → Hauseingang). |
 
 **ANT1 — Kelemen DP-201510 (Multiband-Sperrkreisdipol für 20m / 15m / 10m)**
