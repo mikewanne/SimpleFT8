@@ -1,4 +1,4 @@
-# SimpleFT8 TODO — Stand 27.04.2026 (v0.71)
+# SimpleFT8 TODO — Stand 28.04.2026 (v0.72)
 
 ---
 
@@ -11,6 +11,16 @@
 - ✅ Punkt 1 (Propagations-Balken Pulsieren) — erledigt v0.69
 - ✅ Punkt 6 (Stations-Count Tooltip "37 / 46 Stationen") — erledigt v0.70
 - ✅ Punkt 2 (PSK-Reporter Reichweiten-Sektoren TX) — erledigt v0.71
+
+**v0.72 Release-Bilanz (28.04.2026):**
+- 🎨 **Karten-Theme-Toggle (Aurora / Dark):** QComboBox in DirectionMapDialog,
+  Aurora bleibt Default. Dark-Mode = schwarzes Land + mittel-graues BG +
+  flacher Disk + dezent graue Coastlines (Mike-Inspiration aus QSO-Landkarte
+  mit VP8FLY/ZL4AS-Verbindungen).
+- 💾 Settings-Key `direction_map_theme` persistiert ueber App-Restarts.
+- 🛡️ DeepSeek-Findings (4): AK harmonisiert, Aliase belassen, disk_fill statt
+  Skip, QComboBox statt Toggle-Button, Commits 2→3 aufgeteilt.
+- 🧪 4 neue Tests, 426 → 430 gruen.
 
 **v0.71 Release-Bilanz (27.04.2026):**
 - 🌍 **TX-Reichweiten-Sektoren:** Karten-TX-Modus zeigt Sektor-Wedge-Laenge

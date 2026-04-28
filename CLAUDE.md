@@ -11,8 +11,8 @@ HISTORY.md ob X nicht schon drin ist.
 # SimpleFT8 — Claude Kontext
 
 **Start:** `cd "/Users/mikehammerer/Documents/KI N8N Projekte/FT8/SimpleFT8" && ./venv/bin/python3 main.py`
-**Aktueller Stand:** v0.71 (27.04.2026) — TX-Reichweiten-Sektoren: PSK-Reporter Sektor-Wedges im Karten-TX-Modus zeigen jetzt **Reichweiten-Pattern** (max-Distanz pro Sektor) statt Cluster-Dichte. Spot aus VK6 (16000 km) erzeugt langen Wedge, Iberien-Cluster bleibt bescheiden. Mike sieht auf einen Blick wo sein Signal hingeht. RX-Modus unveraendert. NaN/Inf-Guards in `SectorBucket.max_distance_km`. 4 atomare Commits, V1→V2→V3-Workflow mit DeepSeek-Reviewer.
-**Tests:** `./venv/bin/python3 -m pytest tests/ -q` → 426 passed (Qt-Smoke-Tests via `QT_QPA_PLATFORM=offscreen`)
+**Aktueller Stand:** v0.72 (28.04.2026) — Karten-Theme-Toggle (Aurora / Dark): QComboBox in DirectionMapDialog Filter-Bar wechselt zwischen bestehendem Aurora-Look (Default, Sepia-Land + 3D-Globus + Aurora-Glow) und neuem Dark-Mode (schwarzes Land, mittel-graues BG, flacher Disk, dezent graue Coastlines). Settings-Key `direction_map_theme` persistiert die Auswahl ueber App-Restarts. THEME_AURORA + THEME_DARK Dicts, alte Modul-Konstanten als Aliase belassen (Test-Schutz). 3 atomare Commits, V1→V2→V3-Workflow mit DeepSeek-Reviewer.
+**Tests:** `./venv/bin/python3 -m pytest tests/ -q` → 430 passed (Qt-Smoke-Tests via `QT_QPA_PLATFORM=offscreen`)
 **Vor Commits:** Tests grün + bei nicht-trivialen Änderungen DeepSeek-Review (`pal codereview` model `deepseek-chat`) — bereits durch globale §0 + Projektregeln gefordert.
 
 ⚠️ **DeepSeek V4 (deepseek-chat) — Neues Modell, Verhalten noch unbestätigt (Stand 2026-04-25):**

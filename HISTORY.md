@@ -1554,3 +1554,67 @@ nicht ab. **Code ist Referenz, DeepSeek ist Berater.**
 - Falls TX-Sektoren bei wenigen Spots zu unruhig wirken: weiches
   Min-Floor (z.B. 20% max_wedge_r) erwaegen — fuer's erste linear
   belassen.
+
+
+## 2026-04-28 v0.72 — Karten-Theme-Toggle (Aurora / Dark)
+
+**Mike-Wunsch:** Dark-Mode-Variante fuer den Globus, Inspiration aus
+einer fremden QSO-Landkarte (schwarzes Land, mittel-graues BG, dezent
+graue Coastlines, gelber User-Stern). Bestehender Aurora-Look soll
+unangetastet bleiben — Toggle, nicht Ersetzung.
+
+### Architektur (3 atomare Commits)
+
+1. **`feat(direction_map): theme dicts + Aliase + MapCanvas.set_theme()`**
+   - `THEME_AURORA` + `THEME_DARK` + `THEMES` dict in
+     `direction_map_widget.py`. Keys: bg, bg_center, land_fill,
+     land_fill_high, coast_halo, coast_core, rings, compass,
+     sector_lines, user, user_glow, hint, use_aurora (bool),
+     disk_fill (None | hex).
+   - 12 alte Modul-Konstanten als Backwards-Compat-Aliase auf
+     `THEME_AURORA[...]` belassen (DeepSeek-Korrektur — Tests +
+     externe Importe geschuetzt).
+   - `MapCanvas._theme` Field, `set_theme(name)` Methode mit
+     fallback auf "aurora" bei ungueltigem Namen (kein silent
+     ignore, DeepSeek-Korrektur).
+   - 4 neue Tests: theme_default_is_aurora, set_theme_dark_changes,
+     set_theme_invalid_falls_back_to_aurora, set_theme_invalidates_bg.
+
+2. **`feat(direction_map): paint-Methoden theme-aware + UI-Combo + Settings`**
+   - 8 paint-Methoden auf `self._theme[...]` umgestellt.
+   - `_paint_aurora`: early-return bei `not use_aurora` (Dark).
+   - `_paint_globe_disk`: bei `disk_fill is None` → 3D-RadialGradient
+     + Atmospheric-Limb (Aurora). Bei `disk_fill="#hex"` → flacher
+     einfarbiger Disk ohne Limb (Dark) — DeepSeek-Korrektur, Globus
+     bleibt sichtbar (statt komplett zu skippen).
+   - `QComboBox` in DirectionMapDialog Filter-Bar zwischen Band-Combo
+     und Stations/Sektoren-Checkboxes (DeepSeek-Korrektur, statt
+     QPushButton-Toggle).
+   - Settings-Key `"direction_map_theme"`, Default "aurora",
+     Type-Validierung + Fallback bei ungueltigem Wert.
+   - Sofortige Persistenz bei Combo-Wechsel (nicht erst beim Close).
+
+3. **`chore(release): v0.72`** — APP_VERSION 0.71→0.72, HISTORY.md,
+   CLAUDE.md.
+
+### Workflow
+
+V1 → V2 (Self-Review fuegte 10 fehlende Punkte hinzu: konkrete Theme-
+Keys, use_aurora/disk_fill-Flags, Robust-Fallbacks, Aurora-Hardcodes)
+→ DeepSeek-Reviewer-Auftrag (4 echte Punkte gefunden: AK3/5
+harmonisieren, Aliase belassen statt entfernen, disk_fill statt
+use_3d_disk Skip, QComboBox statt Toggle-Button, Commits aufgeteilt
+2→3) → V3 → Plan-Mode + Umsetzung.
+
+### Tests
+
+426 → 430 gruen (+4 Theme-Tests). Stations-Farben, Antennen-Codes,
+Heatmap, Sektor-Wedges sind NICHT theme-aware (KISS — funktionieren
+auf beiden Hintergruenden).
+
+### Field-Test offen
+
+- Karte oeffnen → Theme auf Dark wechseln. Erwartung: schwarzes
+  Land, graues BG, gelber User-Stern bleibt, Stations-Glow bleibt
+  Cyan/Antennen-Farben, Coastlines dezent grau.
+- Restart-Test: Theme-Wahl persistiert ueber App-Neustart.
