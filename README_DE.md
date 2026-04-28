@@ -147,6 +147,19 @@ Jede der drei Kernfunktionen hat eine eigene ausfuehrliche Dokumentation mit Scr
 - PSKReporter-Integration mit Spot-Statistik und Entfernungsanzeige
 - Laendererkennung aus Rufzeichen-Prefix mit Entfernung in km
 
+### Live-Propagations-Sektoren — operative Karte statt Deko
+Die Richtungs-Karte zeigt einen drehbaren 3D-Globus mit **16 Sektor-Wedges**
+die in Echtzeit visualisieren, wohin die Ausbreitung *gerade jetzt* geht.
+- **RX-Modus**: Wedge-Laenge = Anzahl gehoerter Stationen aus dieser Richtung,
+  Antennen-Farbcodierung (ANT1/ANT2/Rescue) macht Diversity-Beitraege sichtbar.
+- **TX-Modus**: Wedge-Laenge = max-Reichweite des Sektors (v0.71). Ein einziger
+  VK6-Spot mit 16.000 km zaehlt mehr als 50 Iberien-Spots im selben Sektor —
+  zeigt echte Reichweite statt Cluster-Dichte.
+- **Aurora + Dark Theme** (v0.72), persistent ueber App-Restarts.
+
+> Ein Blick auf die Karte sagt: „kein Vektor nach Westen heute — auf diesem
+> Band brauche ich NA gar nicht erst zu versuchen". Operative Information, keine Deko.
+
 ### Live Locator Mining — kein anderer FT8-Client macht das
 SimpleFT8 extrahiert Maidenhead-Locators **direkt aus laufenden CQ-Rufen
 und QSO-Antworten** (`CQ R9CA LO97`, `RA4ALY DL6YJB JO31`) und schreibt
