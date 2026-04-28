@@ -1513,31 +1513,11 @@ class DirectionMapDialog(QDialog):
         layout.addWidget(self.canvas, stretch=1)
 
         # ── Filter-Bar ────────────────────────────────────
+        # v0.73 simpleFT8-Style: Time-Window-Combo (10/30/60/180 Min) + Band-
+        # Combo (Aktuelles/Alle) entfernt — Karte zeigt aktives Band, 60 Min
+        # TTL hardcoded. Mike-Konvention: simple FT8 client, kein
+        # Auswertungs-Programm.
         filter_row = QHBoxLayout()
-        filter_row.addWidget(QLabel("Zeit:"))
-        self.window_combo = QComboBox()
-        self.window_combo.setSizeAdjustPolicy(QComboBox.AdjustToContents)
-        for label, val in [("10 Min", 10), ("30 Min", 30), ("60 Min", 60), ("3 Std", 180)]:
-            self.window_combo.addItem(label, val)
-        self.window_combo.setCurrentIndex(2)  # 60 Min default
-        # Popup-Liste so breit wie laengstes Item (sonst schneidet das Popup
-        # auf macOS die Items ab, auch wenn die geschlossene Combo passt).
-        self.window_combo.view().setMinimumWidth(
-            self.window_combo.view().sizeHintForColumn(0) + 30
-        )
-        filter_row.addWidget(self.window_combo)
-
-        filter_row.addSpacing(16)
-        filter_row.addWidget(QLabel("Band:"))
-        self.band_combo = QComboBox()
-        self.band_combo.setSizeAdjustPolicy(QComboBox.AdjustToContents)
-        self.band_combo.addItem("Aktuelles", "current")
-        self.band_combo.addItem("Alle", "all")
-        self.band_combo.view().setMinimumWidth(
-            self.band_combo.view().sizeHintForColumn(0) + 30
-        )
-        filter_row.addWidget(self.band_combo)
-
         # Theme-Auswahl (Aurora / Dark)
         self.theme_combo = QComboBox()
         self.theme_combo.setSizeAdjustPolicy(QComboBox.AdjustToContents)
@@ -1682,7 +1662,7 @@ class DirectionMapDialog(QDialog):
         self._psk_client.start_polling(
             on_spots=lambda spots: self._psk_spots_signal.emit(spots),
             on_error=lambda e: self._psk_error_signal.emit(str(e)),
-            window_min=self.time_window_min,
+            window_min=60,  # v0.73 hardcoded — simpleFT8-Style
         )
         self.set_status("SENDEN: PSK-Reporter Polling laeuft …")
 
@@ -1795,12 +1775,3 @@ class DirectionMapDialog(QDialog):
     def mode(self) -> str:
         return self._mode
 
-    # ── Window-Status ─────────────────────────────────────
-
-    @property
-    def time_window_min(self) -> int:
-        return int(self.window_combo.currentData() or 60)
-
-    @property
-    def band_filter(self) -> str:
-        return str(self.band_combo.currentData() or "current")

@@ -223,11 +223,13 @@ def test_dialog_set_locator_propagates_to_canvas(qapp):
     d.deleteLater()
 
 
-def test_dialog_default_filter_settings(qapp):
+def test_dialog_default_theme_combo_present(qapp):
+    """v0.73: time_window_min + band_filter Properties wurden entfernt
+    (siehe test_dialog_no_window_combo / no_band_combo). Theme-Combo
+    bleibt — pruefen dass Default-Stil = aurora."""
     from ui.direction_map_widget import DirectionMapDialog
     d = DirectionMapDialog(my_locator="JO31")
-    assert d.time_window_min == 60
-    assert d.band_filter == "current"
+    assert d.theme_combo.currentData() == "aurora"
     d.deleteLater()
 
 
@@ -689,19 +691,16 @@ def test_canvas_paintevent_with_wedges_and_stations(qapp):
 
 # ── Filter-Bar Dropdowns ──────────────────────────────────
 
-def test_dialog_dropdowns_adjust_to_contents(qapp):
-    """v0.68: window_combo + band_combo wachsen mit ihren Items mit,
-    damit "3 Std" / "Aktuelles" nicht abgeschnitten werden."""
+def test_dialog_theme_combo_adjusts_to_contents(qapp):
+    """v0.73: window_combo + band_combo entfernt (siehe
+    test_dialog_no_window_combo / no_band_combo). Theme-Combo
+    behaelt AdjustToContents."""
     from PySide6.QtWidgets import QComboBox
     from ui.direction_map_widget import DirectionMapDialog
     d = DirectionMapDialog(my_locator="JO31")
-    assert d.window_combo.sizeAdjustPolicy() == QComboBox.AdjustToContents
-    assert d.band_combo.sizeAdjustPolicy() == QComboBox.AdjustToContents
-    # sizeHint muss das laengste Item samt Pfeil-Indikator aufnehmen
-    fm_w = d.window_combo.fontMetrics().horizontalAdvance("60 Min")
-    fm_b = d.band_combo.fontMetrics().horizontalAdvance("Aktuelles")
-    assert d.window_combo.sizeHint().width() >= fm_w
-    assert d.band_combo.sizeHint().width() >= fm_b
+    assert d.theme_combo.sizeAdjustPolicy() == QComboBox.AdjustToContents
+    fm = d.theme_combo.fontMetrics().horizontalAdvance("Aurora")
+    assert d.theme_combo.sizeHint().width() >= fm
     d.close()
 
 
@@ -801,3 +800,21 @@ def test_set_theme_invalidates_background(qapp):
     c.set_theme("dark")
     assert c._bg_pixmap is None  # invalidated
     c.deleteLater()
+
+
+# ── UI-Aufraeumung v0.73 ──────────────────────────────────
+
+def test_dialog_no_window_combo(qapp):
+    """v0.73: Time-Window-Combo wurde komplett entfernt (60 Min hardcoded)."""
+    from ui.direction_map_widget import DirectionMapDialog
+    dlg = DirectionMapDialog(my_locator="JO31", default_mode="rx")
+    assert not hasattr(dlg, "window_combo")
+    dlg.deleteLater()
+
+
+def test_dialog_no_band_combo(qapp):
+    """v0.73: Band-Combo wurde komplett entfernt (Karte zeigt aktives Band)."""
+    from ui.direction_map_widget import DirectionMapDialog
+    dlg = DirectionMapDialog(my_locator="JO31", default_mode="rx")
+    assert not hasattr(dlg, "band_combo")
+    dlg.deleteLater()
