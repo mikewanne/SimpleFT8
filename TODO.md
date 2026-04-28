@@ -1,4 +1,4 @@
-# SimpleFT8 TODO — Stand 28.04.2026 (v0.72)
+# SimpleFT8 TODO — Stand 28.04.2026 (v0.73)
 
 ---
 
@@ -11,6 +11,16 @@
 - ✅ Punkt 1 (Propagations-Balken Pulsieren) — erledigt v0.69
 - ✅ Punkt 6 (Stations-Count Tooltip "37 / 46 Stationen") — erledigt v0.70
 - ✅ Punkt 2 (PSK-Reporter Reichweiten-Sektoren TX) — erledigt v0.71
+
+**v0.73 Release-Bilanz (28.04.2026):**
+- 💾 **Persistenter RX-History-Cache:** pro (band, mode) 60 Min Empfangs-
+  daten in `~/.simpleft8/cache/rx_history/{band}_{mode}.json`. Karte zeigt
+  beim Open + Bandwechsel sofort die letzte Stunde — auch nach App-Restart.
+- 🧹 **Karten-UI-Aufraeumung:** Time-Window-Combo + Band-Combo raus
+  (waren tote/halbtote UI-Deko). simpleFT8-Style: Karte zeigt aktives
+  Band, 60 Min hardcoded.
+- 🧪 6 atomare Commits, 430 → 442 Tests gruen, V1→V2→V3 mit DeepSeek-
+  Reviewer (5 echte Findings uebernommen, 4 verworfen).
 
 **v0.72 Release-Bilanz (28.04.2026):**
 - 🎨 **Karten-Theme-Toggle (Aurora / Dark):** QComboBox in DirectionMapDialog,

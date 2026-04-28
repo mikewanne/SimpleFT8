@@ -11,8 +11,8 @@ HISTORY.md ob X nicht schon drin ist.
 # SimpleFT8 — Claude Kontext
 
 **Start:** `cd "/Users/mikehammerer/Documents/KI N8N Projekte/FT8/SimpleFT8" && ./venv/bin/python3 main.py`
-**Aktueller Stand:** v0.72 (28.04.2026) — Karten-Theme-Toggle (Aurora / Dark): QComboBox in DirectionMapDialog Filter-Bar wechselt zwischen bestehendem Aurora-Look (Default, Sepia-Land + 3D-Globus + Aurora-Glow) und neuem Dark-Mode (schwarzes Land, mittel-graues BG, flacher Disk, dezent graue Coastlines). Settings-Key `direction_map_theme` persistiert die Auswahl ueber App-Restarts. THEME_AURORA + THEME_DARK Dicts, alte Modul-Konstanten als Aliase belassen (Test-Schutz). 3 atomare Commits, V1→V2→V3-Workflow mit DeepSeek-Reviewer.
-**Tests:** `./venv/bin/python3 -m pytest tests/ -q` → 430 passed (Qt-Smoke-Tests via `QT_QPA_PLATFORM=offscreen`)
+**Aktueller Stand:** v0.73 (28.04.2026) — Persistenter RX-History-Cache: pro (band, mode) werden Empfangsdaten 60 Min lang in `~/.simpleft8/cache/rx_history/{band}_{mode}.json` gespeichert (Auto-Save alle 5 Min synchron mit LocatorDB, atomic-write, RLock). Beim Karten-Open + Bandwechsel laedt die Karte sofort die letzte Stunde Empfangsdaten — auch nach App-Restart. Plus simpleFT8-Style-UI-Aufraeumung: Time-Window-Combo + Band-Combo aus DirectionMapDialog raus (Karte zeigt aktives Band, 60 Min hardcoded). 6 atomare Commits, V1→V2→V3-Workflow mit DeepSeek-Reviewer (5 echte Findings uebernommen).
+**Tests:** `./venv/bin/python3 -m pytest tests/ -q` → 442 passed (Qt-Smoke-Tests via `QT_QPA_PLATFORM=offscreen`)
 **Vor Commits:** Tests grün + bei nicht-trivialen Änderungen DeepSeek-Review (`pal codereview` model `deepseek-chat`) — bereits durch globale §0 + Projektregeln gefordert.
 
 ⚠️ **DeepSeek V4 (deepseek-chat) — Neues Modell, Verhalten noch unbestätigt (Stand 2026-04-25):**

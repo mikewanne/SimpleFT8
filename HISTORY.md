@@ -1624,3 +1624,85 @@ auf beiden Hintergruenden).
 Mike hat das Theme-Toggle live verifiziert — Originalzitat:
 „erdkugel map sieht geil aus funktioniert auch super". Wechsel
 sofort sichtbar, Persistenz ueber Restart bestaetigt.
+
+
+## 2026-04-28 v0.73 — Persistenter RX-History-Cache + Karten-UI-Aufraeumung
+
+**Mike-Wunsch:** Karte soll beim Open sofort die letzte Stunde Empfangs-
+daten zeigen — auch nach App-Restart. Bisher war alles in-memory mit
+30-Min-TTL und beim Schliessen weg. Plus: simpleFT8-Konformitaet —
+Combos in der Filter-Bar die nichts (oder nicht voll) tun, sollen weg.
+
+### Architektur (6 atomare Commits)
+
+1. **`feat(rx_history): RxHistoryStore module + 10 Tests`**
+   - `core/rx_history.py` neu: `RxEntry` dataclass + `RxHistoryStore`
+     mit RLock + Dirty-Tracking + atomic-write.
+   - 60 Min TTL beim Save UND Load (>3600s alt raus).
+   - JSON-Format `{"version":1, "band":"40m", "mode":"FT8", "entries":[...]}`.
+   - File-Naming: `{band}_{mode}.json` in `~/.simpleft8/cache/rx_history/`.
+   - 10 Tests inkl. OSError-Handling, Schema-Version-Check, korrupte JSONs.
+
+2. **`feat(main_window): RxHistoryStore Lifecycle`**
+   - `__init__`: Store erstellen + `load_all()`.
+   - Existing Auto-Save-Timer (LocatorDB v0.70): erweitert um
+     `rx_history_store.save()` — eine Stelle, KISS.
+   - `closeEvent`: finaler Save parallel zu LocatorDB.
+
+3. **`feat(mw_cycle): Decoder-Hook RxHistoryStore.add_entry`**
+   - Neue Methode `_feed_rx_history(messages, antenna)` parallel zu
+     `_feed_locator_db`.
+   - None-safe (`if rx_history_store is None: return`) — atomar
+     unabhaengig von Commit 2.
+   - Aufrufe in `_handle_normal_mode` (antenna="A1") und
+     `_handle_diversity_operate` (antenna=ant).
+
+4. **`feat(direction_map): RX-History beim Open + Bandwechsel + 60min TTL`**
+   - `STATION_TTL_S = 30*60` → `60*60` (konsistent mit Persist-TTL).
+   - Neuer Modul-Helper `entries_to_station_points(entries, locator_db)`:
+     RxEntry → StationPoint, Locator-Lookup priorisiert
+     `locator_db.get_position` (exakte km), Mobile-Filter.
+   - `main_window.open_direction_map`: ruft `_reload_rx_history_on_map(band)`
+     vor `show()` — Karte hat sofort Daten.
+   - `mw_radio._on_band_changed`: wenn Karte offen → reload.
+
+5. **`refactor(direction_map): Time-Window-Combo + Band-Combo raus`**
+   - `band_combo` "Aktuelles/Alle": Property nirgends ausgewertet (toter Code).
+   - `window_combo` (10/30/60/180 Min): Wert nur beim Polling-Start
+     wirksam, Live-Wechsel im laufenden Dialog wirkungslos.
+   - Beide komplett entfernt + Properties geloescht. `_start_tx_polling`:
+     `window_min=60` hardcoded.
+   - 2 alte Tests umgeschrieben + 2 neue Smoke-Tests.
+
+6. **`chore(release): v0.73`** — APP_VERSION 0.72→0.73, HISTORY, CLAUDE.
+
+### Workflow
+
+V1 → V2 (Self-Review fuegte 8+ fehlende Punkte hinzu: Konkretes Daten-
+modell, Threading-Locks, Auto-Save-synchron, Cold-Start-Verhalten,
+Bandwechsel-atomar) → DeepSeek-Reviewer-Auftrag (5 echte Findings:
+Dirty-Tracking als set, Commit-Reihenfolge atomar via None-safe Hook,
+Write-Error-Handling, Bandwechsel atomar via existing update_stations,
+Cache Band-agnostisch ohne LOGGED_BANDS-Filter).
+
+DeepSeek-Verworfen: JSON → SQLite (Mike-KISS-Wunsch JSON, konsistent
+zu LocatorDB), Dedup im Store (Canvas dedupt eh), Lock-Contention-
+Sorgen (Decode-Frequenz < 1/s), `_handle_ft2/ft4_mode`-Halluzination
+(gibt's nicht — Modus orthogonal zu Reception-Mode).
+
+### Tests
+
+430 → 442 gruen (+12: 10 RxHistory-Tests + 2 Smoke-Tests fuer entfernte
+Combos, 2 alte Tests umgeschrieben).
+
+### Field-Test offen
+
+- App-Restart-Test: vor Restart 30m FT8 + 40m FT8 empfangen, App
+  schliessen, neu starten, Karte oeffnen → 30m oder 40m angezeigt mit
+  letzten 60 Min Empfangsdaten.
+- Bandwechsel-Test: Karte offen, Wechsel 40m→20m → Karte zeigt sofort
+  20m-Cache aus Disk + Live-Daten obendrauf.
+- 60-Min-TTL: nach 1h+ keine Decode → Stationen verschwinden aus Karte.
+- ~/.simpleft8/cache/rx_history/ enthaelt nach Save: bis zu 5 Files
+  (LOGGED_BANDS × FT8) plus eventuell weitere Baender wenn Mike auf
+  60m/80m/12m geht.
