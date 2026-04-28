@@ -332,6 +332,10 @@ class RadioMixin:
         # (sonst 60s Lag bis zum naechsten Polling-Tick → Pulsier-Animation
         # wuerde am alten Band haengen)
         self._update_propagation_ui()
+        # Karten-Dialog (falls offen): RX-History des neuen Bandes nachladen
+        # (v0.73). Zeigt sofort die letzten 60 Min Empfangsdaten.
+        if self._direction_map_dialog is not None:
+            self._reload_rx_history_on_map(band)
 
         # Diversity: Preset-Check mit Dialog + ggf. Pipeline
         if self._rx_mode == "diversity":

@@ -142,7 +142,8 @@ COMPASS_LABELS = ("N", "NE", "E", "SE", "S", "SW", "W", "NW")
 RESIZE_DEBOUNCE_MS = 200
 MAX_DISTANCE_KM = 18000.0
 MAP_RADIUS_FRACTION = 0.45  # Anteil der min(width,height) als Karten-Radius
-STATION_TTL_S = 30 * 60  # Stationen 30 Min in der Karte sichtbar (RX + TX)
+STATION_TTL_S = 60 * 60  # Stationen 60 Min in der Karte sichtbar (RX + TX) —
+# konsistent mit RxHistoryStore-TTL (v0.73)
 ZOOM_MIN = 0.3
 ZOOM_MAX = 6.0
 ZOOM_FACTOR = 1.15  # pro Mausrad-Notch
@@ -263,6 +264,56 @@ def snapshot_to_station_points(
             antenna=antenna,
             timestamp=float(data.get("ts", 0.0)),
             band=band,
+            prec_km=prec_km,
+        ))
+    return points
+
+
+def entries_to_station_points(
+    entries: list,
+    locator_db=None,
+) -> list[StationPoint]:
+    """RxEntry-Liste (aus RxHistoryStore) → StationPoint-Liste.
+
+    Locator-Lookup-Reihenfolge:
+        1. locator_db (persistent, Source-priorisiert) wenn gegeben
+        2. entry.locator (CQ-Locator beim Decode-Zeitpunkt)
+    Mobile-Calls (/P /MM /AM /QRP) werden ausgefiltert.
+    Stationen ohne aufloesbaren Locator werden silent geskippt.
+    """
+    points: list[StationPoint] = []
+    for e in entries:
+        call = getattr(e, "call", "")
+        if not call or is_mobile(call):
+            continue
+
+        lat = lon = None
+        prec_km = 110
+        loc = ""
+        if locator_db is not None:
+            pos = locator_db.get_position(call)
+            if pos is not None:
+                lat, lon, prec_km = pos
+                ent = locator_db.get(call)
+                loc = ent.locator if ent else ""
+        if lat is None:
+            loc = getattr(e, "locator", None) or ""
+            if not loc:
+                continue
+            latlon = safe_locator_to_latlon(loc)
+            if latlon is None:
+                continue
+            lat, lon = latlon
+            prec_km = 5 if len(loc) >= 6 else 110
+
+        points.append(StationPoint(
+            call=call,
+            locator=loc,
+            lat=lat,
+            lon=lon,
+            snr=float(getattr(e, "snr", -30.0)),
+            antenna=getattr(e, "antenna", "") or "",
+            timestamp=float(getattr(e, "ts", 0.0)),
             prec_km=prec_km,
         ))
     return points

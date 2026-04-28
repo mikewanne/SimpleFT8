@@ -885,8 +885,26 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
             self.settings.callsign, self.settings.mode
         )
         self._direction_map_dialog.set_locator_db(self.locator_db)
+        # RX-History des aktiven Bandes vorladen (v0.73): zeigt sofort die
+        # letzte Stunde Empfangsdaten — auch nach App-Restart.
+        self._reload_rx_history_on_map(self.settings.band)
         self._direction_map_dialog.show()
         self._direction_map_dialog.raise_()
+
+    def _reload_rx_history_on_map(self, band: str) -> None:
+        """Karten-Canvas mit RX-History des Bandes (alle Modi gemerged) befuellen.
+
+        Wird beim Karten-Open + Bandwechsel aufgerufen. Konvertiert RxEntries
+        zu StationPoints via locator_db (priorisiert exakte Position aus DB
+        ueber Decode-Zeitpunkt-Locator)."""
+        if self._direction_map_dialog is None:
+            return
+        if getattr(self, "rx_history_store", None) is None:
+            return
+        from ui.direction_map_widget import entries_to_station_points
+        entries = self.rx_history_store.get_band_entries(band)
+        points = entries_to_station_points(entries, locator_db=self.locator_db)
+        self._direction_map_dialog.canvas.update_stations(points)
 
     def _build_map_snapshot(self) -> dict:
         """Snapshot aus aktuellen Stations-Akkumulatoren bauen.
