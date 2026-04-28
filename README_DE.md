@@ -147,6 +147,17 @@ Jede der drei Kernfunktionen hat eine eigene ausfuehrliche Dokumentation mit Scr
 - PSKReporter-Integration mit Spot-Statistik und Entfernungsanzeige
 - Laendererkennung aus Rufzeichen-Prefix mit Entfernung in km
 
+### Live Locator Mining — kein anderer FT8-Client macht das
+SimpleFT8 extrahiert Maidenhead-Locators **direkt aus laufenden CQ-Rufen
+und QSO-Antworten** (`CQ R9CA LO97`, `RA4ALY DL6YJB JO31`) und schreibt
+sie in eine persistente JSON-Datenbank (`~/.simpleft8/locator_cache.json`).
+Source-Prioritaet: `cq_6 > psk_6 > qso_log_6 > _4-Varianten` — ein
+6-stelliger Locator aus einem Live-CQ wird nie von einem 4-stelligen
+ADIF-Eintrag verdraengt. Die Karte zeigt damit **exakte Stations-
+positionen statt Land-Mittelpunkte**. Bootstrap via ADIF-Bulk-Import
+(LotW, QRZ, eigenes Logbuch) beim Start. Auto-Save alle 5 Min — uebersteht
+Hard-Kill. Aktuell 9.366 Calls, waechst mit jeder Session.
+
 ### Getestet und bestaetigt (Feldtest 13.04.2026)
 
 - ✅ **DT-Zeitkorrektur**: Kumulative Korrektur aus Band-Konsens. 4-Zyklen-Messung, 20-Zyklen-Betrieb. DT-Werte ±0.2 (vorher +0.7). TX und RX gleichzeitig korrigiert. Bandwechsel behaelt Korrekturwert.
