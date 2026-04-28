@@ -69,8 +69,16 @@ class StationStatsLogger:
     nicht in statistics/ gespeichert.
     """
 
-    # Welche Baender werden protokolliert (alle anderen werden ignoriert)
-    LOGGED_BANDS = frozenset({"20m", "40m"})
+    # Welche Baender werden protokolliert (alle anderen werden ignoriert).
+    # 28.04.2026 erweitert auf 5 HF-Hauptbaender — Mike will alle Modi
+    # nach und nach komplettieren um Diversity-Verhalten ueber das Spektrum
+    # zu analysieren (Off-Band ANT1 vs Resonant ANT1 vs WARC).
+    LOGGED_BANDS = frozenset({"10m", "15m", "20m", "30m", "40m"})
+
+    # Nur FT8 loggen — Mike-Entscheidung 28.04.2026, fuer einheitliche
+    # Auswertbarkeit. FT4/FT2 haben zu wenig Datenmengen pro Slot fuer
+    # statistisch belastbare Diversity-Vergleiche.
+    LOGGED_FT_MODES = frozenset({"FT8"})
 
     def __init__(self, base_dir: str | Path | None = None):
         if base_dir is None:
@@ -95,8 +103,8 @@ class StationStatsLogger:
             rx_mode: "Normal", "Diversity_Normal", "Diversity_Dx"
             ant2_wins: Wie oft Ant2 strikt besser als Ant1 (nur Diversity)
         """
-        if ft_mode not in ("FT8", "FT4"):
-            return
+        if ft_mode not in self.LOGGED_FT_MODES:
+            return  # Mode-Filter (siehe Klassen-Docstring)
         if band not in self.LOGGED_BANDS:
             return  # Band-Filter (siehe Klassen-Docstring)
         entry = {
@@ -131,6 +139,8 @@ class StationStatsLogger:
         """
         if not comparisons:
             return
+        if mode not in self.LOGGED_FT_MODES:
+            return  # Mode-Filter (siehe Klassen-Docstring)
         if band not in self.LOGGED_BANDS:
             return  # Band-Filter (siehe Klassen-Docstring)
         rx_mode = get_active_reception_mode("diversity", scoring_mode)
@@ -189,6 +199,8 @@ class StationStatsLogger:
             best_ant: "A1" / "A2" / None (keine Pref-Daten vorhanden)
             delta_db: SNR-Differenz A2-A1 in dB, None wenn unbekannt
         """
+        if ft_mode not in self.LOGGED_FT_MODES:
+            return  # Mode-Filter (siehe Klassen-Docstring)
         if band not in self.LOGGED_BANDS:
             return  # Band-Filter (siehe Klassen-Docstring)
         entry = {
