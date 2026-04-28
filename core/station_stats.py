@@ -70,10 +70,11 @@ class StationStatsLogger:
     """
 
     # Welche Baender werden protokolliert (alle anderen werden ignoriert).
-    # 28.04.2026 erweitert auf 5 HF-Hauptbaender — Mike will alle Modi
-    # nach und nach komplettieren um Diversity-Verhalten ueber das Spektrum
-    # zu analysieren (Off-Band ANT1 vs Resonant ANT1 vs WARC).
-    LOGGED_BANDS = frozenset({"10m", "15m", "20m", "30m", "40m"})
+    # 28.04.2026: erweitert auf 5 HF-Hauptbaender (10/15/20/30/40m).
+    # 28.04.2026 nachmittags: 17m hinzugefuegt — Mike will Off-Band-Diversity-
+    # Hypothese empirisch pruefen (ANT1 Trap-Dipol resonant nur 20/15/10m,
+    # auf 17m off-band → Diversity sollte gewinnen wie auf 40m).
+    LOGGED_BANDS = frozenset({"10m", "15m", "17m", "20m", "30m", "40m"})
 
     # Nur FT8 loggen — Mike-Entscheidung 28.04.2026, fuer einheitliche
     # Auswertbarkeit. FT4/FT2 haben zu wenig Datenmengen pro Slot fuer

@@ -47,15 +47,33 @@ SimpleFT8 kann mit einer oder zwei Antennen empfangen. Du hast drei Modi zur Aus
 
 ### Praxis-Ergebnisse
 
-Live-Auswertung 40m FT8, 4 Messtage, 22.696 Zyklen (Pooled Mean über alle Zyklen, alle Tageszeiten):
+**40m FT8 (Off-Band ANT1)** — Live-Auswertung 4 Messtage, 22.696 Zyklen:
 
 | Modus | vs Normal (ohne Rescue) | vs Normal (inkl. Rescue) |
 |-------|:---:|:---:|
 | **Diversity Standard** | **+88%** | **+122%** |
 | **Diversity DX** | **+124%** | **+158%** |
 
-*Rescue = Stationen, die ANT1 nicht decodieren konnte (≤ −24 dB), aber ANT2 rettete.*
-Voller Bericht mit Diagrammen: [auswertung/Auswertung-40m-FT8.pdf](auswertung/Auswertung-40m-FT8.pdf).
+**20m FT8 (Resonant ANT1)** — Live-Auswertung 5–7 Messtage, 13.348 Zyklen:
+
+| Modus | vs Normal (Pooled Mean) |
+|-------|:---:|
+| Diversity Standard | **−18%** |
+| Diversity DX | **−22%** |
+
+> **Diversity ist asymmetrisch je nach Antennen-Setup.** Auf 40m (ANT1 off-band)
+> gleicht ANT2 die schwache ANT1 aus → großer Stations-Gewinn. Auf 20m (ANT1
+> resonant) überlagert ANT2 eine bereits starke ANT1 → kleiner Stations-Verlust.
+> ABER: in direkten A1↔A2-Doppelempfängen gewinnt ANT2 auf 20m in **79–86 %**
+> der Fälle (+4 dB Ø) — qualitative Pol-Diversity wirkt, nur asymmetrisch.
+>
+> **Für andere Operator interessant:** wer eine resonante Antenne für 1–2 Bänder
+> hat plus alles andere über Tuner — genau Mike's Situation auf 40m — bekommt
+> auf den Tuner-Bändern den großen Diversity-Gewinn.
+
+Volle Berichte: [40m-PDF](auswertung/Auswertung-40m-FT8.pdf) · [20m-PDF](auswertung/Auswertung-20m-FT8.pdf).
+Roadmap: 17m, 30m, 15m, 10m, 80m, 60m, 12m folgen — Off-Band/Resonant-Hypothese
+wird empirisch geprüft.
 
 ---
 

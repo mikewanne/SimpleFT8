@@ -79,11 +79,9 @@ stations across app restarts. Fire it up, make a few QSOs, call it a day.
 > ANT1 (Kelemen DP-201510) is operated off-band on 40m and therefore significantly
 > less efficient on this band. ANT2 (house gutter, ~15m) falls between λ/4 and λ/2
 > for 40m and works comparatively well. The measured gains (+88%/+123% stations)
-> represent an **upper bound** — with two well-matched 40m-optimized antennas, a lower
-> but still significant diversity gain is expected.
-> Follow-up tests on **20m** are planned, where the Kelemen DP-201510 operates within
-> its design band and receives considerably more efficiently. The 20m band (14 MHz) is
-> generally easier to receive than 40m. Measurements are ongoing.
+> represent an **upper bound** for off-band operation — with two well-matched
+> 40m-optimized antennas, a lower but still significant diversity gain is expected.
+> The exact opposite happens when ANT1 is on its resonant band — see the 20m results below.
 
 **Station timeline — 40m FT8, all three modes over 24h UTC:**
 *(Dashed lines = Rescue Stations: received by ANT1 below −24 dB — ANT2 boosts the signal above the decoding threshold)*
@@ -103,6 +101,68 @@ stations across app restarts. Fire it up, make a few QSOs, call it a day.
 
 > **📊 Statistics in progress — target: minimum 6 measurement days for reliable results.**
 > Current: 4–5 days. Charts and PDF update automatically with each new session. The more days, the more stable the lines.
+
+---
+
+#### 20m FT8 — when ANT1 is on its design band
+
+**Live measurement results — 20m FT8, 5–7 measurement days, 13,348 cycles:**
+
+| Mode | vs Normal (Pooled Mean) | Days | Cycles |
+|------|:---:|:---:|:---:|
+| Normal | 100% (51.4 stations/15s) | 7 | 5,264 |
+| Diversity Standard | **−18%** | 5 | 3,973 |
+| Diversity DX | **−22%** | 6 | 4,111 |
+
+> **Note on Interpretation — 20m**
+> On 20m, the Kelemen DP-201510 operates within its **design band** as a resonant
+> half-wave dipole. ANT1 alone is already very efficient — Diversity overlays this
+> good antenna with a non-optimized gutter (ANT2). The result is a slight **loss**
+> in raw station count.
+>
+> **But the picture is more nuanced:** in direct A1↔A2 comparisons the ANT2 wins
+> in **79–86 % of cases** with an average **+4 dB** advantage — pure polarization
+> and pattern diversity. Faraday rotation scales with f² → polarization diversity
+> works *stronger* on 20m than on 40m. The benefit is qualitative (different
+> stations, especially weak DX) rather than quantitative.
+>
+> **The honest takeaway:** Diversity is **asymmetric** with this antenna setup.
+> On off-band-ANT1 bands (40m, 30m, 17m, 80m) it compensates the weak ANT1 →
+> large station gain. On resonant-ANT1 bands (20m, 15m, 10m) it overlays an
+> already strong ANT1 → small station loss but qualitative pol-diversity gain.
+
+**Station timeline — 20m FT8, all three modes over 24h UTC:**
+
+![Stations 20m FT8](auswertung/stationen_20m_FT8.png)
+
+**Direct mode comparison — stations per cycle, per hour:**
+
+![Diversity Comparison 20m FT8](auswertung/diversity_20m_FT8.png)
+
+| Diagram | Description |
+|---------|-------------|
+| [📊 Detailed PDF Report — 20m](auswertung/Auswertung-20m-FT8.pdf) | Full 20m analysis with the differential narrative — ANT2 win-rate, Faraday rotation theory, asymmetric advantage. |
+| [🗂 Raw Data (statistics/)](statistics/) | All raw cycle data per mode/band/hour — reproduce any number yourself. |
+
+#### Why this matters for other operators
+
+If your station has **one resonant antenna covering 1–2 bands** plus everything
+else via tuner — **exactly the situation Mike has on 40m** — Diversity is likely
+to bring a substantial gain on the tuner-fed bands and a slight loss on your
+resonant bands. The 40m measurement is the "tuner-fed" archetype, the 20m
+measurement is the "resonant" archetype.
+
+#### Roadmap — more bands measuring
+
+- **17m** (off-band ANT1, just enabled): expected to gain like 40m
+- **30m** (off-band, in progress): expected to gain
+- **15m / 10m** (resonant): expected to lose like 20m
+- **80m / 60m / 12m**: pending
+
+Each new band confirms or refutes the off-band/resonant hypothesis. All raw
+data lives in `statistics/`, all PDFs auto-update with `python3 scripts/generate_plots.py`.
+
+---
 
 ### Antenna Setup
 
@@ -298,12 +358,10 @@ Einfach anschalten, ein paar QSOs machen, Feierabend.
 > ANT1 (Kelemen DP-201510) ist auf 40m außerhalb seines Auslegungsbandes und damit
 > deutlich suboptimal für diesen Frequenzbereich. ANT2 (Regenrinne, ~15m) liegt
 > zwischen λ/4 und λ/2 für 40m und arbeitet dort vergleichsweise gut. Die gemessenen
-> Gewinne (+88%/+123% Stationen) sind als **Obergrenze** zu verstehen — bei zwei
-> gleichwertigen, für 40m optimierten Antennen ist ein geringerer, aber dennoch
-> signifikanter Diversity-Gewinn zu erwarten.
-> Folgetests auf **20m** sind geplant, wo der Kelemen DP-201510 in seinem Auslegungsband
-> arbeitet und deutlich effizienter empfängt. Das 20m-Band (14 MHz) ist generell besser
-> zu empfangen als 40m. Die Messreihe läuft.
+> Gewinne (+88%/+123% Stationen) sind als **Obergrenze für Off-Band-Betrieb** zu
+> verstehen — bei zwei gleichwertigen, für 40m optimierten Antennen ist ein geringerer,
+> aber dennoch signifikanter Diversity-Gewinn zu erwarten.
+> Auf einem resonanten Band kehrt sich das Bild um — siehe 20m-Ergebnisse weiter unten.
 
 **Stationen über 24h UTC — 40m FT8, alle drei Modi:**
 *(Gestrichelte Linien = Rescue Stationen: von ANT1 unter −24 dB empfangen — ANT2 hebt das Signal über die Dekodiergrenze)*
@@ -323,6 +381,70 @@ Einfach anschalten, ein paar QSOs machen, Feierabend.
 
 > **📊 Statistiken in Arbeit — Ziel: mindestens 6 Messtage für belastbare Ergebnisse.**
 > Aktuell: 4–5 Tage. Diagramme und PDF aktualisieren sich automatisch mit jeder neuen Session. Je mehr Tage, desto stabiler die Linien.
+
+---
+
+#### 20m FT8 — wenn ANT1 auf seinem Auslegungsband arbeitet
+
+**Live-Messergebnisse — 20m FT8, 5–7 Messtage, 13.348 Zyklen:**
+
+| Modus | vs Normal (Pooled Mean) | Tage | Zyklen |
+|-------|:---:|:---:|:---:|
+| Normal | 100% (51,4 Stationen/15s) | 7 | 5.264 |
+| Diversity Standard | **−18%** | 5 | 3.973 |
+| Diversity DX | **−22%** | 6 | 4.111 |
+
+> **Hinweis zur Interpretation — 20m**
+> Auf 20m arbeitet der Kelemen DP-201510 in seinem **Auslegungsband** als
+> resonanter Halbwellen-Dipol. ANT1 ist alleine schon sehr effizient —
+> Diversity überlagert eine bereits gute Antenne mit der nicht-optimierten
+> Regenrinne (ANT2). Resultat: leichter **Verlust** in der reinen Stationsanzahl.
+>
+> **Aber das Bild ist differenzierter:** in direkten A1↔A2-Doppelempfängen gewinnt
+> ANT2 in **79–86 % der Fälle** mit Ø **+4 dB** Vorteil — reine Polarisations-
+> und Pattern-Diversity. Faraday-Rotation skaliert mit f² → Pol-Diversity wirkt
+> auf 20m *stärker* als auf 40m. Der Nutzen ist qualitativ (andere Stationen,
+> insbesondere schwaches DX), nicht quantitativ.
+>
+> **Die ehrliche Erkenntnis:** Diversity ist mit diesem Antennen-Setup
+> **asymmetrisch**. Auf Off-Band-ANT1-Bändern (40m, 30m, 17m, 80m) gleicht sie
+> die schwache ANT1 aus → großer Stations-Gewinn. Auf Resonant-ANT1-Bändern
+> (20m, 15m, 10m) überlagert sie eine bereits starke ANT1 → kleiner Stations-
+> Verlust, aber qualitativer Pol-Diversity-Gewinn.
+
+**Stationen über 24h UTC — 20m FT8, alle drei Modi:**
+
+![Stationen 20m FT8](auswertung/stationen_20m_FT8.png)
+
+**Direktvergleich — Stationen pro Zyklus, stündlich:**
+
+![Diversity Vergleich 20m FT8](auswertung/diversity_20m_FT8.png)
+
+| Diagramm | Beschreibung |
+|----------|-------------|
+| [📊 Ausführlicher PDF-Bericht — 20m](auswertung/Auswertung-20m-FT8.pdf) | Vollständige 20m-Analyse mit dem differenzierten Narrativ — ANT2-Win-Rate, Faraday-Rotations-Theorie, asymmetrischer Vorteil. |
+| [🗂 Rohdaten (statistics/)](statistics/) | Alle Rohdaten pro Modus/Band/Stunde — jede Zahl ist nachrechenbar. |
+
+#### Warum das für andere Operator interessant ist
+
+Wenn deine Station **eine resonante Antenne für 1–2 Bänder** hat plus alles andere
+über Tuner — **genau Mike's Situation auf 40m** — wird Diversity auf den Tuner-
+Bändern wahrscheinlich einen substanziellen Gewinn bringen, auf den resonanten
+Bändern einen leichten Verlust. Die 40m-Messung ist der „Tuner-Archetyp",
+die 20m-Messung ist der „Resonant-Archetyp".
+
+#### Roadmap — weitere Bänder in Arbeit
+
+- **17m** (off-band ANT1, gerade aktiviert): Erwartung Gewinn wie 40m
+- **30m** (off-band, in Arbeit): Erwartung Gewinn
+- **15m / 10m** (resonant): Erwartung Verlust wie 20m
+- **80m / 60m / 12m**: anstehend
+
+Jedes neue Band bestätigt oder widerlegt die Off-Band/Resonant-Hypothese.
+Alle Rohdaten in `statistics/`, alle PDFs aktualisieren sich automatisch
+mit `python3 scripts/generate_plots.py`.
+
+---
 
 ### Antennensetup
 
