@@ -3,16 +3,19 @@
 
 Aufruf:
     cat prompt.md | ./venv/bin/python3 tools/deepseek_review.py file1.py file2.py
-    cat prompt.md | ./venv/bin/python3 tools/deepseek_review.py --reasoner file.py
-    echo "Frage" | ./venv/bin/python3 tools/deepseek_review.py file.py
+    cat prompt.md | ./venv/bin/python3 tools/deepseek_review.py --chat file.py
 
 Modelle:
-    --chat       (Default) deepseek-chat → V4-flash, ~3s, ~$0.001/Request
-                 Stark fuer: Code-Review, KISS, UX, simple Bug-Suche
-    --reasoner   deepseek-reasoner → R1, ~20s, ~$0.005/Request
-                 Stark fuer: Race-Conditions, Architektur, mathematische
-                 Korrektheit (DSP-Algorithmen, kohaerente Addition,
-                 State-Machine mit konkurrierenden Hypothesen)
+    --reasoner   (Default) deepseek-reasoner → R1, ~6-30s, ~$0.005/Request
+                 Mike-Entscheidung 28.04.2026: lieber langsamer + teurer +
+                 besser statt schnell + billig + durchschnitt. Quality > Speed.
+                 Stark fuer: Code-Review, Architektur, Race-Conditions,
+                 mathematische Korrektheit, KISS-Trade-offs, niedrige
+                 Halluzinations-Rate weil R1 intern Code-Pfade verifiziert.
+    --chat       deepseek-chat → V4-flash, ~3s, ~$0.001/Request
+                 Opt-in fuer Trivial-Fragen wo R1 overthinkt:
+                 "Ist Funktion X im Code?", Tippfehler-Suche, Pure
+                 Verifikations-Fragen ohne Trade-off.
 
 Key-Datei: ~/.deepseek_key (chmod 600). Niemals im Repo.
 
@@ -30,8 +33,8 @@ from pathlib import Path
 
 KEY_FILE = Path.home() / ".deepseek_key"
 API_URL = "https://api.deepseek.com/v1/chat/completions"
-DEFAULT_MODEL = "deepseek-chat"
-REASONER_MODEL = "deepseek-reasoner"
+DEFAULT_MODEL = "deepseek-reasoner"   # R1 — Quality > Speed (Mike 2026-04-28)
+CHAT_MODEL = "deepseek-chat"          # V4-flash — Opt-in fuer triviale Fragen
 
 
 def load_key() -> str:
@@ -94,12 +97,12 @@ def main() -> None:
 
     stdin_prompt = sys.stdin.read()
     args = sys.argv[1:]
-    model = DEFAULT_MODEL
-    if "--reasoner" in args:
-        model = REASONER_MODEL
-        args.remove("--reasoner")
-    elif "--chat" in args:
+    model = DEFAULT_MODEL  # R1 — Quality > Speed
+    if "--chat" in args:
+        model = CHAT_MODEL
         args.remove("--chat")
+    elif "--reasoner" in args:
+        args.remove("--reasoner")  # explizit, ist eh Default
     files = [Path(arg) for arg in args]
     prompt = build_prompt(stdin_prompt, files)
 
@@ -107,8 +110,8 @@ def main() -> None:
     sys.stderr.write(f"[deepseek] ~{tokens} Tokens, {len(files)} File(s) → {model}\n")
     if tokens > 60000:
         sys.stderr.write(f"[deepseek] WARNUNG: nahe Context-Limit (65K).\n")
-    if model == REASONER_MODEL:
-        sys.stderr.write(f"[deepseek] R1 denkt — kann 15-30s dauern ...\n")
+    if model == DEFAULT_MODEL:
+        sys.stderr.write(f"[deepseek] R1 denkt — kann 6-30s dauern ...\n")
 
     key = load_key()
     result = call_deepseek(prompt, key, model)

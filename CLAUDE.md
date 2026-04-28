@@ -15,11 +15,30 @@ HISTORY.md ob X nicht schon drin ist.
 **Tests:** `./venv/bin/python3 -m pytest tests/ -q` → 446 passed (Qt-Smoke-Tests via `QT_QPA_PLATFORM=offscreen`)
 **Vor Commits:** Tests grün + bei nicht-trivialen Änderungen DeepSeek-Review (`pal codereview` model `deepseek-chat`) — bereits durch globale §0 + Projektregeln gefordert.
 
-⚠️ **DeepSeek V4 (deepseek-chat) — Neues Modell, Verhalten noch unbestätigt (Stand 2026-04-25):**
-DeepSeek-Antworten IMMER kritisch prüfen — Vorschläge nicht blind übernehmen.
-Bekanntes Risiko: KI kann plausibel klingende aber falsche Zeilen-/Datei-Angaben machen.
-Vorgehen: DeepSeek-Review als Zweitmeinung nutzen, Claude verifiziert jeden Vorschlag
-am tatsächlichen Code bevor er übernommen wird. Bei Widerspruch: Code ist Referenz.
+⚠️ **DeepSeek-Workflow Stand 2026-04-28:**
+
+**Direkt-API ist jetzt Default-Werkzeug** (nicht mehr `pal chat`-MCP):
+- Helper: `tools/deepseek_review.py` — kein Token-Limit (65K Context)
+- Aufruf: `cat prompt.md | ./venv/bin/python3 tools/deepseek_review.py file1.py file2.py`
+- Key in `~/.deepseek_key` (chmod 600, ausserhalb Repo)
+
+**Default-Modell: `deepseek-reasoner` (R1)** — Mike-Entscheidung 28.04.:
+„Quality > Speed, ~$3/Monat-Differenz egal gegen Bug der Stunden frisst."
+
+| Modell | Wann | Antwort-Zeit | Kosten |
+|---|---|---|---|
+| **R1 (Default)** | Code-Review, Architektur, Race-Conditions, Trade-offs, KISS-Bewertung | 6-30s | ~$0.005 |
+| V4 via `--chat` | Trivial-Fragen ("Ist X im Code?"), Tippfehler, Pure Verifikation | 2-5s | ~$0.001 |
+
+**DeepSeek-Antworten IMMER kritisch pruefen** — auch R1 halluziniert
+gelegentlich. Bei Widerspruch: Code ist Referenz. V0.74 Bilanz mit V4: 5
+echte Findings + 1 Halluzination („Phase haengt ewig" — falsch). R1 sollte
+hier praeziser sein (verifiziert Code-Pfade intern), aber Verifikation
+bleibt Pflicht.
+
+**`pal chat`-MCP** noch fuer einfache Multi-Turn-Sessions nutzbar
+(Continuation-IDs), aber Files-Limit 7077 Tokens — fuer ernste Reviews
+immer Direkt-API.
 ## ⛔ Projekt-Philosophie (PFLICHT bei Architektur-Entscheidungen!)
 
 **SimpleFT8 ist ein Hobby-Funker-Tool. KEIN Contest-Tool.** Diese Leitlinien
