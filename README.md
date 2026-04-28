@@ -19,7 +19,10 @@
 
 ---
 
-https://github.com/mikewanne/SimpleFT8/raw/main/docs/videos/map.mp4
+<!-- TODO: Map-Video embed via GitHub-Issue-Upload-Trick (siehe Conversation 28.04.) -->
+<!-- Sobald Issue-URL da: <video src="..." controls width="100%"></video> einsetzen -->
+
+📺 **[Live-Karten-Video ansehen → docs/videos/map.mp4](docs/videos/map.mp4)** (647 KB, 36 s, 960×540)
 
 *Live globe visualization: 16-sector propagation wedges per decoded station, color-coded by antenna (ANT1 / ANT2 / rescue), with 60-minute history retention. Recorded during a 40m FT8 session.*
 *Live-Karte mit 16 Richtungs-Sektor-Wedges pro Decode, Antennen-Farbcodierung (ANT1 / ANT2 / Rescue), 60-Min-Historie. Aufgenommen waehrend einer 40m-FT8-Session.*
@@ -181,8 +184,10 @@ data lives in `statistics/`, all PDFs auto-update with `python3 scripts/generate
 
 | Photo | Annotated |
 |:-----:|:---------:|
-| ![Antenna Overview](docs/fotos/Ansicht.png) | ![Antenna Annotated](docs/fotos/Ansicht_Farbe.png) |
-| Full view — gutter downspout (ANT2) on the left, feed point of ANT1 upper right at the dormer. | Yellow = Kelemen DP-201510 (vertical half-wave dipole, green dot = feed point). Red = complete gutter path (roof → downspout → entrance). |
+| ![Frontview](docs/fotos/Ansicht.png) | ![Frontview Annotated](docs/fotos/Ansicht_Farbe.png) |
+| Frontview — gutter downspout (ANT2) on the left, feed point of ANT1 upper right at the dormer. | Yellow = Kelemen DP-201510 (vertical half-wave dipole, green dot = feed point). Red = complete gutter path (roof → downspout → entrance). |
+| ![Sideview](docs/fotos/Gesamt.png) | ![Sideview Annotated](docs/fotos/Gesamt_Farbe.png) |
+| Sideview — second perspective showing the diagonal extent of ANT1 from roof ridge down to balcony. | Same color coding: yellow = ANT1 dipole arms with feed point, red = ANT2 gutter path. |
 
 **ANT1 — Kelemen DP-201510 (multiband trap dipole for 20m / 15m / 10m)**
 A center-fed multiband dipole with coaxial trap resonators (Sperrkreise) — *not* a
@@ -467,8 +472,10 @@ mit `python3 scripts/generate_plots.py`.
 
 | Foto | Annotiert |
 |:----:|:---------:|
-| ![Antennenübersicht](docs/fotos/Ansicht.png) | ![Antenne annotiert](docs/fotos/Ansicht_Farbe.png) |
-| Gesamtansicht — Regenrinnen-Fallrohr (ANT2) links, Einspeisepunkt ANT1 oben rechts an der Dachgaube. | Gelb = Kelemen DP-201510 (vertikal gespannter Halbwellendipol, grüner Punkt = Einspeisepunkt). Rot = vollständiger Regenrinnen-Verlauf (Dachkante → Fallrohr → Hauseingang). |
+| ![Vorderansicht](docs/fotos/Ansicht.png) | ![Vorderansicht annotiert](docs/fotos/Ansicht_Farbe.png) |
+| Vorderansicht — Regenrinnen-Fallrohr (ANT2) links, Einspeisepunkt ANT1 oben rechts an der Dachgaube. | Gelb = Kelemen DP-201510 (vertikal gespannter Halbwellendipol, grüner Punkt = Einspeisepunkt). Rot = vollständiger Regenrinnen-Verlauf (Dachkante → Fallrohr → Hauseingang). |
+| ![Seitenansicht](docs/fotos/Gesamt.png) | ![Seitenansicht annotiert](docs/fotos/Gesamt_Farbe.png) |
+| Seitenansicht — zweite Perspektive zeigt die diagonale Spannweite von ANT1 vom Dachfirst bis zum Balkon. | Gleiche Farbcodierung: gelb = ANT1-Dipol-Arme mit Einspeisepunkt, rot = ANT2-Regenrinnen-Verlauf. |
 
 **ANT1 — Kelemen DP-201510 (Multiband-Sperrkreisdipol für 20m / 15m / 10m)**
 Ein zentral gespeister Multiband-Dipol mit koaxialen Sperrkreisen (Trap-Dipol) —
