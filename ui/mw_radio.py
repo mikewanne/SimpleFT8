@@ -254,6 +254,10 @@ class RadioMixin:
 
     @Slot(str)
     def _on_band_changed(self, band: str):
+        # Race-Schutz: ausstehende TUNE-Callbacks ungueltig machen, sonst ruft
+        # ein 5-Sek-Timer aus dem alten Band-Kontext _enable_diversity() fuer
+        # das jetzt verlassene Band auf.
+        self._tune_token = None
         self.settings.set("band", band)
         freq = self.settings.frequency_mhz
         self._has_sent_cq = False
@@ -694,6 +698,49 @@ class RadioMixin:
         scoring = getattr(self._diversity_ctrl, 'scoring_mode', 'normal')
         gain_scoring = "snr" if scoring == "dx" else "stations"
         self._start_dx_tuning(scoring_mode=gain_scoring)
+
+    def _start_tune_only(self, after_tune_callback=None) -> None:
+        """TUNE allein — fuer Bandwechsel mit Cache-"Weiter"-Pfad.
+
+        Sendet 5s Carrier auf der aktuellen Frequenz auf ANT1, damit ein
+        externer/interner Tuner sich auf die Band-Last einstimmen kann.
+        Danach wird `after_tune_callback` (z.B. `_enable_diversity`) gerufen.
+
+        Race-Schutz: `self._tune_token` wird neu gesetzt. Wenn waehrend der
+        5s ein Bandwechsel passiert (`_on_band_changed` setzt das Token auf
+        None), wird der `_after_tune` Callback ignoriert und `_enable_diversity`
+        nicht mehr fuer das alte Band gerufen.
+
+        Offline-Schutz: Wenn `radio.ip` waehrend TUNE leer wird, kein Crash —
+        `_after_tune` skippt `tune_off()`/Callback.
+        """
+        if not self.radio.ip:
+            if after_tune_callback:
+                after_tune_callback()
+            return
+
+        from PySide6.QtCore import QTimer
+
+        self._tune_token = object()
+        _token = self._tune_token
+        tune_power = self.settings.get("tune_power", 10)
+
+        self.statusBar().showMessage(
+            f"TUNEN — {tune_power}W auf ANT1 fuer 5s ...", 0)
+        self.radio.set_rfpower_direct(tune_power)
+        self.radio.tune_on()
+
+        def _after_tune():
+            if getattr(self, '_tune_token', None) is not _token:
+                return  # Bandwechsel waehrend TUNE — Callback ungueltig
+            if not self.radio.ip:
+                return  # Radio offline gegangen — kein crash
+            self.radio.tune_off()
+            self.radio.set_power(self.settings.get("power_preset", 15))
+            if after_tune_callback:
+                after_tune_callback()
+
+        QTimer.singleShot(5000, _after_tune)
 
     def _start_dx_tuning(self, scoring_mode: str = "snr"):
         """Diversity Pipeline: TUNE (automatisch) → Gain-Messung → Einmessen."""

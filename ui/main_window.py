@@ -193,6 +193,7 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self._reconnect_attempts = 0
         self._reconnect_countdown = 0
         self._dx_tune_dialog = None  # Aktiver DX-Tune Dialog
+        self._tune_token = None  # Race-Token: TUNE-Callbacks bei Bandwechsel ungueltig
         # Normal-Preset-Alterungs-Hinweis: pro Band einmal pro Session zeigen
         self._normal_preset_warned_bands = set()
         self._has_sent_cq = False    # PSKReporter nur nach CQ anzeigen
