@@ -11,8 +11,8 @@ HISTORY.md ob X nicht schon drin ist.
 # SimpleFT8 — Claude Kontext
 
 **Start:** `cd "/Users/mikehammerer/Documents/KI N8N Projekte/FT8/SimpleFT8" && ./venv/bin/python3 main.py`
-**Aktueller Stand:** v0.73 (28.04.2026) — Persistenter RX-History-Cache: pro (band, mode) werden Empfangsdaten 60 Min lang in `~/.simpleft8/cache/rx_history/{band}_{mode}.json` gespeichert (Auto-Save alle 5 Min synchron mit LocatorDB, atomic-write, RLock). Beim Karten-Open + Bandwechsel laedt die Karte sofort die letzte Stunde Empfangsdaten — auch nach App-Restart. Plus simpleFT8-Style-UI-Aufraeumung: Time-Window-Combo + Band-Combo aus DirectionMapDialog raus (Karte zeigt aktives Band, 60 Min hardcoded). 6 atomare Commits, V1→V2→V3-Workflow mit DeepSeek-Reviewer (5 echte Findings uebernommen).
-**Tests:** `./venv/bin/python3 -m pytest tests/ -q` → 442 passed (Qt-Smoke-Tests via `QT_QPA_PLATFORM=offscreen`)
+**Aktueller Stand:** v0.74 (28.04.2026) — Diversity-Bandwechsel-Bug-Fix: Ratio NIE mehr aus 2h-Cache geladen (Pattern ist band-spezifisch, ANT1 hat je nach Band ganz andere Resonanz-Eigenschaften). Bei Bandwechsel/Modus-Wechsel/Std↔DX-Wechsel: TUNE automatisch (5s ANT1-Carrier mit Race-Token-Schutz + Offline-Guard) → reset() → Phase=measure → 8 Slots Re-Measurement → Phase-Diff hebt GUI-Lock auf. Gain bleibt im Cache (Hardware-Eigenschaft). 6 atomare Commits, V1→V2→V3-Workflow mit DeepSeek-Reviewer (5 echte Findings uebernommen, 1 Halluzination ignoriert, eigene Korrekturen gegen DeepSeek's `_on_measure_done`-Pattern und "load_preset behalten"-Vorschlag).
+**Tests:** `./venv/bin/python3 -m pytest tests/ -q` → 446 passed (Qt-Smoke-Tests via `QT_QPA_PLATFORM=offscreen`)
 **Vor Commits:** Tests grün + bei nicht-trivialen Änderungen DeepSeek-Review (`pal codereview` model `deepseek-chat`) — bereits durch globale §0 + Projektregeln gefordert.
 
 ⚠️ **DeepSeek V4 (deepseek-chat) — Neues Modell, Verhalten noch unbestätigt (Stand 2026-04-25):**
@@ -45,6 +45,39 @@ Implementierungen:
 einem Hobby-Funker beim Hobby-Funken? Oder waere das nur fuer Power-User /
 Contester sinnvoll?" — bei letzterem: NICHT umsetzen, in eine optionale
 Erweiterung ausgliedern oder ganz verwerfen.
+
+---
+
+## ⛔ Programmier-Leitsaetze (PFLICHT bei jedem Entwurf!)
+
+Diese Saetze gelten fuer Claude UND DeepSeek bei jedem Plan, jedem Prompt,
+jeder Code-Aenderung. Wenn ich (Claude) gegen sie verstosse: Mike soll mich
+darauf hinweisen, ich nehme die Korrektur an.
+
+1. **Overengineering vermeiden — kritisch beurteilen.** Vor jedem neuen
+   Konzept (neue Klasse, neue Konfig-Datei, neue Abstraktionsebene) fragen:
+   *„Brauchen wir das wirklich, oder sind wir verliebt in unsere Idee?"*
+   Wenn es ohne geht — ohne. Drei aehnliche Zeilen sind besser als eine
+   verfruehte Abstraktion. KISS schlaegt Eleganz.
+
+2. **Sauber wie ein Chirurg.** Schlamperei oder Eile beim Entwurf raechen
+   sich spaeter doppelt — schlechtes Design generiert mehr Bugs, mehr
+   Re-Reviews, mehr Frust. Lieber 30 Min laenger im Plan-Mode als 3 Stunden
+   nachbessern. Schritt fuer Schritt, sauber, kein Drauflos-Schneiden.
+
+3. **Code als Referenz, nicht Annahmen.** Bevor V2-Prompts an DeepSeek gehen
+   oder Plans entstehen: tatsaechlichen Code lesen, Dateipfade + Zeilen
+   verifizieren. Annahmen fuehren zu Halluzinationen die niemand mehr sauber
+   reviewen kann.
+
+4. **Mike auf Overengineering hinweisen.** Wenn Mike ein Feature beschreibt
+   das mit weniger Aufwand sauberer geht: ansprechen, alternative skizzieren,
+   ihn entscheiden lassen. Nicht stillschweigend kompliziert umsetzen.
+
+5. **V1 → V2 (Self-Review) → DeepSeek → V3 → Plan-Mode → Code.** Diese
+   Reihenfolge bei nicht-trivialen Aenderungen. Kein Skip von Self-Review.
+   Kein Skip von Code-Verifikation. „Sauber am Anfang spart 10x Zeit am Ende"
+   (Mike, 2026-04-28).
 
 ---
 

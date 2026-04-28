@@ -5,6 +5,137 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-04-28 v0.74 — Diversity-Bandwechsel: Ratio-Cache-Bug behoben
+
+**Betroffene Dateien:** `ui/main_window.py`, `ui/mw_radio.py`, `ui/mw_cycle.py`,
+`core/diversity.py`, `tests/test_diversity_bandwechsel.py` (neu),
+`tests/test_modules.py`, `main.py`, `HISTORY.md`, `CLAUDE.md`.
+
+### Der Bug
+
+Bei Bandwechsel (z.B. 40m → 20m) mit aktiver Diversity wurde das alte
+Ratio aus dem 2h-Cache geladen. Bei Mike's asymmetrischer Antennen-
+Konfiguration (ANT1 = Kelemen Trap-Dipol resonant 20/15/10m, ANT2 =
+Regenrinne ~15m) ist Ratio aber stark **band-spezifisch**:
+- 40m off-band: ANT2 dominant 30:70 (Tuner-verlustbehaftet)
+- 20m resonant: ANT1 dominant 70:30 (Trap-Dipol effektiv)
+
+Cache uebernehmen → bis zu 60 Zyklen falsche Antennen-Wahl bis zur
+naechsten Manuell-Einmessung. Mike hat das im Feldtest entdeckt.
+
+### Trennung Gain vs. Ratio
+
+| Eigenschaft | Was | Cache | Bei Bandwechsel |
+|---|---|---|---|
+| **Gain** | RMS-Pegel-Kalibrierung pro Antenne | 2h OK | Frage J/N |
+| **Ratio** | Diversity-Pattern (ANT1:ANT2) | NIE | IMMER neu |
+
+Gain ist **Hardware-Eigenschaft** (RX-Verstaerker + Antennen-Anpassung,
+aendert sich nur langsam). Ratio ist **Pattern-Eigenschaft** (welche
+Antenne wo besser empfaengt — abhaengig von Frequenz, Resonanz,
+Tageszeit, Skip-Zone). Cache fuer Pattern ist physikalisch falsch.
+
+### Wechsel-Matrix
+
+| Wechsel | TUNE | Gain | Ratio |
+|---|---|---|---|
+| Band + Gain<2h | auto | Frage J/N | NEU |
+| Band + Gain>2h | auto | auto | NEU |
+| Normal→Diversity (selbes Band) + Gain<2h | auto | Frage J/N | NEU |
+| Diversity Std↔DX (selbes Band) + Gain<2h | auto | Frage J/N | NEU |
+| Diversity→Normal | auto | n/a | n/a |
+| FT-Modus FT8↔FT4↔FT2 | auto | Frage J/N | NEU |
+
+### Implementierung — 6 atomare Commits
+
+1. **`feat(diversity): _start_tune_only() Helper mit Race-Token + Offline-Guard`**
+   - Neuer Helper in `mw_radio.py` der nur TUNE durchfuehrt (5s Carrier,
+     Tuner stimmt sich ein) und einen Callback ausloest.
+   - **Race-Schutz** via `self._tune_token = object()`: wenn waehrend der
+     5s ein Bandwechsel passiert, nullt `_on_band_changed` das Token —
+     der ablaufende Timer prueft das Token und ignoriert seinen Callback.
+     Sonst wuerde `_enable_diversity` fuer das verlassene Band gerufen.
+   - **Offline-Schutz**: wenn FlexRadio waehrend TUNE offline geht, kein
+     Crash bei `tune_off()`.
+
+2. **`fix(diversity): Ratio NIE aus Cache laden — immer neu einmessen`**
+   - `_enable_diversity()` (mw_radio.py:546-565) umgebaut: statt
+     `load_preset()` aufzurufen (das setzte Phase=operate mit altem Ratio)
+     immer `reset()` → Phase=measure.
+   - Gain-Block (Z.569-584) bleibt unveraendert — der ist korrekt.
+   - `_set_gain_measure_lock(True)` setzt GUI-Lock (kein manueller
+     Gain-Klick, kein CQ-Start waehrend Re-Measurement).
+
+3. **`feat(diversity): TUNE im "Weiter"-Cache-Pfad + klarer Dialog-Text`**
+   - `_check_diversity_preset()` "Weiter"-Pfad ruft jetzt `_start_tune_only`
+     mit Lambda-Callback auf `_enable_diversity`. ANT1 wird vor
+     Re-Measurement abgeglichen (wichtig fuer off-band Trap-Dipol auf 40m).
+   - Dialog-Text praezisiert: User sieht jetzt EXPLIZIT dass "Weiter" nur
+     Gain uebernimmt und Ratio neu gemessen wird (5s TUNE). UX-Punkt aus
+     DeepSeek-Review.
+
+4. **`feat(diversity): GUI-Lock-Aufhebung via Phase-Diff in mw_cycle.py`**
+   - `_handle_diversity_measure()` liest `phase` vor `record_measurement()`,
+     erkennt nach Call den Uebergang `measure → operate` und triggert
+     `_set_gain_measure_lock(False)` + `_set_cq_locked(False)`.
+   - DeepSeek hatte ein neues Signal-Pattern (`_on_measure_done` Callback
+     auf Controller) vorgeschlagen — Phase-Diff ist KISS-konform: nutzt
+     vorhandenen pro-Slot-Hook ohne neue Abstraktion.
+
+5. **`refactor(diversity): load_preset() entfernt — toter Code nach Fix`**
+   - `core/diversity.py` Methode geloescht (nur Aufrufer war der Bug-Pfad).
+   - `tests/test_modules.py:test_diversity_load_preset` geloescht.
+   - DeepSeek hatte "behalten + Warnung" empfohlen — Loesch-Variante ist
+     sauberer, kein toter Code im Repo.
+
+6. **`test(diversity): 5 Tests fuer v0.74 Bandwechsel-Bug-Fix`**
+   - `test_token_pattern_invalidates_old_callback` — Pure-Logic Race-Token.
+   - `test_phase_diff_detects_measure_to_operate_transition` — Phase-Diff.
+   - `test_load_preset_removed_from_diversity_controller` — Regression.
+   - `test_reset_phase_is_measure_not_operate` — reset()-Verhalten.
+   - `test_on_band_change_triggers_full_reset` — End-to-End Bandwechsel.
+
+### Workflow-Reflexion (V1 → V2 → V3)
+
+V1 als Roh-Entwurf von Claude. V2 als Self-Review identifizierte 12
+Schwachpunkte (TUNE als 8-Schritt-Flow, Edge-Cases bei Bandwechsel
+waehrend measure, GUI-Lock-Liste unvollstaendig, fehlende Tests).
+V2 ging an DeepSeek-V4 (`pal chat` model `deepseek-chat`).
+
+**DeepSeek-Findings (5 echte / 1 Halluzination):**
+
+✅ Race-Token bei TUNE-Callback ⭐ (kritisch, eingebaut)
+✅ FlexRadio-Offline-Guard in `_after_tune` (eingebaut)
+✅ UX: Dialog-Text muss TUNE-Phase kommunizieren (eingebaut)
+✅ Test-Luecke: T6 Bandwechsel waehrend TUNE (eingebaut als Pure-Logic)
+✅ `from QTimer` Import-Position (Kosmetik, ignoriert)
+❌ "Phase haengt ewig auf measure bei <5 Stationen" — falscher Alarm,
+   `_evaluate()` faellt mit leeren Listen auf 50:50/operate (verifiziert
+   in mw_cycle.py:159: `record_measurement` laeuft pro Slot ohne
+   Conditional, auch bei 0 Stationen).
+
+**Eigene Korrekturen gegen DeepSeek:**
+
+- GUI-Lock-Aufhebung: Phase-Diff in mw_cycle.py (statt DeepSeek's neuer
+  `_on_measure_done` Callback-Attribut auf Controller — er gab selbst zu
+  "schwaches Pattern").
+- `load_preset()` ganz loeschen (statt mit Warnung behalten).
+
+**V3 als Final-Plan** mit Datei:Zeile-Verweisen, atomarer Commit-Plan,
+Tests T1-T8 — dann Implementierung in 6 Commits.
+
+### Tests
+- 446 grün (vorher 442 → +5 neue, -1 geloeschter `test_diversity_load_preset`)
+- `./venv/bin/python3 -m pytest tests/ -q` → 446 passed in 6.03s
+
+### Code-Pfade verifiziert
+- `mw_cycle.py:159` `record_measurement()` laeuft pro Slot, auch ohne Stationen
+- `mw_radio.py:286` `on_band_change()` setzt Phase=measure (✅)
+- `mw_radio.py:344` `_check_diversity_preset()` greift bei Bandwechsel UND Mode-Wechsel UND Diversity-Std/DX-Wechsel — Fix automatisch ueberall
+- `mw_radio.py:240-243` `_on_mode_changed()` ruft auch `_check_diversity_preset()` (Fix greift fuer FT-Modus-Wechsel automatisch)
+
+---
+
 ## 2026-04-27 v0.70 — Locator-DB Live-Feed (Bugfix) + Auto-Save + Map-Quality
 
 **Betroffene Dateien:** `ui/mw_cycle.py`, `ui/main_window.py`,
