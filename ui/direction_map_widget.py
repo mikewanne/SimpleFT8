@@ -43,20 +43,82 @@ from core.geo import (
 )
 
 
-# ── Layout-Konstanten ─────────────────────────────────────
+# ── Karten-Themes ─────────────────────────────────────────
+#
+# Zwei Stile, persistiert in Settings-Key "direction_map_theme".
+# - "aurora" (Default, v0.66+): warmes Sepia-Land, Aurora-Glow, 3D-Disk-Gradient
+# - "dark"   (v0.72): schwarzes Land, mittel-graues BG, kein Aurora, flacher Disk
+#
+# Beide Themes nutzen die gleichen Stations-/Sektor-/Heatmap-Farben
+# (RX_COLOR_*, TX_COLOR_*, HEATMAP_*) — die funktionieren auf beiden
+# Hintergruenden, KISS.
+#
+# Keys:
+#   bg                — Fenster-Hintergrund
+#   bg_center         — Aurora-Gradient-Mitte (nur wenn use_aurora=True)
+#   land_fill         — Land-Polygon-Farbe
+#   land_fill_high    — heller Land-Akzent (aktuell ungenutzt, fuer Mitten-Highlight)
+#   coast_halo        — Coastline-Halo-Stroke (breit, transparent)
+#   coast_core        — Coastline-Core-Stroke (schmal, opaker)
+#   rings             — Distance-Ringe
+#   compass           — N/E/S/W Labels
+#   sector_lines      — 22.5° Sektor-Trennlinien (aktuell ungenutzt, Globus zeigt sie nicht)
+#   user              — User-Marker-Diamant (gelber Stern)
+#   user_glow         — Halo um User-Marker
+#   hint              — Hint-Text (z.B. "kein Locator gesetzt")
+#   use_aurora        — bool: RadialGradient-Layer ueber dem Hintergrund
+#   disk_fill         — None | str: None = bestehender 3D-RadialGradient,
+#                       hex-String = einfarbiger flacher Disk
+THEME_AURORA: dict = {
+    "bg": "#0A0A14",
+    "bg_center": "#0A1030",
+    "land_fill": "#5A4A2C",
+    "land_fill_high": "#8B6F47",
+    "coast_halo": "#00FFAA",
+    "coast_core": "#88FFCC",
+    "rings": "#1F2A3A",
+    "compass": "#88AACC",
+    "sector_lines": "#1A2030",
+    "user": "#FFE600",
+    "user_glow": "#FFFFAA",
+    "hint": "#7788AA",
+    "use_aurora": True,
+    "disk_fill": None,
+}
+THEME_DARK: dict = {
+    "bg": "#3A3A3A",
+    "bg_center": "#3A3A3A",  # ungenutzt da use_aurora=False
+    "land_fill": "#000000",
+    "land_fill_high": "#0A0A0A",
+    "coast_halo": "#666666",
+    "coast_core": "#888888",
+    "rings": "#2A2A2A",
+    "compass": "#777777",
+    "sector_lines": "#2A2A2A",
+    "user": "#FFE600",
+    "user_glow": "#FFFFAA",
+    "hint": "#888888",
+    "use_aurora": False,
+    "disk_fill": "#2D2D2D",
+}
+THEMES: dict[str, dict] = {"aurora": THEME_AURORA, "dark": THEME_DARK}
+DEFAULT_THEME_NAME = "aurora"
 
-COLOR_BG = "#0A0A14"
-COLOR_BG_CENTER = "#0A1030"      # Aurora-Mitte: leichtes Blau
-COLOR_LAND_FILL = "#5A4A2C"      # warmes Sepia/Bronze fuer Land
-COLOR_LAND_FILL_HIGH = "#8B6F47" # heller fuer Mitten-Highlight
-COLOR_COAST_HALO = "#00FFAA"     # Cyan-Halo aussen
-COLOR_COAST_CORE = "#88FFCC"     # Cyan hell innen
-COLOR_RINGS = "#1F2A3A"          # leicht blaeulich statt nur grau
-COLOR_COMPASS = "#88AACC"        # blau-cyan statt grau
-COLOR_SECTOR_LINES = "#1A2030"
-COLOR_USER = "#FFE600"           # Neon-Gelb
-COLOR_USER_GLOW = "#FFFFAA"      # Halo um den Diamanten
-COLOR_HINT = "#7788AA"
+# ── Backwards-Compat-Aliase (alte Modul-Konstanten) ────────
+# Ehemalige direkte Verweise in paint-Methoden lesen jetzt self._theme[...].
+# Diese Aliase bleiben fuer Tests + extern importierte Verwendungen.
+COLOR_BG = THEME_AURORA["bg"]
+COLOR_BG_CENTER = THEME_AURORA["bg_center"]
+COLOR_LAND_FILL = THEME_AURORA["land_fill"]
+COLOR_LAND_FILL_HIGH = THEME_AURORA["land_fill_high"]
+COLOR_COAST_HALO = THEME_AURORA["coast_halo"]
+COLOR_COAST_CORE = THEME_AURORA["coast_core"]
+COLOR_RINGS = THEME_AURORA["rings"]
+COLOR_COMPASS = THEME_AURORA["compass"]
+COLOR_SECTOR_LINES = THEME_AURORA["sector_lines"]
+COLOR_USER = THEME_AURORA["user"]
+COLOR_USER_GLOW = THEME_AURORA["user_glow"]
+COLOR_HINT = THEME_AURORA["hint"]
 
 RX_COLOR_ANT1 = QColor("#00BFFF")    # Neon-Blau
 RX_COLOR_ANT2 = QColor("#00FFCC")    # Neon-Cyan
@@ -330,6 +392,7 @@ class MapCanvas(QWidget):
         self._mode = "rx"  # "rx" oder "tx"
         self._show_sectors = True
         self._show_stations = True
+        self._theme: dict = THEME_AURORA  # Aktives Karten-Theme
 
         # Zoom + 3D-Globus State (Orthographic-Projektion)
         self._zoom = 1.0  # 1.0 = Globus fuellt min(width,height)*RADIUS_FRACTION
@@ -374,6 +437,18 @@ class MapCanvas(QWidget):
         if mode not in ("rx", "tx"):
             return
         self._mode = mode
+        self.update()
+
+    def set_theme(self, name: str) -> None:
+        """Karten-Theme wechseln. Ungueltiger Name → fallback auf Default.
+
+        Triggert Background-Pixmap-Invalidate + Repaint. Stations-Punkte
+        und Sektor-Wedges bleiben unveraendert (nicht theme-aware).
+        """
+        if name not in THEMES:
+            name = DEFAULT_THEME_NAME
+        self._theme = THEMES[name]
+        self._invalidate_background()
         self.update()
 
     def update_stations(self, stations: list[StationPoint]) -> None:

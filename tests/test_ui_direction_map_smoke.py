@@ -757,3 +757,47 @@ def test_paint_sector_wedges_safe_when_user_hidden(qapp):
     c._paint_sector_wedges(painter)  # darf nicht crashen
     painter.end()
     c.deleteLater()
+
+
+# ── Theme-Toggle (v0.72) ──────────────────────────────────
+
+def test_theme_default_is_aurora(qapp):
+    """Neues MapCanvas hat THEME_AURORA als Default."""
+    from ui.direction_map_widget import MapCanvas, THEME_AURORA
+    c = MapCanvas(my_locator="JO31")
+    assert c._theme is THEME_AURORA
+    c.deleteLater()
+
+
+def test_set_theme_dark_changes_self_theme(qapp):
+    """set_theme('dark') wechselt zu THEME_DARK mit schwarzem Land."""
+    from ui.direction_map_widget import MapCanvas, THEME_DARK
+    c = MapCanvas(my_locator="JO31")
+    c.set_theme("dark")
+    assert c._theme is THEME_DARK
+    assert c._theme["land_fill"] == "#000000"
+    c.deleteLater()
+
+
+def test_set_theme_invalid_falls_back_to_aurora(qapp):
+    """Ungueltiger Theme-Name → fallback auf aurora, kein Crash."""
+    from ui.direction_map_widget import MapCanvas, THEME_AURORA
+    c = MapCanvas(my_locator="JO31")
+    c.set_theme("dark")  # erst auf dark
+    c.set_theme("nonsense")  # dann ungueltig
+    assert c._theme is THEME_AURORA  # fallback
+    c.deleteLater()
+
+
+def test_set_theme_invalidates_background(qapp):
+    """Theme-Wechsel triggert Background-Pixmap-Invalidate."""
+    from PySide6.QtGui import QPixmap
+    from ui.direction_map_widget import MapCanvas
+    c = MapCanvas(my_locator="JO31")
+    c.resize(400, 400)
+    # Pixmap erzwingen
+    c._bg_pixmap = QPixmap(400, 400)
+    assert c._bg_pixmap is not None
+    c.set_theme("dark")
+    assert c._bg_pixmap is None  # invalidated
+    c.deleteLater()
