@@ -547,26 +547,19 @@ class RadioMixin:
         store = getattr(self, '_dx_store', None) if scoring_mode == "dx" else getattr(self, '_standard_store', None)
         preset = store.get(band, mode) if store else None
 
-        if preset and "ratio" in preset:
-            self._diversity_ctrl.load_preset(preset)
-            self._diversity_ctrl.OPERATE_CYCLES = base * _MULT.get(mode, 1)
-            self._diversity_ctrl.MEASURE_CYCLES = 8 * _MULT.get(mode, 1)
-            print(f"[Diversity] Preset {mode}_{band}: {preset['ratio']} — Betrieb sofort")
-            self.control_panel.update_diversity_ratio(
-                self._diversity_ctrl.ratio, "operate",
-                operate_cycles=0,
-                operate_total=self._diversity_ctrl.OPERATE_CYCLES,
-                scoring_mode=scoring_mode)
-            self.control_panel.update_diversity_counts(0, 0)
-        else:
-            # Kein Ratio-Preset → einmessen
-            self._diversity_ctrl.reset()
-            self._set_cq_locked(True)
-            print(f"[Diversity] Kein Ratio-Preset — starte Messung ({scoring_mode.upper()})")
-            self.control_panel.update_diversity_ratio("50:50", "measure", 0,
-                                                      self._diversity_ctrl.MEASURE_CYCLES,
-                                                      scoring_mode=scoring_mode)
-            self.control_panel.update_diversity_counts(0, 0)
+        # Ratio NIE aus Cache laden — Pattern ist band-spezifisch (ANT1 hat
+        # je nach Band ganz andere Resonanz-Eigenschaften). Cache-"Weiter" gilt
+        # NUR fuer Gain (Hardware-Eigenschaft des RX-Verstaerkers).
+        # Ratio wird IMMER neu gemessen — 8 Slots Phase=measure, dann _evaluate.
+        self._diversity_ctrl.reset()
+        self._set_cq_locked(True)
+        self._set_gain_measure_lock(True)
+        print(f"[Diversity] Phase=measure — Ratio wird neu eingemessen ({scoring_mode.upper()})")
+        self.control_panel.update_diversity_ratio(
+            "50:50", "measure", 0,
+            self._diversity_ctrl.MEASURE_CYCLES,
+            scoring_mode=scoring_mode)
+        self.control_panel.update_diversity_counts(0, 0)
 
         ft_mode = mode  # bereits oben gesetzt
 
