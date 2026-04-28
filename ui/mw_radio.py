@@ -656,8 +656,9 @@ class RadioMixin:
             lbl_title.setObjectName("lbl_title")
             lbl_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
             lbl_msg = QLabel(
-                f"Kalibrierungsdaten vorhanden ({age} Min. alt).\n"
-                f"Weiter oder neu messen?"
+                f"Gain-Kalibrierung vorhanden ({age} Min. alt).\n"
+                f"\"Weiter\" = Gain uebernehmen, Ratio wird neu eingemessen (5s TUNE).\n"
+                f"\"Neu messen\" = Gain + Ratio komplett neu."
             )
             lbl_msg.setAlignment(Qt.AlignmentFlag.AlignCenter)
             _lay.addWidget(lbl_title)
@@ -675,8 +676,12 @@ class RadioMixin:
             btn_new.clicked.connect(lambda: _dlg.accept())
             _dlg.exec()
             if _choice[0]:
-                print(f"[Diversity] {band}/{ft_mode}: Preset ({age} Min.) übernommen")
-                self._enable_diversity(scoring_mode=scoring)
+                print(f"[Diversity] {band}/{ft_mode}: Gain ({age} Min.) uebernommen, Ratio neu, TUNE laeuft")
+                # TUNE zuerst (ANT1 abgleichen falls off-band), danach _enable_diversity
+                # mit reset() → Phase=measure → 8 Slots Re-Measurement
+                self._start_tune_only(
+                    after_tune_callback=lambda: self._enable_diversity(scoring_mode=scoring)
+                )
                 self._update_statusbar()
                 return
         # Kein Preset, abgelaufen oder "Neu messen" → volle Pipeline
