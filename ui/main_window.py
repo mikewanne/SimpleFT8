@@ -138,6 +138,16 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self.locator_db = LocatorDB()
         self.locator_db.load()
 
+        # Persistenter RX-History-Cache (v0.73): merkt sich pro (band, mode)
+        # die letzten 60 Min Empfangsdaten. Beim Karten-Open zeigt die Karte
+        # die letzte Stunde — auch nach App-Restart. Save: gemeinsam mit
+        # LocatorDB im Auto-Save-Timer (alle 5 Min) + closeEvent.
+        from core.rx_history import RxHistoryStore
+        self.rx_history_store = RxHistoryStore()
+        loaded = self.rx_history_store.load_all()
+        if loaded:
+            print(f"[RxHistory] {loaded} Eintraege aus letzter Session geladen")
+
         # Karten-Widget (Lazy create, Schritt 9 verbindet Button im Settings-Dialog)
         from ui.direction_map_widget import LocatorCache
         self._locator_cache = LocatorCache()
@@ -255,11 +265,18 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self._locator_save_timer.start(300_000)  # 5 Minuten
 
     def _autosave_locator_db(self):
-        """Wird vom Timer aufgerufen — Save mit try/except (kein Crash bei IO-Fehler)."""
+        """Wird vom Timer aufgerufen — Save mit try/except (kein Crash bei IO-Fehler).
+
+        Speichert LocatorDB UND RxHistoryStore (gemeinsame Persistenz-Strategie:
+        atomarer Write, max 5 Min Datenverlust bei kill_old_instances)."""
         try:
             self.locator_db.save()
         except OSError as e:
             print(f"[LocatorDB] Auto-Save fehlgeschlagen: {e}")
+        try:
+            self.rx_history_store.save()
+        except OSError as e:
+            print(f"[RxHistory] Auto-Save fehlgeschlagen: {e}")
 
     def _init_propagation_polling(self):
         """Propagation: Hintergrund-Abruf + UI-Update jede Minute (Zeitkorrektur live)."""
@@ -950,5 +967,10 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
             self.locator_db.save()
         except OSError as e:
             print(f"[LocatorDB] Save fehlgeschlagen: {e}")
+        # RX-History-Cache persistieren (v0.73)
+        try:
+            self.rx_history_store.save()
+        except OSError as e:
+            print(f"[RxHistory] Save fehlgeschlagen: {e}")
         self.settings.save()
         event.accept()
