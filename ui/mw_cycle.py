@@ -155,6 +155,8 @@ class CycleMixin:
         score = sum(max(0.0, float(m.snr + 30)) for m in valid) if valid else 0.0
         avg_snr = (sum(m.snr for m in valid) / station_count) if station_count else -30.0
         weak_count = len([m for m in valid if m.snr < -10])
+        # Phase-Diff: erkennt measure→operate Uebergang fuer GUI-Lock-Aufhebung
+        old_phase = self._diversity_ctrl.phase
         with self._diversity_lock:
             self._diversity_ctrl.record_measurement(
                 ant, score,
@@ -164,6 +166,11 @@ class CycleMixin:
             )
             self._diversity_ctrl.sync_from_stations(self._diversity_stations)
             self._diversity_ctrl.update_proposed_freq()
+        # GUI-Lock weg sobald Re-Measurement durch ist (8 Slots → _evaluate)
+        if old_phase == "measure" and self._diversity_ctrl.phase == "operate":
+            self._set_gain_measure_lock(False)
+            self._set_cq_locked(False)
+            print("[Diversity] Phase=operate — GUI-Lock aufgehoben")
         # Histogram LIVE aktualisieren (auch waehrend Messung)
         self.control_panel.update_freq_histogram(
             self._diversity_ctrl.get_histogram_data())
