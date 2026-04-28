@@ -634,8 +634,8 @@ class MapCanvas(QWidget):
         self._paint_user_marker(painter)
 
     def _paint_no_locator(self, painter: QPainter) -> None:
-        painter.fillRect(self.rect(), QColor(COLOR_BG))
-        painter.setPen(QColor(COLOR_HINT))
+        painter.fillRect(self.rect(), QColor(self._theme["bg"]))
+        painter.setPen(QColor(self._theme["hint"]))
         painter.setFont(QFont("Menlo", 13))
         painter.drawText(
             self.rect(), Qt.AlignCenter,
@@ -646,7 +646,7 @@ class MapCanvas(QWidget):
 
     def _build_background_pixmap(self) -> QPixmap:
         pix = QPixmap(self.size())
-        pix.fill(QColor(COLOR_BG))
+        pix.fill(QColor(self._theme["bg"]))
         painter = QPainter(pix)
         painter.setRenderHint(QPainter.Antialiasing)
         try:
@@ -676,7 +676,7 @@ class MapCanvas(QWidget):
         clip.addEllipse(QPointF(cx, cy), globe_r, globe_r)
         painter.setClipPath(clip)
         painter.setPen(Qt.NoPen)
-        painter.setBrush(QBrush(QColor(COLOR_LAND_FILL)))
+        painter.setBrush(QBrush(QColor(self._theme["land_fill"])))
 
         for poly in self._landmasses:
             sub_polys = self._clip_polygon_to_hemisphere(poly)
@@ -826,39 +826,53 @@ class MapCanvas(QWidget):
     def _paint_globe_disk(self, painter: QPainter) -> None:
         """Die sichtbare Halbkugel als gefuellten Kreis: Ozean-Blau mit
         leichtem Gradient von Mitte (heller) zu Rand (dunkler) — gibt der
-        Erde ihre 3D-Wirkung wie auf einem Globus-Foto."""
-        from PySide6.QtGui import QRadialGradient
+        Erde ihre 3D-Wirkung wie auf einem Globus-Foto.
+
+        Theme-aware: bei `disk_fill is None` (Aurora-Default) wird der
+        bestehende RadialGradient + Atmospheric-Limb gemalt. Bei
+        `disk_fill="#hex"` (Dark) flacher einfarbiger Disk ohne Limb."""
         cx, cy = self._center_px()
         r = self._radius_px()
-        grad = QRadialGradient(QPointF(cx - r * 0.2, cy - r * 0.25), r * 1.2)
-        # Hellere Mitte (Reflexion), dunkler zum Rand (Tiefe)
-        grad.setColorAt(0.0, QColor(40, 70, 130, 220))
-        grad.setColorAt(0.6, QColor(20, 40, 90, 220))
-        grad.setColorAt(1.0, QColor(8, 15, 35, 220))
+        disk_fill = self._theme.get("disk_fill")
         painter.setPen(Qt.NoPen)
-        painter.setBrush(QBrush(grad))
-        painter.drawEllipse(QPointF(cx, cy), r, r)
-        # Daruem ein duenner Highlight-Ring (Atmospheric Limb)
-        painter.setBrush(Qt.NoBrush)
-        pen = QPen(QColor(120, 180, 255, 100))
-        pen.setWidthF(1.2)
-        painter.setPen(pen)
-        painter.drawEllipse(QPointF(cx, cy), r + 0.5, r + 0.5)
+        if disk_fill is None:
+            # Aurora-Default: 3D-RadialGradient mit Atmospheric-Limb-Highlight
+            from PySide6.QtGui import QRadialGradient
+            grad = QRadialGradient(QPointF(cx - r * 0.2, cy - r * 0.25), r * 1.2)
+            grad.setColorAt(0.0, QColor(40, 70, 130, 220))
+            grad.setColorAt(0.6, QColor(20, 40, 90, 220))
+            grad.setColorAt(1.0, QColor(8, 15, 35, 220))
+            painter.setBrush(QBrush(grad))
+            painter.drawEllipse(QPointF(cx, cy), r, r)
+            # Atmospheric Limb (duenner Highlight-Ring)
+            painter.setBrush(Qt.NoBrush)
+            pen = QPen(QColor(120, 180, 255, 100))
+            pen.setWidthF(1.2)
+            painter.setPen(pen)
+            painter.drawEllipse(QPointF(cx, cy), r + 0.5, r + 0.5)
+        else:
+            # Dark-Style: einfarbiger flacher Disk
+            painter.setBrush(QBrush(QColor(disk_fill)))
+            painter.drawEllipse(QPointF(cx, cy), r, r)
 
     def _paint_aurora(self, painter: QPainter) -> None:
         """Subtiler RadialGradient von leicht-blau in der Mitte zu fast-schwarz aussen.
-        Bricht die Monotonie des Hintergrunds ohne Daten zu ueberlagern."""
+        Bricht die Monotonie des Hintergrunds ohne Daten zu ueberlagern.
+
+        Theme-aware: bei `use_aurora=False` (Dark) early-return."""
+        if not self._theme.get("use_aurora"):
+            return
         from PySide6.QtGui import QRadialGradient
         cx, cy = self._center_px()
         radius = max(self.width(), self.height())
         grad = QRadialGradient(QPointF(cx, cy), radius)
         # Mitte: dezent blaues Glow, Rand: voll dunkel
-        center_color = QColor(COLOR_BG_CENTER)
+        center_color = QColor(self._theme["bg_center"])
         center_color.setAlpha(140)
-        edge_color = QColor(COLOR_BG)
+        edge_color = QColor(self._theme["bg"])
         edge_color.setAlpha(0)
         grad.setColorAt(0.0, center_color)
-        grad.setColorAt(0.55, QColor(COLOR_BG_CENTER) if False else QColor(20, 25, 50, 60))
+        grad.setColorAt(0.55, QColor(20, 25, 50, 60))
         grad.setColorAt(1.0, edge_color)
         painter.setPen(Qt.NoPen)
         painter.setBrush(QBrush(grad))
@@ -886,7 +900,7 @@ class MapCanvas(QWidget):
             if poly.size() >= 2:
                 polys.append(poly)
         # Pass 1: Halo (breit, transparent)
-        halo_color = QColor(COLOR_COAST_HALO)
+        halo_color = QColor(self._theme["coast_halo"])
         halo_color.setAlpha(40)
         halo_pen = QPen(halo_color)
         halo_pen.setWidthF(2.5)
@@ -896,7 +910,7 @@ class MapCanvas(QWidget):
         for p in polys:
             painter.drawPolyline(p)
         # Pass 2: Core (schmal, hell)
-        core_color = QColor(COLOR_COAST_CORE)
+        core_color = QColor(self._theme["coast_core"])
         core_color.setAlpha(180)
         core_pen = QPen(core_color)
         core_pen.setWidthF(0.7)
@@ -914,7 +928,7 @@ class MapCanvas(QWidget):
         globe_r = self._radius_px()
         # Erdumfang: 40075 km = 360°. 1° = 111.32 km.
         # Auf der Globus-Sphaere: 1° entspricht globe_r * pi/180 Pixeln (am Punkt selbst).
-        pen = QPen(QColor(COLOR_RINGS))
+        pen = QPen(QColor(self._theme["rings"]))
         pen.setStyle(Qt.DashLine)
         pen.setWidthF(0.8)
         painter.setPen(pen)
@@ -944,7 +958,7 @@ class MapCanvas(QWidget):
         globe_r = self._radius_px()
         # Sektoren als kurze Linien (15% des Globus-Radius, sonst Verzerrung)
         line_len = globe_r * 0.15
-        pen = QPen(QColor(COLOR_SECTOR_LINES))
+        pen = QPen(QColor(self._theme["sector_lines"]))
         pen.setWidthF(0.5)
         painter.setPen(pen)
         cx, cy = self._center_px()
@@ -967,7 +981,7 @@ class MapCanvas(QWidget):
         # Bildschirm — aber die Sektor-Wedges (User-zentriert) wandern mit dem User.
         cx, cy = self._center_px()
         radius = self._radius_px()
-        painter.setPen(QColor(COLOR_COMPASS))
+        painter.setPen(QColor(self._theme["compass"]))
         painter.setFont(QFont("Menlo", 10, QFont.Bold))
         for i, label in enumerate(COMPASS_LABELS):
             angle_deg = i * 45.0
@@ -1300,7 +1314,7 @@ class MapCanvas(QWidget):
         # Halo-Layer: weicher gelber RadialGradient unter dem Diamanten
         from PySide6.QtGui import QRadialGradient
         halo_grad = QRadialGradient(QPointF(cx, cy), 14)
-        halo_color = QColor(COLOR_USER_GLOW)
+        halo_color = QColor(self._theme["user_glow"])
         halo_color.setAlpha(120)
         halo_grad.setColorAt(0.0, halo_color)
         halo_grad.setColorAt(1.0, QColor(255, 230, 0, 0))
@@ -1308,8 +1322,8 @@ class MapCanvas(QWidget):
         painter.setBrush(QBrush(halo_grad))
         painter.drawEllipse(QPointF(cx, cy), 14, 14)
         # Diamant
-        painter.setPen(QPen(QColor(COLOR_USER), 1.5))
-        painter.setBrush(QBrush(QColor(COLOR_USER)))
+        painter.setPen(QPen(QColor(self._theme["user"]), 1.5))
+        painter.setBrush(QBrush(QColor(self._theme["user"])))
         size = 6
         diamond = QPolygonF([
             QPointF(cx, cy - size),
@@ -1325,7 +1339,7 @@ class MapCanvas(QWidget):
         # Locator-Label rechts vom Marker
         painter.setFont(QFont("Menlo", 9, QFont.Bold))
         painter.setBrush(Qt.NoBrush)
-        painter.setPen(QColor(COLOR_USER))
+        painter.setPen(QColor(self._theme["user"]))
         painter.drawText(QPointF(cx + size + 6, cy + 3), self._my_locator)
 
 
@@ -1377,6 +1391,24 @@ class DirectionMapDialog(QDialog):
 
         self._setup_ui(my_locator)
         self._sync_toggle_state()
+
+        # Theme aus Settings laden + Combo + Canvas synchronisieren
+        theme_name = DEFAULT_THEME_NAME
+        if parent is not None and hasattr(parent, "settings"):
+            try:
+                stored = parent.settings.get(
+                    "direction_map_theme", DEFAULT_THEME_NAME
+                )
+                if isinstance(stored, str) and stored in THEMES:
+                    theme_name = stored
+            except Exception:
+                pass  # ungueltig → fallback default
+        self.canvas.set_theme(theme_name)
+        idx = self.theme_combo.findData(theme_name)
+        if idx >= 0:
+            self.theme_combo.setCurrentIndex(idx)
+        # Connect erst NACH initialem setCurrentIndex damit kein Spurious-Save
+        self.theme_combo.currentIndexChanged.connect(self._on_theme_changed)
 
         # Worker → GUI-Thread Marshalling
         self._psk_spots_signal.connect(self._on_psk_spots_received,
@@ -1455,6 +1487,17 @@ class DirectionMapDialog(QDialog):
         )
         filter_row.addWidget(self.band_combo)
 
+        # Theme-Auswahl (Aurora / Dark)
+        self.theme_combo = QComboBox()
+        self.theme_combo.setSizeAdjustPolicy(QComboBox.AdjustToContents)
+        self.theme_combo.addItem("Aurora", "aurora")
+        self.theme_combo.addItem("Dark", "dark")
+        self.theme_combo.view().setMinimumWidth(
+            self.theme_combo.view().sizeHintForColumn(0) + 30
+        )
+        self.theme_combo.setToolTip("Karten-Stil")
+        filter_row.addWidget(self.theme_combo)
+
         filter_row.addSpacing(16)
         self.cb_show_stations = QCheckBox("Stationen")
         self.cb_show_stations.setChecked(True)
@@ -1479,6 +1522,19 @@ class DirectionMapDialog(QDialog):
         layout.addWidget(self.disclaimer_label)
 
     # ── Toggle-Logik ──────────────────────────────────────
+
+    def _on_theme_changed(self, _index: int) -> None:
+        """Combo-Wechsel: Canvas-Theme setzen + Settings persistieren."""
+        name = self.theme_combo.currentData()
+        if not isinstance(name, str) or name not in THEMES:
+            return
+        self.canvas.set_theme(name)
+        parent = self.parent()
+        if parent is not None and hasattr(parent, "settings"):
+            try:
+                parent.settings.set("direction_map_theme", name)
+            except Exception:
+                pass
 
     def _on_mode_toggled(self, mode: str) -> None:
         # Doppel-Klick auf aktiven Mode: einfach State-Sync und Status refreshen.
