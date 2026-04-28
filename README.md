@@ -19,10 +19,7 @@
 
 ---
 
-<!-- TODO: Map-Video embed via GitHub-Issue-Upload-Trick (siehe Conversation 28.04.) -->
-<!-- Sobald Issue-URL da: <video src="..." controls width="100%"></video> einsetzen -->
-
-📺 **[Live-Karten-Video ansehen → docs/videos/map.mp4](docs/videos/map.mp4)** (647 KB, 36 s, 960×540)
+https://github.com/user-attachments/assets/7504bb60-2ab1-465f-92e3-0bf042a74f3a
 
 *Live globe visualization: 16-sector propagation wedges per decoded station, color-coded by antenna (ANT1 / ANT2 / rescue), with 60-minute history retention. Recorded during a 40m FT8 session.*
 *Live-Karte mit 16 Richtungs-Sektor-Wedges pro Decode, Antennen-Farbcodierung (ANT1 / ANT2 / Rescue), 60-Min-Historie. Aufgenommen waehrend einer 40m-FT8-Session.*
