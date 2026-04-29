@@ -231,6 +231,10 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         from core import omni_tx as _omni
         _block_cycles = max(10, self.settings.get("diversity_operate_cycles", 80))
         self._omni_tx = _omni.get_instance(block_cycles=_block_cycles)
+        # v0.78: Signal omni_stopped(reason) → UI raeumt auf
+        self._omni_tx.omni_stopped.connect(self._on_omni_stopped)
+        # v0.78: Button-Klick → start/stop_omni_tx
+        self.control_panel.btn_omni_cq.toggled.connect(self._on_btn_omni_cq_toggled)
         self.control_panel.easter_egg_toggle_clicked.connect(self._on_easter_egg_toggle)
 
         # Auto-Hunt: Initialisieren (deaktiviert, zusammen mit OMNI-TX)
@@ -541,13 +545,11 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
             self.control_panel.btn_auto_hunt.show()
             print("[Easter-Egg] OMNI CQ + AUTO HUNT Buttons verfuegbar")
         else:
-            # Aktive Modi sauber stoppen
+            # Aktive Modi sauber stoppen — Signal-Slots kuemmern sich um UI-Cleanup
             if self._auto_hunt.active:
                 self._auto_hunt.stop_auto_hunt("easter_egg_off")
             if self._omni_tx.active:
-                self._omni_tx.disable()
-                self.control_panel.update_omni_tx(False)
-                self.control_panel.btn_omni_cq.setChecked(False)
+                self._omni_tx.disable()  # → omni_stopped("easter_egg_off") → _on_omni_stopped
             self.control_panel.btn_omni_cq.hide()
             self.control_panel.btn_auto_hunt.hide()
             # R1-Fix: 5s UI-Cooldown abbrechen wenn Button versteckt wird —
@@ -559,6 +561,32 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
                 self._auto_hunt_cooldown_seconds = 0
             print("[Easter-Egg] OMNI CQ + AUTO HUNT versteckt")
         self._update_statusbar()
+
+    # ── OMNI-TX UI-Lifecycle (v0.78) ─────────────────────────────
+
+    def _on_btn_omni_cq_toggled(self, checked: bool):
+        """User-Klick auf btn_omni_cq: enable / stop_omni_tx."""
+        if checked and not self._omni_tx.active:
+            self._omni_tx.enable()
+            self.control_panel.update_omni_tx(True)
+            self._update_statusbar()
+            print("[OMNI-TX] User-Start")
+        elif not checked and self._omni_tx.active:
+            self._omni_tx.stop_omni_tx("manual_halt")
+
+    def _on_omni_stopped(self, reason: str):
+        """Slot fuer omni_stopped(reason): Button-State + Statusbar zuruecksetzen.
+
+        Im Gegensatz zu Auto-Hunt KEIN UI-Reflexions-Cooldown — OMNI ist passiver,
+        kein Bot-Tarn-Schutz noetig.
+        """
+        btn = self.control_panel.btn_omni_cq
+        btn.blockSignals(True)
+        btn.setChecked(False)
+        btn.blockSignals(False)
+        self.control_panel.update_omni_tx(False)
+        self._update_statusbar()
+        print(f"[OMNI-TX-UI] Stop ({reason})")
 
     # ── Auto-Hunt UI-Lifecycle (v0.75) ───────────────────────────
 
