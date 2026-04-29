@@ -227,8 +227,9 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
     def _init_optional_features(self):
         """OMNI-TX (Easter Egg, Feldtest), Auto-Hunt, AP-Lite — alle deaktiviert by default."""
         # OMNI-TX: Initialisieren (deaktiviert), Easter Egg verbinden
+        # Plan v3.2: block_cycles=80 (entspricht diversity_operate_cycles Default)
         from core import omni_tx as _omni
-        _block_cycles = max(10, self.settings.get("diversity_operate_cycles", 80) // 2)
+        _block_cycles = max(10, self.settings.get("diversity_operate_cycles", 80))
         self._omni_tx = _omni.get_instance(block_cycles=_block_cycles)
         self.control_panel.easter_egg_toggle_clicked.connect(self._on_easter_egg_toggle)
 

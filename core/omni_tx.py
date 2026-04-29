@@ -134,11 +134,11 @@ class OmniTX(QObject):
         logger.debug(f"[OMNI-TX] QSO begonnen → Zähler reset (Block {self.block})")
 
     # ─────────────────────────────────────────────────────────────────────────
-    # Aktivierung (nur via Easter Egg)
+    # Aktivierung / Stop
     # ─────────────────────────────────────────────────────────────────────────
 
     def enable(self) -> None:
-        """OMNI-TX aktivieren. Nur via Easter-Egg aufrufen!"""
+        """OMNI-TX aktivieren — Slot-Index, Block, Counter und Pending-Switch zuruecksetzen."""
         self.active = True
         self._cycle_count = 0
         self._slot_index = 0
@@ -146,12 +146,33 @@ class OmniTX(QObject):
         self.block = 1
         logger.info("[OMNI-TX] Aktiviert — Even+Odd Slot-Rotation")
 
-    def disable(self) -> None:
-        """OMNI-TX deaktivieren. Zurück zu normalem CQ-Betrieb."""
+    def stop_omni_tx(self, reason: str) -> None:
+        """OMNI-TX-Session beenden. Emittiert omni_stopped(reason).
+
+        Reasons (siehe v0.78 Plan v3.2):
+            manual_halt       — User klickte btn_omni_cq erneut
+            band_change       — Band wurde gewechselt
+            ft_mode_change    — FT-Modus (FT8/FT4/FT2) wurde gewechselt
+            rx_mode_change    — RX-Modus diversity→normal
+            totmann_expired   — Operator-Presence (15 Min) abgelaufen
+            easter_egg_off    — Easter-Egg deaktiviert waehrend OMNI aktiv
+            superseded        — Anderer Mode-Button (Auto-Hunt) wurde gestartet
+
+        Cleanup ist immer identisch: active=False, slot_index=0, cycle_count=0,
+        _pending_switch=False (Bug-Fix: sonst springt Block nach Re-enable() sofort).
+        """
         self.active = False
-        self._cycle_count = 0
         self._slot_index = 0
-        logger.info("[OMNI-TX] Deaktiviert — normaler Betrieb")
+        self._cycle_count = 0
+        self._pending_switch = False
+        logger.info(f"[OMNI-TX] Stop (reason={reason})")
+        self.omni_stopped.emit(reason)
+
+    def disable(self) -> None:
+        """Backwards-compat Thin-Wrapper. Bestehende Aufrufer (Easter-Egg-Disable
+        in main_window.py:546-548) bleiben funktional, neuer Pfad geht ueber
+        stop_omni_tx(reason)."""
+        self.stop_omni_tx("easter_egg_off")
 
     # ─────────────────────────────────────────────────────────────────────────
     # Status / Debug
