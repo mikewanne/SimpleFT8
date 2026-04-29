@@ -243,6 +243,13 @@ class AutoHunt(QObject):
         if not candidates:
             return None
 
+        # Slot-Affinitaet: bei laufender Session bevorzugt gleiches tx_even,
+        # Fallback auf alle Kandidaten wenn keiner mit gleichem Slot.
+        if self._last_tx_even is not None:
+            same_slot = [c for c in candidates if c.tx_even == self._last_tx_even]
+            if same_slot:
+                candidates = same_slot
+
         # Scoring
         for c in candidates:
             c.score = self._score(c)
@@ -254,9 +261,16 @@ class AutoHunt(QObject):
         if best.score <= 0:
             return None
 
+        # Race-Condition-Sicherung: zwischen Anfangs-Check und Return koennte
+        # _auto_hunt_timer abgelaufen sein. Mike's 10-Min-Hard-Cap ist ethisch
+        # gesetzt — kein "letztes QSO" nach Ablauf.
+        if not self.active:
+            return None
+
         self._current_target = best.call
+        self._last_tx_even = best.tx_even  # Slot-Affinitaet fuer naechsten Zyklus
         print(f"[Auto-Hunt] Ausgewaehlt: {best.call} "
-              f"(SNR={best.snr}, Score={best.score:.1f})")
+              f"(SNR={best.snr}, Score={best.score:.1f}, slot={best.tx_even})")
         return best
 
     def _score(self, c: _HuntCandidate) -> float:

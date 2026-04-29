@@ -140,3 +140,88 @@ def test_qso_log_unaffected_by_stop(qapp):
         assert hunt._qso_log is qso_log, f"_qso_log bleibt nach {reason}"
         assert qso_log.is_worked("DL1OLD"), f"DL1OLD bleibt worked nach {reason}"
         assert qso_log.is_worked_on_band("DL1OLD", "20m")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Commit 5 — Slot-Affinitaet + Race-Condition-Doppel-Check
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _make_cq_msg(call: str, freq_hz: int = 1500, snr: int = -10,
+                 tx_even: bool = True):
+    """Mini-Mock einer FT8-CQ-Message fuer select_next-Tests."""
+    from types import SimpleNamespace
+    return SimpleNamespace(
+        is_cq=True,
+        caller=call,
+        grid_or_report="JO31",
+        is_grid=True,
+        snr=snr,
+        freq_hz=freq_hz,
+        _tx_even=tx_even,
+    )
+
+
+def test_double_active_check_in_select_next(qapp):
+    """Race-Condition-Sicherung: aktiv-Check VOR Return blockt 'letztes QSO'.
+
+    Szenario: select_next laeuft, Kandidat ist gefunden, dann timer_expired
+    feuert (active=False). Der zweite active-Check VOR return verhindert
+    dass ein finaler Candidate noch herausgegeben wird.
+    """
+    from core.auto_hunt import AutoHunt
+    hunt = AutoHunt()
+    hunt.start_auto_hunt(600)
+    msg = _make_cq_msg("DL1ABC", tx_even=True)
+
+    # Verhalten emulieren: nach Kandidaten-Auswahl wird active=False gesetzt
+    # (z.B. durch parallel feuernden Timer). Wir patchen _score so dass es
+    # einmal active deaktiviert.
+    original_score = hunt._score
+
+    def _spying_score(c):
+        result = original_score(c)
+        hunt.active = False  # simuliert Race: Timer ist gerade abgelaufen
+        return result
+
+    hunt._score = _spying_score
+
+    result = hunt.select_next([msg], qso_idle=True, presence_ok=True)
+    assert result is None, "Doppel-Active-Check muss letzten Candidate blocken"
+
+
+def test_slot_affinity_prefers_same_tx_even(qapp):
+    """Bei _last_tx_even=True wird Kandidat mit tx_even=True bevorzugt."""
+    from core.auto_hunt import AutoHunt
+    hunt = AutoHunt()
+    hunt.start_auto_hunt(600)
+    hunt._last_tx_even = True  # Affinitaet aus vorherigem Zyklus
+
+    msg_even = _make_cq_msg("DL1EVEN", tx_even=True, snr=-15)
+    msg_odd = _make_cq_msg("DL2ODD", tx_even=False, snr=-5)  # bessere SNR
+    # Trotz schlechterer SNR muss DL1EVEN gewaehlt werden (Slot-Affinitaet).
+
+    result = hunt.select_next([msg_even, msg_odd], True, True)
+    assert result is not None
+    assert result.call == "DL1EVEN", (
+        "Slot-Affinitaet: Kandidat mit gleichem tx_even muss bevorzugt werden"
+    )
+    assert hunt._last_tx_even is True  # Affinitaet bleibt
+
+
+def test_slot_affinity_fallback_when_no_match(qapp):
+    """Wenn kein Kandidat mit gleichem tx_even: Fallback auf alle Kandidaten."""
+    from core.auto_hunt import AutoHunt
+    hunt = AutoHunt()
+    hunt.start_auto_hunt(600)
+    hunt._last_tx_even = True  # Wir wollen even, aber keiner ist da
+
+    msg_odd1 = _make_cq_msg("DL1ODD1", tx_even=False, snr=-15)
+    msg_odd2 = _make_cq_msg("DL2ODD2", tx_even=False, snr=-5)  # bessere SNR
+
+    result = hunt.select_next([msg_odd1, msg_odd2], True, True)
+    assert result is not None
+    assert result.call == "DL2ODD2", (
+        "Fallback: ohne even-Kandidat soll bester odd gewaehlt werden"
+    )
+    # _last_tx_even wird auf den neuen Slot aktualisiert
+    assert hunt._last_tx_even is False
