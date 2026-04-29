@@ -516,7 +516,7 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         if self._omni_tx.active:
             # Deaktivieren
             self._omni_tx.disable()
-            self._auto_hunt.disable()
+            # Auto-Hunt-Steuerung wird in Commit 9 ueber btn_auto_hunt gefuehrt.
             self.control_panel.update_omni_tx(False)
             self.control_panel.btn_cq.setText("CQ RUFEN")
             self._update_statusbar()
@@ -538,7 +538,7 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
             msg.setStyleSheet(self._msgbox_style())
             if msg.exec() == QMessageBox.StandardButton.Yes:
                 self._omni_tx.enable()
-                self._auto_hunt.enable()
+                # Auto-Hunt-Steuerung wird in Commit 9 ueber btn_auto_hunt gefuehrt.
                 self.control_panel.update_omni_tx(True)
                 self.control_panel.btn_cq.setText("OMNI CQ")
                 self._update_statusbar()

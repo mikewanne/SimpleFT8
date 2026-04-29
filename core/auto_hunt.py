@@ -81,7 +81,6 @@ class AutoHunt(QObject):
         self._qso_log: Optional[QSOLog] = None
         self._band: str = "20m"
         self._cooldown: dict[str, float] = {}  # call → timestamp (letzer Fehlversuch)
-        self._pause_remaining: int = 0          # Zyklen Pause nach QSO
         self._manual_override: bool = False     # Manueller Klick → pausieren
         self._current_target: Optional[str] = None  # Aktuell angerufene Station
 
@@ -92,28 +91,6 @@ class AutoHunt(QObject):
     def set_band(self, band: str):
         """Band setzen (fuer Worked-On-Band Check)."""
         self._band = band
-
-    # ─────────────────────────────────────────────────────────────────────────
-    # Aktivierung (zusammen mit OMNI-TX)
-    # ─────────────────────────────────────────────────────────────────────────
-
-    def enable(self):
-        """Auto-Hunt aktivieren."""
-        self.active = True
-        self._manual_override = False
-        self._pause_remaining = 0
-        self._current_target = None
-        self._cooldown.clear()
-        logger.info("[Auto-Hunt] Aktiviert")
-        print("[Auto-Hunt] Aktiviert — automatisches Anrufen von CQ-Stationen")
-
-    def disable(self):
-        """Auto-Hunt deaktivieren."""
-        self.active = False
-        self._current_target = None
-        self._manual_override = False
-        logger.info("[Auto-Hunt] Deaktiviert")
-        print("[Auto-Hunt] Deaktiviert")
 
     # ─────────────────────────────────────────────────────────────────────────
     # Kern-Logik: Station auswaehlen
@@ -142,11 +119,6 @@ class AutoHunt(QObject):
         if not qso_idle:
             return None
         if self._manual_override:
-            return None
-
-        # Pause nach QSO-Ende
-        if self._pause_remaining > 0:
-            self._pause_remaining -= 1
             return None
 
         # CQ-Stationen filtern
@@ -228,18 +200,16 @@ class AutoHunt(QObject):
     # ─────────────────────────────────────────────────────────────────────────
 
     def on_qso_complete(self, call: str):
-        """QSO erfolgreich beendet → Pause einlegen, dann weiter."""
+        """QSO erfolgreich beendet → naechster Slot kann neue Station waehlen."""
         self._current_target = None
-        self._pause_remaining = _PAUSE_CYCLES
         # Cooldown entfernen (erfolgreich)
         self._cooldown.pop(call, None)
-        print(f"[Auto-Hunt] QSO mit {call} fertig — {_PAUSE_CYCLES} Zyklen Pause")
+        print(f"[Auto-Hunt] QSO mit {call} fertig")
 
     def on_qso_timeout(self, call: str):
         """QSO fehlgeschlagen (Timeout) → Cooldown setzen."""
         self._current_target = None
         self._cooldown[call] = time.time()
-        self._pause_remaining = 0  # Sofort naechste versuchen
         print(f"[Auto-Hunt] Timeout {call} — {_COOLDOWN_SECS // 60} Min Cooldown")
 
     def on_manual_qso_start(self):
@@ -251,7 +221,6 @@ class AutoHunt(QObject):
     def on_manual_qso_end(self):
         """Manuelles QSO beendet → Auto-Hunt wieder freigeben."""
         self._manual_override = False
-        self._pause_remaining = _PAUSE_CYCLES
         print("[Auto-Hunt] Manuelles QSO beendet — Auto-Hunt wird fortgesetzt")
 
     def on_band_change(self):
