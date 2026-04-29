@@ -97,6 +97,17 @@ Erweiterung ausgliedern oder ganz verwerfen.
 
 ---
 
+## 📋 Verbindlicher Feature-Workflow
+
+Fuer alle nicht-trivialen Features (>5 Zeilen Code, neue Module, Architektur-
+Aenderungen): **siehe `docs/WORKFLOW.md`** — Schritt 0 Code-Verifikation →
+V1 → V2 (Self-Review) → DeepSeek-R1-Review → V3 → Mike-Freigabe → Plan-Mode → Code.
+
+Triviale Aenderungen (Tippfehler, Kommentar-Updates, < 5 Zeilen) brauchen den
+Workflow nicht.
+
+---
+
 ## ⛔ Programmier-Leitsaetze (PFLICHT bei jedem Entwurf!)
 
 Diese Saetze gelten fuer Claude UND DeepSeek bei jedem Plan, jedem Prompt,
