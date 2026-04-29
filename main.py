@@ -9,7 +9,7 @@ import os
 import subprocess
 from pathlib import Path
 
-APP_VERSION = "0.76"
+APP_VERSION = "0.77"
 
 # Projektverzeichnis in den Python-Pfad aufnehmen
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))

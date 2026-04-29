@@ -5,6 +5,96 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-04-29 v0.77 — App-Start Hardware-Dialog + Statistik-Methodik-Korrektur
+
+**Betroffene Dateien:** `main.py`, `scripts/generate_plots.py`, `README.md`,
+`HISTORY.md`, `CLAUDE.md`, `auswertung/*` (PDFs neu).
+
+### Was ist v0.77
+
+Zwei Bug-Fix-/Verbesserungs-Punkte aus dem v0.76-Field-Test (29.04.2026)
+zusammengefasst — beide trivial-Pfad-tauglich (klare Diagnose, < 30 Z. Code,
+kein V1→V2→V3-Workflow noetig).
+
+#### 1. App-Start Hardware-Sicherheitsdialog (🔴 Sicherheits-Layer)
+
+Pflicht-Acknowledgment beim App-Start mit Inhalt:
+- ANT1 = IMMER die TX-Antenne. Kann nicht anders gesetzt werden.
+- ANT2 = IMMER nur Hilfs-Empfangsantenne. App nutzt sie NIEMALS zum Senden.
+- Disclaimer: private Machbarkeitsstudie, keine Haftung fuer
+  Hardware-Schaeden, Datenverlust, regulatorische Verstoesse.
+
+UI: schlanker QDialog (520×300 px) im SimpleFT8-Dark-Theme, NICHT QMessageBox
+(zu plump fuer Apps mit eigenem Style). Modal + `WindowStaysOnTopHint`
++ `dlg.exec()`. „OK — verstanden" → App startet, „Abbrechen" → `sys.exit(0)`.
+
+Erste Iteration hatte einen rot-umrandeten „Hardware-Schaden moeglich"-
+Kasten — auf Mike's Wunsch entfernt (Funker wissen das, Drohton schreckt
+ab). Stattdessen kompakter grauer Disclaimer-Block. Funktional reicht
+das zusammen mit der **MIT-License (AS-IS-Klausel)** + dem neuen
+zweisprachigen **Disclaimer-Block in README.md** unter den Badges.
+
+#### 2. Min/Max-Error-Bars im PDF-Bericht entfernt (🟡 Methodik-Korrektur)
+
+Die bisherigen Bars vermischten drei Variablen und waren methodisch unfair:
+1. Modus-Volatilitaet (was wir wissen wollten)
+2. Tag-Conditions (Solar/Storm — Confounder, weil Modi an unterschiedlichen
+   Tagen gemessen wurden)
+3. Stichprobengroesse (Modi haben unterschiedliche `n_days`)
+
+Folge: Diversity-Bars konnten riesig erscheinen NICHT weil Diversity volatil
+ist, sondern weil die Mess-Tage stuermisch waren. Bei kleiner Stichprobe
+(N=2) ist Min/Max ausserdem trivial = einfach die zwei Werte. Ausreisser-
+empfindlich.
+
+Pooled Mean ueber 4-5+ Tage ist statistisch belastbar genug. Bars suggerierten
+Praezision die in der Mess-Methodik nicht steckt — schlechter als gar keine
+Bars. Wirklich saubere Modus-Vergleiche brauchten interleaved-Messung
+(wie in DX-Tune-Kalibrierung), fuer Stunden-/Tagesstatistik nicht praktikabel.
+
+PDFs (DE+EN, 40m+20m FT8) neu generiert — saubereres Layout ohne Bars.
+
+### Workflow
+
+Beide Aenderungen gingen direkt durch (Trivial-Pfad), ohne V1→V2→V3.
+Begruendung: klare Diagnose, kleine Aenderungs-Surface, keine Architektur-
+Wirkung. WORKFLOW v1.1 erlaubt Skip explizit fuer diese Faelle.
+
+DeepSeek-R1 wurde nur fuer die Methodik-Diskussion (5 vs 7 Tage Daten-
+sammlung) konsultiert — **kein Code-Review noetig** wegen Trivial-Charakter.
+
+### Atomare Commits
+
+1. `b6f965f` `refactor(plots): Min/Max-Error-Bars entfernen` — `generate_plots.py`
+   + alle PDFs/PNGs frisch.
+2. `8f2a103` `feat(safety): App-Start Hardware-Dialog + Disclaimer` —
+   `main.py` (Dialog) + `README.md` (Disclaimer-Block) + Tests-Badge
+   442→472 aktualisiert.
+3. (dieser Commit) `chore(release): v0.77 — Hardware-Dialog +
+   Statistik-Methodik` — APP_VERSION, HISTORY, CLAUDE.md.
+
+### Test-Status
+
+```
+./venv/bin/python3 -m pytest tests/ -q
+472 passed in ~7s
+```
+
+Keine neuen Tests — Dialog ist auf User-Acknowledgment ausgelegt (kann
+nur manuell geprueft werden, modal mit `exec()`), Methodik-Aenderung
+ist Plot-Code (nicht test-pflichtig).
+
+### Bekannt-Out-of-Scope (separate v0.78-Issues)
+
+- 🟡 **RX-Tag waehrend Diversity-Kalibrierung** — `_handle_dx_tune_mode`
+  setzt `msg.antenna` nicht auf aktuelle Schedule-Antenne. UI-only-Bug,
+  Mess-Algorithmus selbst korrekt.
+- 🟠 **Bestaetigungsfenster nach Kalibrierung** (`_show_calibration_done`)
+  ist non-modal + nicht-on-top — kann hinter Hauptfenster wandern.
+  Fix: `setModal(True)` + `WindowStaysOnTopHint` + `dlg.exec()`.
+
+---
+
 ## 2026-04-29 v0.76 — Settings-Dialog auf Tabs (1440x900-Fix)
 
 **Betroffene Dateien:** `ui/settings_dialog.py`,
