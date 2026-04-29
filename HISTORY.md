@@ -109,6 +109,31 @@ R1 (Reasoner) hat 4 Findings zurueckgegeben:
   laeuft weiterhin ueber bisherige Logik. Phase 2: dedizierter Handler
   fuer mutually-exclusive Modus-Aktivierung.
 
+### Post-Release Hotfix (`f6d30ab`)
+
+Beim ersten v0.75-App-Restart aufgetauchter Latent-Bug in der `MainWindow`-
+Init-Reihenfolge:
+
+```
+Z.64  _connect_signals          → band_changed.connect(_on_band_changed)
+Z.76  _set_band(settings.band)  → feuert band_changed Signal SOFORT
+       └→ _on_band_changed → mw_radio.py:341 _update_propagation_ui
+            └→ AttributeError: '_prop_error_shown' fehlt
+Z.82  _init_propagation_polling → setzt _prop_error_shown = False (zu spaet!)
+```
+
+Der Bug war auch in v0.74 latent vorhanden, wurde aber durch eine andere
+Trigger-Reihenfolge nicht ausgeloest. Beim v0.75-Restart in Mike's Setup
+zur Live-Session reproduzierbar.
+
+**Fix:** `hasattr`-Guard am Anfang von `_update_propagation_ui` —
+early-return bei zu fruehem Aufruf, der naechste 60s-Polling-Tick oder
+naechste Bandwechsel ruft die Methode dann sauber. Saubere Init-
+Reihenfolge waere besser, aber Risk/Aufwand-Verhaeltnis spricht fuer den
+defensiven Guard (KISS, 5 Zeilen, kein bestehender Pfad veraendert).
+
+**Tests:** 467 weiter gruen.
+
 ---
 
 ## 2026-04-29 — Tooling: DeepSeek Direkt-API + R1 als Default
