@@ -836,6 +836,11 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         if self._presence_remaining <= 0 and not self._presence_expired:
             self._presence_expired = True
             print("[Presence] TIMEOUT — Operator nicht anwesend, CQ wird gestoppt")
+            # Auto-Hunt sofort stoppen (Defense-in-Depth zur 10-Min-Hard-Cap).
+            # Reason "totmann_expired": Cooldowns + _last_tx_even bleiben,
+            # damit User bei Wiederkehr explizit fortsetzen kann (Pflicht-Restart).
+            if self._auto_hunt.active:
+                self._auto_hunt.stop_auto_hunt("totmann_expired")
             # CQ stoppen (aber laufendes QSO zu Ende fuehren!)
             if self.qso_sm.cq_mode:
                 # Nur CQ stoppen wenn KEIN aktives QSO laeuft
