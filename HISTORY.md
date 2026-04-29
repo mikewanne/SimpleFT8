@@ -5,6 +5,112 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-04-29 v0.75 — Auto-Hunt-Modus (Easter-Egg, 10-Min-Hard-Stop)
+
+**Betroffene Dateien:** `core/auto_hunt.py`, `core/encoder.py`, `ui/main_window.py`,
+`ui/mw_radio.py`, `ui/mw_tx.py`, `ui/control_panel.py`,
+`tests/test_modules.py`, `tests/test_auto_hunt_extended.py` (neu),
+`main.py`, `CLAUDE.md`.
+
+### Was ist v0.75
+
+Easter-Egg-aktivierter Auto-Hunt-Modus: Klick auf Versionsnummer →
+3-Button-Layout `[CQ RUFEN] [OMNI CQ] [AUTO HUNT]` erscheint im QSO-Bereich.
+Klick auf AUTO HUNT startet eine **fest 10 Minuten** lange Session, in der
+SimpleFT8 automatisch CQ-Rufer scannt und anruft. Der Timer ist von
+Maus/Tastatur entkoppelt (Bot-Tarn-Schutz, Defense-in-Depth zum
+Totmannschalter).
+
+### Workflow-Reflexion (V1 → V2 → DeepSeek-R1 → V3)
+
+Erstmals den verbindlichen `docs/WORKFLOW.md`-Prozess voll durchlaufen:
+
+- **V1** (`prompts/auto_hunt_v1.md`): erster Entwurf, 18 Akzeptanzkriterien.
+- **V2** (Self-Review): 12 eigene Schwachstellen erkannt, neu geschrieben mit
+  25 Akzeptanzkriterien.
+- **DeepSeek-R1-Review** (`tools/deepseek_review.py --reasoner`): 31 Findings
+  zurueck, davon **12 angenommen** (Plan-Verbesserungen) und **5 begruendet
+  abgelehnt** (Race-Doppel-Check als ethische Belt-and-suspenders behalten,
+  KISS-Begruendungen).
+- **V3** (`prompts/auto_hunt_v3.md`): Final-Plan, Mike-Freigabe.
+- **Plan-Mode**: Code-Verifikationen vor Commit 1 fanden 1 echte Luecke
+  (`mw_tx.py:83` ohne ANT1-Guard) und 1 V3-Halluzination (`_MAX_ATTEMPTS=3`
+  ist nur Modul-Konstante, nicht in der Klasse verwendet → AC C6 gestrichen).
+
+### Implementierung — 10 atomare Commits
+
+1. `feat(safety): ANT1-Guard in Encoder.transmit() + mw_tx.tune_on()` —
+   defensives `set_tx_antenna("ANT1")` zentral. Schliesst echte Luecke im
+   TUNE-Pfad (`mw_tx.py:83`).
+2. `refactor(auto_hunt): AutoHunt erbt von QObject` — Signal-Foundation.
+3. `refactor(auto_hunt): enable/disable + _pause_remaining entfernen` —
+   alte API durch zeitgesteuerte ersetzt.
+4. `feat(auto_hunt): start_auto_hunt + stop_auto_hunt + Signal + Timer` —
+   QTimer single-shot 600_000ms, `auto_hunt_stopped(reason)`-Signal,
+   reason-basierte Cleanup-Logik (totmann_expired laesst Cooldowns +
+   `_last_tx_even` erhalten fuer User-Restart).
+5. `feat(auto_hunt): Slot-Affinitaet + Race-Doppel-Check` — `_last_tx_even`-
+   Filter mit Fallback, zweiter `active`-Check direkt vor Return.
+6. `feat(safety): Totmann-Integration triggert stop_auto_hunt('totmann_expired')` —
+   ueberlappende Abschalt-Mechanismen (10-Min-Hard-Cap + 15-Min-Totmann).
+7. `refactor(ui): omni_tx_clicked → easter_egg_toggle_clicked Signal-Rename`.
+8. `feat(ui): 3-Button-Layout im QSO-Bereich` — mutually exclusive
+   `QButtonGroup`, btn_omni_cq + btn_auto_hunt initial hidden, nur via
+   Easter-Egg sichtbar. TUNE bleibt SEPARAT (kein Group-Member).
+9. `feat(ui): Auto-Hunt-Lifecycle (Easter-Egg + Countdown + 5s UI-Cooldown)` —
+   1s-Polling fuer Live-Countdown, 5s-Reflexions-Cooldown nach Stop,
+   Mode-Wechsel-Hook in `mw_radio._on_mode_changed`.
+10. `chore(release): v0.75 — Auto-Hunt-Modus` (dieser Commit).
+
+### Test-Bilanz
+
+- **446 → 467 gruen** (+21 statt geplanten +10 dank parametrize-Bonus
+  ueber 6 Stop-Reasons).
+- Neuer Test-File: `tests/test_auto_hunt_extended.py`
+  (10 Test-Funktionen, 21 Test-Cases inkl. parametrized).
+- Bestehender Test umgebaut: `test_autohunt_band_change_clears_cooldown` →
+  `test_autohunt_band_change_stops_session_and_clears_cooldown` (neue Semantik:
+  band_change stoppt Session via `stop_auto_hunt`).
+
+### Sicherheits-Schichten (Defense-in-Depth)
+
+| Mechanismus | Trigger | Effect |
+|---|---|---|
+| 10-Min-Hard-Stop | `_auto_hunt_timer.timeout` | `stop_auto_hunt("timer_expired")` |
+| Totmannschalter | 15 Min keine Maus → `_on_presence_tick` | `stop_auto_hunt("totmann_expired")` |
+| Manueller HALT | User klickt btn_auto_hunt | `stop_auto_hunt("manual_halt")` |
+| Easter-Egg-Off | User Klick Versionsnummer | `stop_auto_hunt("easter_egg_off")` |
+| Bandwechsel | `on_band_change()` | `stop_auto_hunt("band_change")` |
+| Mode-Wechsel | `mw_radio._on_mode_changed` | `stop_auto_hunt("mode_change")` |
+
+ANT1-Pflicht ist zentral via `Encoder.transmit()` + alle `tune_on()`-Pfade
+abgesichert (`mw_tx.py:83` Luecke geschlossen).
+
+### DeepSeek-R1-Final-Review-Findings
+
+R1 (Reasoner) hat 4 Findings zurueckgegeben:
+
+1. **„Band-Wechsel-Hook fehlt"** — abgelehnt als Halluzination. R1 sah nur
+   `core/auto_hunt.py` + `ui/main_window.py` (nicht `mw_radio.py`). Der Hook
+   ist in `mw_radio.py:297-299` korrekt verbunden — `set_band(band)` +
+   `on_band_change()` werden bei aktivem Auto-Hunt gerufen.
+2. **„Doppelter `active`-Check redundant im single-threaded GUI"** — bewusst
+   behalten. Mike's ethische Belt-and-suspenders zur 10-Min-Hard-Cap. Nicht
+   entfernen.
+3. **„UI-Cooldown laeuft nach Easter-Egg-Off weiter"** — angenommen, gefixt
+   in `_on_easter_egg_toggle` else-Zweig: `_auto_hunt_cooldown_timer.stop()`
+   + Button-State zurueck zu Idle wenn Button versteckt wird.
+4. **„`btn_omni_cq` ohne `clicked`-Handler"** — als Phase 2 vermerkt
+   (siehe unten).
+
+### Bekannte Einschraenkungen (Phase 2)
+
+- `btn_omni_cq` hat aktuell keinen eigenen `clicked`-Handler — OMNI-CQ
+  laeuft weiterhin ueber bisherige Logik. Phase 2: dedizierter Handler
+  fuer mutually-exclusive Modus-Aktivierung.
+
+---
+
 ## 2026-04-29 — Tooling: DeepSeek Direkt-API + R1 als Default
 
 **Betroffene Dateien:** `tools/deepseek_review.py` (neu), `CLAUDE.md`,

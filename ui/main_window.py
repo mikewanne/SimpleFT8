@@ -549,6 +549,13 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
                 self.control_panel.btn_omni_cq.setChecked(False)
             self.control_panel.btn_omni_cq.hide()
             self.control_panel.btn_auto_hunt.hide()
+            # R1-Fix: 5s UI-Cooldown abbrechen wenn Button versteckt wird —
+            # sonst inkonsistenter Button-State bei naechster Easter-Egg-Aktivierung
+            if self._auto_hunt_cooldown_timer.isActive():
+                self._auto_hunt_cooldown_timer.stop()
+                self.control_panel.btn_auto_hunt.setEnabled(True)
+                self.control_panel.btn_auto_hunt.setText("AUTO HUNT")
+                self._auto_hunt_cooldown_seconds = 0
             print("[Easter-Egg] OMNI CQ + AUTO HUNT versteckt")
         self._update_statusbar()
 
