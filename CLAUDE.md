@@ -269,8 +269,16 @@ core/
   propagation.py      HamQSL + _apply_seasonal_correction(band, condition, utc_hour, month)
                       60m fehlt in XML → Interpolation 40m/80m (day+night getrennt, implementiert)
   ap_lite.py          ⛔ UNGETESTET — Feldtest ausstehend (SCORE_THRESHOLD=0.75)
-  omni_tx.py          ⛔ DEAKTIVIERT — Feldtest ausstehend (Klick auf Versionsnummer)
-  auto_hunt.py        Auto-Hunt Logik
+  omni_tx.py          ⛔ DEAKTIVIERT — Implementation v0.78 in Vorbereitung.
+                      5-Slot-Pattern Even/Odd-Rotation, Diversity-only Feature
+                      (Mode-gekoppelt). Stop-Reasons: band_change, mode_change,
+                      totmann_expired, manual_halt. Aktivierung via Direkt-
+                      Toggle btn_omni_cq (sichtbar nur in Diversity).
+                      → Vollstaendige Design-Spec: docs/OMNI_TX_DESIGN.md
+  auto_hunt.py        Auto-Hunt Logik (v0.78: wird Diversity-only Feature
+                      analog OMNI — Mode-gekoppelt, btn_auto_hunt nur in
+                      Diversity sichtbar; Mode-Wechsel zu Normal stoppt
+                      Auto-Hunt automatisch via auto_hunt_stopped("mode_change")).
   timing.py           UTC-Takt, modus-abh. Zyklen
   protocol.py         FTX_PROTOCOL_FT8/FT4/FT2
   ft8lib_decoder.py   C-Library Wrapper
