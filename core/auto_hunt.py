@@ -25,6 +25,8 @@ import logging
 from dataclasses import dataclass
 from typing import Optional, List, TYPE_CHECKING
 
+from PySide6.QtCore import QObject
+
 if TYPE_CHECKING:
     from core.message import FT8Message
     from log.qso_log import QSOLog
@@ -59,8 +61,11 @@ class _HuntCandidate:
     tx_even: Optional[bool] = None  # Slot-Parity der Station
 
 
-class AutoHunt:
+class AutoHunt(QObject):
     """Auto-Hunt Controller — waehlt und ruft CQ-Stationen automatisch an.
+
+    Erbt von QObject damit Signal-Emit (Commit 4: auto_hunt_stopped) sauber
+    funktioniert und Qt-Lifecycle (deleteLater etc.) greift.
 
     Verwendung (wenn aktiviert via Easter Egg):
         auto = AutoHunt(qso_log, band)
@@ -71,6 +76,7 @@ class AutoHunt:
     """
 
     def __init__(self):
+        super().__init__()
         self.active: bool = False
         self._qso_log: Optional[QSOLog] = None
         self._band: str = "20m"
