@@ -14,155 +14,132 @@ ANT2 mit 100 W = Hardware-Schaden moeglich (PA, Antennen-Pfad).
 |---|---|
 | Manuelle CQ-Anrufe / TUNE | **ANT1** |
 | OMNI CQ (passiv) | **ANT1** |
-| AUTO HUNT (aktiv) | **ANT1** |
+| AUTO HUNT (aktiv, v0.75) | **ANT1** |
 | Diversity RX-Pattern | beide RX, **TX nur ueber ANT1** |
 
-**Im Code:** Vor jedem TX-Trigger muss `radio.set_tx_antenna("ANT1")`
-verifiziert sein. Diversity-Pattern darf **nie** ANT2 als TX-Slot vergeben.
+**Im Code (v0.75):** `set_tx_antenna("ANT1")` zentral abgesichert in
+`Encoder.transmit()` (vor `ptt_on()`) UND vor jedem `tune_on()`-Aufruf
+(`mw_tx.py:83`, `mw_radio.py:896/993/1078`, `dx_tune_dialog.py:192/320/382`).
 
 ---
 
-## 2026-04-27 (v0.67)
+## 2026-04-29 (v0.75) — Auto-Hunt-Modus + Hotfix
 
-## Heute erledigt — Locator-DB Feature + GitHub-Push (v0.66 + v0.67)
+## Heute erledigt
 
-**v0.67 — Persistenter Locator-Cache (LocatorDB)** — 6 atomare Commits, alle gruen.
+**v0.75 Auto-Hunt-Modus** — Easter-Egg-aktivierter 10-Min-Auto-Hunt mit
+Slot-Affinitaet, Race-Doppel-Check, ANT1-Pflicht zentralisiert, 6 Stop-Reasons,
+5s UI-Reflexions-Cooldown, Defense-in-Depth Totmann-Hook.
 
-KISS-Prinzip nach DeepSeek-Plan-V3 (V2 hatte 26-Buchstaben-Splitting, LRU,
-Write-Ahead-Log — alles raus). Eine JSON-Datei `~/.simpleft8/locator_cache.json`,
-in-memory waehrend Laufzeit, save() bei App-Close.
+**11 atomare Commits + 1 Hotfix:**
+1. `fac60a0` ANT1-Guard in Encoder.transmit() + mw_tx.tune_on()
+2. `385425a` AutoHunt → QObject (Signal-Foundation)
+3. `b96ace2` enable/disable + _pause_remaining entfernt
+4. `808de12` start/stop_auto_hunt + Signal + 10-Min-Timer (+5 Tests)
+5. `4e6998e` Slot-Affinitaet + Race-Doppel-Check (+3 Tests)
+6. `70ef451` Totmann-Hook → stop_auto_hunt("totmann_expired")
+7. `7c6093b` Signal-Rename omni_tx → easter_egg_toggle
+8. `ea7ea6e` 3-Button-Layout im QSO-Bereich
+9. `81a610c` UI-Lifecycle (Easter-Egg + Countdown + 5s UI-Cooldown)
+10. `75f0376` chore(release): v0.75
+11. `f6d30ab` **Hotfix:** Init-Race-Guard fuer `_update_propagation_ui`
+    (Latent-Bug, beim v0.75-Restart aufgetaucht)
+12. `48f4864` HISTORY: Hotfix dokumentiert
 
-1. `4b9ba64` — `core/locator_db.py` neues Modul + 26 Tests (DeepSeek-codereviewed,
-   `encoding="utf-8"` Fix uebernommen)
-2. `6dcb275` — Hooks in `mw_cycle._handle_normal_mode` + `_handle_diversity_operate`
-   und `direction_map_widget._on_psk_spots_received`
-3. `38a1990` — ADIF-Bulk-Import beim App-Start aus `<cwd>/adif/` + adif_import_path
-4. `265a918` — `direction_map_widget`: Karte nutzt LocatorDB + prec_km-Feld an
-   StationPoint, Country-Fallback dimmt auf 50% Alpha, Disclaimer reduziert auf
-   "Ø Genauigkeit: X km"
-5. `57beb00` — `rx_panel`: km-Spalte zieht aus DB vor Country-Fallback (kein
-   `~`-Praefix wenn Locator irgendwann mal in CQ/PSK gesehen wurde)
-6. `f397ec9` — Doku: APP_VERSION 0.66 → 0.67, HISTORY.md, CLAUDE.md
+**Workflow:** V1 → V2 (Self-Review, 12 Schwachstellen erkannt) → DeepSeek-R1
+(31 Findings, 12 angenommen, 5 begruendet abgelehnt) → V3 → Plan-Mode-
+Verifikation (1 echte Luecke `mw_tx.py:83`, 1 V3-Halluzination `_MAX_ATTEMPTS=3`)
+→ 10 atomare Commits → R1-Final-Review (1 echtes Finding integriert).
 
-**Bilanz:**
-- **361 → 407 Tests** (+46), alle gruen
-- **DeepSeek-Codereview** vor Modul-Commit (encoding="utf-8" einziger konkreter Fix)
-- **5 Hooks** verbinden Decoder + PSK + ADIF + Karte + rx_panel mit der DB
+**Tests:** 446 → **467 gruen** (+21 dank parametrize-Bonus ueber 6 Stop-Reasons).
 
-## Push + GitHub-Updates (Mike-Freigabe)
+## Bilanz heute
 
-Mike hat freigegeben: **38 Commits** lokal seit letztem Push → `git push origin main`.
+- **Backend** (Commits 1-7): Encoder-Hardware-Guard + AutoHunt komplette
+  Logik-Schicht (start/stop, Timer, Signal, Slot-Affinitaet, Race-Check,
+  Totmann-Integration).
+- **UI** (Commits 8-9): 3-Button-Layout mutually-exclusive, Easter-Egg-Toggle
+  zeigt/versteckt 2 zusaetzliche Buttons, Live-Countdown im Button-Text,
+  5s-Reflexions-Cooldown nach Stop, Mode-Wechsel-Hook in `mw_radio`.
+- **Doku** (Commits 10, 12): HISTORY ausfuehrlich, CLAUDE.md Header v0.75,
+  Bekannte-Fallen erweitert.
+- **Hotfix** (Commit 11): bestehender Init-Race-Bug aufgedeckt durch
+  v0.75-Restart, defensiv via `hasattr`-Guard gefixt (5 Zeilen).
 
-Zusaetzliche README-/Doku-Arbeit auf Mike-Anfrage (kein Version-Bump):
-- Statistik-PDFs frisch generiert (DE+EN)
-- **Antennen-Bezeichnung korrigiert:** Kelemen DP-201510 ist Trap-Dipol
-  (Sperrkreisdipol), KEIN Faecher-Dipol. Recherche bestaetigt — Quellen:
-  WiMo (Hersteller), Funktechnik Dathe, Funkshop, DX Engineering.
-  Korrektur in `scripts/generate_plots.py`, `README.md` (DE+EN),
-  PDF-Berichte regeneriert.
-- **WSJT-X-Vergleichstabellen entfernt** — Hobby-Funker-Philosophie:
-  - DE+EN Tabellen weg, ersetzt durch lockeren Hobby-Funker-Text
-    ("Feierabend-Funk" / "after-work operator")
-  - DeepSeek-Umformulierung, Mike-validiert
-  - WSJT-X bleibt nur als Acknowledgment (Hommage)
-- **Test-Counts + Versionsnummern:** 159/162 → 407, v0.26 → v0.67
-- Karte (v0.66) + Locator-DB (v0.67) als neue Features in der Tested-Liste
+## Statistiken aktualisiert
 
-**Push insgesamt:** v0.66 (Karte) + v0.67 (LocatorDB) + Stats + README → online.
-GitHub: https://github.com/mikewanne/SimpleFT8
-
-## Architektur-Ueberblick (LocatorDB)
-
-```
-Decoder-Thread                        GUI-Thread / App-Lifecycle
-─────────────                         ─────────────────────────
-mw_cycle._handle_*                    main_window.__init__
-  ├── accumulate_stations               └── locator_db.load()
-  └── _feed_locator_db ──────┐
-                             │        main_window.closeEvent
-PSK-Worker (daemon)          │          └── locator_db.save() (atomar)
-  └── _on_psk_spots_received │
-        └── db.set("psk")    │        rx_panel._on_message
-                             ▼          └── db.get_position(call) → exakte km
-                       LocatorDB
-                       (RLock)         direction_map_widget.snapshot_to_*
-                             ▲          └── db.get_position(call) → Karte
-qso_log_init                 │
-  └── bulk_import_adif ──────┘
-```
+`scripts/generate_plots.py` ausgefuehrt — DE+EN PDFs + 8 PNGs neu generiert
+in `auswertung/` und `auswertung/en/`.
 
 ## Offen / Naechste Schritte (priorisiert)
 
-1. **Karten-Live-Test im Feld** (durch Mike) — wie viele Stationen sind nach
-   einer Stunde Funken praezise lokalisiert (prec_km <= 5)? Wieviele bleiben
-   Country-Fallback (transparente Punkte)? Disclaimer "Ø Genauigkeit: X km"
-   plausibel?
+### 🆕 Aus v0.75 hinzugekommen
 
-2. **rx_panel km-Spalte beobachten** — exakte km ohne `~`-Praefix bei DB-
-   Treffern, mit `~` bei Country-Fallback. Wenn DA1MHH oft mit JO31 gesehen
-   wird, sollte das nach App-Restart sofort exakt sein (qso_log_4 → 110 km
-   default, aber durch CQ-Decode wahrscheinlich schnell auf cq_4/cq_6).
+1. **Field-Test v0.75** — Easter-Egg → AUTO HUNT 10 Min → manueller HALT →
+   Bandwechsel-Stop → Totmann-Stop. 6 Verifikationsschritte siehe
+   `prompts/auto_hunt_v3.md` „Verifikation am Ende".
+2. **Phase 2: `btn_omni_cq`-Handler** — Button hat aktuell keinen eigenen
+   `clicked`-Handler (OMNI laeuft weiter ueber bisherige Logik). Saubere
+   mutually-exclusive Modus-Aktivierung als Phase 2.
+3. **Push v0.75 nach GitHub** (12 Commits lokal, wartet auf Mike-OK)
 
-3. **Naechste Features (TODO.md):**
-   - **B) Band-Indikatoren live mit PSK-Reporter** — 1-2 Tage. Foundation
-     `core/psk_reporter.py` steht. Brauchen `fetch_global_activity()` und
-     pulsierende Balken bei steigendem Trend.
-   - **C) Richtungs-Keulen TX-Pattern-Karte** — 2-3 Tage, USP-Killer.
-   - **D) ANT2 RX-Rescue-Keulen** — 1-2 Tage zusaetzlich auf C aufsetzbar.
+### 🔥 Aus frueheren Releases
 
-4. **Migration `main_window._psk_worker` → `core/psk_reporter`** —
-   Konsolidierung des bestehenden PSK-Workers. Separater Refactor-Commit.
+4. **Field-Test v0.74** Diversity-Bandwechsel-Bug-Fix (auch ausstehend)
+5. **Settings-Dialog auf Tabs** (1-2 h) — passt nicht auf Mike's 1440×900
+6. **Migration `main_window._psk_worker` → `core/psk_reporter`** (Konsolidierung)
 
-5. **Bug beobachten:** TX-Frequenz Normal-Modus manchmal ohne Histogramm-
-   Marker — noch nicht reproduzierbar.
+### ⚙️ Mittelfristig
 
-6. **Cleanup-Idee:** `LocatorCache` (in `direction_map_widget.py:96–131`)
-   bleibt vorerst als Fallback. Wenn alle Codepfade migriert sind, kann
-   die Klasse + Loader-Funktion komplett raus (~30 Zeilen Reduktion).
+- F) Audio-Export per Slot (<1 Tag, optional)
+- TX-Frequenz Normal-Modus manchmal ohne Histogramm-Marker (nicht reproduzierbar)
+- Even/Odd dedizierter Timer (FT2 kritisch)
+- Gain-Bias beheben (Normal-Modus Gain-Messung erzwingen)
+- Tertile-Analyse Statistik
+- AP-Lite Test-Pipeline (synthetische E2E-Tests)
+- Per-Station DT-Offset TX
+- IC-7300 Fork (TARGET_TX_OFFSET separat messen)
+- Warteliste-Screenshot (sobald DL3AQJ antwortet)
 
-## Warnungen & Fallen
+## Warnungen & Fallen (v0.75-spezifisch)
 
-- **Locator-DB bei App-Crash:** Save passiert nur bei `closeEvent`. Wenn die
-  App crasht, gehen Decodes der Session verloren. Akzeptiert — neue Session
-  laedt sie wieder rein. KEIN periodisches Auto-Save eingebaut (Hobby-Funker-
-  Konsens).
-
-- **6-stellig wird nie durch 4-stellig ueberschrieben** (Source-Priority).
-  Wenn ein Call einmal mit cq_6 in der DB ist, kann ihn auch ein psk_4 nicht
-  verdraengen — nur ein psk_6 oder cq_6 mit anderem Locator.
-
-- **`LocatorDB.get()` returnt eine Kopie** — Caller-Mutation aendert die DB
-  nicht. Wer Original-Referenz haben will: `_calls` direkt (nicht empfohlen).
-
-- **`_locator_db.set()` kann False zurueckgeben** — bei (a) ungueltigem
-  Locator (nicht durch `safe_locator_to_latlon` validierbar), (b) niedrigerer
-  Priority als bestehender Eintrag, (c) leerem Call.
-
-- **`bulk_import_directory()` laeuft synchron im Init-Thread** — bei 1000
-  ADIF-Records ~300 ms, kein UI-Freeze. Bei groesseren Logs (10k+) ggf.
-  Loading-Splash anzeigen.
+- **`_auto_hunt_timer` UNABHAENGIG vom Totmannschalter** — Maus/Tastatur
+  reset ihn NICHT (Bot-Tarn-Schutz). Nach jedem Stop ist Pflicht-Restart
+  (User-Klick), kein Auto-Resume in `_reset_presence`.
+- **Race-Doppel-Check in `select_next`** ist ethische Belt-and-suspenders
+  zur 10-Min-Hard-Cap. Auch wenn DeepSeek-R1 sagt „im single-threaded GUI
+  redundant" — NICHT entfernen.
+- **`_MAX_ATTEMPTS = 3`** in `core/auto_hunt.py:45` ist Modul-Konstante OHNE
+  Verwendung in der Klasse. 3-Versuche-Logik liegt in `qso_state.py`.
+  V3 hat das halluziniert, Plan-Mode-Verifikation hat es gefangen.
+- **`_pause_remaining` GIBT ES NICHT MEHR** (v0.75 entfernt). Falls in
+  altem Code Verweis auftaucht: durch `active=False` redundant.
+- **`btn_omni_cq` ohne `clicked`-Handler** (Phase 2 — siehe oben).
+- **Init-Race-Bug in `_update_propagation_ui`** durch `hasattr`-Guard
+  gefixt. Bei zukuenftigem Init-Refactor: saubere Reihenfolge wieder-
+  herstellen, aber Guard belassen als Defense-in-Depth.
 
 ## Test-Suite Status
 
 ```
 ./venv/bin/python3 -m pytest tests/ -q
-407 passed in ~7s
+467 passed in ~7s
 ```
 
-Neu seit v0.66:
-- `tests/test_locator_db.py` (28 Tests: CRUD, Source-Priority, Persist,
-  Threading-Stress, Slash-Calls, ADIF-Bulk-Import)
+Neu seit v0.74:
+- `tests/test_auto_hunt_extended.py` (10 Test-Funktionen, 21 Test-Cases
+  inkl. parametrized ueber 6 Stop-Reasons)
 
 ## Letzter bekannter guter Zustand
 
-- **Branch:** main, gepusht
-- **HEAD:** `0a5061a` docs: README v0.67 — Hobby-Funker-Umformulierung
-- **Tag:** kein neuer Tag heute (Mike entscheidet wann)
-- **Tests:** 407/407 gruen
-- **App-Start:** OK (`./venv/bin/python3 main.py`)
-- **JSON-Cache:** wird beim ersten Close angelegt
-  (`~/.simpleft8/locator_cache.json`)
+- **Branch:** main, lokal 12 Commits ahead vom letzten Push (`668b1ed`)
+- **HEAD:** `48f4864` docs(history): v0.75 Post-Release Hotfix dokumentiert
+- **Tag:** kein neuer Tag (Mike entscheidet nach Field-Test)
+- **Tests:** 467/467 gruen
+- **App-Start:** OK (PID 8267 lief stabil heute Vormittag)
+- **App-Version:** v0.75
+- **Backup:** `Appsicherungen/2026-04-29_vor_auto_hunt/` (214 MB)
 
 ---
 
-Morgen: `cd SimpleFT8` → `claude1` → laedt automatisch alle Memories + CLAUDE.md.
+Morgen: `cd SimpleFT8` ODER `cd FT8` → `claude1` → laedt automatisch alle Memories + CLAUDE.md.
