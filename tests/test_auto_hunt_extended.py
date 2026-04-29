@@ -225,3 +225,56 @@ def test_slot_affinity_fallback_when_no_match(qapp):
     )
     # _last_tx_even wird auf den neuen Slot aktualisiert
     assert hunt._last_tx_even is False
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Commit 9 — UI-Integration
+# ─────────────────────────────────────────────────────────────────────────────
+
+def test_control_panel_three_mode_buttons_initially_hidden(qapp):
+    """Smoke-Test: ControlPanel hat btn_omni_cq + btn_auto_hunt initial hidden."""
+    import os
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from ui.control_panel import ControlPanel
+    from config.settings import Settings
+    settings = Settings()
+    cp = ControlPanel(settings)
+
+    # btn_cq: immer sichtbar
+    assert cp.btn_cq is not None
+    assert not cp.btn_cq.isHidden(), "btn_cq muss immer sichtbar sein"
+    assert cp.btn_cq.text() == "CQ RUFEN"
+
+    # btn_omni_cq + btn_auto_hunt: initial hidden (nur via Easter-Egg)
+    assert cp.btn_omni_cq is not None
+    assert cp.btn_omni_cq.isHidden(), "btn_omni_cq muss initial hidden sein"
+    assert cp.btn_omni_cq.text() == "OMNI CQ"
+
+    assert cp.btn_auto_hunt is not None
+    assert cp.btn_auto_hunt.isHidden(), "btn_auto_hunt muss initial hidden sein"
+    assert cp.btn_auto_hunt.text() == "AUTO HUNT"
+
+    # QButtonGroup mutually exclusive ueber alle 3
+    assert cp.mode_button_group.exclusive() is True
+    assert len(cp.mode_button_group.buttons()) == 3
+
+    cp.deleteLater()
+
+
+def test_auto_hunt_timer_expiry_via_emit_triggers_stop_signal(qapp):
+    """Timer-Ablauf simuliert via direktem timeout.emit() → Stop-Signal."""
+    from core.auto_hunt import AutoHunt
+    hunt = AutoHunt()
+    received = []
+    hunt.auto_hunt_stopped.connect(lambda r: received.append(r))
+
+    hunt.start_auto_hunt(600)
+    assert hunt.active
+
+    # Timer-Ablauf simulieren (ohne 10 Min zu warten)
+    hunt._auto_hunt_timer.timeout.emit()
+
+    assert not hunt.active, "Timer-Expiry muss active=False setzen"
+    assert received == ["timer_expired"]
+    assert hunt._cooldown == {}, "timer_expired muss Cooldowns leeren"

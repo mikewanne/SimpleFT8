@@ -1045,6 +1045,10 @@ class ControlPanel(QWidget):
         self.tx_indicator = qso_card.tx_indicator
         self.btn_cq = qso_card.btn_cq
         self.btn_cq.clicked.connect(self._on_cq_clicked)
+        # v0.75: 3-Button-Layout — btn_omni_cq + btn_auto_hunt + ButtonGroup
+        self.btn_omni_cq = qso_card.btn_omni_cq
+        self.btn_auto_hunt = qso_card.btn_auto_hunt
+        self.mode_button_group = qso_card.mode_button_group
         self.presence_bar = qso_card.presence_bar
         self.qso_counter_label = qso_card.qso_counter_label
         self.btn_advance = qso_card.btn_advance

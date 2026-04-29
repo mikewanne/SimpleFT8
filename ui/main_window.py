@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
     QMainWindow, QSplitter, QWidget, QVBoxLayout,
     QMessageBox, QScrollArea, QLabel,
 )
-from PySide6.QtCore import Qt, Slot, Signal
+from PySide6.QtCore import Qt, Slot, Signal, QTimer
 
 from config.settings import Settings, BAND_FREQUENCIES
 from core.timing import FT8Timer
@@ -237,6 +237,22 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self._auto_hunt = AutoHunt()
         self._auto_hunt.set_qso_log(self.qso_log)
         self._auto_hunt.set_band(self.settings.band)
+
+        # v0.75 Auto-Hunt UI-Lifecycle
+        self._easter_egg_active: bool = False
+        self._auto_hunt_cooldown_seconds: int = 0
+        # 1s-Polling fuer Live-Countdown waehrend aktiver Session
+        self._auto_hunt_polling_timer = QTimer(self)
+        self._auto_hunt_polling_timer.setInterval(1000)
+        self._auto_hunt_polling_timer.timeout.connect(self._on_auto_hunt_polling_tick)
+        # 5s UI-Reflexions-Cooldown nach Stop (verhindert Reflex-Klick)
+        self._auto_hunt_cooldown_timer = QTimer(self)
+        self._auto_hunt_cooldown_timer.setInterval(1000)
+        self._auto_hunt_cooldown_timer.timeout.connect(self._on_auto_hunt_cooldown_tick)
+        # Signal: stop_auto_hunt(reason) → UI-Cooldown-Lifecycle
+        self._auto_hunt.auto_hunt_stopped.connect(self._on_auto_hunt_stopped)
+        # Button-Klick: start/stop_auto_hunt
+        self.control_panel.btn_auto_hunt.toggled.connect(self._on_btn_auto_hunt_toggled)
 
         # AP-Lite: Initialisieren (deaktiviert, AP_LITE_ENABLED=False)
         from core import ap_lite as _ap
@@ -512,40 +528,80 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
     # ── Easter Egg ───────────────────────────────────────────────
 
     def _on_easter_egg_toggle(self):
-        """Easter Egg: Klick auf Versionsnummer toggelt OMNI-TX-Modus.
+        """Easter Egg: Klick auf Versionsnummer zeigt/versteckt
+        OMNI CQ + AUTO HUNT Buttons im QSO-Bereich.
 
-        v0.75: wird in Commit 9 erweitert um btn_omni_cq + btn_auto_hunt
-        Sichtbarkeits-Toggle (3-Button-Layout).
+        Persistiert NICHT — jede Session beginnt mit deaktiviertem Easter-Egg.
+        btn_cq bleibt unangetastet (laeuft weiter wenn aktiv).
         """
-        if self._omni_tx.active:
-            # Deaktivieren
-            self._omni_tx.disable()
-            # Auto-Hunt-Steuerung wird in Commit 9 ueber btn_auto_hunt gefuehrt.
-            self.control_panel.update_omni_tx(False)
-            self.control_panel.btn_cq.setText("CQ RUFEN")
-            self._update_statusbar()
+        self._easter_egg_active = not self._easter_egg_active
+        if self._easter_egg_active:
+            self.control_panel.btn_omni_cq.show()
+            self.control_panel.btn_auto_hunt.show()
+            print("[Easter-Egg] OMNI CQ + AUTO HUNT Buttons verfuegbar")
         else:
-            # Aktivierungsdialog
-            msg = QMessageBox(self)
-            msg.setWindowTitle("OMNI-TX")
-            msg.setText(
-                "<b>OMNI-TX aktivieren?</b><br><br>"
-                "SimpleFT8 wechselt automatisch zwischen Even und Odd Slot.<br>"
-                "Gleiche Sendezeit, mehr Reichweite.<br>"
-                "Technisch regelkonform."
-            )
-            msg.setStandardButtons(
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel
-            )
-            msg.button(QMessageBox.StandardButton.Yes).setText("Aktivieren")
-            msg.button(QMessageBox.StandardButton.Cancel).setText("Abbrechen")
-            msg.setStyleSheet(self._msgbox_style())
-            if msg.exec() == QMessageBox.StandardButton.Yes:
-                self._omni_tx.enable()
-                # Auto-Hunt-Steuerung wird in Commit 9 ueber btn_auto_hunt gefuehrt.
-                self.control_panel.update_omni_tx(True)
-                self.control_panel.btn_cq.setText("OMNI CQ")
-                self._update_statusbar()
+            # Aktive Modi sauber stoppen
+            if self._auto_hunt.active:
+                self._auto_hunt.stop_auto_hunt("easter_egg_off")
+            if self._omni_tx.active:
+                self._omni_tx.disable()
+                self.control_panel.update_omni_tx(False)
+                self.control_panel.btn_omni_cq.setChecked(False)
+            self.control_panel.btn_omni_cq.hide()
+            self.control_panel.btn_auto_hunt.hide()
+            print("[Easter-Egg] OMNI CQ + AUTO HUNT versteckt")
+        self._update_statusbar()
+
+    # ── Auto-Hunt UI-Lifecycle (v0.75) ───────────────────────────
+
+    def _on_btn_auto_hunt_toggled(self, checked: bool):
+        """User-Klick auf btn_auto_hunt: start/stop_auto_hunt."""
+        if checked and not self._auto_hunt.active:
+            self._auto_hunt.start_auto_hunt(600)
+            self._auto_hunt_polling_timer.start()
+            self._on_auto_hunt_polling_tick()  # initialer Text-Set
+            print("[Auto-Hunt] User-Start (10 Min)")
+        elif not checked and self._auto_hunt.active:
+            self._auto_hunt.stop_auto_hunt("manual_halt")
+
+    def _on_auto_hunt_stopped(self, reason: str):
+        """Slot fuer auto_hunt_stopped(reason): startet UI-Reflexions-Cooldown.
+
+        5 Sekunden disabled-State auf btn_auto_hunt (Reflex-Klick verhindern),
+        dann zurueck zu Idle.
+        """
+        self._auto_hunt_polling_timer.stop()
+        btn = self.control_panel.btn_auto_hunt
+        # Wenn Button im checked-State (manual_halt-Klick), zurueck setzen ohne
+        # erneuten toggled-Trigger
+        btn.blockSignals(True)
+        btn.setChecked(False)
+        btn.blockSignals(False)
+        btn.setEnabled(False)
+        self._auto_hunt_cooldown_seconds = 5
+        btn.setText(f"AUTO HUNT ({self._auto_hunt_cooldown_seconds})")
+        self._auto_hunt_cooldown_timer.start()
+        print(f"[Auto-Hunt-UI] Stop ({reason}) → 5s Reflexions-Cooldown")
+
+    def _on_auto_hunt_cooldown_tick(self):
+        """1s-Tick waehrend 5s UI-Reflexions-Cooldown."""
+        self._auto_hunt_cooldown_seconds -= 1
+        btn = self.control_panel.btn_auto_hunt
+        if self._auto_hunt_cooldown_seconds > 0:
+            btn.setText(f"AUTO HUNT ({self._auto_hunt_cooldown_seconds})")
+        else:
+            btn.setText("AUTO HUNT")
+            btn.setEnabled(True)
+            self._auto_hunt_cooldown_timer.stop()
+
+    def _on_auto_hunt_polling_tick(self):
+        """1s-Polling waehrend aktiver Session: Live-Countdown auf Button."""
+        if not self._auto_hunt.active:
+            self._auto_hunt_polling_timer.stop()
+            return
+        sec = self._auto_hunt.seconds_remaining()
+        m, s = divmod(sec, 60)
+        self.control_panel.btn_auto_hunt.setText(f"AUTO HUNT — {m}:{s:02d}")
 
     # ── Propagation ──────────────────────────────────────────────
 

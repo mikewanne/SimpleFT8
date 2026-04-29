@@ -193,6 +193,9 @@ class RadioMixin:
 
     @Slot(str)
     def _on_mode_changed(self, mode: str):
+        # v0.75: aktiven Auto-Hunt bei Mode-Wechsel sofort stoppen
+        if hasattr(self, "_auto_hunt") and self._auto_hunt.active:
+            self._auto_hunt.stop_auto_hunt("mode_change")
         self.settings.set("mode", mode)
         self.timer.set_mode(mode)
         # CQ-Freq Dwell/Recalc-Intervall an neuen Modus anpassen
