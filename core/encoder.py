@@ -232,6 +232,7 @@ class Encoder(QObject):
 
         # 6. PTT an — Stille gibt 0.3-0.5s PTT-Settle-Zeit
         if self._radio:
+            self._radio.set_tx_antenna("ANT1")
             self._radio.ptt_on()
 
         self.tx_started.emit(message)

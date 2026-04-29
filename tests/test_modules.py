@@ -736,6 +736,46 @@ def test_encoder_ft2_length():
     assert len(audio) == 45600, f"FT2 erwartet 45600, got {len(audio)}"
 
 
+def test_encoder_transmit_sets_ant1_before_ptt_on(monkeypatch):
+    """Hardware-Pflicht: Encoder ruft set_tx_antenna('ANT1') VOR ptt_on().
+
+    ANT2 (Regenrinne) darf NIEMALS TX-Antenne sein → Hardware-Schaden moeglich.
+    """
+    import time
+    import numpy as np
+    from unittest.mock import MagicMock
+    from core.encoder import Encoder
+
+    enc = Encoder(audio_freq_hz=1500)
+    radio = MagicMock()
+    enc.set_radio(radio)
+    enc._is_transmitting = True  # damit Abort-Check im Worker nicht greift
+
+    # Mock encode_message zu Dummy-Audio (vermeidet ft8lib-Aufruf)
+    enc.encode_message = lambda msg: np.zeros(180000, dtype=np.int16)
+
+    # Slot-Boundary in Vergangenheit → kein Sleep
+    monkeypatch.setattr(enc, "_next_slot_boundary", lambda: time.time() - 0.1)
+    monkeypatch.setattr("time.sleep", lambda s: None)
+
+    # _tx_worker_inner direkt aufrufen (kein Thread → deterministisch)
+    enc._tx_worker_inner("CQ DA1MHH JO31")
+
+    method_names = [c[0] for c in radio.method_calls]
+    assert "set_tx_antenna" in method_names, "set_tx_antenna wurde nicht gerufen"
+    assert "ptt_on" in method_names, "ptt_on wurde nicht gerufen"
+    set_idx = method_names.index("set_tx_antenna")
+    ptt_idx = method_names.index("ptt_on")
+    assert set_idx < ptt_idx, (
+        f"set_tx_antenna muss VOR ptt_on aufgerufen werden "
+        f"(set_idx={set_idx}, ptt_idx={ptt_idx})"
+    )
+    set_call = radio.method_calls[set_idx]
+    assert set_call.args == ("ANT1",), (
+        f"Expected set_tx_antenna('ANT1'), got {set_call}"
+    )
+
+
 # ── Decoder Protocol Switch ──────────────────────────────────────────────────
 
 def test_decoder_slot_samples_ft8():

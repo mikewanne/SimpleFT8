@@ -80,6 +80,7 @@ class TXMixin:
                 self._tune_freq_mhz = self.settings.frequency_mhz
                 print(f"[Tune] Kein Offset-Wert fuer {self.settings.band}/{self.settings.mode} "
                       f"— tune auf Arbeitsfrequenz")
+            self.radio.set_tx_antenna("ANT1")
             self.radio.tune_on()
             self._update_statusbar()
             display_freq = tune_freq if tune_freq is not None else self.settings.frequency_mhz
