@@ -757,10 +757,10 @@ class _QSOStatusCard(QFrame):
         rxtx_row.addStretch()
         lay.addLayout(rxtx_row)
 
-        self.btn_cq = QPushButton("CQ RUFEN")
-        self.btn_cq.setCheckable(True)
-        self.btn_cq.setFixedHeight(26)
-        self.btn_cq.setStyleSheet(
+        # 3-Button-Layout (v0.75): CQ RUFEN immer sichtbar, OMNI CQ + AUTO HUNT
+        # nur via Easter-Egg-Toggle (Klick auf Versionsnummer). TUNE-Button ist
+        # SEPARAT und gehoert NICHT zur QButtonGroup — eigene setEnabled-Steuerung.
+        _mode_btn_style = (
             f"QPushButton {{ background: rgba(120,0,0,0.45); color: #CC8888; "
             f"border: 1px solid rgba(180,50,50,0.5); border-radius: 5px; "
             f"font-size: 12px; font-weight: bold; font-family: {_FONT}; }}"
@@ -770,7 +770,37 @@ class _QSOStatusCard(QFrame):
             f"QPushButton:disabled {{ background: #2a2a2a; color: #666666; "
             f"border: 1px solid #444444; }}"
         )
-        lay.addWidget(self.btn_cq)
+
+        self.btn_cq = QPushButton("CQ RUFEN")
+        self.btn_cq.setCheckable(True)
+        self.btn_cq.setFixedHeight(26)
+        self.btn_cq.setStyleSheet(_mode_btn_style)
+
+        self.btn_omni_cq = QPushButton("OMNI CQ")
+        self.btn_omni_cq.setCheckable(True)
+        self.btn_omni_cq.setFixedHeight(26)
+        self.btn_omni_cq.setStyleSheet(_mode_btn_style)
+        self.btn_omni_cq.hide()  # nur via Easter-Egg sichtbar
+
+        self.btn_auto_hunt = QPushButton("AUTO HUNT")
+        self.btn_auto_hunt.setCheckable(True)
+        self.btn_auto_hunt.setFixedHeight(26)
+        self.btn_auto_hunt.setStyleSheet(_mode_btn_style)
+        self.btn_auto_hunt.hide()  # nur via Easter-Egg sichtbar
+
+        # Mutually exclusive: nur einer kann aktiv sein.
+        self.mode_button_group = QButtonGroup(self)
+        self.mode_button_group.setExclusive(True)
+        self.mode_button_group.addButton(self.btn_cq)
+        self.mode_button_group.addButton(self.btn_omni_cq)
+        self.mode_button_group.addButton(self.btn_auto_hunt)
+
+        mode_row = QHBoxLayout()
+        mode_row.setSpacing(4)
+        mode_row.addWidget(self.btn_cq)
+        mode_row.addWidget(self.btn_omni_cq)
+        mode_row.addWidget(self.btn_auto_hunt)
+        lay.addLayout(mode_row)
 
         # Operator Presence Balken (Totmannschalter)
         # Fest 15 Min, nicht konfigurierbar, gesetzliche Pflicht (DE)
