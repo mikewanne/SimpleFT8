@@ -96,6 +96,47 @@ explizit + Disclaimer (Modal, OK/Abbruch, OK = App startet, Abbruch =
 
 ## Offen / Naechste Schritte (priorisiert)
 
+### 🚀 v0.78 OMNI-TX — Workflow gestartet (2026-04-30)
+
+**Status:** Schritt 0 (Code-Verifikation) abgeschlossen, V1-Entwurf als naechstes.
+
+**Backup:** `Appsicherungen/2026-04-30_vor_omni_implementierung/` (1.2 GB)
+
+**Design-Spec:** `docs/OMNI_TX_DESIGN.md` v3.2 — vollstaendige permanente
+Spec mit 14 Sektionen. CLAUDE.md verweist drauf.
+
+**Wichtige Befunde aus Schritt 0:**
+- OMNI-TX ist **bereits zu ~70% verkabelt** im Codebase (vermutlich
+  v0.50-v0.60). Logik-Schicht in `core/omni_tx.py` komplett vorhanden.
+- 7 Hooks bereits da: Singleton-Init, should_tx(), on_qso_started(),
+  advance() pro Cycle, Easter-Egg-Disable, Statusbar-Anzeige, Buttons.
+- 8 Lucken zu schliessen — alle mit Datei:Zeile-Verweis dokumentiert
+  in `docs/OMNI_TX_DESIGN.md` Sektion 14.
+- Geschaetzter Aufwand: ~425 Zeilen, ~4-5 h, 6-8 atomare Commits.
+- Auto-Hunt wird ebenfalls mode-coupled (Diversity-only) — Konsistenz
+  mit OMNI-Strategie. Easter-Egg bleibt Test-Override fuer Mike.
+
+**Naechste Workflow-Schritte (nach `docs/WORKFLOW.md` v1.1):**
+1. Schritt 1a — V1 schreiben (`prompts/omni_v1.md`)
+2. Schritt 1b/c — Self-Review → V2
+3. Schritt 2 — DeepSeek-R1-Review
+4. Schritt 2.5 — R1-Findings gegen Code verifizieren
+5. Schritt 3 — V3 schreiben + Mike vorlegen
+6. Schritt 4 — Mike-Freigabe
+7. Schritt 5 — Implementation in atomaren Commits
+8. Schritt 5b — Final-R1-Codereview
+9. Schritt 6 — Lessons-Learned
+
+**Mike's Design-Entscheidungen** (festgehalten in `docs/OMNI_TX_DESIGN.md`):
+- UI-Logik mode-gekoppelt (Normal: btn_cq sichtbar; Diversity:
+  btn_omni_cq + btn_auto_hunt sichtbar)
+- Easter-Egg = Test-Bypass nur fuer Mike, nicht GitHub-publik
+- Direkt-Toggle (KEIN Aktivierungsdialog — siehe Memory
+  feedback_disclaimer_no_threat.md)
+- 4 Stop-Reasons: manual_halt, band_change, mode_change, totmann_expired
+- block_cycles=80 (Plan v3.2, aktueller Code-Default 40 wird angepasst)
+- Mutually-exclusive zwischen Auto-Hunt und OMNI im 2-Button-Layout
+
 ### 🆕 Aus v0.76-Field-Test — geplant als v0.78 Bug-Cleanup-Block
 
 1. **🟡 RX-Tag waehrend Diversity-Kalibrierung** — alle Eintraege als „A1"

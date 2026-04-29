@@ -373,3 +373,83 @@ Implementation folgt dem **WORKFLOW.md v1.1** Pflicht-Pfad. Code-Aenderungen
 gehen ueber V1 → V2 → DeepSeek-R1 → V3 → Mike-Freigabe. Diese Design-Spec
 ist das Eingangsdokument fuer V1 — V1 zitiert konkret die Sektionen 1-13
 mit Datei:Zeile-Verweisen.
+
+---
+
+## 14. Schritt-0-Code-Verifikation (2026-04-30)
+
+**Wichtigste Erkenntnis:** OMNI-TX ist bereits zu **~70% verkabelt** im
+Codebase (vermutlich von einer frueheren Implementation v0.50-v0.60). Die
+Logik-Schicht in `core/omni_tx.py` ist komplett vorhanden, und die
+Integrations-Hooks sind groesstenteils implementiert.
+
+### Bereits verkabelte Hooks (verifiziert)
+
+| Hook | Datei:Zeile | Was es tut |
+|---|---|---|
+| OmniTX-Singleton-Init | `ui/main_window.py:230-232` | `from core import omni_tx; self._omni_tx = _omni.get_instance(block_cycles=_block_cycles)` |
+| `should_tx()` + `tx_even` setzen | `ui/mw_qso.py:223-242` | Pro CQ-Send-Trigger: should_tx() → bei RX-Slot return ohne TX, bei TX-Slot Encoder-Paritaet setzen |
+| `on_qso_started()` | `ui/mw_qso.py:178` | Counter-Reset bei QSO-Start |
+| `advance(qso_active)` pro Cycle | `ui/mw_cycle.py:494` | Slot-Index inkrementieren, Block-Wechsel ggf. ausloesen |
+| Easter-Egg-Disable | `ui/main_window.py:546-548` | `if self._omni_tx.active: self._omni_tx.disable(); self.control_panel.update_omni_tx(False)` |
+| Statusbar-Anzeige Ω + Counter | `ui/main_window.py:760-762` | `f"  Ω Even={self._omni_tx.cq_even_count} Odd={self._omni_tx.cq_odd_count}"` |
+| `control_panel.update_omni_tx(False)` | UI-Update-Methode | bestehend |
+| 3-Button-Layout `btn_cq` / `btn_omni_cq` / `btn_auto_hunt` | `ui/control_panel.py:774-802` | QButtonGroup mutually exclusive |
+
+### Was fehlt fuer v0.78 (8 Punkte)
+
+| # | Lücke | Datei | Aufwand |
+|---|---|---|---|
+| 1 | `btn_omni_cq.clicked` Handler `_on_btn_omni_cq_toggled` | `ui/main_window.py` (analog `:255` Auto-Hunt) | ~10 Z. |
+| 2 | OmniTX → QObject mit `omni_stopped(reason)` Signal | `core/omni_tx.py` | ~15 Z. |
+| 3 | Zentralisierte `stop_omni_tx(reason)` Methode | `core/omni_tx.py` | ~20 Z. |
+| 4 | Mode-Coupling (Buttons mode-abhaengig statt Easter-Egg-only) | `ui/main_window.py` `_on_easter_egg_toggle` + `_on_mode_changed` umbauen | ~30 Z. |
+| 5 | Stop bei `band_change` | `ui/mw_radio.py:259` `_on_band_changed` (analog Auto-Hunt `:297-299`) | ~5 Z. |
+| 6 | Stop bei `mode_change` | `ui/mw_radio.py:195` `_on_mode_changed` (analog Auto-Hunt `:197-198`) | ~3 Z. |
+| 7 | Stop bei `totmann_expired` (ausser laufendes QSO) | `ui/main_window.py:836-849` `_on_presence_tick` (analog Auto-Hunt) | ~5 Z. |
+| 8 | `block_cycles` Default 40 → 80 (Plan v3.2) | `core/omni_tx.py:54` | 1 Z. |
+
+### Zusatz-Aufgabe — Auto-Hunt mode-coupled (Plan v0.78)
+
+Auto-Hunt war bisher Easter-Egg-only (sichtbar nach Versions-Klick, modus-
+agnostisch). Wird in v0.78 ebenfalls Diversity-only Feature:
+
+| Lücke | Datei | Aufwand |
+|---|---|---|
+| Auto-Hunt-Buttons mode-coupled (sichtbar nur in Diversity) | `ui/main_window.py` `_on_mode_changed` | ~20 Z. |
+| Easter-Egg = Test-Override fuer Mike behalten | `ui/main_window.py` `_on_easter_egg_toggle` | ~5 Z. |
+
+### Geschaetzter Gesamtaufwand
+
+| Block | Code-Zeilen | Aufwand |
+|---|---|---|
+| OMNI-Implementation (8 Punkte) | ~250 | ~2-3 h |
+| Auto-Hunt-Coupling | ~25 | ~30 min |
+| Tests (Unit + Integration) | ~150 | ~1-1.5 h |
+| **Gesamt** | **~425** | **~4-5 h** |
+
+→ **Deutlich kleiner als v0.75 Auto-Hunt-Implementation** (10 Commits, ~600
+Zeilen) weil OMNI-Logik-Schicht schon da ist.
+
+### Erkannte Risiko-Pfade fuer V1/V2/V3
+
+1. **Easter-Egg-Logik bestehend** (`main_window.py:530-557`) — wird
+   umstrukturiert. Mike testet weiterhin via Versions-Klick.
+2. **`_on_mode_changed` in `mw_radio.py:195`** und **`mw_radio.py:_on_mode_changed`
+   in `main_window.py`** — vermutlich zwei separate Handler die koordiniert
+   werden muessen.
+3. **Race-Conditions:** Bandwechsel mid-Pos1, Mode-Wechsel mid-Block,
+   QSO mid-Pending-Switch — alle in Sektion 13 als Edge-Cases dokumentiert.
+4. **Test-Strategie:** OmniTX als QObject braucht QApplication-Fixture
+   (analog `tests/test_auto_hunt_extended.py`).
+
+### Stand am Ende von Schritt 0
+
+✅ Alle relevanten Files gelesen + verifiziert
+✅ Existing-Strukturen identifiziert (70% schon da)
+✅ Luecken-Liste mit Datei:Zeile-Verweisen
+✅ Aufwand-Schaetzung realistisch
+✅ Risiko-Pfade benannt
+✅ Memory-Lessons (R1-Files-Attachment, Disclaimer-Ton, QMessageBox-vs-QDialog) im Hinterkopf
+
+→ **Bereit fuer Schritt 1a (V1 schreiben).**
