@@ -436,10 +436,16 @@ Speicherung: ~/.simpleft8/dt_corrections.json → Key "FT8_20m" (pro Modus+Band)
 
 ## ⛔ Statistik-Veröffentlichung — Regel
 
-- **Kein Push anderer Bänder ohne ausreichende Datenbasis** — Minimum: Normal + Diversity_Standard
-  + Diversity_Dx je ≥ 2 Messtage, Stunden über den ganzen Tag verteilt (mind. 06–22 UTC).
+- **Minimum (Push erlaubt):** Normal + Diversity_Standard + Diversity_Dx je ≥ 2 Messtage,
+  Stunden über den ganzen Tag verteilt (mind. 06–22 UTC).
+- **Soll fuer solide Aussage (Mike+Claude+R1 2026-04-29):** **5 Tage flaechendeckend**
+  pro Stunde-Modi-Slot, Tage ueber 2-4 Wochen verteilt (Solar-Variation glaetten).
+  Lueckenfreie Slot-Abdeckung schlaegt mehr-Tage-mit-Luecken.
+- **7 Tage Goldstandard:** explizit verworfen — nur ~15% Standard-Error-Reduktion
+  gegenueber 5, ~5 Wochen Aufwand vs ~3 Wochen. Diminishing Returns klar erreicht.
+  Overengineering im Hobby-Kontext.
 - **Auswertungs-Methodik:** Pooled Mean über ALLE Messzyklen aller Messtage und Tageszeiten —
-  kein Stunden-Filter. Je mehr Tage, desto stabiler. Monatlich wachsende Datenbasis.
+  kein Stunden-Filter. Monatlich wachsende Datenbasis.
 - Ergebnis 40m FT8 (Pooled Mean, global, Stand 25.04.2026): Diversity Standard +88%, Diversity DX +123%.
 
 ---

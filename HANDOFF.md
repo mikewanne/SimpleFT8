@@ -73,21 +73,47 @@ in `auswertung/` und `auswertung/en/`.
 
 ## Offen / Naechste Schritte (priorisiert)
 
-### 🆕 Aus v0.75 hinzugekommen
+### 🆕 Aus v0.76 hinzugekommen
 
-1. **Field-Test v0.75** — Easter-Egg → AUTO HUNT 10 Min → manueller HALT →
+1. **20m FT8 Datensammlung — Ziel: 5 Tage flaechendeckend**
+   (Mike+Claude+R1 abgestimmt 2026-04-29, dokumentiert in
+   `prompts/...` zukuenftig).
+
+   **Status (Stand 2026-04-29):** 2-3 Tage je Stunde-Modi-Slot, mit Luecken
+   (z.B. Stunde 13 UTC bei Diversity_Normal = 0 Tage).
+
+   **Ziel:** alle 24 Stunden × 3 Modi (Normal, Diversity_Normal,
+   Diversity_Dx) auf **5 Tage flaechendeckend** (nicht 7 — siehe
+   R1-Diskussion: Diminishing Returns ab 5, 7 Tage = Overengineering
+   fuer Hobby-Aufwand).
+
+   **Strategie:** „Welcher-Modus-jetzt"-Ratgeber (Claude liest
+   `statistics/<Modus>/20m/FT8/*.md`-Files, zaehlt Tage je Stunde,
+   schlaegt schwaechsten Slot vor). Lueckenliste schlaegt mehr-Tage-an-
+   bekannter-Stelle.
+
+   **Aufwand:** ~3 Wochen Funkbetrieb (3-4 h/Tag, durchwechseln).
+
+   **Goldstandard 7 Tage:** explizit verworfen — nur 15% Standard-Error-
+   Reduktion gegenueber 5, ~5 Wochen Aufwand. Hobby-Aufwand-Nutzen-Ratio
+   stimmt nicht.
+
+2. **Field-Test v0.75** — Easter-Egg → AUTO HUNT 10 Min → manueller HALT →
    Bandwechsel-Stop → Totmann-Stop. 6 Verifikationsschritte siehe
    `prompts/auto_hunt_v3.md` „Verifikation am Ende".
-2. **Phase 2: `btn_omni_cq`-Handler** — Button hat aktuell keinen eigenen
+3. **Phase 2: `btn_omni_cq`-Handler** — Button hat aktuell keinen eigenen
    `clicked`-Handler (OMNI laeuft weiter ueber bisherige Logik). Saubere
    mutually-exclusive Modus-Aktivierung als Phase 2.
-3. **Push v0.75 nach GitHub** (12 Commits lokal, wartet auf Mike-OK)
+4. **Reset-Vervollstaendigung in `SettingsDialog._reset_defaults`**
+   (R1-Final-Review v0.76, out-of-scope) — `radio_ip`, `language`,
+   `stats_cb`, `debug_console_cb` werden aktuell NICHT zurueckgesetzt.
+5. **Push v0.75 + v0.76 nach GitHub** (~14 Commits lokal, wartet auf
+   Mike-OK)
 
 ### 🔥 Aus frueheren Releases
 
-4. **Field-Test v0.74** Diversity-Bandwechsel-Bug-Fix (auch ausstehend)
-5. **Settings-Dialog auf Tabs** (1-2 h) — passt nicht auf Mike's 1440×900
-6. **Migration `main_window._psk_worker` → `core/psk_reporter`** (Konsolidierung)
+6. **Field-Test v0.74** Diversity-Bandwechsel-Bug-Fix (auch ausstehend)
+7. **Migration `main_window._psk_worker` → `core/psk_reporter`** (Konsolidierung)
 
 ### ⚙️ Mittelfristig
 
