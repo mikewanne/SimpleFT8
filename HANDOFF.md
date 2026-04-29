@@ -73,6 +73,36 @@ in `auswertung/` und `auswertung/en/`.
 
 ## Offen / Naechste Schritte (priorisiert)
 
+### 🆕 Aus v0.76-Field-Test (29.04.2026 — Mike beobachtet)
+
+**Geplant als v0.77 Bug-Fix-Release** (3 atomare Commits, alle trivial-Pfad-tauglich):
+
+1. **🟡 Bug:** RX-Tabelle zeigt waehrend Diversity-Kalibrierung alle Eintraege
+   als „A1" — Hardware schaltet aber laut `dx_tune_dialog._schedule[step]`
+   zwischen ANT1/ANT2. Tag-Logik im DX-Tune-Pfad
+   (`ui/mw_cycle.py:_handle_dx_tune_mode` oder `ui/dx_tune_dialog.feed_cycle`)
+   bekommt aktive Antenne nicht mit. Fix: `msg.antenna = self._schedule[
+   self._step][0]` vor `add_message()` setzen. Nach Kalibrierung wieder
+   korrekt — also UI-only-Bug, Mess-Algorithmus ist sauber.
+   (~5 Zeilen)
+
+2. **🟠 UX:** Bestaetigungsfenster „Kalibrierung abgeschlossen"
+   (`ui/mw_radio.py:_show_calibration_done`, Z.925) ist explizit
+   `setWindowModality(NonModal)` + nur `dlg.show()`, kein
+   `WindowStaysOnTopHint`. Folge: Klick auf Hauptapp → Dialog wandert in
+   Hintergrund, Bestaetigung bleibt offen aber unsichtbar. Fix:
+   `setModal(True)` + `Qt.WindowStaysOnTopHint` + `dlg.exec()`.
+   Kommentar „blockiert nichts" ist irrefuehrend — Decoder-Thread laeuft
+   eh weiter, nur User-Interaktion blockiert. (~3 Zeilen)
+
+3. **🔴 Hardware-Schutz:** App-Start Warn-Dialog mit OK/Abbruch ergaenzen.
+   Inhalt: „ANT1 = IMMER TX, ANT2 = IMMER nur RX. TX auf ANT2 = Hardware-
+   Schaden moeglich." OK → App startet normal. Abbruch → `sys.exit(0)`.
+   Pflicht-Acknowledgment pro App-Start. Mike+Claude einig: 2-Sekunden-
+   Klick-Aufwand vertretbar gegen irreversiblen PA-Schaden, keine
+   „heute-nicht-mehr-zeigen"-Checkbox (wuerde Schutz unterminieren).
+   Position in `main.py` vor `MainWindow.show()`. (~10-15 Zeilen)
+
 ### 🆕 Aus v0.76 hinzugekommen
 
 1. **20m FT8 Datensammlung — Ziel: 5 Tage flaechendeckend**
