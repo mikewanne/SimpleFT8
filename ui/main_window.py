@@ -230,7 +230,7 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         from core import omni_tx as _omni
         _block_cycles = max(10, self.settings.get("diversity_operate_cycles", 80) // 2)
         self._omni_tx = _omni.get_instance(block_cycles=_block_cycles)
-        self.control_panel.omni_tx_clicked.connect(self._on_omni_tx_easter_egg)
+        self.control_panel.easter_egg_toggle_clicked.connect(self._on_easter_egg_toggle)
 
         # Auto-Hunt: Initialisieren (deaktiviert, zusammen mit OMNI-TX)
         from core.auto_hunt import AutoHunt
@@ -511,8 +511,12 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
 
     # ── Easter Egg ───────────────────────────────────────────────
 
-    def _on_omni_tx_easter_egg(self):
-        """Easter Egg: OMNI-TX via Klick auf Versionsnummer aktivieren/deaktivieren."""
+    def _on_easter_egg_toggle(self):
+        """Easter Egg: Klick auf Versionsnummer toggelt OMNI-TX-Modus.
+
+        v0.75: wird in Commit 9 erweitert um btn_omni_cq + btn_auto_hunt
+        Sichtbarkeits-Toggle (3-Button-Layout).
+        """
         if self._omni_tx.active:
             # Deaktivieren
             self._omni_tx.disable()

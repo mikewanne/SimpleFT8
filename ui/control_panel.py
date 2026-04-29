@@ -905,7 +905,7 @@ class ControlPanel(QWidget):
     dx_preset_changed = Signal(str)
     tx_level_changed = Signal(int)
     preamp_changed = Signal(bool)           # Legacy, nicht mehr genutzt
-    omni_tx_clicked = Signal()             # Easter Egg: Klick auf Versionsnummer
+    easter_egg_toggle_clicked = Signal()   # Easter Egg: Klick auf Versionsnummer
     rx_mode_changed = Signal(str)
     settings_clicked = Signal()
     einmessen_clicked = Signal()
@@ -1050,7 +1050,7 @@ class ControlPanel(QWidget):
             "border: none; background: transparent;"
         )
         self._version_label.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._version_label.mousePressEvent = lambda e: self.omni_tx_clicked.emit()
+        self._version_label.mousePressEvent = lambda e: self.easter_egg_toggle_clicked.emit()
         self._version_row.addStretch()
         self._version_row.addWidget(self._omni_symbol)
         self._version_row.addWidget(self._version_label)
