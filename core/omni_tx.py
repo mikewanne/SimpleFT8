@@ -16,11 +16,8 @@ Konzept:
   Position 3: RX
   Position 4: RX  ← extra Hörslot für sauberen Übergang
 
-Block-Wechsel nach block_cycles Zyklen (default: diversity_cycles // 2).
+Block-Wechsel nach block_cycles Zyklen (Plan v3.2 Default: 80).
 Bei QSO-Start: Zähler zurücksetzen (aktueller Block läuft weiter).
-
-TODO: KOMPLETT DEAKTIVIERT — scharfschalten erst nach Feldtest!
-      Aktivierung nur via Easter Egg (Klick auf Versionsnummer in GUI).
 """
 
 from __future__ import annotations
@@ -28,37 +25,43 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-logger = logging.getLogger(__name__)
+from PySide6.QtCore import QObject, Signal
 
-# ─────────────────────────────────────────────────────────────────────────────
-# FEATURE FLAG — NIEMALS True setzen ohne explizite Aktivierung via Easter Egg
-OMNI_TX_ENABLED: bool = False
-# ─────────────────────────────────────────────────────────────────────────────
+logger = logging.getLogger(__name__)
 
 # 5-Slot-Muster: True=TX, False=RX
 # Gilt für beide Blöcke — der Unterschied ist nur die Startparität (even/odd)
 _TX_PATTERN = [True, True, False, False, False]
 
 
-class OmniTX:
+class OmniTX(QObject):
     """OMNI-TX Controller — Slot-Rotation für Even+Odd CQ.
 
-    Verwendung (wenn aktiviert):
-        omni = OmniTX(block_cycles=40)
+    Erbt von QObject damit Signal-Emit (omni_stopped) sauber funktioniert
+    und Qt-Lifecycle (deleteLater etc.) greift.
+
+    Verwendung:
+        omni = OmniTX(block_cycles=80)
         # Zu Beginn jedes Zyklus:
         if omni.active and not omni.should_tx():
             skip_tx_this_cycle()
         omni.advance(qso_active=qso_sm.is_busy())
     """
 
-    def __init__(self, block_cycles: int = 40):
+    # Qt-Signal: wird bei JEDEM stop_omni_tx(reason) emittiert.
+    # Reasons: "manual_halt", "band_change", "ft_mode_change",
+    #          "rx_mode_change", "totmann_expired", "easter_egg_off",
+    #          "superseded"
+    omni_stopped = Signal(str)
+
+    def __init__(self, block_cycles: int = 80):
         """
         Args:
             block_cycles: Zyklen pro Block vor dem Wechsel.
-                          Empfohlen: settings.diversity_operate_cycles // 2
-                          Default 40 = halbe Standard-Diversity (80 // 2)
+                          Plan v3.2: 80 (entspricht diversity_operate_cycles Default).
         """
-        self.active: bool = False       # True erst nach Easter-Egg-Aktivierung
+        super().__init__()
+        self.active: bool = False
         self.block: int = 1             # Aktueller Block (1 oder 2)
         self.block_cycles: int = max(10, block_cycles)
         self._cycle_count: int = 0      # Zyklen im aktuellen Block
