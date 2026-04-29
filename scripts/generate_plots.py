@@ -1121,20 +1121,12 @@ def create_diversity_diagram(band: str, protocol: str, output_dir: Path,
         if patch:
             handles.append(patch)
 
-        # Error-Bars (Tag-zu-Tag-Variabilität) nur wenn mehrere Messtage vorhanden
-        err_x, err_mean, err_lo, err_hi = [], [], [], []
-        for idx, h in enumerate(all_hours):
-            if h not in agg or agg[h]["n_days"] < 2:
-                continue
-            a = agg[h]
-            err_x.append(x_pos[idx])
-            err_mean.append(a["mean"])
-            err_lo.append(max(0.0, a["mean"] - a["min"]))
-            err_hi.append(max(0.0, a["max"] - a["mean"]))
-        if err_x:
-            ax.errorbar(err_x, err_mean, yerr=[err_lo, err_hi], fmt="none",
-                        ecolor=DARK_FG, alpha=0.55, capsize=2.5,
-                        elinewidth=0.9, zorder=4)
+        # Error-Bars wurden in v0.77 entfernt (vorher: Min/Max-Range pro Stunde).
+        # Begruendung: Bars vermischten Modus-Volatilitaet mit Tag-Conditions
+        # (Confounder), waren bei ungleicher Stichprobengroesse zwischen Modi
+        # statistisch unfair und gaben den Anschein von Praezision den die
+        # Mess-Methodik nicht hergibt. Pooled Mean ueber 4-5+ Tage spricht
+        # fuer sich.
 
     any_rescue = False
     for mode in ["Diversity_Normal", "Diversity_Dx"]:
