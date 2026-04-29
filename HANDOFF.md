@@ -17,133 +17,117 @@ ANT2 mit 100 W = Hardware-Schaden moeglich (PA, Antennen-Pfad).
 | AUTO HUNT (aktiv, v0.75) | **ANT1** |
 | Diversity RX-Pattern | beide RX, **TX nur ueber ANT1** |
 
-**Im Code (v0.75):** `set_tx_antenna("ANT1")` zentral abgesichert in
-`Encoder.transmit()` (vor `ptt_on()`) UND vor jedem `tune_on()`-Aufruf
-(`mw_tx.py:83`, `mw_radio.py:896/993/1078`, `dx_tune_dialog.py:192/320/382`).
+**Im Code (v0.75/v0.77):** `set_tx_antenna("ANT1")` zentral abgesichert in
+`Encoder.transmit()` (vor `ptt_on()`) UND vor jedem `tune_on()`-Aufruf.
+**v0.77 Pflicht-Acknowledgment-Dialog beim App-Start** zeigt die Regel
+explizit + Disclaimer (Modal, OK/Abbruch, OK = App startet, Abbruch =
+`sys.exit(0)`).
 
 ---
 
-## 2026-04-29 (v0.75) — Auto-Hunt-Modus + Hotfix
+## 2026-04-29 (v0.77) — App-Start Hardware-Dialog + Statistik-Methodik
 
-## Heute erledigt
+## Heute erledigt (chronologisch)
 
-**v0.75 Auto-Hunt-Modus** — Easter-Egg-aktivierter 10-Min-Auto-Hunt mit
-Slot-Affinitaet, Race-Doppel-Check, ANT1-Pflicht zentralisiert, 6 Stop-Reasons,
-5s UI-Reflexions-Cooldown, Defense-in-Depth Totmann-Hook.
+**Vormittag — v0.76 Settings-Tabs (1440×900-Display-Fix):**
+- `ui/settings_dialog.py` von 6 GroupBoxen auf 4-Tab-`QTabWidget`
+- 4 Tabs: „Station" / „TX & Schutz" / „FT8 & Diversity" / „Daten & Tools"
+- Tab-Stylesheet nur auf das Widget (kein Konflikt mit Dialog-CSS)
+- Hoehen-Sizing via `adjustSize()` + `resize`-Fallback (max 750 px)
+- `closeEvent()` stoppt `_tx_status_timer` (Defense-in-Depth)
+- 5 Smoke-Tests in `tests/test_settings_dialog_smoke.py`
+- Workflow V1→V2→V3 voll durchlaufen, R1-Final-Codereview
+- 4 atomare Commits
 
-**11 atomare Commits + 1 Hotfix:**
-1. `fac60a0` ANT1-Guard in Encoder.transmit() + mw_tx.tune_on()
-2. `385425a` AutoHunt → QObject (Signal-Foundation)
-3. `b96ace2` enable/disable + _pause_remaining entfernt
-4. `808de12` start/stop_auto_hunt + Signal + 10-Min-Timer (+5 Tests)
-5. `4e6998e` Slot-Affinitaet + Race-Doppel-Check (+3 Tests)
-6. `70ef451` Totmann-Hook → stop_auto_hunt("totmann_expired")
-7. `7c6093b` Signal-Rename omni_tx → easter_egg_toggle
-8. `ea7ea6e` 3-Button-Layout im QSO-Bereich
-9. `81a610c` UI-Lifecycle (Easter-Egg + Countdown + 5s UI-Cooldown)
-10. `75f0376` chore(release): v0.75
-11. `f6d30ab` **Hotfix:** Init-Race-Guard fuer `_update_propagation_ui`
-    (Latent-Bug, beim v0.75-Restart aufgetaucht)
-12. `48f4864` HISTORY: Hotfix dokumentiert
+**Mittag — WORKFLOW.md v1.1 universalisiert:**
+- Verschaerfte R1-Rollenanweisung (5 kritische Regeln statt 1)
+- Schritt 2.5 NEU: R1-Findings gegen Code verifizieren (Pflicht)
+- Schritt 5b NEU: Final-R1-Codereview als Pflicht-Schritt
+- Schritt 6 NEU: Lessons-Learned (3 Fragen + Memory-Update)
+- Universalisierung: Projekt-Variablen statt SimpleFT8-Hardcodes
+  (Geltungsbereich auf alle Mike-Projekte erweitert)
+- Mini-CHANGELOG fuer Nachvollziehbarkeit
 
-**Workflow:** V1 → V2 (Self-Review, 12 Schwachstellen erkannt) → DeepSeek-R1
-(31 Findings, 12 angenommen, 5 begruendet abgelehnt) → V3 → Plan-Mode-
-Verifikation (1 echte Luecke `mw_tx.py:83`, 1 V3-Halluzination `_MAX_ATTEMPTS=3`)
-→ 10 atomare Commits → R1-Final-Review (1 echtes Finding integriert).
+**Nachmittag — 20m FT8 Datensammlung-Ziel diskutiert (Mike+Claude+R1):**
+- Mike+R1 einig: **5 Tage flaechendeckend** statt 7-Tage-Goldstandard
+- Begruendung: Diminishing Returns 5→7 nur ~15% SE-Reduktion bei doppelt
+  so viel Aufwand. „5 Tage mit Luecken < 4 Tage flaechendeckend" —
+  Lueckenliste schlaegt Mehr-Tage-an-bekannter-Stelle.
+- Lueckenfuell-Strategie: nach Stundenliste pro Modus, schwaechster Slot
+  zuerst.
+- In CLAUDE.md (Statistik-Veroeffentlichung) und HANDOFF dokumentiert.
 
-**Tests:** 446 → **467 gruen** (+21 dank parametrize-Bonus ueber 6 Stop-Reasons).
+**Spaetnachmittag — v0.77 Bug-Fix-Release (2 Punkte aus v0.76-Field-Test):**
+- Min/Max-Error-Bars in PDF-Berichten **entfernt** (vermischten
+  Modus-Volatilitaet mit Tag-Conditions als Confounder, bei ungleicher
+  Stichprobengroesse statistisch unfair).
+- App-Start Hardware-Dialog mit Pflicht-Acknowledgment + Disclaimer
+  (private Machbarkeitsstudie). Erste Iteration mit „Hardware-Schaden"-
+  Drohton — auf Mike's Wunsch entfernt (Drohton schreckt User ab).
+- README.md bekam zweisprachigen Disclaimer-Block direkt unter Badges
+  (EN+DE). LICENSE (MIT mit AS-IS) bleibt — deckt rechtlich ab.
+- 3 atomare Commits, **Tests 472 gruen**.
+
+**Push nach GitHub (Mike-OK):**
+- 23 Commits hochgeladen nach `https://github.com/mikewanne/SimpleFT8.git`
+- Enthaelt: v0.75 (war noch ungepushed) + v0.76 + v0.77 + WORKFLOW v1.1
+- HEAD: `ffbe12e chore(release): v0.77`
+
+**Nebenher — Locator-DB-Statistik:**
+- 11.120 Calls in der DB (1.368 heute neu, 9.864 heute aktualisiert)
+- 43% mit 6-stelligem Locator (~70 km Praezision)
+- 57% mit 4-stelligem Locator (~700 km, Tilde-Anzeige)
+- Sources: 4.768 qso_log_6, 3.534 cq_4 (live aufgesammelt), 2.818 qso_log_4
+
+**Nebenher — Architektur-Diskussion (theoretisch, nicht-Code):**
+- IC-705 + Raspberry Pi 4 + Tablet-Browser-Client als „SimpleFT8-Field"
+  Architektur-Skizze. ~70-110 h Aufwand fuer eine erste Version. 70-80%
+  des bestehenden Codes wiederverwendbar (Decoder, Encoder, QSO-State,
+  ADIF, Locator-DB). UI komplett neu (HTML5/JS via FastAPI+WebSocket).
+  IC-705 per USB an Pi (NICHT per WLAN — RS-BA1 Closed-Protocol).
 
 ## Bilanz heute
 
-- **Backend** (Commits 1-7): Encoder-Hardware-Guard + AutoHunt komplette
-  Logik-Schicht (start/stop, Timer, Signal, Slot-Affinitaet, Race-Check,
-  Totmann-Integration).
-- **UI** (Commits 8-9): 3-Button-Layout mutually-exclusive, Easter-Egg-Toggle
-  zeigt/versteckt 2 zusaetzliche Buttons, Live-Countdown im Button-Text,
-  5s-Reflexions-Cooldown nach Stop, Mode-Wechsel-Hook in `mw_radio`.
-- **Doku** (Commits 10, 12): HISTORY ausfuehrlich, CLAUDE.md Header v0.75,
-  Bekannte-Fallen erweitert.
-- **Hotfix** (Commit 11): bestehender Init-Race-Bug aufgedeckt durch
-  v0.75-Restart, defensiv via `hasattr`-Guard gefixt (5 Zeilen).
-
-## Statistiken aktualisiert
-
-`scripts/generate_plots.py` ausgefuehrt — DE+EN PDFs + 8 PNGs neu generiert
-in `auswertung/` und `auswertung/en/`.
+- **3 Releases**: v0.76 (Tabs), v0.77 (Dialog+Methodik) + WORKFLOW v1.1
+- **23 Commits** lokal → 23 Commits remote (GitHub aktuell)
+- **472 Tests** gruen (467 vor heute → +5 Settings-Smoke-Tests)
+- **2 Memory-Eintraege** ergaenzt
+- **Statistiken** mehrfach aktualisiert (3× scripts/generate_plots.py)
 
 ## Offen / Naechste Schritte (priorisiert)
 
-### 🆕 Aus v0.76-Field-Test (29.04.2026 — Mike beobachtet)
+### 🆕 Aus v0.76-Field-Test — geplant als v0.78 Bug-Cleanup-Block
 
-**Geplant als v0.77 Bug-Fix-Release** (3 atomare Commits, alle trivial-Pfad-tauglich):
+1. **🟡 RX-Tag waehrend Diversity-Kalibrierung** — alle Eintraege als „A1"
+   obwohl Hardware zwischen ANT1/ANT2 schaltet. UI-only-Bug (Mess-
+   Algorithmus selbst korrekt). Fix: `msg.antenna = self._schedule[
+   self._step][0]` vor `add_message()` setzen. (~5 Zeilen)
+2. **🟠 Bestaetigungsfenster nach Kalibrierung** (`_show_calibration_done`,
+   `mw_radio.py:925`) ist `setWindowModality(NonModal)` + nur `dlg.show()`
+   — kann hinter Hauptfenster wandern. Fix: `setModal(True)` +
+   `WindowStaysOnTopHint` + `dlg.exec()`. (~3 Zeilen)
+3. **🟡 `_reset_defaults` Reset-Vervollstaendigung** (R1-Final-Review v0.76)
+   — `radio_ip`, `language`, `stats_cb`, `debug_console_cb` werden aktuell
+   NICHT zurueckgesetzt.
 
-1. **🟡 Bug:** RX-Tabelle zeigt waehrend Diversity-Kalibrierung alle Eintraege
-   als „A1" — Hardware schaltet aber laut `dx_tune_dialog._schedule[step]`
-   zwischen ANT1/ANT2. Tag-Logik im DX-Tune-Pfad
-   (`ui/mw_cycle.py:_handle_dx_tune_mode` oder `ui/dx_tune_dialog.feed_cycle`)
-   bekommt aktive Antenne nicht mit. Fix: `msg.antenna = self._schedule[
-   self._step][0]` vor `add_message()` setzen. Nach Kalibrierung wieder
-   korrekt — also UI-only-Bug, Mess-Algorithmus ist sauber.
-   (~5 Zeilen)
+### 🆕 Aus v0.77 hinzugekommen
 
-2. **🟠 UX:** Bestaetigungsfenster „Kalibrierung abgeschlossen"
-   (`ui/mw_radio.py:_show_calibration_done`, Z.925) ist explizit
-   `setWindowModality(NonModal)` + nur `dlg.show()`, kein
-   `WindowStaysOnTopHint`. Folge: Klick auf Hauptapp → Dialog wandert in
-   Hintergrund, Bestaetigung bleibt offen aber unsichtbar. Fix:
-   `setModal(True)` + `Qt.WindowStaysOnTopHint` + `dlg.exec()`.
-   Kommentar „blockiert nichts" ist irrefuehrend — Decoder-Thread laeuft
-   eh weiter, nur User-Interaktion blockiert. (~3 Zeilen)
-
-3. **🔴 Hardware-Schutz:** App-Start Warn-Dialog mit OK/Abbruch ergaenzen.
-   Inhalt: „ANT1 = IMMER TX, ANT2 = IMMER nur RX. TX auf ANT2 = Hardware-
-   Schaden moeglich." OK → App startet normal. Abbruch → `sys.exit(0)`.
-   Pflicht-Acknowledgment pro App-Start. Mike+Claude einig: 2-Sekunden-
-   Klick-Aufwand vertretbar gegen irreversiblen PA-Schaden, keine
-   „heute-nicht-mehr-zeigen"-Checkbox (wuerde Schutz unterminieren).
-   Position in `main.py` vor `MainWindow.show()`. (~10-15 Zeilen)
-
-### 🆕 Aus v0.76 hinzugekommen
-
-1. **20m FT8 Datensammlung — Ziel: 5 Tage flaechendeckend**
-   (Mike+Claude+R1 abgestimmt 2026-04-29, dokumentiert in
-   `prompts/...` zukuenftig).
-
-   **Status (Stand 2026-04-29):** 2-3 Tage je Stunde-Modi-Slot, mit Luecken
-   (z.B. Stunde 13 UTC bei Diversity_Normal = 0 Tage).
-
-   **Ziel:** alle 24 Stunden × 3 Modi (Normal, Diversity_Normal,
-   Diversity_Dx) auf **5 Tage flaechendeckend** (nicht 7 — siehe
-   R1-Diskussion: Diminishing Returns ab 5, 7 Tage = Overengineering
-   fuer Hobby-Aufwand).
-
-   **Strategie:** „Welcher-Modus-jetzt"-Ratgeber (Claude liest
-   `statistics/<Modus>/20m/FT8/*.md`-Files, zaehlt Tage je Stunde,
-   schlaegt schwaechsten Slot vor). Lueckenliste schlaegt mehr-Tage-an-
-   bekannter-Stelle.
-
-   **Aufwand:** ~3 Wochen Funkbetrieb (3-4 h/Tag, durchwechseln).
-
-   **Goldstandard 7 Tage:** explizit verworfen — nur 15% Standard-Error-
-   Reduktion gegenueber 5, ~5 Wochen Aufwand. Hobby-Aufwand-Nutzen-Ratio
-   stimmt nicht.
-
-2. **Field-Test v0.75** — Easter-Egg → AUTO HUNT 10 Min → manueller HALT →
-   Bandwechsel-Stop → Totmann-Stop. 6 Verifikationsschritte siehe
-   `prompts/auto_hunt_v3.md` „Verifikation am Ende".
-3. **Phase 2: `btn_omni_cq`-Handler** — Button hat aktuell keinen eigenen
-   `clicked`-Handler (OMNI laeuft weiter ueber bisherige Logik). Saubere
-   mutually-exclusive Modus-Aktivierung als Phase 2.
-4. **Reset-Vervollstaendigung in `SettingsDialog._reset_defaults`**
-   (R1-Final-Review v0.76, out-of-scope) — `radio_ip`, `language`,
-   `stats_cb`, `debug_console_cb` werden aktuell NICHT zurueckgesetzt.
-5. **Push v0.75 + v0.76 nach GitHub** (~14 Commits lokal, wartet auf
-   Mike-OK)
+4. **20m FT8 Datensammlung — Ziel: 5 Tage flaechendeckend**
+   - Status: 2-3 Tage je Stunde-Modi-Slot, mit Luecken (z.B. Stunde 13 UTC
+     bei Diversity_Normal aktuell 1 Tag — heute hochgezogen).
+   - Ziel: alle 24 Stunden × 3 Modi auf **5 Tage** flaechendeckend.
+   - Strategie: „Welcher-Modus-jetzt"-Ratgeber pruefe pro Anfrage die
+     Lueckenliste, schlage schwaechsten Slot vor.
+   - Aufwand: ~3 Wochen Funkbetrieb (3-4 h/Tag).
 
 ### 🔥 Aus frueheren Releases
 
-6. **Field-Test v0.74** Diversity-Bandwechsel-Bug-Fix (auch ausstehend)
-7. **Migration `main_window._psk_worker` → `core/psk_reporter`** (Konsolidierung)
+5. **Field-Test v0.74** Diversity-Bandwechsel-Bug-Fix (auch ausstehend)
+6. **Field-Test v0.75** Auto-Hunt — 6 Verifikationsschritte siehe
+   `prompts/auto_hunt_v3.md`.
+7. **Phase 2: `btn_omni_cq`-Handler** — Button hat keinen eigenen
+   `clicked`-Handler (OMNI laeuft weiter ueber bisherige Logik).
+8. **Migration `main_window._psk_worker` → `core/psk_reporter`** (Konsolidierung)
 
 ### ⚙️ Mittelfristig
 
@@ -155,46 +139,59 @@ in `auswertung/` und `auswertung/en/`.
 - AP-Lite Test-Pipeline (synthetische E2E-Tests)
 - Per-Station DT-Offset TX
 - IC-7300 Fork (TARGET_TX_OFFSET separat messen)
-- Warteliste-Screenshot (sobald DL3AQJ antwortet)
 
-## Warnungen & Fallen (v0.75-spezifisch)
+### 🌐 Langfristig (theoretisch diskutiert, nicht angefangen)
 
-- **`_auto_hunt_timer` UNABHAENGIG vom Totmannschalter** — Maus/Tastatur
-  reset ihn NICHT (Bot-Tarn-Schutz). Nach jedem Stop ist Pflicht-Restart
-  (User-Klick), kein Auto-Resume in `_reset_presence`.
-- **Race-Doppel-Check in `select_next`** ist ethische Belt-and-suspenders
-  zur 10-Min-Hard-Cap. Auch wenn DeepSeek-R1 sagt „im single-threaded GUI
-  redundant" — NICHT entfernen.
-- **`_MAX_ATTEMPTS = 3`** in `core/auto_hunt.py:45` ist Modul-Konstante OHNE
+- **SimpleFT8-Field**: IC-705 + Pi 4 + Tablet-Browser-Client. Eigenes
+  Projekt, kein Fork. ~70-110 h Aufwand. Pfad: FastAPI-Server auf Pi,
+  HTML5-Frontend, USB-Anbindung IC-705. Realistischste mobile Variante.
+
+## Warnungen & Fallen (Stand v0.77)
+
+**Aus v0.77:**
+- App-Start Hardware-Dialog ist **Pflicht-Acknowledgment** — bei Abbruch
+  beendet sich App. Modal + WindowStaysOnTopHint. Inhalt aendert sich
+  nicht ohne Mike-Freigabe (rechtlich relevanter Disclaimer-Text).
+- Min/Max-Error-Bars wurden in `scripts/generate_plots.py` entfernt —
+  **NICHT wieder einbauen** ohne neue Mess-Methodik (interleaved). Sie
+  vermischten Modus-Volatilitaet mit Tag-Conditions.
+
+**Aus v0.75 — Auto-Hunt:**
+- `_auto_hunt_timer` UNABHAENGIG vom Totmannschalter — Maus/Tastatur
+  reset ihn NICHT (Bot-Tarn-Schutz). Nach jedem Stop ist Pflicht-Restart.
+- Race-Doppel-Check in `select_next` ist ethische Belt-and-suspenders zur
+  10-Min-Hard-Cap. NICHT entfernen.
+- `_MAX_ATTEMPTS = 3` in `core/auto_hunt.py:45` ist Modul-Konstante OHNE
   Verwendung in der Klasse. 3-Versuche-Logik liegt in `qso_state.py`.
-  V3 hat das halluziniert, Plan-Mode-Verifikation hat es gefangen.
-- **`_pause_remaining` GIBT ES NICHT MEHR** (v0.75 entfernt). Falls in
-  altem Code Verweis auftaucht: durch `active=False` redundant.
-- **`btn_omni_cq` ohne `clicked`-Handler** (Phase 2 — siehe oben).
-- **Init-Race-Bug in `_update_propagation_ui`** durch `hasattr`-Guard
-  gefixt. Bei zukuenftigem Init-Refactor: saubere Reihenfolge wieder-
-  herstellen, aber Guard belassen als Defense-in-Depth.
+
+**Aus v0.76 — Settings-Tabs:**
+- `_reset_defaults()` setzt aktuell radio_ip/language/stats_cb/
+  debug_console_cb NICHT zurueck — out-of-scope-Issue, geplant fuer v0.78.
+- Tab-Stylesheet darf NICHT auf das gesamte Dialog-CSS gesetzt werden,
+  sonst Konflikt — auf `self.tabs.setStyleSheet(...)` beschraenken.
 
 ## Test-Suite Status
 
 ```
 ./venv/bin/python3 -m pytest tests/ -q
-467 passed in ~7s
+472 passed in ~7s
 ```
 
-Neu seit v0.74:
-- `tests/test_auto_hunt_extended.py` (10 Test-Funktionen, 21 Test-Cases
-  inkl. parametrized ueber 6 Stop-Reasons)
+Neu seit v0.75:
+- `tests/test_auto_hunt_extended.py` (10 Funktionen, 21 Cases) — v0.75
+- `tests/test_settings_dialog_smoke.py` (5 Cases) — v0.76
 
 ## Letzter bekannter guter Zustand
 
-- **Branch:** main, lokal 12 Commits ahead vom letzten Push (`668b1ed`)
-- **HEAD:** `48f4864` docs(history): v0.75 Post-Release Hotfix dokumentiert
-- **Tag:** kein neuer Tag (Mike entscheidet nach Field-Test)
-- **Tests:** 467/467 gruen
-- **App-Start:** OK (PID 8267 lief stabil heute Vormittag)
-- **App-Version:** v0.75
-- **Backup:** `Appsicherungen/2026-04-29_vor_auto_hunt/` (214 MB)
+- **Branch:** main, lokal **identisch mit origin/main** (eben gepusht)
+- **HEAD:** `ffbe12e chore(release): v0.77 — Hardware-Dialog + Statistik-Methodik`
+- **Tag:** kein neuer Tag (Mike entscheidet)
+- **Tests:** 472/472 gruen
+- **App-Start:** OK (PID 61569 lief stabil heute Nachmittag)
+- **App-Version:** v0.77
+- **Backup:** `Appsicherungen/2026-04-29_vor_auto_hunt/` (v0.74 Stand,
+  vor Auto-Hunt). Kein neues Backup heute (Aenderungen waren UI-/Doku-
+  fokussiert, keine Mess-/Algorithmus-Aenderungen).
 
 ---
 
