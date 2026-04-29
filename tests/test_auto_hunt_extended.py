@@ -1,0 +1,142 @@
+"""Auto-Hunt Erweiterung (v0.75) — Tests fuer Session-Lifecycle, Slot-Affinitaet,
+Race-Condition-Sicherung und Stop-Reasons.
+
+Run: ./venv/bin/python3 -m pytest tests/test_auto_hunt_extended.py -v
+"""
+from __future__ import annotations
+
+import time
+import pytest
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Fixtures
+# ─────────────────────────────────────────────────────────────────────────────
+
+@pytest.fixture
+def qapp():
+    """QApplication-Singleton — Voraussetzung fuer Qt-Signal-Emit."""
+    from PySide6.QtWidgets import QApplication
+    app = QApplication.instance() or QApplication([])
+    yield app
+
+
+class _MockQSOLog:
+    """Minimaler QSO-Log-Mock (parallel zu test_modules.py._MockQSOLog)."""
+    def __init__(self, worked=None, worked_on_band=None):
+        self._worked = set(worked or [])
+        self._wob = set(worked_on_band or [])
+
+    def is_worked(self, call):
+        return call in self._worked
+
+    def is_worked_on_band(self, call, band):
+        return (call, band) in self._wob
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Commit 4 — Session-Lifecycle (start/stop)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def test_start_sets_active_starts_timer_resets_state(qapp):
+    """start_auto_hunt setzt active=True, startet Timer, resetet State."""
+    from core.auto_hunt import AutoHunt
+    hunt = AutoHunt()
+    # Vorbedingung: alter State vorhanden
+    hunt._cooldown = {"DL1OLD": time.time()}
+    hunt._last_tx_even = True
+    hunt._manual_override = True
+
+    hunt.start_auto_hunt(600)
+
+    assert hunt.active is True
+    assert hunt._auto_hunt_timer.isActive(), "Timer muss laufen"
+    assert hunt._cooldown == {}, "Cooldowns muessen geleert sein"
+    assert hunt._last_tx_even is None, "_last_tx_even muss reset sein"
+    assert hunt._manual_override is False
+    assert hunt._hunt_session_start > 0
+
+
+def test_double_start_restarts_timer(qapp):
+    """Doppelklick-Schutz: zweiter start_auto_hunt restartet Timer sauber."""
+    from core.auto_hunt import AutoHunt
+    hunt = AutoHunt()
+    hunt.start_auto_hunt(600)
+    first_session_start = hunt._hunt_session_start
+    assert hunt._auto_hunt_timer.isActive()
+
+    time.sleep(0.01)  # damit time.time() definitiv weitergetickt ist
+    hunt.start_auto_hunt(600)
+
+    assert hunt.active is True
+    assert hunt._auto_hunt_timer.isActive()
+    assert hunt._hunt_session_start > first_session_start, (
+        "Doppel-Start muss neue Session-Start-Zeit setzen"
+    )
+
+
+@pytest.mark.parametrize("reason,should_clear", [
+    ("timer_expired", True),
+    ("manual_halt", True),
+    ("easter_egg_off", True),
+    ("band_change", True),
+    ("mode_change", True),
+    ("totmann_expired", False),  # User soll fortsetzen koennen
+])
+def test_stop_reasons_clear_cooldown_and_last_tx_even_correctly(
+    qapp, reason, should_clear
+):
+    """stop_auto_hunt cleart Cooldown+_last_tx_even ausser bei totmann_expired."""
+    from core.auto_hunt import AutoHunt
+    hunt = AutoHunt()
+    hunt.start_auto_hunt(600)
+    hunt._cooldown = {"DL1ABC": time.time()}
+    hunt._last_tx_even = True
+
+    hunt.stop_auto_hunt(reason)
+
+    assert hunt.active is False
+    assert not hunt._auto_hunt_timer.isActive()
+    if should_clear:
+        assert hunt._cooldown == {}, f"{reason} muss Cooldown leeren"
+        assert hunt._last_tx_even is None, f"{reason} muss _last_tx_even reset"
+    else:
+        assert "DL1ABC" in hunt._cooldown, (
+            f"{reason} darf Cooldown NICHT leeren (User-fortsetzbar)"
+        )
+        assert hunt._last_tx_even is True
+
+
+@pytest.mark.parametrize("reason", [
+    "timer_expired", "manual_halt", "band_change",
+    "mode_change", "totmann_expired", "easter_egg_off",
+])
+def test_auto_hunt_stopped_signal_emits_with_reason(qapp, reason):
+    """auto_hunt_stopped(reason) wird bei jedem Stop emittiert."""
+    from core.auto_hunt import AutoHunt
+    hunt = AutoHunt()
+    hunt.start_auto_hunt(600)
+    received = []
+    hunt.auto_hunt_stopped.connect(lambda r: received.append(r))
+
+    hunt.stop_auto_hunt(reason)
+
+    assert received == [reason], f"Signal sollte ['{reason}'] sein, war {received}"
+
+
+def test_qso_log_unaffected_by_stop(qapp):
+    """_qso_log wird durch stop_auto_hunt NIEMALS angetastet (24h-Block bleibt)."""
+    from core.auto_hunt import AutoHunt
+    hunt = AutoHunt()
+    qso_log = _MockQSOLog(worked={"DL1OLD"}, worked_on_band={("DL1OLD", "20m")})
+    hunt.set_qso_log(qso_log)
+    hunt.set_band("20m")
+    hunt.start_auto_hunt(600)
+
+    for reason in ("timer_expired", "manual_halt", "band_change",
+                   "mode_change", "totmann_expired", "easter_egg_off"):
+        hunt.start_auto_hunt(600)  # Session re-starten zwischen Tests
+        hunt.stop_auto_hunt(reason)
+        assert hunt._qso_log is qso_log, f"_qso_log bleibt nach {reason}"
+        assert qso_log.is_worked("DL1OLD"), f"DL1OLD bleibt worked nach {reason}"
+        assert qso_log.is_worked_on_band("DL1OLD", "20m")

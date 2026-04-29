@@ -2018,13 +2018,21 @@ def test_autohunt_cooldown():
     assert hunt.select_next([msg], True, True) is None
 
 
-def test_autohunt_band_change_clears_cooldown():
-    """Bandwechsel löscht Cooldowns — Station danach wieder wählbar."""
+def test_autohunt_band_change_stops_session_and_clears_cooldown():
+    """Bandwechsel stoppt Session (v0.75) und loescht Cooldowns.
+
+    Re-Start nach Bandwechsel → Station wieder waehlbar.
+    """
     from core.auto_hunt import AutoHunt
     hunt = AutoHunt()
-    hunt.active = True
+    hunt.start_auto_hunt(600)
     hunt.on_qso_timeout("DL1ABC")
     hunt.on_band_change()
+    assert not hunt.active, "band_change muss Session stoppen"
+    assert hunt._cooldown == {}, "band_change muss Cooldowns leeren"
+
+    # Re-Start → Cooldown wirklich weg, Station waehlbar
+    hunt.start_auto_hunt(600)
     msg = _make_msg("DL1ABC", "CQ", "CQ DL1ABC JO31")
     result = hunt.select_next([msg], True, True)
     assert result is not None

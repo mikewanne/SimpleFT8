@@ -25,7 +25,7 @@ import logging
 from dataclasses import dataclass
 from typing import Optional, List, TYPE_CHECKING
 
-from PySide6.QtCore import QObject
+from PySide6.QtCore import QObject, QTimer, Signal
 
 if TYPE_CHECKING:
     from core.message import FT8Message
@@ -75,14 +75,29 @@ class AutoHunt(QObject):
             start_qso(candidate)  # Bestehendes Hunt-QSO starten
     """
 
+    # ─────────────────────────────────────────────────────────────────────────
+    # Qt-Signal: wird bei JEDEM stop_auto_hunt(reason) emittiert.
+    # Reasons: "timer_expired", "manual_halt", "band_change",
+    #          "mode_change", "totmann_expired", "easter_egg_off"
+    # ─────────────────────────────────────────────────────────────────────────
+    auto_hunt_stopped = Signal(str)
+
     def __init__(self):
         super().__init__()
         self.active: bool = False
         self._qso_log: Optional[QSOLog] = None
         self._band: str = "20m"
-        self._cooldown: dict[str, float] = {}  # call → timestamp (letzer Fehlversuch)
+        # Anruf-Fehlversuch-Cooldown (5 Min Sperre nach on_qso_timeout):
+        self._cooldown: dict[str, float] = {}
         self._manual_override: bool = False     # Manueller Klick → pausieren
-        self._current_target: Optional[str] = None  # Aktuell angerufene Station
+        self._current_target: Optional[str] = None
+        # Slot-Affinitaet — bevorzugt Kandidaten mit gleichem tx_even:
+        self._last_tx_even: Optional[bool] = None
+        # Zeit-beschraenkte Session (10-Min-Hard-Stop):
+        self._hunt_session_start: float = 0.0
+        self._auto_hunt_timer = QTimer(self)
+        self._auto_hunt_timer.setSingleShot(True)
+        self._auto_hunt_timer.timeout.connect(self._on_timer_expired)
 
     def set_qso_log(self, qso_log: "QSOLog"):
         """QSO-Log fuer Worked-Before setzen."""
@@ -91,6 +106,77 @@ class AutoHunt(QObject):
     def set_band(self, band: str):
         """Band setzen (fuer Worked-On-Band Check)."""
         self._band = band
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Session-Lifecycle (zeit-beschraenkter Auto-Hunt-Modus)
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def start_auto_hunt(self, duration_sec: int = 600):
+        """Eine zeit-beschraenkte Auto-Hunt-Session starten.
+
+        Maus/Tastatur-Aktivitaet beeinflusst diesen Timer NICHT (Bot-Tarn-Schutz).
+        Doppelklick-Schutz: bei aktiver Session wird der alte Timer gestoppt
+        und ein neuer gestartet (Idempotenz).
+
+        Args:
+            duration_sec: Sessiondauer in Sekunden. Default 600 = 10 Min.
+        """
+        # Doppelklick-Schutz: laufenden Timer stoppen, clean state
+        if self.active:
+            self._auto_hunt_timer.stop()
+
+        self.active = True
+        self._manual_override = False
+        self._current_target = None
+        self._cooldown.clear()
+        self._last_tx_even = None
+        self._hunt_session_start = time.time()
+        self._auto_hunt_timer.setInterval(duration_sec * 1000)
+        self._auto_hunt_timer.start()
+        logger.info(f"[Auto-Hunt] Start (duration={duration_sec}s)")
+        print(f"[Auto-Hunt] Aktiviert — laeuft {duration_sec // 60} Min")
+
+    def stop_auto_hunt(self, reason: str):
+        """Auto-Hunt-Session beenden. Emittiert auto_hunt_stopped(reason).
+
+        Reasons:
+            timer_expired   — 10-Min-Hard-Stop abgelaufen
+            manual_halt     — User klickte HALT-Button
+            band_change     — Band wurde gewechselt
+            mode_change     — FT8/FT4/FT2 wurde gewechselt
+            totmann_expired — Operator-Presence (15 Min) abgelaufen
+            easter_egg_off  — Easter-Egg deaktiviert waehrend Auto-Hunt aktiv
+
+        Cleanup-Logik (reason-basiert):
+            timer_expired/manual_halt/easter_egg_off/band_change/mode_change:
+                _cooldown.clear() + _last_tx_even = None
+            totmann_expired:
+                _cooldown UND _last_tx_even bleiben (User soll fortsetzen)
+        """
+        self.active = False
+        self._current_target = None
+        self._auto_hunt_timer.stop()
+
+        if reason != "totmann_expired":
+            self._cooldown.clear()
+            self._last_tx_even = None
+
+        logger.info(f"[Auto-Hunt] Stop (reason={reason})")
+        print(f"[Auto-Hunt] Gestoppt — {reason}")
+        self.auto_hunt_stopped.emit(reason)
+
+    def _on_timer_expired(self):
+        """Wird vom QTimer aufgerufen wenn die 10 Min abgelaufen sind."""
+        self.stop_auto_hunt("timer_expired")
+
+    def seconds_remaining(self) -> int:
+        """Restzeit der laufenden Session in Sekunden, 0 wenn nicht aktiv."""
+        if not self.active:
+            return 0
+        remaining_ms = self._auto_hunt_timer.remainingTime()
+        if remaining_ms <= 0:
+            return 0
+        return remaining_ms // 1000
 
     # ─────────────────────────────────────────────────────────────────────────
     # Kern-Logik: Station auswaehlen
@@ -224,7 +310,9 @@ class AutoHunt(QObject):
         print("[Auto-Hunt] Manuelles QSO beendet — Auto-Hunt wird fortgesetzt")
 
     def on_band_change(self):
-        """Bandwechsel → Cooldowns loeschen."""
-        self._cooldown.clear()
-        self._current_target = None
-        self._pause_remaining = 0
+        """Bandwechsel → Auto-Hunt-Session beenden + Cooldowns loeschen.
+
+        Delegiert an stop_auto_hunt("band_change") fuer zentralisierte
+        Cleanup-Logik und Signal-Emit.
+        """
+        self.stop_auto_hunt("band_change")
