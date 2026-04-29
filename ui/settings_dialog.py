@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QLineEdit, QSpinBox, QDoubleSpinBox, QPushButton, QGroupBox,
     QComboBox, QMessageBox, QToolButton, QFileDialog,
     QTableWidget, QTableWidgetItem, QHeaderView,
+    QTabWidget, QWidget, QFrame, QCheckBox,
 )
 from PySide6.QtCore import Qt, QTimer
 
@@ -29,6 +30,21 @@ _HINTS = {
     "max_decode": "Obere Grenze des Dekodier-Bereichs.\n3000 Hz = Standard. Hoeher = mehr Stationen aber mehr CPU.",
     "diversity_cycles": "Anzahl Betriebszyklen bis zur naechsten Antennen-Messung.\n80 ≈ 20 Min  |  160 ≈ 40 Min  |  240 ≈ 60 Min\nAntennen werden dann automatisch auf 50:50 zurueckgesetzt und neu vermessen.",
 }
+
+_TAB_STYLE = """
+QTabWidget::pane { border: 1px solid #333; background: #1a1a2e; }
+QTabBar::tab {
+    background: #222; color: #888;
+    padding: 8px 16px; border: 1px solid #333;
+    border-bottom: none;
+    border-top-left-radius: 4px; border-top-right-radius: 4px;
+    margin-right: 2px;
+}
+QTabBar::tab:selected {
+    background: #1a1a2e; color: #00AAFF; border-color: #00AAFF;
+}
+QTabBar::tab:hover:!selected { background: #2a2a3e; color: #CCC; }
+"""
 
 
 def _make_info_btn(hint: str) -> QToolButton:
@@ -59,14 +75,25 @@ def _row_with_hint(widget, hint_key: str) -> QHBoxLayout:
     return row
 
 
+def _hline() -> QFrame:
+    """Horizontale Trennlinie fuer Tab 4."""
+    line = QFrame()
+    line.setFrameShape(QFrame.HLine)
+    line.setFrameShadow(QFrame.Sunken)
+    line.setStyleSheet("color: #333;")
+    return line
+
+
 class SettingsDialog(QDialog):
-    """Einstellungs-Dialog fuer SimpleFT8."""
+    """Einstellungs-Dialog fuer SimpleFT8 (Tab-basiert seit v0.76)."""
 
     def __init__(self, settings: Settings, parent=None):
         super().__init__(parent)
         self.settings = settings
         self.setWindowTitle("SimpleFT8 — Einstellungen")
-        self.setMinimumWidth(620)
+        self.setMinimumWidth(720)
+        self.setMinimumHeight(560)
+        self.setMaximumHeight(750)
         self.setStyleSheet("""
             QDialog { background-color: #1a1a2e; color: #CCC; }
             QGroupBox { color: #00AAFF; border: 1px solid #333;
@@ -88,34 +115,88 @@ class SettingsDialog(QDialog):
         self._setup_ui()
         self._load_values()
 
+        # Hoehen-Regelung: Dialog niemals groesser als 750 px (1440x900-Display)
+        self.adjustSize()
+        if self.height() > 750:
+            self.resize(self.width(), 750)
+
+    def closeEvent(self, event):
+        # Polling-Timer stoppen — sonst kann er nach Dialog-Zerstoerung noch
+        # feuern und auf geloeschte Widgets zugreifen.
+        if hasattr(self, "_tx_status_timer") and self._tx_status_timer.isActive():
+            self._tx_status_timer.stop()
+        super().closeEvent(event)
+
+    # ── UI-Aufbau ────────────────────────────────────────────────────
+
     def _setup_ui(self):
         layout = QVBoxLayout(self)
         layout.setSpacing(10)
 
-        # ── Oberer Bereich: 2 Spalten ─────────────────────────────────
-        top = QHBoxLayout()
-        top.setSpacing(14)
+        # Tab-Widget
+        self.tabs = QTabWidget(self)
+        self.tabs.setTabPosition(QTabWidget.North)
+        self.tabs.setStyleSheet(_TAB_STYLE)
+        self.tabs.addTab(self._build_tab_station(), "Station")
+        self.tabs.addTab(self._build_tab_tx(), "TX & Schutz")
+        self.tabs.addTab(self._build_tab_ft8(), "FT8 & Diversity")
+        self.tabs.addTab(self._build_tab_data(), "Daten & Tools")
+        self.tabs.setCurrentIndex(0)
+        layout.addWidget(self.tabs)
 
-        # LINKE SPALTE: Station & Hardware
-        left = QVBoxLayout()
-        station = QGroupBox("Station & Hardware")
-        form1 = QFormLayout(station)
+        # Buttons (feste Leiste UNTER den Tabs)
+        btn_row = QHBoxLayout()
+        btn_reset = QPushButton("Grundeinstellungen")
+        btn_reset.setObjectName("reset")
+        btn_reset.setToolTip("Alle Werte auf Werkseinstellungen zuruecksetzen")
+        btn_reset.clicked.connect(self._reset_defaults)
+        btn_save = QPushButton("Speichern")
+        btn_save.clicked.connect(self._save_and_close)
+        btn_cancel = QPushButton("Abbrechen")
+        btn_cancel.setObjectName("cancel")
+        btn_cancel.clicked.connect(self.reject)
+        btn_row.addWidget(btn_reset)
+        btn_row.addStretch()
+        btn_row.addWidget(btn_cancel)
+        btn_row.addWidget(btn_save)
+        layout.addLayout(btn_row)
+
+        # TX-Status-Polling (1 s) → Reset-Buttons disabled wenn TX aktiv.
+        # Erst HIER starten, nachdem Build-Methoden self.btn_rf_clear_*
+        # bereits angelegt haben.
+        self._tx_status_timer = QTimer(self)
+        self._tx_status_timer.timeout.connect(self._update_rf_buttons_tx_state)
+        self._tx_status_timer.start(1000)
+
+    def _build_tab_station(self) -> QWidget:
+        """Tab 1: Rufzeichen, Locator, IP-Adresse, Sprache.
+
+        Sprache ist Setup-Einstellung wie Rufzeichen/Locator und gehoert
+        zur Station, nicht zum Funk-Betrieb.
+        """
+        tab = QWidget()
+        form = QFormLayout(tab)
         self.callsign = QLineEdit()
         self.locator = QLineEdit()
         self.locator.setMaxLength(6)
         self.radio_ip = QLineEdit()
         self.radio_ip.setPlaceholderText("Auto-Discovery")
-        form1.addRow("Rufzeichen:", _row_with_hint(self.callsign, "callsign"))
-        form1.addRow("Locator:", _row_with_hint(self.locator, "locator"))
-        form1.addRow("IP Adresse:", _row_with_hint(self.radio_ip, "radio_ip"))
-        left.addWidget(station)
-        left.addStretch()
-        top.addLayout(left)
+        self.language_combo = QComboBox()
+        self.language_combo.addItems(["Deutsch", "English"])
+        form.addRow("Rufzeichen:", _row_with_hint(self.callsign, "callsign"))
+        form.addRow("Locator:", _row_with_hint(self.locator, "locator"))
+        form.addRow("IP Adresse:", _row_with_hint(self.radio_ip, "radio_ip"))
+        form.addRow("Sprache / Language:", self.language_combo)
+        return tab
 
-        # RECHTE SPALTE: TX & Schutz
-        right = QVBoxLayout()
-        tx = QGroupBox("TX & Schutz")
-        form2 = QFormLayout(tx)
+    def _build_tab_tx(self) -> QWidget:
+        """Tab 2: TX-Schutz-Settings + RF-Presets-Tabelle (interne GroupBox)."""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setSpacing(10)
+
+        # TX-Schutz-Form (oben, ohne aeussere GroupBox)
+        form = QFormLayout()
         self.power = QSpinBox()
         self.power.setRange(1, 100)
         self.power.setSuffix(" W")
@@ -128,10 +209,10 @@ class SettingsDialog(QDialog):
         self.swr_limit.setRange(1.5, 10.0)
         self.swr_limit.setSingleStep(0.5)
         self.swr_limit.setDecimals(1)
-        form2.addRow("Sendeleistung:", _row_with_hint(self.power, "power"))
-        form2.addRow("TX Audio-Pegel:", _row_with_hint(self.tx_level, "tx_level"))
-        form2.addRow("Anrufversuche:", _row_with_hint(self.max_calls_combo, "max_calls"))
-        form2.addRow("SWR-Limit:", _row_with_hint(self.swr_limit, "swr_limit"))
+        form.addRow("Sendeleistung:", _row_with_hint(self.power, "power"))
+        form.addRow("TX Audio-Pegel:", _row_with_hint(self.tx_level, "tx_level"))
+        form.addRow("Anrufversuche:", _row_with_hint(self.max_calls_combo, "max_calls"))
+        form.addRow("SWR-Limit:", _row_with_hint(self.swr_limit, "swr_limit"))
         tune_row = QHBoxLayout()
         self._tune_btns = {}
         self._current_tune_power = 10
@@ -150,13 +231,10 @@ class SettingsDialog(QDialog):
             self._tune_btns[w] = btn
         tune_row.addWidget(_make_info_btn(_HINTS["tune_power"]))
         tune_row.addStretch()
-        form2.addRow("Tune-Leistung:", tune_row)
-        right.addWidget(tx)
-        right.addStretch()
-        top.addLayout(right)
-        layout.addLayout(top)
+        form.addRow("Tune-Leistung:", tune_row)
+        layout.addLayout(form)
 
-        # ── RF-Power-Presets (pro Band+Watt, pro Radio) ──────────────
+        # RF-Presets (interne GroupBox — visuelle Trennung von TX-Schutz)
         rf_box = QGroupBox("RF-Presets pro Band+Watt")
         rf_layout = QVBoxLayout(rf_box)
         self._rf_info_label = QLabel("Aktives Radio: —")
@@ -198,15 +276,13 @@ class SettingsDialog(QDialog):
         rf_layout.addLayout(rf_btn_row)
 
         layout.addWidget(rf_box)
+        layout.addStretch()
+        return tab
 
-        # TX-Status-Polling (1 s) → Reset-Buttons disabled wenn TX aktiv
-        self._tx_status_timer = QTimer(self)
-        self._tx_status_timer.timeout.connect(self._update_rf_buttons_tx_state)
-        self._tx_status_timer.start(1000)
-
-        # ── Unterer Bereich: volle Breite — FT8 & Antennen ───────────
-        ft8 = QGroupBox("FT8 & Antennen")
-        form3 = QFormLayout(ft8)
+    def _build_tab_ft8(self) -> QWidget:
+        """Tab 3: FT8-Audio, Decode, Diversity, Statistik-Checkbox."""
+        tab = QWidget()
+        form = QFormLayout(tab)
         self.audio_freq = QSpinBox()
         self.audio_freq.setRange(800, 2800)
         self.audio_freq.setSuffix(" Hz")
@@ -216,79 +292,71 @@ class SettingsDialog(QDialog):
         self.max_decode_freq.setSuffix(" Hz")
         self.diversity_cycles = QComboBox()
         self.diversity_cycles.addItems(["80", "160", "240"])
-        self.language_combo = QComboBox()
-        self.language_combo.addItems(["Deutsch", "English"])
-        form3.addRow("TX Audio-Frequenz:", _row_with_hint(self.audio_freq, "tx_freq"))
-        form3.addRow("Max. Decode-Frequenz:", _row_with_hint(self.max_decode_freq, "max_decode"))
-        form3.addRow("Neueinmessung nach:", _row_with_hint(self.diversity_cycles, "diversity_cycles"))
-        form3.addRow("Sprache / Language:", self.language_combo)
-        from PySide6.QtWidgets import QCheckBox
+        form.addRow("TX Audio-Frequenz:", _row_with_hint(self.audio_freq, "tx_freq"))
+        form.addRow("Max. Decode-Frequenz:", _row_with_hint(self.max_decode_freq, "max_decode"))
+        form.addRow("Neueinmessung nach:", _row_with_hint(self.diversity_cycles, "diversity_cycles"))
         self.stats_cb = QCheckBox("Statistik-Erfassung aktivieren")
         self.stats_cb.setToolTip(
             "Loggt pro Zyklus die Anzahl empfangener Stationen, SNR und Band.\n"
             "Normal + Diversity (Normal/DX) — pausiert bei Antennen-Tuning.\n"
             "Daten in statistics/<Modus>/<Band>/<Protokoll>/ (Markdown).\n"
             "Deaktiviert = kein Hintergrund-Logging, null Overhead.")
-        form3.addRow("", self.stats_cb)
-        self.debug_console_cb = QCheckBox("Debug-Konsole anzeigen")
-        self.debug_console_cb.setToolTip("Zeigt alle Programmausgaben im unteren Fensterbereich (auch via Ctrl+D)")
-        form3.addRow("", self.debug_console_cb)
-        layout.addWidget(ft8)
+        form.addRow("", self.stats_cb)
+        return tab
 
-        # ── Datenexport (Diversity-Vergleichsdaten als CSV) ──────────
-        export_box = QGroupBox("Datenexport")
-        export_lay = QVBoxLayout(export_box)
+    def _build_tab_data(self) -> QWidget:
+        """Tab 4: CSV-Export + Karte + Debug-Konsole (3 Bloecke mit HLine)."""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setSpacing(10)
+
+        # Block 1: CSV-Export
         export_lbl = QLabel(
             "Exportiert die Antennen-Vergleichsdaten (ANT1 vs ANT2 SNR pro "
             "Station) als CSV-Dateien. Pro Band und Modus eine Datei. "
             "Geeignet für Excel, Pandas, R oder eigene Auswertungen."
         )
         export_lbl.setWordWrap(True)
-        export_lbl.setStyleSheet("color: #888; padding: 0 0 6px 0;")
-        export_lay.addWidget(export_lbl)
+        export_lbl.setStyleSheet("color: #888;")
+        layout.addWidget(export_lbl)
         export_btn_row = QHBoxLayout()
         self._export_csv_btn = QPushButton("Diversity-Daten exportieren …")
         self._export_csv_btn.clicked.connect(self._on_export_csv_clicked)
         export_btn_row.addWidget(self._export_csv_btn)
         export_btn_row.addStretch()
-        export_lay.addLayout(export_btn_row)
-        layout.addWidget(export_box)
+        layout.addLayout(export_btn_row)
 
-        # ── Richtungs-Karte ──────────────────────────────────────────
-        map_box = QGroupBox("Richtungs-Karte")
-        map_lay = QVBoxLayout(map_box)
+        layout.addWidget(_hline())
+
+        # Block 2: Richtungs-Karte
         map_lbl = QLabel(
             "Azimuthal-Karte mit eigenem Locator als Center. EMPFANG zeigt "
             "wo Stationen gehoert werden (Antennen-Farbcode), SENDEN zeigt "
             "PSK-Reporter Reverse-Lookup wer mich gehoert hat."
         )
         map_lbl.setWordWrap(True)
-        map_lbl.setStyleSheet("color: #888; padding: 0 0 6px 0;")
-        map_lay.addWidget(map_lbl)
+        map_lbl.setStyleSheet("color: #888;")
+        layout.addWidget(map_lbl)
         map_btn_row = QHBoxLayout()
         self._map_open_btn = QPushButton("Karte oeffnen …")
         self._map_open_btn.clicked.connect(self._on_map_open_clicked)
         map_btn_row.addWidget(self._map_open_btn)
         map_btn_row.addStretch()
-        map_lay.addLayout(map_btn_row)
-        layout.addWidget(map_box)
+        layout.addLayout(map_btn_row)
 
-        # ── Buttons ───────────────────────────────────────────────────
-        btn_row = QHBoxLayout()
-        btn_reset = QPushButton("Grundeinstellungen")
-        btn_reset.setObjectName("reset")
-        btn_reset.setToolTip("Alle Werte auf Werkseinstellungen zuruecksetzen")
-        btn_reset.clicked.connect(self._reset_defaults)
-        btn_save = QPushButton("Speichern")
-        btn_save.clicked.connect(self._save_and_close)
-        btn_cancel = QPushButton("Abbrechen")
-        btn_cancel.setObjectName("cancel")
-        btn_cancel.clicked.connect(self.reject)
-        btn_row.addWidget(btn_reset)
-        btn_row.addStretch()
-        btn_row.addWidget(btn_cancel)
-        btn_row.addWidget(btn_save)
-        layout.addLayout(btn_row)
+        layout.addWidget(_hline())
+
+        # Block 3: Debug-Konsole
+        self.debug_console_cb = QCheckBox("Debug-Konsole anzeigen")
+        self.debug_console_cb.setToolTip(
+            "Zeigt alle Programmausgaben im unteren Fensterbereich (auch via Ctrl+D)"
+        )
+        layout.addWidget(self.debug_console_cb)
+
+        layout.addStretch()
+        return tab
+
+    # ── Event-Handler & Logik (unveraendert) ─────────────────────────
 
     def _on_tune_power_clicked(self, watt: int):
         current = self._current_tune_power
