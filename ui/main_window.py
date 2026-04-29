@@ -614,6 +614,11 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
 
     def _update_propagation_ui(self):
         """Propagations-Balken aus Hintergrund-Cache aktualisieren."""
+        # Init-Race-Guard: _set_band kann band_changed-Signal feuern bevor
+        # _init_propagation_polling gelaufen ist (Init-Reihenfolge-Latent-Bug,
+        # aufgetaucht beim v0.75 App-Restart).
+        if not hasattr(self, "_prop_error_shown"):
+            return
         from core import propagation as _prop
         conditions = _prop.get_conditions()
         if conditions is None:
