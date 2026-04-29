@@ -41,8 +41,8 @@ HISTORY.md ob X nicht schon drin ist.
 # SimpleFT8 — Claude Kontext
 
 **Start:** `cd "/Users/mikehammerer/Documents/KI N8N Projekte/FT8/SimpleFT8" && ./venv/bin/python3 main.py`
-**Aktueller Stand:** v0.75 (29.04.2026) — Auto-Hunt-Modus (Easter-Egg, 10-Min-Hard-Stop). Klick auf Versionsnummer → 3-Button-Layout `[CQ RUFEN] [OMNI CQ] [AUTO HUNT]` erscheint. AUTO HUNT laeuft fest 10 Min (Maus/Tastatur entkoppelt = Bot-Tarn-Schutz). 5s UI-Reflexions-Cooldown nach Stop. Slot-Affinitaet via `_last_tx_even`. Race-Doppel-Check in `select_next`. Reasons fuer Stop: timer_expired, manual_halt, band_change, mode_change, totmann_expired (laesst Cooldowns erhalten), easter_egg_off. ANT1-Pflicht zentral abgesichert (`Encoder.transmit()` + alle `tune_on()`-Pfade — `mw_tx.py:83` Luecke geschlossen). 10 atomare Commits, V1→V2→V3-Workflow voll durchlaufen (DeepSeek-R1-Reviewer 12/31 Findings angenommen).
-**Tests:** `./venv/bin/python3 -m pytest tests/ -q` → 467 passed (Qt-Smoke-Tests via `QT_QPA_PLATFORM=offscreen`)
+**Aktueller Stand:** v0.76 (29.04.2026) — Settings-Dialog auf Tabs. `ui/settings_dialog.py` von monolithisch gestapelter Form (6 GroupBoxen vertikal, ~800 px hoch) auf 4-Tab-`QTabWidget` umgestellt — Dialog passt jetzt vollstaendig auf Mike's 1440×900-Display (max 750 px Hoehe). Tabs: „Station" / „TX & Schutz" / „FT8 & Diversity" / „Daten & Tools". Tab-Stylesheet nur auf das `QTabWidget` (kein Konflikt mit Dialog-CSS). `closeEvent()` stoppt `_tx_status_timer` (Defense-in-Depth gegen Lifecycle-Bug). Workflow V1→V2→V3 voll durchlaufen, R1-Final-Codereview, 4 atomare Commits. **v0.75:** Auto-Hunt-Modus (Easter-Egg, 10-Min-Hard-Stop). ANT1-Pflicht zentral abgesichert.
+**Tests:** `./venv/bin/python3 -m pytest tests/ -q` → 472 passed (Qt-Smoke-Tests via `QT_QPA_PLATFORM=offscreen`)
 **Vor Commits:** Tests grün + bei nicht-trivialen Änderungen DeepSeek-Review (`pal codereview` model `deepseek-chat`) — bereits durch globale §0 + Projektregeln gefordert.
 
 ⚠️ **DeepSeek-Workflow Stand 2026-04-28:**

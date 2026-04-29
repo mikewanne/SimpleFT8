@@ -5,6 +5,79 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-04-29 v0.76 — Settings-Dialog auf Tabs (1440x900-Fix)
+
+**Betroffene Dateien:** `ui/settings_dialog.py`,
+`tests/test_settings_dialog_smoke.py` (neu), `main.py`, `CLAUDE.md`,
+`prompts/settings_tabs_v2.md` + `_v3.md` (neu).
+
+### Was ist v0.76
+
+Reines UI-Refactor: Settings-Dialog wird von monolithisch gestapelter
+Form (6 GroupBoxen vertikal, ~800 px hoch) auf vier `QTabWidget`-Tabs
+umgestellt — Dialog passt jetzt vollstaendig auf Mike's 1440×900-Display
+(max 750 px Hoehe, gemessen 560 px nach Build). Funktional unveraendert.
+
+**Tab-Aufteilung:**
+- Tab 1 „Station": Rufzeichen, Locator, IP-Adresse, Sprache.
+- Tab 2 „TX & Schutz": Sendeleistung, TX-Audio-Pegel, Anrufversuche,
+  SWR-Limit, Tune-Leistung, RF-Presets-Tabelle (interne GroupBox).
+- Tab 3 „FT8 & Diversity": TX-Audio-Frequenz, Max-Decode-Frequenz,
+  Neueinmessung-Zyklen, Statistik-Erfassung-Checkbox.
+- Tab 4 „Daten & Tools": CSV-Export + Beschreibung, Karte oeffnen +
+  Beschreibung, Debug-Konsole-Checkbox (3 Bloecke mit `QFrame::HLine`-
+  Trennern).
+
+**Tab-Anzahl-Entscheidung (4 statt R1-Faustregel-3):** Tab 2 hat
+sizeHint().height() = 462 px (knapp unter R1-Schwellwert 500 px), wuerde
+also nominell die 3-Tab-Variante triggern. Bewusste Abweichung: 3-Tab
+„FT8 & Tools" muesste FT8-Settings + Statistik-Checkbox + CSV-Export +
+Karte + Debug-Konsole zusammenpressen — UX-mässig ueberfrachtet. 4 Tabs
+sind logisch sauberer.
+
+### Workflow
+
+V1 → V2 (Self-Review, ~10 Schwachstellen erkannt) → DeepSeek-R1
+(19 Findings, 12 angenommen, 7 abgelehnt) → V3 → Mike-Freigabe →
+Code (3 Implementierungs-Commits) → Final-R1-Codereview (4 Findings,
+1 fix integriert „Timer-Stop in closeEvent", 3 out-of-scope/abgelehnt).
+
+### Atomare Commits
+
+1. `7727fc9` `refactor(ui): SettingsDialog mit QTabWidget (4 Tabs)` —
+   Hauptaenderung in `settings_dialog.py`. Build-Methoden
+   `_build_tab_station/tx/ft8/data() -> QWidget`, neuer Tab-Stylesheet,
+   Hoehen-Sizing via `adjustSize` + `resize`-Fallback,
+   `closeEvent()`-Timer-Stop (Defense-in-Depth gegen R1-Lifecycle-Finding).
+2. `f4aad88` `test(ui): SettingsDialog Smoke-Test (5 Test-Cases)` —
+   neuer Test-File mit `_FakeSettings`-Mock, Tabs-Existenz, Widget-
+   Erreichbarkeit, Hoehen-Limit, Save-Round-Trip, initialer Tab.
+3. `b7eaf5d` `docs(prompts): Settings-Tabs V2/V3` — Workflow-Doku.
+4. (dieser Commit) `chore(release): v0.76 — Settings auf Tabs` —
+   APP_VERSION, HISTORY.md, CLAUDE.md.
+
+### Test-Status
+
+```
+./venv/bin/python3 -m pytest tests/ -q
+472 passed in ~7s
+```
+
+(467 → 472 dank 5 neuer Smoke-Tests in `test_settings_dialog_smoke.py`.)
+
+### Bekannt-Out-of-Scope (separate Issues)
+
+- `_reset_defaults()` setzt `radio_ip`, `language`, `stats_cb`,
+  `debug_console_cb` NICHT zurueck (war im alten Code auch schon so —
+  R1 hat es im Final-Review wieder gefunden). Bewusst out-of-scope
+  dieses UI-Refactors (V3 hat das explizit ausgeklammert). Wenn das
+  gefixt werden soll: separater Commit.
+- `_load_values()` mischt `settings.callsign` (Property) und
+  `settings.get("flexradio_ip")` (Dict-API). Bestehendes Pattern,
+  out-of-scope.
+
+---
+
 ## 2026-04-29 v0.75 — Auto-Hunt-Modus (Easter-Egg, 10-Min-Hard-Stop)
 
 **Betroffene Dateien:** `core/auto_hunt.py`, `core/encoder.py`, `ui/main_window.py`,
