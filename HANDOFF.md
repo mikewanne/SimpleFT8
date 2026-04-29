@@ -1,4 +1,28 @@
-# HANDOFF — SimpleFT8 — 2026-04-27 (v0.67)
+# HANDOFF — SimpleFT8
+
+---
+
+## ⛔⛔⛔ HARDWARE-WARNUNG — HOECHSTE PRIORITAET ⛔⛔⛔
+
+### ANT1 = TX-Antenne. IMMER. Auf jedem Band.
+### ANT2 = NUR Empfangs-Zusatzantenne. NIEMALS TX!
+
+**ANT2 (Regenrinne ~15m) ist NICHT fuer Sendeleistung ausgelegt.** TX auf
+ANT2 mit 100 W = Hardware-Schaden moeglich (PA, Antennen-Pfad).
+
+| Aktion | Antenne |
+|---|---|
+| Manuelle CQ-Anrufe / TUNE | **ANT1** |
+| OMNI CQ (passiv) | **ANT1** |
+| AUTO HUNT (aktiv) | **ANT1** |
+| Diversity RX-Pattern | beide RX, **TX nur ueber ANT1** |
+
+**Im Code:** Vor jedem TX-Trigger muss `radio.set_tx_antenna("ANT1")`
+verifiziert sein. Diversity-Pattern darf **nie** ANT2 als TX-Slot vergeben.
+
+---
+
+## 2026-04-27 (v0.67)
 
 ## Heute erledigt — Locator-DB Feature + GitHub-Push (v0.66 + v0.67)
 

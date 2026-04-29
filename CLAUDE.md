@@ -1,5 +1,35 @@
 Lies nach dieser Datei sofort auch HANDOFF.md **und HISTORY.md** und bestätige alle drei mit je einer Zeile.
 
+---
+
+# ⛔⛔⛔ HARDWARE-WARNUNG — HOECHSTE PRIORITAET ⛔⛔⛔
+
+## ANT1 = TX-Antenne. IMMER. Auf jedem Band.
+## ANT2 = NUR Empfangs-Zusatzantenne. NIEMALS TX!
+
+**ANT2 (Regenrinne ~15m) ist NICHT fuer Sendeleistung ausgelegt.** TX auf
+ANT2 mit 100 W = **Hardware-Schaden moeglich** (Antennen-Pfad, hochohmige
+Last → PA-Schutzschaltung greift, im worst case PA-Schaden am FlexRadio).
+
+### Konsequenz fuer ALLE TX-Modi
+
+| Aktion | Antenne |
+|---|---|
+| Manuelle CQ-Anrufe | **ANT1** |
+| OMNI CQ (passiv) | **ANT1** |
+| AUTO HUNT (aktiv) | **ANT1** |
+| TUNE-Button | **ANT1** (Tuner-Match) |
+| Diversity RX-Pattern (70:30 / 50:50 / 30:70) | beide RX, **TX nur ueber ANT1** |
+
+**Im Code:** Vor jedem TX-Trigger (Encoder, TUNE) muss `radio.set_tx_antenna("ANT1")`
+verifiziert sein. Diversity-Pattern darf **nie** ANT2 als TX-Slot vergeben.
+
+**Wenn neue TX-Funktionalitaet gebaut wird** (Auto-Hunt, Hybrid-Modi, was
+auch immer): **erste Frage — laeuft TX garantiert ueber ANT1?**
+Beantworte das BEVOR du Code schreibst, niemals erst im Test.
+
+---
+
 ⛔ **HISTORY.md ZWINGEND beim Session-Start lesen!** — Sie ist die einzige
 verlaessliche Quelle dafuer welche Features in welchen Versionen tatsaechlich
 implementiert wurden. Wer das ueberspringt, plant Features doppelt (Beispiel
