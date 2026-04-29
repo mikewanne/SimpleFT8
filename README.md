@@ -6,7 +6,13 @@
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![Platform: macOS](https://img.shields.io/badge/platform-macOS-lightgrey.svg)](https://www.apple.com/macos/)
 [![Ham Radio](https://img.shields.io/badge/ham--radio-FT8%2FFT4%2FFT2-orange.svg)](https://www.physics.princeton.edu/pulsar/k1jt/wsjtx.html)
-[![Tests](https://img.shields.io/badge/tests-442%20passed-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-472%20passed-brightgreen.svg)]()
+
+> ⚠️  **Disclaimer / Haftungsausschluss**
+>
+> *EN:* SimpleFT8 is a private feasibility study and personal hobby project. Use at your own risk. No liability is accepted for damage to hardware (radio, PA, antennas), data loss, or regulatory violations. The software is provided "AS IS" without warranty of any kind — see [LICENSE](LICENSE) (MIT) for full terms.
+>
+> *DE:* SimpleFT8 ist eine private Machbarkeitsstudie und ein persoenliches Hobby-Projekt. Nutzung auf eigene Gefahr. Es wird keine Haftung uebernommen fuer Schaeden an Hardware (Funkgeraet, PA, Antennen), Datenverlust oder regulatorische Verstoesse. Die Software wird "AS IS" ohne jegliche Garantie bereitgestellt — siehe [LICENSE](LICENSE) (MIT) fuer vollstaendige Bedingungen.
 
 > **No more manual ALC babysitting, no missed replies, no guessing the best antenna or frequency.**
 > SimpleFT8 automates your entire FT8/FT4/FT2 workflow with closed-loop power control, dual-mode diversity scoring, automatic CQ frequency optimization, and intelligent caller queuing.

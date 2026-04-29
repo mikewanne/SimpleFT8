@@ -115,6 +115,96 @@ def kill_old_instances():
         print("[SimpleFT8] Cleanup fertig")
 
 
+def _show_hardware_warning(app) -> bool:
+    """Pflicht-Acknowledgment beim App-Start: ANT1 = TX-only, ANT2 = RX-only.
+
+    Schuetzt vor versehentlichem TX auf ANT2 (Regenrinne ~15m, NICHT fuer
+    Sendeleistung ausgelegt — Hardware-Schaden moeglich bei 100W TX).
+    Returnt True wenn User OK klickt, False bei Abbruch (App beendet sich).
+    """
+    from PySide6.QtWidgets import (
+        QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
+    )
+    from PySide6.QtCore import Qt
+
+    dlg = QDialog()
+    dlg.setWindowTitle("Hardware-Sicherheitshinweis")
+    dlg.setModal(True)
+    dlg.setWindowFlag(Qt.WindowStaysOnTopHint, True)
+    dlg.setFixedSize(540, 300)
+    dlg.setStyleSheet("""
+        QDialog { background-color: #1a1a2e; }
+        QLabel { background-color: transparent; color: #CCC; }
+    """)
+
+    lay = QVBoxLayout(dlg)
+    lay.setContentsMargins(28, 24, 28, 20)
+    lay.setSpacing(14)
+
+    # Header
+    header = QLabel("⚠  Hardware-Hinweis")
+    header.setStyleSheet(
+        "color: #FFB000; font-family: Menlo; font-size: 16px; font-weight: bold;"
+    )
+    lay.addWidget(header)
+
+    # Body: ANT1/ANT2 Regel
+    body = QLabel(
+        "<span style='color:#00DDFF; font-weight:bold;'>ANT1</span> = IMMER die TX-Antenne. "
+        "Kann nicht anders gesetzt werden.<br><br>"
+        "<span style='color:#00DDFF; font-weight:bold;'>ANT2</span> = IMMER nur Hilfs-Empfangsantenne. "
+        "Wird von der App <b>NIEMALS</b> zum Senden genutzt."
+    )
+    body.setStyleSheet(
+        "color: #CCC; font-family: Menlo; font-size: 12px; line-height: 1.5;"
+    )
+    body.setWordWrap(True)
+    lay.addWidget(body)
+
+    # Haftungs-Disclaimer (Machbarkeitsstudie / Hobby-Projekt)
+    disclaimer = QLabel(
+        "SimpleFT8 ist eine private Machbarkeitsstudie. Nutzung auf eigene "
+        "Gefahr — fuer Schaeden an Hardware, Antennen oder Funkgeraeten "
+        "wird keine Haftung uebernommen."
+    )
+    disclaimer.setStyleSheet(
+        "color: #888; font-family: Menlo; font-size: 11px; "
+        "padding: 8px; background-color: rgba(60,60,80,0.25); "
+        "border: 1px solid #333; border-radius: 4px;"
+    )
+    disclaimer.setWordWrap(True)
+    lay.addWidget(disclaimer)
+
+    lay.addStretch()
+
+    # Button-Reihe
+    btn_row = QHBoxLayout()
+    btn_row.setSpacing(10)
+    btn_cancel = QPushButton("Abbrechen")
+    btn_cancel.setStyleSheet(
+        "QPushButton { background-color: #333; color: #AAA; border: none; "
+        "border-radius: 4px; padding: 8px 20px; font-family: Menlo; "
+        "font-size: 12px; font-weight: bold; }"
+        "QPushButton:hover { background-color: #444; color: #DDD; }"
+    )
+    btn_cancel.clicked.connect(dlg.reject)
+    btn_ok = QPushButton("OK — verstanden")
+    btn_ok.setStyleSheet(
+        "QPushButton { background-color: #0066AA; color: white; border: none; "
+        "border-radius: 4px; padding: 8px 20px; font-family: Menlo; "
+        "font-size: 12px; font-weight: bold; }"
+        "QPushButton:hover { background-color: #0088CC; }"
+    )
+    btn_ok.setDefault(True)
+    btn_ok.clicked.connect(dlg.accept)
+    btn_row.addStretch()
+    btn_row.addWidget(btn_cancel)
+    btn_row.addWidget(btn_ok)
+    lay.addLayout(btn_row)
+
+    return dlg.exec() == QDialog.Accepted
+
+
 def main():
     kill_old_instances()
 
@@ -125,6 +215,10 @@ def main():
     app = QApplication(sys.argv)
     app.setApplicationName("SimpleFT8")
     app.setOrganizationName("DA1MHH")
+
+    # Pflicht-Acknowledgment Hardware-Schutz (ANT1=TX, ANT2=RX-only)
+    if not _show_hardware_warning(app):
+        sys.exit(0)
 
     settings = Settings()
     window = MainWindow(settings)
