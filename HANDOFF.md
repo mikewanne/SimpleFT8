@@ -25,6 +25,40 @@ explizit + Disclaimer (Modal, OK/Abbruch, OK = App startet, Abbruch =
 
 ---
 
+## 2026-04-30 (v0.78 + v0.79) — OMNI scharfgeschaltet + Bug-Cleanup
+
+### v0.78 (Nacht, Workflow durchgezogen)
+- OMNI-TX scharfgeschaltet als **Diversity-only** Power-User-Feature
+- Mode-Coupling: btn_omni_cq + btn_auto_hunt nur in „diversity"
+- Auto-Hunt analog mode-coupled, neuer Reason `rx_mode_change`
+- Mutually-exclusive OMNI ↔ Auto-Hunt mit `superseded`-Reason
+- Stop-Hooks fuer band/ft_mode/rx_mode/totmann konsistent
+- Workflow: V1 → Self-Review (17) → V2 → R1 (10, 0 Halluzinationen,
+  2 echte Bugs in V2) → V3 → 7 atomare Commits → Final-R1 (11, 2 umgesetzt)
+- 472 → 493 Tests gruen
+
+### v0.79 (Vormittag, Bug-Cleanup-Tag)
+
+**Diagnose-Falle:** R1 hatte gestern Abend ANT1-Hook in `Encoder.transmit()`
+mit 90% Wahrscheinlichkeit als TX-Regression-Ursache gepegt — Test 1
+heute morgen widerlegte das. Mike's Flex sendet sauber, der Empfaenger-
+Icom hatte **Auto-Sequence ausgeschaltet** und sendete stur den
+initial-Anruf. Memory `feedback_auto_sequence_check_first.md` angelegt.
+
+**5 Fixes:**
+- QSO-Panel CQ-Sammelanzeige raus — jede CQ einzeln im Log (`db10b2d`)
+- Kalibrierungs-Bestaetigungsdialog modal + StaysOnTop (`ad24a6e`)
+- RX-Tag waehrend Diversity-Kalibrierung zeigt korrekte Antenne (`a7a16de`)
+- `_reset_defaults` vervollstaendigt: radio_ip / language / stats / debug (`759e49f`)
+- **CQ-Toggle + Stats-Lock-Bug:** `mode_button_group.setExclusive(False)`
+  statt True. Qt-Default verhindert sonst Re-Klick-Deselect → CQ-Toggle
+  broken UND `btn_cq.isChecked()=True` haengen → Stats stillschweigend
+  blockiert. (`d94f2e5`)
+
+**HEAD:** `d94f2e5` (vor Version-Bump auf v0.79)
+
+---
+
 ## 2026-04-29 (v0.77) — App-Start Hardware-Dialog + Statistik-Methodik
 
 ## Heute erledigt (chronologisch)
@@ -96,79 +130,27 @@ explizit + Disclaimer (Modal, OK/Abbruch, OK = App startet, Abbruch =
 
 ## Offen / Naechste Schritte (priorisiert)
 
-### 🚀 v0.78 OMNI-TX — Workflow gestartet (2026-04-30)
+### 🐛 Akut
 
-**Status:** Schritt 0 (Code-Verifikation) abgeschlossen, V1-Entwurf als naechstes.
+1. **Timeout-Cooldown fehlt** — nach `x DA1TST — Timeout` antwortet Mike's
+   Flex sofort wieder auf DA1TST's naechsten CQ. Endlos-Schleife. Braucht
+   V1→V3-Workflow weil State-Logik (qso_state.py). ~10-20 Zeilen.
 
-**Backup:** `Appsicherungen/2026-04-30_vor_omni_implementierung/` (1.2 GB)
+2. **`_on_dx_tune_rejected` Normal-Branch fehlt `_stats_warmup_cycles`-
+   Reset** — bei Cancel der DX-Tune-Pipeline im Normal-Modus bleibt
+   Counter auf 99999 haengen. Fix: `_stats_warmup_cycles = 6` in Z.1011-1012
+   else-Branch ergaenzen. (~1 Zeile)
 
-**Design-Spec:** `docs/OMNI_TX_DESIGN.md` v3.2 — vollstaendige permanente
-Spec mit 14 Sektionen. CLAUDE.md verweist drauf.
+3. **20m FT8 Datensammlung — Ziel: 5 Tage flaechendeckend**
+   Strategie: bei jedem „welcher Modus jetzt" die Lueckenliste pruefen,
+   schwaechsten Slot vorschlagen. Aufwand: ~3 Wochen Funkbetrieb (3-4 h/Tag).
 
-**Wichtige Befunde aus Schritt 0:**
-- OMNI-TX ist **bereits zu ~70% verkabelt** im Codebase (vermutlich
-  v0.50-v0.60). Logik-Schicht in `core/omni_tx.py` komplett vorhanden.
-- 7 Hooks bereits da: Singleton-Init, should_tx(), on_qso_started(),
-  advance() pro Cycle, Easter-Egg-Disable, Statusbar-Anzeige, Buttons.
-- 8 Lucken zu schliessen — alle mit Datei:Zeile-Verweis dokumentiert
-  in `docs/OMNI_TX_DESIGN.md` Sektion 14.
-- Geschaetzter Aufwand: ~425 Zeilen, ~4-5 h, 6-8 atomare Commits.
-- Auto-Hunt wird ebenfalls mode-coupled (Diversity-only) — Konsistenz
-  mit OMNI-Strategie. Easter-Egg bleibt Test-Override fuer Mike.
+### 🔥 Aus frueheren Releases (Field-Test ausstehend)
 
-**Naechste Workflow-Schritte (nach `docs/WORKFLOW.md` v1.1):**
-1. Schritt 1a — V1 schreiben (`prompts/omni_v1.md`)
-2. Schritt 1b/c — Self-Review → V2
-3. Schritt 2 — DeepSeek-R1-Review
-4. Schritt 2.5 — R1-Findings gegen Code verifizieren
-5. Schritt 3 — V3 schreiben + Mike vorlegen
-6. Schritt 4 — Mike-Freigabe
-7. Schritt 5 — Implementation in atomaren Commits
-8. Schritt 5b — Final-R1-Codereview
-9. Schritt 6 — Lessons-Learned
-
-**Mike's Design-Entscheidungen** (festgehalten in `docs/OMNI_TX_DESIGN.md`):
-- UI-Logik mode-gekoppelt (Normal: btn_cq sichtbar; Diversity:
-  btn_omni_cq + btn_auto_hunt sichtbar)
-- Easter-Egg = Test-Bypass nur fuer Mike, nicht GitHub-publik
-- Direkt-Toggle (KEIN Aktivierungsdialog — siehe Memory
-  feedback_disclaimer_no_threat.md)
-- 4 Stop-Reasons: manual_halt, band_change, mode_change, totmann_expired
-- block_cycles=80 (Plan v3.2, aktueller Code-Default 40 wird angepasst)
-- Mutually-exclusive zwischen Auto-Hunt und OMNI im 2-Button-Layout
-
-### 🆕 Aus v0.76-Field-Test — geplant als v0.78 Bug-Cleanup-Block
-
-1. **🟡 RX-Tag waehrend Diversity-Kalibrierung** — alle Eintraege als „A1"
-   obwohl Hardware zwischen ANT1/ANT2 schaltet. UI-only-Bug (Mess-
-   Algorithmus selbst korrekt). Fix: `msg.antenna = self._schedule[
-   self._step][0]` vor `add_message()` setzen. (~5 Zeilen)
-2. **🟠 Bestaetigungsfenster nach Kalibrierung** (`_show_calibration_done`,
-   `mw_radio.py:925`) ist `setWindowModality(NonModal)` + nur `dlg.show()`
-   — kann hinter Hauptfenster wandern. Fix: `setModal(True)` +
-   `WindowStaysOnTopHint` + `dlg.exec()`. (~3 Zeilen)
-3. **🟡 `_reset_defaults` Reset-Vervollstaendigung** (R1-Final-Review v0.76)
-   — `radio_ip`, `language`, `stats_cb`, `debug_console_cb` werden aktuell
-   NICHT zurueckgesetzt.
-
-### 🆕 Aus v0.77 hinzugekommen
-
-4. **20m FT8 Datensammlung — Ziel: 5 Tage flaechendeckend**
-   - Status: 2-3 Tage je Stunde-Modi-Slot, mit Luecken (z.B. Stunde 13 UTC
-     bei Diversity_Normal aktuell 1 Tag — heute hochgezogen).
-   - Ziel: alle 24 Stunden × 3 Modi auf **5 Tage** flaechendeckend.
-   - Strategie: „Welcher-Modus-jetzt"-Ratgeber pruefe pro Anfrage die
-     Lueckenliste, schlage schwaechsten Slot vor.
-   - Aufwand: ~3 Wochen Funkbetrieb (3-4 h/Tag).
-
-### 🔥 Aus frueheren Releases
-
-5. **Field-Test v0.74** Diversity-Bandwechsel-Bug-Fix (auch ausstehend)
-6. **Field-Test v0.75** Auto-Hunt — 6 Verifikationsschritte siehe
-   `prompts/auto_hunt_v3.md`.
-7. **Phase 2: `btn_omni_cq`-Handler** — Button hat keinen eigenen
-   `clicked`-Handler (OMNI laeuft weiter ueber bisherige Logik).
-8. **Migration `main_window._psk_worker` → `core/psk_reporter`** (Konsolidierung)
+4. **Field-Test v0.74** Diversity-Bandwechsel-Bug-Fix verifizieren
+5. **Field-Test v0.75** Auto-Hunt — 6 Verifikationsschritte siehe
+   `prompts/auto_hunt_v3.md`
+6. **Migration `main_window._psk_worker` → `core/psk_reporter`** (Konsolidierung)
 
 ### ⚙️ Mittelfristig
 
@@ -224,15 +206,13 @@ Neu seit v0.75:
 
 ## Letzter bekannter guter Zustand
 
-- **Branch:** main, lokal **identisch mit origin/main** (eben gepusht)
-- **HEAD:** `ffbe12e chore(release): v0.77 — Hardware-Dialog + Statistik-Methodik`
+- **Branch:** main, lokal **vor origin/main** (v0.78 + v0.79 noch nicht gepusht)
+- **HEAD:** vor Version-Bump-Commit auf v0.79 (kommt gleich)
 - **Tag:** kein neuer Tag (Mike entscheidet)
-- **Tests:** 472/472 gruen
-- **App-Start:** OK (PID 61569 lief stabil heute Nachmittag)
-- **App-Version:** v0.77
-- **Backup:** `Appsicherungen/2026-04-29_vor_auto_hunt/` (v0.74 Stand,
-  vor Auto-Hunt). Kein neues Backup heute (Aenderungen waren UI-/Doku-
-  fokussiert, keine Mess-/Algorithmus-Aenderungen).
+- **Tests:** 493/493 gruen
+- **App-Version:** v0.79 (nach Bump)
+- **Backup:** `Appsicherungen/2026-04-30_vor_omni_implementierung/` (v0.77 Stand,
+  vor v0.78 OMNI-Implementation, 1.2 GB)
 
 ---
 

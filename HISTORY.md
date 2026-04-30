@@ -5,6 +5,94 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-04-30 v0.79 — Bug-Cleanup + CQ-Toggle/Stats-Lock-Fix
+
+**Betroffene Dateien:** `ui/qso_panel.py`, `ui/mw_radio.py`, `ui/mw_cycle.py`,
+`ui/settings_dialog.py`, `ui/control_panel.py`, `tests/test_auto_hunt_extended.py`,
+`docs/TIMING_BUG_TESTPLAN_2026-05-01.md`, neue Memory
+`feedback_auto_sequence_check_first.md`.
+
+**Was:** Bug-Cleanup-Tag — vier Bugs gefixt aus v0.76-Field-Test +
+v0.79-Field-Test, plus eine Auto-Sequence-Lesson aus 2h Diagnose-Falle.
+
+### Diagnose-Falle Auto-Sequence (Vormittag, ~2h)
+
+R1-Diagnose von gestern Abend (TX-Regression seit v0.75 mit 90%
+Wahrscheinlichkeit ANT1-Hook stoert TX-Sequencing) wurde durch Test 1
+(Baseline) widerlegt: Mike's Flex sendet alles sauber (Icom-Screenshot
+zeigte CQ + Reports mit SNR 18-19 / DT 0). Echtes Problem: Auto-Sequence
+am Icom-Test-Tool war ausgeschaltet — Icom hat stur initial-Anruf
+wiederholt statt R-Report zu schicken.
+
+→ ANT1-Hook in `Encoder.transmit()` ist unschuldig, kein Code-Fix
+notwendig. Memory `feedback_auto_sequence_check_first.md` angelegt:
+bei kuenftigen TX-Bug-Verdaechten ZUERST Auto-Sequence-Konfig am
+Empfaenger-Tool pruefen.
+
+### QSO-Panel Sammelanzeige raus (commit db10b2d, 30.04 02:26)
+
+Mike-Wunsch v0.78 Field-Test: jede CQ-Wiederholung soll als eigene
+Zeile im QSO-Panel sichtbar sein, statt als „CQ ×N" aggregiert.
+`ui/qso_panel.py:add_tx()` schreibt jetzt jede TX-Message ins Log,
+status_label-CQ-Counter und _cq_flash_timer entfernt.
+
+### Quick-Wins (3 Bugs aus v0.76 R1-Final-Review)
+
+1. **`ui/mw_radio.py` `_show_calibration_done`** (commit ad24a6e):
+   non-modal Dialog mit `dlg.show()` konnte hinter Hauptfenster wandern.
+   Fix: `setModal(True)` + `WindowStaysOnTopHint` + `dlg.exec()` (analog
+   v0.77 Hardware-Acknowledgement-Pattern).
+
+2. **`ui/mw_cycle.py` `_handle_dx_tune_mode`** (commit a7a16de): waehrend
+   Diversity-Kalibrierung wurde RX-Tag stets als „A1" angezeigt obwohl
+   Hardware zwischen ANT1/ANT2 schaltet. Fix: aktuelle Antenne vom
+   `dx_tune_dialog._schedule[_step]` ablesen und auf `msg.antenna` setzen
+   bevor `add_message()`.
+
+3. **`ui/settings_dialog.py` `_reset_defaults`** (commit 759e49f): vier
+   Widgets wurden nicht zurueckgesetzt — `radio_ip`, `language`,
+   `stats_cb`, `debug_console_cb`. Defaults: leer / Deutsch / Stats-on /
+   Debug-off.
+
+### CQ-Toggle + Stats-Lock-Bug (Hauptfund Vormittag, commit d94f2e5)
+
+Doppel-Bug seit v0.75 (commit ea7ea6e, 3-Button-Layout):
+`mode_button_group.setExclusive(True)` verhindert Qt-intern dass ein
+checked Button durch Re-Klick deselektiert werden kann.
+
+Folgen:
+- **CQ-Toggle broken** — Mike's Beobachtung: „CQ-Modus gestartet"
+  mehrmals, nie „CQ-Modus gestoppt". Erneuter Klick triggert
+  `clicked`-Signal mit `isChecked()==True` → `start_cq()` endlos.
+- **Stats stillschweigend blockiert** — `btn_cq.isChecked()` bleibt
+  True → `_cq_ui=True` in `_log_stats` → silent return False ohne
+  Indicator-Update. Mike's Indicator blieb grau vom letzten
+  Tuning/Warmup, obwohl Band+Modus+RX alles korrekt war.
+
+Fix: `setExclusive(False)`. Mutually-exclusive zwischen OMNI ↔ Auto-Hunt
+wird seit v0.78 in `main_window._on_btn_omni_cq_toggled` und
+`_on_btn_auto_hunt_toggled` mit „superseded"-Reason gemacht. `btn_cq`
+und Diversity-Buttons sind ohnehin nie gleichzeitig sichtbar
+(mode-coupled v0.78).
+
+Test-Update: `test_control_panel_three_mode_buttons_initially_hidden`
+exclusive-Erwartung auf False geaendert.
+
+### Bekannte Fallen ergaenzt
+
+- **Stats-Lock**: bei Verdacht auf „Stats wird nicht geloggt" als
+  ERSTES `btn_cq.isChecked()` UND `qso_sm.cq_mode` UND `qso_sm.state`
+  pruefen — wenn alle False/IDLE und Stats-Indicator trotzdem grau,
+  ist's ein Reset-Problem in einem der `_stats_warmup_cycles=99999`-
+  Pfade (`_on_dx_tune_rejected` Z.1011-1012 setzt im Normal-Branch
+  KEIN Reset — TODO-Folge).
+
+**APP_VERSION:** 0.78 → 0.79.
+
+**Tests:** 493 gruen (unveraendert).
+
+---
+
 ## 2026-04-30 v0.78 — OMNI-TX scharfgeschaltet + Auto-Hunt Diversity-only
 
 **Betroffene Dateien:** `core/omni_tx.py`, `ui/main_window.py`, `ui/mw_radio.py`,
