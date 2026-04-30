@@ -241,6 +241,12 @@ class QSOMixin:
                 else:
                     self._omni_tx.cq_odd_count += 1
         print(f"[TX] → '{message}' auf {self.encoder.audio_freq_hz} Hz")
+        # v0.80 Fix A2: wenn bereits ein TX gescheduled ist (z.B. alter
+        # Retry-TX im Sleep), erst abbrechen. Sonst werden zwei TX-Worker
+        # parallel laufen und der alte sendet eine veraltete Message
+        # nachdem der State sich geaendert hat.
+        if self.encoder.is_transmitting:
+            self.encoder.abort()
         self.encoder.transmit(message)  # add_tx() wird via tx_started Signal aufgerufen
 
     @Slot(object)

@@ -52,6 +52,10 @@ class Encoder(QObject):
         self._is_transmitting = False
         self.tx_even = None  # None=nächster Slot, True=even, False=odd
         self._mode = "FT8"  # "FT8", "FT4", "FT2"
+        # v0.80 Fix A2: cancelable sleep. abort() weckt _tx_worker_inner
+        # aus dem Slot-Wait-Sleep auf — sonst schlaeft er bis zu 14s und
+        # sendet veraltete Messages nach State-Change.
+        self._abort_event = threading.Event()
 
     def set_protocol(self, mode: str):
         """Protokoll wechseln."""
@@ -63,8 +67,14 @@ class Encoder(QObject):
         return self._is_transmitting
 
     def abort(self):
-        """TX sofort abbrechen (Bandwechsel, Notaus)."""
+        """TX sofort abbrechen (Bandwechsel, Notaus, State-Change).
+
+        v0.80 Fix A2: setzt zusaetzlich _abort_event, damit der TX-Worker
+        aus seinem Slot-Wait-Sleep aufwacht. Ohne Event bleibt der Worker
+        bis zu 14s im time.sleep haengen und sendet veraltete Messages.
+        """
         self._is_transmitting = False
+        self._abort_event.set()
         print("[Encoder] TX abgebrochen")
 
     def set_radio(self, radio):
@@ -136,6 +146,8 @@ class Encoder(QObject):
     def _tx_worker(self, message: str):
         """TX-Worker: Timing → PTT → Audio via VITA-49 → PTT off."""
         self._is_transmitting = True
+        # v0.80 Fix A2: Event vor jedem TX zuruecksetzen
+        self._abort_event.clear()
         try:
             self._tx_worker_inner(message)
         finally:
@@ -184,13 +196,19 @@ class Encoder(QObject):
 
         # 3. Bis zur Slot-Grenze schlafen (TARGET_TX_OFFSET=0.5 → sleep bis boundary,
         #    dann 0.5s Silence → TX startet bei boundary+0.5s = WSJT-X Protokoll)
+        # v0.80 Fix A2: cancelable sleep via _abort_event.wait().
+        # Returnt True wenn abort() das Event gesetzt hat → sofortiger Exit
+        # statt 14s weiter zu schlafen mit veralteter Message.
         sleep_dur = (next_boundary + TARGET_TX_OFFSET - 0.5) - time.time()
         if sleep_dur > 0.001:
-            time.sleep(sleep_dur)
+            aborted = self._abort_event.wait(timeout=sleep_dur)
+            if aborted:
+                print("[Encoder] TX abgebrochen (während Warte-Phase)")
+                return
 
-        # Abort-Check: wurde TX während des Schlafs abgebrochen?
+        # Abort-Check: kann auch ohne Sleep auftreten (sleep_dur <= 0.001)
         if not self._is_transmitting:
-            print("[Encoder] TX abgebrochen (während Warte-Phase)")
+            print("[Encoder] TX abgebrochen (vor Sleep)")
             return
 
         # 4. Silence-Padding berechnen (jetzt praezise, da nahe am Ziel)

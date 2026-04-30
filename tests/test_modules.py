@@ -2585,6 +2585,98 @@ def test_wait_rr73_retry_at_cycle_one():
     assert sm.qso.rr73_retries == 1, "rr73_retries inkrementiert"
 
 
+# ── v0.80 TX-DT-Drift Fix (Fix A2 — KRITISCH cancelable sleep) ───────────────
+
+def test_abort_during_sleep_returns_within_100ms():
+    """Fix A2: encoder.abort() bricht den Slot-Wait-Sleep sofort ab.
+
+    Vor Fix: time.sleep(14s) ist nicht unterbrechbar, abort() setzt nur
+    Flag, Worker schlaeft 14s weiter und sendet danach veraltete Message.
+    Nach Fix: _abort_event.wait(timeout=...) returnt sofort wenn
+    abort() das Event setzt.
+    """
+    import time
+    import threading
+    import numpy as np
+    from unittest.mock import MagicMock
+    from core.encoder import Encoder
+
+    enc = Encoder(audio_freq_hz=1500)
+    radio = MagicMock()
+    enc.set_radio(radio)
+    enc.encode_message = lambda msg: np.zeros(180000, dtype=np.int16)
+
+    # Slot-Boundary 5 Sekunden in Zukunft → sleep_dur ~ 4.5s
+    enc._next_slot_boundary = lambda: time.time() + 5.0
+
+    # Worker im Thread starten
+    enc._is_transmitting = True
+    enc._abort_event.clear()
+    t = threading.Thread(target=enc._tx_worker_inner, args=("CQ DA1MHH JO31",))
+    t.start()
+
+    # Sicherstellen dass Worker im sleep ist
+    time.sleep(0.05)
+    assert t.is_alive(), "Worker muss im Sleep sein"
+
+    # Abort triggern → Worker MUSS innerhalb 100ms returnen
+    abort_t0 = time.time()
+    enc.abort()
+    t.join(timeout=0.5)
+    abort_dur = time.time() - abort_t0
+
+    assert not t.is_alive(), "Worker muss nach abort() terminiert sein"
+    assert abort_dur < 0.15, (
+        f"Worker hat {abort_dur:.3f}s gebraucht zu terminieren "
+        f"(erwartet < 0.15s) — Sleep ist NICHT cancelable!"
+    )
+    # PTT darf NICHT angegangen sein (Audio nicht gesendet)
+    assert "ptt_on" not in [c[0] for c in radio.method_calls], (
+        "ptt_on darf NICHT gerufen werden wenn TX vor Audio-Send abgebrochen wird"
+    )
+
+
+def test_state_change_during_encoder_sleep_aborts_pending_tx():
+    """Fix A2: Wenn waehrend Encoder-Sleep ein neuer transmit kommt,
+    wird der alte abgebrochen.
+
+    Szenario: WAIT_REPORT-Retry scheduled (sleep 14s). Antwort kommt spaet
+    rein, state-change zu TX_RR73, neuer transmit. Alter TX muss abgebrochen
+    werden, sonst doppelter TX (alter Report + neuer RR73).
+    """
+    import time
+    import threading
+    import numpy as np
+    from unittest.mock import MagicMock
+    from core.encoder import Encoder
+
+    enc = Encoder(audio_freq_hz=1500)
+    radio = MagicMock()
+    enc.set_radio(radio)
+    enc.encode_message = lambda msg: np.zeros(180000, dtype=np.int16)
+    enc._next_slot_boundary = lambda: time.time() + 5.0
+
+    # Alter TX laeuft im Thread
+    enc._is_transmitting = True
+    enc._abort_event.clear()
+    t_old = threading.Thread(
+        target=enc._tx_worker_inner, args=("OLD DA1MHH J031",)
+    )
+    t_old.start()
+    time.sleep(0.05)
+
+    # Simuliere mw_qso._on_send_message-Logik: abort() vor neuem transmit
+    if enc.is_transmitting:
+        enc.abort()
+    t_old.join(timeout=0.3)
+
+    assert not t_old.is_alive(), "Alter TX-Thread muss beendet sein"
+    # Audio des alten TX darf NICHT gesendet sein
+    assert "send_audio" not in [c[0] for c in radio.method_calls], (
+        "Alter TX darf NICHT gesendet werden"
+    )
+
+
 # ── Runner ───────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
