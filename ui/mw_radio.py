@@ -943,11 +943,17 @@ class RadioMixin:
         self._show_calibration_done(band, ant1_g, ant2_g)
 
     def _show_calibration_done(self, band: str, ant1_g: int, ant2_g: int | None):
-        """Non-modales Info-Popup 'Kalibrierung abgeschlossen' — blockiert nichts."""
+        """Modales Info-Popup 'Kalibrierung abgeschlossen' — bleibt im Vordergrund.
+
+        v0.79 R1-Review-Fix: vorher non-modal mit dlg.show() — konnte hinter
+        dem Hauptfenster wandern. Jetzt modal + WindowStaysOnTopHint + exec().
+        """
+        from PySide6.QtCore import Qt as _Qt
         from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton
         dlg = QDialog(self)
         dlg.setWindowTitle("Kalibrierung abgeschlossen")
-        dlg.setWindowModality(Qt.WindowModality.NonModal)
+        dlg.setModal(True)
+        dlg.setWindowFlag(_Qt.WindowType.WindowStaysOnTopHint, True)
         dlg.setStyleSheet(
             "QDialog, QWidget { background-color: #16192b; }"
         )
@@ -983,7 +989,7 @@ class RadioMixin:
         hlay.addWidget(btn)
         lay.addLayout(hlay)
 
-        dlg.show()
+        dlg.exec()
 
     def _on_dx_tune_rejected(self):
         """DX Tuning abgebrochen — zurueck auf Normal/Diversity."""
