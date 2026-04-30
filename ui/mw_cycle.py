@@ -59,6 +59,12 @@ class CycleMixin:
         elif messages:
             self._handle_dx_tune_mode(messages)
 
+        # v0.81 Fix D: Retry-Trigger NACH Message-Verarbeitung am Slot-Ende.
+        # Wenn Gegenstation im RX-Slot geantwortet hat (R+18, RR73), hat
+        # on_message_received den State bereits gewechselt → kein Retry.
+        # Das fixt den Doppel-Report-Bug v0.80.
+        self.qso_sm.on_decoder_finished()
+
         # Slot-synchroner Such-Trigger + Histogramm-Refresh JEDEN Slot
         # (unabhaengig von messages-Inhalt — _diversity_stations mit Aging ist
         # Quelle der Wahrheit). Das fixt P1 (Histogramm-Update Guard) gleich mit.
