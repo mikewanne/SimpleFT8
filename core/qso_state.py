@@ -293,8 +293,14 @@ class QSOStateMachine(QObject):
             self._dbg.log("WAIT", f"Warte auf {self.qso.their_call} "
                          f"({self.state.name}, Zyklus {self.qso.timeout_cycles}/{self.qso.max_timeout})")
 
-            # Nach 2 Zyklen ohne Antwort: nochmal senden (wie WSJT-X, ~30s)
-            if self.qso.timeout_cycles == 2:
+            # Nach 1 Zyklus ohne Antwort: Retry triggern.
+            # Trigger feuert im RX-Slot der Gegenstation (timeout_cycles==1) →
+            # Encoder hat 14s Vorlauf zum naechsten Mike-TX-Slot. Das fixt den
+            # TX-DT-Drift-Bug v0.79: Trigger bei ==2 feuerte AM Anfang von
+            # Mike's TX-Slot, Encoder hatte 0s Vorlauf, "Slot-Rand: sofort
+            # senden" gab DT 0.6-0.8s (ueber FT8-Decode-Schwelle).
+            # Retry-TX-Timing bleibt identisch (Slot N+2, WSJT-X-konform).
+            if self.qso.timeout_cycles == 1:
                 if self.state == QSOState.WAIT_REPORT:
                     station_limit = min(self.qso.max_calls, MAX_STATION_CALLS)
                     if self.qso.calls_made < station_limit:

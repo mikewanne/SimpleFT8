@@ -2534,6 +2534,57 @@ def test_ap_lite_costas_reference_has_signal_at_costas_positions():
     assert gap_energy == 0.0, "Daten-Bloecke muessen 0 sein im Costas-Referenzsignal"
 
 
+# ── v0.80 TX-DT-Drift Fix (Fix A1) ───────────────────────────────────────────
+
+def test_wait_report_retry_at_cycle_one():
+    """Fix A1: WAIT_REPORT-Retry feuert bei timeout_cycles==1 (war ==2 in v0.79).
+
+    Trigger-Zeitpunkt verschiebt sich vom Mike-TX-Slot in den RX-Slot der
+    Gegenstation → Encoder hat 14s Vorlauf zum naechsten Mike-Slot statt 0s.
+    Fixt TX-DT-Drift Bug v0.79 (DT 0.6-0.8s → 0.0-0.1s).
+    """
+    from core.qso_state import QSOStateMachine, QSOState
+    sm = QSOStateMachine("DA1MHH", "JO31")
+    sm.state = QSOState.WAIT_REPORT
+    sm.qso.their_call = "DA1TST"
+    sm.qso.our_snr = "-12"
+    sm.qso.calls_made = 1
+    sm.qso.max_calls = 6
+    sm.qso.timeout_cycles = 0
+    sent = []
+    sm.send_message.connect(lambda m: sent.append(m))
+
+    # Erster on_cycle_end nach WAIT_REPORT-Eintritt: counter 0 → 1
+    # MUSS retry triggern (vor Fix: triggered erst bei ==2)
+    sm.on_cycle_end()
+    assert sm.qso.timeout_cycles == 1, "Counter muss auf 1 stehen"
+    assert len(sent) == 1, "Retry MUSS bei cycle==1 triggern"
+    assert sent[0] == "DA1TST DA1MHH -12", "Retry-Message-Format"
+    assert sm.state == QSOState.TX_CALL, "State-Wechsel zu TX_CALL"
+    assert sm.qso.calls_made == 2, "calls_made inkrementiert"
+
+
+def test_wait_rr73_retry_at_cycle_one():
+    """Fix A1: WAIT_RR73-Retry feuert bei timeout_cycles==1 (war ==2 in v0.79)."""
+    from core.qso_state import QSOStateMachine, QSOState
+    sm = QSOStateMachine("DA1MHH", "JO31")
+    sm.state = QSOState.WAIT_RR73
+    sm.qso.their_call = "DA1TST"
+    sm.qso.our_snr = "R-15"
+    sm.qso.rr73_retries = 0
+    sm.qso.timeout_cycles = 0
+    sent = []
+    sm.send_message.connect(lambda m: sent.append(m))
+
+    sm.on_cycle_end()
+    # Z.320 setzt timeout_cycles=0 nach Retry-Trigger
+    assert sm.qso.timeout_cycles == 0, "Counter wird nach Retry auf 0 reset"
+    assert len(sent) == 1, "Retry MUSS bei cycle==1 triggern"
+    assert sent[0] == "DA1TST DA1MHH R-15", "Retry-Message-Format"
+    assert sm.state == QSOState.TX_REPORT, "State-Wechsel zu TX_REPORT"
+    assert sm.qso.rr73_retries == 1, "rr73_retries inkrementiert"
+
+
 # ── Runner ───────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
