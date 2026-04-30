@@ -788,9 +788,14 @@ class _QSOStatusCard(QFrame):
         self.btn_auto_hunt.setStyleSheet(_mode_btn_style)
         self.btn_auto_hunt.hide()  # nur via Easter-Egg sichtbar
 
-        # Mutually exclusive: nur einer kann aktiv sein.
+        # Mutually exclusive zwischen OMNI ↔ Auto-Hunt: in main_window.py
+        # _on_btn_omni_cq_toggled + _on_btn_auto_hunt_toggled mit "superseded"-
+        # Reason. setExclusive(False) damit jeder Button durch Re-Klick
+        # DESELEKTIERT werden kann (Qt-Default bei exclusive=True verhindert
+        # das — Bug v0.75: CQ-Toggle stuck on, Stats silent blockiert).
+        # btn_cq und Diversity-Buttons nie gleichzeitig sichtbar (mode-coupled).
         self.mode_button_group = QButtonGroup(self)
-        self.mode_button_group.setExclusive(True)
+        self.mode_button_group.setExclusive(False)
         self.mode_button_group.addButton(self.btn_cq)
         self.mode_button_group.addButton(self.btn_omni_cq)
         self.mode_button_group.addButton(self.btn_auto_hunt)

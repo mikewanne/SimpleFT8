@@ -259,8 +259,10 @@ def test_control_panel_three_mode_buttons_initially_hidden(qapp):
     assert cp.btn_auto_hunt.isHidden(), "btn_auto_hunt muss initial hidden sein"
     assert cp.btn_auto_hunt.text() == "AUTO HUNT"
 
-    # QButtonGroup mutually exclusive ueber alle 3
-    assert cp.mode_button_group.exclusive() is True
+    # QButtonGroup NICHT exclusive (ab v0.79): erlaubt Re-Klick-Deselect
+    # auf btn_cq. Mutually-exclusive zwischen OMNI ↔ Auto-Hunt wird in
+    # main_window.py via "superseded"-Reason gemacht.
+    assert cp.mode_button_group.exclusive() is False
     assert len(cp.mode_button_group.buttons()) == 3
 
     cp.deleteLater()
