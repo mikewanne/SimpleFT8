@@ -2510,3 +2510,90 @@ Combos, 2 alte Tests umgeschrieben).
 - ~/.simpleft8/cache/rx_history/ enthaelt nach Save: bis zu 5 Files
   (LOGGED_BANDS × FT8) plus eventuell weitere Baender wenn Mike auf
   60m/80m/12m geht.
+
+
+## 2026-04-30 v0.81 — Doppel-Report-Bug-Fix (Fix D)
+
+**Symptom (Feldtest 30.04. nach v0.80-Release):**
+Nach erfolgreichem TX-DT-Drift-Fix (v0.80) tauchte ein zweiter,
+latenter Bug auf — der **Doppel-Report im QSO-Verlauf**:
+
+```
+08:32:45 [O] Mike → "DA1TST DA1MHH -21"        (initial-call)
+08:33:00 [E] DA1TST → R+18                      (Antwort, decoded ~T+29.5s)
+08:33:15 [O] Mike → "DA1TST DA1MHH -21"        (DOPPEL-Report!)
+08:33:45 [O] Mike → "DA1TST DA1MHH RR73"       (endlich)
+```
+
+QSO-Pacing 6 Slots statt der ueblichen 4.
+
+**Root Cause:**
+`qso_sm.on_cycle_end()` lief in `mw_cycle.py:_on_cycle_start` (Z.501)
+am SLOT-START — also BEVOR der Decoder die Antwort der Gegenstation
+sehen konnte (Decoder gibt erst bei T+13.5s im Slot Bescheid).
+Mit Fix A1 aus v0.80 (Retry-Trigger bei `timeout_cycles == 1` statt
+`== 2`) wurde das sichtbar: der Retry feuerte VOR der Antwort →
+Doppel-Report.
+
+**Workflow (V1 → V2 → DeepSeek-R1 → V3):**
+- V1 (Erstentwurf, ~280 Zeilen): "on_cycle_end komplett ans Slot-Ende
+  verschieben"
+- V2 (Self-Review, ~330 Zeilen): 3 Lueckenfunde, Position praezisiert,
+  Pause-Edge-Case neu formuliert
+- DeepSeek-R1-Review (Reviewer-Modus): **1 BLOCKER (P6) eigeninitiativ**
+  — V2-Plan haette `CQ_WAIT`-Trigger und 3-Min-Gesamttimeout gebrochen
+  bei Decoder-Hang/Skip. R1-Empfehlung: Aufspaltung statt
+  Komplett-Verschiebung.
+- V3 (Aufspaltung): nur den Retry-Pfad ans Slot-Ende, der Rest bleibt
+  am Slot-START. R1-Findings P2 (FT4/FT2 Drift-Guard) und P3 (cross-
+  sender Race) als Trade-offs akzeptiert.
+
+**Fix-Implementation (3 atomare Commits):**
+
+1. **`refactor(qso_state)`:** Neue Methode `on_decoder_finished()` mit
+   dem Retry-Pfad fuer WAIT_REPORT/WAIT_RR73 (`timeout_cycles == 1`).
+   `on_cycle_end()` behaelt: 3-Min-Gesamttimeout, WAIT_73-Tick,
+   CQ_WAIT-Trigger, Counter-Inkrement, Max-Timeout-Check. Tests
+   angepasst.
+2. **`feat(mw_cycle)`:** `qso_sm.on_decoder_finished()` Aufruf in
+   `_on_cycle_decoded` NACH den Message-Handlern, VOR
+   `_refresh_diversity_freq_view`/`_run_ap_lite_rescue`/
+   `_run_auto_hunt`. `_on_cycle_start` unveraendert.
+3. **`chore(release)`:** v0.80 → v0.81, HISTORY.md + APP_VERSION.
+
+**Tests:**
+- `tests/test_modules.py`: 502 → 505 (3 neue Fix-D-Tests).
+- 2 bestehende v0.80-Tests angepasst (testen jetzt
+  `on_decoder_finished` statt `on_cycle_end` fuer den Retry-Pfad).
+- Neue Tests:
+  - `test_on_decoder_finished_skips_retry_when_state_advanced` —
+    Kern-Fix-Verifikation
+  - `test_on_cycle_end_no_longer_triggers_retry` — Regression-Schutz
+  - `test_on_decoder_finished_safe_without_qso` — qso=None safety
+
+**R1-Findings akzeptiert (dokumentiert, keine Code-Aenderung):**
+- **P2 FT4/FT2 Drift-Guard:** Encoder-Vorlauf nach Fix:
+  FT8 ~1.3s ✓, FT4 ~0.5s knapp, FT2 ~0.3s → Drift-Guard skipt zu
+  N+2/N+4. Akzeptabel weil Gegenstation mehrere Slots wartet.
+- **P3 cross-sender Race:** `cycle_start` (Timer-Thread) vs
+  `cycle_decoded` (Decoder-Thread) — theoretisch race, praktisch
+  selten (Decoder typ. <3s, Slot 15s).
+- **P4 auto_hunt-Reihenfolge:** unveraendert. `auto_hunt` liest
+  `qso_sm.state` weiterhin am Slot-Ende, jetzt direkt nach
+  `on_decoder_finished` fuer maximale Aktualitaet.
+
+**Verifikation noch ausstehend:**
+- Real-QSO mit 2. Station auf Icom-Empfaenger: 4-Slot-QSO-Pacing
+  (initial → R+18 → RR73 → 73) statt 6-Slot-Pacing.
+- Mehrere QSOs hintereinander ohne Doppel-Report.
+
+**Lessons (V1 → V3):**
+- DeepSeek-R1 Reviewer-Modus muss klar geframed sein („du sollst
+  KEINEN Code schreiben, nur reviewen") — sonst switcht R1 in
+  Implementer-Modus. Erste R1-Anfrage hat Plan akzeptiert ohne die
+  5 Reviewer-Fragen zu beantworten.
+- Wenn man R1 explizit als Reviewer fragt, findet er BLOCKER die
+  in der Self-Review uebersehen wurden (hier P6 CQ_WAIT-Regression).
+- Aufspaltung statt Komplett-Verschiebung ist die richtige Strategie
+  bei Logik die teils Decoder-abhaengig, teils Decoder-unabhaengig
+  ist. KISS-konform.
