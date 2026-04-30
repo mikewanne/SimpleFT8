@@ -2740,6 +2740,53 @@ def test_encoder_no_drift_below_threshold():
     )
 
 
+def test_next_slot_boundary_strict_threshold():
+    """Fix C: _next_slot_boundary Schwelle 0.5s (war _SLOT/5 = 3.0s).
+
+    Bei tx_even-Match darf nur dann der aktuelle Slot gewaehlt werden,
+    wenn cycle_pos < 0.5s (= EXAKT am Slot-Start). Frueher 3.0s-Schwelle
+    erlaubte Mid-Slot-Trigger faelschlich den aktuellen Slot zu nehmen.
+    """
+    from core.encoder import Encoder
+    from unittest.mock import patch
+
+    enc = Encoder()
+    enc._mode = "FT8"  # _SLOT = 15.0
+
+    # Test 1: cycle_pos = 0.2 (am Slot-Start) → aktueller Slot bei Match
+    # cycle_num=100 → boundary = 100*15 = 1500
+    with patch("time.time", return_value=1500.2):
+        enc.tx_even = True  # 100 ist even → match
+        b = enc._next_slot_boundary()
+        assert b == 1500.0, (
+            f"Bei cycle_pos=0.2 + Match → aktueller Slot 1500.0, got {b}"
+        )
+
+    # Test 2: cycle_pos = 0.49 (knapp unter Schwelle) → aktueller Slot
+    with patch("time.time", return_value=1500.49):
+        enc.tx_even = True
+        b = enc._next_slot_boundary()
+        assert b == 1500.0, f"cycle_pos=0.49 → aktueller Slot, got {b}"
+
+    # Test 3: cycle_pos = 0.5 (genau Schwelle) → naechster passender Slot
+    # Bei Match: aktueller waere 1500, naechster Same-Parity ist 1530
+    with patch("time.time", return_value=1500.5):
+        enc.tx_even = True
+        b = enc._next_slot_boundary()
+        assert b == 1530.0, (
+            f"cycle_pos=0.5 (>= 0.5 Schwelle) → naechster Same-Parity 1530.0, got {b}"
+        )
+
+    # Test 4: cycle_pos = 1.0 (frueher unter 3s-Schwelle, jetzt drueber)
+    # → naechster passender Slot, NICHT aktueller
+    with patch("time.time", return_value=1501.0):
+        enc.tx_even = True
+        b = enc._next_slot_boundary()
+        assert b == 1530.0, (
+            f"cycle_pos=1.0 → MUSS naechster Slot sein (vor Fix war es aktueller), got {b}"
+        )
+
+
 def test_state_change_during_encoder_sleep_aborts_pending_tx():
     """Fix A2: Wenn waehrend Encoder-Sleep ein neuer transmit kommt,
     wird der alte abgebrochen.

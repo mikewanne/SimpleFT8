@@ -167,7 +167,12 @@ class Encoder(QObject):
 
         if self.tx_even is not None:
             want_even = self.tx_even
-            if is_even == want_even and cycle_pos < (_SLOT / 5):
+            # v0.80 Fix C: Schwelle 0.5s statt _SLOT/5 (= 3.0s bei FT8).
+            # Nur wenn TX-Trigger EXAKT am Slot-Start feuert (< 0.5s nach
+            # boundary), darf der aktuelle Slot gewaehlt werden. Frueher
+            # konnte ein Mid-Slot-Trigger faelschlich den aktuellen Slot
+            # nehmen → Drift (R1-Review der V2).
+            if is_even == want_even and cycle_pos < 0.5:
                 return float(cycle_num * _SLOT)
             next_num = cycle_num + 1
             next_boundary = float(next_num * _SLOT)
