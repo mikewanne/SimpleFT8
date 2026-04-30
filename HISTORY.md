@@ -5,6 +5,129 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-04-30 v0.80 — TX-DT-Drift QSO-Retry-Fix (BLOCKER)
+
+**Betroffene Dateien:** `core/encoder.py`, `core/qso_state.py`, `ui/mw_qso.py`,
+`tests/test_modules.py`, `main.py`, `prompts/tx_dt_drift_v{1,2,3}.md` (neu).
+
+**Was:** Real-Funkbetrieb war seit v0.74 unmöglich — schwache Stationen
+konnten Mike's Folge-Reports nicht decodieren. 7 echte QSOs hintereinander
+mit Timeout, nur lokaler Icom-Test funktionierte. Diagnose erst möglich
+nach Mike's Auto-Sequence-Check (v0.79-Lesson eliminierte falsche Spur).
+
+### Symptom (Icom-Verifikation)
+
+| TX-Typ | DT |
+|---|---|
+| Folge-CQs (CQ_WAIT-Loop) | 0.0–0.1s ✓ |
+| Erster Report nach RX-Antwort | 0.1s ✓ |
+| **Folge-Report (WAIT_REPORT-Retry)** | **0.6–0.8s ✗** |
+| **Erster CQ nach QSO-End** | **0.6–0.8s ✗** |
+
+Auto-Sequence-Decoder verwerfen Frames > 0.5s DT.
+
+### Wurzel-Ursache (Code-Pfad-Analyse)
+
+`on_cycle_end` Z.501 in `_on_cycle_start` triggerte `WAIT_REPORT`-Retry bei
+`timeout_cycles == 2` AM Anfang von Mike's eigenem TX-Slot (N+2). Encoder
+hatte 0s Vorlauf, „Slot-Rand: sofort senden"-Pfad sendete mit overshoot
+0.95s → DT 0.95s am Empfänger.
+
+Folge-CQ war sauber, weil dort Trigger bei `timeout_cycles == 1` im RX-Slot
+der Gegenstation (N+1) feuert → Encoder schedulet zu N+2 mit 14s Vorlauf.
+
+### Workflow (V1 → V2 → R1 → V3 → Implementation → Final-R1 → Release)
+
+V1 (initial) → Self-Review fand 8 Lücken → V2. R1-Review der V2 (deepseek-
+reasoner, 5 echte Findings + 2 Overengineering + 1 Halluzination) entdeckte
+**KRITISCHEN Bug:** `time.sleep()` ist nicht unterbrechbar, Fix A2 in V2
+war unwirksam → V3 mit `threading.Event.wait()`. Final-R1-Review nach
+Implementation entdeckte **Race-Condition** in `transmit()`/`abort()`-
+Sequenz → 7. Commit als Race-Fix.
+
+### Fixes (7 atomare Commits)
+
+**Fix A1** (`9101573`): `qso_state.py:297, 313` — Retry triggert bei
+`timeout_cycles == 1` statt `== 2`. Trigger feuert im RX-Slot, Encoder
+hat 14s Vorlauf. Retry-TX-Timing bleibt identisch (Slot N+2,
+WSJT-X-Cadence 30s).
+
+**Fix A2** (`59293f0`) — KRITISCH: `core/encoder.py` cancelable sleep via
+`threading.Event`. `_abort_event.wait(timeout=...)` statt `time.sleep`.
+`abort()` ruft `event.set()` → sleep returnt sofort. `mw_qso.py:243-251`
+ruft `abort()` vor neuem `transmit()` bei laufendem TX. R1's KRITISCHER
+Finding behoben — alter Worker schlief vorher 14s weiter und sendete
+veraltete Messages.
+
+**Fix A3** (`6bf5b8c`): `qso_state.py:_set_state` resetet `timeout_cycles=0`
+zentral für Wartezustände (WAIT_*, CQ_WAIT). Defense-in-Depth gegen
+Counter-Race wenn `on_message_sent` nach `cycle_start` feuert (TX > 15s
+durch Buffer-Drain).
+
+**Fix B** (`46fcb91`): `encoder.py:204-216` Drift-Guard 0.3s-Schwelle
+(war 5.0s). Headroom: 0.5s WSJT-X − 0.1s Encoding − 0.1s Marge. Bei
+overshoot > 0.3s zum nächsten passenden Slot weiterschalten (Parity-
+Erhalt: +2 Slots bei `tx_even` gesetzt, sonst +1).
+
+**Fix C** (`67d374f`): `encoder.py:158` `_next_slot_boundary` Schwelle
+`cycle_pos < 0.5s` statt `_SLOT/5` (= 3.0s bei FT8). Verhindert
+Mid-Slot-Trigger von falscher Slot-Wahl.
+
+**Race-Fix** (`07bccfd`) — R1-Final: `transmit()` joint alten TX-Thread
+vor neuem Start (timeout 0.5s). Verhindert Race wo T1's `finally`
+asynchron `_is_transmitting=False` setzt nachdem T2 schon `True` gesetzt
+hat → State-Korruption, weitere `abort()`-Aufrufe wirkungslos.
+
+**Release** (Commit 7): Version-Bump + HISTORY + CLAUDE.
+
+### Tests
+
+493 → 502 (9 neu, alle grün):
+- `test_wait_report_retry_at_cycle_one`
+- `test_wait_rr73_retry_at_cycle_one`
+- `test_abort_during_sleep_returns_within_100ms` (R1's KRITISCH verifiziert)
+- `test_state_change_during_encoder_sleep_aborts_pending_tx`
+- `test_set_state_resets_counter_for_wait_states`
+- `test_encoder_drift_guard_advances_slot`
+- `test_encoder_no_drift_below_threshold`
+- `test_next_slot_boundary_strict_threshold`
+- `test_transmit_joins_old_thread_before_new` (R1-Final-Race)
+
+### Lessons-Learned
+
+1. **R1-Workflow rechtfertigt jeden Cent.** R1 fand zwei Bugs die ich (V2
+   und Implementation) übersehen hatte. KRITISCHER Bug Race 2 (`time.sleep`
+   nicht unterbrechbar) wäre in Real-Funkbetrieb katastrophal — alter
+   Retry-TX hätte parallel zu neuem state-changed-TX laufen können. R1
+   hat das aus dem Code direkt herausgelesen.
+
+2. **R1 halluziniert auch.** R1's Behauptung „`timeout_cycles` wird
+   nirgendwo zurückgesetzt" war falsch — Code resetet es Z.391/405/320.
+   Verifikation Pflicht. Aber R1's allgemeiner Punkt zur Konsistenz war
+   wertvoll → Fix A3 als Defense-in-Depth.
+
+3. **Audio-Trim TRIM_SAMPLES**: Test-Erwartung muss Encoder-internes
+   Trimming kennen (180k → 162k). Halt mich daran für künftige
+   Encoder-Tests.
+
+4. **Race-Conditions sind in Multithreading-Code IMMER mehr als sie
+   scheinen.** Race-Fix wurde ERST nach R1-Final-Review entdeckt — V2/V3
+   hatten den Pfad nicht analysiert. Bei threading.Event genau überlegen
+   welcher Thread was wann setzt/cleart.
+
+### Backup
+
+`Appsicherungen/2026-04-30_vor_dt_drift_fix/` — core+ui+main.py vor
+allen 7 Commits (2.2 MB Code-Only).
+
+### Verifikation ausstehend
+
+- Real-Station-Test: 3 echte (nicht-lokal) QSOs ohne Timeout. **Kern-
+  Erfolgskriterium.** Bei Erfolg ist der Bug tot.
+- Icom-Verifikation: alle TX-Frames im QSO-Modus DT < 0.3s.
+
+---
+
 ## 2026-04-30 v0.79 — Bug-Cleanup + CQ-Toggle/Stats-Lock-Fix
 
 **Betroffene Dateien:** `ui/qso_panel.py`, `ui/mw_radio.py`, `ui/mw_cycle.py`,
