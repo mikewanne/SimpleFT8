@@ -218,18 +218,22 @@ class Encoder(QObject):
         # KEINE ntp_time Korrektur hier — die gilt nur fuer RX Audio-Buffer-Shift.
         silence_secs = max(0.0, (next_boundary + TARGET_TX_OFFSET) - now)
 
-        # Kaltstart-Guard: nur springen wenn weit daneben (>5s), sonst sofort senden
-        # Bei CQ-Resends ist silence≈0 normal (on_cycle_end feuert am Slot-Rand)
+        # v0.80 Fix B: Drift-Guard. Schwelle 0.3s = WSJT-X-Decode-Schwelle 0.5s
+        # minus 0.1s Audio-Encoding-Latency minus 0.1s Sicherheits-Marge.
+        # Bei overshoot > 0.3s: lieber zum naechsten passenden Slot weiterschalten
+        # als veralteten DT zu senden (vorher 5.0s-Schwelle erlaubte DT bis 0.95s).
         if silence_secs < 0.1:
             overshoot = now - (next_boundary + TARGET_TX_OFFSET)
-            if overshoot > 5.0:
-                # Wirklich verschlafen (Kaltstart) → naechsten Slot nehmen
+            if overshoot > 0.3:
+                # Drift-Risiko zu hoch → naechsten passenden Slot nehmen.
+                # tx_even gesetzt → 2 Slots (gleiche Paritaet) sonst 1 Slot.
                 _SLOT = {"FT8": 15.0, "FT4": 7.5, "FT2": 3.8}.get(self._mode, 15.0)
                 next_boundary += (2 * _SLOT) if self.tx_even is not None else _SLOT
                 silence_secs = max(0.0, (next_boundary + TARGET_TX_OFFSET) - time.time())
-                print(f"[TX] Kaltstart-Guard: {overshoot:.1f}s daneben → Slot {next_boundary:.1f}")
+                print(f"[TX] Drift-Vermeidung: overshoot={overshoot:.2f}s "
+                      f"→ Slot {next_boundary:.1f}")
             else:
-                # Normaler CQ-Resend am Slot-Rand → sofort senden
+                # Knapp am Ziel (overshoot < 0.3s, RF-DT < 0.5s) → sofort senden
                 silence_secs = 0.0
                 print(f"[TX] Slot-Rand: sofort senden (overshoot={overshoot:.2f}s)")
 

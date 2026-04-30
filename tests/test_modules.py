@@ -2662,6 +2662,84 @@ def test_set_state_resets_counter_for_wait_states():
     assert sm.qso.timeout_cycles == 5, "TX_CALL darf Counter NICHT zuruecksetzen"
 
 
+def test_encoder_drift_guard_advances_slot():
+    """Fix B: bei overshoot > 0.3s springt next_boundary zum naechsten Slot.
+
+    Verhindert dass veraltete TX-Frames mit DT > 0.5s gesendet werden
+    (frueher: bis zu 5.0s overshoot wurde tolleriert → DT 0.95s am Empfaenger).
+    """
+    import time
+    import numpy as np
+    from unittest.mock import MagicMock
+    from core.encoder import Encoder
+
+    enc = Encoder(audio_freq_hz=1500)
+    radio = MagicMock()
+    enc.set_radio(radio)
+    enc._is_transmitting = True
+    enc.tx_even = True  # FT8 even-Paritaet → +2*15s Skip
+    enc.encode_message = lambda msg: np.zeros(180000, dtype=np.int16)
+
+    # Slot in Vergangenheit mit overshoot 0.5s (>0.3 Schwelle)
+    boundary_in_past = time.time() - 0.5 + 0.8  # = now - 0.3 + 0.8 - 0.8 ≈ now+0.3
+    # Wir wollen overshoot=0.5 → next_boundary + TARGET = now - 0.5
+    # → next_boundary = now - 0.5 - TARGET = now - 0.5 + 0.8 = now + 0.3
+    fake_boundary = time.time() + 0.3
+    enc._next_slot_boundary = lambda: fake_boundary
+
+    # Patch send_audio damit Worker schnell durchlaeuft
+    radio.send_audio = MagicMock()
+
+    enc._tx_worker_inner("CQ DA1MHH JO31")
+
+    # send_audio MUSS gerufen worden sein
+    assert radio.send_audio.called, "Audio muss gesendet worden sein"
+    # Die effektive TX-Zeit muss MINDESTENS 1 Slot in der Zukunft liegen
+    # (wir haben overshoot von 0.5s, Schwelle ist 0.3s → Skip)
+    # → Der "Slot-Rand: sofort senden"-Pfad darf NICHT genommen worden sein
+    # Indirekt: Audio wurde mit silence_samples > 0 gesendet (nicht 0 sofort)
+    audio_arg = radio.send_audio.call_args[0][0]
+    assert len(audio_arg) > 180000, (
+        f"Audio muss Stille-Padding enthalten (TX im naechsten Slot), "
+        f"laenge={len(audio_arg)} <= 180000 (= nur Signal, kein Padding)"
+    )
+
+
+def test_encoder_no_drift_below_threshold():
+    """Fix B: bei overshoot <= 0.3s wird sofort gesendet (kein Slot-Skip).
+
+    Knapp am Ziel ist OK, wuerde nur kuenstlichen 30s-Delay erzeugen.
+    """
+    import time
+    import numpy as np
+    from unittest.mock import MagicMock
+    from core.encoder import Encoder
+
+    enc = Encoder(audio_freq_hz=1500)
+    radio = MagicMock()
+    enc.set_radio(radio)
+    enc._is_transmitting = True
+    enc.tx_even = True
+    enc.encode_message = lambda msg: np.zeros(180000, dtype=np.int16)
+
+    # overshoot 0.1s (< 0.3 Schwelle)
+    # next_boundary + TARGET = now - 0.1 → next_boundary = now + 0.7
+    fake_boundary = time.time() + 0.7
+    enc._next_slot_boundary = lambda: fake_boundary
+
+    radio.send_audio = MagicMock()
+    enc._tx_worker_inner("CQ DA1MHH JO31")
+
+    assert radio.send_audio.called
+    audio_arg = radio.send_audio.call_args[0][0]
+    # silence_secs sollte 0 sein → Audio = nur (getrimmtes) Signal
+    # Encoder trimmt 18000 Samples (TRIM_SAMPLES) ab → 162000 erwartet
+    assert len(audio_arg) == 162000, (
+        f"Bei overshoot < 0.3s sollte sofort gesendet werden "
+        f"(audio = trimmed signal only, len=162000), bekommen {len(audio_arg)}"
+    )
+
+
 def test_state_change_during_encoder_sleep_aborts_pending_tx():
     """Fix A2: Wenn waehrend Encoder-Sleep ein neuer transmit kommt,
     wird der alte abgebrochen.
