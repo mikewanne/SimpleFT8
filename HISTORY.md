@@ -2597,3 +2597,89 @@ Doppel-Report.
 - Aufspaltung statt Komplett-Verschiebung ist die richtige Strategie
   bei Logik die teils Decoder-abhaengig, teils Decoder-unabhaengig
   ist. KISS-konform.
+
+
+## 2026-04-30 v0.82 — Doppel-Report-Bug-Fix Korrektur (Fix E)
+
+**Status:** Fix D v0.81 hat den Doppel-Report-Bug NICHT geloest.
+Im Real-QSO-Test zeigte sich derselbe Bug am Icom-Empfaenger:
+
+```
+095345 Mike → DA1TST DA1MHH -23     (initial-call)
+095400 DA1TST → R+19                 (Antwort)
+095415 Mike → DA1TST DA1MHH -23     (DOPPEL! — bug bleibt)
+095430 DA1TST → R+19                 (nochmal)
+095445 Mike → DA1TST DA1MHH RR73    (endlich)
+```
+
+Im SimpleFT8-Log dokumentiert (09:54:13): Retry feuert ZUERST,
+dann erst kommt R+19-Verarbeitung. Genau die Reihenfolge die Fix
+D verhindern sollte.
+
+**Root Cause Fix-D-Annahme war FALSCH:**
+Fix D V3 nahm an, `_handle_normal_mode` ruft `on_message_received`
+direkt → State wird gewechselt VOR `on_decoder_finished`.
+
+Realitaet: `on_message_received` haengt am SEPARATEN
+`message_decoded`-Signal des Decoders. Decoder emittet zuerst
+`cycle_decoded` (= `_on_cycle_decoded` mit Fix-D-Retry-Trigger),
+DANN pro msg `message_decoded` (= `on_message_received` mit
+State-Wechsel). Qt-Queue-FIFO laeuft der Retry-Trigger VOR den
+State-Wechseln.
+
+**Workflow voll durchlaufen (V1 → V2 → DeepSeek-R1 → V3):**
+- prompts/decoder_signal_order_v1.md (~330 Zeilen, Erstentwurf)
+- prompts/decoder_signal_order_v2.md (Self-Review +
+  3-Min-Gesamttimeout/CQ_WAIT-Klarstellung, try/finally-Frage,
+  Race cycle_start vs cycle_finished dokumentiert)
+- DeepSeek-R1-Review (Reviewer-Modus): KEIN BLOCKER. Alle 5
+  Tradeoffs akzeptiert (Decoder-Hang, Race, try/finally).
+- prompts/decoder_signal_order_v3.md (R1-Bilanz dokumentiert)
+
+**Fix-Implementation (3 atomare Commits):**
+
+1. **`feat(decoder)`:** Neues Signal `cycle_finished = Signal()` in
+   `Decoder` (decoder.py:107). In `_process_cycle` emittet nach
+   allen `message_decoded`-Calls (auch im else-Branch fuer leere
+   Slots). 1 neuer Test fuer Reihenfolge-Garantie.
+2. **`feat(mw_cycle)`:** `_on_cycle_finished()` haengt am neuen
+   Signal, ruft `qso_sm.on_decoder_finished()`. Aufruf in
+   `_on_cycle_decoded` ENTFERNT (war Fix D's falsche Position).
+   `mw_radio.py` 1 neue connect-Zeile.
+3. **`chore(release)`:** v0.81 → v0.82.
+
+**Reihenfolge im GUI-Thread (Qt-FIFO pro Sender = Decoder):**
+1. `_on_cycle_decoded(messages)` — Aggregation, `_assign_slot_parity`
+2. Pro msg: `on_message_decoded` → `on_message_received` (state-Wechsel)
+3. `_on_cycle_finished()` → `on_decoder_finished` sieht finalen state ✓
+
+**Tests:** 505 → 507 (2 neue Fix-E-Tests).
+- `test_decoder_signal_order_cycle_finished_last` —
+  Reihenfolge-Garantie: cycle_decoded → message_decoded[*] → cycle_finished
+- `test_decoder_cycle_finished_emits_on_empty_slot` —
+  cycle_finished emittet auch bei leeren Slots
+
+**R1-Findings akzeptiert (dokumentiert, keine Code-Aenderung):**
+- P1 Decoder-Hang: skipt cycle_finished → on_decoder_finished
+  laeuft nicht. CQ_WAIT/Gesamttimeout in on_cycle_end (Slot-START)
+  tickt unabhaengig weiter.
+- P4 Race cycle_start(N+1) vs cycle_finished(N): unterschiedliche
+  Sender (Timer vs Decoder), theoretisch race, praktisch selten.
+- P5 try/finally um Decoder-Emit-Sequenz: NEIN — bei Exception
+  Slot ueberspringen sicherer als Halb-State-Tick.
+
+**Verifikation noch ausstehend:**
+- Real-QSO mit 2. Station auf Icom-Empfaenger: 4-Slot-QSO-Pacing
+  und KEIN -XX-Doppelsenden nach R-Report.
+
+**Lessons (Mike's Erinnerung "du arbeitest nicht den deepseek
+workflow"):**
+- Bei jedem Bugfix der NACH einem fehlgeschlagenen Bugfix kommt:
+  Workflow nicht abkuerzen. V1→V2→R1→V3 durchziehen, KEIN
+  "Quick-Fix"-Pfad.
+- Eile fuehrt zu Annahmefehlern wie Fix D V3 (nahm an
+  `_handle_normal_mode` ruft `on_message_received` direkt — tut
+  es nicht).
+- DeepSeek-R1 muss explizit als REVIEWER geframed werden, sonst
+  switcht es in Implementer-Modus. War im 2. R1-Review von Fix-D
+  bereits gelernt — und in V2-Reviewer-Frage hier wieder bestaetigt.
