@@ -1010,6 +1010,7 @@ class RadioMixin:
             self._stats_warmup_cycles = 6
         else:
             self._apply_normal_mode()
+            self._stats_warmup_cycles = 6
         self.control_panel.dx_info.setText("")
         self._update_statusbar()
 
