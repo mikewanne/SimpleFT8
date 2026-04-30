@@ -120,11 +120,37 @@ hat → State-Korruption, weitere `abort()`-Aufrufe wirkungslos.
 `Appsicherungen/2026-04-30_vor_dt_drift_fix/` — core+ui+main.py vor
 allen 7 Commits (2.2 MB Code-Only).
 
-### Verifikation ausstehend
+### Verifikation Feldtest 30.04. 10:30
 
-- Real-Station-Test: 3 echte (nicht-lokal) QSOs ohne Timeout. **Kern-
-  Erfolgskriterium.** Bei Erfolg ist der Bug tot.
-- Icom-Verifikation: alle TX-Frames im QSO-Modus DT < 0.3s.
+**DT-Stabilität: ✓ FIX FUNKTIONIERT.** Alle TX-Frames am Icom DT 0.0–0.1s.
+Der Drift-Bug ist tot. Real-Station-Test ausstehend.
+
+**ABER neuer Bug entdeckt: Folge-Report wird DOPPELT gesendet.**
+
+Mike's Icom-QSO mit DA1TST zeigte:
+- 08:32:45 [O] Mike → "DA1TST DA1MHH -21" (erster Report) ✓
+- 08:33:00 [E] DA1TST sendet R+18 (decoded am Slot-Ende ~T+29.5)
+- 08:33:15 [O] Mike → "DA1TST DA1MHH -21" NOCHMAL (Doppel)
+- 08:33:45 [O] Mike → "DA1TST DA1MHH RR73"
+
+**Root-Cause-Analyse:** `on_cycle_end()` läuft AM SLOT-ANFANG (in
+`_on_cycle_start`, mw_cycle.py:501), aber sollte AM SLOT-ENDE laufen
+(in `_on_cycle_decoded`). Bei T+15 (Anfang [E]-Slot) feuert Fix-A1-
+Retry, BEVOR die R+18-Antwort von DA1TST decoded ist (~T+29.5). Encoder
+ist beim Decode bereits aus dem sleep raus → Race-Fix greift nicht
+mehr. Doppel-Report wird gesendet, RR73 erst im Slot danach.
+
+**Fix D (geplant):** `qso_sm.on_cycle_end()` von `_on_cycle_start` nach
+`_on_cycle_decoded` verschieben (NACH Decoder-Loop). Saubere Architektur-
+Korrektur — der Funktionsname war eh irreführend (heißt "cycle_end" aber
+lief am cycle-START).
+
+**Workflow für Fix D:** V1 → Self-Review V2 → DeepSeek-R1 → V3 → Plan-
+Mode → Implementation. KEIN direkter Fix, weil Race-Conditions im
+Threading-Code immer subtiler sind als sie scheinen (Lesson aus
+v0.80-Workflow: R1 fand 2 Bugs die ich übersehen hätte).
+
+App ist gestoppt — kein TX bis Fix D durch ist.
 
 ---
 
