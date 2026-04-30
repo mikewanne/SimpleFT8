@@ -41,8 +41,8 @@ HISTORY.md ob X nicht schon drin ist.
 # SimpleFT8 — Claude Kontext
 
 **Start:** `cd "/Users/mikehammerer/Documents/KI N8N Projekte/FT8/SimpleFT8" && ./venv/bin/python3 main.py`
-**Aktueller Stand:** v0.77 (29.04.2026) — App-Start Hardware-Dialog (Pflicht-Acknowledgment ANT1=TX-only / ANT2=RX-only, schlanker QDialog im SimpleFT8-Theme, modal+WindowStaysOnTopHint) + Disclaimer-Layer (App-Dialog + README zweisprachig + bestehende MIT-AS-IS-Klausel). Plus Statistik-Methodik-Korrektur: Min/Max-Error-Bars in PDF-Berichten entfernt (vermischten Modus-Volatilitaet mit Tag-Conditions als Confounder, bei ungleicher Stichprobengroesse statistisch unfair). **v0.76:** Settings-Dialog auf 4-Tab-`QTabWidget` (Mike's 1440×900-Display-Fix). **v0.75:** Auto-Hunt-Modus (Easter-Egg, 10-Min-Hard-Stop). ANT1-Pflicht zentral abgesichert.
-**Tests:** `./venv/bin/python3 -m pytest tests/ -q` → 472 passed (Qt-Smoke-Tests via `QT_QPA_PLATFORM=offscreen`)
+**Aktueller Stand:** v0.78 (30.04.2026) — OMNI-TX scharfgeschaltet als **Diversity-only** Power-User-Feature. 5-Slot Even/Odd-Rotation (Plan v3.2, `block_cycles=80`). Mode-gekoppelte UI: `btn_omni_cq` + `btn_auto_hunt` sichtbar nur in RX-Modus „diversity"; Easter-Egg = Test-Override im Normal-Modus (resetet bei RX-Mode-Wechsel). Mutually-exclusive OMNI ↔ Auto-Hunt mit Reason `superseded`. Stop-Hooks fuer band/ft_mode/rx_mode/totmann konsistent fuer beide Features. Auto-Hunt jetzt auch RX-Mode-coupled (`stop_auto_hunt("rx_mode_change")`). **v0.77:** App-Start Hardware-Dialog (Pflicht-Acknowledgment ANT1=TX-only / ANT2=RX-only). **v0.76:** Settings-Dialog auf 4-Tab-`QTabWidget`. **v0.75:** Auto-Hunt-Modus (Easter-Egg, 10-Min-Hard-Stop). ANT1-Pflicht zentral abgesichert in `Encoder.transmit()`.
+**Tests:** `./venv/bin/python3 -m pytest tests/ -q` → 493 passed (Qt-Smoke-Tests via `QT_QPA_PLATFORM=offscreen`)
 **Vor Commits:** Tests grün + bei nicht-trivialen Änderungen DeepSeek-Review (`pal codereview` model `deepseek-chat`) — bereits durch globale §0 + Projektregeln gefordert.
 
 ⚠️ **DeepSeek-Workflow Stand 2026-04-28:**
@@ -269,16 +269,21 @@ core/
   propagation.py      HamQSL + _apply_seasonal_correction(band, condition, utc_hour, month)
                       60m fehlt in XML → Interpolation 40m/80m (day+night getrennt, implementiert)
   ap_lite.py          ⛔ UNGETESTET — Feldtest ausstehend (SCORE_THRESHOLD=0.75)
-  omni_tx.py          ⛔ DEAKTIVIERT — Implementation v0.78 in Vorbereitung.
-                      5-Slot-Pattern Even/Odd-Rotation, Diversity-only Feature
-                      (Mode-gekoppelt). Stop-Reasons: band_change, mode_change,
-                      totmann_expired, manual_halt. Aktivierung via Direkt-
-                      Toggle btn_omni_cq (sichtbar nur in Diversity).
-                      → Vollstaendige Design-Spec: docs/OMNI_TX_DESIGN.md
-  auto_hunt.py        Auto-Hunt Logik (v0.78: wird Diversity-only Feature
-                      analog OMNI — Mode-gekoppelt, btn_auto_hunt nur in
-                      Diversity sichtbar; Mode-Wechsel zu Normal stoppt
-                      Auto-Hunt automatisch via auto_hunt_stopped("mode_change")).
+  omni_tx.py          ✅ AKTIV (v0.78) — 5-Slot-Pattern Even/Odd-Rotation,
+                      Diversity-only Power-User-Feature. QObject mit
+                      omni_stopped(reason)-Signal. block_cycles=80.
+                      Stop-Reasons: manual_halt, superseded, band_change,
+                      ft_mode_change, rx_mode_change, totmann_expired,
+                      easter_egg_off. should_tx() ohne Parameter (Paritaet
+                      via _slot_index + block bestimmt). disable() ist
+                      Backwards-compat-Wrapper. → docs/OMNI_TX_DESIGN.md
+  auto_hunt.py        Auto-Hunt Logik (v0.78: Diversity-only Feature
+                      analog OMNI. btn_auto_hunt sichtbar nur in „diversity"
+                      ausser bei Easter-Egg-Override. Stop-Reasons identisch
+                      zu OMNI plus timer_expired. RX-Mode-Wechsel zu Normal
+                      triggert stop_auto_hunt("rx_mode_change"); FT-Modus-
+                      Wechsel triggert stop_auto_hunt("ft_mode_change") —
+                      Reason umbenannt von „mode_change" in v0.78).
   timing.py           UTC-Takt, modus-abh. Zyklen
   protocol.py         FTX_PROTOCOL_FT8/FT4/FT2
   ft8lib_decoder.py   C-Library Wrapper
@@ -520,9 +525,10 @@ Andere Baender werden empfangen aber nicht gespeichert (Skalierungs-Entscheidung
 
 ## ⛔ OMNI-TX (PRIVAT — NICHT AUF GITHUB WIE MAN ES AKTIVIERT)
 
-- Aktivierung: Klick auf Versionsnummer → CQ-Button wird "OMNI CQ"
-- Status: **DEAKTIVIERT** — Feldtest ausstehend
-- GitHub: Feature darf erwähnt werden, NICHT wie aktiviert
+- Aktivierung Diversity-Modus: Klick `btn_omni_cq` (sichtbar nur in „diversity")
+- Aktivierung Normal-Modus: Klick auf Versionsnummer (Easter-Egg-Override)
+- Status: **AKTIV** seit v0.78 — Feldtest in Verifikation
+- GitHub: Feature darf erwähnt werden, NICHT wie aktiviert (Easter-Egg bleibt verdeckt)
 
 ---
 

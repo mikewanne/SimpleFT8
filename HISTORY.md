@@ -5,6 +5,92 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-04-30 v0.78 — OMNI-TX scharfgeschaltet + Auto-Hunt Diversity-only
+
+**Betroffene Dateien:** `core/omni_tx.py`, `ui/main_window.py`, `ui/mw_radio.py`,
+`ui/mw_qso.py`, `tests/test_omni_tx.py` (NEU), `tests/test_auto_hunt_extended.py`,
+`main.py`, `prompts/omni_v1.md`/`v2.md`/`v3.md` (NEU), `docs/OMNI_TX_DESIGN.md`
+(neu am 2026-04-30 angelegt).
+
+**Was:** OMNI-TX-Feature (5-Slot Even/Odd-Rotation) scharfgeschaltet als
+**Diversity-only** Power-User-Feature — `btn_omni_cq` und `btn_auto_hunt`
+sichtbar nur in RX-Modus „diversity". Direkt-Toggle, mode-gekoppelt,
+mutually-exclusive zueinander. Easter-Egg-Override (Klick Versionsnummer)
+bleibt als Test-Bypass im Normal-Modus, wird automatisch zurueckgesetzt
+beim RX-Mode-Wechsel.
+
+**Code-Aenderungen:**
+- `core/omni_tx.py`: `OmniTX` → `QObject` mit `omni_stopped(reason)`-Signal.
+  Neue Methode `stop_omni_tx(reason)` zentralisiert + `_pending_switch`-Reset
+  (Bug-Fix V3 C6: sonst spruenge Block nach Re-`enable()` sofort).
+  Default `block_cycles` 40 → 80 (Plan v3.2). `OMNI_TX_ENABLED`-Konstante
+  entfernt (war ungenutztes Gate). `disable()` als Backwards-compat-Wrapper
+  delegiert an `stop_omni_tx("easter_egg_off")`. `should_tx()`-Signatur
+  vereinfacht: ungenutzter `is_even`-Parameter entfernt (R1-Final-Review).
+- `ui/main_window.py`: Neue Handler `_on_btn_omni_cq_toggled`,
+  `_on_omni_stopped`, `_update_button_visibility()` (Mode-Coupling-Helper).
+  Easter-Egg-Toggle vereinfacht — Signal-Slots kuemmern sich um UI-Cleanup.
+  Mutually-exclusive: OMNI-Klick stoppt aktiven Auto-Hunt mit `superseded`,
+  und umgekehrt. Totmann-Hook (`_on_presence_tick`) ergaenzt um
+  `stop_omni_tx("totmann_expired")` parallel zu existing Auto-Hunt-Stop —
+  V2-Annahme „Totmann greift bei QSO nicht" wurde im R1-Review als falsch
+  identifiziert (Code stoppt unconditional, laufendes QSO wird via
+  `presence_can_tx()` separat zu Ende gefuehrt).
+- `ui/mw_radio.py`: Stop-Hooks fuer `_on_band_changed`
+  (`stop_omni_tx("band_change")`), `_on_mode_changed` (FT-Modus, Reason
+  umbenannt von `mode_change` zu `ft_mode_change` plus
+  `stop_omni_tx("ft_mode_change")`), `_on_rx_mode_changed` (NEUER Hook
+  fuer `rx_mode_change` plus `stop_auto_hunt("rx_mode_change")` —
+  v0.75 Auto-Hunt war bisher nur mode-coupled fuer FT-Modus, nicht RX-Modus).
+  `_apply_normal_mode` + `_enable_diversity` rufen `_update_button_visibility()`
+  am Ende. Defensive Aufruf am Ende von `_on_rx_mode_changed` ergaenzt
+  (R1-Final: deckt early-return-Pfade ab).
+- `main_window.py`/`mw_radio.py`: Easter-Egg-Override wird automatisch
+  zurueckgesetzt bei RX-Mode-Wechsel (V3 A3).
+
+**Reason-Tabelle (v0.78 final, OMNI + Auto-Hunt):**
+- `manual_halt` — User klickt aktiven Button erneut
+- `superseded` — User startet das andere Mode-Feature (OMNI ↔ Auto-Hunt)
+- `band_change` — Bandwechsel
+- `ft_mode_change` — FT-Modus-Wechsel (FT8/FT4/FT2)
+- `rx_mode_change` — RX-Modus-Wechsel (Diversity↔Normal)
+- `totmann_expired` — Presence-Timeout (15 min)
+- `easter_egg_off` — Easter-Egg deaktiviert
+- `timer_expired` — nur Auto-Hunt 10-Min-Hard-Cap
+
+**Out-of-scope (TODO fuer separates Release):** `_reset_presence`-Aufruf
+bei QSO-Ende. Aktuell stoppt Totmann auch ein laufendes 30-min-QSO mit
+nachfolgendem CQ-Stop wenn keine Mausbewegung. Nicht kritisch im
+Hobby-Kontext.
+
+**Workflow:** V1 (`prompts/omni_v1.md`) → Self-Review (17 Findings) → V2
+(`omni_v2.md`) → DeepSeek-R1 (10 Findings: 2 Bugs, 2 Risiko, 2 Verb.,
+4 Hinweis, **0 Halluzinationen**) → Schritt 2.5 Code-Verifikation (R1 fand
+2 echte Bugs in V2: Totmann-Verhalten + `_reset_presence`-Annahme) → V3
+(`omni_v3.md`) → Mike-Freigabe → 7 atomare Commits → Schritt 5b
+Final-R1-Review (11 Findings, 2 echte Verbesserungen umgesetzt) →
+Lessons-Learned + Memory-Update.
+
+**Tests:** 472 → 493 gruen (+21).
+- `tests/test_omni_tx.py` NEU (11 Cases): `initial_state_inactive`,
+  `default_block_cycles_is_80`, `enable_resets_state`,
+  `5_slot_pattern_block1`/`block2`, `block_switch_after_block_cycles`,
+  `block_switch_at_position_0_only`, `qso_resets_counter_keeps_block`,
+  `stop_omni_tx_resets_pending_switch` (Bug-Fix C6), parametrize
+  `omni_stopped_signal_emits_with_reason` (7 Reasons),
+  `disable_delegates_to_stop_with_easter_egg_off`.
+- `tests/test_auto_hunt_extended.py` ERGAENZT: parametrize-Liste der
+  `stop_reasons_clear_cooldown` und `auto_hunt_stopped_signal` und
+  `qso_log_unaffected_by_stop` Tests um `ft_mode_change`,
+  `rx_mode_change`, `superseded` (3 neue Reasons, +10 Tests durch
+  parametrize-Multiplikation).
+
+**Mike's manuelle Verifikation (V3 Sektion 6):** ausstehend.
+
+**Backup vor Implementation:** `Appsicherungen/2026-04-30_vor_omni_implementierung/` (1.2 GB).
+
+---
+
 ## 2026-04-29 v0.77 — App-Start Hardware-Dialog + Statistik-Methodik-Korrektur
 
 **Betroffene Dateien:** `main.py`, `scripts/generate_plots.py`, `README.md`,
