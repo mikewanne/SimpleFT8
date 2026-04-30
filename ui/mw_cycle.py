@@ -59,11 +59,11 @@ class CycleMixin:
         elif messages:
             self._handle_dx_tune_mode(messages)
 
-        # v0.81 Fix D: Retry-Trigger NACH Message-Verarbeitung am Slot-Ende.
-        # Wenn Gegenstation im RX-Slot geantwortet hat (R+18, RR73), hat
-        # on_message_received den State bereits gewechselt → kein Retry.
-        # Das fixt den Doppel-Report-Bug v0.80.
-        self.qso_sm.on_decoder_finished()
+        # v0.82 Fix E: on_decoder_finished wird NICHT mehr hier aufgerufen.
+        # Qt-FIFO sendet cycle_decoded VOR message_decoded → on_decoder_finished
+        # liefe sonst VOR den State-Wechseln durch on_message_received
+        # (Doppel-Report-Bug v0.81). Stattdessen haengt on_decoder_finished
+        # am neuen `cycle_finished`-Decoder-Signal — siehe `_on_cycle_finished`.
 
         # Slot-synchroner Such-Trigger + Histogramm-Refresh JEDEN Slot
         # (unabhaengig von messages-Inhalt — _diversity_stations mit Aging ist
@@ -76,6 +76,24 @@ class CycleMixin:
 
         self._run_ap_lite_rescue(messages)
         self._run_auto_hunt(messages)
+
+    @Slot()
+    def _on_cycle_finished(self):
+        """v0.82 Fix E — Slot-Ende-Hook NACH allen Decoder-Messages.
+
+        Wird vom Decoder ueber das `cycle_finished`-Signal aufgerufen,
+        NACHDEM alle message_decoded-Emissions verarbeitet sind. Damit
+        laeuft `on_decoder_finished` nach den State-Wechseln durch
+        on_message_received → Doppel-Report-Bug v0.81 verhindert.
+
+        Reihenfolge im GUI-Thread (Qt-FIFO pro Sender=Decoder):
+        1. _on_cycle_decoded(messages) — Aggregation, _assign_slot_parity
+        2. Pro msg: on_message_decoded(msg) → on_message_received → state-Wechsel
+        3. _on_cycle_finished() → on_decoder_finished sieht finalen state ✓
+        """
+        if not self.rx_panel._rx_active:
+            return
+        self.qso_sm.on_decoder_finished()
 
     def _refresh_diversity_freq_view(self):
         """Pro Slot: Histogramm refreshen + ggf. Such-Trigger.

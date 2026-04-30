@@ -54,6 +54,10 @@ class RadioMixin:
         # Decoder-Signals
         self.decoder.message_decoded.connect(self.on_message_decoded)
         self.decoder.cycle_decoded.connect(self._on_cycle_decoded)
+        # v0.82 Fix E: cycle_finished feuert NACH allen message_decoded
+        # → on_decoder_finished sieht den finalen state nach
+        # on_message_received (Doppel-Report-Fix).
+        self.decoder.cycle_finished.connect(self._on_cycle_finished)
 
         # Encoder
         self.encoder.set_radio(self.radio)
