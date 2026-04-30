@@ -123,6 +123,17 @@ class QSOStateMachine(QObject):
     def _set_state(self, new_state: QSOState):
         old = self.state.name
         self.state = new_state
+        # v0.80 Fix A3: Defense-in-Depth gegen Counter-Race.
+        # Bei Eintritt in einen Wartezustand muss timeout_cycles auf 0
+        # stehen — sonst feuert ein nachfolgender on_cycle_end() sofort
+        # einen Retry, obwohl noch kein Zyklus abgewartet wurde.
+        # Bestehende explizite Resets in on_message_sent bleiben (no-op
+        # bei Doppel-Reset), aber R1-Review hat darauf hingewiesen dass
+        # _set_state das selbst nicht garantierte. KISS: zentral hier.
+        if new_state in (QSOState.WAIT_REPORT, QSOState.WAIT_RR73,
+                         QSOState.WAIT_73, QSOState.CQ_WAIT):
+            if self.qso is not None:
+                self.qso.timeout_cycles = 0
         self._dbg.log("STATE", f"{old} → {new_state.name}")
         self.state_changed.emit(new_state)
 

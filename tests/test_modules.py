@@ -2636,6 +2636,32 @@ def test_abort_during_sleep_returns_within_100ms():
     )
 
 
+def test_set_state_resets_counter_for_wait_states():
+    """Fix A3: _set_state resetet timeout_cycles bei Eintritt in Wartezustand.
+
+    Defense-in-Depth gegen Counter-Race: wenn vor State-Wechsel
+    timeout_cycles > 0 stand (z.B. durch Race zwischen on_cycle_end und
+    on_message_sent bei TX > 15s), startet der neue Wartezustand sauber
+    bei 0.
+    """
+    from core.qso_state import QSOStateMachine, QSOState
+    sm = QSOStateMachine("DA1MHH", "JO31")
+
+    for target_state in (QSOState.WAIT_REPORT, QSOState.WAIT_RR73,
+                         QSOState.WAIT_73, QSOState.CQ_WAIT):
+        sm.qso.timeout_cycles = 5  # alter Race-Wert
+        sm._set_state(target_state)
+        assert sm.qso.timeout_cycles == 0, (
+            f"_set_state({target_state.name}) muss timeout_cycles=0 setzen, "
+            f"war aber {sm.qso.timeout_cycles}"
+        )
+
+    # Kein Reset bei NICHT-Wartezustaenden (sonst broken Encoder-Pfad)
+    sm.qso.timeout_cycles = 5
+    sm._set_state(QSOState.TX_CALL)
+    assert sm.qso.timeout_cycles == 5, "TX_CALL darf Counter NICHT zuruecksetzen"
+
+
 def test_state_change_during_encoder_sleep_aborts_pending_tx():
     """Fix A2: Wenn waehrend Encoder-Sleep ein neuer transmit kommt,
     wird der alte abgebrochen.
