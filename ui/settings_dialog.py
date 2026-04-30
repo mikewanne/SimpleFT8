@@ -548,6 +548,12 @@ class SettingsDialog(QDialog):
         for w, btn in self._tune_btns.items():
             btn.setChecked(w == 10)
         self.diversity_cycles.setCurrentIndex(0)  # 80 Zyklen
+        # v0.79 R1-Review-Fix: vorher fehlten radio_ip / language /
+        # stats_cb / debug_console_cb im Reset
+        self.radio_ip.setText("")  # Auto-Discovery
+        self.language_combo.setCurrentIndex(0)  # Deutsch
+        self.stats_cb.setChecked(True)
+        self.debug_console_cb.setChecked(False)
 
     def _on_map_open_clicked(self):
         """Richtungs-Karte oeffnen. Default-Modus aus Settings (rx/tx)."""
