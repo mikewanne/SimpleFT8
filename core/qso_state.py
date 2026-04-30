@@ -304,46 +304,11 @@ class QSOStateMachine(QObject):
             self._dbg.log("WAIT", f"Warte auf {self.qso.their_call} "
                          f"({self.state.name}, Zyklus {self.qso.timeout_cycles}/{self.qso.max_timeout})")
 
-            # Nach 1 Zyklus ohne Antwort: Retry triggern.
-            # Trigger feuert im RX-Slot der Gegenstation (timeout_cycles==1) →
-            # Encoder hat 14s Vorlauf zum naechsten Mike-TX-Slot. Das fixt den
-            # TX-DT-Drift-Bug v0.79: Trigger bei ==2 feuerte AM Anfang von
-            # Mike's TX-Slot, Encoder hatte 0s Vorlauf, "Slot-Rand: sofort
-            # senden" gab DT 0.6-0.8s (ueber FT8-Decode-Schwelle).
-            # Retry-TX-Timing bleibt identisch (Slot N+2, WSJT-X-konform).
-            if self.qso.timeout_cycles == 1:
-                if self.state == QSOState.WAIT_REPORT:
-                    station_limit = min(self.qso.max_calls, MAX_STATION_CALLS)
-                    if self.qso.calls_made < station_limit:
-                        self.qso.calls_made += 1
-                        retry_msg = f"{self.qso.their_call} {self.my_call} {self.qso.our_snr or '-10'}"
-                        self._dbg.log("RETRY", f"WAIT_REPORT Retry {self.qso.calls_made}/{station_limit}: '{retry_msg}'")
-                        self._set_state(QSOState.TX_CALL)
-                        self.send_message.emit(retry_msg)
-                    else:
-                        call = self.qso.their_call
-                        self._dbg.log("TIMEOUT", f"Max Versuche ({station_limit}) erreicht")
-                        self._set_state(QSOState.TIMEOUT)
-                        self.qso_timeout.emit(call)
-                        self._resume_cq_if_needed()
-                    return
-                elif self.state == QSOState.WAIT_RR73:
-                    # Report nochmal senden — eigener Counter, max 3
-                    self.qso.rr73_retries += 1
-                    if self.qso.rr73_retries <= MAX_RR73_RETRIES:
-                        report = self.qso.our_snr or f"R{self._last_snr:+03d}"
-                        retry_msg = f"{self.qso.their_call} {self.my_call} {report}"
-                        self._dbg.log("RETRY", f"WAIT_RR73 Retry {self.qso.rr73_retries}/{MAX_RR73_RETRIES}: '{retry_msg}'")
-                        self.qso.timeout_cycles = 0
-                        self._set_state(QSOState.TX_REPORT)
-                        self.send_message.emit(retry_msg)
-                    else:
-                        call = self.qso.their_call
-                        self._dbg.log("TIMEOUT", f"WAIT_RR73 max Retries ({self.qso.max_calls}) erreicht")
-                        self._set_state(QSOState.TIMEOUT)
-                        self.qso_timeout.emit(call)
-                        self._resume_cq_if_needed()
-                    return
+            # v0.81 Fix D: Retry-Trigger ist nicht mehr hier. Er feuert in
+            # on_decoder_finished() am Slot-ENDE — also NACH der Decoder-
+            # Verarbeitung — damit eine eingehende Antwort der Gegenstation
+            # (R+18, RR73) den State vorher wechseln kann und der Doppel-
+            # Report-Bug nicht mehr auftritt.
 
             if self.qso.timeout_cycles >= self.qso.max_timeout:
                 call = self.qso.their_call
@@ -351,6 +316,54 @@ class QSOStateMachine(QObject):
                 self._set_state(QSOState.TIMEOUT)
                 self.qso_timeout.emit(call)
                 self._resume_cq_if_needed()
+
+    def on_decoder_finished(self):
+        """v0.81 Fix D — Retry-Trigger NACH Decoder-Verarbeitung.
+
+        Wird im Slot-Ende-Pfad (`mw_cycle._on_cycle_decoded`) NACH den
+        Message-Handlern aufgerufen. Triggert Retry fuer WAIT_REPORT/
+        WAIT_RR73 nur wenn die Gegenstation in diesem RX-Slot NICHT
+        geantwortet hat. Wenn sie geantwortet hat, hat
+        on_message_received bereits den State gewechselt → kein Retry.
+
+        Vor Fix D lief der Retry in on_cycle_end() am Slot-START — also
+        BEVOR der Decoder die Antwort sehen konnte → Doppel-Report-Bug.
+        """
+        if self.qso is None:
+            return
+
+        if self.state == QSOState.WAIT_REPORT and self.qso.timeout_cycles == 1:
+            station_limit = min(self.qso.max_calls, MAX_STATION_CALLS)
+            if self.qso.calls_made < station_limit:
+                self.qso.calls_made += 1
+                retry_msg = f"{self.qso.their_call} {self.my_call} {self.qso.our_snr or '-10'}"
+                self._dbg.log("RETRY", f"WAIT_REPORT Retry {self.qso.calls_made}/{station_limit}: '{retry_msg}'")
+                self._set_state(QSOState.TX_CALL)
+                self.send_message.emit(retry_msg)
+            else:
+                call = self.qso.their_call
+                self._dbg.log("TIMEOUT", f"Max Versuche ({station_limit}) erreicht")
+                self._set_state(QSOState.TIMEOUT)
+                self.qso_timeout.emit(call)
+                self._resume_cq_if_needed()
+            return
+
+        if self.state == QSOState.WAIT_RR73 and self.qso.timeout_cycles == 1:
+            self.qso.rr73_retries += 1
+            if self.qso.rr73_retries <= MAX_RR73_RETRIES:
+                report = self.qso.our_snr or f"R{self._last_snr:+03d}"
+                retry_msg = f"{self.qso.their_call} {self.my_call} {report}"
+                self._dbg.log("RETRY", f"WAIT_RR73 Retry {self.qso.rr73_retries}/{MAX_RR73_RETRIES}: '{retry_msg}'")
+                self.qso.timeout_cycles = 0
+                self._set_state(QSOState.TX_REPORT)
+                self.send_message.emit(retry_msg)
+            else:
+                call = self.qso.their_call
+                self._dbg.log("TIMEOUT", f"WAIT_RR73 max Retries ({self.qso.max_calls}) erreicht")
+                self._set_state(QSOState.TIMEOUT)
+                self.qso_timeout.emit(call)
+                self._resume_cq_if_needed()
+            return
 
     def _resume_cq_if_needed(self):
         """Nach Timeout/Hunt: CQ wieder aufnehmen wenn vorher CQ-Modus aktiv war.
