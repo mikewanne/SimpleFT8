@@ -392,9 +392,23 @@ class CycleMixin:
         self._emit_map_snapshot_if_open()
 
     def _handle_dx_tune_mode(self, messages):
-        """DX-Tuning-Modus: nur aktueller Zyklus, keine Akkumulation."""
+        """DX-Tuning-Modus: nur aktueller Zyklus, keine Akkumulation.
+
+        v0.79-Fix: Antenne vom aktiven dx_tune_dialog ablesen statt
+        Default „A1" — Hardware schaltet zwischen ANT1/ANT2, das soll auch
+        in der RX-Tabelle sichtbar sein.
+        """
+        current_ant = "A1"
+        if self._dx_tune_dialog is not None:
+            try:
+                ant, _gain = self._dx_tune_dialog._schedule[
+                    self._dx_tune_dialog._step]
+                current_ant = ant
+            except (IndexError, AttributeError):
+                pass
         self.rx_panel.table.setRowCount(0)
         for msg in messages:
+            msg.antenna = current_ant
             self.rx_panel.add_message(msg)
         self.rx_panel.reapply_sort()
 
