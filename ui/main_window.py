@@ -583,8 +583,13 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
     # ── OMNI-TX UI-Lifecycle (v0.78) ─────────────────────────────
 
     def _on_btn_omni_cq_toggled(self, checked: bool):
-        """User-Klick auf btn_omni_cq: enable / stop_omni_tx."""
+        """User-Klick auf btn_omni_cq: enable / stop_omni_tx.
+
+        Mutually-exclusive: laufender Auto-Hunt wird via "superseded" gestoppt.
+        """
         if checked and not self._omni_tx.active:
+            if self._auto_hunt.active:
+                self._auto_hunt.stop_auto_hunt("superseded")
             self._omni_tx.enable()
             self.control_panel.update_omni_tx(True)
             self._update_statusbar()
@@ -609,8 +614,13 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
     # ── Auto-Hunt UI-Lifecycle (v0.75) ───────────────────────────
 
     def _on_btn_auto_hunt_toggled(self, checked: bool):
-        """User-Klick auf btn_auto_hunt: start/stop_auto_hunt."""
+        """User-Klick auf btn_auto_hunt: start/stop_auto_hunt.
+
+        Mutually-exclusive: laufendes OMNI-TX wird via "superseded" gestoppt.
+        """
         if checked and not self._auto_hunt.active:
+            if self._omni_tx.active:
+                self._omni_tx.stop_omni_tx("superseded")
             self._auto_hunt.start_auto_hunt(600)
             self._auto_hunt_polling_timer.start()
             self._on_auto_hunt_polling_tick()  # initialer Text-Set
