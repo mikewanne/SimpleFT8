@@ -1,5 +1,22 @@
 # Timing-Bug Diagnose + Test-Plan — 2026-05-01
 
+## ⚠️ RESOLUTION (2026-04-30, Vormittag) — KEIN SimpleFT8-Bug
+
+**Test 1 (Baseline) hat aufgedeckt:** Mike's Flex sendet alles
+einwandfrei — Icom-Screenshot zeigte CQ + Reports sauber dekodiert
+(SNR 18-19, DT 0). Das eigentliche Problem: **Auto-Sequence am Icom-
+Test-Tool war ausgeschaltet.** Icom hat stur weiter `JO31` (initial-
+Anruf) gesendet statt R-Report zu schicken.
+
+→ ANT1-Hook in `Encoder.transmit()` ist **unschuldig**. Kein Patch
+notwendig. Test 2-6 nicht durchgefuehrt.
+
+**Lesson learned (Memory `feedback_auto_sequence_check_first.md`):**
+Bei TX-Bug-Verdacht ZUERST Auto-Sequence-Konfig am Empfaenger-Tool
+pruefen, bevor Code-Diagnose.
+
+---
+
 ## Problem
 
 QSO-Regression seit 27.04.2026 (vorher 20+ erfolgreiche QSOs).
