@@ -151,43 +151,19 @@ class QSOPanel(QWidget):
         return "[E]" if int(now / slot) % 2 == 0 else "[O]"
 
     def add_tx(self, message: str, ant_label: str = ""):
-        """Eigene gesendete Nachricht. CQ-Wiederholungen nur in Status-Zeile."""
+        """Eigene gesendete Nachricht — IMMER ins Log (Mike-Wunsch v0.78:
+        keine Sammelanzeige, alle CQ-Rufe einzeln untereinander sichtbar)."""
         now = time.time()
         slot = getattr(self, '_cycle_duration', 15.0)
         slot_start = now - (now % slot)
         utc = time.strftime("%H:%M:%S", time.gmtime(slot_start))
         tag = self._slot_tag()
-        is_cq = message.startswith("CQ ")
-
-        if is_cq:
-            self._cq_count = getattr(self, '_cq_count', 0) + 1
-            if self._cq_count == 1:
-                # Erste CQ: ins Log
-                self._append_colored(f"{utc} {tag} →  Sende   {message}", "#FFAA00")
-            # Ab 2. CQ: NUR Status-Zeile aktualisieren, NICHTS ins Log
-            self.status_label.setText(f"CQ ×{self._cq_count}")
-            self.status_label.setStyleSheet("color: #44FF44; font-size: 11px; padding: 2px;")
-            # Nach 2s zurueck auf normal
-            if not hasattr(self, '_cq_flash_timer'):
-                self._cq_flash_timer = QTimer(self)
-                self._cq_flash_timer.setSingleShot(True)
-                self._cq_flash_timer.timeout.connect(
-                    lambda: self.status_label.setStyleSheet("color: #886600; font-size: 11px; padding: 2px;"))
-            self._cq_flash_timer.start(2000)
-            return
+        line = f"{utc} {tag} →  Sende   {message}"
+        if ant_label:
+            self._append_two_color(line, "#FFAA00", f"   {ant_label}", "#888888")
         else:
-            if self._cq_count > 0:
-                self.status_label.setStyleSheet("color: #666; font-size: 11px; padding: 2px;")
-            self._cq_count = 0
-            # CQ-Flash-Timer stoppen — sonst koennte er nach 2s das status_label
-            # neu stylen und die Live-QSO-Anzeige (gruen) wieder auf CQ-orange setzen.
-            if hasattr(self, '_cq_flash_timer') and self._cq_flash_timer.isActive():
-                self._cq_flash_timer.stop()
-            line = f"{utc} {tag} →  Sende   {message}"
-            if ant_label:
-                self._append_two_color(line, "#FFAA00", f"   {ant_label}", "#888888")
-            else:
-                self._append_colored(line, "#FFAA00")
+            self._append_colored(line, "#FFAA00")
+        self._cq_count = 0  # Backwards-compat fuer status_label-Logik
         self._auto_trim()
 
     def add_rx(self, message: str):
