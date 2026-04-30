@@ -2787,6 +2787,49 @@ def test_next_slot_boundary_strict_threshold():
         )
 
 
+def test_transmit_joins_old_thread_before_new(monkeypatch):
+    """R1-Final-Fix: transmit() joint alten TX-Thread bevor neuer startet.
+
+    Race ohne Fix: T1's finally setzt is_transmitting=False NACHDEM T2
+    schon True gesetzt hat → State korrupt, abort() wirkungslos.
+    """
+    import time
+    import threading
+    import numpy as np
+    from unittest.mock import MagicMock
+    from core.encoder import Encoder
+
+    enc = Encoder(audio_freq_hz=1500)
+    radio = MagicMock()
+    enc.set_radio(radio)
+    enc.encode_message = lambda msg: np.zeros(180000, dtype=np.int16)
+    enc._next_slot_boundary = lambda: time.time() + 5.0
+
+    # Erster TX startet
+    enc.transmit("OLD DA1MHH J031")
+    time.sleep(0.05)
+    assert enc._tx_thread is not None
+    old_thread = enc._tx_thread
+    assert old_thread.is_alive()
+
+    # abort() setzt Event, alter Thread wacht aus wait() auf
+    enc.abort()
+
+    # Direkt danach neuen transmit → MUSS auf alten warten
+    enc.transmit("NEW DA1MHH J031")
+
+    # Nach transmit() darf alter Thread NICHT mehr leben
+    # (wurde via join in transmit() abgewartet)
+    assert not old_thread.is_alive(), (
+        "Alter Thread muss vor neuem TX beendet sein (sonst Race)"
+    )
+
+    # Cleanup: neuen Thread auch beenden
+    enc.abort()
+    if enc._tx_thread is not None:
+        enc._tx_thread.join(timeout=1.0)
+
+
 def test_state_change_during_encoder_sleep_aborts_pending_tx():
     """Fix A2: Wenn waehrend Encoder-Sleep ein neuer transmit kommt,
     wird der alte abgebrochen.

@@ -135,6 +135,16 @@ class Encoder(QObject):
 
     def transmit(self, message: str):
         """FT8-Nachricht encoden und zum naechsten Zyklusbeginn senden."""
+        # v0.80 Race-Fix (R1-Final-Review): alten TX-Thread sauber beenden,
+        # bevor neuer startet. Sonst kann das finally des alten Threads
+        # _is_transmitting=False setzen NACHDEM der neue Thread True gesetzt
+        # hat → State desynchronisiert, weitere abort()-Aufrufe wirkungslos.
+        # Race-Window: zwischen abort() und neuem transmit() laeuft das
+        # finally des alten Workers asynchron.
+        if (self._tx_thread is not None
+                and self._tx_thread.is_alive()
+                and threading.current_thread() is not self._tx_thread):
+            self._tx_thread.join(timeout=0.5)
         if self._is_transmitting:
             print(f"[TX] SKIP (TX aktiv): '{message}'")
             return
