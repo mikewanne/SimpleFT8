@@ -198,20 +198,21 @@ def test_stop_omni_tx_resets_pending_switch(qapp, omni_tx_fresh):
     assert omni._cycle_count == 0
 
 
-def test_omni_stopped_signal_emits_with_reason(qapp, omni_tx_fresh):
-    """omni_stopped(reason) wird bei jedem Stop emittiert."""
+@pytest.mark.parametrize("reason", [
+    "manual_halt", "band_change", "ft_mode_change", "rx_mode_change",
+    "totmann_expired", "easter_egg_off", "superseded",
+])
+def test_omni_stopped_signal_emits_with_reason(qapp, omni_tx_fresh, reason):
+    """omni_stopped(reason) wird bei jedem Stop fuer alle 7 Reasons emittiert."""
     from core.omni_tx import OmniTX
     omni = OmniTX()
     omni.enable()
     received = []
     omni.omni_stopped.connect(lambda r: received.append(r))
 
-    omni.stop_omni_tx("band_change")
-    assert received == ["band_change"]
-
-    omni.enable()
-    omni.stop_omni_tx("totmann_expired")
-    assert received == ["band_change", "totmann_expired"]
+    omni.stop_omni_tx(reason)
+    assert received == [reason]
+    assert omni.active is False
 
 
 def test_disable_delegates_to_stop_with_easter_egg_off(qapp, omni_tx_fresh):

@@ -263,6 +263,9 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         from core import ap_lite as _ap
         self._ap_lite = _ap.get_instance(encoder=self.encoder)
 
+        # v0.78: Initial-Sichtbarkeit der 3 Mode-Buttons (rx_mode + Easter-Egg)
+        self._update_button_visibility()
+
     def _init_psk_polling(self):
         """PSKReporter Timer (erste Abfrage nach 2 Min, danach alle 5 Min Rate-Limit)."""
         from PySide6.QtCore import QTimer
@@ -533,25 +536,19 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
     # ── Easter Egg ───────────────────────────────────────────────
 
     def _on_easter_egg_toggle(self):
-        """Easter Egg: Klick auf Versionsnummer zeigt/versteckt
-        OMNI CQ + AUTO HUNT Buttons im QSO-Bereich.
+        """Easter Egg: Klick auf Versionsnummer = Test-Override fuer Mode-Coupling.
 
-        Persistiert NICHT — jede Session beginnt mit deaktiviertem Easter-Egg.
-        btn_cq bleibt unangetastet (laeuft weiter wenn aktiv).
+        v0.78: Buttons sind im RX-Mode "diversity" eh sichtbar — Easter-Egg ist
+        nur Override fuer "normal". Persistiert NICHT — jede Session und jeder
+        RX-Mode-Wechsel beginnt mit deaktiviertem Override.
         """
         self._easter_egg_active = not self._easter_egg_active
-        if self._easter_egg_active:
-            self.control_panel.btn_omni_cq.show()
-            self.control_panel.btn_auto_hunt.show()
-            print("[Easter-Egg] OMNI CQ + AUTO HUNT Buttons verfuegbar")
-        else:
+        if not self._easter_egg_active:
             # Aktive Modi sauber stoppen — Signal-Slots kuemmern sich um UI-Cleanup
             if self._auto_hunt.active:
                 self._auto_hunt.stop_auto_hunt("easter_egg_off")
             if self._omni_tx.active:
                 self._omni_tx.disable()  # → omni_stopped("easter_egg_off") → _on_omni_stopped
-            self.control_panel.btn_omni_cq.hide()
-            self.control_panel.btn_auto_hunt.hide()
             # R1-Fix: 5s UI-Cooldown abbrechen wenn Button versteckt wird —
             # sonst inkonsistenter Button-State bei naechster Easter-Egg-Aktivierung
             if self._auto_hunt_cooldown_timer.isActive():
@@ -559,8 +556,29 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
                 self.control_panel.btn_auto_hunt.setEnabled(True)
                 self.control_panel.btn_auto_hunt.setText("AUTO HUNT")
                 self._auto_hunt_cooldown_seconds = 0
-            print("[Easter-Egg] OMNI CQ + AUTO HUNT versteckt")
+        self._update_button_visibility()
+        print(f"[Easter-Egg] Override {'aktiv' if self._easter_egg_active else 'inaktiv'}")
         self._update_statusbar()
+
+    # ── Mode-Coupling Buttons (v0.78) ────────────────────────────
+
+    def _update_button_visibility(self):
+        """3-Button-Layout mode-abhaengig + Easter-Egg-Override.
+
+        Plan v0.78:
+        - RX-Mode "normal":     nur btn_cq sichtbar
+        - RX-Mode "diversity":  btn_omni_cq + btn_auto_hunt sichtbar, btn_cq versteckt
+        - Easter-Egg-Override:  in "normal" zusaetzlich alle Power-User-Buttons sichtbar
+
+        Wird gerufen nach Init, RX-Mode-Wechsel und Easter-Egg-Toggle.
+        """
+        rx_mode = getattr(self, "_rx_mode", "normal")
+        is_diversity = (rx_mode == "diversity")
+        show_power_buttons = is_diversity or self._easter_egg_active
+        self.control_panel.btn_omni_cq.setHidden(not show_power_buttons)
+        self.control_panel.btn_auto_hunt.setHidden(not show_power_buttons)
+        # btn_cq: in Diversity unsichtbar, sonst sichtbar
+        self.control_panel.btn_cq.setHidden(is_diversity)
 
     # ── OMNI-TX UI-Lifecycle (v0.78) ─────────────────────────────
 
@@ -942,6 +960,9 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
             # damit User bei Wiederkehr explizit fortsetzen kann (Pflicht-Restart).
             if self._auto_hunt.active:
                 self._auto_hunt.stop_auto_hunt("totmann_expired")
+            # v0.78: OMNI-TX bei Totmann-Expire stoppen (analog Auto-Hunt)
+            if self._omni_tx.active:
+                self._omni_tx.stop_omni_tx("totmann_expired")
             # CQ stoppen (aber laufendes QSO zu Ende fuehren!)
             if self.qso_sm.cq_mode:
                 # Nur CQ stoppen wenn KEIN aktives QSO laeuft

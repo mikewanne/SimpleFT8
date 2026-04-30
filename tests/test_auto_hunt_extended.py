@@ -80,8 +80,10 @@ def test_double_start_restarts_timer(qapp):
     ("manual_halt", True),
     ("easter_egg_off", True),
     ("band_change", True),
-    ("mode_change", True),
-    ("totmann_expired", False),  # User soll fortsetzen koennen
+    ("ft_mode_change", True),     # v0.78: ehemals "mode_change", umbenannt
+    ("rx_mode_change", True),     # v0.78: NEU (Diversity → Normal)
+    ("superseded", True),         # v0.78: NEU (Mutually-exclusive)
+    ("totmann_expired", False),   # User soll fortsetzen koennen
 ])
 def test_stop_reasons_clear_cooldown_and_last_tx_even_correctly(
     qapp, reason, should_clear
@@ -109,7 +111,8 @@ def test_stop_reasons_clear_cooldown_and_last_tx_even_correctly(
 
 @pytest.mark.parametrize("reason", [
     "timer_expired", "manual_halt", "band_change",
-    "mode_change", "totmann_expired", "easter_egg_off",
+    "ft_mode_change", "rx_mode_change", "superseded",
+    "totmann_expired", "easter_egg_off",
 ])
 def test_auto_hunt_stopped_signal_emits_with_reason(qapp, reason):
     """auto_hunt_stopped(reason) wird bei jedem Stop emittiert."""
@@ -134,7 +137,8 @@ def test_qso_log_unaffected_by_stop(qapp):
     hunt.start_auto_hunt(600)
 
     for reason in ("timer_expired", "manual_halt", "band_change",
-                   "mode_change", "totmann_expired", "easter_egg_off"):
+                   "ft_mode_change", "rx_mode_change", "superseded",
+                   "totmann_expired", "easter_egg_off"):
         hunt.start_auto_hunt(600)  # Session re-starten zwischen Tests
         hunt.stop_auto_hunt(reason)
         assert hunt._qso_log is qso_log, f"_qso_log bleibt nach {reason}"
