@@ -2955,6 +2955,101 @@ def test_on_decoder_finished_safe_without_qso():
     assert sm.qso is None, "qso unveraendert"
 
 
+# ── v0.82 Fix E — Decoder-Signal-Reihenfolge ─────────────────────────────────
+
+def test_decoder_signal_order_cycle_finished_last():
+    """Fix E: cycle_finished feuert NACH cycle_decoded und message_decoded.
+
+    Reihenfolge ist die Garantie hinter Fix D: on_decoder_finished sieht
+    den finalen state nach allen on_message_received-Calls.
+
+    Hintergrund: Fix D v0.81 lief on_decoder_finished am Ende von
+    _on_cycle_decoded — ABER Qt-FIFO sendet cycle_decoded VOR message_decoded,
+    also lief on_decoder_finished VOR den State-Wechseln durch
+    on_message_received. Doppel-Report-Bug blieb bestehen.
+
+    Mit cycle_finished (separates Signal) ist die Reihenfolge:
+    1. cycle_decoded → _on_cycle_decoded (Aggregation)
+    2. Pro msg: message_decoded → on_message_decoded → state-Wechsel
+    3. cycle_finished → _on_cycle_finished → on_decoder_finished
+    """
+    import sys
+    from PySide6.QtCore import QCoreApplication, QObject
+    from core.decoder import Decoder
+    from core.message import FT8Message
+
+    app = QCoreApplication.instance() or QCoreApplication(sys.argv)
+
+    # Decoder ohne ft8lib-Init (wir wollen nur die Signals testen)
+    decoder = Decoder.__new__(Decoder)
+    QObject.__init__(decoder)
+
+    call_order = []
+    decoder.cycle_decoded.connect(
+        lambda msgs: call_order.append(("cycle_decoded", len(msgs)))
+    )
+    decoder.message_decoded.connect(
+        lambda m: call_order.append(("message_decoded", m.raw))
+    )
+    decoder.cycle_finished.connect(
+        lambda: call_order.append(("cycle_finished",))
+    )
+
+    fake_msgs = [
+        FT8Message(raw="CQ DA1MHH JO31", field1="CQ", field2="DA1MHH",
+                   field3="JO31", snr=-10, freq_hz=1500, dt=0.1),
+        FT8Message(raw="CQ K1JT FN42", field1="CQ", field2="K1JT",
+                   field3="FN42", snr=-12, freq_hz=1700, dt=0.0),
+    ]
+
+    # Manuell die Decoder-Sequenz nachstellen wie in _process_cycle
+    decoder.cycle_decoded.emit(fake_msgs)
+    for m in fake_msgs:
+        decoder.message_decoded.emit(m)
+    decoder.cycle_finished.emit()
+
+    app.processEvents()  # alle queued Slots ausfuehren
+
+    expected = [
+        ("cycle_decoded", 2),
+        ("message_decoded", "CQ DA1MHH JO31"),
+        ("message_decoded", "CQ K1JT FN42"),
+        ("cycle_finished",),
+    ]
+    assert call_order == expected, (
+        f"Falsche Signal-Reihenfolge:\n  got:      {call_order}\n  expected: {expected}"
+    )
+
+
+def test_decoder_cycle_finished_emits_on_empty_slot():
+    """Fix E: cycle_finished feuert AUCH bei leerem messages-Slot.
+
+    Wichtig fuer korrekten Counter-Tick beim Folge-Slot: wenn Decoder
+    0 Stationen dekodiert, soll on_decoder_finished trotzdem laufen,
+    damit der Retry-Pfad nicht haengt.
+    """
+    import sys
+    from PySide6.QtCore import QCoreApplication, QObject
+    from core.decoder import Decoder
+
+    app = QCoreApplication.instance() or QCoreApplication(sys.argv)
+
+    decoder = Decoder.__new__(Decoder)
+    QObject.__init__(decoder)
+
+    cycle_finished_count = [0]
+    decoder.cycle_finished.connect(lambda: cycle_finished_count.__setitem__(0, cycle_finished_count[0] + 1))
+
+    decoder.cycle_decoded.emit([])
+    decoder.cycle_finished.emit()
+
+    app.processEvents()
+
+    assert cycle_finished_count[0] == 1, (
+        "cycle_finished muss auch bei leeren Slots emitten"
+    )
+
+
 # ── Runner ───────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":

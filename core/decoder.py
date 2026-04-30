@@ -100,10 +100,16 @@ class Decoder(QObject):
     Signals:
         message_decoded: (FT8Message) — einzelne dekodierte Nachricht
         cycle_decoded:   (list[FT8Message]) — alle Nachrichten eines Zyklus
+        cycle_finished:  () — feuert NACH allen message_decoded-Emissions
+                              eines Zyklus. v0.82 Fix E: garantiert dass
+                              Slot-Ende-Hooks (qso_sm.on_decoder_finished)
+                              nach den State-Wechseln durch
+                              on_message_received laufen.
     """
 
     message_decoded = Signal(object)
     cycle_decoded = Signal(list)
+    cycle_finished = Signal()
 
     def __init__(self, max_freq: int = 3000, my_call: str = "DA1MHH",
                  mode: str = "FT8"):
@@ -292,8 +298,12 @@ class Decoder(QObject):
                         tag = ">>> AN UNS" if is_to_me else "QSO-Partner"
                         print(f"[RX] {_utc} Slot={_slot} | {msg.raw} | snr={msg.snr} freq={msg.freq_hz} [{tag}]")
                     self.message_decoded.emit(msg)
+                # v0.82 Fix E: emit NACH allen message_decoded → on_decoder_finished
+                # sieht die State-Wechsel durch on_message_received.
+                self.cycle_finished.emit()
             else:
                 self.cycle_decoded.emit([])
+                self.cycle_finished.emit()
 
         except Exception as e:
             import traceback
