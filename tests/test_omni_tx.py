@@ -84,7 +84,7 @@ def test_5_slot_pattern_block1(qapp, omni_tx_fresh):
         (False, None),  # Pos 4: RX
     ]
     for pos, (exp_send, exp_target) in enumerate(expected):
-        send, target = omni.should_tx(is_even=True)
+        send, target = omni.should_tx()
         assert send == exp_send, f"Pos {pos}: expected send={exp_send}"
         assert target == exp_target, f"Pos {pos}: expected target_even={exp_target}"
         omni.advance(qso_active=False)
@@ -104,7 +104,7 @@ def test_5_slot_pattern_block2(qapp, omni_tx_fresh):
         (False, None),
     ]
     for pos, (exp_send, exp_target) in enumerate(expected):
-        send, target = omni.should_tx(is_even=True)
+        send, target = omni.should_tx()
         assert send == exp_send, f"Pos {pos}: expected send={exp_send}"
         assert target == exp_target, f"Pos {pos}: expected target_even={exp_target}"
         omni.advance(qso_active=False)

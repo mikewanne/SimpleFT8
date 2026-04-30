@@ -513,6 +513,10 @@ class RadioMixin:
             self._pending_diversity_scoring = scoring
             self._start_dx_tuning(scoring_mode=gain_scoring)
 
+        # v0.78: Defensive — Mode-Coupling-Update auch wenn _apply_normal_mode /
+        # _enable_diversity nicht direkt durchgelaufen sind (early-return-Pfade)
+        if hasattr(self, "_easter_egg_active"):
+            self._update_button_visibility()
         self._update_statusbar()
 
     def _set_cq_locked(self, locked: bool):

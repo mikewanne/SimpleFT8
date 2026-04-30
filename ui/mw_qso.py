@@ -222,7 +222,7 @@ class QSOMixin:
             # OMNI-TX: CQ-Slot-Steuerung mit Even/Odd Paritaet
             if self._omni_tx.active:
                 is_even = self.timer.is_even_cycle()
-                send_ok, target_even = self._omni_tx.should_tx(is_even)
+                send_ok, target_even = self._omni_tx.should_tx()
                 if not send_ok:
                     # RX-Slot: CQ NICHT senden, aber QSO SM NICHT als Fehlversuch zaehlen
                     print(f"[OMNI-TX] RX-Slot → skip CQ ({self._omni_tx.slot_label})")

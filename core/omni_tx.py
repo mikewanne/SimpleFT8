@@ -74,8 +74,11 @@ class OmniTX(QObject):
     # Haupt-API
     # ─────────────────────────────────────────────────────────────────────────
 
-    def should_tx(self, is_even: bool = True) -> tuple:
+    def should_tx(self) -> tuple:
         """Prueft ob dieser Slot gesendet werden soll + Ziel-Paritaet.
+
+        Die Paritaet wird ausschliesslich aus _slot_index + block bestimmt —
+        der Aufrufer muss seinen aktuellen Even/Odd-State NICHT uebergeben.
 
         Returns:
             (should_send, target_is_even)
