@@ -2683,3 +2683,54 @@ workflow"):**
 - DeepSeek-R1 muss explizit als REVIEWER geframed werden, sonst
   switcht es in Implementer-Modus. War im 2. R1-Review von Fix-D
   bereits gelernt — und in V2-Reviewer-Frage hier wieder bestaetigt.
+
+
+## 2026-05-01 v0.83 — Kalibrierungs-Dialog Auto-Close (Fix F)
+
+**Mike's Wunsch:** "Verbesserung kalibrirung abgeschlossen muss mit
+okay bestätigt werden und ist immer im vordergrund, im vordergrund
+lassen okay weg nur 3 sekunden zur kenntnissnahme und dann fenster
+weg verbessert den workflow".
+
+**Aenderung in `mw_radio._show_calibration_done`:**
+- `setModal(True)` ENTFERNT
+- OK-Button + QHBoxLayout ENTFERNT
+- `dlg.exec()` → `dlg.show()` + `raise_()` + `activateWindow()`
+- NEU: `QTimer.singleShot(3000, dlg.accept)` Auto-Close nach 3s
+- WindowStaysOnTopHint bleibt (gegen Hinten-Wandern, v0.79-Lesson)
+
+**Workflow voll V1 → V2 → DeepSeek-R1 → V3:**
+- prompts/calibration_dialog_autoclose_v1.md
+- prompts/calibration_dialog_autoclose_v2.md
+- prompts/calibration_dialog_autoclose_v3.md (R1-Bilanz: keine BLOCKER,
+  P5-Test-Optimierung uebernommen, P3-Flicker-Risk akzeptiert,
+  P4-Doppel-Klick-Edge via GUI-Lock entschaerft)
+
+**Tests:** 507 → 510 (3 neue Smoke-Tests in
+tests/test_calibration_dialog_smoke.py):
+- test_calibration_done_uses_singleshot_3000ms (R1-P5-Pattern:
+  monkeypatch QTimer.singleShot statt QTest.qWait)
+- test_calibration_done_no_ok_button (Regression-Schutz)
+- test_calibration_done_non_modal (Verifikation Mike kann weiterarbeiten)
+
+**Atomare Commits (2):**
+1. feat(mw_radio): _show_calibration_done auto-close 3s ohne OK
+2. chore(release): v0.83 — Kalibrierungs-Dialog Auto-Close (Fix F)
+
+**R1-Trade-offs akzeptiert (dokumentiert):**
+- P1: WindowStaysOnTopHint deckt nicht 100% gegen macOS-Spaces-/
+  Mission-Control-Edge-Cases ab — Hobby-Funk-Use-Case akzeptabel.
+- P3: show()→raise_()→activateWindow() koennte minimalen Flicker
+  haben (R1's Hinweis "show() last") — keine Aenderung,
+  Standard-Pattern.
+- P4: Doppel-Klick auf Kalibrieren-Button in 3s wuerde 2 Dialoge
+  zeigen — durch `_set_gain_measure_lock(True)` waehrend
+  Kalibrierung GUI-seitig entschaerft.
+
+**Lessons:**
+- Auch bei „trivialen" 10-Zeilen-Aenderungen findet R1 wichtige
+  Edge-Cases (P4 Doppel-Klick, P5 Test-Performance). Voller
+  Workflow rentiert sich auch hier.
+- Mike-Bestaetigt 30.04.: „voller workflow auf jeden fall" — heute
+  bestaetigt durch Anwendung auf den kleinsten Fix der Woche.
+
