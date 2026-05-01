@@ -2870,3 +2870,57 @@ inkonsistent zur entfernten AGC-Funktion) → in Folge-Commit gefixt.
   V3-Erweiterung statt separater Workflow ist KISS-Win wenn der
   Cleanup-Scope thematisch zusammenpasst.
 
+
+
+## 2026-05-01 (Doku-only) — Session-Lifecycle Workflow aktiviert
+
+**Mike-Anweisung 01.05.2026 nach 3-Releases-Tag (v0.83 Fix F + v0.84
+Feature H + v0.85 Cleanup I/J):** „stelle dir einen workflow zusammen
+das wir uns erkentnisse offene punkte einstellungen wichtige sachen
+bei start lesen und merken und bei feierabend sichern".
+
+**Erstellt:** `SimpleFT8/docs/SESSION_WORKFLOW.md` v1.2 — verbindliches
+Steuerdokument fuer Session-Orchestrierung analog zum Feature-Workflow
+`docs/WORKFLOW.md` v1.1.
+
+**Drei Phasen:**
+- **Phase 1 (Start):** CLAUDE → MEMORY → HISTORY → HANDOFF lesen,
+  Begruessung mit Stand.
+- **Phase 2 (Arbeit):** Trivial direkt / Nicht-trivial via WORKFLOW
+  v1.1 + 4-Datei-Update (HISTORY→HANDOFF→CLAUDE→Memory) nach jedem
+  Punkt. Trivial-Klausel: <5 Zeilen brauchen keine Pflege.
+- **Phase 3 (Feierabend):** Verifikations-Check + Bestaetigungs-Block.
+
+**Workflow voll V1 → V2 (Self-Review) → R1-Review → V3 durchlaufen:**
+Mike musste bei V1 mahnen weil ich den Skip selbst gemacht hatte (V1
+ohne Self-Review). Wichtige R1-Findings (DeepSeek-R1 Reviewer-Modus):
+- **KRITISCH P2/P7-1:** 2a↔2b-Widerspruch — V2 hatte „Trivial direkt"
+  in 2a und „4-Datei-Update IMMER" in 2b → Trivial-Klausel in 2b
+  explizit ergaenzt
+- **P1:** MEMORY vor HISTORY in Lese-Reihenfolge (PFLICHT-Lessons
+  sind strenger als Release-Verlauf)
+- **P7-2:** HANDOFF.md MUSS im Backup mit drin (sonst „Heute neu
+  beobachtet" verloren)
+- **P4:** Versionsbump-Heuristik praezisiert: Cleanup → optional
+  Patch statt Inflation
+
+**Aktivierung (Doku-only Aenderungen, kein Versionsbump):**
+- `FT8/CLAUDE.md` + `SimpleFT8/CLAUDE.md`: Header-Verweis auf
+  SESSION_WORKFLOW.md mit 3-Phasen-Zusammenfassung
+- `FT8/feierabend.md`: schlanker Pointer auf Phase 3
+- `MEMORY.md` neu strukturiert: ⛔-PFLICHT-Eintraege ZUERST, dann
+  user/feedback/project-Sektionen
+- Neue Memory `feedback_session_lifecycle.md` als Pointer auf
+  SESSION_WORKFLOW.md
+
+**Lessons:**
+- Workflow-Disziplin gilt auch fuer Workflow-Dokumente. V1 ohne
+  Self-Review/R1 ist genau der Skip den der Workflow verbieten soll.
+  Mike-Mahnung 01.05.: „hast du dir das nach den workflow noch mal
+  als unabhaengige ki angeschaut ob es was zu ergaenzen oder
+  optimieren gibt, hast du es zur revision nach deepseek geschickt"
+  → V2 + R1-Review nachgeholt, 3 echte Findings.
+- R1's KRITISCH-Finding (2a↔2b-Widerspruch) waere sonst zur
+  Frust-Quelle geworden: Mike haette bei jedem Tippfehler 4 Files
+  updaten muessen.
+

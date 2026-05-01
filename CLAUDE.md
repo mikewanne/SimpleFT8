@@ -30,6 +30,18 @@ Beantworte das BEVOR du Code schreibst, niemals erst im Test.
 
 ---
 
+⛔ **SESSION-LIFECYCLE-WORKFLOW: `docs/SESSION_WORKFLOW.md` v1.2 ist
+verbindlich.**
+
+- **Session-Start**: Phase 1 ausfuehren — CLAUDE.md → MEMORY.md →
+  HISTORY.md → HANDOFF.md lesen, dann Begruessung mit Stand.
+- **Waehrend Arbeit**: Phase 2 — nicht-triviale Aenderungen ueber
+  WORKFLOW.md v1.1 (V1→V2→R1→V3), nach jedem Punkt HISTORY+HANDOFF+
+  CLAUDE+Memory in dieser Reihenfolge updaten. Trivial-Klausel:
+  Tippfehler/Kommentare/<5 Zeilen brauchen kein 4-Datei-Update.
+- **Feierabend**: Phase 3 — Verifikations-Check + Bestaetigungs-Block.
+- **Notfall-Save**: Phase 2f bei „muss kurz weg".
+
 ⛔ **HISTORY.md ZWINGEND beim Session-Start lesen!** — Sie ist die einzige
 verlaessliche Quelle dafuer welche Features in welchen Versionen tatsaechlich
 implementiert wurden. Wer das ueberspringt, plant Features doppelt (Beispiel

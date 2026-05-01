@@ -111,6 +111,17 @@ erfolgreich):**
 - 20m FT8 Datensammlung — Ziel 5 Tage flaechendeckend (24h x 3 Modi).
 - Aktueller Stand: 2-3 Tage je Stunde-Modi-Slot, mit Luecken.
 
+### 🐛 Heute neu beobachtet (01.05.2026 abends)
+
+- **Propagation-False-Positive-Dialog beim App-Start:** Mike sah einmal
+  „Kein Netzwerk — keine Propagationsdaten verfügbar" obwohl Netzwerk da
+  war. Root-Cause: `_init_propagation_polling` triggert ersten UI-Update
+  nach 3s (`main_window.py:316`), aber Background-HamQSL-Fetch kann
+  laenger dauern → `_raw_data = None` beim ersten UI-Tick → Dialog.
+  Fix-Idee (voller Workflow): zusaetzliches `_prop_ever_loaded`-Flag,
+  Dialog nur bei Verlust nach erfolgreichem Erst-Fetch, nicht im
+  initialen Race-Window.
+
 ### 🔵 Aus aelteren Releases (offen)
 
 - Migration `main_window._psk_worker` → `core/psk_reporter` (Konsolidierung).
@@ -124,6 +135,9 @@ erfolgreich):**
 - v0.83 Fix F — Kalibrierungs-Dialog Auto-Close 3s ohne OK
 - v0.84 Feature H — Tertile-Analyse Statistik (Pooled Mean + 33%/67%-Tertile shaded band)
 - v0.85 Cleanup I + Doc J — Dead-Code-Cleanup (AGC + input_sample_rate + sync_ntp + _ntp_offset, ~60 Zeilen)
+- **SESSION_WORKFLOW.md v1.2 aktiviert** (Doku-only) — neuer Lifecycle-Workflow analog zu WORKFLOW.md v1.1.
+  CLAUDE.md/feierabend.md/MEMORY.md auf neue Struktur umgestellt. R1-Review fand 3 Findings inkl. KRITISCH
+  2a↔2b-Widerspruch (Trivial-Klausel ergänzt).
 - TODO-Liste-Lesson: `_reset_defaults` (v0.79) und `btn_omni_cq` (v0.78) waren bereits erledigt. Memory
   `feedback_todo_history_pflicht.md` — vor TODO-Liste IMMER `git log --oneline` + `grep` gegen aktuellen Code.
 
