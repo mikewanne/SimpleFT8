@@ -99,3 +99,49 @@ def test_calibration_done_non_modal():
     for t in dlg.findChildren(QTimer):
         t.stop()
     dlg.deleteLater()
+
+
+# ── Fix G v0.86 — Falscher Kalibrierungstext im Normal-Modus ─────────────────
+
+def test_dxtune_mode_label_normal_modus():
+    """Fix G: DXTuneDialog mit rx_mode='normal' → Titel 'Gain-Messung', kein 'Diversity'."""
+    _ensure_app()
+
+    from ui.dx_tune_dialog import DXTuneDialog
+
+    class _FakeRadio:
+        ip = ""
+        def set_rx_antenna(self, ant): pass
+        def set_rfgain(self, g): pass
+        def set_tx_antenna(self, ant): pass
+        def ptt_off(self): pass
+
+    dlg = DXTuneDialog(_FakeRadio(), "20m", scoring_mode="stations", rx_mode="normal")
+    assert dlg._get_mode_label() == "Gain-Messung"
+    assert "Gain-Messung" in dlg.windowTitle()
+    assert "Diversity" not in dlg.windowTitle()
+    dlg.deleteLater()
+
+
+def test_dxtune_mode_label_diversity_modus():
+    """Fix G: DXTuneDialog mit rx_mode='diversity' → 'Diversity Standard' oder 'Diversity DX'."""
+    _ensure_app()
+
+    from ui.dx_tune_dialog import DXTuneDialog
+
+    class _FakeRadio:
+        ip = ""
+        def set_rx_antenna(self, ant): pass
+        def set_rfgain(self, g): pass
+        def set_tx_antenna(self, ant): pass
+        def ptt_off(self): pass
+
+    dlg_std = DXTuneDialog(_FakeRadio(), "40m", scoring_mode="stations", rx_mode="diversity")
+    assert dlg_std._get_mode_label() == "Diversity Standard"
+    assert "Diversity Standard" in dlg_std.windowTitle()
+    dlg_std.deleteLater()
+
+    dlg_dx = DXTuneDialog(_FakeRadio(), "40m", scoring_mode="snr", rx_mode="diversity")
+    assert dlg_dx._get_mode_label() == "Diversity DX"
+    assert "Diversity DX" in dlg_dx.windowTitle()
+    dlg_dx.deleteLater()

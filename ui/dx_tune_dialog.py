@@ -43,11 +43,12 @@ def _build_interleaved_schedule() -> list:
 class DXTuneDialog(QDialog):
     """DX Tuning Dialog — Interleaved Messung, per-Antenne Presets."""
 
-    def __init__(self, radio, band: str, scoring_mode: str = "snr", parent=None):
+    def __init__(self, radio, band: str, scoring_mode: str = "snr", rx_mode: str = "diversity", parent=None):
         super().__init__(parent)
         self.radio = radio
         self.band = band
         self.scoring_mode = scoring_mode  # "snr" (DX) oder "stations" (Standard)
+        self.rx_mode = rx_mode            # "normal" oder "diversity"
         self._results = {}
 
         # Messplan
@@ -58,12 +59,17 @@ class DXTuneDialog(QDialog):
         self._finished = False
         self._skip_first = True  # ersten angebrochenen Zyklus ueberspringen
 
-        _mode_label = "Diversity DX" if scoring_mode == "snr" else "Diversity Standard"
+        _mode_label = self._get_mode_label()
         self.setWindowTitle(f"{_mode_label} — Kalibrierung {band}")
         self.setFixedSize(520, 460)
         self.setModal(False)  # Non-modal damit Decoder-Signale durchkommen
         self._setup_ui()
         self._start_step()
+
+    def _get_mode_label(self) -> str:
+        if self.rx_mode == "normal":
+            return "Gain-Messung"
+        return "Diversity DX" if self.scoring_mode == "snr" else "Diversity Standard"
 
     # ── UI ──────────────────────────────────────────────────────
 
@@ -78,8 +84,7 @@ class DXTuneDialog(QDialog):
         layout.setContentsMargins(16, 12, 16, 12)
 
         # Titel
-        _mode_label = "Diversity DX" if self.scoring_mode == "snr" else "Diversity Standard"
-        title = QLabel(f"{_mode_label} — Kalibrierung {self.band}")
+        title = QLabel(f"{self._get_mode_label()} — Kalibrierung {self.band}")
         title.setStyleSheet("color: #00AAFF; font-size: 18px; font-weight: bold;")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title)

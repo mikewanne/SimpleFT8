@@ -830,7 +830,7 @@ class RadioMixin:
         from ui.dx_tune_dialog import DXTuneDialog
         band = self.settings.band
         scoring = getattr(self, '_gain_scoring_mode', 'snr')
-        dialog = DXTuneDialog(self.radio, band, scoring_mode=scoring, parent=self)
+        dialog = DXTuneDialog(self.radio, band, scoring_mode=scoring, rx_mode=self._rx_mode, parent=self)
         self._dx_tune_dialog = dialog
 
         # Immer im Vordergrund halten (verschwindet nicht hinter der GUI)
@@ -865,7 +865,10 @@ class RadioMixin:
         if hasattr(self.control_panel, 'btn_einmessen'):
             self.control_panel.btn_einmessen.setEnabled(not locked)
         if locked:
-            self.statusBar().showMessage("DIVERSITY SETUP AKTIV — Bedienung gesperrt", 0)
+            if getattr(self, '_rx_mode', 'normal') == 'normal':
+                self.statusBar().showMessage("GAIN-MESSUNG AKTIV — Bedienung gesperrt", 0)
+            else:
+                self.statusBar().showMessage("DIVERSITY SETUP AKTIV — Bedienung gesperrt", 0)
 
     def _on_dx_tune_accepted(self):
         """DX Tuning erfolgreich — Preset speichern."""
