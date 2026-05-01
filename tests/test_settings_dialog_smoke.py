@@ -102,9 +102,35 @@ def test_widget_attributes_accessible(dlg):
         "btn_rf_clear_band", "btn_rf_clear_all", "_rf_info_label",
         "_tx_status_timer", "_export_csv_btn", "_map_open_btn",
         "tabs",
+        # v0.87 Bandpilot
+        "bandpilot_cb", "bandpilot_pref_combo",
     ]
     for attr in expected_attrs:
         assert hasattr(dlg, attr), f"Fehlt: {attr}"
+
+
+def test_bandpilot_save_round_trip(dlg):
+    """Bandpilot-Einstellungen ueberleben _save_and_close → Settings."""
+    dlg.bandpilot_cb.setChecked(True)
+    dlg.bandpilot_pref_combo.setCurrentIndex(2)  # DX
+    dlg.accept = lambda: None
+    dlg._save_and_close()
+    assert dlg.settings.get("bandpilot_enabled") is True
+    assert dlg.settings.get("bandpilot_diversity_pref") == "dx"
+
+
+def test_bandpilot_load_values_from_settings(qapp):
+    """Bandpilot-Werte aus Settings werden korrekt im Dialog initialisiert."""
+    settings = _FakeSettings()
+    settings.set("bandpilot_enabled", True)
+    settings.set("bandpilot_diversity_pref", "standard")
+    dlg = SettingsDialog(settings, parent=None)
+    try:
+        assert dlg.bandpilot_cb.isChecked() is True
+        assert dlg.bandpilot_pref_combo.currentIndex() == 1
+    finally:
+        dlg.close()
+        dlg.deleteLater()
 
 
 def test_dialog_height_within_limit(dlg, qapp):

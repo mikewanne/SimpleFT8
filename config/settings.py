@@ -66,6 +66,8 @@ DEFAULTS = {
     "language": "de",                # "de" = Deutsch, "en" = English (Hilfe-Texte + Docs)
     "stats_enabled": True,           # Stations-Statistik pro Zyklus loggen
     "debug_console_visible": False,  # Debug-Konsole ein/ausblenden
+    "bandpilot_enabled": False,      # v0.87 — RX-Modus automatisch waehlen bei Bandwechsel
+    "bandpilot_diversity_pref": "auto",  # "auto" | "standard" | "dx"
 }
 
 
