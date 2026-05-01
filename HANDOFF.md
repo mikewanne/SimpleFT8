@@ -1,9 +1,43 @@
 # HANDOFF — SimpleFT8
 
-**Stand 2026-05-01:** v0.86 (Fix G + Test-Coverage-Erweiterung AC-1..AC-4).
-v0.85 Dead-Code-Cleanup. 20m Datensammlung läuft aktiv.
+**Stand 2026-05-01:** v0.87 (Bandpilot — RX-Modus-Empfehlung pro Band).
+v0.86 Fix G + AC-1..AC-4. v0.85 Dead-Code-Cleanup. 20m Datensammlung läuft aktiv.
 
-**Tests:** 563/563 gruen (+56 neue Tests fuer protocol/diversity_merger/ap_lite, -5 Duplikate).
+**Tests:** 593/593 gruen (+28 mode_recommender, +2 settings_dialog Bandpilot).
+
+---
+
+## 2026-05-01 (v0.87) — Bandpilot
+
+**Implementiert (autonom, voller Workflow V1→V2→R1→V3→Plan→Code):**
+
+- `core/mode_recommender.py` (neu) — Pure-Logik: aggregiert Stats aus
+  `statistics/<Modus>/<Band>/FT8/`, empfiehlt RX-Modus.
+  - `MIN_DAYS=2`, `MIN_CYCLES=50` Schwellen pro Modus.
+  - Kandidat-A-Aggregation: `Normal_Mean` vs `(Diversity_Normal_Mean + Diversity_DX_Mean) / 2`.
+  - `BandpilotSummaryCache` mit 24h-TTL pro Band, atomarem Write.
+- `tests/test_mode_recommender.py` (neu) — 28 Tests.
+- `ui/mw_radio.py` — `_activate_diversity_with_scoring(scoring)` aus
+  `_on_rx_mode_changed` extrahiert (Refactor), neuer `_set_rx_mode_direct(target)`
+  Helper, `_maybe_apply_bandpilot(band)` Hook in `_on_band_changed`.
+  Override-Set `_bandpilot_overridden_bands` mit „greift einmal beim
+  Rückwechsel"-Semantik.
+- `ui/main_window.py` — Bandpilot-Init in `_init_optional_features`.
+- `ui/settings_dialog.py` — Bandpilot-Section in Tab „FT8 & Diversity":
+  Checkbox + Pref-Combo (Auto/Standard/DX) + ?-Button mit
+  sprachabh. QMessageBox-Hilfe.
+- `config/settings.py` — `bandpilot_enabled=False`,
+  `bandpilot_diversity_pref="auto"`.
+- `docs/bandpilot_help_de.md` + `docs/bandpilot_help_en.md` (neu).
+
+**Live-Smoke-Test mit Mike's Daten:** 40m → diversity_normal
+(42.4 vs 19.2), 20m → normal (20m-Diversity-Datenlage noch dünn).
+
+**Anmerkung Lesson:** Premature Annahme „Diversity_DX zählt nur SNR<-10"
+in der Aggregation war falsch — Mike hat den Code-Check eingefordert,
+ich habe verifiziert dass alle drei Stats-Pfade die gleiche Metrik
+loggen (Anzahl dekodierter Stationen). Damit ist Mike's
+Kandidat A (50/50-Aggregat) korrekt — Mindest-Messzeit halbiert.
 
 ---
 

@@ -5,6 +5,132 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-01 v0.87 — Bandpilot (RX-Modus-Empfehlung pro Band)
+
+**Betroffene Dateien:** `core/mode_recommender.py` (neu),
+`tests/test_mode_recommender.py` (neu, 28 Tests),
+`tests/test_settings_dialog_smoke.py` (+2 Tests),
+`ui/main_window.py`, `ui/mw_radio.py`, `ui/settings_dialog.py`,
+`config/settings.py`, `docs/bandpilot_help_de.md` (neu),
+`docs/bandpilot_help_en.md` (neu), `main.py`.
+
+**Was:** Bei jedem Bandwechsel waehlt der „Bandpilot" automatisch den
+RX-Modus (Normal / Diversity Standard / Diversity DX) der auf diesem
+Band die hoechste Pooled-Mean-Stations-Anzahl pro 15s-Slot in der
+Statistik liefert. Mike-Idee: nicht jedes Band bei jedem Anstecken
+manuell durchklicken — die App weiss aus den eigenen Messdaten was an
+Mike's Antennenkombination (ANT1 Kelemen DP-201510 + ANT2 Regenrinne)
+am besten funktioniert. Hobby-Funker-Komfort: anstecken → Band waehlen
+→ ideale Konfig ist da.
+
+**Workflow voll durchlaufen:** V1 → V2 (Self-Review) → R1 (DeepSeek-
+Reasoner) → V3 → Plan (Task-Liste) → Code. Mike hat „vollstes Vertrauen
+… autonom implementieren" gegeben nach finalem V3 mit Kandidat-A-
+Aggregation.
+
+### Aggregations-Methodik (Kandidat A — Mike-Entscheidung)
+
+```
+diversity_aggregate = (Diversity_Normal_Mean + Diversity_DX_Mean) / 2
+recommendation     = Normal vs diversity_aggregate
+```
+
+Hintergrund: alle drei Stats-Pfade (Normal / Diversity_Normal /
+Diversity_Dx) loggen dieselbe Metrik — Anzahl dekodierter Stationen
+pro 15s-Slot. Damit halbiert sich die Mindest-Messzeit fuer
+„Diversity": ein Tag Diversity_Normal + ein Tag Diversity_Dx ergibt
+zwei Datentage fuer das Aggregat. Anfangs hatte ich faelschlich
+behauptet Diversity_Dx zaehle nur SNR<-10 — Mike hat den Code-Check
+verlangt und meinen Irrtum aufgedeckt (CLAUDE.md-Notiz war
+ambivalent, Code zeigt: alle drei zaehlen gleich).
+
+### Bedingungen + Algorithmus
+
+- **MIN_DAYS = 2** pro Modus, **MIN_CYCLES = 50** pro Modus.
+- Wenn ein Modus diese Schwellen nicht erreicht → **kein Auto-Switch**
+  (Mike behaelt seinen Modus).
+- Wenn `Normal_Mean >= diversity_aggregate` → Empfehlung = `normal`.
+- Sonst Empfehlung = `diversity_normal` oder `diversity_dx`, je nach
+  `bandpilot_diversity_pref`-Setting:
+  - `auto` (Default): der Diversity-Modus mit dem hoeheren Mean
+  - `standard`: immer Diversity_Normal
+  - `dx`: immer Diversity_Dx
+
+Live-Smoke-Test mit Mike's Daten: 40m → diversity_normal (42.4 vs 19.2),
+20m → normal (Datenbasis 20m ist noch duenn → faellt zurueck auf Normal).
+
+### Override pro Band
+
+User-Klick auf btn_normal/btn_diversity bei aktivem Bandpilot setzt
+`_bandpilot_overridden_bands.add(current_band)`. Beim naechsten
+Bandwechsel ZU diesem Band greift der Override (kein Auto-Switch) und
+wird zugleich geloescht. Beispiel: 40m → manuell Normal → 20m →
+zurueck zu 40m: Bandpilot respektiert Override genau einmal, danach
+wieder normal.
+
+### Cache
+
+`~/.simpleft8/bandpilot_summary.json`, TTL 24h pro Band. Aggregation
+pro Band (~50ms bei 10 Tagen) wird gecached, naechster Aufruf nach 24h
+re-aggregiert automatisch. Atomarer Write (`.tmp` + `os.replace`)
+gegen Crashs waehrend Persistenz.
+
+### Refactor in mw_radio.py
+
+`_on_rx_mode_changed` hatte den Diversity-Aktivierungs-Block (60+ Zeilen)
+inline. Den habe ich in `_activate_diversity_with_scoring(scoring)`
+extrahiert — wird jetzt sowohl vom User-Dialog (Standard/DX-Wahl) als
+auch vom Bandpilot ueber `_set_rx_mode_direct(target)` aufgerufen.
+Kein Code-Duplikat. `_bandpilot_setting_mode`-Flag mit try-finally
+verhindert dass programmatischer Switch einen User-Override speichert.
+
+### UI
+
+Settings-Dialog Tab „FT8 & Diversity":
+
+- Neue Checkbox **„Bandpilot — RX-Modus automatisch waehlen"**
+- ComboBox **„Wenn Diversity besser:"** mit Auto / Standard / DX
+- ?-Button rechts oeffnet QMessageBox mit
+  `docs/bandpilot_help_<de|en>.md` (sprachabh. via settings.language)
+
+Toast-Feedback ueber `statusBar().showMessage(..., 3000)`:
+`Bandpilot: Diversity Standard fuer 40m`.
+
+### Tests
+
+- `tests/test_mode_recommender.py` — 28 neue Tests (parse, aggregate,
+  recommend, cache, end-to-end).
+- `tests/test_settings_dialog_smoke.py` — 2 neue Tests (Bandpilot-
+  Widgets vorhanden, Save-Round-Trip).
+- Existing-Tests vom mw_radio-Refactor: alle 591 grün, kein
+  Breakage durch die `_activate_diversity_with_scoring`-Extraktion.
+
+### Defaults
+
+`config/settings.py`:
+- `bandpilot_enabled = False` (User-Opt-In, nicht aufgezwungen)
+- `bandpilot_diversity_pref = "auto"`
+
+### Tests-Bilanz
+
+563 → **593 grün** (+28 mode_recommender, +2 settings_dialog,
+0 Regressionen).
+
+### Lessons
+
+- **Code-Verifikation vor Premise.** Meine Annahme „Diversity_Dx
+  zaehlt nur SNR<-10" war falsch — Mike hat das aufgeklaert und das
+  korrekte Kandidat-A-Aggregat eingefordert. CLAUDE.md-Notizen sind
+  Hilfsmaterial, der Code ist die Referenz. Memory-Eintrag wird gleich
+  gepflegt.
+- **Helper-Extraktion statt Flags.** Ich hatte zuerst ueberlegt
+  `_bandpilot_setting_mode`-Flag im `_on_rx_mode_changed` direkt zu
+  branchen. Sauberer war: den Diversity-Aktivierungs-Block in eine
+  eigene Methode rauszuziehen und beide Pfade (Dialog + Direct) sie
+  rufen zu lassen. KISS schlaegt Verzweigungslogik.
+
+---
+
 ## 2026-04-30 v0.80 — TX-DT-Drift QSO-Retry-Fix (BLOCKER)
 
 **Betroffene Dateien:** `core/encoder.py`, `core/qso_state.py`, `ui/mw_qso.py`,
