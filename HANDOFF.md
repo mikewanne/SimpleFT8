@@ -1,10 +1,10 @@
 # HANDOFF — SimpleFT8
 
-**Stand 2026-05-01:** v0.84 (Tertile-Analyse Statistik, Feature H).
-v0.83 Fix F (Auto-Close-Dialog) heute Vormittag. v0.82 Fix E
-(Doppel-Report Decoder-Signal-Reihenfolge) gestern (30.04.) abends.
+**Stand 2026-05-01:** v0.85 (Dead-Code-Cleanup, Cleanup I + Doc J).
+v0.84 Tertile-Analyse heute Mittag. v0.83 Fix F Auto-Close-Dialog
+heute Vormittag. v0.82 Fix E gestern abends.
 
-**Tests:** 514/514 gruen.
+**Tests:** 510/510 gruen (514 - 4 AGC-Tests aus Dead-Code-Cleanup).
 
 ---
 
@@ -119,12 +119,13 @@ erfolgreich):**
 - IC-7300 Fork (TARGET_TX_OFFSET dort separat messen).
 - AP-Lite Test-Pipeline (synthetische E2E-Tests).
 
-### ✅ Heute am 2026-05-01 erledigt (Selbstcheck nach Halluzination)
+### ✅ Heute am 2026-05-01 erledigt
 
 - v0.83 Fix F — Kalibrierungs-Dialog Auto-Close 3s ohne OK
 - v0.84 Feature H — Tertile-Analyse Statistik (Pooled Mean + 33%/67%-Tertile shaded band)
-- TODO-Liste war stale: `_reset_defaults` (v0.79 erledigt) und `btn_omni_cq`-Handler (v0.78 erledigt) waren bereits in Code.
-  → Lesson: Memory `feedback_todo_history_pflicht.md` — vor TODO-Liste IMMER `git log --oneline` + `grep` gegen aktuellen Code.
+- v0.85 Cleanup I + Doc J — Dead-Code-Cleanup (AGC + input_sample_rate + sync_ntp + _ntp_offset, ~60 Zeilen)
+- TODO-Liste-Lesson: `_reset_defaults` (v0.79) und `btn_omni_cq` (v0.78) waren bereits erledigt. Memory
+  `feedback_todo_history_pflicht.md` — vor TODO-Liste IMMER `git log --oneline` + `grep` gegen aktuellen Code.
 
 ### 🟢 Long-term (theoretisch)
 
@@ -181,7 +182,7 @@ erfolgreich):**
 
 ```
 ./venv/bin/python3 -m pytest tests/ -q
-514 passed in ~7s
+510 passed in ~7s
 ```
 
 Neu seit v0.79:
@@ -190,15 +191,16 @@ Neu seit v0.79:
 - v0.82: 2 Tests fuer Fix E (Decoder-Signal-Reihenfolge)
 - v0.83: 3 Tests fuer Fix F (Auto-Close-Dialog)
 - v0.84: 4 Tests fuer Feature H (Tertile-Analyse)
+- v0.85: -4 Tests (4 AGC-Tests entfernt mit Dead-Code-Cleanup)
 
 ---
 
 ## Letzter bekannter guter Zustand
 
 - **Branch:** main
-- **HEAD:** `chore(release): v0.84 — Tertile-Analyse Statistik (Feature H)`
-- **Tests:** 514/514 gruen
-- **App-Version:** v0.84
+- **HEAD:** `chore(release): v0.85 — Dead-Code-Cleanup (Cleanup I + Doc J)`
+- **Tests:** 510/510 gruen
+- **App-Version:** v0.85
 - **Backup:** `Appsicherungen/2026-04-30_vor_decoder_reihenfolge_fix/`
   (4 MB code-only, vor Fix E v0.82). Heute Vormittag Fix F + Feature
   H — kein neues Backup, da pure Code-Updates ohne riskante

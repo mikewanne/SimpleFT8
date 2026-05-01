@@ -2811,3 +2811,62 @@ Berechnungen produziert. Final-V3 hat `fill_between` in
   ohne Reviewer-Brille nicht gesehen haette. Workflow erneut
   bestaetigt.
 
+
+
+## 2026-05-01 v0.85 — Dead-Code-Cleanup (Cleanup I + Doc J)
+
+**Mike's Anweisung:** "ich nehme alles mit vollen workflow ohne
+mittlere aufgaben los" — alle kleinen TODOs gebuendelt.
+
+**Entfernter Dead-Code:**
+
+### `core/decoder.py`
+- 5 `_AGC_*`-Konstanten (Z.51-55)
+- `_apply_agc`-Funktion (Z.58-94, ~37 Zeilen)
+- `self.input_sample_rate = 24000`-Member (Z.127, R1-P5-Finding)
+- `self._agc_state = (1.0, 1.0)`-Init (Z.130)
+- Auskommentierter Aufruf + Kommentar (Z.270-271)
+- Header-Doku: "RMS Auto-Gain Control" durch "Noise-Floor-basierte
+  Normalisierung" ersetzt (R1-Final-Review-Finding).
+
+### `core/timing.py`
+- `self._ntp_offset = 0.0`-Member (Z.36)
+- TODO-Kommentar in `utc_now()` (war "ungetestet — Feldtest noetig")
+- `utc_now()` vereinfacht: `return ntp_time.get_time() + self._ntp_offset`
+  → `return ntp_time.get_time()`
+- `sync_ntp()`-Methode (Z.62-70, nie aufgerufen)
+
+### `tests/test_modules.py`
+- 4 AGC-Tests entfernt (testeten nur die tote Funktion).
+
+**Workflow voll V1 → V2 → DeepSeek-R1 → V3:**
+- prompts/dead_code_agc_v1.md (V1 fokussiert auf AGC)
+- prompts/dead_code_agc_v2.md (V2 Self-Review, Scope-Klarstellung)
+- DeepSeek-R1: alles JA/NEIN klare Antworten + **P5 eigeninitiativ:
+  `input_sample_rate` ist auch tot**
+- Schritt-0-Verifikation fuer Doc J ergab: `sync_ntp` + `_ntp_offset`
+  auch tot → V3 erweitert um timing.py
+- prompts/dead_code_agc_v3.md (R1-Bilanz + Doc J integriert)
+
+**Final-R1-Codereview:** "Alles OK" + 1 TRADEOFF (Header-Doku
+inkonsistent zur entfernten AGC-Funktion) → in Folge-Commit gefixt.
+
+**Tests:** 514 → 510 (4 AGC-Tests weg, alle anderen unveraendert).
+
+**Atomare Commits:**
+1. chore(decoder/timing): toten AGC-Code + input_sample_rate +
+   sync_ntp + _ntp_offset entfernen
+2. docs(decoder): Pipeline-Header an entfernte AGC-Funktion anpassen
+   (R1-Final-Finding)
+3. chore(release): v0.85 — Dead-Code-Cleanup
+
+**Code-Reduzierung gesamt:** ~60 Zeilen.
+
+**Lessons:**
+- R1's P5-Initiative bringt auch in trivialen Cleanups Mehrwert
+  (zusaetzlicher toter Member entdeckt).
+- Schritt-0-Verifikation fuer Doc J zeigte dass der Scope groesser
+  war als gedacht (`sync_ntp` + `_ntp_offset` zusaetzlich).
+  V3-Erweiterung statt separater Workflow ist KISS-Win wenn der
+  Cleanup-Scope thematisch zusammenpasst.
+
