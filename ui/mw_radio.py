@@ -947,16 +947,20 @@ class RadioMixin:
         self._show_calibration_done(band, ant1_g, ant2_g)
 
     def _show_calibration_done(self, band: str, ant1_g: int, ant2_g: int | None):
-        """Modales Info-Popup 'Kalibrierung abgeschlossen' — bleibt im Vordergrund.
+        """Auto-Close-Info-Popup 'Kalibrierung abgeschlossen' — 3s, kein OK.
 
-        v0.79 R1-Review-Fix: vorher non-modal mit dlg.show() — konnte hinter
-        dem Hauptfenster wandern. Jetzt modal + WindowStaysOnTopHint + exec().
+        v0.83 Fix F: non-modal + Auto-Close, Mike kann waehrend der 3s
+        weiterarbeiten. WindowStaysOnTopHint + raise_+activateWindow
+        verhindern Hinten-Wandern (v0.79-Problem).
+
+        v0.79 (vorher): Modal + exec() weil non-modal hinter Hauptfenster
+        verschwand. Mit raise_+activateWindow + StaysOnTopHint sollte das
+        nicht mehr passieren. Esc schliesst Dialog vorzeitig (Qt-Default).
         """
-        from PySide6.QtCore import Qt as _Qt
-        from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton
+        from PySide6.QtCore import Qt as _Qt, QTimer as _QTimer
+        from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel
         dlg = QDialog(self)
         dlg.setWindowTitle("Kalibrierung abgeschlossen")
-        dlg.setModal(True)
         dlg.setWindowFlag(_Qt.WindowType.WindowStaysOnTopHint, True)
         dlg.setStyleSheet(
             "QDialog, QWidget { background-color: #16192b; }"
@@ -980,20 +984,16 @@ class RadioMixin:
         )
         lay.addWidget(lbl_info)
 
-        btn = QPushButton("OK")
-        btn.setStyleSheet(
-            "QPushButton { background-color: rgba(40,80,160,0.45); color: #CCC; "
-            "border: 1px solid #3a5a9a; border-radius: 6px; padding: 7px 24px; "
-            "font-family: Menlo; font-size: 12px; font-weight: bold; }"
-            "QPushButton:hover { background-color: rgba(50,100,180,0.55); }"
-        )
-        btn.clicked.connect(dlg.accept)
-        hlay = QHBoxLayout()
-        hlay.addStretch()
-        hlay.addWidget(btn)
-        lay.addLayout(hlay)
+        # Auto-Close nach 3s (singleShot ist QApplication-owned).
+        # accept() ist idempotent — kein Crash wenn Dialog vorher per
+        # Esc oder App-Close geschlossen wurde.
+        _QTimer.singleShot(3000, dlg.accept)
 
-        dlg.exec()
+        # show() statt exec() = non-modal. raise_+activateWindow gegen
+        # Hinten-Wandern (R1-P1: macOS Spaces-Edge-Cases akzeptiert).
+        dlg.show()
+        dlg.raise_()
+        dlg.activateWindow()
 
     def _on_dx_tune_rejected(self):
         """DX Tuning abgebrochen — zurueck auf Normal/Diversity."""
