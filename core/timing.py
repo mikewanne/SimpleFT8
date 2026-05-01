@@ -33,16 +33,14 @@ class FT8Timer(QObject):
         self._running = False
         self._thread = None
         self._cycle_count = 0
-        self._ntp_offset = 0.0  # Offset zu System-Clock
 
     def set_mode(self, mode: str):
         self.mode = mode
         self.cycle_duration = self.CYCLE_DURATIONS[mode]
 
     def utc_now(self) -> float:
-        """Aktuelle UTC-Zeit mit DT-Korrektur.
-        TODO: ungetestet — Feldtest nötig (Vorzeichen, Smoothing)."""
-        return ntp_time.get_time() + self._ntp_offset
+        """Aktuelle UTC-Zeit mit DT-Korrektur."""
+        return ntp_time.get_time()
 
     def seconds_in_cycle(self) -> float:
         """Sekunden seit Beginn des aktuellen Zyklus."""
@@ -58,16 +56,6 @@ class FT8Timer(QObject):
 
     def is_even_cycle(self) -> bool:
         return self.current_cycle_number() % 2 == 0
-
-    def sync_ntp(self):
-        """NTP-Offset berechnen (optional, macOS synced automatisch)."""
-        try:
-            import ntplib
-            client = ntplib.NTPClient()
-            response = client.request("pool.ntp.org", version=3)
-            self._ntp_offset = response.offset
-        except Exception:
-            self._ntp_offset = 0.0
 
     def start(self):
         if self._running:

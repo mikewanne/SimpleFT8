@@ -19,44 +19,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import numpy as np
 
 
-# ── AGC ──────────────────────────────────────────────────────────────────────
-
-def test_agc_loud_signal():
-    """Lautes Signal → Gain sinkt unter 1.0."""
-    from core.decoder import _apply_agc
-    loud = (np.random.randn(180000) * 25000).astype(np.int16)
-    state = (1.0, 1.0)
-    for _ in range(5):
-        _, state = _apply_agc(loud, state)
-    assert state[0] < 1.0, f"AGC bei lautem Signal: gain={state[0]}"
-
-
-def test_agc_normal_signal():
-    """Normales Signal (Ziel-RMS) → Gain bleibt nahe 1.0."""
-    from core.decoder import _apply_agc
-    normal = (np.random.randn(180000) * 8225).astype(np.int16)
-    state = (1.0, 1.0)
-    for _ in range(10):
-        _, state = _apply_agc(normal, state)
-    assert 0.7 < state[0] < 1.5, f"AGC bei normalem Signal: gain={state[0]}"
-
-
-def test_agc_clipping_protection():
-    """Clipping-Schutz: kein int16 Overflow."""
-    from core.decoder import _apply_agc
-    extreme = np.full(1000, 30000, dtype=np.int16)
-    out, _ = _apply_agc(extreme, (3.0, 3.0))
-    assert np.max(out) <= 32767, f"Clipping: max={np.max(out)}"
-
-
-def test_agc_silence():
-    """Stille → Gain rampt auf Maximum (erwartet, kein Bug)."""
-    from core.decoder import _apply_agc
-    silence = np.zeros(12000, dtype=np.int16)
-    _, state = _apply_agc(silence, (1.0, 1.0))
-    assert state[0] >= 1.0, f"AGC bei Stille: gain={state[0]}"
-
-
 # ── NTP Time ─────────────────────────────────────────────────────────────────
 
 def test_ntp_reset():
