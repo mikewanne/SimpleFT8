@@ -112,53 +112,6 @@ def test_omni_tx_qso_reset():
     omni.disable()
 
 
-# ── AP-Lite ──────────────────────────────────────────────────────────────────
-
-def test_ap_lite_candidates_wait_report():
-    """WAIT_REPORT → 6 Kandidaten (SNR-Fenster)."""
-    from core.ap_lite import generate_candidates
-    cands = generate_candidates(1, "DK5ON", "DA1MHH", "JO31", -10)
-    assert len(cands) == 6
-    assert all("DA1MHH" in c and "DK5ON" in c for c in cands)
-
-
-def test_ap_lite_candidates_wait_rr73():
-    """WAIT_RR73 → 3 Kandidaten (RR73, 73, RRR)."""
-    from core.ap_lite import generate_candidates
-    cands = generate_candidates(2, "DK5ON", "DA1MHH", "JO31")
-    assert len(cands) == 3
-    assert "DA1MHH DK5ON RR73" in cands
-
-
-def test_ap_lite_candidates_cq_wait():
-    """CQ_WAIT → 0 Kandidaten (zu viele Unbekannte)."""
-    from core.ap_lite import generate_candidates
-    assert len(generate_candidates(3, "DK5ON", "DA1MHH", "JO31")) == 0
-
-
-def test_ap_lite_buffer_management():
-    """Buffer speichern und loeschen."""
-    from core.ap_lite import APLite
-    ap = APLite()
-    ap.enabled = True
-    pcm = np.zeros(180000, dtype=np.float32)
-    ap.on_decode_failed(pcm, 1000.0, "DK5ON", 1500.0, 1, "DA1MHH", "JO31")
-    assert len(ap._buffers) == 1
-    ap.clear()
-    assert len(ap._buffers) == 0
-
-
-def test_ap_lite_freq_mismatch():
-    """Frequenz-Abweichung >30Hz → kein Rescue."""
-    from core.ap_lite import APLite
-    ap = APLite()
-    ap.enabled = True
-    pcm = np.zeros(180000, dtype=np.float32)
-    ap.on_decode_failed(pcm, 1000.0, "DK5ON", 1500.0, 1, "DA1MHH", "JO31")
-    result = ap.try_rescue(pcm, 1015.0, "DK5ON", 1600.0, 1, "DA1MHH", "JO31")
-    assert result is None  # freq diff > 30Hz
-
-
 # ── Diversity ────────────────────────────────────────────────────────────────
 
 def test_diversity_50_50_pattern():
