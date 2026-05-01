@@ -263,6 +263,18 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         from core import ap_lite as _ap
         self._ap_lite = _ap.get_instance(encoder=self.encoder)
 
+        # v0.87: Bandpilot — RX-Modus-Empfehlung pro Band aus Statistik
+        from core.mode_recommender import Bandpilot
+        self._bandpilot = Bandpilot(
+            diversity_pref=self.settings.get("bandpilot_diversity_pref", "auto"),
+        )
+        # Override-Set: Baender wo User manuell anders gewaehlt hat —
+        # wird beim nachsten Bandwechsel ZU diesem Band wieder geleert.
+        self._bandpilot_overridden_bands: set[str] = set()
+        # Flag: True waehrend Bandpilot programmatisch RX-Modus setzt
+        # → verhindert dass _on_rx_mode_changed daraus einen Override macht.
+        self._bandpilot_setting_mode: bool = False
+
         # v0.78: Initial-Sichtbarkeit der 3 Mode-Buttons (rx_mode + Easter-Egg)
         self._update_button_visibility()
 

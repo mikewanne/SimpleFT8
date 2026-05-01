@@ -353,8 +353,14 @@ class RadioMixin:
         if self._direction_map_dialog is not None:
             self._reload_rx_history_on_map(band)
 
+        # v0.87 Bandpilot: ggf. RX-Modus auf Empfehlung wechseln.
+        # Wenn er aktiv geworden ist, hat _set_rx_mode_direct bereits den
+        # passenden Preset-Dialog gefahren — Standard-Diversity-Preset-Pfad
+        # ueberspringen, sonst doppelter Dialog.
+        bandpilot_acted = self._maybe_apply_bandpilot(band)
+
         # Diversity: Preset-Check mit Dialog + ggf. Pipeline
-        if self._rx_mode == "diversity":
+        if not bandpilot_acted and self._rx_mode == "diversity":
             ft_mode = self.settings.get("mode", "FT8")
             scoring = getattr(self._diversity_ctrl, 'scoring_mode', 'normal')
             self._check_diversity_preset(band, ft_mode, scoring)
@@ -367,6 +373,16 @@ class RadioMixin:
         if not self.radio.ip:
             self.control_panel.set_rx_mode("normal")
             return
+
+        # Bandpilot-Override: User-Klick auf btn_normal/btn_diversity
+        # = Override fuer aktuelles Band. Reset erst beim naechsten
+        # Bandwechsel ZU diesem Band. Wenn Bandpilot programmatisch
+        # gerade wechselt → Flag aktiv → kein Override speichern.
+        if (not getattr(self, "_bandpilot_setting_mode", False)
+                and self.settings.get("bandpilot_enabled", False)):
+            band_now = self.settings.band
+            if hasattr(self, "_bandpilot_overridden_bands"):
+                self._bandpilot_overridden_bands.add(band_now)
 
         old_mode = self._rx_mode
         # v0.78: bei RX-Mode-Wechsel Easter-Egg-Override und aktive Power-Modi stoppen
@@ -453,75 +469,200 @@ class RadioMixin:
                 self._update_statusbar()
                 return
             scoring = _result[0]
-            self._rx_mode = "diversity"
-            self._diversity_stations = {}
-            label = "DIVERSITY DX" if scoring == "dx" else "DIVERSITY"
-            self.control_panel.btn_diversity.setText(label)
-
-            # Preset-Store pruefen — 2h-Frist pro Band+FTMode
-            band = self.settings.band
-            ft_mode = self.settings.mode
-            store = getattr(self, '_dx_store', None) if scoring == "dx" else getattr(self, '_standard_store', None)
-            if store and store.is_valid(band, ft_mode):
-                age = store.get_age_minutes(band, ft_mode)
-                mode_label = "Diversity DX" if scoring == "dx" else "Diversity Standard"
-                from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel
-                _dlg = QDialog(self)
-                _dlg.setWindowTitle("Diversity Setup")
-                _dlg.setStyleSheet("""
-                    QDialog, QWidget { background-color: #1a1a2e; }
-                    QLabel { color: #CCCCCC; font-family: Menlo; font-size: 13px; background-color: #1a1a2e; }
-                    QLabel#lbl_title { color: #88AACC; font-size: 14px; font-weight: bold; padding-bottom: 4px; }
-                    QPushButton {
-                        background-color: #2a2a3e; color: #CCCCCC;
-                        border: 1px solid #444; border-radius: 5px;
-                        font-family: Menlo; font-size: 13px;
-                        padding: 8px 20px; min-width: 120px;
-                    }
-                    QPushButton:hover { background-color: #3a3a5e; }
-                    QPushButton#btn_weiter { background-color: #1a3a6e; border-color: #4488cc; }
-                    QPushButton#btn_weiter:hover { background-color: #2a4a8e; }
-                """)
-                _lay = QVBoxLayout(_dlg)
-                _lay.setContentsMargins(24, 20, 24, 20)
-                _lay.setSpacing(10)
-                lbl_title = QLabel(f"{band} {ft_mode} — {mode_label}")
-                lbl_title.setObjectName("lbl_title")
-                lbl_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                lbl_msg = QLabel(f"Kalibrierungsdaten vorhanden ({age} Min. alt).\nWeiter oder neu messen?")
-                lbl_msg.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                _lay.addWidget(lbl_title)
-                _lay.addWidget(lbl_msg)
-                _btn_row = QHBoxLayout()
-                _btn_row.setSpacing(12)
-                btn_new  = QPushButton("Neu messen")
-                btn_use  = QPushButton("Weiter")
-                btn_use.setObjectName("btn_weiter")
-                _btn_row.addWidget(btn_new)
-                _btn_row.addWidget(btn_use)
-                _lay.addLayout(_btn_row)
-                _choice = [False]
-                btn_use.clicked.connect(lambda: (_choice.__setitem__(0, True), _dlg.accept()))
-                btn_new.clicked.connect(lambda: _dlg.accept())
-                _dlg.exec()
-                if _choice[0]:
-                    print(f"[Diversity] Preset gueltig ({age} Min.) — ueberspringe Pipeline")
-                    self._enable_diversity(scoring_mode=scoring)
-                    self._update_statusbar()
-                    return
-
-            # Volle Pipeline: Tunen → Gain-Messung → Einmessen
-            gain_scoring = "snr" if scoring == "dx" else "stations"
-            print(f"[Diversity] Starte Pipeline ({scoring.upper()}, Gain: {gain_scoring})")
-            self._pending_dx_diversity = True
-            self._pending_diversity_scoring = scoring
-            self._start_dx_tuning(scoring_mode=gain_scoring)
+            self._activate_diversity_with_scoring(scoring)
 
         # v0.78: Defensive — Mode-Coupling-Update auch wenn _apply_normal_mode /
         # _enable_diversity nicht direkt durchgelaufen sind (early-return-Pfade)
         if hasattr(self, "_easter_egg_active"):
             self._update_button_visibility()
         self._update_statusbar()
+
+    def _activate_diversity_with_scoring(self, scoring: str):
+        """Diversity aktivieren mit explizitem scoring ('normal'|'dx').
+
+        Wird sowohl aus dem Standard/DX-Dialog (User-Klick auf btn_diversity)
+        als auch vom Bandpilot (programmatisch via _set_rx_mode_direct)
+        aufgerufen — kein Code-Duplikat zwischen beiden Pfaden.
+
+        Pruefung: Preset-Store auf 2h-Frist → Dialog "Weiter/Neu messen".
+        Bei "Weiter" → _enable_diversity. Bei "Neu" oder fehlend Preset →
+        volle Pipeline (Tunen → Gain → Einmessen).
+        """
+        self._rx_mode = "diversity"
+        self._diversity_stations = {}
+        label = "DIVERSITY DX" if scoring == "dx" else "DIVERSITY"
+        self.control_panel.btn_diversity.setText(label)
+
+        # Preset-Store pruefen — 2h-Frist pro Band+FTMode
+        band = self.settings.band
+        ft_mode = self.settings.mode
+        store = getattr(self, '_dx_store', None) if scoring == "dx" else getattr(self, '_standard_store', None)
+        if store and store.is_valid(band, ft_mode):
+            age = store.get_age_minutes(band, ft_mode)
+            mode_label = "Diversity DX" if scoring == "dx" else "Diversity Standard"
+            from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel
+            _dlg = QDialog(self)
+            _dlg.setWindowTitle("Diversity Setup")
+            _dlg.setStyleSheet("""
+                QDialog, QWidget { background-color: #1a1a2e; }
+                QLabel { color: #CCCCCC; font-family: Menlo; font-size: 13px; background-color: #1a1a2e; }
+                QLabel#lbl_title { color: #88AACC; font-size: 14px; font-weight: bold; padding-bottom: 4px; }
+                QPushButton {
+                    background-color: #2a2a3e; color: #CCCCCC;
+                    border: 1px solid #444; border-radius: 5px;
+                    font-family: Menlo; font-size: 13px;
+                    padding: 8px 20px; min-width: 120px;
+                }
+                QPushButton:hover { background-color: #3a3a5e; }
+                QPushButton#btn_weiter { background-color: #1a3a6e; border-color: #4488cc; }
+                QPushButton#btn_weiter:hover { background-color: #2a4a8e; }
+            """)
+            _lay = QVBoxLayout(_dlg)
+            _lay.setContentsMargins(24, 20, 24, 20)
+            _lay.setSpacing(10)
+            lbl_title = QLabel(f"{band} {ft_mode} — {mode_label}")
+            lbl_title.setObjectName("lbl_title")
+            lbl_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            lbl_msg = QLabel(f"Kalibrierungsdaten vorhanden ({age} Min. alt).\nWeiter oder neu messen?")
+            lbl_msg.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            _lay.addWidget(lbl_title)
+            _lay.addWidget(lbl_msg)
+            _btn_row = QHBoxLayout()
+            _btn_row.setSpacing(12)
+            btn_new  = QPushButton("Neu messen")
+            btn_use  = QPushButton("Weiter")
+            btn_use.setObjectName("btn_weiter")
+            _btn_row.addWidget(btn_new)
+            _btn_row.addWidget(btn_use)
+            _lay.addLayout(_btn_row)
+            _choice = [False]
+            btn_use.clicked.connect(lambda: (_choice.__setitem__(0, True), _dlg.accept()))
+            btn_new.clicked.connect(lambda: _dlg.accept())
+            _dlg.exec()
+            if _choice[0]:
+                print(f"[Diversity] Preset gueltig ({age} Min.) — ueberspringe Pipeline")
+                self._enable_diversity(scoring_mode=scoring)
+                return
+
+        # Volle Pipeline: Tunen → Gain-Messung → Einmessen
+        gain_scoring = "snr" if scoring == "dx" else "stations"
+        print(f"[Diversity] Starte Pipeline ({scoring.upper()}, Gain: {gain_scoring})")
+        self._pending_dx_diversity = True
+        self._pending_diversity_scoring = scoring
+        self._start_dx_tuning(scoring_mode=gain_scoring)
+
+    # ── Bandpilot ────────────────────────────────────────────────────────────
+
+    def _current_rx_mode_string(self) -> str | None:
+        """Aktueller RX-Modus als Bandpilot-String.
+
+        Returns: 'normal' | 'diversity_normal' | 'diversity_dx' | None
+                 (None bei dx_tuning).
+        """
+        if self._rx_mode == "normal":
+            return "normal"
+        if self._rx_mode == "diversity":
+            scoring = getattr(self._diversity_ctrl, "scoring_mode", "normal")
+            return "diversity_dx" if scoring == "dx" else "diversity_normal"
+        return None
+
+    def _bandpilot_label(self, target: str) -> str:
+        """Bandpilot-Empfehlungs-String → User-friendly Label."""
+        return {
+            "normal":           "Normal",
+            "diversity_normal": "Diversity Standard",
+            "diversity_dx":     "Diversity DX",
+        }.get(target, target)
+
+    def _set_rx_mode_direct(self, target: str):
+        """Programmatischer RX-Modus-Wechsel — umgeht den Standard/DX-Dialog.
+
+        Wird vom Bandpilot aufgerufen wenn aufgrund der Statistik ein
+        bestimmter Modus empfohlen wird. Setzt _bandpilot_setting_mode-Flag
+        damit _on_rx_mode_changed daraus keinen User-Override macht.
+
+        Args:
+            target: 'normal' | 'diversity_normal' | 'diversity_dx'.
+        """
+        self._bandpilot_setting_mode = True
+        try:
+            current = self._current_rx_mode_string()
+            if current == target:
+                return  # nichts zu tun
+
+            if target == "normal":
+                if self._rx_mode == "diversity":
+                    self._disable_diversity()
+                self._rx_mode = "normal"
+                self._apply_normal_mode()
+                self.control_panel.set_rx_mode("normal")
+                self.control_panel.btn_diversity.setText("DIVERSITY")
+                self.control_panel._freq_hist.setVisible(False)
+            elif target in ("diversity_normal", "diversity_dx"):
+                scoring = "normal" if target == "diversity_normal" else "dx"
+                if self._rx_mode == "diversity":
+                    # Modus-Wechsel innerhalb Diversity (Standard ↔ DX)
+                    self._disable_diversity()
+                self.control_panel.set_rx_mode("diversity")
+                self._activate_diversity_with_scoring(scoring)
+
+            if hasattr(self, "_easter_egg_active"):
+                self._update_button_visibility()
+            self._update_statusbar()
+        finally:
+            self._bandpilot_setting_mode = False
+
+    def _maybe_apply_bandpilot(self, band: str) -> bool:
+        """Bandpilot-Empfehlung fuer Band pruefen + ggf. RX-Modus wechseln.
+
+        Override-Mechanismus: hatte der User fuer dieses Band manuell einen
+        anderen Modus gewaehlt (Override-Flag gesetzt), respektieren wir das
+        bei diesem einen Bandwechsel und loeschen das Flag — der naechste
+        Bandwechsel zu diesem Band greift dann wieder regulaer.
+
+        Returns True wenn ein Wechsel stattgefunden hat (Caller skippt dann
+        den normalen Diversity-Preset-Check). False wenn Bandpilot aus,
+        Override aktiv, zu wenig Daten oder Empfehlung == aktueller Modus.
+        """
+        if not hasattr(self, "_bandpilot"):
+            return False  # Init-Reihenfolge-Schutz (sollte nicht passieren)
+        if not self.settings.get("bandpilot_enabled", False):
+            return False
+
+        # Override pro Band: einen Bandwechsel respektieren, dann Reset
+        if band in self._bandpilot_overridden_bands:
+            self._bandpilot_overridden_bands.discard(band)
+            print(f"[Bandpilot] {band}: User-Override aktiv — kein Auto-Switch")
+            return False
+
+        # Pref aus Settings nachfuehren (User kann zwischen Standard/DX/Auto
+        # waehlen ohne dass App neu starten muss).
+        self._bandpilot.diversity_pref = self.settings.get(
+            "bandpilot_diversity_pref", "auto"
+        )
+
+        try:
+            rec = self._bandpilot.recommend_for_band(band)
+        except Exception as e:
+            print(f"[Bandpilot] Aggregations-Fehler: {e}")
+            return False
+
+        if rec is None:
+            print(f"[Bandpilot] {band}: zu wenig Daten — kein Auto-Switch")
+            return False
+
+        current = self._current_rx_mode_string()
+        if rec == current:
+            return False
+
+        label = self._bandpilot_label(rec)
+        print(f"[Bandpilot] {band}: Empfehlung {label} (aktuell: {current})")
+        self._set_rx_mode_direct(rec)
+
+        sb = self.statusBar() if hasattr(self, "statusBar") else None
+        if sb is not None:
+            sb.showMessage(f"Bandpilot: {label} fuer {band}", 3000)
+        return True
 
     def _set_cq_locked(self, locked: bool):
         """CQ + Hunt sperren waehrend Diversity-Einmessen.
