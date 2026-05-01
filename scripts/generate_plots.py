@@ -10,7 +10,7 @@ Output: auswertung/stationen_<band>_<proto>.png          (DE)
         auswertung/en/Report-40m-FT8.pdf                  (EN)
 
 X-Achse: Stunde des Tages (00–23 UTC), gemittelt über alle Messtage.
-Konfidenzband: Min–Max der Tages-Mittelwerte (Tag-zu-Tag-Variabilität).
+Konfidenzband: 33%–67%-Tertile der Cycle-Werte pro Stunde (mittleres Drittel der Slots, kein Datencropping).
 """
 
 import re
@@ -213,10 +213,10 @@ TEXTS = {
 
         # ── Diagramm-Seite Stationen (S.4) ──────────────────────────────────
         "p4_title":      "Stationen pro Stunde — alle drei Modi im Vergleich",
-        "p4_subtitle":   "{band} {protocol} — Linie = Mittelwert, schattiertes Band = Schwankung zwischen den Messtagen",
+        "p4_subtitle":   "{band} {protocol} — Linie = Pooled Mean, schattiertes Band = mittleres Drittel der Slots (33%–67%-Tertile)",
         "p4_annotation": (
             "Man sieht gut wie die graue Linie (Normal, eine Antenne) fast immer unter blau und orange liegt. "
-            "Das schattierte Band zeigt die Schwankung zwischen den beiden Messtagen — je mehr Tage dazukommen, desto enger wird das."
+            "Das schattierte Band zeigt das mittlere Drittel der Slot-Werte pro Stunde — auch bei nur einem Tag Daten ist das aussagekräftig (echte Slot-zu-Slot-Streuung statt Tag-zu-Tag-Variation)."
         ),
 
         # ── Diagramm-Seite Diversity (S.5) ──────────────────────────────────
@@ -225,7 +225,7 @@ TEXTS = {
         "p5_annotation": (
             "Die grünen Kappen (+N) oben auf den Balken zeigen Stationen die ANT1 nicht dekodieren konnte — "
             "Signal unter −24 dB. ANT2 hat sie trotzdem gerettet. Ob man die mitzählt oder nicht — Ansichtssache. "
-            "Weiße Fehlerbalken zeigen die Schwankung zwischen den Messtagen."
+            "Weiße Fehlerbalken zeigen die 33%–67%-Tertile der Slot-Werte."
         ),
 
         # ── Rescue-Seite (S.6) ──────────────────────────────────────────────
@@ -434,10 +434,10 @@ TEXTS = {
 
         # ── Stations diagram page (p.4) ──────────────────────────────────────
         "p4_title":      "Stations per Hour — all three modes compared",
-        "p4_subtitle":   "{band} {protocol} — line = mean, shaded band = day-to-day variation",
+        "p4_subtitle":   "{band} {protocol} — line = pooled mean, shaded band = middle third of slots (33%–67% tertiles)",
         "p4_annotation": (
             "You can clearly see how the grey line (Normal, one antenna) almost always falls below blue and orange. "
-            "The shaded band shows day-to-day variation — as more days are added, the band will narrow."
+            "The shaded band shows the middle third of slot values per hour — meaningful even with just one day of data (real slot-to-slot variation, not day-to-day differences)."
         ),
 
         # ── Diversity diagram page (p.5) ─────────────────────────────────────
@@ -446,7 +446,7 @@ TEXTS = {
         "p5_annotation": (
             "Green caps (+N) on top of bars show stations that ANT1 couldn't decode — signal below −24 dB. "
             "ANT2 rescued them anyway. Whether to count them or not — your call. "
-            "White error bars show day-to-day variation."
+            "White error bars show 33%–67% tertiles of slot values."
         ),
 
         # ── Rescue page (p.6) ────────────────────────────────────────────────
@@ -846,21 +846,35 @@ def load_rescue_by_hour(stats_dir: Path, mode: str, band: str,
 
 
 def _aggregate(hour_stats: dict[int, dict]) -> dict[int, dict]:
-    """Pooled Mean (alle Zyklen) + Min/Max über Tages-Mittelwerte (für Error Bars)."""
+    """Pooled Mean (alle Zyklen) + Tertile (33%/67%) der Cycle-Werte.
+
+    v0.84 Feature H — Tertile-Analyse: ersetzt min/max der Tagesmittel
+    durch 33%/67%-Tertile aller Einzel-Cycle-Werte. Bei 1 Tag mit
+    >= 3 Zyklen zeigt das shaded band echte Slot-zu-Slot-Streuung
+    statt null-breit (kein Datencropping). Schluessel min/max behalten
+    (Plot-Konsumenten sind entkoppelt).
+    """
+    import statistics as _stat
     result = {}
     for hour, data in sorted(hour_stats.items()):
         cycles = data.get("cycles", [])
         if not cycles:
             continue
         pooled_mean = sum(cycles) / len(cycles)
-        daily_means = [sum(v) / len(v) for v in data.get("daily", {}).values() if v]
+        if len(cycles) >= 3:
+            t33, t67 = _stat.quantiles(cycles, n=3, method="inclusive")
+        else:
+            t33 = t67 = pooled_mean
+        # n_days direkt aus dict-Laenge (R1-P6: daily_means-Berechnung
+        # obsolet seit min/max aus Tertilen kommen).
+        n_days = sum(1 for v in data.get("daily", {}).values() if v)
         minutes = data.get("minutes", set())
         result[hour] = {
             "mean":       pooled_mean,
-            "min":        min(daily_means) if len(daily_means) > 1 else pooled_mean,
-            "max":        max(daily_means) if len(daily_means) > 1 else pooled_mean,
+            "min":        t33,
+            "max":        t67,
             "n_cycles":   len(cycles),
-            "n_days":     len(daily_means),
+            "n_days":     n_days,
             "coverage":   len(minutes),
         }
     return result
@@ -1005,6 +1019,9 @@ def create_stations_diagram(band: str, protocol: str, output_dir: Path,
 
         color = COLORS[rx_mode]
         ax.plot(xs, means, color=color, label=label, linewidth=2.5, zorder=3)
+        # v0.84 Feature H: shaded band = 33%-67%-Tertile pro Stunde
+        # (mins/maxs aus _aggregate, alpha=0.15 dezent, zorder=2 hinter Linien)
+        ax.fill_between(xs, mins, maxs, color=color, alpha=0.15, zorder=2)
         has_data = True
 
         # Gestrichelte Rescue-Linie (mean + Rescue) für Diversity-Modi
