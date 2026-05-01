@@ -2734,3 +2734,80 @@ tests/test_calibration_dialog_smoke.py):
 - Mike-Bestaetigt 30.04.: „voller workflow auf jeden fall" — heute
   bestaetigt durch Anwendung auf den kleinsten Fix der Woche.
 
+
+
+## 2026-05-01 v0.84 — Tertile-Analyse Statistik (Feature H)
+
+**Mike's TODO seit Mai 2026:** Pooled-Mean-Statistik mit Konfidenzband
+ohne Datencropping.
+
+**Problem heute:** `scripts/generate_plots.py:_aggregate` (Z.848-866)
+nutzte `min/max` der TÄGLICHEN Mittelwerte als shaded band. Bei 1
+Tag: `min == max == pooled_mean` → Band null breit. Bei 2 Tagen
+schmal. Effektiv Datencropping — hunderte Cycle-Werte werden auf
+1-2 Tagesmittel reduziert, dann Min/Max davon.
+
+**Loesung:** 33%/67%-Tertile aller Cycle-Werte direkt. Bei 1 Tag
+mit ≥3 Zyklen zeigt das Band echte Slot-zu-Slot-Streuung.
+
+**Kritisches R1-Finding (V2-Review):** das shaded band wurde gar
+nicht GEZEICHNET — `mins/maxs` aus `_hours_x` wurden in keine
+Plot-Funktion eingespeist. Mein V2-Plan haette nur tote
+Berechnungen produziert. Final-V3 hat `fill_between` in
+`create_stations_diagram` aktiviert.
+
+**Aenderungen:**
+- `_aggregate`: `statistics.quantiles(cycles, n=3, "inclusive")`
+  fuer t33/t67. Schluessel `min`/`max` behalten (KISS, Konsumenten
+  unveraendert). `daily_means`-Berechnung entfernt (R1-P6 obsolet).
+- `create_stations_diagram`: NEU `ax.fill_between(xs, mins, maxs,
+  alpha=0.15, zorder=2)` direkt nach der Mean-Linie.
+- PDF-Texte (DE+EN): „shaded band = day-to-day variation" → „shaded
+  band = middle third of slots (33%–67% tertiles)".
+- Header-Doku: „Konfidenzband: 33%–67%-Tertile der Cycle-Werte".
+
+**Workflow voll V1 → V2 → DeepSeek-R1 → V3:**
+- prompts/tertile_analysis_v1.md (Erstentwurf, Test-Werte falsch
+  gerechnet — V2 korrigiert)
+- prompts/tertile_analysis_v2.md (Self-Review, exakte Test-Werte
+  via `statistics.quantiles` verifiziert)
+- DeepSeek-R1: 5 Tradeoffs/JA + **1 BLOCKER P6** (shaded band wird
+  gar nicht gezeichnet, plus daily_means obsolet)
+- prompts/tertile_analysis_v3.md (R1-BLOCKER eingebaut: fill_between
+  in create_stations_diagram)
+
+**Tests:** 510 → 514 (4 neue in tests/test_aggregate_tertiles.py):
+- test_aggregate_tertiles_basic (12 Cycles, exakte t33/t67)
+- test_aggregate_tertiles_fallback_under_3 (< 3 Cycles → pooled_mean)
+- test_aggregate_tertiles_zero_cycles_skipped (0 Cycles)
+- test_aggregate_tertiles_multiday (n_days korrekt aus dict)
+
+**Statistik-Regenerierung:**
+- Alle PNG/PDF-Outputs (DE+EN) erfolgreich neu generiert.
+- Pooled-Mean-Linien unveraendert → Diversity-Gewinn-Zahlen
+  (+88% / +124% auf 40m FT8) bleiben korrekt.
+- Shaded Band visuell jetzt aussagekraeftig auch bei wenigen
+  Messtagen.
+
+**Atomare Commits:**
+1. feat(plots): _aggregate Tertile (33%/67%) statt Min/Max der
+   Tagesmittel
+2. feat(plots): shaded band in create_stations_diagram aktivieren
+   + PDF-Texte
+3. chore(release): v0.84 — Tertile-Analyse Statistik (Feature H)
+
+**R1-Trade-offs akzeptiert (dokumentiert):**
+- P1 inclusive vs. exclusive: ~1% Abweichung egal bei ganzzahligen
+  Station-Counts.
+- P2 min/max-Keys behalten: KISS, kein Refactor.
+- P4 Statistik-Push: bei naechstem Push-Text Methodenwechsel
+  erwaehnen (Konfidenzband-Semantik geaendert).
+
+**Lessons:**
+- Pure-Logic-Tests testen NICHT, ob die Werte tatsaechlich
+  GEZEICHNET werden. End-to-End-Verifikation ist bei Plot-Code
+  Pflicht.
+- R1's Final-Codereview hat den toten Code-Pfad gefunden, den ich
+  ohne Reviewer-Brille nicht gesehen haette. Workflow erneut
+  bestaetigt.
+

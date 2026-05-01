@@ -1,5 +1,11 @@
 # HANDOFF — SimpleFT8
 
+**Stand 2026-05-01:** v0.84 (Tertile-Analyse Statistik, Feature H).
+v0.83 Fix F (Auto-Close-Dialog) heute Vormittag. v0.82 Fix E
+(Doppel-Report Decoder-Signal-Reihenfolge) gestern (30.04.) abends.
+
+**Tests:** 514/514 gruen.
+
 ---
 
 ## ⛔⛔⛔ HARDWARE-WARNUNG — HOECHSTE PRIORITAET ⛔⛔⛔
@@ -14,206 +20,191 @@ ANT2 mit 100 W = Hardware-Schaden moeglich (PA, Antennen-Pfad).
 |---|---|
 | Manuelle CQ-Anrufe / TUNE | **ANT1** |
 | OMNI CQ (passiv) | **ANT1** |
-| AUTO HUNT (aktiv, v0.75) | **ANT1** |
+| AUTO HUNT (aktiv) | **ANT1** |
 | Diversity RX-Pattern | beide RX, **TX nur ueber ANT1** |
 
-**Im Code (v0.75/v0.77):** `set_tx_antenna("ANT1")` zentral abgesichert in
+**Im Code:** `set_tx_antenna("ANT1")` zentral abgesichert in
 `Encoder.transmit()` (vor `ptt_on()`) UND vor jedem `tune_on()`-Aufruf.
-**v0.77 Pflicht-Acknowledgment-Dialog beim App-Start** zeigt die Regel
-explizit + Disclaimer (Modal, OK/Abbruch, OK = App startet, Abbruch =
-`sys.exit(0)`).
+**App-Start Hardware-Dialog (v0.77)** zeigt die Regel explizit + Disclaimer
+(Modal, OK/Abbruch, Abbruch = `sys.exit(0)`).
 
 ---
 
-## 2026-04-30 (v0.78 + v0.79) — OMNI scharfgeschaltet + Bug-Cleanup
+## 2026-04-30 (v0.80 → v0.81 → v0.82) — Drei-Bugfix-Tag
 
-### v0.78 (Nacht, Workflow durchgezogen)
-- OMNI-TX scharfgeschaltet als **Diversity-only** Power-User-Feature
-- Mode-Coupling: btn_omni_cq + btn_auto_hunt nur in „diversity"
-- Auto-Hunt analog mode-coupled, neuer Reason `rx_mode_change`
-- Mutually-exclusive OMNI ↔ Auto-Hunt mit `superseded`-Reason
-- Stop-Hooks fuer band/ft_mode/rx_mode/totmann konsistent
-- Workflow: V1 → Self-Review (17) → V2 → R1 (10, 0 Halluzinationen,
-  2 echte Bugs in V2) → V3 → 7 atomare Commits → Final-R1 (11, 2 umgesetzt)
-- 472 → 493 Tests gruen
+### Heute erledigt (chronologisch)
 
-### v0.79 (Vormittag, Bug-Cleanup-Tag)
+**Vormittag — v0.80 TX-DT-Drift QSO-Retry-Fix (BLOCKER):**
+- Folge-Reports kamen seit v0.74 mit DT 0.6-0.8s am Empfaenger an (ueber
+  FT8-Decode-Schwelle 0.5s) → 7 Real-QSOs gescheitert.
+- 7 atomare Commits: A1+A2+A3+B+C+Race-Fix+Release.
+- Workflow voll V1 → V2 → R1 → V3 (R1 fand A2 cancelable-sleep KRITISCH +
+  Final-Race-Condition).
+- Real-QSO mit 2. Station auf Icom: DT 0.0-0.1s ✓.
 
-**Diagnose-Falle:** R1 hatte gestern Abend ANT1-Hook in `Encoder.transmit()`
-mit 90% Wahrscheinlichkeit als TX-Regression-Ursache gepegt — Test 1
-heute morgen widerlegte das. Mike's Flex sendet sauber, der Empfaenger-
-Icom hatte **Auto-Sequence ausgeschaltet** und sendete stur den
-initial-Anruf. Memory `feedback_auto_sequence_check_first.md` angelegt.
+**Mittag — v0.81 Fix D Doppel-Report (Versuch 1, gescheitert):**
+- `on_decoder_finished` aus `on_cycle_end` rausgezogen, sollte am Slot-Ende
+  in `_on_cycle_decoded` laufen.
+- Workflow voll V1 → V2 → R1 → V3 (R1 fand BLOCKER P6 CQ_WAIT-Regression).
+- Implementation + Final-R1: alles OK laut Code-Review.
+- Field-Test scheiterte: Doppel-Report bleibt. Mike sandte „-23" zweimal
+  nach R+19.
 
-**5 Fixes:**
-- QSO-Panel CQ-Sammelanzeige raus — jede CQ einzeln im Log (`db10b2d`)
-- Kalibrierungs-Bestaetigungsdialog modal + StaysOnTop (`ad24a6e`)
-- RX-Tag waehrend Diversity-Kalibrierung zeigt korrekte Antenne (`a7a16de`)
-- `_reset_defaults` vervollstaendigt: radio_ip / language / stats / debug (`759e49f`)
-- **CQ-Toggle + Stats-Lock-Bug:** `mode_button_group.setExclusive(False)`
-  statt True. Qt-Default verhindert sonst Re-Klick-Deselect → CQ-Toggle
-  broken UND `btn_cq.isChecked()=True` haengen → Stats stillschweigend
-  blockiert. (`d94f2e5`)
+**Nachmittag — v0.82 Fix E Decoder-Signal-Reihenfolge (Versuch 2,
+erfolgreich):**
+- Root Cause analysiert: `on_message_received` haengt am `message_decoded`-
+  Signal das NACH `cycle_decoded` emittet wird → mein Fix-D-Trigger lief
+  VOR den State-Wechseln.
+- Mike's Feedback „du arbeitest nicht den deepseek workflow" → vollen
+  Workflow erneut durchgezogen.
+- Loesung: drittes Decoder-Signal `cycle_finished = Signal()` das NACH
+  allen `message_decoded`-Emits feuert; `on_decoder_finished` haengt
+  daran.
+- 3 atomare Commits + 2 neue Tests (505 → 507).
+- Field-Test: QSO mit RW6HP komplett bestaetigt (4-Slot-Pacing).
 
-**HEAD:** `d94f2e5` (vor Version-Bump auf v0.79)
+**Spaetnachmittag — Memory-Updates + Fernwartungs-Setup:**
+- Memory `project_simpleft8_ferienhaus.md` — Trigger-Phrase „SimpleFT8 am
+  Ferienhaus": Wrapper-Script-Start + Fenster auf Display 2 (Pos 1024,0)
+  verschieben.
+- Wrapper-Script `tools/remote/start_simpleft8_nokill.py` — umgeht
+  `kill_old_instances`-osascript-Self-Kill bei Background-Launch.
+- Memory `feedback_workflow_works_with_deepseek.md` — Mike-bestaetigte
+  Workflow-Wirksamkeit nach Fix E.
+- Memory `feedback_workflow_after_failed_fix.md` — Disziplin nach
+  gescheitertem Fix.
+
+### Bilanz heute
+
+- **3 Releases**: v0.80, v0.81 (gescheitert im Field-Test), v0.82
+- **13 Commits** lokal (10 fuer v0.80-Run + 3 fuer v0.82, dazu Fix D in
+  v0.81)
+- **507 Tests** gruen (502 vor heute → +5 Fix-D + +2 Fix-E Tests, 2 v0.80-
+  Tests fuer Fix-D angepasst)
+- **3 Memory-Eintraege** ergaenzt
+- **Voller V1→V2→R1→V3-Workflow** dreimal durchlaufen — Mike's Feedback:
+  „unser workflow superfinktioenr mit deepseek im verband"
+
+### Field-Test-Erfolge
+
+- v0.80 Real-QSO am Icom: DT 0.0-0.1s, Drift weg ✓
+- v0.82 Real-QSO mit RW6HP: 4-Slot-Pacing, kein Doppel-Report ✓
+  ```
+  14:28:27 TX_REPORT → TX_RR73 (sauber)
+  14:28:43 RX R-15 von RW6HP
+  14:28:43 TX RW6HP DA1MHH RR73
+  14:29:13 RX 73 von RW6HP — QSO bestätigt ✓
+  ```
 
 ---
-
-## 2026-04-29 (v0.77) — App-Start Hardware-Dialog + Statistik-Methodik
-
-## Heute erledigt (chronologisch)
-
-**Vormittag — v0.76 Settings-Tabs (1440×900-Display-Fix):**
-- `ui/settings_dialog.py` von 6 GroupBoxen auf 4-Tab-`QTabWidget`
-- 4 Tabs: „Station" / „TX & Schutz" / „FT8 & Diversity" / „Daten & Tools"
-- Tab-Stylesheet nur auf das Widget (kein Konflikt mit Dialog-CSS)
-- Hoehen-Sizing via `adjustSize()` + `resize`-Fallback (max 750 px)
-- `closeEvent()` stoppt `_tx_status_timer` (Defense-in-Depth)
-- 5 Smoke-Tests in `tests/test_settings_dialog_smoke.py`
-- Workflow V1→V2→V3 voll durchlaufen, R1-Final-Codereview
-- 4 atomare Commits
-
-**Mittag — WORKFLOW.md v1.1 universalisiert:**
-- Verschaerfte R1-Rollenanweisung (5 kritische Regeln statt 1)
-- Schritt 2.5 NEU: R1-Findings gegen Code verifizieren (Pflicht)
-- Schritt 5b NEU: Final-R1-Codereview als Pflicht-Schritt
-- Schritt 6 NEU: Lessons-Learned (3 Fragen + Memory-Update)
-- Universalisierung: Projekt-Variablen statt SimpleFT8-Hardcodes
-  (Geltungsbereich auf alle Mike-Projekte erweitert)
-- Mini-CHANGELOG fuer Nachvollziehbarkeit
-
-**Nachmittag — 20m FT8 Datensammlung-Ziel diskutiert (Mike+Claude+R1):**
-- Mike+R1 einig: **5 Tage flaechendeckend** statt 7-Tage-Goldstandard
-- Begruendung: Diminishing Returns 5→7 nur ~15% SE-Reduktion bei doppelt
-  so viel Aufwand. „5 Tage mit Luecken < 4 Tage flaechendeckend" —
-  Lueckenliste schlaegt Mehr-Tage-an-bekannter-Stelle.
-- Lueckenfuell-Strategie: nach Stundenliste pro Modus, schwaechster Slot
-  zuerst.
-- In CLAUDE.md (Statistik-Veroeffentlichung) und HANDOFF dokumentiert.
-
-**Spaetnachmittag — v0.77 Bug-Fix-Release (2 Punkte aus v0.76-Field-Test):**
-- Min/Max-Error-Bars in PDF-Berichten **entfernt** (vermischten
-  Modus-Volatilitaet mit Tag-Conditions als Confounder, bei ungleicher
-  Stichprobengroesse statistisch unfair).
-- App-Start Hardware-Dialog mit Pflicht-Acknowledgment + Disclaimer
-  (private Machbarkeitsstudie). Erste Iteration mit „Hardware-Schaden"-
-  Drohton — auf Mike's Wunsch entfernt (Drohton schreckt User ab).
-- README.md bekam zweisprachigen Disclaimer-Block direkt unter Badges
-  (EN+DE). LICENSE (MIT mit AS-IS) bleibt — deckt rechtlich ab.
-- 3 atomare Commits, **Tests 472 gruen**.
-
-**Push nach GitHub (Mike-OK):**
-- 23 Commits hochgeladen nach `https://github.com/mikewanne/SimpleFT8.git`
-- Enthaelt: v0.75 (war noch ungepushed) + v0.76 + v0.77 + WORKFLOW v1.1
-- HEAD: `ffbe12e chore(release): v0.77`
-
-**Nebenher — Locator-DB-Statistik:**
-- 11.120 Calls in der DB (1.368 heute neu, 9.864 heute aktualisiert)
-- 43% mit 6-stelligem Locator (~70 km Praezision)
-- 57% mit 4-stelligem Locator (~700 km, Tilde-Anzeige)
-- Sources: 4.768 qso_log_6, 3.534 cq_4 (live aufgesammelt), 2.818 qso_log_4
-
-**Nebenher — Architektur-Diskussion (theoretisch, nicht-Code):**
-- IC-705 + Raspberry Pi 4 + Tablet-Browser-Client als „SimpleFT8-Field"
-  Architektur-Skizze. ~70-110 h Aufwand fuer eine erste Version. 70-80%
-  des bestehenden Codes wiederverwendbar (Decoder, Encoder, QSO-State,
-  ADIF, Locator-DB). UI komplett neu (HTML5/JS via FastAPI+WebSocket).
-  IC-705 per USB an Pi (NICHT per WLAN — RS-BA1 Closed-Protocol).
-
-## Bilanz heute
-
-- **3 Releases**: v0.76 (Tabs), v0.77 (Dialog+Methodik) + WORKFLOW v1.1
-- **23 Commits** lokal → 23 Commits remote (GitHub aktuell)
-- **472 Tests** gruen (467 vor heute → +5 Settings-Smoke-Tests)
-- **2 Memory-Eintraege** ergaenzt
-- **Statistiken** mehrfach aktualisiert (3× scripts/generate_plots.py)
 
 ## Offen / Naechste Schritte (priorisiert)
 
-### 🐛 Akut
+### 🔴 Verifikation v0.82 Fix E
 
-1. **Timeout-Cooldown fehlt** — nach `x DA1TST — Timeout` antwortet Mike's
-   Flex sofort wieder auf DA1TST's naechsten CQ. Endlos-Schleife. Braucht
-   V1→V3-Workflow weil State-Logik (qso_state.py). ~10-20 Zeilen.
+- Real-QSO weitere Stationen (mehr als 1 Bestaetigung des Fix).
+- Beobachten: kein Doppel-Report-Bug bei R-Report-Empfang in
+  WAIT_REPORT-Phase.
 
-2. **`_on_dx_tune_rejected` Normal-Branch fehlt `_stats_warmup_cycles`-
-   Reset** — bei Cancel der DX-Tune-Pipeline im Normal-Modus bleibt
-   Counter auf 99999 haengen. Fix: `_stats_warmup_cycles = 6` in Z.1011-1012
-   else-Branch ergaenzen. (~1 Zeile)
+### 🟡 Aus v0.76-Field-Test (offen seit 29.04.)
 
-3. **20m FT8 Datensammlung — Ziel: 5 Tage flaechendeckend**
-   Strategie: bei jedem „welcher Modus jetzt" die Lueckenliste pruefen,
-   schwaechsten Slot vorschlagen. Aufwand: ~3 Wochen Funkbetrieb (3-4 h/Tag).
+- 20m FT8 Datensammlung — Ziel 5 Tage flaechendeckend (24h x 3 Modi).
+- Aktueller Stand: 2-3 Tage je Stunde-Modi-Slot, mit Luecken.
 
-### 🔥 Aus frueheren Releases (Field-Test ausstehend)
+### 🔵 Aus aelteren Releases (offen)
 
-4. **Field-Test v0.74** Diversity-Bandwechsel-Bug-Fix verifizieren
-5. **Field-Test v0.75** Auto-Hunt — 6 Verifikationsschritte siehe
-   `prompts/auto_hunt_v3.md`
-6. **Migration `main_window._psk_worker` → `core/psk_reporter`** (Konsolidierung)
+- Migration `main_window._psk_worker` → `core/psk_reporter` (Konsolidierung).
+- Even/Odd dedizierter Timer (FT2 kritisch).
+- Per-Station DT-Offset TX (erst nach mehr Feldtest-Daten).
+- IC-7300 Fork (TARGET_TX_OFFSET dort separat messen).
+- AP-Lite Test-Pipeline (synthetische E2E-Tests).
 
-### ⚙️ Mittelfristig
+### ✅ Heute am 2026-05-01 erledigt (Selbstcheck nach Halluzination)
 
-- F) Audio-Export per Slot (<1 Tag, optional)
-- TX-Frequenz Normal-Modus manchmal ohne Histogramm-Marker (nicht reproduzierbar)
-- Even/Odd dedizierter Timer (FT2 kritisch)
-- Gain-Bias beheben (Normal-Modus Gain-Messung erzwingen)
-- Tertile-Analyse Statistik
-- AP-Lite Test-Pipeline (synthetische E2E-Tests)
-- Per-Station DT-Offset TX
-- IC-7300 Fork (TARGET_TX_OFFSET separat messen)
+- v0.83 Fix F — Kalibrierungs-Dialog Auto-Close 3s ohne OK
+- v0.84 Feature H — Tertile-Analyse Statistik (Pooled Mean + 33%/67%-Tertile shaded band)
+- TODO-Liste war stale: `_reset_defaults` (v0.79 erledigt) und `btn_omni_cq`-Handler (v0.78 erledigt) waren bereits in Code.
+  → Lesson: Memory `feedback_todo_history_pflicht.md` — vor TODO-Liste IMMER `git log --oneline` + `grep` gegen aktuellen Code.
 
-### 🌐 Langfristig (theoretisch diskutiert, nicht angefangen)
+### 🟢 Long-term (theoretisch)
 
-- **SimpleFT8-Field**: IC-705 + Pi 4 + Tablet-Browser-Client. Eigenes
-  Projekt, kein Fork. ~70-110 h Aufwand. Pfad: FastAPI-Server auf Pi,
-  HTML5-Frontend, USB-Anbindung IC-705. Realistischste mobile Variante.
+- SimpleFT8-Field: IC-705 + Pi 4 + Tablet-Browser-Client. ~70-110 h.
+- Statistik-Push nach GitHub sobald 5 Tage flaechendeckend erreicht.
 
-## Warnungen & Fallen (Stand v0.77)
+---
 
-**Aus v0.77:**
-- App-Start Hardware-Dialog ist **Pflicht-Acknowledgment** — bei Abbruch
-  beendet sich App. Modal + WindowStaysOnTopHint. Inhalt aendert sich
-  nicht ohne Mike-Freigabe (rechtlich relevanter Disclaimer-Text).
-- Min/Max-Error-Bars wurden in `scripts/generate_plots.py` entfernt —
-  **NICHT wieder einbauen** ohne neue Mess-Methodik (interleaved). Sie
-  vermischten Modus-Volatilitaet mit Tag-Conditions.
+## Warnungen & Fallen (Stand v0.82)
 
-**Aus v0.75 — Auto-Hunt:**
-- `_auto_hunt_timer` UNABHAENGIG vom Totmannschalter — Maus/Tastatur
-  reset ihn NICHT (Bot-Tarn-Schutz). Nach jedem Stop ist Pflicht-Restart.
-- Race-Doppel-Check in `select_next` ist ethische Belt-and-suspenders zur
-  10-Min-Hard-Cap. NICHT entfernen.
-- `_MAX_ATTEMPTS = 3` in `core/auto_hunt.py:45` ist Modul-Konstante OHNE
-  Verwendung in der Klasse. 3-Versuche-Logik liegt in `qso_state.py`.
+**v0.82 Fix E NEU:**
+- **Decoder-Signal-Reihenfolge** ist KRITISCH:
+  `cycle_decoded` → pro msg `message_decoded` → `cycle_finished`.
+  REIHENFOLGE NICHT AENDERN. `cycle_decoded` MUSS vor `message_decoded`
+  bleiben (`_assign_slot_parity` setzt `msg._tx_even` das in
+  `mw_qso.py:85/423` gelesen wird). `cycle_finished` MUSS am Ende
+  bleiben (sonst Doppel-Report-Bug zurueck).
+- **`on_cycle_end` (Slot-START) vs `on_decoder_finished` (Slot-ENDE)**
+  Aufspaltung: nicht zusammenfuehren. CQ_WAIT/3-Min-Gesamttimeout/
+  WAIT_73-Tick laufen Decoder-unabhaengig in `on_cycle_end`. Retry-Pfad
+  laeuft Decoder-abhaengig in `on_decoder_finished` (sieht state nach
+  R-Report-Verarbeitung).
 
-**Aus v0.76 — Settings-Tabs:**
-- `_reset_defaults()` setzt aktuell radio_ip/language/stats_cb/
-  debug_console_cb NICHT zurueck — out-of-scope-Issue, geplant fuer v0.78.
-- Tab-Stylesheet darf NICHT auf das gesamte Dialog-CSS gesetzt werden,
-  sonst Konflikt — auf `self.tabs.setStyleSheet(...)` beschraenken.
+**v0.81 Lessons (Fix D scheiterte):**
+- Annahme „`_handle_normal_mode` ruft `on_message_received` direkt" war
+  FALSCH. `on_message_received` haengt am separaten `message_decoded`-
+  Signal das Qt-FIFO NACH `cycle_decoded` emittet.
+- Bei Folge-Fixes nach Field-Test-Scheitern: Workflow nicht abkuerzen.
+  Memory: `feedback_workflow_after_failed_fix.md`.
+
+**v0.80 (TX-DT-Drift):**
+- `TARGET_TX_OFFSET = -0.8s` ist FlexRadio-spezifisch. IC-7300 Fork
+  braucht eigenen Wert.
+- `_abort_event` (threading.Event) ist KRITISCH fuer cancelable sleep —
+  ohne das schlaeft Encoder bis zu 14s nach abort.
+- Drift-Guard 0.3s-Schwelle — nicht groesser ohne neue Mess-Methodik.
+
+**Aus v0.75-v0.78 unveraendert:**
+- Auto-Hunt `_auto_hunt_timer` UNABHAENGIG vom Totmannschalter
+  (Bot-Tarn-Schutz). Nach Stop ist Pflicht-Restart, kein Auto-Resume.
+- App-Start Hardware-Dialog: Pflicht-Acknowledgment, bei Abbruch
+  `sys.exit(0)`.
+
+**Fernwartungs-Setup (NEU 30.04.):**
+- App via `tools/remote/start_simpleft8_nokill.py` starten (umgeht
+  `kill_old_instances`-osascript-Self-Kill bei Background-Launch).
+- Fenster nach App-Start auf Display 2 (Pos 1024,0) verschieben.
+- Memory `project_simpleft8_ferienhaus.md` — Trigger „SimpleFT8 am
+  Ferienhaus".
+
+---
 
 ## Test-Suite Status
 
 ```
 ./venv/bin/python3 -m pytest tests/ -q
-472 passed in ~7s
+514 passed in ~7s
 ```
 
-Neu seit v0.75:
-- `tests/test_auto_hunt_extended.py` (10 Funktionen, 21 Cases) — v0.75
-- `tests/test_settings_dialog_smoke.py` (5 Cases) — v0.76
-
-## Letzter bekannter guter Zustand
-
-- **Branch:** main, lokal **vor origin/main** (v0.78 + v0.79 noch nicht gepusht)
-- **HEAD:** vor Version-Bump-Commit auf v0.79 (kommt gleich)
-- **Tag:** kein neuer Tag (Mike entscheidet)
-- **Tests:** 493/493 gruen
-- **App-Version:** v0.79 (nach Bump)
-- **Backup:** `Appsicherungen/2026-04-30_vor_omni_implementierung/` (v0.77 Stand,
-  vor v0.78 OMNI-Implementation, 1.2 GB)
+Neu seit v0.79:
+- v0.80: 9 Tests fuer DT-Drift-Fix (A1-A3, B, C, Race-Fix)
+- v0.81: 3 Tests fuer Fix D (`on_decoder_finished`)
+- v0.82: 2 Tests fuer Fix E (Decoder-Signal-Reihenfolge)
+- v0.83: 3 Tests fuer Fix F (Auto-Close-Dialog)
+- v0.84: 4 Tests fuer Feature H (Tertile-Analyse)
 
 ---
 
-Morgen: `cd SimpleFT8` ODER `cd FT8` → `claude1` → laedt automatisch alle Memories + CLAUDE.md.
+## Letzter bekannter guter Zustand
+
+- **Branch:** main
+- **HEAD:** `chore(release): v0.84 — Tertile-Analyse Statistik (Feature H)`
+- **Tests:** 514/514 gruen
+- **App-Version:** v0.84
+- **Backup:** `Appsicherungen/2026-04-30_vor_decoder_reihenfolge_fix/`
+  (4 MB code-only, vor Fix E v0.82). Heute Vormittag Fix F + Feature
+  H — kein neues Backup, da pure Code-Updates ohne riskante
+  Algorithmus-Aenderung.
+
+---
+
+Morgen: `cd SimpleFT8` ODER `cd FT8` → `claude1` → laedt automatisch alle
+Memories + CLAUDE.md.

@@ -38,11 +38,33 @@ Review entworfen — nutzlose Stunde, weil v0.69 das Feature schon vollstaendig
 abdeckt). Bei jedem „lass uns ein Feature X bauen" zuerst grep in
 HISTORY.md ob X nicht schon drin ist.
 
+⛔ **PFLICHT NACH JEDEM ERLEDIGTEN FIX/FEATURE (Mike 01.05.2026):**
+Reihenfolge VOR der naechsten Aufgabe:
+1. **HISTORY.md** anhaengen — `## YYYY-MM-DD vX.YY — Kurztitel` + Eintrag.
+2. **HANDOFF.md** in BEIDEN Verzeichnissen identisch updaten (TODO-Punkt
+   raus, neuer Stand rein, Test-Count).
+3. **CLAUDE.md** Header in BEIDEN Verzeichnissen updaten (`Aktueller Stand`
+   + Test-Count).
+4. **Memory** wenn Lesson gelernt.
+
+Bei Halluzination einer TODO-Liste (Mike 01.05.: ich hatte
+`_reset_defaults` als offen vorgeschlagen, war aber in v0.79 schon erledigt)
+→ STOP, Code-Verifikation mit `git log --oneline | head -30` + grep gegen
+aktuellen Code, BEVOR Workflow gestartet wird.
+
+Memory: `feedback_todo_history_pflicht.md`.
+
 # SimpleFT8 — Claude Kontext
 
+**Trigger „SimpleFT8 am Ferienhaus":** Memory `project_simpleft8_ferienhaus.md`
+laden — App via `tools/remote/start_simpleft8_nokill.py` starten (umgeht
+`kill_old_instances`-osascript-Self-Kill bei Background-Launch), dann Fenster
+auf Display 2 (Position 1024,0) verschieben. Mike macht von dort
+Fernwartung — App MUSS auf dem mittleren Bildschirm landen.
+
 **Start:** `cd "/Users/mikehammerer/Documents/KI N8N Projekte/FT8/SimpleFT8" && ./venv/bin/python3 main.py`
-**Aktueller Stand:** v0.78 (30.04.2026) — OMNI-TX scharfgeschaltet als **Diversity-only** Power-User-Feature. 5-Slot Even/Odd-Rotation (Plan v3.2, `block_cycles=80`). Mode-gekoppelte UI: `btn_omni_cq` + `btn_auto_hunt` sichtbar nur in RX-Modus „diversity"; Easter-Egg = Test-Override im Normal-Modus (resetet bei RX-Mode-Wechsel). Mutually-exclusive OMNI ↔ Auto-Hunt mit Reason `superseded`. Stop-Hooks fuer band/ft_mode/rx_mode/totmann konsistent fuer beide Features. Auto-Hunt jetzt auch RX-Mode-coupled (`stop_auto_hunt("rx_mode_change")`). **v0.77:** App-Start Hardware-Dialog (Pflicht-Acknowledgment ANT1=TX-only / ANT2=RX-only). **v0.76:** Settings-Dialog auf 4-Tab-`QTabWidget`. **v0.75:** Auto-Hunt-Modus (Easter-Egg, 10-Min-Hard-Stop). ANT1-Pflicht zentral abgesichert in `Encoder.transmit()`.
-**Tests:** `./venv/bin/python3 -m pytest tests/ -q` → 493 passed (Qt-Smoke-Tests via `QT_QPA_PLATFORM=offscreen`)
+**Aktueller Stand:** v0.84 (01.05.2026) — **Tertile-Analyse Statistik (Feature H).** `scripts/generate_plots.py:_aggregate` ersetzt `min/max` der Tagesmittel durch 33%/67%-Tertile aller Cycle-Werte. Bei 1 Tag mit ≥3 Zyklen zeigt das shaded band echte Slot-zu-Slot-Streuung statt Null-Breite. R1-Final-Review fand BLOCKER P6: shaded band wurde gar nicht gezeichnet — `fill_between` in `create_stations_diagram` aktiviert. Pooled-Mean-Linie unveraendert → Diversity-Gewinn-Zahlen (40m FT8 +88% / +124%) bleiben korrekt. PDF-Texte DE+EN angepasst. **v0.83:** Fix F Kalibrierungs-Dialog Auto-Close 3s ohne OK (R1-Final fand QTimer-Parent-Edge-Case). **v0.82:** Doppel-Report-Bug-Fix (Fix E). Im Real-QSO-Test nach v0.81 Fix D blieb der Bug: Mike sandte „-23" zweimal nach R+19. Root Cause: `_handle_normal_mode` ruft `on_message_received` NICHT direkt — der laeuft am separaten `message_decoded`-Signal das Qt-FIFO NACH `cycle_decoded` emittet. Mein Fix-D-`on_decoder_finished` lief im `_on_cycle_decoded`-Pfad → VOR den State-Wechseln. Loesung Fix E: drittes Decoder-Signal `cycle_finished = Signal()` das NACH allen `message_decoded`-Emits feuert; `on_decoder_finished` haengt daran und sieht den finalen state. 3 atomare Commits + 2 neue Tests. Real-QSO mit RW6HP komplett bestaetigt (4-Slot-Pacing, kein Doppel-Report). **v0.81:** Fix D `on_decoder_finished` (Aufspaltung von `on_cycle_end`) — funktionierte aber nicht wegen Signal-Reihenfolge. **v0.80:** TX-DT-Drift-Fix (A1+A2+A3+B+C+Race) — Retry-Trigger 1 Slot frueher, cancelable sleep, Counter-Reset zentral. **v0.79:** Bug-Cleanup. **v0.78:** OMNI-TX scharfgeschaltet (Diversity-only). **v0.77:** App-Start Hardware-Dialog. **v0.76:** Settings-Tabs. **v0.75:** Auto-Hunt-Modus.
+**Tests:** `./venv/bin/python3 -m pytest tests/ -q` → 514 passed (Qt-Smoke-Tests via `QT_QPA_PLATFORM=offscreen`)
 **Vor Commits:** Tests grün + bei nicht-trivialen Änderungen DeepSeek-Review (`pal codereview` model `deepseek-chat`) — bereits durch globale §0 + Projektregeln gefordert.
 
 ⚠️ **DeepSeek-Workflow Stand 2026-04-28:**
@@ -269,21 +291,16 @@ core/
   propagation.py      HamQSL + _apply_seasonal_correction(band, condition, utc_hour, month)
                       60m fehlt in XML → Interpolation 40m/80m (day+night getrennt, implementiert)
   ap_lite.py          ⛔ UNGETESTET — Feldtest ausstehend (SCORE_THRESHOLD=0.75)
-  omni_tx.py          ✅ AKTIV (v0.78) — 5-Slot-Pattern Even/Odd-Rotation,
-                      Diversity-only Power-User-Feature. QObject mit
-                      omni_stopped(reason)-Signal. block_cycles=80.
-                      Stop-Reasons: manual_halt, superseded, band_change,
-                      ft_mode_change, rx_mode_change, totmann_expired,
-                      easter_egg_off. should_tx() ohne Parameter (Paritaet
-                      via _slot_index + block bestimmt). disable() ist
-                      Backwards-compat-Wrapper. → docs/OMNI_TX_DESIGN.md
-  auto_hunt.py        Auto-Hunt Logik (v0.78: Diversity-only Feature
-                      analog OMNI. btn_auto_hunt sichtbar nur in „diversity"
-                      ausser bei Easter-Egg-Override. Stop-Reasons identisch
-                      zu OMNI plus timer_expired. RX-Mode-Wechsel zu Normal
-                      triggert stop_auto_hunt("rx_mode_change"); FT-Modus-
-                      Wechsel triggert stop_auto_hunt("ft_mode_change") —
-                      Reason umbenannt von „mode_change" in v0.78).
+  omni_tx.py          ⛔ DEAKTIVIERT — Implementation v0.78 in Vorbereitung.
+                      5-Slot-Pattern Even/Odd-Rotation, Diversity-only Feature
+                      (Mode-gekoppelt). Stop-Reasons: band_change, mode_change,
+                      totmann_expired, manual_halt. Aktivierung via Direkt-
+                      Toggle btn_omni_cq (sichtbar nur in Diversity).
+                      → Vollstaendige Design-Spec: docs/OMNI_TX_DESIGN.md
+  auto_hunt.py        Auto-Hunt Logik (v0.78: wird Diversity-only Feature
+                      analog OMNI — Mode-gekoppelt, btn_auto_hunt nur in
+                      Diversity sichtbar; Mode-Wechsel zu Normal stoppt
+                      Auto-Hunt automatisch via auto_hunt_stopped("mode_change")).
   timing.py           UTC-Takt, modus-abh. Zyklen
   protocol.py         FTX_PROTOCOL_FT8/FT4/FT2
   ft8lib_decoder.py   C-Library Wrapper
@@ -525,10 +542,9 @@ Andere Baender werden empfangen aber nicht gespeichert (Skalierungs-Entscheidung
 
 ## ⛔ OMNI-TX (PRIVAT — NICHT AUF GITHUB WIE MAN ES AKTIVIERT)
 
-- Aktivierung Diversity-Modus: Klick `btn_omni_cq` (sichtbar nur in „diversity")
-- Aktivierung Normal-Modus: Klick auf Versionsnummer (Easter-Egg-Override)
-- Status: **AKTIV** seit v0.78 — Feldtest in Verifikation
-- GitHub: Feature darf erwähnt werden, NICHT wie aktiviert (Easter-Egg bleibt verdeckt)
+- Aktivierung: Klick auf Versionsnummer → CQ-Button wird "OMNI CQ"
+- Status: **DEAKTIVIERT** — Feldtest ausstehend
+- GitHub: Feature darf erwähnt werden, NICHT wie aktiviert
 
 ---
 
@@ -617,3 +633,5 @@ direkt aus dem Decoder-Thread Widget-Methoden aufrufen — immer ueber das Signa
 - **CQ-Such-Periode = 60 s konstant** alle Modi (DeepSeek + WSJT-X-Praxis: < 30 s killt QSO-Aufbau weil antwortende Station auf alter TX-Frequenz fixiert ist)
 - **`SWEET_SPOT_MIN_HZ`/`MAX_HZ` Klassenkonstanten gibt's NICHT mehr** (v0.58-Sackgasse, v0.59 entfernt). Falls in altem Code Verweis auftaucht: Suchbereich ist dynamisch, nicht fest
 - **v0.75 Auto-Hunt:** `_auto_hunt_timer` ist UNABHAENGIG vom Totmannschalter — Maus/Tastatur reset ihn NICHT (Bot-Tarn-Schutz). Nach jedem Stop ist Pflicht-Restart (User-Klick), kein Auto-Resume in `_reset_presence`. Race-Doppel-Check in `select_next` ist ethische Belt-and-suspenders zur 10-Min-Hard-Cap — NICHT als "redundant" entfernen. `_MAX_ATTEMPTS=3` in `core/auto_hunt.py:45` ist Modul-Konstante OHNE Verwendung in der Klasse (3-Versuche-Logik liegt in `qso_state.py`). `btn_omni_cq` hat aktuell keinen eigenen `clicked`-Handler — OMNI-CQ laeuft weiter ueber bisherige Logik (Phase 2-TODO)
+- **v0.81/v0.82 Decoder-Signal-Reihenfolge (Fix D + Fix E):** Decoder emittet 3 Signale pro Slot in dieser Reihenfolge: `cycle_decoded` (Aggregation in `mw_cycle._on_cycle_decoded`) → pro msg `message_decoded` (state-Wechsel via `on_message_received`) → `cycle_finished` (Slot-Ende-Hook via `_on_cycle_finished` → `qso_sm.on_decoder_finished`). REIHENFOLGE NICHT AENDERN — `on_decoder_finished` MUSS nach allen State-Wechseln laufen (Doppel-Report-Bug v0.80/v0.81). `_assign_slot_parity` in `_on_cycle_decoded` setzt `msg._tx_even` BEVOR `on_message_received` es liest (mw_qso.py:85, :423) — `cycle_decoded` muss vor `message_decoded` bleiben.
+- **`on_cycle_end` vs `on_decoder_finished`:** `on_cycle_end` laeuft am Slot-START (Timer-Pfad, Decoder-unabhaengig) und behandelt: 3-Min-Gesamttimeout, WAIT_73-Tick, CQ_WAIT-Trigger, Counter-Inkrement, Max-Timeout-Check. `on_decoder_finished` laeuft am Slot-ENDE (Decoder-Pfad ueber `cycle_finished`-Signal) und triggert NUR den Retry-Pfad (WAIT_REPORT/WAIT_RR73 mit `timeout_cycles == 1`). Aufspaltung ist kritisch — wer sie zusammenfuehren will: CQ_WAIT bricht bei Decoder-Hang.
