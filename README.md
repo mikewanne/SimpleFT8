@@ -78,21 +78,23 @@ stations across app restarts. Fire it up, make a few QSOs, call it a day.
 > Generated automatically from live session data via `scripts/generate_plots.py`.
 > X-axis = UTC hour of day, averaged across all measurement days. Data grows with every session.
 
-**Live measurement results — 40m FT8, 4 measurement days, 22,696 cycles:**
+**Live measurement results — 40m FT8, 8–9 measurement days, 27,200 cycles:**
 
-| Mode | vs Normal (w/o rescue) | vs Normal (incl. rescue) | Rescue alone | Days |
+| Mode | Stations/15s (Pooled Mean) | vs Normal | Days | Cycles |
 |------|:---:|:---:|:---:|:---:|
-| Diversity Standard | **+88%** | **+122%** | +35% | 4 |
-| Diversity DX | **+124%** | **+158%** | +34% | 4 |
+| Normal | 18.7 | — | 8 | 7,743 |
+| Diversity Standard | 42.2 | **+126%** | 9 | 10,172 |
+| Diversity DX | 41.6 | **+123%** | 6 | 9,285 |
 
-*Rescue = stations that ANT1 could not decode (≤ −24 dB SNR) but ANT2 saved. Pooled mean over all cycles — not cherry-picked, not a single good day.*
-*Values = typical hourly average of a full measurement day, pooled across all days and all hours of the day.*
+*Pooled mean over all cycles and all hours — not cherry-picked, not a single good day.*
+*Rescue stations (ANT1 below −24 dB, saved by ANT2) are included in the Diversity totals.
+Detailed breakdown with rescue-only analysis: PDF report (p.3).*
 
 > **Note on methodology**
 > All cycles from all measurement days and all hours of the day are pooled directly —
-> no time-of-day filter, no cherry-picking. The result is the typical hourly station count
-> averaged across a full day of operation. The more measurement days, the more stable the numbers.
-> The PDF report (p.3) shows the same table with full cycle counts and day counts.
+> no time-of-day filter, no cherry-picking. The result is the typical station count per
+> 15-second cycle averaged across a full operating day. The more measurement days, the
+> more stable the numbers. The PDF report (p.3) shows the full hourly breakdown.
 
 > **Note on Interpretation**
 > ANT1 (Kelemen DP-201510) is operated off-band on 40m and therefore significantly
@@ -125,13 +127,17 @@ stations across app restarts. Fire it up, make a few QSOs, call it a day.
 
 #### 20m FT8 — when ANT1 is on its design band
 
-**Live measurement results — 20m FT8, 5–7 measurement days, 13,348 cycles:**
+**Live measurement results — 20m FT8, 7–9 measurement days, 19,936 cycles:**
 
-| Mode | vs Normal (Pooled Mean) | Days | Cycles |
-|------|:---:|:---:|:---:|
-| Normal | 100% (51.4 stations/15s) | 7 | 5,264 |
-| Diversity Standard | **−18%** | 5 | 3,973 |
-| Diversity DX | **−22%** | 6 | 4,111 |
+| Mode | Stations/15s (Pooled Mean) | vs Normal | Days | Cycles |
+|------|:---:|:---:|:---:|:---:|
+| Normal | 51.1 | — | 9 | 5,959 |
+| Diversity Standard | 47.9 | **−6%** | 7 | 6,290 |
+| Diversity DX | 47.1 | **−8%** | 7 | 7,687 |
+
+*Note: Earlier readings (fewer days) showed −18%/−22%. With more measurement days now
+covering all times of day, the numbers have stabilized at a smaller loss. Still negative
+— the resonant ANT1 advantage on 20m is real — but the picture is more nuanced.*
 
 > **Note on Interpretation — 20m**
 > On 20m, the Kelemen DP-201510 operates within its **design band** as a resonant
@@ -163,6 +169,22 @@ stations across app restarts. Fire it up, make a few QSOs, call it a day.
 | [📊 Detailed PDF Report — 20m](auswertung/Auswertung-20m-FT8.pdf) | Full 20m analysis with the differential narrative — ANT2 win-rate, Faraday rotation theory, asymmetric advantage. |
 | [🗂 Raw Data (statistics/)](statistics/) | All raw cycle data per mode/band/hour — reproduce any number yourself. |
 
+#### 30m FT8 — off-band ANT1, early data *(in progress)*
+
+**Live measurement results — 30m FT8, preliminary data:**
+
+| Mode | Stations/15s (Pooled Mean) | vs Normal | Days | Cycles |
+|------|:---:|:---:|:---:|:---:|
+| Normal | 15.0 | — | 3 | 452 |
+| Diversity Standard | 25.3 | **+69%** | 3 | 1,386 |
+| Diversity DX | 23.9 | **+59%** *(preliminary)* | 1 | 214 |
+
+> **Note:** 30m data collection just started. Normal and Diversity Standard have 3 days
+> each — already showing the expected off-band pattern (large gain, ANT1 suboptimal on 10 MHz).
+> Diversity DX has only 1 day — not yet reliable. Data growing with each session.
+
+![Stations 30m FT8](auswertung/stationen_30m_FT8.png)
+
 #### Why this matters for other operators
 
 If your station has **one resonant antenna covering 1–2 bands** plus everything
@@ -173,8 +195,8 @@ measurement is the "resonant" archetype.
 
 #### Roadmap — more bands measuring
 
-- **17m** (off-band ANT1, just enabled): expected to gain like 40m
-- **30m** (off-band, in progress): expected to gain
+- **30m** (off-band ANT1, data collection started — 3 days Normal/Standard, 1 day DX): confirmed gain pattern, see above
+- **17m** (off-band ANT1): data collection in progress, expected gain like 40m
 - **15m / 10m** (resonant): expected to lose like 20m
 - **80m / 60m / 12m**: pending
 
@@ -250,12 +272,16 @@ polarization, building-coupled mounting — the ideal complement for diversity r
 - ✅ **Ant2 Superiority Counter**: Quantifies diversity gain (A2 > A1 frequency)
 - ✅ **TX Safety**: TX halted immediately before Gain Measurement — no accidental transmit during calibration
 - ✅ **Gain Measurement**: Audio input calibration tool (GAIN-MESSUNG button). Finds optimal RX level before statistics or diversity sessions.
-- ✅ **UI Polish**: Info dialogs with "Don't show again" option. DT correction preserved across mode switches. Button labels reflect active state (e.g. "OMNI CQ" when active).
+- ✅ **Auto-Hunt (v0.75)**: Automatically selects the next CQ station from the waitlist and initiates QSO without manual clicking. Independent dead man's switch (not mouse-triggered — bot protection). Diversity-only mode: visible only when Diversity is active, stops automatically on mode switch.
+- ✅ **Auto-Close Calibration Dialog (v0.83)**: After gain measurement completes, the confirmation dialog closes automatically after 3 seconds — no click required.
+- ✅ **Double-Report Bug Fix (v0.82)**: Fixed: app used to resend the signal report after already receiving RR73. Root cause was decoder signal ordering (`cycle_finished` must fire after all `message_decoded` events). Fully resolved and confirmed in real QSO.
+- ✅ **Diversity Tertile Analysis (v0.84)**: Statistics plots show 33rd/67th percentile shaded band (actual slot-to-slot variation) instead of flat min/max bars.
+- ✅ **UI Polish**: Info dialogs with "Don't show again" option. DT correction preserved across mode switches. Button labels reflect active state.
 - ✅ **Debug Console**: Ctrl+D, live filter, font 11pt, Copy/Clear buttons
 
 **In Field Test:**
-- ⚠️ **AP-Lite v2.2**: Weak QSO rescue via coherent addition. Threshold 0.75 calibration in progress.
-- ⚠️ **OMNI-TX**: Even/Odd CQ rotation for 100% operator reach (hidden Easter egg). Integrated, field validation pending.
+- ⚠️ **AP-Lite v2.2**: Weak QSO rescue via coherent addition of two failed decode attempts. Threshold 0.75 calibration in progress.
+- ⚠️ **OMNI-TX**: Even/Odd CQ rotation for 100% time-slot coverage (hidden Easter egg). Integrated, field validation pending.
 
 ### FT2 Frequencies (Decodium-compatible)
 
@@ -367,21 +393,23 @@ Einfach anschalten, ein paar QSOs machen, Feierabend.
 > Automatisch generiert aus Live-Sitzungsdaten via `scripts/generate_plots.py`.
 > X-Achse = UTC-Stunde des Tages, gemittelt über alle Messtage. Daten wachsen mit jeder Session.
 
-**Live-Messergebnisse — 40m FT8, 4 Messtage, 22.696 Zyklen:**
+**Live-Messergebnisse — 40m FT8, 8–9 Messtage, 27.200 Zyklen:**
 
-| Modus | vs Normal (ohne Rescue) | vs Normal (inkl. Rescue) | Rescue allein | Tage |
+| Modus | Stationen/15s (Pooled Mean) | vs Normal | Tage | Zyklen |
 |-------|:---:|:---:|:---:|:---:|
-| Diversity Standard | **+88%** | **+122%** | +35% | 4 |
-| Diversity DX | **+124%** | **+158%** | +34% | 4 |
+| Normal | 18,7 | — | 8 | 7.743 |
+| Diversity Standard | 42,2 | **+126%** | 9 | 10.172 |
+| Diversity DX | 41,6 | **+123%** | 6 | 9.285 |
 
-*Rescue = Stationen, die ANT1 nicht decodieren konnte (≤ −24 dB SNR), aber ANT2 rettete. Pooled Mean über alle Zyklen — kein Cherry-Picking, kein einzelner guter Tag.*
-*Wert = typischer Stunden-Durchschnitt eines ganzen Messtages, gepoolt über alle Tage und alle Tageszeiten.*
+*Pooled Mean über alle Zyklen und alle Tageszeiten — kein Cherry-Picking, kein einzelner guter Tag.*
+*Rescue-Stationen (ANT1 unter −24 dB, von ANT2 gerettet) sind in den Diversity-Werten enthalten.
+Detaillierte Aufschlüsselung mit Rescue-only-Analyse: PDF-Bericht (S.3).*
 
 > **Hinweis zur Methodik**
 > Alle Messzyklen aus allen Messtagen und allen Tageszeiten werden direkt zusammengezählt und gemittelt —
-> kein Stunden-Filter, kein Cherry-Picking. Das Ergebnis ist der typische Stunden-Durchschnitt
-> eines ganzen Betriebstages. Je mehr Messtage, desto stabiler die Zahlen.
-> Die detaillierte Vergleichstabelle mit Zyklen- und Tagesanzahlen ist im PDF-Bericht (S.3) zu finden.
+> kein Stunden-Filter, kein Cherry-Picking. Das Ergebnis ist die typische Stationsanzahl pro
+> 15-Sekunden-Zyklus, gemittelt über einen ganzen Betriebstag. Je mehr Messtage, desto stabiler
+> die Zahlen. Der PDF-Bericht (S.3) zeigt die vollständige stündliche Aufschlüsselung.
 
 > **Hinweis zur Interpretation**
 > ANT1 (Kelemen DP-201510) ist auf 40m außerhalb seines Auslegungsbandes und damit
@@ -415,13 +443,17 @@ Einfach anschalten, ein paar QSOs machen, Feierabend.
 
 #### 20m FT8 — wenn ANT1 auf seinem Auslegungsband arbeitet
 
-**Live-Messergebnisse — 20m FT8, 5–7 Messtage, 13.348 Zyklen:**
+**Live-Messergebnisse — 20m FT8, 7–9 Messtage, 19.936 Zyklen:**
 
-| Modus | vs Normal (Pooled Mean) | Tage | Zyklen |
-|-------|:---:|:---:|:---:|
-| Normal | 100% (51,4 Stationen/15s) | 7 | 5.264 |
-| Diversity Standard | **−18%** | 5 | 3.973 |
-| Diversity DX | **−22%** | 6 | 4.111 |
+| Modus | Stationen/15s (Pooled Mean) | vs Normal | Tage | Zyklen |
+|-------|:---:|:---:|:---:|:---:|
+| Normal | 51,1 | — | 9 | 5.959 |
+| Diversity Standard | 47,9 | **−6%** | 7 | 6.290 |
+| Diversity DX | 47,1 | **−8%** | 7 | 7.687 |
+
+*Hinweis: Frühere Messungen (weniger Tage) zeigten −18%/−22%. Mit mehr Messtagen, die alle
+Tageszeiten abdecken, haben sich die Zahlen bei einem kleineren Verlust eingependelt. Negativ
+bleibt es — der resonante ANT1-Vorteil auf 20m ist real — aber das Bild ist differenzierter.*
 
 > **Hinweis zur Interpretation — 20m**
 > Auf 20m arbeitet der Kelemen DP-201510 in seinem **Auslegungsband** als
@@ -454,6 +486,22 @@ Einfach anschalten, ein paar QSOs machen, Feierabend.
 | [📊 Ausführlicher PDF-Bericht — 20m](auswertung/Auswertung-20m-FT8.pdf) | Vollständige 20m-Analyse mit dem differenzierten Narrativ — ANT2-Win-Rate, Faraday-Rotations-Theorie, asymmetrischer Vorteil. |
 | [🗂 Rohdaten (statistics/)](statistics/) | Alle Rohdaten pro Modus/Band/Stunde — jede Zahl ist nachrechenbar. |
 
+#### 30m FT8 — off-band ANT1, erste Daten *(läuft)*
+
+**Live-Messergebnisse — 30m FT8, vorläufige Daten:**
+
+| Modus | Stationen/15s (Pooled Mean) | vs Normal | Tage | Zyklen |
+|-------|:---:|:---:|:---:|:---:|
+| Normal | 15,0 | — | 3 | 452 |
+| Diversity Standard | 25,3 | **+69%** | 3 | 1.386 |
+| Diversity DX | 23,9 | **+59%** *(vorläufig)* | 1 | 214 |
+
+> **Hinweis:** 30m-Datensammlung läuft erst seit Kurzem. Normal und Diversity Standard haben
+> je 3 Messtage — zeigen bereits das erwartete Off-Band-Muster (großer Gewinn, ANT1 auf 10 MHz
+> suboptimal). Diversity DX hat erst 1 Tag — noch nicht belastbar. Daten wachsen mit jeder Session.
+
+![Stationen 30m FT8](auswertung/stationen_30m_FT8.png)
+
 #### Warum das für andere Operator interessant ist
 
 Wenn deine Station **eine resonante Antenne für 1–2 Bänder** hat plus alles andere
@@ -464,9 +512,9 @@ die 20m-Messung ist der „Resonant-Archetyp".
 
 #### Roadmap — weitere Bänder in Arbeit
 
-- **17m** (off-band ANT1, gerade aktiviert): Erwartung Gewinn wie 40m
-- **30m** (off-band, in Arbeit): Erwartung Gewinn
-- **15m / 10m** (resonant): Erwartung Verlust wie 20m
+- **30m** (off-band ANT1, Datensammlung gestartet — 3 Tage Normal/Standard, 1 Tag DX): bestätigt Gewinn-Muster, siehe oben
+- **17m** (off-band ANT1): Datensammlung läuft, erwarteter Gewinn wie 40m
+- **15m / 10m** (resonant): erwarteter Verlust wie 20m
 - **80m / 60m / 12m**: anstehend
 
 Jedes neue Band bestätigt oder widerlegt die Off-Band/Resonant-Hypothese.
@@ -550,12 +598,16 @@ andere Polarisierung, gebäudegebundene Befestigung — die ideale Ergänzung f�
 - ✅ **Ant2 Superiority Counter**: Quantifiziert Diversity-Gewinn (Ant2 > Ant1)
 - ✅ **TX-Sicherheit**: TX stoppt sofort vor Gain-Messung — kein versehentliches Senden bei Kalibrierung
 - ✅ **Gain-Messung**: Audio-Eingangspegel kalibrieren (Button "GAIN-MESSUNG"). Findet optimalen RX-Pegel vor Statistik- oder Diversity-Sitzungen.
-- ✅ **UI-Verbesserungen**: Info-Dialoge mit "Nicht mehr anzeigen". DT-Korrektur bleibt beim Modus-Wechsel erhalten. Button-Labels spiegeln den aktiven Zustand (z.B. "OMNI CQ" wenn aktiv).
+- ✅ **Auto-Hunt (v0.75)**: Wählt automatisch die nächste CQ-Station aus der Warteliste und startet QSO ohne manuellen Klick. Eigener Totmannschalter (nicht mausausgelöst — Bot-Schutz). Diversity-only: sichtbar nur bei aktivem Diversity, stoppt automatisch bei Modus-Wechsel.
+- ✅ **Auto-Close Kalibrierungs-Dialog (v0.83)**: Nach abgeschlossener Gain-Messung schließt der Bestätigungs-Dialog automatisch nach 3 Sekunden — kein Klick nötig.
+- ✅ **Doppel-Report-Bug behoben (v0.82)**: Behoben: App sendete Signal-Report erneut, nachdem bereits RR73 empfangen wurde. Ursache war die Decoder-Reihenfolge (`cycle_finished` muss nach allen `message_decoded`-Events feuern). Im echten QSO bestätigt.
+- ✅ **Diversity Tertile-Analyse (v0.84)**: Statistik-Diagramme zeigen 33./67.-Perzentil Schattierung (echte Slot-zu-Slot-Streuung) statt flacher Min/Max-Balken.
+- ✅ **UI-Verbesserungen**: Info-Dialoge mit "Nicht mehr anzeigen". DT-Korrektur bleibt beim Modus-Wechsel erhalten. Button-Labels spiegeln aktiven Zustand.
 - ✅ **Debug-Konsole**: Ctrl+D, Live-Filter, Schrift 11pt, Copy/Clear
 
 **Im Feldtest:**
-- ⚠️ **AP-Lite v2.2**: Schwache QSOs retten via kohaerenter Addition. Schwellwert-Kalibrierung laeuft.
-- ⚠️ **OMNI-TX**: Even/Odd CQ-Rotation fuer 100% Reichweite (verstecktes Easter Egg). Integriert, Feld-Validierung ausstehend.
+- ⚠️ **AP-Lite v2.2**: Schwache QSOs retten via kohaerenter Addition zweier fehlgeschlagener Dekodier-Versuche. Schwellwert-Kalibrierung laeuft.
+- ⚠️ **OMNI-TX**: Even/Odd CQ-Rotation fuer 100% Zeitschlitz-Abdeckung (verstecktes Easter Egg). Integriert, Feld-Validierung ausstehend.
 
 ### FT2-Frequenzen (Decodium-kompatibel)
 
