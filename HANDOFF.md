@@ -1,10 +1,9 @@
 # HANDOFF — SimpleFT8
 
-**Stand 2026-05-01:** v0.85 (Dead-Code-Cleanup, Cleanup I + Doc J).
-v0.84 Tertile-Analyse heute Mittag. v0.83 Fix F Auto-Close-Dialog
-heute Vormittag. v0.82 Fix E gestern abends.
+**Stand 2026-05-01:** v0.86 (Fix G + Test-Coverage-Erweiterung AC-1..AC-4).
+v0.85 Dead-Code-Cleanup. 20m Datensammlung läuft aktiv.
 
-**Tests:** 510/510 gruen (514 - 4 AGC-Tests aus Dead-Code-Cleanup).
+**Tests:** 563/563 gruen (+56 neue Tests fuer protocol/diversity_merger/ap_lite, -5 Duplikate).
 
 ---
 
@@ -140,6 +139,11 @@ erfolgreich):**
   2a↔2b-Widerspruch (Trivial-Klausel ergänzt).
 - TODO-Liste-Lesson: `_reset_defaults` (v0.79) und `btn_omni_cq` (v0.78) waren bereits erledigt. Memory
   `feedback_todo_history_pflicht.md` — vor TODO-Liste IMMER `git log --oneline` + `grep` gegen aktuellen Code.
+- v0.86 Fix G — Falscher Kalibrierungstext im Normal-Modus. `DXTuneDialog` zeigte "Diversity Standard"
+  statt "Gain-Messung". `rx_mode`-Parameter hinzugefügt, `_get_mode_label()` unterscheidet Normal/Diversity.
+  Statusbar-Text modus-abhängig. 2 neue Smoke-Tests. 512/512 grün.
+- **WORKFLOW-PFLICHT verschärft:** Keine Ausnahmen mehr. IMMER V1→V2→R1→V3→Plan→Code.
+  CLAUDE.md Anfang+Ende doppelt eingetragen. Skill `.claude/skills/ft8_workflow.md` erstellt.
 
 ### 🟢 Long-term (theoretisch)
 
@@ -196,7 +200,7 @@ erfolgreich):**
 
 ```
 ./venv/bin/python3 -m pytest tests/ -q
-510 passed in ~7s
+563 passed in ~8s
 ```
 
 Neu seit v0.79:
@@ -206,15 +210,20 @@ Neu seit v0.79:
 - v0.83: 3 Tests fuer Fix F (Auto-Close-Dialog)
 - v0.84: 4 Tests fuer Feature H (Tertile-Analyse)
 - v0.85: -4 Tests (4 AGC-Tests entfernt mit Dead-Code-Cleanup)
+- v0.86: +2 Smoke-Tests Fix G + AC-1..AC-4 (+56, -5 Duplikate = +51 netto)
+  - test_protocol.py: 22 Tests (protocol.py, vorher 0)
+  - test_diversity_merger.py: 10 Tests (diversity_merger.py, vorher 0)
+  - test_ap_lite.py: 24 Tests (ap_lite.py, vorher 5 in test_modules.py)
+  - test_modules.py: -5 (AP-Lite-Duplikate entfernt)
 
 ---
 
 ## Letzter bekannter guter Zustand
 
 - **Branch:** main
-- **HEAD:** `chore(release): v0.85 — Dead-Code-Cleanup (Cleanup I + Doc J)`
-- **Tests:** 510/510 gruen
-- **App-Version:** v0.85
+- **HEAD:** `refactor(tests): AP-Lite-Duplikate aus test_modules.py entfernen (AC-4)`
+- **Tests:** 563/563 gruen
+- **App-Version:** v0.86
 - **Backup:** `Appsicherungen/2026-04-30_vor_decoder_reihenfolge_fix/`
   (4 MB code-only, vor Fix E v0.82). Heute Vormittag Fix F + Feature
   H — kein neues Backup, da pure Code-Updates ohne riskante

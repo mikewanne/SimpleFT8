@@ -2924,3 +2924,52 @@ ohne Self-Review). Wichtige R1-Findings (DeepSeek-R1 Reviewer-Modus):
   Frust-Quelle geworden: Mike haette bei jedem Tippfehler 4 Files
   updaten muessen.
 
+
+## 2026-05-01 v0.86 — Fix G: Falscher Kalibrierungstext im Normal-Modus
+
+**Bug:** Normal-Modus + KALIBRIEREN → DXTuneDialog zeigte "Diversity Standard — Kalibrierung Xm"
+statt "Gain-Messung — Kalibrierung Xm". Statusbar zeigte "DIVERSITY SETUP AKTIV".
+
+**Root Cause:** `_get_mode_label` in `dx_tune_dialog.py` hatte nur 2 Fälle (DX/Standard),
+kein dritter Fall für Normal-Modus. `scoring_mode="stations"` fiel immer in Diversity-Standard.
+Statusbar-Text in `_set_gain_measure_lock` hardcodiert ohne Modus-Check.
+
+**Fix:** Neuer `rx_mode`-Parameter in `DXTuneDialog.__init__`, neue `_get_mode_label()`-Methode,
+`mw_radio._open_dx_tune_dialog` übergibt `rx_mode=self._rx_mode`, Statusbar modus-abhängig.
+2 neue Smoke-Tests → 512/512 grün.
+
+**Workflow-Lesson:** Fix wurde zunächst OHNE vollen V1→V2→R1→V3-Workflow implementiert →
+Mike-Unterbrechung → Workflow nachgeholt → R1 bestätigt Korrektheit + 1 Test-Finding.
+CLAUDE.md mit doppelter Workflow-Pflicht-Regel aktualisiert (kein Ausnahme mehr).
+
+
+## 2026-05-01 v0.86+ — Test-Coverage-Erweiterung (AC-1 bis AC-4)
+
+**Kontext:** V1→V2→R1→V3-Workflow für Test-Analyse. Mike: "lieber 100 Tests
+zuviel als 1 zuwenig". R1-Review identifizierte 3 komplett ungetestete Module.
+
+**AC-2: test_protocol.py (22 Tests)**
+Parametrisierte Mathematik-Tests für FT8/FT4/FT2: symbol_duration,
+signal_duration, waveform_samples, signal_duration < slot_time. get_profile()
+Case-Insensitivity + Unknown-Fallback (FT8 Default). BAND_FREQUENCIES-
+Vollständigkeit. FrozenInstanceError-Immutabilität (direkt + setattr).
+FT4/FT2 gleiche Symbolanzahl, FT8 anders.
+
+**AC-1: test_diversity_merger.py (10 Tests)**
+DiversityMerger-Fusionslogik: A1/A2-Labels ohne Duplikat, Duplikat A1>2 und
+A2>1 mit korrekten _snr_a1/_snr_a2-Feldern. Timeout-Pfade (nur A1 / nur A2).
+Reset stoppt Timer + löscht Zustand. Kein Emit bei leerem Merge. Whitespace-
+Normalisierung im Key. Signal emittiert exakt 1x.
+
+**AC-3: test_ap_lite.py (24 Tests)**
+generate_candidates() State 1/2/3, SNR-Clamping. APLite.on_decode_failed()
+Buffer-Speicherung, Cache-Limit 3, disabled-Flag, leere/ungültige Callsigns.
+try_rescue() Guards (Freq >30Hz, Timing 10-20s, State-3-keine-Kandidaten,
+disabled). clear(). Singleton get_instance(). Kein Encoder/DSP.
+
+**AC-4: test_modules.py Bereinigung**
+5 AP-Lite-Duplikate aus test_modules.py entfernt (durch test_ap_lite.py
+mit 24 Tests vollständig superseded). DSP-Sanity-Checks (align/costas)
+in test_modules.py behalten.
+
+**Gesamt:** 512 → 563 Tests (+56 neu, -5 Duplikate).
