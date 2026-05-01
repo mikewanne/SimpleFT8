@@ -984,10 +984,13 @@ class RadioMixin:
         )
         lay.addWidget(lbl_info)
 
-        # Auto-Close nach 3s (singleShot ist QApplication-owned).
-        # accept() ist idempotent — kein Crash wenn Dialog vorher per
-        # Esc oder App-Close geschlossen wurde.
-        _QTimer.singleShot(3000, dlg.accept)
+        # Auto-Close nach 3s. Timer Child von dlg → wird mit dlg
+        # zerstoert (z.B. App-Close), kein Race auf gestorbenen
+        # Python-Wrapper (R1-Final-Review-Fix).
+        _close_timer = _QTimer(dlg)
+        _close_timer.setSingleShot(True)
+        _close_timer.timeout.connect(dlg.accept)
+        _close_timer.start(3000)
 
         # show() statt exec() = non-modal. raise_+activateWindow gegen
         # Hinten-Wandern (R1-P1: macOS Spaces-Edge-Cases akzeptiert).
