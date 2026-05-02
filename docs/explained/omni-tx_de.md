@@ -51,13 +51,12 @@ Wenn eine Station antwortet:
 
 Bei Aktivierung wird Auto-Hunt automatisch mitgestartet. Auto-Hunt beantwortet CQ-Stationen intelligent nach Scoring (neues DXCC > seltenes Call > guter SNR).
 
-## Aktivierung
+## Status
 
-1. Klick auf die **Versionsnummer** unten rechts im Hauptfenster
-2. Bestaetigungsdialog erscheint
-3. Bei Aktivierung: **Omega-Symbol** (Omega) erscheint neben der Version
-4. CQ-Button wechselt zu "OMNI CQ"
-5. Erneuter Klick deaktiviert OMNI-TX
+OMNI-TX ist aktuell deaktiviert (Feldtest ausstehend). Aktivierungs-
+Details sind nicht oeffentlich dokumentiert. Bei aktiviertem OMNI:
+ein Omega-Symbol erscheint neben der Versionsnummer und der CQ-Button
+wechselt zu "OMNI CQ".
 
 ## Fuer Beobachter
 

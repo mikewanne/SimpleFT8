@@ -51,13 +51,12 @@ When a station responds:
 
 When enabled, Auto-Hunt is automatically activated. Auto-Hunt responds to CQ stations using intelligent scoring (new DXCC > rare call > good SNR).
 
-## Activation
+## Status
 
-1. Click the **version number** in the bottom-right corner
-2. Confirmation dialog appears
-3. When activated: **Omega symbol** appears next to the version
-4. CQ button changes to "OMNI CQ"
-5. Click again to deactivate
+OMNI-TX is currently disabled (field test pending). Activation
+details are not publicly documented. When enabled: an Omega symbol
+appears next to the version number and the CQ button switches to
+"OMNI CQ".
 
 ## To Observers
 
