@@ -379,6 +379,9 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
             "QPushButton:hover { background: #2a3a5a; }"
         )
         _help_btn.setFixedHeight(22)
+        _help_btn.setToolTip(
+            "Funktionsuebersicht — Feature Overview"
+        )
         _help_btn.clicked.connect(self._on_help_clicked)
         self.statusBar().addPermanentWidget(_help_btn)
         # DT-Anzeige nur in der Statusbar-Message (kein separates Label mehr)

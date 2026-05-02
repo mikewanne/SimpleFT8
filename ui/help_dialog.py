@@ -9,18 +9,29 @@ from PySide6.QtCore import Qt, QSettings
 
 
 # Feature-Liste: (Anzeige-Name DE, Anzeige-Name EN, Datei-Basis)
+# Alphabetisch nach Anzeige-Name DE sortiert (KISS — beim Hinzufuegen
+# neuer Features einfach an der richtigen Stelle einfuegen).
 _FEATURES = [
-    ("QSO-Ablauf (Hunt/CQ)", "QSO Flow (Hunt/CQ)", "qso-flow"),
-    ("Gain-Messung (DX Tuning)", "Gain Measurement (DX Tuning)", "gain-measurement"),
-    ("Diversity (Standard/DX)", "Diversity (Standard/DX)", "diversity-modes"),
-    ("FT2-Modus (Decodium)", "FT2 Mode (Decodium)", "ft2-mode"),
-    ("DT-Zeitkorrektur", "DT Time Correction", "dt-correction"),
-    ("Signalverarbeitung", "Signal Processing", "signal-processing"),
-    ("Logbuch & QRZ", "Logbook & QRZ", "logbook"),
+    ("Anrufer-Warteliste", "Caller Waitlist", "waitlist"),
+    ("Antennen-Praeferenz pro Station", "Per-Station Antenna Preference", "antenna-preference"),
     ("AP-Lite Rettung", "AP-Lite Rescue", "ap-lite"),
-    ("Propagation-Anzeige", "Propagation Indicators", "propagation-indicators"),
-    ("Operator-Praesenz", "Operator Presence", "operator-presence"),
+    ("Auto-Hunt", "Auto-Hunt", "auto-hunt"),
+    ("Bandpilot", "Bandpilot", "bandpilot"),
+    ("CQ-Frequenz (Histogramm)", "CQ Frequency (Histogram)", "cq-frequency"),
+    ("Diversity-Modi (Standard/DX)", "Diversity Modes (Standard/DX)", "diversity-modes"),
+    ("DT-Zeitkorrektur", "DT Time Correction", "dt-correction"),
+    ("DX-Tuning (Antennen-Messung)", "DX Tuning (Antenna Measurement)", "dx-tuning"),
+    ("FT2-Modus (Decodium)", "FT2 Mode (Decodium)", "ft2-mode"),
+    ("Gain-Messung (Audio-Pegel)", "Gain Measurement (audio level)", "gain-measurement"),
+    ("Live Locator-DB", "Live Locator Mining", "locator-mining"),
+    ("Logbuch & QRZ", "Logbook & QRZ", "logbook"),
     ("OMNI-TX (Slot-Rotation)", "OMNI-TX (Slot Rotation)", "omni-tx"),
+    ("Operator-Praesenz", "Operator Presence", "operator-presence"),
+    ("Power-Regulation", "Power Regulation", "power-regulation"),
+    ("Propagation-Anzeige", "Propagation Indicators", "propagation-indicators"),
+    ("QSO-Ablauf (Hunt/CQ)", "QSO Flow (Hunt/CQ)", "qso-flow"),
+    ("Richtungs-Karte (3D-Globus)", "Direction Map (3D Globe)", "direction-map"),
+    ("Signalverarbeitung", "Signal Processing", "signal-processing"),
 ]
 
 _DOCS_DIR = Path(__file__).parent.parent / "docs" / "explained"
