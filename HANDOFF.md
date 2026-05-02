@@ -1,9 +1,38 @@
 # HANDOFF — SimpleFT8
 
-**Stand 2026-05-01:** v0.87 (Bandpilot — RX-Modus-Empfehlung pro Band).
-v0.86 Fix G + AC-1..AC-4. v0.85 Dead-Code-Cleanup. 20m Datensammlung läuft aktiv.
+**Stand 2026-05-02:** v0.87.1 (Doku-Konsolidierung + Help-Dialog komplett).
+v0.87 Bandpilot. v0.86 Fix G + AC-1..AC-4. v0.85 Dead-Code-Cleanup.
 
-**Tests:** 593/593 gruen (+28 mode_recommender, +2 settings_dialog Bandpilot).
+**Tests:** 616/616 gruen (+23 help_dialog_features, +28 mode_recommender,
++2 settings_dialog Bandpilot).
+
+---
+
+## 2026-05-02 (v0.87.1) — Doku-Konsolidierung
+
+**Voller Workflow ft8_workflow durchgezogen** (V1→V2(17 Self-Review-
+Lücken)→R1(13 Findings)→V3→11 atomare Commits→Final-R1).
+
+- `docs/explained/` ist jetzt die **Single Source of Truth** für
+  alle 20 User-Features (= 40 Files DE+EN).
+- 4 alte UPPER_SNAKE_CASE-Files migriert (POWER, FREQUENCY, DX_TUNING,
+  bandpilot), 4 redundante geloescht (DIVERSITY, DT_CORRECTION) mit
+  Inhalts-Merge ihrer einzigartigen Sektionen.
+- 5 neue User-Doku-Files (DE+EN): antenna-preference, waitlist,
+  direction-map, locator-mining, auto-hunt.
+- `ui/help_dialog.py:_FEATURES` von 11 auf 20 alphabetisch sortiert.
+- `?`-Button bekommt Tooltip.
+- README.md komplett aktualisiert (Bandpilot in Key Innov + All
+  Features + In Field Test + 20-Feature-Doc-Tabelle, v0.86→v0.87,
+  Tests-Badge 563→616).
+- OMNI-TX-Aktivierungs-Methode aus Doku entfernt (PRIVAT, gehoert
+  nicht auf GitHub).
+- 11 atomare Commits. Final-R1 fand 1 valides Finding (Modul-Verweis
+  raus aus User-Doku) + 4 Halluzinationen.
+
+---
+
+## 2026-05-01 (v0.87) — Bandpilot
 
 ---
 

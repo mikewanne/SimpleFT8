@@ -5,6 +5,111 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-02 v0.87.1 — Doku-Konsolidierung + Help-Dialog-Erweiterung
+
+**Betroffene Dateien:** `ui/help_dialog.py`, `ui/main_window.py`,
+`ui/settings_dialog.py`, `tests/test_help_dialog_features.py` (neu),
+`README.md`, `docs/explained/` (komplette Reorganisation), 5 neue
+Doku-Features (DE+EN = 10 Files), `core/mode_recommender.py`-Pfad
+in settings_dialog umgestellt.
+
+**Was:** Komplette Doku-Konsolidierung. Vorher chaotisch verteilt
+auf `docs/` (UPPER_SNAKE_CASE) + `docs/explained/` (kebab-case) +
+neue `bandpilot_help_*` (mit `_help_`-Suffix). Jetzt einheitlich
+`docs/explained/<feat>_de.md` + `<feat>.md` als Single Source of
+Truth — App-Help-Dialog UND GitHub-README beziehen Inhalt aus
+demselben Pool. 11-Phasen-Workflow streng nach `ft8_workflow`
+durchgezogen mit V1→V2→R1→V3→Plan→11 atomare Commits→Final-R1.
+
+### Migrations + Cleanups
+
+- `docs/bandpilot_help_<de|en>.md` → `docs/explained/bandpilot_<de>.md`
+  + `bandpilot.md` (neue Naming-Norm).
+- `docs/POWER_REGULATION_<DE|EN>.md` → `docs/explained/power-regulation_<de>.md`
+  + `.md`.
+- `docs/FREQUENCY_HISTOGRAM_<DE|EN>.md` →
+  `docs/explained/cq-frequency_<de>.md` + `.md` (semantisch
+  klarerer Name).
+- `docs/DX_TUNING_<DE|EN>.md` → `docs/explained/dx-tuning_<de>.md`
+  + `.md` mit Abgrenzungs-Hinweis zu gain-measurement
+  (gain-measurement = Audio-Pegel-Kalibrierung; dx-tuning =
+  4.5-Min-18-Zyklus-Antennenmessung).
+- `docs/DIVERSITY_<DE|EN>.md` + `DT_CORRECTION_<DE|EN>.md`
+  geloescht — einzigartige Inhalte vorher in die explained/-
+  Pendants gemergt:
+  + diversity-modes_<de|en>: A1/A2-Markierungen-Sektion
+  + dt-correction_<de|en>: zweistufige Architektur, DT_BUFFER_OFFSET-
+    Tabelle, JSON-Persistenz, TX-TARGET_TX_OFFSET, Status
+    "UNGETESTET" → "Validiert".
+- `docs/explained/diversity-modes.md` (EN) auf DE-Stand (159 →
+  163 Zeilen, +Antenna-Pref, +Three-Modes-Overview, +Bird-Beispiel).
+- `docs/explained/omni-tx_<de|en>.md`: Aktivierungs-Methode
+  (Klick auf Versionsnummer) entfernt — PRIVAT, durfte nicht auf
+  GitHub.
+
+### 5 neue User-Feature-Doku-Files (DE+EN, je ~80-180 Zeilen)
+
+| Slug | Display |
+|---|---|
+| `antenna-preference` | Antennen-Praeferenz pro Station |
+| `waitlist` | Anrufer-Warteliste |
+| `direction-map` | Richtungs-Karte (3D-Globus) |
+| `locator-mining` | Live Locator-DB |
+| `auto-hunt` | Auto-Hunt |
+
+### App-Code
+
+- `ui/help_dialog.py:_FEATURES` von 11 auf **20 Features** erweitert,
+  alphabetisch sortiert (case-insensitive), mit aktualisierten
+  Display-Namen ("Gain-Messung (Audio-Pegel)" statt "Gain-Messung
+  (DX Tuning)" — Verwechslung mit dx-tuning vermeiden).
+- `ui/main_window.py:_help_btn.setToolTip("Funktionsuebersicht —
+  Feature Overview")`.
+- `ui/settings_dialog.py:_show_bandpilot_help` Pfad auf
+  `docs/explained/bandpilot_<de|en>.md`.
+
+### README
+
+- Tests-Badge 563 → 616.
+- Versions-Erwaehnungen v0.86 → v0.87.
+- Bandpilot in "Key Innovations" + "All Features" + "In Field Test"
+  + "Detailed Feature Documentation"-Tabelle (vollstaendig auf alle
+  20 Features erweitert, vorher nur 5 verlinkt).
+- Beide Sprachen-Sektionen (English + Deutsch) synchron.
+- README_DE.md unveraendert (nicht aktiv genutzt — nicht aus
+  README.md verlinkt, GitHub-Default ist README.md).
+
+### Tests
+
+- `tests/test_help_dialog_features.py` (neu) — 23 Tests:
+  parametrisierte File-Existenz pro Feature (20),
+  alphabetische Sortierung, Mindest-Anzahl, Slug-Eindeutigkeit.
+- 593 → **616 grün**, 0 Regressionen.
+
+### Workflow-Bilanz
+
+V1 → V2 (Self-Review fand 17 Lücken) → R1 (13 Findings, 5
+verifiziert + 8 angenommen) → V3 → 11 atomare Commits → Final-R1
+(1 valid Finding: interner Code-Verweis aus User-Doku raus, 4
+Halluzinationen abgelehnt).
+
+### Lessons
+
+- **R1 sieht nur die mitgesendeten Files.** Wenn man nur 6 von 40
+  schickt, halluziniert R1 dass die anderen 34 fehlen. Beim Final-
+  Review reichlich Files mitgeben oder explizit "die anderen
+  existieren bereits" schreiben.
+- **Single-Source-Migration vor Inhalts-Edits:** zuerst alle Files
+  an die richtige Stelle, DANN editieren. Verlinkungen brechen
+  sonst halb. Phase 2 (Migration) vor Phase 3 (EN-Update) vor
+  Phase 4 (Lösch-Op).
+- **Naming-Konvention strikt durchhalten:** bei Bandpilot war
+  "_help_<de|en>.md" der falsche Suffix — das ist 1 Ausreißer
+  reicht um Inkonsistenz zu erzeugen, also kompromisslos
+  vereinheitlichen.
+
+---
+
 ## 2026-05-01 v0.87 — Bandpilot (RX-Modus-Empfehlung pro Band)
 
 **Betroffene Dateien:** `core/mode_recommender.py` (neu),
