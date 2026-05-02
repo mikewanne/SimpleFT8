@@ -345,10 +345,10 @@ class SettingsDialog(QDialog):
     def _show_bandpilot_help(self):
         """Bandpilot-Hilfe in QMessageBox anzeigen — sprachabhaengig DE/EN."""
         lang = self.settings.get("language", "de")
-        doc_name = "bandpilot_help_en.md" if lang == "en" else "bandpilot_help_de.md"
-        # Pfad: SimpleFT8/docs/<doc_name> — App-Root via __file__
+        doc_name = "bandpilot.md" if lang == "en" else "bandpilot_de.md"
+        # Pfad: SimpleFT8/docs/explained/<doc_name> — App-Root via __file__
         base = Path(__file__).parent.parent
-        doc_path = base / "docs" / doc_name
+        doc_path = base / "docs" / "explained" / doc_name
         try:
             text = doc_path.read_text(encoding="utf-8")
         except OSError:

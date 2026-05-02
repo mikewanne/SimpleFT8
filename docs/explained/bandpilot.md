@@ -1,4 +1,8 @@
-# Bandpilot — Help
+# Bandpilot
+
+> ⚠️ **In field test** (v0.87, 2026-05-01) — algorithm
+> implemented and unit-tested (28 tests passing), live validation
+> over extended operating time pending.
 
 ## What does Bandpilot do?
 

@@ -1,4 +1,8 @@
-# Bandpilot — Hilfe
+# Bandpilot
+
+> ⚠️ **Im Feldtest** (v0.87, 01.05.2026) — Algorithmus
+> implementiert + getestet (28 Unit-Tests gruen), Live-Validierung
+> ueber laengere Funkzeit ausstehend.
 
 ## Was macht der Bandpilot?
 
