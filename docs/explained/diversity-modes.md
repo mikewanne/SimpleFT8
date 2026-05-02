@@ -1,4 +1,37 @@
-# Diversity Modes — Standard vs. DX Scoring
+# Diversity Modes — Normal, Standard and DX
+
+## All three modes at a glance
+
+Which mode should I use? Quick answer:
+
+| Situation | Mode |
+|-----------|------|
+| I only have one antenna | **Normal** |
+| I want to hear as many stations as possible | **Diversity Standard** |
+| I'm specifically chasing distant, weak stations | **Diversity DX** |
+| I want to compare SimpleFT8 to other software | **Normal** as baseline |
+
+### Normal — the baseline mode
+
+Normal uses a single antenna and behaves exactly like WSJT-X, JS8Call, or any other standard FT8 software. You need it as a starting point: if you don't know how good your reception is in the first place, you can't measure progress. Measure with Normal first, then switch to Diversity — the difference is immediately visible.
+
+### Diversity Standard — for the masses
+
+With two antennas, the system automatically picks the antenna decoding **more stations** each round. You don't just get more from the same antenna — you automatically get the best of both. Real measurements show 15–30% more stations than Normal.
+
+### Diversity DX — for the quiet ones
+
+Also two antennas, but the selection criterion is different: the system picks the antenna that **catches weak signals best** — stations with a signal just above the noise floor (SNR below −10 dB). A strong local station two kilometers away doesn't count because you'd hear it anyway. What counts are the quiet signals from thousands of kilometers.
+
+**When Standard, when DX?**
+Imagine collecting bird species in a forest. Standard counts every bird — the more, the better. DX counts only the rare species deep in the forest, barely audible. If you just want to operate actively and rack up QSOs → Standard. If you're targeting a specific rare DX entity → DX.
+
+**Why does Standard sometimes show fewer stations than DX?**
+In measurements it occasionally looks like DX has more stations than Standard. That's not because DX counts better — it's the measurement timing. If Standard is measured at 07:20 (band peak) and DX at 07:50 (band already weakening), Standard shows more. Reverse can happen too. Over many measurement days this evens out. Across 6 shared measurement hours, DX beat Normal in 5 of 6 cases — for *station count*, not just weak signals.
+
+---
+
+## Technical summary
 
 ## In a Nutshell
 
@@ -96,6 +129,30 @@ The LED bar or ratio label changes color based on status:
 - Green: dominant antenna clearly winning
 - Teal/Blue: 50:50, both antennas similar
 - Yellow: measurement in progress
+
+## Antenna-Pref — the learning memory
+
+Diversity is not a simple switch. After every decode cycle SimpleFT8 remembers, per callsign, which antenna received that station better — and by how many dB.
+
+That's the point: the global Diversity decision (which antenna currently has more stations / more weak signals) is an average across everyone. But if DL3AQJ comes from northern Germany and your ANT2 points north, ANT2 might be 6 dB better for that one station — regardless of what the rest of the band says.
+
+**How it works:**
+
+```
+Without Diversity:    Always antenna 1 — no matter what's happening.
+Diversity Standard:   Every 15 s: which antenna receives more stations? Use that.
+Diversity DX:         Every 15 s: which antenna hears the weakest signals? Use that.
++ Antenna-Pref:       System remembers — "DL3AQJ always comes in better on ANT2".
+                      On QSO start, the right antenna is selected automatically.
+```
+
+**When does it switch?** Only at cycle boundaries (never mid-decode). During an active QSO the antenna stays fixed, the global Diversity rhythm is temporarily overridden. After QSO end: back into the normal cycle.
+
+**No memory, no timeout.** When a station is received, the value is at most 15 seconds old — you can't get more precise. If it's not received, there's nothing to call. Historical values are useless.
+
+**Waitlist:** When multiple stations call simultaneously, SimpleFT8 cycles between them — and each time on the matching antenna preference.
+
+In the QSO panel you see which antenna was used: `Calling DL3AQJ (ANT2, +6.3 dB)`. In the status bar: `RX: A2 (+6.3 dB)`.
 
 ## Tips for Operators
 
