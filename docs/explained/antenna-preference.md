@@ -21,8 +21,7 @@ But if DL3AQJ comes from northern Germany and ANT2 points north,
 ANT2 might be 6 dB better **for that one station** — regardless of
 what the rest of the band says.
 
-The `AntennaPreferenceStore` (module `core/antenna_pref.py`) keeps
-per callsign:
+SimpleFT8 keeps per callsign:
 
 - **best_ant** — `"A1"` or `"A2"`
 - **delta_db** — how many dB advantage the better antenna has
