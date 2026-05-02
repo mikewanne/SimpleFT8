@@ -1,8 +1,13 @@
-# DX Tuning — Automatische Gain-Messung
+# DX-Tuning — Automatische Antennen-Messung pro Band
 
-[English](DX_TUNING.md) | **Deutsch**
+[English](dx-tuning.md) | **Deutsch**
 
-[Zurueck zur README](../README_DE.md) | [Diversity](DIVERSITY_DE.md) | [Leistungsregelung](POWER_REGULATION_DE.md)
+[Zurueck zur README](../../README.md) | [Diversity-Modi](diversity-modes_de.md) | [Power-Regulation](power-regulation_de.md) | [Gain-Messung (Audio-Pegel)](gain-measurement_de.md)
+
+> **Abgrenzung:** DX-Tuning ist die mehrminuetige Antennen-
+> Vergleichsmessung mit Preset-Speicherung pro Band+Modus.
+> Das ist NICHT die Audio-Pegel-Kalibrierung (siehe
+> [Gain-Messung](gain-measurement_de.md), GAIN-MESSUNG-Button).
 
 ## Das Problem
 
