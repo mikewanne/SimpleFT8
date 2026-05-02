@@ -100,13 +100,59 @@ outside this range    → discarded (clearly broken station or sync error)
 | Robust median filter ignores outlier stations | 50ms dead-band means very small drifts are never corrected |
 | Works on any band with FT8 activity | On a dead band with <5 stations, correction pauses |
 
+## Two-stage architecture (v0.74+)
+
+In practice the DT error is split into two components:
+
+### Stage 1 — Fixed hardware offset
+
+The FlexRadio SmartSDR introduces a constant audio pipeline delay.
+This is a known hardware property and is compensated directly in
+the decoder via `DT_BUFFER_OFFSET`:
+
+| Mode  | DT_BUFFER_OFFSET |
+|-------|------------------|
+| FT8   | 2.0 s            |
+| FT4   | 1.0 s            |
+| FT2   | 0.8 s            |
+
+These values already include the 0.5 s WSJT-X protocol convention.
+
+### Stage 2 — Adaptive correction (described above)
+
+After subtracting the fixed offset, a small residual (~0.27 s on
+FlexRadio VITA-49) remains. The DT correction handles this
+automatically.
+
+## Per mode + band persistence
+
+Corrections are persisted in `~/.simpleft8/dt_corrections.json`:
+
+```json
+{
+  "FT8_20m": 0.24,
+  "FT8_40m": 0.27,
+  "FT4_20m": 0.25
+}
+```
+
+On band or mode change the stored value is loaded immediately — no
+re-convergence from zero.
+
+## TX timing
+
+When transmitting, the FlexRadio buffers audio samples ~1.3 s before
+RF output. `TARGET_TX_OFFSET = -0.8 s` in the encoder compensates:
+
+```
+TARGET_TX_OFFSET = 0.5 s (protocol) − 1.3 s (FlexRadio TX buffer) = −0.8 s
+```
+
+This value is FlexRadio-specific — other rigs (e.g. IC-7300) need
+their own measured value.
+
 ## Status
 
-**UNTESTED** — Code complete (v0.21, `core/ntp_time.py`), field validation needed.
-
-Things to verify during field testing:
-- **Sign convention:** Does positive DT_median mean our clock is late or early? The code assumes late (adds positive correction). If spots get worse after enabling, the sign is wrong.
-- **Smoothing factor:** 0.3 might need tuning. Too high = jittery correction. Too low = too slow to track real drift.
-- **Dead-band:** 50ms might be too conservative or too aggressive. Log the raw median DT values and check.
-
-Watch for `[DT-Korr] Median=+X.XXXs -> Korrektur=+X.XXXs (n=XX)` in the log.
+**Validated** — implemented in `core/ntp_time.py` (v0.74),
+two-stage architecture since v0.74, per-mode+band persistence since
+v0.74. Real-QSO validation completed in v0.80 (see HISTORY).

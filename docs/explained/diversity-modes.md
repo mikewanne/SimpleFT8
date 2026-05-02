@@ -66,6 +66,19 @@ Use DX mode when:
 
 **Example:** ANT1 decodes 25 stations total, 3 of them below -10 dB. ANT2 decodes 18 stations total, 7 of them below -10 dB. In Standard mode, ANT1 wins (25 > 18). In DX mode, ANT2 wins (7 > 3) — it receives more weak DX stations.
 
+## Antenna markers in the RX panel
+
+Each station in the RX panel shows which antenna decoded it:
+
+- **A1** — heard only on ANT1
+- **A2** — heard only on ANT2
+- **A1>2** — heard on both, ANT1 had better SNR
+- **A2>1** — heard on both, ANT2 had better SNR
+
+This lets you see immediately which stations would not have been
+received at all (or only worse) without the second antenna —
+diversity gain visible live in the RX window.
+
 ## How the Measurement Works
 
 Both modes use the same 8-cycle measurement process:

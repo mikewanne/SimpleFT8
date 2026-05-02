@@ -100,13 +100,60 @@ ausserhalb             → verworfen (offensichtlich kaputte Station oder Sync-F
 | Robuster Medianfilter ignoriert Ausreisser-Stationen | 50ms-Totzone bedeutet, dass sehr kleine Drifts nie korrigiert werden |
 | Funktioniert auf jedem Band mit FT8-Aktivitaet | Auf einem toten Band mit <5 Stationen pausiert die Korrektur |
 
+## Zweistufige Architektur (v0.74+)
+
+In der Praxis wird der DT-Fehler in zwei Komponenten aufgeteilt:
+
+### Stufe 1 — Fester Hardware-Offset
+
+Das FlexRadio SmartSDR fuehrt eine konstante Audio-Pipeline-
+Verzoegerung ein. Diese ist eine bekannte Hardware-Eigenschaft und
+wird im Decoder direkt durch `DT_BUFFER_OFFSET` kompensiert:
+
+| Modus | DT_BUFFER_OFFSET |
+|-------|------------------|
+| FT8   | 2,0 s            |
+| FT4   | 1,0 s            |
+| FT2   | 0,8 s            |
+
+Diese Werte beinhalten bereits die 0,5 s WSJT-X-Protokollkonvention.
+
+### Stufe 2 — Adaptive Korrektur (oben beschrieben)
+
+Nach Abzug des festen Offsets verbleibt ein kleiner Restfehler
+(~0,27 s beim FlexRadio VITA-49). Diesen reguliert die DT-Korrektur
+automatisch.
+
+## Speicherung pro Modus + Band
+
+Korrekturen werden in `~/.simpleft8/dt_corrections.json` persistiert:
+
+```json
+{
+  "FT8_20m": 0.24,
+  "FT8_40m": 0.27,
+  "FT4_20m": 0.25
+}
+```
+
+Bei Band- oder Modus-Wechsel wird der gespeicherte Wert sofort
+geladen — kein erneutes Konvergieren von Null.
+
+## TX-Timing
+
+Beim Senden puffert das FlexRadio Audio-Samples ~1,3 s vor der
+HF-Ausgabe. `TARGET_TX_OFFSET = -0,8 s` im Encoder kompensiert das:
+
+```
+TARGET_TX_OFFSET = 0,5 s (Protokoll) − 1,3 s (FlexRadio TX-Buffer) = −0,8 s
+```
+
+Dieser Wert ist FlexRadio-spezifisch — andere Funkgeraete (z.B.
+IC-7300) brauchen einen eigens gemessenen Wert.
+
 ## Status
 
-**UNGETESTET** — Code fertig (v0.21, `core/ntp_time.py`), Feldvalidierung steht noch aus.
-
-Im Feldtest zu pruefen:
-- **Vorzeichenkonvention:** Bedeutet positiver DT_median, dass unsere Uhr nachgeht oder vorgeht? Der Code nimmt "nachgehend" an (addiert positive Korrektur). Falls PSKReporter-Spots nach Aktivierung schlechter werden, stimmt das Vorzeichen nicht.
-- **Glaettungsfaktor:** 0,3 koennte Feintuning brauchen. Zu hoch = zittrige Korrektur. Zu niedrig = zu langsam um reale Drift zu verfolgen.
-- **Totzone:** 50ms koennten zu konservativ oder zu aggressiv sein. Die rohen Median-DT-Werte loggen und pruefen.
-
-Auf `[DT-Korr] Median=+X.XXXs -> Korrektur=+X.XXXs (n=XX)` im Log achten.
+**Validiert** — implementiert in `core/ntp_time.py` (v0.74),
+zweistufige Architektur seit v0.74, Per-Modus+Band-Persistenz seit
+v0.74. Real-QSO-Validierung in v0.80 erfolgreich abgeschlossen
+(siehe HISTORY).
