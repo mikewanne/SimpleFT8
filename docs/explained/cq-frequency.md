@@ -1,6 +1,8 @@
-# Frequency Histogram & CQ Frequency Selection
+# CQ Frequency (Frequency Histogram)
 
-[Back to README](../README.md) | [Diversity](DIVERSITY.md) | [DX Tuning](DX_TUNING.md) | [DT Correction](DT_CORRECTION.md)
+[Deutsch](cq-frequency_de.md) | **English**
+
+[Back to README](../../README.md) | [Diversity Modes](diversity-modes.md) | [DX Tuning](dx-tuning.md) | [DT Correction](dt-correction.md)
 
 ## What You See
 
