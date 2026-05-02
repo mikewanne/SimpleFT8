@@ -1,8 +1,8 @@
 # Automatische TX-Leistungsregelung
 
-[English](POWER_REGULATION.md) | **Deutsch**
+[English](power-regulation.md) | **Deutsch**
 
-[Zurueck zur README](../README_DE.md) | [Diversity](DIVERSITY_DE.md) | [DX Tuning](DX_TUNING_DE.md)
+[Zurueck zur README](../../README.md) | [Diversity-Modi](diversity-modes_de.md) | [DX-Tuning](dx-tuning_de.md)
 
 ## Das Problem
 

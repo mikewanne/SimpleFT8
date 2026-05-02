@@ -1,6 +1,8 @@
 # Auto TX Power Regulation
 
-[Back to README](../README.md) | [Diversity](DIVERSITY.md) | [DX Tuning](DX_TUNING.md)
+[Deutsch](power-regulation_de.md) | **English**
+
+[Back to README](../../README.md) | [Diversity Modes](diversity-modes.md) | [DX Tuning](dx-tuning.md)
 
 ## The Problem
 
