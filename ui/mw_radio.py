@@ -646,12 +646,46 @@ class RadioMixin:
     def _apply_bandpilot_auto(
         self, band: str, utc_hour: int, rec: dict,
     ) -> bool:
-        """Auto-Modus: Toast zeigen, bei switch Modus wechseln."""
+        """Auto-Modus: Toast zeigen, bei switch Modus wechseln.
+
+        TX-Schutz (V3-AK 7): Wenn encoder gerade transmittet, Modus-
+        Wechsel bis ``tx_finished`` verzoegern.
+        """
         if rec["decision"] == "no_change":
             return False
+        target = rec["decision_mode"]
+
+        if not self.encoder.is_transmitting:
+            # Sofort wechseln
+            self._show_bandpilot_auto_toast(band, utc_hour, rec)
+            self._set_rx_mode_direct(target)
+            return True
+
+        # TX laeuft → verzoegern bis tx_finished
         self._show_bandpilot_auto_toast(band, utc_hour, rec)
-        self._set_rx_mode_direct(rec["decision_mode"])
+        self._bandpilot_pending = (band, utc_hour, rec, target)
+        if not getattr(self, "_bandpilot_tx_connected", False):
+            self.encoder.tx_finished.connect(self._on_bandpilot_tx_finished)
+            self._bandpilot_tx_connected = True
+        sb = self.statusBar() if hasattr(self, "statusBar") else None
+        if sb is not None:
+            from core.mode_recommender import USER_LABEL
+            label = USER_LABEL.get(target, target)
+            sb.showMessage(
+                f"Bandpilot wechselt zu {label} nach TX-Ende", 5000)
         return True
+
+    def _on_bandpilot_tx_finished(self):
+        """tx_finished-Hook: gespeicherten Bandpilot-Wechsel ausfuehren."""
+        pending = getattr(self, "_bandpilot_pending", None)
+        if pending is None:
+            return
+        _band, _utc_hour, _rec, target = pending
+        self._bandpilot_pending = None
+        self._set_rx_mode_direct(target)
+        sb = self.statusBar() if hasattr(self, "statusBar") else None
+        if sb is not None:
+            sb.showMessage("Bandpilot: Modus angewendet", 1500)
 
     def _apply_bandpilot_manual(
         self, band: str, utc_hour: int, rec: dict, current: str,

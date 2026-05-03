@@ -20,7 +20,8 @@ def qapp():
     yield app
 
 
-def _make_mock_self(*, mode: str, current: str | None, rec: dict | None):
+def _make_mock_self(*, mode: str, current: str | None, rec: dict | None,
+                    is_transmitting: bool = False):
     """Mock-Objekt fuer self mit allen benoetigten Attributen + Methoden."""
     self_mock = MagicMock()
     # Settings.get('bandpilot_mode', ...) → mode
@@ -28,6 +29,9 @@ def _make_mock_self(*, mode: str, current: str | None, rec: dict | None):
                                        {"bandpilot_mode": mode}.get(key, default))
     self_mock._bandpilot.recommend.return_value = rec
     self_mock._current_rx_mode_string.return_value = current
+    self_mock.encoder.is_transmitting = is_transmitting
+    self_mock._bandpilot_pending = None
+    self_mock._bandpilot_tx_connected = False
     # Stub Methoden
     self_mock._show_bandpilot_insufficient_data = MagicMock()
     self_mock._show_bandpilot_auto_toast = MagicMock()
@@ -167,6 +171,46 @@ def test_maybe_apply_bandpilot_handles_exception_gracefully():
     s._bandpilot.recommend.side_effect = OSError("disk read fail")
     result = RadioMixin._maybe_apply_bandpilot(s, "40m")
     assert result is False
+    s._set_rx_mode_direct.assert_not_called()
+
+
+# ── TX-Schutz (Phase 8 / V3-AK 7) ─────────────────────────────────────────────
+
+def test_auto_tx_active_delays_set_rx_mode():
+    """Bei is_transmitting=True wird Modus-Wechsel verzoegert."""
+    rec = {
+        "top1": "diversity_dx", "top1_mean": 50.0,
+        "ranking": [("diversity_dx", 50.0), ("diversity_normal", 30.0),
+                    ("normal", 10.0)],
+        "decision": "switch", "decision_mode": "diversity_dx",
+    }
+    s = _make_mock_self(mode="auto", current="normal", rec=rec,
+                        is_transmitting=True)
+    result = RadioMixin._maybe_apply_bandpilot(s, "40m")
+    assert result is True
+    # Pending gespeichert, aber Modus NOCH NICHT gewechselt
+    s._set_rx_mode_direct.assert_not_called()
+    assert s._bandpilot_pending is not None
+    assert s._bandpilot_pending[3] == "diversity_dx"
+    s._show_bandpilot_auto_toast.assert_called_once()
+
+
+def test_on_bandpilot_tx_finished_applies_pending():
+    """tx_finished-Hook fuehrt gespeicherten Wechsel aus + leert pending."""
+    s = MagicMock()
+    s._bandpilot_pending = ("40m", 13, {}, "diversity_dx")
+    s._set_rx_mode_direct = MagicMock()
+    RadioMixin._on_bandpilot_tx_finished(s)
+    s._set_rx_mode_direct.assert_called_once_with("diversity_dx")
+    assert s._bandpilot_pending is None
+
+
+def test_on_bandpilot_tx_finished_noop_when_no_pending():
+    """Ohne pending-Wechsel: tx_finished tut nichts."""
+    s = MagicMock()
+    s._bandpilot_pending = None
+    s._set_rx_mode_direct = MagicMock()
+    RadioMixin._on_bandpilot_tx_finished(s)
     s._set_rx_mode_direct.assert_not_called()
 
 
