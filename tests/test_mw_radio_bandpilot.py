@@ -199,6 +199,7 @@ def test_on_bandpilot_tx_finished_applies_pending():
     """tx_finished-Hook fuehrt gespeicherten Wechsel aus + leert pending."""
     s = MagicMock()
     s._bandpilot_pending = ("40m", 13, {}, "diversity_dx")
+    s.settings.band = "40m"  # Band identisch → wechseln
     s._set_rx_mode_direct = MagicMock()
     RadioMixin._on_bandpilot_tx_finished(s)
     s._set_rx_mode_direct.assert_called_once_with("diversity_dx")
@@ -212,6 +213,23 @@ def test_on_bandpilot_tx_finished_noop_when_no_pending():
     s._set_rx_mode_direct = MagicMock()
     RadioMixin._on_bandpilot_tx_finished(s)
     s._set_rx_mode_direct.assert_not_called()
+
+
+def test_on_bandpilot_tx_finished_discards_when_band_changed():
+    """R1-Final-Finding: Band-Wechsel waehrend TX → pending verwerfen.
+
+    Szenario: User auf 20m → TX laeuft + Bandpilot pending fuer 20m →
+    User wechselt auf 40m waehrend TX → TX endet → KEIN Modus-Wechsel
+    (sonst wuerde der 20m-empfohlene Modus auf 40m gesetzt).
+    """
+    s = MagicMock()
+    s._bandpilot_pending = ("20m", 13, {}, "diversity_dx")
+    s.settings.band = "40m"  # User hat Band gewechselt
+    s._set_rx_mode_direct = MagicMock()
+    RadioMixin._on_bandpilot_tx_finished(s)
+    s._set_rx_mode_direct.assert_not_called()
+    # pending wird trotzdem geleert (kein Backlog)
+    assert s._bandpilot_pending is None
 
 
 # ── BandpilotAutoToast Smoke-Tests (Phase 6) ──────────────────────────────────

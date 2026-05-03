@@ -115,5 +115,10 @@ def write_bandpilot_md(
 
     output_dir.mkdir(parents=True, exist_ok=True)
     out_path = output_dir / f"Bandpilot-{band}-{ft_mode}.md"
-    out_path.write_text(md, encoding="utf-8")
+    # Atomarer Write (R1-Final-Finding 04.05.2026): bei parallelem Zugriff
+    # (App-Start + generate_plots.py) verhindert tmp+replace korrupte Datei
+    import os
+    tmp_path = out_path.with_suffix(out_path.suffix + ".tmp")
+    tmp_path.write_text(md, encoding="utf-8")
+    os.replace(tmp_path, out_path)
     return out_path

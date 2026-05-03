@@ -676,12 +676,24 @@ class RadioMixin:
         return True
 
     def _on_bandpilot_tx_finished(self):
-        """tx_finished-Hook: gespeicherten Bandpilot-Wechsel ausfuehren."""
+        """tx_finished-Hook: gespeicherten Bandpilot-Wechsel ausfuehren.
+
+        Band-Konsistenz-Pruefung (R1-Final-Finding 04.05.2026):
+        Wenn User waehrend TX das Band gewechselt hat, ist die pending-
+        Empfehlung ungueltig (sie galt fuer das alte Band). In dem Fall
+        wird die Empfehlung verworfen, kein Wechsel.
+        """
         pending = getattr(self, "_bandpilot_pending", None)
         if pending is None:
             return
-        _band, _utc_hour, _rec, target = pending
+        pending_band, _utc_hour, _rec, target = pending
         self._bandpilot_pending = None
+        # Aktuelles Band vs pending-Band: wenn unterschiedlich → verwerfen
+        current_band = getattr(self.settings, "band", None)
+        if current_band != pending_band:
+            print(f"[Bandpilot] Pending fuer {pending_band} verworfen "
+                  f"(aktuell: {current_band})")
+            return
         self._set_rx_mode_direct(target)
         sb = self.statusBar() if hasattr(self, "statusBar") else None
         if sb is not None:
