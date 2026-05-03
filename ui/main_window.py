@@ -266,9 +266,33 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         # v0.88: Bandpilot — Stunden-genaue Empfehlung (Replacement v0.87)
         from core.mode_recommender import HourlyBandpilot
         self._bandpilot = HourlyBandpilot()
+        self._bandpilot_pending = None
+        self._bandpilot_tx_connected = False
+        self._bandpilot_active_toast = None
+        self._bandpilot_active_dialog = None
+
+        # v0.88: Bandpilot-MD-Reports beim App-Start regenerieren
+        self._init_bandpilot_recommendations()
 
         # v0.78: Initial-Sichtbarkeit der 3 Mode-Buttons (rx_mode + Easter-Egg)
         self._update_button_visibility()
+
+    def _init_bandpilot_recommendations(self):
+        """Beim App-Start ``auswertung/Bandpilot-<band>-FT8.md`` neu generieren.
+
+        Aktuell loggt das Stats-Logger nur 20m + 40m FT8 (Stats-Filter v0.63).
+        Pro Band ~50ms — Sync-Aufruf akzeptabel.
+        """
+        from pathlib import Path
+        from core.bandpilot_md import write_bandpilot_md
+        base = Path(__file__).parent.parent
+        stats_dir = base / "statistics"
+        output_dir = base / "auswertung"
+        for band in ("20m", "40m"):
+            try:
+                write_bandpilot_md(stats_dir, output_dir, band, ft_mode="FT8")
+            except Exception as e:  # noqa: BLE001
+                print(f"[Bandpilot-MD] {band} fehlgeschlagen: {e}")
 
     def _init_psk_polling(self):
         """PSKReporter Timer (erste Abfrage nach 2 Min, danach alle 5 Min Rate-Limit)."""

@@ -1726,6 +1726,17 @@ def main():
             print(f"\n  --- PDF {band} {protocol} ({lang.upper()}) ---")
             create_pdf_report(combos, out_dir, lang=lang, band=band, protocol=protocol)
 
+    # v0.88 Bandpilot-MD-Reports (nur DE — V3-AK 15)
+    sys.path.insert(0, str(BASE_DIR))  # core/ importierbar machen
+    from core.bandpilot_md import write_bandpilot_md
+    print(f"\n{'='*50}\n  Generating Bandpilot-Empfehlungen (DE)\n{'='*50}")
+    for band, protocol in PDF_TARGETS:
+        try:
+            out = write_bandpilot_md(STATS_DIR, OUTPUT_DIR, band, ft_mode=protocol)
+            print(f"  → {out.relative_to(BASE_DIR)}")
+        except Exception as e:  # noqa: BLE001
+            print(f"  Bandpilot-MD {band} {protocol} fehlgeschlagen: {e}")
+
     print(f"\nDone. Output in: {OUTPUT_DIR}  and  {OUTPUT_DIR_EN}")
 
 
