@@ -66,8 +66,7 @@ DEFAULTS = {
     "language": "de",                # "de" = Deutsch, "en" = English (Hilfe-Texte + Docs)
     "stats_enabled": True,           # Stations-Statistik pro Zyklus loggen
     "debug_console_visible": False,  # Debug-Konsole ein/ausblenden
-    "bandpilot_enabled": False,      # v0.87 — RX-Modus automatisch waehlen bei Bandwechsel
-    "bandpilot_diversity_pref": "auto",  # "auto" | "standard" | "dx"
+    "bandpilot_mode": "off",         # v0.88 — "off" | "auto" | "manual"
 }
 
 
@@ -86,11 +85,39 @@ class Settings:
                 self._data.update(saved)
             except (json.JSONDecodeError, IOError):
                 pass
+        self._migrate_bandpilot_settings_v088()
+
+    def _migrate_bandpilot_settings_v088(self):
+        """v0.87 → v0.88 Migration: alte Bandpilot-Keys → bandpilot_mode.
+
+        Idempotent: Vorhandensein der ALTEN Keys triggert die Migration.
+        Nach Migration sind sie weg → zweiter Lauf ist No-op.
+        Loescht alten Cache ``bandpilot_summary.json``.
+        """
+        has_old_keys = ("bandpilot_enabled" in self._data
+                        or "bandpilot_diversity_pref" in self._data)
+        if not has_old_keys:
+            return  # frische Config oder schon migriert
+        old_enabled = self._data.pop("bandpilot_enabled", None)
+        self._data.pop("bandpilot_diversity_pref", None)
+        self._data["bandpilot_mode"] = "auto" if old_enabled is True else "off"
+
+        old_cache = Path.home() / ".simpleft8" / "bandpilot_summary.json"
+        if old_cache.exists():
+            try:
+                old_cache.unlink()
+            except OSError:
+                pass  # nicht kritisch
+
+        self.save()
 
     def save(self):
+        """Atomarer Write via tmp+replace (R1-Finding 2026-05-04)."""
         CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-        with open(CONFIG_FILE, "w") as f:
+        tmp = CONFIG_FILE.with_suffix(".tmp")
+        with open(tmp, "w") as f:
             json.dump(self._data, f, indent=2)
+        os.replace(tmp, CONFIG_FILE)
 
     def get(self, key, default=None):
         return self._data.get(key, default)
