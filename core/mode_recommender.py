@@ -1,31 +1,32 @@
-"""Bandpilot — RX-Modus-Empfehlung pro Band aus Statistik-Daten.
+"""Bandpilot — Stunden-genaue RX-Modus-Empfehlung pro Band aus Statistik.
 
-Hobby-Funker-Tool: User wechselt Band → Bandpilot empfiehlt automatisch
-den RX-Modus (Normal / Diversity Standard / Diversity DX) der in der
-bisherigen Messung den hoechsten Pooled-Mean an Stationen pro 15s-Zyklus
-geliefert hat.
+Hobby-Funker-Tool: User wechselt Band → Bandpilot prueft fuer die aktuelle
+UTC-Stunde welcher RX-Modus (Normal / Diversity Standard / Diversity DX)
+historisch am meisten Stationen gebracht hat, und entscheidet basierend
+auf Settings (off / auto / manual).
 
-Aggregations-Methodik (Mike-Entscheidung 2026-05-01, Kandidat A):
-    Vergleichswert Diversity = (Diversity_Normal + Diversity_Dx) / 2
-    Empfehlung = Normal vs Diversity-Aggregat
+Design v0.88 (Mike + R1 Konsens 2026-05-04):
 
-Begruendung Kandidat A: Alle drei Stats-Pfade
-(Normal / Diversity_Normal / Diversity_Dx) loggen dieselbe Metrik —
-Anzahl dekodierter Stationen pro Slot. Das halbiert die Mindest-Messzeit:
-ein Tag Diversity_Normal + ein Tag Diversity_Dx zaehlt fuer das Diversity-
-Aggregat als zwei Datentage statt nur als Halb-Daten.
+    Drei DIREKTE Stunden-Werte pro UTC-Stunde — KEINE Aggregation.
+    Begruendung: Std und DX repraesentieren unterschiedliche
+    Grundgesamtheiten (Antennen-Pattern, Win-Rate-Logik). Aggregat
+    ``(Std + DX) / 2`` aus v0.87 war statistisch nicht sauber, weil
+    nicht IID.
 
-Wenn Diversity gewinnt: der user-konfigurierbare ``diversity_pref``
-("auto"/"standard"/"dx") entscheidet welcher konkrete Modus aktiviert wird.
-"auto" = der Modus mit dem hoeheren individuellen Mean wird gewaehlt.
+    Empfehlung = Top-1 nach Stations-Mean. Toleranz ``max(5%, 1 Station)``
+    gegen den AKTUELLEN Modus (R1-Finding A): wenn der aktuelle Modus
+    nahe genug an Top-1 dran ist, kein Wechsel — sonst Wechsel zu Top-1.
 
-Threshold ``MIN_DAYS = 2`` pro Modus — gleiche Schwelle wie GitHub-Push-
-Minimum (CLAUDE.md "Statistik-Veroeffentlichung"). Unter MIN_DAYS oder
-MIN_CYCLES gibt ``recommend()`` ``None`` zurueck — User behaelt seinen
-manuell gesetzten Modus.
+    Stille bei zu wenig Daten in irgendeinem der drei Modi pro Stunde.
+    Schwellen: ``MIN_DAYS_HOUR = 3`` Messtage, ``MIN_CYCLES_HOUR = 20``
+    Slots in DIESER UTC-Stunde, alle drei Modi muessen erfuellen.
 
-Cache: ``~/.simpleft8/bandpilot_summary.json`` mit TTL 24h pro Band.
-Aggregation kostet bei 10+ Tagen ~50ms — Lazy-Load reicht.
+Cache: ``~/.simpleft8/bandpilot_hourly.json`` mit TTL 24h pro Band.
+Lazy-Aggregation — ``HourlyBandpilot.get_summary(band)`` nutzt Cache.
+
+Replacement von v0.87 ``Bandpilot``-Klasse + ``aggregate_stats`` +
+``recommend(diversity_pref)``: alte Aggregat-API ist komplett geloescht.
+Migration siehe ``config/settings.py:_migrate_bandpilot_settings_v088``.
 """
 
 from __future__ import annotations
@@ -36,37 +37,47 @@ import re
 import time
 from pathlib import Path
 
-# Mindest-Messtage pro Modus (Normal / Diversity_Normal / Diversity_Dx)
-# — unter dieser Schwelle gibt recommend() None zurueck (kein Auto-Switch).
-MIN_DAYS = 2
+# ── Schwellen pro Stunde (alle drei Modi muessen erfuellen) ──────────────
+MIN_DAYS_HOUR = 3
+MIN_CYCLES_HOUR = 20
 
-# Mindest-Zyklenzahl pro Modus — Schutz gegen Tage mit nur 1-2 Slots
-# (z.B. Mode-Wechsel-Artefakte in den ersten Sekunden einer Stunde).
-MIN_CYCLES = 50
-
-# Cache-TTL: nach 24h wird neu aggregiert (deckt einen ganzen Messtag ab).
+# Cache-TTL: 24h
 CACHE_TTL_S = 24 * 3600
 
-# Welche Modi gepruert werden — Reihenfolge entspricht Verzeichnisnamen.
-_RX_MODES = ("Normal", "Diversity_Normal", "Diversity_Dx")
+# ── Encoding-Konvention v0.88 (V3-AK 22) ──────────────────────────────
+# Code-Strings (interne Repraesentation, JSON-Keys)
+CODE_MODES: tuple[str, ...] = ("normal", "diversity_normal", "diversity_dx")
 
-# Stats-File-Format-Match (z.B. "2026-04-21_07.md").
-# Verhindert Treffer auf "2026-04-21_07 2.md" (macOS-Spotlight-Duplikate).
-_FILE_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})_\d{2}\.md$")
+# Stats-Verzeichnis-Mapping (Code-String → Verzeichnis-Name)
+STATS_DIR: dict[str, str] = {
+    "normal":           "Normal",
+    "diversity_normal": "Diversity_Normal",
+    "diversity_dx":     "Diversity_Dx",
+}
 
-# Stats-Tabellenzeile: "| HH:MM:SS | <count> | ..."
-# Erste Spalte muss eine Uhrzeit sein, zweite Spalte ist Stationsanzahl.
+# UI-Label (Toast, Dialog, MD-Datei)
+USER_LABEL: dict[str, str] = {
+    "normal":           "Normal",
+    "diversity_normal": "Diversity Standard",
+    "diversity_dx":     "Diversity DX",
+}
+
+# ── Datei-Format ──────────────────────────────────────────────────────
+# Stats-File-Namen z.B. "2026-04-21_07.md" (Datum_Stunde).
+# Das _2-Suffix-Pattern (macOS-Spotlight-Duplikat) wird nicht gematcht.
+_FILE_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})_(\d{2})\.md$")
 _TIME_RE = re.compile(r"^\d{2}:\d{2}:\d{2}$")
 
 
 def _parse_stats_file(path: Path) -> tuple[int, int]:
     """Eine Stats-MD-Datei lesen → (sum_count, num_cycles).
 
-    Format der relevanten Zeilen (Normal):  ``| HH:MM:SS | <int> | <snr> |``
-    Format Diversity (5 Spalten):           ``| HH:MM:SS | <int> | <snr> | <wins> | <delta> |``
+    Format der relevanten Zeilen:
+    ``| HH:MM:SS | <int> | <snr> |`` (Normal, 3 Spalten)
+    ``| HH:MM:SS | <int> | <snr> | <wins> | <delta> |`` (Diversity, 5 Spalten)
 
-    Defekte Zeilen (z.B. Header, Trenner, leere Werte) werden uebersprungen.
-    Bei IO-Fehler: (0, 0) — wir wollen Bandpilot nicht crashen lassen.
+    Defekte Zeilen (Header, Trenner, leere Werte) werden uebersprungen.
+    Bei IO-Fehler: ``(0, 0)`` — Bandpilot soll nie crashen.
     """
     sum_count = 0
     cycles = 0
@@ -91,112 +102,156 @@ def _parse_stats_file(path: Path) -> tuple[int, int]:
     return sum_count, cycles
 
 
-def _aggregate_mode(mode_dir: Path) -> dict:
-    """Alle MD-Dateien eines Modus-Verzeichnisses aggregieren.
+def _aggregate_mode_by_hour(mode_dir: Path) -> dict[int, dict]:
+    """Alle MD-Dateien eines Modus-Verzeichnisses pro UTC-Stunde aggregieren.
 
-    Returns: ``{"days": int, "cycles": int, "mean": float | None}``
-    ``mean`` ist Pooled Mean = sum(counts) / cycles. ``None`` wenn 0 Cycles.
+    Returns: ``{hour: {"days": int, "cycles": int, "mean": float}}``.
+    Stunden ohne Daten werden nicht in das Dict aufgenommen.
     """
     if not mode_dir.is_dir():
-        return {"days": 0, "cycles": 0, "mean": None}
+        return {}
 
-    days: set[str] = set()
-    sum_count = 0
-    cycles = 0
+    # state pro Stunde: {hour: {"days": set, "sum_count": int, "cycles": int}}
+    hour_state: dict[int, dict] = {}
 
     for entry in mode_dir.iterdir():
         m = _FILE_RE.match(entry.name)
         if not m:
             continue
         day = m.group(1)
+        hour = int(m.group(2))
         s, c = _parse_stats_file(entry)
         if c == 0:
             continue
-        sum_count += s
-        cycles += c
-        days.add(day)
+        if hour not in hour_state:
+            hour_state[hour] = {"days": set(), "sum_count": 0, "cycles": 0}
+        hour_state[hour]["days"].add(day)
+        hour_state[hour]["sum_count"] += s
+        hour_state[hour]["cycles"] += c
 
-    mean = sum_count / cycles if cycles > 0 else None
-    return {"days": len(days), "cycles": cycles, "mean": mean}
+    result: dict[int, dict] = {}
+    for hour, state in hour_state.items():
+        cycles = state["cycles"]
+        result[hour] = {
+            "days": len(state["days"]),
+            "cycles": cycles,
+            "mean": state["sum_count"] / cycles if cycles > 0 else None,
+        }
+    return result
 
 
-def aggregate_stats(stats_dir: Path, band: str, protocol: str = "FT8") -> dict:
-    """Stats fuer ein Band aggregieren ueber alle drei Modi.
+def aggregate_stats_by_hour(
+    stats_dir: Path, band: str, protocol: str = "FT8"
+) -> dict[int, dict[str, dict]]:
+    """Stats fuer ein Band stunden-aggregiert ueber alle drei Modi.
 
     Args:
-        stats_dir: ``<repo>/statistics`` — App-Root-relativ (portable).
+        stats_dir: ``<repo>/statistics`` — App-Root-relativ.
         band: ``"40m"``, ``"20m"`` etc.
         protocol: aktuell nur ``"FT8"`` (Stats-Logger filtert FT4/FT2).
 
-    Returns: dict mit drei Keys (Normal, Diversity_Normal, Diversity_Dx),
-             jeder mit ``{"days", "cycles", "mean"}``.
+    Returns: ``{hour: {mode_code: {"days", "cycles", "mean"}}}``.
+             Stunden ohne Daten in einem Modus → mode-Key fehlt im inneren
+             dict. Stunden ohne Daten in ALLEN Modi fehlen komplett.
     """
-    summary = {}
-    for mode in _RX_MODES:
-        mode_dir = stats_dir / mode / band / protocol
-        summary[mode] = _aggregate_mode(mode_dir)
-    return summary
+    result: dict[int, dict[str, dict]] = {}
+    for code in CODE_MODES:
+        mode_dir = stats_dir / STATS_DIR[code] / band / protocol
+        per_hour = _aggregate_mode_by_hour(mode_dir)
+        for hour, summary in per_hour.items():
+            if hour not in result:
+                result[hour] = {}
+            result[hour][code] = summary
+    return result
 
 
-def recommend(summary: dict, diversity_pref: str = "auto") -> str | None:
-    """Empfehlung aus aggregiertem Summary herleiten.
+def recommend_for_hour(
+    summary_24h: dict[int, dict[str, dict]],
+    hour: int,
+    current_mode: str | None,
+) -> dict | None:
+    """Empfehlung fuer eine bestimmte UTC-Stunde + aktuellen Modus.
 
     Args:
-        summary: Output von ``aggregate_stats()``.
-        diversity_pref: ``"auto"`` (besserer der beiden Diversity-Modi),
-                        ``"standard"`` (immer Diversity_Normal),
-                        ``"dx"`` (immer Diversity_Dx).
+        summary_24h: Output von ``aggregate_stats_by_hour()``.
+        hour: UTC-Stunde 0..23.
+        current_mode: aktueller RX-Modus-String oder ``None`` (z.B.
+            waehrend dx_tuning) — None → keine Empfehlung.
 
     Returns:
-        ``"normal"`` | ``"diversity_normal"`` | ``"diversity_dx"`` | ``None``.
-        ``None`` wenn auch nur ein Modus unter MIN_DAYS oder MIN_CYCLES liegt
-        (User behaelt manuellen Modus).
+        ``None`` wenn ``current_mode`` ist ``None`` ODER fuer die Stunde
+        nicht alle drei Modi MIN_DAYS_HOUR + MIN_CYCLES_HOUR erfuellen
+        ODER ``current_mode`` nicht im Vergleich vorkommt.
+
+        Sonst: ``dict`` mit:
+            - ``top1``: Code-String des Top-Modus
+            - ``top1_mean``: Pooled Mean Top-1
+            - ``ranking``: ``[(mode, mean), ...]`` 3-elementig, desc sortiert
+            - ``decision``: ``"no_change"`` | ``"switch"``
+            - ``decision_mode``: empfohlener neuer Modus (kann == current_mode
+              sein bei ``no_change``)
+
+    Toleranz-Regel (R1-Finding A, V3-AK 12):
+        Kein Wechsel wenn ``current_mean >= top1_mean - max(5%·top1_mean, 1)``.
+        Toleranz wird gegen den AKTUELLEN Modus gemessen, nicht gegen Top-2.
     """
-    n = summary.get("Normal", {})
-    s = summary.get("Diversity_Normal", {})
-    d = summary.get("Diversity_Dx", {})
+    if current_mode is None:
+        return None
 
-    for entry in (n, s, d):
-        if entry.get("days", 0) < MIN_DAYS:
+    modes_in_hour = summary_24h.get(hour, {})
+    if not modes_in_hour:
+        return None
+
+    means: dict[str, float] = {}
+    for code in CODE_MODES:
+        entry = modes_in_hour.get(code, {})
+        if (entry.get("days", 0) < MIN_DAYS_HOUR or
+                entry.get("cycles", 0) < MIN_CYCLES_HOUR or
+                entry.get("mean") is None):
             return None
-        if entry.get("cycles", 0) < MIN_CYCLES:
-            return None
-        if entry.get("mean") is None:
-            return None
+        means[code] = entry["mean"]
 
-    n_mean = n["mean"]
-    s_mean = s["mean"]
-    d_mean = d["mean"]
+    if current_mode not in means:
+        # Kann nicht passieren wenn alle 3 Code-Modi vorhanden,
+        # aber defensive: unbekannter current_mode-String.
+        return None
 
-    # Kandidat A: gewichtet 50/50, weil beide Diversity-Modi dieselbe
-    # Metrik (Stationen/Slot) loggen. Halbiert die Mindest-Messzeit.
-    div_aggregate = (s_mean + d_mean) / 2.0
+    # Sortieren descending → Top-1 erster Eintrag
+    ranking = sorted(means.items(), key=lambda x: x[1], reverse=True)
+    top1_mode, top1_mean = ranking[0]
 
-    if n_mean >= div_aggregate:
-        return "normal"
+    current_mean = means[current_mode]
+    tolerance = max(0.05 * top1_mean, 1.0)
 
-    if diversity_pref == "standard":
-        return "diversity_normal"
-    if diversity_pref == "dx":
-        return "diversity_dx"
-    # "auto" oder unbekannt: bessererer der beiden
-    return "diversity_normal" if s_mean >= d_mean else "diversity_dx"
+    if current_mean >= top1_mean - tolerance:
+        decision = "no_change"
+        decision_mode = current_mode
+    else:
+        decision = "switch"
+        decision_mode = top1_mode
+
+    return {
+        "top1": top1_mode,
+        "top1_mean": top1_mean,
+        "ranking": ranking,
+        "decision": decision,
+        "decision_mode": decision_mode,
+    }
 
 
-class BandpilotSummaryCache:
-    """Persistenter Cache pro Band fuer aggregierte Stats.
+class HourlyBandpilotCache:
+    """Persistenter Cache pro Band fuer stunden-aggregierte Stats.
 
-    Aggregation kostet bei 10+ Tagen ~50ms. Cache invalidert nach 24h
-    automatisch — naechster Aufruf re-aggregiert. Manueller Reset ueber
-    ``invalidate(band)`` falls noetig.
+    Datei ``~/.simpleft8/bandpilot_hourly.json``, Format:
+    ``{band: {ts: <unix>, summary: {hour_str: {mode: {...}}}}}``
+    JSON serialisiert int-Keys als Strings — beim Lesen zurueck konvertiert.
 
-    Datei: ``~/.simpleft8/bandpilot_summary.json``, Format:
-    ``{ "<band>": {"ts": <unix>, "summary": {...}} }``
+    Atomares Schreiben via tmp+replace.
     """
 
     def __init__(self, cache_path: Path | None = None):
         if cache_path is None:
-            cache_path = Path.home() / ".simpleft8" / "bandpilot_summary.json"
+            cache_path = Path.home() / ".simpleft8" / "bandpilot_hourly.json"
         self._path = Path(cache_path)
         self._data: dict = self._load()
 
@@ -212,8 +267,8 @@ class BandpilotSummaryCache:
             pass
         return {}
 
-    def get(self, band: str) -> dict | None:
-        """Cached Summary fuer band, wenn nicht abgelaufen. Sonst None."""
+    def get(self, band: str) -> dict[int, dict[str, dict]] | None:
+        """Cached Summary fuer band, wenn nicht abgelaufen. Sonst ``None``."""
         entry = self._data.get(band)
         if not entry:
             return None
@@ -221,11 +276,19 @@ class BandpilotSummaryCache:
         if (time.time() - ts) > CACHE_TTL_S:
             return None
         summary = entry.get("summary")
-        return summary if isinstance(summary, dict) else None
+        if not isinstance(summary, dict):
+            return None
+        # JSON-int-Keys sind Strings — zurueck konvertieren
+        try:
+            return {int(k): v for k, v in summary.items()}
+        except (TypeError, ValueError):
+            return None
 
-    def set(self, band: str, summary: dict) -> None:
+    def set(self, band: str, summary: dict[int, dict]) -> None:
         """Summary fuer band cachen + atomar persistieren."""
-        self._data[band] = {"ts": time.time(), "summary": summary}
+        # Int-Hours als Strings serialisieren (JSON-Limitation)
+        serialized = {str(k): v for k, v in summary.items()}
+        self._data[band] = {"ts": time.time(), "summary": serialized}
         self._save()
 
     def invalidate(self, band: str) -> None:
@@ -242,32 +305,38 @@ class BandpilotSummaryCache:
         os.replace(tmp, self._path)
 
 
-class Bandpilot:
-    """High-Level-API fuer das UI: ``recommend_for_band(band)`` reicht.
+class HourlyBandpilot:
+    """High-Level-API fuer das UI: Empfehlung pro (band, hour, current_mode).
 
-    Kapselt Aggregator + Cache. Lazy-Aggregation: Cache wird erst beim
-    ersten Aufruf pro Band gefuellt.
+    Kapselt Aggregator + Cache. Lazy-Aggregation pro Band — Cache wird
+    erst beim ersten Aufruf gefuellt.
     """
 
     def __init__(
         self,
         stats_dir: Path | None = None,
-        cache: BandpilotSummaryCache | None = None,
-        diversity_pref: str = "auto",
+        cache: HourlyBandpilotCache | None = None,
     ):
         if stats_dir is None:
             stats_dir = Path(__file__).parent.parent / "statistics"
         self._stats_dir = Path(stats_dir)
-        self._cache = cache if cache is not None else BandpilotSummaryCache()
-        self.diversity_pref = diversity_pref
+        self._cache = cache if cache is not None else HourlyBandpilotCache()
 
-    def recommend_for_band(self, band: str) -> str | None:
-        """Empfehlung fuer band, mit Cache-Fast-Path. None = nicht genug Daten."""
-        summary = self._cache.get(band)
-        if summary is None:
-            summary = aggregate_stats(self._stats_dir, band)
-            self._cache.set(band, summary)
-        return recommend(summary, diversity_pref=self.diversity_pref)
+    def get_summary(self, band: str) -> dict[int, dict[str, dict]]:
+        """Stunden-Summary fuer band, mit Cache-Fast-Path."""
+        cached = self._cache.get(band)
+        if cached is not None:
+            return cached
+        summary = aggregate_stats_by_hour(self._stats_dir, band)
+        self._cache.set(band, summary)
+        return summary
+
+    def recommend(
+        self, band: str, hour: int, current_mode: str | None,
+    ) -> dict | None:
+        """Empfehlung fuer (band, hour, current_mode)."""
+        summary = self.get_summary(band)
+        return recommend_for_hour(summary, hour, current_mode)
 
     def invalidate(self, band: str) -> None:
         """Cache fuer band invalidieren — naechster Aufruf re-aggregiert."""

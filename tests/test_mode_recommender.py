@@ -1,14 +1,16 @@
-"""Tests fuer core/mode_recommender.py — Bandpilot RX-Modus-Empfehlung.
+"""Tests fuer core/mode_recommender.py — Bandpilot v0.88 Stunden-Logik.
 
 Deckt ab:
-- _parse_stats_file: Normal- und Diversity-Format, kaputte Zeilen
-- _aggregate_mode: Tagesanzahl, Pooled Mean, Spotlight-Duplikate ignorieren
-- aggregate_stats: alle drei Modi parallel
-- recommend: MIN_DAYS / MIN_CYCLES Guards
-- recommend: Normal gewinnt
-- recommend: Diversity gewinnt mit diversity_pref auto/standard/dx
-- BandpilotSummaryCache: TTL, invalidate, atomare Persistenz
-- Bandpilot.recommend_for_band: End-to-End
+- _parse_stats_file: Normal/Diversity/kaputte Zeilen
+- _aggregate_mode_by_hour: pro UTC-Stunde gruppieren, Spotlight-Duplikate ignorieren
+- aggregate_stats_by_hour: alle drei Modi
+- recommend_for_hour: Toleranz-Regel, Schwellen, Edge-Cases
+- HourlyBandpilotCache: TTL, invalidate, atomare Persistenz, JSON-Round-Trip
+- HourlyBandpilot End-to-End
+
+Alte Kandidat-A-Tests (V0.87 Aggregat (S+D)/2) wurden komplett entfernt —
+das Konzept ist mit V0.88 obsolet (R1-Urteil 2026-05-04: Std und DX sind
+keine IID-Population, Aggregat erzeugt Bias).
 """
 
 import json
@@ -17,16 +19,15 @@ from pathlib import Path
 
 import pytest
 
-from core import mode_recommender as mr
 from core.mode_recommender import (
-    Bandpilot,
-    BandpilotSummaryCache,
-    MIN_CYCLES,
-    MIN_DAYS,
-    _aggregate_mode,
+    HourlyBandpilot,
+    HourlyBandpilotCache,
+    MIN_CYCLES_HOUR,
+    MIN_DAYS_HOUR,
+    _aggregate_mode_by_hour,
     _parse_stats_file,
-    aggregate_stats,
-    recommend,
+    aggregate_stats_by_hour,
+    recommend_for_hour,
 )
 
 
@@ -45,7 +46,6 @@ DIV_HEADER = (
 
 
 def _write_normal_file(path: Path, counts: list[int]):
-    """Erzeuge Normal-Stats-Datei mit gegebenen Stations-Counts."""
     path.parent.mkdir(parents=True, exist_ok=True)
     lines = [NORMAL_HEADER]
     for i, c in enumerate(counts):
@@ -54,7 +54,6 @@ def _write_normal_file(path: Path, counts: list[int]):
 
 
 def _write_div_file(path: Path, counts: list[int]):
-    """Erzeuge Diversity-Stats-Datei mit gegebenen Stations-Counts."""
     path.parent.mkdir(parents=True, exist_ok=True)
     lines = [DIV_HEADER]
     for i, c in enumerate(counts):
@@ -62,25 +61,43 @@ def _write_div_file(path: Path, counts: list[int]):
     path.write_text("".join(lines), encoding="utf-8")
 
 
-def _build_band_stats(
+def _build_band_hour_stats(
     base: Path,
     band: str,
+    hour: int,
     *,
     normal_days: dict[str, list[int]] | None = None,
     div_normal_days: dict[str, list[int]] | None = None,
     div_dx_days: dict[str, list[int]] | None = None,
 ):
-    """Baue Stats-Verzeichnis mit Tag→Counts-Mapping pro Modus."""
-    for mode, days_data, writer in (
+    """Stats-Verzeichnis bauen fuer EINE Stunde + alle 3 Modi.
+
+    Filename-Format: ``YYYY-MM-DD_HH.md``.
+    """
+    for mode_dir, days_data, writer in (
         ("Normal", normal_days, _write_normal_file),
         ("Diversity_Normal", div_normal_days, _write_div_file),
         ("Diversity_Dx", div_dx_days, _write_div_file),
     ):
         if not days_data:
             continue
-        mode_dir = base / mode / band / "FT8"
+        target = base / mode_dir / band / "FT8"
         for day, counts in days_data.items():
-            writer(mode_dir / f"{day}_12.md", counts)
+            writer(target / f"{day}_{hour:02d}.md", counts)
+
+
+def _summary_uniform(
+    *, normal_mean: float, std_mean: float, dx_mean: float,
+    days: int = MIN_DAYS_HOUR, cycles: int = MIN_CYCLES_HOUR,
+) -> dict[int, dict[str, dict]]:
+    """Synthetisches Summary fuer Stunde 12 mit gegebenen Means + Schwellen."""
+    return {
+        12: {
+            "normal":           {"days": days, "cycles": cycles, "mean": normal_mean},
+            "diversity_normal": {"days": days, "cycles": cycles, "mean": std_mean},
+            "diversity_dx":     {"days": days, "cycles": cycles, "mean": dx_mean},
+        }
+    }
 
 
 # ── _parse_stats_file ─────────────────────────────────────────────────────────
@@ -106,8 +123,8 @@ def test_parse_skips_broken_lines(tmp_path):
     path.write_text(
         NORMAL_HEADER
         + "| 12:00:00 | 7 | -20 |\n"
-        + "| ohne_zeit | 99 | -20 |\n"   # parts[0] keine Uhrzeit
-        + "| 12:01:00 | x | -20 |\n"     # parts[1] keine Zahl
+        + "| ohne_zeit | 99 | -20 |\n"
+        + "| 12:01:00 | x | -20 |\n"
         + "| 12:02:00 | 3 | -20 |\n",
         encoding="utf-8",
     )
@@ -121,156 +138,254 @@ def test_parse_missing_file_returns_zero(tmp_path):
     assert (s, c) == (0, 0)
 
 
-# ── _aggregate_mode ───────────────────────────────────────────────────────────
+# ── _aggregate_mode_by_hour ───────────────────────────────────────────────────
 
-def test_aggregate_mode_empty(tmp_path):
-    res = _aggregate_mode(tmp_path)
-    assert res == {"days": 0, "cycles": 0, "mean": None}
-
-
-def test_aggregate_mode_two_days(tmp_path):
-    _write_normal_file(tmp_path / "2026-04-21_12.md", [4, 6])      # day 1: 10 / 2
-    _write_normal_file(tmp_path / "2026-04-22_12.md", [10, 10, 10]) # day 2: 30 / 3
-    res = _aggregate_mode(tmp_path)
-    assert res["days"] == 2
-    assert res["cycles"] == 5
-    assert res["mean"] == pytest.approx(40 / 5)
+def test_aggregate_mode_by_hour_empty(tmp_path):
+    res = _aggregate_mode_by_hour(tmp_path)
+    assert res == {}
 
 
-def test_aggregate_mode_ignores_spotlight_duplicates(tmp_path):
+def test_aggregate_mode_by_hour_one_hour_two_days(tmp_path):
+    _write_normal_file(tmp_path / "2026-04-21_12.md", [4, 6])     # day 1
+    _write_normal_file(tmp_path / "2026-04-22_12.md", [10, 10, 10])  # day 2
+    res = _aggregate_mode_by_hour(tmp_path)
+    assert 12 in res
+    assert res[12]["days"] == 2
+    assert res[12]["cycles"] == 5
+    assert res[12]["mean"] == pytest.approx(40 / 5)
+
+
+def test_aggregate_mode_by_hour_groups_by_hour(tmp_path):
+    _write_normal_file(tmp_path / "2026-04-21_07.md", [10])
+    _write_normal_file(tmp_path / "2026-04-21_08.md", [20])
+    _write_normal_file(tmp_path / "2026-04-22_07.md", [12])
+    res = _aggregate_mode_by_hour(tmp_path)
+    assert set(res.keys()) == {7, 8}
+    assert res[7]["days"] == 2
+    assert res[7]["mean"] == pytest.approx(11.0)
+    assert res[8]["days"] == 1
+    assert res[8]["mean"] == pytest.approx(20.0)
+
+
+def test_aggregate_mode_by_hour_ignores_spotlight_duplicates(tmp_path):
     _write_normal_file(tmp_path / "2026-04-21_12.md", [10])
     _write_normal_file(tmp_path / "2026-04-21_12 2.md", [99])  # macOS-Artefakt
     _write_normal_file(tmp_path / "random_other.md", [99])     # nicht-matching
-    res = _aggregate_mode(tmp_path)
-    assert res["days"] == 1
-    assert res["cycles"] == 1
-    assert res["mean"] == 10.0
+    res = _aggregate_mode_by_hour(tmp_path)
+    assert 12 in res
+    assert res[12]["days"] == 1
+    assert res[12]["mean"] == pytest.approx(10.0)
 
 
-# ── aggregate_stats ───────────────────────────────────────────────────────────
+# ── aggregate_stats_by_hour ───────────────────────────────────────────────────
 
-def test_aggregate_stats_three_modes(tmp_path):
-    _build_band_stats(
-        tmp_path,
-        "40m",
-        normal_days={"2026-04-21": [10, 10], "2026-04-22": [10, 10, 10]},
-        div_normal_days={"2026-04-21": [15, 15], "2026-04-22": [15, 15, 15]},
-        div_dx_days={"2026-04-21": [12, 12], "2026-04-22": [12, 12, 12]},
+def test_aggregate_stats_by_hour_three_days_three_modes(tmp_path):
+    """V3-AK 32 #1: Drei Tage in einer Stunde, alle drei Modi."""
+    _build_band_hour_stats(
+        tmp_path, "40m", hour=12,
+        normal_days={
+            "2026-04-21": [10, 10, 10, 10, 10],
+            "2026-04-22": [10, 10, 10, 10, 10],
+            "2026-04-23": [10, 10, 10, 10, 10],
+        },
+        div_normal_days={
+            "2026-04-21": [15, 15, 15, 15, 15],
+            "2026-04-22": [15, 15, 15, 15, 15],
+            "2026-04-23": [15, 15, 15, 15, 15],
+        },
+        div_dx_days={
+            "2026-04-21": [12, 12, 12, 12, 12],
+            "2026-04-22": [12, 12, 12, 12, 12],
+            "2026-04-23": [12, 12, 12, 12, 12],
+        },
     )
-    res = aggregate_stats(tmp_path, "40m")
-    assert res["Normal"]["days"] == 2
-    assert res["Normal"]["mean"] == pytest.approx(10.0)
-    assert res["Diversity_Normal"]["mean"] == pytest.approx(15.0)
-    assert res["Diversity_Dx"]["mean"] == pytest.approx(12.0)
+    res = aggregate_stats_by_hour(tmp_path, "40m")
+    assert 12 in res
+    assert res[12]["normal"]["days"] == 3
+    assert res[12]["normal"]["mean"] == pytest.approx(10.0)
+    assert res[12]["diversity_normal"]["mean"] == pytest.approx(15.0)
+    assert res[12]["diversity_dx"]["mean"] == pytest.approx(12.0)
 
 
-def test_aggregate_stats_missing_band(tmp_path):
-    res = aggregate_stats(tmp_path, "20m")
-    for mode in ("Normal", "Diversity_Normal", "Diversity_Dx"):
-        assert res[mode] == {"days": 0, "cycles": 0, "mean": None}
+def test_aggregate_stats_by_hour_missing_band(tmp_path):
+    res = aggregate_stats_by_hour(tmp_path, "20m")
+    assert res == {}
 
 
-# ── recommend: Guards ─────────────────────────────────────────────────────────
+# ── recommend_for_hour: Edge-Cases (None, leere Stunde) ────────────────────────
 
-def _summary(n_days, n_cycles, n_mean,
-             s_days, s_cycles, s_mean,
-             d_days, d_cycles, d_mean):
-    return {
-        "Normal":           {"days": n_days, "cycles": n_cycles, "mean": n_mean},
-        "Diversity_Normal": {"days": s_days, "cycles": s_cycles, "mean": s_mean},
-        "Diversity_Dx":     {"days": d_days, "cycles": d_cycles, "mean": d_mean},
+def test_recommend_for_hour_current_mode_none_returns_none():
+    summary = _summary_uniform(normal_mean=10.0, std_mean=15.0, dx_mean=12.0)
+    assert recommend_for_hour(summary, 12, None) is None
+
+
+def test_recommend_for_hour_empty_hour_returns_none():
+    """V3-AK 32 #6: Stunde ohne Daten → None."""
+    summary = _summary_uniform(normal_mean=10.0, std_mean=15.0, dx_mean=12.0)
+    # Stunde 13 ist nicht im summary
+    assert recommend_for_hour(summary, 13, "normal") is None
+
+
+def test_recommend_for_hour_insufficient_one_mode_returns_none():
+    """V3-AK 32 #6: Wenn ein Modus unter MIN_DAYS_HOUR → None."""
+    summary = {
+        12: {
+            "normal":           {"days": MIN_DAYS_HOUR - 1,
+                                  "cycles": MIN_CYCLES_HOUR, "mean": 10.0},
+            "diversity_normal": {"days": MIN_DAYS_HOUR,
+                                  "cycles": MIN_CYCLES_HOUR, "mean": 15.0},
+            "diversity_dx":     {"days": MIN_DAYS_HOUR,
+                                  "cycles": MIN_CYCLES_HOUR, "mean": 12.0},
+        }
     }
+    assert recommend_for_hour(summary, 12, "normal") is None
 
 
-def test_recommend_insufficient_days_returns_none():
-    s = _summary(1, 999, 10.0, 5, 999, 15.0, 5, 999, 12.0)  # Normal hat nur 1 Tag
-    assert recommend(s) is None
+def test_recommend_for_hour_insufficient_cycles_returns_none():
+    summary = {
+        12: {
+            "normal":           {"days": MIN_DAYS_HOUR,
+                                  "cycles": MIN_CYCLES_HOUR - 1, "mean": 10.0},
+            "diversity_normal": {"days": MIN_DAYS_HOUR,
+                                  "cycles": MIN_CYCLES_HOUR, "mean": 15.0},
+            "diversity_dx":     {"days": MIN_DAYS_HOUR,
+                                  "cycles": MIN_CYCLES_HOUR, "mean": 12.0},
+        }
+    }
+    assert recommend_for_hour(summary, 12, "normal") is None
 
 
-def test_recommend_insufficient_cycles_returns_none():
-    s = _summary(5, MIN_CYCLES - 1, 10.0, 5, 999, 15.0, 5, 999, 12.0)
-    assert recommend(s) is None
+def test_recommend_for_hour_current_mode_no_data_returns_none():
+    """V3-AK 32 #7: current_mode hat keine Daten in der Stunde → None.
+
+    Edge-Case R1-3: Stunde existiert, aber EIN Modus fehlt komplett —
+    insufficient-data-Path greift, weil der fehlende Modus ist == None.
+    """
+    summary = {
+        12: {
+            "normal":           {"days": MIN_DAYS_HOUR,
+                                  "cycles": MIN_CYCLES_HOUR, "mean": 10.0},
+            "diversity_normal": {"days": MIN_DAYS_HOUR,
+                                  "cycles": MIN_CYCLES_HOUR, "mean": 15.0},
+            # diversity_dx fehlt komplett
+        }
+    }
+    assert recommend_for_hour(summary, 12, "diversity_dx") is None
 
 
-def test_recommend_none_mean_returns_none():
-    s = _summary(5, 999, None, 5, 999, 15.0, 5, 999, 12.0)
-    assert recommend(s) is None
+# ── recommend_for_hour: Hauptlogik ────────────────────────────────────────────
+
+def test_recommend_for_hour_normal_top1_no_change():
+    """V3-AK 32 #2: Top-1 == aktueller Modus → no_change."""
+    summary = _summary_uniform(normal_mean=20.0, std_mean=10.0, dx_mean=5.0)
+    res = recommend_for_hour(summary, 12, "normal")
+    assert res is not None
+    assert res["top1"] == "normal"
+    assert res["top1_mean"] == pytest.approx(20.0)
+    assert res["decision"] == "no_change"
+    assert res["decision_mode"] == "normal"
+    # Ranking: 3-elementig, sortiert
+    assert [r[0] for r in res["ranking"]] == ["normal", "diversity_normal", "diversity_dx"]
 
 
-# ── recommend: Entscheidungslogik ─────────────────────────────────────────────
-
-def test_recommend_normal_wins():
-    # Normal=20, (Div_S+Div_D)/2 = (15+12)/2 = 13.5 → Normal
-    s = _summary(MIN_DAYS, MIN_CYCLES, 20.0,
-                 MIN_DAYS, MIN_CYCLES, 15.0,
-                 MIN_DAYS, MIN_CYCLES, 12.0)
-    assert recommend(s) == "normal"
-
-
-def test_recommend_diversity_auto_picks_standard():
-    # Normal=10, (15+12)/2=13.5 → Diversity, auto: max(15,12)=15 → standard
-    s = _summary(MIN_DAYS, MIN_CYCLES, 10.0,
-                 MIN_DAYS, MIN_CYCLES, 15.0,
-                 MIN_DAYS, MIN_CYCLES, 12.0)
-    assert recommend(s, diversity_pref="auto") == "diversity_normal"
+def test_recommend_for_hour_diversity_dx_top1_switch():
+    """V3-AK 32 #3: Top-1 != aktueller Modus + grosse Differenz → switch."""
+    # Normal=10, Std=15, DX=40 (current=normal). 40-10=30 > Toleranz max(2,1)=2.
+    summary = _summary_uniform(normal_mean=10.0, std_mean=15.0, dx_mean=40.0)
+    res = recommend_for_hour(summary, 12, "normal")
+    assert res is not None
+    assert res["top1"] == "diversity_dx"
+    assert res["decision"] == "switch"
+    assert res["decision_mode"] == "diversity_dx"
 
 
-def test_recommend_diversity_auto_picks_dx():
-    # Normal=10, (12+18)/2=15 → Diversity, auto: max(12,18)=18 → dx
-    s = _summary(MIN_DAYS, MIN_CYCLES, 10.0,
-                 MIN_DAYS, MIN_CYCLES, 12.0,
-                 MIN_DAYS, MIN_CYCLES, 18.0)
-    assert recommend(s, diversity_pref="auto") == "diversity_dx"
+def test_recommend_for_hour_tolerance_5pct_keeps_current():
+    """V3-AK 32 #4: 5%-Toleranz greift, kein Wechsel."""
+    # Top-1 = 40, current = 39. 5% von 40 = 2. 40-39 = 1 < 2 → no_change.
+    summary = _summary_uniform(normal_mean=39.0, std_mean=10.0, dx_mean=40.0)
+    res = recommend_for_hour(summary, 12, "normal")
+    assert res is not None
+    assert res["top1"] == "diversity_dx"
+    assert res["decision"] == "no_change"
+    assert res["decision_mode"] == "normal"
 
 
-def test_recommend_diversity_pref_standard_forces_standard():
-    # Auto wuerde dx waehlen (18>12), aber pref=standard zwingt diversity_normal
-    s = _summary(MIN_DAYS, MIN_CYCLES, 10.0,
-                 MIN_DAYS, MIN_CYCLES, 12.0,
-                 MIN_DAYS, MIN_CYCLES, 18.0)
-    assert recommend(s, diversity_pref="standard") == "diversity_normal"
+def test_recommend_for_hour_tolerance_1station_keeps_current():
+    """V3-AK 32 #5: 1-Station-Toleranz bei kleinen Means."""
+    # Top-1 = 5, current = 4.5. 5% von 5 = 0.25, max(0.25, 1) = 1.
+    # 5-4.5 = 0.5 < 1 → no_change.
+    summary = _summary_uniform(normal_mean=4.5, std_mean=3.0, dx_mean=5.0)
+    res = recommend_for_hour(summary, 12, "normal")
+    assert res is not None
+    assert res["decision"] == "no_change"
+    assert res["decision_mode"] == "normal"
 
 
-def test_recommend_diversity_pref_dx_forces_dx():
-    # Auto wuerde standard waehlen (18>12), aber pref=dx zwingt diversity_dx
-    s = _summary(MIN_DAYS, MIN_CYCLES, 10.0,
-                 MIN_DAYS, MIN_CYCLES, 18.0,
-                 MIN_DAYS, MIN_CYCLES, 12.0)
-    assert recommend(s, diversity_pref="dx") == "diversity_dx"
+def test_recommend_for_hour_tolerance_5pct_switches():
+    """5%-Toleranz NICHT erfuellt → switch."""
+    # Top-1 = 40, current = 30. 40-30 = 10 > max(2, 1) = 2 → switch.
+    summary = _summary_uniform(normal_mean=30.0, std_mean=10.0, dx_mean=40.0)
+    res = recommend_for_hour(summary, 12, "normal")
+    assert res is not None
+    assert res["decision"] == "switch"
+    assert res["decision_mode"] == "diversity_dx"
 
 
-def test_recommend_normal_pref_ignored_when_normal_wins():
-    # Normal gewinnt unabhaengig von diversity_pref
-    s = _summary(MIN_DAYS, MIN_CYCLES, 100.0,
-                 MIN_DAYS, MIN_CYCLES, 5.0,
-                 MIN_DAYS, MIN_CYCLES, 5.0)
-    assert recommend(s, diversity_pref="dx") == "normal"
+def test_recommend_for_hour_hourly_thresholds_constants():
+    """V3-AK 32 #8: MIN_DAYS_HOUR=3, MIN_CYCLES_HOUR=20."""
+    assert MIN_DAYS_HOUR == 3
+    assert MIN_CYCLES_HOUR == 20
 
 
-# ── BandpilotSummaryCache ─────────────────────────────────────────────────────
+def test_recommend_for_hour_ranking_descending():
+    """Ranking immer absteigend nach mean sortiert."""
+    summary = _summary_uniform(normal_mean=10.0, std_mean=30.0, dx_mean=20.0)
+    res = recommend_for_hour(summary, 12, "normal")
+    assert res is not None
+    means_in_order = [r[1] for r in res["ranking"]]
+    assert means_in_order == sorted(means_in_order, reverse=True)
+    assert res["ranking"][0][0] == "diversity_normal"
+
+
+# ── HourlyBandpilotCache ──────────────────────────────────────────────────────
 
 def test_cache_set_and_get(tmp_path):
-    cache = BandpilotSummaryCache(tmp_path / "cache.json")
-    summary = {"Normal": {"days": 2, "cycles": 100, "mean": 10.0}}
+    cache = HourlyBandpilotCache(tmp_path / "cache.json")
+    summary = {12: {"normal": {"days": 3, "cycles": 50, "mean": 10.0}}}
     cache.set("40m", summary)
-    assert cache.get("40m") == summary
+    got = cache.get("40m")
+    assert got is not None
+    assert got[12]["normal"]["mean"] == pytest.approx(10.0)
+
+
+def test_cache_int_keys_round_trip(tmp_path):
+    """JSON serialisiert int-keys als str — beim Lesen zurueck konvertieren."""
+    cache_path = tmp_path / "cache.json"
+    cache = HourlyBandpilotCache(cache_path)
+    summary = {7: {"normal": {"days": 3, "cycles": 50, "mean": 5.0}},
+               13: {"normal": {"days": 3, "cycles": 50, "mean": 10.0}}}
+    cache.set("40m", summary)
+    cache2 = HourlyBandpilotCache(cache_path)  # neu laden
+    got = cache2.get("40m")
+    assert got is not None
+    assert set(got.keys()) == {7, 13}
+    assert all(isinstance(k, int) for k in got.keys())
 
 
 def test_cache_ttl_expires(tmp_path):
     cache_path = tmp_path / "cache.json"
-    cache = BandpilotSummaryCache(cache_path)
-    cache.set("40m", {"x": 1})
-    # Datei manipulieren: Timestamp 25h alt
+    cache = HourlyBandpilotCache(cache_path)
+    cache.set("40m", {12: {"normal": {"days": 3, "cycles": 50, "mean": 1.0}}})
     raw = json.loads(cache_path.read_text())
-    raw["40m"]["ts"] = time.time() - 25 * 3600
+    raw["40m"]["ts"] = time.time() - 25 * 3600  # 25h alt
     cache_path.write_text(json.dumps(raw))
-    cache2 = BandpilotSummaryCache(cache_path)  # neu laden
+    cache2 = HourlyBandpilotCache(cache_path)
     assert cache2.get("40m") is None
 
 
 def test_cache_invalidate(tmp_path):
-    cache = BandpilotSummaryCache(tmp_path / "cache.json")
-    cache.set("40m", {"x": 1})
+    cache = HourlyBandpilotCache(tmp_path / "cache.json")
+    cache.set("40m", {12: {"normal": {"days": 3, "cycles": 50, "mean": 1.0}}})
     cache.invalidate("40m")
     assert cache.get("40m") is None
 
@@ -278,100 +393,68 @@ def test_cache_invalidate(tmp_path):
 def test_cache_corrupted_json_returns_empty(tmp_path):
     cache_path = tmp_path / "cache.json"
     cache_path.write_text("{ not valid json")
-    cache = BandpilotSummaryCache(cache_path)
+    cache = HourlyBandpilotCache(cache_path)
     assert cache.get("40m") is None
 
 
-def test_cache_persists_across_instances(tmp_path):
-    cache1 = BandpilotSummaryCache(tmp_path / "cache.json")
-    cache1.set("40m", {"hello": "world"})
-    cache2 = BandpilotSummaryCache(tmp_path / "cache.json")
-    assert cache2.get("40m") == {"hello": "world"}
+def test_cache_atomic_write_no_partial_file(tmp_path):
+    """Cache-Save schreibt erst tmp, dann replace — keine half-written
+    config.json moeglich."""
+    cache_path = tmp_path / "cache.json"
+    cache = HourlyBandpilotCache(cache_path)
+    cache.set("40m", {12: {"normal": {"days": 3, "cycles": 50, "mean": 5.0}}})
+    # Nach Save: Datei existiert + keine .tmp-Reste
+    assert cache_path.exists()
+    assert not (tmp_path / "cache.tmp").exists()
 
 
-# ── Bandpilot End-to-End ──────────────────────────────────────────────────────
+# ── HourlyBandpilot End-to-End ────────────────────────────────────────────────
 
-def test_bandpilot_recommend_for_band(tmp_path):
+def test_hourly_bandpilot_recommend_uses_cache(tmp_path):
+    """Zweiter Aufruf nutzt Cache (Stats geloescht → Cache haelt Wert)."""
     stats = tmp_path / "stats"
     cache_path = tmp_path / "cache.json"
-    _build_band_stats(
-        stats,
-        "40m",
-        normal_days={
-            "2026-04-21": [10] * 30, "2026-04-22": [10] * 30,
-        },
-        div_normal_days={
-            "2026-04-21": [20] * 30, "2026-04-22": [20] * 30,
-        },
-        div_dx_days={
-            "2026-04-21": [15] * 30, "2026-04-22": [15] * 30,
-        },
+    _build_band_hour_stats(
+        stats, "40m", hour=12,
+        normal_days={f"2026-04-{d:02d}": [10] * 10 for d in range(21, 24)},
+        div_normal_days={f"2026-04-{d:02d}": [20] * 10 for d in range(21, 24)},
+        div_dx_days={f"2026-04-{d:02d}": [15] * 10 for d in range(21, 24)},
     )
-    bp = Bandpilot(stats_dir=stats, cache=BandpilotSummaryCache(cache_path))
-    result = bp.recommend_for_band("40m")
-    # Normal=10, (20+15)/2=17.5 → Diversity, auto: max(20,15)=20 → standard
-    assert result == "diversity_normal"
-
-
-def test_bandpilot_uses_cache_on_second_call(tmp_path):
-    """Zweiter Call muss Cache verwenden — kein erneutes Aggregieren."""
-    stats = tmp_path / "stats"
-    cache_path = tmp_path / "cache.json"
-    _build_band_stats(
-        stats, "40m",
-        normal_days={"2026-04-21": [5] * MIN_CYCLES, "2026-04-22": [5] * MIN_CYCLES},
-        div_normal_days={"2026-04-21": [10] * MIN_CYCLES, "2026-04-22": [10] * MIN_CYCLES},
-        div_dx_days={"2026-04-21": [10] * MIN_CYCLES, "2026-04-22": [10] * MIN_CYCLES},
-    )
-    cache = BandpilotSummaryCache(cache_path)
-    bp = Bandpilot(stats_dir=stats, cache=cache)
-    bp.recommend_for_band("40m")
-    # Nun Stats wegloeschen → wenn Cache verwendet wird, klappt 2. Call trotzdem
+    bp = HourlyBandpilot(stats_dir=stats, cache=HourlyBandpilotCache(cache_path))
+    first = bp.recommend("40m", 12, "normal")
+    assert first is not None
+    # Stats wegloeschen → Cache haelt
     import shutil
     shutil.rmtree(stats)
-    result = bp.recommend_for_band("40m")
-    assert result is not None  # Cache hat noch Daten
+    second = bp.recommend("40m", 12, "normal")
+    assert second is not None
+    assert second["top1"] == first["top1"]
 
 
-def test_bandpilot_insufficient_data_returns_none(tmp_path):
+def test_hourly_bandpilot_insufficient_data_returns_none(tmp_path):
     stats = tmp_path / "stats"
-    # nur 1 Tag → unter MIN_DAYS → None
-    _build_band_stats(
-        stats, "40m",
-        normal_days={"2026-04-21": [10] * 100},
+    _build_band_hour_stats(
+        stats, "40m", hour=12,
+        normal_days={"2026-04-21": [10] * 100},  # nur 1 Tag
         div_normal_days={"2026-04-21": [15] * 100},
         div_dx_days={"2026-04-21": [12] * 100},
     )
-    bp = Bandpilot(stats_dir=stats, cache=BandpilotSummaryCache(tmp_path / "c.json"))
-    assert bp.recommend_for_band("40m") is None
+    bp = HourlyBandpilot(stats_dir=stats,
+                         cache=HourlyBandpilotCache(tmp_path / "c.json"))
+    assert bp.recommend("40m", 12, "normal") is None
 
 
-def test_bandpilot_invalidate_forces_reaggregate(tmp_path):
+def test_hourly_bandpilot_invalidate(tmp_path):
     stats = tmp_path / "stats"
     cache_path = tmp_path / "cache.json"
-    _build_band_stats(
-        stats, "40m",
-        normal_days={"2026-04-21": [5] * MIN_CYCLES, "2026-04-22": [5] * MIN_CYCLES},
-        div_normal_days={"2026-04-21": [10] * MIN_CYCLES, "2026-04-22": [10] * MIN_CYCLES},
-        div_dx_days={"2026-04-21": [10] * MIN_CYCLES, "2026-04-22": [10] * MIN_CYCLES},
+    _build_band_hour_stats(
+        stats, "40m", hour=12,
+        normal_days={f"2026-04-{d:02d}": [10] * 10 for d in range(21, 24)},
+        div_normal_days={f"2026-04-{d:02d}": [20] * 10 for d in range(21, 24)},
+        div_dx_days={f"2026-04-{d:02d}": [15] * 10 for d in range(21, 24)},
     )
-    bp = Bandpilot(stats_dir=stats, cache=BandpilotSummaryCache(cache_path))
-    bp.recommend_for_band("40m")  # populated cache
+    bp = HourlyBandpilot(stats_dir=stats, cache=HourlyBandpilotCache(cache_path))
+    bp.recommend("40m", 12, "normal")
     bp.invalidate("40m")
-    # Nach invalidate ist der Cache fuer 40m leer → recommend_for_band re-aggregiert
     raw = json.loads(cache_path.read_text())
     assert "40m" not in raw
-
-
-def test_bandpilot_diversity_pref_propagates(tmp_path):
-    stats = tmp_path / "stats"
-    _build_band_stats(
-        stats, "40m",
-        normal_days={"2026-04-21": [5] * MIN_CYCLES, "2026-04-22": [5] * MIN_CYCLES},
-        div_normal_days={"2026-04-21": [10] * MIN_CYCLES, "2026-04-22": [10] * MIN_CYCLES},
-        div_dx_days={"2026-04-21": [20] * MIN_CYCLES, "2026-04-22": [20] * MIN_CYCLES},
-    )
-    cache = BandpilotSummaryCache(tmp_path / "c.json")
-    # diversity_pref="standard" muss auch wenn dx-Mean groesser ist Standard waehlen
-    bp_std = Bandpilot(stats_dir=stats, cache=cache, diversity_pref="standard")
-    assert bp_std.recommend_for_band("40m") == "diversity_normal"

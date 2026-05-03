@@ -374,16 +374,6 @@ class RadioMixin:
             self.control_panel.set_rx_mode("normal")
             return
 
-        # Bandpilot-Override: User-Klick auf btn_normal/btn_diversity
-        # = Override fuer aktuelles Band. Reset erst beim naechsten
-        # Bandwechsel ZU diesem Band. Wenn Bandpilot programmatisch
-        # gerade wechselt → Flag aktiv → kein Override speichern.
-        if (not getattr(self, "_bandpilot_setting_mode", False)
-                and self.settings.get("bandpilot_enabled", False)):
-            band_now = self.settings.band
-            if hasattr(self, "_bandpilot_overridden_bands"):
-                self._bandpilot_overridden_bands.add(band_now)
-
         old_mode = self._rx_mode
         # v0.78: bei RX-Mode-Wechsel Easter-Egg-Override und aktive Power-Modi stoppen
         if mode != old_mode:
@@ -578,91 +568,46 @@ class RadioMixin:
         """Programmatischer RX-Modus-Wechsel — umgeht den Standard/DX-Dialog.
 
         Wird vom Bandpilot aufgerufen wenn aufgrund der Statistik ein
-        bestimmter Modus empfohlen wird. Setzt _bandpilot_setting_mode-Flag
-        damit _on_rx_mode_changed daraus keinen User-Override macht.
+        bestimmter Modus empfohlen wird.
 
         Args:
             target: 'normal' | 'diversity_normal' | 'diversity_dx'.
         """
-        self._bandpilot_setting_mode = True
-        try:
-            current = self._current_rx_mode_string()
-            if current == target:
-                return  # nichts zu tun
+        current = self._current_rx_mode_string()
+        if current == target:
+            return  # nichts zu tun
 
-            if target == "normal":
-                if self._rx_mode == "diversity":
-                    self._disable_diversity()
-                self._rx_mode = "normal"
-                self._apply_normal_mode()
-                self.control_panel.set_rx_mode("normal")
-                self.control_panel.btn_diversity.setText("DIVERSITY")
-                self.control_panel._freq_hist.setVisible(False)
-            elif target in ("diversity_normal", "diversity_dx"):
-                scoring = "normal" if target == "diversity_normal" else "dx"
-                if self._rx_mode == "diversity":
-                    # Modus-Wechsel innerhalb Diversity (Standard ↔ DX)
-                    self._disable_diversity()
-                self.control_panel.set_rx_mode("diversity")
-                self._activate_diversity_with_scoring(scoring)
+        if target == "normal":
+            if self._rx_mode == "diversity":
+                self._disable_diversity()
+            self._rx_mode = "normal"
+            self._apply_normal_mode()
+            self.control_panel.set_rx_mode("normal")
+            self.control_panel.btn_diversity.setText("DIVERSITY")
+            self.control_panel._freq_hist.setVisible(False)
+        elif target in ("diversity_normal", "diversity_dx"):
+            scoring = "normal" if target == "diversity_normal" else "dx"
+            if self._rx_mode == "diversity":
+                # Modus-Wechsel innerhalb Diversity (Standard ↔ DX)
+                self._disable_diversity()
+            self.control_panel.set_rx_mode("diversity")
+            self._activate_diversity_with_scoring(scoring)
 
-            if hasattr(self, "_easter_egg_active"):
-                self._update_button_visibility()
-            self._update_statusbar()
-        finally:
-            self._bandpilot_setting_mode = False
+        if hasattr(self, "_easter_egg_active"):
+            self._update_button_visibility()
+        self._update_statusbar()
 
     def _maybe_apply_bandpilot(self, band: str) -> bool:
-        """Bandpilot-Empfehlung fuer Band pruefen + ggf. RX-Modus wechseln.
+        """Bandpilot-Empfehlung pruefen — Stunden-Logik kommt in Phase 5b.
 
-        Override-Mechanismus: hatte der User fuer dieses Band manuell einen
-        anderen Modus gewaehlt (Override-Flag gesetzt), respektieren wir das
-        bei diesem einen Bandwechsel und loeschen das Flag — der naechste
-        Bandwechsel zu diesem Band greift dann wieder regulaer.
+        TODO Phase 5b (v0.88): aktuelle UTC-Stunde holen, summary aus
+        HourlyBandpilot ziehen, Auto-/Manuell-Pfad ausfuehren.
+        Aktuell No-op-Stub damit Phase 1 (mode_recommender Backend-
+        Refactor) atomar committed werden kann ohne UI-Bruch.
 
-        Returns True wenn ein Wechsel stattgefunden hat (Caller skippt dann
-        den normalen Diversity-Preset-Check). False wenn Bandpilot aus,
-        Override aktiv, zu wenig Daten oder Empfehlung == aktueller Modus.
+        Returns True wenn Modus-Wechsel stattgefunden — sonst False.
         """
-        if not hasattr(self, "_bandpilot"):
-            return False  # Init-Reihenfolge-Schutz (sollte nicht passieren)
-        if not self.settings.get("bandpilot_enabled", False):
-            return False
-
-        # Override pro Band: einen Bandwechsel respektieren, dann Reset
-        if band in self._bandpilot_overridden_bands:
-            self._bandpilot_overridden_bands.discard(band)
-            print(f"[Bandpilot] {band}: User-Override aktiv — kein Auto-Switch")
-            return False
-
-        # Pref aus Settings nachfuehren (User kann zwischen Standard/DX/Auto
-        # waehlen ohne dass App neu starten muss).
-        self._bandpilot.diversity_pref = self.settings.get(
-            "bandpilot_diversity_pref", "auto"
-        )
-
-        try:
-            rec = self._bandpilot.recommend_for_band(band)
-        except Exception as e:
-            print(f"[Bandpilot] Aggregations-Fehler: {e}")
-            return False
-
-        if rec is None:
-            print(f"[Bandpilot] {band}: zu wenig Daten — kein Auto-Switch")
-            return False
-
-        current = self._current_rx_mode_string()
-        if rec == current:
-            return False
-
-        label = self._bandpilot_label(rec)
-        print(f"[Bandpilot] {band}: Empfehlung {label} (aktuell: {current})")
-        self._set_rx_mode_direct(rec)
-
-        sb = self.statusBar() if hasattr(self, "statusBar") else None
-        if sb is not None:
-            sb.showMessage(f"Bandpilot: {label} fuer {band}", 3000)
-        return True
+        return False
 
     def _set_cq_locked(self, locked: bool):
         """CQ + Hunt sperren waehrend Diversity-Einmessen.
