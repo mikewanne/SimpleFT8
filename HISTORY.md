@@ -5,6 +5,87 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-04 v0.88 — Bandpilot Stunden-Refactor
+
+**Konzept-Bruch ggu v0.87:** der globale Pooled-Mean + Aggregat
+``(Diversity_Std + Diversity_DX) / 2`` ist statistisch nicht sauber
+(R1-Urteil 2026-05-04: Std und DX sind keine IID-Population, Aggregat
+erzeugt Bias). Ersatz durch **drei direkte Werte pro UTC-Stunde**
+ohne Aggregation. Empfehlung via max-Pick mit Toleranz
+``max(5%, 1 Station)`` gegen den AKTUELLEN Modus (R1-Finding A:
+Toleranz nicht gegen Top-2, sondern gegen aktuellen Modus messen,
+sonst Edge-Case wenn Top-1+Top-2 eng beieinander aber weit ueber
+aktuell liegen).
+
+**Workflow:** V1 (Mike-Konsens 04.05.) → V2 (Self-Review 25 neue AKs)
+→ R1-Review (5 KRITISCH + 3 OPTIONAL Findings) → V3 (36 AKs konsolidiert)
+→ Mike-Freigabe → 13 atomare Commits → Final-R1 (1 KRITISCH +
+2 EMPFEHLUNGEN) → Fix-Commit.
+
+**Settings v0.87 → v0.88 Migration (idempotent):**
+- ``bandpilot_enabled = false`` → ``bandpilot_mode = "off"``
+- ``bandpilot_enabled = true`` → ``bandpilot_mode = "auto"``
+- ``bandpilot_diversity_pref`` wird verworfen
+- Alter Cache ``~/.simpleft8/bandpilot_summary.json`` wird geloescht
+- Plus ``Settings.save()`` jetzt atomar via ``os.replace`` (R1-Finding 1)
+
+**Neue Dateien:**
+- ``core/bandpilot_md.py`` — MD-Generator fuer
+  ``auswertung/Bandpilot-<band>-FT8.md`` (24-Zeilen-Tabelle, Top-1)
+- ``ui/bandpilot_dialogs.py`` — ``BandpilotAutoToast`` (3s self-close,
+  parent-zentriert, Frameless+Tool, ``WA_DeleteOnClose``) +
+  ``BandpilotManualDialog`` (3 Buttons, 1/2/3-Marker, Top-1 gruen,
+  ●-Marker fuer aktuellen Modus)
+- ``tests/test_bandpilot_md.py`` (14 Tests)
+- ``tests/test_settings_migration.py`` (9 Tests, inkl. atomic-save)
+- ``tests/test_mw_radio_bandpilot.py`` (19 Tests, Mock-basiert,
+  inkl. R1-Final-Finding "TX-Schutz Band-Check")
+- ``auswertung/Bandpilot-20m-FT8.md`` + ``Bandpilot-40m-FT8.md``
+  (App-Start-generiert)
+- ``prompts/bandpilot_stundenlogik_{v1,v2,v3}.md`` (Workflow-Doku)
+
+**Refactored:**
+- ``core/mode_recommender.py`` komplett neu (alte
+  ``Bandpilot``/``BandpilotSummaryCache``/``aggregate_stats``/
+  ``recommend(diversity_pref)`` geloescht; neu:
+  ``aggregate_stats_by_hour``/``recommend_for_hour``/
+  ``HourlyBandpilot``/``HourlyBandpilotCache`` mit atomarem Write
+  und JSON-int-Key-Round-Trip)
+- ``ui/mw_radio.py`` — ``_maybe_apply_bandpilot`` Stunden-Logik
+  (off/auto/manual) + TX-Schutz mit Band-Konsistenz-Check
+  (R1-Final) + Toast/Dialog-Trigger; Override-Set +
+  ``_bandpilot_setting_mode``-Flag entfernt; ``_set_rx_mode_direct``
+  vereinfacht
+- ``ui/main_window.py`` — ``HourlyBandpilot``-Init + State-Variablen
+  (``_bandpilot_pending``, ``_bandpilot_tx_connected``,
+  ``_bandpilot_active_toast``/``_dialog``) +
+  ``_init_bandpilot_recommendations`` fuer App-Start-MD-Generierung
+- ``ui/settings_dialog.py`` — ``bandpilot_mode_combo``
+  (Aus/Auto/Manuell) statt ``bandpilot_cb`` + ``bandpilot_pref_combo``
+- ``config/settings.py`` — DEFAULTS auf ``bandpilot_mode="off"``
+  reduziert + ``_migrate_bandpilot_settings_v088`` + atomic save
+- ``scripts/generate_plots.py`` — Bandpilot-MD-Hook am Ende
+- ``docs/explained/bandpilot_de.md`` + ``bandpilot.md`` komplett neu
+- README.md (DE+EN): Bandpilot-Sektion + Migrations-Hinweis
+
+**TX-Schutz (V3-AK 7):**
+- Wenn ``encoder.is_transmitting``: Modus-Wechsel verzoegern bis
+  ``tx_finished``-Signal
+- Sofortiger Toast + Statusbar-Hinweis "wechselt nach TX-Ende"
+- ``_on_bandpilot_tx_finished``: Band-Konsistenz-Check
+  (R1-Final-Finding): wenn User waehrend TX das Band gewechselt
+  hat → pending verwerfen, kein falscher Modus-Wechsel auf neuem
+  Band
+
+**Tests:** 616 → **659 grün** (+43: +31 mode_recommender,
++14 bandpilot_md, +9 settings_migration, +19 mw_radio_bandpilot
+[inkl. R1-Final-Test], +1 settings_dialog smoke-Update). 13 atomare
+Commits.
+
+**APP_VERSION:** 0.87 → 0.88
+
+---
+
 ## 2026-05-02 v0.87.1 — Doku-Konsolidierung + Help-Dialog-Erweiterung
 
 **Betroffene Dateien:** `ui/help_dialog.py`, `ui/main_window.py`,

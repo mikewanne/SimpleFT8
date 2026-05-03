@@ -1,10 +1,49 @@
 # HANDOFF — SimpleFT8
 
-**Stand 2026-05-02:** v0.87.1 (Doku-Konsolidierung + Help-Dialog komplett).
-v0.87 Bandpilot. v0.86 Fix G + AC-1..AC-4. v0.85 Dead-Code-Cleanup.
+**Stand 2026-05-04:** v0.88 (Bandpilot Stunden-Refactor — drei direkte
+Werte pro UTC-Stunde ohne Aggregation, Settings off/auto/manual,
+TX-Schutz mit Band-Check). v0.87.1 Doku-Konsolidierung. v0.87
+Bandpilot v1.
 
-**Tests:** 616/616 gruen (+23 help_dialog_features, +28 mode_recommender,
-+2 settings_dialog Bandpilot).
+**Tests:** 659/659 gruen (+43 ggu v0.87.1: +31 mode_recommender, +14
+bandpilot_md, +9 settings_migration, +19 mw_radio_bandpilot).
+
+---
+
+## 2026-05-04 (v0.88) — Bandpilot Stunden-Refactor
+
+**Voller Workflow ft8_workflow durchgezogen:** V1 (Mike-Konsens) → V2
+(Self-Review, 25 neue AKs) → R1 (5 KRITISCH + 3 OPTIONAL) → V3 (36 AKs)
+→ Mike-Freigabe → 13 atomare Commits → Final-R1 (1 KRITISCH +
+2 EMPFEHLUNGEN, alle gefixt).
+
+**Neue Architektur (v0.87 → v0.88):**
+- Drei direkte Werte pro UTC-Stunde **ohne Aggregation**
+  (R1: Std + DX sind nicht IID → Aggregat erzeugt Bias)
+- Settings ``bandpilot_mode`` ∈ ``{off, auto, manual}`` ersetzt
+  ``bandpilot_enabled`` + ``bandpilot_diversity_pref``
+- Auto-Modus: Toleranz ``max(5%, 1 Sta)`` **gegen aktuellen Modus**
+  (R1-Finding A) — kein Pingpong wenn nahe Top-1
+- Manuell-Modus: Dialog **nur** wenn Top-1 != aktueller Modus
+  (R1-smart, kein Klick-Overhead)
+- TX-Schutz mit Band-Konsistenz-Check (R1-Final): wenn User waehrend
+  TX das Band wechselt, wird pending-Empfehlung verworfen
+- Atomic save() in Settings + atomic write in MD-Generator
+- Migration alter Settings + Cache-Cleanup automatisch beim 1. Start
+
+**Implementierte Files:**
+- `core/mode_recommender.py` (komplett ersetzt — alte Bandpilot-API
+  geloescht, neue HourlyBandpilot)
+- `core/bandpilot_md.py` (neu — MD-Generator)
+- `ui/bandpilot_dialogs.py` (neu — Toast + Manuell-Dialog)
+- `ui/mw_radio.py`, `ui/main_window.py`, `ui/settings_dialog.py`
+- `config/settings.py` (Migration + atomic save)
+- `scripts/generate_plots.py` (MD-Hook am Ende)
+- `docs/explained/bandpilot_de.md` + `bandpilot.md` (komplett neu)
+- `README.md` (DE+EN, Migrations-Hinweis)
+- `auswertung/Bandpilot-20m-FT8.md` + `Bandpilot-40m-FT8.md`
+
+**Tests +43:** 616 → 659 grün.
 
 ---
 
