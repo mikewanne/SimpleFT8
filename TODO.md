@@ -4,6 +4,56 @@
 
 ## ⭐ ALS NÄCHSTES (Priorität)
 
+### 🆕 Reiter „Geraet" in Settings — Sauberer Remote-Shutdown + Auto-Start (03.05.2026)
+
+**Hintergrund (Web-Recherche 2026-05-03):**
+- KEIN offizieller SmartSDR-API-Befehl fuer Power-On/Off (FlexRadio
+  Staff bestaetigt, Daemon "In Review" seit Dez 2019, nicht umgesetzt).
+- KEIN offizieller SSH-Zugang zum Linux des Radios.
+- **Saubere Linux-Shutdown-Methode = REM ON Jack Open-Circuit.** Das
+  ist KEIN AC-Cut, sondern ein Soft-Trigger an die Radio-CPU
+  (~15-20s sauberer Shutdown, dann safe).
+- Empfohlene Hardware: **Shelly 1 / Shelly Plus 1** (~15€,
+  ESP-basiert, lokale HTTP-API ohne Cloud-Zwang) als IP-Relais
+  am REM ON Jack.
+
+**Mike's offene Frage:** welche Hardware (Shelly schon vorhanden?
+neu kaufen? andere Marke?). RCA-Adapter mit Drahtenden zu
+Relais-Kontakten — fertig kaufen oder loeten?
+
+**Geplanter Tab „Geraet" (nach Mike-Entscheidung Hardware):**
+
+```
+Tab "Geraet":
+- Sauber herunterfahren (Shelly Relais am REM ON):
+  - Shelly-IP + Auth-Token (optional)
+  - "Verbindung testen"-Button
+  - "Radio sauber herunterfahren"-Button
+    -> Stoppt TX, schliesst Decoder, oeffnet REM ON via HTTP,
+       wartet 20s auf Linux-Shutdown
+- Auto-Start nach Stromausfall:
+  - Hardware-Setting im Shelly: "Restore last state" oder
+    "Always on" -> Relais bei Stromrueckkehr "zu" -> REM ON
+    shorted -> Radio bootet automatisch
+  - "Setup-Anleitung oeffnen"-Button
+```
+
+**Aufwand-Schaetzung (nach V1->V2->R1->V3-Workflow):**
+- core/shelly_client.py: HTTP-Client mit Auth, ~80-120 Zeilen
+- ui/settings_dialog.py: neuer Tab "Geraet", ~80 Zeilen
+- core/safe_shutdown.py: TX-Stop + Decoder-Close + Shelly-
+  Trigger + 20s-Warten, ~60 Zeilen
+- tests/test_shelly_client.py: HTTP-Mock, ~60 Zeilen
+- docs/explained/remote-shutdown_de.md + .md: Setup-Anleitung
+  + Hardware-Skizze
+- Hardware-Setup (Mike): Shelly konfigurieren, RCA-Adapter
+  loeten oder Adapter-Kit, im Settings IP eintragen
+- Gesamt: ~3-4h Code + Hardware-Beschaffung Mike
+
+**Status: WAITING fuer Mike's Hardware-Entscheidung.**
+
+---
+
 **Mike's offene Map-UI-Punkte aus v0.68-Field-Test — ALLE ERLEDIGT:**
 - ✅ Punkt 3 (Zeit-Dropdown) — erledigt v0.68
 - ✅ Punkt 4 (Band-Dropdown) — erledigt v0.68
