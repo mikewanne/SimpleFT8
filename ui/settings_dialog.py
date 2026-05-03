@@ -303,26 +303,21 @@ class SettingsDialog(QDialog):
             "Deaktiviert = kein Hintergrund-Logging, null Overhead.")
         form.addRow("", self.stats_cb)
 
-        # ── v0.87 Bandpilot ──────────────────────────────────────────
-        self.bandpilot_cb = QCheckBox("Bandpilot — RX-Modus automatisch waehlen")
-        self.bandpilot_cb.setToolTip(
-            "Bei Bandwechsel schaltet die App auf den RX-Modus mit der\n"
-            "besten Empfangsstatistik (Normal / Diversity Standard / DX).\n"
-            "Mindestens 2 Messtage pro Modus + 50 Zyklen erforderlich.\n"
-            "Manuell uebersteuerbar — eigene Wahl gilt fuer eine Band-Session.")
-        form.addRow("", self.bandpilot_cb)
-
-        self.bandpilot_pref_combo = QComboBox()
-        self.bandpilot_pref_combo.addItems([
-            "Auto — bessere von Standard und DX",
-            "Standard (mehr Stationen)",
-            "DX (schwache Signale)",
+        # ── v0.88 Bandpilot — Stunden-Logik ──────────────────────────
+        self.bandpilot_mode_combo = QComboBox()
+        self.bandpilot_mode_combo.addItems([
+            "Aus",
+            "Auto (bester Wert)",
+            "Manuell (Dialog)",
         ])
-        self.bandpilot_pref_combo.setToolTip(
-            "Greift nur wenn Diversity besser als Normal ist.\n"
-            "Auto: Modus mit hoeherem Pooled Mean.\n"
-            "Standard: immer Diversity_Normal.\n"
-            "DX: immer Diversity_Dx.")
+        self.bandpilot_mode_combo.setToolTip(
+            "Aus:     keine Empfehlung beim Bandwechsel.\n"
+            "Auto:    App wechselt automatisch zum Modus mit dem besten\n"
+            "         historischen Wert in der aktuellen UTC-Stunde\n"
+            "         (Normal / Diversity Standard / Diversity DX).\n"
+            "Manuell: Dialog erscheint nur wenn ein anderer Modus den\n"
+            "         hoeheren Wert hat.\n"
+            "Schwellen: ≥3 Messtage UND ≥20 Slots pro Modus + Stunde.")
         bandpilot_help_btn = QToolButton()
         bandpilot_help_btn.setText("?")
         bandpilot_help_btn.setFixedSize(20, 20)
@@ -335,11 +330,11 @@ class SettingsDialog(QDialog):
         """)
         bandpilot_help_btn.setToolTip("Bandpilot — Hilfe / Help")
         bandpilot_help_btn.clicked.connect(self._show_bandpilot_help)
-        pref_row = QHBoxLayout()
-        pref_row.addWidget(self.bandpilot_pref_combo)
-        pref_row.addWidget(bandpilot_help_btn)
-        pref_row.addStretch()
-        form.addRow("Wenn Diversity besser:", pref_row)
+        bp_row = QHBoxLayout()
+        bp_row.addWidget(self.bandpilot_mode_combo)
+        bp_row.addWidget(bandpilot_help_btn)
+        bp_row.addStretch()
+        form.addRow("Bandpilot — Verhalten:", bp_row)
         return tab
 
     def _show_bandpilot_help(self):
@@ -459,11 +454,10 @@ class SettingsDialog(QDialog):
         # Statistik + Debug-Konsole
         self.stats_cb.setChecked(self.settings.get("stats_enabled", True))
         self.debug_console_cb.setChecked(self.settings.get("debug_console_visible", False))
-        # v0.87 Bandpilot
-        self.bandpilot_cb.setChecked(self.settings.get("bandpilot_enabled", False))
-        pref = self.settings.get("bandpilot_diversity_pref", "auto")
-        self.bandpilot_pref_combo.setCurrentIndex(
-            {"auto": 0, "standard": 1, "dx": 2}.get(pref, 0))
+        # v0.88 Bandpilot Stunden-Logik
+        mode = self.settings.get("bandpilot_mode", "off")
+        self.bandpilot_mode_combo.setCurrentIndex(
+            {"off": 0, "auto": 1, "manual": 2}.get(mode, 0))
         # RF-Presets-Tabelle initial befüllen
         self._refresh_rf_table()
         self._update_rf_buttons_tx_state()
@@ -582,10 +576,9 @@ class SettingsDialog(QDialog):
         self.settings.set("language", "de" if self.language_combo.currentIndex() == 0 else "en")
         self.settings.set("stats_enabled", self.stats_cb.isChecked())
         self.settings.set("debug_console_visible", self.debug_console_cb.isChecked())
-        # v0.87 Bandpilot
-        self.settings.set("bandpilot_enabled", self.bandpilot_cb.isChecked())
-        self.settings.set("bandpilot_diversity_pref",
-                          {0: "auto", 1: "standard", 2: "dx"}[self.bandpilot_pref_combo.currentIndex()])
+        # v0.88 Bandpilot Stunden-Logik
+        self.settings.set("bandpilot_mode",
+                          {0: "off", 1: "auto", 2: "manual"}[self.bandpilot_mode_combo.currentIndex()])
         self.settings.save()
         self.accept()
 
