@@ -1,87 +1,142 @@
-# Bandpilot
+# Bandpilot — Per-Hour RX-Mode Recommendation
 
-> ⚠️ **In field test** (v0.87, 2026-05-01) — algorithm
-> implemented and unit-tested (28 tests passing), live validation
-> over extended operating time pending.
+> **v0.88, May 2026** — Concept refactor. Instead of a global mean,
+> three direct values per UTC hour, no aggregation.
 
-## What does Bandpilot do?
+## What does the Bandpilot do?
 
-When you change band, Bandpilot automatically switches to the receive
-mode that has historically delivered the most decoded stations per
-15-second slot on that band.
+When you switch bands, the Bandpilot checks for the **current UTC
+hour**: which RX mode historically delivered the most stations per
+15-second slot in that hour?
 
 Three modes are available:
 
 - **Normal** — single antenna (ANT1)
-- **Diversity Standard** — two antennas, picks the one with more stations
-- **Diversity DX** — two antennas, picks the one with weaker DX signals
+- **Diversity Standard** — two antennas, the one with more stations wins
+- **Diversity DX** — two antennas, the one with weaker DX signals wins
 
-## Data source
+Unlike v0.87, **no aggregation** is performed — the three values are
+compared directly. Reason: Diversity Standard and Diversity DX are
+different populations (different antenna patterns, different win-rate
+logic). Averaging them creates bias.
 
-Bandpilot reads the hourly Markdown files in
-`statistics/<Mode>/<Band>/FT8/`. Each file = one UTC hour, each row =
-one 15s slot with the number of decoded stations.
+## Data basis
 
-Minimum threshold per mode: **2 measurement days and 50 slots**.
-Below that, Bandpilot makes no recommendation — your manual mode stays.
+Hourly Markdown files in `statistics/<Mode>/<Band>/FT8/`. Each file
+= one UTC hour, each row = one 15s slot with the number of decoded
+stations.
 
-## Comparison (Candidate A)
+Per-hour thresholds (all three modes must satisfy):
 
-`Normal` is compared against the mean of Diversity_Normal and
-Diversity_DX:
+- **at least 3 measurement days** in this hour
+- **at least 20 slots** in this hour
 
-```
-diversity_aggregate = (Diversity_Normal_Mean + Diversity_DX_Mean) / 2
-```
+If one mode is below: silent recommendation, no switch, status bar
+hint for 5 seconds ("Bandpilot: not enough data for 40m at 03 UTC").
 
-If `Normal_Mean >= diversity_aggregate` → **Normal**.
-Otherwise → **Diversity** with your preferred sub-mode.
+## Settings — three behaviour modes
 
-## Diversity preference
+In the Settings dialog under "FT8 & Diversity":
 
-If Diversity wins, your preference setting decides which sub-mode is
-activated:
+| Value | Behaviour |
+|---|---|
+| **Off** | Bandpilot does not react. |
+| **Auto (best value)** | On band change: 3-second toast centred on screen shows all three values. App switches to Top-1 automatically — if current mode is within 5% tolerance of Top-1, no switch (ping-pong protection). |
+| **Manual (dialog)** | On band change: dialog appears **only** if Top-1 != current mode. Three buttons (Top-1 in green), user clicks — or cancel. |
 
-- **Auto** (default) — the Diversity sub-mode with the higher pooled
-  mean wins
-- **Standard** — always Diversity_Normal (more total stations)
-- **DX** — always Diversity_DX (more weak DX signals)
+## Tolerance rule
 
-## Manual override
-
-If, after a Bandpilot recommendation, you manually switch to a different
-mode (click on "NORMAL" or "DIVERSITY"), this is remembered for this
-band. The next band change **to** this band will respect the override —
-Bandpilot only kicks in again at the band change after that.
-
-Example:
-
-1. Switch to 40m → Bandpilot recommends Diversity Standard, app switches.
-2. You click "Normal" manually → override set for 40m.
-3. Switch to 20m → Bandpilot operates normally for 20m.
-4. Switch back to 40m → Bandpilot **does not switch** (override), clears
-   the flag.
-5. Switch to 20m and back to 40m again → Bandpilot operates normally.
-
-## Cache
-
-Stats aggregation is cached per band for 24 hours
-(`~/.simpleft8/bandpilot_summary.json`). After 24h the next call
-re-aggregates automatically.
-
-## Prerequisites
-
-- Statistics logging must be active (Settings → "Enable statistics
-  logging").
-- At least 2 days of measurement per mode on the band.
-- Currently FT8 only (FT4/FT2 are skipped by the stats logger).
-
-## What does the status bar show?
-
-When Bandpilot switches, the status bar briefly shows:
+Auto mode only switches if the current mode is **noticeably worse**
+than Top-1:
 
 ```
-Bandpilot: Diversity Standard for 40m
+tolerance = max(5% of Top-1_mean, 1 station/slot)
+
+if current_mean >= Top-1_mean - tolerance:
+    no switch (ping-pong guard kicks in)
+else:
+    switch to Top-1 (with toast)
 ```
 
-(3 seconds, then back to the regular status bar.)
+Example for 13 UTC on 40m:
+
+| Mode | Mean |
+|---|---:|
+| Diversity DX (Top-1) | 50.4 |
+| Diversity Standard | 48.0 |
+| Normal (current) | 35.0 |
+
+Tolerance = max(2.5, 1) = 2.5. Current mean (35.0) is 15.4 below
+Top-1 → noticeably worse → switch to DX.
+
+Another example:
+
+| Mode | Mean |
+|---|---:|
+| Diversity DX (Top-1) | 50.4 |
+| Diversity Standard (current) | 49.0 |
+| Normal | 35.0 |
+
+Tolerance = 2.5. Current mean (49.0) is 1.4 below Top-1 → no switch
+(stay on Standard).
+
+## TX protection
+
+If a TX is in progress when the band changes:
+
+1. Toast appears immediately with the recommendation
+2. Status bar 5s: "Bandpilot switches to Diversity DX after TX end"
+3. As soon as the `tx_finished` signal arrives: mode switch +
+   short confirmation toast 1.5s "Bandpilot: mode applied"
+
+This way no QSO is interrupted in mid-transmit.
+
+## Markdown recommendation file
+
+On app start (and on `scripts/generate_plots.py` runs)
+`auswertung/Bandpilot-<band>-FT8.md` is regenerated — a 24-row table
+(UTC 00..23) with all three values per hour plus Top-1.
+
+This lets you see at a glance where which mode is optimal — even
+without switching the app's band.
+
+## What it does **not** do
+
+- Does **not** recommend other bands (no "switch to 20m, more
+  activity there" feature). Bandpilot only reacts after you've
+  picked the band.
+- Does **not** react to hour transitions while you stay on a band.
+  The trigger is always a band change.
+- Has **no** time hysteresis ("don't switch twice in a row") —
+  this is added in a future version if needed.
+
+## Migration v0.87 → v0.88
+
+Existing settings are migrated automatically on first app start:
+
+| Old | New |
+|---|---|
+| `bandpilot_enabled = false` | `bandpilot_mode = "off"` |
+| `bandpilot_enabled = true` | `bandpilot_mode = "auto"` |
+| `bandpilot_diversity_pref = ...` | discarded |
+
+The old cache `~/.simpleft8/bandpilot_summary.json` is deleted.
+New cache: `~/.simpleft8/bandpilot_hourly.json`.
+
+The MD recommendation files are German-only for now. An English
+variant under `auswertung/en/` may be added in a future version.
+
+## Sample output
+
+From `auswertung/Bandpilot-40m-FT8.md` (excerpt):
+
+```
+| UTC | Normal | Div Standard | Div DX | Top-1 |
+|---:|---:|---:|---:|:---|
+| 13 | 5·45.2 | 4·38.0 | 5·52.7 | Diversity DX |
+| 14 | 5·48.1 | 5·40.5 | 5·55.2 | Diversity DX |
+| ...
+```
+
+Cell format: `<days>·<mean>`. If a mode lacks data: `—` (em-dash)
+or the Top-1 column shows `_zu wenig Daten_` (not enough data).
