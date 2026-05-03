@@ -675,18 +675,18 @@ class RadioMixin:
             )
 
     def _show_bandpilot_auto_toast(self, band: str, utc_hour: int, rec: dict):
-        """3s-Toast mittig, alle 3 Werte — Phase 6 ersetzt durch QDialog."""
-        from core.mode_recommender import USER_LABEL
-        chosen_label = USER_LABEL.get(rec["decision_mode"], rec["decision_mode"])
-        details = ", ".join(
-            f"{USER_LABEL.get(m, m)}: {v:.1f}" for m, v in rec["ranking"]
-        )
-        msg = (f"Bandpilot {band} {utc_hour:02d} UTC — {chosen_label} "
-               f"({rec['top1_mean']:.1f} Sta./Slot) [{details}]")
-        print(f"[Bandpilot] {msg}")
-        sb = self.statusBar() if hasattr(self, "statusBar") else None
-        if sb is not None:
-            sb.showMessage(msg, 3000)
+        """3-Sekunden Self-Close-Toast mit Modus-Wahl (V3-AK 4 + 20 + 21)."""
+        from ui.bandpilot_dialogs import BandpilotAutoToast
+        # V3-AK 21: schnelle Bandwechsel — alten Toast schliessen
+        old = getattr(self, "_bandpilot_active_toast", None)
+        if old is not None:
+            try:
+                old.close()
+            except RuntimeError:
+                pass  # Qt-Object schon weg
+        toast = BandpilotAutoToast(self, band, utc_hour, rec)
+        self._bandpilot_active_toast = toast
+        toast.show()
 
     def _show_bandpilot_manual_dialog(
         self, band: str, utc_hour: int, rec: dict, current: str,

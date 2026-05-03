@@ -2,6 +2,7 @@
 
 Direkter Test der Methode ueber unbound-method-Aufruf mit Mock-Object —
 keine echte MainWindow-Instanziierung noetig (zu teuer fuer Smoke-Tests).
+Plus Smoke-Tests fuer BandpilotAutoToast / BandpilotManualDialog.
 """
 
 from unittest.mock import MagicMock
@@ -9,6 +10,14 @@ from unittest.mock import MagicMock
 import pytest
 
 from ui.mw_radio import RadioMixin
+
+
+@pytest.fixture(scope="module")
+def qapp():
+    """Qt Application Instance — module-scoped (1× pro Test-Modul)."""
+    from PySide6.QtWidgets import QApplication
+    app = QApplication.instance() or QApplication([])
+    yield app
 
 
 def _make_mock_self(*, mode: str, current: str | None, rec: dict | None):
@@ -159,3 +168,70 @@ def test_maybe_apply_bandpilot_handles_exception_gracefully():
     result = RadioMixin._maybe_apply_bandpilot(s, "40m")
     assert result is False
     s._set_rx_mode_direct.assert_not_called()
+
+
+# ── BandpilotAutoToast Smoke-Tests (Phase 6) ──────────────────────────────────
+
+@pytest.fixture
+def sample_rec():
+    return {
+        "top1": "diversity_dx",
+        "top1_mean": 50.4,
+        "ranking": [("diversity_dx", 50.4), ("normal", 35.2),
+                    ("diversity_normal", 30.1)],
+        "decision": "switch",
+        "decision_mode": "diversity_dx",
+    }
+
+
+def test_auto_toast_instantiable_without_crash(qapp, sample_rec):
+    """Toast laesst sich erstellen + zeigen ohne Exception (offscreen-mode)."""
+    from ui.bandpilot_dialogs import BandpilotAutoToast
+    toast = BandpilotAutoToast(None, "40m", 13, sample_rec)
+    assert toast.windowFlags()  # Frameless+Tool-Flags gesetzt
+    toast.show()
+    qapp.processEvents()
+    toast.close()
+
+
+def test_auto_toast_contains_top1_label(qapp, sample_rec):
+    from ui.bandpilot_dialogs import BandpilotAutoToast
+    toast = BandpilotAutoToast(None, "40m", 13, sample_rec)
+    # Sammle alle QLabel-Texte
+    from PySide6.QtWidgets import QLabel
+    texts = [w.text() for w in toast.findChildren(QLabel)]
+    combined = " ".join(texts)
+    assert "Diversity DX" in combined
+    assert "40m" in combined
+    assert "13 UTC" in combined
+    toast.close()
+
+
+# ── BandpilotManualDialog Smoke-Tests (Phase 7) ───────────────────────────────
+
+def test_manual_dialog_instantiable(qapp, sample_rec):
+    from ui.bandpilot_dialogs import BandpilotManualDialog
+    dlg = BandpilotManualDialog(None, "40m", 13, sample_rec, "normal")
+    assert dlg.chosen is None
+    dlg.close()
+
+
+def test_manual_dialog_select_returns_mode(qapp, sample_rec):
+    """Direkter Aufruf von _select setzt chosen + accept."""
+    from ui.bandpilot_dialogs import BandpilotManualDialog
+    dlg = BandpilotManualDialog(None, "40m", 13, sample_rec, "normal")
+    dlg._select("diversity_normal")
+    assert dlg.chosen == "diversity_normal"
+    dlg.close()
+
+
+def test_manual_dialog_shows_current_marker(qapp, sample_rec):
+    """● Marker erscheint vor dem aktuellen Modus."""
+    from ui.bandpilot_dialogs import BandpilotManualDialog
+    dlg = BandpilotManualDialog(None, "40m", 13, sample_rec, "normal")
+    from PySide6.QtWidgets import QLabel
+    texts = [w.text() for w in dlg.findChildren(QLabel)]
+    # Eine Label-Zeile muss "●" enthalten + "Normal" erwaehnen
+    has_current_marker = any("●" in t and "Normal" in t for t in texts)
+    assert has_current_marker
+    dlg.close()
