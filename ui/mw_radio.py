@@ -691,13 +691,25 @@ class RadioMixin:
     def _show_bandpilot_manual_dialog(
         self, band: str, utc_hour: int, rec: dict, current: str,
     ) -> str | None:
-        """Manuell-Dialog mit 3 Buttons — Phase 7 ersetzt Stub durch QDialog.
+        """Manuell-Dialog mit 3 Buttons (V3-AK 5 + 21).
 
-        Aktueller Stub: gibt direkt Top-1 zurueck (User-Klick simuliert).
+        Returns: gewaehlter Code-Modus oder ``None`` (Abbruch / unveraendert).
         """
-        print(f"[Bandpilot] {band} {utc_hour:02d} UTC — Empfehlung: "
-              f"{rec['top1']} (aktuell: {current})")
-        return rec["top1"]
+        from ui.bandpilot_dialogs import BandpilotManualDialog
+        # V3-AK 21: schnelle Bandwechsel — alten Dialog schliessen
+        old = getattr(self, "_bandpilot_active_dialog", None)
+        if old is not None:
+            try:
+                old.close()
+            except RuntimeError:
+                pass
+        dlg = BandpilotManualDialog(self, band, utc_hour, rec, current)
+        self._bandpilot_active_dialog = dlg
+        result = dlg.exec()
+        from PySide6.QtWidgets import QDialog
+        if result == QDialog.DialogCode.Accepted:
+            return dlg.chosen
+        return None
 
     def _set_cq_locked(self, locked: bool):
         """CQ + Hunt sperren waehrend Diversity-Einmessen.
