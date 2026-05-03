@@ -598,16 +598,106 @@ class RadioMixin:
         self._update_statusbar()
 
     def _maybe_apply_bandpilot(self, band: str) -> bool:
-        """Bandpilot-Empfehlung pruefen — Stunden-Logik kommt in Phase 5b.
+        """Bandpilot-Empfehlung fuer Band+aktuelle UTC-Stunde anwenden.
 
-        TODO Phase 5b (v0.88): aktuelle UTC-Stunde holen, summary aus
-        HourlyBandpilot ziehen, Auto-/Manuell-Pfad ausfuehren.
-        Aktuell No-op-Stub damit Phase 1 (mode_recommender Backend-
-        Refactor) atomar committed werden kann ohne UI-Bruch.
+        Returns:
+            True wenn ein Modus-Wechsel angefordert wurde (Caller skippt
+            den normalen Diversity-Preset-Check). False sonst.
 
-        Returns True wenn Modus-Wechsel stattgefunden — sonst False.
+        Verhalten je ``bandpilot_mode``:
+            - ``"off"``: gar nichts.
+            - ``"auto"``: bei ``decision == "switch"`` wird Toast gezeigt
+              + ``_set_rx_mode_direct(decision_mode)`` aufgerufen.
+            - ``"manual"``: bei ``top1 != current_mode`` Manuell-Dialog,
+              sonst stillschweigend bestaetigt.
         """
+        from datetime import datetime, timezone
+
+        if not hasattr(self, "_bandpilot"):
+            return False  # Init-Schutz (sollte nicht passieren)
+
+        bp_mode = self.settings.get("bandpilot_mode", "off")
+        if bp_mode == "off":
+            return False
+
+        current = self._current_rx_mode_string()
+        if current is None:
+            # dx_tuning laeuft → Bandpilot still
+            return False
+
+        utc_hour = datetime.now(timezone.utc).hour
+
+        try:
+            rec = self._bandpilot.recommend(band, utc_hour, current)
+        except Exception as e:
+            print(f"[Bandpilot] Aggregations-Fehler: {e}")
+            return False
+
+        if rec is None:
+            self._show_bandpilot_insufficient_data(band, utc_hour)
+            return False
+
+        if bp_mode == "auto":
+            return self._apply_bandpilot_auto(band, utc_hour, rec)
+        if bp_mode == "manual":
+            return self._apply_bandpilot_manual(band, utc_hour, rec, current)
         return False
+
+    def _apply_bandpilot_auto(
+        self, band: str, utc_hour: int, rec: dict,
+    ) -> bool:
+        """Auto-Modus: Toast zeigen, bei switch Modus wechseln."""
+        if rec["decision"] == "no_change":
+            return False
+        self._show_bandpilot_auto_toast(band, utc_hour, rec)
+        self._set_rx_mode_direct(rec["decision_mode"])
+        return True
+
+    def _apply_bandpilot_manual(
+        self, band: str, utc_hour: int, rec: dict, current: str,
+    ) -> bool:
+        """Manuell-Modus: Dialog NUR wenn Top-1 != aktueller Modus."""
+        if rec["top1"] == current:
+            return False  # stillschweigend bestaetigt
+        chosen = self._show_bandpilot_manual_dialog(band, utc_hour, rec, current)
+        if chosen is None or chosen == current:
+            return False
+        self._set_rx_mode_direct(chosen)
+        return True
+
+    def _show_bandpilot_insufficient_data(self, band: str, utc_hour: int):
+        """Statusbar-Hinweis 5s — V3-AK 6 / Phase 8."""
+        sb = self.statusBar() if hasattr(self, "statusBar") else None
+        if sb is not None:
+            sb.showMessage(
+                f"Bandpilot: nicht genug Daten fuer {band} um {utc_hour:02d} UTC",
+                5000,
+            )
+
+    def _show_bandpilot_auto_toast(self, band: str, utc_hour: int, rec: dict):
+        """3s-Toast mittig, alle 3 Werte — Phase 6 ersetzt durch QDialog."""
+        from core.mode_recommender import USER_LABEL
+        chosen_label = USER_LABEL.get(rec["decision_mode"], rec["decision_mode"])
+        details = ", ".join(
+            f"{USER_LABEL.get(m, m)}: {v:.1f}" for m, v in rec["ranking"]
+        )
+        msg = (f"Bandpilot {band} {utc_hour:02d} UTC — {chosen_label} "
+               f"({rec['top1_mean']:.1f} Sta./Slot) [{details}]")
+        print(f"[Bandpilot] {msg}")
+        sb = self.statusBar() if hasattr(self, "statusBar") else None
+        if sb is not None:
+            sb.showMessage(msg, 3000)
+
+    def _show_bandpilot_manual_dialog(
+        self, band: str, utc_hour: int, rec: dict, current: str,
+    ) -> str | None:
+        """Manuell-Dialog mit 3 Buttons — Phase 7 ersetzt Stub durch QDialog.
+
+        Aktueller Stub: gibt direkt Top-1 zurueck (User-Klick simuliert).
+        """
+        print(f"[Bandpilot] {band} {utc_hour:02d} UTC — Empfehlung: "
+              f"{rec['top1']} (aktuell: {current})")
+        return rec["top1"]
 
     def _set_cq_locked(self, locked: bool):
         """CQ + Hunt sperren waehrend Diversity-Einmessen.
