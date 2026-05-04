@@ -42,17 +42,17 @@ Volle R1-Antwort: `/tmp/calibration_r1_response.md` (ggf. neu querien
 nach Compact: `cat /tmp/calibration_optimize_briefing.md | tools/deepseek_review.py
 ui/dx_tune_dialog.py core/diversity.py`)
 
-## Optimierungen — Block 1 (sicher, ~30 min Code)
+## Optimierungen — Block 1 (sicher, ~30 min Code) ✅ ERLEDIGT 2026-05-04 v0.89
 
-| # | Was | Wo | Aktuell | Neu | Ersparnis | Risiko |
-|---|---|---|---|---|---|---|
-| 1 | Skip-First-Cycle entfernen | `ui/dx_tune_dialog.py:60` `_skip_first = True` | wird ignoriert | direkt messen | -15 s | minimal |
-| 2 | TUNE 5 s → 3 s | `ui/mw_radio.py:1002` + `ui/mw_radio.py:1053` `QTimer.singleShot(5000, ...)` | 5 s | 3 s | -2 s | gering (FlexRadio internal Tuner schafft <1 s) |
-| 3 | Gain-Stufen 3 → 2 (10/20 dB) | `ui/dx_tune_dialog.py:22` `GAIN_VALUES = [0, 10, 20]` | 3 Werte | `[10, 20]` als Default, 0 nur bei Overload | -90 s | gering (Overload-Check fängt es) |
-| 4 | Phase 3: 8 → 6 Zyklen | `core/diversity.py:26` `MEASURE_CYCLES = 8` | 8 (4 pro Antenne) | 6 (3 pro Antenne) | -30 s | gering |
-| 5 | Cache 2 h → 6 h | `core/preset_store.py` (PresetStore.is_valid) | 2 h | 6 h (TTL hochsetzen) | weniger Pipeline-Laeufe pro Tag | niedrig |
+| # | Was | Wo | Aktuell | Neu | Ersparnis | Risiko | Status |
+|---|---|---|---|---|---|---|---|
+| 1 | Skip-First-Cycle entfernen | `ui/dx_tune_dialog.py:60` `_skip_first = True` | wird ignoriert | direkt messen | -15 s | minimal | ✅ `ebddd3e` |
+| 2 | TUNE 5 s → 3 s | `ui/mw_radio.py` 6 Stellen (R1) | 5 s | 3 s | -4 s (2 Pfade) | gering | ✅ `5662d76` |
+| 3 | Gain-Stufen 3 → 2 (10/20 dB) | `ui/dx_tune_dialog.py` 8 Stellen | 3 Werte | `[10, 20]` KISS | -90 s | gering | ✅ `bea87f9` |
+| 4 | Phase 3: 8 → 6 Zyklen | `core/diversity.py:26` + R1: `ui/mw_radio.py:798` | 8 (4 pro Antenne) | 6 (3 pro Antenne) | -30 s | gering | ✅ `3a4de56` |
+| 5 | Cache 2 h → 6 h | `core/preset_store.py` (PresetStore.is_valid) | 2 h | 6 h | weniger Laeufe/Tag | niedrig | ✅ `aec3706` |
 
-**Block 1 Ersparnis: ~2:15 Min sicher.**
+**Block 1 Ersparnis: -2:19 Min (6:50 → ~4:31). Tests 659 gruen.**
 
 ## Optimierungen — Block 2 (mittel, ~1 h Code + Test)
 

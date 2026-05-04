@@ -4,6 +4,37 @@
 
 ## ⭐ ALS NÄCHSTES (Priorität)
 
+### 🔥 DRINGEND — Block 2 Kalibrier-Pipeline-Optimierung (2026-05-04)
+
+**Empfehlung Claude:** DRINGEND nach Block-1-Feldtest. Pipeline geht
+dann von ~4:35 Min (nach Block 1) auf typisch **~3:20 Min** (-52 % vs
+6:50 Ausgangsstand). Hobby-Use bei Bandwechsel deutlich angenehmer.
+
+**Hintergrund:** Block 1 (V3 fertig 2026-05-04, 5 sicher Optimierungen)
+bringt 6:50 → ~4:35 Min. Block 2 ergaenzt 3 mittel-Risk-Optimierungen.
+Eigener V1→V2→R1→V3-Zyklus weil Adaptiv-Stops Schwellen-Tuning
+brauchen das im Feldtest justiert werden muss.
+
+**3 Optimierungen:**
+
+| # | Was | Wo | Aktuell | Neu | Ersparnis | Risiko |
+|---|---|---|---|---|---|---|
+| 6 | N=3 → N=2 pro Kombi | `ui/dx_tune_dialog.py:23` `ROUNDS = 3` | 3 Runden | 2 Runden | -60 s | mittel |
+| 7 | Adaptiv-Stop Phase 2 | `ui/dx_tune_dialog.py:_finish + zwischendrin` | immer 3 Runden | nach Runde 1 abbrechen wenn Δ > 4 dB SNR oder > 50 % Stationen | -30 bis -120 s | mittel |
+| 8 | Adaptiv-Stop Phase 3 | `core/diversity.py:choose / _finalize` | immer 6 Zyklen (nach Block 1) | nach 4 Zyklen abbrechen wenn Δ > 15-20 % | -30 s | mittel |
+
+**Erwartete Pipeline nach Block 1+2:**
+- Best-Case (alles greift, Adaptiv-Stop frueh): ~2:30 Min (-63 %)
+- Typisch: ~3:20 Min (-52 %)
+- Worst-Case: ~4:35 Min (-33 %)
+
+**Aufwand:** ~1 h Code + Test + Feldtest-Schwellen-Tuning.
+**Plan-Datei:** `prompts/kalibrier_optimierung_plan.md` Block 2-Tabelle.
+**Trigger:** Mike sagt „Block 2 starten".
+**Status:** PARKED — wartet auf Block-1-Erfolg + Feldtest.
+
+---
+
 ### 🆕 Reiter „Geraet" in Settings — Sauberer Remote-Shutdown + Auto-Start (03.05.2026)
 
 **Hintergrund (Web-Recherche 2026-05-03):**

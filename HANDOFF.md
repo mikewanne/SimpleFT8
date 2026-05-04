@@ -1,16 +1,21 @@
 # HANDOFF — SimpleFT8
 
-**Stand 2026-05-04:** v0.88.1 — Pre-Optimization-Snapshot.
-v0.88 (Bandpilot Stunden-Refactor) + Tertile-Korridor entfernt + Toast 5s.
-Sicherung in Appsicherungen/2026-05-04_v0.88.1_vor_kalibrier_optimierung/.
+**Stand 2026-05-04:** v0.89 — Kalibrier-Pipeline Block 1 erledigt.
+Pipeline 6:50 → ~4:31 Min (-2:19 Min, -34 %). 5 atomare Commits
+(ebddd3e..aec3706). Voller Workflow V1→V2→R1→V3 — R1 fand
+1 KRITISCH (mw_radio.py:798 ueberschreibt MEASURE_CYCLES).
 
 **Tests:** 659/659 grün.
 
-**Naechster Schritt:** Kalibrier-Pipeline-Optimierung Block 1 starten.
-Plan: `prompts/kalibrier_optimierung_plan.md`. Memory:
-`project_kalibrier_optimierung.md`. Trigger: "Block 1 starten".
+**Naechster Schritt:**
+1. **Feldtest Block 1** — Mike kalibriert auf 20m + 40m, prueft
+   Pipeline-Dauer + Mess-Qualitaet (Overload? Median stabil?).
+2. **Block 2 starten** (DRINGEND-TODO) — eigener V1→V3-Zyklus:
+   #6 ROUNDS=2, #7 Adaptiv-Stop Phase 2, #8 Adaptiv-Stop Phase 3
+   → Pipeline typisch ~3:20 Min. Trigger: „Block 2 starten".
+   Plan: `prompts/kalibrier_optimierung_plan.md` Block-2-Tabelle.
 
-**Rollback bei Problemen:** `git checkout v0.88.1`.
+**Rollback bei Problemen:** `git checkout v0.88.1` (Snapshot vor Block 1).
 
 ---
 

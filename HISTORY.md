@@ -5,6 +5,42 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-04 v0.89 — Kalibrier-Pipeline-Optimierung Block 1
+
+**Pipeline 6:50 → ~4:31 Min (-2:19 Min, -34 %).** Vorbereitend fuer
+Block 2 (mittel-Risk, Adaptiv-Stops) der typisch ~3:20 Min anvisiert.
+
+**Voller Workflow durchgezogen:** V1 (Plan-Datei) → V2 (Self-Review,
+2 zusaetzliche Stellen entdeckt) → R1 (DeepSeek-R1, 1 KRITISCH +
+mehrere uebersehene Stellen) → V3 (final, 28 Code-Stellen +
+2 Test-Anpassungen) → Mike-Freigabe → 5 atomare Commits.
+
+**R1-KRITISCH:** `mw_radio.py:798` setzt `MEASURE_CYCLES = 8 * _MULT`
+zur Laufzeit — ueberschreibt Konstante. Beide Stellen muessen synchron
+geaendert werden, sonst ist AC4 wirkungslos. Ohne R1-Review uebersehen.
+
+**5 atomare Commits:**
+1. `ebddd3e` Skip-First-Cycle entfernen (-15 s)
+2. `5662d76` TUNE 5s → 3s (-2 s × 2 Pfade)
+3. `bea87f9` Gain-Stufen 3 → 2 — `[10, 20]` (-90 s, 18 → 12 Zyklen)
+4. `3a4de56` Phase 3 MEASURE_CYCLES 8 → 6 (-30 s, 4×A1+4×A2 → 3×A1+3×A2)
+5. `aec3706` Preset-Cache 2 h → 6 h (weniger Pipeline-Laeufe pro Tag)
+
+**Tests:** 659 gruen (zwei Tests umbenannt + range-Anpassung:
+`test_diversity_phase_transition_after_8_measurements` →
+`_after_6_measurements`, analog `test_phase_diff_detects_measure_to_operate_transition`).
+
+**Block 2 als naechstes (TODO.md DRINGEND-Eintrag):**
+- #6 ROUNDS = 3 → 2 (-60 s)
+- #7 Adaptiv-Stop Phase 2 nach Runde 1 (Δ > 4 dB / > 50 %)
+- #8 Adaptiv-Stop Phase 3 nach 4 Zyklen (Δ > 15-20 %)
+→ Pipeline typisch ~3:20 Min nach Block 2. Eigener V1→V3-Zyklus
+nach Block-1-Feldtest.
+
+**Rollback:** `git checkout v0.88.1` (Snapshot vor Block 1).
+
+---
+
 ## 2026-05-04 v0.88.1 — Snapshot vor Kalibrier-Optimierung
 
 GitHub-Release v0.88.1 + Tag + lokale Sicherung in
