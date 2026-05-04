@@ -4,7 +4,7 @@ Speichert Gain-Kalibrierung + Diversity-Ratio pro Band+FTMode.
 Standard → ~/.simpleft8/kalibrierung/presets_standard.json
 DX       → ~/.simpleft8/kalibrierung/presets_dx.json
 
-2h-Frist: is_valid() True wenn Preset vorhanden und < 2h alt.
+6h-Frist: is_valid() True wenn Preset vorhanden und < 6h alt.
 """
 
 import json
@@ -16,7 +16,7 @@ from typing import Optional
 
 CONFIG_DIR = Path.home() / ".simpleft8"
 CALIB_DIR  = CONFIG_DIR / "kalibrierung"
-VALIDITY_SECONDS = 2 * 3600  # 2 Stunden
+VALIDITY_SECONDS = 6 * 3600  # 6 Stunden
 
 
 class PresetStore:
@@ -97,7 +97,7 @@ class PresetStore:
             return self._data.get(self._key(band, ft_mode))
 
     def is_valid(self, band: str, ft_mode: str) -> bool:
-        """True wenn Preset vorhanden UND < 2h alt."""
+        """True wenn Preset vorhanden UND < 6h alt."""
         with self._lock:
             entry = self._data.get(self._key(band, ft_mode))
         if not entry or "timestamp" not in entry:
@@ -117,7 +117,7 @@ class PresetStore:
     def save_gain(self, band: str, ft_mode: str, *,
                   rxant: str, ant1_gain: int, ant2_gain: int,
                   ant1_avg: float = 0.0, ant2_avg: float = 0.0) -> None:
-        """Gain-Kalibrierung speichern (setzt Timestamp → startet 2h-Frist)."""
+        """Gain-Kalibrierung speichern (setzt Timestamp → startet 6h-Frist)."""
         key = self._key(band, ft_mode)
         with self._lock:
             entry = dict(self._data.get(key) or {})
