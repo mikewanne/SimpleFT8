@@ -5,6 +5,27 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-04 — Tertile-Konfidenzband im Stationen-Diagramm entfernt
+
+**Mike's Feedback (04.05.2026):** "Korridor-Berechnung der einzelnen
+Modi verwirrt durch ihre grosse Streuung."
+
+`scripts/generate_plots.py`:
+- `fill_between(xs, mins, maxs, alpha=0.15)` aus
+  `create_stations_diagram` entfernt (Zeile 1024)
+- p4-Subtitle (DE+EN): "schattiertes Band"-Beschreibung raus,
+  ersetzt durch Hinweis auf gestrichelte Rescue-Linie
+- p4-Annotation entsprechend angepasst
+- Header-Modul-Doku bereinigt (Konfidenzband-Erwaehnung raus)
+
+Tertile-Berechnung bleibt intern erhalten — die weissen Fehlerbalken
+im Bar-Chart (S.5 PDF) sind nicht betroffen, nur das Linien-
+Diagramm wurde entschlackt.
+
+PDFs DE+EN regeneriert. Kein Code-Test betroffen (PNG-Output).
+
+---
+
 ## 2026-05-04 v0.88 — Bandpilot Stunden-Refactor
 
 **Konzept-Bruch ggu v0.87:** der globale Pooled-Mean + Aggregat

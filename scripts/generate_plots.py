@@ -10,7 +10,6 @@ Output: auswertung/stationen_<band>_<proto>.png          (DE)
         auswertung/en/Report-40m-FT8.pdf                  (EN)
 
 X-Achse: Stunde des Tages (00–23 UTC), gemittelt über alle Messtage.
-Konfidenzband: 33%–67%-Tertile der Cycle-Werte pro Stunde (mittleres Drittel der Slots, kein Datencropping).
 """
 
 import re
@@ -213,10 +212,10 @@ TEXTS = {
 
         # ── Diagramm-Seite Stationen (S.4) ──────────────────────────────────
         "p4_title":      "Stationen pro Stunde — alle drei Modi im Vergleich",
-        "p4_subtitle":   "{band} {protocol} — Linie = Pooled Mean, schattiertes Band = mittleres Drittel der Slots (33%–67%-Tertile)",
+        "p4_subtitle":   "{band} {protocol} — Linie = Pooled Mean ueber alle Messtage. Gestrichelt = + Rescue-Stationen.",
         "p4_annotation": (
             "Man sieht gut wie die graue Linie (Normal, eine Antenne) fast immer unter blau und orange liegt. "
-            "Das schattierte Band zeigt das mittlere Drittel der Slot-Werte pro Stunde — auch bei nur einem Tag Daten ist das aussagekräftig (echte Slot-zu-Slot-Streuung statt Tag-zu-Tag-Variation)."
+            "Die gestrichelten Linien zeigen den Effekt der Rescue-Stationen, die ANT2 zusaetzlich liefert."
         ),
 
         # ── Diagramm-Seite Diversity (S.5) ──────────────────────────────────
@@ -434,10 +433,10 @@ TEXTS = {
 
         # ── Stations diagram page (p.4) ──────────────────────────────────────
         "p4_title":      "Stations per Hour — all three modes compared",
-        "p4_subtitle":   "{band} {protocol} — line = pooled mean, shaded band = middle third of slots (33%–67% tertiles)",
+        "p4_subtitle":   "{band} {protocol} — line = pooled mean over all measurement days. Dashed = + rescue stations.",
         "p4_annotation": (
             "You can clearly see how the grey line (Normal, one antenna) almost always falls below blue and orange. "
-            "The shaded band shows the middle third of slot values per hour — meaningful even with just one day of data (real slot-to-slot variation, not day-to-day differences)."
+            "The dashed lines show the additional contribution of ANT2 rescue stations."
         ),
 
         # ── Diversity diagram page (p.5) ─────────────────────────────────────
@@ -1019,9 +1018,9 @@ def create_stations_diagram(band: str, protocol: str, output_dir: Path,
 
         color = COLORS[rx_mode]
         ax.plot(xs, means, color=color, label=label, linewidth=2.5, zorder=3)
-        # v0.84 Feature H: shaded band = 33%-67%-Tertile pro Stunde
-        # (mins/maxs aus _aggregate, alpha=0.15 dezent, zorder=2 hinter Linien)
-        ax.fill_between(xs, mins, maxs, color=color, alpha=0.15, zorder=2)
+        # v0.88.1: Tertile-Konfidenzband entfernt — zu grosse Streuung verwirrt
+        # mehr als sie hilft. Tertile-Daten werden im PDF-Bericht weiter genutzt
+        # (S.5 Bar-Chart Fehlerbalken).
         has_data = True
 
         # Gestrichelte Rescue-Linie (mean + Rescue) für Diversity-Modi
