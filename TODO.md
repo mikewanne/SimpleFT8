@@ -19,127 +19,118 @@ von ~4 % auf ~15-25 % auf 40 m FT8.
 
 ---
 
-### 🟡 OFFEN — Bandwechsel-Race in `mw_radio.py` (R1-Verdacht v0.90)
+### 🟡 v0.92 Lock-Audit — Code DRIN, Tests + Doku PENDING (2026-05-04)
 
-**Verdacht (R1 hat zweimal angedeutet, v0.90 Audit + V3-Review):**
-`_on_band_changed()` ruft `self._diversity_ctrl.on_band_change()`
-(reset auf measure + step=0). Der aktuell noch laufende Zyklus (unter
-altem Band gestartet) wird **nach** dem Reset in `_on_cycle_decoded`
-verarbeitet, ruft `record_measurement` auf und verfaelscht so die
-neu gestartete Messung (inkonsistenter Zustand zwischen Antenne und
-step-Zaehler).
+**Status:** 5 Code-Edits in `ui/mw_radio.py` UNCOMMITTED (Working-Tree).
+App lief mit den Aenderungen (PID 81079). Voller V1→V2→R1→V3-Workflow
+durchgezogen. R1 hat Mike's KISS-Variante (Frueh-Return) bevorzugt vs
+Token-Pattern (komplexer).
 
-**Fix-Idee:** Token-Pattern wie in v0.74 (DX-Tune-Dialog) — beim
-Bandwechsel wird `_diversity_token = object()` gesetzt; `record_measurement`
-prueft Token vor Verarbeitung. Slots mit veraltetem Token werden verworfen.
+**Was geaendert wurde (5 Edits in ui/mw_radio.py):**
+1. `_set_gain_measure_lock` (Z.1080) — `self._gain_measure_locked = locked` Flag
+2. `_on_band_changed` (Z.265) — Frueh-Return wenn Lock aktiv
+3. `_on_mode_changed` (Z.199) — gleiches
+4. `_on_rx_mode_changed` (Z.371) — gleiches (R1-Finding zusaetzlich!)
+5. `_enable_diversity` (Z.811-813) — Reihenfolge umgekehrt (Lock VOR reset)
 
-**Code-Stellen (V1-Skizze, R1 in eigenem Workflow):**
-- `core/diversity.py` `record_measurement` — Token-Check
-- `ui/mw_radio.py` `_on_band_changed` — Token rotieren
-- `ui/mw_cycle.py` `_handle_diversity_measure` — Token in Closure capturen
+**Was R1 entdeckte:**
+- Bandwechsel-Race ist real, nicht Theorie (Phase-Check `if _phase != measure`
+  wird durch `reset()` ausgehebelt)
+- `_on_rx_mode_changed` braucht auch Lock-Check (V1+V2 hatten den vergessen)
+- R1's „btn_rx absichern"-Vorschlag verworfen (kein btn_rx im Code)
 
-**Aufwand:** ~30-45 min + V1→V3-Workflow + Tests
-**Status:** OPEN — eigener V1→V3-Zyklus, geringe Prioritaet (selten
-genug dass Mike es nicht aktiv stoert), aber sauber zu fixen.
+**Was NOCH FEHLT:**
+- `tests/test_lock_coverage.py` mit 7 Tests (geplant in V3)
+- APP_VERSION 0.91 → 0.92
+- HISTORY.md, HANDOFF.md×2, CLAUDE.md×2 v0.92-Sync
+- Atomarer Commit (Code+Tests zusammen, v0.90/v0.91-Konvention)
 
----
+**Aufwand verbleibend:** ~30 Min (Tests + Doku + Commit).
 
-### 🆕 Diversity-Ratio-Cache beim Bandwechsel wiederverwenden (2026-05-04, Mike)
+**Trigger nach Compact:** „Lock-Audit fertig" oder „v0.92 starten".
 
-**Idee:** Bei Bandwechsel pruefen ob fuer `band+ftmode+scoring`-Kombination
-schon eine frische Diversity-Ratio im `PresetStore` liegt — falls ja
-uebernehmen statt neu einzumessen. Spart 1:30-3 Min Pipeline pro
-Bandwechsel.
-
-**Hintergrund:**
-- `PresetStore.save_ratio(band, ft_mode, ratio, dominant)` existiert
-  bereits (`core/preset_store.py:139`) — wird in `mw_cycle.py:220` nach
-  Phase 3 schon aufgerufen.
-- `PresetStore.is_valid(band, ft_mode)` macht schon Frist-Check (aktuell
-  6h fuer Gain).
-- Aktuell: `_on_band_changed()` in `ui/mw_radio.py:265` ruft
-  `_diversity_ctrl.on_band_change()` → `reset()` → neue Phase-3-Messung
-  ist Pflicht (v0.74-Bug-Fix `load_preset()` geloescht).
-
-**Problem v0.74-Konflikt:** Damals war Cache nicht band-spezifisch. Jetzt
-ist er es (Key `40m_FT8`, `20m_FT8`, etc.) → die alte Begruendung
-„Pattern band-spezifisch" gilt nicht mehr.
-
-**Vorschlag (R1 + Claude einig):**
-1. **Cache-Validity X = 2 Stunden** (R1: konservativ, deckt typische
-   Hobby-Session, faengt Daemmerungs-Uebergang 18-20 UTC ab; 4h waere
-   vertretbar aber riskanter; 6h zu lang weil Tag→Nacht oft drin).
-2. Beim Bandwechsel: vor `on_band_change()` reset pruefen ob
-   `preset_store.is_valid(band, mode)` UND ratio+dominant im entry.
-   Falls ja: `_diversity_ctrl` mit gespeicherten Werten initialisieren,
-   Phase=operate, Phase 3 ueberspringen.
-3. Falls nein: aktueller Pfad (full reset).
-4. **UI-Feedback PFLICHT:** Toast „Diversity aus Cache (Xh alt) —
-   A1 70:30" oder aehnlich. Mike sieht dass keine Messung laeuft und
-   kann manuell neu einmessen wenn er will.
-5. **Auto-Refresh alle 80 Zyklen NICHT noetig** — bestehender
-   Re-Measure-Zyklus (aktuell `OPERATE_CYCLES = 60`) speichert schon
-   nach jeder Messung via `save_ratio`. Mike's Vorschlag ist redundant.
-6. **v0.74-Regression-Test umschreiben** (`test_load_preset_removed`):
-   nicht loeschen — Begruendung dokumentieren dass band-spezifisches
-   Reuse jetzt erlaubt ist, globales nicht.
-
-**Risiken (R1):**
-- Schlimmster Fall: 5h alter Cache aus Nacht (A2 dominant), aber jetzt
-  Tag (A1 waere besser) → suboptimale 30:70 → User merkt nur indirekt
-  (sinkende QSO-Rate).
-- Mitigation: 2h-Limit + UI-Toast + manueller Override.
-
-**Code-Stellen (V1-Skizze, R1 in eigenem Workflow):**
-- `core/preset_store.py` — neue Konstante `RATIO_VALIDITY_SECONDS = 2*3600`
-  (Gain-Frist 6h bleibt — Hardware-Eigenschaft langlebiger als Ratio)
-- `ui/mw_radio.py:_on_band_changed` — Cache-Check vor reset
-- `ui/mw_cycle.py` — UI-Toast-Trigger bei Cache-Hit
-- `tests/test_diversity_bandwechsel.py` — Test umschreiben
-
-**Aufwand R1:** ~1-2 Stunden inkl. Tests + V1→V3-Workflow.
-
-**Mike's Reihenfolge-Frage:** Block 2 (Adaptiv-Stops) zuerst macht Sinn —
-Cache-Reuse-Nutzen waechst wenn Pipeline trotzdem laenger ist. Aber
-unabhaengig.
-
-**Status:** OPEN — nach Block 2 oder parallel.
+**Diskussions-Trail:** `prompts/lock_audit_v1.md`, `_v2.md`, `_r1.md`, `_v3.md`
+**Memory:** `project_lock_audit_pending.md`
 
 ---
 
-### 🟡 OFFEN — OPERATE_CYCLES = 60 ist sehr aggressiv (2026-05-04, Mike)
+### 🟢 v0.93 Cache-Reuse + Mess-Refactor — Plan steht, Implementation pending (2026-05-04)
 
-**Beobachtung Mike:** Wenn 2h-Cache fuer Bandwechsel reicht — warum
-dann alle 15 Min (= 60 Zyklen FT8) im Operate-Modus neu einmessen?
+**Status:** Voller V1→V2→R1→V3-Workflow + Folge-R1 zur FT2-Statistik.
+Mike's Vision konsequent durchziehen mit R1's 4 Modifikationen.
+Reihenfolge: NACH v0.92 Lock-Audit.
 
-**Status quo:**
-- `core/diversity.py:27` `OPERATE_CYCLES = 60` (15 Min FT8)
-- `should_remeasure()` triggert nach 60 Zyklen ohne aktives QSO →
-  Phase 3 neu (~1:30 Min)
-- Operate-Anteil aktuell: 15 / (15+1.5) ≈ 91 %
+**Mike's Vision (R1-bestaetigt):**
+1. **1 h Auto-Refresh** statt 15 Min Zyklen-Counter (atmosphärisch korrekt)
+2. **Cache-Reuse pro Band+Modus** bei Bandwechsel (5-s-Toast, kein Klick)
+3. **Normal-Modus raus** aus Cache-System („Normal ist normal")
+4. **OPERATE_CYCLES Konstante weg** + Settings-Option `diversity_operate_cycles` weg
+5. **`_MULT` für OPERATE_CYCLES weg** (zeit-basiert obsolet)
+6. **Pattern fair 3:3 bleibt** unverändert (v0.90)
 
-**Wenn `OPERATE_CYCLES = 240` (60 Min) waere:**
-- Operate-Anteil: 60 / (60+1.5) ≈ 97.5 %
-- Spart ~3 Min Mess-Pause pro Stunde
-- Risiko: Tag→Nacht-Uebergang innerhalb 1h wird nicht erkannt
+**R1's 4 KRITISCHE Modifikationen:**
+- **Mod 1:** `_MULT` für MEASURE_CYCLES BEHALTEN (FT8=6, FT4=12, FT2=24)
+  — FT2 in 6 Zyklen × 3.8 s = 23 s waere zu kurz fuer Statistik
+- **Mod 2:** PresetStore zwei Timestamps (`gain_timestamp` 6h + `ratio_timestamp` 1h)
+- **Mod 3:** CQ-Lock zusätzlich zu QSO-Lock in `should_remeasure()`
+- **Mod 4 (KILLER):** `score` (= sum(snr+30)) statt `station_count` speichern
+  — adressiert Mike's FT2-Sorge (1-2 Stationen pro Slot → diskrete Werte
+  {0,1,2} → keine Auflösung). Mit Score: kontinuierliche Werte, Median
+  statistisch robust auch bei dünner Dichte. **Eine Zeile umstellen**
+  (`record_measurement` Z.381) — Score wird schon übergeben, nur ignoriert.
 
-**Zwei Mechanismen mit unterschiedlichem Zweck:**
-1. **OPERATE_CYCLES** = Drift-Tracking im aktiven Betrieb auf einem Band
-2. **Cache-Validity** = Schnelles Bandhopping ohne Pipeline
+**R1's Bonus-Modifikationen:**
+- **Mod 5:** `MIN_MEASURE_STATIONS = 5` ENTFERNEN (`can_measure()` immer True)
+  — bei FT2 oft Block-Trigger, mit Score-Umstellung obsolet
+- **Mod 6 (optional):** `scoring_mode` vereinheitlichen — DX-Modus obsolet
+  weil SNR-Score eh feiner als `dx_weak_count`. Kann später separat.
 
-**Diskussion noetig:**
-- Vorteil 60 Zyklen: konservativ, faengt Drift kontinuierlich
-- Vorteil 240 Zyklen: weniger Mess-Unterbrechungen
-- Vermittler: 120 Zyklen (30 Min) als Kompromiss
-- Praxis-Frage: Wie haeufig aendert sich Ratio innerhalb 30-60 Min
-  realistisch? Statistik aus v0.90 Field-Test wird das zeigen.
+**Code-Stellen:**
+```
+core/diversity.py:27       OPERATE_CYCLES = 60          → ENTFERNEN
+core/diversity.py:29       MIN_MEASURE_STATIONS = 5     → ENTFERNEN
+core/diversity.py:374-385  record_measurement           → score statt station_count
+core/diversity.py:421-453  _evaluate                    → peak-Schwelle anpassen (5.0)
+core/diversity.py:461      should_remeasure(qso_active) → +cq_active
+core/preset_store.py:19    VALIDITY_SECONDS = 6*3600    → splitten in gain/ratio
+core/preset_store.py:99    is_valid()                   → ratio/gain unterscheiden
+core/preset_store.py:139   save_ratio()                 → ratio_timestamp setzen
+ui/main_window.py:822      OPERATE_CYCLES aus Settings  → ENTFERNEN
+ui/mw_radio.py:821-824     _MULT für OPERATE_CYCLES    → ENTFERNEN (MEASURE_CYCLES bleibt)
+ui/mw_radio.py:_on_band_changed   → Cache-Check VOR _diversity_ctrl.on_band_change()
+ui/mw_cycle.py:220        save_ratio() bereits da, _was_early_stopped-Schutz aus v0.91 #8
+```
 
-**Empfehlung:** **Beobachten** mit v0.90 Field-Test — wenn die Ratio
-sich seltener als gedacht aendert, kann `OPERATE_CYCLES` hoch.
-Sonst lassen.
+**Aufwand:** ~4.5 h (V3 + Code + Tests + Doku-Sync v0.93).
 
-**Aufwand:** 1 Konstante + Tests + Workflow ~30 min.
-**Status:** OPEN — Datenlage abwarten, niedrige Prioritaet.
+**Trigger nach Compact:** „Refactor starten" oder „v0.93 starten" oder
+„Score zuerst" (nur Mod 4 als Quick-Win).
+
+**Diskussions-Trail:**
+- V1: `prompts/cache_reuse_refactor_v1.md`
+- V2: `prompts/cache_reuse_refactor_v2.md` (7 Self-Review-Findings)
+- R1: `prompts/cache_reuse_refactor_r1.md` (Mike-Vision + 3 Mods)
+- Dichte-V1: `prompts/cache_reuse_dichte_problem.md` (FT2-Statistik-Problem)
+- Dichte-R1: `prompts/cache_reuse_dichte_r1.md` (Score-Insight!)
+
+**Memory:** `project_diversity_cache_reuse.md`
+
+**Was BLEIBT unveraendert:**
+- Phase 2 Gain-Messung (separate 6 h Validity)
+- Phase 3 fair 3:3 Pattern (v0.90)
+- v0.91 Adaptiv-Stops (Phase 2 + Phase 3)
+- v0.91 Cache-Schutz (`_was_early_stopped`)
+- Manueller „NEU"-Button
+
+---
+
+### ✅ GELÖST durch v0.93-Refactor — OPERATE_CYCLES wird komplett entfernt
+
+Aufgenommen in den Cache-Reuse + Mess-Refactor-Plan (siehe oben).
+Mike's Vision: 1 h Auto-Refresh atmosphärisch korrekt, OPERATE_CYCLES
+und `_MULT`-Skalierung weg, Settings-Option weg. R1-bestaetigt.
+
+Wird mit v0.93 erledigt — Trigger „Refactor starten" / „v0.93 starten".
 
 ---
 
