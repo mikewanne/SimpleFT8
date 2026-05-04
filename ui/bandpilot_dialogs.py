@@ -109,8 +109,8 @@ class BandpilotAutoToast(QDialog):
             row.setObjectName("row_top1" if idx == 0 else "row_neutral")
             layout.addWidget(row)
 
-        # Self-close nach 3 Sekunden
-        QTimer.singleShot(3000, self._safe_close)
+        # Self-close nach 5 Sekunden (Mike-Feedback 04.05.: 3s zu kurz)
+        QTimer.singleShot(5000, self._safe_close)
 
     def _safe_close(self):
         """Robust gegen bereits-geschlossen (User-Klick auf [×] vorher)."""

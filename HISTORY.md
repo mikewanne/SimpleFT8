@@ -5,6 +5,18 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-04 — Bandpilot Auto-Toast 3s → 5s
+
+Mike-Feedback nach Live-Test 04.05.2026: 3 Sekunden zu kurz um die
+drei Werte zu lesen.
+
+`ui/bandpilot_dialogs.py`: `QTimer.singleShot(3000, self._safe_close)`
+→ 5000. Plus: Slot-Lueckenliste Ziel-Erreicht 19 → 20.
+
+App-Neustart erforderlich damit die neue Self-Close-Zeit greift.
+
+---
+
 ## 2026-05-04 — Tertile-Konfidenzband im Stationen-Diagramm entfernt
 
 **Mike's Feedback (04.05.2026):** "Korridor-Berechnung der einzelnen
