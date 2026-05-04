@@ -16,14 +16,14 @@ class DiversityController:
     """Periodische Antennen-Messung fuer Diversity-Modus.
 
     Ablauf:
-    - MESS-PHASE  (8 Zyklen): 4×A1 + 4×A2 messen
+    - MESS-PHASE  (6 Zyklen): 3×A1 + 3×A2 messen
     - BETRIEB     (60 Zyklen ≈ 15 Min): 70:30 oder 50:50
     - Nach 60 Zyklen ohne aktives QSO → neu messen
     Scoring: Modus-abhaengig (Normal=Stationsanzahl, DX=Top-5-SNR)
     Schwelle: 8% relative Differenz → 50:50, sonst 70:30
     """
 
-    MEASURE_CYCLES = 8   # 4×A1 + 4×A2 (~2 Min Fenster, je even+odd pro Antenne)
+    MEASURE_CYCLES = 6   # 3×A1 + 3×A2 (~1,5 Min Fenster, je even+odd pro Antenne)
     OPERATE_CYCLES = 60  # 15 Min Betrieb (vorher 80=20 Min)
     THRESHOLD = 0.08     # 8% relative Differenz fuer Antennen-Entscheidung
     MIN_MEASURE_STATIONS = 5  # Mindestanzahl Stationen fuer Messung

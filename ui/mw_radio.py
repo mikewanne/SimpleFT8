@@ -795,7 +795,7 @@ class RadioMixin:
         _MULT = {"FT8": 1, "FT4": 2, "FT2": 4}
         base = self.settings.get("diversity_operate_cycles", 60)
         self._diversity_ctrl.OPERATE_CYCLES = base * _MULT.get(mode, 1)
-        self._diversity_ctrl.MEASURE_CYCLES = 8 * _MULT.get(mode, 1)
+        self._diversity_ctrl.MEASURE_CYCLES = 6 * _MULT.get(mode, 1)
         self._diversity_ctrl.scoring_mode = scoring_mode
 
         # Gespeichertes Preset laden (ein Eintrag enthält Gain + Ratio)

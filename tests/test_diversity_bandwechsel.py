@@ -48,8 +48,8 @@ def test_phase_diff_detects_measure_to_operate_transition():
     dc = DiversityController()
     dc._phase = "measure"
 
-    # 7 Messungen — bleibt measure
-    for i in range(7):
+    # 5 Messungen — bleibt measure
+    for i in range(5):
         old_phase = dc.phase
         dc.record_measurement("A1" if i % 2 == 0 else "A2",
                               score=0.0, station_count=10)
@@ -57,7 +57,7 @@ def test_phase_diff_detects_measure_to_operate_transition():
         # Phase-Diff: kein Uebergang
         assert not (old_phase == "measure" and new_phase == "operate")
 
-    # 8. Messung → Uebergang triggert
+    # 6. Messung → Uebergang triggert
     old_phase = dc.phase
     dc.record_measurement("A2", score=0.0, station_count=10)
     new_phase = dc.phase

@@ -2371,18 +2371,18 @@ def test_diversity_dx_mode_uses_weak_count():
     assert dc_std._measurements["A2"] == [5.0]
 
 
-def test_diversity_phase_transition_after_8_measurements():
-    """Nach MEASURE_CYCLES (8) Messungen → automatisch zu phase=operate."""
+def test_diversity_phase_transition_after_6_measurements():
+    """Nach MEASURE_CYCLES (6) Messungen → automatisch zu phase=operate."""
     from core.diversity import DiversityController
     dc = DiversityController()
     dc._phase = "measure"
     assert dc.phase == "measure"
-    # 7 Messungen → noch measure
-    for i in range(7):
+    # 5 Messungen → noch measure
+    for i in range(5):
         ant = "A1" if i % 2 == 0 else "A2"
         dc.record_measurement(ant, score=0.0, station_count=10)
-    assert dc.phase == "measure", f"Nach 7 Messungen: phase={dc.phase}"
-    # 8. Messung → _evaluate triggert → phase=operate
+    assert dc.phase == "measure", f"Nach 5 Messungen: phase={dc.phase}"
+    # 6. Messung → _evaluate triggert → phase=operate
     dc.record_measurement("A2", score=0.0, station_count=10)
     assert dc.phase == "operate"
     assert dc._operate_cycles == 0
