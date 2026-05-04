@@ -5,6 +5,84 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-04 v0.92 — Pipeline-Lock bulletproof (Bandwechsel-Race-Fix)
+
+**Hintergrund:** R1 hatte in v0.90 einen Bandwechsel-Race-Verdacht in
+`mw_radio.py` geaeussert: laufender Slot konnte nach `on_band_change()`
+reset noch Decode-Daten liefern → `record_measurement` mit altem
+Antennen-State auf neuem Band → Mess-Daten-Leck zwischen Baendern.
+
+**Mike's KISS-Argument:** „Waehrend Messung lauft, soll ALLES geblockt
+sein ausser Cancel." Wenn Lock dicht ist → Token-Pattern unnoetig.
+
+**Voller Workflow durchgezogen:**
+- V1 (`prompts/lock_audit_v1.md`) — Code-Verifikation + Befunde
+- V2 (`prompts/lock_audit_v2.md`) — Self-Review, 6 Findings vs V1,
+  konkreter Race-Pfad dokumentiert
+- R1 (`prompts/lock_audit_r1.md`, deepseek-reasoner) — bestaetigt Mike's
+  KISS-Variante. **NEU R1-Finding:** `_on_rx_mode_changed` braucht auch
+  Lock-Check (V1+V2 hatten den vergessen). R1's btn_rx-Vorschlag
+  verworfen (Code-Verifikation: kein btn_rx im control_panel).
+- V3 (`prompts/lock_audit_v3.md`) — alle R1-Findings adressiert,
+  Implementierungsplan mit 5 Fixes + 7 Tests.
+
+**Atomarer Commit `9b9303d` — 5 Edits in `ui/mw_radio.py`:**
+
+1. `_set_gain_measure_lock(self, locked)` (Z.1080) — setzt
+   `self._gain_measure_locked` Flag (einzige Quelle der Wahrheit fuer
+   programmatischen Lock-Schutz).
+
+2. `_on_band_changed(self, band)` (Z.265) — Frueh-Return wenn Flag aktiv:
+   ```python
+   if getattr(self, '_gain_measure_locked', False):
+       current = self.settings.band
+       print(f"[Bandwechsel ignoriert: Pipeline laeuft, bleibe auf {current}]")
+       self.control_panel._set_band(current)  # UI-Sync zurueck
+       return
+   ```
+
+3. `_on_mode_changed(self, mode)` (Z.199) — gleiches mit
+   `self.settings.mode` und `self.control_panel._set_mode(current)`.
+
+4. `_on_rx_mode_changed(self, mode)` (Z.371) — gleiches mit
+   `self._rx_mode` und `self.control_panel.set_rx_mode(current)`
+   (R1-Finding!).
+
+5. `_enable_diversity` (Z.811-813) — Reset-Reihenfolge umgekehrt:
+   Lock VOR `_diversity_ctrl.reset()` (statt umgekehrt). Schliesst
+   Race-Window in dem laufende Slots ins frische `_measurements`-Bucket
+   schreiben koennten.
+
+**Tests +6 in `test_lock_coverage.py` NEU:**
+- `test_lock_flag_set_when_locked`
+- `test_lock_flag_cleared_when_unlocked`
+- `test_band_change_blocked_during_lock`
+- `test_mode_change_blocked_during_lock`
+- `test_rx_mode_change_blocked_during_lock`
+- `test_enable_diversity_locks_before_reset` (Reihenfolge-Verifikation
+  via call-tracking auf gemeinsamem Manager-Mock)
+
+**Tests:** 675 → 681 gruen (+6).
+
+**R1-Halluzinationen verworfen:**
+- „btn_rx absichern" — kein btn_rx im `control_panel.py`
+- Bandpilot-Pending-Mechanismus (R1 als optional markiert) — KISS,
+  Hobby-Use unnoetig
+
+**Was BLEIBT unveraendert:**
+- `_diversity_lock` (threading.Lock in `mw_cycle.py:184`) — schuetzt
+  weiter die kritische Sektion in `record_measurement` vor parallelen
+  Decoder-Threads
+- Phase-Check `if self._phase != "measure"` — schuetzt Daten nach
+  Pipeline-Ende (Phase=operate)
+
+**Statistik:** Lock-Coverage-Audit war 1 zusaetzlicher R1-Pass, hat
+einen 3. ungeschuetzten Handler (`_on_rx_mode_changed`) entdeckt der
+in V1+V2 uebersehen worden war. Lesson: KISS-Loesungen brauchen
+trotzdem R1-Audit fuer komplette Coverage.
+
+---
+
 ## 2026-05-04 v0.91 — Block 2 Kalibrier-Pipeline-Optimierung (Adaptiv-Stops)
 
 **Ziel:** Pipeline ~4:31 Min (v0.89/v0.90) → typisch ~3:20 Min (-26 %),

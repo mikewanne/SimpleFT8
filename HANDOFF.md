@@ -1,8 +1,11 @@
 # HANDOFF — SimpleFT8
 
-**Stand 2026-05-04:** **v0.91 — Block 2 Adaptiv-Stops + ROUNDS=2 erledigt.**
-Pipeline ~4:31 Min (v0.89/v0.90) → typisch ~3:20 Min, Best-Case ~2:30 Min.
-v0.90 Mess-Pattern-Bug-Fix bleibt unveraendert (fair 3:3 Pattern A1A1A2A2A1A2).
+**Stand 2026-05-04:** **v0.92 — Pipeline-Lock bulletproof (Bandwechsel-Race-Fix).**
+5 Edits in `ui/mw_radio.py` schliessen Bandwechsel/Mode/RX-Mode-Race via
+`_gain_measure_locked`-Flag + Reset-Reihenfolge. R1-Verdacht aus v0.90 geloest.
+Atomarer Commit `9b9303d` + 6 neue Tests. Voller V1→V2→R1→V3-Workflow.
+**v0.91:** Block 2 Adaptiv-Stops + ROUNDS=2. Pipeline ~4:31 → typisch ~3:20 Min,
+Best-Case ~2:30 Min. **v0.90:** Mess-Pattern-Bug-Fix (fair 3:3 Pattern A1A1A2A2A1A2).
 
 **3 atomare Commits Block 2:**
 - `eef4369` perf(dx_tune): ROUNDS 3→2 (#6, -60s, Schedule 12→8 Eintraege)
@@ -37,15 +40,6 @@ Cache-Reuse-TODO bleibt auf voll-gemessene Ratios beschraenkt.
   + V3-Review). Token-Pattern-Fix in eigener Iteration.
 
 **Naechster Schritt nach Compact:**
-
-**🟡 v0.92 Lock-Audit (HALB FERTIG, Tests + Doku pending):**
-- 5 Code-Edits in `ui/mw_radio.py` UNCOMMITTED (Working-Tree drin):
-  Bandwechsel/Mode/RX-Mode-Lock-Coverage + reset-Reihenfolge.
-- Voller V1→V2→R1→V3-Workflow durch (`prompts/lock_audit_*`).
-- App lief beim Compact mit den Edits (PID 81079).
-- **Trigger nach Compact:** „Lock-Audit fertig" → 7 Tests in
-  `tests/test_lock_coverage.py` schreiben + atomar committen + Doku v0.92.
-- Memory: `project_lock_audit_pending.md` hat alle Details.
 
 **🟢 v0.93 Cache-Reuse + Mess-Refactor (Plan steht, R1-bestaetigt):**
 - Mike-Vision: 1 h Auto-Refresh atmosphärisch, Cache pro Band, Normal raus,

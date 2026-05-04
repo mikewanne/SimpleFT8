@@ -19,35 +19,23 @@ von ~4 % auf ~15-25 % auf 40 m FT8.
 
 ---
 
-### 🟡 v0.92 Lock-Audit — Code DRIN, Tests + Doku PENDING (2026-05-04)
+### ✅ ERLEDIGT — v0.92 Lock-Audit (2026-05-04)
 
-**Status:** 5 Code-Edits in `ui/mw_radio.py` UNCOMMITTED (Working-Tree).
-App lief mit den Aenderungen (PID 81079). Voller V1→V2→R1→V3-Workflow
-durchgezogen. R1 hat Mike's KISS-Variante (Frueh-Return) bevorzugt vs
-Token-Pattern (komplexer).
+Atomarer Commit `9b9303d` + Doku-Sync. R1-Audit-Findings adressiert.
 
-**Was geaendert wurde (5 Edits in ui/mw_radio.py):**
-1. `_set_gain_measure_lock` (Z.1080) — `self._gain_measure_locked = locked` Flag
-2. `_on_band_changed` (Z.265) — Frueh-Return wenn Lock aktiv
-3. `_on_mode_changed` (Z.199) — gleiches
-4. `_on_rx_mode_changed` (Z.371) — gleiches (R1-Finding zusaetzlich!)
-5. `_enable_diversity` (Z.811-813) — Reihenfolge umgekehrt (Lock VOR reset)
+**5 Edits in `ui/mw_radio.py`:**
+1. `_set_gain_measure_lock` — setzt `self._gain_measure_locked` Flag
+2. `_on_band_changed` — Frueh-Return wenn Flag aktiv
+3. `_on_mode_changed` — gleiches
+4. `_on_rx_mode_changed` — gleiches (R1-NEU-Finding!)
+5. `_enable_diversity` — Lock VOR `_diversity_ctrl.reset()`
 
-**Was R1 entdeckte:**
-- Bandwechsel-Race ist real, nicht Theorie (Phase-Check `if _phase != measure`
-  wird durch `reset()` ausgehebelt)
-- `_on_rx_mode_changed` braucht auch Lock-Check (V1+V2 hatten den vergessen)
-- R1's „btn_rx absichern"-Vorschlag verworfen (kein btn_rx im Code)
+**Tests +6** in `tests/test_lock_coverage.py` (NEU): 675 → 681 gruen.
 
-**Was NOCH FEHLT:**
-- `tests/test_lock_coverage.py` mit 7 Tests (geplant in V3)
-- APP_VERSION 0.91 → 0.92
-- HISTORY.md, HANDOFF.md×2, CLAUDE.md×2 v0.92-Sync
-- Atomarer Commit (Code+Tests zusammen, v0.90/v0.91-Konvention)
+**R1-Halluzinationen verworfen:** btn_rx-Schutz (kein btn_rx im Code),
+Bandpilot-Pending (KISS-Argument).
 
-**Aufwand verbleibend:** ~30 Min (Tests + Doku + Commit).
-
-**Trigger nach Compact:** „Lock-Audit fertig" oder „v0.92 starten".
+**Bandwechsel-Race aus v0.90 R1-Verdacht final geloest.**
 
 **Diskussions-Trail:** `prompts/lock_audit_v1.md`, `_v2.md`, `_r1.md`, `_v3.md`
 **Memory:** `project_lock_audit_pending.md`
