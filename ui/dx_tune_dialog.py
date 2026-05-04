@@ -1,12 +1,13 @@
 """SimpleFT8 DX Tune Dialog — Interleaved Antennen + Preamp Optimierung.
 
-Neues Verfahren (v2):
-- 12 Zyklen interleaved: ANT1@10 → ANT2@10 → ANT1@20 → ANT2@20
-  × 3 Runden = 3 Minuten
-- Jede Kombination bekommt 3 Zyklen (45s) verteilt ueber die Messzeit
+Neues Verfahren (v3, Block 2):
+- 8 Zyklen interleaved: ANT1@10 → ANT2@10 → ANT1@20 → ANT2@20
+  × 2 Runden = 2 Minuten
+- Jede Kombination bekommt 2 Zyklen (30s) verteilt ueber die Messzeit
 - ANT1 und ANT2 werden bei gleichen Bandoeffnungen verglichen
 - Ergebnis: optimaler Gain fuer ANT1 UND ANT2 separat
 - Diversity: ANT1_gain beim Wechsel auf ANT1, ANT2_gain beim Wechsel auf ANT2
+- Adaptiv-Stop nach Runde 1 (4 Schritte) wenn Antennen-Differenz klar
 """
 
 from PySide6.QtWidgets import (
@@ -20,7 +21,7 @@ _FONT_MONO = QFont("Menlo", 12)
 _FONT_MONO_SM = QFont("Menlo", 10)
 
 GAIN_VALUES = [10, 20]
-ROUNDS = 3  # 3 Runden × 4 Kombos = 12 Zyklen × 15s = 3 Min
+ROUNDS = 2  # 2 Runden × 4 Kombos = 8 Zyklen × 15s = 2 Min (v0.91 Block 2 #6)
 
 
 def _build_interleaved_schedule() -> list:
@@ -89,8 +90,8 @@ class DXTuneDialog(QDialog):
         layout.addWidget(title)
 
         hint = QLabel(
-            "12 Zyklen interleaved • ANT1 & ANT2 bei gleichem Gain verglichen\n"
-            "Dauert ca. 3 Minuten  •  TX bleibt immer auf ANT1"
+            "8 Zyklen interleaved • ANT1 & ANT2 bei gleichem Gain verglichen\n"
+            "Dauert ca. 2 Minuten  •  TX bleibt immer auf ANT1"
         )
         hint.setStyleSheet("color: #FFD700; font-size: 11px;")
         hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -198,7 +199,7 @@ class DXTuneDialog(QDialog):
         round_num = self._step // (len(GAIN_VALUES) * 2) + 1
         pos_in_round = self._step % (len(GAIN_VALUES) * 2) + 1
         self.step_label.setText(
-            f"Runde {round_num}/3 — {ant}  Gain {gain} dB"
+            f"Runde {round_num}/{ROUNDS} — {ant}  Gain {gain} dB"
         )
         self.detail_label.setText(
             f"Schritt {self._step + 1}/{len(self._schedule)}  "
