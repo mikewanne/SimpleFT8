@@ -28,7 +28,6 @@ _HINTS = {
     "tune_power": "Leistung beim TUNE-Vorgang (Antennentuner einstellen).\nMax 20W — hoehere Werte brauchen Bestaetigung.",
     "tx_freq": "Audio-Frequenz fuer TX im FT8-Fenster.\n1500 Hz = Standard (WSJT-X Default).\nBereich 1000-2000 Hz wird von allen Stationen dekodiert.\nUnter 800 Hz: wird von vielen Stationen ausgefiltert!",
     "max_decode": "Obere Grenze des Dekodier-Bereichs.\n3000 Hz = Standard. Hoeher = mehr Stationen aber mehr CPU.",
-    "diversity_cycles": "Anzahl Betriebszyklen bis zur naechsten Antennen-Messung.\n80 ≈ 20 Min  |  160 ≈ 40 Min  |  240 ≈ 60 Min\nAntennen werden dann automatisch auf 50:50 zurueckgesetzt und neu vermessen.",
 }
 
 _TAB_STYLE = """
@@ -290,11 +289,9 @@ class SettingsDialog(QDialog):
         self.max_decode_freq = QSpinBox()
         self.max_decode_freq.setRange(1000, 5000)
         self.max_decode_freq.setSuffix(" Hz")
-        self.diversity_cycles = QComboBox()
-        self.diversity_cycles.addItems(["80", "160", "240"])
         form.addRow("TX Audio-Frequenz:", _row_with_hint(self.audio_freq, "tx_freq"))
         form.addRow("Max. Decode-Frequenz:", _row_with_hint(self.max_decode_freq, "max_decode"))
-        form.addRow("Neueinmessung nach:", _row_with_hint(self.diversity_cycles, "diversity_cycles"))
+        # v0.93: "Neueinmessung nach: <Zyklen>" entfernt — jetzt fest 1 h zeit-basiert
         self.stats_cb = QCheckBox("Statistik-Erfassung aktivieren")
         self.stats_cb.setToolTip(
             "Loggt pro Zyklus die Anzahl empfangener Stationen, SNR und Band.\n"
@@ -440,9 +437,7 @@ class SettingsDialog(QDialog):
         self.swr_limit.setValue(self.settings.get("swr_limit", 3.0))
         self.audio_freq.setValue(self.settings.get("audio_freq_hz", 1500))
         self.max_decode_freq.setValue(self.settings.max_decode_freq)
-        # Diversity-Zyklen
-        dc = self.settings.get("diversity_operate_cycles", 80)
-        self.diversity_cycles.setCurrentIndex({80: 0, 160: 1, 240: 2}.get(dc, 0))
+        # v0.93: diversity_operate_cycles entfernt — 1h-Frist zeit-basiert
         # Sprache
         lang = self.settings.get("language", "de")
         self.language_combo.setCurrentIndex(0 if lang == "de" else 1)
@@ -572,7 +567,7 @@ class SettingsDialog(QDialog):
         self.settings.set("tune_power", self._current_tune_power)
         self.settings.set("audio_freq_hz", self.audio_freq.value())
         self.settings.set("max_decode_freq", self.max_decode_freq.value())
-        self.settings.set("diversity_operate_cycles", int(self.diversity_cycles.currentText()))
+        # v0.93: diversity_operate_cycles entfernt
         self.settings.set("language", "de" if self.language_combo.currentIndex() == 0 else "en")
         self.settings.set("stats_enabled", self.stats_cb.isChecked())
         self.settings.set("debug_console_visible", self.debug_console_cb.isChecked())
@@ -605,7 +600,7 @@ class SettingsDialog(QDialog):
         self._current_tune_power = 10
         for w, btn in self._tune_btns.items():
             btn.setChecked(w == 10)
-        self.diversity_cycles.setCurrentIndex(0)  # 80 Zyklen
+        # v0.93: diversity_cycles UI entfernt
         # v0.79 R1-Review-Fix: vorher fehlten radio_ip / language /
         # stats_cb / debug_console_cb im Reset
         self.radio_ip.setText("")  # Auto-Discovery

@@ -58,7 +58,8 @@ class OmniTX(QObject):
         """
         Args:
             block_cycles: Zyklen pro Block vor dem Wechsel.
-                          Plan v3.2: 80 (entspricht diversity_operate_cycles Default).
+                          Plan v3.2: 80 (eigene OMNI-TX-Konstante seit v0.93,
+                          frueher von diversity_operate_cycles abgeleitet).
         """
         super().__init__()
         self.active: bool = False

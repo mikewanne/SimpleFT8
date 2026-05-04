@@ -830,11 +830,11 @@ class RadioMixin:
         self.control_panel.update_decode_count(0)
         self._diversity_current_ant = "A1"
         self._diversity_ant_queue = deque()  # (ant, phase) Tupel
-        # Settings-Wert × Modus-Multiplikator (gleiche ZEIT fuer alle Modi)
+        # MEASURE_CYCLES × Modus-Multiplikator (gleiche Mess-Zeit fuer alle Modi).
+        # OPERATE_CYCLES ist seit v0.93 zeit-basiert (1h-Frist) — kein
+        # Settings/Modus-Skalierung mehr noetig.
         mode = self.settings.mode
         _MULT = {"FT8": 1, "FT4": 2, "FT2": 4}
-        base = self.settings.get("diversity_operate_cycles", 60)
-        self._diversity_ctrl.OPERATE_CYCLES = base * _MULT.get(mode, 1)
         self._diversity_ctrl.MEASURE_CYCLES = 6 * _MULT.get(mode, 1)
         self._diversity_ctrl.scoring_mode = scoring_mode
 

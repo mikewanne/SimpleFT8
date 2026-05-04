@@ -30,7 +30,6 @@ class DiversityController:
     """
 
     MEASURE_CYCLES = 6   # 3×A1 + 3×A2 (~1,5 Min Fenster, je even+odd pro Antenne)
-    OPERATE_CYCLES = 60  # 15 Min Betrieb (vorher 80=20 Min)
     THRESHOLD = 0.08     # 8% relative Differenz fuer Antennen-Entscheidung
     # Score-Mindest-Peak: unter dem Wert (sehr schwacher Empfang) wird auf
     # 50:50 zurueckgefallen statt zwischen knappen Differenzen zu entscheiden.
@@ -519,8 +518,20 @@ class DiversityController:
 
     @property
     def operate_cycles(self) -> int:
-        """Bereits abgeschlossene Betriebszyklen (0..OPERATE_CYCLES)."""
+        """Bereits abgeschlossene Betriebszyklen seit letzter Messung."""
         return self._operate_cycles
+
+    @property
+    def seconds_until_remeasure(self) -> int:
+        """Sekunden bis zum naechsten zeit-basierten Re-Measure (v0.93).
+
+        0 = ueberfaellig (Re-Measure beim naechsten freien Slot).
+        Vor erster Messung (``_last_measured_at`` None) → 0.
+        """
+        if self._last_measured_at is None:
+            return 0
+        elapsed = time.time() - self._last_measured_at
+        return max(0, int(self.REMEASURE_INTERVAL_SECONDS - elapsed))
 
     def _evaluate(self):
         # Pre-v0.90 Mess-Pattern war 4xA1 + 2xA2 (struktureller Bias zu ANT1).

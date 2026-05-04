@@ -923,15 +923,20 @@ def test_can_measure_always_true_v093():
     assert dc.can_measure(20) is True
 
 
-# ── Modus-Multiplikator ──────────────────────────────────────────────────────
+# ── Modus-Multiplikator (v0.93: nur noch MEASURE_CYCLES) ─────────────────────
 
-def test_operate_cycles_multiplier():
-    """OPERATE_CYCLES wird mit Modus-Faktor multipliziert."""
+def test_measure_cycles_multiplier():
+    """MEASURE_CYCLES wird mit Modus-Faktor multipliziert (v0.93).
+
+    OPERATE_CYCLES-Konstante wurde in v0.93 entfernt (zeit-basiert, 1h-Frist).
+    Nur MEASURE_CYCLES skaliert noch modus-abhaengig fuer ausreichende
+    statistische Basis bei FT4/FT2.
+    """
     _MULT = {"FT8": 1, "FT4": 2, "FT2": 4}
-    base = 60
-    assert base * _MULT["FT8"] == 60
-    assert base * _MULT["FT4"] == 120
-    assert base * _MULT["FT2"] == 240
+    base = 6
+    assert base * _MULT["FT8"] == 6
+    assert base * _MULT["FT4"] == 12
+    assert base * _MULT["FT2"] == 24
 
 
 def test_dt_min_stations_per_mode():

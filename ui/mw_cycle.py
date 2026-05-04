@@ -202,8 +202,7 @@ class CycleMixin:
             self._diversity_ctrl.ratio, self._diversity_ctrl.phase,
             measure_step=self._diversity_ctrl.measure_step,
             measure_total=self._diversity_ctrl.MEASURE_CYCLES,
-            operate_cycles=self._diversity_ctrl.operate_cycles,
-            operate_total=self._diversity_ctrl.OPERATE_CYCLES,
+            operate_seconds_remaining=self._diversity_ctrl.seconds_until_remeasure,
             scoring_mode=self._diversity_ctrl.scoring_mode,
         )
         # Einmessen abgeschlossen → nur beim Übergang measure→operate ausführen
@@ -606,8 +605,7 @@ class CycleMixin:
                     self._diversity_ctrl.ratio, self._diversity_ctrl.phase,
                     measure_step=self._diversity_ctrl.measure_step,
                     measure_total=self._diversity_ctrl.MEASURE_CYCLES,
-                    operate_cycles=self._diversity_ctrl.operate_cycles,
-                    operate_total=self._diversity_ctrl.OPERATE_CYCLES,
+                    operate_seconds_remaining=self._diversity_ctrl.seconds_until_remeasure,
                     scoring_mode=self._diversity_ctrl.scoring_mode,
                 )
 

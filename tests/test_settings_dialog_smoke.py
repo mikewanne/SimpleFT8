@@ -31,7 +31,6 @@ class _FakeSettings:
             "tune_power": 10,
             "audio_freq_hz": 1500,
             "max_decode_freq": 3000,
-            "diversity_operate_cycles": 80,
             "language": "de",
             "stats_enabled": True,
             "debug_console_visible": False,
@@ -95,7 +94,7 @@ def test_widget_attributes_accessible(dlg):
     expected_attrs = [
         "callsign", "locator", "radio_ip",
         "power", "tx_level", "max_calls_combo", "swr_limit",
-        "audio_freq", "max_decode_freq", "diversity_cycles",
+        "audio_freq", "max_decode_freq",
         "language_combo", "stats_cb", "debug_console_cb",
         "_tune_btns", "_current_tune_power",
         "rf_table", "_rf_band_combo",

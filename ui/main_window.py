@@ -227,9 +227,10 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
     def _init_optional_features(self):
         """OMNI-TX (Easter Egg, Feldtest), Auto-Hunt, AP-Lite — alle deaktiviert by default."""
         # OMNI-TX: Initialisieren (deaktiviert), Easter Egg verbinden
-        # Plan v3.2: block_cycles=80 (entspricht diversity_operate_cycles Default)
+        # Plan v3.2: block_cycles=80 (eigene OMNI-TX-Default seit v0.93,
+        # frueher von diversity_operate_cycles abgeleitet)
         from core import omni_tx as _omni
-        _block_cycles = max(10, self.settings.get("diversity_operate_cycles", 80))
+        _block_cycles = 80
         self._omni_tx = _omni.get_instance(block_cycles=_block_cycles)
         # v0.78: Signal omni_stopped(reason) → UI raeumt auf
         self._omni_tx.omni_stopped.connect(self._on_omni_stopped)
@@ -819,7 +820,7 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         if dialog.exec():
             self._update_statusbar()
             self.qso_sm.max_calls = self.settings.get("max_calls", 3)
-            self._diversity_ctrl.OPERATE_CYCLES = self.settings.get("diversity_operate_cycles", 80)
+            # v0.93: OPERATE_CYCLES + diversity_operate_cycles entfernt (1h-Frist zeit-basiert)
             self.radio.tx_audio_level = (
                 self.settings.get("tx_level", 100) / 100.0
             )

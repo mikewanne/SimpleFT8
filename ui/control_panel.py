@@ -1253,12 +1253,16 @@ class ControlPanel(QWidget):
     # =====================================================================
     def update_diversity_ratio(self, ratio: str, phase: str,
                                measure_step: int = 0, measure_total: int = 8,
-                               operate_cycles: int = 0, operate_total: int = 80,
-                               scoring_mode: str = "normal"):
+                               operate_seconds_remaining: int = 0,
+                               scoring_mode: str = "normal",
+                               # v0.92-Aliase fuer Backwards-Kompat (ignoriert wenn
+                               # operate_seconds_remaining >0; sonst Cycles-Fallback)
+                               operate_cycles: int = 0, operate_total: int = 0):
         """Diversity-Anzeige aktualisieren.
 
         ratio: '70:30' | '30:70' | '50:50'
         phase: 'measure' | 'operate' | 'remeasure'
+        operate_seconds_remaining: Sekunden bis zum naechsten Re-Measure (v0.93)
         scoring_mode: 'normal' (Standard) | 'dx' (DX)
         """
         mode_tag = "DX" if scoring_mode == "dx" else "Standard"
@@ -1283,14 +1287,37 @@ class ControlPanel(QWidget):
             self._a1_pct["50%"].setStyleSheet(_DIV_PCT_YELLOW)
             self._a2_pct["50%"].setStyleSheet(_DIV_PCT_YELLOW)
         else:
-            remaining = operate_total - operate_cycles
-            if remaining <= 5:
+            # v0.93: zeit-basiert. Backwards-Compat: wenn operate_seconds_remaining=0
+            # aber alte Cycles-Args gesetzt, fall-back auf Cycles (waehrend Migration).
+            secs = operate_seconds_remaining
+            if secs <= 0 and operate_total > 0:
+                # Fallback fuer alte Aufrufer
+                self._phase_label.setText(
+                    f"Diversity Neuberechnung in {operate_total - operate_cycles} Zyklen"
+                )
+                self._phase_label.setStyleSheet(
+                    f"color:#888888;font-size:9px;font-family:{_FONT};font-style:italic;"
+                )
+                if ratio == "70:30":
+                    self._a1_pct["70%"].setStyleSheet(_DIV_PCT_GREEN)
+                    self._a2_pct["30%"].setStyleSheet(_DIV_PCT_RED)
+                elif ratio == "30:70":
+                    self._a1_pct["30%"].setStyleSheet(_DIV_PCT_RED)
+                    self._a2_pct["70%"].setStyleSheet(_DIV_PCT_GREEN)
+                else:
+                    self._a1_pct["50%"].setStyleSheet(_DIV_PCT_YELLOW)
+                    self._a2_pct["50%"].setStyleSheet(_DIV_PCT_YELLOW)
+                return
+            mins = max(0, int(secs // 60))
+            if mins <= 2:
                 color = "#FF8800"
-            elif remaining <= 15:
+            elif mins <= 10:
                 color = "#FFCC00"
             else:
                 color = "#888888"
-            self._phase_label.setText(f"Diversity Neuberechnung in {remaining} Zyklen")
+            label_txt = (f"Diversity Neuberechnung in {mins} Min."
+                         if mins > 0 else "Diversity Neuberechnung jetzt")
+            self._phase_label.setText(label_txt)
             self._phase_label.setStyleSheet(
                 f"color:{color};font-size:9px;font-family:{_FONT};font-style:italic;"
             )
