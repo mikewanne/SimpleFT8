@@ -27,6 +27,9 @@ class DiversityController:
     OPERATE_CYCLES = 60  # 15 Min Betrieb (vorher 80=20 Min)
     THRESHOLD = 0.08     # 8% relative Differenz fuer Antennen-Entscheidung
     MIN_MEASURE_STATIONS = 5  # Mindestanzahl Stationen fuer Messung
+    # Adaptiv-Stop Phase 3 (v0.91 Block 2 #8)
+    EARLY_STOP_FRACTION = 2 / 3   # nach 2/3 von MEASURE_CYCLES pruefen
+    EARLY_STOP_THRESHOLD = 0.15   # 15% rel. Differenz, ~2× THRESHOLD=8%
     # Such-Periode SLOT-SYNCHRON: pro Modus N Slots = ~60s (DeepSeek/Internet-Konsens)
     _SEARCH_INTERVAL_SLOTS = {"FT8": 4, "FT4": 8, "FT2": 16}
     _CYCLE_S = {"FT8": 15.0, "FT4": 7.5, "FT2": 3.8}
@@ -70,10 +73,21 @@ class DiversityController:
         self._current_gap_width_hz: int = 0     # Sticky-State: Breite der aktuellen Lueck
         self._search_slots_remaining = 4        # Slot-Counter (default FT8 = 4)
         self._recalc_count = 0                  # Zaehler: wie oft wurde CQ-Freq neu berechnet
+        self._was_early_stopped = False         # Adaptiv-Stop-Flag (Cache-Schutz, v0.91 #8)
 
     def can_measure(self, station_count: int) -> bool:
         """Genug Stationen fuer zuverlaessige Messung?"""
         return station_count >= self.MIN_MEASURE_STATIONS
+
+    @property
+    def _early_stop_at(self) -> int:
+        """Step ab dem Frueh-Stop geprueft wird (2/3 von MEASURE_CYCLES).
+
+        FT8: 4, FT4: 8, FT2: 16. Bei FT4/FT2 effektiv wirkungslos wegen
+        Pattern-Periode 6 — Pre-Condition len(m1)==len(m2) verhindert Stop.
+        Akzeptabel da Hobby-Use 99% FT8 (siehe record_measurement-Doc).
+        """
+        return int(self.MEASURE_CYCLES * self.EARLY_STOP_FRACTION)
 
     def choose(self) -> str:
         """Antenne fuer den naechsten Zyklus waehlen.
@@ -360,7 +374,7 @@ class DiversityController:
     def record_measurement(self, ant: str, score: float,
                            station_count: int = 0, avg_snr: float = -30.0,
                            dx_weak_count: int = 0):
-        """Score nach Messzyklus einpflegen — evaluiert nach 8 Messungen.
+        """Score nach Messzyklus einpflegen — evaluiert nach MEASURE_CYCLES Messungen.
 
         Args:
             ant: "A1" oder "A2"
@@ -368,6 +382,18 @@ class DiversityController:
             station_count: Anzahl dekodierbarer Stationen (SNR > -20)
             avg_snr: Durchschnitts-SNR aller Stationen
             dx_weak_count: Anzahl schwacher Stationen (SNR < -10, DX-Modus)
+
+        Adaptiv-Stop (v0.91 #8): Nach 2/3 der Mess-Phase pruefen ob rel_diff
+        bereits klar (>=15%). Spart ~30s bei eindeutigen Verhaeltnissen.
+
+        Cancel-Schutz: record_measurement wird vom mw_cycle/mw_radio-Pfad
+        bei Cancel/Phase-Wechsel nicht mehr aufgerufen (Phase=operate gesetzt).
+        Daher kein internes _cancelled-Flag noetig.
+
+        FT4/FT2-Hinweis: Mess-Pattern hat Periode 6. Bei FT4 (MEASURE_CYCLES=12,
+        early_stop_at=8) ergibt sich 5:3 Verteilung statt balanciert — Pre-
+        Condition len(m1)==len(m2) verhindert Stop. Effektiv profitiert nur
+        FT8 von #8. Akzeptabel da Hobby-Use 99% FT8 (R1-bestaetigt).
         """
         if self._phase != "measure":
             return
@@ -381,8 +407,51 @@ class DiversityController:
             self._measurements[ant].append(float(station_count))
 
         self._measure_step += 1
+
+        # Adaptiv-Stop Phase 3 (v0.91 Block 2 #8) — nur wenn balanciert
+        if (self._measure_step == self._early_stop_at
+                and len(self._measurements["A1"]) == len(self._measurements["A2"])
+                and len(self._measurements["A1"]) >= 2):
+            if self._check_phase3_early_stop():
+                return  # _evaluate wurde in _check aufgerufen
+
         if self._measure_step >= self.MEASURE_CYCLES:
             self._evaluate()
+
+    def _check_phase3_early_stop(self) -> bool:
+        """Pruefen ob rel-Differenz >=15% nach 2/3 der Mess-Phase.
+
+        Bei Stop: _was_early_stopped=True, _evaluate() aufgerufen, ratio +
+        dominant gesetzt. mw_cycle.py darf save_ratio() bei diesem Flag NICHT
+        aufrufen (Cache-Schutz R1.4) — Adaptiv-Stop-Ratios sollen nicht
+        persistiert werden weil sie auf weniger Messdaten basieren.
+
+        Returns: True wenn Stop, False sonst.
+        """
+        m1 = self._measurements["A1"]
+        m2 = self._measurements["A2"]
+        s1 = statistics.median(m1)
+        s2 = statistics.median(m2)
+        peak = max(s1, s2)
+        if peak <= 1.0:
+            return False
+
+        rel_diff = abs(s1 - s2) / peak
+
+        import time
+        ts = time.strftime("%H:%M:%S")
+
+        if rel_diff < self.EARLY_STOP_THRESHOLD:
+            print(f"[{ts}] [Diversity] Adaptiv-Stop-Check nach {self._measure_step} Zyklen — "
+                  f"rel_diff={rel_diff:.1%} < {self.EARLY_STOP_THRESHOLD:.0%} → weiter")
+            return False
+
+        # Stop! _evaluate triggern + Flag setzen
+        print(f"[{ts}] [Diversity] Adaptiv-Stop nach {self._measure_step} Zyklen — "
+              f"rel_diff={rel_diff:.1%} >= {self.EARLY_STOP_THRESHOLD:.0%}, ~30s gespart, NICHT gecached")
+        self._was_early_stopped = True
+        self._evaluate()
+        return True
 
     def on_operate_cycle(self):
         """Pro Betriebszyklus aufrufen."""
@@ -398,6 +467,7 @@ class DiversityController:
         self._phase = "measure"
         self._measure_step = 0
         self._measurements = {"A1": [], "A2": []}
+        self._was_early_stopped = False  # Cache-Schutz Flag bei Re-Measure ruecksetzen
 
     def on_band_change(self):
         """Bandwechsel → Neueinmessung starten."""

@@ -214,14 +214,21 @@ class CycleMixin:
                 print("[Stats] Einmessen fertig — 6 Zyklen Warmup bis Stats starten")
                 self._set_cq_locked(False)
                 # Ratio in PresetStore ergänzen (Timestamp von Gain-Messung bleibt)
+                # Cache-Schutz (v0.91 #8 R1.4): Adaptiv-Stop-Ratios NICHT persistieren —
+                # weniger Messdaten → potenziell ungenauer, soll nicht ueber 6h Cache-
+                # Validity hinweg verwendet werden.
+                _early_stopped = getattr(self._diversity_ctrl, '_was_early_stopped', False)
                 _scoring = getattr(self._diversity_ctrl, 'scoring_mode', 'normal')
                 _store = getattr(self, '_dx_store', None) if _scoring == "dx" else getattr(self, '_standard_store', None)
-                if _store:
+                if _store and not _early_stopped:
                     _store.save_ratio(
                         self.settings.band, self.settings.mode,
                         ratio=self._diversity_ctrl.ratio,
                         dominant=self._diversity_ctrl.dominant,
                     )
+                elif _early_stopped:
+                    print("[mw_cycle] Adaptiv-Stop-Ratio NICHT gecached "
+                          "(weniger Messdaten als regulaerer Pfad)")
                 # Rückwärtskompatibilität
                 self.settings.save_diversity_preset(
                     mode=self.settings.mode,
