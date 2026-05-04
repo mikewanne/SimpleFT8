@@ -172,34 +172,31 @@ out` + `[FlexRadio] Reconnect #N in 60s ...`).
 
 ---
 
-### 🔥 DRINGEND — Block 2 Kalibrier-Pipeline-Optimierung (2026-05-04)
+### ✅ ERLEDIGT — Block 2 Kalibrier-Pipeline-Optimierung (v0.91, 2026-05-04)
 
-**Empfehlung Claude:** DRINGEND nach Block-1-Feldtest. Pipeline geht
-dann von ~4:35 Min (nach Block 1) auf typisch **~3:20 Min** (-52 % vs
-6:50 Ausgangsstand). Hobby-Use bei Bandwechsel deutlich angenehmer.
+Pipeline ~4:31 Min (v0.89/v0.90) → typisch ~3:20 Min, Best-Case ~2:30 Min.
 
-**Hintergrund:** Block 1 (V3 fertig 2026-05-04, 5 sicher Optimierungen)
-bringt 6:50 → ~4:35 Min. Block 2 ergaenzt 3 mittel-Risk-Optimierungen.
-Eigener V1→V2→R1→V3-Zyklus weil Adaptiv-Stops Schwellen-Tuning
-brauchen das im Feldtest justiert werden muss.
+**3 atomare Commits:**
+- `eef4369` ROUNDS 3→2 (#6, -60 s, Schedule 12→8 Eintraege)
+- `3068919` Adaptiv-Stop Phase 2 nach Runde 1 (#7, -30 bis -60 s,
+  Δ_SNR≥4 dB ODER Δ_STAT≥50 %, +6 Tests)
+- `f090097` Adaptiv-Stop Phase 3 nach 4 Zyklen + Cache-Schutz
+  (#8, -30 s, EARLY_STOP_THRESHOLD=0.15, Cache-Schutz R1.4 KRITISCH, +5 Tests)
 
-**3 Optimierungen:**
+**Voller V1→V2→R1→V3-Workflow durchgezogen.** R1-Findings adressiert:
+Cache-Schutz, Monitoring-Log mit Timestamp, FT4/FT2-Doku, Cancel-Flag dokumentiert.
 
-| # | Was | Wo | Aktuell | Neu | Ersparnis | Risiko |
-|---|---|---|---|---|---|---|
-| 6 | N=3 → N=2 pro Kombi | `ui/dx_tune_dialog.py:23` `ROUNDS = 3` | 3 Runden | 2 Runden | -60 s | mittel |
-| 7 | Adaptiv-Stop Phase 2 | `ui/dx_tune_dialog.py:_finish + zwischendrin` | immer 3 Runden | nach Runde 1 abbrechen wenn Δ > 4 dB SNR oder > 50 % Stationen | -30 bis -120 s | mittel |
-| 8 | Adaptiv-Stop Phase 3 | `core/diversity.py:choose / _finalize` | immer 6 Zyklen (nach Block 1) | nach 4 Zyklen abbrechen wenn Δ > 15-20 % | -30 s | mittel |
+**Tests:** 664 → 675 gruen.
 
-**Erwartete Pipeline nach Block 1+2:**
-- Best-Case (alles greift, Adaptiv-Stop frueh): ~2:30 Min (-63 %)
-- Typisch: ~3:20 Min (-52 %)
-- Worst-Case: ~4:35 Min (-33 %)
+**Schwellen konservativ tuned (R1-bestaetigt):** Field-Test liefert
+Daten fuer evtl. Senken auf 12 % (R1-Empfehlung). Monitoring-Log mit
+ISO-Timestamp eingebaut.
 
-**Aufwand:** ~1 h Code + Test + Feldtest-Schwellen-Tuning.
-**Plan-Datei:** `prompts/kalibrier_optimierung_plan.md` Block 2-Tabelle.
-**Trigger:** Mike sagt „Block 2 starten".
-**Status:** PARKED — wartet auf Block-1-Erfolg + Feldtest.
+**FT4/FT2-Hinweis:** Pattern-Periode 6 verhindert balancierte Verteilung
+bei MEASURE_CYCLES=12/24, Pre-Condition len-equal verhindert Stop —
+effektiv profitiert nur FT8 (Hobby-Use 99 % FT8, R1-akzeptiert).
+
+**Status:** ERLEDIGT. Field-Test Block 1+2 wartet auf Mike.
 
 ---
 

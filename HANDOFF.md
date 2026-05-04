@@ -1,41 +1,57 @@
 # HANDOFF — SimpleFT8
 
-**Stand 2026-05-04:** **v0.90 — Mess-Pattern-Bug-Fix erledigt.**
-`core/diversity.py:86` Mess-Phase auf fair 3:3 (Pattern A1,A1,A2,A2,A1,A2)
-korrigiert. Pre-v0.90 hatte 4× A1 + 2× A2 strukturellen Bias zu ANT1.
-Pipeline ~4:31 Min unveraendert, MEASURE_CYCLES=6 bleibt.
+**Stand 2026-05-04:** **v0.91 — Block 2 Adaptiv-Stops + ROUNDS=2 erledigt.**
+Pipeline ~4:31 Min (v0.89/v0.90) → typisch ~3:20 Min, Best-Case ~2:30 Min.
+v0.90 Mess-Pattern-Bug-Fix bleibt unveraendert (fair 3:3 Pattern A1A1A2A2A1A2).
 
-3 atomare Commits (`473f164`..`<v0.90-doku>`). Voller Workflow
-V1 → V2 (Self-Review) → R1 (DeepSeek-R1, 2 KRITISCH-Findings: End-to-End-Test
-+ Bandwechsel-Race-Hinweis behalten) → V3.
+**3 atomare Commits Block 2:**
+- `eef4369` perf(dx_tune): ROUNDS 3→2 (#6, -60s, Schedule 12→8 Eintraege)
+- `3068919` perf(dx_tune): Adaptiv-Stop Phase 2 nach Runde 1 (#7, -30 bis -60s)
+- `f090097` perf(diversity): Adaptiv-Stop Phase 3 nach 4 Zyklen + Cache-Schutz (#8, -30s)
 
-**Tests:** 664/664 gruen (+5 neue: ratio_balanced, seamless_loop,
-closed_pairs_per_antenna, evaluate_fair_yields_5050,
-evaluate_a1_dominant_yields_7030).
+Voller Workflow V1→V2→R1→V3 durchgezogen. R1 (DeepSeek-Reasoner) hat 4
+kritische Findings geliefert die alle in V3 adressiert wurden (Cache-Schutz
+fuer Adaptiv-Stop-Ratios, Monitoring-Log mit Timestamp, FT4/FT2-Doku,
+Cancel-Flag dokumentieren).
 
-**🟡 Offene R1-Verdachts-Punkte (NICHT in v0.90 — separater Workflow):**
+**Tests:** 664 → 675 gruen (+6 fuer #7 in `test_dx_tune_adaptive_stop.py` NEU,
++5 fuer #8 in `test_patterns.py` Erweiterung).
+
+**Schwellen-Werte (R1-bestaetigt konservativ):**
+- Phase 2: Δ_SNR ≥ 4 dB ODER Δ_STAT ≥ 50 % (Pre-Cond: 4 Buckets non-empty,
+  non-overload, min 5 Stationen)
+- Phase 3: rel_diff ≥ 15 % (Pre-Cond: len(m1)==len(m2), peak>1.0)
+
+**FT4/FT2-Hinweis:** Pattern-Periode 6 verhindert balancierte Verteilung
+bei MEASURE_CYCLES=12/24, Pre-Condition len-equal verhindert Stop —
+effektiv profitiert nur FT8 (Hobby-Use 99 % FT8, R1-akzeptiert).
+
+**Cache-Schutz (R1.4 KRITISCH):** Adaptiv-Stop-Ratios werden NICHT in
+PresetStore gespeichert (`mw_cycle.py` save_ratio() pruef `_was_early_stopped`).
+Cache-Reuse-TODO bleibt auf voll-gemessene Ratios beschraenkt.
+
+**🟡 Offene R1-Verdachts-Punkte (NICHT in v0.91 — separater Workflow):**
 - `mw_radio.py` Bandwechsel-Race: laufender Slot wird nach `on_band_change`
   reset noch verarbeitet → `record_measurement` mit altem Antennen-State auf
   neuem Band moeglich. R1 hat den Verdacht zweimal angedeutet (v0.90 Audit
-  + V3-Review). Token-Pattern-Fix in eigener Iteration. Verifikation per
-  Field-Test (Bandwechsel im 2. Mess-Zyklus → erwartet: kein Datenleck
-  zwischen Baendern in measurements-Liste).
+  + V3-Review). Token-Pattern-Fix in eigener Iteration.
 
 **Naechster Schritt nach Compact:**
-1. **Block 2 starten** (Adaptiv-Stops + ROUNDS=2) — eigener V1→V3-Zyklus,
-   Ziel typisch ~3:20 Min Pipeline. Trigger: „Block 2 starten".
-2. **Block 1 Feldtest** — Mike testet Pipeline-Dauer ~4:31 Min + Mess-
-   Qualitaet. Bei v0.90 Mess-Pattern-Fix wird ANT2-Win-Rate erwartet
-   hoeher (15-25 % statt 4 %).
-3. **Diversity-Ratio-Cache beim Bandwechsel** (TODO-Eintrag, R1+Claude
+1. **Block 1+2 Feldtest** — Mike testet Pipeline-Dauer:
+   - Best-Case ~2:30 Min (alle Adaptiv-Stops greifen)
+   - Typisch ~3:20 Min
+   - ANT2-Win-Rate erwartet weiter hoeher (15-25 % statt 4 % pre-v0.90)
+   - Monitoring-Log liefert Schwellen-Tuning-Daten (4 dB / 50 % / 15 %)
+2. **Diversity-Ratio-Cache beim Bandwechsel** (TODO-Eintrag, R1+Claude
    einig: X = 2h). Spart 1:30-3 Min Pipeline pro Bandwechsel. Trigger:
-   „Cache-Reuse starten".
-4. **OPERATE_CYCLES = 60 ueberdenken** (TODO-Eintrag) — 15 Min ist
-   sehr aggressiv wenn 2h-Cache reicht. Datenlage aus v0.90 Field-Test
+   „Cache-Reuse starten". Cache-Schutz aus #8 ist Voraussetzung — nur
+   voll-gemessene Ratios werden persistiert.
+3. **OPERATE_CYCLES = 60 ueberdenken** (TODO-Eintrag) — 15 Min ist
+   sehr aggressiv wenn 2h-Cache reicht. Datenlage aus v0.91 Field-Test
    abwarten, dann ggf. auf 120-240 erhoehen.
-5. **Bandwechsel-Race verifizieren** (R1-Verdacht v0.90, TODO-Eintrag)
-   — Token-Pattern-Fix nach Block 2.
-6. Antennen-Drossel-Beobachtung 2026-05-04: Mantelwellensperre wieder
+4. **Bandwechsel-Race verifizieren** (R1-Verdacht v0.90, TODO-Eintrag)
+   — Token-Pattern-Fix nach Cache-Reuse.
+5. Antennen-Drossel-Beobachtung 2026-05-04: Mantelwellensperre wieder
    ausgebaut, ANT2-Kabel jetzt mit lockeren 8-foermigen Schlaufen verlegt.
    Mit v0.90 Pattern-Fix wird Mike's „4 % ANT2-Win"-Beobachtung neu
    bewertet (vermutlich ~15-25 % bei fairer Messung).
@@ -44,8 +60,9 @@ evaluate_a1_dominant_yields_7030).
 Mess-Bias 4:2. Pooled-Mean +88 %/+124 % bleibt valide weil ANT2 trotz Bias
 signifikant beitraegt — absolute ANT2-Win-Rate war konservativ unterschaetzt.
 
-**Rollback bei Problemen:** `git checkout aec3706` (letzter Block-1-Commit
-v0.89, vor v0.90 Pattern-Fix).
+**Rollback bei Problemen:**
+- v0.91 Block 2 isoliert: `git checkout f090097^` (= v0.90-Stand, Block 2 raus)
+- Komplett v0.89: `git checkout aec3706` (vor v0.90 Pattern-Fix)
 
 ---
 

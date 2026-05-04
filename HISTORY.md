@@ -5,6 +5,69 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-04 v0.91 — Block 2 Kalibrier-Pipeline-Optimierung (Adaptiv-Stops)
+
+**Ziel:** Pipeline ~4:31 Min (v0.89/v0.90) → typisch ~3:20 Min (-26 %),
+Best-Case ~2:30 Min (-45 %) bei eindeutigen Antennen-Verhaeltnissen.
+
+**Voller Workflow durchgezogen:**
+- V1 (`prompts/block2_v1.md`) — Probleme + Akzeptanzkriterien
+- V2 (`prompts/block2_v2.md`) — Self-Review, 6 Findings vs V1 (Pre-Conditions
+  klarer, FT4/FT2-Pattern-Edge-Case entdeckt, Property statt Konstante,
+  Schwellen-Rationale begruendet, Test-Strategie konkret, Field- vs Unit-AC-Trennung)
+- R1 (`prompts/block2_r1_review.md`, deepseek-reasoner) — 4 kritische +
+  4 minor Findings: Cache-Schutz fuer Adaptiv-Stop-Ratios (R1.4 KRITISCH),
+  Monitoring-Log mit Timestamp, FT4/FT2-Doku, Cancel-Flag dokumentieren
+- V3 (`prompts/block2_v3.md`) — alle R1-Findings adressiert, Plan-Mode Go
+
+**3 Optimierungen umgesetzt (3 atomare Commits):**
+
+### Commit 1: `eef4369` — perf(dx_tune): ROUNDS 3→2 (#6, -60s)
+- `ui/dx_tune_dialog.py:23` ROUNDS = 2 (statt 3)
+- 5 Hint-Texte synchron: Docstring, Inline-Kommentar, UI-Hint × 2, step_label
+- step_label nutzt ROUNDS-Konstante (statt hardcoded 3)
+- Schedule = 8 Eintraege (2 Runden × 2 ANT × 2 Gain)
+- Tests: 664 → 664 (keine Aenderung erwartet)
+
+### Commit 2: `3068919` — perf(dx_tune): Adaptiv-Stop Phase 2 (#7, -30 bis -60s)
+- `_check_phase2_early_stop()` nach Schritt 4 (Runde 1 Ende)
+- Stop-Bedingung: Δ_SNR ≥ 4 dB ODER Δ_STAT ≥ 50 % (R1-bestaetigt konservativ)
+- Pre-Conditions: alle 4 Buckets non-empty + non-overload + min 5 Stationen
+- Monitoring-Log mit ISO-Timestamp fuer Schwellen-Tuning post-Feldtest
+- Tests +6 (`test_dx_tune_adaptive_stop.py` NEU): 670 gruen
+
+### Commit 3: `f090097` — perf(diversity): Adaptiv-Stop Phase 3 + Cache-Schutz (#8, -30s)
+- `core/diversity.py`:
+  - EARLY_STOP_FRACTION = 2/3, EARLY_STOP_THRESHOLD = 0.15
+  - Property `_early_stop_at` (Modus-aware ueber MEASURE_CYCLES)
+  - Flag `_was_early_stopped` (in reset() + start_measure())
+  - `_check_phase3_early_stop()` — rel_diff>=15 % nach 4 Zyklen
+  - record_measurement nur wenn `len(m1)==len(m2)` (FT4/FT2-Schutz)
+- `ui/mw_cycle.py` (R1.4 Cache-Schutz):
+  - save_ratio() wird bei `_was_early_stopped=True` UEBERSPRUNGEN
+  - Adaptiv-Stop-Ratios sollen nicht 6h+ via PresetStore wiederverwendet werden
+- FT4/FT2-Hinweis: Pattern-Periode 6 verhindert balancierte Verteilung bei
+  MEASURE_CYCLES=12/24, Pre-Condition len-equal verhindert Stop —
+  effektiv profitiert nur FT8 (R1-akzeptiert da Hobby-Use 99 % FT8)
+- Tests +5 (`test_patterns.py` Erweiterung): 675 gruen
+
+**Erwartete Pipeline:**
+- Best-Case (alles greift): Tunen 3 s + Phase 2 1:00 + Phase 3 1:00 = ~2:30 Min
+- Typisch: ~3:20 Min
+- Worst-Case (keine Adaptiv-Stops): ~3:30 Min (= 30 s vs v0.90 dank #6 allein)
+
+**Tests:** 664 → 675 gruen (+11: 6 fuer #7, 5 fuer #8).
+
+**Statistik-Disclaimer:** Adaptiv-Stop-Ratios werden NICHT in PresetStore
+gespeichert. Cache-Reuse-TODO (`project_diversity_cache_reuse.md`) bleibt
+auf voll-gemessene Ratios beschraenkt.
+
+**Offen:** Field-Test der Schwellen-Werte (4 dB, 50 %, 15 %). Bei zu seltenen
+Triggers auf 12 % senken (R1-Empfehlung). Monitoring-Log liefert Daten.
+🟡 Bandwechsel-Race in `mw_radio.py` weiter offen (separater Workflow).
+
+---
+
 ## 2026-05-04 v0.90 — Mess-Pattern-Bug-Fix (KRITISCH, Phase-3-Bias seit v0.36 behoben)
 
 **Bug seit Phase 3:** `core/diversity.py:86` nutzte das Pattern
