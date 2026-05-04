@@ -509,12 +509,18 @@ class RadioMixin:
         label = "DIVERSITY DX" if scoring == "dx" else "DIVERSITY"
         self.control_panel.btn_diversity.setText(label)
 
-        # Preset-Store pruefen — 2h-Frist pro Band+FTMode
         band = self.settings.band
         ft_mode = self.settings.mode
+
+        # v0.93 Cache-Reuse: Ratio < 1h alt → Phase 3 ueberspringen + Toast
+        if self._try_diversity_cache_reuse(band, ft_mode, scoring):
+            self._update_statusbar()
+            return
+
+        # Preset-Store pruefen — 6h-Frist Gain
         store = getattr(self, '_dx_store', None) if scoring == "dx" else getattr(self, '_standard_store', None)
-        if store and store.is_valid(band, ft_mode):
-            age = store.get_age_minutes(band, ft_mode)
+        if store and store.is_valid_gain(band, ft_mode):
+            age = store.get_gain_age_minutes(band, ft_mode)
             mode_label = "Diversity DX" if scoring == "dx" else "Diversity Standard"
             from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel
             _dlg = QDialog(self)
@@ -805,8 +811,16 @@ class RadioMixin:
             self.control_panel.btn_cq.setText("CQ RUFEN")
             self.rx_panel.table.setEnabled(True)
 
-    def _enable_diversity(self, scoring_mode: str = "normal"):
-        """Diversity aktivieren: Antenne pro Zyklus wechseln, Stationen akkumulieren."""
+    def _enable_diversity(self, scoring_mode: str = "normal", *,
+                          cached_ratio: str | None = None,
+                          cached_dominant: str | None = None,
+                          cached_age_seconds: float = 0.0):
+        """Diversity aktivieren: Antenne pro Zyklus wechseln, Stationen akkumulieren.
+
+        v0.93 Cache-Reuse: wenn ``cached_ratio`` gesetzt → Phase=operate
+        statt =measure, ratio/dominant aus Cache, Pipeline-Lock NICHT setzen
+        (Phase 3 wird komplett uebersprungen).
+        """
         self._diversity_in_operate = False  # Transition-Guard zurücksetzen
         # RX-Liste + QSO-Panel leeren bei Antennen-Modus-Wechsel
         self.rx_panel.table.setRowCount(0)
@@ -830,21 +844,40 @@ class RadioMixin:
         store = getattr(self, '_dx_store', None) if scoring_mode == "dx" else getattr(self, '_standard_store', None)
         preset = store.get(band, mode) if store else None
 
-        # Ratio NIE aus Cache laden — Pattern ist band-spezifisch (ANT1 hat
-        # je nach Band ganz andere Resonanz-Eigenschaften). Cache-"Weiter" gilt
-        # NUR fuer Gain (Hardware-Eigenschaft des RX-Verstaerkers).
-        # Ratio wird IMMER neu gemessen — 8 Slots Phase=measure, dann _evaluate.
-        # Reihenfolge: Lock VOR reset (v0.92 R1-Audit Befund 3) — sonst Race-
-        # Window in dem laufende Slots ins frische `_measurements`-Bucket
-        # schreiben koennten.
-        self._set_cq_locked(True)
-        self._set_gain_measure_lock(True)
-        self._diversity_ctrl.reset()
-        print(f"[Diversity] Phase=measure — Ratio wird neu eingemessen ({scoring_mode.upper()})")
-        self.control_panel.update_diversity_ratio(
-            "50:50", "measure", 0,
-            self._diversity_ctrl.MEASURE_CYCLES,
-            scoring_mode=scoring_mode)
+        # v0.93: Cache-Reuse vs Standard-Pfad
+        # - cached_ratio gesetzt → Phase=operate, kein Lock, kein Phase 3.
+        # - sonst → Standard-Pfad (Lock VOR reset, Phase=measure).
+        if cached_ratio is not None:
+            # Cache-Reuse: kein Lock, Phase direkt operate
+            self._diversity_ctrl.reset()
+            self._diversity_ctrl.ratio    = cached_ratio
+            self._diversity_ctrl.dominant = cached_dominant or ("A1" if cached_ratio == "70:30" else None)
+            self._diversity_ctrl._phase   = "operate"
+            import time as _time
+            self._diversity_ctrl._last_measured_at = _time.time() - cached_age_seconds
+            self._set_cq_locked(False)
+            self._set_gain_measure_lock(False)
+            print(f"[Diversity] Phase=operate (Cache-Reuse) — {cached_ratio} "
+                  f"({scoring_mode.upper()})")
+            self.control_panel.update_diversity_ratio(
+                cached_ratio, "operate", 0,
+                self._diversity_ctrl.MEASURE_CYCLES,
+                scoring_mode=scoring_mode)
+        else:
+            # Ratio NIE aus Cache laden — Pattern ist band-spezifisch (ANT1 hat
+            # je nach Band ganz andere Resonanz-Eigenschaften). Standard-Pfad:
+            # Phase=measure, 6 Slots, dann _evaluate.
+            # Reihenfolge: Lock VOR reset (v0.92 R1-Audit Befund 3) — sonst
+            # Race-Window in dem laufende Slots ins frische
+            # `_measurements`-Bucket schreiben koennten.
+            self._set_cq_locked(True)
+            self._set_gain_measure_lock(True)
+            self._diversity_ctrl.reset()
+            print(f"[Diversity] Phase=measure — Ratio wird neu eingemessen ({scoring_mode.upper()})")
+            self.control_panel.update_diversity_ratio(
+                "50:50", "measure", 0,
+                self._diversity_ctrl.MEASURE_CYCLES,
+                scoring_mode=scoring_mode)
         self.control_panel.update_diversity_counts(0, 0)
 
         ft_mode = mode  # bereits oben gesetzt
@@ -879,6 +912,60 @@ class RadioMixin:
         if hasattr(self, "_easter_egg_active"):
             self._update_button_visibility()
 
+    def _try_diversity_cache_reuse(self, band: str, ft_mode: str,
+                                   scoring: str) -> bool:
+        """Pruefen ob Ratio-Cache < 1h alt ist und ggf. anwenden (v0.93).
+
+        Bei Erfolg: ``_enable_diversity`` aufrufen, Phase=operate setzen,
+        ratio + dominant aus Cache, Toast zeigen, ``_last_measured_at``
+        passend setzen. Returnt True → Aufrufer ueberspringt Pipeline/Dialog.
+
+        Pre-Condition: Standard-Modus (gain UND ratio im Cache). Wenn nur
+        gain valid ist (1h < age <= 6h) → False, Standard-Dialog uebernimmt.
+        """
+        store = (getattr(self, '_dx_store', None) if scoring == "dx"
+                 else getattr(self, '_standard_store', None))
+        if not store:
+            return False
+        if not store.is_valid_ratio(band, ft_mode):
+            return False
+        # Gain muss auch valid sein (ohne Gain kann der RX-Verstaerker nicht
+        # korrekt eingestellt werden — Cache-Reuse-Pfad braucht beides).
+        if not store.is_valid_gain(band, ft_mode):
+            return False
+        entry = store.get(band, ft_mode)
+        ratio = entry.get("ratio")
+        dominant = entry.get("dominant")
+        if not ratio:
+            return False
+        age_min = store.get_ratio_age_minutes(band, ft_mode) or 0
+        age_sec = age_min * 60
+
+        scoring_label = "Diversity DX" if scoring == "dx" else "Diversity Standard"
+        print(f"[Diversity] Cache-Reuse {band}/{ft_mode}: {ratio} "
+              f"(dominant: {dominant or 'A1'}, vor {age_min} Min.) — Phase 3 skip")
+
+        self._enable_diversity(
+            scoring_mode=scoring,
+            cached_ratio=ratio,
+            cached_dominant=dominant,
+            cached_age_seconds=age_sec,
+        )
+
+        # Toast zeigen (non-modal, 5s self-close)
+        try:
+            from ui.diversity_cache_toast import DiversityCacheToast
+            toast = DiversityCacheToast(
+                self, band=band, ft_mode=ft_mode,
+                scoring_label=scoring_label,
+                ratio=ratio, dominant=dominant,
+                age_minutes=age_min,
+            )
+            toast.show()
+        except Exception as e:
+            print(f"[Diversity] Toast-Fehler ignoriert: {e}")
+        return True
+
     def _disable_diversity(self):
         """Diversity deaktivieren: zurueck auf ANT1."""
         # RX-Liste + QSO-Panel leeren bei Antennen-Modus-Wechsel
@@ -912,15 +999,23 @@ class RadioMixin:
     def _check_diversity_preset(self, band: str, ft_mode: str, scoring: str) -> None:
         """Preset-Check bei Band/Modus-Wechsel mit aktiver Diversity.
 
-        is_valid + < 2h → Dialog (Weiter / Neu messen).
-        Kein Preset oder abgelaufen → sofort Pipeline starten.
+        v0.93 Reihenfolge:
+        1. Ratio < 1h → Cache-Reuse, Phase 3 skip, Toast.
+        2. Sonst Gain < 6h → Dialog (Weiter / Neu messen).
+        3. Sonst → volle Pipeline.
         """
         if not getattr(self, 'radio', None) or not self.radio.ip:
             return
+
+        # v0.93 Cache-Reuse vor Standard-Dialog
+        if self._try_diversity_cache_reuse(band, ft_mode, scoring):
+            self._update_statusbar()
+            return
+
         store = (getattr(self, '_dx_store', None) if scoring == "dx"
                  else getattr(self, '_standard_store', None))
-        if store and store.is_valid(band, ft_mode):
-            age = store.get_age_minutes(band, ft_mode)
+        if store and store.is_valid_gain(band, ft_mode):
+            age = store.get_gain_age_minutes(band, ft_mode)
             mode_label = "Diversity DX" if scoring == "dx" else "Diversity Standard"
             from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel
             _dlg = QDialog(self)
