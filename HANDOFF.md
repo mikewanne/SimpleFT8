@@ -21,14 +21,21 @@ evaluate_a1_dominant_yields_7030).
   Field-Test (Bandwechsel im 2. Mess-Zyklus → erwartet: kein Datenleck
   zwischen Baendern in measurements-Liste).
 
-**Naechster Schritt:**
-1. **Block 1 Feldtest** — Mike testet Pipeline-Dauer ~4:31 Min + Mess-
-   Qualitaet (Overload-Check, Median-Stabilitaet). Bei v0.90 Mess-Pattern-
-   Fix wird ANT2-Win-Rate erwartet hoeher (15-25 % statt 4 %).
-2. **Block 2 starten** (Adaptiv-Stops + ROUNDS=2) — eigener V1→V3-Zyklus,
+**Naechster Schritt nach Compact:**
+1. **Block 2 starten** (Adaptiv-Stops + ROUNDS=2) — eigener V1→V3-Zyklus,
    Ziel typisch ~3:20 Min Pipeline. Trigger: „Block 2 starten".
-3. **Bandwechsel-Race verifizieren** — eigener Mini-Bug-Fix nach Block 2.
-4. Antennen-Drossel-Beobachtung 2026-05-04: Mantelwellensperre wieder
+2. **Block 1 Feldtest** — Mike testet Pipeline-Dauer ~4:31 Min + Mess-
+   Qualitaet. Bei v0.90 Mess-Pattern-Fix wird ANT2-Win-Rate erwartet
+   hoeher (15-25 % statt 4 %).
+3. **Diversity-Ratio-Cache beim Bandwechsel** (TODO-Eintrag, R1+Claude
+   einig: X = 2h). Spart 1:30-3 Min Pipeline pro Bandwechsel. Trigger:
+   „Cache-Reuse starten".
+4. **OPERATE_CYCLES = 60 ueberdenken** (TODO-Eintrag) — 15 Min ist
+   sehr aggressiv wenn 2h-Cache reicht. Datenlage aus v0.90 Field-Test
+   abwarten, dann ggf. auf 120-240 erhoehen.
+5. **Bandwechsel-Race verifizieren** (R1-Verdacht v0.90, TODO-Eintrag)
+   — Token-Pattern-Fix nach Block 2.
+6. Antennen-Drossel-Beobachtung 2026-05-04: Mantelwellensperre wieder
    ausgebaut, ANT2-Kabel jetzt mit lockeren 8-foermigen Schlaufen verlegt.
    Mit v0.90 Pattern-Fix wird Mike's „4 % ANT2-Win"-Beobachtung neu
    bewertet (vermutlich ~15-25 % bei fairer Messung).

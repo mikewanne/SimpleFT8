@@ -44,6 +44,105 @@ genug dass Mike es nicht aktiv stoert), aber sauber zu fixen.
 
 ---
 
+### 🆕 Diversity-Ratio-Cache beim Bandwechsel wiederverwenden (2026-05-04, Mike)
+
+**Idee:** Bei Bandwechsel pruefen ob fuer `band+ftmode+scoring`-Kombination
+schon eine frische Diversity-Ratio im `PresetStore` liegt — falls ja
+uebernehmen statt neu einzumessen. Spart 1:30-3 Min Pipeline pro
+Bandwechsel.
+
+**Hintergrund:**
+- `PresetStore.save_ratio(band, ft_mode, ratio, dominant)` existiert
+  bereits (`core/preset_store.py:139`) — wird in `mw_cycle.py:220` nach
+  Phase 3 schon aufgerufen.
+- `PresetStore.is_valid(band, ft_mode)` macht schon Frist-Check (aktuell
+  6h fuer Gain).
+- Aktuell: `_on_band_changed()` in `ui/mw_radio.py:265` ruft
+  `_diversity_ctrl.on_band_change()` → `reset()` → neue Phase-3-Messung
+  ist Pflicht (v0.74-Bug-Fix `load_preset()` geloescht).
+
+**Problem v0.74-Konflikt:** Damals war Cache nicht band-spezifisch. Jetzt
+ist er es (Key `40m_FT8`, `20m_FT8`, etc.) → die alte Begruendung
+„Pattern band-spezifisch" gilt nicht mehr.
+
+**Vorschlag (R1 + Claude einig):**
+1. **Cache-Validity X = 2 Stunden** (R1: konservativ, deckt typische
+   Hobby-Session, faengt Daemmerungs-Uebergang 18-20 UTC ab; 4h waere
+   vertretbar aber riskanter; 6h zu lang weil Tag→Nacht oft drin).
+2. Beim Bandwechsel: vor `on_band_change()` reset pruefen ob
+   `preset_store.is_valid(band, mode)` UND ratio+dominant im entry.
+   Falls ja: `_diversity_ctrl` mit gespeicherten Werten initialisieren,
+   Phase=operate, Phase 3 ueberspringen.
+3. Falls nein: aktueller Pfad (full reset).
+4. **UI-Feedback PFLICHT:** Toast „Diversity aus Cache (Xh alt) —
+   A1 70:30" oder aehnlich. Mike sieht dass keine Messung laeuft und
+   kann manuell neu einmessen wenn er will.
+5. **Auto-Refresh alle 80 Zyklen NICHT noetig** — bestehender
+   Re-Measure-Zyklus (aktuell `OPERATE_CYCLES = 60`) speichert schon
+   nach jeder Messung via `save_ratio`. Mike's Vorschlag ist redundant.
+6. **v0.74-Regression-Test umschreiben** (`test_load_preset_removed`):
+   nicht loeschen — Begruendung dokumentieren dass band-spezifisches
+   Reuse jetzt erlaubt ist, globales nicht.
+
+**Risiken (R1):**
+- Schlimmster Fall: 5h alter Cache aus Nacht (A2 dominant), aber jetzt
+  Tag (A1 waere besser) → suboptimale 30:70 → User merkt nur indirekt
+  (sinkende QSO-Rate).
+- Mitigation: 2h-Limit + UI-Toast + manueller Override.
+
+**Code-Stellen (V1-Skizze, R1 in eigenem Workflow):**
+- `core/preset_store.py` — neue Konstante `RATIO_VALIDITY_SECONDS = 2*3600`
+  (Gain-Frist 6h bleibt — Hardware-Eigenschaft langlebiger als Ratio)
+- `ui/mw_radio.py:_on_band_changed` — Cache-Check vor reset
+- `ui/mw_cycle.py` — UI-Toast-Trigger bei Cache-Hit
+- `tests/test_diversity_bandwechsel.py` — Test umschreiben
+
+**Aufwand R1:** ~1-2 Stunden inkl. Tests + V1→V3-Workflow.
+
+**Mike's Reihenfolge-Frage:** Block 2 (Adaptiv-Stops) zuerst macht Sinn —
+Cache-Reuse-Nutzen waechst wenn Pipeline trotzdem laenger ist. Aber
+unabhaengig.
+
+**Status:** OPEN — nach Block 2 oder parallel.
+
+---
+
+### 🟡 OFFEN — OPERATE_CYCLES = 60 ist sehr aggressiv (2026-05-04, Mike)
+
+**Beobachtung Mike:** Wenn 2h-Cache fuer Bandwechsel reicht — warum
+dann alle 15 Min (= 60 Zyklen FT8) im Operate-Modus neu einmessen?
+
+**Status quo:**
+- `core/diversity.py:27` `OPERATE_CYCLES = 60` (15 Min FT8)
+- `should_remeasure()` triggert nach 60 Zyklen ohne aktives QSO →
+  Phase 3 neu (~1:30 Min)
+- Operate-Anteil aktuell: 15 / (15+1.5) ≈ 91 %
+
+**Wenn `OPERATE_CYCLES = 240` (60 Min) waere:**
+- Operate-Anteil: 60 / (60+1.5) ≈ 97.5 %
+- Spart ~3 Min Mess-Pause pro Stunde
+- Risiko: Tag→Nacht-Uebergang innerhalb 1h wird nicht erkannt
+
+**Zwei Mechanismen mit unterschiedlichem Zweck:**
+1. **OPERATE_CYCLES** = Drift-Tracking im aktiven Betrieb auf einem Band
+2. **Cache-Validity** = Schnelles Bandhopping ohne Pipeline
+
+**Diskussion noetig:**
+- Vorteil 60 Zyklen: konservativ, faengt Drift kontinuierlich
+- Vorteil 240 Zyklen: weniger Mess-Unterbrechungen
+- Vermittler: 120 Zyklen (30 Min) als Kompromiss
+- Praxis-Frage: Wie haeufig aendert sich Ratio innerhalb 30-60 Min
+  realistisch? Statistik aus v0.90 Field-Test wird das zeigen.
+
+**Empfehlung:** **Beobachten** mit v0.90 Field-Test — wenn die Ratio
+sich seltener als gedacht aendert, kann `OPERATE_CYCLES` hoch.
+Sonst lassen.
+
+**Aufwand:** 1 Konstante + Tests + Workflow ~30 min.
+**Status:** OPEN — Datenlage abwarten, niedrige Prioritaet.
+
+---
+
 ### 🆕 Radio-Erreichbarkeits-Check beim App-Start (2026-05-04, Mike)
 
 **Problem:** Wenn das FlexRadio aus ist, startet die App still und versucht
