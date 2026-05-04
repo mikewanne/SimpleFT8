@@ -907,22 +907,20 @@ def test_diversity_preset_missing():
     assert s.get_diversity_preset("FT2", "160m") is None
 
 
-# ── can_measure() Schwelle ────────────────────────────────────────────────────
+# ── can_measure() (v0.93: immer True, Score-basierter Fallback in _evaluate) ─
 
-def test_can_measure_enough():
-    """5 Stationen → kann messen."""
+def test_can_measure_always_true_v093():
+    """v0.93: can_measure() ist immer True — MIN_MEASURE_STATIONS entfernt.
+
+    Die Schwelle wandert nach ``_evaluate``: bei ``peak <= MIN_PEAK_SCORE``
+    faellt die Pipeline auf 50:50 zurueck statt Phase 3 zu blocken.
+    """
     from core.diversity import DiversityController
     dc = DiversityController()
-    assert dc.can_measure(5) is True
+    assert dc.can_measure() is True
+    assert dc.can_measure(0) is True
+    assert dc.can_measure(3) is True
     assert dc.can_measure(20) is True
-
-
-def test_can_measure_too_few():
-    """3 Stationen → kann NICHT messen."""
-    from core.diversity import DiversityController
-    dc = DiversityController()
-    assert dc.can_measure(3) is False
-    assert dc.can_measure(0) is False
 
 
 # ── Modus-Multiplikator ──────────────────────────────────────────────────────
@@ -2352,23 +2350,28 @@ def test_diversity_evaluate_too_few_data_falls_back_to_50_50():
     assert dc.dominant is None
 
 
-def test_diversity_dx_mode_uses_weak_count():
-    """DX-Modus zaehlt schwache Stationen (SNR < -10), Standard-Modus alle."""
+def test_diversity_record_measurement_uses_score_v093():
+    """v0.93: beide Modi (Standard + DX) speichern jetzt ``score``.
+
+    Frueher (v0.92): Standard speicherte ``station_count``, DX
+    ``dx_weak_count``. Jetzt einheitlich Score (sum(snr+30)) — die
+    Aufrufer-Sammlungsstrategie unterscheidet die Modi (DX nur SNR<-10),
+    aber der gespeicherte Wert ist immer der Slot-Score.
+    """
     from core.diversity import DiversityController
     dc_dx = DiversityController(scoring_mode="dx")
     dc_dx._phase = "measure"
-    # In DX-Modus: dx_weak_count wird gespeichert
-    dc_dx.record_measurement("A1", score=0.0, station_count=20, dx_weak_count=2)
-    dc_dx.record_measurement("A2", score=0.0, station_count=5, dx_weak_count=8)
-    assert dc_dx._measurements["A1"] == [2.0]
-    assert dc_dx._measurements["A2"] == [8.0]
+    dc_dx.record_measurement("A1", score=120.0, station_count=20, dx_weak_count=2)
+    dc_dx.record_measurement("A2", score=80.0, station_count=5, dx_weak_count=8)
+    assert dc_dx._measurements["A1"] == [120.0]
+    assert dc_dx._measurements["A2"] == [80.0]
 
     dc_std = DiversityController(scoring_mode="normal")
     dc_std._phase = "measure"
-    dc_std.record_measurement("A1", score=0.0, station_count=20, dx_weak_count=2)
-    dc_std.record_measurement("A2", score=0.0, station_count=5, dx_weak_count=8)
-    assert dc_std._measurements["A1"] == [20.0]
-    assert dc_std._measurements["A2"] == [5.0]
+    dc_std.record_measurement("A1", score=300.0, station_count=20, dx_weak_count=2)
+    dc_std.record_measurement("A2", score=75.0, station_count=5, dx_weak_count=8)
+    assert dc_std._measurements["A1"] == [300.0]
+    assert dc_std._measurements["A2"] == [75.0]
 
 
 def test_diversity_phase_transition_after_6_measurements():
@@ -2380,10 +2383,10 @@ def test_diversity_phase_transition_after_6_measurements():
     # 5 Messungen → noch measure
     for i in range(5):
         ant = "A1" if i % 2 == 0 else "A2"
-        dc.record_measurement(ant, score=0.0, station_count=10)
+        dc.record_measurement(ant, score=150.0)
     assert dc.phase == "measure", f"Nach 5 Messungen: phase={dc.phase}"
     # 6. Messung → _evaluate triggert → phase=operate
-    dc.record_measurement("A2", score=0.0, station_count=10)
+    dc.record_measurement("A2", score=150.0)
     assert dc.phase == "operate"
     assert dc._operate_cycles == 0
 
@@ -2393,7 +2396,7 @@ def test_diversity_record_measurement_ignored_in_operate_phase():
     from core.diversity import DiversityController
     dc = DiversityController()
     dc._phase = "operate"
-    dc.record_measurement("A1", score=99.0, station_count=99)
+    dc.record_measurement("A1", score=99.0)
     assert dc._measurements["A1"] == []
     assert dc._measurements["A2"] == []
 

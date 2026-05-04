@@ -181,12 +181,15 @@ def test_measure_evaluate_fair_yields_5050():
 
     Schuetzt gegen Regression in _evaluate(): Pattern-Test allein deckt
     Median+Ratio-Logik nicht ab (R1-Finding v0.90).
+
+    v0.93: ``score=N*15`` simuliert plausible SNR-Summen
+    (10 Stationen × (snr+30) bei snr~-15 dB).
     """
     dc = DiversityController()
     dc._phase = "measure"
     for _ in range(3):
-        dc.record_measurement("A1", score=0.0, station_count=10)
-        dc.record_measurement("A2", score=0.0, station_count=10)
+        dc.record_measurement("A1", score=150.0)
+        dc.record_measurement("A2", score=150.0)
     assert dc.phase == "operate"
     assert dc.ratio == "50:50"
     assert dc.dominant is None
@@ -197,8 +200,8 @@ def test_measure_evaluate_a1_dominant_yields_7030():
     dc = DiversityController()
     dc._phase = "measure"
     for _ in range(3):
-        dc.record_measurement("A1", score=0.0, station_count=20)
-        dc.record_measurement("A2", score=0.0, station_count=10)
+        dc.record_measurement("A1", score=300.0)
+        dc.record_measurement("A2", score=150.0)
     assert dc.phase == "operate"
     assert dc.ratio == "70:30"
     assert dc.dominant == "A1"
@@ -211,10 +214,10 @@ def test_phase3_early_stop_on_a1_dominant():
     """A1 deutlich staerker → Adaptiv-Stop nach 4 Zyklen, ratio=70:30."""
     dc = DiversityController()
     dc._phase = "measure"
-    # Nach 4 Aufrufen: m1=[20,20], m2=[5,5] → rel_diff=15/20=0.75 >= 0.15 → Stop
+    # Nach 4 Aufrufen: m1=[300,300], m2=[75,75] → rel_diff=225/300=0.75 >= 0.15 → Stop
     for _ in range(2):
-        dc.record_measurement("A1", score=0.0, station_count=20)
-        dc.record_measurement("A2", score=0.0, station_count=5)
+        dc.record_measurement("A1", score=300.0)
+        dc.record_measurement("A2", score=75.0)
     assert dc.phase == "operate", f"phase={dc.phase}, expected operate"
     assert dc.ratio == "70:30"
     assert dc.dominant == "A1"
@@ -227,8 +230,8 @@ def test_phase3_early_stop_on_a2_dominant():
     dc = DiversityController()
     dc._phase = "measure"
     for _ in range(2):
-        dc.record_measurement("A1", score=0.0, station_count=5)
-        dc.record_measurement("A2", score=0.0, station_count=20)
+        dc.record_measurement("A1", score=75.0)
+        dc.record_measurement("A2", score=300.0)
     assert dc.phase == "operate"
     assert dc.ratio == "30:70"
     assert dc.dominant == "A2"
@@ -239,19 +242,19 @@ def test_phase3_no_early_stop_on_fair():
     """Faire Verhaeltnisse → kein Frueh-Stop, regulaerer Pfad bis 6 Zyklen."""
     dc = DiversityController()
     dc._phase = "measure"
-    # m1=[10,11], m2=[10,9] → median 10.5 vs 9.5 → rel=1/10.5=9.5% < 15% → kein Stop
-    dc.record_measurement("A1", score=0.0, station_count=10)
-    dc.record_measurement("A2", score=0.0, station_count=10)
-    dc.record_measurement("A1", score=0.0, station_count=11)
-    dc.record_measurement("A2", score=0.0, station_count=9)
+    # m1=[150,165], m2=[150,135] → median 157.5 vs 142.5 → rel=15/157.5=9.5% < 15%
+    dc.record_measurement("A1", score=150.0)
+    dc.record_measurement("A2", score=150.0)
+    dc.record_measurement("A1", score=165.0)
+    dc.record_measurement("A2", score=135.0)
     # Pre-Adaptiv-Stop-Check waere hier: kein Stop
     assert dc.phase == "measure", f"phase={dc.phase}, expected still measure"
     assert dc._was_early_stopped is False
     assert dc._measure_step == 4
 
     # Restliche 2 Zyklen → regulaeres _evaluate
-    dc.record_measurement("A1", score=0.0, station_count=10)
-    dc.record_measurement("A2", score=0.0, station_count=10)
+    dc.record_measurement("A1", score=150.0)
+    dc.record_measurement("A2", score=150.0)
     assert dc.phase == "operate"
     assert dc._measure_step == 6
 
@@ -269,9 +272,9 @@ def test_phase3_no_early_stop_on_unbalanced_counts_ft4():
 
     # Unbalanciertes Pattern: 5 × A1 + 3 × A2 (= 8 Aufrufe = early_stop_at fuer FT4)
     for _ in range(5):
-        dc.record_measurement("A1", score=0.0, station_count=20)
+        dc.record_measurement("A1", score=300.0)
     for _ in range(3):
-        dc.record_measurement("A2", score=0.0, station_count=5)
+        dc.record_measurement("A2", score=75.0)
 
     assert dc._measure_step == 8
     assert dc._early_stop_at == 8  # 12 * 2/3 = 8
@@ -286,8 +289,8 @@ def test_phase3_was_early_stopped_flag_resets_on_band_change():
     dc._phase = "measure"
     # Adaptiv-Stop ausloesen
     for _ in range(2):
-        dc.record_measurement("A1", score=0.0, station_count=20)
-        dc.record_measurement("A2", score=0.0, station_count=5)
+        dc.record_measurement("A1", score=300.0)
+        dc.record_measurement("A2", score=75.0)
     assert dc._was_early_stopped is True
 
     dc.on_band_change()

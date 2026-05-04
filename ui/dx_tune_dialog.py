@@ -255,7 +255,8 @@ class DXTuneDialog(QDialog):
         - _step == 4 (genau Runde 1 Ende)
         - kein Cancel
         - alle 4 Buckets non-empty + non-overload
-        - mind. 5 Stationen pro Bucket (= MIN_MEASURE_STATIONS)
+        - mind. 5 Stationen pro Bucket (Phase-2-eigene Schwelle, unabhaengig
+          von Phase-3-Score-Logik in DiversityController seit v0.93)
 
         Konservativ tuned (R1-bestaetigt): lieber kein Stop als falscher Stop.
         Spart bei Trigger ~60 s Pipeline.

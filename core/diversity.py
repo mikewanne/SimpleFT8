@@ -1,10 +1,16 @@
 """SimpleFT8 Diversity Controller — periodische Antennen-Messung + CQ-Frequenzwahl.
 
-Scoring-Modi:
-  "normal" — Fokus auf Masse: Anzahl dekodierbarer Stationen (SNR > -20 dB)
-  "dx"     — Fokus auf Qualitaet: Durchschnitts-SNR der Top-5 Stationen
+Score-basierte Messung (v0.93):
+  Pro Slot wird ``sum(snr+30)`` ueber alle dekodierten Stationen akkumuliert.
+  Kontinuierliche Werte → Median liefert auch bei duenner Decoder-Dichte
+  (z.B. FT2 mit 1-2 Stationen pro Slot) statistische Aufloesung.
 
-Auswertung: Median ueber 3 Zyklen pro Antenne (6-Slot fair 3:3), Schwelle 8% (statt 15%).
+  Der ``scoring_mode`` ("normal"/"dx") bestimmt aktuell nur die Sammlungs-
+  strategie der Aufrufer (Standard sammelt alle Stationen, DX nur SNR<-10);
+  intern wird in beiden Modi der gleiche Score gemessen.
+
+Auswertung: Median ueber Slot-Scores (6-Slot fair 3:3), Schwelle 8 % rel.
+Differenz → 70:30 bzw. 30:70, sonst 50:50.
 """
 
 import statistics
@@ -26,7 +32,10 @@ class DiversityController:
     MEASURE_CYCLES = 6   # 3×A1 + 3×A2 (~1,5 Min Fenster, je even+odd pro Antenne)
     OPERATE_CYCLES = 60  # 15 Min Betrieb (vorher 80=20 Min)
     THRESHOLD = 0.08     # 8% relative Differenz fuer Antennen-Entscheidung
-    MIN_MEASURE_STATIONS = 5  # Mindestanzahl Stationen fuer Messung
+    # Score-Mindest-Peak: unter dem Wert (sehr schwacher Empfang) wird auf
+    # 50:50 zurueckgefallen statt zwischen knappen Differenzen zu entscheiden.
+    # 5.0 entspricht ~1 Station bei SNR -25 oder ~0.3 Stationen bei SNR -10.
+    MIN_PEAK_SCORE = 5.0
     # Adaptiv-Stop Phase 3 (v0.91 Block 2 #8)
     EARLY_STOP_FRACTION = 2 / 3   # nach 2/3 von MEASURE_CYCLES pruefen
     EARLY_STOP_THRESHOLD = 0.15   # 15% rel. Differenz, ~2× THRESHOLD=8%
@@ -75,9 +84,16 @@ class DiversityController:
         self._recalc_count = 0                  # Zaehler: wie oft wurde CQ-Freq neu berechnet
         self._was_early_stopped = False         # Adaptiv-Stop-Flag (Cache-Schutz, v0.91 #8)
 
-    def can_measure(self, station_count: int) -> bool:
-        """Genug Stationen fuer zuverlaessige Messung?"""
-        return station_count >= self.MIN_MEASURE_STATIONS
+    def can_measure(self, station_count: int = 0) -> bool:
+        """Phase 3 darf immer starten (v0.93).
+
+        Frueher: ``>= MIN_MEASURE_STATIONS = 5`` blockte FT2-Pipelines mit
+        duenner Stations-Dichte. Mit Score-basiertem Median (Mod 4) und
+        ``MIN_PEAK_SCORE``-Fallback in ``_evaluate`` ist die Schwelle
+        intrinsisch — kein Pre-Block mehr noetig. Aufrufer-Kompatibilitaet
+        (``station_count``-Argument) bleibt erhalten, wird ignoriert.
+        """
+        return True
 
     @property
     def _early_stop_at(self) -> int:
@@ -378,10 +394,11 @@ class DiversityController:
 
         Args:
             ant: "A1" oder "A2"
-            score: Legacy-Score (sum(snr+30)), fuer Rueckwaerts-Kompatibilitaet
-            station_count: Anzahl dekodierbarer Stationen (SNR > -20)
-            avg_snr: Durchschnitts-SNR aller Stationen
-            dx_weak_count: Anzahl schwacher Stationen (SNR < -10, DX-Modus)
+            score: ``sum(snr+30)`` ueber alle dekodierten Stationen des Slots —
+                kontinuierlicher Wert, treibt die Messung (v0.93).
+            station_count: Legacy-Argument, wird ignoriert.
+            avg_snr: Legacy-Argument, wird ignoriert.
+            dx_weak_count: Legacy-Argument, wird ignoriert.
 
         Adaptiv-Stop (v0.91 #8): Nach 2/3 der Mess-Phase pruefen ob rel_diff
         bereits klar (>=15%). Spart ~30s bei eindeutigen Verhaeltnissen.
@@ -398,13 +415,10 @@ class DiversityController:
         if self._phase != "measure":
             return
 
-        # Modus-abhaengigen Score speichern (Einzelwert, NICHT akkumuliert)
-        if self._scoring_mode == "dx":
-            # DX: Anzahl schwacher Stationen (SNR < -10) — mehr = bessere DX-Antenne
-            self._measurements[ant].append(float(dx_weak_count))
-        else:
-            # Standard: Gesamtzahl dekodierbarer Stationen — mehr = besser
-            self._measurements[ant].append(float(station_count))
+        # Score (sum(snr+30)) speichern — kontinuierlich, robust auch bei
+        # 1-2 Stationen pro Slot (FT2-Dichte). Ersetzt die diskreten
+        # station_count/dx_weak_count Werte aus v0.92 (R1 Mod 4).
+        self._measurements[ant].append(float(score))
 
         self._measure_step += 1
 
@@ -433,7 +447,7 @@ class DiversityController:
         s1 = statistics.median(m1)
         s2 = statistics.median(m2)
         peak = max(s1, s2)
-        if peak <= 1.0:
+        if peak <= self.MIN_PEAK_SCORE:
             return False
 
         rel_diff = abs(s1 - s2) / peak
@@ -500,8 +514,8 @@ class DiversityController:
         peak = max(s1, s2)
 
         diff = 0.0
-        if peak <= 1.0:
-            # Zu wenig Daten fuer zuverlaessige Entscheidung
+        if peak <= self.MIN_PEAK_SCORE:
+            # Zu wenig Daten fuer zuverlaessige Entscheidung (sehr schwacher Empfang)
             self.ratio = "50:50"
             self.dominant = None
         else:

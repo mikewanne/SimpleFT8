@@ -108,7 +108,7 @@ def test_phase2_no_stop_on_overload():
 def test_phase2_no_stop_on_low_station_count():
     """Alle Buckets <5 Stationen → kein Stop (Mess-Streuung-Schutz)."""
     dlg = _make_dlg(scoring_mode="snr")
-    # Nur 3 Stationen pro Bucket — unter MIN_MEASURE_STATIONS=5
+    # Nur 3 Stationen pro Bucket — unter Phase-2-Schwelle 5 (DXTune-eigen)
     dlg._phase_data[("ANT1", 10)] = [-15.0, -16.0, -17.0]
     dlg._phase_data[("ANT2", 10)] = [-15.0, -16.0, -17.0]
     dlg._phase_data[("ANT1", 20)] = [0.0, -1.0, -2.0]
