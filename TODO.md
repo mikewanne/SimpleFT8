@@ -4,6 +4,66 @@
 
 ## ⭐ ALS NÄCHSTES (Priorität)
 
+### 🔴 KRITISCH — v0.90 Mess-Pattern-Bug (2026-05-04, R1-Audit)
+
+**Bug:** ``core/diversity.py:86`` Mess-Phase liefert Pattern
+``("A2","A1","A1","A2","A1","A1")`` = **4×A1 + 2×A2 auf 6 Slots**.
+Das ist identisch mit OPERATE-70:30-Pattern und strukturell unfair —
+ANT2 wird mit halber Stichprobe gemessen.
+
+**Auswirkung:** Diversity-Ratio bevorzugt systematisch ANT1, ANT2-
+Win-Rate kuenstlich gedrueckt. Erklaert teilweise Mike's Beobachtung
+4% ANT2-Win-Rate auf 40m FT8.
+
+**Statistik-Implikation:** Pooled-Mean-Werte (+88%/+124%) bleiben
+valide, ABER absolute ANT2-Win-Rate ist konservativ unter-geschaetzt.
+Faire Messung wird hoehere Win-Rates zeigen.
+
+**Plan:** ``prompts/v090_mess_pattern_fix_plan.md``
+**R1-Audit-Antwort:** ``prompts/v090_audit_r1.md``
+**Memory:** ``project_v090_mess_pattern_bug.md``
+
+**Default-Fix Option C:** ``("A1","A1","A2","A2","A1","A2")`` — 3:3
+fair, beide Antennen Even+Odd-Paar, ``MEASURE_CYCLES = 6`` bleibt
+(Block-1-Ersparnis erhalten).
+
+**Aufwand:** ~30-45 min Code + V1→V2→R1→V3-Workflow + Tests.
+
+**Trigger:** Mike sagt „v0.90 starten" oder „Mess-Pattern-Fix starten".
+**Status:** OPEN — eigener Workflow, Bug ist alt (existiert seit
+Phase 3 implementiert wurde) und kein Rollback-Risiko.
+
+---
+
+### 🆕 Radio-Erreichbarkeits-Check beim App-Start (2026-05-04, Mike)
+
+**Problem:** Wenn das FlexRadio aus ist, startet die App still und versucht
+nur via Reconnect-Loop alle 60 s neu zu verbinden. User merkt das erst nach
+einer Weile (Log-Eintrag `[Radio] FlexRadio Verbindung fehlgeschlagen: timed
+out` + `[FlexRadio] Reconnect #N in 60s ...`).
+
+**Gewuenschtes Verhalten:**
+- Beim App-Start einmal pruefen ob konfiguriertes Radio erreichbar ist
+  (TCP-Connect zur Radio-IP/Port mit kurzem Timeout, z. B. 2-3 s).
+- Falls nicht erreichbar: nicht-modalen Dialog/Toast oben anzeigen
+  („FlexRadio nicht erreichbar — Radio einschalten und auf Verbindung
+  warten" o. ä.). Nicht blockierend (App soll weiterlaufen, Reconnect
+  weiterversuchen).
+- Bei spaeterem Erfolg-Verbinden den Hinweis automatisch verschwinden lassen.
+
+**Code-Stellen (V1-Skizze, R1 in eigenem Workflow):**
+- `radio/flexradio.py` — neue Methode `is_reachable(timeout=2.0)` die einen
+  TCP-Connect-Test macht ohne Login.
+- `ui/main_window.py` `_init_radio()` oder direkt nach Settings-Load —
+  Reachability-Check + Toast.
+- Toast-Klasse evtl. wiederverwendbar (z. B. aehnlich `BandpilotAutoToast`
+  aber persistent bis Verbinden klappt).
+
+**Aufwand:** ~30-60 min Code + Workflow V1→V3.
+**Status:** OPEN — eigener V1→V3-Zyklus nach Block-2-Erfolg.
+
+---
+
 ### 🔥 DRINGEND — Block 2 Kalibrier-Pipeline-Optimierung (2026-05-04)
 
 **Empfehlung Claude:** DRINGEND nach Block-1-Feldtest. Pipeline geht

@@ -7,13 +7,24 @@ Pipeline 6:50 → ~4:31 Min (-2:19 Min, -34 %). 5 atomare Commits
 
 **Tests:** 659/659 grün.
 
-**Naechster Schritt:**
-1. **Feldtest Block 1** — Mike kalibriert auf 20m + 40m, prueft
-   Pipeline-Dauer + Mess-Qualitaet (Overload? Median stabil?).
-2. **Block 2 starten** (DRINGEND-TODO) — eigener V1→V3-Zyklus:
-   #6 ROUNDS=2, #7 Adaptiv-Stop Phase 2, #8 Adaptiv-Stop Phase 3
-   → Pipeline typisch ~3:20 Min. Trigger: „Block 2 starten".
-   Plan: `prompts/kalibrier_optimierung_plan.md` Block-2-Tabelle.
+**🔴 KRITISCH-Bug entdeckt nach Block 1 (R1-Audit 2026-05-04):**
+``core/diversity.py:86`` Mess-Phase nutzt OPERATE-70:30-Pattern
+(4×A1 + 2×A2 statt 3:3). ANT2 strukturell unter-gemessen — erklaert
+teilweise Mike's 40m-Beobachtung 4% ANT2-Win-Rate.
+→ Plan: ``prompts/v090_mess_pattern_fix_plan.md``
+→ Memory: ``project_v090_mess_pattern_bug.md``
+
+**Naechster Schritt — Reihenfolge nach Compact:**
+1. **v0.90 Mess-Pattern-Fix** (KRITISCH) — Trigger „v0.90 starten" oder
+   „Mess-Pattern-Fix starten". Default Option C: 3:3 fair mit Even+Odd
+   beider Antennen, ~30-45 min.
+2. **Block 1 Feldtest** — Mike testet kalibrierungs-Dauer/Qualitaet
+   (parallel zu v0.90 moeglich).
+3. **Block 2 starten** (Adaptiv-Stops) — eigener V1→V3-Zyklus, Ziel
+   typisch ~3:20 Min Pipeline. Trigger: „Block 2 starten".
+4. Antennen-Drossel-Beobachtung 2026-05-04: Mantelwellensperre
+   wieder ausgebaut, ANT2-Kabel jetzt mit lockeren 8-foermigen
+   Schlaufen verlegt. Zukunfts-Test ob ANT2-Win-Rate erholt.
 
 **Rollback bei Problemen:** `git checkout v0.88.1` (Snapshot vor Block 1).
 
