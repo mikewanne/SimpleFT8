@@ -81,17 +81,17 @@ diversity gain visible live in the RX window.
 
 ## How the Measurement Works
 
-Both modes use the same 8-cycle measurement process:
+Both modes use the same 6-cycle measurement process (since v0.90 — pre-v0.90 used 8 cycles with a 4:2-bias toward ANT1):
 
-1. **4 cycles on ANT1** (2 even + 2 odd slots): collect scores
-2. **4 cycles on ANT2** (2 even + 2 odd slots): collect scores
+1. **3 cycles on ANT1** (slots 0-1 connected even+odd pair, plus singleton slot 4)
+2. **3 cycles on ANT2** (slots 2-3 connected even+odd pair, plus singleton slot 5)
 3. **Evaluate:** Compare median scores for each antenna
 
-The measurement alternates: A2, A1, A2, A1, A2, A1, A2, A1 — ensuring both antennas are measured under similar propagation conditions.
+The measurement pattern is: A1, A1, A2, A2, A1, A2 — each antenna gets a connected even+odd pair so both parities are observed under similar propagation conditions.
 
 ### Median Scoring
 
-SimpleFT8 uses the **median** of all measurements per antenna, not the average. The median is robust against outliers — one unusually good or bad cycle does not distort the result. With 4 measurements per antenna, the median gives a reliable picture.
+SimpleFT8 uses the **median** of all measurements per antenna, not the average. The median is robust against outliers — one unusually good or bad cycle does not distort the result. With 3 measurements per antenna, the median gives a reliable picture (since v0.90 — pre-v0.90 had a structural 4:2-bias toward ANT1).
 
 ### The 8% Threshold
 

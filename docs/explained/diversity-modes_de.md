@@ -79,17 +79,17 @@ Gewinn live im RX-Fenster.
 
 ## So funktioniert die Messung
 
-Beide Modi verwenden denselben 8-Zyklen-Messprozess:
+Beide Modi verwenden denselben 6-Zyklen-Messprozess (seit v0.90 — pre-v0.90 verwendete 8 Zyklen mit 4:2-Bias zu ANT1):
 
-1. **4 Zyklen auf ANT1** (2 gerade + 2 ungerade Slots): Werte sammeln
-2. **4 Zyklen auf ANT2** (2 gerade + 2 ungerade Slots): Werte sammeln
+1. **3 Zyklen auf ANT1** (Slots 0-1 zusammenhaengendes Even+Odd-Paar, plus Singleton Slot 4)
+2. **3 Zyklen auf ANT2** (Slots 2-3 zusammenhaengendes Even+Odd-Paar, plus Singleton Slot 5)
 3. **Auswertung:** Median-Werte beider Antennen vergleichen
 
-Die Messung wechselt ab: A2, A1, A2, A1, A2, A1, A2, A1 — damit beide Antennen unter aehnlichen Ausbreitungsbedingungen gemessen werden.
+Mess-Pattern: A1, A1, A2, A2, A1, A2 — jede Antenne bekommt ein zusammenhaengendes Even+Odd-Paar damit beide Paritaeten unter aehnlichen Ausbreitungsbedingungen gemessen werden.
 
 ### Median-Bewertung
 
-SimpleFT8 verwendet den **Median** aller Messungen pro Antenne, nicht den Durchschnitt. Der Median ist robust gegen Ausreisser — ein einzelner ungewoehnlich guter oder schlechter Zyklus verzerrt das Ergebnis nicht. Mit 4 Messungen pro Antenne liefert der Median ein zuverlaessiges Bild.
+SimpleFT8 verwendet den **Median** aller Messungen pro Antenne, nicht den Durchschnitt. Der Median ist robust gegen Ausreisser — ein einzelner ungewoehnlich guter oder schlechter Zyklus verzerrt das Ergebnis nicht. Mit 3 Messungen pro Antenne liefert der Median ein zuverlaessiges Bild (seit v0.90 — pre-v0.90 hatte strukturellen 4:2-Bias zu ANT1).
 
 ### Die 8%-Schwelle
 

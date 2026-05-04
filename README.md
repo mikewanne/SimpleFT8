@@ -58,7 +58,7 @@ stations across app restarts. Fire it up, make a few QSOs, call it a day.
 - **Dual-Mode Diversity** — Two scoring strategies selectable at startup:
   - **Standard**: Counts total decoded stations — best for CQ operation (maximize QSOs)
   - **DX**: Counts weak stations (SNR < -10 dB) — best for DX hunting (Australia at -24 dB counts, local at +12 dB doesn't)
-  - 8% threshold, median over 4 cycles, 70:30 or 50:50 ratio. Button shows "DIVERSITY DX" when in DX mode.
+  - 8% threshold, median over 3 cycles per antenna (6-slot fair 3:3), 70:30 or 50:50 ratio. Button shows "DIVERSITY DX" when in DX mode.
   - **Antenna Memory (learning)**: Every decode cycle, the system records per callsign which antenna heard it better and by how many dB. When you start a QSO with that callsign, the best antenna is selected automatically — overlaying the global Diversity rhythm for the duration of the QSO. No timeout, no persistence: a station you can hear *right now* is always the most precise value. The QSO panel shows "Calling DL3AQJ (ANT2, +6.3 dB)".
 
 - **Bandpilot (v0.88)** — On band change SimpleFT8 looks up the **current UTC hour** and compares the three RX modes (Normal / Diversity Standard / Diversity DX) directly — no aggregation. Three behaviour modes in settings: **Off** / **Auto** (3-second toast + auto-switch with 5% tolerance) / **Manual** (dialog appears only when a different mode wins). TX-protected: switch waits for `tx_finished`. Hourly thresholds: ≥3 days + ≥20 slots per mode. ⚠️ In field test.
@@ -578,7 +578,7 @@ andere Polarisierung, gebäudegebundene Befestigung — die ideale Ergänzung f�
 - **Dual-Mode Diversity** — Zwei Scoring-Strategien:
   - **Standard**: Zaehlt dekodierte Stationen — ideal fuer CQ-Betrieb
   - **DX**: Zaehlt schwache Stationen (SNR < -10 dB) — ideal fuer DX-Jagd (Australien bei -24 dB zaehlt, Bochum bei +12 dB nicht)
-  - 8% Schwelle, Median ueber 4 Zyklen. Button zeigt "DIVERSITY DX" im DX-Modus.
+  - 8% Schwelle, Median ueber 3 Zyklen pro Antenne (6-Slot fair 3:3). Button zeigt "DIVERSITY DX" im DX-Modus.
   - **Lernendes Antennen-Gedaechtnis**: Nach jedem Dekodier-Zyklus merkt sich das System pro Rufzeichen, welche Antenne besser empfangen hat und um wieviel dB. Beim QSO-Aufbau wird automatisch die beste Antenne gewaehlt — das ueberlagert den globalen Diversity-Rhythmus fuer die QSO-Dauer. Kein Timeout, keine Persistenz: eine Station die du *gerade jetzt* hoerst, ist immer der praeziseste Wert. Das QSO-Fenster zeigt z.B. "Antworte DL3AQJ (ANT2, +6.3 dB)".
 
 - **Automatische TX-Leistungsregelung** — Zielwatt einstellen, SimpleFT8 regelt den FWDPWR-Wert automatisch.
