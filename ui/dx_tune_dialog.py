@@ -236,7 +236,85 @@ class DXTuneDialog(QDialog):
             self.detail_label.setStyleSheet("color: #FF8800;")
 
         self._step += 1
+
+        # Adaptiv-Stop Phase 2 (v0.91 Block 2 #7) — nach Runde 1 pruefen
+        if self._check_phase2_early_stop():
+            self._finish()
+            return
+
         self._start_step()
+
+    def _check_phase2_early_stop(self) -> bool:
+        """Adaptiv-Stop nach Runde 1 (Schritt 4) wenn ANT-Differenz klar.
+
+        Stop-Bedingung (mind. eine erfuellt):
+        - Δ_SNR (Top5-Avg) ≥ 4 dB
+        - Δ_STAT (Stations-Anzahl, rel.) ≥ 50 %
+
+        Pre-Conditions (alle muessen gelten, sonst kein Stop):
+        - _step == 4 (genau Runde 1 Ende)
+        - kein Cancel
+        - alle 4 Buckets non-empty + non-overload
+        - mind. 5 Stationen pro Bucket (= MIN_MEASURE_STATIONS)
+
+        Konservativ tuned (R1-bestaetigt): lieber kein Stop als falscher Stop.
+        Spart bei Trigger ~60 s Pipeline.
+        """
+        if self._step != 4:
+            return False
+        if self._cancelled:
+            return False
+
+        keys = [(ant, gain) for ant in ("ANT1", "ANT2") for gain in GAIN_VALUES]
+
+        # Pre-Conditions: alle 4 Buckets non-empty + non-overload + min 5 St.
+        for k in keys:
+            if not self._phase_data.get(k):
+                return False
+            if self._has_overload(k):
+                return False
+            if self._station_count(k) < 5:
+                return False
+
+        use_snr = (self.scoring_mode == "snr")
+
+        def best_for(ant: str) -> int:
+            best_g, best_s = GAIN_VALUES[0], None
+            for gain in GAIN_VALUES:
+                if use_snr:
+                    score = self._top5_avg((ant, gain))
+                else:
+                    score = self._station_count((ant, gain))
+                if score is None:
+                    continue
+                if best_s is None or score > best_s:
+                    best_s, best_g = score, gain
+            return best_g
+
+        ant1_g = best_for("ANT1")
+        ant2_g = best_for("ANT2")
+        a1_snr = self._top5_avg(("ANT1", ant1_g)) or -30.0
+        a2_snr = self._top5_avg(("ANT2", ant2_g)) or -30.0
+        a1_n = self._station_count(("ANT1", ant1_g))
+        a2_n = self._station_count(("ANT2", ant2_g))
+
+        delta_snr = abs(a1_snr - a2_snr)
+        peak_n = max(a1_n, a2_n)
+        delta_pct = abs(a1_n - a2_n) / peak_n if peak_n > 0 else 0.0
+
+        stop = (delta_snr >= 4.0) or (delta_pct >= 0.50)
+
+        # Monitoring-Log (R1-Empfehlung) — Schwellen-Tuning post-Feldtest
+        import time
+        ts = time.strftime("%H:%M:%S")
+        if stop:
+            print(f"[{ts}] [DX-Tune] Adaptiv-Stop nach Runde 1 — "
+                  f"Δ_SNR={delta_snr:.1f}dB Δ_STAT={delta_pct:.0%} → Stop, ~60s gespart")
+        else:
+            print(f"[{ts}] [DX-Tune] Adaptiv-Stop-Check nach Runde 1 — "
+                  f"Δ_SNR={delta_snr:.1f}dB Δ_STAT={delta_pct:.0%} → weiter")
+
+        return stop
 
     def _detect_overload(self, messages: list) -> bool:
         """Erkennt ADC-Uebersteuerung: zu viele Signale >+20 dB oder SNR-Varianz zu niedrig."""
