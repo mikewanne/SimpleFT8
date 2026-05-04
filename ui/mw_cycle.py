@@ -552,23 +552,27 @@ class CycleMixin:
 
                 band = self.settings.band
 
-                # Betriebszyklus zaehlen + ggf. neu messen
+                # Betriebszyklus zaehlen + ggf. neu messen (v0.93: zeit-basiert)
                 if self._diversity_ctrl.phase == "operate":
                     self._diversity_ctrl.on_operate_cycle()
-                    # Remeasure NUR wenn wirklich idle — CQ_CALLING/CQ_WAIT schützen!
+                    # qso_active = echtes QSO laeuft (NICHT CQ-Ruf)
                     qso_active = self.qso_sm.state not in (
                         QSOState.IDLE, QSOState.TIMEOUT,
-                    ) or self.qso_sm.state in (
                         QSOState.CQ_CALLING, QSOState.CQ_WAIT,
                     )
-                    if self._diversity_ctrl.should_remeasure(qso_active):
+                    # cq_active = CQ-Ruf laeuft (state ODER cq_mode-Flag)
+                    cq_active = (
+                        self.qso_sm.state in (QSOState.CQ_CALLING, QSOState.CQ_WAIT)
+                        or getattr(self.qso_sm, 'cq_mode', False)
+                    )
+                    if self._diversity_ctrl.should_remeasure(qso_active, cq_active):
                         self._diversity_ctrl.start_measure()
                         self._set_cq_locked(True)
                         self.control_panel.update_diversity_ratio(
                             "50:50", "remeasure", 0,
                             self._diversity_ctrl.MEASURE_CYCLES,
                             scoring_mode=self._diversity_ctrl.scoring_mode)
-                        print("[Diversity] Automatische Neueinmessung gestartet")
+                        print("[Diversity] Automatische Neueinmessung gestartet (1h-Frist abgelaufen)")
 
                 # Smart Antenna: waehrend QSO auf beste Antenne forcieren
                 _in_qso = self.qso_sm.state not in (

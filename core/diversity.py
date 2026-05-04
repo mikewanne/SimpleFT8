@@ -83,6 +83,7 @@ class DiversityController:
         self._search_slots_remaining = 4        # Slot-Counter (default FT8 = 4)
         self._recalc_count = 0                  # Zaehler: wie oft wurde CQ-Freq neu berechnet
         self._was_early_stopped = False         # Adaptiv-Stop-Flag (Cache-Schutz, v0.91 #8)
+        self._last_measured_at: Optional[float] = None  # Zeit-Frist (v0.93, gesetzt in _evaluate)
 
     def can_measure(self, station_count: int = 0) -> bool:
         """Phase 3 darf immer starten (v0.93).
@@ -472,10 +473,29 @@ class DiversityController:
         if self._phase == "operate":
             self._operate_cycles += 1
 
-    def should_remeasure(self, qso_active: bool) -> bool:
-        return (self._phase == "operate"
-                and self._operate_cycles >= self.OPERATE_CYCLES
-                and not qso_active)
+    # Re-Measure-Frist (v0.93): atmosphaerisch korrekt, modus-unabhaengig
+    REMEASURE_INTERVAL_SECONDS = 3600  # 1 Stunde
+
+    def should_remeasure(self, qso_active: bool, cq_active: bool = False) -> bool:
+        """True → DiversityController will neu messen.
+
+        Args:
+            qso_active: laufendes QSO blockt Remeasure (TX-Slots gebraucht)
+            cq_active: laufender CQ-Ruf blockt ebenfalls (R1 Mod 3)
+
+        Logik:
+            - phase muss "operate" sein
+            - Pause (qso/cq) blockt
+            - Frist: time.time() - _last_measured_at >= REMEASURE_INTERVAL_SECONDS
+            - Defensiv (R1-Hinweis V3): _last_measured_at None → True (App-Start)
+        """
+        if self._phase != "operate":
+            return False
+        if qso_active or cq_active:
+            return False
+        if self._last_measured_at is None:
+            return True
+        return (time.time() - self._last_measured_at) >= self.REMEASURE_INTERVAL_SECONDS
 
     def start_measure(self):
         self._phase = "measure"
@@ -531,6 +551,7 @@ class DiversityController:
                 self.dominant = "A2"
         self._phase = "operate"
         self._operate_cycles = 0
+        self._last_measured_at = time.time()  # v0.93: 1h-Frist-Anker
         mode_tag = "DX" if self._scoring_mode == "dx" else "Normal"
         print(f"[Diversity] Messung ({mode_tag}): A1={s1:.1f} A2={s2:.1f} "
               f"diff={diff:.3f} (>{self.THRESHOLD:.0%}?) → {self.ratio} "
