@@ -1,11 +1,24 @@
 # HANDOFF — SimpleFT8
 
-**Stand 2026-05-04:** **v0.92 — Pipeline-Lock bulletproof (Bandwechsel-Race-Fix).**
-5 Edits in `ui/mw_radio.py` schliessen Bandwechsel/Mode/RX-Mode-Race via
-`_gain_measure_locked`-Flag + Reset-Reihenfolge. R1-Verdacht aus v0.90 geloest.
-Atomarer Commit `9b9303d` + 6 neue Tests. Voller V1→V2→R1→V3-Workflow.
-**v0.91:** Block 2 Adaptiv-Stops + ROUNDS=2. Pipeline ~4:31 → typisch ~3:20 Min,
-Best-Case ~2:30 Min. **v0.90:** Mess-Pattern-Bug-Fix (fair 3:3 Pattern A1A1A2A2A1A2).
+**Stand 2026-05-04:** **v0.93 — Cache-Reuse + Mess-Refactor (Score-basiert + 1h-Frist).**
+
+Diversity-Mess-Pipeline grundlegend ueberarbeitet. Mike's Vision +
+R1's 4 Mods + Dichte-R1 Score-Insight in 6 atomaren Commits umgesetzt
+(`d8d947f`, `305d775`, `fd416ca`, `f8af3e8`, `196a999` + Doku-Sync).
+**Hauptfeatures:**
+- **Cache-Reuse pro Band+Modus** mit 5-s-Toast (Phase 3 wird bei Ratio
+  < 1 h alt komplett uebersprungen)
+- **Score-basierte Messung** statt diskreter Stations-Anzahl —
+  Killer fuer FT2 mit duenner Decoder-Dichte (R1 Mod 4)
+- **1-Stunden-Frist** atmosphaerisch korrekt, modus-unabhaengig
+- **CQ-Lock** zusaetzlich zu QSO-Lock in `should_remeasure` (R1 Mod 3)
+- **PresetStore zwei Timestamps** (gain 6h, ratio 1h) mit Migration
+- **OPERATE_CYCLES + Settings-Option entfernt** (KISS-Cleanup)
+- **MIN_MEASURE_STATIONS entfernt** (FT2-Pre-Block weg)
+
+**v0.92:** Pipeline-Lock bulletproof (Bandwechsel-Race-Fix).
+**v0.91:** Block 2 Adaptiv-Stops + ROUNDS=2. Pipeline ~4:31 → typisch ~3:20 Min.
+**v0.90:** Mess-Pattern-Bug-Fix (fair 3:3 Pattern A1A1A2A2A1A2).
 
 **3 atomare Commits Block 2:**
 - `eef4369` perf(dx_tune): ROUNDS 3→2 (#6, -60s, Schedule 12→8 Eintraege)
@@ -39,18 +52,17 @@ Cache-Reuse-TODO bleibt auf voll-gemessene Ratios beschraenkt.
   neuem Band moeglich. R1 hat den Verdacht zweimal angedeutet (v0.90 Audit
   + V3-Review). Token-Pattern-Fix in eigener Iteration.
 
-**Naechster Schritt nach Compact:**
+**Naechster Schritt:**
 
-**🟢 v0.93 Cache-Reuse + Mess-Refactor (Plan steht, R1-bestaetigt):**
-- Mike-Vision: 1 h Auto-Refresh atmosphärisch, Cache pro Band, Normal raus,
-  OPERATE_CYCLES weg.
-- R1's 4 Mods: MEASURE_CYCLES-_MULT bleibt, 2 Timestamps, CQ-Lock,
-  **Score statt station_count** (KILLER fuer FT2-Statistik).
-- Bonus: MIN_MEASURE_STATIONS weg.
-- Aufwand ~4.5 h.
-- **Trigger nach Compact:** „Refactor starten" oder „v0.93 starten" oder
-  „Score zuerst" (nur Mod 4 als Quick-Win).
-- Memory: `project_diversity_cache_reuse.md` hat alle Details.
+**🔬 v0.93 Field-Test (Mike's Aufgabe):**
+- App starten — Cache-Reuse pruefen bei Bandwechsel innerhalb 1 h
+  (Toast erscheint, kein Standard-Dialog mehr).
+- FT2-Empfang ueberpruefen: Score-basierte Statistik soll auch bei
+  1-2 Stationen pro Slot eine Antennen-Praeferenz liefern statt 50:50.
+- Settings-Dialog: „Neueinmessung nach: <Zyklen>" ist verschwunden,
+  ersetzt durch zeit-basierte UI-Anzeige „Diversity Neuberechnung in X Min."
+- 1h-Frist: nach 60 Min ohne QSO/CQ → automatischer Re-Measure.
+  Waehrend QSO/CQ gesperrt.
 
 **🔬 Block 1+2 Feldtest (Mike's Aufgabe):**
 - Pipeline-Dauer messen (Best-Case ~2:30, typisch ~3:20).

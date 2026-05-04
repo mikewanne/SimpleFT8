@@ -5,6 +5,133 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-04 v0.93 — Cache-Reuse + Mess-Refactor (Score-basiert + 1h-Frist)
+
+**Hintergrund:** Mike wollte den Diversity-Mess-Mechanismus pragmatisch
+umbauen. Ziel: zeit-basierter Re-Measure (1 h, atmosphaerisch korrekt),
+Cache-Reuse pro Band+Modus mit 5-s-Toast statt Standard-Dialog, Score-
+basierte Statistik (Killer fuer FT2 mit duenner Decoder-Dichte).
+
+**Voller Workflow durchgezogen:**
+- V1 (`prompts/cache_reuse_refactor_v1.md`) — Mike-Vision konkret formuliert
+- V2 (`prompts/cache_reuse_refactor_v2.md`) — Self-Review, 7 Findings
+  (`_MULT` fuer MEASURE_CYCLES, CQ-Lock, Timestamp-Konflikt, App-Start-Cache,
+  Bandpilot-UX, `_was_early_stopped`, Tests-Migration)
+- R1 (`prompts/cache_reuse_refactor_r1.md`, deepseek-reasoner) — 4 Mods
+  bestaetigt (MEASURE_CYCLES bleibt, 2 Timestamps, CQ-Lock, KISS-Verbesserung)
+- Dichte-V1+R1 (`prompts/cache_reuse_dichte_*.md`) — Score-Insight
+  (KILLER fuer FT2): `score = sum(snr+30)` statt `station_count` ist
+  1-Zeilen-Aenderung, loest Mike's Sorge ueber duenne Stations-Dichte
+- V3 (`prompts/cache_reuse_refactor_v3.md`) — Synthese aller Findings
+- V3-R1-Final-Review (`cache_reuse_refactor_v3_r1_review.md`) — Plan
+  freigegeben, kein V4 noetig. Optionaler Hinweis zu defensive None-Pruefung
+  in `should_remeasure` integriert.
+
+**6 atomare Commits:**
+
+### Commit 1: `d8d947f` PresetStore zwei Timestamps + Migration
+- `core/preset_store.py`:
+  - `GAIN_VALIDITY_SECONDS = 6h` + neu `RATIO_VALIDITY_SECONDS = 1h`
+  - `is_valid_gain()`, `is_valid_ratio()`, `get_*_age_minutes()`
+  - `save_gain()` setzt `gain_timestamp`; `save_ratio()` setzt
+    `ratio_timestamp` (vorher: kein Timestamp-Update — V2 Finding 3!)
+  - `_load()` Migration: alter `timestamp` → beide Felder gespiegelt,
+    idempotent
+  - Alte `is_valid()`/`get_age_minutes()` als Aliase auf gain-Variante
+- Tests +18 in `test_preset_store.py` NEU
+
+### Commit 2: `305d775` Score statt station_count + MIN_STATIONS weg
+- `core/diversity.py`:
+  - Mod 4 (KILLER): `record_measurement` speichert `score` (sum(snr+30))
+    statt diskreter `station_count`/`dx_weak_count` — kontinuierliche
+    Werte, Median liefert auch bei FT2-1-2-Stationen-Slot Aufloesung
+  - Mod 5: `MIN_MEASURE_STATIONS = 5` ENTFERNT, `can_measure()` immer True
+  - `MIN_PEAK_SCORE = 5.0` ersetzt 1.0-Schwelle in `_evaluate` +
+    `_check_phase3_early_stop` (SNR-Skala statt Stueckzahl)
+- Tests +9 in `test_diversity_density.py` NEU
+  (FT2-Density, peak<=5 → 50:50-Fallback, Adaptiv-Stop mit Score)
+- Tests angepasst: 7 in `test_patterns.py` (score=N*15 statt
+  station_count=N), 3 in `test_modules.py`, 1 in `test_diversity_bandwechsel.py`
+
+### Commit 3: `fd416ca` zeit-basiertes should_remeasure + CQ-Lock
+- `core/diversity.py`:
+  - `REMEASURE_INTERVAL_SECONDS = 3600`
+  - `_last_measured_at` Property (gesetzt in `_evaluate`, geloescht in
+    `reset()`)
+  - `should_remeasure(qso_active, cq_active=False)`:
+    * Phase=operate Pre-Cond
+    * QSO oder CQ aktiv → False (Mod 3)
+    * `_last_measured_at` None → True (R1 defensive Hinweis)
+    * Sonst zeit-basiert (>=3600 s)
+- `ui/mw_cycle.py`: `qso_active` sauber von `cq_active` getrennt
+- Tests +13 in `test_should_remeasure.py` NEU
+
+### Commit 4: `f8af3e8` Cache-Reuse + 5-s-Toast bei Bandwechsel (Hauptfeature)
+- `ui/diversity_cache_toast.py` NEU (5s self-close, analog Bandpilot-Toast)
+- `ui/mw_radio.py`:
+  - `_try_diversity_cache_reuse(band, ft_mode, scoring) -> bool` —
+    Pre-Cond ratio_valid AND gain_valid, lädt entry["ratio"]+"dominant",
+    ruft `_enable_diversity` mit cache-Args, zeigt Toast
+  - `_enable_diversity` erweitert um `cached_ratio`/`cached_dominant`/
+    `cached_age_seconds` (kw-only): wenn gesetzt → Phase=operate,
+    KEIN Lock (kein Phase 3)
+  - `_check_diversity_preset` + `_activate_diversity_with_scoring` rufen
+    `_try_diversity_cache_reuse` VOR Standard-Dialog
+- Tests +9 in `test_diversity_cache_reuse.py` NEU
+  (Whitebox via MagicMock-self, Toast-Smoke)
+
+### Commit 5: `196a999` OPERATE_CYCLES + Settings-Option entfernen
+- `core/diversity.py` `OPERATE_CYCLES = 60` Konstante entfernt
+- `core/diversity.py` `seconds_until_remeasure` property NEU (zeit-basiert)
+- `ui/mw_radio.py` Z.821-824: `_MULT` fuer OPERATE_CYCLES entfernt,
+  MEASURE_CYCLES-Skalierung bleibt (R1 Mod 1)
+- `ui/main_window.py`: OPERATE_CYCLES-Update aus Settings-Pfad raus,
+  `_block_cycles` als fester OMNI-TX-Default 80
+- `ui/mw_cycle.py`: `update_diversity_ratio` mit `operate_seconds_remaining`
+  statt `operate_cycles/operate_total`
+- `ui/control_panel.py`: UI zeigt jetzt "Diversity Neuberechnung in X Min."
+  mit Farb-Schwellen <=2/<=10/sonst
+- `ui/settings_dialog.py`: "Neueinmessung nach: <Zyklen>"-UI komplett raus
+- `core/omni_tx.py`: Kommentar praezisiert (eigene OMNI-TX-Konstante)
+- Tests angepasst: `test_operate_cycles_multiplier` → `test_measure_cycles_multiplier`,
+  `diversity_operate_cycles` aus `test_settings_dialog_smoke.py` raus
+
+### Commit 6: Doku-Sync + Tests-Migration
+- HISTORY.md (dieser Eintrag)
+- HANDOFF.md beide Pfade
+- CLAUDE.md beide Pfade — Aktueller Stand v0.93
+- Memory `project_diversity_cache_reuse.md` als ERLEDIGT
+- MEMORY.md Index-Update
+- main.py APP_VERSION 0.92 → 0.93
+- `test_load_preset_removed_from_diversity_controller` umgeschrieben:
+  v0.74 entfernte GLOBALEN Cache-Pfad — band-spezifischer Cache-Reuse
+  seit v0.93 erlaubt (V2 Finding 7 adressiert)
+
+**Tests:** 681 → 729 gruen (+48: PresetStore +18, Density +9,
+should_remeasure +13, Cache-Reuse +9, sonstige Anpassungen netto -1).
+
+**Was BLEIBT unveraendert:**
+- Phase 2 Gain-Messung (separate 6 h Validity)
+- Phase 3 fair 3:3 Pattern (v0.90)
+- v0.91 Adaptiv-Stops + Cache-Schutz `_was_early_stopped`
+- v0.92 Pipeline-Lock (Bandwechsel-Race-Fix)
+- Manueller „NEU"-Button fuer Re-Measure
+- Auto-Hunt, OMNI-TX, Bandpilot-Logik
+
+**Lessons:**
+1. **Score-Insight war R1's wichtigster Fund.** Mike's Hinweis „weniger
+   Stationen bei FT4/FT2" fuehrte zu separater Dichte-R1-Diskussion, die
+   den 1-Zeilen-Fix (`score` statt `station_count`) entdeckte.
+2. **Cache-Reuse-Reihenfolge:** Ratio-Cache VOR Gain-Dialog, beide Pfade
+   (`_check_diversity_preset` + `_activate_diversity_with_scoring`).
+3. **API-Aliase fuer Migration** — `is_valid()` als Alias fuer
+   `is_valid_gain()` verhindert Breakage in 4 mw_radio.py-Aufrufstellen
+   waehrend Commit 1.
+4. **R1's defensive None-Hinweis war wertvoll** — `if _last_measured_at
+   is None: return True` schuetzt vor App-Start-Edge-Case.
+
+---
+
 ## 2026-05-04 v0.92 — Pipeline-Lock bulletproof (Bandwechsel-Race-Fix)
 
 **Hintergrund:** R1 hatte in v0.90 einen Bandwechsel-Race-Verdacht in

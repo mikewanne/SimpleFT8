@@ -67,17 +67,22 @@ def test_phase_diff_detects_measure_to_operate_transition():
 
 
 def test_load_preset_removed_from_diversity_controller():
-    """Regression: load_preset() darf nicht zurueckkommen.
+    """Regression: globaler load_preset() darf nicht zurueckkommen.
 
-    Wenn der Code zurueckkommt, lassen wir auch versehentlich den Bug-Pfad
-    zurueck. Test dokumentiert diese bewusste Loesch-Entscheidung.
+    v0.74 entfernte den Bug-Pfad ``DiversityController.load_preset()``,
+    der einen GLOBALEN Cache geladen hat. Der Bug: Ratio wurde band-
+    uebergreifend uebernommen, obwohl Pattern band-spezifisch ist.
+
+    v0.93: Cache-Reuse PRO Band+Modus ist erlaubt und richtig
+    (siehe ``ui/mw_radio.py::_try_diversity_cache_reuse``). Was bleibt
+    verboten: ein globaler Cache-Pfad innerhalb des DiversityController.
     """
     from core.diversity import DiversityController
     dc = DiversityController()
     assert not hasattr(dc, 'load_preset'), (
-        "load_preset() wurde in v0.74 bewusst entfernt — Ratio darf NIE "
-        "aus Cache geladen werden, weil Pattern band-spezifisch ist. "
-        "Wenn diese Methode zurueckkommt, kommt auch der Bug zurueck."
+        "load_preset() wurde in v0.74 bewusst entfernt — globaler Ratio-"
+        "Cache ist verboten. Band-/Modus-spezifischer Cache-Reuse seit v0.93 "
+        "erlaubt, aber NICHT ueber DiversityController-Methode."
     )
 
 
