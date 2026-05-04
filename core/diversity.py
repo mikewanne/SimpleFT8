@@ -4,7 +4,7 @@ Scoring-Modi:
   "normal" — Fokus auf Masse: Anzahl dekodierbarer Stationen (SNR > -20 dB)
   "dx"     — Fokus auf Qualitaet: Durchschnitts-SNR der Top-5 Stationen
 
-Auswertung: Median ueber 4 Zyklen pro Antenne, Schwelle 8% (statt 15%).
+Auswertung: Median ueber 3 Zyklen pro Antenne (6-Slot fair 3:3), Schwelle 8% (statt 15%).
 """
 
 import statistics
@@ -78,12 +78,14 @@ class DiversityController:
     def choose(self) -> str:
         """Antenne fuer den naechsten Zyklus waehlen.
 
-        WICHTIG: Jede Antenne bekommt IMMER mindestens 2 aufeinanderfolgende
-        Slots (Even+Odd Paar) damit beide Paritaeten empfangen werden.
+        In der Mess-Phase bekommt jede Antenne mindestens ein zusammenhaengendes
+        Even+Odd-Paar (A1: Slots 0-1, A2: Slots 2-3) damit beide Paritaeten
+        empfangen werden. Slots 4-5 sind Singles (A1=even, A2=odd) zur
+        Aufrundung 3:3.
         """
         if self._phase == "measure":
-            # Messung: A2,A1,A1,A2 (6-Slot nahtlos, beide Paritaeten)
-            return ("A2","A1","A1","A2","A1","A1")[self._measure_step % 6]
+            # Mess-Pattern: A1,A1,A2,A2,A1,A2 — fair 3:3, Even+Odd-Paar je Antenne
+            return ("A1","A1","A2","A2","A1","A2")[self._measure_step % 6]
         if self.ratio == "70:30":
             return self._PAT_70_A1[self._operate_cycles % 6]
         if self.ratio == "30:70":
@@ -400,7 +402,7 @@ class DiversityController:
     def on_band_change(self):
         """Bandwechsel → Neueinmessung starten."""
         self.reset()
-        print("[Diversity] Bandwechsel — Neueinmessung gestartet (4 Zyklen)")
+        print("[Diversity] Bandwechsel — Neueinmessung gestartet (6 Zyklen)")
 
     @property
     def phase(self) -> str:
@@ -417,6 +419,8 @@ class DiversityController:
         return self._operate_cycles
 
     def _evaluate(self):
+        # Pre-v0.90 Mess-Pattern war 4xA1 + 2xA2 (struktureller Bias zu ANT1).
+        # Seit v0.90 fair 3:3 — Median-Robustheit beider Antennen gleich.
         m1 = self._measurements["A1"]
         m2 = self._measurements["A2"]
 

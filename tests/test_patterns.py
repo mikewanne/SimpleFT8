@@ -150,6 +150,60 @@ def test_measure_max_consecutive():
     check_max_consecutive(p, 2)
 
 
+def test_measure_ratio_balanced():
+    """Mess-Pattern: 3xA1 + 3xA2 ueber 6 Slots — fair (v0.90 Bug-Fix)."""
+    dc = DiversityController()
+    dc._phase = "measure"
+    p = get_pattern(dc, 6, mode="measure")
+    assert p.count("A1") == 3, f"Erwartet 3xA1: {p}"
+    assert p.count("A2") == 3, f"Erwartet 3xA2: {p}"
+
+
+def test_measure_seamless_loop():
+    """Mess-Pattern: max 2 hintereinander auch am Loop-Uebergang."""
+    dc = DiversityController()
+    dc._phase = "measure"
+    p = get_pattern(dc, 6, mode="measure")
+    check_seamless_loop(p, 2)
+
+
+def test_measure_closed_pairs_per_antenna():
+    """A1 hat geschlossenes Paar Slots 0-1, A2 hat geschlossenes Paar Slots 2-3."""
+    dc = DiversityController()
+    dc._phase = "measure"
+    p = get_pattern(dc, 6, mode="measure")
+    assert p[0] == "A1" and p[1] == "A1", f"A1 0-1 Paar fehlt: {p}"
+    assert p[2] == "A2" and p[3] == "A2", f"A2 2-3 Paar fehlt: {p}"
+
+
+def test_measure_evaluate_fair_yields_5050():
+    """End-to-End: gleiche Scores fuer A1 und A2 → Ratio 50:50.
+
+    Schuetzt gegen Regression in _evaluate(): Pattern-Test allein deckt
+    Median+Ratio-Logik nicht ab (R1-Finding v0.90).
+    """
+    dc = DiversityController()
+    dc._phase = "measure"
+    for _ in range(3):
+        dc.record_measurement("A1", score=0.0, station_count=10)
+        dc.record_measurement("A2", score=0.0, station_count=10)
+    assert dc.phase == "operate"
+    assert dc.ratio == "50:50"
+    assert dc.dominant is None
+
+
+def test_measure_evaluate_a1_dominant_yields_7030():
+    """End-to-End: A1 deutlich besser → Ratio 70:30, dominant=A1."""
+    dc = DiversityController()
+    dc._phase = "measure"
+    for _ in range(3):
+        dc.record_measurement("A1", score=0.0, station_count=20)
+        dc.record_measurement("A2", score=0.0, station_count=10)
+    assert dc.phase == "operate"
+    assert dc.ratio == "70:30"
+    assert dc.dominant == "A1"
+
+
 # ─── OMNI-TX Pattern ─────────────────────────────────────────────────────────
 
 def test_omni_tx_pattern():
