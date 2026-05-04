@@ -1,8 +1,8 @@
 """SimpleFT8 DX Tune Dialog — Interleaved Antennen + Preamp Optimierung.
 
 Neues Verfahren (v2):
-- 18 Zyklen interleaved: ANT1@0 → ANT2@0 → ANT1@10 → ANT2@10 → ANT1@20 → ANT2@20
-  × 3 Runden = 4,5 Minuten
+- 12 Zyklen interleaved: ANT1@10 → ANT2@10 → ANT1@20 → ANT2@20
+  × 3 Runden = 3 Minuten
 - Jede Kombination bekommt 3 Zyklen (45s) verteilt ueber die Messzeit
 - ANT1 und ANT2 werden bei gleichen Bandoeffnungen verglichen
 - Ergebnis: optimaler Gain fuer ANT1 UND ANT2 separat
@@ -19,8 +19,8 @@ from PySide6.QtGui import QFont
 _FONT_MONO = QFont("Menlo", 12)
 _FONT_MONO_SM = QFont("Menlo", 10)
 
-GAIN_VALUES = [0, 10, 20]
-ROUNDS = 3  # 3 Runden × 6 Kombos = 18 Zyklen × 15s = 4,5 Min
+GAIN_VALUES = [10, 20]
+ROUNDS = 3  # 3 Runden × 4 Kombos = 12 Zyklen × 15s = 3 Min
 
 
 def _build_interleaved_schedule() -> list:
@@ -37,7 +37,7 @@ def _build_interleaved_schedule() -> list:
             for gain in GAIN_VALUES:
                 schedule.append(("ANT2", gain))
                 schedule.append(("ANT1", gain))
-    return schedule  # 18 Eintraege
+    return schedule  # 12 Eintraege
 
 
 class DXTuneDialog(QDialog):
@@ -52,7 +52,7 @@ class DXTuneDialog(QDialog):
         self._results = {}
 
         # Messplan
-        self._schedule = _build_interleaved_schedule()  # 18 Schritte
+        self._schedule = _build_interleaved_schedule()  # 12 Schritte
         self._step = 0          # aktueller Schritt im Schedule
         self._phase_data = {}   # (ant, gain) -> [snr_werte]
         self._cancelled = False
@@ -89,8 +89,8 @@ class DXTuneDialog(QDialog):
         layout.addWidget(title)
 
         hint = QLabel(
-            "18 Zyklen interleaved • ANT1 & ANT2 bei gleichem Gain verglichen\n"
-            "Dauert ca. 4,5 Minuten  •  TX bleibt immer auf ANT1"
+            "12 Zyklen interleaved • ANT1 & ANT2 bei gleichem Gain verglichen\n"
+            "Dauert ca. 3 Minuten  •  TX bleibt immer auf ANT1"
         )
         hint.setStyleSheet("color: #FFD700; font-size: 11px;")
         hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -274,7 +274,7 @@ class DXTuneDialog(QDialog):
         return len([v for v in vals if v is not None])
 
     def _finish(self):
-        """Alle 18 Zyklen fertig — besten Gain pro Antenne bestimmen.
+        """Alle 12 Zyklen fertig — besten Gain pro Antenne bestimmen.
 
         scoring_mode='snr': Bester Top-5 SNR → maximale Empfindlichkeit (DX)
         scoring_mode='stations': Meiste Stationen → maximaler Durchsatz (Standard)
