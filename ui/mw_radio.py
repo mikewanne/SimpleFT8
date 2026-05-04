@@ -961,12 +961,12 @@ class RadioMixin:
     def _start_tune_only(self, after_tune_callback=None) -> None:
         """TUNE allein — fuer Bandwechsel mit Cache-"Weiter"-Pfad.
 
-        Sendet 5s Carrier auf der aktuellen Frequenz auf ANT1, damit ein
+        Sendet 3s Carrier auf der aktuellen Frequenz auf ANT1, damit ein
         externer/interner Tuner sich auf die Band-Last einstimmen kann.
         Danach wird `after_tune_callback` (z.B. `_enable_diversity`) gerufen.
 
         Race-Schutz: `self._tune_token` wird neu gesetzt. Wenn waehrend der
-        5s ein Bandwechsel passiert (`_on_band_changed` setzt das Token auf
+        3s ein Bandwechsel passiert (`_on_band_changed` setzt das Token auf
         None), wird der `_after_tune` Callback ignoriert und `_enable_diversity`
         nicht mehr fuer das alte Band gerufen.
 
@@ -985,7 +985,7 @@ class RadioMixin:
         tune_power = self.settings.get("tune_power", 10)
 
         self.statusBar().showMessage(
-            f"TUNEN — {tune_power}W auf ANT1 fuer 5s ...", 0)
+            f"TUNEN — {tune_power}W auf ANT1 fuer 3s ...", 0)
         self.radio.set_rfpower_direct(tune_power)
         self.radio.tune_on()
 
@@ -999,7 +999,7 @@ class RadioMixin:
             if after_tune_callback:
                 after_tune_callback()
 
-        QTimer.singleShot(5000, _after_tune)
+        QTimer.singleShot(3000, _after_tune)
 
     def _start_dx_tuning(self, scoring_mode: str = "snr"):
         """Diversity Pipeline: TUNE (automatisch) → Gain-Messung → Einmessen."""
@@ -1028,7 +1028,7 @@ class RadioMixin:
         # TUNE automatisch — immer, keine Auswahl
         if self.radio.ip:
             self.statusBar().showMessage(
-                f"TUNEN — {tune_power}W auf ANT1 fuer 5s ...", 0)
+                f"TUNEN — {tune_power}W auf ANT1 fuer 3s ...", 0)
             self.radio.set_rfpower_direct(tune_power)
             self.radio.tune_on()
 
@@ -1050,7 +1050,7 @@ class RadioMixin:
                     return
                 self._open_dx_tune_dialog()
 
-            QTimer.singleShot(5000, _after_tune)
+            QTimer.singleShot(3000, _after_tune)
         else:
             # Kein Radio → direkt Gain-Messung
             self._open_dx_tune_dialog()
