@@ -5,6 +5,23 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-04 v0.88.1 — Snapshot vor Kalibrier-Optimierung
+
+GitHub-Release v0.88.1 + Tag + lokale Sicherung in
+`Appsicherungen/2026-05-04_v0.88.1_vor_kalibrier_optimierung/`.
+
+**Zweck:** Rollback-Anker fuer geplante Kalibrierungs-Pipeline-
+Optimierungen (Pipeline 6:50 Min → typisch ~3:20 Min, 8 Schritte
+in 2 Blöcken). Bei Bedarf: `git checkout v0.88.1`.
+
+**Enthält ggu v0.88:** Tertile-Konfidenzband im Stationen-Diagramm
+entfernt + Bandpilot Auto-Toast 3s → 5s. Tests 659 grün.
+
+**Plan:** `prompts/kalibrier_optimierung_plan.md`
+**Memory:** `project_kalibrier_optimierung.md`
+
+---
+
 ## 2026-05-04 — Bandpilot Auto-Toast 3s → 5s
 
 Mike-Feedback nach Live-Test 04.05.2026: 3 Sekunden zu kurz um die

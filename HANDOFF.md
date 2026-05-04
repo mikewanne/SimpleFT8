@@ -1,12 +1,16 @@
 # HANDOFF — SimpleFT8
 
-**Stand 2026-05-04:** v0.88 (Bandpilot Stunden-Refactor — drei direkte
-Werte pro UTC-Stunde ohne Aggregation, Settings off/auto/manual,
-TX-Schutz mit Band-Check). v0.87.1 Doku-Konsolidierung. v0.87
-Bandpilot v1.
+**Stand 2026-05-04:** v0.88.1 — Pre-Optimization-Snapshot.
+v0.88 (Bandpilot Stunden-Refactor) + Tertile-Korridor entfernt + Toast 5s.
+Sicherung in Appsicherungen/2026-05-04_v0.88.1_vor_kalibrier_optimierung/.
 
-**Tests:** 659/659 gruen (+43 ggu v0.87.1: +31 mode_recommender, +14
-bandpilot_md, +9 settings_migration, +19 mw_radio_bandpilot).
+**Tests:** 659/659 grün.
+
+**Naechster Schritt:** Kalibrier-Pipeline-Optimierung Block 1 starten.
+Plan: `prompts/kalibrier_optimierung_plan.md`. Memory:
+`project_kalibrier_optimierung.md`. Trigger: "Block 1 starten".
+
+**Rollback bei Problemen:** `git checkout v0.88.1`.
 
 ---
 
