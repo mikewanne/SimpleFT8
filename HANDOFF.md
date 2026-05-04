@@ -37,24 +37,35 @@ Cache-Reuse-TODO bleibt auf voll-gemessene Ratios beschraenkt.
   + V3-Review). Token-Pattern-Fix in eigener Iteration.
 
 **Naechster Schritt nach Compact:**
-1. **Block 1+2 Feldtest** — Mike testet Pipeline-Dauer:
-   - Best-Case ~2:30 Min (alle Adaptiv-Stops greifen)
-   - Typisch ~3:20 Min
-   - ANT2-Win-Rate erwartet weiter hoeher (15-25 % statt 4 % pre-v0.90)
-   - Monitoring-Log liefert Schwellen-Tuning-Daten (4 dB / 50 % / 15 %)
-2. **Diversity-Ratio-Cache beim Bandwechsel** (TODO-Eintrag, R1+Claude
-   einig: X = 2h). Spart 1:30-3 Min Pipeline pro Bandwechsel. Trigger:
-   „Cache-Reuse starten". Cache-Schutz aus #8 ist Voraussetzung — nur
-   voll-gemessene Ratios werden persistiert.
-3. **OPERATE_CYCLES = 60 ueberdenken** (TODO-Eintrag) — 15 Min ist
-   sehr aggressiv wenn 2h-Cache reicht. Datenlage aus v0.91 Field-Test
-   abwarten, dann ggf. auf 120-240 erhoehen.
-4. **Bandwechsel-Race verifizieren** (R1-Verdacht v0.90, TODO-Eintrag)
-   — Token-Pattern-Fix nach Cache-Reuse.
-5. Antennen-Drossel-Beobachtung 2026-05-04: Mantelwellensperre wieder
-   ausgebaut, ANT2-Kabel jetzt mit lockeren 8-foermigen Schlaufen verlegt.
-   Mit v0.90 Pattern-Fix wird Mike's „4 % ANT2-Win"-Beobachtung neu
-   bewertet (vermutlich ~15-25 % bei fairer Messung).
+
+**🟡 v0.92 Lock-Audit (HALB FERTIG, Tests + Doku pending):**
+- 5 Code-Edits in `ui/mw_radio.py` UNCOMMITTED (Working-Tree drin):
+  Bandwechsel/Mode/RX-Mode-Lock-Coverage + reset-Reihenfolge.
+- Voller V1→V2→R1→V3-Workflow durch (`prompts/lock_audit_*`).
+- App lief beim Compact mit den Edits (PID 81079).
+- **Trigger nach Compact:** „Lock-Audit fertig" → 7 Tests in
+  `tests/test_lock_coverage.py` schreiben + atomar committen + Doku v0.92.
+- Memory: `project_lock_audit_pending.md` hat alle Details.
+
+**🟢 v0.93 Cache-Reuse + Mess-Refactor (Plan steht, R1-bestaetigt):**
+- Mike-Vision: 1 h Auto-Refresh atmosphärisch, Cache pro Band, Normal raus,
+  OPERATE_CYCLES weg.
+- R1's 4 Mods: MEASURE_CYCLES-_MULT bleibt, 2 Timestamps, CQ-Lock,
+  **Score statt station_count** (KILLER fuer FT2-Statistik).
+- Bonus: MIN_MEASURE_STATIONS weg.
+- Aufwand ~4.5 h.
+- **Trigger nach Compact:** „Refactor starten" oder „v0.93 starten" oder
+  „Score zuerst" (nur Mod 4 als Quick-Win).
+- Memory: `project_diversity_cache_reuse.md` hat alle Details.
+
+**🔬 Block 1+2 Feldtest (Mike's Aufgabe):**
+- Pipeline-Dauer messen (Best-Case ~2:30, typisch ~3:20).
+- ANT2-Win-Rate erwartet 15-25 % statt 4 % pre-v0.90.
+- Monitoring-Log liefert Schwellen-Tuning-Daten (4 dB / 50 % / 15 %).
+
+**📡 Antennen-Drossel-Beobachtung 2026-05-04:**
+Mantelwellensperre wieder ausgebaut, ANT2-Kabel jetzt mit lockeren
+8-foermigen Schlaufen verlegt.
 
 **Statistik-Disclaimer:** Alle Pre-v0.90 Diversity-Daten haben strukturellen
 Mess-Bias 4:2. Pooled-Mean +88 %/+124 % bleibt valide weil ANT2 trotz Bias
