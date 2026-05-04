@@ -5,6 +5,79 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-04 v0.90 — Mess-Pattern-Bug-Fix (KRITISCH, Phase-3-Bias seit v0.36 behoben)
+
+**Bug seit Phase 3:** `core/diversity.py:86` nutzte das Pattern
+`("A2","A1","A1","A2","A1","A1")` = **4× A1 + 2× A2** auf 6 Slots —
+identisch mit OPERATE 70:30. ANT2 strukturell unter-gemessen → Median-
+Vergleich verschoben → 8 %-Schwelle bevorzugte ANT1-Ratio.
+
+**Erklaert teilweise** Mike's Beobachtung 4 % ANT2-Win-Rate auf 40 m FT8
+(1 von 23 Stationen am 04.05.2026 13 UTC).
+
+**Voller Workflow durchgezogen:**
+- V1 (Plan-Datei `prompts/v090_mess_pattern_fix_plan.md`, 3 Optionen A/B/C)
+- V2 (`prompts/v090_v2.md`, Self-Review, 6 zusaetzliche Findings inkl.
+  Block-1-Doku-Bug Z.7+Z.403)
+- R1 (DeepSeek-R1, 2 KRITISCH-Findings: 🔴 End-to-End-Test fehlt
+  + 🔴 Bandwechsel-Race-Hinweis in HANDOFF behalten)
+- V3 (`prompts/v090_v3.md`, final mit 6 ACs)
+
+**Fix Option C (R1-Plan-Default):**
+```python
+return ("A1","A1","A2","A2","A1","A2")[self._measure_step % 6]
+```
+
+3:3 fair, beide Antennen mit zusammenhaengendem Even+Odd-Paar
+(A1: Slots 0-1, A2: Slots 2-3), Singletons 4 (A1=even) + 5 (A2=odd).
+6 Slots bleiben → MEASURE_CYCLES=6 unveraendert → Pipeline ~4:31 Min
+unveraendert.
+
+**3 atomare Commits:**
+1. `473f164` Pattern-Fix + 5 neue Tests in `tests/test_patterns.py`
+   (`test_measure_ratio_balanced`, `_seamless_loop`, `_closed_pairs_per_antenna`
+   und 2 End-to-End-Tests fuer `_evaluate()` 50:50 + 70:30)
+2. `2a3c535` Doku-Sync README.md (DE+EN) + `docs/explained/diversity-modes.md`
+   (DE+EN) — alle „4 Zyklen / 8-cycle" Stellen auf 6-Zyklen-Pattern aktualisiert
+3. `<pending>` APP_VERSION 0.89 → 0.90 + HISTORY/HANDOFF/CLAUDE/TODO/Memory
+
+**R1-Findings einarbeitet:**
+- 🔴 **End-to-End-Test (KRITISCH)** — `record_measurement` mit fairen/
+  asymmetrischen Scores → Pruefung von `_evaluate()` Median+Ratio. Pattern-
+  Test allein deckt das nicht ab; bei Aenderung an `_evaluate()` waere der
+  Bug zurueckschleichen koennen.
+- 🔴 **Bandwechsel-Race-Hinweis** in HANDOFF behalten (R1 hat den Verdacht
+  zweimal angedeutet: laufender Slot wird nach `on_band_change` reset noch
+  verarbeitet → record_measurement mit altem Antennen-State auf neuem Band
+  moeglich). Separater Bug-Fix nach v0.90.
+- 🟡 Code-Kommentar in `_evaluate()` mit Statistik-History
+- 🟡 Geschlossene Even+Odd-Paare als eigener Test (`_closed_pairs_per_antenna`)
+
+**Statistik-Disclaimer (PFLICHT-Lese fuer Auswertungen):**
+- Alle Pre-v0.90 Diversity-Daten haben strukturellen Mess-Bias 4:2 statt 3:3.
+- Pooled-Mean +88 %/+124 % bleibt valide weil ANT2 trotz Bias signifikant
+  beitraegt — absolute ANT2-Win-Rate ist konservativ unterschaetzt.
+- Field-Test-Erwartung: ANT2-Win-Rate auf 40 m steigt von ~4 % auf ~15-25 %
+  bei aehnlich-guten Antennen.
+- 50:50-Ratio wird haeufiger gewaehlt wenn echte Differenz < 8 %.
+
+**Block-1-Doku-Bug mitfixt:**
+- `core/diversity.py:7` Module-Docstring „Median ueber 4 Zyklen pro Antenne"
+- `core/diversity.py:403` print „(4 Zyklen)"
+- `README.md:61+581` (DE+EN) „median over 4 cycles" / „Median ueber 4 Zyklen"
+- `docs/explained/diversity-modes.md` (DE+EN) „8-cycle measurement / 4 cycles"
+
+**Tests:** 664 gruen (= 659 + 5 neue).
+
+**Out-of-Scope (NICHT in v0.90):**
+- 🟡 Bandwechsel-Race in `mw_radio.py` (separater Workflow nach v0.90)
+- Block 2 (Adaptiv-Stops + ROUNDS=2): eigener V1→V3-Zyklus
+- `core/diversity 2.py` (untracked Backup vom 30.04.2026): nicht angetastet
+
+**Rollback bei Problemen:** `git checkout aec3706` (letzter Block-1-Commit).
+
+---
+
 ## 2026-05-04 v0.89 — Kalibrier-Pipeline-Optimierung Block 1
 
 **Pipeline 6:50 → ~4:31 Min (-2:19 Min, -34 %).** Vorbereitend fuer

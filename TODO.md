@@ -4,34 +4,43 @@
 
 ## ⭐ ALS NÄCHSTES (Priorität)
 
-### 🔴 KRITISCH — v0.90 Mess-Pattern-Bug (2026-05-04, R1-Audit)
+### ✅ ERLEDIGT — v0.90 Mess-Pattern-Bug-Fix (2026-05-04)
 
-**Bug:** ``core/diversity.py:86`` Mess-Phase liefert Pattern
-``("A2","A1","A1","A2","A1","A1")`` = **4×A1 + 2×A2 auf 6 Slots**.
-Das ist identisch mit OPERATE-70:30-Pattern und strukturell unfair —
-ANT2 wird mit halber Stichprobe gemessen.
+`core/diversity.py:86` auf fair 3:3 (``("A1","A1","A2","A2","A1","A2")``)
+korrigiert — Option C aus V3. 3 atomare Commits, Tests 664 gruen.
+Voller Workflow V1→V2→R1→V3 mit 2 R1-KRITISCH-Findings (End-to-End-Test,
+Bandwechsel-Race-Hinweis behalten). Siehe HISTORY.md v0.90-Eintrag und
+``prompts/v090_v3.md`` fuer Details.
 
-**Auswirkung:** Diversity-Ratio bevorzugt systematisch ANT1, ANT2-
-Win-Rate kuenstlich gedrueckt. Erklaert teilweise Mike's Beobachtung
-4% ANT2-Win-Rate auf 40m FT8.
+**Statistik-Disclaimer:** Alle Pre-v0.90 Diversity-Daten haben strukturellen
+Mess-Bias 4:2. Pooled-Mean +88 %/+124 % bleibt valide; absolute ANT2-Win-Rate
+war konservativ unterschaetzt. Field-Test-Erwartung: ANT2-Win-Rate steigt
+von ~4 % auf ~15-25 % auf 40 m FT8.
 
-**Statistik-Implikation:** Pooled-Mean-Werte (+88%/+124%) bleiben
-valide, ABER absolute ANT2-Win-Rate ist konservativ unter-geschaetzt.
-Faire Messung wird hoehere Win-Rates zeigen.
+---
 
-**Plan:** ``prompts/v090_mess_pattern_fix_plan.md``
-**R1-Audit-Antwort:** ``prompts/v090_audit_r1.md``
-**Memory:** ``project_v090_mess_pattern_bug.md``
+### 🟡 OFFEN — Bandwechsel-Race in `mw_radio.py` (R1-Verdacht v0.90)
 
-**Default-Fix Option C:** ``("A1","A1","A2","A2","A1","A2")`` — 3:3
-fair, beide Antennen Even+Odd-Paar, ``MEASURE_CYCLES = 6`` bleibt
-(Block-1-Ersparnis erhalten).
+**Verdacht (R1 hat zweimal angedeutet, v0.90 Audit + V3-Review):**
+`_on_band_changed()` ruft `self._diversity_ctrl.on_band_change()`
+(reset auf measure + step=0). Der aktuell noch laufende Zyklus (unter
+altem Band gestartet) wird **nach** dem Reset in `_on_cycle_decoded`
+verarbeitet, ruft `record_measurement` auf und verfaelscht so die
+neu gestartete Messung (inkonsistenter Zustand zwischen Antenne und
+step-Zaehler).
 
-**Aufwand:** ~30-45 min Code + V1→V2→R1→V3-Workflow + Tests.
+**Fix-Idee:** Token-Pattern wie in v0.74 (DX-Tune-Dialog) — beim
+Bandwechsel wird `_diversity_token = object()` gesetzt; `record_measurement`
+prueft Token vor Verarbeitung. Slots mit veraltetem Token werden verworfen.
 
-**Trigger:** Mike sagt „v0.90 starten" oder „Mess-Pattern-Fix starten".
-**Status:** OPEN — eigener Workflow, Bug ist alt (existiert seit
-Phase 3 implementiert wurde) und kein Rollback-Risiko.
+**Code-Stellen (V1-Skizze, R1 in eigenem Workflow):**
+- `core/diversity.py` `record_measurement` — Token-Check
+- `ui/mw_radio.py` `_on_band_changed` — Token rotieren
+- `ui/mw_cycle.py` `_handle_diversity_measure` — Token in Closure capturen
+
+**Aufwand:** ~30-45 min + V1→V3-Workflow + Tests
+**Status:** OPEN — eigener V1→V3-Zyklus, geringe Prioritaet (selten
+genug dass Mike es nicht aktiv stoert), aber sauber zu fixen.
 
 ---
 

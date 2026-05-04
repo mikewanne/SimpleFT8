@@ -1,32 +1,44 @@
 # HANDOFF — SimpleFT8
 
-**Stand 2026-05-04:** v0.89 — Kalibrier-Pipeline Block 1 erledigt.
-Pipeline 6:50 → ~4:31 Min (-2:19 Min, -34 %). 5 atomare Commits
-(ebddd3e..aec3706). Voller Workflow V1→V2→R1→V3 — R1 fand
-1 KRITISCH (mw_radio.py:798 ueberschreibt MEASURE_CYCLES).
+**Stand 2026-05-04:** **v0.90 — Mess-Pattern-Bug-Fix erledigt.**
+`core/diversity.py:86` Mess-Phase auf fair 3:3 (Pattern A1,A1,A2,A2,A1,A2)
+korrigiert. Pre-v0.90 hatte 4× A1 + 2× A2 strukturellen Bias zu ANT1.
+Pipeline ~4:31 Min unveraendert, MEASURE_CYCLES=6 bleibt.
 
-**Tests:** 659/659 grün.
+3 atomare Commits (`473f164`..`<v0.90-doku>`). Voller Workflow
+V1 → V2 (Self-Review) → R1 (DeepSeek-R1, 2 KRITISCH-Findings: End-to-End-Test
++ Bandwechsel-Race-Hinweis behalten) → V3.
 
-**🔴 KRITISCH-Bug entdeckt nach Block 1 (R1-Audit 2026-05-04):**
-``core/diversity.py:86`` Mess-Phase nutzt OPERATE-70:30-Pattern
-(4×A1 + 2×A2 statt 3:3). ANT2 strukturell unter-gemessen — erklaert
-teilweise Mike's 40m-Beobachtung 4% ANT2-Win-Rate.
-→ Plan: ``prompts/v090_mess_pattern_fix_plan.md``
-→ Memory: ``project_v090_mess_pattern_bug.md``
+**Tests:** 664/664 gruen (+5 neue: ratio_balanced, seamless_loop,
+closed_pairs_per_antenna, evaluate_fair_yields_5050,
+evaluate_a1_dominant_yields_7030).
 
-**Naechster Schritt — Reihenfolge nach Compact:**
-1. **v0.90 Mess-Pattern-Fix** (KRITISCH) — Trigger „v0.90 starten" oder
-   „Mess-Pattern-Fix starten". Default Option C: 3:3 fair mit Even+Odd
-   beider Antennen, ~30-45 min.
-2. **Block 1 Feldtest** — Mike testet kalibrierungs-Dauer/Qualitaet
-   (parallel zu v0.90 moeglich).
-3. **Block 2 starten** (Adaptiv-Stops) — eigener V1→V3-Zyklus, Ziel
-   typisch ~3:20 Min Pipeline. Trigger: „Block 2 starten".
-4. Antennen-Drossel-Beobachtung 2026-05-04: Mantelwellensperre
-   wieder ausgebaut, ANT2-Kabel jetzt mit lockeren 8-foermigen
-   Schlaufen verlegt. Zukunfts-Test ob ANT2-Win-Rate erholt.
+**🟡 Offene R1-Verdachts-Punkte (NICHT in v0.90 — separater Workflow):**
+- `mw_radio.py` Bandwechsel-Race: laufender Slot wird nach `on_band_change`
+  reset noch verarbeitet → `record_measurement` mit altem Antennen-State auf
+  neuem Band moeglich. R1 hat den Verdacht zweimal angedeutet (v0.90 Audit
+  + V3-Review). Token-Pattern-Fix in eigener Iteration. Verifikation per
+  Field-Test (Bandwechsel im 2. Mess-Zyklus → erwartet: kein Datenleck
+  zwischen Baendern in measurements-Liste).
 
-**Rollback bei Problemen:** `git checkout v0.88.1` (Snapshot vor Block 1).
+**Naechster Schritt:**
+1. **Block 1 Feldtest** — Mike testet Pipeline-Dauer ~4:31 Min + Mess-
+   Qualitaet (Overload-Check, Median-Stabilitaet). Bei v0.90 Mess-Pattern-
+   Fix wird ANT2-Win-Rate erwartet hoeher (15-25 % statt 4 %).
+2. **Block 2 starten** (Adaptiv-Stops + ROUNDS=2) — eigener V1→V3-Zyklus,
+   Ziel typisch ~3:20 Min Pipeline. Trigger: „Block 2 starten".
+3. **Bandwechsel-Race verifizieren** — eigener Mini-Bug-Fix nach Block 2.
+4. Antennen-Drossel-Beobachtung 2026-05-04: Mantelwellensperre wieder
+   ausgebaut, ANT2-Kabel jetzt mit lockeren 8-foermigen Schlaufen verlegt.
+   Mit v0.90 Pattern-Fix wird Mike's „4 % ANT2-Win"-Beobachtung neu
+   bewertet (vermutlich ~15-25 % bei fairer Messung).
+
+**Statistik-Disclaimer:** Alle Pre-v0.90 Diversity-Daten haben strukturellen
+Mess-Bias 4:2. Pooled-Mean +88 %/+124 % bleibt valide weil ANT2 trotz Bias
+signifikant beitraegt — absolute ANT2-Win-Rate war konservativ unterschaetzt.
+
+**Rollback bei Problemen:** `git checkout aec3706` (letzter Block-1-Commit
+v0.89, vor v0.90 Pattern-Fix).
 
 ---
 
