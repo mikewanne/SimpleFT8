@@ -197,6 +197,14 @@ class RadioMixin:
 
     @Slot(str)
     def _on_mode_changed(self, mode: str):
+        # Pipeline-Lock-Schutz (v0.92 R1-Audit): blockiert auch programmatische
+        # Pfade. Mode-Wechsel triggert `_check_diversity_preset` das
+        # asynchron Tune+Gain-Messung starten kann waehrend laufende Pipeline.
+        if getattr(self, '_gain_measure_locked', False):
+            current = self.settings.mode
+            print(f"[Mode-Wechsel ignoriert: Pipeline laeuft, bleibe auf {current}]")
+            self.control_panel._set_mode(current)
+            return
         # v0.75/v0.78: aktive Power-Modi bei FT-Mode-Wechsel (FT8/FT4/FT2) stoppen
         if hasattr(self, "_auto_hunt") and self._auto_hunt.active:
             self._auto_hunt.stop_auto_hunt("ft_mode_change")
@@ -263,6 +271,15 @@ class RadioMixin:
 
     @Slot(str)
     def _on_band_changed(self, band: str):
+        # Pipeline-Lock-Schutz (v0.92 R1-Audit): blockiert auch programmatische
+        # Pfade die UI-Button-Disable umgehen wuerden. Ohne diese Pruefung
+        # konnte `reset()` in `_diversity_ctrl.on_band_change()` den Phase-
+        # Check in `record_measurement` aushebeln → Daten-Leck zwischen Baendern.
+        if getattr(self, '_gain_measure_locked', False):
+            current = self.settings.band
+            print(f"[Bandwechsel ignoriert: Pipeline laeuft, bleibe auf {current}]")
+            self.control_panel._set_band(current)  # UI-Sync zurueck
+            return
         # Race-Schutz: ausstehende TUNE-Callbacks ungueltig machen, sonst ruft
         # ein 5-Sek-Timer aus dem alten Band-Kontext _enable_diversity() fuer
         # das jetzt verlassene Band auf.
@@ -370,6 +387,15 @@ class RadioMixin:
     @Slot(str)
     def _on_rx_mode_changed(self, mode: str):
         """RX-Modus umschalten (nur 'normal' oder 'diversity')."""
+        # Pipeline-Lock-Schutz (v0.92 R1-Audit): RX-Mode-Wechsel ruft
+        # `_disable_diversity` / `_activate_diversity_with_scoring` und kann
+        # damit eine laufende Diversity-Messung mid-pipeline beenden.
+        if getattr(self, '_gain_measure_locked', False):
+            current = getattr(self, '_rx_mode', 'normal')
+            print(f"[RX-Mode-Wechsel ignoriert: Pipeline laeuft, bleibe auf {current}]")
+            if hasattr(self.control_panel, 'set_rx_mode'):
+                self.control_panel.set_rx_mode(current)
+            return
         if not self.radio.ip:
             self.control_panel.set_rx_mode("normal")
             return
@@ -808,9 +834,12 @@ class RadioMixin:
         # je nach Band ganz andere Resonanz-Eigenschaften). Cache-"Weiter" gilt
         # NUR fuer Gain (Hardware-Eigenschaft des RX-Verstaerkers).
         # Ratio wird IMMER neu gemessen — 8 Slots Phase=measure, dann _evaluate.
-        self._diversity_ctrl.reset()
+        # Reihenfolge: Lock VOR reset (v0.92 R1-Audit Befund 3) — sonst Race-
+        # Window in dem laufende Slots ins frische `_measurements`-Bucket
+        # schreiben koennten.
         self._set_cq_locked(True)
         self._set_gain_measure_lock(True)
+        self._diversity_ctrl.reset()
         print(f"[Diversity] Phase=measure — Ratio wird neu eingemessen ({scoring_mode.upper()})")
         self.control_panel.update_diversity_ratio(
             "50:50", "measure", 0,
@@ -1078,7 +1107,14 @@ class RadioMixin:
         dialog.show()
 
     def _set_gain_measure_lock(self, locked: bool):
-        """GUI sperren/entsperren waehrend Diversity-Pipeline (Tune+Gain+Einmessen)."""
+        """GUI sperren/entsperren waehrend Diversity-Pipeline (Tune+Gain+Einmessen).
+
+        Setzt zusaetzlich `_gain_measure_locked`-Flag (v0.92 R1-Audit) das von
+        `_on_band_changed`/`_on_mode_changed`/`_on_rx_mode_changed` als Frueh-
+        Return-Trigger geprueft wird. Sperrt damit auch programmatische Pfade,
+        nicht nur User-Klicks.
+        """
+        self._gain_measure_locked = locked
         # Mode-Buttons sperren
         self.control_panel.btn_ft8.setEnabled(not locked)
         self.control_panel.btn_ft4.setEnabled(not locked)
