@@ -635,10 +635,19 @@ class CycleMixin:
 
         Waehrend Einmessphase wird je Zyklus nur EINE Antenne gemessen —
         Stats waeren verfaelscht (fehlende Stationen der anderen Antenne).
+
+        v0.94 Bug-Fix: Phase 2 (DXTuneDialog) blockt Stats. Frueher wurde
+        nur ``_rx_mode == "dx_tuning"`` geprueft — aber das wird im Code
+        nirgendwo gesetzt. Folge bis v0.93: Stats wurden waehrend Phase 2
+        weiter geloggt mit Diversity-Pattern-Antenne statt Hardware-
+        Antenne (sichtbar im RX-Panel, ~0.3 % Daten-Bias).
         """
         if not getattr(self.radio, 'ip', None):
             return True
         if self._rx_mode == "dx_tuning":
+            return True
+        # v0.94: Phase 2 (Gain-Messung im DXTune-Dialog) blockt Stats
+        if getattr(self, '_dx_tune_dialog', None) is not None:
             return True
         if (self._rx_mode == "diversity"
                 and hasattr(self, '_diversity_ctrl')
