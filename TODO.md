@@ -4,6 +4,271 @@
 
 ## ⭐ ALS NÄCHSTES (Priorität)
 
+### 🟢 P1.12 — NEU-Button im Diversity-Panel entfernen (NEU 2026-05-05)
+
+KALIBRIEREN-Button macht seit v0.94 Phase 2 (Gain) + Phase 3 (Diversity)
+automatisch. Der NEU-Button (`btn_remeasure` in `ui/control_panel.py:516`)
+ist redundant — er macht nur Phase 3 alleine, was im Hobby-Funker-Alltag
+selten gebraucht wird.
+
+**Aufgabe:**
+- `ui/control_panel.py:516-525` — `btn_remeasure` löschen
+- `ui/control_panel.py:1023-1024` — `remeasure_clicked` Signal-Connect raus
+- `ui/main_window.py:530` — Connect zu `_on_diversity_remeasure` raus
+- `ui/mw_radio.py:985-997` — `_on_diversity_remeasure` Methode löschen
+
+**Aufwand:** ~10 Zeilen, KISS, kein Workflow nötig.
+
+---
+
+### 🔴 P1.14 — Station-Wechsel via Klick funktioniert nicht (NEU 2026-05-06)
+
+**Symptom (Field-Test Mike, 22:01 + 22:09 UTC):**
+
+Mehrere kaputte Pfade — gemeinsame Wurzel: Klick auf neue Station im
+RX-Panel waehrend aktiver TX bricht den laufenden TX nicht ab.
+
+**Pfad 1 — nach Hunt-Timeout:**
+- Hunt UN0GY 6× ohne Antwort → `× UN0GY — Timeout`
+- Doppelklick MM8FKF (RX-Panel-Markierung) → **NICHTS**
+- App sendet weiter CQ statt MM8FKF zu rufen
+
+**Pfad 2 — waehrend laufendem CQ-Modus:**
+- CQ_CALLING aktiv (CQ DA1MHH JO31)
+- Doppelklick auf andere CQ-rufende Station → **NICHTS**
+- Mike muss erst manuell HALT druecken, dann Station anwaehlen
+
+**Pfad 3 — waehrend laufendem Hunt:**
+- TX_CALL / WAIT_REPORT aktiv mit Station A
+- Mike entscheidet sich um, klickt Station B → **NICHTS**
+
+**Erwartetes Verhalten in ALLEN Pfaden:**
+- Klick auf neue Station bricht aktuellen Zustand sauber ab
+- (CQ-Modus / Hunt-QSO / Timeout)
+- Bei naechstem TX-Slot wird neue Station angerufen
+
+**Code-Pfad zu pruefen:**
+- `ui/mw_qso.py:_on_station_clicked` (Z.65+) — hat zwar
+  `_cq_was_active`-Logik aber Hunt-Abbruch fehlt
+- `core/qso_state.py:start_qso` (Z.236+) — `state not in (IDLE, CQ_WAIT)`
+  Branch wird vermutlich gar nicht erreicht
+- RX-Panel Click-Handler — wird Doppelklick im aktiven QSO ueberhaupt
+  weitergegeben?
+
+**Diagnose-Schritt 1:** Logging hinzufuegen in `_on_station_clicked`
+Eingang + RX-Panel-Click-Emit. Pruefen ob Event ueberhaupt durchkommt.
+
+**Workflow:** voller V1→V2→R1→V3 — beruehrt State-Machine + UI-Click-
+Handling + Encoder-Abort, mehrere Akzeptanzkriterien.
+
+---
+
+### 🔴 P1.18 — DT-Korrektur konvergiert nicht (Wurzel-Bug, 2026-05-06)
+
+**Wurzel:** `core/ntp_time.py:36` `_MAX_CORR["FT8"] = 1.0` — Limit
+zu eng. Mike's FlexRadio + Hardware-Setup braucht **+1.2s** Korrektur,
+clamp in Z.213 reduziert auf 1.0s → DT-Korrektur „stuck" bei 1.0s.
+
+**Beweis im Log:**
+```
+Feinkorrektur: Median=+0.240s ×0.7 → Δ+0.168s → Korrektur=+1.168s
+Neue Messphase (Korrektur=+1.000s)  ← clamped!
+Feinkorrektur: ... → Korrektur=+1.220s
+Neue Messphase (Korrektur=+1.000s)  ← clamped!
+```
+
+Jede Feinkorrektur erreicht ~+1.18-1.22s, wird auf +1.000s zurueck-
+geclampt. **Konvergenz unmoeglich.**
+
+**Konsequenz — vermutlich Wurzel von P1.17 + P1.8:**
+- DT-Korrektur 200ms zu klein
+- Decoder samplet mit 200ms Versatz
+- FT8-Decoder hochempfindlich auf Timing → alle SNR-Werte mehrere
+  dB reduziert → P1.17 (alle Stationen -17 bis -25)
+- Reports an Gegenstationen ebenfalls pessimistisch → P1.8
+
+**Fix (1 Zeile):**
+```python
+_MAX_CORR = {"FT8": 2.0, "FT4": 1.0, "FT2": 0.5}
+```
+
+oder `_MAX_CORR["FT8"] = MAX_CORRECTION` (= 2.0, schon definiert Z.31).
+
+**Plus:** `~/.simpleft8/dt_corrections.json` zuruecksetzen (alle Werte
+1.0 sind clamped, neu konvergieren lassen).
+
+**Aufwand:** 5 Min Code + Field-Test + Vergleich der SNR-Werte vorher/
+nachher. Falls SNR um >3 dB besser → P1.17 + P1.8 gleich miterledigt.
+
+**Workflow:** voller V1→V2→R1→V3 — kritischer Wurzel-Fix mit weit-
+reichenden Konsequenzen, mehrere Akzeptanzkriterien (SNR-Verbesserung,
+DT-Konvergenz, RX-Panel sauber).
+
+---
+
+### 🟡 P1.17 — RX-SNR-Bias verdaechtig (alle Stationen -17 bis -25 dB) (NEU 2026-05-06)
+**Vermutlich GELOEST durch P1.18 — Field-Test nach P1.18-Fix.**
+
+**Symptom (Field-Test Mike 22:09 UTC):**
+22 Stationen im RX-Panel, ALLE zwischen -17 und -25 dB. Selbst nahe
+Stationen schwach:
+- England 415km → -21
+- England 630km → -23
+- Polen 846km → -18
+- Bulgarien 1700km → -17
+
+Erwartung 40m FT8 Abend: Mix aus -5 (gut) bis -24 (Decode-Schwelle).
+Komplettes Fehlen besserer Werte ist verdaechtig.
+
+**Mike's Argument:** externe Software-Vergleich (SDR-Control / IC-7300)
+nicht moeglich weil andere SNR-Berechnung. Wir muessen selbst pruefen.
+
+**Mike's Trost:** falls systematischer Bias vorliegt — **Diagramme
+(Diversity vs Normal) bleiben aussagekraeftig** weil RELATIVE Vergleiche.
+Aber: ABSOLUTE Werte (gemeldete Reports an Gegenstationen, Reichweite-
+Stats) sind dann verfaelscht.
+
+**Diagnose-Optionen:**
+
+1. **PSK-Reporter-Asymmetrie:** App empfaengt PSK-Reporter-Daten
+   (was andere fuer DA1MHH reporten). Vergleichen mit unseren RX-Werten
+   fuer dieselben Stationen. Wenn andere uns mit -10 hoeren und wir
+   sie mit -22 → asymmetrischer RX-Bias.
+2. **AGC-Pegel im Log pruefen:** RMS-Ziel ist -12 dBFS. Wenn AGC
+   saturiert (zu viel Verstaerkung) wird Signal vorm Decoder platt.
+3. **Decoder-SNR-Berechnung Code-Review:** wo wird `msg.snr` berechnet?
+   ft8lib oder eigener Code? Gibt es einen Offset der subtrahiert wird?
+4. **Vergleich Diversity ANT2 (Regenrinne):** ANT2 ist viel schwaecher
+   als ANT1, sollte 10-15 dB schlechter sein. Wenn ANT1 und ANT2
+   aehnliche Werte zeigen → Verstaerker-/AGC-Bug.
+
+**Auswirkung wenn Bug:**
+- Reports an Gegenstationen 5-10 dB zu pessimistisch
+- Reichweite-Statistiken systematisch zu niedrig
+- Diversity-Vergleich bleibt valide (relativ)
+
+**Aufwand:** Diagnose 1-2h. Falls Bug bestaetigt: Fix je nach Wurzel.
+
+---
+
+### 🟢 P1.19 — Lokale Conditions als Sterne-Anzeige (NEU 2026-05-06)
+
+**Idee Mike:** SNR-Wert „-25 dB" im Status ist fuer User nicht intuitiv —
+auch Mike kann nach 4 Wochen nicht spontan einordnen. Ersetzen durch
+**5-Sterne-Anzeige** „Lokale Conditions" mit dunkler Outline fuer
+inaktive Sterne (sichtbare Skala).
+
+**Wichtige Abgrenzung:**
+- **Bandanzeige oben (gruen/gelb/rot):** GLOBAL aus PSK-Reporter
+- **Lokale Conditions (NEU):** was DU gerade empfaengst (Antenne, lokales
+  Rauschen, lokale Tageszeit-Skip)
+- Beide ergaenzen sich (Band gruen + lokal rot = Hardware-Problem!)
+
+**Berechnung (KISS, 2 Faktoren):**
+
+| Sterne | Stationen (Aging-Fenster) | Median-SNR der besten Haelfte |
+|---|---|---|
+| ★★★★★ | 25+ | > -12 dB |
+| ★★★★☆ | 15-24 | > -15 dB |
+| ★★★☆☆ | 8-14 | > -18 dB |
+| ★★☆☆☆ | 3-7 | > -22 dB |
+| ★☆☆☆☆ | < 3 | egal (Antenne checken) |
+
+Schwellen werden ODER-verknuepft (eines reicht zum Hochstufen).
+
+**UI:**
+- Aktive Sterne: Neon-Cyan (#00DDFF) mit weichem Glow (passt zum Theme)
+- Inaktive Sterne: dunkle Outline (#3a3a4e) — sichtbar, klare Skala
+- Tooltip beim Hover: „12 Stationen, Median -16 dB"
+- Position: ersetzt aktuellen `SNR: -25 dB` Eintrag im Status-Block
+
+**Intern:** SNR-Wert weiter berechnen (Reports, DT-Korrektur, Statistik)
+— nur die UI-Anzeige aendert sich.
+
+**Wichtige Reihenfolge:** **erst P1.18 fixen** (DT-Clamp). Sonst zeigt
+die Sterne-Skala mit dem aktuellen Bias systematisch zu schlechte
+Werte.
+
+**Aufwand:** ~30 Min Implementation (Berechnungs-Funktion + UI-Widget +
+Theme-Styling). Voller Workflow nicht zwingend — KISS-Feature, lokal.
+
+---
+
+### 🟢 P1.16 — QSO-Panel-Log: 5-Min-Rolling-Window (NEU 2026-05-06)
+
+**Symptom:** QSO-Panel-Log fuellt sich Eintrag fuer Eintrag, nach laengerer
+Session unleserlich/zugemuellt. Mike's Beobachtung 22:07 UTC: 9 Minuten
+Verlauf sichtbar, aelter Material ist nicht mehr relevant.
+
+**Mike's Idee (KISS):** alle Eintraege aelter als 5 Min automatisch oben
+loeschen. Juengere Eintraege ruetschen nach oben. So bleibt der Last-5-Min-
+Verlauf immer sichtbar, ohne manuelles Aufraeumen.
+
+**Code-Pfad:** `ui/qso_panel.py` — alle `add_info` / `add_rx` / `add_tx` /
+`add_qso_complete` / Trenn-Linien zu Eintraegen mit Timestamp speichern.
+Periodisch (z.B. via QTimer alle 30s ODER bei jedem `add_*`) Eintraege
+mit `now - timestamp > 300s` entfernen.
+
+**Edge Cases:**
+- Trenn-Linien („─────"): nicht standalone loeschen, sondern mit
+  zugehoerigem QSO-Block
+- „CQ-Modus laeuft weiter..." sollte erhalten bleiben wenn QSO im
+  Window ist
+- Scroll-Position: User-Scroll respektieren (kein Auto-Reset bei Cleanup)
+
+**Aufwand:** ~30 Zeilen, moderates Refactoring (zentrale add-Funktion +
+Timestamp-Tracking + Cleanup-Timer). Voller V1→V2→R1→V3 nicht zwingend
+(lokal in qso_panel.py, single Akzeptanzkriterium), aber Edge-Cases
+brauchen Sorgfalt.
+
+---
+
+### 🟢 P1.15 — Statusbar-Anzeige „→ Call | RX: ANT" entfernen (NEU 2026-05-06)
+
+Mike: *„die macht mich irre"*. Statusbar-Eintrag unten links zeigt
+`→ SP5LST | RX: ANT1` — wird nicht gebraucht, soll komplett weg.
+
+**Code-Pfad:** `ui/main_window.py` Statusbar-Update — Mike's Active-QSO-
+Anzeige in Statusbar. Wahrscheinlich `_update_statusbar()` oder
+`statusBar().showMessage()`.
+
+**Aufwand:** ~5 Zeilen, KISS, kein Workflow.
+
+---
+
+### 🟡 P1.13 — TX-Frequenz-Spinbox-Sync im Normal-Modus (NEU 2026-05-05)
+
+**Symptom:** Wenn User im Normal-Modus auf eine Station klickt (Hunt),
+wird `encoder.audio_freq_hz` auf die Station-Frequenz gesetzt + Histogramm-
+Marker (gelb) zeigt korrekt die neue Freq. **Aber die TX-Freq-Spinbox
+in der UI zeigt weiterhin den alten manuell gesetzten Wert.**
+
+→ User sieht TX-Freq-Spinbox=1150 Hz, Histogramm-Marker=800 Hz.
+
+Das hatte heute (05.05.) bei der Diagnose des „Frequenz-Wechsel-Bugs"
+stundenlang Verwirrung verursacht — der vermeintliche Bug war ein
+UI-Sync-Issue zwischen Spinbox und Encoder.
+
+**Code-Pfad:** `ui/mw_qso.py:_on_station_clicked` setzt
+`encoder.tx_even` aber NICHT `control_panel._tx_freq_spin.setValue()`.
+Ähnlich `_on_send_message` für CQ-Reply-Pfad in Diversity-Modus.
+
+**Fix-Idee (KISS):** in `_on_station_clicked` nach `start_qso` die
+Spinbox synchronisieren:
+```python
+if self._rx_mode == "normal" and msg.freq_hz:
+    self.encoder.audio_freq_hz = msg.freq_hz
+    spin = self.control_panel._tx_freq_spin
+    spin.blockSignals(True)
+    spin.setValue(msg.freq_hz)
+    spin.blockSignals(False)
+```
+
+**Aufwand:** ~15 Zeilen (Hunt-Pfad + CQ-Reply-Pfad). Voller V1→V2→R1→V3
+NICHT nötig (single Akzeptanzkriterium, lokaler Patch in einer Methode).
+
+---
+
 ### ✅ P1.5 — CQ-Reply-Recognition-Bug (ERLEDIGT 2026-05-05, v0.95.2)
 
 5-Min-Sperre `_WORKED_BLOCK_SECS = 300` an 3 Block-Stellen entfernt.
@@ -144,9 +409,16 @@ Der LAST-emit-msg setzt `_last_snr` final → das ist die SCHWAECHSTE
 Station im Slot, nicht die antwortende.
 
 **Beispiel:** im :39:00-Slot werden 5 Stationen dekodiert (HA1BF -16,
-GB8VED -15, EC3A -18, DA1TST **-10**, schwache Russland-Station -23). 
+GB8VED -15, EC3A -18, DA1TST **-10**, schwache Russland-Station -23).
 `_last_snr=-23` zur Zeit `_process_cq_reply` laeuft → Report fuer DA1TST
 ist `-23` statt korrekt `-10`. **42 dB Bug erklaert!**
+
+**Live-Beweis 2026-05-05 21:58 UTC (Mike-Screenshot):**
+- RX-Panel: UN0GY MN83 mit dB=-16 (im :57:57-Slot dekodiert)
+- TX-Sequenz: `21:58:15 UN0GY DA1MHH -23` ← falscher Report!
+- Differenz 7 dB — UN0GY hat -16, wir senden -23
+- Slot enthielt ~20 Stationen, schwaechste war TL8BNW JN34 mit -23
+- → `_last_snr=-23` bei `_process_cq_reply` → Bug bestaetigt
 
 **Fix:** in `_process_cq_reply` (Z. 218 + 233) `self._last_snr` durch
 `msg.snr` ersetzen (msg ist der DA1TST-Reply). Analog im
