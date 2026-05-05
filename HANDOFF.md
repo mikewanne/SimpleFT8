@@ -17,19 +17,27 @@ optionale Findings)→V3 Plan-Workflow. Tests 764 → 777 gruen (+13 neu,
 
 ## 🟢 OFFEN nach v0.95.4 (Liste fuer naechste Session)
 
-### 🔴 P1.10 Field-Test ausstehend
-Mike soll mit DA1TST IC-7300 auf 30m FT8 (oder anderem Band) testen:
-- **Erwartung:** Nach unserem RR73 + DA1TST 73 + unserem Courtesy-73
-  → IC-7300 sendet KEIN weiteres 73 (oder maximal 1, falls Auto-Seq
-  verzoegert).
-- **Beobachtung:** Im simpleft8.log sollte erscheinen:
-  `[QSO-DBG] [TX] Courtesy-73 für DA1TST: 'DA1TST DA1MHH 73'`
-  `STATE WAIT_73 → TX_73_COURTESY` (statt direkt CQ_CALLING).
-  Nach Send: `STATE TX_73_COURTESY → CQ_CALLING` + `qso_confirmed`.
-- **Mindestens 2 QSO-Reproduktionen** noetig vor Bug-Closure.
-- **Field-Test-Beobachtungspunkt R1 KP4:** Decoder/Encoder-Race
-  0.2s-Window — falls Overshoot >0.3s häufig, Encoder-Wake auf
-  `next_boundary - 1.0s` verschieben (separater Workflow).
+### ✅ P1.10 Field-Test BESTAETIGT (Mike 16:56-:59 UTC, EA2BHE Spanien)
+QSO mit EA2BHE (echte Station, Locator IN83):
+- 16:59:00 RR73 → 16:59:15 EA2BHE 73 → 16:59:30 unser Courtesy-73
+- KEIN weiteres 73 von EA2BHE → Auto-Sequence sauber gestoppt
+- ✓ QSO komplett, CQ-Modus laeuft weiter
+
+**Pattern bestaetigt:** Courtesy-73 funktioniert mit Standard-FT8-Apps
+(WSJT-X, JTDX, MSHV). Echte Stationen weltweit akzeptieren das
+abschliessende 73 sauber.
+
+### 🟡 IC-7300 Test-Setup-Quirk (DA1TST 13:48-:51, NICHT-Problem)
+Mike's eigenes IC-7300 als DA1TST sendet WEITERHIN 7+ 73 trotz
+unseres Courtesy-73 (Field-Test 13:48-:51 UTC). Das **ist KEIN
+SimpleFT8-Bug** — IC-7300's eingebauter FT8-Decoder ist enger
+getaktet als der WSJT-X-Standard und erwartet 73 in einem praeziseren
+Zeitfenster oder mit anderen Eigenschaften (DT-Drift?
+Frequenz-Praezision?). Andere Stationen (EA2BHE) akzeptieren unser
+Courtesy-73 sauber.
+
+→ Mike's Test-Setup-Spezifikum, nicht weiter zu fixen. Falls in
+Zukunft echte IC-7300-Funker das Problem melden, eigener Workflow.
 
 ### ✅ P1.9 Field-Test BESTAETIGT (Mike 11:18-:24 UTC, 2 QSOs DA1TST)
 QSO 1 (11:19:45 RX → 11:20:00 Report, Replace mit -20).

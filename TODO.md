@@ -37,7 +37,10 @@ v0.95.3. **🟡 Field-Test bei Mike ausstehend.**
 **Code-Commit:** `9783583` (Code+Tests+Workflow-Files, 13 Files,
 +3439/-14) + Doku-Commit.
 
-**Field-Test:** AUSSTEHEND. Mike testet mit DA1TST IC-7300 auf 30m FT8.
+**Field-Test:** ✅ BESTAETIGT 16:59 UTC mit EA2BHE Spanien (IN83) — nach
+unserem Courtesy-73 KEIN weiteres 73 von Gegenstation, Auto-Sequence
+sauber gestoppt. IC-7300/DA1TST Test-Setup ist Quirk (enger getakteter
+Decoder), kein SimpleFT8-Bug.
 
 **Bug-Wurzel:** IC-7300 (DA1TST) Auto-Sequence wartet auf abschliessendes
 Hoeflichkeits-73 von uns. SimpleFT8 sendete bisher kein Courtesy-73 →

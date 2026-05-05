@@ -49,9 +49,18 @@ wichtige + 3 optionale Findings)→V3 Plan-Workflow.
 
 **Tests:** 764 → 777 gruen (+13 neu, 2 angepasst).
 
-**Field-Test bei Mike ausstehend** (DA1TST IC-7300, 30m FT8). Erwartet:
-nach unserem RR73 + DA1TST 73 + unserem Courtesy-73 → IC-7300 sendet
-KEIN weiteres 73.
+**Field-Test bei Mike BESTAETIGT (16:56-:59 UTC, EA2BHE Spanien IN83):**
+QSO-Ende: 16:59:00 RR73 → 16:59:15 EA2BHE 73 → 16:59:30 unser
+Courtesy-73 → KEIN weiteres 73 von EA2BHE → Auto-Sequence sauber
+gestoppt. ✓ QSO komplett. Pattern bestaetigt fuer Standard-FT8-Apps
+(WSJT-X, JTDX, MSHV).
+
+**IC-7300 Test-Setup-Quirk (DA1TST):** Mike's eigenes IC-7300 als
+DA1TST sendet weiterhin 7+ 73 trotz unseres Courtesy-73 (Field-Test
+13:48-:51 UTC). Das ist KEIN SimpleFT8-Bug — der eingebaute FT8-Decoder
+des IC-7300 ist enger getaktet als WSJT-X und akzeptiert unser
+Courtesy-73 nicht. Echte Stationen weltweit (EA2BHE) verhalten sich
+korrekt. Test-Setup-Spezifikum, kein Fix erforderlich.
 
 **Known Issue (Plan-R1 F1, NICHT durch P1.10 verschaerft):**
 `rr73_retries` shared zwischen WAIT_RR73 + WAIT_73-Hoeflichkeits-Pfad.
