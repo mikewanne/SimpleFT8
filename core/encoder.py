@@ -275,14 +275,14 @@ class Encoder(QObject):
             self._radio.set_tx_antenna("ANT1")
             self._radio.ptt_on()
 
-        # Slot-Quelle fuer qso_panel.add_tx: TX startet jetzt — Slot ist
-        # der Slot in dem time.time() liegt (TX-Trigger-Zeit). Konsistent
-        # mit Decoder-seitiger pre-sleep-Berechnung.
-        _tx_now = time.time()
+        # Slot-Quelle fuer qso_panel.add_tx: NICHT time.time() benutzen!
+        # ptt_on() laeuft 1.3s VOR next_boundary (Stille-Padding davor).
+        # floor(time.time()/slot)*slot wuerde damit auf den VORHERIGEN
+        # Slot zeigen (Bug aus v0.95). Korrekt ist next_boundary — das ist
+        # der echte Ziel-TX-Slot-Anfang in dem das FT8-Signal hochgeht.
         _slot_dur = {"FT8": 15.0, "FT4": 7.5, "FT2": 3.8}.get(self._mode, 15.0)
-        _slot_start_ts = _tx_now - (_tx_now % _slot_dur)
-        _tx_even = int(_slot_start_ts / _slot_dur) % 2 == 0
-        self.tx_started.emit(message, _tx_even, _slot_start_ts)
+        _tx_even = int(next_boundary / _slot_dur) % 2 == 0
+        self.tx_started.emit(message, _tx_even, next_boundary)
 
         # 7. Stream: FlexRadio Hardware-Clock uebernimmt das Pacing
         #    t_start = jetzt → jedes Paket bei t_start + n*5.33ms (absolut, kein Drift)
