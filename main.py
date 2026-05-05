@@ -7,9 +7,21 @@ DA1MHH / Mike — Herne, Ruhrgebiet — 2026
 import sys
 import os
 import subprocess
+import time
+import fcntl
+import atexit
+import signal
 from pathlib import Path
 
-APP_VERSION = "0.95.4"
+APP_VERSION = "0.95.5"
+
+# ── Single-Instance-Lock — verhindert ZWEI gleichzeitige Apps ──
+# Mike-Anweisung 2026-05-05 (mehrfach!): nur EINE Instanz darf laufen.
+# Doppelte Instanzen ruinieren Statistik (doppelte Decoder-Eintraege),
+# lassen UI/Encoder out-of-sync (doppelte Frequenz, doppelte Slots) und
+# fuehren zu Falsch-Diagnosen.
+_LOCK_FILE = Path.home() / ".simpleft8" / "simpleft8.lock"
+_lock_fd = None  # globale fcntl-Lock-Datei, leben bis Prozess-Ende
 
 # Projektverzeichnis in den Python-Pfad aufnehmen
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -40,6 +52,167 @@ class _Tee:
 
 sys.stdout = _Tee(sys.__stdout__, _log_file)
 sys.stderr = _Tee(sys.__stderr__, _log_file)
+
+
+def _release_lock_on_exit():
+    """Lock-Release bei Prozess-Ende (atexit + Signal-Handler)."""
+    global _lock_fd
+    if _lock_fd is not None:
+        try:
+            fcntl.flock(_lock_fd.fileno(), fcntl.LOCK_UN)
+            _lock_fd.close()
+        except Exception:
+            pass
+        _lock_fd = None
+    try:
+        _LOCK_FILE.unlink(missing_ok=True)
+    except Exception:
+        pass
+
+
+def _signal_release_and_exit(signum, frame):
+    """Bei SIGTERM/SIGINT: Lock freigeben + sauber beenden."""
+    _release_lock_on_exit()
+    sys.exit(0)
+
+
+def _kill_all_simpleft8_instances():
+    """ALLE laufenden SimpleFT8-Instanzen via pgrep finden und killen.
+
+    Sucht nach Prozessen die main.py ODER start_simpleft8_nokill.py laufen.
+    Kein Verlass auf Lock-Datei — pgrep findet ALLE Prozesse, auch die ohne
+    Lock-Datei (z.B. nach Crash, manuellem Start, doppeltem Wrapper).
+    """
+    my_pid = os.getpid()
+    found_any = False
+    # Patterns matchen Command-Line von Python-Prozessen die SimpleFT8 starten:
+    # - "main.py" matcht "python main.py" und "python /full/path/SimpleFT8/main.py"
+    # - "start_simpleft8" matcht Wrapper-Skripte
+    # Bug 2026-05-05: vorher waren Patterns zu restriktiv ("SimpleFT8.*start_simpleft8"),
+    # weil bei CWD-relativem Aufruf das command line nur "tools/remote/start_simpleft8_nokill.py"
+    # enthaelt — KEIN "SimpleFT8" im command line! Daher pgrep findet nichts.
+    patterns = [
+        r"python.*main\.py",
+        r"python.*start_simpleft8",
+    ]
+    for pattern in patterns:
+        try:
+            result = subprocess.run(
+                ["pgrep", "-f", pattern],
+                capture_output=True, text=True,
+            )
+            for line in result.stdout.strip().split("\n"):
+                if not line:
+                    continue
+                try:
+                    pid = int(line)
+                except ValueError:
+                    continue
+                if pid == my_pid:
+                    continue
+                # Pruefen ob Prozess wirklich noch lebt
+                try:
+                    os.kill(pid, 0)
+                except ProcessLookupError:
+                    continue
+                print(f"[SingleInstance] Killing rogue PID {pid} (matched '{pattern}')")
+                try:
+                    os.kill(pid, signal.SIGTERM)
+                except ProcessLookupError:
+                    pass
+                found_any = True
+        except Exception as e:
+            print(f"[SingleInstance] pgrep-Fehler fuer '{pattern}': {e}")
+
+    if found_any:
+        time.sleep(1.5)  # SIGTERM-Pause
+        # Hartes SIGKILL fuer Zaehe
+        for pattern in patterns:
+            try:
+                result = subprocess.run(
+                    ["pgrep", "-f", pattern],
+                    capture_output=True, text=True,
+                )
+                for line in result.stdout.strip().split("\n"):
+                    if not line:
+                        continue
+                    try:
+                        pid = int(line)
+                    except ValueError:
+                        continue
+                    if pid == my_pid:
+                        continue
+                    try:
+                        os.kill(pid, 0)
+                    except ProcessLookupError:
+                        continue
+                    print(f"[SingleInstance] Hard-kill PID {pid}")
+                    try:
+                        os.kill(pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+            except Exception:
+                pass
+        time.sleep(1.0)
+
+
+def acquire_single_instance_lock():
+    """⛔ Single-Instance-Lock — robust gegen jede Race-Bedingung.
+
+    Strategie (Mike-Anweisung 2026-05-05, mehrfach!):
+    1. pgrep auf ALLE laufenden SimpleFT8-Instanzen (main.py + Wrapper)
+    2. SIGTERM auf alle, warten, dann SIGKILL fuer Zaehe
+    3. Lock-Datei loeschen (war von toten Instanzen)
+    4. fcntl.flock() atomar holen — verhindert dass zwei gleichzeitig
+       startende Apps beide nach dem Kill rein-rennen
+    5. Eigene PID in Lock-Datei schreiben
+
+    Garantie nach Rueckkehr: GENAU EINE Instanz von SimpleFT8 am Laufen
+    — diese. Egal ob alte Instanzen Lock-Datei hatten oder nicht.
+    """
+    global _lock_fd
+
+    _LOCK_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+    # SCHRITT 1: ALLE laufenden Instanzen via pgrep killen — nicht nur die
+    # in der Lock-Datei. Belt-and-suspenders gegen Crashes / Wrapper-Mix.
+    _kill_all_simpleft8_instances()
+
+    # SCHRITT 2: stale Lock-Datei entfernen (alle Inhaber sind jetzt tot)
+    try:
+        _LOCK_FILE.unlink(missing_ok=True)
+    except Exception:
+        pass
+
+    # SCHRITT 3: atomar Lock holen (5 Versuche fuer Race-Sicherheit zwischen
+    # zwei gleichzeitig startenden Apps)
+    for attempt in range(5):
+        _lock_fd = open(_LOCK_FILE, "a+")
+        try:
+            fcntl.flock(_lock_fd.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            _lock_fd.seek(0)
+            _lock_fd.truncate()
+            _lock_fd.write(str(os.getpid()))
+            _lock_fd.flush()
+            os.fsync(_lock_fd.fileno())
+            print(f"[SingleInstance] Lock geholt — PID {os.getpid()} (Versuch {attempt + 1})")
+            return
+        except BlockingIOError:
+            _lock_fd.close()
+            _lock_fd = None
+            print(f"[SingleInstance] Lock-Race Versuch {attempt + 1} — warte 0.5s")
+            time.sleep(0.5)
+            # Erneut killen falls eine zweite App genau jetzt rein-gerannt ist
+            _kill_all_simpleft8_instances()
+
+    print("[SingleInstance] FATAL: konnte Lock nach 5 Versuchen nicht holen — Abbruch")
+    sys.exit(1)
+
+
+# Cleanup bei Exit + Signal-Handler fuer SIGTERM/SIGINT
+atexit.register(_release_lock_on_exit)
+signal.signal(signal.SIGTERM, _signal_release_and_exit)
+signal.signal(signal.SIGINT, _signal_release_and_exit)
 
 
 def kill_old_instances():
@@ -206,6 +379,11 @@ def _show_hardware_warning(app) -> bool:
 
 
 def main():
+    # ⛔ Single-Instance-Lock ZUERST (atomar, killt alte Instanzen).
+    # Mike-Anweisung 2026-05-05: nur EINE Instanz darf laufen.
+    acquire_single_instance_lock()
+    # Belt-and-suspenders: kill_old_instances raeumt zusaetzlich Ports
+    # (UDP:4991/TCP:4992) und macOS Dock-Icons auf.
     kill_old_instances()
 
     from PySide6.QtWidgets import QApplication
