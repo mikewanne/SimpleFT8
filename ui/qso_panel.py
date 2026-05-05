@@ -150,14 +150,23 @@ class QSOPanel(QWidget):
         slot = getattr(self, '_cycle_duration', 15.0)
         return "[E]" if int(now / slot) % 2 == 0 else "[O]"
 
-    def add_tx(self, message: str, ant_label: str = ""):
+    def add_tx(self, message: str, ant_label: str = "",
+               tx_even: bool | None = None,
+               slot_start_ts: float | None = None):
         """Eigene gesendete Nachricht — IMMER ins Log (Mike-Wunsch v0.78:
-        keine Sammelanzeige, alle CQ-Rufe einzeln untereinander sichtbar)."""
-        now = time.time()
-        slot = getattr(self, '_cycle_duration', 15.0)
-        slot_start = now - (now % slot)
-        utc = time.strftime("%H:%M:%S", time.gmtime(slot_start))
-        tag = self._slot_tag()
+        keine Sammelanzeige, alle CQ-Rufe einzeln untereinander sichtbar).
+
+        tx_even/slot_start_ts: bevorzugte Slot-Quelle (vom Encoder
+        durchgereicht, latenz-frei). Fallback fuer Tests/alte Caller:
+        time.time() zur Aufruf-Zeit.
+        """
+        if slot_start_ts is None or tx_even is None:
+            now = time.time()
+            slot = getattr(self, '_cycle_duration', 15.0)
+            slot_start_ts = now - (now % slot)
+            tx_even = int(slot_start_ts / slot) % 2 == 0
+        utc = time.strftime("%H:%M:%S", time.gmtime(slot_start_ts))
+        tag = "[E]" if tx_even else "[O]"
         line = f"{utc} {tag} →  Sende   {message}"
         if ant_label:
             self._append_two_color(line, "#FFAA00", f"   {ant_label}", "#888888")
@@ -166,14 +175,24 @@ class QSOPanel(QWidget):
         self._cq_count = 0  # Backwards-compat fuer status_label-Logik
         self._auto_trim()
 
-    def add_rx(self, message: str):
-        """Empfangene Antwort anzeigen."""
+    def add_rx(self, message: str,
+               tx_even: bool | None = None,
+               slot_start_ts: float | None = None):
+        """Empfangene Antwort anzeigen.
+
+        tx_even/slot_start_ts: bevorzugte Slot-Quelle (Decoder-gesetzt
+        ueber msg._tx_even / msg._slot_start_ts). Fallback fuer Tests/
+        alte Caller: time.time() zur Aufruf-Zeit (kann durch Decoder-
+        Latenz im Folge-Slot landen — nur fuer Mocks akzeptabel).
+        """
         self._cq_count = 0
-        now = time.time()
-        slot = getattr(self, '_cycle_duration', 15.0)
-        slot_start = now - (now % slot)
-        utc = time.strftime("%H:%M:%S", time.gmtime(slot_start))
-        tag = self._slot_tag()
+        if slot_start_ts is None or tx_even is None:
+            now = time.time()
+            slot = getattr(self, '_cycle_duration', 15.0)
+            slot_start_ts = now - (now % slot)
+            tx_even = int(slot_start_ts / slot) % 2 == 0
+        utc = time.strftime("%H:%M:%S", time.gmtime(slot_start_ts))
+        tag = "[E]" if tx_even else "[O]"
         self._append_colored(f"{utc} {tag} ←  Empf.   {message}", "#44BBFF")
 
     def add_qso_complete(self, their_call: str):
