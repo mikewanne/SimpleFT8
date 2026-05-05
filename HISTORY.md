@@ -5,6 +5,63 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-05 v0.95.5 — Single-Instance-Lock (Mike-Anweisung mehrfach!)
+
+**Atomare Commits:** `24aba07` (initial Lock) + `f348763` (CWD-Filter Fix)
++ `13c067f` (Doku SDR-Control-Klaerung).
+
+**Wurzel:** Mike's wiederholte Anweisung „nur EINE Instanz darf laufen"
+war monatelang nicht implementiert. Heute liefen 2 Apps parallel ueber
+Stunden — verursachte Stunden-langes Falsch-Diagnostizieren (1500/1000-Hz-
+Frequenz-„Wechsel" war Artefakt aus 2 Apps mit verschiedenen CQ-Freqs).
+
+**Fix:**
+- `main.py` + `tools/remote/start_simpleft8_nokill.py` (Wrapper):
+  identische `acquire_single_instance_lock()` Funktion — fcntl.flock()
+  atomar + pgrep-Kandidaten + lsof CWD-Filter (`-a` Flag PFLICHT auf
+  macOS sonst OR-Verknuepfung statt AND!) + SIGTERM/SIGKILL fuer
+  rogue-Instanzen.
+- Lock-Datei: `~/.simpleft8/simpleft8.lock`
+- atexit + signal-Handler (SIGTERM/SIGINT) fuer Lock-Release
+- CWD-Filter via `lsof -a -p PID -d cwd -Fn` — schuetzt fremde main.py-
+  Apps (Websdr, JimBob etc.) vor Kollateral-Kill durch zu breites
+  pgrep-Pattern `python.*main\.py`.
+- main.py APP_VERSION 0.95.4 → 0.95.5
+
+**Bugs entdeckt + gefixt:**
+1. fcntl.flock() allein reicht nicht — Lock-Datei kann geloescht werden
+   ohne dass Prozess stirbt → Lock weg aber Prozess lebt. Loesung:
+   ZUERST pgrep+kill, DANN Lock holen.
+2. Pattern `SimpleFT8.*main\.py` matched nicht bei CWD-relativem Aufruf
+   (`python tools/remote/start_simpleft8_nokill.py`). Loesung:
+   liberaler Pattern + CWD-Filter.
+3. macOS lsof: ohne `-a` ist `-p` und `-d` mit OR verknuepft statt AND
+   → listet alle Prozesse, jeder Filter matched. Loesung: `-a` Flag.
+
+**Test-Plan (manuell verifiziert):**
+- App1 starten → Lock geholt
+- App2 starten → erkennt App1 → SIGTERM → Lock geholt
+- Final: nur App2 lebt, Lock-Datei zeigt App2's PID
+- Websdr-App (PID 12178, CWD=...Websdr) bleibt unbeeinflusst
+
+**SDR-Control Endlos-73 GEKLAERT (parallel-Befund):**
+Mike fand selbst die Wurzel: SDR-Control hat Retry=99 in Auto-Sequence
+(Test-Override). Mit Standard-Retry kein Problem. P1.10 funktioniert
+mit echten Stationen (EA2BHE 16:59 UTC bestaetigt). SDR-Control's
+73-Reply-after-73 ist by-design (Help-Text) — identisch zu P1.10's
+Logik. Kein App-Bug auf beiden Seiten.
+
+**Lessons (Memory):**
+- Mike-Anforderungen aus Memory IMMER pruefen — `feedback_app_start_
+  single_instance.md` + `project_v095_single_instance_lock.md` standen
+  seit Wochen, wurden ignoriert.
+- Bei Field-Test-Anomalien IMMER Gegenstation-Setup hinterfragen bevor
+  App-Bug diagnostiziert wird (Mike's „12000 QSO ohne Probleme" war
+  richtig).
+- macOS lsof braucht `-a` fuer Filter-AND-Verknuepfung.
+
+---
+
 ## 2026-05-05 v0.95.4 — P1.10 End-of-QSO Icom-73-Loop-Fix (Courtesy-73)
 
 **Atomare Commits:** `9783583` (Code+Tests+Workflow-Files, 13 Files,
