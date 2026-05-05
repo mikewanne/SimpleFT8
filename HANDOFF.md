@@ -1,7 +1,26 @@
 # HANDOFF — SimpleFT8
 
-**Stand 2026-05-04:** **v0.93 — Cache-Reuse + Mess-Refactor (Score-basiert + 1h-Frist).**
+**Stand 2026-05-05:** **v0.94 — KALIBRIEREN-Pipeline + Stats-Bug Phase 2.**
 
+Mike's Field-Test-Befund 05.05.: RX-Panel zeigte waehrend Phase 2
+"A1" fuer Station die im DXTuneDialog-Bucket "ANT2 G20" landete.
+3 atomare Commits + Doku (`2c1c58d`, `7ca791e`, `2658ee1`):
+- **Stats-Pause Phase 2 Bug-Fix** — `_is_antenna_tuning_active`
+  hatte einen toten Pfad (`_rx_mode == "dx_tuning"` wurde nirgends
+  gesetzt), Stats wurden waehrend Gain-Messung weiter geloggt mit
+  Diversity-Pattern-Antenne. ~0.3 % Daten-Bias bis v0.93.
+- **RX-Panel Hardware-Antenne** — neuer Helper
+  `_resolve_hardware_antenna()` liest waehrend Phase 2 die echte
+  Antenne aus `_schedule[_step]` statt Diversity-Pattern.
+- **KALIBRIEREN-Erweiterung** (Mike's UX-Vorschlag, R1-bestaetigt):
+  im Diversity-Modus startet KALIBRIEREN jetzt Phase 2 + Phase 3
+  (Cache + 1h-Timer-Reset) in einem Klick. Cancel resetet Pending-
+  Flags. Im Normal-Modus: nur Phase 2 wie bisher.
+
+R1-Klaerung: 0-Stations-Logging IST korrekt (kein Filter auf 0,
+Pre-Conditions symmetrisch fair) — Mike's Sorge unbegruendet.
+
+**Stand 2026-05-04:** v0.93 — Cache-Reuse + Mess-Refactor (Score-basiert + 1h-Frist).
 Diversity-Mess-Pipeline grundlegend ueberarbeitet. Mike's Vision +
 R1's 4 Mods + Dichte-R1 Score-Insight in 6 atomaren Commits umgesetzt
 (`d8d947f`, `305d775`, `fd416ca`, `f8af3e8`, `196a999` + Doku-Sync).

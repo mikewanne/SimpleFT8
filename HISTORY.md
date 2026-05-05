@@ -5,6 +5,86 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-05 v0.94 — KALIBRIEREN-Pipeline + Stats-Bug Phase 2
+
+**Ausloeser:** Mike's Field-Test 2026-05-05 nach v0.93-Release. Im
+Diversity-Modus zeigte das RX-Panel waehrend laufender Phase-2-Gain-
+Messung "A1" fuer eine Station, die im DXTuneDialog im Bucket
+"ANT2 Gain 20 dB" (-22 dB, CU2JX) gespeichert wurde. Mike's Doppel-
+Frage: Stimmen die Statistiken trotzdem? + Sollte der KALIBRIEREN-
+Button auch die Diversity-Antennen-Messung starten?
+
+**Voller Workflow durchgezogen:**
+- V1 (`prompts/kalibrieren_v0.94_v1.md`) — 4 Akzeptanzkriterien
+- R1 (`prompts/kalibrieren_v0.94_r1.md`, deepseek-reasoner) — alle
+  4 Punkte mit Ja bestaetigt, 0-Stations-Logging-Sorge entwarnt
+  (filter NICHT auf 0, Pre-Conditions sind symmetrisch fair)
+- V3 (`prompts/kalibrieren_v0.94_v3.md`) — Self-Review 5 Findings,
+  Atomar-Plan 4 Commits
+
+**3 atomare Commits + Doku-Sync:**
+
+### Commit 1: `2c1c58d` Stats-Pause Phase 2 Bug-Fix
+- `ui/mw_cycle.py:633-648` `_is_antenna_tuning_active` erweitert um
+  `if getattr(self, '_dx_tune_dialog', None) is not None: return True`
+- Frueher tot: `_rx_mode == "dx_tuning"` wurde nirgends gesetzt
+  (nur Kommentar in `main_window.py:204`)
+- Folge Pre-v0.94: ~0.3 % der Stats-Daten waren mit Diversity-Pattern-
+  Antenne markiert statt Hardware-Antenne. Pooled-Mean-Auswertung
+  bleibt valide (Bias zu klein), aber technisch falsch.
+- Tests +4 in `test_phase2_stats_pause.py` NEU
+
+### Commit 2: `7ca791e` RX-Panel zeigt Hardware-Antenne in Phase 2
+- `ui/mw_cycle.py` NEU `_resolve_hardware_antenna(default_ant) -> str`:
+  bei aktivem `_dx_tune_dialog` lese ant_long aus `_schedule[_step]`,
+  konvertiere "ANT1"/"ANT2" → "A1"/"A2" (kurze Form). Defensive
+  try/except gegen IndexError/AttributeError/TypeError.
+- `_on_cycle_decoded` ruft `_resolve_hardware_antenna(ant)` VOR den
+  `_handle_diversity_*`-Aufrufen → ant ist immer korrekt
+- Tests +5 in `test_phase2_antenna_display.py` NEU
+
+### Commit 3: `2658ee1` KALIBRIEREN RX-Modus-spezifisch (Mike's UX)
+- `ui/mw_radio.py:1079` `_handle_dx_tuning` erweitert:
+  * Wenn `_rx_mode == "diversity"` → `_pending_dx_diversity = True` +
+    `_pending_diversity_scoring = scoring` → nach Phase 2 laeuft
+    Phase 3 automatisch durch (nutzt bestehenden Pipeline-Mechanismus
+    aus `_activate_diversity_with_scoring`)
+  * Sonst (Normal): nur Phase 2 (Status quo)
+- `_on_dx_tune_rejected` resetet Pending-Flags bei Cancel — sonst
+  startet Phase 3 beim naechsten Diversity-Aktivieren ungewollt
+- Tests +4 in `test_kalibrieren_pipeline.py` NEU
+
+**Tests:** 729 → 742 gruen (+13).
+
+**0-Stations-Logging Klarstellung (R1-bestaetigt):**
+- `core/station_stats.py:96` `log_cycle` filtert NICHT auf
+  `station_count == 0` → schreibt auch leere Slots
+- `_log_stats` Pre-Conditions (Warmup, Tuning, CQ, QSO) sind
+  symmetrisch fair: Normal und Diversity werden gleich behandelt
+- Bei schlechten Bedingungen (Normal=0, Diversity=3) werden BEIDE
+  Slots geloggt → Pooled-Mean bleibt fair. Mike's Sorge unbegruendet.
+
+**Was BLEIBT unveraendert:**
+- v0.92 Pipeline-Lock (Bandwechsel/Mode/RX-Mode-Race)
+- v0.93 Score-basierte Messung + Cache-Reuse + 1h-Frist
+- v0.91 Adaptiv-Stops Phase 2/3
+- v0.90 Pattern fair 3:3
+
+**Lessons:**
+1. **R1-Antwort prueft Premise:** Mike's "0-Stations werden nicht
+   geloggt"-Sorge wurde durch Code-Verifikation entkraeftet, BEVOR ein
+   Fix implementiert wurde. Sparte 1-2 h vergebliche Refactor-Zeit.
+2. **Tote Code-Pfade aus alten Plänen:** `_rx_mode = "dx_tuning"` als
+   Konzept war nur in Kommentaren — in der Implementierung nie
+   umgesetzt. Lesson: bei Pre-Cond-Checks immer `grep` ob die
+   Pre-Cond auch wirklich gesetzt wird.
+3. **Wiederverwendung bestehender Pipeline-Flags spart Code:**
+   `_pending_dx_diversity` existierte bereits fuer
+   `_activate_diversity_with_scoring`-Pfad — Mike's KALIBRIEREN-
+   Erweiterung brauchte nur 5 Zeilen statt einer neuen Pipeline.
+
+---
+
 ## 2026-05-04 v0.93 — Cache-Reuse + Mess-Refactor (Score-basiert + 1h-Frist)
 
 **Hintergrund:** Mike wollte den Diversity-Mess-Mechanismus pragmatisch
