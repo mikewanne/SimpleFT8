@@ -67,8 +67,29 @@ def _signal_release_and_exit(signum, frame):
     sys.exit(0)
 
 
+def _is_simpleft8_pid(pid: int) -> bool:
+    """CWD enthaelt 'SimpleFT8'? Schuetzt vor Kollateral-Kill anderer main.py-Apps."""
+    import subprocess
+    try:
+        # macOS lsof: -a verknuepft -p und -d mit AND (sonst OR — listet alles!)
+        result = subprocess.run(
+            ["lsof", "-a", "-p", str(pid), "-d", "cwd", "-Fn"],
+            capture_output=True, text=True, timeout=2,
+        )
+        for line in result.stdout.split("\n"):
+            if line.startswith("n") and "SimpleFT8" in line:
+                return True
+    except Exception:
+        pass
+    return False
+
+
 def _kill_all_simpleft8_instances():
-    """ALLE laufenden SimpleFT8-Instanzen via pgrep finden und killen."""
+    """ALLE laufenden SimpleFT8-Instanzen finden und killen.
+
+    pgrep findet Kandidaten, dann CWD-Filter via lsof: nur Prozesse mit CWD
+    in SimpleFT8 werden gekillt — andere main.py-Apps (Websdr etc.) bleiben.
+    """
     import subprocess
     my_pid = os.getpid()
     found_any = False
@@ -76,6 +97,8 @@ def _kill_all_simpleft8_instances():
         r"python.*main\.py",
         r"python.*start_simpleft8",
     ]
+
+    candidate_pids = set()
     for pattern in patterns:
         try:
             result = subprocess.run(
@@ -91,46 +114,38 @@ def _kill_all_simpleft8_instances():
                     continue
                 if pid == my_pid:
                     continue
-                try:
-                    os.kill(pid, 0)
-                except ProcessLookupError:
-                    continue
-                print(f"[SingleInstance] Killing rogue PID {pid} (Wrapper, matched '{pattern}')")
-                try:
-                    os.kill(pid, signal.SIGTERM)
-                except ProcessLookupError:
-                    pass
-                found_any = True
+                candidate_pids.add(pid)
         except Exception:
+            pass
+
+    simpleft8_pids = []
+    for pid in candidate_pids:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            continue
+        if _is_simpleft8_pid(pid):
+            simpleft8_pids.append(pid)
+
+    for pid in simpleft8_pids:
+        print(f"[SingleInstance] Killing SimpleFT8 PID {pid} (Wrapper)")
+        try:
+            os.kill(pid, signal.SIGTERM)
+            found_any = True
+        except ProcessLookupError:
             pass
 
     if found_any:
         time.sleep(1.5)
-        for pattern in patterns:
+        for pid in simpleft8_pids:
             try:
-                result = subprocess.run(
-                    ["pgrep", "-f", pattern],
-                    capture_output=True, text=True,
-                )
-                for line in result.stdout.strip().split("\n"):
-                    if not line:
-                        continue
-                    try:
-                        pid = int(line)
-                    except ValueError:
-                        continue
-                    if pid == my_pid:
-                        continue
-                    try:
-                        os.kill(pid, 0)
-                    except ProcessLookupError:
-                        continue
-                    print(f"[SingleInstance] Hard-kill PID {pid} (Wrapper)")
-                    try:
-                        os.kill(pid, signal.SIGKILL)
-                    except ProcessLookupError:
-                        pass
-            except Exception:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                continue
+            print(f"[SingleInstance] Hard-kill PID {pid} (Wrapper)")
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except ProcessLookupError:
                 pass
         time.sleep(1.0)
 
