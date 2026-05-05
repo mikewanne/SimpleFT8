@@ -1077,9 +1077,26 @@ class RadioMixin:
         self._start_dx_tuning(scoring_mode=gain_scoring)
 
     def _handle_dx_tuning(self):
-        """KALIBRIEREN-Button: Tunen + Gain-Messung fuer aktuelles Band, immer ueberschreiben."""
+        """KALIBRIEREN-Button: komplette Pipeline je nach RX-Modus (v0.94).
+
+        - **Normal:** nur Phase 2 (Gain-Messung) — Status quo.
+          Speichert Gain im PresetStore Standard, kein Phase-3-Flag gesetzt.
+        - **Diversity Standard/DX:** Phase 2 (Gain) + Phase 3 (Ratio-Messung)
+          + Cache + Timer-Reset. ``_pending_dx_diversity = True`` triggert
+          nach Phase-2-Erfolg automatisch Phase 3 ueber den bestehenden
+          ``_on_dx_tune_accepted``-Pfad. ``_evaluate`` setzt am Ende
+          ``_last_measured_at = time.time()`` (= Timer-Reset auf 0/1h-Frist
+          startet von vorn).
+        """
         scoring = getattr(self._diversity_ctrl, 'scoring_mode', 'normal')
         gain_scoring = "snr" if scoring == "dx" else "stations"
+        if self._rx_mode == "diversity":
+            self._pending_dx_diversity = True
+            self._pending_diversity_scoring = scoring
+            print(f"[Kalibrierung] Diversity-Pipeline ({scoring.upper()}): "
+                  f"Phase 2 Gain + Phase 3 Ratio")
+        else:
+            print("[Kalibrierung] Normal-Modus: nur Phase 2 Gain")
         self._start_dx_tuning(scoring_mode=gain_scoring)
 
     def _start_tune_only(self, after_tune_callback=None) -> None:
@@ -1370,6 +1387,10 @@ class RadioMixin:
         """DX Tuning abgebrochen — zurueck auf Normal/Diversity."""
         self._dx_tune_dialog = None
         self._set_gain_measure_lock(False)
+        # v0.94: Pending-Flag bei Cancel zuruecksetzen — sonst startet
+        # Phase 3 beim naechsten Diversity-Aktivieren ungewollt.
+        self._pending_dx_diversity = False
+        self._pending_diversity_scoring = None
 
         # Sicherheit: TX/Encoder definitiv stoppen
         if self.encoder.is_transmitting:
