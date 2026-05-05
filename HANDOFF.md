@@ -1,19 +1,32 @@
 # HANDOFF — SimpleFT8
 
-**Stand 2026-05-05:** **v0.95.4 — P1.10 End-of-QSO Icom-73-Loop-Fix
-(Courtesy-73).** Atomare Commits `9783583` (Code+Tests+Workflow-Files,
-13 Files, +3439/-14) + Doku-Commit. Wurzel: IC-7300 (DA1TST) Auto-Sequence
-wartet auf abschliessendes Hoeflichkeits-73 von uns. SimpleFT8 sendete
-bisher kein Courtesy-73 → IC-7300 retried 5× `73` in Folgeslots. Andere
-FT8-Apps (WSJT-X, JTDX, MSHV) senden Courtesy-73 als Funkalltag-Standard.
-Fix (Option A1 + R1-Slot-Paritaet-Defensive): neuer State
-`TX_73_COURTESY` + Feld `qso.courtesy_73_sent` (max 1× pro QSO), Branch
-in WAIT_73-Logik (qso_state.py:582-597) + on_message_sent + 3-Min-Timeout-
-Ausschluss + mw_qso `_on_tx_slot_for_partner` state-abhaengig (Panel-Info
-nur bei CQ-Reply). Voller V1→V2(8 V1-Luecken)→R1(4 KP + 3 Findings)→V3
-Diagnose + V1→V2(6 V1-Luecken, D8 Timeout-Liste)→R1(3 wichtige + 3
-optionale Findings)→V3 Plan-Workflow. Tests 764 → 777 gruen (+13 neu,
-2 angepasst).
+**Stand 2026-05-06:** **v0.95.6 — P1-Bundle1: 5 UI-Cleanups
+(P1.6+P1.12+P1.15+P1.16+P1.19).** Voller Diagnose-Workflow V1→V2→R1
+(5 KP-Findings)→V3 + Plan-V1→V2→R1 (4 Findings + 4 Test-Erweiterungen)→V3.
+Mike volle Autonomie ohne Rückfragen. Tests 777 → 796 gruen (+19 neu).
+
+**Sub-Aufgaben umgesetzt:**
+- **P1.6** Versionsnummer Color #333 → #666 (lesbar)
+- **P1.12** NEU-Button (`btn_remeasure`) entfernt — KALIBRIEREN macht alles seit v0.94
+- **P1.15** Statusbar `→ Call | RX: ANT` raus — Mike's Wunsch
+- **P1.16** QSO-Panel zeitbasiertes 5-Min-Rolling-Window (statt 40-Zeilen)
+- **P1.19** 5-Sterne-Anzeige `★★★☆☆` ersetzt SNR-Label (lokale Conditions)
+
+**APP_VERSION:** 0.95.5 → 0.95.6.
+
+**Field-Test offen:** Mike testet im Praxis-Betrieb (Sterne sollten je nach
+Conditions schwanken; KALIBRIEREN funktioniert weiter).
+
+---
+
+**Vorheriger Stand 2026-05-05:** **v0.95.5 — Single-Instance-Lock**
+(`24aba07` + `f348763` + `13c067f`). Garantiert nur EINE Instanz, schuetzt
+fremde main.py-Apps (Websdr) vor Kollateral-Kill via lsof CWD-Filter.
+
+**Vorher v0.95.4 — P1.10 Courtesy-73:** Atomare Commits `9783583`. Wurzel:
+IC-7300 Auto-Sequence wartet auf abschliessendes Hoeflichkeits-73. Fix:
+neuer State `TX_73_COURTESY` + Feld `qso.courtesy_73_sent`. Field-Test
+BESTAETIGT (16:59 UTC EA2BHE). Tests 764 → 777 gruen.
 
 ## 🟢 OFFEN nach v0.95.4 (Liste fuer naechste Session)
 
@@ -74,9 +87,8 @@ wird fuer jede msg im Slot ueberschrieben → letzte/schwaechste msg-SNR
 wird verwendet. Fix: `msg.snr` direkt in `_process_cq_reply` (qso_state.py:
 218, 233). Voller V1→V2→R1→V3, NACH P1.9 + P1.10. Siehe TODO.md P1.8.
 
-### 🟢 P1.6 — Versionsnummer-Anzeige fehlt
-Mike sieht `SimpleFT8 v0.95.2` unten rechts nicht mehr. Code unveraendert.
-Trivial-Diagnose ausstehend.
+### ✅ P1.6 — Versionsnummer-Anzeige (ERLEDIGT v0.95.6 / Bundle1)
+Color `#333` (auf `#1a1a2e` unsichtbar) → `#666` (lesbar, Theme-konform).
 
 ### 🟢 P1.7 — Lokaler Duplikat-Filter ADIF/Logbuch (NEU 05.05.)
 Folgebug-Risiko aus P1.5-Fix: bekannte Station < 5 Min nach RR73

@@ -1,8 +1,69 @@
-# SimpleFT8 TODO — Stand 28.04.2026 (v0.73)
+# SimpleFT8 TODO — Stand 06.05.2026 (v0.95.6)
+
+---
+
+## ✅ P1-Bundle1 (06.05.2026 v0.95.6) — ERLEDIGT
+
+5 UI-Cleanups thematisch gebuendelt + voller Diagnose-Workflow + Plan-Workflow.
+Tests 777 → 796 gruen (+19). Field-Test ausstehend.
+
+- ✅ **P1.6** Versionsnummer Color #333 → #666
+- ✅ **P1.12** NEU-Button (`btn_remeasure`) entfernt (6 Stellen)
+- ✅ **P1.15** Statusbar `→ Call | RX: ANT` raus
+- ✅ **P1.16** QSO-Panel zeitbasiertes 5-Min-Rolling-Window (statt 40 Zeilen)
+- ✅ **P1.19** 5-Sterne-Anzeige `★★★☆☆` ersetzt SNR-Label
+
+**Field-Test (Mike) noch offen:**
+- App startet ohne Fehler, Versionsnummer rechts unten lesbar
+- KALIBRIEREN funktioniert weiter (statt NEU)
+- Bei aktivem QSO: keine `→ Call`-Anzeige
+- Nach 5+ Min Funken: alte QSO-Eintraege weg
+- Sterne reagieren auf Conditions (sollten zwischen 2-4 schwanken)
 
 ---
 
 ## ⭐ ALS NÄCHSTES (Priorität)
+
+### 🔴 P1.18 — DT-Clamp Wurzel-Bug (KRITISCH, NEU 2026-05-06)
+
+`core/ntp_time.py:36` `_MAX_CORR = {"FT8": 1.0, "FT4": 0.5, "FT2": 0.3}` zu eng.
+Mike's Hardware braucht +1.2s, wird auf 1.0s geclamped → 200ms Decoder-Timing-
+Offset. Vermutlich Wurzel von P1.17 (alle SNR -17 bis -25) und P1.8
+(Report-SNR-Bug). Eigener Workflow noetig (V1→V2→R1→V3) — Mike-Field-Test
+verifizieren ob `_MAX_CORR` z.B. 2.0/1.0/0.5 sinnvoll ist.
+
+### 🔴 P1.14 — Station-Wechsel-Bug (KRITISCH)
+
+Mike-Befund: Bei Stations-Klick waehrend laufendem CQ wird neuer QSO-Versuch
+gestartet aber alter QSO-Status nicht sauber resetet. Workflow noetig.
+
+### 🟡 P1.8 — Report-SNR-Bug `_last_snr` statt `msg.snr`
+
+Wir senden Reports mit schlechteren dB-Werten als wir empfangen.
+`_last_snr` wird fuer jede msg im Slot ueberschrieben → letzte/schwaechste
+msg-SNR wird verwendet. Fix: `msg.snr` direkt in `_process_cq_reply`
+(qso_state.py:218, 233). Voller V1→V2→R1→V3.
+
+### 🟡 P1.11 — `rr73_retries`-Counter shared
+
+Bestehender Bug, NICHT durch P1.10 verschaerft. `qso.rr73_retries` wird
+in WAIT_RR73 UND WAIT_73-Hoeflichkeits-Pfad inkrementiert/getestet.
+Fix: separates Feld `wait_73_retries` oder Reset bei WAIT_73-Eintritt.
+
+### 🟢 P1.7 — Lokaler Duplikat-Filter ADIF/Logbuch
+
+Folgebug-Risiko aus P1.5: bekannte Station < 5 Min nach RR73 ruft erneut →
+zweites QSO + zweiter ADIF-Eintrag. QRZ.com filtert serverseitig, aber
+lokal nicht.
+
+### 🟢 P1.20 — Workflow-Template institutionalisieren
+
+Mike-Wunsch: Bundle1-Workflow als Standard-Pattern in CLAUDE.md / Skill
+festhalten — V1+V2+R1+V3 Diagnose + Plan-V1+V2+R1+V3 + Code + Tests.
+
+---
+
+## 🗂 ALTE TODO-Eintraege (vor Bundle1 — zu konsolidieren)
 
 ### 🟢 P1.12 — NEU-Button im Diversity-Panel entfernen (NEU 2026-05-05)
 
@@ -148,6 +209,44 @@ Stats) sind dann verfaelscht.
 - Diversity-Vergleich bleibt valide (relativ)
 
 **Aufwand:** Diagnose 1-2h. Falls Bug bestaetigt: Fix je nach Wurzel.
+
+---
+
+### 🟢 P1.20 — Workflow-Template als Standard-Pattern in Skill (NEU 2026-05-06)
+
+**Idee Mike:** der heutige Bundle1-Workflow war besonders sauber. Das
+konkrete Template als Standard-Pattern in `.claude/skills/ft8_workflow.md`
+festhalten damit Claude immer gleich-strukturiert vorgeht.
+
+**Was heute gut war (zu institutionalisieren):**
+
+1. **Compact-Strategie:** nach V2, vor R1 — Token-effizient + Persistenz
+2. **V1 = Code-Verifikation FIRST:** alle Datei:Zeile-Refs **bevor**
+   Diagnose geschrieben wird (verhindert Spekulation)
+3. **V2 = Tabelle der V1-Luecken:** explizit dokumentiert was V1 verpasst,
+   nicht nur „erweitert"
+4. **R1-Pruefauftraege konkret:** mit Nummerierung 6.1, 6.2 etc., nicht
+   „schau mal drueber"
+5. **Bundle-Strategie:** mehrere kleine Fixes als gemeinsamer Workflow
+   wenn thematisch zusammenhaengend (z.B. UI-Cleanup)
+6. **Pre-Compact-Check als eigener Task:** Files-Liste verifizieren,
+   nichts darf verloren gehen
+7. **Akzeptanzkriterien getrennt:** Code-Akzeptanz vs Field-Test als
+   zwei Listen
+8. **Workflow-Plan numeriert** mit Status-Markern (✅/→/Mike-Freigabe)
+
+**Aufgabe:**
+- `.claude/skills/ft8_workflow.md` erweitern um „Workflow-Template"-Sektion
+- Bundle1 + P1.10 als Beispiele referenzieren
+- Klare Vorgabe: V1 IMMER mit Code-Verifikation, V2 IMMER mit Luecken-
+  Tabelle, R1 IMMER mit nummerierten Pruefauftraegen
+- Compact-Trigger-Punkt explizit benennen
+- Bundle-Kriterium: wann sammeln, wann separat?
+
+**Trigger:** Nach Bundle1-Abschluss (heute Nacht oder morgen) — dann
+haben wir 2 vollstaendige Workflow-Beispiele zum Destillieren.
+
+**Aufwand:** 30 Min Skill-Erweiterung, KISS, kein eigener Workflow.
 
 ---
 

@@ -5,6 +5,54 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-06 v0.95.6 — P1-Bundle1: 5 UI-Cleanups (P1.6+P1.12+P1.15+P1.16+P1.19)
+
+**Workflow:** Voller V1→V2→R1→V3 Diagnose + Plan-V1→V2→R1→V3 (DeepSeek-Reasoner
+zwei Mal), Mike volle Autonomie ohne Rückfragen.
+
+**Diagnose:** 5 unabhaengige UI-Cleanups thematisch gebuendelt + ein voller
+Workflow statt 5 separate. R1 fand 5 KP-Findings (KP1 kritisch:
+`update_snr()` bricht nach Ersetzung), Plan-R1 fand weitere 4 (B1-B4) + 4
+Test-Erweiterungen (T1-T4, alle adressiert).
+
+**Sub-Aufgaben:**
+- **P1.6** Versionsnummer-Anzeige: Color `#333` (auf `#1a1a2e` unsichtbar) →
+  `#666` (lesbar, Theme-konform). 1 Zeile. `control_panel.py:1088`.
+- **P1.12** NEU-Button (`btn_remeasure`) entfernt — KALIBRIEREN macht seit
+  v0.94 Phase 2+3 alleine, NEU war redundant. 6 Stellen: `control_panel.py`
+  Button-Definition + Spacing + Signal + Connect, `main_window.py:530`
+  Connect, `mw_radio.py:985-997` Handler-Methode komplett raus.
+- **P1.15** Statusbar `→ Call | RX: ANT` raus — Mike: „die macht mich irre".
+  `main_window.py:917-934` Block entfernt.
+- **P1.16** QSO-Panel zeitbasiertes 5-Min-Rolling-Window — ersetzt zeilen-
+  basiertes `_auto_trim` (40 Zeilen). `_block_timestamps`-Liste parallel zu
+  log_view-Blocks, QTimer 30s ruft `_auto_trim_by_age(300s)`. R1-KP2
+  Defensive: `clear()`-Resync fuer out-of-sync Liste. Mindest-Schwelle 5
+  gegen Flackern. Scroll-Position-Logik.
+- **P1.19** Sterne-Anzeige `★★★☆☆` (5-Sterne, Neon-Cyan #00DDFF aktiv,
+  #555 inaktiv) ersetzt `SNR: -25 dB`-Label. NEU `ui/widgets/stars_widget.py`
+  StarsConditionWidget. NEU `compute_local_conditions(stations)` Helper in
+  `mw_cycle.py` (Score 1-5 basierend auf Stationsanzahl ODER Median-SNR
+  der oberen Haelfte). `update_snr()` wird No-Op (R1-KP1, Backward-Compat).
+  `update_local_conditions(score, n, median)` ist neuer Pfad. Aufruf nach
+  `_log_stats` (immer, auch bei leerem Slot).
+
+**Tests 777 → 796 gruen (+19 neu):**
+- `test_p1_bundle1.py` (4 statische Tests P1.12+P1.15)
+- `test_qso_panel_rolling.py` (6 Tests Rolling-Window inkl. T1 Two-Color)
+- `test_local_conditions.py` (5 pure-logic Tests)
+- `test_stars_widget.py` (4 Tests inkl. T2 Clamping)
+
+**APP_VERSION:** 0.95.5 → 0.95.6 (`main.py:16`).
+
+**KP1 (kritisch):** `update_snr()` weiter aufrufbar (No-Op) — `mw_cycle.py:415,
+750` brauchen keine Änderung. Backward-Compat ohne Crash gewahrt.
+
+**Field-Test:** offen — Mike testet im Praxis-Betrieb (Sterne sollten je nach
+Conditions zwischen 2-4 schwanken; bei Cluster vieler Stationen 5).
+
+---
+
 ## 2026-05-05 v0.95.5 — Single-Instance-Lock (Mike-Anweisung mehrfach!)
 
 **Atomare Commits:** `24aba07` (initial Lock) + `f348763` (CWD-Filter Fix)
