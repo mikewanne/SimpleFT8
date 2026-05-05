@@ -245,6 +245,14 @@ class Decoder(QObject):
             print(f"[Decoder] {len(messages)} Stationen — Gesamt: {t_done - t_start:.2f}s "
                   f"(Pre: {t_decode - t_pre:.2f}s, Decode: {t_done - t_decode:.2f}s)")
 
+            # Slot-Quelle aus Decoder-Wake-Zeit auf jede Message setzen.
+            # Konsumenten (qso_panel, mw_cycle._assign_slot_parity, auto_hunt)
+            # lesen diese Felder statt time.time() zur GUI-Aufruf-Zeit.
+            tx_even = int(target_slot_start / slot_duration) % 2 == 0
+            for m in messages:
+                m._slot_start_ts = target_slot_start
+                m._tx_even = tx_even
+
             if messages:
                 self.cycle_decoded.emit(messages)
                 for msg in messages:
@@ -252,9 +260,8 @@ class Decoder(QObject):
                     is_partner = (self.priority_call and
                                   msg.caller == self.priority_call)
                     if is_to_me or is_partner:
-                        _now = time.time()
-                        _slot = "EVEN" if int(_now / 15.0) % 2 == 0 else "ODD"
-                        _utc = time.strftime("%H:%M:%S", time.gmtime(_now))
+                        _slot = "EVEN" if tx_even else "ODD"
+                        _utc = time.strftime("%H:%M:%S", time.gmtime(target_slot_start))
                         tag = ">>> AN UNS" if is_to_me else "QSO-Partner"
                         print(f"[RX] {_utc} Slot={_slot} | {msg.raw} | snr={msg.snr} freq={msg.freq_hz} [{tag}]")
                     self.message_decoded.emit(msg)
