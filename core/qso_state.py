@@ -58,6 +58,7 @@ class QSOState(Enum):
     WAIT_RR73 = auto()      # Warte auf RR73
     TX_RR73 = auto()        # Sende RR73
     WAIT_73 = auto()        # Warte auf 73 (QSO schon geloggt)
+    TX_73_COURTESY = auto() # P1.10 Fix (v0.95.4): Hoeflichkeits-73 nach 73-Empfang
     LOGGING = auto()        # QSO abgeschlossen (legacy, nicht mehr genutzt)
     TIMEOUT = auto()        # Keine Antwort
 
@@ -80,6 +81,7 @@ class QSOData:
     calls_made: int = 0    # Wie oft haben wir bereits gesendet
     max_calls: int = 3     # Maximale CQ-Rufe (aus Settings)
     rr73_retries: int = 0  # Retries speziell fuer WAIT_RR73
+    courtesy_73_sent: bool = False  # P1.10 Fix (v0.95.4): max 1x pro QSO
 
 
 class QSOStateMachine(QObject):
@@ -267,7 +269,8 @@ class QSOStateMachine(QObject):
     def on_cycle_end(self):
         # Gesamt-QSO Timeout (3 Min) — egal welcher State
         if (self.state not in (QSOState.IDLE, QSOState.CQ_CALLING, QSOState.CQ_WAIT,
-                               QSOState.TIMEOUT, QSOState.WAIT_73)
+                               QSOState.TIMEOUT, QSOState.WAIT_73,
+                               QSOState.TX_73_COURTESY)  # P1.10: Courtesy-73 zu Ende fuehren
                 and self.qso.start_time > 0
                 and time.time() - self.qso.start_time > MAX_QSO_DURATION):
             call = self.qso.their_call
@@ -434,6 +437,13 @@ class QSOStateMachine(QObject):
             # Warte noch auf 73 von Gegenstation (max 2 Zyklen)
             self._set_state(QSOState.WAIT_73)
             self.qso.timeout_cycles = 0
+        elif self.state == QSOState.TX_73_COURTESY:
+            # P1.10 Fix (v0.95.4): Courtesy-73 fertig gesendet.
+            # qso_complete wurde bereits in TX_RR73 (oben) gefeuert — hier nur
+            # qso_confirmed (UI „QSO ✓") + CQ resumen.
+            self._dbg.log("TX", "Courtesy-73 fertig → qso_confirmed + resume_cq")
+            self.qso_confirmed.emit(self.qso)
+            self._resume_cq_if_needed()
 
     # ── Nachricht empfangen ─────────────────────────────────────
 
@@ -582,8 +592,28 @@ class QSOStateMachine(QObject):
         if self.state == QSOState.WAIT_73:
             if msg.is_73 or msg.is_rr73:
                 print(f"[QSO] 73 von {msg.caller} empfangen — QSO bestätigt!")
-                self.qso_confirmed.emit(self.qso)
-                self._resume_cq_if_needed()
+                if not self.qso.courtesy_73_sent:
+                    # P1.10 Fix (v0.95.4): einmaliges Hoeflichkeits-73 zurueck.
+                    # IC-7300 wartet auf abschliessendes 73 in seiner Auto-Sequence
+                    # (sonst sendet er 5x weiter 73). Andere FT8-Apps (WSJT-X, JTDX)
+                    # senden es als Standard.
+                    self.qso.courtesy_73_sent = True
+                    tx_msg = f"{self.qso.their_call} {self.my_call} 73"
+                    self._dbg.log("TX", f"Courtesy-73 für {msg.caller}: '{tx_msg}'")
+                    # State VOR Slot-Signal setzen, damit _on_tx_slot_for_partner
+                    # in mw_qso state-abhaengig zwischen CQ-Reply und Courtesy-73
+                    # unterscheiden kann (Plan-R1 F2: Panel-Info nicht "Antworte...").
+                    self._set_state(QSOState.TX_73_COURTESY)
+                    # Slot-Paritaet defensiv auf Gegentakt (R1 KP1 + Plan-R1 F2):
+                    self.tx_slot_for_partner.emit(msg)
+                    self.send_message.emit(tx_msg)
+                    # qso_confirmed.emit + _resume_cq_if_needed in on_message_sent
+                    # fuer TX_73_COURTESY (D3).
+                else:
+                    # Hypothetischer Doppelschutz — wir verlassen WAIT_73 sofort
+                    # nach erstem 73 (_set_state TX_73_COURTESY).
+                    self.qso_confirmed.emit(self.qso)
+                    self._resume_cq_if_needed()
             elif msg.is_r_report and msg.caller == self.qso.their_call:
                 # Hoeflichkeit: Station hat unser RR73 nicht empfangen → nochmal senden (max 2x)
                 if self.qso.rr73_retries < 2:

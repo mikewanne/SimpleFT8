@@ -449,7 +449,11 @@ def test_qso_rr73_courtesy():
 
 
 def test_qso_73_confirmation():
-    """Nach RR73: 73 von Gegenstation → QSO bestaetigt."""
+    """Nach RR73: 73 von Gegenstation → Courtesy-73 + QSO bestaetigt.
+
+    P1.10 (v0.95.4): qso_confirmed feuert erst NACH on_message_sent fuer
+    TX_73_COURTESY (nicht mehr direkt bei 73-Empfang). Vorher: direkt.
+    """
     from core.qso_state import QSOStateMachine, QSOState
     sm = QSOStateMachine("DA1MHH", "JO31")
     sm.state = QSOState.WAIT_73
@@ -460,6 +464,12 @@ def test_qso_73_confirmation():
 
     msg = _make_msg("R3EDI", "DA1MHH", "DA1MHH R3EDI 73", is_73=True)
     sm.on_message_received(msg)
+    # P1.10: qso_confirmed kommt erst nach Courtesy-73-Send
+    assert len(confirmed) == 0
+    assert sm.state == QSOState.TX_73_COURTESY
+
+    # Courtesy-73-TX abgeschlossen -> qso_confirmed feuert
+    sm.on_message_sent()
     assert len(confirmed) == 1
 
 
@@ -1244,7 +1254,11 @@ def test_qso_3min_timeout():
 
 
 def test_qso_no_double_log():
-    """QSO wird nur einmal geloggt (nicht bei 73 nochmal)."""
+    """QSO wird nur einmal geloggt (nicht bei 73 nochmal).
+
+    P1.10 (v0.95.4): qso_confirmed feuert erst nach on_message_sent fuer
+    TX_73_COURTESY. qso_complete bleibt bei 1x (TX_RR73 only).
+    """
     from core.qso_state import QSOStateMachine, QSOState
     sm = QSOStateMachine("DA1MHH", "JO31")
     completed = []
@@ -1255,12 +1269,17 @@ def test_qso_no_double_log():
     sm.on_message_sent()
     assert len(completed) == 1
     assert sm.state == QSOState.WAIT_73
-    # 73 empfangen → qso_confirmed, NICHT nochmal qso_complete
+    # 73 empfangen → Courtesy-73 + TX_73_COURTESY
     confirmed = []
     sm.qso_confirmed.connect(lambda q: confirmed.append(q))
     sm.cq_mode = True
     msg = _make_msg("R3EDI", "DA1MHH", "DA1MHH R3EDI 73", is_73=True)
     sm.on_message_received(msg)
+    assert sm.state == QSOState.TX_73_COURTESY
+    # qso_confirmed noch nicht — erst nach Courtesy-73-Send
+    assert len(confirmed) == 0
+    # Courtesy-73 fertig → qso_confirmed feuert, qso_complete unveraendert
+    sm.on_message_sent()
     assert len(confirmed) == 1
     assert len(completed) == 1  # immer noch 1, nicht 2!
 

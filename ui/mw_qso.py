@@ -199,7 +199,8 @@ class QSOMixin:
 
         is_tx = state in (
             QSOState.TX_CALL, QSOState.TX_REPORT,
-            QSOState.TX_RR73, QSOState.CQ_CALLING,
+            QSOState.TX_RR73, QSOState.TX_73_COURTESY,
+            QSOState.CQ_CALLING,
         )
         self.control_panel.set_tx_active(is_tx)
 
@@ -423,16 +424,24 @@ class QSOMixin:
 
     @Slot(object)
     def _on_tx_slot_for_partner(self, msg):
-        """CQ-Reply empfangen: Encoder-Slot auf Gegentakt der Station setzen."""
+        """CQ-Reply ODER Courtesy-73: Encoder-Slot auf Gegentakt der Station setzen.
+
+        P1.10 (v0.95.4): wird jetzt auch fuer Courtesy-73 in WAIT_73 verwendet.
+        State-abhaengig zwischen 'CQ-Reply' und 'Courtesy-73 Slot' unterscheiden.
+        """
         their_even = getattr(msg, '_tx_even', None)
+        is_courtesy = self.qso_sm.state == QSOState.TX_73_COURTESY
         if their_even is not None:
             self.encoder.tx_even = not their_even
             slot_str = "ODD" if their_even else "EVEN"
-            print(f"[TX] CQ-Reply {msg.caller}: sie={('EVEN' if their_even else 'ODD')} → wir={slot_str}")
-        # Antennen-Praeferenz anzeigen, falls vorhanden
-        label = self._antenna_pref_label(msg.caller)
-        if label:
-            self.qso_panel.add_info(f"Antworte {msg.caller}{label}")
+            kind = "Courtesy-73" if is_courtesy else "CQ-Reply"
+            print(f"[TX] {kind} {msg.caller}: sie={('EVEN' if their_even else 'ODD')} → wir={slot_str}")
+        # Antennen-Praeferenz-Panel-Info nur bei CQ-Reply, nicht bei Courtesy-73
+        # (bei Courtesy-73 ist QSO bereits abgeschlossen — "Antworte..." waere irrefuehrend)
+        if not is_courtesy:
+            label = self._antenna_pref_label(msg.caller)
+            if label:
+                self.qso_panel.add_info(f"Antworte {msg.caller}{label}")
 
     @Slot(object)
     def _on_try_replace_pending_tx(self, msg):
