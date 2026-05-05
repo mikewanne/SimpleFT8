@@ -116,8 +116,6 @@ class QSOStateMachine(QObject):
         self._pending_rr73 = None       # Gemerktes RR73 (waehrend TX_REPORT)
         self._was_cq = False            # CQ-Modus vor Hunt-Start
         self._dbg = QSODebugLog()       # QSO Debug Logger
-        self._worked_calls: dict = {}   # {callsign: timestamp} — gesperrte Calls nach QSO
-        self._WORKED_BLOCK_SECS = 300   # 5 Minuten Sperre nach QSO
         self._caller_queue: list = []   # Warteliste: Stationen die während QSO gerufen haben
 
     def _set_state(self, new_state: QSOState):
@@ -165,16 +163,6 @@ class QSOStateMachine(QObject):
         self._set_state(QSOState.CQ_CALLING)
         self.send_message.emit(msg)
 
-    def _is_worked_recently(self, callsign: str) -> bool:
-        """True wenn diese Station in den letzten _WORKED_BLOCK_SECS gearbeitet wurde."""
-        ts = self._worked_calls.get(callsign)
-        if ts is None:
-            return False
-        if time.time() - ts > self._WORKED_BLOCK_SECS:
-            del self._worked_calls[callsign]
-            return False
-        return True
-
     def _process_cq_reply(self):
         """Gemerkte CQ-Antwort verarbeiten (nach TX-Ende)."""
         msg = self._pending_reply
@@ -185,11 +173,6 @@ class QSOStateMachine(QObject):
         # Kein CQ-Reply verarbeiten wenn CQ-Modus nicht aktiv (z.B. nach HALT)
         if not self.cq_mode:
             print(f"[QSO] {msg.caller} ignoriert — CQ-Modus nicht aktiv")
-            return
-
-        # Kein neues QSO mit kuerzlich gearbeiteter Station
-        if self._is_worked_recently(msg.caller):
-            print(f"[QSO] {msg.caller} ignoriert — kuerzlich gearbeitet (beendet ist beendet)")
             return
 
         # 73/RR73 als CQ-Antwort ignorieren (Gegenstation steckt in Schleife)
@@ -437,10 +420,6 @@ class QSOStateMachine(QObject):
             # ADIF sofort loggen (RR73 oder 73 gesendet = QSO von unserer Seite bestaetigt)
             self.qso_complete.emit(self.qso)
             self.cq_qso_count += 1
-            # Call sperren: kein neues QSO mit dieser Station fuer 5 Minuten
-            if self.qso.their_call:
-                self._worked_calls[self.qso.their_call] = time.time()
-                print(f"[QSO] {self.qso.their_call} gesperrt fuer {self._WORKED_BLOCK_SECS}s")
             # Warte noch auf 73 von Gegenstation (max 2 Zyklen)
             self._set_state(QSOState.WAIT_73)
             self.qso.timeout_cycles = 0
@@ -467,7 +446,6 @@ class QSOStateMachine(QObject):
                 and msg.target == self.my_call
                 and (msg.is_grid or msg.is_report)
                 and msg.caller != self.qso.their_call
-                and not self._is_worked_recently(msg.caller)
                 and not any(q.caller == msg.caller for q in self._caller_queue)):
             self._caller_queue.append(msg)
             self.queue_changed.emit([m.caller for m in self._caller_queue])
@@ -476,10 +454,6 @@ class QSOStateMachine(QObject):
         # ── Jemand ruft UNS (CQ-Modus, oder im IDLE) ──
         if self.state in (QSOState.IDLE, QSOState.CQ_WAIT, QSOState.CQ_CALLING) and msg.target == self.my_call:
             if msg.is_grid or msg.is_report:
-                # Beendet ist beendet: kuerzlich gearbeitete Stationen ignorieren
-                if self._is_worked_recently(msg.caller):
-                    print(f"[QSO] {msg.caller} ignoriert — kuerzlich gearbeitet (beendet ist beendet)")
-                    return
                 # Antwort merken — wird in on_message_sent() verarbeitet
                 # (falls CQ TX noch laeuft, darf JETZT nicht gesendet werden!)
                 self._pending_reply = msg

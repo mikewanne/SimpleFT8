@@ -474,12 +474,16 @@ def test_qso_hunt_basic():
     assert "US5EAA" in sent[0] and "DA1MHH" in sent[0]
 
 
-def test_qso_worked_recently_block():
-    """Kuerzlich gearbeitete Station wird im CQ-Modus ignoriert."""
-    import time
+def test_qso_known_station_can_call_again():
+    """Funker-Entscheidung: bekannte Station darf erneut anrufen.
+
+    Mike's Philosophie 2026-05-05 (P1.5): keine 5-Min-Sperre. Wenn eine
+    bekannte Station ruft, hat sie meist einen Grund (kein 73 erhalten).
+    Filter 'Neue Stationen' im RX-Panel blendet aus Anzeige aus, NICHT
+    aus dem Reply-Pfad. Ersetzt das frühere test_qso_worked_recently_block.
+    """
     from core.qso_state import QSOStateMachine, QSOState
     sm = QSOStateMachine("DA1MHH", "JO31")
-    sm._worked_calls["R3EDI"] = time.time()  # gerade gearbeitet
     sm.state = QSOState.CQ_WAIT
     sm.cq_mode = True
     sent = []
@@ -488,8 +492,89 @@ def test_qso_worked_recently_block():
     msg = _make_msg("R3EDI", "DA1MHH", "DA1MHH R3EDI KO82",
                      grid_or_report="KO82", is_grid=True)
     sm.on_message_received(msg)
-    # Sollte ignoriert werden → kein neuer TX
-    assert not any("R3EDI" in s and "RR73" not in s and "CQ" not in s for s in sent)
+    # Sollte als CQ-Reply verarbeitet werden → state=TX_REPORT, send_message emit
+    assert sm.state == QSOState.TX_REPORT
+    assert any("R3EDI" in s and "DA1MHH" in s for s in sent)
+
+
+def test_qso_cq_reply_during_tx_pending_then_processed():
+    """CQ-Reply waehrend TX laeuft → _pending_reply gesetzt → nach TX-Ende verarbeitet.
+
+    Vorher nicht getestet — der CQ_CALLING-Pfad der bei Field-Test
+    2026-05-05 mit DA1TST das Symptom zeigte (kombiniert mit Sperre).
+    """
+    from core.qso_state import QSOStateMachine, QSOState
+    sm = QSOStateMachine("DA1MHH", "JO31")
+    sm.state = QSOState.CQ_CALLING       # TX laeuft
+    sm.cq_mode = True
+    sent = []
+    sm.send_message.connect(lambda m: sent.append(m))
+
+    # Reply kommt waehrend TX
+    msg = _make_msg("R3EDI", "DA1MHH", "DA1MHH R3EDI KO82",
+                     grid_or_report="KO82", is_grid=True)
+    sm.on_message_received(msg)
+    # CQ_CALLING-Pfad: pending merken, NOCH nicht verarbeiten
+    assert sm.state == QSOState.CQ_CALLING
+    assert sm._pending_reply is msg
+    assert len(sent) == 0  # noch kein TX
+
+    # TX-Ende → on_message_sent verarbeitet pending
+    sm.on_message_sent()
+    assert sm.state == QSOState.TX_REPORT
+    assert any("R3EDI" in s and "DA1MHH" in s for s in sent)
+
+
+def test_qso_caller_queue_accepts_known_station():
+    """Caller-Queue nimmt bekannte Stationen waehrend QSO auf (kein Block).
+
+    Block #3 (qso_state.py:470 vorher 'not _is_worked_recently') wurde
+    entfernt. Test sichert ab: bekannte Station ruft uns waehrend QSO →
+    landet in Warteliste.
+    """
+    from core.qso_state import QSOStateMachine, QSOState
+    sm = QSOStateMachine("DA1MHH", "JO31")
+    sm.cq_mode = True
+    sm.state = QSOState.WAIT_REPORT
+    sm.qso.their_call = "EA3FHP"  # aktiver QSO-Partner
+
+    # R3EDI war frueher gearbeitet (vor Fix wuerde geblockt)
+    msg = _make_msg("R3EDI", "DA1MHH", "DA1MHH R3EDI KO82",
+                     grid_or_report="KO82", is_grid=True)
+    sm.on_message_received(msg)
+    # R3EDI soll in Queue landen
+    assert len(sm._caller_queue) == 1
+    assert sm._caller_queue[0].caller == "R3EDI"
+
+
+def test_qso_resume_pops_known_station_from_queue():
+    """_resume_cq_if_needed verarbeitet bekannte Station aus Caller-Queue.
+
+    Vor Fix: Block #2 in _process_cq_reply blockierte den Pop-Pfad doppelt
+    (zusaetzlich zu Block #3 beim Add). Nach Fix: kein Block mehr — Station
+    aus Queue wird beantwortet.
+    """
+    from core.qso_state import QSOStateMachine, QSOState, QSOData
+    sm = QSOStateMachine("DA1MHH", "JO31")
+    sm.cq_mode = True
+    sm._was_cq = True
+    sm.qso = QSOData()  # leer
+
+    # R3EDI war frueher gearbeitet — vor Fix waere Block #2 gegriffen
+    msg = _make_msg("R3EDI", "DA1MHH", "DA1MHH R3EDI KO82",
+                     grid_or_report="KO82", is_grid=True)
+    sm._caller_queue.append(msg)
+
+    sent = []
+    sm.send_message.connect(lambda m: sent.append(m))
+
+    # _resume_cq_if_needed simuliert QSO-Ende mit nicht-leerer Queue
+    sm._resume_cq_if_needed()
+
+    # R3EDI muss verarbeitet sein → state=TX_REPORT
+    assert sm.state == QSOState.TX_REPORT
+    assert any("R3EDI" in s and "DA1MHH" in s for s in sent)
+    assert len(sm._caller_queue) == 0  # Pop hat geleert
 
 
 def test_qso_caller_queue():
