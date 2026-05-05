@@ -18,6 +18,40 @@ from core.station_accumulator import accumulate_stations
 from radio.presets import PREAMP_PRESETS
 
 
+def compute_local_conditions(stations: dict) -> tuple[int, int, float]:
+    """P1.19: 5-Sterne-Score aus Stations-Dict.
+
+    Returnt (score 1-5, n_stations, median_snr_top_half).
+    Score-Skala (ODER-verknuepft):
+      5 ★: 25+ Stationen ODER Median > -12 dB
+      4 ★: 15+ Stationen ODER Median > -15 dB
+      3 ★: 8+ Stationen  ODER Median > -18 dB
+      2 ★: 3+ Stationen  ODER Median > -22 dB
+      1 ★: alles darunter
+    """
+    if not stations:
+        return 1, 0, -99.0
+    snrs = sorted(
+        [float(s.snr) for s in stations.values()
+         if hasattr(s, 'snr') and s.snr is not None],
+        reverse=True,
+    )
+    n = len(snrs)
+    if n == 0:
+        return 1, 0, -99.0
+    top_half = snrs[:max(1, n // 2)]
+    median = top_half[len(top_half) // 2] if top_half else -99.0
+    if n >= 25 or median > -12:
+        return 5, n, median
+    if n >= 15 or median > -15:
+        return 4, n, median
+    if n >= 8 or median > -18:
+        return 3, n, median
+    if n >= 3 or median > -22:
+        return 2, n, median
+    return 1, n, median
+
+
 class CycleMixin:
     """Mixin fuer Zyklusverarbeitung — wird in MainWindow eingemischt.
 
@@ -416,6 +450,13 @@ class CycleMixin:
 
         # Statistik loggen — auch bei leerem Zyklus (akkumulierter Stand)
         self._log_stats(len(self._normal_stations), messages or [], avg_snr=avg_snr)
+
+        # P1.19: Sterne-Anzeige (immer aktualisieren, auch bei leerem Slot)
+        stations = (self._diversity_stations
+                    if self._rx_mode == "diversity"
+                    else self._normal_stations)
+        score, n_st, median = compute_local_conditions(stations)
+        self.control_panel.update_local_conditions(score, n_st, median)
 
         # Richtungs-Karten-Hook: Snapshot via Qt.QueuedConnection in GUI-Thread
         self._emit_map_snapshot_if_open()

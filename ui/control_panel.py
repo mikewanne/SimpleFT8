@@ -14,6 +14,7 @@ from PySide6.QtGui import QFont, QPainter, QColor, QPen, QBrush, QCursor
 
 from config.settings import BAND_FREQUENCIES
 from main import APP_VERSION
+from ui.widgets.stars_widget import StarsConditionWidget
 from ui.styles import (
     BG as _BG, TEXT as _TEXT, FONT as _FONT, SEP_COLOR as _SEP_COLOR,
     MIN_WIDTH as _MIN_WIDTH, LED_GREEN as _LED_GREEN, LED_BLUE as _LED_BLUE,
@@ -505,24 +506,12 @@ class _AntenneCard(QFrame):
         div_lay.addLayout(ratio_row)
         phase_row = QHBoxLayout()
         phase_row.setContentsMargins(0, 0, 0, 0)
-        # 36px Spacer links balanciert den NEU-Button rechts → echte Zentrierung
-        phase_row.addSpacing(36)
         self._phase_label = QLabel("")
         self._phase_label.setStyleSheet(
             f"color:#FFCC00;font-size:9px;font-family:{_FONT};font-style:italic;"
         )
         self._phase_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         phase_row.addWidget(self._phase_label)
-        self.btn_remeasure = QPushButton("NEU")
-        self.btn_remeasure.setFixedSize(36, 18)
-        self.btn_remeasure.setStyleSheet(
-            f"QPushButton {{ background: rgba(60,60,100,0.4); color: #88AACC; "
-            f"border: 1px solid #446; border-radius: 3px; font-size: 9px; "
-            f"font-family: {_FONT}; font-weight: bold; }}"
-            f"QPushButton:hover {{ background: rgba(80,80,140,0.6); }}"
-        )
-        self.btn_remeasure.setToolTip("Diversity sofort neu einmessen")
-        phase_row.addWidget(self.btn_remeasure)
         div_lay.addLayout(phase_row)
         self._div_widget.setVisible(False)
         lay.addWidget(self._div_widget)
@@ -872,14 +861,13 @@ class _QSOStatusCard(QFrame):
         self.decode_label.setStyleSheet(f"color: {_TEXT}; font-family: {_FONT}; font-size: 11px;")
         lay.addWidget(self.decode_label)
 
-        # SNR + UTC in einer Zeile
+        # P1.19: Sterne-Anzeige `Lokale Conditions` ersetzt SNR-Label
         snr_utc_row = QHBoxLayout()
         snr_utc_row.setSpacing(8)
-        self.snr_label = QLabel("SNR: — dB")
-        self.snr_label.setStyleSheet(f"color: {_TEXT}; font-family: {_FONT}; font-size: 11px;")
+        self.conditions_widget = StarsConditionWidget()
         self.utc_label = QLabel("UTC: --:--:--")
         self.utc_label.setStyleSheet(f"color: {_TEXT}; font-family: {_FONT}; font-size: 11px;")
-        snr_utc_row.addWidget(self.snr_label)
+        snr_utc_row.addWidget(self.conditions_widget)
         snr_utc_row.addStretch()
         snr_utc_row.addWidget(self.utc_label)
         lay.addLayout(snr_utc_row)
@@ -944,7 +932,6 @@ class ControlPanel(QWidget):
     rx_mode_changed = Signal(str)
     settings_clicked = Signal()
     einmessen_clicked = Signal()
-    remeasure_clicked = Signal()
     map_clicked = Signal()  # Map-Button im PSK-Frame → MainWindow.open_direction_map
 
     # ── Klassen-Konstanten ───────────────────────────────────────────────
@@ -1020,8 +1007,6 @@ class ControlPanel(QWidget):
         self.btn_normal.clicked.connect(lambda: self._on_rx_mode_clicked("normal"))
         self.btn_diversity.clicked.connect(lambda: self._on_rx_mode_clicked("diversity"))
         self.btn_einmessen.clicked.connect(self.einmessen_clicked.emit)
-        self.btn_remeasure = ant_card.btn_remeasure
-        self.btn_remeasure.clicked.connect(self.remeasure_clicked.emit)
         layout.addWidget(ant_card)
 
         # ── Kachel 3: RADIO (türkis) ─────────────────────────────────────
@@ -1062,7 +1047,7 @@ class ControlPanel(QWidget):
         self.btn_cancel.clicked.connect(self.cancel_clicked.emit)
         self.connection_label = qso_card.connection_label
         self.decode_label = qso_card.decode_label
-        self.snr_label = qso_card.snr_label
+        self.conditions_widget = qso_card.conditions_widget
         self.utc_label = qso_card.utc_label
         self.state_label = qso_card.state_label
         self._last_state = "IDLE"
@@ -1085,7 +1070,7 @@ class ControlPanel(QWidget):
         self._omni_symbol.setVisible(False)
         self._version_label = QLabel(f"SimpleFT8 v{APP_VERSION}")
         self._version_label.setStyleSheet(
-            f"color: #333; font-family: {_FONT}; font-size: 10px; "
+            f"color: #666; font-family: {_FONT}; font-size: 10px; "
             "border: none; background: transparent;"
         )
         self._version_label.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -1582,7 +1567,16 @@ class ControlPanel(QWidget):
     # Status / Info
     # =====================================================================
     def update_snr(self, snr: int):
-        self.snr_label.setText(f"SNR:  {snr:+d} dB")
+        """No-Op (P1.19). Sterne-Anzeige nutzt update_local_conditions."""
+        pass
+
+    def update_local_conditions(self, score: int, n_stations: int, median_snr: float):
+        """P1.19: 5-Sterne-Anzeige fuer lokale Conditions aktualisieren."""
+        if median_snr <= -98:
+            tooltip = f"{n_stations} Stationen (kein Signal)"
+        else:
+            tooltip = f"{n_stations} Stationen, Median {median_snr:+.0f} dB"
+        self.conditions_widget.set_score(score, tooltip)
 
     def update_state(self, state_name: str):
         self._last_state = state_name

@@ -22,6 +22,12 @@ class QSOPanel(QWidget):
         super().__init__()
         self._setup_ui()
         self._qso_count = 0
+        # P1.16: zeitbasiertes Rolling-Window — Block-Timestamps parallel zu log_view-Blocks
+        self._block_timestamps: list[float] = []
+        self._cleanup_timer = QTimer(self)
+        self._cleanup_timer.setInterval(30_000)  # 30s
+        self._cleanup_timer.timeout.connect(self._auto_trim_by_age)
+        self._cleanup_timer.start()
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
@@ -173,7 +179,7 @@ class QSOPanel(QWidget):
         else:
             self._append_colored(line, "#FFAA00")
         self._cq_count = 0  # Backwards-compat fuer status_label-Logik
-        self._auto_trim()
+        # P1.16: _auto_trim_by_age laeuft via QTimer alle 30s, kein expliziter Aufruf hier
 
     def add_rx(self, message: str,
                tx_even: bool | None = None,
@@ -244,6 +250,8 @@ class QSOPanel(QWidget):
         self.log_view.setTextCursor(cursor)
         self.log_view.setTextColor(QColor(color))
         self.log_view.append(text)
+        # P1.16: Timestamp parallel zu Block fuer 5-Min-Rolling-Window
+        self._block_timestamps.append(time.time())
         # Auto-Scroll nach unten
         scrollbar = self.log_view.verticalScrollBar()
         scrollbar.setValue(scrollbar.maximum())
@@ -254,6 +262,8 @@ class QSOPanel(QWidget):
         self.log_view.setTextCursor(cursor)
         self.log_view.setTextColor(QColor(color1))
         self.log_view.append(text1)
+        # P1.16: Timestamp — _append_two_color erzeugt EINEN Block (append=Block, insertText=im-Block)
+        self._block_timestamps.append(time.time())
         cursor = self.log_view.textCursor()
         cursor.movePosition(QTextCursor.MoveOperation.End)
         fmt = QTextCharFormat()
@@ -263,14 +273,38 @@ class QSOPanel(QWidget):
         scrollbar = self.log_view.verticalScrollBar()
         scrollbar.setValue(scrollbar.maximum())
 
-    def _auto_trim(self, max_lines: int = 40):
-        """QSO-Log auf ~40 Zeilen begrenzen (~3 Min Traffic)."""
+    def _auto_trim_by_age(self, max_age_s: float = 300.0):
+        """P1.16: Eintraege aelter als max_age_s (default 5 Min) entfernen.
+
+        Defensiv gegen externe `clear()` (R1-KP2): synct Liste mit blockCount.
+        Mindest-Schwelle 5 verhindert Flackern bei kleinen Mengen.
+        """
         doc = self.log_view.document()
-        excess = doc.blockCount() - max_lines
-        if excess > 5:
-            cursor = QTextCursor(doc)
-            cursor.movePosition(QTextCursor.MoveOperation.Start)
-            for _ in range(excess):
-                cursor.movePosition(QTextCursor.MoveOperation.Down, QTextCursor.MoveMode.KeepAnchor)
-            cursor.removeSelectedText()
-            cursor.deleteChar()
+        block_count = doc.blockCount()
+        # KP2 Resync: falls extern geleert oder Liste-out-of-sync
+        if len(self._block_timestamps) > block_count:
+            self._block_timestamps = self._block_timestamps[-block_count:]
+
+        now = time.time()
+        cutoff = now - max_age_s
+        n_old = sum(1 for ts in self._block_timestamps if ts < cutoff)
+        if n_old < 5:  # Mindest-Schwelle gegen Flackern
+            return
+
+        # Scroll-Position merken
+        scrollbar = self.log_view.verticalScrollBar()
+        was_at_bottom = scrollbar.value() >= scrollbar.maximum() - 5
+
+        cursor = QTextCursor(doc)
+        cursor.movePosition(QTextCursor.MoveOperation.Start)
+        for _ in range(n_old):
+            cursor.movePosition(
+                QTextCursor.MoveOperation.Down,
+                QTextCursor.MoveMode.KeepAnchor)
+        cursor.removeSelectedText()
+        cursor.deleteChar()
+
+        self._block_timestamps = self._block_timestamps[n_old:]
+
+        if was_at_bottom:
+            scrollbar.setValue(scrollbar.maximum())

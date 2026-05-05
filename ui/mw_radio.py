@@ -982,20 +982,6 @@ class RadioMixin:
         self.control_panel.update_diversity_counts(0, 0)
         print("[Diversity] Deaktiviert")
 
-    def _on_diversity_remeasure(self):
-        """NEU-Button: Diversity sofort neu einmessen (erzwungen)."""
-        if self._rx_mode != "diversity":
-            return
-        import time as _time
-        self._stats_warmup_cycles = 99999  # Blockiert bis nach Einmessen+Warmup
-        print("[Diversity] Manuelle Neueinmessung gestartet")
-        self._diversity_ctrl.start_measure()
-        self._set_cq_locked(True)
-        self.control_panel.update_diversity_ratio(
-            "50:50", "measure", 0,
-            self._diversity_ctrl.MEASURE_CYCLES,
-            scoring_mode=self._diversity_ctrl.scoring_mode)
-
     def _check_diversity_preset(self, band: str, ft_mode: str, scoring: str) -> None:
         """Preset-Check bei Band/Modus-Wechsel mit aktiver Diversity.
 
