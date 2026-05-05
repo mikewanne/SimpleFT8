@@ -100,6 +100,9 @@ class QSOStateMachine(QObject):
     tx_slot_for_partner = Signal(object)  # CQ-Reply: msg mit _tx_even → Encoder soll Gegentakt setzen
     caller_queued = Signal(str)     # Station zur Warteliste hinzugefügt (call)
     queue_changed = Signal(list)    # Warteliste geändert → UI aktualisieren
+    # P1.9 Fix (v0.95.3): CQ-Reply waehrend CQ_CALLING → mw_qso versucht
+    # Encoder-Replace im Sleep-Phase damit Report im SELBEN Slot rausgeht.
+    try_replace_pending_tx = Signal(object)
 
     def __init__(self, my_call: str, my_grid: str):
         super().__init__()
@@ -157,6 +160,14 @@ class QSOStateMachine(QObject):
 
     def _send_cq(self):
         """CQ-Ruf senden."""
+        # P1.9 Defense-in-Depth (v0.95.3): falls _pending_reply bereits
+        # gesetzt ist (Race: Replace-Request kam zu spaet aber Reply ist
+        # gemerkt), direkt Reply verarbeiten statt nochmal CQ zu senden.
+        if self._pending_reply is not None:
+            print(f"[QSO] _send_cq: pending {self._pending_reply.caller} "
+                  f"→ process statt CQ")
+            self._process_cq_reply()
+            return
         self._pending_reply = None  # Alte Antwort verwerfen
         msg = f"CQ {self.my_call} {self.my_grid}"
         self._dbg.log("TX", f"Sende: '{msg}'")
@@ -461,6 +472,12 @@ class QSOStateMachine(QObject):
                 # Wenn CQ_WAIT oder IDLE: sofort verarbeiten (TX ist frei)
                 if self.state in (QSOState.IDLE, QSOState.CQ_WAIT):
                     self._process_cq_reply()
+                # P1.9 (v0.95.3): Bei CQ_CALLING (TX laeuft) versuche Replace
+                # im Encoder-Sleep. Falls erfolgreich: mw_qso schaltet direkt
+                # auf TX_REPORT um. Falls zu spaet: on_message_sent
+                # verarbeitet das pending nach TX-Ende (Status quo).
+                elif self.state == QSOState.CQ_CALLING:
+                    self.try_replace_pending_tx.emit(msg)
                 # Bei CQ_CALLING: on_message_sent() verarbeitet es nach TX-Ende
                 return
 

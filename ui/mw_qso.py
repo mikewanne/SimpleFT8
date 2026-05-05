@@ -434,6 +434,60 @@ class QSOMixin:
         if label:
             self.qso_panel.add_info(f"Antworte {msg.caller}{label}")
 
+    @Slot(object)
+    def _on_try_replace_pending_tx(self, msg):
+        """P1.9 (v0.95.3): CQ-Reply waehrend CQ_CALLING → Encoder-Replace
+        versuchen. Wenn erfolgreich: state direkt zu TX_REPORT, Encoder
+        sendet Report im selben Slot statt erst nach CQ-Ende.
+        Wenn zu spaet (Audio bereits gestartet): kein State-Wechsel,
+        on_message_sent verarbeitet pending nach TX-Ende (Status quo).
+        """
+        import time as _time
+        from core.qso_state import QSOData, QSOState
+
+        # Nur Grid-Replies haben sofortigen Report (R+Report waere zu spaet
+        # im QSO-Flow; das verarbeitet weiterhin _process_cq_reply nach TX).
+        if not msg.is_grid:
+            return
+
+        # Report-Format identisch zu _process_cq_reply (qso_state.py:201)
+        snr = self.qso_sm._last_snr
+        report = f"{snr:+03d}" if snr > -30 else "-10"
+        tx_msg = f"{msg.caller} {self.qso_sm.my_call} {report}"
+
+        # V2 FINDING-D: tx_even MUSS vor request_replace gesetzt werden,
+        # damit der Worker beim Wake _next_slot_boundary() mit korrektem
+        # Wert aufruft. Race-Vermeidung.
+        their_even = getattr(msg, '_tx_even', None)
+        if their_even is not None:
+            self.encoder.tx_even = not their_even
+
+        if not self.encoder.request_replace(tx_msg):
+            return  # zu spaet — Status quo Pfad uebernimmt
+
+        # Replace eingereiht → State analog _process_cq_reply
+        self.qso_sm._pending_reply = None
+        self.qso_sm._was_cq = True  # V2 FINDING-A: CQ-Resume nach QSO
+        self.qso_sm.qso = QSOData(
+            their_call=msg.caller,
+            their_grid=msg.grid_or_report if msg.is_grid else "",
+            freq_hz=msg.freq_hz,
+            start_time=_time.time(),
+            our_snr=report,
+        )
+        # V2 FINDING-B: Debug-Log analog _process_cq_reply
+        self.qso_sm._dbg.reset(msg.caller)
+        self.qso_sm._dbg.log("RX", f"P1.9 Replace: CQ-Antwort von {msg.caller}: '{msg.raw}'")
+        self.qso_sm._dbg.log("TX", f"Sende Report: '{tx_msg}' (SNR={snr})")
+        self.qso_sm._set_state(QSOState.TX_REPORT)
+        # V2 FINDING-C: QSO-Panel-Anzeige analog _on_tx_slot_for_partner
+        label = self._antenna_pref_label(msg.caller)
+        if label:
+            self.qso_panel.add_info(f"Antworte {msg.caller}{label}")
+        # ACHTUNG: KEIN send_message.emit — Encoder hat die Message bereits
+        # ueber _replace_message bekommen.
+        print(f"[QSO] P1.9 Replace OK: CQ → '{tx_msg}'")
+
     def _on_qso_tab_changed(self, index: int):
         """Tab-Wechsel im QSO-Panel: Detail-Overlay schliessen wenn nicht mehr im Logbuch."""
         if index == 0:  # QSO-Tab (nicht Logbuch)

@@ -541,6 +541,8 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self.qso_sm.qso_confirmed.connect(self._on_qso_confirmed)
         self.qso_sm.qso_timeout.connect(self._on_qso_timeout)
         self.qso_sm.tx_slot_for_partner.connect(self._on_tx_slot_for_partner)
+        # P1.9 (v0.95.3): CQ-Reply waehrend CQ_CALLING → Encoder-Replace versuchen
+        self.qso_sm.try_replace_pending_tx.connect(self._on_try_replace_pending_tx)
         self.qso_sm.queue_changed.connect(self._on_caller_queue_changed)
 
         # Timer

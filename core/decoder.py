@@ -135,7 +135,14 @@ class Decoder(QObject):
                 # Mode-abhängige Slot-Dauer + Wake-Time
                 _SLOT = {"FT8": 15.0, "FT4": 7.5, "FT2": 3.8}.get(self._mode, 15.0)
                 # Wake-Time: kurz vor Slot-Ende, mode-abhängig
-                _WAKE_OFFSETS = {"FT8": 1.5, "FT4": 0.5, "FT2": 0.3}
+                # P1.9 Fix (v0.95.3): FT8 wake 1s frueher (slot+12.5 statt
+                # slot+13.5), damit Decoder typisch 0.5-2.5s VOR Encoder-Wake
+                # fertig ist. Macht Encoder-Replace-Pfad ueberhaupt erst
+                # nutzbar (sonst CQ-Audio bereits in send_audio wenn
+                # _pending_reply gesetzt wird → 1 Slot Delay).
+                # SNR-Effekt < 0.1 dB (R1: FT8-Signal endet bei slot+13.14s,
+                # Hanning-Fenster dampft Rand). FT4/FT2 unveraendert.
+                _WAKE_OFFSETS = {"FT8": 2.5, "FT4": 0.5, "FT2": 0.3}
                 _WAKE = _SLOT - _WAKE_OFFSETS.get(self._mode, 1.5)
                 cycle_pos = now % _SLOT
                 # target_slot_start PRE-SLEEP berechnen (driftfrei, unabhängig

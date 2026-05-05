@@ -59,6 +59,15 @@ class Encoder(QObject):
         # aus dem Slot-Wait-Sleep auf — sonst schlaeft er bis zu 14s und
         # sendet veraltete Messages nach State-Change.
         self._abort_event = threading.Event()
+        # P1.9 Fix (v0.95.3): Replace-Mechanik fuer CQ → Report im selben Slot.
+        # _audio_started: True ab dem Moment wo send_audio gleich startet
+        #                 (point-of-no-return — kein Replace mehr moeglich).
+        # _replace_message: neue Message die request_replace() einreiht.
+        # _replace_lock: schuetzt _audio_started + _replace_message gegen
+        #                Race zwischen request_replace() und Worker-Wake.
+        self._audio_started = False
+        self._replace_message: str | None = None
+        self._replace_lock = threading.Lock()
 
     def set_protocol(self, mode: str):
         """Protokoll wechseln."""
@@ -79,6 +88,29 @@ class Encoder(QObject):
         self._is_transmitting = False
         self._abort_event.set()
         print("[Encoder] TX abgebrochen")
+
+    def request_replace(self, message: str) -> bool:
+        """P1.9 Fix (v0.95.3): laufenden TX mit neuer Message ersetzen
+        waehrend Sleep-Phase (vor send_audio).
+
+        Returns True wenn Replace eingereiht wurde, False wenn zu spaet
+        (Audio bereits gestartet) oder kein TX laeuft.
+
+        Race-Sicherheit: Lock + is_transmitting-Guard + atomare
+        _audio_started-Pruefung verhindern Replace nach send_audio-Start.
+
+        Aufrufer (mw_qso._on_try_replace_pending_tx) muss tx_even VOR
+        diesem Aufruf setzen, damit der aufgeweckte Worker
+        _next_slot_boundary() mit korrektem Wert aufruft.
+        """
+        with self._replace_lock:
+            if not self._is_transmitting:
+                return False
+            if self._audio_started:
+                return False
+            self._replace_message = message
+            self._abort_event.set()
+            return True
 
     def set_radio(self, radio):
         self._radio = radio
@@ -161,10 +193,15 @@ class Encoder(QObject):
         self._is_transmitting = True
         # v0.80 Fix A2: Event vor jedem TX zuruecksetzen
         self._abort_event.clear()
+        # P1.9 Fix (v0.95.3): Replace-State pro TX-Zyklus zuruecksetzen.
+        self._audio_started = False
+        with self._replace_lock:
+            self._replace_message = None
         try:
             self._tx_worker_inner(message)
         finally:
             self._is_transmitting = False
+            self._audio_started = False
 
     def _next_slot_boundary(self) -> float:
         """Naechste passende Slot-Grenze als Unix-Timestamp.
@@ -199,35 +236,57 @@ class Encoder(QObject):
         # FESTE TX-Frequenz
         print(f"[TX] Frequenz: {self.audio_freq_hz} Hz → '{message}'")
 
-        # 1. Audio SOFORT codieren — unabhaengig vom Timing, kein GIL-Problem
-        audio_12k = self.encode_message(message)
-        if audio_12k is None:
-            return
+        # P1.9 Fix (v0.95.3): Loop ermoeglicht Re-Encode bei Replace-Request
+        # waehrend Sleep. Decoder wakes 1s frueher (decoder.py:138 _WAKE_OFFSETS
+        # FT8 = 2.5), Slot-Handler in mw_qso ruft request_replace() auf,
+        # Worker wacht aus Sleep auf, sieht _replace_message != None,
+        # re-encodiert mit Report-Message → Report im SELBEN Slot wo CQ
+        # scheduled war.
+        while True:
+            # 1. Audio codieren (re-codiert nach Replace mit neuer Message)
+            audio_12k = self.encode_message(message)
+            if audio_12k is None:
+                # V2 FINDING-F: tx_finished MUSS feuern damit qso_state
+                # nicht in TX_REPORT haengt. Invariant: jeder TX-Versuch
+                # endet mit tx_finished.
+                self.tx_finished.emit()
+                return
+            # Trailing Silence trimmen (FT8-Nutzsignal ist 12.64s, Rest stille)
+            if len(audio_12k) > TRIM_SAMPLES:
+                audio_12k = audio_12k[:-TRIM_SAMPLES]
 
-        # Trailing Silence trimmen (FT8-Nutzsignal ist 12.64s, Rest ist stille)
-        # slot+0.5 + 13.5s = slot+14.0s → 1.0s Puffer vor naechstem Slot
-        if len(audio_12k) > TRIM_SAMPLES:
-            audio_12k = audio_12k[:-TRIM_SAMPLES]
+            # 2. Naechste passende Slot-Grenze berechnen
+            next_boundary = self._next_slot_boundary()
 
-        # 2. Naechste passende Slot-Grenze berechnen
-        next_boundary = self._next_slot_boundary()
+            # 3. Sleep bis Slot-Grenze. _abort_event weckt auf bei abort()
+            #    ODER bei request_replace() (P1.9).
+            sleep_dur = (next_boundary + TARGET_TX_OFFSET - 0.5) - time.time()
+            if sleep_dur > 0.001:
+                aborted = self._abort_event.wait(timeout=sleep_dur)
+                if aborted:
+                    # P1.9: Replace eingereiht? → re-encode + neuer Loop-Durchgang
+                    with self._replace_lock:
+                        if self._replace_message is not None:
+                            message = self._replace_message
+                            self._replace_message = None
+                            self._abort_event.clear()
+                            print(f"[Encoder] TX-Replace → '{message}'")
+                            continue
+                    print("[Encoder] TX abgebrochen (während Warte-Phase)")
+                    return
 
-        # 3. Bis zur Slot-Grenze schlafen (TARGET_TX_OFFSET=0.5 → sleep bis boundary,
-        #    dann 0.5s Silence → TX startet bei boundary+0.5s = WSJT-X Protokoll)
-        # v0.80 Fix A2: cancelable sleep via _abort_event.wait().
-        # Returnt True wenn abort() das Event gesetzt hat → sofortiger Exit
-        # statt 14s weiter zu schlafen mit veralteter Message.
-        sleep_dur = (next_boundary + TARGET_TX_OFFSET - 0.5) - time.time()
-        if sleep_dur > 0.001:
-            aborted = self._abort_event.wait(timeout=sleep_dur)
-            if aborted:
-                print("[Encoder] TX abgebrochen (während Warte-Phase)")
+            # Abort-Check ohne Sleep (sleep_dur <= 0.001)
+            if not self._is_transmitting:
+                print("[Encoder] TX abgebrochen (vor Sleep)")
                 return
 
-        # Abort-Check: kann auch ohne Sleep auftreten (sleep_dur <= 0.001)
-        if not self._is_transmitting:
-            print("[Encoder] TX abgebrochen (vor Sleep)")
-            return
+            # 4. Audio-Start vorbereiten — point of no return.
+            # _audio_started=True UNTER Lock setzen, damit ein gleichzeitig
+            # laufendes request_replace() entweder noch erfolgreich ist
+            # oder sauber False zurueckgibt. Kein Mid-State.
+            with self._replace_lock:
+                self._audio_started = True
+            break  # raus aus dem while-Loop, weiter mit Audio-Send
 
         # 4. Silence-Padding berechnen (jetzt praezise, da nahe am Ziel)
         #    Stille absorbiert den restlichen Jitter des OS-Schedulers
