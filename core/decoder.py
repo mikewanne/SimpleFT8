@@ -138,9 +138,14 @@ class Decoder(QObject):
                 _WAKE_OFFSETS = {"FT8": 1.5, "FT4": 0.5, "FT2": 0.3}
                 _WAKE = _SLOT - _WAKE_OFFSETS.get(self._mode, 1.5)
                 cycle_pos = now % _SLOT
+                # target_slot_start PRE-SLEEP berechnen (driftfrei, unabhängig
+                # von Sleep-Jitter). Identifiziert den Slot dessen Audio im
+                # Buffer landen wird = Slot dessen TX wir gleich dekodieren.
                 if cycle_pos < _WAKE:
+                    target_slot_start = now - cycle_pos          # selber Slot
                     wait = _WAKE - cycle_pos
                 else:
+                    target_slot_start = now - cycle_pos + _SLOT  # nächster Slot
                     wait = _SLOT - cycle_pos + _WAKE
                 time.sleep(wait)
 
@@ -162,7 +167,7 @@ class Decoder(QObject):
 
                 threading.Thread(
                     target=self._process_cycle,
-                    args=(chunks,),
+                    args=(chunks, target_slot_start, _SLOT),
                     daemon=True,
                 ).start()
 
@@ -175,8 +180,14 @@ class Decoder(QObject):
 
     # ── Cycle Processing ──────────────────────────────────────────────────────
 
-    def _process_cycle(self, chunks):
-        """Preprocessing + Decode in eigenem Thread."""
+    def _process_cycle(self, chunks, target_slot_start: float = 0.0,
+                       slot_duration: float = 15.0):
+        """Preprocessing + Decode in eigenem Thread.
+
+        target_slot_start: UTC-Sekunden des TX-Slot-Anfangs der Audio-Daten
+            (vom _decode_loop pre-sleep berechnet, driftfrei).
+        slot_duration: Cycle-Dauer in Sekunden (FT8=15.0, FT4=7.5, FT2=3.8).
+        """
         t_start = time.time()
         try:
             audio_raw = np.concatenate(chunks)
