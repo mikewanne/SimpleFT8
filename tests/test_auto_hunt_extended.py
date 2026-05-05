@@ -231,6 +231,38 @@ def test_slot_affinity_fallback_when_no_match(qapp):
     assert hunt._last_tx_even is False
 
 
+def test_auto_hunt_with_corrected_tx_even(qapp):
+    """V3-Slot-Fix: Auto-Hunt arbeitet weiterhin korrekt wenn _tx_even
+    jetzt vom Decoder direkt gesetzt wird (latenz-frei) statt vom
+    is_even_cycle() zur Decode-Output-Zeit (potentiell Folge-Slot).
+
+    Regression-Sicherung gegen R1-Frage: 'Hat Auto-Hunt mit dem alten,
+    Latenz-bedingt FALSCHEN _tx_even gearbeitet und durch Inversion
+    kompensiert?' R1+Code-Analyse: Nein, kein Inversion-Schutz im Code.
+    Fix korrigiert, bricht nicht.
+
+    Test: Mock-Message mit Decoder-typisch gesetzten Slot-Feldern
+    (_tx_even = aus target_slot_start abgeleitet). Auto-Hunt waehlt
+    den Kandidat und setzt _last_tx_even korrekt.
+    """
+    from core.auto_hunt import AutoHunt
+    hunt = AutoHunt()
+    hunt.start_auto_hunt(600)
+    hunt._last_tx_even = None  # noch keine Affinitaet
+
+    # Decoder hat _tx_even=True gesetzt (TX-Slot der Nachricht ist EVEN).
+    # _slot_start_ts simuliert was Decoder.target_slot_start liefert.
+    msg = _make_cq_msg("DL3DEC", tx_even=True, snr=-12)
+    msg._slot_start_ts = 1730000100.0  # zusaetzlich Decoder-Zeitstempel
+
+    result = hunt.select_next([msg], qso_idle=True, presence_ok=True)
+    assert result is not None
+    assert result.call == "DL3DEC"
+    assert result.tx_even is True, "tx_even muss aus Decoder-Quelle uebernommen sein"
+    # _last_tx_even wird gespeichert fuer naechsten Zyklus
+    assert hunt._last_tx_even is True
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Commit 9 — UI-Integration
 # ─────────────────────────────────────────────────────────────────────────────
