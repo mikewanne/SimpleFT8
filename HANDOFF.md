@@ -1,53 +1,48 @@
 # HANDOFF — SimpleFT8
 
-**Stand 2026-05-05:** **v0.95.3 — P1.9 First-Reply-Lost-Bug-Fix.**
-Atomare Commits `20c7fe7` (Code+Tests, +282/-29 in 7 Files) + Doku-Commit.
-Wurzel: Decoder-Encoder-Timing-Race (FlexRadio TX-Buffer 1.3s) — Encoder
-wachte 0.2-3.0s VOR Decoder fertig → CQ-Audio bereits in send_audio
-(BLOCKING) wenn _pending_reply gesetzt wurde → Report 1 Slot zu spaet.
-Fix-Kombination (atomar): Decoder-Wake 1.5→2.5 + Encoder request_replace
-API + State-Machine try_replace_pending_tx Signal + Defense-in-Depth in
-_send_cq + mw_qso Slot-Handler + Connect in main_window:543. Voller
-V1→V2(12 Findings A-L)→R1(6 Pruefauftraege KORREKT)→V3 Workflow.
-Tests 759 → 764 gruen (+5).
+**Stand 2026-05-05:** **v0.95.4 — P1.10 End-of-QSO Icom-73-Loop-Fix
+(Courtesy-73).** Atomare Commits `9783583` (Code+Tests+Workflow-Files,
+13 Files, +3439/-14) + Doku-Commit. Wurzel: IC-7300 (DA1TST) Auto-Sequence
+wartet auf abschliessendes Hoeflichkeits-73 von uns. SimpleFT8 sendete
+bisher kein Courtesy-73 → IC-7300 retried 5× `73` in Folgeslots. Andere
+FT8-Apps (WSJT-X, JTDX, MSHV) senden Courtesy-73 als Funkalltag-Standard.
+Fix (Option A1 + R1-Slot-Paritaet-Defensive): neuer State
+`TX_73_COURTESY` + Feld `qso.courtesy_73_sent` (max 1× pro QSO), Branch
+in WAIT_73-Logik (qso_state.py:582-597) + on_message_sent + 3-Min-Timeout-
+Ausschluss + mw_qso `_on_tx_slot_for_partner` state-abhaengig (Panel-Info
+nur bei CQ-Reply). Voller V1→V2(8 V1-Luecken)→R1(4 KP + 3 Findings)→V3
+Diagnose + V1→V2(6 V1-Luecken, D8 Timeout-Liste)→R1(3 wichtige + 3
+optionale Findings)→V3 Plan-Workflow. Tests 764 → 777 gruen (+13 neu,
+2 angepasst).
 
-## 🟢 OFFEN nach v0.95.3 (Liste fuer naechste Session)
+## 🟢 OFFEN nach v0.95.4 (Liste fuer naechste Session)
+
+### 🔴 P1.10 Field-Test ausstehend
+Mike soll mit DA1TST IC-7300 auf 30m FT8 (oder anderem Band) testen:
+- **Erwartung:** Nach unserem RR73 + DA1TST 73 + unserem Courtesy-73
+  → IC-7300 sendet KEIN weiteres 73 (oder maximal 1, falls Auto-Seq
+  verzoegert).
+- **Beobachtung:** Im simpleft8.log sollte erscheinen:
+  `[QSO-DBG] [TX] Courtesy-73 für DA1TST: 'DA1TST DA1MHH 73'`
+  `STATE WAIT_73 → TX_73_COURTESY` (statt direkt CQ_CALLING).
+  Nach Send: `STATE TX_73_COURTESY → CQ_CALLING` + `qso_confirmed`.
+- **Mindestens 2 QSO-Reproduktionen** noetig vor Bug-Closure.
+- **Field-Test-Beobachtungspunkt R1 KP4:** Decoder/Encoder-Race
+  0.2s-Window — falls Overshoot >0.3s häufig, Encoder-Wake auf
+  `next_boundary - 1.0s` verschieben (separater Workflow).
 
 ### ✅ P1.9 Field-Test BESTAETIGT (Mike 11:18-:24 UTC, 2 QSOs DA1TST)
-QSO 1 (11:19:45 RX → 11:20:00 Report, Replace mit -20):
-  `[Encoder] TX-Replace → 'DA1TST DA1MHH -20'`
-  `[QSO] P1.9 Replace OK: CQ → 'DA1TST DA1MHH -20'`
-QSO 2 (11:22:15 RX → 11:22:30 Report, Replace mit -23): identisch.
+QSO 1 (11:19:45 RX → 11:20:00 Report, Replace mit -20).
+QSO 2 (11:22:15 RX → 11:22:30 Report, Replace mit -23).
 2/2 Replace-Pfad genommen, kein „erster Ruf ignoriert" mehr. Bug tot.
 
-### 🔴 P1.10 — End-of-QSO Icom-73-Loop (NEU 2026-05-05, Diagnose offen)
-**Symptom:** Field-Test 11:24-:27 UTC + 11:28-:29 UTC zweimal reproduziert.
-Nach unserem RR73 + DA1TST 73 (QSO komplett, ADIF geloggt) sendet der
-IC-7300 von DA1TST **5× weiter `73`** in den Folgeslots (alle :15-Slots).
-Wir senden CQ → Icom „antwortet" mit 73 → ignoriert von uns. Nach 5 73's
-gibt der IC-7300 auf.
-
-**Trace 1 (11:24-:27):**
-- :24:00 [E] RR73 → :24:15 [O] 73 (DA1TST) → State WAIT_73 → CQ_CALLING
-- :24:30 [E] CQ → :24:45 [O] 73 → ignoriert (CQ_CALLING)
-- :25:00 [E] CQ → :25:15 [O] 73 → ignoriert
-- :25:30 [E] CQ → :25:45 [O] 73 → ignoriert
-- :26:00 [E] CQ → :26:15 [O] 73 → ignoriert
-- :26:30 [E] CQ → IC-7300 still
-- :27:45 [O] DA1TST JO31 (neuer Anruf) → P1.9 Replace OK ✓
-
-**Code-Pfade verifiziert:**
-- `core/qso_state.py:582-586` — `WAIT_73` + `73`-Empfang: `qso_confirmed.emit`
-  + `_resume_cq_if_needed` direkt → kein 73 zurueck. Hier liegt der Hebel.
-- `core/qso_state.py:419-436` — `on_message_sent` `TX_RR73`: `qso_complete.emit`
-  + ADIF + state → WAIT_73. Sauber.
-- `core/qso_state.py:447-451` — CQ_CALLING + 73 → log „nach Timeout/CQ ignoriert".
-
-**Mike's Hypothese (zu pruefen):** WSJT-X sendet optional Hoeflichkeits-73
-zurueck nach 73-Empfang, IC-7300 wartet darauf. Loesung: 1× Hoeflichkeits-
-73 nach 73-Empfang in WAIT_73, mit Counter (max 1× pro QSO).
-
-**Naechster Schritt nach Compact:** P1.10 V1 schreiben.
+### 🟡 P1.11 — `rr73_retries`-Counter shared (NEU aus Plan-R1 F1, 05.05.)
+Bestehender Bug, NICHT durch P1.10 verschaerft. `qso.rr73_retries` wird
+in WAIT_RR73 (`qso_state.py:346`) UND in WAIT_73-Hoeflichkeits-Pfad
+(`qso_state.py:589-590`) inkrementiert/getestet. Wenn QSO viele
+WAIT_RR73-Retries hatte (z.B. 2 von 3), bleibt fuer WAIT_73-R-Report-
+Hoeflichkeit nichts uebrig. Fix: separates Feld `wait_73_retries` oder
+Reset bei WAIT_73-Eintritt. ~1 Stunde Aufwand, KISS.
 
 ### ✅ P1.5 Field-Test BESTAETIGT (Mike 09:35-:44 UTC, 4 QSOs in Folge)
 SP6AXW + DA1TST + HA0GK (aus Warteliste) + S50XX alle erfolgreich.

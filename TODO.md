@@ -32,24 +32,46 @@ v0.95.3. **🟡 Field-Test bei Mike ausstehend.**
 
 ---
 
-### 🟢 P1.10 — End-of-QSO Icom-73-Loop (NEU 2026-05-05, separater Workflow)
+### ✅ P1.10 — End-of-QSO Icom-73-Loop (ERLEDIGT 2026-05-05, v0.95.4)
 
-**Symptom:** Field-Test 09:55-09:59: nach unserem RR73 :57:00 + DA1TST 73
-:57:15 (QSO intern komplett) sendet DA1TST weiter 73 in :58:15 + :58:45.
-Wir reagieren nicht — bereits in CQ_CALLING.
+**Code-Commit:** `9783583` (Code+Tests+Workflow-Files, 13 Files,
++3439/-14) + Doku-Commit.
 
-**Hypothese:** Icom IC-7300 Auto-Sequence wartet auf Hoeflichkeits-73
-zurueck, das WSJT-X optional sendet. Mike's Vermutung: SDR-Control
-empfindlicher als IC-7300.
+**Field-Test:** AUSSTEHEND. Mike testet mit DA1TST IC-7300 auf 30m FT8.
 
-**Code-Pfad:** `core/qso_state.py:591-606` — bei 73-Empfang in WAIT_73
-wird `qso_confirmed.emit` + `_resume_cq_if_needed` direkt gerufen, KEIN
-73-zurueck.
+**Bug-Wurzel:** IC-7300 (DA1TST) Auto-Sequence wartet auf abschliessendes
+Hoeflichkeits-73 von uns. SimpleFT8 sendete bisher kein Courtesy-73 →
+IC-7300 retried 5× `73`. Andere FT8-Apps (WSJT-X, JTDX, MSHV) senden
+Courtesy-73 als Funkalltag-Standard.
 
-**Loesungs-Idee:** nach 73-Empfang ein einzelnes Hoeflichkeits-73
-zurueksenden (mit Counter max 1x). Zu pruefen mit R1.
+**Fix:** neuer State `TX_73_COURTESY` + Feld `qso.courtesy_73_sent`
+(max 1× pro QSO), Branch in WAIT_73 (`qso_state.py:582-597`) +
+on_message_sent + 3-Min-Timeout-Ausschluss + mw_qso state-abhaengig
+(Panel-Info nur bei CQ-Reply, NICHT bei Courtesy-73).
 
-**Workflow:** voller V1→V2→R1→V3 — separater Plan nach P1.9-Abschluss.
+**Workflow:** voller V1→V2(8 V1-Luecken)→R1(4 KP + 3 Findings)→V3
+Diagnose + Cross-Check Zweit-KI + V1→V2(6 Plan-V1-Luecken)→R1(3 wichtige
++ 3 optionale Findings)→V3 Plan. Tests 764 → 777 gruen (+13 neu, 2
+angepasst).
+
+---
+
+### 🟡 P1.11 — `rr73_retries`-Counter shared (NEU 2026-05-05, aus Plan-R1 F1)
+
+**Bestehender Bug, NICHT durch P1.10 verschaerft.**
+
+`qso.rr73_retries` wird in WAIT_RR73 (`qso_state.py:346`) UND in
+WAIT_73-Hoeflichkeits-Pfad (`qso_state.py:589-590`) inkrementiert/
+getestet. Wenn QSO viele WAIT_RR73-Retries hatte (z.B. 2 von 3),
+bleibt fuer WAIT_73-R-Report-Hoeflichkeit nichts uebrig.
+
+**Fix-Idee:** separates Feld `wait_73_retries: int = 0` in QSOData
+oder Reset bei WAIT_73-Eintritt (`_set_state` Branch).
+
+**Aufwand:** ~1 Stunde, KISS.
+
+**Workflow:** trivialer Bugfix mit klarem Code-Pfad — V1 reicht
+laut WORKFLOW.md (single Akzeptanzkriterium).
 
 ---
 

@@ -5,6 +5,72 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-05 v0.95.4 — P1.10 End-of-QSO Icom-73-Loop-Fix (Courtesy-73)
+
+**Atomare Commits:** `9783583` (Code+Tests+Workflow-Files, 13 Files,
++3439/-14) + Doku-Commit.
+
+**Bug-Wurzel:** IC-7300 (DA1TST) Auto-Sequence wartet auf abschliessendes
+Hoeflichkeits-73 von uns. SimpleFT8 sendet bisher KEIN Courtesy-73 nach
+73-Empfang im WAIT_73-State. Folge: IC-7300 retried 5× das `73` in den
+nachfolgenden Slots bevor er aufgibt. Andere FT8-Apps (WSJT-X, JTDX,
+MSHV) senden ein Courtesy-73 als Funkalltag-Standard.
+
+**Field-Test 05.05.:** 2× reproduziert (11:24-:27 UTC und 11:28-:29 UTC
+mit DA1TST). Mike-Befund: „Bei IC-Stationen empfange ich oft 2× ein 73"
+— das bestaetigt dass andere Apps Höflichkeits- + Sequenz-73 senden,
+SimpleFT8 nur 1× → IC-7300 ist zu sensibel.
+
+**Workflow:** voller V1→V2(8 V1-Luecken, kritischer Fund: TX_RR73 ist
+NICHT exklusiv weil Z.401-403 ebenfalls "73" als TX_RR73 sendet → Reuse
+= Doppel-ADIF → eigener State `TX_73_COURTESY` PFLICHT)→R1(4 KP + 3
+Findings + Empfehlung A1)→V3 Diagnose + Cross-Check Zweit-KI (Hypothese
+verstaerkt, „Pause"-Alternative durch Trace widerlegt) + voller
+V1→V2(6 Plan-V1-Luecken, D8 Timeout-Liste defensiv hinzugefuegt)→R1(3
+wichtige + 3 optionale Findings)→V3 Plan-Workflow.
+
+**Fix (Option A1 mit R1-Slot-Paritaet-Defensive):**
+- `core/qso_state.py` — neuer State `TX_73_COURTESY`, neues Feld
+  `qso.courtesy_73_sent` (max 1× pro QSO), neuer Branch in
+  `on_message_sent` fuer TX_73_COURTESY (`qso_confirmed.emit` +
+  `_resume_cq_if_needed`), WAIT_73-Hauptlogik geaendert: bei
+  73/RR73-Empfang einmaliges Courtesy-73 senden + Slot-Paritaet via
+  `tx_slot_for_partner.emit(msg)` (R1 KP1, `_set_state` VOR Signal-Emit
+  fuer state-abhaengiges UI), TX_73_COURTESY in 3-Min-QSO-Timeout-
+  Ausschluss-Liste (defensiv, Plan-V2-L1).
+- `ui/mw_qso.py` — `is_tx`-Set erweitert um TX_73_COURTESY,
+  `_on_tx_slot_for_partner` state-abhaengig (CQ-Reply vs Courtesy-73,
+  Panel-Info „Antworte..." nur bei CQ-Reply, Plan-R1 F2 + F4).
+- `main.py` — APP_VERSION 0.95.3 → 0.95.4.
+- `tests/test_p1_10_courtesy_73.py` — 13 neue Tests.
+- `tests/test_modules.py` — 2 bestehende Tests angepasst (qso_confirmed
+  feuert jetzt nach `on_message_sent` fuer TX_73_COURTESY, nicht mehr
+  direkt bei 73-Empfang).
+
+**Tests:** 764 → 777 gruen (+13 neu, 2 angepasst).
+
+**Field-Test bei Mike ausstehend** (DA1TST IC-7300, 30m FT8). Erwartet:
+nach unserem RR73 + DA1TST 73 + unserem Courtesy-73 → IC-7300 sendet
+KEIN weiteres 73.
+
+**Known Issue (Plan-R1 F1, NICHT durch P1.10 verschaerft):**
+`rr73_retries` shared zwischen WAIT_RR73 + WAIT_73-Hoeflichkeits-Pfad.
+Wenn QSO viele WAIT_RR73-Retries hatte, bleibt fuer WAIT_73 nichts
+uebrig. Eigener Workflow P1.11.
+
+**Lessons:**
+- Plan-V2 muss bei jedem neuen State pruefen ob 3-Min-Timeout-Ausschluss-
+  Liste angepasst werden muss (V1 hatte das verpasst, V2 hat es gefangen).
+- TX_RR73-State ist NICHT exklusiv fuer RR73 — wird auch fuer
+  „73"-Vorwaertssprung (Z.401-403) verwendet → Reuse erzeugt Doppel-ADIF
+  ueber qso_complete.emit → eigener State Pflicht.
+- Slot-Paritaet defensiv via Signal `tx_slot_for_partner.emit(msg)` statt
+  implizit auf `encoder.tx_even`-Stand verlassen (R1 KP1).
+- Reihenfolge `_set_state` VOR `tx_slot_for_partner.emit` damit Listener
+  state-abhaengig zwischen CQ-Reply und Courtesy-73 unterscheiden kann.
+
+---
+
 ## 2026-05-05 v0.95.3 — P1.9 First-Reply-Lost-Bug-Fix
 
 **Atomare Commits:** `20c7fe7` (Code+Tests, 7 Files, +282/-29) + Doku-Commit.
