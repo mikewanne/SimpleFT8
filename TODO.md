@@ -4,7 +4,52 @@
 
 ## ⭐ ALS NÄCHSTES (Priorität)
 
-### ✅ ERLEDIGT P1 — v0.95 QSO-Panel Slot-Tag/Zeit-Display-Fix (2026-05-05)
+### 🔴 P1.5 — CQ-Reply-Recognition-Bug (2026-05-05)
+
+**Symptom Field-Test 05:30-05:33 UTC (Screenshot 2):**
+FlexRadio im CQ-Modus empfaengt DA1TST's CQ-Antwort `DA1MHH DA1TST J031`,
+ignoriert sie aber, sendet weiter CQ statt zu antworten. DA1TST wiederholt
+seine Antwort 3-4 mal — manchmal greift's irgendwann doch, manchmal nie.
+
+```
+05:31:15 [O] → Sende CQ                 (FlexRadio CQ)
+05:31:30 [E] ← Empf. DA1MHH DA1TST J031 (CQ-Antwort, wird ignoriert)
+05:31:45 [O] → Sende CQ                 (Sollte Report sein!)
+05:32:30 [E] ← Empf. DA1MHH DA1TST J031 (Wiederholung)
+05:32:45 [O] → Sende CQ                 (immer noch CQ!)
+```
+
+**Mike's Hauptbeschwerde** seit langem ("doppelte Antworten"-Problem,
+"manchmal geht's, manchmal nicht"). Sporadisch — daher schwer zu fangen.
+
+**Wahrscheinliche Bug-Orte (R1 muss systematisch pruefen):**
+- `core/qso_state.py` `_process_cq_reply()` (oder aequivalent) —
+  Format-Check fuer "MEINCALL CALL GRID" greift nicht zuverlaessig
+- `_was_cq` / `cq_mode` Flags — State-Konsistenz
+- Frequenz-Filter — DA1TST antwortet auf der gleichen Frequenz, sollte
+  okay sein
+- `on_message_received` Routing zu `_process_cq_reply` vs. anderen Pfaden
+
+**Workflow:** Voller V1→V2→R1→V3 — Mike-Wunsch saubere Loesung.
+NICHT trivial fixen, weil seit langem instabil.
+
+**Debug-Linien (`[DBGLOOP]`, `[DBGTX]`)** sind in v0.95.1 noch drin
+fuer dieses Bugfix-Field-Test. Werden bei P1.5-Fix entfernt oder
+bleiben als optionaler DEBUG-flag.
+
+---
+
+### 🟢 P1.6 — Versionsnummer-Anzeige fehlt (2026-05-05)
+
+Mike sieht `SimpleFT8 v0.95(.1)` unten rechts im Control-Panel nicht mehr.
+Code ist unveraendert (`ui/control_panel.py:1086`). Vermutlich Layout-
+Glitch, evtl. durch Display-2-Setup oder Resize abgeschnitten.
+
+**Trivial-Diagnose:** Resize-Test, evtl. Layout-Anchoring pruefen.
+
+---
+
+### ✅ ERLEDIGT P1 — v0.95 + v0.95.1 QSO-Panel Slot-Tag/Zeit-Display-Fix (2026-05-05)
 
 7 atomare Commits (``dac4a73``..``5d4b767``). Decoder als single source
 of truth fuer Slot-Quelle. Tests 742 → 756 gruen. Voller V1→V2→R1→V3-

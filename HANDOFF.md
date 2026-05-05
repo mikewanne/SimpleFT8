@@ -1,17 +1,26 @@
 # HANDOFF — SimpleFT8
 
-**Stand 2026-05-05:** **v0.95 — QSO-Panel Slot-Tag/Zeit-Display-Fix.**
+**Stand 2026-05-05:** **v0.95.1 — Encoder-TX-Slot-Tag-Fix.**
+v0.95 hatte den TX-Display-Tag noch 1 Slot zurueck (time.time() in
+ptt_on-Phase = 1.3s vor next_boundary). v0.95.1 nutzt next_boundary
+direkt. Field-Test bestaetigt: TX `[E]` und RX `[O]` sauber getrennt,
+2 komplette QSOs in Folge.
 
-## 🟢 OFFEN nach v0.95 (Liste fuer naechste Session)
+## 🟢 OFFEN nach v0.95.1 (Liste fuer naechste Session)
 
-### Field-Test v0.95 (Mike's Aufgabe — direkt nach App-Restart)
-- **RX-Eintraege im QSO-Panel** zeigen ODD-Tag fuer Nachrichten der
-  Gegenstation (vorher faelschlich EVEN). Erwartete Sequenz bei DA1TST-
-  QSO: `03:38:15 [O] ← Empf.` statt `03:38:30 [E] ← Empf.`
-- **TX-Anzeige unveraendert** — eigene Sendungen weiter `[E]`/`[O]`
-  passend zum echten TX-Slot
-- **„Doppelte Antworten"-Optik geht weg** — Empfang und TX sind
-  visuell sauber getrennt (verschiedene Slots/Tags)
+### 🔴 P1.5 — CQ-Reply-Recognition-Bug (NEU 05.05.)
+Mike's seit langem bestehendes "doppelte Antworten"-Problem entlarvt
+durch sauberes Slot-Display: FlexRadio im CQ-Modus IGNORIERT eingehende
+DA1TST-CQ-Antworten und sendet weiter CQ statt mit Report zu antworten.
+Voller V1→V2→R1→V3-Workflow geplant. Details in `TODO.md` P1.5.
+
+### 🟢 P1.6 — Versionsnummer-Anzeige fehlt
+Mike sieht `SimpleFT8 v0.95.1` unten rechts nicht mehr. Code unveraendert.
+Trivial-Diagnose ausstehend.
+
+### v0.95.1 Field-Test (✅ bestaetigt durch Mike 05:27-05:30 UTC)
+- **TX/RX-Slot-Trennung sichtbar:** TX `[E]` + RX `[O]` (oder umgekehrt
+  je nach CQ-Pattern). 2 komplette QSOs ohne Slot-Konflikt-Anzeige.
 - **Auto-Hunt** funktioniert weiter (R1+Code-Analyse: kein
   Inversion-Schutz, Fix korrigiert nicht bricht)
 

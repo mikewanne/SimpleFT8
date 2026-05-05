@@ -5,6 +5,50 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-05 v0.95.1 — Encoder-TX-Slot-Tag-Fix
+
+**Ausloeser:** Mike's Field-Test mit IC-7300 als ODD-Gegenstation
+zeigte v0.95-Encoder-Fix war noch unvollstaendig. TX-Display-Tag
+haengt 1 Slot zurueck — Display zeigte FlexRadio-TX im selben Slot
+wie die Gegenstation, was physikalisch unmoeglich ist.
+
+**Root Cause:** `core/encoder.py:281-285` (mein v0.95-Code) nutzte
+`time.time()` zur ptt_on()-Aufruf-Zeit zur slot_start_ts-Berechnung.
+ptt_on() laeuft aber **1.3s VOR next_boundary** (Stille-Padding davor,
+TARGET_TX_OFFSET=-0.8). `floor(time.time()/slot)*slot` rundet damit
+auf den VORHERIGEN Slot ab.
+
+Beispiel: TX-Ziel `:13:30` EVEN. ptt_on bei `:13:28.7`. Naive
+Berechnung: `floor(:13:28.7/15)*15 = :13:15` ODD. Falsch.
+
+**Fix:** `tx_started.emit()` bekommt `next_boundary` (vom Encoder
+bereits in `_next_slot_boundary()` korrekt berechnet) direkt als
+`slot_start_ts`. Kein `time.time()`-Roundoff-Bug mehr.
+
+**Field-Test-Validierung Mike (05:27-05:30 UTC):**
+- TX `[E] → Sende DA1TST DA1MHH -21`
+- RX `[O] ← Empf. DA1MHH DA1TST R+18`
+- TX `[E] → Sende DA1TST DA1MHH RR73`
+- RX `[O] ← Empf. DA1MHH DA1TST 73`
+→ TX und RX in unterschiedlichen Slots, sauber getrennt. Zwei komplette
+QSOs in Folge ohne Slot-Konflikt-Anzeige.
+
+**Atomarer Commit `04388ef`** + Tests 756/756 gruen (kein Test-Update
+noetig, da test_encoder_slot.py den emit nur auf API-Ebene testet,
+nicht den TX-Trigger-Pfad).
+
+**Lesson:** v0.95-Plan-V2-V3 hat "tx_started feuert AM TX-Start"
+geschrieben — das war ungenau. Tatsaechlich feuert es VOR dem TX-Start
+(noch im Stille-Padding). Bei zukuenftigen Slot-bezogenen Aenderungen
+genauer pruefen WANN ein Signal feuert relativ zur Slot-Boundary.
+
+**Offen entdeckt (NEU, P1.5 in TODO):** Im CQ-Mode ignoriert die
+State-Machine eingehende DA1TST-CQ-Antworten — FlexRadio sendet weiter
+CQ statt mit Report zu antworten. Mike's seit langem bestehendes
+"doppelte Antworten"-Problem. Separater Workflow V1→V2→R1→V3.
+
+---
+
 ## 2026-05-05 v0.95 — QSO-Panel Slot-Tag/Zeit-Display-Fix
 
 **Ausloeser:** Mike's Field-Test 03:36-03:40 UTC mit DA1TST/R6OK/PY7ZZ.
