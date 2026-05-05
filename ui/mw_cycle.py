@@ -49,6 +49,12 @@ class CycleMixin:
         if self._rx_mode == "diversity":
             ant, was_phase = self._pop_diversity_queue()
 
+        # v0.94: waehrend Phase 2 (DXTuneDialog) zaehlt die Hardware-Antenne
+        # aus _schedule[_step], nicht das Diversity-Pattern. Sonst falsche
+        # Antennen-Markierung im RX-Panel + accumulate_stations
+        # (Mike's Screenshot 2026-05-05: CU2JX als A1 obwohl ANT2 G20 lief).
+        ant = self._resolve_hardware_antenna(ant)
+
         if self._rx_mode == "diversity" and was_phase == "measure":
             self._handle_diversity_measure(messages, ant)
 
@@ -629,6 +635,27 @@ class CycleMixin:
         hist_data = self._diversity_ctrl.get_histogram_data()
         hist_data['cq_freq'] = self.encoder.audio_freq_hz  # Marker = manuell
         self.control_panel.update_freq_histogram(hist_data)
+
+    def _resolve_hardware_antenna(self, default_ant: str) -> str:
+        """Liefert Antennen-Tag passend zur tatsaechlichen Hardware (v0.94).
+
+        Im Normalfall: ``default_ant`` aus Diversity-Pop-Queue ("A1"/"A2").
+        Bei aktivem DXTune-Dialog (Phase 2 Gain-Messung): Hardware-Antenne
+        aus ``_schedule[_step]`` (z.B. "ANT2") → kurze Form "A2".
+
+        Verhindert Mismatch zwischen Hardware-Antenne und Display/Stats:
+        ``radio.set_rx_antenna()`` aus DXTuneDialog._start_step schaltet
+        live, aber Diversity-Pattern liefert weiter "A1"/"A2" via
+        ``choose()`` → Falsch-Markierung im RX-Panel.
+        """
+        dlg = getattr(self, '_dx_tune_dialog', None)
+        if dlg is None:
+            return default_ant
+        try:
+            ant_long, _gain = dlg._schedule[dlg._step]
+        except (IndexError, AttributeError, TypeError):
+            return default_ant
+        return "A1" if ant_long == "ANT1" else "A2"
 
     def _is_antenna_tuning_active(self) -> bool:
         """Prueft ob RF-Tuning, Radio-Suche oder Diversity-Einmessphase aktiv.
