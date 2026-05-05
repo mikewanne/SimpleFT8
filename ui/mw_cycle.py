@@ -752,6 +752,10 @@ class CycleMixin:
 
         # RX zuerst anzeigen, dann verarbeiten (sonst erscheint TX-Antwort vor RX im Log)
         if msg.target == self.settings.callsign:
-            self.qso_panel.add_rx(msg.raw)
+            self.qso_panel.add_rx(
+                msg.raw,
+                tx_even=getattr(msg, '_tx_even', None),
+                slot_start_ts=getattr(msg, '_slot_start_ts', None),
+            )
 
         self.qso_sm.on_message_received(msg)
