@@ -55,12 +55,21 @@ Courtesy-73 → KEIN weiteres 73 von EA2BHE → Auto-Sequence sauber
 gestoppt. ✓ QSO komplett. Pattern bestaetigt fuer Standard-FT8-Apps
 (WSJT-X, JTDX, MSHV).
 
-**IC-7300 Test-Setup-Quirk (DA1TST):** Mike's eigenes IC-7300 als
-DA1TST sendet weiterhin 7+ 73 trotz unseres Courtesy-73 (Field-Test
-13:48-:51 UTC). Das ist KEIN SimpleFT8-Bug — der eingebaute FT8-Decoder
-des IC-7300 ist enger getaktet als WSJT-X und akzeptiert unser
-Courtesy-73 nicht. Echte Stationen weltweit (EA2BHE) verhalten sich
-korrekt. Test-Setup-Spezifikum, kein Fix erforderlich.
+**SDR-Control Endlos-73 GEKLAERT (Mike 2026-05-05):** das anfangs
+beobachtete „IC-7300 sendet endlos 73"-Verhalten lag an Mike's
+SDR-Control-Konfig: **Retry=99** in den Auto-Sequence-Einstellungen
+(Test-Override von vor Wochen). Mit Retry=99 sendet SDR-Control 99×
+sein 73 wenn keine QSO-Ende-Bestaetigung kommt. Das ist **Mike's
+eigene Test-Konfiguration**, kein App-Bug. Loesung: SDR-Control
+Retry auf Standard (1) zurueck. Mike's 12000-QSO-Erfahrung war
+unauffaellig weil dort entweder Retry=Standard oder Gegenstationen
+mit WSJT-X (1× 73, kein Retry).
+
+**SDR-Control-Verhalten (laut Help-Text):** „Meine App wartet nach
+RR73 einen Taktzyklus und antwortet, falls sie eine weitere
+73-Nachricht korrekt empfaengt, ebenfalls mit einem 73 — fuer
+zuverlaessige QSO-Protokollierung." → identisch zu P1.10's Logik.
+Beide Apps machen dasselbe Standard-Verhalten.
 
 **Known Issue (Plan-R1 F1, NICHT durch P1.10 verschaerft):**
 `rr73_retries` shared zwischen WAIT_RR73 + WAIT_73-Hoeflichkeits-Pfad.

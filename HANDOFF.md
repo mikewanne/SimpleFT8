@@ -27,17 +27,27 @@ QSO mit EA2BHE (echte Station, Locator IN83):
 (WSJT-X, JTDX, MSHV). Echte Stationen weltweit akzeptieren das
 abschliessende 73 sauber.
 
-### 🟡 IC-7300 Test-Setup-Quirk (DA1TST 13:48-:51, NICHT-Problem)
-Mike's eigenes IC-7300 als DA1TST sendet WEITERHIN 7+ 73 trotz
-unseres Courtesy-73 (Field-Test 13:48-:51 UTC). Das **ist KEIN
-SimpleFT8-Bug** — IC-7300's eingebauter FT8-Decoder ist enger
-getaktet als der WSJT-X-Standard und erwartet 73 in einem praeziseren
-Zeitfenster oder mit anderen Eigenschaften (DT-Drift?
-Frequenz-Praezision?). Andere Stationen (EA2BHE) akzeptieren unser
-Courtesy-73 sauber.
+### ✅ IC-7300 Endlos-73 GEKLAERT (Mike 2026-05-05) — KEIN Bug
+**Wurzel:** Mike's SDR-Control hatte **Retry=99** in den Auto-Sequence-
+Einstellungen (Test-Override). Mit Retry=99 sendet SDR-Control 99× sein
+73 wenn keine "QSO-Ende-Bestaetigung" kommt. Das ist **Mike's eigene
+Test-Konfiguration**, kein SimpleFT8-Bug, kein SDR-Control-Bug.
 
-→ Mike's Test-Setup-Spezifikum, nicht weiter zu fixen. Falls in
-Zukunft echte IC-7300-Funker das Problem melden, eigener Workflow.
+**SDR-Control-Verhalten (laut Help-Text vom Entwickler):**
+> „Meine App wartet nach RR73 einen Taktzyklus und antwortet, falls
+> sie eine weitere 73-Nachricht korrekt empfaengt, ebenfalls mit einem
+> 73 — fuer zuverlaessige QSO-Protokollierung."
+
+Das ist **identisch zu P1.10's Courtesy-73-Logik**. Beide Apps machen
+also dasselbe Standard-Verhalten. Bei Mike's Retry=99 → 99× 73-Spam.
+Bei Standard-Retry (1-3) → max 3 73-Slots, sauberer Abschluss.
+
+**Loesung:** Mike setzt SDR-Control Retry auf Standard (1) zurueck.
+Kein Code-Aenderung in SimpleFT8 noetig.
+
+**12000-QSO-Erfahrung erklaert:** Mike hatte Retry=99 erst kuerzlich
+fuer Test gesetzt. Vorher mit Standard-Retry und gegen WSJT-X-Stationen
+(senden 1× 73, kein Retry) gab es nie ein Problem.
 
 ### ✅ P1.9 Field-Test BESTAETIGT (Mike 11:18-:24 UTC, 2 QSOs DA1TST)
 QSO 1 (11:19:45 RX → 11:20:00 Report, Replace mit -20).
