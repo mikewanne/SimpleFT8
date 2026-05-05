@@ -2,6 +2,36 @@
 
 **Stand 2026-05-05:** **v0.94 — KALIBRIEREN-Pipeline + Stats-Bug Phase 2.**
 
+## 🟢 OFFEN nach v0.94 (Liste fuer naechste Session)
+
+### Field-Test (Mike's Aufgabe)
+- **v0.94 KALIBRIEREN-Button im Diversity-Modus** → Phase 2 + Phase 3
+  laufen automatisch durch, Cache + 1h-Timer frisch
+- **v0.94 Stats-Pause Phase 2 verifizieren** → waehrend DXTuneDialog
+  laufen darf KEIN Stats-Logging mehr (~/.simpleft8/simpleft8.log)
+- **v0.94 RX-Panel-Hardware-Antenne** → waehrend Phase 2 zeigt RX-
+  Panel die Antenne aus _schedule[_step] (ANT1/ANT2 als A1/A2)
+- **v0.93 Cache-Reuse beim Bandwechsel innerhalb 1 h** → 5-s-Toast
+- **v0.93 FT2-Score-basierte Statistik** bei duenner Stations-Dichte
+- **v0.93 1h-Frist** → nach 60 Min ohne QSO/CQ automatischer Re-Measure
+- **v0.91 Block 1+2 Pipeline-Dauer messen** (Best-Case ~2:30, typisch ~3:20)
+- **Antennen-Drossel-Beobachtung** (Mantelwellensperre 04.05.
+  ausgebaut, 8-foermige Schlaufen)
+
+### Code-Refactor offen (V1→V2→R1→V3 noch nicht gestartet)
+- **v0.95 Single-Instance-Lock im App-Code** — robuster Schutz gegen
+  Doppelstart (Lockfile vs TCP-Port). Memory:
+  `project_v095_single_instance_lock.md`. Aktuell nur Memory-Regel fuer
+  Claude (`feedback_app_start_single_instance.md`).
+
+### Wartung
+- **~50 neue Statistics-Files** committen (auswertung/ + statistics/
+  Output-Files vom heutigen generate_plots-Run plus Decoder-Logs)
+- **Stats-Sammlung 5 Tage flaechendeckend** pro Stunde-Modi-Slot
+  (laut Memory `project_statistics_strategy.md`)
+
+---
+
 Mike's Field-Test-Befund 05.05.: RX-Panel zeigte waehrend Phase 2
 "A1" fuer Station die im DXTuneDialog-Bucket "ANT2 G20" landete.
 3 atomare Commits + Doku (`2c1c58d`, `7ca791e`, `2658ee1`):
