@@ -5,6 +5,51 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-05 v0.95.3 — P1.9 First-Reply-Lost-Bug-Fix
+
+**Atomare Commits:** `20c7fe7` (Code+Tests, 7 Files, +282/-29) + Doku-Commit.
+
+**Bug-Wurzel:** Decoder-Encoder-Timing-Race bei FlexRadio (TX-Buffer 1.3s).
+Encoder wachte `boundary - 1.3s`, Decoder wachte `slot + 13.5s` und war
+0.5-3.0s spaeter fertig → Reply von DA1TST kam typisch wenn CQ-Audio
+bereits in `send_audio` (BLOCKING) lief → `_pending_reply` wurde gesetzt
+aber Encoder hielt CQ-Message in Worker-Local → Report 1 Slot zu spaet.
+
+**Field-Test 05.05.:** 4× reproduziert (09:39, 09:47, 09:55, 10:05 UTC).
+Mike: *„den kann ich gut immer wieder nachstellen"*.
+
+**Workflow:** voller V1→V2→R1→V3 Diagnose + voller V1→V2→R1→V3 Plan.
+V2 fand 12 Findings A-L (9 ⛔ kritisch + 3 Test-Ergaenzungen). DeepSeek-R1
+(Reasoner) bestaetigte alle 6 Pruefauftraege als KORREKT, KEINE neuen
+Findings. R1-Hinweis: gleicher Encode-Bug im Nicht-Replace-Pfad
+(separater Fix, nicht zu P1.9).
+
+**Fix-Kombination (atomar — Option C alleine fixt nicht):**
+- `core/decoder.py:138` — `_WAKE_OFFSETS["FT8"]` 1.5 → 2.5 (Decoder
+  ready 0.5-2.5s VOR Encoder-Wake). SNR-Effekt < 0.1 dB (R1).
+- `core/encoder.py` — `request_replace(message)` API + Loop in
+  `_tx_worker_inner` fuer Re-Encode + `_audio_started`/`_replace_message`/
+  `_replace_lock` + `tx_finished.emit` im Encode-Fehler-Pfad
+  (V2 FINDING-F).
+- `core/qso_state.py` — Signal `try_replace_pending_tx` + Emit in
+  `on_message_received` bei CQ_CALLING + Defense-in-Depth in `_send_cq()`
+  (R1-Empfehlung).
+- `ui/mw_qso.py` — `_on_try_replace_pending_tx` Slot mit `tx_even`-vor-
+  `request_replace` (V2 FINDING-D), `_was_cq=True` (FINDING-A),
+  Debug-Log (FINDING-B), QSO-Panel-Anzeige (FINDING-C).
+- `ui/main_window.py:543` — Connect des neuen Signals.
+
+**Erwartete Wirkung:** Report im SELBEN Slot wo CQ scheduled war
+(:06:00 statt :06:30). Failure-Pfad (Decoder zu langsam): Status quo
+(1 Slot Delay, kein Crash, kein Doppel-TX).
+
+**Tests:** 759 → 764 gruen (+5: 3 Encoder API + 2 SM Logik).
+Neue Datei `tests/test_p1_9_replace.py`.
+
+**Memory-Lesson:** keine neue — V1→V2→R1→V3 lief sauber.
+
+---
+
 ## 2026-05-05 v0.95.2 — CQ-Reply-Bug-Fix (P1.5)
 
 **Bug-Wurzel:** 5-Min-Sperre `_WORKED_BLOCK_SECS = 300` blockierte

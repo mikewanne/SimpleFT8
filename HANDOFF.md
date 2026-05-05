@@ -1,20 +1,34 @@
 # HANDOFF — SimpleFT8
 
-**Stand 2026-05-05:** **v0.95.2 — CQ-Reply-Bug-Fix (P1.5).**
-5-Min-Sperre `_WORKED_BLOCK_SECS = 300` + Methode `_is_worked_recently`
-+ 3 Block-Stellen + Eintrag-Stelle in `core/qso_state.py` komplett
-entfernt (-22 Zeilen, +0 Code). Mike's Funker-Entscheidung-Linie:
-bekannte Stationen duerfen wieder anrufen. Voller V1→V2→R1→V3 Diagnose
-+ voller V1→V2→R1→V3 Plan, R1 zwei Mal bestaetigt ohne Halluzinationen.
-Tests 756 → 759 gruen (+3). Atomarer Commit `43dd062` + Doku-Commit.
+**Stand 2026-05-05:** **v0.95.3 — P1.9 First-Reply-Lost-Bug-Fix.**
+Atomare Commits `20c7fe7` (Code+Tests, +282/-29 in 7 Files) + Doku-Commit.
+Wurzel: Decoder-Encoder-Timing-Race (FlexRadio TX-Buffer 1.3s) — Encoder
+wachte 0.2-3.0s VOR Decoder fertig → CQ-Audio bereits in send_audio
+(BLOCKING) wenn _pending_reply gesetzt wurde → Report 1 Slot zu spaet.
+Fix-Kombination (atomar): Decoder-Wake 1.5→2.5 + Encoder request_replace
+API + State-Machine try_replace_pending_tx Signal + Defense-in-Depth in
+_send_cq + mw_qso Slot-Handler + Connect in main_window:543. Voller
+V1→V2(12 Findings A-L)→R1(6 Pruefauftraege KORREKT)→V3 Workflow.
+Tests 759 → 764 gruen (+5).
 
-## 🟢 OFFEN nach v0.95.2 (Liste fuer naechste Session)
+## 🟢 OFFEN nach v0.95.3 (Liste fuer naechste Session)
 
-### 🟡 P1.5 Field-Test ausstehend
-Mike testet das DA1TST-Szenario: vorheriges QSO mit RR73, dann gleiche
-Station < 5 Min spaeter ruft uns nochmal an. Erwartet: App antwortet
-mit Report. Falls Symptom doch noch da ist → die Sperre als Verursacher
-ausgeklammert, Diagnose-V4 mit neuen Daten.
+### 🟡 P1.9 Field-Test ausstehend (Mike)
+30m FT8 mit DA1TST am IC-7300. Erwartung: Report im SELBEN Slot wo CQ
+scheduled war. Logs sammeln: `[Encoder] TX-Replace →` und
+`[QSO] P1.9 Replace OK:` fuer Erfolgsquote ueber 5-10 QSOs.
+
+### ✅ P1.5 Field-Test BESTAETIGT (Mike 09:35-:44 UTC, 4 QSOs in Folge)
+SP6AXW + DA1TST + HA0GK (aus Warteliste) + S50XX alle erfolgreich.
+Bekannte Stationen koennen wieder anrufen, Caller-Queue-Pop funktioniert.
+P1.5-Symptom „App ignoriert komplett" ist weg.
+
+### 🟡 P1.8 — Report-SNR-Bug `_last_snr` statt `msg.snr` (NEU 2026-05-05)
+Wir senden Reports mit schlechteren dB-Werten als wir empfangen
+(z.B. DA1TST: wir -23, er R+19 = 42 dB Diff). Wurzel: `_last_snr`
+wird fuer jede msg im Slot ueberschrieben → letzte/schwaechste msg-SNR
+wird verwendet. Fix: `msg.snr` direkt in `_process_cq_reply` (qso_state.py:
+218, 233). Voller V1→V2→R1→V3, NACH P1.9 + P1.10. Siehe TODO.md P1.8.
 
 ### 🟢 P1.6 — Versionsnummer-Anzeige fehlt
 Mike sieht `SimpleFT8 v0.95.2` unten rechts nicht mehr. Code unveraendert.

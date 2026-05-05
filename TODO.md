@@ -9,7 +9,47 @@
 5-Min-Sperre `_WORKED_BLOCK_SECS = 300` an 3 Block-Stellen entfernt.
 Voller V1→V2→R1→V3 Diagnose + Plan, R1 zwei Mal bestaetigt ohne
 Halluzinationen. Tests 756 → 759 gruen. Atomarer Commit `43dd062`.
-Field-Test ausstehend (Mike). Siehe `HISTORY.md` v0.95.2.
+Field-Test bestaetigt: 4 QSOs in Folge, Warteliste-Pop ✓. Siehe
+`HISTORY.md` v0.95.2.
+
+---
+
+### ✅ P1.9 — First-Reply-Lost-Bug (ERLEDIGT 2026-05-05, v0.95.3)
+
+Decoder-Encoder-Timing-Race behoben. Atomarer Commit `20c7fe7` (Code+Tests,
++282/-29 in 7 Files) + Doku-Commit. Voller V1→V2(12 Findings A-L)→R1(6
+Pruefauftraege KORREKT)→V3 Plan-Workflow. Fix-Kombination:
+- `core/decoder.py:138` — `_WAKE_OFFSETS["FT8"]` 1.5 → 2.5 (SNR<0.1 dB R1)
+- `core/encoder.py` — `request_replace` API + Loop + `tx_finished.emit`
+  Encode-Fehler-Pfad (V2 FINDING-F)
+- `core/qso_state.py` — Signal `try_replace_pending_tx` + Defense-in-Depth
+  in `_send_cq()`
+- `ui/mw_qso.py` — `_on_try_replace_pending_tx` Slot (V2 FINDING-A/B/C/D)
+- `ui/main_window.py:543` — Connect
+
+Tests 759 → 764 gruen (+5: 3 Encoder API + 2 SM Logik). Siehe HISTORY.md
+v0.95.3. **🟡 Field-Test bei Mike ausstehend.**
+
+---
+
+### 🟢 P1.10 — End-of-QSO Icom-73-Loop (NEU 2026-05-05, separater Workflow)
+
+**Symptom:** Field-Test 09:55-09:59: nach unserem RR73 :57:00 + DA1TST 73
+:57:15 (QSO intern komplett) sendet DA1TST weiter 73 in :58:15 + :58:45.
+Wir reagieren nicht — bereits in CQ_CALLING.
+
+**Hypothese:** Icom IC-7300 Auto-Sequence wartet auf Hoeflichkeits-73
+zurueck, das WSJT-X optional sendet. Mike's Vermutung: SDR-Control
+empfindlicher als IC-7300.
+
+**Code-Pfad:** `core/qso_state.py:591-606` — bei 73-Empfang in WAIT_73
+wird `qso_confirmed.emit` + `_resume_cq_if_needed` direkt gerufen, KEIN
+73-zurueck.
+
+**Loesungs-Idee:** nach 73-Empfang ein einzelnes Hoeflichkeits-73
+zurueksenden (mit Counter max 1x). Zu pruefen mit R1.
+
+**Workflow:** voller V1→V2→R1→V3 — separater Plan nach P1.9-Abschluss.
 
 ---
 
@@ -44,6 +84,59 @@ trotzdem da**.
 - `qso_log.add_qso` analog absichern.
 
 **Trivial-Mittel:** ~1 Tag Aufwand. Kein eigener Workflow — KISS.
+
+---
+
+### 🟡 P1.8 — Report-SNR-Bug: `_last_snr` statt `msg.snr` (NEU 2026-05-05)
+
+**Symptom (Field-Test 09:35-:44):** wir senden Reports mit deutlich
+schlechteren dB-Werten als die Gegenstation uns gibt:
+
+| QSO | Wir senden | Gegenstation an uns | Diff |
+|---|---|---|---|
+| SP6AXW | -24 | R-17 | 7 dB |
+| DA1TST | -23 | R+19 | **42 dB** |
+
+42 dB-Differenz ist **zu gross** fuer reine Hardware-Asymmetrie (Mike's
+ANT1=Kelemen-Dipol vs. Icom-Antenne). Mike's Frage: *„wir senden raport
+mit wesendlich schlechtere wert als wir ihn empfangen?"*
+
+**Code-Wurzel-Verdacht:** `core/qso_state.py:218` und `:233` in
+`_process_cq_reply`:
+```python
+report = f"{self._last_snr:+03d}" if self._last_snr > -30 else "-10"
+```
+
+`self._last_snr` wird in `ui/mw_cycle.py:751` fuer **jede** dekodierte
+Message gesetzt:
+```python
+self.qso_sm.set_last_snr(msg.snr)
+```
+
+Decoder emit'd messages in **dekodierter Reihenfolge** (decoder.py:258-267,
+nach `_decode_with_subtraction` → starkes Signal zuerst, schwaches zuletzt).
+Der LAST-emit-msg setzt `_last_snr` final → das ist die SCHWAECHSTE
+Station im Slot, nicht die antwortende.
+
+**Beispiel:** im :39:00-Slot werden 5 Stationen dekodiert (HA1BF -16,
+GB8VED -15, EC3A -18, DA1TST **-10**, schwache Russland-Station -23). 
+`_last_snr=-23` zur Zeit `_process_cq_reply` laeuft → Report fuer DA1TST
+ist `-23` statt korrekt `-10`. **42 dB Bug erklaert!**
+
+**Fix:** in `_process_cq_reply` (Z. 218 + 233) `self._last_snr` durch
+`msg.snr` ersetzen (msg ist der DA1TST-Reply). Analog im
+`tx_slot_for_partner.emit(msg)`-Pfad checken.
+
+**Plus:** auch in `start_qso()` (Z. 263) nutzt `_last_snr` — das ist OK
+weil bei Hunt der User klickt und KEIN Slot-spezifisches msg vorliegt.
+
+**Workflow:** voller V1→V2→R1→V3. Nicht trivial — der Pfad geht durch
+die State-Machine, mehrere Stellen pruefen. **R1 muss bestaetigen ob
+`msg.snr` an allen relevanten Stellen die richtige Quelle ist.**
+
+**Prio:** mittel — kosmetisch wirkend, aber FT8-Reciprocity-Praxis ist
+wichtig (echte Stationen verlassen sich auf akkurate Reports). Nicht
+blockierend, aber sollte NACH P1.9 (Anfang-Bug) und P1.10 (Ende-Bug) kommen.
 
 ---
 
