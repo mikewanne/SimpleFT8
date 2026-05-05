@@ -4,38 +4,12 @@
 
 ## ⭐ ALS NÄCHSTES (Priorität)
 
-### 🔴 P1.5 — CQ-Reply-Recognition-Bug (2026-05-05)
+### ✅ P1.5 — CQ-Reply-Recognition-Bug (ERLEDIGT 2026-05-05, v0.95.2)
 
-**Symptom Field-Test 05:30-05:33 UTC (Screenshot 2):**
-FlexRadio im CQ-Modus empfaengt DA1TST's CQ-Antwort `DA1MHH DA1TST J031`,
-ignoriert sie aber, sendet weiter CQ statt zu antworten. DA1TST wiederholt
-seine Antwort 3-4 mal — manchmal greift's irgendwann doch, manchmal nie.
-
-```
-05:31:15 [O] → Sende CQ                 (FlexRadio CQ)
-05:31:30 [E] ← Empf. DA1MHH DA1TST J031 (CQ-Antwort, wird ignoriert)
-05:31:45 [O] → Sende CQ                 (Sollte Report sein!)
-05:32:30 [E] ← Empf. DA1MHH DA1TST J031 (Wiederholung)
-05:32:45 [O] → Sende CQ                 (immer noch CQ!)
-```
-
-**Mike's Hauptbeschwerde** seit langem ("doppelte Antworten"-Problem,
-"manchmal geht's, manchmal nicht"). Sporadisch — daher schwer zu fangen.
-
-**Wahrscheinliche Bug-Orte (R1 muss systematisch pruefen):**
-- `core/qso_state.py` `_process_cq_reply()` (oder aequivalent) —
-  Format-Check fuer "MEINCALL CALL GRID" greift nicht zuverlaessig
-- `_was_cq` / `cq_mode` Flags — State-Konsistenz
-- Frequenz-Filter — DA1TST antwortet auf der gleichen Frequenz, sollte
-  okay sein
-- `on_message_received` Routing zu `_process_cq_reply` vs. anderen Pfaden
-
-**Workflow:** Voller V1→V2→R1→V3 — Mike-Wunsch saubere Loesung.
-NICHT trivial fixen, weil seit langem instabil.
-
-**Debug-Linien (`[DBGLOOP]`, `[DBGTX]`)** sind in v0.95.1 noch drin
-fuer dieses Bugfix-Field-Test. Werden bei P1.5-Fix entfernt oder
-bleiben als optionaler DEBUG-flag.
+5-Min-Sperre `_WORKED_BLOCK_SECS = 300` an 3 Block-Stellen entfernt.
+Voller V1→V2→R1→V3 Diagnose + Plan, R1 zwei Mal bestaetigt ohne
+Halluzinationen. Tests 756 → 759 gruen. Atomarer Commit `43dd062`.
+Field-Test ausstehend (Mike). Siehe `HISTORY.md` v0.95.2.
 
 ---
 
@@ -46,6 +20,30 @@ Code ist unveraendert (`ui/control_panel.py:1086`). Vermutlich Layout-
 Glitch, evtl. durch Display-2-Setup oder Resize abgeschnitten.
 
 **Trivial-Diagnose:** Resize-Test, evtl. Layout-Anchoring pruefen.
+
+---
+
+### 🟢 P1.7 — Lokaler Duplikat-Filter ADIF/Logbuch (2026-05-05)
+
+**Hintergrund:** P1.5-Fix entfernt 5-Min-Sperre nach QSO. Bekannte Stationen
+duerfen wieder anrufen (Mike's Funker-Entscheidung-Philosophie). Aber:
+wenn dieselbe Station < 5 Min nach RR73 nochmal anruft (z.B. ihr 73 ist
+nicht angekommen), wuerde ein zweites QSO entstehen → zweiter ADIF-Eintrag
++ zweiter qso_log-Eintrag.
+
+**QRZ.com filtert serverseitig** (Duplikat-Check Call+Band+Mode+Date+Time
+liefert `RESULT=FAIL REASON=duplicate` zurueck, im Code in
+`ui/mw_qso.py:386-392` als `dup` gezaehlt). Aber **lokal sind die Eintraege
+trotzdem da**.
+
+**Aufgabe:**
+- Duplikat-Check in `log/adif.py` vor `log_qso()`-Schreiben.
+- Logik: gleicher Call + gleiches Band + gleicher Modus binnen 60 Min
+  → entweder updaten (latest wins) oder skip + Info-Log.
+- UI-Hinweis im QSO-Panel ("Doppel-QSO mit X erkannt — uebersprungen").
+- `qso_log.add_qso` analog absichern.
+
+**Trivial-Mittel:** ~1 Tag Aufwand. Kein eigener Workflow — KISS.
 
 ---
 

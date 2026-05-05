@@ -5,6 +5,61 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-05 v0.95.2 — CQ-Reply-Bug-Fix (P1.5)
+
+**Bug-Wurzel:** 5-Min-Sperre `_WORKED_BLOCK_SECS = 300` blockierte
+CQ-Replies an 3 Stellen (`core/qso_state.py:480` Hauptpfad,
+`:191` `_process_cq_reply`, `:470` Caller-Queue-Add). Effekt: Stationen
+mit denen wir innerhalb 5 Min ein QSO hatten konnten uns nicht erneut
+anrufen — App ignorierte sie still.
+
+**Field-Test 05:30-05:33 UTC** zeigte: DA1TST nach :28:00 RR73
+versuchte ab :31:30 mehrfach uns zu rufen (Grid JO31), App sendete
+weiter CQ statt Report. Erklaerte Mike's Aussage „manchmal klappt
+QSO, manchmal nicht — auch mit fremden Stationen" (selbe Station < 5
+Min spaeter ruft erneut, oft weil unser RR73 nicht angekommen ist).
+
+**Workflow:** voller V1→V2→R1→V3 Diagnose + voller V1→V2→R1→V3 Plan.
+DeepSeek-R1 (Reasoner) bestaetigte zwei Mal Hauptwurzel, keine zweiten
+Pfade, keine Halluzinationen. Alle anderen Hypothesen (Race
+tx_finished/message_decoded, _send_cq clearet pending, Slot-Mismatch,
+is_grid 4-char, Auto-Hunt, encoder.abort-Race) verworfen.
+
+**Aenderungen `core/qso_state.py`** (Commit `43dd062`, -22 Zeilen, +0 Code):
+- Z. 119, 120 — `_worked_calls` dict + `_WORKED_BLOCK_SECS` geloescht
+- Z. 168-176 — Methode `_is_worked_recently` komplett geloescht
+- Z. 190-193 — Block #2 in `_process_cq_reply` geloescht
+- Z. 440-443 — TX_RR73 Eintrag-Stelle in `_worked_calls` geloescht
+- Z. 470 — Block #3 in Caller-Queue-Add geloescht
+- Z. 479-482 — Block #1 in Hauptpfad geloescht
+
+**Mike's Funker-Philosophie:** Filter „Neue Stationen" im RX-Panel ist
+die korrekte Stelle (blendet aus Anzeige aus, nicht aus Reply-Pfad).
+State-Machine soll nicht filtern — Funker entscheidet. Memory-Lesson:
+`feedback_funker_entscheidung_filter_in_rx.md`.
+
+**Tests:** 756 → 759 gruen (+3, 1 invertiert + 3 neu):
+- `test_qso_worked_recently_block` invertiert →
+  `test_qso_known_station_can_call_again`
+- NEU: `test_qso_cq_reply_during_tx_pending_then_processed`
+- NEU: `test_qso_caller_queue_accepts_known_station`
+- NEU: `test_qso_resume_pops_known_station_from_queue`
+
+**Folgebug-Risiko:**
+- Doppel-ADIF wenn Station < 5 Min nach RR73 erneut anruft → TODO P1.7
+  (lokaler Duplikat-Filter ADIF/Logbuch). QRZ.com filtert serverseitig
+  bereits (REASON=duplicate, ui/mw_qso.py:386-392 zaehlt als `dup`).
+- Endlos-Schleife wenn Station nie 73 sendet → real-Welt-Schutz: Funker
+  gibt nach 2-3 Versuchen auf, QSB beendet.
+- Stats-Bias: 0 (`_worked_calls` nur in qso_state.py genutzt, R1-grep
+  bestaetigt).
+
+**Atomare Commits:**
+- (1) `43dd062` `fix(qso_state): remove 5-min worked-recently lockout (P1.5, v0.95.2)`
+- (2) Doku-Commit (HISTORY + HANDOFF + CLAUDE + TODO + Memory)
+
+---
+
 ## 2026-05-05 v0.95.1 — Encoder-TX-Slot-Tag-Fix
 
 **Ausloeser:** Mike's Field-Test mit IC-7300 als ODD-Gegenstation
