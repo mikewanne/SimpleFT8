@@ -13,10 +13,41 @@ Tests 759 → 764 gruen (+5).
 
 ## 🟢 OFFEN nach v0.95.3 (Liste fuer naechste Session)
 
-### 🟡 P1.9 Field-Test ausstehend (Mike)
-30m FT8 mit DA1TST am IC-7300. Erwartung: Report im SELBEN Slot wo CQ
-scheduled war. Logs sammeln: `[Encoder] TX-Replace →` und
-`[QSO] P1.9 Replace OK:` fuer Erfolgsquote ueber 5-10 QSOs.
+### ✅ P1.9 Field-Test BESTAETIGT (Mike 11:18-:24 UTC, 2 QSOs DA1TST)
+QSO 1 (11:19:45 RX → 11:20:00 Report, Replace mit -20):
+  `[Encoder] TX-Replace → 'DA1TST DA1MHH -20'`
+  `[QSO] P1.9 Replace OK: CQ → 'DA1TST DA1MHH -20'`
+QSO 2 (11:22:15 RX → 11:22:30 Report, Replace mit -23): identisch.
+2/2 Replace-Pfad genommen, kein „erster Ruf ignoriert" mehr. Bug tot.
+
+### 🔴 P1.10 — End-of-QSO Icom-73-Loop (NEU 2026-05-05, Diagnose offen)
+**Symptom:** Field-Test 11:24-:27 UTC + 11:28-:29 UTC zweimal reproduziert.
+Nach unserem RR73 + DA1TST 73 (QSO komplett, ADIF geloggt) sendet der
+IC-7300 von DA1TST **5× weiter `73`** in den Folgeslots (alle :15-Slots).
+Wir senden CQ → Icom „antwortet" mit 73 → ignoriert von uns. Nach 5 73's
+gibt der IC-7300 auf.
+
+**Trace 1 (11:24-:27):**
+- :24:00 [E] RR73 → :24:15 [O] 73 (DA1TST) → State WAIT_73 → CQ_CALLING
+- :24:30 [E] CQ → :24:45 [O] 73 → ignoriert (CQ_CALLING)
+- :25:00 [E] CQ → :25:15 [O] 73 → ignoriert
+- :25:30 [E] CQ → :25:45 [O] 73 → ignoriert
+- :26:00 [E] CQ → :26:15 [O] 73 → ignoriert
+- :26:30 [E] CQ → IC-7300 still
+- :27:45 [O] DA1TST JO31 (neuer Anruf) → P1.9 Replace OK ✓
+
+**Code-Pfade verifiziert:**
+- `core/qso_state.py:582-586` — `WAIT_73` + `73`-Empfang: `qso_confirmed.emit`
+  + `_resume_cq_if_needed` direkt → kein 73 zurueck. Hier liegt der Hebel.
+- `core/qso_state.py:419-436` — `on_message_sent` `TX_RR73`: `qso_complete.emit`
+  + ADIF + state → WAIT_73. Sauber.
+- `core/qso_state.py:447-451` — CQ_CALLING + 73 → log „nach Timeout/CQ ignoriert".
+
+**Mike's Hypothese (zu pruefen):** WSJT-X sendet optional Hoeflichkeits-73
+zurueck nach 73-Empfang, IC-7300 wartet darauf. Loesung: 1× Hoeflichkeits-
+73 nach 73-Empfang in WAIT_73, mit Counter (max 1× pro QSO).
+
+**Naechster Schritt nach Compact:** P1.10 V1 schreiben.
 
 ### ✅ P1.5 Field-Test BESTAETIGT (Mike 09:35-:44 UTC, 4 QSOs in Folge)
 SP6AXW + DA1TST + HA0GK (aus Warteliste) + S50XX alle erfolgreich.
