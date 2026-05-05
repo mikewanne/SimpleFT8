@@ -41,12 +41,15 @@ class QSOMixin:
             return " (ANT2)"
         return f" (ANT2 ↑{abs(delta):.1f} dB)"
 
-    @Slot(str)
-    def _on_tx_started(self, message: str):
+    @Slot(str, bool, float)
+    def _on_tx_started(self, message: str, tx_even: bool, slot_start_ts: float):
         """TX begonnen — Nachricht mit einheitlichem Antennen-Label ins QSO-Panel.
 
         Verwendet `_antenna_pref_label` damit Format identisch zu Rufe...-Eintrag
         und Statusbar ist (verhindert Verwirrung wie z.B. 'ANT1 Δ1.0dB').
+
+        tx_even/slot_start_ts vom Encoder durchgereicht — qso_panel zeigt
+        damit den korrekten Slot-Tag/Zeitstempel der TX-Aktion.
         """
         ant_label = ""
         if not message.startswith("CQ "):
@@ -56,7 +59,8 @@ class QSOMixin:
                     # _antenna_pref_label liefert " (ANT...)" → fuehrendes Leerzeichen
                     # entfernen, qso_panel.add_tx setzt eigene Trennspaces.
                     ant_label = self._antenna_pref_label(call).lstrip()
-        self.qso_panel.add_tx(message, ant_label)
+        self.qso_panel.add_tx(message, ant_label,
+                              tx_even=tx_even, slot_start_ts=slot_start_ts)
 
     @Slot(object)
     def _on_station_clicked(self, msg: FT8Message):

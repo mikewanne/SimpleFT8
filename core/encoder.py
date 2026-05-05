@@ -34,12 +34,15 @@ class Encoder(QObject):
     TX-Pfad: FT8 encode → VITA-49 float32 stereo 48kHz → FlexRadio UDP
 
     Signals:
-        tx_started: (str) — TX begonnen
+        tx_started: (str, bool, float) — TX begonnen mit
+            (message, tx_even, slot_start_ts). slot_start_ts ist der
+            Slot-Start in UTC-Sekunden. Ermoeglicht qso_panel.add_tx
+            korrekte Slot-Anzeige unabhaengig von Signal-Latenz.
         tx_finished: () — TX abgeschlossen
         encoding_error: (str) — Fehler
     """
 
-    tx_started = Signal(str)
+    tx_started = Signal(str, bool, float)
     tx_finished = Signal()
     encoding_error = Signal(str)
 
@@ -272,7 +275,14 @@ class Encoder(QObject):
             self._radio.set_tx_antenna("ANT1")
             self._radio.ptt_on()
 
-        self.tx_started.emit(message)
+        # Slot-Quelle fuer qso_panel.add_tx: TX startet jetzt — Slot ist
+        # der Slot in dem time.time() liegt (TX-Trigger-Zeit). Konsistent
+        # mit Decoder-seitiger pre-sleep-Berechnung.
+        _tx_now = time.time()
+        _slot_dur = {"FT8": 15.0, "FT4": 7.5, "FT2": 3.8}.get(self._mode, 15.0)
+        _slot_start_ts = _tx_now - (_tx_now % _slot_dur)
+        _tx_even = int(_slot_start_ts / _slot_dur) % 2 == 0
+        self.tx_started.emit(message, _tx_even, _slot_start_ts)
 
         # 7. Stream: FlexRadio Hardware-Clock uebernimmt das Pacing
         #    t_start = jetzt → jedes Paket bei t_start + n*5.33ms (absolut, kein Drift)

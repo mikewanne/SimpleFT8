@@ -63,7 +63,7 @@ class RadioMixin:
         self.encoder.set_radio(self.radio)
         self.encoder.set_decoder(self.decoder)
         self.encoder.tx_started.connect(
-            lambda msg: self.control_panel.set_tx_active(True)
+            lambda msg, te, sst: self.control_panel.set_tx_active(True)
         )
         self.encoder.tx_started.connect(
             self._on_tx_started,
