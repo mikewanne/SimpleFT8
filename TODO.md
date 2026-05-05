@@ -4,6 +4,75 @@
 
 ## ⭐ ALS NÄCHSTES (Priorität)
 
+### ✅ ERLEDIGT P1 — v0.95 QSO-Panel Slot-Tag/Zeit-Display-Fix (2026-05-05)
+
+7 atomare Commits (``dac4a73``..``5d4b767``). Decoder als single source
+of truth fuer Slot-Quelle. Tests 742 → 756 gruen. Voller V1→V2→R1→V3-
+Workflow zweimal. Field-Test offen (siehe HANDOFF.md).
+
+Original-Beschreibung (zur Doku):
+
+### 🔴 P1 (war offen) — QSO-Panel Slot-Tag/Zeit-Display falsch (2026-05-05)
+
+**Symptom Field-Test 03:38-:40 UTC:** RX und TX erscheinen mit identischem
+Slot-Tag `[E]` und Zeit, obwohl FT8 das physikalisch ausschliesst. QSO mit
+DA1TST/R6OK/PY7ZZ liefen real korrekt (IC-7300 DT 0.0-0.1 s) — reine
+Anzeige-Anomalie. RX-Eintraege haengen 1 Slot hinterher und vergeben das
+EVEN-Tag des Folge-Slots statt das ODD-Tag des TX-Slots der Nachricht.
+
+**Root Cause (R1-bestaetigt + Log-verifiziert):**
+- `ui/qso_panel.py:147-177` `_slot_tag()` + `add_rx()` nutzen
+  `time.time()` zum Decoder-Output-Zeitpunkt
+- Decoder-Output kommt 1 Slot zu spaet weil Audio-Buffer-Lag (FlexRadio
+  VITA-49). Decode selbst <0.2 s, aber `Zu wenig Audio: X < 90000` im Log
+  → Skip, Decode dann erst im Folge-Slot
+- `time.time()` zur Decode-Output-Zeit liegt damit im Folge-Slot
+
+**Loesung Option A (R1-Empfehlung, von uns erweitert):**
+- Decoder ermittelt `slot_start_ts` aus Wake-Zeit und setzt es als
+  Attribut auf jede Message (sichere Quelle, unabhaengig von GUI-Lag)
+- `_assign_slot_parity` nutzt Decoder-gesetzten Wert statt
+  `is_even_cycle()` zur Aufruf-Zeit
+- `add_rx`/`add_tx` bekommen `tx_even` + `slot_start_ts` durchgereicht
+
+**Dokumente:**
+- V1: `prompts/qso_panel_slot_display_v1.md`
+- V2: `prompts/qso_panel_slot_display_v2.md`
+- R1: `prompts/qso_panel_slot_display_r1.md`
+- V3: noch zu schreiben → Mike-Freigabe vor Code
+
+**Stats-Risiko:** R1-bewertet < 0.1 % falsche Slots am Stundenrand,
+symmetrisch verteilt → kein Bias in Pooled-Mean. **Historische Daten
+nicht korrigieren.**
+
+---
+
+### 🟡 P2 — Reply-Lag durch Audio-Buffer-Latenz (2026-05-05)
+
+**Beobachtung Field-Test:** Bei R6OK-QSO antwortet DA1MHH mit Report erst
+:45:30 statt :45:00 (1 Slot zu spaet). Folge: R6OK haelt Mike's Antwort
+fuer ausgeblieben und sendet seinen CQ-Reply :45:15 ODD nochmal — wirkt
+fuer Mike wie „doppelte Antwort".
+
+**Vermutete Wurzel:** Selbe wie P1 — Audio-Buffer-Lag bei FlexRadio
+VITA-49. Decoder-Output kommt 1 Slot zu spaet → State-Machine-Reaktion
++ TX-Pipeline-Trigger landen im uebernaechsten Slot statt im naechsten.
+
+**Wichtig:** Erst nach P1-Fix angreifen — das korrekte Slot-Display
+zeigt erst dann zuverlaessig wieviel Lag wirklich da ist und ob die
+Hypothese „selbe Wurzel" stimmt. Vielleicht reduziert sich der Reply-
+Lag bereits auf < 1 Slot wenn die Anzeige stimmt.
+
+**Mogliche Eingriffe (sofern nach P1 noch noetig):**
+- Wake-Offset im Decoder vergroessern (aktuell `_WAKE = SLOT - 1.5s`,
+  evtl. SLOT - 2.5s) — gibt Audio-Buffer mehr Zeit voll zu werden
+- VITA-49 Jitterbuffer-Konfiguration im FlexRadio-Connector pruefen
+- Audio-Pre-Fetch / Buffer-Pacing untersuchen
+
+**Risiko hoch** — Hardware-naher Eingriff, eigener Workflow nach P1.
+
+---
+
 ### ✅ ERLEDIGT — v0.90 Mess-Pattern-Bug-Fix (2026-05-04)
 
 `core/diversity.py:86` auf fair 3:3 (``("A1","A1","A2","A2","A1","A2")``)

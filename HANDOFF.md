@@ -1,10 +1,21 @@
 # HANDOFF — SimpleFT8
 
-**Stand 2026-05-05:** **v0.94 — KALIBRIEREN-Pipeline + Stats-Bug Phase 2.**
+**Stand 2026-05-05:** **v0.95 — QSO-Panel Slot-Tag/Zeit-Display-Fix.**
 
-## 🟢 OFFEN nach v0.94 (Liste fuer naechste Session)
+## 🟢 OFFEN nach v0.95 (Liste fuer naechste Session)
 
-### Field-Test (Mike's Aufgabe)
+### Field-Test v0.95 (Mike's Aufgabe — direkt nach App-Restart)
+- **RX-Eintraege im QSO-Panel** zeigen ODD-Tag fuer Nachrichten der
+  Gegenstation (vorher faelschlich EVEN). Erwartete Sequenz bei DA1TST-
+  QSO: `03:38:15 [O] ← Empf.` statt `03:38:30 [E] ← Empf.`
+- **TX-Anzeige unveraendert** — eigene Sendungen weiter `[E]`/`[O]`
+  passend zum echten TX-Slot
+- **„Doppelte Antworten"-Optik geht weg** — Empfang und TX sind
+  visuell sauber getrennt (verschiedene Slots/Tags)
+- **Auto-Hunt** funktioniert weiter (R1+Code-Analyse: kein
+  Inversion-Schutz, Fix korrigiert nicht bricht)
+
+### Field-Test offen aus v0.94 (Liste fuer naechste Session)
 - **v0.94 KALIBRIEREN-Button im Diversity-Modus** → Phase 2 + Phase 3
   laufen automatisch durch, Cache + 1h-Timer frisch
 - **v0.94 Stats-Pause Phase 2 verifizieren** → waehrend DXTuneDialog
@@ -18,8 +29,12 @@
 - **Antennen-Drossel-Beobachtung** (Mantelwellensperre 04.05.
   ausgebaut, 8-foermige Schlaufen)
 
-### Code-Refactor offen (V1→V2→R1→V3 noch nicht gestartet)
-- **v0.95 Single-Instance-Lock im App-Code** — robuster Schutz gegen
+### Code-Refactor offen
+- **P2 Reply-Lag durch Audio-Buffer-Latenz** (TODO.md) — nach v0.95
+  Display-Fix kann Mike den ECHTEN Reply-Lag am korrekten Slot ablesen.
+  Falls Lag dann noch >1 Slot: separater Workflow (Wake-Offset +
+  Audio-Buffer-Tuning, hardware-nah).
+- **Single-Instance-Lock im App-Code** — robuster Schutz gegen
   Doppelstart (Lockfile vs TCP-Port). Memory:
   `project_v095_single_instance_lock.md`. Aktuell nur Memory-Regel fuer
   Claude (`feedback_app_start_single_instance.md`).

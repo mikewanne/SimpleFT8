@@ -5,6 +5,138 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-05 v0.95 — QSO-Panel Slot-Tag/Zeit-Display-Fix
+
+**Ausloeser:** Mike's Field-Test 03:36-03:40 UTC mit DA1TST/R6OK/PY7ZZ.
+RX und TX erschienen mit identischem Slot-Tag `[E]` im selben Zeitstempel,
+obwohl FT8 das physikalisch ausschliesst. QSOs liefen real korrekt
+(IC-7300 DT 0.0-0.1s, alle Reports + RR73 + 73 ausgetauscht) — reine
+Anzeige-Anomalie. Mike's „doppelte Antworten"-Beobachtung war Folge des
+Display-Bugs plus echte FT8-Wiederholung der Gegenstation.
+
+**Voller V1→V2→R1→V3-Workflow zweimal durchgezogen:**
+
+*Diagnose-Workflow:*
+- V1 Symptom-Doku (`prompts/qso_panel_slot_display_v1.md`)
+- V2 Self-Review (`_v2.md`)
+- R1 (`_r1.md`) — Hypothese bestaetigt: Decoder-Output kommt 1 Slot
+  zu spaet, `time.time()` zur Decode-Zeit ist im Folge-Slot. Empfehlung
+  Option A.
+- Audio-Buffer-Lag-Beweis: `~/.simpleft8/simpleft8.log` zeigt regelmaessig
+  `Zu wenig Audio: X < 90000` → FlexRadio VITA-49 liefert Audio mit Lag,
+  Decoder skipt initialen Slot, decodiert im Folge-Slot.
+
+*Implementierungs-Workflow:*
+- V1 Plan-Draft (`prompts/qso_panel_slot_fix_plan_v1.md`)
+- V2 Self-Review mit 10 Findings (`_v2.md`) — Wake-Drift-Behandlung,
+  `tx_started`-Signal-Migration, Konsumenten-Liste, Atomic-Commits
+- R1 (`_r1.md`) — durchgehend positiv, 2 Zusatztest-Empfehlungen
+- R1-Validierung: `not _candidate.tx_even` an mw_cycle.py:512 verifiziert
+  (R1 hat nicht halluziniert). Eine zusaetzliche `is_even_cycle()`-Stelle
+  in mw_qso.py:128 gefunden — laeuft aber im CQ-Start-Pfad auf User-Klick,
+  nicht latenz-betroffen, bleibt unveraendert.
+- V3 final mit R1-Empfehlungen + Validierungs-Anmerkung (`_v3.md`)
+
+**Architektur-Entscheidung:** Decoder ist die einzige sichere Slot-Quelle.
+Im Decoder-Loop wird der Wake-Zeitpunkt gezielt gewaehlt — `target_slot_start`
+wird PRE-SLEEP berechnet (driftfrei gegen Sleep-Jitter) und als Attribut
+auf jede Message bis zu allen Konsumenten durchgereicht.
+
+**7 atomare Commits:**
+
+### Commit 1 `dac4a73` feat(decoder): target_slot_start pre-sleep + Thread-Arg
+- `core/decoder.py:_decode_loop` — `target_slot_start` PRE-SLEEP berechnet
+- Thread-Spawn mit `(chunks, target_slot_start, slot_duration)` Args
+- `_process_cycle` Signatur erweitert
+- Tests 742/742 gruen (kein Verhaltenswechsel, nur Args durchgereicht)
+
+### Commit 2 `885d48a` feat(decoder): _slot_start_ts/_tx_even auf Messages setzen
+- `core/decoder.py:_process_cycle` setzt nach Decode auf jede Message:
+  `m._slot_start_ts = target_slot_start`, `m._tx_even = int(target_slot_start / slot_duration) % 2 == 0`
+- `[RX]`-Diagnose-Print nutzt latenz-freie Quelle
+- Tests 742/742 gruen — `_assign_slot_parity` ueberschreibt Werte noch
+
+### Commit 3 `6793e73` refactor(mw_cycle): _assign_slot_parity respektiert Decoder
+- `ui/mw_cycle.py:_assign_slot_parity` ueberschreibt nicht mehr,
+  ergaenzt nur fehlende Felder (Test-Mocks, AP-Lite-Rescue)
+- `_slot_from_utc`-Helper ENTFERNT (FT2-Fallback nicht mehr noetig —
+  Decoder liefert fuer alle Modi)
+- Tests 742/742 gruen — Decoder-Werte werden jetzt respektiert
+
+### Commit 4 `c919b72` feat(qso_panel): add_rx/add_tx mit slot_start_ts/tx_even
+- Beide Methoden bekommen optionale Parameter `tx_even`/`slot_start_ts`
+- Wenn gesetzt: korrekter Slot-Tag + Zeitstempel des TX-Slots
+- Fallback (Default `None`) bleibt rueckwaerts-kompatibel
+- Tests 742/742 gruen
+
+### Commit 5 `102e75f` feat(encoder): tx_started mit slot_start_ts/tx_even
+- `tx_started`-Signal: `Signal(str, bool, float)` (war `Signal(str)`)
+- Encoder berechnet pre-emit `slot_start_ts` aus TX-Trigger-Zeit
+- 2 Listener migriert: `mw_radio.py:65` Lambda, `mw_qso.py:_on_tx_started`
+- `mw_qso.py:59` reicht Werte zu `add_tx` durch
+- Tests 742/742 gruen
+- ⚠️ Vor Commit: `grep -rn "tx_started\.connect" --include="*.py"` durchgefuehrt
+  (R1-Empfehlung, alle Listener gefunden)
+
+### Commit 6 `88b6648` refactor(mw_cycle): add_rx mit Decoder-Slot-Feldern
+- `ui/mw_cycle.py:on_message_decoded` reicht `msg._tx_even` und
+  `msg._slot_start_ts` an `qso_panel.add_rx` durch
+- `getattr`-Fallback (None) fuer Tests/Mocks ohne Decoder-Felder
+
+### Commit 7 `5d4b767` test(slot): 14 neue Tests
+- `tests/test_slot_display.py` (7 Tests): add_rx/add_tx + _assign_slot_parity
+- `tests/test_decoder_slot_source.py` (4 Tests): target_slot_start
+  Drift-Robustheit + Mode-Konsistenz + Message-Attribute + FT2
+- `tests/test_encoder_slot.py` (2 Tests, R1-Empfehlung): Signal-Signatur
+  + Listener-Args
+- `tests/test_auto_hunt_extended.py` (1 Test): Decoder-gesetzter
+  `_tx_even` korrekt durchgeschleift
+- Tests **742 → 756 (+14, V3-Plan rechnete +11)** — 3 Bonus-Tests fuer
+  edge-cases (`add_rx_explicit_even_overrides_wallclock`, `_assign_slot_parity_partial_fields`,
+  `tx_started_listener_gets_all_three_args`)
+
+**R1-Validierung:** Keine Halluzinationen festgestellt.
+- `not _candidate.tx_even` Logik an mw_cycle.py:512 verifiziert
+- `tx_started.connect`-grep: 2 Listener gefunden (mw_radio.py:65 + 68),
+  beide migriert
+- `mw_qso.py:128` `is_even_cycle()` ist NICHT betroffen (User-Klick-Pfad)
+
+**Stats-Risiko (R1-bewertet):** `core/station_stats.py:113-117` nutzt
+`time.gmtime()` zur Aufrufzeit fuer Stunden-Datei. Maximaler Bias < 0.1 %
+(symmetrisch verteilt), kein Pooled-Mean-Effekt. **NICHT Teil dieses Fixes**
+— separates TODO falls je relevant. Historische Daten bleiben unkorrigiert.
+
+**Bekannter Float-Issue (vorbestehend):** `int(slot_start_ts / 3.8) % 2`
+fuer FT2 ist Float-bedingt nicht stabil bei aufeinanderfolgenden Slots.
+Selber Issue im alten `_slot_from_utc`-Code, durch diesen Fix nicht
+verursacht. Mike funkt praktisch FT8, daher unkritisch.
+
+**Erwartung Field-Test:**
+- RX-Eintraege im QSO-Panel zeigen ODD-Tag (statt faelschlich EVEN) fuer
+  Nachrichten der Gegenstation
+- RX-Zeitstempel = Slot-Start des TX-Slots (z.B. `03:38:15 [O]` statt
+  `03:38:30 [E]`)
+- TX-Anzeige unveraendert
+- Auto-Hunt funktioniert weiter (R1: Fix korrigiert, bricht nicht)
+- „Doppelte Antworten"-Optik geht weg — eine FT8-Wiederholung der
+  Gegenstation und Mike's TX im naechsten Slot sind dann visuell sauber
+  getrennt
+
+**Lessons:**
+1. **Pre-sleep-Berechnung kritisch:** `time.time()` post-sleep ist drift-
+   anfaellig (Sleep-Jitter, OS-Scheduler). Slot-Start vor sleep berechnen,
+   nach sleep nur noch verwenden.
+2. **Decoder als single source of truth:** Wake-Zeit ist die einzige
+   Stelle wo „welcher Slot gehoert das Audio" verlustfrei bekannt ist.
+   Alle Konsumenten ueber Message-Attribute versorgen statt eigene
+   Wallclock-Berechnungen.
+3. **R1 + Code-Validierung Pflicht:** R1's Auto-Hunt-Analyse liess sich
+   per `grep` verifizieren (`not _candidate.tx_even` an mw_cycle.py:512).
+   Eine `is_even_cycle()`-Stelle gefunden die R1 nicht erwaehnte —
+   nicht latenz-betroffen, aber wichtig zu pruefen.
+
+---
+
 ## 2026-05-05 v0.94 — KALIBRIEREN-Pipeline + Stats-Bug Phase 2
 
 **Ausloeser:** Mike's Field-Test 2026-05-05 nach v0.93-Release. Im
