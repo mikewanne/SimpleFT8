@@ -18,17 +18,6 @@ from core.station_accumulator import accumulate_stations
 from radio.presets import PREAMP_PRESETS
 
 
-def _slot_from_utc(utc_str: str):
-    """Even/Odd-Slot aus HHMMSS-String für FT2 (Periode 3.8s). None bei Fehler."""
-    if not utc_str or len(utc_str) < 6:
-        return None
-    try:
-        secs = int(utc_str[:2]) * 3600 + int(utc_str[2:4]) * 60 + int(utc_str[4:6])
-        return (int(secs / 3.8) % 2) == 0
-    except (ValueError, TypeError):
-        return None
-
-
 class CycleMixin:
     """Mixin fuer Zyklusverarbeitung — wird in MainWindow eingemischt.
 
@@ -133,23 +122,27 @@ class CycleMixin:
     # ───────────────────────────────────────────────────────────────────
 
     def _assign_slot_parity(self, messages):
-        """Slot-Parity setzen.
+        """Slot-Parity respektieren — Decoder hat sie bereits gesetzt.
 
-        ft8lib dekodiert innerhalb des SELBEN Slots (< 0.3s) →
-        is_even_cycle() zeigt noch den aktuellen Slot, KEIN not nötig.
-        FT2: 3.75s Zyklen → Slot aus Nachricht-UTC berechnen (Timer-Drift zu gross).
+        Der Decoder setzt seit V3-Slot-Fix latenz-frei
+        ``m._slot_start_ts`` und ``m._tx_even`` aus der Wake-Zeit. Diese
+        Werte sind robust gegen Sleep-Drift, Audio-Buffer-Lag und
+        Qt-Signal-Queue-Latenz.
+
+        Fallback nur fuer Test-Mocks ohne echten Decoder oder fuer
+        Messages aus alternativen Quellen (z.B. AP-Lite-Rescue).
         """
         if not messages:
             return
-        msg_was_even = self.timer.is_even_cycle()
-        mode = self.settings.mode
+        fallback_even = self.timer.is_even_cycle()
+        fallback_now = ntp_time.get_time()
+        slot = self.timer.cycle_duration
+        fallback_slot_start = int(fallback_now / slot) * slot
         for m in messages:
-            if mode == "FT2":
-                utc = getattr(m, '_utc_str', None) or getattr(m, '_utc_display', None)
-                slot = _slot_from_utc(utc) if utc else None
-                m._tx_even = slot if slot is not None else msg_was_even
-            else:
-                m._tx_even = msg_was_even
+            if not hasattr(m, '_tx_even'):
+                m._tx_even = fallback_even
+            if not hasattr(m, '_slot_start_ts'):
+                m._slot_start_ts = fallback_slot_start
 
     def _update_dt_correction(self, messages):
         """DT-Korrektur aus dekodierten Nachrichten aktualisieren + Anzeige."""
