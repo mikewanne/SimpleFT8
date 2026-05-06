@@ -867,14 +867,28 @@ class _QSOStatusCard(QFrame):
         lbl_status.setStyleSheet(f"color: #CC9944; font-size: 11px; font-family: {_FONT}; font-weight: bold;")
         lay.addWidget(lbl_status)
 
-        self.connection_label = QLabel("RADIO: Suche...")
+        # P1.22: RADIO/Decode/Lokaler Empfang einheitliche Schriftart (11px Menlo
+        # normal). Label-Teil grau via RichText, Wert dynamisch farbig.
+        self.connection_label = QLabel()
+        self.connection_label.setTextFormat(Qt.TextFormat.RichText)
         self.connection_label.setStyleSheet(
-            f"color: #FFD700; font-family: {_FONT}; font-size: 11px; font-weight: bold;"
+            f"font-family: {_FONT}; font-size: 11px;"
+        )
+        self.connection_label.setText(
+            f'<span style="color:{_TEXT};">RADIO: </span>'
+            f'<span style="color:#888;">Suche...</span>'
         )
         lay.addWidget(self.connection_label)
 
-        self.decode_label = QLabel("Decode: —")
-        self.decode_label.setStyleSheet(f"color: {_TEXT}; font-family: {_FONT}; font-size: 11px;")
+        self.decode_label = QLabel()
+        self.decode_label.setTextFormat(Qt.TextFormat.RichText)
+        self.decode_label.setStyleSheet(
+            f"font-family: {_FONT}; font-size: 11px;"
+        )
+        self.decode_label.setText(
+            f'<span style="color:{_TEXT};">Decode: </span>'
+            f'<span style="color:#666;">—</span>'
+        )
         lay.addWidget(self.decode_label)
 
         # P1.19/P1.21/P1.22: `Lokaler Empfang: ★★★☆☆` im Decode-Stil + UTC rechts
@@ -1629,11 +1643,18 @@ class ControlPanel(QWidget):
             "reconnecting": "RADIO: Reconnect...",
         }
         color = colors.get(status, "#888")
-        label = labels.get(status, f"RADIO: {status}")
-        self.connection_label.setText(label)
-        self.connection_label.setStyleSheet(
-            f"color: {color}; font-family: {_FONT}; font-size: 12px; font-weight: bold;"
-        )
+        label_text = labels.get(status, f"RADIO: {status}")
+        # P1.22: RichText mit einheitlich grauem Label + farbigem Wert
+        if ": " in label_text:
+            prefix, value = label_text.split(": ", 1)
+            self.connection_label.setText(
+                f'<span style="color:{_TEXT};">{prefix}: </span>'
+                f'<span style="color:{color};">{value}</span>'
+            )
+        else:
+            self.connection_label.setText(
+                f'<span style="color:{color};">{label_text}</span>'
+            )
         connected = (status == "connected")
         for btn in [self.btn_tune, self.btn_cq, self.btn_diversity,
                     self.btn_einmessen, self.btn_normal]:
@@ -1648,16 +1669,19 @@ class ControlPanel(QWidget):
         # _last_state wird in update_state gesetzt
 
     def update_decode_count(self, count: int):
-        """Anzahl dekodierter Stationen im letzten Zyklus."""
+        """Anzahl dekodierter Stationen im letzten Zyklus.
+        P1.22: RichText mit einheitlich grauem Label + farbigem Wert.
+        """
         if count > 0:
-            self.decode_label.setText(f"Decode: {count} Station{'en' if count != 1 else ''}")
-            self.decode_label.setStyleSheet(
-                f"color: #44FF44; font-family: {_FONT}; font-size: 12px;"
+            value = f"{count} Station{'en' if count != 1 else ''}"
+            self.decode_label.setText(
+                f'<span style="color:{_TEXT};">Decode: </span>'
+                f'<span style="color:#44FF44;">{value}</span>'
             )
         else:
-            self.decode_label.setText("Decode: —")
-            self.decode_label.setStyleSheet(
-                f"color: #666; font-family: {_FONT}; font-size: 12px;"
+            self.decode_label.setText(
+                f'<span style="color:{_TEXT};">Decode: </span>'
+                f'<span style="color:#666;">—</span>'
             )
 
     def update_cycle_bar(self, seconds_in_cycle: float, cycle_duration: float):
