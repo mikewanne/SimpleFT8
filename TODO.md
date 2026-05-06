@@ -100,6 +100,54 @@ Folgebug-Risiko aus P1.5: bekannte Station < 5 Min nach RR73 ruft erneut →
 zweites QSO + zweiter ADIF-Eintrag. QRZ.com filtert serverseitig, aber
 lokal nicht.
 
+### ⛔ P1.AP-FIX — AP-Lite Kandidaten-Format-Bug (NEU, BUG-FINDING 2026-05-06)
+
+**Befund via P1.AP E2E-Test-Suite** (kein Field-Test nötig):
+
+`core/ap_lite.py:126` — `generate_candidates` erzeugt für State 1
+(WAIT_REPORT) 4-Token-Nachrichten:
+```python
+candidates.append(f"{own_callsign} {their_callsign} {own_locator} {r:+03d}")
+# z.B. "DA1MHH DK5ON JO31 +05"
+```
+
+Aber FT8 erlaubt nur **3 Tokens pro Frame** (Locator XOR Report, nicht
+beides). ft8lib lehnt mit rc=5 → alle Korrelations-Scores = 0 →
+**State-1-Rescue scheitert IMMER**, auch bei sauberen Buffern.
+
+**Fix:** Kandidaten auf 3 Tokens reduzieren — Vorschlag Report-only:
+```python
+candidates.append(f"{own_callsign} {their_callsign} {r:+03d}")
+```
+
+Workflow: V1→V2→R1→V3 (Algorithmus-Aenderung in produktivem Code →
+Architektur-Pflicht laut CLAUDE.md). Tests existieren als Schutznetz
+(`test_ap_lite_e2e.py:test_try_rescue_state1_documents_bug` und
+`test_generate_candidates_state1_format_bug` — friert aktuelles
+kaputtes Verhalten ein, schlaegt fehl wenn Generator gefixt wird).
+
+**Aufwand:** ~1 Zeile Code, ~30 Min Workflow + Tests-Update.
+**Empfehlung:** post-Kur (Field-Test auf gefixten Generator zur
+Validierung dass Rescue-Rate steigt).
+
+---
+
+### ✅ P1.AP — AP-Lite synthetische E2E Test-Pipeline (ERLEDIGT 2026-05-06 v0.95.9)
+
+`tests/test_ap_lite_e2e.py` NEU — 14 Tests mit echtem ft8lib-Encoding +
+Gaussian-Rauschen. Decken correlate_candidate (clean/noisy/wrong/unrelated),
+align_buffers (dt/shape/range), try_rescue E2E (-30dB fail, State-2-Ranking,
+APLiteResult), Stats-Counter ab. Tests 816 → 830 gruen.
+
+**Findings dokumentiert:**
+- AP-Lite State-1-Generator ist kaputt (4-Token-Bug → P1.AP-FIX)
+- Costas-Referenz-Implementation findet auch identische Buffer mit Offset
+  (vereinfachte Naeherung, Code-TODO-Kommentar bestaetigt)
+- SCORE_THRESHOLD=0.75 wird auch von sauberen RR73-Buffern nicht erreicht
+  (~0.42), aber Ranking-Logik funktioniert
+
+---
+
 ### ✅ P1.20 — Workflow-Template institutionalisieren (ERLEDIGT 2026-05-06 v0.95.9)
 
 Skill `.claude/skills/ft8_workflow.md` mit explizitem Trigger-Block
