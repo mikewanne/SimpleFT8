@@ -5,6 +5,59 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-06 v0.95.7 — P1.18 DT-Drift-Wurzel + P1.21 Sterne-UX-Refactor
+
+**Wurzel-Findung (Mike-Hartnaeckigkeit + DeepSeek):** Mike's Field-Test
+zeigte DT-Korrektur clamped bei 1.0s (statt erwartet ~0.24s). Erste
+Reaktion „liegt am FlexRadio-Buffer" war falsch — Mike bestand auf
+Software-Wurzel. Systematischer Code-Diff seit Golden-Stand `38a55b2`
+(23.04.2026) zeigte: in v0.95.3 (P1.9-Fix) wurde `_WAKE_OFFSETS["FT8"]`
+von **1.5 auf 2.5** erhoeht — die abhaengige Konstante `_DT_OFFSETS["FT8"]`
+wurde aber **vergessen mit-zu-erhoehen**. DeepSeek bestaetigt: 1 Zeile +1.0s.
+
+**P1.18 DT-Fix (`core/decoder.py:323`):**
+```python
+# vorher: _DT_OFFSETS = {"FT8": 2.0, "FT4": 1.0, "FT2": 0.8}
+_DT_OFFSETS = {"FT8": 3.0, "FT4": 1.0, "FT2": 0.8}  # Sync mit _WAKE_OFFSETS
+```
+Plus: Code-Kommentar (Z.317-322) aktualisiert mit Warnung „MUSS mit
+_WAKE_OFFSETS synchron bleiben". Plus: `~/.simpleft8/dt_corrections.json`
+geloescht (alte clamped-Werte raus, frische Messung).
+
+**Erwartung:** Stationen-DT zurueck auf -0.1 bis +0.2, Korrektur
+konvergiert auf ~0.24s (nur Hardware-Latenz wie 23.04. validiert).
+
+**P1.21 Sterne-UX-Refactor (Mike-Frust 02:28 UTC):** „scheiss umgesetzt
+keiner weiss was sie bedeuten, farbe scheisse, abstaende zu weit, passt
+nicht zu decode/radio darueber, anzahl passt nicht zu schlechten dB-Werten."
+DeepSeek-Konsultation lieferte 5 Fixes — alle umgesetzt:
+
+1. **Label `Empfang:`** dazu (im Decode-Stil 11px grau, exakt 7 Zeichen
+   wie `Decode:`, `RADIO:`).
+2. **Farbe Gold #FFD700** (statt Cyan #00DDFF) — Konsistenz mit RADIO-
+   Label im STATUS-Block. Inaktiv weiterhin #555.
+3. **Abstaende eng** via RichText/HTML-Spans in EINEM QLabel statt 5
+   separater QLabels (`<span color:#FFD700>★★★</span><span color:#555>★★</span>`).
+4. **Layout konsistent** mit RADIO/Decode darueber: `Empfang:  ★★★☆☆`
+   linksbuendig, UTC weiter rechts mit Stretch.
+5. **Score-Algorithmus rein SNR-basiert** (Mike-Befund: 48 Stationen
+   × -25 dB triggerten faelschlich 5 Sterne wegen `or n>=25`-Logik).
+   Neue Schwellen: `> -10/-14/-18/-22 dB` → 5/4/3/2/1 Stern. Mike-Field-
+   Test-Szenario jetzt korrekt: 48×-25 → 1 Stern (statt 5).
+
+**Tests 796 → 802 gruen (+6 neu, 5 angepasst):** Score-Schwellen-Tests
+(strong/4/3/2/1/borderline/Mike-48-Szenario), RichText-Render-Tests
+(active/5/1/clamping/gold-not-cyan).
+
+**APP_VERSION:** 0.95.6 → 0.95.7.
+
+**Memory-Lesson** (`feedback_mike_haftnaeckig_oft_recht.md`): Wenn Mike
+hartnaeckig ist und sagt „aber vorher ging es" — ZUERST git-diff seit
+Golden-Stand machen, NICHT auf Hardware tippen. 30 Jahre Funker-Erfahrung
+schlaegt Code-Theorie.
+
+---
+
 ## 2026-05-06 v0.95.6 — P1-Bundle1: 5 UI-Cleanups (P1.6+P1.12+P1.15+P1.16+P1.19)
 
 **Workflow:** Voller V1→V2→R1→V3 Diagnose + Plan-V1→V2→R1→V3 (DeepSeek-Reasoner

@@ -1,4 +1,23 @@
-# SimpleFT8 TODO — Stand 06.05.2026 (v0.95.6)
+# SimpleFT8 TODO — Stand 06.05.2026 (v0.95.7)
+
+---
+
+## ✅ P1.18 + P1.21 (06.05.2026 v0.95.7) — ERLEDIGT
+
+**P1.18 DT-Drift-Wurzel:** `_DT_OFFSETS["FT8"]` 2.0 → 3.0 (Sync mit
+`_WAKE_OFFSETS["FT8"]=2.5` + 0.5s WSJT-X-Protokoll). `dt_corrections.json`
+reset. Erwartung: DT zurueck auf -0.1 bis +0.2 wie 23.04.
+
+**P1.21 Sterne-UX-Refactor:** Label `Empfang:`, Gold #FFD700 statt Cyan,
+RichText fuer enge Sterne, Score nur SNR (-10/-14/-18/-22 dB).
+Mike-Szenario 48×-25 dB jetzt 1 Stern (war 5).
+
+**Field-Test (Mike) ausstehend:**
+- DT-Korrektur konvergiert auf ~0.24s (`dt_corrections.json` zeigt klein,
+  nicht 1.0)
+- Stationen zeigen DT -0.1 bis +0.2
+- Sterne reagieren auf Conditions (bei -25 dB sollten 1-2 Sterne sein)
+- Sterne-Optik passt zum STATUS-Block (Gold, eng zusammen)
 
 ---
 
@@ -60,6 +79,49 @@ lokal nicht.
 
 Mike-Wunsch: Bundle1-Workflow als Standard-Pattern in CLAUDE.md / Skill
 festhalten — V1+V2+R1+V3 Diagnose + Plan-V1+V2+R1+V3 + Code + Tests.
+
+### 🔴 P1.21 — Sterne-Anzeige UX-Refactor (NEU 2026-05-06, Mike-Frust)
+
+Mike-Befund Field-Test 02:28 UTC: Sterne sind „scheiss umgesetzt".
+DeepSeek-Konsultation lieferte 5 konkrete Fixes — alle in einem Workflow
+abarbeiten:
+
+**1. Label fehlt** — Mike: niemand weiss was die Sterne bedeuten.
+   → DeepSeek-Empfehlung: `Empfang:` (1 Wort, 7 Zeichen wie `Decode:`/`RADIO:`)
+
+**2. Farbe scheisse** — Cyan #00DDFF passt nicht zu STATUS-Block (Gold
+   #FFD700 fett RADIO + Grau #CCCCCC Decode).
+   → DeepSeek-Empfehlung: aktive Sterne in **Gold #FFD700** (Konsistenz),
+   inaktive bleiben #555.
+
+**3. Sterne-Abstaende zu weit** trotz `setSpacing(0)` + `padding: 0 1px`.
+   → DeepSeek-Empfehlung: **EIN QLabel mit RichText/HTML-Spans** statt
+   5 QLabels (Sterne sitzen direkt nebeneinander wie Zeichen):
+   ```python
+   self._star_label.setText(
+       '<span style="color:#FFD700;">★★★</span>'
+       '<span style="color:#555;">★★</span>'
+   )
+   ```
+
+**4. Optik passt nicht zu RADIO/Decode darueber** — Sterne 14px ohne
+   Label, RADIO/Decode 11px mit Label.
+   → DeepSeek-Empfehlung: Format `Empfang:  ★★★☆☆` als zweite
+   Status-Zeile, Decode-Stil-Label + Sterne als „Wert", UTC weiter rechts.
+
+**5. Score-Algorithmus falsch** (Mike: „Anzahl passt nicht zu schlechten
+   dB-Werten") — `or`-Verknuepfung in `compute_local_conditions` triggert
+   bei 48 Stationen × -25 dB → 5 Sterne (Quatsch).
+   → DeepSeek-Empfehlung: **nur Median-SNR**, Schwellen
+   `> -10/-14/-18/-22` → 5/4/3/2/1 Stern. Stationsanzahl ist nur
+   Indikator dass ueberhaupt decoded wird (n=0 → 1 Stern).
+
+**Aufwand:** ~30 Min (UI-Refactor + Score-Logik + Tests anpassen).
+Workflow: V1→V2→R1→V3 (Diagnose existiert via DeepSeek-Konsultation,
+Plan kann direkt). Tests `test_local_conditions.py` muessen Schwellen
+anpassen, `test_stars_widget.py` an RichText-API.
+
+**DeepSeek-Konsultation persistiert:** `/tmp/stars_review_request.md`.
 
 ---
 

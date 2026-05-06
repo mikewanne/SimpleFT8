@@ -1,9 +1,18 @@
 # HANDOFF — SimpleFT8
 
-**Stand 2026-05-06:** **v0.95.6 — P1-Bundle1: 5 UI-Cleanups
-(P1.6+P1.12+P1.15+P1.16+P1.19).** Voller Diagnose-Workflow V1→V2→R1
-(5 KP-Findings)→V3 + Plan-V1→V2→R1 (4 Findings + 4 Test-Erweiterungen)→V3.
-Mike volle Autonomie ohne Rückfragen. Tests 777 → 796 gruen (+19 neu).
+**Stand 2026-05-06:** **v0.95.7 — P1.18 DT-Drift Wurzel-Fix + P1.21
+Sterne-UX-Refactor.** DT-Bug war 1 vergessene Konstante in v0.95.3:
+`_WAKE_OFFSETS["FT8"]` wurde 1.5→2.5 erhoeht aber `_DT_OFFSETS["FT8"]`
+blieb 2.0 (haette 3.0 sein muessen). +1.0s Drift exakt geclampt auf
+`_MAX_CORR=1.0`. Mike-Hartnaeckigkeit + git-diff + DeepSeek bestaetigt.
+
+P1.21 Sterne-Refactor (Mike-Frust): Label `Empfang:` dazu, Gold #FFD700
+statt Cyan, RichText fuer enge Sterne, Score nur SNR-basiert (-10/-14/
+-18/-22 dB). Mike-Szenario 48×-25 dB jetzt korrekt 1 Stern (war 5).
+
+Tests 796 → 802 gruen (+6 neu). APP_VERSION 0.95.6 → 0.95.7.
+
+**Vorher v0.95.6:** P1-Bundle1 (5 UI-Cleanups: P1.6+P1.12+P1.15+P1.16+P1.19).
 
 **Sub-Aufgaben umgesetzt:**
 - **P1.6** Versionsnummer Color #333 → #666 (lesbar)
