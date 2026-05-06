@@ -1,6 +1,6 @@
 # SimpleFT8 — Luecken-Liste (5-Tage-Ziel)
 
-Generiert: 2026-04-29 23:44
+Generiert: 2026-04-30 00:37
 
 Sortiert: erst nach Mess-Tagen (0 zuerst), dann nach Berliner Uhrzeit.
 Ziel: 5 Tage flaechendeckend pro Stunde-Band-Modus-Slot.
@@ -11,9 +11,8 @@ Ziel: 5 Tage flaechendeckend pro Stunde-Band-Modus-Slot.
 ---
 
 
-## 1 Tag erfasst — 29 Slots
+## 1 Tag erfasst — 28 Slots
 
-    00:00 Berlin (=22 UTC)  20m   Diversity DX    1 Tag 
     01:00 Berlin (=23 UTC)  40m   Diversity DX    1 Tag 
     02:00 Berlin (=00 UTC)  20m   Normal          1 Tag 
     02:00 Berlin (=00 UTC)  20m   Diversity Std   1 Tag 
@@ -43,12 +42,13 @@ Ziel: 5 Tage flaechendeckend pro Stunde-Band-Modus-Slot.
     23:00 Berlin (=21 UTC)  40m   Normal          1 Tag 
     23:00 Berlin (=21 UTC)  40m   Diversity Std   1 Tag 
 
-## 2 Tage erfasst — 60 Slots
+## 2 Tage erfasst — 61 Slots
 
     00:00 Berlin (=22 UTC)  40m   Normal          2 Tage
     00:00 Berlin (=22 UTC)  40m   Diversity Std   2 Tage
     00:00 Berlin (=22 UTC)  20m   Normal          2 Tage
     00:00 Berlin (=22 UTC)  20m   Diversity Std   2 Tage
+    00:00 Berlin (=22 UTC)  20m   Diversity DX    2 Tage
     01:00 Berlin (=23 UTC)  40m   Normal          2 Tage
     01:00 Berlin (=23 UTC)  40m   Diversity Std   2 Tage
     01:00 Berlin (=23 UTC)  20m   Normal          2 Tage
@@ -73,7 +73,6 @@ Ziel: 5 Tage flaechendeckend pro Stunde-Band-Modus-Slot.
     08:00 Berlin (=06 UTC)  20m   Diversity Std   2 Tage
     09:00 Berlin (=07 UTC)  40m   Diversity Std   2 Tage
     09:00 Berlin (=07 UTC)  20m   Diversity Std   2 Tage
-    10:00 Berlin (=08 UTC)  40m   Normal          2 Tage
     10:00 Berlin (=08 UTC)  20m   Diversity Std   2 Tage
     12:00 Berlin (=10 UTC)  40m   Normal          2 Tage
     12:00 Berlin (=10 UTC)  40m   Diversity Std   2 Tage
