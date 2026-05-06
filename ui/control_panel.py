@@ -867,12 +867,12 @@ class _QSOStatusCard(QFrame):
         lbl_status.setStyleSheet(f"color: #CC9944; font-size: 11px; font-family: {_FONT}; font-weight: bold;")
         lay.addWidget(lbl_status)
 
-        # P1.22: RADIO/Decode/Lokaler Empfang einheitliche Schriftart (11px Menlo
-        # normal). Label-Teil grau via RichText, Wert dynamisch farbig.
+        # P1.23: RADIO/Decode/Empfangsqualitaet einheitlich 10px (matcht Status
+        # darunter, wirkt vertikal enger ohne Layout-Eingriff).
         self.connection_label = QLabel()
         self.connection_label.setTextFormat(Qt.TextFormat.RichText)
         self.connection_label.setStyleSheet(
-            f"font-family: {_FONT}; font-size: 11px;"
+            f"font-family: {_FONT}; font-size: 10px;"
         )
         self.connection_label.setText(
             f'<span style="color:{_TEXT};">RADIO: </span>'
@@ -883,7 +883,7 @@ class _QSOStatusCard(QFrame):
         self.decode_label = QLabel()
         self.decode_label.setTextFormat(Qt.TextFormat.RichText)
         self.decode_label.setStyleSheet(
-            f"font-family: {_FONT}; font-size: 11px;"
+            f"font-family: {_FONT}; font-size: 10px;"
         )
         self.decode_label.setText(
             f'<span style="color:{_TEXT};">Decode: </span>'
@@ -891,16 +891,16 @@ class _QSOStatusCard(QFrame):
         )
         lay.addWidget(self.decode_label)
 
-        # P1.19/P1.21/P1.22: `Lokaler Empfang: ★★★☆☆` im Decode-Stil + UTC rechts
+        # P1.19/P1.21/P1.22/P1.23: `Lokale Empfangsqualität: ★★★☆☆` + UTC rechts
         snr_utc_row = QHBoxLayout()
         snr_utc_row.setSpacing(4)
-        self._empfang_label = QLabel("Lokaler Empfang: ")
+        self._empfang_label = QLabel("Lokale Empfangsqualität: ")
         self._empfang_label.setStyleSheet(
-            f"color: {_TEXT}; font-family: {_FONT}; font-size: 11px;"
+            f"color: {_TEXT}; font-family: {_FONT}; font-size: 10px;"
         )
         self.conditions_widget = StarsConditionWidget()
         self.utc_label = QLabel("UTC: --:--:--")
-        self.utc_label.setStyleSheet(f"color: {_TEXT}; font-family: {_FONT}; font-size: 11px;")
+        self.utc_label.setStyleSheet(f"color: {_TEXT}; font-family: {_FONT}; font-size: 10px;")
         snr_utc_row.addWidget(self._empfang_label)
         snr_utc_row.addWidget(self.conditions_widget)
         snr_utc_row.addStretch()
