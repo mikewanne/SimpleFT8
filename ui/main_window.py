@@ -206,6 +206,7 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self._normal_stations = {}     # key → FT8Message (Normal, 2-Min-Fenster)
         self._diversity_ctrl = DiversityController()
         self._active_qso_targets: set = set()  # Stationen im aktiven QSO → 150s Aging
+        self._pending_station_click = None  # P1.24: Klick waehrend TX → Buffer fuer naechsten Slot
         self._diversity_lock = threading.Lock()  # Race Condition Guard
         self._tune_active = False
         self._tune_freq_mhz = None

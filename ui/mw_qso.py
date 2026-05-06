@@ -66,10 +66,26 @@ class QSOMixin:
     def _on_station_clicked(self, msg: FT8Message):
         """User hat eine Station in der Empfangsliste angeklickt."""
         if self.encoder.is_transmitting:
-            print(f"[QSO] TX aktiv — Klick ignoriert, warte auf TX-Ende")
-            # P1.14 W5: User-Feedback (war silent skip — frustrierend)
+            # P1.24: Klick waehrend TX wird gebuffert + sofort State-Cleanup
+            # (CQ stoppen ODER laufendes Hunt-QSO abbrechen). Aktueller TX-
+            # Audio-Slot laeuft durch (kann nicht ohne RF-Click abgebrochen
+            # werden), aber im naechsten Slot wird die Station angerufen.
+            # Vorher: silent skip → Mike's CQ lief weiter, Klick verpufft.
+            print(f"[QSO] TX aktiv — Klick {msg.caller} gebuffert "
+                  f"(state={self.qso_sm.state.name})")
+            if self.qso_sm.cq_mode:
+                self.qso_sm.stop_cq()
+                self.control_panel.set_cq_active(False)
+            elif self.qso_sm.state not in (QSOState.IDLE, QSOState.TIMEOUT,
+                                            QSOState.CQ_CALLING,
+                                            QSOState.CQ_WAIT):
+                # Hunt-QSO laeuft → abbrechen damit on_message_sent nicht
+                # in WAIT_REPORT/RR73 wechselt
+                self.qso_sm.cancel()
+            self._pending_station_click = msg
             self.statusBar().showMessage(
-                "TX aktiv – Klick ignoriert (warte auf TX-Ende)", 3000)
+                f"TX läuft — {msg.caller} wird im nächsten Slot gerufen",
+                3000)
             return
         if getattr(self, '_diversity_measuring', False):
             print(f"[QSO] Einmessen aktiv — Hunt blockiert")
@@ -170,6 +186,7 @@ class QSOMixin:
     def _on_cancel(self):
         """HALT — stoppt ALLES: CQ, QSO, TX, Messung."""
         self._active_qso_targets.clear()
+        self._pending_station_click = None  # P1.24: gepufferten Klick verwerfen
         self.rx_panel.set_active_call("")
         # TX sofort stoppen
         if self.encoder.is_transmitting:
@@ -235,6 +252,14 @@ class QSOMixin:
         """TX abgeschlossen — PTT aus, zurueck zu RX."""
         self.control_panel.set_tx_active(False)
         self.qso_sm.on_message_sent()
+        # P1.24: gepufferter Station-Klick aus TX-Phase jetzt nachholen
+        # (is_transmitting ist hier False, state-Cleanup ist im
+        # _on_station_clicked-TX-Pfad bereits passiert)
+        if self._pending_station_click is not None:
+            buffered = self._pending_station_click
+            self._pending_station_click = None
+            print(f"[QSO] TX fertig — Buffered Klick {buffered.caller} jetzt anrufen")
+            self._on_station_clicked(buffered)
 
     @Slot(str)
     def _on_send_message(self, message: str):
