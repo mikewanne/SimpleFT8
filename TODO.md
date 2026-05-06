@@ -77,19 +77,6 @@ Tests 777 → 796 gruen (+19). Field-Test ausstehend.
 
 ## ⭐ ALS NÄCHSTES (Priorität)
 
-### 🔴 P1.18 — DT-Clamp Wurzel-Bug (KRITISCH, NEU 2026-05-06)
-
-`core/ntp_time.py:36` `_MAX_CORR = {"FT8": 1.0, "FT4": 0.5, "FT2": 0.3}` zu eng.
-Mike's Hardware braucht +1.2s, wird auf 1.0s geclamped → 200ms Decoder-Timing-
-Offset. Vermutlich Wurzel von P1.17 (alle SNR -17 bis -25) und P1.8
-(Report-SNR-Bug). Eigener Workflow noetig (V1→V2→R1→V3) — Mike-Field-Test
-verifizieren ob `_MAX_CORR` z.B. 2.0/1.0/0.5 sinnvoll ist.
-
-### 🔴 P1.14 — Station-Wechsel-Bug (KRITISCH)
-
-Mike-Befund: Bei Stations-Klick waehrend laufendem CQ wird neuer QSO-Versuch
-gestartet aber alter QSO-Status nicht sauber resetet. Workflow noetig.
-
 ### 🟡 P1.8 — Report-SNR-Bug `_last_snr` statt `msg.snr`
 
 Wir senden Reports mit schlechteren dB-Werten als wir empfangen.
@@ -103,6 +90,10 @@ Bestehender Bug, NICHT durch P1.10 verschaerft. `qso.rr73_retries` wird
 in WAIT_RR73 UND WAIT_73-Hoeflichkeits-Pfad inkrementiert/getestet.
 Fix: separates Feld `wait_73_retries` oder Reset bei WAIT_73-Eintritt.
 
+### 🟡 P1.13 — TX-Frequenz-Spinbox-Sync Normal-Modus
+
+Spinbox spiegelt Klick-Frequenz nicht immer korrekt (alt aus 05.05.).
+
 ### 🟢 P1.7 — Lokaler Duplikat-Filter ADIF/Logbuch
 
 Folgebug-Risiko aus P1.5: bekannte Station < 5 Min nach RR73 ruft erneut →
@@ -114,48 +105,15 @@ lokal nicht.
 Mike-Wunsch: Bundle1-Workflow als Standard-Pattern in CLAUDE.md / Skill
 festhalten — V1+V2+R1+V3 Diagnose + Plan-V1+V2+R1+V3 + Code + Tests.
 
-### 🔴 P1.21 — Sterne-Anzeige UX-Refactor (NEU 2026-05-06, Mike-Frust)
+### ✅ P1.17 — RX-SNR-Bias (ERLEDIGT 2026-05-06 v0.95.9)
 
-Mike-Befund Field-Test 02:28 UTC: Sterne sind „scheiss umgesetzt".
-DeepSeek-Konsultation lieferte 5 konkrete Fixes — alle in einem Workflow
-abarbeiten:
+War Folge von P1.18 DT-Drift. Mike Field-Test bestaetigt: DT bei 0,26s,
+SNR-Werte normal, alles gruen.
 
-**1. Label fehlt** — Mike: niemand weiss was die Sterne bedeuten.
-   → DeepSeek-Empfehlung: `Empfang:` (1 Wort, 7 Zeichen wie `Decode:`/`RADIO:`)
+### ✅ P1.18 / P1.14 / P1.21 — alle ERLEDIGT (v0.95.7-9, Field-Test bestaetigt)
 
-**2. Farbe scheisse** — Cyan #00DDFF passt nicht zu STATUS-Block (Gold
-   #FFD700 fett RADIO + Grau #CCCCCC Decode).
-   → DeepSeek-Empfehlung: aktive Sterne in **Gold #FFD700** (Konsistenz),
-   inaktive bleiben #555.
-
-**3. Sterne-Abstaende zu weit** trotz `setSpacing(0)` + `padding: 0 1px`.
-   → DeepSeek-Empfehlung: **EIN QLabel mit RichText/HTML-Spans** statt
-   5 QLabels (Sterne sitzen direkt nebeneinander wie Zeichen):
-   ```python
-   self._star_label.setText(
-       '<span style="color:#FFD700;">★★★</span>'
-       '<span style="color:#555;">★★</span>'
-   )
-   ```
-
-**4. Optik passt nicht zu RADIO/Decode darueber** — Sterne 14px ohne
-   Label, RADIO/Decode 11px mit Label.
-   → DeepSeek-Empfehlung: Format `Empfang:  ★★★☆☆` als zweite
-   Status-Zeile, Decode-Stil-Label + Sterne als „Wert", UTC weiter rechts.
-
-**5. Score-Algorithmus falsch** (Mike: „Anzahl passt nicht zu schlechten
-   dB-Werten") — `or`-Verknuepfung in `compute_local_conditions` triggert
-   bei 48 Stationen × -25 dB → 5 Sterne (Quatsch).
-   → DeepSeek-Empfehlung: **nur Median-SNR**, Schwellen
-   `> -10/-14/-18/-22` → 5/4/3/2/1 Stern. Stationsanzahl ist nur
-   Indikator dass ueberhaupt decoded wird (n=0 → 1 Stern).
-
-**Aufwand:** ~30 Min (UI-Refactor + Score-Logik + Tests anpassen).
-Workflow: V1→V2→R1→V3 (Diagnose existiert via DeepSeek-Konsultation,
-Plan kann direkt). Tests `test_local_conditions.py` muessen Schwellen
-anpassen, `test_stars_widget.py` an RichText-API.
-
-**DeepSeek-Konsultation persistiert:** `/tmp/stars_review_request.md`.
+Mike 2026-05-06: „Sterne reagieren, DT-Zeit-Korrektur bei 0,26 Sekunden,
+alles gruen, erledigt."
 
 ---
 
