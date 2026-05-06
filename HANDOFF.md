@@ -1,22 +1,50 @@
 # HANDOFF — SimpleFT8
 
-**Stand 2026-05-06:** **v0.95.9 — P1.24 TX-Klick-Buffer (Folge-Fix
-zu P1.14, Field-Test bestätigt).**
+**Stand 2026-05-06:** **v0.95.10 — P1.AP-FIX generate_candidates
+State-1 Format-Bug.**
 
-**P1.24 (NEU):** Mike's Field-Test v0.95.8 entdeckte: TX-Klick wurde
-komplett ignoriert wenn `encoder.is_transmitting=True`. Mike rief CQ,
-sah seltene Station, klickte — CQ lief weiter, Klick verpufft. Erweitert:
-gleiche Frustration bei Hunt-TX_CALL-Umentscheidung.
+**P1.AP-FIX (NEU):** P1.AP E2E-Test-Pipeline (v0.95.9, hardware-frei mit
+ft8lib + Gauß-Rauschen) entdeckte den Bug: `core/ap_lite.py:126`
+`generate_candidates(state=1)` produzierte 4-Token-Strings
+(`OWN THEIR LOC SNR`, z.B. „DA1MHH DK5ON JO31 +05"). FT8 erlaubt nur
+3 Tokens pro Frame → ft8lib lehnt jeden Kandidaten mit `rc=5` →
+alle Korrelations-Scores=0 → **State-1-Rescue (WAIT_REPORT) scheiterte
+IMMER silent seit AP-Lite-Implementierung**.
 
-**Fix:** Buffer-Logik. Klick während TX → State-Cleanup sofort (cq_mode
-aktiv → `stop_cq()` + Button visuell off; Hunt-State → `cancel()`) +
-`_pending_station_click = msg` + Statusbar „TX läuft — X wird im
-nächsten Slot gerufen". In `_on_tx_finished` nach `on_message_sent()`
-wird Buffer geprüft und `_on_station_clicked(buffered)` rekursiv
-aufgerufen. HALT verwirft Buffer.
+**Fix (1 Zeile, KISS):** Locator weglassen, Report-only:
+```python
+candidates.append(f"{own_callsign} {their_callsign} {r:+03d}")
+```
+Plus Code-Kommentar Z.121-131 fachlich aktualisiert.
 
-**Code:** `ui/main_window.py:209` (1 Attribut), `ui/mw_qso.py` (3 Stellen).
-Tests 812 → 816 grün (+4 in `tests/test_p1_24_pending_click.py`).
+**Voller Workflow:** V1 (Diagnose) → V2 (Self-Review, 9 Lessons) → R1
+(„Plan freigegeben") → V3 (5 Compact-feste Diffs) → Compact → Code →
+Final-R1-Codereview („Push freigegeben, keine Vorbehalte").
+Plan-Files: `prompts/p1_ap_fix_v[1-3].md`.
+
+**Tests 830 → 831 gruen** (+1 maschineller Format-Schutz):
+- `test_generate_state1_basic` — 3-Token-Asserts mit Regex
+- `test_try_rescue_state1_runs_after_fix` (umbenannt) — kein silent-Block
+- `test_generate_candidates_state1_format_correct` (umbenannt) — 3-Token
+- `test_generate_candidates_state1_ft8lib_compatible` **NEU** — ruft
+  `encoder.generate_reference_wave()` für jeden Kandidaten → ft8lib-Reject
+  schlägt sofort an
+
+**Code:** `core/ap_lite.py:121-131`. Atomare Commits `17b7237`
+(Code+Tests+main.py 4 Files +79/-36) + Doku-Commit.
+
+**APP_VERSION:** 0.95.9 → 0.95.10.
+
+**Field-Test:** Mike ist in Kur — Test post-Rückkehr. Erwartung: Rescue-
+Rate steigt. Notbremse: `AP_LITE_ENABLED=False`.
+
+---
+
+**Vorher v0.95.9 (06.05.2026):** **P1.24 TX-Klick-Buffer (Folge-Fix
+zu P1.14, Field-Test bestätigt).** TX-Klick wurde ignoriert wenn
+`encoder.is_transmitting=True`. Fix: Buffer-Logik mit State-Cleanup
++ `_pending_station_click` + Statusbar + rekursiver Replay in
+`_on_tx_finished`. Tests 812 → 816 gruen.
 
 ---
 

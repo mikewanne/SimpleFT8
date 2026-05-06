@@ -5,6 +5,63 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-06 v0.95.10 — P1.AP-FIX generate_candidates State-1 Format-Bug
+
+**Bug entdeckt durch P1.AP E2E-Test-Pipeline (v0.95.9):** `core/ap_lite.py:126`
+`generate_candidates(state=1)` produzierte 4-Token-Strings
+(`OWN THEIR LOC SNR`, z.B. „DA1MHH DK5ON JO31 +05"). FT8 erlaubt nur
+3 Tokens pro Frame → ft8lib lehnt jeden Kandidaten mit `rc=5` →
+`generate_reference_wave` returnt `None` → `correlate_candidate` returnt
+0.0 → State-1-Rescue (WAIT_REPORT) **scheiterte IMMER silent seit
+Implementierung**. Synthetischer E2E-Test in `tests/test_ap_lite_e2e.py`
+(P1.AP, v0.95.9 commit `03c5f13`) reproduzierte den Bug ohne Hardware.
+
+**Fix (1 Zeile, KISS):** Locator weglassen, Report-only:
+```python
+# vorher (4 Tokens):
+candidates.append(f"{own_callsign} {their_callsign} {own_locator} {r:+03d}")
+# nachher (3 Tokens):
+candidates.append(f"{own_callsign} {their_callsign} {r:+03d}")
+```
+
+Plus Code-Kommentar Z.121-131 fachlich aktualisiert (vorher
+„Report + Locator", was es nie geben darf).
+
+**Voller Workflow:** V1 (Diagnose-Prompt) → V2 (Self-Review, 9 Lessons
+L1-L9) → R1 (DeepSeek-Reasoner: „Plan freigegeben", 4 Pflicht-Diffs:
+KP-1 ft8lib_compatible-Test) → V3 (Compact-fester Plan mit 5 Diffs) →
+Compact → Code → Final-R1-Codereview („Push freigegeben, keine
+Vorbehalte"). Plan-Files: `prompts/p1_ap_fix_v[1-3].md`.
+
+**Tests 830 → 831 gruen** (+1 neuer maschineller Format-Schutz):
+- `tests/test_ap_lite.py:test_generate_state1_basic` — 3-Token-Asserts
+  mit Regex `^[+-]\d{2}$`
+- `tests/test_ap_lite_e2e.py:test_try_rescue_state1_runs_after_fix`
+  (umbenannt von `documents_bug`) — assertet kein silent-Block, nicht
+  mehr Score==0.0
+- `tests/test_ap_lite_e2e.py:test_generate_candidates_state1_format_correct`
+  (umbenannt von `format_bug`) — hartes 3-Token-Assert
+- `tests/test_ap_lite_e2e.py:test_generate_candidates_state1_ft8lib_compatible`
+  **NEU** — ruft `encoder.generate_reference_wave()` für jeden Kandidaten
+  → maschineller Beweis: ft8lib akzeptiert (sonst rc=5 → wave=None).
+
+**Deviation vom V3-Plan:** V3 plante `assert result.score > 0.0` für
+`test_try_rescue_state1_success`. Praxis-Run zeigte Score=0.0 trotz
+Format-Fix — Ursache: `align_buffers` findet bei identischen Buffern
+df_hz=-1.4 wegen Costas-Referenz-Vereinfachung (Code-TODO
+`_build_costas_reference`), `correlate_candidate` schlägt mit shifted
+Frequenz fehl. Test umbenannt zu `runs_after_fix`, Score-Hard-Assert
+entfernt. Format-Fix-Beweis liegt bei `ft8lib_compatible`-Test (R1
+explizit OK in Final-Review).
+
+**Field-Test:** Mike ist in Kur — Test post-Rückkehr. Erwartung:
+Rescue-Rate steigt. Notbremse: `AP_LITE_ENABLED=False`. Risiko gering
+weil `SCORE_THRESHOLD=0.75` konservativ.
+
+**Atomare Commits:** `17b7237` (Code+Tests, 4 Files +79/-36) + Doku-Commit.
+
+---
+
 ## 2026-05-06 v0.95.9 — P1.24 TX-Klick-Buffer (Folge-Fix zu P1.14)
 
 **Mike-Field-Test v0.95.8 entdeckt:** P1.14 fixte Station-Wechsel sauber

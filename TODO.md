@@ -100,35 +100,28 @@ Folgebug-Risiko aus P1.5: bekannte Station < 5 Min nach RR73 ruft erneut →
 zweites QSO + zweiter ADIF-Eintrag. QRZ.com filtert serverseitig, aber
 lokal nicht.
 
-### ⛔ P1.AP-FIX — AP-Lite Kandidaten-Format-Bug (NEU, BUG-FINDING 2026-05-06)
+### ✅ P1.AP-FIX — AP-Lite Kandidaten-Format-Bug (ERLEDIGT 2026-05-06 v0.95.10)
 
-**Befund via P1.AP E2E-Test-Suite** (kein Field-Test nötig):
+`core/ap_lite.py:126` produzierte 4-Token-Strings (`OWN THEIR LOC SNR`).
+FT8 erlaubt nur 3 Tokens → ft8lib `rc=5` → State-1-Rescue scheiterte
+IMMER silent seit Implementierung.
 
-`core/ap_lite.py:126` — `generate_candidates` erzeugt für State 1
-(WAIT_REPORT) 4-Token-Nachrichten:
-```python
-candidates.append(f"{own_callsign} {their_callsign} {own_locator} {r:+03d}")
-# z.B. "DA1MHH DK5ON JO31 +05"
-```
-
-Aber FT8 erlaubt nur **3 Tokens pro Frame** (Locator XOR Report, nicht
-beides). ft8lib lehnt mit rc=5 → alle Korrelations-Scores = 0 →
-**State-1-Rescue scheitert IMMER**, auch bei sauberen Buffern.
-
-**Fix:** Kandidaten auf 3 Tokens reduzieren — Vorschlag Report-only:
+**Fix (1 Zeile, KISS):** Locator weglassen, Report-only:
 ```python
 candidates.append(f"{own_callsign} {their_callsign} {r:+03d}")
 ```
+Plus Code-Kommentar Z.121-131 fachlich aktualisiert.
 
-Workflow: V1→V2→R1→V3 (Algorithmus-Aenderung in produktivem Code →
-Architektur-Pflicht laut CLAUDE.md). Tests existieren als Schutznetz
-(`test_ap_lite_e2e.py:test_try_rescue_state1_documents_bug` und
-`test_generate_candidates_state1_format_bug` — friert aktuelles
-kaputtes Verhalten ein, schlaegt fehl wenn Generator gefixt wird).
+**Voller Workflow:** V1→V2(9 Lessons)→R1("Plan freigegeben")→V3(5
+Compact-feste Diffs)→Compact→Code→Final-R1("Push freigegeben").
+Plan-Files: `prompts/p1_ap_fix_v[1-3].md`.
 
-**Aufwand:** ~1 Zeile Code, ~30 Min Workflow + Tests-Update.
-**Empfehlung:** post-Kur (Field-Test auf gefixten Generator zur
-Validierung dass Rescue-Rate steigt).
+**Tests 830 → 831 gruen** (+1 ft8lib_compatible als maschineller
+Format-Schutz). Atomare Commits `17b7237` (Code+Tests+main.py) +
+Doku-Commit. APP_VERSION 0.95.9 → 0.95.10.
+
+**Field-Test:** post-Kur. Erwartung Rescue-Rate steigt. Notbremse
+`AP_LITE_ENABLED=False`.
 
 ---
 
