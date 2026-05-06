@@ -8,6 +8,10 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QSlider, QFrame, QGridLayout, QButtonGroup, QProgressBar, QSpinBox,
 )
+
+# Qt-Konstante (in PySide6 nicht direkt exportiert) — entspricht 2^24 - 1.
+# Wird als „kein Limit"-Reset für setMaximumHeight() benutzt.
+_QWIDGETSIZE_MAX = 16_777_215
 from typing import Optional
 from PySide6.QtCore import Signal, Qt, QTimer, Property, QPropertyAnimation, QEasingCurve
 from PySide6.QtGui import QFont, QPainter, QColor, QPen, QBrush, QCursor
@@ -419,7 +423,13 @@ def _sep_line() -> QFrame:
 
 
 class _AntenneCard(QFrame):
-    """Kachel 2 (grün) — ANTENNE alleine (NORMAL/DIVERSITY/EINMESSEN + LED)."""
+    """Kachel 2 (grün) — ANTENNE alleine (NORMAL/DIVERSITY/EINMESSEN + LED).
+
+    P1.ANTENNE-COLLAPSE (v0.95.11): Body ist einklappbar via Toggle-Button
+    im Header. State persistiert in Settings, wird vom MainWindow geladen.
+    """
+
+    collapse_changed = Signal(bool)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -431,9 +441,34 @@ class _AntenneCard(QFrame):
         lay.setContentsMargins(10, 8, 10, 8)
         lay.setSpacing(5)
 
+        # ── Header-Row: Toggle-Button + ANTENNE-Label ─────────────────────
+        header_row = QHBoxLayout()
+        header_row.setContentsMargins(0, 0, 0, 0)
+        header_row.setSpacing(6)
+
+        self.toggle_btn = QPushButton("▼")
+        self.toggle_btn.setFixedSize(20, 20)
+        self.toggle_btn.setFlat(True)
+        self.toggle_btn.setStyleSheet(
+            "QPushButton { background: transparent; color: #55BBAA; "
+            "border: none; font-size: 11px; font-weight: bold; padding: 0; }"
+            "QPushButton:hover { color: #88EECC; }"
+        )
+        self.toggle_btn.setToolTip("Antennen-Kachel ein-/ausklappen")
+        self.toggle_btn.clicked.connect(self._toggle_collapsed)
+        header_row.addWidget(self.toggle_btn)
+
         lbl_ant = QLabel("ANTENNE")
         lbl_ant.setStyleSheet(f"color: #55BBAA; font-size: 10px; font-family: {_FONT}; font-weight: bold;")
-        lay.addWidget(lbl_ant)
+        header_row.addWidget(lbl_ant)
+        header_row.addStretch()
+        lay.addLayout(header_row)
+
+        # ── Body-Container (einklappbar) ──────────────────────────────────
+        self._body_widget = QWidget()
+        body_lay = QVBoxLayout(self._body_widget)
+        body_lay.setContentsMargins(0, 0, 0, 0)  # KP-8: keine doppelten Margins
+        body_lay.setSpacing(5)
 
         btn_row = QHBoxLayout()
         btn_row.setSpacing(4)
@@ -452,11 +487,11 @@ class _AntenneCard(QFrame):
         btn_row.addWidget(self.btn_normal)
         btn_row.addWidget(self.btn_diversity)
         btn_row.addWidget(self.btn_einmessen)
-        lay.addLayout(btn_row)
+        body_lay.addLayout(btn_row)
 
         self.dx_info = QLabel("")
         self.dx_info.setStyleSheet(f"color: #668877; font-size: 10px; font-family: {_FONT};")
-        lay.addWidget(self.dx_info)
+        body_lay.addWidget(self.dx_info)
 
         # Diversity Ratio Display
         self._div_widget = QWidget()
@@ -514,12 +549,12 @@ class _AntenneCard(QFrame):
         phase_row.addWidget(self._phase_label)
         div_lay.addLayout(phase_row)
         self._div_widget.setVisible(False)
-        lay.addWidget(self._div_widget)
+        body_lay.addWidget(self._div_widget)
 
         # Frequenz-Histogramm (nur nach Einmessen sichtbar)
         self._freq_hist = FrequencyHistogramWidget(self)
         self._freq_hist.setVisible(False)
-        lay.addWidget(self._freq_hist)
+        body_lay.addWidget(self._freq_hist)
 
         # TX-Freq Manuell-Eingabe (nur Normal-Modus sichtbar) — Spinbox + Pfeile
         # Klick im Histogramm uebernimmt Wert hier rein, User kann manuell feintunen.
@@ -560,7 +595,7 @@ class _AntenneCard(QFrame):
         _tx_lay.addWidget(self._tx_freq_spin)
         _tx_lay.addStretch()
         self._tx_freq_row.setVisible(False)
-        lay.addWidget(self._tx_freq_row)
+        body_lay.addWidget(self._tx_freq_row)
 
         # CQ-Freq Countdown: Label + Balken in einer Zeile (horizontal)
         cq_row_layout = QHBoxLayout()
@@ -584,7 +619,32 @@ class _AntenneCard(QFrame):
         self._cq_row = QWidget()
         self._cq_row.setLayout(cq_row_layout)
         self._cq_row.setVisible(False)
-        lay.addWidget(self._cq_row)
+        body_lay.addWidget(self._cq_row)
+
+        # ── Body-Container an Card-Layout anhängen ────────────────────────
+        lay.addWidget(self._body_widget)
+
+    # ── Collapse-API ─────────────────────────────────────────────────────
+    def set_collapsed(self, collapsed: bool) -> None:
+        """Body aus-/einklappen. Setzt Toggle-Icon + MaximumHeight.
+
+        Programm-API — emitiert KEIN collapse_changed-Signal (Init-Loop-
+        Schutz). User-Klick geht über _toggle_collapsed.
+        """
+        self._body_widget.setVisible(not collapsed)
+        self.toggle_btn.setText("▶" if collapsed else "▼")
+        if collapsed:
+            self.setMaximumHeight(36)  # Header-Höhe + Margins
+        else:
+            self.setMaximumHeight(_QWIDGETSIZE_MAX)
+
+    def is_collapsed(self) -> bool:
+        return not self._body_widget.isVisible()
+
+    def _toggle_collapsed(self) -> None:
+        """Slot für Toggle-Button-Klick. Persistenz über Signal."""
+        self.set_collapsed(not self.is_collapsed())
+        self.collapse_changed.emit(self.is_collapsed())
 
 
 class _RadioCard(QFrame):
@@ -968,6 +1028,7 @@ class ControlPanel(QWidget):
     settings_clicked = Signal()
     einmessen_clicked = Signal()
     map_clicked = Signal()  # Map-Button im PSK-Frame → MainWindow.open_direction_map
+    antenne_collapse_changed = Signal(bool)  # P1.ANTENNE-COLLAPSE → MainWindow
 
     # ── Klassen-Konstanten ───────────────────────────────────────────────
     _RX_MODES = ["normal", "diversity"]
@@ -1020,6 +1081,7 @@ class ControlPanel(QWidget):
 
         # ── Kachel 2: ANTENNE (grün) ─────────────────────────────────────
         ant_card = _AntenneCard(self)
+        self._ant_card = ant_card  # KP-7: Expose für MainWindow-Collapse-Init
         self.btn_normal = ant_card.btn_normal
         self.btn_diversity = ant_card.btn_diversity
         self.btn_einmessen = ant_card.btn_einmessen
@@ -1042,6 +1104,8 @@ class ControlPanel(QWidget):
         self.btn_normal.clicked.connect(lambda: self._on_rx_mode_clicked("normal"))
         self.btn_diversity.clicked.connect(lambda: self._on_rx_mode_clicked("diversity"))
         self.btn_einmessen.clicked.connect(self.einmessen_clicked.emit)
+        # P1.ANTENNE-COLLAPSE: Toggle-Signal forwarden für Settings-Persistenz
+        ant_card.collapse_changed.connect(self.antenne_collapse_changed.emit)
         layout.addWidget(ant_card)
 
         # ── Kachel 3: RADIO (türkis) ─────────────────────────────────────

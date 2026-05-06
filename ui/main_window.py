@@ -418,6 +418,11 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         # Tab-Wechsel: Detail-Overlay zuruecksetzen wenn User vom Logbuch weg navigiert
         self.qso_panel.tabs.currentChanged.connect(self._on_qso_tab_changed)
         self.control_panel = ControlPanel(callsign=self.settings.callsign)
+        # P1.ANTENNE-COLLAPSE: Initial-State aus Settings laden + Persistenz-Hook
+        _antenne_collapsed = self.settings.get("antenne_card_collapsed", False)
+        self.control_panel._ant_card.set_collapsed(_antenne_collapsed)
+        self.control_panel.antenne_collapse_changed.connect(
+            self._on_antenne_collapse_changed)
 
         # QSO Detail Overlay (wird ueber Control Panel gelegt bei Logbuch-Klick)
         from ui.qso_detail_overlay import QSODetailOverlay
@@ -815,6 +820,12 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
             print(f"[PSK] Fehler: {e}")
 
     # ── Settings ─────────────────────────────────────────────────
+
+    @Slot(bool)
+    def _on_antenne_collapse_changed(self, collapsed: bool) -> None:
+        """P1.ANTENNE-COLLAPSE: Persistiert Toggle-State in Settings."""
+        self.settings.set("antenne_card_collapsed", collapsed)
+        self.settings.save()
 
     @Slot()
     def _on_settings_clicked(self):
