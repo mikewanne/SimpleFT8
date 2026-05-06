@@ -67,6 +67,9 @@ class QSOMixin:
         """User hat eine Station in der Empfangsliste angeklickt."""
         if self.encoder.is_transmitting:
             print(f"[QSO] TX aktiv — Klick ignoriert, warte auf TX-Ende")
+            # P1.14 W5: User-Feedback (war silent skip — frustrierend)
+            self.statusBar().showMessage(
+                "TX aktiv – Klick ignoriert (warte auf TX-Ende)", 3000)
             return
         if getattr(self, '_diversity_measuring', False):
             print(f"[QSO] Einmessen aktiv — Hunt blockiert")
@@ -81,8 +84,23 @@ class QSOMixin:
         # Auto-Hunt pausieren bei manuellem Klick
         if self._auto_hunt.active:
             self._auto_hunt.on_manual_qso_start()
+        # P1.14 KP3: alte their_call aus _active_qso_targets entfernen
+        # (sonst Set-Bloat bei haeufigen Wechseln)
+        old_call = self.qso_sm.qso.their_call if self.qso_sm.qso else None
+        if old_call:
+            self._active_qso_targets.discard(old_call)
         self._active_qso_targets.add(msg.caller)  # 150s Aging fuer angerufene Station
         self.rx_panel.set_active_call(msg.caller)  # Zeile im RX-Panel hervorheben
+        # P1.14 KP2: wenn Station bereits in Caller-Queue gewartet hat, aus
+        # Queue entfernen damit sie nicht doppelt kontaktiert wird (sonst
+        # Doppel-QSO-Risiko nach Resume)
+        if any(m.caller == msg.caller for m in self.qso_sm._caller_queue):
+            self.qso_sm._caller_queue = [
+                m for m in self.qso_sm._caller_queue
+                if m.caller != msg.caller
+            ]
+            self.qso_sm.queue_changed.emit(
+                [m.caller for m in self.qso_sm._caller_queue])
         self.qso_panel.add_info(f"Rufe {msg.caller}...{self._antenna_pref_label(msg.caller)}")
         self.qso_sm.max_calls = self.settings.get("max_calls", 3)
         # Even/Odd: sende im GEGENTEILIGEN Slot der Gegenstation
@@ -97,8 +115,9 @@ class QSOMixin:
             their_grid=msg.grid_or_report if msg.is_grid else "",
             freq_hz=msg.freq_hz,
         )
-        # Fix: start_qso() hat _was_cq=False gespeichert (cq_mode war schon False durch stop_cq)
-        # → CQ-Status nachträglich korrigieren damit _resume_cq_if_needed() richtig handelt
+        # P1.14 KP6 (Plan-V2-Entscheidung): Workaround BEHALTEN. Saubere
+        # Integration in start_qso ist nicht moeglich weil stop_cq() vor
+        # start_qso() laufen MUSS — _was_cq waere dort schon False.
         if _cq_was_active:
             self.qso_sm._was_cq = True
 
@@ -161,6 +180,9 @@ class QSOMixin:
         self.qso_sm.stop_cq()
         self.qso_sm.cancel()
         self.control_panel.set_cq_active(False)
+        # P1.14 W6: Auto-Hunt freigeben (sonst dauerhaft pausiert nach HALT)
+        if self._auto_hunt.active:
+            self._auto_hunt.on_manual_qso_end()
         self.qso_panel.add_info("HALT — alles gestoppt")
         self.statusBar().showMessage("HALT — CQ, QSO, TX gestoppt", 5000)
         print("[HALT] Alles gestoppt")
@@ -302,6 +324,9 @@ class QSOMixin:
         self.qso_panel.add_qso_complete(qso_data.their_call)
         # Logbuch aktualisieren (neues QSO wurde in ADIF geschrieben)
         self.qso_panel.logbook.refresh()
+        # P1.14 W6: Auto-Hunt nach erfolgreichem manuellem QSO freigeben
+        if self._auto_hunt.active:
+            self._auto_hunt.on_manual_qso_end()
         # CQ-Modus läuft weiter — visuell bestätigen
         if self.qso_sm.cq_mode:
             self.control_panel.set_cq_active(True)
@@ -407,6 +432,9 @@ class QSOMixin:
         # Auto-Hunt: Timeout → Cooldown setzen, naechste Station
         if self._auto_hunt.active:
             self._auto_hunt.on_qso_timeout(their_call)
+            # P1.14 W6: _manual_override zuruecksetzen (sonst pausiert
+            # Auto-Hunt nach Klick → Timeout dauerhaft)
+            self._auto_hunt.on_manual_qso_end()
         # CQ-Button aktiv halten wenn CQ-Modus laeuft
         if self.qso_sm.cq_mode:
             self.control_panel.set_cq_active(True)

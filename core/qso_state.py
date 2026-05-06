@@ -238,10 +238,19 @@ class QSOStateMachine(QObject):
     def start_qso(self, their_call: str, their_grid: str = "",
                    freq_hz: int = 0):
         """QSO mit angeklickter Station starten. Bricht laufendes QSO ab."""
-        if self.state not in (QSOState.IDLE, QSOState.CQ_WAIT):
+        # P1.14 KP1: Reset bei JEDEM Nicht-IDLE-State (auch CQ_WAIT, da
+        # dort _pending_reply gesetzt sein kann)
+        if self.state != QSOState.IDLE:
             # Laufendes QSO abbrechen → neues starten
             old = self.qso.their_call if self.qso else "?"
             print(f"[QSO] Abbruch {old} → starte neu mit {their_call}")
+            # P1.14 KP1: Pendings explizit resetten (sonst Geister-Eintraege
+            # mit alter their_call im naechsten Slot)
+            self._pending_reply = None
+            self._pending_hunt_reply = None
+            self._pending_rr73 = None
+            # _caller_queue BEHALTEN (Option B — Mike will durchgaengig
+            # CQ-Antworter abarbeiten nach manuellem Hunt)
             self._set_state(QSOState.IDLE)
 
         self._was_cq = self.cq_mode  # CQ-Modus merken fuer Resume nach Timeout
