@@ -5,6 +5,50 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-06 v0.95.8 — P1.14 Station-Wechsel-Bug + P1.23 Status-UI-Feinjustierung
+
+### P1.14 Station-Wechsel-Bug — voller Workflow
+**Wurzeln (W1-W6 aus Diagnose-V3):**
+- W1: `start_qso` resetete keine Pendings bei `state != IDLE` (CQ_WAIT
+  inkl.) → Geister-Pendings mit alter `their_call`
+- W2: `_caller_queue` enthielt manuell-gewählte Station → Doppel-QSO-Risiko
+- W3: `_active_qso_targets` wuchs monoton bei Wechseln
+- W4/KP6: `_was_cq` State-Machine-extern korrigiert (fragil) — Plan-V2:
+  Workaround BEHALTEN, sauberer Kommentar (start_qso liest cq_mode aber
+  stop_cq() läuft vorher → cq_mode bereits False, keine saubere
+  Integration möglich)
+- W5: TX-Klick silent ignoriert → frustrierende UX
+- W6: `auto_hunt._manual_override` wurde NIE zurückgesetzt — pausierte
+  dauerhaft nach manuellem QSO/HALT/Timeout
+
+**Workflow:** voller V1→V2(10 Lücken)→R1(6 KP)→V3 Diagnose +
+V1→V2(10 Lücken, 2 Auto-Hunt-Stellen ergänzt)→R1(„Plan freigegeben")→V3 Plan.
+
+**Code-Änderungen:**
+- `core/qso_state.py:start_qso` (Z.238-251) — Reset-Set auf `state != IDLE`
+  erweitert + 3 Pendings explizit auf None (`_pending_reply`,
+  `_pending_hunt_reply`, `_pending_rr73`); `_caller_queue` BLEIBT
+  (Option B — Mike's Funker-Wunsch).
+- `ui/mw_qso.py:_on_station_clicked` — KP3 alte `their_call` discarden,
+  KP2 angeklickte Station aus `_caller_queue` entfernen + queue_changed
+  emit, W5 Statusbar-Toast „TX aktiv – Klick ignoriert" (3s),
+  KP6-Workaround Kommentar präzisiert.
+- `ui/mw_qso.py:_on_cancel` — `auto_hunt.on_manual_qso_end()` ergänzt (W6).
+- `ui/mw_qso.py:_on_qso_confirmed` — `auto_hunt.on_manual_qso_end()`
+  ergänzt (W6, Plan-V2).
+- `ui/mw_qso.py:_on_qso_timeout` — `auto_hunt.on_manual_qso_end()`
+  ergänzt (W6, Plan-V2).
+
+**Tests:** 802 → 812 grün (+10 in `tests/test_p1_14_station_switch.py`).
+
+### P1.23 Status-UI-Feinjustierung (Mike-Wunsch)
+- Label `Lokaler Empfang:` → `Lokale Empfangsqualität:`
+- Schriftgrößen RADIO/Decode/Empfang/UTC: 11px → 10px (matcht Status
+  darunter, vertikal homogener)
+- Sterne: 15px → 13px (passt zur kleineren Schrift)
+
+---
+
 ## 2026-05-06 v0.95.7 — P1.18 DT-Drift-Wurzel + P1.21 Sterne-UX-Refactor
 
 **Wurzel-Findung (Mike-Hartnaeckigkeit + DeepSeek):** Mike's Field-Test

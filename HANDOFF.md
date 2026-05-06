@@ -1,16 +1,39 @@
 # HANDOFF — SimpleFT8
 
-**Stand 2026-05-06:** **v0.95.7 — P1.18 DT-Drift Wurzel-Fix + P1.21
-Sterne-UX-Refactor.** DT-Bug war 1 vergessene Konstante in v0.95.3:
-`_WAKE_OFFSETS["FT8"]` wurde 1.5→2.5 erhoeht aber `_DT_OFFSETS["FT8"]`
-blieb 2.0 (haette 3.0 sein muessen). +1.0s Drift exakt geclampt auf
-`_MAX_CORR=1.0`. Mike-Hartnaeckigkeit + git-diff + DeepSeek bestaetigt.
+**Stand 2026-05-06:** **v0.95.8 — P1.14 Station-Wechsel-Bug +
+P1.23 Status-UI-Feinjustierung.**
 
-P1.21 Sterne-Refactor (Mike-Frust): Label `Empfang:` dazu, Gold #FFD700
-statt Cyan, RichText fuer enge Sterne, Score nur SNR-basiert (-10/-14/
--18/-22 dB). Mike-Szenario 48×-25 dB jetzt korrekt 1 Stern (war 5).
+**P1.14 (voller Workflow V1→V2→R1→V3 Diagnose + Plan-V1→V2→R1→V3):**
+6 Bug-Wurzeln W1-W6:
+- W1: `start_qso` resetete keine Pendings bei `state != IDLE` → Geister-
+  Pendings mit alter `their_call`
+- W2: angeklickte Station blieb in `_caller_queue` → Doppel-QSO-Risiko
+- W3: `_active_qso_targets` wuchs monoton bei Wechseln
+- W4/KP6: `_was_cq` State-Machine-extern korrigiert (Plan-V2: BEHALTEN —
+  saubere Integration unmöglich, stop_cq() läuft vor start_qso())
+- W5: TX-Klick silent ignoriert → Statusbar-Toast „TX aktiv – Klick
+  ignoriert" (3s)
+- W6: `auto_hunt._manual_override` wurde NIE zurückgesetzt — Auto-Hunt
+  pausierte dauerhaft nach manuellem QSO/HALT/Timeout. Fix: `on_manual_qso_end()`
+  in `_on_cancel`, `_on_qso_confirmed`, `_on_qso_timeout` (Plan-V2-Erweiterung).
 
-Tests 796 → 802 gruen (+6 neu). APP_VERSION 0.95.6 → 0.95.7.
+Code-Änderungen: `core/qso_state.py:start_qso` (Reset-Set + 3 Pendings),
+`ui/mw_qso.py` (5 Stellen: _on_station_clicked, _on_cancel,
+_on_qso_confirmed, _on_qso_timeout).
+
+**P1.23 UI-Feinjustierung:** Label „Lokale Empfangsqualität:" (statt
+„Lokaler Empfang:"), Status-Schriftgrößen 11→10px, Sterne 15→13px.
+
+Tests 802 → 812 grün (+10 in `tests/test_p1_14_station_switch.py`).
+APP_VERSION 0.95.7 → 0.95.8.
+
+---
+
+**Vorher v0.95.7:** P1.18 DT-Drift Wurzel-Fix + P1.21 Sterne-UX-Refactor.
+DT-Bug war 1 vergessene Konstante in v0.95.3 (`_WAKE_OFFSETS["FT8"]`
+1.5→2.5 erhoeht, `_DT_OFFSETS["FT8"]` blieb 2.0 statt 3.0). Mike-Hartnaeckigkeit
++ git-diff + DeepSeek bestaetigt. Sterne: Label `Empfang:`, Gold #FFD700,
+RichText, Score nur SNR (-10/-14/-18/-22 dB).
 
 **Vorher v0.95.6:** P1-Bundle1 (5 UI-Cleanups: P1.6+P1.12+P1.15+P1.16+P1.19).
 
