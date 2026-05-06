@@ -861,12 +861,17 @@ class _QSOStatusCard(QFrame):
         self.decode_label.setStyleSheet(f"color: {_TEXT}; font-family: {_FONT}; font-size: 11px;")
         lay.addWidget(self.decode_label)
 
-        # P1.19: Sterne-Anzeige `Lokale Conditions` ersetzt SNR-Label
+        # P1.19/P1.21: `Empfang: ★★★☆☆` im Decode-Stil + UTC rechts
         snr_utc_row = QHBoxLayout()
-        snr_utc_row.setSpacing(8)
+        snr_utc_row.setSpacing(2)
+        self._empfang_label = QLabel("Empfang: ")
+        self._empfang_label.setStyleSheet(
+            f"color: {_TEXT}; font-family: {_FONT}; font-size: 11px;"
+        )
         self.conditions_widget = StarsConditionWidget()
         self.utc_label = QLabel("UTC: --:--:--")
         self.utc_label.setStyleSheet(f"color: {_TEXT}; font-family: {_FONT}; font-size: 11px;")
+        snr_utc_row.addWidget(self._empfang_label)
         snr_utc_row.addWidget(self.conditions_widget)
         snr_utc_row.addStretch()
         snr_utc_row.addWidget(self.utc_label)

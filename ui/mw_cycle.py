@@ -19,15 +19,16 @@ from radio.presets import PREAMP_PRESETS
 
 
 def compute_local_conditions(stations: dict) -> tuple[int, int, float]:
-    """P1.19: 5-Sterne-Score aus Stations-Dict.
+    """P1.19/P1.21: 5-Sterne-Empfang-Score aus Stations-Dict.
 
     Returnt (score 1-5, n_stations, median_snr_top_half).
-    Score-Skala (ODER-verknuepft):
-      5 ★: 25+ Stationen ODER Median > -12 dB
-      4 ★: 15+ Stationen ODER Median > -15 dB
-      3 ★: 8+ Stationen  ODER Median > -18 dB
-      2 ★: 3+ Stationen  ODER Median > -22 dB
-      1 ★: alles darunter
+    Score nur SNR-basiert (Mike's Funker-Logik: Anzahl ohne dB-Werte ist
+    irrelevant — 50 Stationen bei -25 dB sind kein guter Empfang):
+      5 ★: Median-SNR > -10 dB (sehr gut)
+      4 ★: Median-SNR > -14 dB (gut)
+      3 ★: Median-SNR > -18 dB (maessig)
+      2 ★: Median-SNR > -22 dB (schlecht)
+      1 ★: alles darunter (sehr schlecht / kein Signal)
     """
     if not stations:
         return 1, 0, -99.0
@@ -41,13 +42,13 @@ def compute_local_conditions(stations: dict) -> tuple[int, int, float]:
         return 1, 0, -99.0
     top_half = snrs[:max(1, n // 2)]
     median = top_half[len(top_half) // 2] if top_half else -99.0
-    if n >= 25 or median > -12:
+    if median > -10:
         return 5, n, median
-    if n >= 15 or median > -15:
+    if median > -14:
         return 4, n, median
-    if n >= 8 or median > -18:
+    if median > -18:
         return 3, n, median
-    if n >= 3 or median > -22:
+    if median > -22:
         return 2, n, median
     return 1, n, median
 

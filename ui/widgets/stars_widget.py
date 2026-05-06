@@ -1,39 +1,36 @@
-"""StarsConditionWidget — 5-Sterne-Anzeige fuer lokale Conditions.
+"""StarsConditionWidget — 5-Sterne-Anzeige fuer Empfangs-Conditions.
 
-Theme: aktive Sterne in Neon-Cyan #00DDFF, inaktive in dezentem Grau #555.
+Theme: aktive Sterne in Gold #FFD700 (Konsistenz mit RADIO-Label im
+STATUS-Block), inaktive in #555. Eng zusammenstehend via RichText/HTML
+in einer einzigen QLabel (statt 5 separater Labels).
 """
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QLabel
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QLabel
 
 
-class StarsConditionWidget(QWidget):
-    _STAR_ACTIVE_STYLE = (
-        "color: #00DDFF; font-size: 14px; "
-        "font-family: Menlo; padding: 0 1px;"
-    )
-    _STAR_INACTIVE_STYLE = (
-        "color: #555; font-size: 14px; "
-        "font-family: Menlo; padding: 0 1px;"
-    )
+class StarsConditionWidget(QLabel):
+    """5-Sterne-Anzeige als single QLabel mit RichText.
+
+    Aktive Sterne in Gold (#FFD700), inaktive in #555. Sterne sitzen direkt
+    nebeneinander weil sie als Zeichen in einem String liegen.
+    """
+
+    _ACTIVE_COLOR = "#FFD700"
+    _INACTIVE_COLOR = "#555"
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
-        self._stars: list[QLabel] = []
-        for _ in range(5):
-            lbl = QLabel("★")
-            lbl.setStyleSheet(self._STAR_INACTIVE_STYLE)
-            self._stars.append(lbl)
-            layout.addWidget(lbl)
-        layout.addStretch()
+        self.setTextFormat(Qt.TextFormat.RichText)
+        self.setStyleSheet(
+            "padding: 0; margin: 0; background: transparent; "
+            "font-size: 13px; font-family: Menlo;"
+        )
+        self.setContentsMargins(0, 0, 0, 0)
         self.set_score(1, "0 Stationen")
 
     def set_score(self, score: int, tooltip: str = "") -> None:
         score = max(1, min(5, int(score)))
-        for i, lbl in enumerate(self._stars):
-            if i < score:
-                lbl.setStyleSheet(self._STAR_ACTIVE_STYLE)
-            else:
-                lbl.setStyleSheet(self._STAR_INACTIVE_STYLE)
+        active = f'<span style="color:{self._ACTIVE_COLOR};">{"★" * score}</span>'
+        inactive = f'<span style="color:{self._INACTIVE_COLOR};">{"★" * (5 - score)}</span>'
+        self.setText(active + inactive)
         self.setToolTip(tooltip)
