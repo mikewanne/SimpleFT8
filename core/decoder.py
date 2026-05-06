@@ -314,13 +314,20 @@ class Decoder(QObject):
                     if key and key not in seen:
                         # dt korrigieren:
                         # 1) Offset-Verschiebung rueckgaengig machen (Window-Sliding)
-                        # 2) Buffer-Offset: Decode-Loop wacht 1.5s vor Slot-Ende auf →
-                        #    Buffer startet 1.5s VOR Slot-Start → DT um +1.5 zu hoch
+                        # 2) Buffer-Offset: Decode-Loop wacht _WAKE_OFFSETS[mode]s vor
+                        #    Slot-Ende auf → Buffer startet _WAKE_OFFSETS[mode]s VOR
+                        #    Slot-Start → DT um +_WAKE_OFFSETS zu hoch.
                         # 3) WSJT-X Protokoll: TX startet bei t=+0.5s im Slot →
-                        #    Protokoll-Offset 0.5s direkt eingerechnet (= 1.5 + 0.5)
-                        # Ergebnis: Korrektur konvergiert nur noch auf ~0.27s (Hardware)
-                        # statt 0.77s (Hardware + Protokoll-Offset)
-                        _DT_OFFSETS = {"FT8": 2.0, "FT4": 1.0, "FT2": 0.8}
+                        #    Protokoll-Offset 0.5s direkt eingerechnet.
+                        # ⚠️ MUSS mit _WAKE_OFFSETS synchron bleiben (siehe Z.145):
+                        #    FT8: 2.5 + 0.5 = 3.0 (v0.95.7 — vorher fälschlich 2.0
+                        #    weil P1.9 Wake 1.5→2.5 erhöht aber DT_OFFSET nicht
+                        #    mit-erhöht, +1.0s DT-Drift bis 06.05.2026)
+                        #    FT4: 0.5 + 0.5 = 1.0
+                        #    FT2: 0.3 + 0.5 = 0.8
+                        # Ergebnis: Korrektur konvergiert auf ~0.27s (Hardware) statt
+                        # auf clamped 1.0 (Hardware+vergessener Wake-Anteil).
+                        _DT_OFFSETS = {"FT8": 3.0, "FT4": 1.0, "FT2": 0.8}
                         DT_BUFFER_OFFSET = _DT_OFFSETS.get(self._mode, 2.0)
                         raw_results.append({
                             **r,
