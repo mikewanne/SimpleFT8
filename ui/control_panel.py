@@ -540,7 +540,22 @@ class _AntenneCard(QFrame):
             f"QSpinBox {{ background:#0a0a14; color:#FFD700; "
             f"border:1px solid #444; border-radius:3px; padding:2px 4px; "
             f"font-family:{_FONT}; font-size:11px; font-weight:bold; }}"
-            "QSpinBox::up-button, QSpinBox::down-button { width:14px; }"
+            # P1.22: Spinbox-Pfeile deutlich sichtbar (waren nur 2 gelbe Punkte)
+            "QSpinBox::up-button { "
+            "subcontrol-origin: border; subcontrol-position: top right; "
+            "width: 20px; background: #2a2a3a; border-left: 1px solid #555; "
+            "border-top-right-radius: 3px; "
+            "} "
+            "QSpinBox::down-button { "
+            "subcontrol-origin: border; subcontrol-position: bottom right; "
+            "width: 20px; background: #2a2a3a; border-left: 1px solid #555; "
+            "border-bottom-right-radius: 3px; "
+            "} "
+            "QSpinBox::up-button:hover, QSpinBox::down-button:hover { "
+            "background: #3a3a5a; "
+            "} "
+            "QSpinBox::up-arrow { width: 10px; height: 10px; } "
+            "QSpinBox::down-arrow { width: 10px; height: 10px; } "
         )
         _tx_lay.addWidget(self._tx_freq_spin)
         _tx_lay.addStretch()
@@ -848,7 +863,8 @@ class _QSOStatusCard(QFrame):
 
         # ── STATUS ────────────────────────────────────────────────
         lbl_status = QLabel("STATUS")
-        lbl_status.setStyleSheet(f"color: #CC9944; font-size: 10px; font-family: {_FONT}; font-weight: bold;")
+        # P1.22: minimal groesser fuer Lesbarkeit
+        lbl_status.setStyleSheet(f"color: #CC9944; font-size: 11px; font-family: {_FONT}; font-weight: bold;")
         lay.addWidget(lbl_status)
 
         self.connection_label = QLabel("RADIO: Suche...")
@@ -861,10 +877,10 @@ class _QSOStatusCard(QFrame):
         self.decode_label.setStyleSheet(f"color: {_TEXT}; font-family: {_FONT}; font-size: 11px;")
         lay.addWidget(self.decode_label)
 
-        # P1.19/P1.21: `Empfang: ★★★☆☆` im Decode-Stil + UTC rechts
+        # P1.19/P1.21/P1.22: `Lokaler Empfang: ★★★☆☆` im Decode-Stil + UTC rechts
         snr_utc_row = QHBoxLayout()
-        snr_utc_row.setSpacing(2)
-        self._empfang_label = QLabel("Empfang: ")
+        snr_utc_row.setSpacing(4)
+        self._empfang_label = QLabel("Lokaler Empfang: ")
         self._empfang_label.setStyleSheet(
             f"color: {_TEXT}; font-family: {_FONT}; font-size: 11px;"
         )

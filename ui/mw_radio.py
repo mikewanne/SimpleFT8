@@ -229,7 +229,9 @@ class RadioMixin:
         self._normal_stations = {}
         self.control_panel.update_decode_count(0)
         self.qso_panel.log_view.clear()
-        self.qso_panel.status_label.setText(f"Modus: {mode}")
+        # P1.22: `Modus: FT8` Label entfernt — redundant zur Statusbar unten.
+        # status_label-Widget bleibt fuer QSO-Counter / CQ-Anzeige verfuegbar.
+        self.qso_panel.status_label.setText("")
         # PSK-Reporter zuruecksetzen bei Moduswechsel
         self.control_panel.psk_label.setText("PSK:  —")
         # CQ stoppen bei Mode-Wechsel

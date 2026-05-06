@@ -22,8 +22,9 @@ class StarsConditionWidget(QLabel):
         super().__init__(parent)
         self.setTextFormat(Qt.TextFormat.RichText)
         self.setStyleSheet(
+            # P1.22: Sterne minimal groesser (Mike-Wunsch — etwas mehr Praesenz)
             "padding: 0; margin: 0; background: transparent; "
-            "font-size: 13px; font-family: Menlo;"
+            "font-size: 15px; font-family: Menlo;"
         )
         self.setContentsMargins(0, 0, 0, 0)
         self.set_score(1, "0 Stationen")
