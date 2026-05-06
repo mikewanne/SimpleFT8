@@ -100,10 +100,12 @@ Folgebug-Risiko aus P1.5: bekannte Station < 5 Min nach RR73 ruft erneut →
 zweites QSO + zweiter ADIF-Eintrag. QRZ.com filtert serverseitig, aber
 lokal nicht.
 
-### 🟢 P1.20 — Workflow-Template institutionalisieren
+### ✅ P1.20 — Workflow-Template institutionalisieren (ERLEDIGT 2026-05-06 v0.95.9)
 
-Mike-Wunsch: Bundle1-Workflow als Standard-Pattern in CLAUDE.md / Skill
-festhalten — V1+V2+R1+V3 Diagnose + Plan-V1+V2+R1+V3 + Code + Tests.
+Skill `.claude/skills/ft8_workflow.md` mit explizitem Trigger-Block
+erweitert (Mike-Phrasen + Auto-Trigger + Trivial-Klausel). Slash-Command
+`.claude/commands/workflow.md` angelegt → `/workflow [bug-name]` startet
+Skill direkt. CLAUDE.md beide Pfade verweisen auf Triggers + Slash-Command.
 
 ### ✅ P1.17 — RX-SNR-Bias (ERLEDIGT 2026-05-06 v0.95.9)
 

@@ -13,8 +13,19 @@ Lies nach dieser Datei sofort auch HANDOFF.md **und HISTORY.md** und bestätige 
 
 → **Beweis 01.05.2026:** Label-Fix in 2 Dateien ohne Workflow = Mike-Unterbrechung + Regelverletzung
 → **Skill:** `.claude/skills/ft8_workflow.md` — VOR jedem Code aufrufen
+→ **Slash-Command:** `/workflow [bug-name]` — startet Skill direkt
 → **Selbst-Check vor JEDEM Tastendruck:** "Habe ich den vollen Workflow durchgeführt? NEIN → STOP."
 → **Verstoss = Vertrauensverlust.** Mike unterbricht, korrigiert, und hat immer Recht.
+
+**Mike-Trigger-Phrasen die den Skill SOFORT laden:**
+- „vollen workflow", „kompletten workflow", „voller worflow"
+- „workflow mit deepseek", „mit deepseek durch", „deepseek einbinden"
+- „ausführlicher plan", „sauber planen", „v1 v2 v3"
+- „selbe verfahrensweise", „wie immer", „wie bei P1.X"
+- „erst V1 dann zu deepseek", „prompt entwerfen"
+
+**Trivial-Klausel (Workflow NICHT laden):** Tippfehler/Style/Doku/<5 Zeilen.
+Vollständige Trigger- und Trivial-Liste: `.claude/skills/ft8_workflow.md`.
 
 ---
 
