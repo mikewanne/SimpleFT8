@@ -5,6 +5,38 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-06 v0.95.9 — P1.24 TX-Klick-Buffer (Folge-Fix zu P1.14)
+
+**Mike-Field-Test v0.95.8 entdeckt:** P1.14 fixte Station-Wechsel sauber
+in RX-Phase, aber wenn der Klick während CQ-TX-Phase (`encoder.is_transmitting`)
+kam, wurde der Klick komplett ignoriert (silent skip + Toast „TX aktiv"
+seit P1.14 W5). CQ lief weiter, Klick verpufft. Mike: „rufe CQ, sehe
+seltene Station, klicke an — CQ läuft weiter, muss erst HALT drücken."
+Erweiterung: gleiche Frustration bei Hunt-TX_CALL-Umentscheidung.
+
+**Wurzel:** `_on_station_clicked` Z.68-73 mit `if is_transmitting: return`
+hatte keine Buffer-Logik. Aktueller TX-Audio-Slot kann nicht ohne RF-Click
+abgebrochen werden, aber State-Cleanup + Buffer-für-nächsten-Slot ist
+trivial machbar.
+
+**Fix (`ui/mw_qso.py` + `ui/main_window.py`):**
+- `_main_window.__init__:209` — neues Attribut `_pending_station_click = None`
+- `_on_station_clicked:69-89` — bei `is_transmitting`: State-Cleanup
+  (cq_mode aktiv → `stop_cq()` + Button visuell off; Hunt-State aktiv
+  → `cancel()`); `_pending_station_click = msg`; Statusbar
+  „TX läuft — X wird im nächsten Slot gerufen"; return
+- `_on_tx_finished:236-244` — nach `on_message_sent()`: wenn Buffer
+  gesetzt → `_on_station_clicked(buffered)` rekursiv (jetzt
+  `is_transmitting=False`, normaler Pfad)
+- `_on_cancel:172` — Buffer wird verworfen (HALT cleared alles)
+
+**Tests:** 812 → 816 grün (+4 in `tests/test_p1_24_pending_click.py` —
+Buffer-Logik isoliert via Logik-Sim, kein UI-Mock).
+
+**Field-Test bestätigt von Mike** („Ja läuft").
+
+---
+
 ## 2026-05-06 v0.95.8 — P1.14 Station-Wechsel-Bug + P1.23 Status-UI-Feinjustierung
 
 ### P1.14 Station-Wechsel-Bug — voller Workflow

@@ -1,6 +1,26 @@
 # HANDOFF — SimpleFT8
 
-**Stand 2026-05-06:** **v0.95.8 — P1.14 Station-Wechsel-Bug +
+**Stand 2026-05-06:** **v0.95.9 — P1.24 TX-Klick-Buffer (Folge-Fix
+zu P1.14, Field-Test bestätigt).**
+
+**P1.24 (NEU):** Mike's Field-Test v0.95.8 entdeckte: TX-Klick wurde
+komplett ignoriert wenn `encoder.is_transmitting=True`. Mike rief CQ,
+sah seltene Station, klickte — CQ lief weiter, Klick verpufft. Erweitert:
+gleiche Frustration bei Hunt-TX_CALL-Umentscheidung.
+
+**Fix:** Buffer-Logik. Klick während TX → State-Cleanup sofort (cq_mode
+aktiv → `stop_cq()` + Button visuell off; Hunt-State → `cancel()`) +
+`_pending_station_click = msg` + Statusbar „TX läuft — X wird im
+nächsten Slot gerufen". In `_on_tx_finished` nach `on_message_sent()`
+wird Buffer geprüft und `_on_station_clicked(buffered)` rekursiv
+aufgerufen. HALT verwirft Buffer.
+
+**Code:** `ui/main_window.py:209` (1 Attribut), `ui/mw_qso.py` (3 Stellen).
+Tests 812 → 816 grün (+4 in `tests/test_p1_24_pending_click.py`).
+
+---
+
+**Vorher v0.95.8:** **P1.14 Station-Wechsel-Bug +
 P1.23 Status-UI-Feinjustierung.**
 
 **P1.14 (voller Workflow V1→V2→R1→V3 Diagnose + Plan-V1→V2→R1→V3):**

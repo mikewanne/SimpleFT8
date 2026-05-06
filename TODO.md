@@ -1,4 +1,38 @@
-# SimpleFT8 TODO — Stand 06.05.2026 (v0.95.7)
+# SimpleFT8 TODO — Stand 06.05.2026 (v0.95.9)
+
+---
+
+## ✅ P1.24 (06.05.2026 v0.95.9) — ERLEDIGT (Field-Test bestaetigt)
+
+**Folge-Fix zu P1.14:** TX-Klick wurde komplett ignoriert wenn
+`encoder.is_transmitting=True` (während CQ-TX oder Hunt-TX_CALL). Mike
+musste HALT druecken um Station-Wechsel zu erzwingen.
+
+**Fix:** Buffer-Logik. Klick waehrend TX → State-Cleanup (stop_cq oder
+cancel) sofort + Buffer + Statusbar; nach TX-Ende rekursiv neu triggern.
+Aktueller TX-Slot laeuft durch, im naechsten Slot wird Station angerufen.
+
+Code: `ui/main_window.py` (1 Attribut), `ui/mw_qso.py` (3 Stellen).
+Tests 812 → 816 gruen (+4 in `tests/test_p1_24_pending_click.py`).
+
+---
+
+## ✅ P1.14 + P1.23 (06.05.2026 v0.95.8) — ERLEDIGT (Field-Test bestaetigt)
+
+**P1.14 Station-Wechsel-Bug** (voller Workflow V1→V2→R1→V3 Diagnose +
+Plan-V1→V2→R1→V3): 6 Bug-Wurzeln W1-W6 gefixt:
+- W1: `start_qso` resetete keine Pendings bei `state != IDLE`
+- W2: `_caller_queue` enthielt manuell-gewaehlte Station (Doppel-QSO)
+- W3: `_active_qso_targets` wuchs monoton bei Wechseln
+- W4/KP6: `_was_cq` State-Machine-extern korrigiert (BEHALTEN)
+- W5: TX-Klick silent ignoriert (Statusbar-Toast 3s)
+- W6: `auto_hunt._manual_override` wurde NIE zurueckgesetzt
+  (Fix in `_on_cancel`, `_on_qso_confirmed`, `_on_qso_timeout`)
+
+Tests 802 → 812 gruen (+10 in `tests/test_p1_14_station_switch.py`).
+
+**P1.23 Status-UI:** Label „Lokale Empfangsqualitaet:" (statt „Lokaler
+Empfang:"), Schriftgroessen 11→10px, Sterne 15→13px.
 
 ---
 
