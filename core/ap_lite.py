@@ -119,12 +119,16 @@ def generate_candidates(
     candidates = []
 
     if qso_state == 1:
-        # WAIT_REPORT: Wir warten auf Report + Locator von der Gegenstation
-        # Format: "DA1MHH DK5ON JO31 -15" oder Varianten
+        # WAIT_REPORT: Gegenstation sendet Report ODER Grid (FT8: 3 Tokens
+        # pro Frame, niemals beides). Wir generieren nur Report-Kandidaten
+        # (haeufigster Fall, KISS). Grid nicht implementiert weil Locator
+        # der Gegenstation unbekannt waere.
+        # Format: "OWN_CALL THEIR_CALL +-NN" (z.B. "DA1MHH DK5ON +05")
         for snr_delta in range(-5, 6, 2):  # SNR-Fenster ±4 dB
             r = max(-30, min(29, snr_clamped + snr_delta))
-            candidates.append(f"{own_callsign} {their_callsign} {own_locator} {r:+03d}")
-        # TODO: Locator der Gegenstation fehlt hier — aus vorheriger Dekodierung merken!
+            candidates.append(f"{own_callsign} {their_callsign} {r:+03d}")
+        # P1.AP-FIX (2026-05-06 v0.95.10): Locator entfernt — FT8-konform
+        # 3-Token. Vorher 4-Token, ft8lib-rc=5, Rescue scheiterte immer.
 
     elif qso_state == 2:
         # WAIT_RR73: Wir warten auf RR73, 73 oder RRR

@@ -32,7 +32,12 @@ from core.ap_lite import (
 # ── generate_candidates() ─────────────────────────────────────────────────────
 
 def test_generate_state1_basic():
-    """State 1 (WAIT_REPORT): Nachrichten mit eigenem Locator + SNR-Fenster."""
+    """State 1 (WAIT_REPORT): 3-Token-Kandidaten mit Report (FT8-konform).
+
+    Nach P1.AP-FIX (v0.95.10): Locator NICHT mehr im Kandidat —
+    FT8 erlaubt nur 3 Tokens pro Frame.
+    """
+    import re
     cands = generate_candidates(
         qso_state=1,
         their_callsign="DK5ON",
@@ -41,10 +46,16 @@ def test_generate_state1_basic():
         snr_estimate=-10.0,
     )
     assert len(cands) > 0, "State 1 muss Kandidaten liefern"
-    # Alle müssen eigenes Rufzeichen + Locator enthalten
+    # Alle Kandidaten 3-Token-Format: OWN_CALL THEIR_CALL [+-]NN
+    report_pattern = re.compile(r'^[+-]\d{2}$')
     for c in cands:
-        assert "DA1MHH" in c
-        assert "JO31" in c
+        tokens = c.split()
+        assert len(tokens) == 3, f"3 Tokens erwartet, habe {len(tokens)}: '{c}'"
+        assert tokens[0] == "DA1MHH"
+        assert tokens[1] == "DK5ON"
+        assert report_pattern.match(tokens[2]), f"Ungueltiger Report '{tokens[2]}'"
+        val = int(tokens[2])
+        assert -30 <= val <= 29, f"Report {val} ausserhalb -30..+29"
 
 
 def test_generate_state1_snr_range():

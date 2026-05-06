@@ -186,25 +186,23 @@ def test_align_buffers_returns_correct_shape(encoder):
 # ── 3. try_rescue E2E ───────────────────────────────────────────────
 
 
-def test_try_rescue_state1_documents_bug(encoder):
-    """⛔ BUG-FINDING 2026-05-06 v0.95.9 (P1.AP):
+def test_try_rescue_state1_runs_after_fix(encoder):
+    """State 1 Rescue laeuft durch (vorher: Kandidaten ungueltig).
 
-    State-1-Rescue ist AKTUELL NICHT FUNKTIONAL — `generate_candidates`
-    erzeugt fuer WAIT_REPORT 4-Token-Nachrichten:
-        f"{own_callsign} {their_callsign} {own_locator} {r:+03d}"
-    z.B. "DA1MHH DK5ON JO31 +05".
+    Nach P1.AP-FIX (v0.95.10): Kandidaten sind 3-Token-Format,
+    ft8lib akzeptiert, Korrelation laeuft tatsaechlich (statt rc=5-Block).
 
-    Aber FT8 erlaubt nur 3 Tokens pro Frame (Locator XOR Report, nicht
-    beides). ft8lib lehnt alle Kandidaten mit rc=5 ab → alle Korrelations-
-    Scores = 0 → State-1-Rescue scheitert IMMER, auch bei sauberen Buffern.
+    HINWEIS: Score == 0.0 ist hier moeglich obwohl Format korrekt — Ursache
+    ist NICHT der P1.AP-FIX, sondern die `_build_costas_reference`-
+    Vereinfachung (Code-TODO). align_buffers findet bei identischen Buffern
+    df_hz != 0 wegen Costas-Nebenmaxima → correlate_candidate erhaelt
+    abweichende Frequenz → ft8lib-Wave passt nicht mehr → 0.0.
 
-    Mike-TODO post-Kur (P1.AP-FIX):
-    - core/ap_lite.py:126 — Kandidaten auf 3 Tokens reduzieren
-    - Vorschlag: f"{own_callsign} {their_callsign} {r:+03d}" (Report-only)
-    - Workflow: V1→V2→R1→V3 (Algorithmus-Aenderung, Architektur-Pflicht)
+    Format-Fix-Beweis liegt bei `test_generate_candidates_state1_ft8lib_compatible`
+    (maschineller Beweis: ft8lib akzeptiert jeden Kandidaten).
 
-    Dieser Test friert das aktuelle (kaputte) Verhalten ein — wenn der
-    Generator gefixt wird, wird der Test failen → Trigger zur Anpassung.
+    Hier nur: result is not None + attempt_count erhoeht +
+    success-Pfad asserts nur falls success.
     """
     ap = APLite(encoder=encoder)
     msg_real = "DA1MHH DK5ON +05"
@@ -222,29 +220,59 @@ def test_try_rescue_state1_documents_bug(encoder):
         own_locator="JO31", snr_estimate=5.0,
     )
 
-    # Aktuelles Verhalten: alle Kandidaten ungueltig → score=0, fail.
     assert result is not None
-    assert result.success is False
-    assert result.score == 0.0
-    # attempt_count erhoeht (Versuch wurde gezaehlt)
+    # attempt_count erhoeht (Versuch wurde gezaehlt — nicht silent geblockt)
     assert ap.attempt_count == 1
+    # R1 KP-3: hartcodierten 0.7 vermeiden, SCORE_THRESHOLD nutzen.
+    if result.success:
+        # Bei Erfolg: gewaehlte Message enthaelt Callsigns + Score >= THRESHOLD
+        assert result.recovered_message is not None
+        assert "DA1MHH" in result.recovered_message
+        assert "DK5ON" in result.recovered_message
+        assert result.score >= SCORE_THRESHOLD
 
 
-def test_generate_candidates_state1_format_bug():
-    """⛔ BUG-FINDING (Zwilling zu test_try_rescue_state1_documents_bug):
-    generate_candidates State 1 erzeugt 4-Token-Strings, nicht FT8-konform.
+def test_generate_candidates_state1_format_correct():
+    """State 1 Kandidaten sind FT8-konform 3-Token-Format.
+
+    Regression-Schutz fuer P1.AP-FIX (v0.95.10) — falls jemand wieder
+    4-Token einbaut, schlaegt dieser Test sofort fehl.
     """
     cands = generate_candidates(
         qso_state=1, their_callsign="DK5ON",
         own_callsign="DA1MHH", own_locator="JO31",
         snr_estimate=5.0,
     )
-    # Aktuelles Verhalten: mindestens 1 Kandidat hat 4 Tokens (BUG)
-    has_4_tokens = any(len(c.split()) == 4 for c in cands)
-    assert has_4_tokens, (
-        "Falls dieser Test failed: Kandidaten-Generator wurde gefixt — "
-        "Test entfernen oder umkehren."
+    assert len(cands) > 0
+    for c in cands:
+        tokens = c.split()
+        assert len(tokens) == 3, (
+            f"FT8 erlaubt nur 3 Tokens pro Frame, habe {len(tokens)}: '{c}'"
+        )
+
+
+def test_generate_candidates_state1_ft8lib_compatible(encoder):
+    """Jeder State-1-Kandidat wird von ft8lib akzeptiert (rc != 5).
+
+    Maschineller Beweis fuer P1.AP-FIX: keine 4-Token-Regressionen
+    moeglich, weil ft8lib jede Abweichung sofort rejectet.
+    """
+    cands = generate_candidates(
+        qso_state=1, their_callsign="DK5ON",
+        own_callsign="DA1MHH", own_locator="JO31",
+        snr_estimate=-5.0,
     )
+    assert len(cands) > 0
+    for c in cands:
+        wave = encoder.generate_reference_wave(c, freq_hz=1500.0)
+        assert wave is not None, (
+            f"ft8lib lehnt Kandidaten ab (rc=5): '{c}' — "
+            f"vermutlich falsche Token-Anzahl oder ungueltiges Format"
+        )
+        # Wave-Laenge plausibel (FT8 = 79 Symbole × 1920 = 151_680 Samples)
+        assert 100_000 < len(wave) < 200_000, (
+            f"Wave-Laenge unplausibel: {len(wave)}"
+        )
 
 
 def test_try_rescue_extreme_noise_fails(encoder, rng):
