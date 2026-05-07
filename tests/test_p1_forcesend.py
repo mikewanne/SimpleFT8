@@ -104,9 +104,16 @@ def test_advance_other_states_no_emit():
 
 
 def test_advance_label_default(panel):
-    """state IDLE → Default-Label 'Weiter →'."""
+    """state IDLE → Default-Label 'QSO Finish' (Mike-Feedback 07.05.)."""
     panel.set_advance_label(QSOState.IDLE)
-    assert panel.btn_advance.text() == "Weiter →"
+    assert panel.btn_advance.text() == "QSO Finish"
+
+
+def test_advance_button_tooltip(panel):
+    """Tooltip erklaert was der Button tut (Default-Label allein nicht klar)."""
+    tip = panel.btn_advance.toolTip()
+    assert "stuck" in tip.lower() or "manuell" in tip.lower()
+    assert "73" in tip
 
 
 def test_advance_label_wait_report(panel):
@@ -130,11 +137,11 @@ def test_advance_label_wait_73(panel):
 def test_advance_label_unknown_state_default(panel):
     """state TX_RR73 (nicht in mapping) → Default 'Weiter →'."""
     panel.set_advance_label(QSOState.TX_RR73)
-    assert panel.btn_advance.text() == "Weiter →"
+    assert panel.btn_advance.text() == "QSO Finish"
 
 
 def test_advance_label_returns_to_default(panel):
     """Nach WAIT_73 → IDLE → Label zurueck auf Default."""
     panel.set_advance_label(QSOState.WAIT_73)
     panel.set_advance_label(QSOState.IDLE)
-    assert panel.btn_advance.text() == "Weiter →"
+    assert panel.btn_advance.text() == "QSO Finish"

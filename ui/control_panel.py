@@ -896,7 +896,7 @@ class _QSOStatusCard(QFrame):
         # Weiter + Abbrechen nebeneinander
         adv_row = QHBoxLayout()
         adv_row.setSpacing(4)
-        self.btn_advance = QPushButton("Weiter →")
+        self.btn_advance = QPushButton("QSO Finish")
         self.btn_advance.setFixedHeight(22)
         self.btn_advance.setStyleSheet(
             "QPushButton { background: rgba(0,100,0,0.35); color: #88CC88; "
@@ -904,6 +904,11 @@ class _QSOStatusCard(QFrame):
             "padding: 2px; font-size: 11px; font-weight: bold; }"
             "QPushButton:hover { background: rgba(0,130,0,0.45); }"
             "QPushButton:disabled { background: #2a2a2a; color: #666666; border-color: #444444; }"
+        )
+        self.btn_advance.setToolTip(
+            "Sendet manuell den nächsten QSO-Schritt "
+            "(R+Report / RR73 / 73 — je nach Phase). "
+            "Nutze bei stuck-Gegenstation."
         )
         self.btn_advance.setEnabled(False)
         self.btn_cancel = QPushButton("HALT")
@@ -1686,6 +1691,8 @@ class ControlPanel(QWidget):
 
         Mike's Hobby-UX: Button macht klar was gesendet wird.
         KISS: kompakt ohne Verb (Button-Klick-Kontext impliziert "senden").
+        Default „QSO Finish" macht den Button-Zweck auch im IDLE klar
+        (Mike-Feedback 07.05.: „Weiter →" nichtssagend).
         """
         from core.qso_state import QSOState
         labels = {
@@ -1693,7 +1700,7 @@ class ControlPanel(QWidget):
             QSOState.WAIT_RR73: "RR73",
             QSOState.WAIT_73: "73",
         }
-        self.btn_advance.setText(labels.get(state, "Weiter →"))
+        self.btn_advance.setText(labels.get(state, "QSO Finish"))
 
     def set_rx_active(self, enabled: bool):
         """GAIN-MESSUNG + DIVERSITY sperren wenn RX aus ist."""
