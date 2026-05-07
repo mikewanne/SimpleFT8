@@ -50,6 +50,11 @@ def _make_self_with_store(*, scoring="normal",
     else:
         fake_self._standard_store = store
         fake_self._dx_store = None
+
+    # P1.CACHE-SIMPLE: _get_diversity_store-Helper im Mock-Self bereitstellen.
+    def _gds(scoring_):
+        return fake_self._dx_store if scoring_ == "dx" else fake_self._standard_store
+    fake_self._get_diversity_store = _gds
     return fake_self, store
 
 
@@ -59,6 +64,7 @@ def test_cache_reuse_returns_false_when_no_store():
     fake_self = MagicMock()
     fake_self._standard_store = None
     fake_self._dx_store = None
+    fake_self._get_diversity_store = lambda s: None
     result = RadioMixin._try_diversity_cache_reuse(
         fake_self, "40m", "FT8", "normal"
     )
@@ -76,15 +82,23 @@ def test_cache_reuse_returns_false_when_ratio_expired():
     fake_self._enable_diversity.assert_not_called()
 
 
-def test_cache_reuse_returns_false_when_gain_expired():
-    """gain > 6h → kein Cache-Reuse (Gain-Werte unbrauchbar)."""
+def test_cache_reuse_loads_ratio_even_when_gain_expired():
+    """P1.CACHE-SIMPLE (v0.95.13): Gain-Frist ist NICHT mehr Voraussetzung.
+
+    Frische Ratio + abgelaufener Gain → Cache-Reuse laedt Ratio trotzdem.
+    Caller (`_check_diversity_preset`) entscheidet ob Gain-Refresh
+    parallel/sequentiell laeuft. Vorher (v0.93-v0.95.12): blockiert.
+    """
     from ui.mw_radio import RadioMixin
     fake_self, store = _make_self_with_store(gain_valid=False)
     result = RadioMixin._try_diversity_cache_reuse(
         fake_self, "40m", "FT8", "normal"
     )
-    assert result is False
-    fake_self._enable_diversity.assert_not_called()
+    assert result is True
+    fake_self._enable_diversity.assert_called_once()
+    kwargs = fake_self._enable_diversity.call_args.kwargs
+    assert kwargs["scoring_mode"] == "normal"
+    assert kwargs["cached_ratio"] == "70:30"
 
 
 def test_cache_reuse_returns_false_when_ratio_field_missing():
@@ -174,19 +188,8 @@ def test_enable_diversity_with_cached_ratio_sets_operate_phase(qapp):
     assert (time.time() - dc._last_measured_at) < 3600
 
 
-# ── DiversityCacheToast Smoke ──────────────────────────────────────────────
-
-
-def test_diversity_cache_toast_constructs(qapp):
-    """Toast laesst sich ohne Crash konstruieren."""
-    from ui.diversity_cache_toast import DiversityCacheToast
-    toast = DiversityCacheToast(
-        parent=None, band="40m", ft_mode="FT8",
-        scoring_label="Diversity Standard",
-        ratio="70:30", dominant="A1", age_minutes=23,
-    )
-    assert toast is not None
-    toast.close()
+# Toast-Smoke-Test entfernt v0.95.13 — Toast-Klasse + Aufruf raus
+# (Mike-Feedback: keine Pillepalle-Notifications für Routine-Aktionen).
 
 
 if __name__ == "__main__":

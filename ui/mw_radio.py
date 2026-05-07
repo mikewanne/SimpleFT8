@@ -502,9 +502,10 @@ class RadioMixin:
         als auch vom Bandpilot (programmatisch via _set_rx_mode_direct)
         aufgerufen — kein Code-Duplikat zwischen beiden Pfaden.
 
-        Pruefung: Preset-Store auf 2h-Frist → Dialog "Weiter/Neu messen".
-        Bei "Weiter" → _enable_diversity. Bei "Neu" oder fehlend Preset →
-        volle Pipeline (Tunen → Gain → Einmessen).
+        P1.CACHE-SIMPLE (v0.95.13): Wahl-Dialog "Weiter/Neu messen" raus.
+        Cache-Status-Dispatch via ``_check_diversity_preset`` analog zum
+        Bandwechsel-Pfad. Mike-Vision: keine Modal-Wahl-Dialoge fuer
+        Routine-Aktionen.
         """
         self._rx_mode = "diversity"
         self._diversity_stations = {}
@@ -514,66 +515,9 @@ class RadioMixin:
         band = self.settings.band
         ft_mode = self.settings.mode
 
-        # v0.93 Cache-Reuse: Ratio < 1h alt → Phase 3 ueberspringen + Toast
-        if self._try_diversity_cache_reuse(band, ft_mode, scoring):
-            self._update_statusbar()
-            return
-
-        # Preset-Store pruefen — 6h-Frist Gain
-        store = getattr(self, '_dx_store', None) if scoring == "dx" else getattr(self, '_standard_store', None)
-        if store and store.is_valid_gain(band, ft_mode):
-            age = store.get_gain_age_minutes(band, ft_mode)
-            mode_label = "Diversity DX" if scoring == "dx" else "Diversity Standard"
-            from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel
-            _dlg = QDialog(self)
-            _dlg.setWindowTitle("Diversity Setup")
-            _dlg.setStyleSheet("""
-                QDialog, QWidget { background-color: #1a1a2e; }
-                QLabel { color: #CCCCCC; font-family: Menlo; font-size: 13px; background-color: #1a1a2e; }
-                QLabel#lbl_title { color: #88AACC; font-size: 14px; font-weight: bold; padding-bottom: 4px; }
-                QPushButton {
-                    background-color: #2a2a3e; color: #CCCCCC;
-                    border: 1px solid #444; border-radius: 5px;
-                    font-family: Menlo; font-size: 13px;
-                    padding: 8px 20px; min-width: 120px;
-                }
-                QPushButton:hover { background-color: #3a3a5e; }
-                QPushButton#btn_weiter { background-color: #1a3a6e; border-color: #4488cc; }
-                QPushButton#btn_weiter:hover { background-color: #2a4a8e; }
-            """)
-            _lay = QVBoxLayout(_dlg)
-            _lay.setContentsMargins(24, 20, 24, 20)
-            _lay.setSpacing(10)
-            lbl_title = QLabel(f"{band} {ft_mode} — {mode_label}")
-            lbl_title.setObjectName("lbl_title")
-            lbl_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            lbl_msg = QLabel(f"Kalibrierungsdaten vorhanden ({age} Min. alt).\nWeiter oder neu messen?")
-            lbl_msg.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            _lay.addWidget(lbl_title)
-            _lay.addWidget(lbl_msg)
-            _btn_row = QHBoxLayout()
-            _btn_row.setSpacing(12)
-            btn_new  = QPushButton("Neu messen")
-            btn_use  = QPushButton("Weiter")
-            btn_use.setObjectName("btn_weiter")
-            _btn_row.addWidget(btn_new)
-            _btn_row.addWidget(btn_use)
-            _lay.addLayout(_btn_row)
-            _choice = [False]
-            btn_use.clicked.connect(lambda: (_choice.__setitem__(0, True), _dlg.accept()))
-            btn_new.clicked.connect(lambda: _dlg.accept())
-            _dlg.exec()
-            if _choice[0]:
-                print(f"[Diversity] Preset gueltig ({age} Min.) — ueberspringe Pipeline")
-                self._enable_diversity(scoring_mode=scoring)
-                return
-
-        # Volle Pipeline: Tunen → Gain-Messung → Einmessen
-        gain_scoring = "snr" if scoring == "dx" else "stations"
-        print(f"[Diversity] Starte Pipeline ({scoring.upper()}, Gain: {gain_scoring})")
-        self._pending_dx_diversity = True
-        self._pending_diversity_scoring = scoring
-        self._start_dx_tuning(scoring_mode=gain_scoring)
+        # P1.CACHE-SIMPLE: einheitliche Dispatch-Logik
+        # (Cache-Reuse / Auto-Messung / DXTuneDialog / volle Pipeline).
+        self._check_diversity_preset(band, ft_mode, scoring)
 
     # ── Bandpilot ────────────────────────────────────────────────────────────
 
@@ -916,24 +860,21 @@ class RadioMixin:
 
     def _try_diversity_cache_reuse(self, band: str, ft_mode: str,
                                    scoring: str) -> bool:
-        """Pruefen ob Ratio-Cache < 1h alt ist und ggf. anwenden (v0.93).
+        """Pruefen ob Ratio-Cache < 1h alt ist und ggf. anwenden.
+
+        P1.CACHE-SIMPLE (v0.95.13): Gain-Check entfernt — Ratio und Gain
+        komplett entkoppelt. Bei frischer Ratio wird geladen, auch wenn
+        Gain abgelaufen ist. Gain-Refresh wird vom Caller (z.B.
+        ``_check_diversity_preset``) separat behandelt.
 
         Bei Erfolg: ``_enable_diversity`` aufrufen, Phase=operate setzen,
-        ratio + dominant aus Cache, Toast zeigen, ``_last_measured_at``
-        passend setzen. Returnt True → Aufrufer ueberspringt Pipeline/Dialog.
-
-        Pre-Condition: Standard-Modus (gain UND ratio im Cache). Wenn nur
-        gain valid ist (1h < age <= 6h) → False, Standard-Dialog uebernimmt.
+        ratio + dominant aus Cache, ``_last_measured_at`` passend setzen.
+        Returnt True → Aufrufer ueberspringt Pipeline/Dialog.
         """
-        store = (getattr(self, '_dx_store', None) if scoring == "dx"
-                 else getattr(self, '_standard_store', None))
+        store = self._get_diversity_store(scoring)
         if not store:
             return False
         if not store.is_valid_ratio(band, ft_mode):
-            return False
-        # Gain muss auch valid sein (ohne Gain kann der RX-Verstaerker nicht
-        # korrekt eingestellt werden — Cache-Reuse-Pfad braucht beides).
-        if not store.is_valid_gain(band, ft_mode):
             return False
         entry = store.get(band, ft_mode)
         ratio = entry.get("ratio")
@@ -943,7 +884,6 @@ class RadioMixin:
         age_min = store.get_ratio_age_minutes(band, ft_mode) or 0
         age_sec = age_min * 60
 
-        scoring_label = "Diversity DX" if scoring == "dx" else "Diversity Standard"
         print(f"[Diversity] Cache-Reuse {band}/{ft_mode}: {ratio} "
               f"(dominant: {dominant or 'A1'}, vor {age_min} Min.) — Phase 3 skip")
 
@@ -953,19 +893,10 @@ class RadioMixin:
             cached_dominant=dominant,
             cached_age_seconds=age_sec,
         )
-
-        # Toast zeigen (non-modal, 5s self-close)
-        try:
-            from ui.diversity_cache_toast import DiversityCacheToast
-            toast = DiversityCacheToast(
-                self, band=band, ft_mode=ft_mode,
-                scoring_label=scoring_label,
-                ratio=ratio, dominant=dominant,
-                age_minutes=age_min,
-            )
-            toast.show()
-        except Exception as e:
-            print(f"[Diversity] Toast-Fehler ignoriert: {e}")
+        # P1.CACHE-TOAST-WEG (v0.95.13): Toast bei Cache-Reuse entfernt —
+        # Mike-Feedback 07.05.: "wenn Wert noch gültig ist, warum schreiben
+        # dass er gültig ist? Wie 'Computer fährt runter — OK?'". Aktuelle
+        # Werte stehen sowieso im Diversity-Display der Antennen-Kachel.
         return True
 
     def _disable_diversity(self):
@@ -984,85 +915,100 @@ class RadioMixin:
         self.control_panel.update_diversity_counts(0, 0)
         print("[Diversity] Deaktiviert")
 
+    def _get_diversity_store(self, scoring: str):
+        """P1.CACHE-SIMPLE Helper: PresetStore je nach scoring-Modus."""
+        return (getattr(self, '_dx_store', None) if scoring == "dx"
+                else getattr(self, '_standard_store', None))
+
+    def _assess_ratio(self, band: str, ft_mode: str, scoring: str) -> str:
+        """P1.CACHE-SIMPLE: Ratio-Cache-Status fuer band+mode bewerten.
+
+        Returns: "fresh" (< 60 Min), "stale" (>= 60 Min, vorhanden),
+        "missing" (kein Eintrag oder kein ratio-Feld).
+        """
+        store = self._get_diversity_store(scoring)
+        if not store:
+            return "missing"
+        if store.is_valid_ratio(band, ft_mode):
+            return "fresh"
+        entry = store.get(band, ft_mode)
+        if entry and entry.get("ratio"):
+            return "stale"
+        return "missing"
+
+    def _assess_gain(self, band: str, ft_mode: str, scoring: str) -> str:
+        """P1.CACHE-SIMPLE: Gain-Cache-Status fuer band+mode bewerten.
+
+        Returns: "fresh" (< 6h), "stale" (>= 6h, vorhanden), "missing".
+        """
+        store = self._get_diversity_store(scoring)
+        if not store:
+            return "missing"
+        if store.is_valid_gain(band, ft_mode):
+            return "fresh"
+        entry = store.get(band, ft_mode)
+        if entry and "gain_timestamp" in entry:
+            return "stale"
+        return "missing"
+
     def _check_diversity_preset(self, band: str, ft_mode: str, scoring: str) -> None:
         """Preset-Check bei Band/Modus-Wechsel mit aktiver Diversity.
 
-        v0.93 Reihenfolge:
-        1. Ratio < 1h → Cache-Reuse, Phase 3 skip, Toast.
-        2. Sonst Gain < 6h → Dialog (Weiter / Neu messen).
-        3. Sonst → volle Pipeline.
+        P1.CACHE-SIMPLE (v0.95.13): Diversity- und Gain-Cache komplett
+        entkoppelt. Keine Modal-Wahl-Dialoge mehr fuer Routine-Aktionen.
+
+        Logik:
+        - Gain stale  → DXTuneDialog (auto-start, nur Abbruch). Wenn Ratio
+                        fresh: nach Gain-OK Cache-Reuse statt Phase 3.
+        - Gain missing → volle Pipeline (Gain + Ratio).
+        - Gain fresh + Ratio fresh → Cache-Reuse (still, kein Toast).
+        - Gain fresh + Ratio stale/missing → stille Auto-Ratio-Messung.
         """
         if not getattr(self, 'radio', None) or not self.radio.ip:
             return
 
-        # v0.93 Cache-Reuse vor Standard-Dialog
-        if self._try_diversity_cache_reuse(band, ft_mode, scoring):
+        # P1.CACHE-SIMPLE: zentrales Reset des Pending-States als erste
+        # Aktion — verhindert Leak von vorherigen Bandwechseln/Exceptions.
+        self._pending_ratio_status = None
+
+        ratio_status = self._assess_ratio(band, ft_mode, scoring)
+        gain_status = self._assess_gain(band, ft_mode, scoring)
+        print(f"[Diversity] Cache-Status {band}/{ft_mode}: "
+              f"ratio={ratio_status}, gain={gain_status}")
+
+        if gain_status == "stale":
+            # Gain abgelaufen → DXTuneDialog (auto-start, nur Abbruch).
+            # Pending-Ratio-Status fuer _on_dx_tune_accepted merken.
+            self._pending_ratio_status = ratio_status
+            self._pending_diversity_scoring = scoring
+            gain_scoring = "snr" if scoring == "dx" else "stations"
+            print(f"[Diversity] {band}/{ft_mode}: Gain stale → DXTuneDialog")
+            self._start_dx_tuning(scoring_mode=gain_scoring)
             self._update_statusbar()
             return
 
-        store = (getattr(self, '_dx_store', None) if scoring == "dx"
-                 else getattr(self, '_standard_store', None))
-        if store and store.is_valid_gain(band, ft_mode):
-            age = store.get_gain_age_minutes(band, ft_mode)
-            mode_label = "Diversity DX" if scoring == "dx" else "Diversity Standard"
-            from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel
-            _dlg = QDialog(self)
-            _dlg.setWindowTitle("Diversity Setup")
-            _dlg.setStyleSheet("""
-                QDialog, QWidget { background-color: #1a1a2e; }
-                QLabel { color: #CCCCCC; font-family: Menlo; font-size: 13px; background-color: #1a1a2e; }
-                QLabel#lbl_title { color: #88AACC; font-size: 14px; font-weight: bold; padding-bottom: 4px; }
-                QPushButton {
-                    background-color: #2a2a3e; color: #CCCCCC;
-                    border: 1px solid #444; border-radius: 5px;
-                    font-family: Menlo; font-size: 13px;
-                    padding: 8px 20px; min-width: 120px;
-                }
-                QPushButton:hover { background-color: #3a3a5e; }
-                QPushButton#btn_weiter { background-color: #1a3a6e; border-color: #4488cc; }
-                QPushButton#btn_weiter:hover { background-color: #2a4a8e; }
-            """)
-            _lay = QVBoxLayout(_dlg)
-            _lay.setContentsMargins(24, 20, 24, 20)
-            _lay.setSpacing(10)
-            lbl_title = QLabel(f"{band} {ft_mode} — {mode_label}")
-            lbl_title.setObjectName("lbl_title")
-            lbl_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            lbl_msg = QLabel(
-                f"Gain-Kalibrierung vorhanden ({age} Min. alt).\n"
-                f"\"Weiter\" = Gain uebernehmen, Ratio wird neu eingemessen (5s TUNE).\n"
-                f"\"Neu messen\" = Gain + Ratio komplett neu."
-            )
-            lbl_msg.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            _lay.addWidget(lbl_title)
-            _lay.addWidget(lbl_msg)
-            _btn_row = QHBoxLayout()
-            _btn_row.setSpacing(12)
-            btn_new = QPushButton("Neu messen")
-            btn_use = QPushButton("Weiter")
-            btn_use.setObjectName("btn_weiter")
-            _btn_row.addWidget(btn_new)
-            _btn_row.addWidget(btn_use)
-            _lay.addLayout(_btn_row)
-            _choice = [False]
-            btn_use.clicked.connect(lambda: (_choice.__setitem__(0, True), _dlg.accept()))
-            btn_new.clicked.connect(lambda: _dlg.accept())
-            _dlg.exec()
-            if _choice[0]:
-                print(f"[Diversity] {band}/{ft_mode}: Gain ({age} Min.) uebernommen, Ratio neu, TUNE laeuft")
-                # TUNE zuerst (ANT1 abgleichen falls off-band), danach _enable_diversity
-                # mit reset() → Phase=measure → 8 Slots Re-Measurement
-                self._start_tune_only(
-                    after_tune_callback=lambda: self._enable_diversity(scoring_mode=scoring)
-                )
+        if gain_status == "missing":
+            # Komplett unkalibriert → volle Pipeline (Gain + Ratio).
+            gain_scoring = "snr" if scoring == "dx" else "stations"
+            print(f"[Diversity] {band}/{ft_mode}: Gain missing → volle Pipeline")
+            self._pending_dx_diversity = True
+            self._pending_diversity_scoring = scoring
+            self._start_dx_tuning(scoring_mode=gain_scoring)
+            return
+
+        # gain_status == "fresh":
+        if ratio_status == "fresh":
+            # Beides frisch → Cache-Reuse (still, kein Toast).
+            if self._try_diversity_cache_reuse(band, ft_mode, scoring):
                 self._update_statusbar()
-                return
-        # Kein Preset, abgelaufen oder "Neu messen" → volle Pipeline
-        gain_scoring = "snr" if scoring == "dx" else "stations"
-        print(f"[Diversity] {band}/{ft_mode}: kein/abgelaufenes Preset → Pipeline")
-        self._pending_dx_diversity = True
-        self._pending_diversity_scoring = scoring
-        self._start_dx_tuning(scoring_mode=gain_scoring)
+            return
+
+        # Ratio stale/missing, Gain fresh → stille Auto-Ratio-Messung.
+        # _enable_diversity startet Phase=measure → Phase 3 laeuft automatisch.
+        print(f"[Diversity] {band}/{ft_mode}: Ratio {ratio_status} mit Gain "
+              f"fresh → automatische Ratio-Messung (Phase 3)")
+        self._enable_diversity(scoring_mode=scoring)
+        self._update_statusbar()
 
     def _handle_dx_tuning(self):
         """KALIBRIEREN-Button: komplette Pipeline je nach RX-Modus (v0.94).
@@ -1305,6 +1251,30 @@ class RadioMixin:
 
         # Diversity nach Gain-Messung starten/neu initialisieren (einmalig)
         if self._rx_mode == "diversity" and self.radio.ip:
+            # P1.CACHE-SIMPLE (v0.95.13): Wenn Gain stale war (DXTuneDialog
+            # via _check_diversity_preset) und Ratio fresh → Ratio aus Cache
+            # uebernehmen statt Phase 3 erneut zu fahren.
+            pending_ratio = getattr(self, '_pending_ratio_status', None)
+            self._pending_ratio_status = None  # immer reset
+            if pending_ratio == "fresh":
+                self._pending_dx_diversity = False
+                scoring = getattr(self, '_pending_diversity_scoring',
+                                  getattr(self._diversity_ctrl, 'scoring_mode', 'normal'))
+                self._pending_diversity_scoring = None
+                print(f"[Diversity] Gain neu OK → Ratio aus Cache (Phase 3 skip)")
+                if self._try_diversity_cache_reuse(band, ft_mode, scoring):
+                    self._stats_warmup_cycles = 6
+                    self._update_statusbar()
+                    self._show_calibration_done(band, ant1_g, ant2_g)
+                    return
+                # Fallback: Cache-Reuse failt unerwartet → Phase 3 als Sicherheitsnetz
+                print(f"[Diversity] Cache-Reuse failed unexpectedly → Phase 3 fallback")
+                self._enable_diversity(scoring_mode=scoring)
+                self._stats_warmup_cycles = 6
+                self._update_statusbar()
+                self._show_calibration_done(band, ant1_g, ant2_g)
+                return
+
             if getattr(self, '_pending_dx_diversity', False):
                 self._pending_dx_diversity = False
                 scoring = getattr(self, '_pending_diversity_scoring',
@@ -1372,13 +1342,20 @@ class RadioMixin:
         dlg.activateWindow()
 
     def _on_dx_tune_rejected(self):
-        """DX Tuning abgebrochen — zurueck auf Normal/Diversity."""
+        """DX Tuning abgebrochen — P1.CACHE-SIMPLE: Stale-Acceptance.
+
+        Bei Cancel mit alten Werten weiterarbeiten (Risiko-Akzeptanz).
+        Wenn alte Werte vorhanden: still laden ohne Neu-Messung — kein
+        Endlos-Pipeline-Restart. Wenn nichts da: Diversity deaktivieren.
+        """
+        import time as _time
         self._dx_tune_dialog = None
         self._set_gain_measure_lock(False)
-        # v0.94: Pending-Flag bei Cancel zuruecksetzen — sonst startet
+        # v0.94: Pending-Flags bei Cancel zuruecksetzen — sonst startet
         # Phase 3 beim naechsten Diversity-Aktivieren ungewollt.
         self._pending_dx_diversity = False
         self._pending_diversity_scoring = None
+        self._pending_ratio_status = None  # P1.CACHE-SIMPLE
 
         # Sicherheit: TX/Encoder definitiv stoppen
         if self.encoder.is_transmitting:
@@ -1386,12 +1363,34 @@ class RadioMixin:
         if self.radio.ip:
             self.radio.ptt_off()
 
-        # Wenn Diversity aktiv war, KOMPLETT neu initialisieren
+        # P1.CACHE-SIMPLE: Stale-Acceptance — alte Werte laden statt
+        # Pipeline neu zu starten (Endlos-Schleife verhindern).
         if self._rx_mode == "diversity" and self.radio.ip:
             scoring = getattr(self._diversity_ctrl, 'scoring_mode', 'normal')
-            print(f"[Diversity] Gain abgebrochen → Diversity neu initialisieren ({scoring})")
-            self._enable_diversity(scoring_mode=scoring)
-            self._stats_warmup_cycles = 6
+            band = self.settings.band
+            ft_mode = self.settings.mode
+            store = self._get_diversity_store(scoring)
+            entry = store.get(band, ft_mode) if store else None
+            if entry and entry.get("ratio"):
+                ratio = entry["ratio"]
+                dominant = entry.get("dominant")
+                ratio_age_sec = (_time.time()
+                                 - entry.get("ratio_timestamp", _time.time()))
+                print(f"[Diversity] Cancel → Stale-Acceptance: lade {ratio} "
+                      f"(Alter ignoriert)")
+                self._enable_diversity(
+                    scoring_mode=scoring,
+                    cached_ratio=ratio,
+                    cached_dominant=dominant,
+                    cached_age_seconds=ratio_age_sec,
+                )
+                self._stats_warmup_cycles = 6
+            else:
+                # Keine Werte vorhanden → Diversity deaktivieren
+                print(f"[Diversity] Cancel ohne Werte → Diversity AUS")
+                self._disable_diversity()
+                self.control_panel.set_rx_mode("normal")
+                self._stats_warmup_cycles = 6
         else:
             self._apply_normal_mode()
             self._stats_warmup_cycles = 6
