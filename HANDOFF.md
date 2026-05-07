@@ -1,6 +1,57 @@
 # HANDOFF — SimpleFT8
 
-**Stand 2026-05-07:** **v0.95.13 — P1.CACHE-SIMPLE Diversity/Gain
+**Stand 2026-05-07:** **v0.95.14 — P1.QRZ-UPLOAD-UI: Confirm + Progress
++ Single-Instance.**
+
+**P1.QRZ-UPLOAD-UI (NEU):** Bulk-Upload an QRZ.com mit sichtbarem
+Status-Fenster, Cancel-Moeglichkeit, Single-Instance-Schutz 3-fach.
+Field-Test 07.05. 10:35 entdeckte: 8x Klick = 8 Bulk-Jobs queued
+(~8h Duplikat-Spam Risiko). App rechtzeitig gekillt.
+
+**Loesung:**
+- Phase 1: `QRZConfirmDialog` modal — „X QSOs hochladen?" Default Hochladen.
+- Phase 2: `QRZUploadDialog` non-modal mit StaysOnTopHint, ProgressBar,
+  Counter, Cancel + Auto-Close 10s.
+- Worker `QRZUploadWorker` (QObject + ThreadPoolExecutor + Signals +
+  threading.Event cancel).
+- Single-Instance 3-fach: `_qrz_bulk_active`-Flag + Button-Disable +
+  Re-Entry-Check (defensive first-line in `_on_qrz_upload`).
+
+**R1-KP-Findings im Plan-Review:**
+- KP-1: `_qrz_upload_single` skipt bei `_qrz_bulk_active=True`
+- KP-2: Klick-Sperre Reihenfolge Flag → Button → submit
+- KP-3: closeEvent disconnect()-vor-cancel()
+
+**Final-R1-Findings im Code-Review (sofort gefixt):**
+- 🚨 Cancel-Bug: Worker emittet IMMER finished (sonst Dialog haengt bei
+  Sofort-Cancel)
+- ⚠️ KP-3 Rest: closeEvent disconnect() VOR cancel()
+
+**Geaenderte Files (10):**
+- NEU `core/qrz_upload_worker.py`, `ui/qrz_upload_dialogs.py`,
+  `tests/test_p1_qrz_upload_ui.py`, `prompts/p1_qrz_upload_ui_v[1-3].md`
+- `ui/mw_qso.py` (`_on_qrz_upload` Rewrite + Slot + Helper +
+  `_qrz_upload_single` Bulk-Skip)
+- `ui/main_window.py` (closeEvent disconnect+cancel+shutdown)
+- `ui/logbook_widget.py` (`_btn_upload`-Reference + Public-API)
+- `main.py` APP_VERSION 0.95.13 → 0.95.14
+
+**Voller Workflow:** V1 (5 Probleme + Field-Test-Beweis) → V2 (12 Lessons
+L1-L12) → R1 (9 Pruefauftraege beantwortet, 3 KP gefunden) → V3
+(Compact-fest, 7 Diffs) → Compact → Code → Final-R1 (Cancel-Bug +
+KP-3-Rest gefunden) → Fix-Round → R1-Verifikation („Push freigegeben").
+
+**Tests 862 → 872 gruen** (+10 in `tests/test_p1_qrz_upload_ui.py`).
+Atomare Commits `2270fdf` (Code+Tests, 10 Files +1841/-29) + Doku-Commit.
+
+**KEIN Resume-Feature** (KISS, QRZ.com filtert serverseitig).
+
+**Field-Test ausstehend.** Push noch nicht gemacht — Mike-Freigabe nach
+Field-Test einholen.
+
+---
+
+**Vorher v0.95.13 (07.05.2026):** **P1.CACHE-SIMPLE Diversity/Gain
 entkoppelt + UX-Cleanup.**
 
 **P1.CACHE-SIMPLE (NEU):** Mike-Vision: Diversity-Cache (Ratio, 60 Min)

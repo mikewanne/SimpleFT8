@@ -5,6 +5,87 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-07 v0.95.14 — P1.QRZ-UPLOAD-UI: Confirm + Progress + Single-Instance
+
+**Mike-Anforderung (07.05.2026):** „brauche ne Meldung Status der irgendwas
+und auch nur einmal gestartet werden darf das" — sichtbares Status-Fenster
+fuer Bulk-Upload, weiterfunken moeglich, single-instance-Schutz.
+
+**Field-Test-Beweis 10:35 UTC:** Mike klickte QRZ-Bulk-Upload-Button — keine
+UI-Reaktion. 8x geklickt → 8 Bulk-Jobs in geteilten ThreadPool gequeued.
+Bei `max_workers=1` waeren 8 × 18.443 QSOs × ~200ms = ~8 Stunden Duplikat-
+Spam an QRZ.com gelaufen. App rechtzeitig gekillt.
+
+**Loesung:** Zwei-Phasen-Workflow + 3-fach-Single-Instance-Schutz.
+
+- Phase 1: `QRZConfirmDialog` (modal) — „X QSOs hochladen?" mit Default-Button
+  `[Hochladen]` (Enter). Custom QDialog mit `_DLG_STYLE` (#1a1a2e Theme)
+  statt QMessageBox (Memory `feedback_qmessagebox_avoid.md`).
+- Phase 2: `QRZUploadDialog` (non-modal, `WindowStaysOnTopHint`) mit
+  ProgressBar, Counter „Neu: X   Duplikate: Y   Fehler: Z", Cancel-Button.
+  Auto-Close 10s nach Fertig + `[Schliessen]`-Button. `raise_/activateWindow`
+  fuer macOS-Spaces.
+- Worker `QRZUploadWorker(QObject)` in NEU `core/qrz_upload_worker.py`:
+  ThreadPoolExecutor (max_workers=1, thread_name_prefix=„qrz_bulk") +
+  `threading.Event` als cancel_event + Signals
+  `progress(int,int,int,int,int)` alle 10 QSOs +
+  `finished(int,int,int,bool,int)`. Cancel-Latenz max 10s (HTTP-Timeout).
+- Single-Instance-Schutz 3-fach (R1-KP-2): Flag `_qrz_bulk_active` →
+  Button-Disable via `set_qrz_button_enabled` → Re-Entry-Check in
+  `_on_qrz_upload` (defensive first-line).
+
+**R1-KP-Findings adressiert:**
+- KP-1: `_qrz_upload_single` skipt sofort bei `_qrz_bulk_active=True` —
+  sonst Race im geteilten ThreadPool (Auto-Upload-Konflikt).
+- KP-2: Klick-Sperre Reihenfolge Flag → Button → submit (verhindert
+  Race zwischen `submit()` und `setEnabled(False)`).
+- KP-3: `closeEvent` macht `finished.disconnect()` + `progress.disconnect()`
+  VOR `cancel()` + `shutdown(wait=False)` — schuetzt vor Signal-Emit auf
+  zerstoertem Dialog.
+
+**Final-R1-Findings (im 2. Review entdeckt) sofort gefixt:**
+- 🚨 Cancel-Bug: Worker emittet IMMER `finished` (auch bei `processed=0`).
+  Vorherige Bedingung `if not cancelled or total_processed > 0` hatte
+  Edge-Case: Bei Sofort-Cancel vor 1. QSO blieb Dialog hängen in
+  „wird abgebrochen ...". App-Close-Schutz erfolgt jetzt rein über
+  `disconnect()` in `closeEvent`.
+- ⚠️ KP-3 Rest: `closeEvent` braucht `disconnect()` VOR `cancel()`.
+
+**KEIN Resume-Feature** — KISS-Entscheidung. QRZ.com filtert Duplikate
+serverseitig (Mike-Pattern: Filter im Anzeige-Pfad, nicht in der
+Logik — siehe `feedback_funker_entscheidung_filter_in_rx.md`).
+
+**Voller Workflow:**
+- V1 Diagnose (5 Probleme A-E mit Field-Test-Beweis)
+- V2 Self-Review (12 Lessons L1-L12)
+- R1 Plan-Review (9 Pruefauftraege beantwortet, 3 KP gefunden)
+- V3 (Compact-fest, 7 konkrete Diffs)
+- Compact
+- Code-Phase (autonom, alle 7 Diffs)
+- Final-R1 Code-Review (Cancel-Bug + KP-3-Rest gefunden)
+- Fix-Round (Worker IMMER emit + closeEvent disconnect + neuer Test)
+- Final-R1 Verifikation („Push freigegeben, keine Restrisiken")
+
+Plan-Files: `prompts/p1_qrz_upload_ui_v[1-3].md`.
+
+**Tests 862 → 872 gruen (+10):** Worker progress/cancel/counts +
+immediate-cancel-emits-finished + Dialog default-button/reject/render/
+finished-state/cancelled-title/auto-close.
+
+**Field-Test-Pflicht (post-Kur):**
+- Klick auf QRZ-Button → Confirm-Dialog
+- 18.443 QSOs Upload — Progress sichtbar, Counter aktualisiert
+- Cancel-Button → max 10s Latenz, sauberes Stop
+- Mehrfach-Klick → 2. Klick ignoriert
+- Auto-Upload nach QSO waehrend Bulk → Skip-Log
+- App-Close waehrend Bulk → kein Hang/Crash
+
+Atomare Commits `2270fdf` (Code+Tests, 10 Files +1841/-29) + Doku-Commit.
+
+APP_VERSION 0.95.13 → 0.95.14.
+
+---
+
 ## 2026-05-07 v0.95.13 — P1.CACHE-SIMPLE Diversity/Gain entkoppelt + UX-Cleanup
 
 **Mike-Vision (NICHT verhandelbar, 2026-05-07):** Diversity-Cache (Ratio,
