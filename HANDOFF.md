@@ -1,6 +1,64 @@
 # HANDOFF — SimpleFT8
 
-**Stand 2026-05-07:** **v0.95.14 — P1.QRZ-UPLOAD-UI: Confirm + Progress
+**Stand 2026-05-07:** **v0.95.15 — P1.QRZ-UPLOAD-UI-2: Title + File-Move
++ Log + Rate-Limit.**
+
+**P1.QRZ-UPLOAD-UI-2 (NEU):** Folge zu v0.95.14 — Mike-Field-Test
+07.05. nachmittags entdeckte 3 Probleme: Progress-Dialog StaysOnTopHint
+nervt, kein Tracking welche QSOs schon hochgeladen, 12134 Dups +
+Fail-Burst nacheinander deutet auf QRZ-Rate-Limit.
+
+**Loesung:**
+- Status in Titelleiste statt non-modal Dialog (`SimpleFT8 — DA1MHH —
+  QRZ ↑ x/y (z%)`)
+- Statusbar inline `[QRZ ↑ x/y (z%)] [✕]` Cancel-Widget
+- File-Move: nach Bulk wird Datei nach `adif/hochgeladen/` verschoben
+  (nur wenn `fail==0 AND processed==expected`). LogbookWidget +
+  qso_log + locator_db laden BEIDE Verzeichnisse.
+- JSONL-Log `~/.simpleft8/qrz_upload_YYYY-MM-DD.log` (Daily-Rotation,
+  Mike: „log ob die daten nach qrz ok hochgeladen wurden")
+- Rate-Limit-Detection: 20 consecutive fails → 60s Cooldown
+  (Loop mit Cancel-Check, `cooldown_tick(int)` Signal pro Sekunde,
+  KEIN blockierendes `time.sleep`) → 2. Burst → Cancel.
+
+**R1-Fixes (Final-Review, vor Push):**
+- `shutil.move` Ueberschreib-Schutz: `dest.exists()`-Check, skip + Toast
+- `total_records`-Property statt direkter `_records`-Zugriff (Kapselung)
+
+**Geaenderte Files (8):**
+- NEU `tests/test_p1_qrz_upload_ui_2.py` (20 Tests)
+- `core/qrz_upload_worker.py` (file_results + log + rate-limit
+  + total_records)
+- `ui/qrz_upload_dialogs.py` (QRZUploadDialog-Klasse weg)
+- `ui/mw_qso.py` (_on_qrz_upload Rewrite + 6 neue Slots/Helpers)
+- `ui/main_window.py` (Statusbar-Widget Init + qso_log+locator_db
+  Multi-Dir + closeEvent cooldown_tick disconnect)
+- `ui/logbook_widget.py` (load_adif Multi-Dir)
+- `tests/test_p1_qrz_upload_ui.py` (4 Progress-Dialog-Tests geloescht)
+- `main.py` APP_VERSION 0.95.14 → 0.95.15
+
+**Voller Workflow:** V1 → V2 (14 Lessons L1-L14, mid-V2 Mike-Feedback
+L13/L14) → R1 (Plan freigegeben + 7 Optimierungen) → V3 (Compact-fest,
+8 Diffs) → Compact → Code → Final-R1 (2 SOLLTE-FIX gefixt).
+
+**Plan-Files:** `prompts/p1_qrz_upload_ui_2_v[1-3].md`.
+
+**Tests 872 → 888 gruen** (+16: -4 Dialog +18 V3 +2 R1-Fix).
+Atomare Commits `d8f86b6` (Code+Tests, 11 Files +2534/-204) + Doku.
+
+**KP-1/2/3 aus v0.95.14 noch intakt** (Bulk-Skip, Klick-Sperre 3-fach,
+closeEvent disconnect — jetzt erweitert um cooldown_tick).
+
+**Field-Test ausstehend.** Push noch nicht — Mike-Freigabe nach
+Field-Test einholen.
+
+**P2.ADIF-ARCHIVE folgt:** Standalone-Helper `tools/adif_archive.py`
+fuer Jahresarchive `archiv/2024.adi`/`2025.adi` aus `adif/hochgeladen/`
+(separater Workflow nach P1-2-Field-Test).
+
+---
+
+**Vorher v0.95.14 (07.05.2026):** **P1.QRZ-UPLOAD-UI: Confirm + Progress
 + Single-Instance.**
 
 **P1.QRZ-UPLOAD-UI (NEU):** Bulk-Upload an QRZ.com mit sichtbarem

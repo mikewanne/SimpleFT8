@@ -5,6 +5,87 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-07 v0.95.15 — P1.QRZ-UPLOAD-UI-2: Title + File-Move + Log + Rate-Limit
+
+**Mike-Field-Test v0.95.14 (07.05. nachmittags) entdeckte 3 Probleme:**
+1. Progress-Dialog `WindowStaysOnTopHint` liegt staendig vor App — nervt
+2. Keine Persistierung welche QSOs schon hochgeladen → 18443 Wiederhol-Bulk
+3. Bei 12134 Duplikaten + Fail-Burst nacheinander → wahrscheinlich QRZ-Rate-Limit
+
+**Loesung (4 Bausteine):**
+- **Status in Titelleiste:** waehrend Bulk `SimpleFT8 — DA1MHH — QRZ ↑ x/y (z%)`,
+  Update alle 10 QSOs synchron mit `progress`-Signal. Reset nach Finish.
+  Zentrale Helper `_update_window_title()` in mw_qso.py (R1: Hardcoding vermeiden).
+- **Statusbar-Cancel-Widget:** `[QRZ ↑ x/y (z%)] [✕]` als `permanentWidget` in
+  `_init_statusbar`. Klein, klickbar, blockt nicht die App. Klick auf ✕ →
+  Worker-Cancel + Button-Disable + Label „wird abgebrochen ...". Initial hidden.
+- **File-Move-Strategie:** Pro QSO `_SOURCE_FILE` (existiert schon in
+  `log/adif.py:42` als uppercase). Worker aggregiert pro File `{ok, dup, fail,
+  expected}`. Im `_handle_qrz_file_results` wird Datei nach `adif/hochgeladen/`
+  verschoben wenn `fail==0 AND processed==expected AND processed>0`. Schutz:
+  Files aus `hochgeladen/` werden NIE bewegt (`hochgeladen` im Pfad). Atomic
+  via `shutil.move`. **R1-Final-Fix:** vorher `dest.exists()`-Check (kein
+  Ueberschreib-Risiko bei Namens-Kollision aus subdir).
+- **JSONL-Log + Rate-Limit-Detection:**
+  - `~/.simpleft8/qrz_upload_YYYY-MM-DD.log` (Daily-Rotation), append-only,
+    pro Result eine JSON-Zeile (`ts/call/band/mode/date/time/result/reason`).
+  - `MAX_CONSECUTIVE_FAILS=20` + `COOLDOWN_SECONDS=60`. Counter resetet bei
+    OK/Dup. Bei 20 Fails: 60s Cooldown als Loop mit `cancel_event`-Check
+    + `cooldown_tick(int)` Signal pro Sekunde — KEIN blockierendes
+    `time.sleep(60)` (R1-KP). Zweiter Burst nach Cooldown → Worker setzt
+    selbst `cancel_event` und beendet.
+
+**Geaenderte Files (8):**
+- NEU `tests/test_p1_qrz_upload_ui_2.py` (20 Tests)
+- `core/qrz_upload_worker.py` (file_results-Property + JSONL-Log + Rate-Limit
+  + cooldown_tick-Signal + total_records-Property fuer Kapselung)
+- `ui/qrz_upload_dialogs.py` (QRZUploadDialog-Klasse geloescht — 95 → 80 Zeilen)
+- `ui/mw_qso.py` (`_on_qrz_upload` Rewrite + 6 neue Slots/Helpers:
+  `_on_qrz_progress`, `_on_qrz_cooldown_tick`, `_on_qrz_bulk_finished`,
+  `_handle_qrz_file_results`, `_show_qrz_status_widget`,
+  `_on_qrz_status_cancel_clicked`, `_update_window_title`)
+- `ui/main_window.py` (Statusbar-Widget Init in `_init_statusbar`,
+  `_qrz_title_suffix=""` Init in `__init__`, qso_log+locator_db Multi-Dir
+  in `_init_qso_log`, closeEvent `cooldown_tick.disconnect()`)
+- `ui/logbook_widget.py` (`load_adif()` lädt zusaetzlich `adif/hochgeladen/`)
+- `tests/test_p1_qrz_upload_ui.py` (4 Progress-Dialog-Tests geloescht)
+- `main.py` APP_VERSION 0.95.14 → 0.95.15
+
+**Bulk-Filter:** `_on_qrz_upload` filtert `[r for r in _all_records if
+"hochgeladen" not in r.get("_SOURCE_FILE", "").replace("\\", "/")]` —
+Records aus `adif/hochgeladen/` werden NIE erneut hochgeladen.
+
+**KP-1/2/3 aus v0.95.14 alle noch intakt:**
+- KP-1: `_qrz_upload_single` skipt bei `_qrz_bulk_active=True`
+- KP-2: Klick-Sperre Reihenfolge Flag → Button → submit (3 Stufen)
+- KP-3: closeEvent `disconnect()` VOR `cancel()` (jetzt + cooldown_tick)
+
+**Voller Workflow:** V1 (10 ACs, Mike's 3 Vision-Punkte A/B/C, Field-Test-
+Beweis) → V2 (14 Lessons L1-L14, mid-V2 Mike-Feedback fuer L13/L14
+JSONL-Log + Rate-Limit-Detection) → R1 („Plan freigegeben mit
+Praezisierungen", 7 Optimierungen alle in V3) → V3 (Compact-fest, 8 Diffs
+inkl. Diff 1 = NO CHANGE weil `_SOURCE_FILE` schon existiert) → Compact →
+Code → Final-R1 („Push freigegeben mit 2 SOLLTE-FIX", beide gefixt:
+`shutil.move` Ueberschreib-Schutz + `total_records`-Property).
+
+**Plan-Files:** `prompts/p1_qrz_upload_ui_2_v[1-3].md`.
+
+**Tests 872 → 888 gruen (+16):**
+- 4 Progress-Dialog-Tests aus v0.95.14 geloescht (-4)
+- 18 neue Tests aus V3-Plan (+18): file_results, JSONL-Log, Rate-Limit
+  (3 Tests: cooldown, reset-on-OK, cancel-during-cooldown, second-burst),
+  File-Move (4 Tests: all-OK, fail-skip, partial-skip, hochgeladen-skip),
+  Title-Update (2 Tests), Logbook-Multi-Dir, Bulk-Filter, Pflege-Tests.
+- 2 R1-Fix-Tests (+2): `dest.exists()`-Schutz + `total_records`-Property.
+
+**Atomare Commits:** `d8f86b6` (Code+Tests, 11 Files +2534/-204) +
+Doku-Commit.
+
+**Field-Test ausstehend.** Push noch nicht — Mike-Freigabe nach Field-Test
+einholen.
+
+---
+
 ## 2026-05-07 v0.95.14 — P1.QRZ-UPLOAD-UI: Confirm + Progress + Single-Instance
 
 **Mike-Anforderung (07.05.2026):** „brauche ne Meldung Status der irgendwas
