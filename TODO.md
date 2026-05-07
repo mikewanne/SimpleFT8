@@ -1,4 +1,88 @@
-# SimpleFT8 TODO — Stand 06.05.2026 (v0.95.9)
+# SimpleFT8 TODO — Stand 07.05.2026 (v0.95.15)
+
+> **Mike-Regel 07.05.2026:** Offene Aufgaben gehoeren AUSSCHLIESSLICH
+> in diese Datei. Nicht in CLAUDE.md, nicht in HANDOFF.md. Diese Datei
+> ist die einzige Quelle fuer Backlog/Bugs/Feature-Wuensche.
+
+---
+
+## 📌 OFFEN — TOP-PRIORITAET (zuerst angehen)
+
+### Field-Test v0.95.15 P1.QRZ-UPLOAD-UI-2 + Push-Freigabe
+- [ ] Mike testet im Feld: Title-Update, Statusbar-Cancel, File-Move,
+      JSONL-Log, Rate-Limit-Cooldown, App-Close waehrend Cooldown
+- [ ] Bei OK: Mike-Freigabe einholen → `git push origin main`
+      (Commits `d8f86b6` Code+Tests + `d313b1a` Doku + `f456d04` TODO)
+
+### P2.ADIF-ARCHIVE — Standalone Helper-Script (NEU 07.05.)
+- [ ] `tools/adif_archive.py` schreiben — konsolidiert Tagesdateien aus
+      `adif/hochgeladen/` in Jahresarchive `archiv/2024.adi`/`2025.adi`
+- [ ] Separater Workflow nach v0.95.15-Field-Test (klein genug ohne Compact)
+
+---
+
+## 🟡 OFFENE P1-Bugs (klein, mit klarer Diagnose)
+
+- [ ] **P1.7** 🟢 — Lokaler Duplikat-Filter ADIF/Logbuch
+      (QRZ filtert serverseitig, aber Doppel-ADIF moeglich)
+- [ ] **P1.8** 🟡 — Report-SNR-Bug `_last_snr` statt `msg.snr`
+      (RX-SNR-Bias-Folge, siehe Detail-Section unten)
+- [ ] **P1.11** 🟡 — `rr73_retries`-Counter shared zwischen WAIT_RR73 +
+      WAIT_73-Hoeflichkeits-Pfad
+- [ ] **P1.13** 🟡 — TX-Frequenz-Spinbox-Sync im Normal-Modus
+
+---
+
+## 🛠 OFFEN — Quality-of-Life (alte TODOs, weiterhin gueltig)
+
+- [ ] Even/Odd dedizierter Timer — unabhaengig vom Decoder-Thread (FT2 kritisch)
+- [ ] Gain-Bias beheben — Normal-Modus Gain-Messung wenn Stats aktiv erzwingen
+- [ ] CQ-Zusammenfassung RX-Liste — ins QSO-Panel verschieben oder ganz raus?
+- [ ] Tertile-Analyse Statistik — kein Datencropping, alle Werte in 3 Drittel
+- [ ] Per-Station DT-Offset TX — `encoder._station_dt_offset` (nach mehr Feldtest-Daten)
+- [ ] IC-7300 Fork — TARGET_TX_OFFSET dort separat messen (eigener Branch)
+- [ ] F) Audio-Export per Slot — Roh-WAV-Dump 4s pro Slot fuer
+      Forschung/Debug (AP-Lite-Decode-Replay, ANT1/ANT2-Spektrum offline,
+      Inspectrum/Audacity). Optional, NICHT dringend. <1 Tag Aufwand.
+- [ ] TX-Frequenz Normal-Modus manchmal ohne Histogramm-Marker
+      (NEU 26.04., noch nicht reproduzierbar)
+
+---
+
+## 🗺 OFFEN — Karten-Folgemassnahmen (v0.66)
+
+- [ ] Migration `main_window._psk_worker` → `core/psk_reporter`
+- [ ] Karten-Live-Test im Feld (40m FT8 abends mit RX-Layer)
+- [ ] TX-Modus Live-Test (CQ rufen + TX-Toggle, schauen ob Marker erscheint)
+- [ ] Mobile-Filter-Edge-Case dokumentieren (Region-Calls wie `K1ABC/W2`)
+
+---
+
+## 📊 OFFEN — Statistik & Analyse (Prio NIEDRIG)
+
+- [ ] Diagramm-Auswertung 20m fuer GitHub (wenn genug Daten)
+- [ ] ANT1 vs ANT2 SNR direkt loggen (ant1_snr, ant2_snr, delta pro Station)
+- [ ] Statistik-Diagramme fuer GitHub (matplotlib aus statistics/*.md)
+- [ ] Auswertung per Tertile-Analyse (Entscheidung final, kein Datencropping)
+- [ ] RX-Liste: Spalten-Konfig in Settings (RX-Spalten ein/ausblendbar
+      + gespeichert, Slot/Ant/DT/etc.)
+- [ ] CQ-Zusammenfassung im RX-Panel ueberarbeiten (aktuell „CQ ×N" kaum sichtbar)
+
+---
+
+## ✅ ERLEDIGT (Aufraeum-Snapshot 07.05.2026)
+
+- B) Band-Indikatoren live mit PSK-Reporter ✅ — v0.69 deckt Use-Case ab
+- C) Richtungs-Keulen TX-Pattern-Karte ✅ — v0.66
+- D) Richtungs-Keulen ANT2 RX-Rescue ✅ — v0.66
+- E) CSV-Export Diversity-Daten ✅ — v0.65
+- AP-Lite Test-Pipeline ✅ — v0.95.9 (P1.AP) + v0.95.10 (P1.AP-FIX)
+- DT-Drift Wurzel-Fix ✅ — v0.95.7 (P1.18, `_DT_OFFSETS["FT8"]=3.0`)
+- Warteliste-Screenshot ✅ — DL3AQJ-Freigabe + Einbau erledigt
+
+---
+
+## 🗂 ARCHIV (chronologisch, ERLEDIGTE Punkte aus alten Sessions unten)
 
 ---
 

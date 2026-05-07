@@ -618,60 +618,19 @@ direkt aus dem Decoder-Thread Widget-Methoden aufrufen — immer ueber das Signa
 
 ---
 
-## Offene TODOs (nach Schwierigkeit)
+## ⛔ TODOs gehoeren in TODO.md im Projektverzeichnis (Mike-Anweisung 07.05.2026)
 
-**v0.60-v0.66 (26.04.2026) — UMGESETZT:**
-- v0.60: CQ-Counter QSO-Reset (kein Mid-QSO-Sprung) + Info-Box Normal-Preset alt
-- v0.61: Antenna-Pref Hysterese `>=` Fix + Live-QSO-Anzeige + Label `(ANT2 ↑X.X dB)`
-- v0.62: Normal-Modus = WSJT-X-Standard (manuelle TX-Frequenz, Klick im Histogramm)
-- v0.63: 20m FT8 PDF (DE+EN) + Stats-Filter (nur 20m+40m FT8)
-- v0.64: Aging-Bug-Fix — Aging in Slots statt Sekunden (FT2 jetzt sauber)
-- v0.65: CSV-Export Diversity-Daten + UI-Integration im Settings-Dialog
-- v0.66: Richtungs-Karte mit RX/TX-Toggle (Azimuthal-Karte, Coastlines, 16
-  Sektoren à 22.5°, RX-Live-Layer aus mw_cycle, TX-Modus mit PSK-Reporter,
-  Settings-Button); 10 atomare Commits, +141 Tests, alle Module DeepSeek-reviewed
-- 361 Tests grün
+**Regel:** Alle offenen Aufgaben, Bugs, Feature-Wuensche, Folgearbeiten
+gehoeren EXKLUSIV in `SimpleFT8/TODO.md` — NICHT in CLAUDE.md, NICHT in
+HANDOFF.md (HANDOFF nur „Stand der laufenden Session" + „naechste 1-2
+Schritte"). CLAUDE.md ist fuer Architektur, Konventionen, Workflow-Regeln,
+Hardware-Warnungen — nicht fuer den Backlog.
 
-**ERLEDIGT seit v0.95.x (07.05.2026 Aufraeumen):**
-- B) Band-Indikatoren live mit PSK-Reporter ✅ — v0.69 deckt Use-Case ab
-- C) Richtungs-Keulen TX-Pattern-Karte ✅ — v0.66
-- D) Richtungs-Keulen ANT2 RX-Rescue ✅ — v0.66
-- E) CSV-Export Diversity-Daten ✅ — v0.65
-- AP-Lite Test-Pipeline ✅ — v0.95.9 (P1.AP) + v0.95.10 (P1.AP-FIX)
-- DT-Drift Wurzel-Fix ✅ — v0.95.7 (P1.18)
-- Warteliste-Screenshot ✅ — DL3AQJ-Freigabe + Einbau erledigt
+- **Naechste Aufgaben + offene Bugs** → `SimpleFT8/TODO.md`
+- **Aktueller Stand der Session + naechster Schritt** → `HANDOFF.md`
+- **Lueckenlose Aenderungshistorie** → `HISTORY.md`
 
-**OFFEN (Stand 07.05.2026):**
-
-*P1-Bugs (klein, mit klarer Diagnose):*
-- 🟡 **P1.8** — Report-SNR-Bug `_last_snr` statt `msg.snr` (RX-SNR-Bias-Folge)
-- 🟡 **P1.11** — `rr73_retries`-Counter shared zwischen WAIT_RR73 + WAIT_73-
-  Hoeflichkeits-Pfad
-- 🟡 **P1.13** — TX-Frequenz-Spinbox-Sync im Normal-Modus
-- 🟢 **P1.7** — Lokaler Duplikat-Filter ADIF/Logbuch (QRZ filtert serverseitig,
-  aber Doppel-ADIF moeglich)
-
-*Quality-of-Life (alte TODOs, weiterhin gueltig):*
-- Even/Odd dedizierter Timer — unabhaengig vom Decoder-Thread (FT2 kritischsten)
-- Gain-Bias beheben — Normal-Modus Gain-Messung wenn Stats aktiv erzwingen
-- CQ-Zusammenfassung RX-Liste — ins QSO-Panel verschieben oder ganz raus?
-- Tertile-Analyse Statistik — kein Datencropping, alle Werte in 3 Drittel
-- Per-Station DT-Offset TX — `encoder._station_dt_offset` (nach mehr Feldtest-Daten)
-- IC-7300 Fork — TARGET_TX_OFFSET dort separat messen (Branch fuer Mike)
-- F) Audio-Export per Slot (<1 Tag, optional, fuer Forschung/Debug)
-- TX-Frequenz Normal-Modus manchmal ohne Histogramm-Marker (NEU 26.04.,
-  noch nicht reproduzierbar)
-
-*Karten-Folgemassnahmen (v0.66):*
-- Migration `main_window._psk_worker` → `core/psk_reporter`
-- Karten-Live-Test im Feld (40m FT8 abends mit RX-Layer)
-- TX-Modus Live-Test (CQ rufen + TX-Toggle, schauen ob Marker erscheint)
-- Mobile-Filter-Edge-Case dokumentieren (Region-Calls wie `K1ABC/W2`)
-
-*Naechstes geplantes Feature:*
-- **P2.ADIF-ARCHIVE** — Standalone-Helper `tools/adif_archive.py` fuer
-  Jahresarchive `archiv/2024.adi`/`2025.adi` aus `adif/hochgeladen/`
-  (separater Workflow nach v0.95.15 Field-Test)
+Bei Doku-Updates: nicht in CLAUDE.md duplizieren was in TODO.md steht.
 
 ---
 
