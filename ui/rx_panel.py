@@ -321,18 +321,12 @@ class RXPanel(QWidget):
         # Extras berechnen
         country = "?"
         caller = msg.caller
-        # Portable/Mobile Suffix entfernen fuer Country-Lookup: ON3MOH/P → ON3MOH
-        # Ausnahme: Sonderpraefixe wie EA8/DA1MHH → EA8 ist das Land
+        # P1.LOCATOR-SLASH v0.95.16: Lookup-Call = Decoder-Output 1:1 (Option A,
+        # strikte Trennung). Slash-Calls bleiben komplett — passend zu wie
+        # `_feed_locator_db` (mw_cycle.py) in die DB schreibt (`db.set(m.caller, ...)`)
+        # und wie `callsign_to_country/distance` intern Slash-Calls per DXCC-
+        # Heuristik aufloesen. Keine Suffix-Heuristik hier.
         lookup_call = caller
-        if caller and "/" in caller:
-            parts = caller.split("/")
-            # Mobil-Suffixe: P, M, MM, AM, QRP, portable → Basisrufzeichen nutzen
-            MOBILE_SUFFIXES = {"P", "M", "MM", "AM", "QRP", "PORTABLE", "MOBILE"}
-            if parts[-1].upper() in MOBILE_SUFFIXES:
-                lookup_call = parts[0]
-            # Sonstige Schraegstrich-Calls: laengeres Teil ist meist das Rufzeichen
-            else:
-                lookup_call = max(parts, key=len)
 
         if lookup_call and lookup_call != "<....>":
             country = callsign_to_country(lookup_call)

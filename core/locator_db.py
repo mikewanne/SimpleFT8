@@ -11,8 +11,9 @@ Quellen (hoeher gewinnt):
     4. cq_4 / psk_4 / qso_log_4 → 110 km (nur 4-stellig)
 
 Slash-Calls:
-    /P           → erlaubt, gleiche Priority (portable, stationaer)
-    /MM /AM /QRP → erlaubt, prec_km x 1.5 (mobile, ungenauer)
+    Praefix-Slash (z.B. EA8/DA1MHH)         → unter eigenem Key, Source-Priority
+    Mobile-Suffixe (/P /M /MM /AM /QRP /PORTABLE /MOBILE) → prec_km x 1.5
+    (Konsolidierte Liste aus core/geo.MOBILE_SUFFIXES — P1.LOCATOR-SLASH v0.95.16)
 
 Regeln:
     - 6-stellig wird nie durch 4-stellig ueberschrieben (Source-Priority)
@@ -33,7 +34,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Iterable
 
-from core.geo import safe_locator_to_latlon
+from core.geo import MOBILE_SUFFIXES, safe_locator_to_latlon
 
 LOG = logging.getLogger(__name__)
 
@@ -47,7 +48,6 @@ SOURCE_PRIORITY: dict[str, int] = {
     "qso_log_4": 100,
 }
 PREC_KM_BY_LEN: dict[int, int] = {6: 5, 4: 110}
-MOBILE_SUFFIXES: tuple[str, ...] = ("/MM", "/AM", "/QRP")
 DEFAULT_PATH: Path = Path.home() / ".simpleft8" / "locator_cache.json"
 SCHEMA_VERSION: int = 1
 

@@ -554,20 +554,79 @@ _COUNTRY_COORDS = {
 }
 
 
+# ── Slash-Call-Konstanten + Helper (P1.LOCATOR-SLASH v0.95.16) ─────────────
+#
+# Konsolidiert aus rx_panel.py + locator_db.py: ein einziger Ort fuer Slash-
+# Suffix-Erkennung. Format: mit fuehrendem Slash, exakter Vergleich via
+# str.endswith(). DXCC-Heuristik nutzt _PREFIX_MAP fuer Praefix-Lookup —
+# loest den max(parts, key=len)-Bug bei `EA8/DA1MHH` (war: laengster Token
+# = DA1MHH = Heim, korrekt: DXCC-Token EA8 = Kanaren).
+
+MOBILE_SUFFIXES: tuple[str, ...] = (
+    "/P", "/M", "/MM", "/AM", "/QRP", "/PORTABLE", "/MOBILE",
+)
+
+
+def _strip_mobile_suffix(call: str) -> str:
+    """Mobile-Suffix entfernen. `DA1MHH/P` → `DA1MHH`. `DA1MHH` → `DA1MHH`.
+
+    Praefix-Slash bleibt unangetastet: `EA8/DA1MHH` → `EA8/DA1MHH`.
+    """
+    up = call.upper()
+    for suf in MOBILE_SUFFIXES:
+        if up.endswith(suf):
+            return up[:-len(suf)]
+    return up
+
+
+def _dxcc_prefix_from_call(call: str) -> str | None:
+    """Bei Slash-Call: erstes Token zurueckgeben das in `_PREFIX_MAP` ist.
+
+    `EA8/DA1MHH` → `EA8`. `K1ABC/W2` → `W2` (Suffix als DXCC).
+    `DL/W7XYZ` → `DL`. `DA1MHH/P` → None (Mobile-Suffix kein DXCC).
+    `DA1MHH` (ohne Slash) → None. Fallback dann auf normalen Lookup.
+    """
+    if "/" not in call:
+        return None
+    base = _strip_mobile_suffix(call)
+    if "/" not in base:
+        return None  # War nur Mobile-Suffix
+    parts = base.split("/")
+    for token in parts:
+        if token in _PREFIX_MAP:
+            return token
+    # Iterativer Praefix-Match (z.B. "EA8" bei "EA8RUN/X")
+    for token in parts:
+        for plen in (3, 2, 1):
+            if len(token) >= plen and token[:plen] in _PREFIX_MAP:
+                return token[:plen]
+    return None
+
+
 def callsign_to_distance(callsign: str, my_grid: str) -> int | None:
-    """Ungefaehre Entfernung zum Callsign-Prefix (wenn kein Grid verfuegbar)."""
+    """Ungefaehre Entfernung zum Callsign-Prefix (wenn kein Grid verfuegbar).
+
+    Slash-Calls (P1.LOCATOR-SLASH v0.95.16):
+        `EA8/DA1MHH`  → DXCC-Token EA8 → Kanaren-Distanz
+        `K1ABC/W2`    → DXCC-Token W2  → USA-Distanz
+        `DA1MHH/P`    → Mobile-Suffix entfernt → DA1MHH → Heim-Distanz
+    """
     my_pos = grid_to_latlon(my_grid)
     if not my_pos:
         return None
 
     call = callsign.upper().strip().lstrip('<').rstrip('>')
+    target_call = call
     if '/' in call:
-        parts = call.split('/')
-        call = max(parts, key=len)
+        dxcc_token = _dxcc_prefix_from_call(call)
+        if dxcc_token is not None:
+            target_call = dxcc_token  # Distanz zum DXCC-Land
+        else:
+            target_call = _strip_mobile_suffix(call)
 
     # Prefix → Country Code → Coords
     for plen in [3, 2, 1]:
-        prefix = call[:plen]
+        prefix = target_call[:plen]
         if prefix in _PREFIX_MAP:
             code = _PREFIX_MAP[prefix]
             if code in _COUNTRY_COORDS:
@@ -577,16 +636,25 @@ def callsign_to_distance(callsign: str, my_grid: str) -> int | None:
 
 
 def callsign_to_country(callsign: str) -> str:
-    """Callsign → Laender-Kuerzel (2-3 Buchstaben fuer Anzeige)."""
+    """Callsign → Laender-Kuerzel (2-3 Buchstaben fuer Anzeige).
+
+    Slash-Calls (P1.LOCATOR-SLASH v0.95.16):
+        `EA8/DA1MHH`  → DXCC-Token EA8 → Canary Isl.
+        `DA1MHH/P`    → Mobile-Suffix entfernt → DA1MHH → Germany
+        `K1ABC/W2`    → DXCC-Token W2  → USA
+    """
     call = callsign.upper().strip().lstrip('<').rstrip('>')
-    # Slash-Calls: DA1MHH/P → DA1MHH
+    target_call = call
     if '/' in call:
-        parts = call.split('/')
-        call = max(parts, key=len)
+        dxcc_token = _dxcc_prefix_from_call(call)
+        if dxcc_token is not None:
+            code = _PREFIX_MAP[dxcc_token]
+            return _COUNTRY_NAMES.get(code, code)
+        target_call = _strip_mobile_suffix(call)
 
     # 3-char, 2-char, 1-char Prefix probieren
     for plen in [3, 2, 1]:
-        prefix = call[:plen]
+        prefix = target_call[:plen]
         if prefix in _PREFIX_MAP:
             code = _PREFIX_MAP[prefix]
             return _COUNTRY_NAMES.get(code, code)

@@ -261,13 +261,19 @@ def test_concurrent_writes_no_corruption(tmp_path: Path):
 
 # ── Slash-Calls ────────────────────────────────────────────
 
-def test_slash_p_treated_as_stationary(tmp_path: Path):
-    """/P (portable) → gleiche Priority und prec_km wie ohne Suffix."""
+def test_slash_p_treated_as_mobile(tmp_path: Path):
+    """/P (portable) → prec_km x 1.5 wie alle Mobile-Suffixe.
+
+    P1.LOCATOR-SLASH v0.95.16: MOBILE_SUFFIXES konsolidiert in core/geo.py.
+    Funker-Praxis: /P ist Operator unterwegs (Park, Berg, Reise) — Position
+    weicht von Heim ab → Aufpumpen ist konsistent zu /M /MM /AM /QRP.
+    """
     db = LocatorDB(tmp_path / "loc.json")
     db.set("DA1MHH/P", "JO31qf", "cq")
     e = db.get("DA1MHH/P")
     assert e is not None
-    assert e.prec_km == 5  # nicht aufgepumpt
+    # 5 * 1.5 = 7.5 → round to 8
+    assert e.prec_km == 8
 
 
 def test_slash_mm_higher_imprecision(tmp_path: Path):
