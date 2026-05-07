@@ -48,6 +48,7 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         super().__init__()
         self.settings = settings
         self.setWindowTitle(f"SimpleFT8 — {settings.callsign}")
+        self._qrz_title_suffix = ""  # P1.QRZ-UPLOAD-UI-2 v0.95.15
         self.setMinimumSize(1200, 600)
         self.resize(1400, 700)
         self._apply_dark_theme()
@@ -172,6 +173,10 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         import_path = self.settings.get("adif_import_path")
         if import_path:
             self.qso_log.load_directory(Path(import_path))
+        # P1.QRZ-UPLOAD-UI-2: hochgeladene QSOs auch in qso_log
+        hochgeladen_dir = Path.cwd() / "adif" / "hochgeladen"
+        if hochgeladen_dir.is_dir():
+            self.qso_log.load_directory(hochgeladen_dir)
         print(f"[QSOLog] {self.qso_log.worked_count()} unique Calls, {self.qso_log.qso_count()} QSOs")
 
         # ADIF-Daten in die Locator-DB pushen (qso_log-Source, prec_km 5/110).
@@ -181,6 +186,9 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         n_loc = 0
         if adif_dir.is_dir():
             n_loc += self.locator_db.bulk_import_directory(adif_dir)
+        # P1.QRZ-UPLOAD-UI-2: LocatorDB auch aus hochgeladen/
+        if hochgeladen_dir.is_dir():
+            n_loc += self.locator_db.bulk_import_directory(hochgeladen_dir)
         if import_path:
             n_loc += self.locator_db.bulk_import_directory(Path(import_path))
         if n_loc:
@@ -389,6 +397,34 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         )
         self._stats_indicator.setVisible(self.settings.get("stats_enabled", True))
         self.statusBar().addPermanentWidget(self._stats_indicator)
+
+        # P1.QRZ-UPLOAD-UI-2: Bulk-Cancel-Widget (initial versteckt)
+        from PySide6.QtWidgets import (
+            QWidget as _QW, QHBoxLayout as _QHL,
+            QPushButton as _QPB2,
+        )
+        self._qrz_status_widget = _QW()
+        _qrz_lay = _QHL(self._qrz_status_widget)
+        _qrz_lay.setContentsMargins(0, 0, 0, 0)
+        _qrz_lay.setSpacing(4)
+        self._qrz_status_label = _QLabel("QRZ ↑")
+        self._qrz_status_label.setStyleSheet(
+            "color: #4488cc; font-family: Menlo; font-size: 11px; padding: 0 4px;"
+        )
+        self._qrz_status_cancel_btn = _QPB2("✕")
+        self._qrz_status_cancel_btn.setFixedSize(18, 18)
+        self._qrz_status_cancel_btn.setStyleSheet(
+            "QPushButton { background: rgba(180,30,30,0.4); color: #FFAAAA;"
+            "border: 1px solid #533; border-radius: 3px; font-size: 10px; padding: 0;}"
+            "QPushButton:hover { background: rgba(220,40,40,0.6); }"
+            "QPushButton:disabled { color: #555; }"
+        )
+        self._qrz_status_cancel_btn.clicked.connect(self._on_qrz_status_cancel_clicked)
+        _qrz_lay.addWidget(self._qrz_status_label)
+        _qrz_lay.addWidget(self._qrz_status_cancel_btn)
+        self._qrz_status_widget.hide()
+        self.statusBar().addPermanentWidget(self._qrz_status_widget)
+
         from PySide6.QtWidgets import QPushButton as _QPB
         _help_btn = _QPB(" ? ")
         _help_btn.setStyleSheet(
@@ -1134,6 +1170,7 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
             try:
                 self._qrz_worker.finished.disconnect()
                 self._qrz_worker.progress.disconnect()
+                self._qrz_worker.cooldown_tick.disconnect()
             except (RuntimeError, TypeError):
                 pass
             self._qrz_worker.cancel()

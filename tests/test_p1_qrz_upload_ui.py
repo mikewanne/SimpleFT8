@@ -1,15 +1,16 @@
-"""Tests fuer P1.QRZ-UPLOAD-UI v0.95.14.
+"""Tests fuer P1.QRZ-UPLOAD-UI v0.95.14 (Confirm + Worker).
 
 Decken ab:
 - Worker progress-Signal alle 10 QSOs
 - Worker cancel-Pfad (sauberer Stop nach aktuellem QSO)
+- Worker immediate-cancel emittet trotzdem finished (R1-Final v0.95.14)
 - Worker counter-Logik (OK/Dup/Fail)
 - Confirm-Dialog Default-Button (Enter = Upload)
 - Confirm-Dialog Reject-Pfad
-- Progress-Dialog update_progress rendert Werte
-- Progress-Dialog finished blendet Schliessen-Button ein
-- Progress-Dialog cancelled-Title
-- Progress-Dialog Auto-Close-Timer 10s
+
+P1.QRZ-UPLOAD-UI-2 v0.95.15: Progress-Dialog-Tests (4) entfernt — Status
+laeuft jetzt in Titelleiste + Statusbar-Cancel-Widget. Neue Tests in
+tests/test_p1_qrz_upload_ui_2.py.
 """
 import os
 import sys
@@ -171,42 +172,3 @@ def test_confirm_dialog_reject_returns_rejected(qapp):
     assert dlg.result() == QDialog.DialogCode.Rejected
 
 
-def test_progress_dialog_update_renders_correctly(qapp):
-    """update_progress aktualisiert Progress-Bar + Counter-Label."""
-    from ui.qrz_upload_dialogs import QRZUploadDialog
-    dlg = QRZUploadDialog(total=18443)
-    dlg.update_progress(4123, 18443, 4100, 23, 0)
-    assert "4123 von 18443" in dlg.lbl_progress.text()
-    assert "22%" in dlg.lbl_progress.text()
-    assert dlg.progress_bar.value() == 4123
-    assert "4100" in dlg.lbl_counter.text()
-    assert "23" in dlg.lbl_counter.text()
-
-
-def test_progress_dialog_finished_shows_close_button(qapp):
-    """set_finished blendet Cancel aus, Schliessen ein, Title aktualisiert."""
-    from ui.qrz_upload_dialogs import QRZUploadDialog
-    dlg = QRZUploadDialog(total=100)
-    dlg.show()  # damit isVisible/isHidden korrekt funktioniert
-    dlg.set_finished(ok=80, dup=15, fail=5, cancelled=False, total_processed=100)
-    assert dlg.btn_cancel.isHidden()
-    assert not dlg.btn_close.isHidden()
-    assert "fertig" in dlg.lbl_title.text().lower()
-    dlg.close()
-
-
-def test_progress_dialog_cancelled_title_yellow(qapp):
-    """Cancel-Pfad: Title bekommt cancelled-Style."""
-    from ui.qrz_upload_dialogs import QRZUploadDialog
-    dlg = QRZUploadDialog(total=100)
-    dlg.set_finished(ok=20, dup=5, fail=0, cancelled=True, total_processed=25)
-    assert "abgebrochen" in dlg.lbl_title.text().lower()
-
-
-def test_progress_dialog_auto_close_timer_starts(qapp):
-    """set_finished startet 10s Auto-Close-Timer (R1.6)."""
-    from ui.qrz_upload_dialogs import QRZUploadDialog
-    dlg = QRZUploadDialog(total=100)
-    dlg.set_finished(ok=100, dup=0, fail=0, cancelled=False, total_processed=100)
-    assert dlg._auto_close_timer.isActive()
-    assert dlg._auto_close_timer.remainingTime() > 9000

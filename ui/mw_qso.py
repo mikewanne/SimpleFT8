@@ -425,14 +425,14 @@ class QSOMixin:
         )
 
     def _on_qrz_upload(self):
-        """QRZ Bulk-Upload mit Confirm-Dialog + Progress-Dialog.
+        """QRZ Bulk-Upload mit Title-Suffix + Statusbar-Cancel-Widget.
 
-        P1.QRZ-UPLOAD-UI v0.95.14: Phase 1 Confirm → Phase 2 Progress (non-modal).
-        Klick-Sperre 3-fach (R1-KP-2): Flag → Button → submit-Reihenfolge.
+        P1.QRZ-UPLOAD-UI-2 v0.95.15: Progress in Titelleiste statt Dialog.
+        Klick-Sperre 3-fach (R1-KP-2) bleibt: Flag → Button → submit.
         """
         from PySide6.QtWidgets import QDialog
 
-        # KP-2: Re-Entry-Check als FIRST line (defensive)
+        # Re-Entry-Check als FIRST line (defensive)
         if getattr(self, '_qrz_bulk_active', False):
             print("[QRZ] Re-Entry-Schutz: Bulk laeuft schon, Klick ignoriert")
             return
@@ -459,53 +459,162 @@ class QSOMixin:
             dlg.exec()
             return
 
-        records = self.qso_panel.logbook._all_records
+        # Filter: nur Records aus adif/ (NICHT adif/hochgeladen/) — AC-7
+        all_records = self.qso_panel.logbook._all_records
+        records = [
+            r for r in all_records
+            if "hochgeladen" not in r.get("_SOURCE_FILE", "").replace("\\", "/")
+        ]
         if not records:
-            self.statusBar().showMessage("Keine QSOs zum Hochladen.", 5000)
+            self.statusBar().showMessage(
+                "Keine QSOs zum Hochladen — alle bereits in adif/hochgeladen/.", 5000)
             return
 
-        from ui.qrz_upload_dialogs import QRZConfirmDialog, QRZUploadDialog
+        from ui.qrz_upload_dialogs import QRZConfirmDialog
         confirm = QRZConfirmDialog(len(records), parent=self)
         if confirm.exec() != QDialog.DialogCode.Accepted:
             return
 
-        # KP-2 Reihenfolge: 1) Flag → 2) Button → 3) Worker starten
+        # KP-2 Reihenfolge: 1) Flag → 2) Button → 3) Worker
         self._qrz_bulk_active = True
         self._set_qrz_button_enabled(False)
-
-        self._qrz_dialog = QRZUploadDialog(len(records), parent=self)
-        self._qrz_dialog.setWindowFlag(Qt.WindowType.Window, True)
+        self._show_qrz_status_widget(True, len(records))
 
         from core.qrz_upload_worker import QRZUploadWorker
         client = self._get_qrz_client()
         self._qrz_worker = QRZUploadWorker(client, records, parent=self)
         self._qrz_worker.progress.connect(
-            self._qrz_dialog.update_progress, Qt.ConnectionType.QueuedConnection)
+            self._on_qrz_progress, Qt.ConnectionType.QueuedConnection)
         self._qrz_worker.finished.connect(
             self._on_qrz_bulk_finished, Qt.ConnectionType.QueuedConnection)
-        self._qrz_dialog.cancel_clicked.connect(self._qrz_worker.cancel)
-        self._qrz_dialog.show()
-        self._qrz_dialog.raise_()
-        self._qrz_dialog.activateWindow()
+        self._qrz_worker.cooldown_tick.connect(
+            self._on_qrz_cooldown_tick, Qt.ConnectionType.QueuedConnection)
 
         self._qrz_worker.start()
         print(f"[QRZ] Bulk-Upload gestartet ({len(records)} QSOs)")
 
+    @Slot(int, int, int, int, int)
+    def _on_qrz_progress(self, current: int, total: int,
+                         ok: int, dup: int, fail: int) -> None:
+        """Worker-Progress alle 10 QSOs → Title + Statusbar-Label."""
+        pct = int((current / total) * 100) if total else 0
+        self._qrz_title_suffix = f" — QRZ ↑ {current}/{total} ({pct}%)"
+        self._update_window_title()
+        if hasattr(self, '_qrz_status_label'):
+            self._qrz_status_label.setText(f"QRZ ↑ {current}/{total} ({pct}%)")
+
+    @Slot(int)
+    def _on_qrz_cooldown_tick(self, seconds_left: int) -> None:
+        """Worker meldet Cooldown-Sekunde — Statusbar zeigt Countdown."""
+        if hasattr(self, '_qrz_status_label'):
+            if seconds_left > 0:
+                self._qrz_status_label.setText(
+                    f"QRZ ↑ pausiert {seconds_left}s ...")
+            else:
+                self._qrz_status_label.setText("QRZ ↑ retrying...")
+
     @Slot(int, int, int, bool, int)
     def _on_qrz_bulk_finished(self, ok: int, dup: int, fail: int,
                               cancelled: bool, total_processed: int) -> None:
-        """Worker-Finish — Dialog updaten, Flag/Button reset."""
-        if hasattr(self, '_qrz_dialog') and self._qrz_dialog:
-            self._qrz_dialog.set_finished(ok, dup, fail, cancelled, total_processed)
+        """Worker-Finish — Title reset, Toast, File-Move."""
+        # Title zuruecksetzen
+        self._qrz_title_suffix = ""
+        self._update_window_title()
+        # Statusbar-Widget verbergen
+        self._show_qrz_status_widget(False)
+        # Toast 10s mit Endstand
+        total_planned = (
+            self._qrz_worker.total_records
+            if getattr(self, '_qrz_worker', None) else 0
+        )
+        if cancelled:
+            msg = (f"QRZ Upload abgebrochen bei {total_processed}/{total_planned}: "
+                   f"{ok} neu, {dup} dup, {fail} fail")
+        else:
+            msg = f"QRZ Upload fertig: {ok} neu, {dup} dup, {fail} fail"
+        self.statusBar().showMessage(msg, 10000)
+
+        # File-Move
+        if hasattr(self, '_qrz_worker') and self._qrz_worker:
+            file_results = self._qrz_worker.file_results
+            self._handle_qrz_file_results(file_results)
+            self._qrz_worker.shutdown(wait=False)
+
+        # State reset
         self._qrz_bulk_active = False
         self._set_qrz_button_enabled(True)
-        if hasattr(self, '_qrz_worker') and self._qrz_worker:
-            self._qrz_worker.shutdown(wait=False)
-        # Logbuch refreshen damit neue QSOs (falls vorher per Auto-Upload geadded)
-        # auch sichtbar sind (kosmetisch — Bulk lädt bestehende QSOs hoch).
         self.qso_panel.logbook.refresh()
         print(f"[QRZ] Bulk-Upload beendet: {ok} neu, {dup} dup, {fail} fail "
               f"(cancelled={cancelled})")
+
+    def _handle_qrz_file_results(self, file_results: dict) -> None:
+        """Files mit fail==0 und expected==processed nach adif/hochgeladen/."""
+        import shutil
+        from pathlib import Path
+        adif_dir = Path.cwd() / "adif"
+        target_dir = adif_dir / "hochgeladen"
+        try:
+            target_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as e:
+            self.statusBar().showMessage(f"Fehler hochgeladen-Ordner: {e}", 8000)
+            return
+        moved = 0
+        skipped = 0
+        for src_path, counts in file_results.items():
+            processed = counts["ok"] + counts["dup"] + counts["fail"]
+            if counts["fail"] == 0 and processed == counts["expected"] and processed > 0:
+                src = Path(src_path)
+                if not src.is_file():
+                    continue
+                # Schutz: nur Files aus adif/ verschieben (nicht aus hochgeladen/)
+                if "hochgeladen" in str(src).replace("\\", "/"):
+                    continue
+                dest = target_dir / src.name
+                if dest.exists():
+                    print(f"[QRZ] Move uebersprungen — Ziel existiert: {dest}")
+                    self.statusBar().showMessage(
+                        f"File-Move uebersprungen: {src.name} bereits in hochgeladen/", 5000)
+                    skipped += 1
+                    continue
+                try:
+                    shutil.move(str(src), str(dest))
+                    moved += 1
+                except OSError as e:
+                    print(f"[QRZ] File-Move {src} fehlgeschlagen: {e}")
+                    self.statusBar().showMessage(
+                        f"File-Move fehlgeschlagen: {src.name} ({e})", 5000)
+            else:
+                skipped += 1
+        if moved:
+            print(f"[QRZ] {moved} Datei(en) nach adif/hochgeladen/ verschoben "
+                  f"({skipped} bleiben wegen FAILs oder unvollstaendig)")
+
+    def _show_qrz_status_widget(self, visible: bool, total: int = 0) -> None:
+        """Statusbar-Cancel-Widget toggle."""
+        if not hasattr(self, '_qrz_status_widget'):
+            return
+        self._qrz_status_widget.setVisible(visible)
+        if visible:
+            if hasattr(self, '_qrz_status_label'):
+                self._qrz_status_label.setText(f"QRZ ↑ 0/{total} (0%)")
+            if hasattr(self, '_qrz_status_cancel_btn'):
+                self._qrz_status_cancel_btn.setEnabled(True)
+
+    @Slot()
+    def _on_qrz_status_cancel_clicked(self) -> None:
+        """Klick auf Statusbar-✕ → Worker cancel."""
+        if (hasattr(self, '_qrz_worker') and self._qrz_worker
+                and getattr(self, '_qrz_bulk_active', False)):
+            self._qrz_worker.cancel()
+            if hasattr(self, '_qrz_status_cancel_btn'):
+                self._qrz_status_cancel_btn.setEnabled(False)
+            if hasattr(self, '_qrz_status_label'):
+                self._qrz_status_label.setText("QRZ ↑ wird abgebrochen ...")
+
+    def _update_window_title(self) -> None:
+        """Zentrale Title-Update-Methode (R1: Hardcoding vermeiden)."""
+        suffix = getattr(self, '_qrz_title_suffix', '')
+        self.setWindowTitle(f"SimpleFT8 — {self.settings.callsign}{suffix}")
 
     def _set_qrz_button_enabled(self, enabled: bool) -> None:
         """Logbook-QRZ-Button enable/disable — Single-Instance-Schutz (R1-KP-2)."""

@@ -237,10 +237,20 @@ class LogbookWidget(QWidget):
     # ─────────────────────────────────────────────────────────────────────────
 
     def load_adif(self, directory: Path = None):
-        """Alle ADIF-Dateien laden und Tabelle fuellen."""
+        """Alle ADIF-Dateien aus adif/ UND adif/hochgeladen/ laden.
+
+        P1.QRZ-UPLOAD-UI-2: hochgeladene QSOs sollen weiter sichtbar bleiben,
+        aber NICHT erneut hochgeladen werden (Filter via _SOURCE_FILE in
+        mw_qso._on_qrz_upload).
+        """
         if directory:
             self._adif_dir = directory
-        self._all_records = parse_all_adif_files(self._adif_dir)
+        records_active = parse_all_adif_files(self._adif_dir)
+        hochgeladen_dir = self._adif_dir / "hochgeladen"
+        records_archived = []
+        if hochgeladen_dir.is_dir():
+            records_archived = parse_all_adif_files(hochgeladen_dir)
+        self._all_records = records_active + records_archived
         self._populate_table(self._all_records)
         self._update_counters()
 
