@@ -1466,16 +1466,21 @@ F (Audio-Export)           ←  unabhängig, jederzeit
   Docstring vermerkt. Falls in Praxis ein Region-Call regelmaessig fehlt:
   Whitelist statt Regex.
 
-### Andere offene TODOs
+### Andere offene TODOs (Bereinigt 07.05.2026)
 - [ ] Even/Odd dedizierter Timer — unabhängig vom Decoder-Thread (FT2 kritisch)
 - [ ] Gain-Bias beheben — Normal-Modus Gain-Messung wenn Stats aktiv erzwingen
 - [ ] CQ-Zusammenfassung RX-Liste — DeepSeek-Idee: ins QSO-Panel verschieben oder ganz raus
 - [ ] Tertile-Analyse Statistik — kein Datencropping, alle Werte in 3 Drittel
-- [ ] AP-Lite Test-Pipeline — synthetische E2E-Tests vor jedem Code-Fix
+- [x] **AP-Lite Test-Pipeline** — ✅ ERLEDIGT v0.95.9 (P1.AP synthetische E2E)
+      + v0.95.10 (P1.AP-FIX 4-Token-Bug)
 - [ ] Per-Station DT-Offset TX — encoder._station_dt_offset (nach mehr Feldtest-Daten)
-- [ ] IC-7300 Fork — TARGET_TX_OFFSET dort separat messen!
-- [ ] Warteliste-Screenshot — sobald DL3AQJ antwortet
+- [ ] IC-7300 Fork — TARGET_TX_OFFSET dort separat messen! (eigener Branch)
+- [x] **Warteliste-Screenshot** — ✅ ERLEDIGT (DL3AQJ-Freigabe + Einbau)
+- [x] **DT-Korrektur konvergiert nicht** — ✅ ERLEDIGT v0.95.7 (P1.18 Wurzel-
+      Fix `_DT_OFFSETS["FT8"]=3.0` Sync mit Wake-Offset)
 - [ ] **NEU 26.04.:** TX-Frequenz Normal-Modus manchmal ohne Histogramm-Marker (Bug, noch nicht reproduzierbar)
+- [ ] **NEU 07.05.:** P2.ADIF-ARCHIVE Standalone-Helper `tools/adif_archive.py`
+      fuer Jahresarchive aus `adif/hochgeladen/`
 
 ---
 

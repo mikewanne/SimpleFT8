@@ -632,24 +632,46 @@ direkt aus dem Decoder-Thread Widget-Methoden aufrufen — immer ueber das Signa
   Settings-Button); 10 atomare Commits, +141 Tests, alle Module DeepSeek-reviewed
 - 361 Tests grün
 
-**Naechste Features (siehe TODO.md fuer Details):**
-- B) Band-Indikatoren live mit PSK-Reporter ergaenzen (1-2 Tage)
-- C) Richtungs-Keulen TX-Pattern-Karte (2-3 Tage) — USP-Killer
-- D) Richtungs-Keulen ANT2 RX-Rescue (1-2 Tage zusaetzlich)
-- F) Audio-Export per Slot (<1 Tag, optional)
+**ERLEDIGT seit v0.95.x (07.05.2026 Aufraeumen):**
+- B) Band-Indikatoren live mit PSK-Reporter ✅ — v0.69 deckt Use-Case ab
+- C) Richtungs-Keulen TX-Pattern-Karte ✅ — v0.66
+- D) Richtungs-Keulen ANT2 RX-Rescue ✅ — v0.66
+- E) CSV-Export Diversity-Daten ✅ — v0.65
+- AP-Lite Test-Pipeline ✅ — v0.95.9 (P1.AP) + v0.95.10 (P1.AP-FIX)
+- DT-Drift Wurzel-Fix ✅ — v0.95.7 (P1.18)
+- Warteliste-Screenshot ✅ — DL3AQJ-Freigabe + Einbau erledigt
 
-**OFFEN AUS ALTER TODO-LISTE:**
-1. **Even/Odd dedizierter Timer** — unabhaengig vom Decoder-Thread (FT2 kritischsten)
-2. **Gain-Bias beheben** — Normal-Modus Gain-Messung wenn Stats aktiv erzwingen
-3. **CQ-Zusammenfassung RX-Liste** — DeepSeek-Idee: ins QSO-Panel verschieben oder ganz raus
-4. **Tertile-Analyse Statistik** — kein Datencropping, alle Werte in 3 Drittel
-5. **AP-Lite Test-Pipeline** — synthetische E2E-Tests vor jedem Code-Fix
-6. **Per-Station DT-Offset TX** — encoder._station_dt_offset (erst nach mehr Feldtest-Daten)
-7. **IC-7300 Fork** — TARGET_TX_OFFSET dort separat messen!
-8. **Warteliste-Screenshot** — sobald DL3AQJ antwortet
+**OFFEN (Stand 07.05.2026):**
 
-**VERMUTLICHER BUG (beobachten):**
-- TX-Frequenz Normal-Modus manchmal ohne Histogramm-Marker — noch nicht reproduzierbar
+*P1-Bugs (klein, mit klarer Diagnose):*
+- 🟡 **P1.8** — Report-SNR-Bug `_last_snr` statt `msg.snr` (RX-SNR-Bias-Folge)
+- 🟡 **P1.11** — `rr73_retries`-Counter shared zwischen WAIT_RR73 + WAIT_73-
+  Hoeflichkeits-Pfad
+- 🟡 **P1.13** — TX-Frequenz-Spinbox-Sync im Normal-Modus
+- 🟢 **P1.7** — Lokaler Duplikat-Filter ADIF/Logbuch (QRZ filtert serverseitig,
+  aber Doppel-ADIF moeglich)
+
+*Quality-of-Life (alte TODOs, weiterhin gueltig):*
+- Even/Odd dedizierter Timer — unabhaengig vom Decoder-Thread (FT2 kritischsten)
+- Gain-Bias beheben — Normal-Modus Gain-Messung wenn Stats aktiv erzwingen
+- CQ-Zusammenfassung RX-Liste — ins QSO-Panel verschieben oder ganz raus?
+- Tertile-Analyse Statistik — kein Datencropping, alle Werte in 3 Drittel
+- Per-Station DT-Offset TX — `encoder._station_dt_offset` (nach mehr Feldtest-Daten)
+- IC-7300 Fork — TARGET_TX_OFFSET dort separat messen (Branch fuer Mike)
+- F) Audio-Export per Slot (<1 Tag, optional, fuer Forschung/Debug)
+- TX-Frequenz Normal-Modus manchmal ohne Histogramm-Marker (NEU 26.04.,
+  noch nicht reproduzierbar)
+
+*Karten-Folgemassnahmen (v0.66):*
+- Migration `main_window._psk_worker` → `core/psk_reporter`
+- Karten-Live-Test im Feld (40m FT8 abends mit RX-Layer)
+- TX-Modus Live-Test (CQ rufen + TX-Toggle, schauen ob Marker erscheint)
+- Mobile-Filter-Edge-Case dokumentieren (Region-Calls wie `K1ABC/W2`)
+
+*Naechstes geplantes Feature:*
+- **P2.ADIF-ARCHIVE** — Standalone-Helper `tools/adif_archive.py` fuer
+  Jahresarchive `archiv/2024.adi`/`2025.adi` aus `adif/hochgeladen/`
+  (separater Workflow nach v0.95.15 Field-Test)
 
 ---
 
