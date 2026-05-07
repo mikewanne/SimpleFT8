@@ -230,7 +230,14 @@ class _PulseBar(QWidget):
 
 
 class _ModeBandCard(QFrame):
-    """Kachel 1 (blau) — Modus (FT8/FT4) + Band-Auswahl."""
+    """Kachel 1 (blau) — Modus (FT8/FT4) + Band-Auswahl.
+
+    P1.COLLAPSE-RADIO-MODEBAND (v0.95.17): Body ist einklappbar via
+    Toggle-Button im Header. State persistiert in Settings, wird vom
+    MainWindow geladen.
+    """
+
+    collapse_changed = Signal(bool)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -245,6 +252,37 @@ class _ModeBandCard(QFrame):
         lay = QVBoxLayout(self)
         lay.setContentsMargins(10, 10, 10, 10)
         lay.setSpacing(8)
+
+        # ── Header-Row: Toggle-Button + MODUS+BAND-Label ─────────────────
+        header_row = QHBoxLayout()
+        header_row.setContentsMargins(0, 0, 0, 0)
+        header_row.setSpacing(6)
+
+        self.toggle_btn = QPushButton("▼")
+        self.toggle_btn.setFixedSize(20, 20)
+        self.toggle_btn.setFlat(True)
+        self.toggle_btn.setStyleSheet(
+            "QPushButton { background: transparent; color: #7799FF; "
+            "border: none; font-size: 11px; font-weight: bold; padding: 0; }"
+            "QPushButton:hover { color: #99BBFF; }"
+        )
+        self.toggle_btn.setToolTip("Modus+Band-Kachel ein-/ausklappen")
+        self.toggle_btn.clicked.connect(self._toggle_collapsed)
+        header_row.addWidget(self.toggle_btn)
+
+        lbl_mb = QLabel("MODUS+BAND")
+        lbl_mb.setStyleSheet(
+            f"color: #7799FF; font-size: 10px; font-family: {_FONT}; font-weight: bold;"
+        )
+        header_row.addWidget(lbl_mb)
+        header_row.addStretch()
+        lay.addLayout(header_row)
+
+        # ── Body-Container (einklappbar) ─────────────────────────────────
+        self._body_widget = QWidget()
+        body_lay = QVBoxLayout(self._body_widget)
+        body_lay.setContentsMargins(0, 0, 0, 0)
+        body_lay.setSpacing(0)
 
         # ── Alles in einem Grid → exakte Spalten-Ausrichtung ─────
         # Spalten: 0=Label(fix), 1=FT8, 2=FT4, 3=10m/15m, 4=12m/17m, 5=20m
@@ -327,7 +365,32 @@ class _ModeBandCard(QFrame):
         grid.setRowMinimumHeight(2, 4)
         grid.setRowMinimumHeight(4, 4)
 
-        lay.addLayout(grid)
+        body_lay.addLayout(grid)
+
+        # ── Body-Container an Card-Layout anhaengen ──────────────────────
+        lay.addWidget(self._body_widget)
+
+    # ── Collapse-API ─────────────────────────────────────────────────────
+    def set_collapsed(self, collapsed: bool) -> None:
+        """Body aus-/einklappen. Setzt Toggle-Icon + MaximumHeight.
+
+        Programm-API — emitiert KEIN collapse_changed-Signal (Init-Loop-
+        Schutz). User-Klick geht ueber _toggle_collapsed.
+        """
+        self._body_widget.setVisible(not collapsed)
+        self.toggle_btn.setText("▶" if collapsed else "▼")
+        if collapsed:
+            self.setMaximumHeight(36)
+        else:
+            self.setMaximumHeight(_QWIDGETSIZE_MAX)
+
+    def is_collapsed(self) -> bool:
+        return not self._body_widget.isVisible()
+
+    def _toggle_collapsed(self) -> None:
+        """Slot fuer Toggle-Button-Klick. Persistenz ueber Signal."""
+        self.set_collapsed(not self.is_collapsed())
+        self.collapse_changed.emit(self.is_collapsed())
 
     def update_propagation(self, conditions: dict,
                            active_band: Optional[str] = None) -> None:
@@ -648,7 +711,14 @@ class _AntenneCard(QFrame):
 
 
 class _RadioCard(QFrame):
-    """Kachel 3 (türkis) — RADIO Controls (PSK, Freq, Power, TUNE, ALC, TX)."""
+    """Kachel 3 (türkis) — RADIO Controls (PSK, Freq, Power, TUNE, ALC, TX).
+
+    P1.COLLAPSE-RADIO-MODEBAND (v0.95.17): Body ist einklappbar via
+    Toggle-Button im Header. State persistiert in Settings, wird vom
+    MainWindow geladen.
+    """
+
+    collapse_changed = Signal(bool)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -660,9 +730,36 @@ class _RadioCard(QFrame):
         lay.setContentsMargins(10, 8, 10, 8)
         lay.setSpacing(5)
 
+        # ── Header-Row: Toggle-Button + RADIO-Label ──────────────────────
+        header_row = QHBoxLayout()
+        header_row.setContentsMargins(0, 0, 0, 0)
+        header_row.setSpacing(6)
+
+        self.toggle_btn = QPushButton("▼")
+        self.toggle_btn.setFixedSize(20, 20)
+        self.toggle_btn.setFlat(True)
+        self.toggle_btn.setStyleSheet(
+            "QPushButton { background: transparent; color: #00aacc; "
+            "border: none; font-size: 11px; font-weight: bold; padding: 0; }"
+            "QPushButton:hover { color: #44CCEE; }"
+        )
+        self.toggle_btn.setToolTip("Radio-Kachel ein-/ausklappen")
+        self.toggle_btn.clicked.connect(self._toggle_collapsed)
+        header_row.addWidget(self.toggle_btn)
+
         lbl_radio = QLabel("RADIO")
-        lbl_radio.setStyleSheet(f"color: #00aacc; font-size: 10px; font-family: {_FONT}; font-weight: bold;")
-        lay.addWidget(lbl_radio)
+        lbl_radio.setStyleSheet(
+            f"color: #00aacc; font-size: 10px; font-family: {_FONT}; font-weight: bold;"
+        )
+        header_row.addWidget(lbl_radio)
+        header_row.addStretch()
+        lay.addLayout(header_row)
+
+        # ── Body-Container (einklappbar) ─────────────────────────────────
+        self._body_widget = QWidget()
+        body_lay = QVBoxLayout(self._body_widget)
+        body_lay.setContentsMargins(0, 0, 0, 0)
+        body_lay.setSpacing(5)
 
         _SEP_SS = "background: #445544; max-height: 1px; min-height: 1px;"
 
@@ -688,7 +785,7 @@ class _RadioCard(QFrame):
         )
         psk_inner.addWidget(self.psk_label, 1)
         psk_inner.addWidget(self.btn_psk_map, 0, Qt.AlignmentFlag.AlignTop)
-        lay.addWidget(psk_frame)
+        body_lay.addWidget(psk_frame)
 
         # ── Sektion 2: Power Buttons ──────────────────────────
         _PRESETS = [
@@ -717,7 +814,7 @@ class _RadioCard(QFrame):
             self.power_buttons[watts] = btn
             self._power_btn_group.addButton(btn)
             power_row.addWidget(btn)
-        lay.addLayout(power_row)
+        body_lay.addLayout(power_row)
 
         # ── Sektion 3: TX Status (gerahmt) ────────────────────
         from PySide6.QtWidgets import QProgressBar
@@ -789,7 +886,32 @@ class _RadioCard(QFrame):
         output_row.addWidget(self.swr_label)
         tx_lay.addLayout(output_row)
 
-        lay.addWidget(tx_frame)
+        body_lay.addWidget(tx_frame)
+
+        # ── Body-Container an Card-Layout anhaengen ──────────────────────
+        lay.addWidget(self._body_widget)
+
+    # ── Collapse-API ─────────────────────────────────────────────────────
+    def set_collapsed(self, collapsed: bool) -> None:
+        """Body aus-/einklappen. Setzt Toggle-Icon + MaximumHeight.
+
+        Programm-API — emitiert KEIN collapse_changed-Signal (Init-Loop-
+        Schutz). User-Klick geht ueber _toggle_collapsed.
+        """
+        self._body_widget.setVisible(not collapsed)
+        self.toggle_btn.setText("▶" if collapsed else "▼")
+        if collapsed:
+            self.setMaximumHeight(36)
+        else:
+            self.setMaximumHeight(_QWIDGETSIZE_MAX)
+
+    def is_collapsed(self) -> bool:
+        return not self._body_widget.isVisible()
+
+    def _toggle_collapsed(self) -> None:
+        """Slot fuer Toggle-Button-Klick. Persistenz ueber Signal."""
+        self.set_collapsed(not self.is_collapsed())
+        self.collapse_changed.emit(self.is_collapsed())
 
 
 class _QSOStatusCard(QFrame):
@@ -1034,6 +1156,8 @@ class ControlPanel(QWidget):
     einmessen_clicked = Signal()
     map_clicked = Signal()  # Map-Button im PSK-Frame → MainWindow.open_direction_map
     antenne_collapse_changed = Signal(bool)  # P1.ANTENNE-COLLAPSE → MainWindow
+    modeband_collapse_changed = Signal(bool)  # P1.COLLAPSE-RADIO-MODEBAND → MainWindow
+    radio_collapse_changed = Signal(bool)     # P1.COLLAPSE-RADIO-MODEBAND → MainWindow
 
     # ── Klassen-Konstanten ───────────────────────────────────────────────
     _RX_MODES = ["normal", "diversity"]
@@ -1072,6 +1196,7 @@ class ControlPanel(QWidget):
         # ── Kachel 1: MODUS + BAND (blau) ───────────────────────────────
         mb_card = _ModeBandCard(self)
         self._mode_band_card = mb_card          # für update_propagation
+        self._modeband_card = mb_card  # P1.COLLAPSE-RADIO-MODEBAND: expose for MainWindow init
         self.btn_ft8 = mb_card.btn_ft8
         self.btn_ft4 = mb_card.btn_ft4
         self.btn_ft2 = mb_card.btn_ft2
@@ -1082,6 +1207,8 @@ class ControlPanel(QWidget):
         mb_card.btn_ft2.clicked.connect(lambda: self._set_mode("FT2"))
         for band, btn in mb_card.band_buttons.items():
             btn.clicked.connect(lambda checked, b=band: self._set_band(b))
+        # P1.COLLAPSE-RADIO-MODEBAND: Toggle-Signal forwarden
+        mb_card.collapse_changed.connect(self.modeband_collapse_changed.emit)
         layout.addWidget(mb_card)
 
         # ── Kachel 2: ANTENNE (grün) ─────────────────────────────────────
@@ -1115,6 +1242,7 @@ class ControlPanel(QWidget):
 
         # ── Kachel 3: RADIO (türkis) ─────────────────────────────────────
         radio_card = _RadioCard(self)
+        self._radio_card = radio_card  # P1.COLLAPSE-RADIO-MODEBAND: expose for MainWindow init
         self.psk_label = radio_card.psk_label
         self.btn_psk_map = radio_card.btn_psk_map
         self.btn_psk_map.clicked.connect(self._open_psk_map)
@@ -1131,6 +1259,8 @@ class ControlPanel(QWidget):
         self.tx_level_bar = radio_card.tx_level_bar
         self.tx_level_label = radio_card.tx_level_label
         self.rf_power_label = radio_card.rf_power_label
+        # P1.COLLAPSE-RADIO-MODEBAND: Toggle-Signal forwarden
+        radio_card.collapse_changed.connect(self.radio_collapse_changed.emit)
         layout.addWidget(radio_card)
 
         # ── Kachel 3: QSO + STATUS (orange) ─────────────────────────────

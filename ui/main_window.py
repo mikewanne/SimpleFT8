@@ -459,6 +459,15 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self.control_panel._ant_card.set_collapsed(_antenne_collapsed)
         self.control_panel.antenne_collapse_changed.connect(
             self._on_antenne_collapse_changed)
+        # P1.COLLAPSE-RADIO-MODEBAND (v0.95.17): Initial-State + Persistenz
+        _modeband_collapsed = self.settings.get("modeband_card_collapsed", False)
+        self.control_panel._modeband_card.set_collapsed(_modeband_collapsed)
+        self.control_panel.modeband_collapse_changed.connect(
+            self._on_modeband_collapse_changed)
+        _radio_collapsed = self.settings.get("radio_card_collapsed", False)
+        self.control_panel._radio_card.set_collapsed(_radio_collapsed)
+        self.control_panel.radio_collapse_changed.connect(
+            self._on_radio_collapse_changed)
 
         # QSO Detail Overlay (wird ueber Control Panel gelegt bei Logbuch-Klick)
         from ui.qso_detail_overlay import QSODetailOverlay
@@ -861,6 +870,18 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
     def _on_antenne_collapse_changed(self, collapsed: bool) -> None:
         """P1.ANTENNE-COLLAPSE: Persistiert Toggle-State in Settings."""
         self.settings.set("antenne_card_collapsed", collapsed)
+        self.settings.save()
+
+    @Slot(bool)
+    def _on_modeband_collapse_changed(self, collapsed: bool) -> None:
+        """P1.COLLAPSE-RADIO-MODEBAND: persist Modus+Band-Card collapse state."""
+        self.settings.set("modeband_card_collapsed", collapsed)
+        self.settings.save()
+
+    @Slot(bool)
+    def _on_radio_collapse_changed(self, collapsed: bool) -> None:
+        """P1.COLLAPSE-RADIO-MODEBAND: persist Radio-Card collapse state."""
+        self.settings.set("radio_card_collapsed", collapsed)
         self.settings.save()
 
     @Slot()
