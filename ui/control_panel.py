@@ -1681,6 +1681,20 @@ class ControlPanel(QWidget):
         self._last_state = state_name
         self.state_label.setText(f"Status: {state_name}")
 
+    def set_advance_label(self, state) -> None:
+        """P1.FORCESEND (v0.95.12): btn_advance Label dynamisch je nach State.
+
+        Mike's Hobby-UX: Button macht klar was gesendet wird.
+        KISS: kompakt ohne Verb (Button-Klick-Kontext impliziert "senden").
+        """
+        from core.qso_state import QSOState
+        labels = {
+            QSOState.WAIT_REPORT: "R+Report",
+            QSOState.WAIT_RR73: "RR73",
+            QSOState.WAIT_73: "73",
+        }
+        self.btn_advance.setText(labels.get(state, "Weiter →"))
+
     def set_rx_active(self, enabled: bool):
         """GAIN-MESSUNG + DIVERSITY sperren wenn RX aus ist."""
         self.btn_einmessen.setEnabled(enabled)

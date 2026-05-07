@@ -651,6 +651,22 @@ class QSOStateMachine(QObject):
             self._set_state(QSOState.TX_RR73)
             self.send_message.emit(msg)
 
+        elif self.state == QSOState.WAIT_73:
+            # P1.FORCESEND (v0.95.12): manuelles 73 wenn Gegenstation
+            # kein 73 schickt. WAIT_73 = "QSO schon geloggt" (qso_complete
+            # wurde in TX_RR73 emittiert), wir senden Hoeflichkeits-73.
+            # Final-R1 Race-Schutz: Auto-Pfad (on_message_received) koennte
+            # courtesy_73_sent bereits gesetzt haben — idempotent return.
+            if self.qso.courtesy_73_sent:
+                self._dbg.log("TX", "advance() Force-73: 73 schon gesendet, ignoriert")
+                return
+            # Flag VOR send (R1 KP-3, asynchron-Schutz).
+            self.qso.courtesy_73_sent = True
+            msg = f"{self.qso.their_call} {self.my_call} 73"
+            self._dbg.log("TX", f"advance() Force-73: '{msg}'")
+            self._set_state(QSOState.TX_73_COURTESY)
+            self.send_message.emit(msg)
+
     def cancel(self):
         self.cq_mode = False
         self._set_state(QSOState.IDLE)

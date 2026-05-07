@@ -228,9 +228,14 @@ class QSOMixin:
             QSOState.IDLE, QSOState.TIMEOUT,
             QSOState.CQ_CALLING, QSOState.CQ_WAIT,
         )
+        # P1.FORCESEND (v0.95.12): Label dynamisch + WAIT_73 in Enabled-Liste
+        # + Diversity-Lock zusätzlich prüfen (R1-Empfehlung Defense-in-Depth).
+        diversity_locked = getattr(self, "_diversity_measuring", False)
+        self.control_panel.set_advance_label(state)
         self.control_panel.btn_advance.setEnabled(
-            state in (QSOState.WAIT_REPORT, QSOState.WAIT_RR73)
+            state in (QSOState.WAIT_REPORT, QSOState.WAIT_RR73, QSOState.WAIT_73)
             and not self.qso_sm.cq_mode
+            and not diversity_locked
         )
         self.control_panel.btn_cancel.setEnabled(
             in_qso or state in (QSOState.CQ_CALLING, QSOState.CQ_WAIT)
