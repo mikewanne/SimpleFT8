@@ -100,6 +100,60 @@ Folgebug-Risiko aus P1.5: bekannte Station < 5 Min nach RR73 ruft erneut →
 zweites QSO + zweiter ADIF-Eintrag. QRZ.com filtert serverseitig, aber
 lokal nicht.
 
+### ✅ P1.FORCESEND — btn_advance state-aware + WAIT_73-Branch (ERLEDIGT 2026-05-07 v0.95.12)
+
+Mike-Use-Case 06.05.: bei stuck-Gegenstation manuell RR73 oder 73
+senden statt 3-Min-Timeout. Bestehender `btn_advance` wird state-aware:
+Label dynamisch (`R+Report` / `RR73` / `73` / `Weiter →`), Enabled in
+{WAIT_REPORT, WAIT_RR73, WAIT_73} AND nicht cq_mode AND nicht
+diversity_locked. `advance()` neuer WAIT_73-Branch sendet 73 mit
+`courtesy_73_sent=True` VOR send (R1-KP-3 asynchron) + idempotent-
+Return wenn Auto-Pfad schneller war (Final-R1 Race-Fix).
+
+**Voller Workflow:** V1 → V2 (10 Lessons, Bug-A-Halluzination
+eingestanden) → R1 („Plan freigegeben + 5 KP", KP-1 als Halluzination
+verworfen) → V3 (Compact-feste Diffs) → Code → Final-R1 („Push
+freigegeben mit Vorbehalt: idempotent-Return" → sofort umgesetzt).
+Plan-Files: `prompts/p1_forcesend_v[1-3].md`.
+
+**Tests 841 → 852 gruen** (+11 in `tests/test_p1_forcesend.py`).
+Atomare Commits `c8bf5bb` (Code+Tests+main.py 5 Files +177/-2) +
+Doku-Commit. APP_VERSION 0.95.11 → 0.95.12.
+
+**Lesson:** V1-Halluzination-Risk auch nach 2 Jahren — grep zu eng,
+`_on_state_changed`-Hook in mw_qso.py übersehen. V2-Self-Review fing
+es ab.
+
+---
+
+### ✅ P1.ANTENNE-COLLAPSE — Antennen-Kachel einklappbar (ERLEDIGT 2026-05-06 v0.95.11)
+
+Mike-Designentscheidung 06.05.: `_AntenneCard` (`ui/control_panel.py:421`)
+WIRD einklappbar. DeepSeek hatte abgeraten — Mike überschrieb explizit
+(SimpleFT8 ist Hobby-Tool, kein Contest). Hobby-Use-Case: stundenlang
+auf einem Band+Modus, Antennen-Status selten gebraucht → wegklappen,
+Platz für QSO/RX-Panel. Bei Bedarf aufklappen.
+
+**Architektur:** Header-Row mit Toggle-Button `▼`/`▶` + `_body_widget`-
+Container für alle bisherigen Body-Widgets. API `set_collapsed(bool)` /
+`is_collapsed()` / `_toggle_collapsed()`. Signal `collapse_changed` NUR
+bei User-Klick (Init-Loop-Schutz). `ControlPanel._ant_card` exposed,
+forwardet via `antenne_collapse_changed.emit`. `MainWindow` lädt
+Initial-State aus Settings + persistiert via Slot.
+
+**Voller Workflow:** V1 → V2 (16 Lessons) → R1 („Plan freigegeben +
+5 KP", neue Befunde KP-7 bis KP-11) → V3 (Compact-feste Diffs) → Code →
+Final-R1 („Push freigegeben mit optionalem Debounce-Vorbehalt").
+Plan-Files: `prompts/p1_antenne_collapse_v[1-3].md`.
+
+**Tests 831 → 841 gruen** (+10 in `tests/test_antenne_card.py`). Atomare
+Commits `a0ce1ae` (Code+Tests+main.py 4 Files +209/-9) + Doku-Commit.
+APP_VERSION 0.95.10 → 0.95.11.
+
+**Settings-Key:** `antenne_card_collapsed` (bool, default False = aufgeklappt).
+
+---
+
 ### ✅ P1.AP-FIX — AP-Lite Kandidaten-Format-Bug (ERLEDIGT 2026-05-06 v0.95.10)
 
 `core/ap_lite.py:126` produzierte 4-Token-Strings (`OWN THEIR LOC SNR`).

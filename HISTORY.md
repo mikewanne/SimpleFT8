@@ -5,6 +5,148 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-07 v0.95.12 — P1.FORCESEND btn_advance state-aware + WAIT_73-Branch
+
+**Mike-Use-Case 2026-05-06:** Bei stuck-Gegenstation (sendet immer
+Report statt RR73, oder kein 73) manuell RR73 oder 73 senden können
+statt 3-Min-Timeout abwarten.
+
+**Befund aus Code-Inspektion (V1→V2-Selbstkorrektur):**
+
+V1 hatte 3 Bugs vermutet, V2 verifizierte am Code dass nur 2 echte
+Bugs sind:
+
+- ~~Bug A: btn_advance dauerhaft disabled~~ — V1-Halluzination!
+  `_on_state_changed` (mw_qso.py:208-234) macht state-aware Enabled
+  bereits für WAIT_REPORT+WAIT_RR73.
+- **Bug B:** Label statisch „Weiter →" — macht nicht klar was gesendet
+  wird. Mike hat Button nie genutzt.
+- **Bug C:** WAIT_73-Branch fehlt in `advance()` + in der Enabled-Liste.
+
+**Lösung (KISS, keine neuen UI-Elemente):** Bestehender `btn_advance`
+wird state-aware:
+
+- Label dynamisch je nach State (kompakt ohne Verb):
+  - WAIT_REPORT → „R+Report"
+  - WAIT_RR73 → „RR73"
+  - WAIT_73 → „73"
+  - sonst → „Weiter →"
+- Enabled wenn state in {WAIT_REPORT, WAIT_RR73, WAIT_73} UND nicht
+  cq_mode UND nicht diversity_locked.
+- `advance()` neuer Branch für WAIT_73 sendet `73`, setzt
+  `courtesy_73_sent=True` VOR `send_message.emit` (P1.10 Doppel-Send-
+  Schutz, R1-KP-3).
+
+**Final-R1 Race-Fix:** R1 fand Race zwischen Auto-73-Empfang und
+Mike-Klick. Wenn Auto-Pfad zwischen Klick und `advance()` schon
+`courtesy_73_sent=True` setzt → würde manuell 2× 73 gesendet.
+Idempotent-Return ergänzt:
+
+```python
+if self.qso.courtesy_73_sent:
+    return  # 73 schon gesendet (Auto-Pfad)
+```
+
+**Voller Workflow:** V1 (Diagnose) → V2 (Self-Review, 10 Lessons,
+Bug-A-Halluzination eingestanden) → R1 („Plan freigegeben unter 5
+Bedingungen", KP-1 [qso_complete-Bug] als Halluzination verworfen
+weil WAIT_73 = „QSO schon geloggt" laut qso_state.py:60) → V3
+(Compact-feste Diffs) → Code → Final-R1 („Push freigegeben mit
+Vorbehalt: idempotent-Return" → sofort umgesetzt). Plan-Files:
+`prompts/p1_forcesend_v[1-3].md`.
+
+**Tests 841 → 852 gruen** (+11 in `tests/test_p1_forcesend.py`):
+
+- `test_advance_wait_73_sends_73` — emittet `<their> <me> 73`
+- `test_advance_wait_73_sets_courtesy_flag` — Doppel-Send-Schutz P1.10
+- `test_advance_wait_73_flag_set_before_send` — R1-KP-3 asynchron
+- `test_advance_wait_73_idempotent_when_flag_set` — **Final-R1 Race-Fix**
+- `test_advance_other_states_no_emit` — Regression
+- 6× `test_advance_label_*` für alle States + Default + Wechsel
+
+**Atomare Commits:** `c8bf5bb` (Code+Tests+main.py 5 Files +177/-2)
++ Doku-Commit. APP_VERSION 0.95.11 → 0.95.12.
+
+**Field-Test:** post-Kur. Mike erkennt am Label was gesendet wird,
+kann bei stuck-Gegenstation manuell die Sequenz abkürzen.
+
+**Lesson:** V1-Halluzination-Risk auch nach 2 Jahren Erfahrung —
+„grep für btn_advance.setEnabled in mw_radio.py" war zu eng,
+`_on_state_changed`-Hook in mw_qso.py übersehen. V2-Self-Review hat
+die Halluzination abgefangen — Workflow funktioniert.
+
+---
+
+## 2026-05-06 v0.95.11 — P1.ANTENNE-COLLAPSE _AntenneCard einklappbar
+
+**Mike-Designentscheidung 2026-05-06:** Antennen-Kachel WIRD einklappbar.
+DeepSeek hatte in vorheriger Session abgeraten („andere FT8-Programme
+zeigen alles immer sichtbar") — Mike überschrieb explizit:
+> „SimpleFT8 ist nicht andere Programme. Wenn ich auf einem Band+Modus
+> stundenlang funke brauche ich die Kachel selten und wenn kann ich sie
+> aufklappen."
+
+SimpleFT8 ist Hobby-Tool, kein Contest. Hobby-Use-Case: stundenlang auf
+einem Band, Antennen-Status nicht permanent gebraucht — wegklappen,
+Platz für QSO/RX-Panel. Bei Bedarf (Bandwechsel, KALIBRIEREN) aufklappen.
+
+**Architektur (R1-bestätigt):**
+
+- `_AntenneCard` (`ui/control_panel.py:421`) bekommt Header-Row mit
+  Toggle-Button (`▼` aufgeklappt / `▶` zugeklappt, 20×20, transparent
+  über `_CARD_SS_GREEN`-Akzent).
+- Body-Container `_body_widget` umschließt alle bisherigen Body-Widgets
+  (btn_row NORMAL/DIVERSITY/KALIBRIEREN, dx_info, Diversity-Ratio,
+  Frequenz-Histogramm, TX-Freq-Spinner, CQ-Countdown).
+- API: `set_collapsed(bool)` (Programm), `is_collapsed()`,
+  `_toggle_collapsed()` (User-Klick).
+- **Signal-Emission nur bei User-Klick**, NICHT bei `set_collapsed()`-
+  Programm-API → schützt vor Init-Loop (MainWindow ruft `set_collapsed`
+  beim App-Start mit Settings-Wert auf).
+- `setMaximumHeight(36)` bei Collapse, `_QWIDGETSIZE_MAX = 16_777_215`
+  bei Expand (PySide6 exportiert `QWIDGETSIZE_MAX` nicht — Modul-Konstante
+  als Workaround).
+- `ControlPanel._ant_card = ant_card` exposed (KP-7), forwardet
+  `antenne_collapse_changed` lambda-frei via `Signal.emit`.
+- `MainWindow.__init__` lädt Initial-State aus `Settings.get(
+  "antenne_card_collapsed", False)` + persistiert User-Toggles via
+  `_on_antenne_collapse_changed` Slot.
+
+**Workflow:** V1 (Diagnose) → V2 (Self-Review, 16 Lessons L1-L16) →
+R1 („Plan freigegeben mit 4 KP + 5 neue Befunde KP-7..KP-11")
+→ V3 (Compact-feste Diffs mit allen 5 Punkten) → Code → Final-R1
+(„Push freigegeben mit optionalem Debounce-Vorbehalt"). Plan-Files:
+`prompts/p1_antenne_collapse_v[1-3].md`.
+
+**Tests 831 → 841 gruen** (+10 in `tests/test_antenne_card.py`):
+- `test_default_expanded` — Default-State nach Konstruktor
+- `test_set_collapsed_hides_body` / `test_set_collapsed_false_shows_body`
+- `test_toggle_button_click_collapses` — User-Klick-Pfad via QTest
+- `test_toggle_emits_collapse_changed` — Signal nur bei User-Klick
+- `test_max_height_set_when_collapsed` — Höhen-Switch
+- `test_diversity_widget_visibility_preserved_through_toggle` — Mode-State
+- `test_tooltip_set_on_toggle_button`
+- `test_collapse_with_existing_body_state` — Sub-Widget-Visibility
+- `test_signal_not_emitted_by_set_collapsed_api` — Init-Loop-Schutz
+
+**Settings-Key:** generic `antenne_card_collapsed` (default `False`).
+Keine Migration nötig — `Settings.get()` liefert Default für frische
+Configs.
+
+**R1-Vorbehalt (NICHT umgesetzt, KISS):** `Settings.save()` ist synchron +
+blocking JSON-Dump. Bei schnellem Toggle könnte 200ms-Debounce helfen.
+Für Hobby-Tool (1 User, JSON-dump < 10 ms, Tests 0.26s grün) akzeptabel.
+
+**Atomare Commits:** `a0ce1ae` (Code+Tests+main.py 4 Files +209/-9) +
+Doku-Commit. APP_VERSION 0.95.10 → 0.95.11.
+
+**Lesson:** Mike's Designentscheidung schlägt DeepSeek-Konvention bei
+Hobby-Tool-UI. R1 darf KISS-Bedenken äussern, aber das „WIRD/WIRD NICHT
+umgesetzt" entscheidet Mike. R1-Prompt-Klausel „Designentscheidung
+NICHT verhandelbar" hat sauber funktioniert.
+
+---
+
 ## 2026-05-06 v0.95.10 — P1.AP-FIX generate_candidates State-1 Format-Bug
 
 **Bug entdeckt durch P1.AP E2E-Test-Pipeline (v0.95.9):** `core/ap_lite.py:126`

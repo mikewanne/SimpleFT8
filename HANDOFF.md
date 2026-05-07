@@ -1,9 +1,64 @@
 # HANDOFF — SimpleFT8
 
-**Stand 2026-05-06:** **v0.95.10 — P1.AP-FIX generate_candidates
+**Stand 2026-05-07:** **v0.95.12 — P1.FORCESEND btn_advance state-aware
++ WAIT_73-Branch.**
+
+**P1.FORCESEND (NEU):** Mike's Use-Case bei stuck-Gegenstation: manuell
+RR73 oder 73 senden statt 3-Min-Timeout. Bestehender `btn_advance`
+wird state-aware:
+
+- Label dynamisch (`R+Report` / `RR73` / `73` / `Weiter →`)
+- Enabled in {WAIT_REPORT, WAIT_RR73, WAIT_73} (vorher nur erste 2)
+  AND nicht cq_mode AND nicht diversity_locked
+- `advance()` WAIT_73-Branch sendet 73, setzt `courtesy_73_sent=True`
+  + idempotent-Return wenn Auto-Pfad schneller war (Final-R1 Race-Fix)
+
+**Voller Workflow:** V1 → V2 (10 Lessons, Bug-A-Halluzination eingestanden)
+→ R1 („Plan freigegeben unter Bedingungen 1-5", KP-1 als Halluzination
+verworfen) → V3 → Code → Final-R1 („Push freigegeben mit Vorbehalt:
+idempotent-Return" → sofort umgesetzt). Plan-Files:
+`prompts/p1_forcesend_v[1-3].md`.
+
+**Tests 841 → 852 gruen** (+11 in `tests/test_p1_forcesend.py`).
+Atomare Commits `c8bf5bb` (Code+Tests+main.py 5 Files +177/-2) +
+Doku-Commit. APP_VERSION 0.95.11 → 0.95.12.
+
+**Lesson:** V1-Halluzination ist auch nach 2 Jahren Workflow noch real.
+Grep zu eng → `_on_state_changed`-Hook übersehen. V2-Self-Review fing
+es ab — Workflow funktioniert.
+
+---
+
+**Vorher v0.95.11 (06.05.2026):** **P1.ANTENNE-COLLAPSE _AntenneCard
+einklappbar.**
+
+**P1.ANTENNE-COLLAPSE:** Mike-Designentscheidung 06.05.: Antennen-
+Kachel WIRD einklappbar (DeepSeek-Konvention „alles sichtbar" überschrieben).
+Hobby-Use-Case: stundenlang auf einem Band, Kachel selten gebraucht →
+wegklappen, Platz für QSO/RX-Panel.
+
+**Architektur:** Header-Row mit Toggle-Button (`▼`/`▶`) + `_body_widget`-
+Container für alle bisherigen Body-Widgets. API `set_collapsed/is_collapsed/
+_toggle_collapsed`. Signal `collapse_changed` NUR bei User-Klick (nicht
+bei Programm-API → Init-Loop-Schutz). `ControlPanel` forwardet via
+`antenne_collapse_changed.emit`. `MainWindow` lädt Initial-State aus
+Settings, persistiert User-Toggles. `setMaximumHeight(36)` bei Collapse.
+
+**Workflow:** V1 → V2 (16 Lessons) → R1 („freigegeben + 5 KP") → V3 →
+Code → Final-R1 („Push freigegeben"). Plan-Files: `prompts/p1_antenne_
+collapse_v[1-3].md`.
+
+**Tests 831 → 841 gruen** (+10 in `tests/test_antenne_card.py`).
+Atomare Commits `a0ce1ae` + Doku. APP_VERSION 0.95.10 → 0.95.11.
+
+**Settings-Key:** `antenne_card_collapsed` (bool, default False).
+
+---
+
+**Vorher v0.95.10 (06.05.2026):** **P1.AP-FIX generate_candidates
 State-1 Format-Bug.**
 
-**P1.AP-FIX (NEU):** P1.AP E2E-Test-Pipeline (v0.95.9, hardware-frei mit
+**P1.AP-FIX:** P1.AP E2E-Test-Pipeline (v0.95.9, hardware-frei mit
 ft8lib + Gauß-Rauschen) entdeckte den Bug: `core/ap_lite.py:126`
 `generate_candidates(state=1)` produzierte 4-Token-Strings
 (`OWN THEIR LOC SNR`, z.B. „DA1MHH DK5ON JO31 +05"). FT8 erlaubt nur
