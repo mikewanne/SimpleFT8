@@ -1,9 +1,73 @@
 # HANDOFF — SimpleFT8
 
-**Stand 2026-05-07:** **v0.95.15 — P1.QRZ-UPLOAD-UI-2: Title + File-Move
+**Stand 2026-05-07:** **v0.95.16 — P1.LOCATOR-SLASH: Slash-Call Lookup-Bugs
+gefixt.**
+
+**P1.LOCATOR-SLASH (NEU):** Mike-Pflicht-Verifikation der km-Anzeige im
+RX-Panel (DeepSeek-R1 Code-Review 07.05.) entdeckte 3 echte Bugs:
+
+1. `ui/rx_panel.py:333-335` — `lookup_call = max(parts, key=len)` bei
+   Praefix-Slash wie `EA8/DA1MHH` extrahierte das laengste Token (`DA1MHH`)
+   statt des DXCC-Praefixes (`EA8`) → Country Deutschland statt Kanaren,
+   Distanz ~0 km statt ~3000 km, DB-Lookup verfehlt Eintrag.
+2. `core/geo.py callsign_to_country` + `callsign_to_distance` — gleicher
+   `max(parts, key=len)`-Bug.
+3. Mobile-Suffix-Inkonsistenz zwischen rx_panel-Stripping und DB-Set-Pfad.
+
+**Mike-Entscheidung 07.05.:** **DB BEHALTEN** — Daten korrekt gespeichert,
+nur Lookup-Pfad kaputt. Decoder-Verifikation pre-V3 (`core/message.py:107-111`
+`parts = msg_str.strip().split()` → `f2 = parts[1]`) bewiesen: `m.caller`
+bleibt komplett.
+
+**Loesung — Option A (strikte Trennung):**
+- `ui/rx_panel.py`: KEIN Suffix-Stripping mehr. `lookup_call = caller` 1:1.
+- `core/geo.py`: NEU `MOBILE_SUFFIXES` (7 Suffixe), `_strip_mobile_suffix`,
+  `_dxcc_prefix_from_call` Helper. `callsign_to_country/distance` nutzen
+  DXCC-Token-Heuristik (exakt-Match in `_PREFIX_MAP`, dann iterativ 3/2/1).
+- `core/locator_db.py`: lokale `MOBILE_SUFFIXES` (3-Tupel `/MM /AM /QRP`)
+  durch Import aus `core.geo` ersetzt (jetzt 7 Suffixe). Verhaltens-
+  Aenderung: `/P /M /PORTABLE /MOBILE` bekommen jetzt `prec_km*1.5`
+  konsistent zu `/MM /AM /QRP` (Funker-Praxis: portable = Operator
+  unterwegs = Position weicht von Heim ab). R1-bestaetigt vertretbar.
+
+**DB bleibt unveraendert.** Karten-Code (`direction_map_widget.py:1694`)
+und Statistik-Code unbeeinflusst.
+
+**Geaenderte Files (5):**
+- `core/geo.py` — Helpers + Slash-Heuristik in `callsign_to_*`
+- `core/locator_db.py` — Import + Doku Z.13-15 angepasst
+- `ui/rx_panel.py` — Slash-Block Z.323-338 vereinfacht (9 Bug-Zeilen raus)
+- NEU `tests/test_p1_locator_slash.py` (14 Tests)
+- `tests/test_locator_db.py` — `test_slash_p_treated_as_stationary`
+  invertiert zu `test_slash_p_treated_as_mobile` (jetzt `prec_km == 8`)
+- `main.py` APP_VERSION 0.95.15 → 0.95.16
+
+**Voller Workflow:** V1 (3 Bugs, 3 Optionen, 10 ACs) → V2 (12 Lessons,
+L6 entlarvt Option B als Original-Design-Widerspruch) → R1 („Plan
+freigegeben" mit 1 KRITISCH = Decoder-Verifikation Schritt 0 ERLEDIGT
+pre-V3 + 1 SOLLTE-ERGAENZEN = +2 Edge-Case-Tests) → V3 (Compact-fest,
+6 Diffs) → Compact → Code → **Final-R1 („Push freigegeben") — 0
+KP-Findings.** Plan-Files: `prompts/p1_locator_slash_v[1-3].md`.
+
+**Tests 888 → 902 gruen** (+14, exakt wie V3 prognostiziert).
+
+**Field-Test-Pflicht (post-Push):**
+- App starten → Slash-Call beobachten (`EA8/...`-Aktivitaeten, `/P`-Mobile,
+  `K1ABC/W2`-Region-Suffix wenn am Band).
+- km-Spalte: exakte Position bei DB-Hit ODER DXCC-Distanz bei Miss —
+  KEIN Heim-Country-Bias mehr.
+- country-Spalte: korrektes Land.
+- Karten-Pin: am DXCC-Land, nicht in Heim-DE.
+
+**Push noch nicht.** Mike-Freigabe nach Field-Test mit echtem Slash-Call
+(EA8 oder /P) explizit einholen.
+
+---
+
+**Vorher v0.95.15 (07.05.2026):** **P1.QRZ-UPLOAD-UI-2: Title + File-Move
 + Log + Rate-Limit.**
 
-**P1.QRZ-UPLOAD-UI-2 (NEU):** Folge zu v0.95.14 — Mike-Field-Test
+**P1.QRZ-UPLOAD-UI-2:** Folge zu v0.95.14 — Mike-Field-Test
 07.05. nachmittags entdeckte 3 Probleme: Progress-Dialog StaysOnTopHint
 nervt, kein Tracking welche QSOs schon hochgeladen, 12134 Dups +
 Fail-Burst nacheinander deutet auf QRZ-Rate-Limit.

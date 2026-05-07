@@ -5,6 +5,92 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-07 v0.95.16 — P1.LOCATOR-SLASH: Slash-Call Lookup-Bugs gefixt
+
+**Mike-Pflicht-Verifikation 07.05. (DeepSeek-R1 Code-Review der km-Anzeige im
+RX-Panel) entdeckte 3 echte Bugs im Lookup-Pfad fuer Slash-Calls:**
+
+1. `ui/rx_panel.py:333-335` — `lookup_call = max(parts, key=len)` bei Praefix-
+   Slash wie `EA8/DA1MHH` extrahierte das laengste Token (`DA1MHH` = 6 Zeichen)
+   statt des DXCC-Praefixes (`EA8` = 3 Zeichen) → DB-Lookup mit falschem Key,
+   Country-Fallback Deutschland statt Kanaren, Distanz ~0 km statt ~3000 km.
+2. `core/geo.py callsign_to_country` + `callsign_to_distance` — gleicher
+   `max(parts, key=len)`-Bug.
+3. Mobile-Suffix-Inkonsistenz zwischen rx_panel-Stripping und DB-Set-Pfad
+   (DB hatte `DA1MHH/P` als Key, rx_panel suchte nach `DA1MHH` ohne Suffix
+   → Lookup verfehlt).
+
+**Mike-Entscheidung 07.05.:** **Datenbank behalten** — Daten korrekt
+gespeichert, nur Lookup-Pfad kaputt. Decoder-Verifikation pre-V3
+(`core/message.py:107-111` `parts = msg_str.strip().split()` → `f2 = parts[1]`)
+bewiesen: `m.caller="EA8/DA1MHH"` bleibt komplett. ft8lib hat 35-Char-Buffer.
+
+**Loesung — Option A (strikte Trennung):**
+- `ui/rx_panel.py`: KEIN Suffix-Stripping mehr. `lookup_call = caller` 1:1.
+  Slash-Calls bleiben komplett — passt zu wie `_feed_locator_db` schreibt
+  und wie `callsign_to_country/distance` intern Slash-Calls per DXCC-
+  Heuristik aufloesen.
+- `core/geo.py`: NEU zwei Helper + zentrale `MOBILE_SUFFIXES`-Konstante
+  - `MOBILE_SUFFIXES = ("/P", "/M", "/MM", "/AM", "/QRP", "/PORTABLE", "/MOBILE")`
+  - `_strip_mobile_suffix(call)` — entfernt Mobile-Suffix von hinten
+  - `_dxcc_prefix_from_call(call)` — bei Slash-Call das erste DXCC-Praefix-
+    Token (exakt-Match in `_PREFIX_MAP`, dann iterativ 3/2/1 Zeichen)
+- `core/geo.py:callsign_to_country` + `callsign_to_distance` umgestellt:
+  bei Slash-Call zuerst DXCC-Token suchen → wenn gefunden = Land/Distanz
+  zum DXCC-Land. Sonst Mobile-Suffix entfernen → Basis-Call → normaler
+  Praefix-Match. `max(parts, key=len)` ist weg.
+- `core/locator_db.py`: lokale `MOBILE_SUFFIXES` (war 3-Tupel `/MM /AM /QRP`)
+  durch Import aus `core.geo` ersetzt (jetzt 7 Suffixe). Verhaltens-Aenderung
+  (R1-bestaetigt vertretbar): `/P /M /PORTABLE /MOBILE` bekommen jetzt
+  konsistent `prec_km*1.5` — Funker-Praxis: Portable/Mobile = Operator
+  unterwegs = Position weicht von Heim ab. Doku Z.13-15 angepasst.
+
+**DB bleibt unveraendert** — Daten korrekt befuellt, alle Eintraege ueber
+`adif/qrz.com`-Imports und Live-Decodes. Karten-Code
+(`direction_map_widget.py`) und Statistik-Code unbeeinflusst.
+
+**Geaenderte Files (5):**
+- `core/geo.py` — Helpers + Slash-Heuristik in `callsign_to_country/distance`
+- `core/locator_db.py` — Import + Doku
+- `ui/rx_panel.py` — Slash-Block Z.323-338 vereinfacht (9 Bug-Zeilen raus)
+- `tests/test_p1_locator_slash.py` NEU — 14 Tests
+- `tests/test_locator_db.py` — `test_slash_p_treated_as_stationary` invertiert
+  zu `test_slash_p_treated_as_mobile` (jetzt `prec_km == 8`)
+- `main.py` APP_VERSION 0.95.15 → 0.95.16
+
+**Voller Workflow** V1 (3 Bugs, 3 Optionen A/B/C, 10 ACs) → V2 (12 Lessons,
+L6 entlarvt Option B als Original-Design-Widerspruch via `locator_db.py:180`
+Mobile-Praezision-Aufpumpen — empfiehlt Option A) → R1 („Plan freigegeben"
+mit 1 KRITISCH = Decoder-Verifikation Schritt 0 ERLEDIGT pre-V3 + 1
+SOLLTE-ERGAENZEN = +2 Edge-Case-Tests in V3) → V3 (Compact-fest, 6 Diffs)
+→ Compact → Code → **Final-R1 („Push freigegeben") — 0 KP-Findings**.
+
+**Plan-Files:** `prompts/p1_locator_slash_v[1-3].md`.
+
+**Tests 888 → 902 gruen** (+14, exakt wie V3 prognostiziert).
+
+**Field-Test-Pflicht (post-Push):**
+- App starten → Slash-Call beobachten (`EA8/...`-Kanaren-Aktivitaet,
+  `/P`-Mobile, `K1ABC/W2`-Region-Suffix wenn am Band).
+- km-Spalte: exakte Position bei DB-Hit ODER DXCC-Distanz bei Miss —
+  KEIN Heim-Country-Bias mehr.
+- country-Spalte: korrektes Land.
+- Karten-Pin: am DXCC-Land, nicht in Heim-DE.
+
+**Lessons-Learned (Skill Schritt 6):**
+1. Decoder-Verifikation Schritt 0 ist Pflicht-KRITISCH — bei Bugfix der
+   Decoder-Output-Annahmen beruehrt MUSS die tatsaechliche Decoder-Ausgabe
+   verifiziert werden (split-Output, ft8lib-Buffer, Spezialformate).
+   `feedback_decoder_verifikation_pflicht.md` als Memory-Vorschlag.
+2. V2-Self-Review fand Original-Design-Widerspruch (L6: `locator_db.py:180`
+   Mobile-Praezision-Aufpumpen war schon designt) — entlarvte falsche
+   V1-Empfehlung (Option B). Self-Review ist nicht Routine, oft entscheidend.
+3. R1 hat Decoder-Verifikation als KRITISCH markiert obwohl V2 nur als
+   ⚠️-Lesson formuliert — DeepSeek-R1 priorisiert Sicherheits-Schritte
+   konsequenter als Self-Review.
+
+---
+
 ## 2026-05-07 v0.95.15 — P1.QRZ-UPLOAD-UI-2: Title + File-Move + Log + Rate-Limit
 
 **Mike-Field-Test v0.95.14 (07.05. nachmittags) entdeckte 3 Probleme:**
