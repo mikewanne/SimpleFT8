@@ -5,6 +5,82 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-07 v0.95.17 — P1.COLLAPSE-RADIO-MODEBAND: Modus+Band + Radio einklappbar
+
+**Mike-Wunsch 07.05. nach v0.95.16-Push:** „radio und mouds haette ich
+gerne auch zum einklappen der kachel wie die Antennen kachel".
+Hobby-Use-Case: stundenlang FT8 auf 20m → Modus+Band einmal eingestellt,
+Watt selten verstellt, TUNE automatisch in Diversity → wegklappen,
+Platz fuer QSO/RX-Panel. Beide Karten unabhaengig, letzter Zustand
+persistiert. QSO-Kachel bleibt immer voll sichtbar.
+
+**Loesung — Pattern 1:1 Spiegelung Antennen-Kachel (v0.95.11):**
+- `_ModeBandCard` (`ui/control_panel.py:232`) bekommt Header-Row mit
+  Toggle-Button (`▼`/`▶`, blau `#7799FF`) + Label „MODUS+BAND" +
+  `_body_widget`. Grid mit allen Member-Erstellungen (btn_ft8/ft4/ft2,
+  freq_label, band_buttons, prop_bars) liegt im body_widget.
+- `_RadioCard` (`ui/control_panel.py:680`) analog mit Toggle (teal
+  `#00aacc`) + existierendem RADIO-Label im Header. PSK-Frame +
+  Power-Row + TX-Frame im body_widget.
+- Beide Cards: `set_collapsed/is_collapsed/_toggle_collapsed` API +
+  `collapse_changed = Signal(bool)`. Signal NUR bei User-Klick
+  (`_toggle_collapsed`), KEIN Emit bei Programm-API (`set_collapsed`)
+  → Init-Loop-Schutz wie bei Antennen-Card. `setMaximumHeight(36)`
+  bei Collapse, `_QWIDGETSIZE_MAX` bei Expand.
+- `ControlPanel`: 2 neue Klassen-Signale `modeband_collapse_changed` +
+  `radio_collapse_changed`, 2 Exposes `_modeband_card` + `_radio_card`,
+  2 Forward-Connects (lambda-frei, `.emit`-Hookup).
+- `MainWindow`: 2 Initial-State-Loads aus Settings (`modeband_card_collapsed`,
+  `radio_card_collapsed`, Default `False` = ausgeklappt) + 2 neue
+  `@Slot(bool)`-Methods analog `_on_antenne_collapse_changed`.
+
+**Geaenderte Files (4):**
+- `ui/control_panel.py` — `_ModeBandCard` Refactor (Z.232-414),
+  `_RadioCard` Refactor (Z.680-865), `ControlPanel` 2 Signale + 2
+  Exposes + 2 Forward-Connects (Z.1036-1038, Z.1075+, Z.1117+)
+- `ui/main_window.py` — 2 Initial-Loads + 2 Connects (Z.456-470),
+  2 neue Slot-Methods (Z.870-880)
+- `tests/test_p1_collapse_radio_modeband.py` NEU — 19 Tests
+  (8 parametrisiert × 2 Cards = 16 + 3 Integration)
+- `main.py` APP_VERSION 0.95.16 → 0.95.17
+
+**Voller Workflow** V1 (Diagnose, 13 ACs, Antennen-Pattern-Mapping)
+→ V2 (Self-Review, 14 Lessons L1-L14, Refactor-Risiko-Analyse,
+pytest-parametrize-Empfehlung) → R1 („Plan freigegeben fuer V3", 0
+KRITISCH-Findings, 5 kleine Hinweise alle in V2 erfasst) → V3
+(Compact-fest, 8 Diffs konkret, 19 Tests parametrisiert) → Compact
+→ Code → **Final-R1 („kein Aenderungsbedarf, alle 8 Pruefauftraege
+erfuellt") — 0 KP-Findings**.
+
+**Plan-Files:** `prompts/p1_collapse_radio_modeband_v[1-3].md`.
+
+**Tests 902 → 921 gruen** (+19, exakt wie V3 prognostiziert).
+
+**Karten-Code (`direction_map_widget.py`) und Statistik-Code unbeeinflusst.**
+
+**Lessons-Learned (Skill Schritt 6):**
+1. Pattern-Spiegelung lohnt — Antennen-Card v0.95.11 als bewaehrtes
+   Vorbild liess V1+V2+R1+V3 in ~1 Stunde durchziehen.
+2. pytest-parametrize fuer 2 Klassen mit identischer API spart
+   ~150 Test-Zeilen (8 × 2 = 16 statt 16 Duplikate).
+3. R1-Vorbehalte aus Antennen-Workflow (Settings-Debounce) sind 1:1
+   uebertragbar — nicht relevant fuer Hobby-Tool, KISS akzeptiert.
+
+**Field-Test-Pflicht (post-Push):**
+- App starten → 4 Karten (MODUS+BAND, ANTENNE, RADIO, QSO) alle
+  ausgeklappt (Default `False`).
+- Toggle MODUS+BAND klicken → Body verschwindet, nur Header bleibt.
+- Toggle RADIO klicken → Body verschwindet, nur Header bleibt.
+- Beide Karten gleichzeitig collapsed: ControlPanel kompakt, viel
+  Platz fuer QSO-Kachel + Statusbar.
+- App neu starten → letzter Zustand geladen aus Settings.
+- Antennen-Kachel weiter unbeeinflusst funktional.
+
+**Push noch nicht.** Mike-Freigabe nach Field-Test mit visueller
+Pruefung explizit einholen.
+
+---
+
 ## 2026-05-07 v0.95.16 — P1.LOCATOR-SLASH: Slash-Call Lookup-Bugs gefixt
 
 **Mike-Pflicht-Verifikation 07.05. (DeepSeek-R1 Code-Review der km-Anzeige im

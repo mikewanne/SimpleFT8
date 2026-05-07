@@ -1,6 +1,54 @@
 # HANDOFF — SimpleFT8
 
-**Stand 2026-05-07:** **v0.95.16 — P1.LOCATOR-SLASH: Slash-Call Lookup-Bugs
+**Stand 2026-05-07:** **v0.95.17 — P1.COLLAPSE-RADIO-MODEBAND: Modus+Band
+und Radio einklappbar.**
+
+**P1.COLLAPSE-RADIO-MODEBAND (NEU):** Mike-Wunsch 07.05. nach v0.95.16-Push:
+„radio und mouds haette ich gerne auch zum einklappen der kachel wie die
+Antennen kachel". Hobby-Use-Case: einmal Modus+Band einstellen, Watt selten
+verstellen, TUNE in Diversity automatisch → wegklappen, Platz fuer
+QSO/RX-Panel. Beide Karten unabhaengig, letzter Zustand persistiert.
+
+**Loesung — Pattern 1:1 Spiegelung Antennen-Kachel (v0.95.11):**
+- `_ModeBandCard` (`ui/control_panel.py:232`) Header-Row mit Toggle-Button
+  + „MODUS+BAND"-Label + `_body_widget` mit existierendem Grid.
+- `_RadioCard` (`ui/control_panel.py:680`) Header-Row mit Toggle-Button
+  + existierendes „RADIO"-Label + `_body_widget` mit PSK + Power + TX-Frame.
+- Beide: `set_collapsed/is_collapsed/_toggle_collapsed` + `collapse_changed`-
+  Signal NUR bei User-Klick (Init-Loop-Schutz).
+- `ControlPanel`: 2 neue Signale + 2 Exposes + 2 Forward-Connects (lambda-frei).
+- `MainWindow`: 2 Initial-Loads aus Settings + 2 neue Slot-Methods.
+- 19 neue Tests via pytest-parametrize (8 × 2 Cards = 16 + 3 Integration).
+
+**Geaenderte Files (4):**
+- `ui/control_panel.py` — `_ModeBandCard` + `_RadioCard` Refactor +
+  ControlPanel-Integration
+- `ui/main_window.py` — Initial-Loads + Slot-Methods
+- NEU `tests/test_p1_collapse_radio_modeband.py` (19 Tests)
+- `main.py` APP_VERSION 0.95.16 → 0.95.17
+
+**Voller Workflow** V1 (13 ACs, Antennen-Pattern-Mapping) → V2 (14 Lessons
+L1-L14, Refactor-Risiko-Analyse) → R1 („Plan freigegeben fuer V3", 0 KRITISCH,
+5 kleine Hinweise alle in V2) → V3 (Compact-fest, 8 Diffs) → Compact → Code
+→ **Final-R1 („kein Aenderungsbedarf, alle 8 Pruefauftraege erfuellt") — 0
+KP-Findings**.
+
+**Plan-Files:** `prompts/p1_collapse_radio_modeband_v[1-3].md`.
+
+**Tests 902 → 921 gruen** (+19, exakt wie V3 prognostiziert).
+
+**Field-Test-Pflicht (post-Push):**
+- 4 Karten alle ausgeklappt beim ersten App-Start (Default `False`).
+- Toggle MODUS+BAND und RADIO unabhaengig — beide Body verschwinden.
+- App neu starten → letzter Zustand geladen.
+- Antennen-Kachel + QSO-Kachel unbeeinflusst.
+
+**Push noch nicht.** Mike-Freigabe nach Field-Test mit visueller Pruefung
+explizit einholen.
+
+---
+
+**Vorher v0.95.16 (07.05.2026):** **P1.LOCATOR-SLASH: Slash-Call Lookup-Bugs
 gefixt.**
 
 **P1.LOCATOR-SLASH (NEU):** Mike-Pflicht-Verifikation der km-Anzeige im
