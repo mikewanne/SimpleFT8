@@ -5,6 +5,88 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-07 v0.95.13 — P1.CACHE-SIMPLE Diversity/Gain entkoppelt + UX-Cleanup
+
+**Mike-Vision (NICHT verhandelbar, 2026-05-07):** Diversity-Cache (Ratio,
+60 Min) und Gain-Cache (6h) komplett entkoppelt. Beide eigene Frist, beide
+eigenes Verhalten bei Ablauf. Keine Modal-Wahl-Dialoge fuer Routine —
+Mike-Argument: „Computer faehrt runter — OK?"-Pattern ist UX-Pillepalle.
+
+**4 Probleme gefixed (V1-Diagnose):**
+
+| Problem | Wurzel | Fix |
+|---|---|---|
+| A — Cache-Reuse-Toast | Mike: „warum bestaetigen wenn gueltig?" | Toast-Klasse + Aufruf raus |
+| B — Modal-Wahl-Dialog „Weiter / Neu messen" | Sinnlose Frage da Default fast immer „Weiter" | Wahl-Dialog raus an 2 Stellen |
+| C — Frische Ratio mit altem Gain ignoriert | Kreuz-Dependency: `is_valid_gain` blockierte Cache-Reuse | Gain-Check raus aus `_try_diversity_cache_reuse` |
+| D — Volle Pipeline ohne Ankuendigung | Mike: „was passiert mit alten Werten bei Cancel?" | Stale-Acceptance + Disable-Fallback |
+
+**Architektur — Dispatch-Logik (`_check_diversity_preset`):**
+
+```
+ratio_status = _assess_ratio(band, mode, scoring)  → fresh/stale/missing
+gain_status  = _assess_gain(band, mode, scoring)   → fresh/stale/missing
+
+gain stale  → DXTuneDialog (auto-start, nur Abbruch)
+              + _pending_ratio_status für Post-Gain-Pfad
+gain miss   → volle Pipeline (Gain + Ratio)
+gain fresh + ratio fresh → Cache-Reuse (still, kein Toast)
+gain fresh + ratio stale → stille Auto-Ratio-Messung (Phase 3)
+gain fresh + ratio miss  → stille Auto-Ratio-Messung (Phase 3)
+```
+
+Plus Stale-Acceptance in `_on_dx_tune_rejected`: bei Cancel mit alten
+Werten weiterarbeiten (Risiko-Akzeptanz). Wenn nichts da: Diversity AUS.
+
+**Aenderungen (`ui/mw_radio.py`):**
+- `_try_diversity_cache_reuse` Gain-Check entfernt (Diff 1a)
+- NEU `_get_diversity_store` + `_assess_ratio` + `_assess_gain` Helpers
+- `_check_diversity_preset` komplett refactort (Dispatch-Logik)
+- `_on_dx_tune_accepted` `_pending_ratio_status`-Pfad mit Cache-Reuse +
+  Phase-3-Sicherheitsnetz
+- `_on_dx_tune_rejected` Stale-Acceptance + Disable-Fallback
+- `_activate_diversity_with_scoring` Wahl-Dialog raus, delegiert jetzt zu
+  `_check_diversity_preset` (Code-Deduplikation, ~70 Zeilen weg)
+
+**Toast-Cleanup:**
+- `ui/diversity_cache_toast.py` geloescht
+- `tests/test_diversity_cache_reuse.py` Smoke-Test entfernt
+- Toast-Aufruf in mw_radio.py war bereits uncommitted, jetzt mit-committed
+
+**Voller Workflow:**
+
+V1 (Diagnose 4 Probleme) → V2 (Self-Review, 12 Lessons L1-L12: DXTuneDialog
+wiederverwenden, Cancel-Stale-Acceptance, Option B fuer Ratio-frisch+Gain-
+stale, kein neuer Dialog noetig) → R1-Plan (8 Pruefauftraege detailliert
+beantwortet, kein Veto, konkrete Diff-Plan-Empfehlung) → V3 (Compact-fest,
+6 Diffs konkret) → Compact → Code → Final-R1 („Keine KP-Findings, Code ist
+robust und entspricht der Mike-Vision. Tests decken alle relevanten Pfade
+ab. ✅"). Plan-Files: `prompts/p1_cache_simple_v[1-3].md`.
+
+**Tests 852 → 862 gruen (+10 neu, 1 invertiert):**
+- NEU `tests/test_p1_cache_simple.py` (10 Tests):
+  - `test_assess_ratio_fresh_stale_missing`
+  - `test_assess_gain_fresh_stale_missing`
+  - `test_check_preset_dispatch_gain_stale_opens_dialog`
+  - `test_check_preset_dispatch_gain_missing_full_pipeline`
+  - `test_check_preset_dispatch_both_fresh_cache_reuse_silent`
+  - `test_check_preset_dispatch_ratio_stale_gain_fresh_auto_remeasure`
+  - `test_dx_tune_accepted_with_pending_ratio_fresh_uses_cache`
+  - `test_dx_tune_rejected_loads_stale_values`
+  - `test_dx_tune_rejected_no_values_disables_diversity`
+  - `test_no_modal_dialog_in_normal_paths`
+- INVERTIERT `test_cache_reuse_returns_false_when_gain_expired` →
+  `test_cache_reuse_loads_ratio_even_when_gain_expired` (Erwartung jetzt:
+  True bei stale Gain, frische Ratio wird trotzdem geladen)
+
+**Atomare Commits:** `4af2e9e` (Code+Tests, 5 Files +508/-277) + Doku-Commit.
+APP_VERSION 0.95.12 → 0.95.13.
+
+**Field-Test ausstehend.** Notbremse bei Problemen: KALIBRIEREN-Button als
+Hard-Reset (komplette Pipeline = Gain + Ratio neu).
+
+---
+
 ## 2026-05-07 v0.95.12 — P1.FORCESEND btn_advance state-aware + WAIT_73-Branch
 
 **Mike-Use-Case 2026-05-06:** Bei stuck-Gegenstation (sendet immer

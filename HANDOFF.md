@@ -1,9 +1,56 @@
 # HANDOFF — SimpleFT8
 
-**Stand 2026-05-07:** **v0.95.12 — P1.FORCESEND btn_advance state-aware
+**Stand 2026-05-07:** **v0.95.13 — P1.CACHE-SIMPLE Diversity/Gain
+entkoppelt + UX-Cleanup.**
+
+**P1.CACHE-SIMPLE (NEU):** Mike-Vision: Diversity-Cache (Ratio, 60 Min)
+und Gain-Cache (6h) komplett entkoppelt. Keine Modal-Wahl-Dialoge fuer
+Routine-Aktionen.
+
+**Logik (`_check_diversity_preset` Dispatch):**
+- Gain stale  → DXTuneDialog auto-start (nur Abbruch). Wenn Ratio fresh:
+                nach Gain-OK Cache-Reuse statt Phase 3.
+- Gain missing → volle Pipeline (Gain + Ratio).
+- Gain fresh + Ratio fresh → Cache-Reuse (still, kein Toast).
+- Gain fresh + Ratio stale/missing → stille Auto-Ratio-Messung.
+
+**Plus Stale-Acceptance** in `_on_dx_tune_rejected`: Cancel mit alten
+Werten → laden, kein Pipeline-Restart. Wenn nichts da: Diversity AUS.
+
+**Aenderungen mw_radio.py:**
+- `_try_diversity_cache_reuse` Gain-Check entfernt
+- NEU `_get_diversity_store` + `_assess_ratio` + `_assess_gain` Helpers
+- `_check_diversity_preset` komplett refactort (Dispatch-Logik)
+- `_on_dx_tune_accepted` `_pending_ratio_status`-Pfad
+- `_on_dx_tune_rejected` Stale-Acceptance + Disable-Fallback
+- `_activate_diversity_with_scoring` Wahl-Dialog raus, delegiert zu
+  `_check_diversity_preset` (~70 Zeilen Code-Deduplikation)
+
+**Toast-Cleanup (Mike: „Computer faehrt runter — OK?"-Pattern raus):**
+- `ui/diversity_cache_toast.py` geloescht
+- Toast-Aufruf bereits zuvor entfernt (uncommitted, jetzt mit-committed)
+- Smoke-Test entfernt
+
+**Voller Workflow:** V1 (Diagnose 4 Probleme) → V2 (Self-Review, 12 Lessons
+L1-L12) → R1-Plan (8 Pruefauftraege detailliert beantwortet, kein Veto) →
+V3 (Compact-fest, 6 Diffs konkret) → Compact → Code → Final-R1
+(„Keine KP-Findings, Code ist robust und entspricht der Mike-Vision. ✅").
+Plan-Files: `prompts/p1_cache_simple_v[1-3].md`.
+
+**Tests 852 → 862 gruen** (+10 in `tests/test_p1_cache_simple.py` + 1
+invertiert in `test_diversity_cache_reuse.py`). Atomare Commits `4af2e9e`
+(Code+Tests, 5 Files +508/-277) + Doku-Commit. APP_VERSION 0.95.12 →
+0.95.13.
+
+**Field-Test ausstehend.** Push noch nicht gemacht — Mike-Freigabe nach
+Field-Test einholen.
+
+---
+
+**Vorher v0.95.12 (07.05.2026):** **P1.FORCESEND btn_advance state-aware
 + WAIT_73-Branch.**
 
-**P1.FORCESEND (NEU):** Mike's Use-Case bei stuck-Gegenstation: manuell
+**P1.FORCESEND:** Mike's Use-Case bei stuck-Gegenstation: manuell
 RR73 oder 73 senden statt 3-Min-Timeout. Bestehender `btn_advance`
 wird state-aware:
 

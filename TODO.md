@@ -100,6 +100,40 @@ Folgebug-Risiko aus P1.5: bekannte Station < 5 Min nach RR73 ruft erneut →
 zweites QSO + zweiter ADIF-Eintrag. QRZ.com filtert serverseitig, aber
 lokal nicht.
 
+### ✅ P1.CACHE-SIMPLE — Diversity/Gain entkoppelt + UX-Cleanup (ERLEDIGT 2026-05-07 v0.95.13)
+
+Mike-Vision: Diversity-Cache (Ratio, 60 Min) und Gain-Cache (6h)
+komplett entkoppelt. Keine Modal-Wahl-Dialoge fuer Routine.
+
+**4 Probleme gefixed:**
+- A) Cache-Reuse-Toast raus (Mike: „Computer faehrt runter — OK?"-Pattern)
+- B) Modal-Wahl-Dialog „Weiter / Neu messen" raus an 2 Stellen
+- C) Frische Ratio mit altem Gain ignoriert (Cross-Dependency-Bug)
+- D) Volle Pipeline ohne Ankuendigung — jetzt Stale-Acceptance bei Cancel
+
+**Architektur (`_check_diversity_preset` Dispatch):**
+- Gain stale → DXTuneDialog auto-start (nur Abbruch). Wenn Ratio fresh:
+  nach Gain-OK Cache-Reuse statt Phase 3.
+- Gain missing → volle Pipeline (Gain + Ratio).
+- Gain fresh + Ratio fresh → Cache-Reuse (still, kein Toast).
+- Gain fresh + Ratio stale/missing → stille Auto-Ratio-Messung.
+
+Plus Stale-Acceptance bei `_on_dx_tune_rejected`-Cancel: alte Werte
+werden geladen statt Pipeline-Restart. Wenn nichts da: Diversity AUS.
+
+**Voller Workflow:** V1 (4 Probleme) → V2 (12 Lessons) → R1 (8 Pruefauf-
+traege beantwortet, kein Veto) → V3 (Compact-fest, 6 Diffs konkret) →
+Compact → Code → Final-R1 („Keine KP-Findings, Code ist robust und
+entspricht der Mike-Vision. ✅"). Plan-Files: `prompts/p1_cache_simple_v[1-3].md`.
+
+**Tests 852 → 862 gruen** (+10 NEU in `tests/test_p1_cache_simple.py` +
+1 invertiert in `test_diversity_cache_reuse.py`). Atomare Commits
+`4af2e9e` (Code+Tests, 5 Files +508/-277) + Doku-Commit. APP_VERSION
+0.95.12 → 0.95.13.
+
+**Field-Test ausstehend.** Push noch nicht gemacht — Mike-Freigabe
+einholen.
+
 ### ✅ P1.FORCESEND — btn_advance state-aware + WAIT_73-Branch (ERLEDIGT 2026-05-07 v0.95.12)
 
 Mike-Use-Case 06.05.: bei stuck-Gegenstation manuell RR73 oder 73
