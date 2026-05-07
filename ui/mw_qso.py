@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import Slot
+from PySide6.QtCore import Qt, Slot
 
 if TYPE_CHECKING:
     from .main_window import MainWindow
@@ -395,7 +395,16 @@ class QSOMixin:
                 self._detail_overlay.qrz_status.setText("QRZ: kein Login konfiguriert")
 
     def _qrz_upload_single(self, record: dict):
-        """Einzelnes QSO an QRZ.com hochladen (non-blocking)."""
+        """Einzelnes QSO an QRZ.com hochladen (non-blocking).
+
+        P1.QRZ-UPLOAD-UI v0.95.14 (R1-KP-1): Bei aktivem Bulk-Upload
+        skippen — sonst Race im geteilten ThreadPool.
+        """
+        if getattr(self, '_qrz_bulk_active', False):
+            call = record.get("CALL", "?")
+            print(f"[QRZ] Auto-Upload {call} uebersprungen — Bulk-Upload laeuft")
+            return
+
         from concurrent.futures import ThreadPoolExecutor
         if not hasattr(self, '_qrz_pool'):
             self._qrz_pool = ThreadPoolExecutor(max_workers=1)
@@ -416,14 +425,38 @@ class QSOMixin:
         )
 
     def _on_qrz_upload(self):
-        """Alle QSOs an QRZ.com hochladen (non-blocking)."""
+        """QRZ Bulk-Upload mit Confirm-Dialog + Progress-Dialog.
+
+        P1.QRZ-UPLOAD-UI v0.95.14: Phase 1 Confirm → Phase 2 Progress (non-modal).
+        Klick-Sperre 3-fach (R1-KP-2): Flag → Button → submit-Reihenfolge.
+        """
+        from PySide6.QtWidgets import QDialog
+
+        # KP-2: Re-Entry-Check als FIRST line (defensive)
+        if getattr(self, '_qrz_bulk_active', False):
+            print("[QRZ] Re-Entry-Schutz: Bulk laeuft schon, Klick ignoriert")
+            return
+
         api_key = self.settings.get("qrz_api_key", "")
         if not api_key:
-            from PySide6.QtWidgets import QMessageBox
-            QMessageBox.warning(self, "QRZ.com",
-                "Kein QRZ API Key konfiguriert.\n"
+            from ui.qrz_upload_dialogs import _DLG_STYLE
+            from PySide6.QtWidgets import QVBoxLayout, QLabel, QPushButton
+            dlg = QDialog(self)
+            dlg.setWindowTitle("QRZ.com")
+            dlg.setStyleSheet(_DLG_STYLE)
+            lay = QVBoxLayout(dlg)
+            lay.setContentsMargins(24, 20, 24, 16)
+            lbl = QLabel(
+                "Kein QRZ API Key konfiguriert.\n\n"
                 "Bitte in ~/.simpleft8/config.json eintragen:\n"
-                '"qrz_api_key": "XXXX-XXXX-XXXX-XXXX"')
+                '"qrz_api_key": "XXXX-XXXX-XXXX-XXXX"'
+            )
+            lay.addWidget(lbl)
+            btn = QPushButton("OK")
+            btn.setObjectName("btn_primary")
+            btn.clicked.connect(dlg.accept)
+            lay.addWidget(btn)
+            dlg.exec()
             return
 
         records = self.qso_panel.logbook._all_records
@@ -431,28 +464,55 @@ class QSOMixin:
             self.statusBar().showMessage("Keine QSOs zum Hochladen.", 5000)
             return
 
-        from concurrent.futures import ThreadPoolExecutor
-        if not hasattr(self, '_qrz_pool'):
-            self._qrz_pool = ThreadPoolExecutor(max_workers=1)
+        from ui.qrz_upload_dialogs import QRZConfirmDialog, QRZUploadDialog
+        confirm = QRZConfirmDialog(len(records), parent=self)
+        if confirm.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        # KP-2 Reihenfolge: 1) Flag → 2) Button → 3) Worker starten
+        self._qrz_bulk_active = True
+        self._set_qrz_button_enabled(False)
+
+        self._qrz_dialog = QRZUploadDialog(len(records), parent=self)
+        self._qrz_dialog.setWindowFlag(Qt.WindowType.Window, True)
+
+        from core.qrz_upload_worker import QRZUploadWorker
         client = self._get_qrz_client()
-        self.statusBar().showMessage(f"QRZ Upload: {len(records)} QSOs...", 30000)
+        self._qrz_worker = QRZUploadWorker(client, records, parent=self)
+        self._qrz_worker.progress.connect(
+            self._qrz_dialog.update_progress, Qt.ConnectionType.QueuedConnection)
+        self._qrz_worker.finished.connect(
+            self._on_qrz_bulk_finished, Qt.ConnectionType.QueuedConnection)
+        self._qrz_dialog.cancel_clicked.connect(self._qrz_worker.cancel)
+        self._qrz_dialog.show()
+        self._qrz_dialog.raise_()
+        self._qrz_dialog.activateWindow()
 
-        def _do_bulk():
-            ok, fail, dup = 0, 0, 0
-            for rec in records:
-                result = client.upload_qso_from_dict(rec)
-                s = result.get("RESULT", "FAIL")
-                if s == "OK": ok += 1
-                elif "duplicate" in result.get("REASON", "").lower(): dup += 1
-                else: fail += 1
-            return f"QRZ Upload: {ok} neu, {dup} Duplikate, {fail} Fehler"
+        self._qrz_worker.start()
+        print(f"[QRZ] Bulk-Upload gestartet ({len(records)} QSOs)")
 
-        future = self._qrz_pool.submit(_do_bulk)
-        future.add_done_callback(
-            lambda f: self.statusBar().showMessage(f.result(), 10000)
-            if not f.exception() else None
-        )
-        print(f"[QRZ] Upload gestartet ({len(records)} QSOs)")
+    @Slot(int, int, int, bool, int)
+    def _on_qrz_bulk_finished(self, ok: int, dup: int, fail: int,
+                              cancelled: bool, total_processed: int) -> None:
+        """Worker-Finish — Dialog updaten, Flag/Button reset."""
+        if hasattr(self, '_qrz_dialog') and self._qrz_dialog:
+            self._qrz_dialog.set_finished(ok, dup, fail, cancelled, total_processed)
+        self._qrz_bulk_active = False
+        self._set_qrz_button_enabled(True)
+        if hasattr(self, '_qrz_worker') and self._qrz_worker:
+            self._qrz_worker.shutdown(wait=False)
+        # Logbuch refreshen damit neue QSOs (falls vorher per Auto-Upload geadded)
+        # auch sichtbar sind (kosmetisch — Bulk lädt bestehende QSOs hoch).
+        self.qso_panel.logbook.refresh()
+        print(f"[QRZ] Bulk-Upload beendet: {ok} neu, {dup} dup, {fail} fail "
+              f"(cancelled={cancelled})")
+
+    def _set_qrz_button_enabled(self, enabled: bool) -> None:
+        """Logbook-QRZ-Button enable/disable — Single-Instance-Schutz (R1-KP-2)."""
+        try:
+            self.qso_panel.logbook.set_qrz_button_enabled(enabled)
+        except AttributeError:
+            pass
 
     @Slot(str)
     def _on_qso_timeout(self, their_call: str):

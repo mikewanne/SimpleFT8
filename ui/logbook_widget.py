@@ -123,6 +123,8 @@ class LogbookWidget(QWidget):
         )
         btn_upload.clicked.connect(self.upload_requested.emit)
         toolbar.addWidget(btn_upload)
+        # P1.QRZ-UPLOAD-UI: Reference fuer Klick-Sperre waehrend Bulk
+        self._btn_upload = btn_upload
 
         self.btn_delete = QPushButton("Löschen")
         self.btn_delete.setFixedWidth(60)
@@ -372,3 +374,12 @@ class LogbookWidget(QWidget):
                 self.refresh()
             else:
                 QMessageBox.warning(self, "Fehler", "Eintrag konnte nicht gelöscht werden.")
+
+    def set_qrz_button_enabled(self, enabled: bool) -> None:
+        """P1.QRZ-UPLOAD-UI: Single-Instance-Schutz fuer Bulk-Upload."""
+        if hasattr(self, '_btn_upload'):
+            self._btn_upload.setEnabled(enabled)
+            if enabled:
+                self._btn_upload.setToolTip("")
+            else:
+                self._btn_upload.setToolTip("Upload laeuft …")

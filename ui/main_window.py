@@ -1127,6 +1127,17 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         # TX-Modus wird in Schritt 8 ueber PSKReporter befuellt, nicht hier.
 
     def closeEvent(self, event):
+        # P1.QRZ-UPLOAD-UI (KP-3): Bulk-Worker sauber stoppen vor App-Close.
+        # Disconnect VOR cancel(), sonst kann Worker noch finished.emit() auf
+        # zerstoertem Dialog/Slot feuern.
+        if hasattr(self, '_qrz_worker') and self._qrz_worker:
+            try:
+                self._qrz_worker.finished.disconnect()
+                self._qrz_worker.progress.disconnect()
+            except (RuntimeError, TypeError):
+                pass
+            self._qrz_worker.cancel()
+            self._qrz_worker.shutdown(wait=False)
         # Fenstergeometrie + Splitter-Breiten speichern
         geom = self.geometry()
         self.settings.set("window_x", geom.x())
