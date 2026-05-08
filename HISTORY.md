@@ -5,6 +5,96 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-08 v0.95.18 — P1.BUNDLE-LOGBOOK-RST-SNR: 3 Bugs gebuendelt
+
+**Mike-Auftrag 08.05.:** „2 leichte Punkte zusammen mit Logbuch-Crash beim
+Eintrag-Loeschen — und QRZ-10K-Burst-Bug pruefen ob unser ADIF-Format
+spec-konform ist." Bundle aus 3 unabhaengigen Bugs im selben ADIF/Logbuch/
+Reporting-Pfad — voller V1→V2→R1→V3-Workflow gemeinsam, atomare Commits
+pro Bug.
+
+**Bug A — Logbuch-UI-Hang beim Eintrag-Loeschen:**
+- **Wurzel:** `log/adif.py:94` `new_body += block + eor` in while-Loop =
+  O(n²) bei 12 MB ADIF (~10K Records) → 5-10 s Hang im UI-Thread (macOS
+  Beachball). Plus full `self.refresh()` in `_on_delete_clicked` re-parste
+  beide ADIF-Verzeichnisse (~19 MB Disk-IO im UI-Thread).
+- **Field-Test 07.05. nachmittags:** „eintrag neben qrz.com fehler ...
+  kreis dreht sich für bearbeiten anscheinend endlos jetzt hat es
+  aufgehört" → reproduziert.
+- **Fix:** `delete_qso` `new_parts = []` + `.append` + `"".join` → O(n),
+  < 200 ms gemessen. Plus `_on_delete_clicked` In-Memory-Update via
+  `_all_records.remove(rec)` + `_on_filter_changed` + `_update_counters`.
+  Edge-Case ValueError → Fallback full refresh (Konsistenz).
+
+**Bug B — RST_RCVD/RST_SENT mit FT8-R-Praefix in ADIF (QRZ-Reject):**
+- **Wurzel:** SimpleFT8 schrieb `<RST_RCVD:4>R-22` in ADIF (FT8-Roger-
+  Praefix aus Sequence-Layer durchgereicht). ADIF-Spec + QRZ-Validator
+  akzeptieren nur `<rst_rcvd:3>-22`. Vergleich mit QRZ-Original-Export
+  `do4mhh.398467.20260427134135.adi` bestaetigt Spec-Verletzung. Mike's
+  10K-QSO-Burst-Bug (12134 Dups + Fail-Cascade in v0.95.15) wahrscheinlich
+  wegen QRZ-Validator-Reject + Cooldown-Cascade.
+- **Fix:** Neuer Helper `_strip_r_prefix(rst)` in `log/adif.py` (idempotent,
+  None-safe, case-insensitive — `R-22`/`r-22` → `-22`; `RR73`/`R`/`""`
+  unveraendert). Aufruf in 2 Pfaden (Defense-in-Depth):
+  1. `log_qso` (Schreib-Pfad): neue Records sauber.
+  2. `qrz.upload_qso_from_dict` (Send-Pfad, lazy import): alte ADIF-Files
+     mit R-Format werden beim Re-Upload korrigiert. Kein Migration-Helper
+     noetig (R1-bestaetigt KISS).
+- **Field-Test Pflicht:** QRZ-Bulk-Upload alter ADIF-Datei nach Update —
+  kein 10K-Burst mehr.
+
+**Bug C / P1.8 — `_process_cq_reply` nutzt _last_snr statt msg.snr:**
+- **Wurzel:** `mw_cycle.py:793` ruft `set_last_snr(msg.snr)` PRO decodierter
+  Message in jedem Slot → `_last_snr` wird 50+ mal pro Slot ueberschrieben.
+  `qso_state.py:214,229` baute Report aus `_last_snr` → zuletzt iterierte
+  Message gewinnt, ist fast nie die anrufende Station. Mike-Beispiel:
+  DA1TST -23 (von uns) vs R+19 (von ihm) = 42 dB Diff.
+- **Fix:** nur Z.214 + Z.229 in `_process_cq_reply` auf `snr = msg.snr`
+  umgestellt. Hunt-Pfad (`start_qso`) + Retry-Pfade (Z.345,360,585,594,642)
+  BLEIBEN mit `_last_snr` (Fallback bekannt akzeptiert, Hunt-Pfad-
+  Durchreichung als separater Folge-Bug dokumentiert).
+
+**Workflow:**
+- V1 (Diagnose, 3 Bugs lokalisiert mit Datei:Zeile)
+- V2 (Self-Review, 15 Lessons L1-L15 — entlarvte O(n²) als Hauptwurzel +
+  Send-Pfad-Strip als notwendig + Filter-Re-Apply Race-Frei via Qt)
+- R1 („Plan kann freigegeben werden", 0 KRITISCH-Findings, 10/10
+  Pruefauftraege gruen, 1 Vorbehalt = Mike-Field-Test fuer Bug-B)
+- V3 (Compact-fest, 7 Diffs konkret) → Compact → Code
+- Final-R1 („Code kann gemerged werden", 0 KP-Findings, 1 optionaler
+  Wunsch fuer R-Report-Test war Fehl-Interpretation — Test deckt Pfad ab)
+
+**Geaenderte Files (5 Code + main.py + Test-File):**
+1. `log/adif.py` — `delete_qso` O(n²)→O(n) + `_strip_r_prefix` Helper
+   + `log_qso` 2 Aufrufe
+2. `log/qrz.py` — `upload_qso_from_dict` lazy import + RST-Strip
+3. `ui/logbook_widget.py` — `_on_delete_clicked` In-Memory-Update
+4. `core/qso_state.py` — `_process_cq_reply` Z.214,229 `msg.snr`
+5. `tests/test_p1_bundle_logbook_rst_snr.py` NEU (17 Tests: 4 Bug-A +
+   10 Bug-B + 3 Bug-C, ein Bonus-Test fuer Whitespace-Strip)
+6. `main.py` APP_VERSION 0.95.17 → 0.95.18
+
+**Tests:** 921 → 938 gruen (+17, V3 prognostizierte +16, ein Bonus).
+Performance-AC < 500 ms erfuellt (Performance-Test mit 10K Records).
+
+**Atomare Commits:**
+- `P1.BUNDLE Bug-A (v0.95.18): delete_qso O(n²) Fix + Logbuch In-Memory-Update`
+- `P1.BUNDLE Bug-B (v0.95.18): RST_RCVD/RST_SENT R-Strip Schreib- und Send-Pfad`
+- `P1.BUNDLE Bug-C (v0.95.18) / P1.8: _process_cq_reply nutzt msg.snr statt _last_snr`
+- `docs (v0.95.18): P1.BUNDLE-LOGBOOK-RST-SNR HISTORY+HANDOFF+CLAUDE+Tests+APP_VERSION`
+
+**Field-Test ausstehend:**
+- QRZ-Bulk-Upload einer alten ADIF-Datei → kein 10K-Burst mehr
+- Logbuch-Eintrag-Loeschen → < 0.5 s, kein Beachball
+- QSO live → Report-SNR korrekt (nicht 42 dB Bias)
+
+Push noch nicht — Mike-Field-Test-Freigabe abwarten. v0.95.16 + v0.95.17
++ v0.95.18 gehen beim naechsten Push zusammen origin/main.
+
+Plan-Files: `prompts/p1_bundle_logbook_rst_snr_v[1-3].md`.
+
+---
+
 ## 2026-05-07 v0.95.17 — P1.COLLAPSE-RADIO-MODEBAND: Modus+Band + Radio einklappbar
 
 **Mike-Wunsch 07.05. nach v0.95.16-Push:** „radio und mouds haette ich

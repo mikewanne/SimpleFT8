@@ -1,50 +1,72 @@
 # HANDOFF — SimpleFT8
 
-**Stand 2026-05-07:** **v0.95.17 — P1.COLLAPSE-RADIO-MODEBAND: Modus+Band
-und Radio einklappbar.**
+**Stand 2026-05-08:** **v0.95.18 — P1.BUNDLE-LOGBOOK-RST-SNR: 3 Bugs gebuendelt.**
 
-**P1.COLLAPSE-RADIO-MODEBAND (NEU):** Mike-Wunsch 07.05. nach v0.95.16-Push:
-„radio und mouds haette ich gerne auch zum einklappen der kachel wie die
-Antennen kachel". Hobby-Use-Case: einmal Modus+Band einstellen, Watt selten
-verstellen, TUNE in Diversity automatisch → wegklappen, Platz fuer
-QSO/RX-Panel. Beide Karten unabhaengig, letzter Zustand persistiert.
+**P1.BUNDLE-LOGBOOK-RST-SNR (NEU):** Mike-Auftrag 08.05.: „2 leichte Punkte
+zusammen mit Logbuch-Crash beim Eintrag-Loeschen — und QRZ-10K-Burst-Bug
+pruefen ob unser ADIF-Format spec-konform ist." Bundle aus 3 unabhaengigen
+Bugs im selben ADIF/Logbuch/Reporting-Pfad.
 
-**Loesung — Pattern 1:1 Spiegelung Antennen-Kachel (v0.95.11):**
-- `_ModeBandCard` (`ui/control_panel.py:232`) Header-Row mit Toggle-Button
-  + „MODUS+BAND"-Label + `_body_widget` mit existierendem Grid.
-- `_RadioCard` (`ui/control_panel.py:680`) Header-Row mit Toggle-Button
-  + existierendes „RADIO"-Label + `_body_widget` mit PSK + Power + TX-Frame.
-- Beide: `set_collapsed/is_collapsed/_toggle_collapsed` + `collapse_changed`-
-  Signal NUR bei User-Klick (Init-Loop-Schutz).
-- `ControlPanel`: 2 neue Signale + 2 Exposes + 2 Forward-Connects (lambda-frei).
-- `MainWindow`: 2 Initial-Loads aus Settings + 2 neue Slot-Methods.
-- 19 neue Tests via pytest-parametrize (8 × 2 Cards = 16 + 3 Integration).
+**Bug A — Logbuch-UI-Hang beim Eintrag-Loeschen:**
+- Wurzel: `log/adif.py:94` `new_body += block + eor` in while-Loop = O(n²)
+  bei 12 MB ADIF (~10K Records) → 5-10 s Hang im UI-Thread (Beachball).
+  Plus full `self.refresh()` re-parste beide ADIF-Verzeichnisse (~19 MB).
+- Field-Test 07.05. nachmittags reproduziert.
+- Fix: `delete_qso` `new_parts = []` + `.append` + `"".join` → O(n),
+  < 200 ms gemessen. `_on_delete_clicked` In-Memory-Update.
 
-**Geaenderte Files (4):**
-- `ui/control_panel.py` — `_ModeBandCard` + `_RadioCard` Refactor +
-  ControlPanel-Integration
-- `ui/main_window.py` — Initial-Loads + Slot-Methods
-- NEU `tests/test_p1_collapse_radio_modeband.py` (19 Tests)
-- `main.py` APP_VERSION 0.95.16 → 0.95.17
+**Bug B — RST_RCVD/RST_SENT mit FT8-R-Praefix in ADIF:**
+- Wurzel: SimpleFT8 schrieb `<RST_RCVD:4>R-22`, ADIF-Spec + QRZ-Validator
+  akzeptieren nur `<rst_rcvd:3>-22`. Vergleich mit QRZ-Original-Export
+  bestaetigt. Mike's 10K-Burst-Bug in v0.95.15 wahrscheinlich daher.
+- Fix: `_strip_r_prefix` Helper in 2 Pfaden (Schreib + Send, lazy import).
 
-**Voller Workflow** V1 (13 ACs, Antennen-Pattern-Mapping) → V2 (14 Lessons
-L1-L14, Refactor-Risiko-Analyse) → R1 („Plan freigegeben fuer V3", 0 KRITISCH,
-5 kleine Hinweise alle in V2) → V3 (Compact-fest, 8 Diffs) → Compact → Code
-→ **Final-R1 („kein Aenderungsbedarf, alle 8 Pruefauftraege erfuellt") — 0
-KP-Findings**.
+**Bug C / P1.8 — `_process_cq_reply` _last_snr-Race:**
+- Wurzel: `_last_snr` wird pro Slot 50× ueberschrieben. Z.214,229 nahmen
+  zuletzt iterierte Message statt anrufende Station. Mike-Beispiel:
+  DA1TST -23 vs R+19 = 42 dB Diff.
+- Fix: nur Z.214 + Z.229 auf `snr = msg.snr`. Hunt + Retry-Pfade unveraendert.
 
-**Plan-Files:** `prompts/p1_collapse_radio_modeband_v[1-3].md`.
+**Geaenderte Files (4 Code + 1 Test + main.py):**
+- `log/adif.py` — `delete_qso` O(n²)→O(n) + `_strip_r_prefix` + `log_qso`
+- `log/qrz.py` — `upload_qso_from_dict` lazy import + RST-Strip
+- `ui/logbook_widget.py` — `_on_delete_clicked` In-Memory-Update
+- `core/qso_state.py` — `_process_cq_reply` Z.214,229 `msg.snr`
+- NEU `tests/test_p1_bundle_logbook_rst_snr.py` (17 Tests)
+- `main.py` APP_VERSION 0.95.17 → 0.95.18
 
-**Tests 902 → 921 gruen** (+19, exakt wie V3 prognostiziert).
+**Voller Workflow** V1 (Diagnose, 3 Bugs lokalisiert) → V2 (15 Lessons —
+entlarvte O(n²) als Hauptwurzel + Send-Pfad-Strip + Filter-Re-Apply
+Race-Frei via Qt) → R1 („Plan kann freigegeben werden", 0 KRITISCH,
+10/10 Pruefauftraege gruen) → V3 (Compact-fest, 7 Diffs) → Compact → Code
+→ **Final-R1 („Code kann gemerged werden") — 0 KP-Findings**.
 
-**Field-Test-Pflicht (post-Push):**
-- 4 Karten alle ausgeklappt beim ersten App-Start (Default `False`).
-- Toggle MODUS+BAND und RADIO unabhaengig — beide Body verschwinden.
-- App neu starten → letzter Zustand geladen.
-- Antennen-Kachel + QSO-Kachel unbeeinflusst.
+**Plan-Files:** `prompts/p1_bundle_logbook_rst_snr_v[1-3].md`.
 
-**Push noch nicht.** Mike-Freigabe nach Field-Test mit visueller Pruefung
-explizit einholen.
+**Tests 921 → 938 gruen** (+17: 4 Bug-A + 10 Bug-B + 3 Bug-C).
+Performance-AC < 500 ms erfuellt.
+
+**Atomare Commits:**
+- `37e73aa` Bug-A (delete_qso O(n²) + In-Memory-Update)
+- `e44fc26` Bug-B (RST R-Strip Schreib + Send)
+- `1ec7b7a` Bug-C (msg.snr im CQ-Reply)
+- (Doku-Commit folgt mit Tests + APP_VERSION)
+
+**Field-Test-Pflicht (vor Push):**
+- QRZ-Bulk-Upload alter ADIF-Datei → kein 10K-Burst mehr (Bug-B-Beweis).
+- Logbuch-Eintrag-Loeschen → < 0.5 s, kein Beachball (Bug-A-Beweis).
+- QSO live → Report-SNR korrekt (kein 42 dB Bias, Bug-C-Beweis).
+
+**Push noch nicht.** Mike-Freigabe nach Field-Test explizit einholen.
+v0.95.16 + v0.95.17 + v0.95.18 gehen beim naechsten Push zusammen.
+
+---
+
+**Vorher v0.95.17 (07.05.2026):** **P1.COLLAPSE-RADIO-MODEBAND: Modus+Band
+und Radio einklappbar.** Pattern 1:1 Spiegelung Antennen-Kachel (v0.95.11).
+4 Files. Tests 902 → 921. Voller Workflow durchgezogen, Final-R1 0
+KP-Findings. Plan-Files: `prompts/p1_collapse_radio_modeband_v[1-3].md`.
+Field-Test bestaetigt visuell ✅.
 
 ---
 
