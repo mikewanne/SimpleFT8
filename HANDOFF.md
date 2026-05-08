@@ -1,9 +1,54 @@
 # HANDOFF — SimpleFT8
 
-**Stand 2026-05-08 (v0.95.20):** **P3.AUDIO-DUMP-DEBUG fertig — Roh-Audio-
-Slot-Dump fuer Debug/Forschung implementiert.** Tests 992 gruen.
+**Stand 2026-05-08 (v0.95.21):** **P1.HUNT-SNR fertig — Hunt-Pfad
+nutzt jetzt station-spezifischen `msg.snr` statt `_last_snr`.** Tests
+1003 gruen.
 
-**P3.AUDIO-DUMP-DEBUG (NEU 08.05.):** Mike-Auftrag voller DeepSeek-Workflow
+**P1.HUNT-SNR (NEU 08.05.):** Mike-Field-Test 13:57 UTC: Slot mit 3
+Stationen, Klick auf EV81AB (-18 empfangen) → App sendete -24 (6 dB
+falsch). Wurzel: `_last_snr` wird vom Decoder pro Message ueberschrieben,
+zuletzt iterierte Station gewinnt. Folge zu P1.8 (v0.95.18) wo nur
+`_process_cq_reply` gefixt wurde, Hunt-Pfad explizit ausgelassen.
+
+**Voller Workflow:** V1(7 offene Fragen, 10 ACs)→V2(12 Lessons L1-L12)
+→R1(0 KRITISCH + 1 SOLLTE = `advance()` R-Report-Bug + 2 KOENNTE
+optional)→V3(Compact-fest, R1-SOLLTE mit aufgenommen)→Compact→Code→
+**Final-R1 („Code freigegeben", 1 SOLLTE-Halluzination Fallback-Clamp
+verworfen weil Code bereits via `> -30 else "R-10"` clamped)**.
+
+**Geaenderte Files (3 Code + 1 Test NEU + main.py + 3 Plan-Files):**
+- `core/qso_state.py`:
+  - `start_qso(their_snr: int | None = None)` — Signatur erweitert,
+    Body nutzt `their_snr if not None else _last_snr`. Backward-compat.
+  - `advance()` WAIT_REPORT-Branch — `qso.our_snr` zuerst (R-Praefix
+    via `lstrip("R")`-Defense), fallback `_last_snr` nur wenn leer.
+- `ui/mw_qso.py:138` — Hunt-Klick `their_snr=msg.snr` durchreichen.
+- `ui/mw_cycle.py:562` — Auto-Hunt `their_snr=_candidate.snr`.
+- NEU `tests/test_p1_hunt_snr.py` (10 Tests: 8 Hunt + 2 advance).
+- `main.py` APP_VERSION 0.95.20 → 0.95.21.
+- Plan-Files: `prompts/p1_hunt_snr_v[1-3].md`.
+
+**Tests 992 → 1003 gruen** (+11, V3 prognostizierte +10 — 1 Bonus).
+Bestehende Tests alle weiter gruen (Backward-compat-Beweis).
+
+**Atomare Commits:**
+- Code-1 `659e210`: qso_state.py + Tests + Plan-Files
+- Code-2 `8d6e80a`: mw_qso + mw_cycle + APP_VERSION
+- Doku: HISTORY+HANDOFF+CLAUDE+TODO+Memory
+
+**Naechster Schritt fuer Mike:**
+- Field-Test: Slot mit 3+ Stationen, Klick auf mittlere SNR-Station →
+  Report MUSS station-spezifisch sein (Reproduktion 13:57-Screenshot).
+- Auto-Hunt-Sekundaer-Test: Hunt-Reports muessen `_candidate.snr`
+  entsprechen.
+- Push: zusammen mit v0.95.16-21 + P2-Tool + P3 (alle pending).
+
+---
+
+**Vorher (08.05.):** **P3.AUDIO-DUMP-DEBUG (v0.95.20) — Roh-Audio-
+Slot-Dump fuer Debug/Forschung implementiert.**
+
+**P3.AUDIO-DUMP-DEBUG:** Mike-Auftrag voller DeepSeek-Workflow
 + Compact dazwischen. Toggle in Settings („Daten & Tools" → Block 4,
 Default OFF) + Spinbox Max-Files (50-1000, Default 200). NUR FT8.
 Speicherort `audio_dump/{band}_FT8/{YYYY-MM-DD_HH-MM-SS}_{ant}.wav`,

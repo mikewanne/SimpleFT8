@@ -5,6 +5,63 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-08 v0.95.21 — P1.HUNT-SNR: Hunt-Pfad nutzt msg.snr statt _last_snr
+
+**Mike-Field-Test 08.05.2026 13:57 UTC:** Slot mit 3 Stationen (EV81OB -15,
+**EV81AB -18**, LZ81ZZ -23). Mike klickt EV81AB → App sendet
+`EV81AB DA1MHH -24` (6 dB falsch). Wurzel: `_last_snr` wird vom Decoder pro
+decodierter Message ueberschrieben (mw_cycle.py:805). `start_qso` liest
+`_last_snr` → zuletzt iterierte Station gewinnt, fast nie die geklickte.
+
+**Folge-Bug zu P1.8 (v0.95.18):** Damals war `_process_cq_reply` gefixt
+(`msg.snr` direkt), Hunt-Pfad explizit ausgelassen mit Annahme „geklickte
+Station ist meist die staerkste". Mike's 3-Stationen-Slot widerlegt das.
+
+**Voller Workflow:** V1(7 offene Fragen, 10 ACs) → V2(12 Lessons L1-L12,
+alle V1-Fragen via grep beantwortet) → R1(DeepSeek-Reasoner: 0 KRITISCH +
+1 SOLLTE = `advance()` R-Report-Bug + 2 KOENNTE optional) → V3(Compact-
+fest, R1-SOLLTE mit aufgenommen) → Compact → Code → **Final-R1 („Code
+freigegeben", 1 SOLLTE-Halluzination Fallback-Clamp verworfen weil Code
+bereits via `> -30 else "R-10"` clamped)**.
+
+**Geaenderte Files (3 Code + 1 Test NEU + main.py + 3 Plan-Files):**
+- `core/qso_state.py`:
+  - `start_qso(their_snr: int | None = None)` — Signatur erweitert,
+    Body nutzt `their_snr if not None else _last_snr`. Backward-compat
+    via Default `None`. Reports `f"{snr:+03d}" if snr > -30 else "-10"`
+    (gleich wie bisher).
+  - `advance()` WAIT_REPORT-Branch (R1-SOLLTE) — `qso.our_snr` zuerst
+    (R-Praefix dazu via `lstrip("R")`-Defense), fallback `_last_snr` nur
+    wenn `our_snr` leer. Verhindert dass Force-Send-Pfad (P1.FORCESEND
+    v0.95.12) bei zwischenzeitlich decodierten Stationen falschen R-Report
+    schickt.
+- `ui/mw_qso.py:138` — Hunt-Klick `their_snr=msg.snr` durchreichen.
+- `ui/mw_cycle.py:562` — Auto-Hunt `their_snr=_candidate.snr` (Feld
+  existiert seit `core/auto_hunt.py:53-57`).
+- NEU `tests/test_p1_hunt_snr.py` (10 Tests: 8 Hunt + 2 advance).
+- `main.py` APP_VERSION 0.95.20 → 0.95.21.
+- Plan-Files: `prompts/p1_hunt_snr_v[1-3].md`.
+
+**Tests:** 992 → 1003 gruen (+11, V3 prognostizierte +10 — 1 Bonus durch
+Test-Baseline). Bestehende Tests alle weiter gruen (Backward-compat-Beweis).
+
+**Atomare Commits:** `659e210` Code-1 (qso_state + Tests + Plan-Files) +
+`8d6e80a` Code-2 (mw_qso + mw_cycle + APP_VERSION) + Doku-Commit.
+
+**Field-Test-Pflicht (vor Push):** Slot mit 3+ Stationen, Klick auf mittlere
+SNR-Station → Report MUSS station-spezifisch sein. Auto-Hunt-Sekundaer-Test:
+Hunt-Reports muessen `_candidate.snr` entsprechen.
+
+**Push noch nicht** — v0.95.16-21 + P2-Tool + P3 + Bundle gehen beim
+naechsten Push zusammen.
+
+**Lesson:** Bei P1.X-Bug-Fix-Patterns immer pruefen ob alle Pfade gleicher
+Klasse mit-gefixt werden — v0.95.18 fixte `_process_cq_reply`, Hunt-Pfad
+blieb explizit, Mike's Field-Test 3 Wochen spaeter zeigt den gleichen Bug.
+Memory: `feedback_partial_fix_check_other_paths.md`.
+
+---
+
 ## 2026-05-08 v0.95.20 — P3.AUDIO-DUMP-DEBUG: Roh-Audio-Slot-Dump fuer Debug/Forschung
 
 **Mike-Auftrag 08.05.:** Toggle in Settings, rollierender FIFO-Cap (50-1000),

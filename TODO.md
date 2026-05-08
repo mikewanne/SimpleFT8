@@ -173,12 +173,14 @@ Tests 777 → 796 gruen (+19). Field-Test ausstehend.
 
 ## ⭐ ALS NÄCHSTES (Priorität)
 
-### 🟡 P1.8 — Report-SNR-Bug `_last_snr` statt `msg.snr`
+### ✅ P1.8 — Report-SNR-Bug `_last_snr` statt `msg.snr` (ERLEDIGT 2026-05-08, v0.95.18 + v0.95.21)
 
-Wir senden Reports mit schlechteren dB-Werten als wir empfangen.
-`_last_snr` wird fuer jede msg im Slot ueberschrieben → letzte/schwaechste
-msg-SNR wird verwendet. Fix: `msg.snr` direkt in `_process_cq_reply`
-(qso_state.py:218, 233). Voller V1→V2→R1→V3.
+Wir sendeten Reports mit schlechteren dB-Werten als wir empfangen.
+`_last_snr` wurde fuer jede msg im Slot ueberschrieben → letzte/schwaechste
+msg-SNR gewann. v0.95.18 fixte `_process_cq_reply` (qso_state.py:214,229).
+**v0.95.21 P1.HUNT-SNR** fixte den Hunt-Pfad: `start_qso(their_snr)` +
+Aufrufer (mw_qso, mw_cycle) reichen `msg.snr`/`_candidate.snr` durch.
+Plus `advance()` WAIT_REPORT-Branch nutzt `qso.our_snr` (R1-SOLLTE).
 
 ### 🟡 P1.11 — `rr73_retries`-Counter shared
 
