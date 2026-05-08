@@ -1,4 +1,4 @@
-# SimpleFT8 TODO — Stand 07.05.2026 (v0.95.15)
+# SimpleFT8 TODO — Stand 08.05.2026 (v0.95.20)
 
 > **Mike-Regel 07.05.2026:** Offene Aufgaben gehoeren AUSSCHLIESSLICH
 > in diese Datei. Nicht in CLAUDE.md, nicht in HANDOFF.md. Diese Datei
@@ -23,15 +23,12 @@
 
 ---
 
-## 🟡 OFFENE P1-Bugs (klein, mit klarer Diagnose)
+## ✅ P1-Bugs ERLEDIGT (08.05.2026 v0.95.18+19)
 
-- [ ] **P1.7** 🟢 — Lokaler Duplikat-Filter ADIF/Logbuch
-      (QRZ filtert serverseitig, aber Doppel-ADIF moeglich)
-- [ ] **P1.8** 🟡 — Report-SNR-Bug `_last_snr` statt `msg.snr`
-      (RX-SNR-Bias-Folge, siehe Detail-Section unten)
-- [ ] **P1.11** 🟡 — `rr73_retries`-Counter shared zwischen WAIT_RR73 +
-      WAIT_73-Hoeflichkeits-Pfad
-- [ ] **P1.13** 🟡 — TX-Frequenz-Spinbox-Sync im Normal-Modus
+- [x] **P1.7** ✅ — Lokaler Duplikat-Filter ADIF/Logbuch (v0.95.19 Bundle2)
+- [x] **P1.8** ✅ — Report-SNR-Bug `_last_snr` statt `msg.snr` (v0.95.18 Bug-C)
+- [x] **P1.11** ✅ — `wait_73_retries` von `rr73_retries` entkoppelt (v0.95.19 Bundle2)
+- [x] **P1.13** ✅ — TX-Frequenz-Spinbox-Sync im Normal-Modus (v0.95.19 Bundle2)
 
 ---
 
@@ -51,15 +48,12 @@
      Nutzen. -->
 
 - [ ] IC-7300 Fork — TARGET_TX_OFFSET dort separat messen (eigener Branch)
-- [ ] **F) Audio-Export per Slot** — Roh-WAV-Dump 4s pro Slot fuer
-      Forschung/Debug. **Mike-Spec 07.05.:**
-      - Settings-Menupunkt im selben Tab wie Debug-Fenster-Toggle
-        (vermutlich `ui/settings_dialog.py` „Erweitert"/„Debug"-Bereich)
-      - Speicherort: Unterverzeichnis im SimpleFT8-Ordner, klar
-        wiederauffindbar (Vorschlag: `audio_dump/{band}_{mode}/
-        {YYYY-MM-DD_HH-MM-SS}_{ant}.wav`)
-      - Optional, <1 Tag Aufwand. Use-Case: AP-Lite-Decode-Replay,
-        ANT1/ANT2-Spektrum offline (Inspectrum/Audacity).
+- [x] **F) Audio-Export per Slot** ✅ ERLEDIGT 08.05.2026 (v0.95.20
+      P3.AUDIO-DUMP-DEBUG): Toggle in Settings „Daten & Tools" Block 4
+      + Spinbox Max-Files (50-1000, Default 200, FIFO-Cleanup). NUR FT8.
+      `audio_dump/{band}_FT8/{YYYY-MM-DD_HH-MM-SS}_{ant}.wav`. Architektur
+      Pull-Pattern (R1-KRITISCH adressiert). Tests 978 → 992. Field-Test
+      ausstehend.
 - [ ] TX-Frequenz Normal-Modus manchmal ohne Histogramm-Marker
       (NEU 26.04., noch nicht reproduzierbar)
 

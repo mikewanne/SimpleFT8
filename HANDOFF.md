@@ -1,7 +1,62 @@
 # HANDOFF — SimpleFT8
 
-**Stand 2026-05-08 (post-v0.95.19):** **P2.ADIF-ARCHIVE Standalone-Tool
-fertig — Tool-only, kein APP_VERSION-Bump.**
+**Stand 2026-05-08 (v0.95.20):** **P3.AUDIO-DUMP-DEBUG fertig — Roh-Audio-
+Slot-Dump fuer Debug/Forschung implementiert.** Tests 992 gruen.
+
+**P3.AUDIO-DUMP-DEBUG (NEU 08.05.):** Mike-Auftrag voller DeepSeek-Workflow
++ Compact dazwischen. Toggle in Settings („Daten & Tools" → Block 4,
+Default OFF) + Spinbox Max-Files (50-1000, Default 200). NUR FT8.
+Speicherort `audio_dump/{band}_FT8/{YYYY-MM-DD_HH-MM-SS}_{ant}.wav`,
+WAV mono int16 24 kHz.
+
+**Architektur-Wechsel (R1-KRITISCH adressiert):** V2 hatte Setter-Pattern
+mit Antennen-Race, V3 pivot auf **Pull-Pattern**: Decoder cached
+`last_audio_24k` als Buffer, GUI-Thread holt via `decoder.dump_last_slot(
+ant, root, max_files)` aus `mw_cycle._on_cycle_decoded` nach `_resolve_
+hardware_antenna`. Race komplett eliminiert.
+
+**Sicherheits-Garantien:**
+- **Atomic-Write** via `tempfile.mkstemp(dir=target_dir)` + `os.replace`
+  (P2-Pattern, gleiches FS = POSIX atomic rename).
+- **FIFO-Cleanup** global ueber band_mode-Sub-Dirs via mtime-Sort,
+  ignoriert `.tmp`/non-WAV. Default 200 ≈ 50 Min FT8 ≈ 58 MB.
+- **Modus-Filter:** `dump_last_slot` returnt False ausserhalb FT8.
+- **Robust:** try/except verhindert App-Crash bei Disk-voll/File-Lock.
+
+**Geaenderte Files (1 NEU + 1 Test NEU + 5 Code + 3 Plan-Files):**
+- NEU `core/audio_dump.py` (~80 Zeilen): atomic_write_wav, enforce_fifo_cap,
+  build_dump_path
+- `core/decoder.py`: last_audio_24k + last_slot_start_utc + _band Default
+  + set_band() + Hook in _process_cycle + dump_last_slot Pull-Methode
+- `ui/settings_dialog.py`: Tab 4 Block 4 NEU
+- `ui/mw_cycle.py`: Pull-Aufruf nach _resolve_hardware_antenna
+- `ui/mw_radio.py`: decoder.set_band() in _on_band_changed
+- `ui/main_window.py`: _audio_dump_enabled/_audio_dump_max_files Init+Update
+- `main.py`: APP_VERSION 0.95.19 → 0.95.20
+- NEU `tests/test_audio_dump.py` (14 Tests)
+- NEU `prompts/p3_audio_dump_v[1-3].md`
+
+**Voller Workflow:** V1(10 ACs)→V2(15 Lessons)→R1(1 KRITISCH + 1 SOLLTE)
+→V3(Compact-fest mit Pull-Pivot)→Compact→Code→**Final-R1 („Code kann
+gemerged werden", 0 KRITISCH/SOLLTE, 2 KOENNTE optional)**.
+
+**Tests 978 → 992 gruen** (+14, V3 prognostizierte +13).
+
+**Atomare Commits:**
+- Code-1 `abda630`: `audio_dump.py` + Decoder + Tests + Plan-Files
+- Code-2 `df3bc78`: Settings-UI + mw_cycle Pull + mw_radio + main_window + main.py
+- Doku: HISTORY+HANDOFF+CLAUDE+TODO+Memory
+
+**Naechster Schritt fuer Mike:**
+- Hardware-frei: App starten + Settings → Tab → Block 4 sichtbar.
+- Field-Test: Toggle ON + Cap 50 → ein paar FT8-Slots → WAVs in
+  `audio_dump/{band}_FT8/` pruefen.
+- Push: zusammen mit v0.95.16+17+18+19 + P2-Tool + P3 (alle pending).
+
+---
+
+**Vorher (08.05.):** **P2.ADIF-ARCHIVE Standalone-Tool fertig — Tool-only,
+kein APP_VERSION-Bump.**
 
 **P2.ADIF-ARCHIVE (NEU 08.05.):** Mike-Auftrag post-v0.95.19: voller
 DeepSeek-Workflow + Compact dazwischen. Standalone-Helper-Script

@@ -5,6 +5,103 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-08 v0.95.20 — P3.AUDIO-DUMP-DEBUG: Roh-Audio-Slot-Dump fuer Debug/Forschung
+
+**Mike-Auftrag 08.05.:** Toggle in Settings, rollierender FIFO-Cap (50-1000),
+NUR FT8, voller DeepSeek-Workflow + Compact dazwischen. Use-Case: AP-Lite-
+Replay, ANT1/ANT2-Spektrum offline (Inspectrum/Audacity), Decoder-Tests
+gegen reale Aufnahmen.
+
+**Voller Workflow:** V1(10 ACs, 7 offene Fragen, 12 Tests) → V2(15 Lessons
+L1-L15, Pfad-Resolution + Spinbox-Bindung + Modus-Filter) → R1(DeepSeek-
+Reasoner: 1 KRITISCH + 1 SOLLTE) → V3(Compact-fest mit **Architektur-
+Wechsel zu Pull-Pattern statt Setter** — eliminiert Race komplett) → Compact
+→ Code → **Final-R1 („Code kann gemerged werden", 0 KRITISCH/SOLLTE,
+2 KOENNTE optional)**.
+
+**R1-KRITISCH adressiert:** V2 hatte Setter-Pattern (`decoder.set_current_
+antenna(ant)` aus `mw_cycle._on_cycle_decoded`) → Race weil Antennen-Setter
+NACH Decoder-Thread-Dump lief. Pivot zu Pull-Pattern: Decoder cached
+`last_audio_24k` als Buffer, GUI-Thread holt via `decoder.dump_last_slot(
+ant, root, max_files)`. Kein Race weil Decoder-Thread bei `cycle_decoded`-
+Signal fertig ist.
+
+**Architektur:**
+- NEU `core/audio_dump.py` (~80 Zeilen): `atomic_write_wav` (`tempfile.
+  mkstemp(dir=) + os.replace`, P2-Pattern), `enforce_fifo_cap` (mtime-Sort,
+  global ueber band_mode-Sub-Dirs), `build_dump_path` (root/{band}_{mode}/
+  YYYY-MM-DD_HH-MM-SS_ANT.wav, `_v2`-Suffix bei Kollision).
+- `core/decoder.py`: `last_audio_24k` Buffer + `last_slot_start_utc`
+  + `_band` Default `"20m"` + `set_band(band)` + Hook in `_process_cycle`
+  nach `np.concatenate` (`audio_raw.copy()` weil spaeter in-place modifiziert)
+  + `dump_last_slot(ant, root, max_files)` Pull-Methode mit Modus-Filter
+  (nur FT8, sonst `return False`).
+- `ui/settings_dialog.py`: Tab 4 „Daten & Tools" Block 4 NEU mit Checkbox
+  + Spinbox 50-1000/Default 200 + Toggle-Bindung lambda-frei + Reset.
+- `ui/mw_cycle.py`: Pull-Aufruf in `_on_cycle_decoded` nach `_resolve_
+  hardware_antenna` (Z.80) — `getattr`-Schutz fuer alte Sessions.
+- `ui/mw_radio.py`: `decoder.set_band(band)` in `_on_band_changed` analog
+  `ntp_time.set_band`.
+- `ui/main_window.py`: `_audio_dump_enabled` + `_audio_dump_max_files`
+  initial aus Settings + Update bei Settings-Save + initiales
+  `decoder.set_band(settings.band)`.
+- `main.py`: APP_VERSION 0.95.19 → 0.95.20.
+
+**Sicherheits-Garantien:**
+- **Atomic-Write:** tmpfile auf gleichem FS via `dir=target_dir` →
+  `os.replace` ist atomar. Bei Crash mid-write: tmpfile via try/except
+  aufgeraeumt, kein zerrissenes WAV.
+- **FIFO-Cleanup:** global ueber `**/*.wav` mit mtime-Sort, ignoriert
+  `.tmp` und non-WAV. Default-Cap 200 ≈ 50 Min FT8 ≈ 58 MB.
+- **Modus-Filter:** `dump_last_slot` returnt `False` ausserhalb FT8.
+- **Robust:** try/except verhindert App-Crash bei Disk-voll/File-Lock.
+
+**Settings-UI:** Tab „Daten & Tools" → Block 4 → Checkbox „Audio-Slots
+fuer Debugging sichern" (Default OFF) + Spinbox „Max. Files" (50-1000,
+Default 200, enabled-bound an Checkbox).
+
+**Speicherort:** `audio_dump/{band}_FT8/{YYYY-MM-DD_HH-MM-SS}_{ant}.wav`,
+absolut via `Path(__file__).resolve().parent.parent / "audio_dump"`.
+WAV mono int16 24 kHz (Decoder-Original-Format vor Resample).
+
+**Geaenderte Files (1 NEU + 1 Test NEU + 5 Code + 3 Plan-Files):**
+NEU `core/audio_dump.py`, NEU `tests/test_audio_dump.py` (14 Tests:
+4 atomic + 5 fifo + 3 build + 2 Decoder-Integration), `core/decoder.py`,
+`ui/settings_dialog.py`, `ui/mw_cycle.py`, `ui/mw_radio.py`,
+`ui/main_window.py`, `main.py`. NEU `prompts/p3_audio_dump_v[1-3].md`.
+
+**Tests 978 → 992 gruen** (+14, V3 prognostizierte +13 — +1 Bonus durch
+zusaetzlichen Edge-Case-Test).
+
+**Atomare Commits:** Code-1 (`audio_dump.py` + Decoder + Tests + Plan-Files)
++ Code-2 (Settings-UI + mw_cycle Pull + mw_radio + main_window + main.py)
++ Doku.
+
+**KEIN Push** — Mike kann lokal nutzen (Toggle aktivieren + funken),
+naechster Push zusammen mit v0.95.16-19 + P2-Tool + diesem Bundle.
+
+**Field-Test-Plan:**
+1. App starten → Settings → Tab „Daten & Tools" → Block „Audio-Slots"
+   sichtbar.
+2. Toggle ON + Cap 50 → OK → ein paar FT8-Slots laufen lassen.
+3. WAVs in `audio_dump/{band}_FT8/` pruefen (korrekte Antennen-Tags).
+4. Cap-Test: bei 10 Slots max 5 WAVs.
+5. Audacity: 1 WAV oeffnen → 24 kHz mono int16, ~12.6 s.
+
+**Lessons-Learned:**
+- **Pull-Pattern statt Setter-Pattern** bei Multi-Thread-Ist-Werten:
+  Wenn Thread A einen Wert braucht den Thread B kennt, holt A den Wert
+  vom B-Daten-Buffer ab statt B den Wert in A reinpusht. Eliminiert
+  Race komplett. Memory-Vorschlag: `feedback_pull_vs_setter_pattern.md`.
+- **R1's KRITISCH war richtig:** V2's Setter-Pattern war fragile, ohne
+  R1-Plan-Review haetten wir einen Bug eingebaut der Antennen-Tags
+  1 Slot zu spaet macht.
+- **Atomic-Write-Pattern wiederverwenden:** P2.ADIF-ARCHIVE etablierte
+  `tempfile.mkstemp(dir=) + os.replace` — P3 kopiert 1:1, kostet nichts,
+  schenkt 1 Schicht Sicherheit.
+
+---
+
 ## 2026-05-08 — P2.ADIF-ARCHIVE Standalone-Tool (Tool-only, kein APP_VERSION-Bump)
 
 **Mike-Auftrag 08.05. (post-v0.95.19):** Voller DeepSeek-Workflow + Compact
