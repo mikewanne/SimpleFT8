@@ -415,7 +415,9 @@ def test_wait_73_with_r_report_before_73_unchanged():
     # Erwartet: RR73-Retry, NICHT Courtesy-73
     assert len(sent) == 1
     assert sent[0] == "DA1TST DA1MHH RR73"
-    assert sm.qso.rr73_retries == 1
+    # P1.11 (v0.95.19): Counter ist jetzt wait_73_retries (entkoppelt
+    # von rr73_retries — siehe P1.BUNDLE2).
+    assert sm.qso.wait_73_retries == 1
     # courtesy_73_sent bleibt False (Pfad nicht durchlaufen)
     assert sm.qso.courtesy_73_sent is False
     # State bleibt WAIT_73 (Hoeflichkeits-Retry setzt KEIN _set_state)

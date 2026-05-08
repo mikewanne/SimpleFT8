@@ -5,6 +5,90 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-08 v0.95.19 — P1.BUNDLE2: 3 hardware-freie Bugs gebuendelt
+
+**Mike-Auftrag 08.05. (post-v0.95.18):** „die kleinen können wir die
+zusammenfassen wenn wir deepseek workflow komplett machen mit compact?"
+→ Bundle aus 3 unabhaengigen kleinen Bugs (P1.7 + P1.11 + P1.13). Voller
+V1→V2(15 Lessons)→R1(1 KRITISCH + 2 SOLLTE + 1 KOENNTE)→V3(9 Diffs)→
+Compact→Code→Final-R1(„Code kann gemerged werden", 0 KP-Findings).
+
+**Bug 1 — P1.11 `rr73_retries`-Counter shared zwischen WAIT_RR73 + WAIT_73-Hoeflichkeit:**
+- **Wurzel:** `core/qso_state.py:83` Feld `rr73_retries` wurde in 2
+  unabhaengigen Pfaden inkrementiert (WAIT_RR73-Retry max 3 +
+  WAIT_73-Hoeflichkeit max 2). Nach voller WAIT_RR73-Sequenz blockierte
+  `rr73_retries=3` die WAIT_73-Hoeflichkeit komplett — Station die ihren
+  R-Report wiederholt wurde im Stich gelassen.
+- **Fix:** Neues Feld `wait_73_retries: int = 0` in QSOData (Auto-Reset
+  via `QSOData()` in `start_qso(...)`), WAIT_73-Hoeflichkeit nutzt es
+  jetzt unabhaengig.
+
+**Bug 2 — P1.13 TX-Frequenz-Spinbox-Sync (Normal-Modus Hunt-Klick):**
+- **Wurzel:** `ui/mw_qso.py:_on_station_clicked` setzte
+  `encoder.tx_even` + `start_qso`, aber NICHT `encoder.audio_freq_hz`
+  oder `_tx_freq_spin`. Hunt-Klick im Normal-Modus → TX lief auf alter
+  Spinbox-Frequenz, Mike's Augen sahen anderes.
+- **Fix:** Nach `start_qso(...)` im Normal-Modus
+  `encoder.audio_freq_hz = clamped_freq` + `spin.setValue(...)` mit
+  Range-Clamp aus `spin.minimum()/maximum()` (statt hardcoded 150/2800,
+  R1-Empfehlung). Persistenz NICHT (`settings.save_normal_tx_freq`
+  bleibt unangetastet — Hunt-Klick ist temporaer, Default pro Band
+  bleibt erhalten). Histogramm-Update bewusst weggelassen (KISS,
+  R1-Empfehlung — Histogramm ist im Normal-Modus typisch nicht sichtbar).
+
+**Bug 3 — P1.7 Lokaler ADIF-Duplikat-Filter:**
+- **Wurzel:** `ui/mw_qso.py:_on_qso_complete` rief `adif.log_qso(...)`
+  unbedingt — bekannte Station < 5 Min nach RR73 ruft erneut → 2.
+  ADIF-Eintrag landet im Logbuch (QRZ filtert serverseitig, lokal nicht).
+- **Fix:** Session-lokaler Cache `_recent_logged_calls: dict[(call, band), float]`
+  in MainWindow (App-Restart loescht den State, ist gewollt).
+  Modul-Konstante `_LOG_DEDUP_WINDOW_S = 300` in mw_qso.py. Bei Duplikat:
+  ADIF + `qso_log.add_qso` + `log_antenna_qso` SKIP + qso-Panel-
+  Info-Eintrag. UI-Cleanup (`active_qso`, `rx_panel`, `auto_hunt`)
+  laeuft IMMER vor Duplikat-Check (R1-KRITISCH KP-8) — sonst
+  Inkonsistenzen.
+
+**Geaenderte Files (3 Code + 1 Test + main.py + 1 Test-Anpassung):**
+- `core/qso_state.py` — `wait_73_retries`-Feld + WAIT_73-Hoeflichkeit nutzt es
+- `ui/mw_qso.py` — `_LOG_DEDUP_WINDOW_S` + `_on_station_clicked` TX-Sync
+  + `_on_qso_complete` Duplikat-Filter
+- `ui/main_window.py` — `_recent_logged_calls` init
+- NEU `tests/test_p1_bundle2.py` (17 Tests: 4 P1.11 + 5 P1.13 + 8 P1.7)
+- `tests/test_p1_10_courtesy_73.py` — Test-Anpassung (`rr73_retries` →
+  `wait_73_retries`)
+- `main.py` APP_VERSION 0.95.18 → 0.95.19
+
+**Voller Workflow** V1 (Diagnose, 3 Bugs lokalisiert) → V2 (15 Lessons —
+L1 Option A entschieden, L6 Tupel-Key fuer Multi-Band, L11 Test-Soll auf
+15 erhoeht) → R1 (1 KRITISCH KP-8 = Skip-Order vor return + 2 SOLLTE:
+Histogramm weglassen + Range aus Spinbox + 1 KOENNTE Mode-Edge-Case
+nur dokumentieren + 4 zusaetzliche Edge-Case-Tests) → V3 (Compact-fest,
+9 Diffs, alle Findings adressiert) → Compact → Code → **Final-R1
+(„Code kann gemerged werden") — 0 KP-Findings**, kleiner Hinweis
+`import time` an File-Top sofort umgesetzt.
+
+**Plan-Files:** `prompts/p1_bundle2_v[1-3].md`.
+
+**Tests 938 → 955 gruen** (+17, V3 prognostizierte +17).
+
+**Atomare Commits:**
+- `faff2bb` Bug-1 P1.11 (qso_state.py only)
+- `9be7747` Bug-2 P1.13 (mw_qso.py _on_station_clicked only)
+- `5466cb4` Bug-3 P1.7 (mw_qso.py + main_window.py)
+- (folgender) Doku-Commit (Tests + APP_VERSION + HISTORY/HANDOFF/CLAUDE)
+
+**Field-Test-Pflicht (vor Push):**
+- P1.11: QSO mit IC-7300 (DA1TST) voll durchziehen, R-Report-Wiederholung
+  in WAIT_73 → RR73-Antwort sollte erfolgen (vorher: ignoriert).
+- P1.13: Normal-Modus, Spinbox=1500, RX-Klick auf 800 Hz Station →
+  Spinbox+TX zeigen 800 Hz; App-Restart → wieder 1500 Hz.
+- P1.7: hardware-frei (Tests reichen).
+
+**Push noch nicht** — v0.95.16 + v0.95.17 + v0.95.18 + v0.95.19 gehen
+beim naechsten Push zusammen.
+
+---
+
 ## 2026-05-08 v0.95.18 — P1.BUNDLE-LOGBOOK-RST-SNR: 3 Bugs gebuendelt
 
 **Mike-Auftrag 08.05.:** „2 leichte Punkte zusammen mit Logbuch-Crash beim

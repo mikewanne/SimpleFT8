@@ -1,8 +1,70 @@
 # HANDOFF — SimpleFT8
 
-**Stand 2026-05-08:** **v0.95.18 — P1.BUNDLE-LOGBOOK-RST-SNR: 3 Bugs gebuendelt.**
+**Stand 2026-05-08:** **v0.95.19 — P1.BUNDLE2: 3 hardware-freie Bugs gebuendelt.**
 
-**P1.BUNDLE-LOGBOOK-RST-SNR (NEU):** Mike-Auftrag 08.05.: „2 leichte Punkte
+**P1.BUNDLE2 (NEU):** Mike-Auftrag 08.05. (post-v0.95.18): „die kleinen
+können wir die zusammenfassen wenn wir deepseek workflow komplett
+machen mit compact?" Bundle aus 3 unabhaengigen kleinen Bugs (P1.7 +
+P1.11 + P1.13). Voller V1→V2(15 Lessons)→R1(1 KRITISCH KP-8 +
+2 SOLLTE + 1 KOENNTE)→V3(9 Diffs)→Compact→Code→**Final-R1 („Code kann
+gemerged werden") — 0 KP-Findings**.
+
+**Bug 1 — P1.11 `wait_73_retries` entkoppelt von `rr73_retries`:**
+- Wurzel: nach voller WAIT_RR73-Sequenz (rr73_retries=3) blockierte
+  derselbe Counter die WAIT_73-Hoeflichkeit (max 2). Station die ihren
+  R-Report wiederholt wurde im Stich gelassen.
+- Fix: Neues Feld `wait_73_retries: int = 0` in QSOData (Auto-Reset
+  via `QSOData()` in `start_qso`).
+
+**Bug 2 — P1.13 Hunt-Klick Normal-Mode TX-Frequenz-Sync:**
+- Wurzel: `_on_station_clicked` setzte `encoder.tx_even` + `start_qso`,
+  aber NICHT `encoder.audio_freq_hz` oder Spinbox. → TX lief auf alter
+  Spinbox-Frequenz, Mike's Augen sahen anderes.
+- Fix: Nach `start_qso` im Normal-Modus encoder + Spinbox auf clamped
+  Station-Frequenz (Range aus `spin.minimum()/maximum()`, R1).
+  Diversity unangetastet, Persistenz NICHT, Histogramm-Update KISS weggelassen.
+
+**Bug 3 — P1.7 ADIF-Duplikat-Filter 5-Min-Fenster:**
+- Wurzel: `_on_qso_complete` rief `adif.log_qso` unbedingt — bekannte
+  Station < 5 Min nach RR73 ruft erneut → 2. ADIF-Eintrag im Logbuch.
+- Fix: Session-lokaler Cache `_recent_logged_calls: dict[(call, band), float]`
+  in MainWindow, Modul-Konstante `_LOG_DEDUP_WINDOW_S=300` in mw_qso.py.
+  Bei Duplikat: ADIF + qso_log + log_antenna_qso SKIP.
+  UI-Cleanup laeuft IMMER vor Skip-Return (R1-KRITISCH).
+
+**Geaenderte Files (3 Code + 1 Test NEU + main.py + 1 Test-Anpassung):**
+- `core/qso_state.py` — `wait_73_retries`-Feld + WAIT_73-Hoeflichkeit
+- `ui/mw_qso.py` — Modul-Konstante + TX-Sync + Duplikat-Filter
+- `ui/main_window.py` — `_recent_logged_calls` init
+- NEU `tests/test_p1_bundle2.py` (17 Tests: 4 P1.11 + 5 P1.13 + 8 P1.7)
+- `tests/test_p1_10_courtesy_73.py` Anpassung (`rr73_retries` → `wait_73_retries`)
+- `main.py` APP_VERSION 0.95.18 → 0.95.19
+
+**Plan-Files:** `prompts/p1_bundle2_v[1-3].md`.
+
+**Tests 938 → 955 gruen** (+17 wie V3 prognostizierte).
+
+**Atomare Commits:**
+- `faff2bb` Bug-1 P1.11 (qso_state.py only)
+- `9be7747` Bug-2 P1.13 (mw_qso.py _on_station_clicked only)
+- `5466cb4` Bug-3 P1.7 (mw_qso.py + main_window.py)
+- (Doku-Commit folgt mit Tests + APP_VERSION + HISTORY/HANDOFF/CLAUDE)
+
+**Field-Test-Pflicht (vor Push):**
+- P1.11: QSO mit IC-7300 voll durchziehen, R-Report-Wiederholung in
+  WAIT_73 → RR73-Antwort sollte erfolgen (vorher: ignoriert).
+- P1.13: Normal-Modus, Spinbox=1500, RX-Klick auf 800 Hz Station →
+  Spinbox+TX zeigen 800 Hz; App-Restart → wieder 1500 Hz.
+- P1.7: hardware-frei (Tests reichen).
+
+**Push noch nicht.** v0.95.16 + v0.95.17 + v0.95.18 + v0.95.19 gehen
+beim naechsten Push zusammen.
+
+---
+
+**Vorher v0.95.18 (08.05.2026):** **P1.BUNDLE-LOGBOOK-RST-SNR: 3 Bugs gebuendelt.**
+
+**P1.BUNDLE-LOGBOOK-RST-SNR:** Mike-Auftrag 08.05.: „2 leichte Punkte
 zusammen mit Logbuch-Crash beim Eintrag-Loeschen — und QRZ-10K-Burst-Bug
 pruefen ob unser ADIF-Format spec-konform ist." Bundle aus 3 unabhaengigen
 Bugs im selben ADIF/Logbuch/Reporting-Pfad.
