@@ -211,10 +211,15 @@ class QSOStateMachine(QObject):
         self.tx_slot_for_partner.emit(msg)
 
         if msg.is_grid:
-            report = f"{self._last_snr:+03d}" if self._last_snr > -30 else "-10"
+            # P1.BUNDLE Bug-C / P1.8 (v0.95.18): msg.snr ist der SNR der
+            # spezifischen anrufenden Station. _last_snr wuerde vom letzten
+            # on_message_decoded-Aufruf im Slot ueberschrieben (kann andere
+            # Station sein) → falscher Report.
+            snr = msg.snr
+            report = f"{snr:+03d}" if snr > -30 else "-10"
             self.qso.our_snr = report
             tx_msg = f"{msg.caller} {self.my_call} {report}"
-            self._dbg.log("TX", f"Sende Report: '{tx_msg}' (SNR={self._last_snr})")
+            self._dbg.log("TX", f"Sende Report: '{tx_msg}' (SNR={snr})")
             self._set_state(QSOState.TX_REPORT)
             self.send_message.emit(tx_msg)
         elif msg.is_report:
@@ -226,7 +231,9 @@ class QSOStateMachine(QObject):
                 self._set_state(QSOState.TX_RR73)
                 self.send_message.emit(tx_msg)
             else:
-                report = f"R{self._last_snr:+03d}" if self._last_snr > -30 else "R-10"
+                # P1.BUNDLE Bug-C / P1.8 (v0.95.18): siehe oben — msg.snr.
+                snr = msg.snr
+                report = f"R{snr:+03d}" if snr > -30 else "R-10"
                 self.qso.our_snr = report
                 tx_msg = f"{msg.caller} {self.my_call} {report}"
                 print(f"[QSO] Antworte {msg.caller} mit R-Report '{tx_msg}'")
