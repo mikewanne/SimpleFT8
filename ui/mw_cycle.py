@@ -563,6 +563,7 @@ class CycleMixin:
             their_call=_candidate.call,
             their_grid=_candidate.grid,
             freq_hz=_candidate.freq_hz,
+            their_snr=_candidate.snr,  # P1.HUNT-SNR (v0.95.21)
         )
 
     @Slot(float, float)

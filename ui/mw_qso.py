@@ -139,6 +139,7 @@ class QSOMixin:
             their_call=msg.caller,
             their_grid=msg.grid_or_report if msg.is_grid else "",
             freq_hz=msg.freq_hz,
+            their_snr=msg.snr,  # P1.HUNT-SNR (v0.95.21)
         )
         # P1.13 (v0.95.19): Im Normal-Modus TX-Frequenz auf Station-Frequenz
         # nachziehen + Spinbox synchronisieren. Frequenz wird NICHT
