@@ -1,4 +1,4 @@
-# SimpleFT8 TODO — Stand 08.05.2026 (v0.95.20)
+# SimpleFT8 TODO — Stand 08.05.2026 (v0.95.22)
 
 > **Mike-Regel 07.05.2026:** Offene Aufgaben gehoeren AUSSCHLIESSLICH
 > in diese Datei. Nicht in CLAUDE.md, nicht in HANDOFF.md. Diese Datei
@@ -7,6 +7,47 @@
 ---
 
 ## 📌 OFFEN — TOP-PRIORITAET (zuerst angehen)
+
+### 🟡 Splashtop-Doppelklick + Single-Klick verschluckt (NEU 2026-05-08)
+- **Symptom:** Mike steuert von Linux Mint Notebook fern. Im RX-Panel
+  reagiert kein Klick (Hunt-Klick auf Station, Antwort-Button). In
+  ForkLift kein Doppelklick zum Datei-Oeffnen. Zuhause direkt am Mac
+  geht alles. → Splashtop-Client-Side-Problem auf Linux Mint, NICHT
+  SimpleFT8-Bug.
+- **Versuche bisher:** HID-File `/Users/Shared/SplashtopStreamer/
+  com.splashtop.input.hid` Anlegen scheiterte (Permission denied,
+  sudo nicht moeglich aus Claude-Sitzung).
+- **Naechste Schritte:** Linux-Mint-Side: Doppelklick-Timeout in
+  System-Settings auf 800ms hochsetzen, anderen Browser/Splashtop-
+  Client probieren. Mac-Side: HID-File anlegen wenn Mike das selber
+  via Terminal-sudo machen kann.
+
+### 🟡 Memory-Wachstum 32 GB (NEU 2026-05-08, Diagnose laufend)
+- **Symptom:** Alte App PID 31564 (v0.95.20) hatte nach ~40 Min
+  Laufzeit 32 GB RSS gefressen. vmmap zeigte: 4.2M Allocations,
+  96 % Heap-Fragmentation, MALLOC_SMALL (empty) 30.7 GB resident,
+  Physical-Footprint-Peak 109.3 GB. KEIN klassischer Leak im Code,
+  sondern **chronische Heap-Fragmentation**.
+- **Aktueller Stand:** Neu gestartete v0.95.21 PID 39362 stabilisiert
+  bei ~670 MB nach 38 Min — **Faktor 50× besser**. Memory-Watcher
+  laeuft im Hintergrund (`/tmp/simpleft8_memwatch/memwatch_*.csv`),
+  loggt alle 60 s RSS/CPU + alle 5 Min vmmap-Detail.
+- **Vermutete Ursache:** ueber Stunden akkumulierte Allocations
+  (Decoder-Pipeline ~1700/s) ohne Object-Pools. Kein klarer Trigger.
+- **Naechste Schritte:** App 1-2 h aktiv nutzen lassen (sobald
+  Splashtop-Klick wieder geht), Wachstumskurve auswerten. Wenn
+  > 5 GB → V1→V2→R1→V3 fuer Object-Pool oder periodischer
+  `gc.collect()`-Timer. Wenn stabil < 2 GB → kein Bug.
+
+### Field-Test v0.95.22 P1.OMNI-START + Push-Freigabe (NEU 2026-05-08)
+- [ ] **Mike-Field-Test (V3 §6, 7+1 Punkte):** Diversity, Easter-Egg an,
+      btn_omni_cq sichtbar; Klick → CQ sofort auf Even, Statusbar
+      `Ω Even=1 Odd=0`; naechster Slot Odd, dann 3 RX, Block-Wechsel
+      nach 80; CQ-Reply → QSO normal → nach RR73 OMNI-Resume; Toggle
+      off → CQ stoppt; HALT mit OMNI → alles gestoppt, Button
+      entriegelt; Bandwechsel → OMNI stoppt automatisch; OMNI waehrend
+      WAIT_REPORT → blockiert + Statusbar 4 s.
+- [ ] Bei OK: Push-Bundle v0.95.16-22 + P2-Tool + P3 zusammen.
 
 ### Field-Test v0.95.15 P1.QRZ-UPLOAD-UI-2 + Push-Freigabe
 - [ ] Mike testet im Feld: Title-Update, Statusbar-Cancel, File-Move,

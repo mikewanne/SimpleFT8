@@ -5,6 +5,108 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-08 v0.95.22 — P1.OMNI-START: OMNI-CQ-Toggle aktiviert jetzt CQ-Loop
+
+**Mike-Field-Test 08.05.2026 16:08 UTC** (Diversity, Easter-Egg lange aktiv):
+Klick auf `btn_omni_cq` → Button gedrueckt + Statusbar zeigt zusaetzlich
+`Even=0 Odd=0` → **aber kein CQ wird gesendet**. Auch nach mehreren Zyklen
+nichts. Bug latent seit v0.78 (30.04.2026) wo OMNI-TX scharfgeschaltet
+wurde. Plus 2 Folge-Bugs entdeckt.
+
+**Wurzeln (Code-Verifikation 08.05.):**
+
+W1 — `ui/main_window.py:676-689` `_on_btn_omni_cq_toggled`: setzte nur
+`omni_tx.active=True` (Slot-Filter aktiviert), aber `qso_sm.cq_mode`
+blieb `False` → niemand rief `_send_cq()` → keine
+`send_message.emit("CQ ...")` → `_on_send_message` wurde nie gerufen →
+OMNI-Slot-Filter griff nie → kein TX. In Diversity ist `btn_cq` versteckt
+(`main_window.py:672`), Mike konnte `cq_mode=True` gar nicht manuell
+aktivieren. OMNI musste das selbst tun — tat es aber nicht.
+
+W2 — `ui/main_window.py:691-703` `_on_omni_stopped`: setzte nur
+Button-State zurueck, kein `qso_sm.stop_cq()` → `cq_mode` blieb `True`
+wenn OMNI extern gestoppt (band_change, totmann_expired, easter_egg_off
+etc.). Plus `_was_cq` blieb haengen → ungewolltes Auto-Resume nach
+QSO-Ende wenn User OMNI bewusst gestoppt hatte.
+
+W3 — `ui/mw_qso.py:211-230` `_on_cancel` (HALT-Button): stoppte CQ + QSO
++ TX + Auto-Hunt aber NICHT OMNI → Inkonsistenz nach HALT, Button-State
+versus Modul-State auseinander.
+
+**Voller Workflow:** V1(10 ACs, 7 Fragen) → V2(8 Lessons L1-L8, alle
+V1-Fragen via grep beantwortet) → R1(DeepSeek-Reasoner: 2 Bug + 1 SOLLTE
++ 2 KOENNTE — 5 angenommen + 3 abgelehnt + 0 halluziniert) → V3
+(Compact-fest, R1-SOLLTE `_was_cq=False` mit aufgenommen) → Compact →
+Code → **Final-R1 („Code kann gemerged werden", 0 KRITISCH + 3 SOLLTE
+alle als KISS-Trade-offs in V3 dokumentiert: `_was_cq`-Setter
+verschoben (V3 §5), Doppel-`stop_cq`-Defense-in-Depth gewollt,
+Doppelklick-Schutz Mike-irrelevant da Splashtop kein Doppelklick
+liefert)**.
+
+**Geaenderte Files (2 Code + 1 Test NEU + main.py + 3 Plan-Files):**
+
+- `ui/main_window.py` `_on_btn_omni_cq_toggled` (Z.676-714, +25 Zeilen):
+  - Pre-Block bei `state not in (IDLE, CQ_WAIT)` → Toggle revert via
+    `blockSignals(True) / setChecked(False) / blockSignals(False)` +
+    Statusbar-Hinweis 4s „OMNI-CQ nur startbar wenn kein aktives QSO
+    laeuft — erst laufendes QSO beenden".
+  - Konsistent mit `qso_state.py:152` `start_cq()`-Akzeptanz-Bedingung.
+  - Bei OK: zusaetzlich `qso_sm.start_cq()` rufen — nun greift
+    OMNI-Slot-Filter weil `_send_cq()` `send_message.emit("CQ ...")`
+    triggert.
+- `ui/main_window.py` `_on_omni_stopped` (Z.716-743, +5 Zeilen):
+  - `if qso_sm.cq_mode: qso_sm.stop_cq()` — idempotenter CQ-Loop-Stop
+    fuer ALLE Stop-Reasons (band_change, ft_mode_change, rx_mode_change,
+    totmann_expired, easter_egg_off, superseded, manual_halt).
+  - `qso_sm._was_cq = False` — R1-SOLLTE: kein Auto-Resume nach
+    Stop-while-QSO. KISS-Akzeptanz fuer State-Machine-Internal-Setzung
+    (V3 §5 dokumentiert, Final-R1 SOLLTE-Punkt 1 verworfen).
+- `ui/mw_qso.py` `_on_cancel` (Z.210-234, +3 Zeilen):
+  - `if _omni_tx.active: _omni_tx.stop_omni_tx("manual_halt")` ergaenzt.
+  - Statusbar-Text auf „HALT — CQ, QSO, TX, OMNI gestoppt" erweitert.
+  - Docstring um OMNI-Erwaehnung erweitert.
+  - Reihenfolge gewollt: stop_cq + cancel zuerst (eigene UI-Cleanup),
+    danach OMNI-Stop. Final-R1 SOLLTE-Punkt 2 (Doppel-`stop_cq` durch
+    `_on_omni_stopped`-Slot) als Defense-in-Depth verworfen.
+- NEU `tests/test_p1_omni_start.py` (11 Tests via parametrize):
+  - 1 Start: Toggle on bei IDLE → omni.active + cq_mode + CQ emittet.
+  - 1 Stop: Toggle off → omni stop + cq_mode=False + _was_cq=False.
+  - 6 parametrized Stop-Reasons (band_change, ft_mode_change,
+    rx_mode_change, totmann_expired, easter_egg_off, superseded).
+  - 1 Block-while-QSO: WAIT_REPORT-Klick → Toggle nicht aktiviert.
+  - 1 HALT mit OMNI: cancel-Sequenz stoppt OMNI.
+  - 1 Reply-Resume Backward-compat: `_process_cq_reply` setzt
+    `_was_cq=True` (damit `_resume_cq_if_needed` nach QSO-Ende
+    OMNI-CQ resumen kann solange OMNI nicht extern gestoppt wird).
+- `main.py` APP_VERSION 0.95.21 → 0.95.22.
+- Plan-Files NEU: `prompts/p1_omni_start_v[1-3].md`.
+
+**Tests:** 1003 → **1014 gruen (+11)**, V3 prognostizierte +7 (paramet-
+rize zaehlt 6 Reasons als 6 Tests statt 1). Backward-compat: bestehende
+`tests/test_omni_tx.py` weiter gruen (kein Eingriff in `omni_tx.py`).
+
+**Atomare Commits:** Code-1 (Toggle + Stop-Slot + 11 Tests + V1-V3
+Plan-Files) + Code-2 (HALT + APP_VERSION) + Doku-Commit (HISTORY +
+HANDOFF + CLAUDE + TODO + Memory).
+
+**Hardware-Garantie ANT1:** OMNI emittet kein TX direkt, nur Slot-Filter.
+TX laeuft via `encoder.transmit()` → `radio.set_tx_antenna("ANT1")`
+zentral (`core/encoder.py:334`). Kein direkter Hardware-Eingriff durch
+OMNI-Aenderung. Final-R1 Pruefauftrag 7 bestaetigt.
+
+**Field-Test-Plan (vor Push):** Diversity, Easter-Egg an, btn_omni_cq
+sichtbar; Klick → CQ sofort auf Even, Statusbar `Ω Even=1 Odd=0`,
+naechster Slot Odd, Block-Wechsel nach 80; CQ-Reply → QSO normal → nach
+RR73 OMNI-Resume; Toggle off → CQ stoppt; HALT mit OMNI → alles
+gestoppt; Bandwechsel → OMNI stoppt automatisch; OMNI waehrend
+WAIT_REPORT → blockiert + Statusbar 4s.
+
+**Push pending** — v0.95.16 + v0.95.17 + v0.95.18 + v0.95.19 + v0.95.20
++ v0.95.21 + v0.95.22 + P2-Tool + P3 zusammen wenn Mike Field-Tests
+positiv.
+
+---
+
 ## 2026-05-08 v0.95.21 — P1.HUNT-SNR: Hunt-Pfad nutzt msg.snr statt _last_snr
 
 **Mike-Field-Test 08.05.2026 13:57 UTC:** Slot mit 3 Stationen (EV81OB -15,

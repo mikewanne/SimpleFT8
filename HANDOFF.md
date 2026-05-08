@@ -1,47 +1,75 @@
 # HANDOFF — SimpleFT8
 
-**Stand 2026-05-08 (v0.95.21):** **P1.HUNT-SNR fertig — Hunt-Pfad
-nutzt jetzt station-spezifischen `msg.snr` statt `_last_snr`.** Tests
-1003 gruen.
+**Stand 2026-05-08 (v0.95.22):** **P1.OMNI-START fertig — OMNI-CQ-Toggle
+aktiviert jetzt zusaetzlich den CQ-Loop in qso_state.** Tests 1014 gruen.
 
-**P1.HUNT-SNR (NEU 08.05.):** Mike-Field-Test 13:57 UTC: Slot mit 3
-Stationen, Klick auf EV81AB (-18 empfangen) → App sendete -24 (6 dB
-falsch). Wurzel: `_last_snr` wird vom Decoder pro Message ueberschrieben,
-zuletzt iterierte Station gewinnt. Folge zu P1.8 (v0.95.18) wo nur
-`_process_cq_reply` gefixt wurde, Hunt-Pfad explizit ausgelassen.
+**P1.OMNI-START (NEU 08.05., post-Compact):** Mike-Field-Test 16:08 UTC
+(Diversity, Easter-Egg lange aktiv): Klick auf btn_omni_cq → Statusbar
+zeigt zusaetzlich `Even=0 Odd=0`, **aber kein CQ wird gesendet**. Bug
+latent seit v0.78 (30.04.2026) — Toggle-Handler aktivierte zwar `omni_tx`,
+aber `qso_sm.cq_mode` blieb False → niemand emittete `send_message("CQ ...")`
+→ OMNI-Slot-Filter griff nie → kein TX. Plus 2 Folge-Bugs:
+`_on_omni_stopped` reagierte nicht auf qso_state-Stop, HALT-Button
+stoppte OMNI nicht.
 
-**Voller Workflow:** V1(7 offene Fragen, 10 ACs)→V2(12 Lessons L1-L12)
-→R1(0 KRITISCH + 1 SOLLTE = `advance()` R-Report-Bug + 2 KOENNTE
-optional)→V3(Compact-fest, R1-SOLLTE mit aufgenommen)→Compact→Code→
-**Final-R1 („Code freigegeben", 1 SOLLTE-Halluzination Fallback-Clamp
-verworfen weil Code bereits via `> -30 else "R-10"` clamped)**.
+**Voller Workflow:** V1(10 ACs, 7 Fragen)→V2(8 Lessons, V1-Fragen via grep
+beantwortet)→R1(2 Bug + 1 SOLLTE + 2 KOENNTE — 5 angenommen + 3 abgelehnt
++ 0 halluziniert)→V3(Compact-fest, R1-SOLLTE `_was_cq=False` mit
+aufgenommen)→Compact→Code→**Final-R1 („Code kann gemerged werden",
+0 KRITISCH + 3 SOLLTE alle als KISS-Trade-offs in V3 dokumentiert:
+`_was_cq`-Setter (V3 §5), Doppel-`stop_cq`-Defense-in-Depth gewollt,
+Doppelklick-Schutz Mike-irrelevant da Splashtop kein Doppelklick)**.
 
-**Geaenderte Files (3 Code + 1 Test NEU + main.py + 3 Plan-Files):**
-- `core/qso_state.py`:
-  - `start_qso(their_snr: int | None = None)` — Signatur erweitert,
-    Body nutzt `their_snr if not None else _last_snr`. Backward-compat.
-  - `advance()` WAIT_REPORT-Branch — `qso.our_snr` zuerst (R-Praefix
-    via `lstrip("R")`-Defense), fallback `_last_snr` nur wenn leer.
-- `ui/mw_qso.py:138` — Hunt-Klick `their_snr=msg.snr` durchreichen.
-- `ui/mw_cycle.py:562` — Auto-Hunt `their_snr=_candidate.snr`.
-- NEU `tests/test_p1_hunt_snr.py` (10 Tests: 8 Hunt + 2 advance).
-- `main.py` APP_VERSION 0.95.20 → 0.95.21.
-- Plan-Files: `prompts/p1_hunt_snr_v[1-3].md`.
+**Geaenderte Files (2 Code + 1 Test NEU + main.py + 3 Plan-Files):**
+- `ui/main_window.py` `_on_btn_omni_cq_toggled` — Pre-Block bei
+  state nicht in (IDLE, CQ_WAIT) + zusaetzlich `qso_sm.start_cq()` rufen.
+- `ui/main_window.py` `_on_omni_stopped` — idempotent
+  `qso_sm.stop_cq()` + `qso_sm._was_cq = False` (R1-SOLLTE).
+- `ui/mw_qso.py` `_on_cancel` HALT-Branch — `_omni_tx.stop_omni_tx(
+  "manual_halt")` ergaenzt + Statusbar-Text aktualisiert.
+- NEU `tests/test_p1_omni_start.py` (11 Tests via parametrize).
+- `main.py` APP_VERSION 0.95.21 → 0.95.22.
+- Plan-Files: `prompts/p1_omni_start_v[1-3].md`.
 
-**Tests 992 → 1003 gruen** (+11, V3 prognostizierte +10 — 1 Bonus).
-Bestehende Tests alle weiter gruen (Backward-compat-Beweis).
+**Tests 1003 → 1014 gruen** (+11, V3 prognostizierte +7 — parametrize
+zaehlt 6 Reasons als 6 Tests). Backward-compat: bestehende
+`tests/test_omni_tx.py` weiter gruen (kein Eingriff in `omni_tx.py`).
 
 **Atomare Commits:**
-- Code-1 `659e210`: qso_state.py + Tests + Plan-Files
-- Code-2 `8d6e80a`: mw_qso + mw_cycle + APP_VERSION
+- Code-1 (Toggle + Stop-Slot + 11 Tests + V1-V3 Plan-Files)
+- Code-2 `36e365d`: HALT-Branch + APP_VERSION 0.95.22
 - Doku: HISTORY+HANDOFF+CLAUDE+TODO+Memory
 
-**Naechster Schritt fuer Mike:**
-- Field-Test: Slot mit 3+ Stationen, Klick auf mittlere SNR-Station →
-  Report MUSS station-spezifisch sein (Reproduktion 13:57-Screenshot).
-- Auto-Hunt-Sekundaer-Test: Hunt-Reports muessen `_candidate.snr`
-  entsprechen.
-- Push: zusammen mit v0.95.16-21 + P2-Tool + P3 (alle pending).
+**Hardware-Garantie ANT1:** OMNI emittet kein TX direkt, nur Slot-Filter.
+TX laeuft via `encoder.transmit()` → `radio.set_tx_antenna("ANT1")`
+zentral. Final-R1 Pruefauftrag 7 bestaetigt.
+
+**Naechster Schritt fuer Mike (Field-Test 7-Punkte-Plan, V3 §6):**
+1. Diversity, Easter-Egg an, btn_omni_cq sichtbar.
+2. Klick btn_omni_cq → CQ sofort auf Even, Statusbar `Ω Even=1 Odd=0`.
+3. Naechster Slot Odd, dann 3 RX, Block-Wechsel nach 80.
+4. CQ-Reply → QSO normal → nach RR73 OMNI-Resume.
+5. Toggle off → CQ stoppt.
+6. HALT mit OMNI aktiv → alles gestoppt, Button entriegelt.
+7. Bandwechsel → OMNI stoppt automatisch.
+8. OMNI waehrend WAIT_REPORT → blockiert + Statusbar 4s.
+
+**Push pending** — v0.95.16-22 + P2-Tool + P3 zusammen wenn Field-Tests
+positiv.
+
+---
+
+**Vorher (08.05.):** **P1.HUNT-SNR fertig (v0.95.21) — Hunt-Pfad nutzt
+jetzt station-spezifischen `msg.snr` statt `_last_snr`.**
+
+**P1.HUNT-SNR:** Mike-Field-Test 13:57 UTC: Slot mit 3 Stationen, Klick
+auf EV81AB (-18 empfangen) → App sendete -24 (6 dB falsch). Folge zu P1.8
+(v0.95.18) wo nur `_process_cq_reply` gefixt wurde. Voller Workflow
+V1→V2→R1→V3→Compact→Code→Final-R1. Geaenderte Files: `core/qso_state.py`
+(`start_qso(their_snr=None)` + `advance()`-Defense), `ui/mw_qso.py:138`
++ `ui/mw_cycle.py:562` Aufrufer, NEU `tests/test_p1_hunt_snr.py` (10
+Tests). `main.py` APP_VERSION 0.95.20 → 0.95.21. Tests 992 → 1003 gruen.
+Atomare Commits `659e210` + `8d6e80a` + Doku.
 
 ---
 
