@@ -82,6 +82,13 @@ class Decoder(QObject):
         self.last_pcm_12k: np.ndarray | None = None  # AP-Lite: letzter 12kHz float32 Buffer
         self._startup_samples: int = 0                 # Startup-Purge: erste 2s verwerfen
         self._startup_done: bool = False
+        # P3 v0.95.20: Roh-Audio-Slot-Buffer fuer optionalen WAV-Dump.
+        # Wird in _process_cycle nach np.concatenate gesetzt (Pull-Pattern,
+        # GUI-Thread holt ihn via dump_last_slot). _band Default fuer Tests
+        # ohne mw_radio.set_band-Aufruf.
+        self.last_audio_24k: np.ndarray | None = None
+        self.last_slot_start_utc: float = 0.0
+        self._band: str = "20m"
 
     def start(self):
         self._running = True
@@ -98,6 +105,14 @@ class Decoder(QObject):
         self._mode = mode
         self._slot_samples = _SLOT_SAMPLES.get(mode, CYCLE_SAMPLES_12K)
         print(f"[Decoder] Protokoll: {mode} (Slot: {self._slot_samples/SAMP_RATE:.1f}s)")
+
+    def set_band(self, band: str):
+        """Aktuelles Band setzen (P3 v0.95.20: fuer audio_dump-Filename).
+
+        Wird von mw_radio._on_band_changed analog zu ntp_time.set_band
+        aufgerufen. Default in __init__ ist "20m".
+        """
+        self._band = band
 
     def set_quality(self, mode: str):
         """Decode-Qualitaet anpassen: 'normal' = schnell, 'diversity' = tief."""
@@ -201,6 +216,14 @@ class Decoder(QObject):
             peak_raw = np.max(np.abs(audio_raw))
             noise_pre = np.median(np.abs(audio_raw.astype(np.float32)))
             print(f"[Decoder] Zyklus: {len(audio_raw)} Samples, Peak={peak_raw}, NoiseFloor={noise_pre:.0f}")
+
+            # P3 v0.95.20: Roh-Audio fuer optionalen Dump puffern (kopiert
+            # weil audio_raw spaeter durch Noise-Floor-Normalisierung
+            # in-place modifiziert wird). Pull-Pattern: GUI-Thread holt
+            # den Buffer via dump_last_slot() — kein Race weil Decoder-
+            # Thread bei `cycle_decoded`-Emit fertig ist.
+            self.last_audio_24k = audio_raw.copy()
+            self.last_slot_start_utc = target_slot_start
 
             # Noise-Floor-basierte Normalisierung
             audio_f = audio_raw.astype(np.float32)
@@ -389,6 +412,37 @@ class Decoder(QObject):
         self.occupied_freqs = sorted(occupied)
 
         return all_messages
+
+    # ── P3 v0.95.20: Audio-Slot-Dump (Pull-Pattern) ──────────────────────
+
+    def dump_last_slot(self, ant: str, audio_dump_root,
+                       max_files: int) -> bool:
+        """Dumpt den zuletzt verarbeiteten Slot als WAV (24 kHz mono int16).
+
+        Wird vom GUI-Thread aufgerufen (mw_cycle._on_cycle_decoded) — kein
+        Race weil Decoder-Thread `_process_cycle` zu diesem Zeitpunkt
+        fertig ist (cycle_decoded-Signal feuerte → wir sind hier).
+
+        Returnt True bei Erfolg, False bei Skip (kein Buffer / nicht FT8)
+        oder Fehler.
+        """
+        if self.last_audio_24k is None or self._mode != "FT8":
+            return False
+        try:
+            from core.audio_dump import (
+                atomic_write_wav, build_dump_path, enforce_fifo_cap,
+            )
+            from pathlib import Path
+            root = Path(audio_dump_root)
+            band = getattr(self, "_band", "20m")
+            path = build_dump_path(root, band, "FT8",
+                                   self.last_slot_start_utc, ant)
+            atomic_write_wav(path, self.last_audio_24k, sample_rate=24000)
+            enforce_fifo_cap(root, max_files)
+            return True
+        except Exception as e:
+            print(f"[AudioDump] Fehler: {e}")
+            return False
 
 
 # ── Signal Subtraction: Rekonstruktion ───────────────────────────────────────
