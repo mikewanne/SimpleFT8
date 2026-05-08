@@ -37,13 +37,27 @@
 
 - [ ] Even/Odd dedizierter Timer — unabhaengig vom Decoder-Thread (FT2 kritisch)
 - [ ] Gain-Bias beheben — Normal-Modus Gain-Messung wenn Stats aktiv erzwingen
-- [ ] CQ-Zusammenfassung RX-Liste — ins QSO-Panel verschieben oder ganz raus?
+- [x] **CQ-Zusammenfassung Dead-Code raus** (08.05.2026): _cq_count und
+      _cq_flash_timer-Reste in qso_panel.py + mw_qso.py entfernt. User-
+      sichtbare Zusammenfassung war schon weg (HISTORY:2378), nur 4 Zeilen
+      Backwards-compat noch vorhanden. Keine Verhaltens-Aenderung.
 - [ ] Tertile-Analyse Statistik — kein Datencropping, alle Werte in 3 Drittel
-- [ ] Per-Station DT-Offset TX — `encoder._station_dt_offset` (nach mehr Feldtest-Daten)
+<!-- VERWORFEN 07.05.2026 (Mike-Entscheidung):
+     Per-Station DT-Offset TX hat keinen Nutzwert. Globaler -0.8s Offset
+     reicht (FT8-Decoder-Toleranz ±2.5s). Per-Station-Offset wuerde
+     symmetrische HW-Drift voraussetzen — falsche Pramisse, Risiko >
+     Nutzen. -->
+
 - [ ] IC-7300 Fork — TARGET_TX_OFFSET dort separat messen (eigener Branch)
-- [ ] F) Audio-Export per Slot — Roh-WAV-Dump 4s pro Slot fuer
-      Forschung/Debug (AP-Lite-Decode-Replay, ANT1/ANT2-Spektrum offline,
-      Inspectrum/Audacity). Optional, NICHT dringend. <1 Tag Aufwand.
+- [ ] **F) Audio-Export per Slot** — Roh-WAV-Dump 4s pro Slot fuer
+      Forschung/Debug. **Mike-Spec 07.05.:**
+      - Settings-Menupunkt im selben Tab wie Debug-Fenster-Toggle
+        (vermutlich `ui/settings_dialog.py` „Erweitert"/„Debug"-Bereich)
+      - Speicherort: Unterverzeichnis im SimpleFT8-Ordner, klar
+        wiederauffindbar (Vorschlag: `audio_dump/{band}_{mode}/
+        {YYYY-MM-DD_HH-MM-SS}_{ant}.wav`)
+      - Optional, <1 Tag Aufwand. Use-Case: AP-Lite-Decode-Replay,
+        ANT1/ANT2-Spektrum offline (Inspectrum/Audacity).
 - [ ] TX-Frequenz Normal-Modus manchmal ohne Histogramm-Marker
       (NEU 26.04., noch nicht reproduzierbar)
 
@@ -54,7 +68,9 @@
 - [ ] Migration `main_window._psk_worker` → `core/psk_reporter`
 - [ ] Karten-Live-Test im Feld (40m FT8 abends mit RX-Layer)
 - [ ] TX-Modus Live-Test (CQ rufen + TX-Toggle, schauen ob Marker erscheint)
-- [ ] Mobile-Filter-Edge-Case dokumentieren (Region-Calls wie `K1ABC/W2`)
+- [x] Mobile-Filter-Edge-Case dokumentieren (08.05.2026): bereits in
+      `core/direction_pattern.py:65-72` als Code-Kommentar — Region-Calls
+      wie `K1ABC/W2` werden bewusst rausgefiltert (akzeptabel laut Doku).
 
 ---
 

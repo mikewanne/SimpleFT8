@@ -178,7 +178,6 @@ class QSOPanel(QWidget):
             self._append_two_color(line, "#FFAA00", f"   {ant_label}", "#888888")
         else:
             self._append_colored(line, "#FFAA00")
-        self._cq_count = 0  # Backwards-compat fuer status_label-Logik
         # P1.16: _auto_trim_by_age laeuft via QTimer alle 30s, kein expliziter Aufruf hier
 
     def add_rx(self, message: str,
@@ -191,7 +190,6 @@ class QSOPanel(QWidget):
         alte Caller: time.time() zur Aufruf-Zeit (kann durch Decoder-
         Latenz im Folge-Slot landen — nur fuer Mocks akzeptabel).
         """
-        self._cq_count = 0
         if slot_start_ts is None or tx_even is None:
             now = time.time()
             slot = getattr(self, '_cycle_duration', 15.0)
@@ -206,9 +204,6 @@ class QSOPanel(QWidget):
         self._qso_count += 1
         self._append_colored(f"       ✓ QSO mit {their_call} komplett", "#44FF44")
         self._append_colored("─" * 30, "#333333")
-        # CQ-Flash-Timer stoppen falls noch aktiv (haengt sonst Style auf orange).
-        if hasattr(self, '_cq_flash_timer') and self._cq_flash_timer.isActive():
-            self._cq_flash_timer.stop()
         # Reset Style nach moeglicher Live-QSO-Anzeige (war gruen, fett).
         self.status_label.setText(f"{self._qso_count} QSO(s) diese Session")
         self.status_label.setStyleSheet("color: #666; font-size: 11px; padding: 2px;")
