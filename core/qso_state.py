@@ -244,8 +244,14 @@ class QSOStateMachine(QObject):
     # ── Hunt-Modus (Station anklicken) ──────────────────────────
 
     def start_qso(self, their_call: str, their_grid: str = "",
-                   freq_hz: int = 0):
-        """QSO mit angeklickter Station starten. Bricht laufendes QSO ab."""
+                   freq_hz: int = 0, their_snr: int | None = None):
+        """QSO mit angeklickter Station starten. Bricht laufendes QSO ab.
+
+        P1.HUNT-SNR (v0.95.21): their_snr ist station-spezifischer SNR
+        aus FT8Message — verhindert dass _last_snr (vom letzten Decoder-
+        Iterator-Schritt im Slot) den Report dominiert. Backward-compat:
+        None → fallback auf _last_snr (alte Tests).
+        """
         # P1.14 KP1: Reset bei JEDEM Nicht-IDLE-State (auch CQ_WAIT, da
         # dort _pending_reply gesetzt sein kann)
         if self.state != QSOState.IDLE:
@@ -273,11 +279,15 @@ class QSOStateMachine(QObject):
         )
 
         self._dbg.reset(their_call)
-        report = f"{self._last_snr:+03d}" if self._last_snr > -30 else "-10"
+        # P1.HUNT-SNR (v0.95.21): explizite their_snr > _last_snr-Fallback.
+        # Verhindert dass im selben Slot decodierte andere Stationen
+        # _last_snr ueberschreiben und falsche Reports erzeugen.
+        snr = their_snr if their_snr is not None else self._last_snr
+        report = f"{snr:+03d}" if snr > -30 else "-10"
         self.qso.our_snr = report
         msg = f"{their_call} {self.my_call} {report}"
         self._dbg.log("START", f"Hunt: {their_call} auf {freq_hz}Hz, max {self.max_calls} Versuche")
-        self._dbg.log("TX", f"Sende: '{msg}' (SNR={self._last_snr})")
+        self._dbg.log("TX", f"Sende: '{msg}' (SNR={snr})")
         self._set_state(QSOState.TX_CALL)
         self.send_message.emit(msg)
 
@@ -650,7 +660,14 @@ class QSOStateMachine(QObject):
 
     def advance(self):
         if self.state == QSOState.WAIT_REPORT and self.qso.their_snr:
-            report = f"R{self._last_snr:+03d}" if self._last_snr > -30 else "R-10"
+            # P1.HUNT-SNR (v0.95.21): qso.our_snr wurde in start_qso bereits
+            # mit station-spezifischem SNR gesetzt. R-Praefix wird hier hinzu-
+            # gefuegt. Fallback _last_snr nur wenn our_snr leer (Edge-Case).
+            if self.qso.our_snr:
+                base = self.qso.our_snr.lstrip("R")  # ist heute ohne R
+                report = f"R{base}"
+            else:
+                report = f"R{self._last_snr:+03d}" if self._last_snr > -30 else "R-10"
             self.qso.our_snr = report
             msg = f"{self.qso.their_call} {self.my_call} {report}"
             self._dbg.log("TX", f"advance() R-Report: '{msg}'")
