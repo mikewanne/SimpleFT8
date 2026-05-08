@@ -209,7 +209,7 @@ class QSOMixin:
 
     @Slot()
     def _on_cancel(self):
-        """HALT — stoppt ALLES: CQ, QSO, TX, Messung."""
+        """HALT — stoppt ALLES: CQ, QSO, TX, Messung, OMNI, Auto-Hunt."""
         self._active_qso_targets.clear()
         self._pending_station_click = None  # P1.24: gepufferten Klick verwerfen
         self.rx_panel.set_active_call("")
@@ -225,8 +225,12 @@ class QSOMixin:
         # P1.14 W6: Auto-Hunt freigeben (sonst dauerhaft pausiert nach HALT)
         if self._auto_hunt.active:
             self._auto_hunt.on_manual_qso_end()
+        # P1.OMNI-START (v0.95.22): OMNI ebenfalls stoppen — ohne diesen Branch
+        # blieb omni_tx.active=True nach HALT, Inkonsistenz mit Button-State.
+        if self._omni_tx.active:
+            self._omni_tx.stop_omni_tx("manual_halt")
         self.qso_panel.add_info("HALT — alles gestoppt")
-        self.statusBar().showMessage("HALT — CQ, QSO, TX gestoppt", 5000)
+        self.statusBar().showMessage("HALT — CQ, QSO, TX, OMNI gestoppt", 5000)
         print("[HALT] Alles gestoppt")
 
     @Slot(object)
