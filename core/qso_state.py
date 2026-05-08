@@ -81,6 +81,7 @@ class QSOData:
     calls_made: int = 0    # Wie oft haben wir bereits gesendet
     max_calls: int = 3     # Maximale CQ-Rufe (aus Settings)
     rr73_retries: int = 0  # Retries speziell fuer WAIT_RR73
+    wait_73_retries: int = 0  # P1.11 (v0.95.19): Retries fuer WAIT_73-Hoeflichkeit (R-Report-Wiederholung), entkoppelt von rr73_retries
     courtesy_73_sent: bool = False  # P1.10 Fix (v0.95.4): max 1x pro QSO
 
 
@@ -631,12 +632,15 @@ class QSOStateMachine(QObject):
                     self.qso_confirmed.emit(self.qso)
                     self._resume_cq_if_needed()
             elif msg.is_r_report and msg.caller == self.qso.their_call:
-                # Hoeflichkeit: Station hat unser RR73 nicht empfangen → nochmal senden (max 2x)
-                if self.qso.rr73_retries < 2:
-                    self.qso.rr73_retries += 1
+                # P1.11 (v0.95.19): Hoeflichkeits-Retry nutzt eigenes Feld
+                # wait_73_retries — entkoppelt von rr73_retries (das nach
+                # WAIT_RR73-Sequenz auf MAX_RR73_RETRIES=3 stehen kann und
+                # sonst diesen Pfad blockieren wuerde).
+                if self.qso.wait_73_retries < 2:
+                    self.qso.wait_73_retries += 1
                     tx_msg = f"{self.qso.their_call} {self.my_call} RR73"
                     print(f"[QSO] Hoeflichkeit: {msg.caller} wiederholt R-Report → sende RR73 erneut "
-                          f"({self.qso.rr73_retries}/2)")
+                          f"({self.qso.wait_73_retries}/2)")
                     self.send_message.emit(tx_msg)
                 else:
                     print(f"[QSO] {msg.caller} wiederholt R-Report — max Retries erreicht, ignoriert")
