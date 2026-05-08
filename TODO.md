@@ -14,10 +14,12 @@
 - [ ] Bei OK: Mike-Freigabe einholen → `git push origin main`
       (Commits `d8f86b6` Code+Tests + `d313b1a` Doku + `f456d04` TODO)
 
-### P2.ADIF-ARCHIVE — Standalone Helper-Script (NEU 07.05.)
-- [ ] `tools/adif_archive.py` schreiben — konsolidiert Tagesdateien aus
-      `adif/hochgeladen/` in Jahresarchive `archiv/2024.adi`/`2025.adi`
-- [ ] Separater Workflow nach v0.95.15-Field-Test (klein genug ohne Compact)
+### P2.ADIF-ARCHIVE — Standalone Helper-Script (✅ ERLEDIGT 08.05.)
+- [x] `tools/adif_archive.py` geschrieben — konsolidiert Tagesdateien aus
+      `adif/hochgeladen/` in Jahresarchive `adif/archiv/YYYY.adi`.
+      Voller V1→V2(15 Lessons)→R1(1 KRITISCH + 2 WICHTIG)→V3→Compact→
+      Code→Final-R1(0 KP). Tests 955 → 978 gruen (+23). Tool-only,
+      kein APP_VERSION-Bump. Hardware-frei testbar via `--dry-run`.
 
 ---
 
@@ -1579,8 +1581,9 @@ F (Audio-Export)           ←  unabhängig, jederzeit
 - [x] **DT-Korrektur konvergiert nicht** — ✅ ERLEDIGT v0.95.7 (P1.18 Wurzel-
       Fix `_DT_OFFSETS["FT8"]=3.0` Sync mit Wake-Offset)
 - [ ] **NEU 26.04.:** TX-Frequenz Normal-Modus manchmal ohne Histogramm-Marker (Bug, noch nicht reproduzierbar)
-- [ ] **NEU 07.05.:** P2.ADIF-ARCHIVE Standalone-Helper `tools/adif_archive.py`
-      fuer Jahresarchive aus `adif/hochgeladen/`
+- [x] **NEU 07.05. → ✅ ERLEDIGT 08.05.:** P2.ADIF-ARCHIVE Standalone-
+      Helper `tools/adif_archive.py` fuer Jahresarchive aus
+      `adif/hochgeladen/`. Voller Workflow durchgezogen.
 
 ---
 

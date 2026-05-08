@@ -5,6 +5,120 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-08 — P2.ADIF-ARCHIVE Standalone-Tool (Tool-only, kein APP_VERSION-Bump)
+
+**Mike-Auftrag 08.05. (post-v0.95.19):** Voller DeepSeek-Workflow + Compact
+fuer P2.ADIF-ARCHIVE (Standalone-Helper-Script, war seit 07.05. in TODO).
+Tool konsolidiert hochgeladene QSO-Tagesdateien (`SimpleFT8_LOG_*.adi`)
+aus `adif/hochgeladen/` in Jahresarchive `adif/archiv/YYYY.adi`.
+
+Voller Workflow V1(Diagnose, 7 ACs, 7 offene Fragen)→V2(Self-Review,
+15 Lessons L1-L15, alle V1-Fragen beantwortet)→R1(DeepSeek-Reasoner,
+1 KRITISCH + 2 WICHTIG + Tests 17→20)→V3(Compact-fest, vollstaendiges
+Script + 20 Tests, alle R1-Findings adressiert)→Compact→Code→**Final-R1
+(„Code kann gemerged werden") — 0 KP-Findings**, 1 SOLLTE-Fix (None-Schutz
+in `_record_to_adif`) + 1 KOENNTE (Race-Condition-Doku) sofort umgesetzt.
+
+**Sicherheits-Garantien (3 Mike-Schutzwaelle fuer Hobby-Schatz-Logbuch):**
+1. **Idempotenz** via Match-Key `(CALL, QSO_DATE, TIME_ON)` (gleich wie
+   `delete_qso` in `log/adif.py`). Re-Run derselben Quelle schreibt keine
+   Duplikate, schluckt sie still im `skipped_duplicates`-Counter.
+2. **Atomic-Write** via `tempfile.mkstemp(dir=target_dir)` +
+   `os.replace`. Tmpfile MUSS auf gleichem Filesystem liegen
+   (R1-WICHTIG, deshalb `dir=target_dir` statt Default-`/tmp`) — sonst
+   ist der „atomic rename" nicht atomar. Bei Crash mid-write: existing
+   Archiv bleibt heil, tmpfile wird via try/except aufgeraeumt.
+3. **Datenintegritaets-Abort:** Existing Archiv wird vor jedem Write
+   geparst. Schlaegt das fehl (korrupte Datei) → `all_years_ok=False`,
+   Quelle bleibt liegen, Fehler im Summary, kein Schreiben. R1-KRITISCH:
+   Mike's Logbuch darf NIE durch korruptes existing-Archiv ueberschrieben
+   werden. Quelle bleibt fuer manuellen Eingriff.
+4. **Verifikations-Schritt nach Schreiben:** Nach `os.replace` wird das
+   neue Archiv re-geparst, Match-Keys verglichen mit `expected_keys`.
+   Bei Diskrepanz (z.B. Disk-Korruption beim Schreiben) → `all_years_ok=
+   False`, kein Move/Delete der Quelle. R1-WICHTIG.
+5. **Default Move (nicht Delete):** Quelle wandert nach
+   `adif/archiv/_konsolidiert/` statt geloescht zu werden (V2-L1
+   Sicherheits-Default). `--delete-source` als opt-in. Bei Re-Run
+   gleicher Datei: `_dup`-Suffix verhindert Overwrite (V3-Test
+   `test_konsolidiert_dest_collision`).
+
+**CLI-Flags (V2-L2 + L6 + L10):**
+- `--source PATH` (Default: `adif/hochgeladen`)
+- `--target PATH` (Default: `adif/archiv`)
+- `--pattern GLOB` (Default: `SimpleFT8_LOG_*.adi`, ignoriert QRZ-Exports)
+- `--dry-run` (Plan-Summary, kein Schreiben)
+- `--yes` (Confirm-Prompt ueberspringen, fuer Skript-Automation)
+- `--delete-source` (LOESCHEN statt verschieben — opt-in)
+
+Phase 1 immer Dry-Run mit Plan-Ausgabe, dann `[y/N]`-Prompt
+(uebergehbar via `--yes`), Phase 3 Real-Run mit Ergebnis-Summary.
+
+**Geaenderte Files (1 NEU + 1 Test NEU + 3 Plan-Files):**
+- NEU `tools/adif_archive.py` (~280 Zeilen, vollstaendiges Script
+  mit `_record_key`, `_record_year`, `_record_to_adif` Helpers,
+  `_atomic_write_archive`, `consolidate`, `_format_summary`, `main`)
+- NEU `tests/test_adif_archive.py` (23 Tests: 5 Helper + 18 Konsolidierung)
+- NEU `prompts/p2_adif_archive_v[1-3].md` (V1+V2+V3 Plan-Dokumente)
+- KEIN `main.py` Bump — Tool-only, App-Verhalten unveraendert.
+
+**V2-Highlights (Self-Review entlarvt 15 V1-Luecken L1-L15):**
+- L1: Default-Verhalten Quelle = Move (sicher) statt Delete
+- L6: Glob `SimpleFT8_LOG_*.adi` strikt → QRZ-Exports unangetastet
+- L7: Atomic-Write Pflicht (Strg+C-Schutz)
+- L9: Lockfile NICHT noetig (KISS, 1-User-Hobby, V3-explizit verworfen)
+- L12: Verifikations-Schritt vor Move
+- Tests-Soll von 10 (V1) ueber 15 (V2 Edge-Cases) auf 17 (V2 Helper-
+  Tests) auf 20 (V3 R1-Empfehlung)
+
+**R1-Plan-Review (DeepSeek-Reasoner) entlarvte 3 Findings:**
+- 🔴 KRITISCH: Korruptes existing Archiv → V3 muss Abbruch garantieren
+  (try/except + `all_years_ok=False`-Pfad)
+- 🟡 WICHTIG: Tmpfile MUSS auf gleichem Filesystem
+  (`tempfile.mkstemp(dir=target_dir)` statt `/tmp`)
+- 🟡 WICHTIG: Verifikations-Schritt nach Schreiben (re-read +
+  Match-Key-Check)
+- 🔵 OPTIONAL: Tests 17 → 20
+
+**Final-R1 (Code-Review) bestaetigt freigabe-bereit:**
+- 0 KP-Findings, „Code kann gemerged werden"
+- 1 SOLLTE: `_record_to_adif` None-Schutz → fixed via
+  `str(v) if v is not None else ""` + neuer Test
+- 1 KOENNTE: Race-Condition-Doku → fixed in Module-Docstring
+- 2 KRITISCH (parallele Instanzen + Verifikations-Rollback) explizit als
+  Single-User-Akzeptanz dokumentiert (V2-L9 KISS-Entscheidung)
+
+**Tests 955 → 978 gruen (+23, V3 prognostizierte +20):**
+- 5 Helper-Tests (`_record_key`/`_record_year`/`_record_to_adif`)
+- 14 Konsolidierungs-Tests (Single-Year, Multi-Year, Idempotent, Dry-
+  Run, Move/Delete, Glob-Filter, Korrupte Files, Header-Once,
+  Atomic-Write, Atomic-No-Partial, Korruptes-Existing, Verifikations-
+  Diskrepanz, Missing-Year, Konsolidiert-Collision)
+- 2 CLI-Tests (Dry-Run + --yes)
+- 1 None-Schutz-Test (Final-R1 SOLLTE)
+- 1 Bonus durch Helper-Test-Splits
+
+**Atomare Commits:**
+- Code: `P2.ADIF-ARCHIVE: Standalone-Tool tools/adif_archive.py + 23 Tests`
+- Doku: `docs (P2.ADIF-ARCHIVE): HISTORY+HANDOFF+CLAUDE+TODO+Memory`
+
+**KEIN Push-Plan** — Mike kann lokal nutzen, Push zusammen mit
+v0.95.16-19 (alle bisher pending).
+
+**Lessons:**
+- R1's KRITISCH-Befund „korruptes existing Archiv" haette ich allein
+  uebersehen. Drei-Schritt-Pruefung (parse-existing → write → re-parse-
+  verify) ist Goldstandard fuer Datei-Konsolidierungs-Tools.
+- `tempfile.NamedTemporaryFile()` Default-Pfad `/tmp` ist auf macOS
+  haeufig anderes Filesystem als Projektordner → `os.replace`
+  faellt auf cross-FS-Copy zurueck, NICHT atomar. R1 fing das.
+- Tests-Soll skalierte 10→15→17→20→23. Helper-Tests + Edge-Cases
+  finden mehr Bugs als pauschale „mehr Tests".
+- KISS-Lockfile-Verzicht (V2-L9) korrekt — fuer Mike's
+  1-User-Workflow ist Atomic-Write ausreichend, Race-Condition-Risiko
+  in Doku transparent.
+
+
 ## 2026-05-08 v0.95.19 — P1.BUNDLE2: 3 hardware-freie Bugs gebuendelt
 
 **Mike-Auftrag 08.05. (post-v0.95.18):** „die kleinen können wir die

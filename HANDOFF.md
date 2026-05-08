@@ -1,8 +1,60 @@
 # HANDOFF — SimpleFT8
 
-**Stand 2026-05-08:** **v0.95.19 — P1.BUNDLE2: 3 hardware-freie Bugs gebuendelt.**
+**Stand 2026-05-08 (post-v0.95.19):** **P2.ADIF-ARCHIVE Standalone-Tool
+fertig — Tool-only, kein APP_VERSION-Bump.**
 
-**P1.BUNDLE2 (NEU):** Mike-Auftrag 08.05. (post-v0.95.18): „die kleinen
+**P2.ADIF-ARCHIVE (NEU 08.05.):** Mike-Auftrag post-v0.95.19: voller
+DeepSeek-Workflow + Compact dazwischen. Standalone-Helper-Script
+`tools/adif_archive.py` konsolidiert Tagesdateien `SimpleFT8_LOG_*.adi`
+aus `adif/hochgeladen/` in Jahresarchive `adif/archiv/YYYY.adi`.
+Hardware-frei, App-Verhalten unveraendert.
+
+**Sicherheits-Garantien (3 Schutzwaelle fuer Mike's Logbuch-Schatz):**
+1. **Idempotenz** Match-Key `(CALL, QSO_DATE, TIME_ON)` (gleich wie
+   `delete_qso`). Re-Run derselben Quelle = keine Duplikate.
+2. **Atomic-Write** via `tempfile.mkstemp(dir=target_dir)` +
+   `os.replace`. Tmpfile auf gleichem FS → POSIX atomic rename.
+3. **Datenintegritaets-Abort:** korruptes existing Archiv →
+   `all_years_ok=False`, Quelle bleibt liegen, kein Schreiben
+   (R1-KRITISCH adressiert).
+4. **Verifikations-Schritt** nach Schreiben: re-parse + Match-Key-Check,
+   bei Diskrepanz kein Move (R1-WICHTIG adressiert).
+5. **Default Move** (nicht Delete) nach `_konsolidiert/`, opt-in
+   `--delete-source`. `_dup`-Suffix bei Kollision.
+
+**CLI:** `--source --target --pattern --dry-run --yes --delete-source`.
+Glob-Pattern strikt `SimpleFT8_LOG_*.adi` (V2-L6, ignoriert QRZ-Exports).
+Phase 1 Dry-Run + Plan, dann `[y/N]`-Prompt (uebergehbar via `--yes`),
+Phase 3 Real-Run + Ergebnis.
+
+**Geaenderte Files (1 NEU + 1 Test NEU + 3 Plan-Files):**
+- NEU `tools/adif_archive.py` (~280 Zeilen)
+- NEU `tests/test_adif_archive.py` (23 Tests: 5 Helper + 18 Konsolidierung)
+- NEU `prompts/p2_adif_archive_v[1-3].md`
+- KEIN `main.py` Bump — Tool-only.
+
+**Voller Workflow:** V1(7 ACs, 7 Fragen)→V2(15 Lessons L1-L15)→R1
+(DeepSeek-Reasoner: 1 KRITISCH + 2 WICHTIG + Tests-Soll 17→20)→V3(Compact-
+fest)→Compact→Code→**Final-R1 („Code kann gemerged werden", 0 KP-Findings)**.
+1 SOLLTE-Fix (None-Schutz `_record_to_adif`) + 1 KOENNTE (Race-Doku)
+sofort umgesetzt + 1 Test.
+
+**Tests 955 → 978 gruen (+23, V3 prognostizierte +20).**
+
+**Atomare Commits:**
+- Code: `P2.ADIF-ARCHIVE: Standalone-Tool tools/adif_archive.py + 23 Tests`
+- Doku: `docs (P2.ADIF-ARCHIVE): HISTORY+HANDOFF+CLAUDE+TODO+Memory`
+
+**Naechster Schritt fuer Mike:**
+- Hardware-frei testbar: `./venv/bin/python3 tools/adif_archive.py --dry-run`
+  (mit existierender Tagesdatei in `adif/hochgeladen/`).
+- Push: zusammen mit v0.95.16+17+18+19 (alle pending).
+
+---
+
+**Vorher v0.95.19 — P1.BUNDLE2: 3 hardware-freie Bugs gebuendelt.**
+
+**P1.BUNDLE2:** Mike-Auftrag 08.05. (post-v0.95.18): „die kleinen
 können wir die zusammenfassen wenn wir deepseek workflow komplett
 machen mit compact?" Bundle aus 3 unabhaengigen kleinen Bugs (P1.7 +
 P1.11 + P1.13). Voller V1→V2(15 Lessons)→R1(1 KRITISCH KP-8 +
