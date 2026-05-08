@@ -381,7 +381,20 @@ class LogbookWidget(QWidget):
 
         if msg.clickedButton() == btn_yes:
             if delete_qso(rec):
-                self.refresh()
+                # P1.BUNDLE Bug-A (v0.95.18): In-Memory-Update statt
+                # full refresh() — vermeidet Re-Parse beider Verzeichnisse
+                # (~19 MB Disk-IO im UI-Thread). Filter-Re-Apply laeuft
+                # frisch aus aktualisiertem _all_records (Qt-Events
+                # serialisiert → keine Race).
+                try:
+                    self._all_records.remove(rec)
+                except ValueError:
+                    # Edge-Case: Record nicht in Liste → Fallback auf
+                    # full refresh damit Tabelle konsistent bleibt
+                    self.refresh()
+                    return
+                self._on_filter_changed(self.search_input.text())
+                self._update_counters()
             else:
                 QMessageBox.warning(self, "Fehler", "Eintrag konnte nicht gelöscht werden.")
 
