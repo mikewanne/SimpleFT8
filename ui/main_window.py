@@ -674,14 +674,37 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
     # ── OMNI-TX UI-Lifecycle (v0.78) ─────────────────────────────
 
     def _on_btn_omni_cq_toggled(self, checked: bool):
-        """User-Klick auf btn_omni_cq: enable / stop_omni_tx.
+        """User-Klick auf btn_omni_cq: enable + start CQ-Loop / stop CQ-Loop.
 
-        Mutually-exclusive: laufender Auto-Hunt wird via "superseded" gestoppt.
+        P1.OMNI-START (v0.95.22): Aktiviert ZUSAETZLICH den CQ-Loop in qso_state,
+        sonst greift OMNI-Slot-Filter nie. Mutually-exclusive: laufender Auto-Hunt
+        wird via "superseded" gestoppt.
+
+        Bei aktivem QSO (state nicht in IDLE/CQ_WAIT, also QSO laeuft):
+        Toggle blockieren mit Statusbar-Hinweis. Sonst haette Mike einen
+        aktivierten Button ohne Wirkung (start_cq macht silent no-op).
         """
         if checked and not self._omni_tx.active:
+            # P1.OMNI-START: nur wenn kein QSO laeuft. start_cq() selbst akzeptiert
+            # state in (IDLE, CQ_WAIT). Konsistent dazu blockieren wir alle anderen.
+            if self.qso_sm.state not in (QSOState.IDLE, QSOState.CQ_WAIT):
+                btn = self.control_panel.btn_omni_cq
+                btn.blockSignals(True)
+                btn.setChecked(False)
+                btn.blockSignals(False)
+                self.statusBar().showMessage(
+                    "OMNI-CQ nur startbar wenn kein aktives QSO laeuft "
+                    "— erst laufendes QSO beenden",
+                    4000,
+                )
+                return
             if self._auto_hunt.active:
                 self._auto_hunt.stop_auto_hunt("superseded")
             self._omni_tx.enable()
+            # P1.OMNI-START: CQ-Loop in qso_state aktivieren —
+            # OMNI-Filter in _on_send_message greift erst wenn jemand
+            # send_message("CQ ...") emittet. start_cq() macht genau das.
+            self.qso_sm.start_cq()
             self.control_panel.update_omni_tx(True)
             self._update_statusbar()
             print("[OMNI-TX] User-Start")
@@ -691,6 +714,12 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
     def _on_omni_stopped(self, reason: str):
         """Slot fuer omni_stopped(reason): Button-State + Statusbar zuruecksetzen.
 
+        P1.OMNI-START (v0.95.22): ALLE Stop-Reasons stoppen den CQ-Loop in
+        qso_state — sonst bleibt cq_mode=True haengen waehrend OMNI nicht
+        mehr lauft. Plus _was_cq=False (R1-SOLLTE): bei Stop-while-QSO soll
+        nach QSO-Ende KEIN regulaeres CQ resumen — Mike hat OMNI bewusst
+        gestoppt.
+
         Im Gegensatz zu Auto-Hunt KEIN UI-Reflexions-Cooldown — OMNI ist passiver,
         kein Bot-Tarn-Schutz noetig.
         """
@@ -698,6 +727,12 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         btn.blockSignals(True)
         btn.setChecked(False)
         btn.blockSignals(False)
+        # P1.OMNI-START: CQ-Loop stoppen (idempotent — stop_cq macht nix wenn cq_mode=False)
+        if self.qso_sm.cq_mode:
+            self.qso_sm.stop_cq()
+        # P1.OMNI-START R1-SOLLTE: bei Stop-while-QSO _was_cq invalidieren
+        # damit _resume_cq_if_needed nach QSO-Ende kein regulaeres CQ startet.
+        self.qso_sm._was_cq = False
         self.control_panel.update_omni_tx(False)
         self._update_statusbar()
         print(f"[OMNI-TX-UI] Stop ({reason})")
