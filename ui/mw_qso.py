@@ -131,6 +131,22 @@ class QSOMixin:
             their_grid=msg.grid_or_report if msg.is_grid else "",
             freq_hz=msg.freq_hz,
         )
+        # P1.13 (v0.95.19): Im Normal-Modus TX-Frequenz auf Station-Frequenz
+        # nachziehen + Spinbox synchronisieren. Frequenz wird NICHT
+        # persistiert (settings.save_normal_tx_freq) — Hunt-Klick ist
+        # temporaer, bandbezogene Default-Frequenz bleibt erhalten.
+        # Histogramm-Update bewusst weggelassen (KISS, R1-Empfehlung) —
+        # Histogramm-Widget ist im Normal-Modus typisch nicht sichtbar,
+        # Encoder + Spinbox-Sync reichen vollstaendig.
+        if self._rx_mode == "normal" and msg.freq_hz:
+            spin = self.control_panel._tx_freq_spin
+            # Hardware-Range aus Spinbox-Properties (statt hardcoded
+            # 150/2800) — bleibt automatisch konsistent bei Range-Aenderung.
+            freq_hz = max(spin.minimum(), min(spin.maximum(), int(msg.freq_hz)))
+            self.encoder.audio_freq_hz = freq_hz
+            spin.blockSignals(True)
+            spin.setValue(freq_hz)
+            spin.blockSignals(False)
         # P1.14 KP6 (Plan-V2-Entscheidung): Workaround BEHALTEN. Saubere
         # Integration in start_qso ist nicht moeglich weil stop_cq() vor
         # start_qso() laufen MUSS — _was_cq waere dort schon False.
