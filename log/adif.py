@@ -14,6 +14,25 @@ ADIF_HEADER = """SimpleFT8 ADIF Export
 """
 
 
+def _strip_r_prefix(rst) -> str:
+    """Strippt fuehrendes R-Praefix aus FT8-Reports (ADIF-Compliance).
+
+    P1.BUNDLE Bug-B (v0.95.18): FT8-Sequence-Layer schreibt bei der
+    Antwort `R{snr:+03d}` (z.B. „R-22" = „Roger, dein Report ist -22").
+    Im ADIF-Logbuch ist das jedoch nicht spec-konform — RST_RCVD bei
+    digitalen Modi soll nur das SNR enthalten (z.B. „-22", „+05").
+    QRZ.com-Validator wirft R-Prefix-Records raus → Bulk-Upload-Burst.
+
+    Idempotent: ohne R-Prefix oder nicht-FT8-Format unveraendert.
+    """
+    if not rst:
+        return ""
+    rst = str(rst).strip()
+    if len(rst) >= 2 and rst[0].upper() == "R" and rst[1] in "+-":
+        return rst[1:]
+    return rst
+
+
 def _field(name: str, value: str) -> str:
     """Ein ADIF-Feld formatieren."""
     return f"<{name.upper()}:{len(value)}>{value}"
@@ -193,8 +212,8 @@ class AdifWriter:
         if adif_submode:
             fields.append(_field("SUBMODE", adif_submode))
         fields += [
-            _field("RST_SENT", str(rst_sent)),
-            _field("RST_RCVD", str(rst_rcvd)),
+            _field("RST_SENT", _strip_r_prefix(rst_sent)),
+            _field("RST_RCVD", _strip_r_prefix(rst_rcvd)),
             _field("OPERATOR", my_callsign.upper()),
             _field("STATION_CALLSIGN", my_callsign.upper()),
             _field("MY_GRIDSQUARE", my_gridsquare.upper()),

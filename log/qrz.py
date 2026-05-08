@@ -52,11 +52,21 @@ class QRZClient:
             return {"RESULT": "FAIL", "REASON": str(e)}
 
     def upload_qso_from_dict(self, record: Dict[str, str]) -> Dict[str, str]:
-        """QSO-Dict (aus ADIF-Parser) an QRZ.com senden."""
+        """QSO-Dict (aus ADIF-Parser) an QRZ.com senden.
+
+        P1.BUNDLE Bug-B (v0.95.18): RST_RCVD/RST_SENT defensiv vom
+        FT8-Roger-Praefix (`R-22` → `-22`) befreien, damit alte
+        SimpleFT8-ADIF-Files (vor v0.95.18 mit R-Format geschrieben)
+        beim Re-Upload nicht von QRZ-Validator zurueckgewiesen werden.
+        """
+        from log.adif import _strip_r_prefix  # lazy: vermeidet Zirkel-Import-Risiko
         adif_parts = []
         for key, value in record.items():
             if key.startswith("_"):
                 continue  # Skip interne Felder
+            # Bug-B: RST-Felder defensiv strippen
+            if key.upper() in ("RST_RCVD", "RST_SENT"):
+                value = _strip_r_prefix(value)
             adif_parts.append(f"<{key.lower()}:{len(value)}>{value}")
         adif_parts.append("<eor>")
         return self.upload_qso(" ".join(adif_parts))
