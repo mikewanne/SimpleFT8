@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -12,6 +13,14 @@ if TYPE_CHECKING:
 
 from core.qso_state import QSOState
 from core.message import FT8Message
+
+
+# P1.7 (v0.95.19): ADIF-Duplikat-Filter Zeit-Fenster (Sekunden).
+# Mike's Spec 2026-05-05: < 5 Min nach RR73 erneut → kein doppelter Eintrag.
+# Cache ist Session-lokal in MainWindow._recent_logged_calls (App-Restart
+# loescht den State, ist gewollt — Mike will Reset bei manuellem Neustart).
+# Cache-Wachstum: bei 18000 QSOs ~1-2 MB, kein Cleanup noetig (KISS).
+_LOG_DEDUP_WINDOW_S = 300
 
 
 class QSOMixin:
@@ -324,7 +333,15 @@ class QSOMixin:
 
     @Slot(object)
     def _on_qso_complete(self, qso_data):
-        """RR73 gesendet — ADIF schreiben (UI-Meldung kommt erst bei 73 oder Timeout)."""
+        """RR73 gesendet — ADIF schreiben (UI-Meldung kommt erst bei 73 oder Timeout).
+
+        P1.7 (v0.95.19): Duplikat-Filter — wenn dieselbe Station auf
+        gleichem Band innerhalb _LOG_DEDUP_WINDOW_S=300s schon geloggt
+        wurde, ADIF/qso_log/Antennen-Stats ueberspringen.
+        UI-Cleanup (active_qso, rx_panel, auto_hunt) laeuft IMMER —
+        sonst Inkonsistenzen (R1-KRITISCH).
+        """
+        # UI-Cleanup IMMER (vor Duplikat-Check) — R1-KRITISCH:
         self._active_qso_targets.discard(qso_data.their_call)
         self.rx_panel.set_active_call("")
         # Auto-Hunt: QSO erfolgreich → Pause, dann naechste Station
@@ -335,6 +352,22 @@ class QSOMixin:
 
         band = self.settings.band.upper()
         freq = self.settings.frequency_mhz
+
+        # P1.7 Duplikat-Check: (call, band)-Tupel-Key, beide UPPER (siehe
+        # qso_log.py:23 add_qso normiert Band/Call gleich). Mode wird
+        # bewusst NICHT in den Key aufgenommen — KISS, Mike's Mode-Wechsel
+        # binnen 5 Min mit gleicher Station ist Hobby-Praxis quasi nie.
+        now = time.time()
+        call_key = qso_data.their_call.upper()
+        dedup_key = (call_key, band)
+        last = self._recent_logged_calls.get(dedup_key, 0.0)
+        if now - last < _LOG_DEDUP_WINDOW_S:
+            print(f"[QSO] DUPLIKAT-FILTER: {call_key}@{band} schon vor "
+                  f"{int(now-last)}s geloggt → skip ADIF + qso_log + antenna_stats")
+            self.qso_panel.add_info(
+                f"{call_key} Duplikat ({int(now-last)}s) — kein ADIF-Eintrag")
+            return  # KEIN log_qso, KEIN add_qso, KEIN log_antenna_qso
+        self._recent_logged_calls[dedup_key] = now
 
         self.adif.log_qso(
             call=qso_data.their_call,

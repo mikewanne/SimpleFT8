@@ -215,6 +215,7 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self._diversity_ctrl = DiversityController()
         self._active_qso_targets: set = set()  # Stationen im aktiven QSO → 150s Aging
         self._pending_station_click = None  # P1.24: Klick waehrend TX → Buffer fuer naechsten Slot
+        self._recent_logged_calls: dict[tuple[str, str], float] = {}  # P1.7 (v0.95.19): ADIF-Dedup (call, band) → ts
         self._diversity_lock = threading.Lock()  # Race Condition Guard
         self._tune_active = False
         self._tune_freq_mhz = None
