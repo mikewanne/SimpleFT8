@@ -122,6 +122,9 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self.encoder = Encoder(settings.audio_freq_hz)
         self.decoder = Decoder(max_freq=settings.max_decode_freq)
         self.decoder._my_call = settings.callsign
+        # P3 v0.95.20: initiales Band setzen (sonst Default "20m" bei
+        # erstem Audio-Dump-Slot vor Bandwechsel)
+        self.decoder.set_band(settings.band)
         self.adif = AdifWriter()
 
         # Stations-Statistik Logger + Warmup
@@ -216,6 +219,9 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self._active_qso_targets: set = set()  # Stationen im aktiven QSO → 150s Aging
         self._pending_station_click = None  # P1.24: Klick waehrend TX → Buffer fuer naechsten Slot
         self._recent_logged_calls: dict[tuple[str, str], float] = {}  # P1.7 (v0.95.19): ADIF-Dedup (call, band) → ts
+        # P3 v0.95.20: Audio-Dump-Settings (in mw_cycle._on_cycle_decoded gelesen)
+        self._audio_dump_enabled = self.settings.get("audio_dump_enabled", False)
+        self._audio_dump_max_files = self.settings.get("audio_dump_max_files", 200)
         self._diversity_lock = threading.Lock()  # Race Condition Guard
         self._tune_active = False
         self._tune_freq_mhz = None
@@ -904,6 +910,9 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
                 self._main_vsplitter.setSizes([500, 150])
             else:
                 self._main_vsplitter.setSizes([600, 0])
+            # P3 v0.95.20: Audio-Dump-Settings live aktualisieren
+            self._audio_dump_enabled = self.settings.get("audio_dump_enabled", False)
+            self._audio_dump_max_files = self.settings.get("audio_dump_max_files", 200)
 
     def _update_statusbar(self):
         work_freq = self.settings.frequency_mhz

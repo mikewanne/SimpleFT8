@@ -79,6 +79,18 @@ class CycleMixin:
         # (Mike's Screenshot 2026-05-05: CU2JX als A1 obwohl ANT2 G20 lief).
         ant = self._resolve_hardware_antenna(ant)
 
+        # P3 v0.95.20: Audio-Dump fuer Debug/Forschung. Pull-Pattern aus
+        # GUI-Thread → Antenne ist garantiert korrekt fuer den just-decoded
+        # Slot (kein Race mit Decoder-Thread). Modus-Filter (nur FT8) im
+        # Decoder.dump_last_slot. Default-Root: SimpleFT8/audio_dump/.
+        if getattr(self, "_audio_dump_enabled", False):
+            from core.audio_dump import DEFAULT_DUMP_ROOT
+            ant_long = "ANT1" if ant == "A1" else "ANT2"
+            self.decoder.dump_last_slot(
+                ant_long, DEFAULT_DUMP_ROOT,
+                getattr(self, "_audio_dump_max_files", 200),
+            )
+
         if self._rx_mode == "diversity" and was_phase == "measure":
             self._handle_diversity_measure(messages, ant)
 

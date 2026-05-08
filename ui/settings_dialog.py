@@ -401,6 +401,41 @@ class SettingsDialog(QDialog):
         )
         layout.addWidget(self.debug_console_cb)
 
+        layout.addWidget(_hline())
+
+        # Block 4: Audio-Dump (P3 v0.95.20)
+        audio_lbl = QLabel(
+            "Sichert pro FT8-Slot eine WAV-Datei in <b>audio_dump/{band}_FT8/</b> "
+            "fuer offline Decoder-Replay und Antennen-Spektrum-Vergleich. "
+            "Rollierend mit FIFO-Cleanup — aelteste Datei wird ueberschrieben."
+        )
+        audio_lbl.setWordWrap(True)
+        audio_lbl.setStyleSheet("color: #888;")
+        layout.addWidget(audio_lbl)
+
+        audio_row = QHBoxLayout()
+        self.audio_dump_cb = QCheckBox("Audio-Slots fuer Debugging sichern")
+        self.audio_dump_cb.setToolTip(
+            "Pro FT8-Slot 1 WAV (24 kHz mono int16, ~576 KB)."
+        )
+        audio_row.addWidget(self.audio_dump_cb)
+
+        audio_row.addWidget(QLabel("Max. Files:"))
+        self.audio_dump_max_spin = QSpinBox()
+        self.audio_dump_max_spin.setRange(50, 1000)
+        self.audio_dump_max_spin.setValue(200)
+        self.audio_dump_max_spin.setToolTip(
+            "200 Files ≈ 50 Min FT8 Single-Antenne ≈ 58 MB.\n"
+            "1000 Files ≈ 250 Min ≈ 290 MB."
+        )
+        audio_row.addWidget(self.audio_dump_max_spin)
+        audio_row.addStretch()
+        layout.addLayout(audio_row)
+
+        # Spinbox enabled/disabled an Checkbox koppeln
+        self.audio_dump_cb.toggled.connect(self.audio_dump_max_spin.setEnabled)
+        self.audio_dump_max_spin.setEnabled(self.audio_dump_cb.isChecked())
+
         layout.addStretch()
         return tab
 
@@ -449,6 +484,10 @@ class SettingsDialog(QDialog):
         # Statistik + Debug-Konsole
         self.stats_cb.setChecked(self.settings.get("stats_enabled", True))
         self.debug_console_cb.setChecked(self.settings.get("debug_console_visible", False))
+        # P3 v0.95.20: Audio-Dump
+        self.audio_dump_cb.setChecked(self.settings.get("audio_dump_enabled", False))
+        self.audio_dump_max_spin.setValue(self.settings.get("audio_dump_max_files", 200))
+        self.audio_dump_max_spin.setEnabled(self.audio_dump_cb.isChecked())
         # v0.88 Bandpilot Stunden-Logik
         mode = self.settings.get("bandpilot_mode", "off")
         self.bandpilot_mode_combo.setCurrentIndex(
@@ -571,6 +610,9 @@ class SettingsDialog(QDialog):
         self.settings.set("language", "de" if self.language_combo.currentIndex() == 0 else "en")
         self.settings.set("stats_enabled", self.stats_cb.isChecked())
         self.settings.set("debug_console_visible", self.debug_console_cb.isChecked())
+        # P3 v0.95.20: Audio-Dump
+        self.settings.set("audio_dump_enabled", self.audio_dump_cb.isChecked())
+        self.settings.set("audio_dump_max_files", self.audio_dump_max_spin.value())
         # v0.88 Bandpilot Stunden-Logik
         self.settings.set("bandpilot_mode",
                           {0: "off", 1: "auto", 2: "manual"}[self.bandpilot_mode_combo.currentIndex()])
@@ -607,6 +649,10 @@ class SettingsDialog(QDialog):
         self.language_combo.setCurrentIndex(0)  # Deutsch
         self.stats_cb.setChecked(True)
         self.debug_console_cb.setChecked(False)
+        # P3 v0.95.20: Audio-Dump
+        self.audio_dump_cb.setChecked(False)
+        self.audio_dump_max_spin.setValue(200)
+        self.audio_dump_max_spin.setEnabled(False)
 
     def _on_map_open_clicked(self):
         """Richtungs-Karte oeffnen. Default-Modus aus Settings (rx/tx)."""

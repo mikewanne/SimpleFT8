@@ -355,6 +355,8 @@ class RadioMixin:
         # DT-Korrektur: gespeicherten Wert fuer neues Band laden
         from core import ntp_time as _ntp
         _ntp.set_band(band)
+        # P3 v0.95.20: Decoder-Band fuer audio_dump-Filename aktualisieren
+        self.decoder.set_band(band)
         # PSK-Reporter: alte Band-Daten löschen + Timer neu starten (2 Min Delay)
         self.control_panel.psk_label.setText("PSK:  —")
         _psk_t = getattr(self, '_psk_timer', None)
