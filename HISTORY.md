@@ -5,6 +5,170 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-09 v0.95.25 — P3.OMNI-PATTERN-FIX-2: QTimer-Pretrigger + Button-Label + RX-Slot-Horche
+
+**Mike-Field-Test v0.95.24, 09.05.2026 11:55-12:00 UTC:** OMNI-Pattern
+hat alle ~75s nur 1 TX statt der erwarteten 2-TX-3-RX-Sequenz. Plus
+Button-Label „OMNI CQ" zeigt nicht ob OMNI aktiv → Mike klickt mehrfach.
+Plus QSO-Panel still in 3 von 5 Slots → kein Lebenszeichen.
+
+**4 Probleme:**
+1. **GUI-Tick-Latency** (KRITISCH) — Decoder blockiert GUI-Thread →
+   `cycle_tick` kommt erst bei `cycle_pos=14.89s` rein. Pretrigger
+   feuert zu spaet → Encoder `silence_secs = 15.0 - 1.3 - 14.89 = -1.19`
+   → overshoot=1.19s > 0.3s → v0.80 Fix B Drift-Schutz schiebt 2 Slots
+   weiter → Pattern verschoben.
+2. **Button-Label statisch** — `QPushButton("OMNI CQ")` zeigt nicht ob
+   aktiv. Mike klickt mehrfach aus Unsicherheit → permanenter
+   `manual_halt`.
+3. (verworfen V2-L3) — V1 hatte User-Start-Drift-Schutz mit
+   `_OMNI_USER_START_GUARD_S = 1.5s` geplant. V2 zeigte via Code-
+   Verifikation `core/encoder.py:_next_slot_boundary`: bei mid-cycle
+   Toggle-On waehlt Encoder den NAECHSTEN passenden Slot mit
+   `silence_secs > 14s` → kein Drift. User-Start-Delay verworfen, spart
+   2 Tests + Race-Risk.
+4. **RX-Slots stumm** — Mike sieht im QSO-Panel keine Lebenszeichen
+   in 3 von 5 Slots des OMNI-Patterns.
+
+**Loesung (R1-bestaetigt, V3 Plan):**
+
+1. **QTimer.singleShot mit Qt.PreciseTimer** (`ui/main_window.py:__init__`):
+   Persistente Instanz-Variable `_omni_pretrigger_timer` mit
+   `setSingleShot(True)` + `setTimerType(Qt.TimerType.PreciseTimer)`
+   + timeout-Connect zu `_omni_pretrigger_fire_impl` (Mixin-Methode in
+   CycleMixin). In `mw_cycle._on_cycle_start` mit
+   `delay_ms = (cycle_duration - 1.3s) * 1000` gestartet wenn OMNI
+   active + nicht paused. Restart-Semantik: `start()` nach `start()`
+   ersetzt alten Timeout. Garantiertes Timing ~50ms genau gegen
+   >1500ms bei cycle_tick-Signal-Queue (durch Decoder-Blocking).
+
+2. **Cycle-Tick-Pretrigger als Fallback** (`mw_cycle._omni_pretrigger
+   _check`): refactored zu Defense-in-Depth mit Schwelle `dur - 0.5s`.
+   Greift nur wenn `_omni_pretriggered=False` (= QTimer hat NICHT
+   gefeuert). Log-Marker `[OMNI-Pretrigger-FALLBACK]`.
+
+3. **Button-Label dynamisch** (`ui/control_panel.py:update_omni_tx`):
+   Button-Text wechselt synchron mit Ω-Symbol-Visibility:
+   `active=True` → „OMNI CQ (aktiv)", `active=False` → „OMNI CQ".
+   `hasattr`-Guard fuer Init-Race.
+
+4. **`add_listening`** (`ui/qso_panel.py`): Neue Methode mit Format
+   `HH:MM:SS [E/O] ←  Horche  …` in Grau (#666666). Aufruf in
+   `mw_qso._on_send_message` RX-Slot-Skip-Pfad (zusaetzlich zu
+   bestehendem `print` + `_omni_skip_state_change=True`).
+   Spam-begrenzt durch existierendes `_auto_trim_by_age(300)`.
+
+**Voller Workflow:**
+V1 (`prompts/p3_omni_pattern_fix2_v1.md`) →
+V2 15 Lessons (`p3_omni_pattern_fix2_v2.md`, V2-L3 verwirft V1's
+User-Start-Drift-Schutz) →
+R1 DeepSeek-Reasoner („V2 ist bereit für die Umsetzung", 0 KP, alle
+15 Lessons bestätigt) →
+V3 Compact-fest 15 ACs / 10 Tests / 3 atomare Commits
+(`p3_omni_pattern_fix2_v3.md`) → Mike-Freigabe → Code (3 Commits) →
+**Final-R1 (DeepSeek-Reasoner, in=82409/out=1593 Tokens: „Der Compact
+ist bereit für die Umsetzung. Ich sehe keine inhaltlichen Lücken oder
+Widersprüche.", 0 KP-Findings, alle ACs verifiziert + Risiken
+mitigiert)**.
+
+**R1-Final-Findings:** alle 4 Problem-Loesungen bestaetigt, alle 6
+Risiken (R1-R6) mitigiert. „Field-Test mit 10-Slot-OMNI-Loop ist der
+finale Beweis."
+
+**Geaenderte Files (5 Code + 1 Test NEU + main.py + 4 Plan-Files):**
+
+- `ui/main_window.py` (Commit 1):
+  - `__init__`: `_omni_pretrigger_timer = QTimer(self)` mit
+    `setSingleShot(True)` + `setTimerType(Qt.TimerType.PreciseTimer)`
+    + `timeout.connect(self._omni_pretrigger_fire_impl)`
+  - `_on_omni_stopped`: `self._omni_pretrigger_timer.stop()`
+    zentral fuer alle Stop-Reasons (manual_halt, ft_mode_change,
+    band_change, rx_mode_change, totmann_expired, easter_egg_off,
+    superseded — alle laufen ueber `omni_stopped`-Signal).
+
+- `ui/mw_cycle.py` (Commit 1):
+  - `_omni_pretrigger_fire_impl` NEU — gemeinsame Logik fuer QTimer +
+    Fallback (peek_next + tx_even + `_was_pretriggered=True` +
+    `_send_cq`). Idempotent ueber `_omni_pretriggered`-Flag.
+  - `_on_cycle_start` ergaenzt: `if active+!paused: timer.start(delay_ms)`
+    mit Mathematik-Kommentar (V2 L2 sicheres Fenster
+    `[dur-1.3, dur-0.8]` 500ms breit).
+  - `_omni_pretrigger_check` refactored zu Fallback-Pfad mit Schwelle
+    `dur - 0.5s` und Log-Marker `[OMNI-Pretrigger-FALLBACK]`.
+
+- `ui/control_panel.py` (Commit 2):
+  - `update_omni_tx` ergaenzt: `btn_omni_cq.setText(...)` synchron mit
+    Ω-Symbol-Visibility und Versions-Label-Color.
+
+- `ui/qso_panel.py` (Commit 3):
+  - `add_listening(slot_start_ts: float, tx_even: bool)` NEU —
+    schreibt formatierte Zeile in Grau.
+
+- `ui/mw_qso.py` (Commit 3):
+  - `_on_send_message` RX-Slot-Skip-Pfad ruft
+    `qso_panel.add_listening(slot_start, is_even)` mit time.time()-
+    basiertem Slot-Start.
+
+- `main.py` APP_VERSION 0.95.24 → 0.95.25.
+
+- NEU `tests/test_p3_omni_pattern_fix2.py` (21 Tests):
+  - T1, T1b: QTimer-Schedule mit korrekter Delay (FT8 13700ms /
+    FT4 6200ms)
+  - T11, T12: kein Timer-Start bei inactive/paused OMNI
+  - T10: Restart-Semantik (2x cycle_start → 2x start)
+  - T2, T2b, T2c: Fire-Impl Pre-Conds, Idempotenz, RX-Slot-Skip
+  - T8, T8b, T8c: Fallback-Schwelle, Doppel-Trigger-Schutz,
+    below-threshold-no-fire
+  - T3, T3b, T3c: Button-Text aktiv/inaktiv/synced mit `_omni_active`
+  - T6: RX-Slot-Skip ruft add_listening (Integration mit
+    `_on_send_message`)
+  - T7, T7b, T7c: add_listening Format Even/Odd/Timestamp aus
+    `slot_start_ts`
+  - T9, T9b: `_on_omni_stopped` cancelt Timer fuer alle 7
+    Stop-Reasons (manual_halt, ft_mode_change, band_change,
+    rx_mode_change, totmann_expired, easter_egg_off, superseded)
+  - Plus Sanity-Constant-Test (`_OMNI_PRETRIGGER_OFFSET_S == 1.3`)
+
+- Plan-Files: `prompts/p3_omni_pattern_fix2_v[1-3].md`.
+
+**Tests:** 1048 → **1069 gruen** (+21, V3 prognostizierte +10 — mehr
+Defense-Tests gefunden in T1b, T2b/c, T3b/c, T7b/c, T8b/c, T9b).
+
+**Atomare Commits (3 Code + 1 Doku):**
+- Commit 1 (QTimer+Fallback, alle main_window/mw_cycle Aenderungen +
+  Tests T1, T2, T8, T10, T11, T12 + V1/V2/V3 Plan-Files)
+- Commit 2 `8b11266` (Button-Label, control_panel + 3 T3-Tests)
+- Commit 3 `9ce831a` (Horche+APP_VERSION, qso_panel/mw_qso/main.py +
+  6 T6/T7/T9-Tests)
+- Commit 4 (Doku, dieser): HISTORY+HANDOFF+CLAUDE+Memory.
+
+**Push pending** — v0.95.16-25 + P2-Tool + P3 zusammen wenn Field-Test
+positiv.
+
+**Field-Test-Pflicht (Mike, V3 §6, 7 Punkte vor Push):**
+1. Activate Test: Button-Text → „OMNI CQ (aktiv)", erste TX naechster Slot
+2. 5-Slot-Pattern Block 1: Sende [E], Sende [O], 3x „Horche …"
+3. 5-Slot-Pattern Block 2: Sende [O], Sende [E], 3x „Horche …"
+4. **10-Slot-Loop (KRITISCH):** Pattern bleibt EXAKT — Drift-Beweis
+   ohne +30s wie v0.95.24
+5. Toggle off: Button-Text → „OMNI CQ", QSO-Panel still
+6. HALT mid-OMNI: alles gestoppt, Button → „OMNI CQ"
+7. Mode/Band-Wechsel: OMNI stoppt, QTimer canceled
+
+**Lessons:**
+- GUI-Thread-Blocking durch Decoder ist real und unvermeidbar im
+  aktuellen Design. QTimer mit `Qt.PreciseTimer` umgeht das, weil die
+  Eventloop-Prioritaet hoeher ist als reguläre Signal-Slots.
+- V2-L3 zeigt: vorzeitige Loesung in V1 kann durch Code-Verifikation
+  als unnoetig entlarvt werden. Encoder waehlt mid-cycle Toggle-On
+  selbststaendig den naechsten passenden Slot — kein User-Start-Drift.
+- Defense-in-Depth (Cycle-Tick-Fallback) kostet wenig + schuetzt vor
+  unbekannten Edge-Cases. Log-Marker erlaubt Field-Diagnose.
+- `update_omni_tx` als zentrale Stelle fuer Button-State-UI vermeidet
+  doppelte Setter-Pfade (single-source-of-truth).
+
+---
+
 ## 2026-05-09 v0.95.24 — P2.OMNI-PATTERN-FIX: Mid-Cycle-Pretrigger + Encoder-Queue
 
 **Mike-Field-Test v0.95.23, 09.05.2026 08:34-08:37 UTC:** OMNI-CQ-Pattern

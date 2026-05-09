@@ -1,6 +1,105 @@
 # HANDOFF — SimpleFT8
 
-**Stand 2026-05-09 (v0.95.24):** **P2.OMNI-PATTERN-FIX fertig — Mid-Cycle-
+**Stand 2026-05-09 (v0.95.25):** **P3.OMNI-PATTERN-FIX-2 fertig —
+QTimer-Pretrigger + Button-Label + RX-Slot-Horche.** Tests 1048 → 1069
+gruen (+21).
+
+**P3.OMNI-PATTERN-FIX-2 (NEU 09.05., post v0.95.24 Field-Test):** Mike-
+Field-Test 11:55-12:00 UTC zeigte 4 Probleme: (1) GUI-Tick-Latency macht
+Pretrigger zu spaet (cycle_pos=14.89s statt 13.7s) → v0.80 Drift-Schutz
+schiebt 2 Slots → Pattern verschoben. (2) Button-Label statisch — Mike
+sieht nicht ob OMNI aktiv → klickt mehrfach → manual_halt-Spam. (3)
+verworfen V2-L3 — User-Start hat KEIN Drift-Problem (Encoder waehlt
+next_boundary mit silence_secs > 14s). (4) RX-Slots stumm im QSO-Panel.
+
+**Loesung (R1-bestaetigt):**
+1. **QTimer.singleShot mit Qt.PreciseTimer** in `main_window.__init__`
+   initialisiert, in `mw_cycle._on_cycle_start` gestartet mit
+   `delay = (dur - 1.3s) * 1000`. Garantiertes Timing ~50ms genau
+   gegen >1500ms bei cycle_tick-Signal-Queue.
+2. **Cycle-Tick-Pretrigger als Fallback** bei `dur - 0.5s` mit
+   Log-Marker `[OMNI-Pretrigger-FALLBACK]`.
+3. **Button-Label dynamisch** via `update_omni_tx` — `OMNI CQ (aktiv)`
+   wenn aktiv, `OMNI CQ` sonst. Synchron mit Ω-Symbol.
+4. **`qso_panel.add_listening`** in RX-Slot-Skip-Pfad — Format
+   `HH:MM:SS [E/O] ←  Horche  …` in Grau (#666). Spam-begrenzt
+   durch `_auto_trim_by_age(300)`.
+
+**Voller Workflow:**
+V1 (`prompts/p3_omni_pattern_fix2_v1.md`) →
+V2 15 Lessons (`p3_omni_pattern_fix2_v2.md`, V2-L3 verwirft V1's
+User-Start-Drift-Schutz nach Code-Verifikation Encoder._next_slot
+_boundary) →
+R1 DeepSeek-Reasoner („V2 ist bereit für die Umsetzung", 0 KP, alle
+15 Lessons bestätigt) →
+V3 Compact-fest 15 ACs / 10 Tests / 3 atomare Commits
+(`p3_omni_pattern_fix2_v3.md`) →
+Mike-Freigabe → Code (3 Commits) → **Final-R1 (DeepSeek-Reasoner,
+in=82409/out=1593 Tokens: „Der Compact ist bereit für die Umsetzung.
+Ich sehe keine inhaltlichen Lücken oder Widersprüche.", 0 KP-Findings,
+alle ACs verifiziert + Risiken mitigiert)**.
+
+**Geaenderte Files (5 Code + 1 Test NEU + main.py + 4 Plan-Files):**
+- `ui/main_window.py` (Commit 1):
+  - QTimer-Init mit Qt.PreciseTimer + timeout-Connect zu
+    `_omni_pretrigger_fire_impl`
+  - `_on_omni_stopped`: `timer.stop()` zentral fuer alle Stop-Reasons
+- `ui/mw_cycle.py` (Commit 1):
+  - `_omni_pretrigger_fire_impl` NEU — gemeinsame Logik fuer QTimer +
+    Fallback (peek_next + tx_even + _was_pretriggered + _send_cq)
+  - `_on_cycle_start` startet Timer wenn OMNI active+!paused
+  - `_omni_pretrigger_check` refactored zu Fallback bei `dur-0.5s`
+- `ui/control_panel.py` (Commit 2):
+  - `update_omni_tx` setzt Button-Text synchron mit Ω-Symbol
+- `ui/qso_panel.py` (Commit 3):
+  - `add_listening(slot_start_ts, tx_even)` NEU
+- `ui/mw_qso.py` (Commit 3):
+  - `_on_send_message` RX-Slot-Skip ruft `add_listening` zusaetzlich
+- `main.py` APP_VERSION 0.95.24 → 0.95.25
+- NEU `tests/test_p3_omni_pattern_fix2.py` (21 Tests):
+  - T1, T1b: QTimer-Schedule mit korrekter Delay (FT8/FT4)
+  - T11, T12: kein Timer-Start bei inactive/paused OMNI
+  - T10: Restart-Semantik
+  - T2, T2b, T2c: Fire-Impl mit Pre-Conds, Idempotenz, RX-Slot-Skip
+  - T8, T8b, T8c: Fallback-Schwelle, Doppel-Trigger-Schutz, below-threshold
+  - T3, T3b, T3c: Button-Text aktiv/inaktiv/synced
+  - T6: RX-Slot-Skip ruft add_listening
+  - T7, T7b, T7c: add_listening Format Even/Odd/Timestamp
+  - T9, T9b: omni_stopped cancelt Timer fuer alle 7 Stop-Reasons
+  - Plus Sanity-Constant-Test
+- Plan-Files: `prompts/p3_omni_pattern_fix2_v[1-3].md`
+
+**Tests 1048 → 1069 gruen** (+21, V3 prognostizierte +10 — mehr
+Defense-Tests gefunden).
+
+**Atomare Commits (3 Code + 1 Doku):**
+- Commit 1 (QTimer+Fallback): `ui/main_window.py`, `ui/mw_cycle.py`,
+  Tests + Plan-Files
+- Commit 2 (Button-Label): `ui/control_panel.py`, Tests
+- Commit 3 (Horche+APP_VERSION): `ui/qso_panel.py`, `ui/mw_qso.py`,
+  `main.py`, Tests
+- Commit 4 (Doku, dieser): HISTORY+HANDOFF+CLAUDE+Memory
+
+**Hardware-Garantie ANT1:** unveraendert. Pretrigger emittet kein TX
+direkt, ruft `_send_cq` der via `encoder.transmit()` ueber
+`radio.set_tx_antenna("ANT1")` laeuft.
+
+**Naechster Schritt fuer Mike (Field-Test V3 §6, 7-Punkte-Plan):**
+1. Activate Test: Button-Text → „OMNI CQ (aktiv)", erste TX naechster Slot
+2. 5-Slot-Pattern Block 1: Sende [E], Sende [O], 3x „Horche …"
+3. 5-Slot-Pattern Block 2: Sende [O], Sende [E], 3x „Horche …"
+4. **10-Slot-Loop (KRITISCH):** Pattern bleibt EXAKT — Drift-Beweis
+   ohne +30s Verschiebung wie v0.95.24
+5. Toggle off: Button-Text → „OMNI CQ", QSO-Panel still
+6. HALT mid-OMNI: alles gestoppt, Button → „OMNI CQ"
+7. Mode/Band-Wechsel: OMNI stoppt automatisch, QTimer canceled
+
+**Push pending** — v0.95.16-25 + P2-Tool + P3 zusammen wenn Field-Test
+positiv.
+
+---
+
+**Vorher (09.05., v0.95.24):** **P2.OMNI-PATTERN-FIX fertig — Mid-Cycle-
 Pretrigger + Encoder-Queue.** Tests 1023 → 1048 gruen (+25 effektiv: +9
 Encoder-Queue + +16 Pattern-Fix).
 
