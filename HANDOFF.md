@@ -1,7 +1,94 @@
 # HANDOFF — SimpleFT8
 
-**Stand 2026-05-08 (v0.95.22):** **P1.OMNI-START fertig — OMNI-CQ-Toggle
-aktiviert jetzt zusaetzlich den CQ-Loop in qso_state.** Tests 1014 gruen.
+**Stand 2026-05-09 (v0.95.23):** **P2.OMNI-REDESIGN fertig — voller Refactor:
+Flag-Pattern + Pause/Resume + Auto-Rollover.** Tests 1023 gruen.
+
+**P2.OMNI-REDESIGN (NEU 09.05., post-Compact #3):** Mike-Auftrag voller
+Refactor (kein Pflaster). P1.OMNI-START hatte den OMNI-Toggle scharf gestellt
+— Mike-Field-Test bewies: CQ-Loop stirbt nach 2 TX-Slots. Bug latent seit
+v0.78. Wurzel: `core/qso_state.py:177` `_set_state(CQ_CALLING)` VOR
+`send_message.emit()`. OMNI-Filter skippt RX-Slot → State stuck → tot.
+
+**Voller Workflow:** V1 → V2(15 Lessons) → R1-Lauf-1+2 → R1-V2(Reasoner,
+304 Z., 1 KRITISCH K1 + 1 SOLLTE S1 + S2/S3) → V3(Compact-fest, 15 ACs,
+20 Tests, 7 Commits) → Mike-Freigabe → Compact #3 → Code → **Final-R1
+(„Code freigegeben. Implementierungsreif. Keine offenen Architektur- oder
+Logikfehler.")**.
+
+**R1-V2-Bewertung:**
+- K1 ⛔ ANGENOMMEN: `_on_try_replace_pending_tx` fehlte OMNI-Pause →
+  DRY-Helper `_pause_omni_if_active` für 3 Entry-Pfade.
+- S1 ❌ VERWORFEN als R1-Halluzination: DirectConnection-Code-Beweis
+  `main_window.py:597-599` (keine ConnectionType → AutoConnection bei
+  gleichem GUI-Thread → DirectConnection → emit synchron).
+- S2 ✅ ANGENOMMEN: `block_cycles`-Param komplett raus.
+- S3 ✅ ANGENOMMEN: AC14 als Integrationstest mit Listener-Mock.
+- L1/L8/L13 ✅ ANGENOMMEN: 3 Code-Kommentare.
+
+**Architektur-Highlights v0.95.23:**
+- `block_cycles=80`-Counter komplett raus (war Diversity-OPERATE_CYCLES-
+  Überrest aus v0.78). Block-Switch jetzt automatisch bei rollover
+  (slot_index 4→0).
+- Pause/Resume-Lifecycle: `_pause_omni_if_active` (3 Entry-Pfade —
+  Hunt-Klick, CQ-Reply, Replace) + `_maybe_resume_omni` (3 Exit-Pfade —
+  qso_complete, qso_confirmed, qso_timeout). „Kein Slot verschwenden":
+  Block-Wahl per nächster Slot-Parität.
+- Flag-Pattern `_omni_skip_state_change`: bei OMNI-RX-Slot setzt
+  Listener Flag → `_send_cq` macht KEINEN State-Wechsel zu CQ_CALLING
+  → on_cycle_end re-CQ greift weiter.
+- Singleton-API saubergezogen: `OmniTX()` + `get_instance()` ohne Param.
+
+**Geaenderte Files (7 Code + 4 Test + main.py + 5 Plan-Files):**
+- `core/omni_tx.py` Refactor (Konstruktor, Methoden, Singleton)
+- `core/qso_state.py` Flag-Init + `_send_cq`-Refactor + S1-Doku in
+  `_resume_cq_if_needed`
+- `core/timing.py` Docstring `is_even_cycle()` (L13)
+- `core/encoder.py` Inline-Kommentar `tx_even` (L8)
+- `ui/mw_qso.py` 2 Helpers + 3 Entry-Pfade + 3 Exit-Pfade + Flag-Pattern
+  in `_on_send_message` + `on_qso_started`-Call entfernt
+- `ui/main_window.py` Pre-QSO-Flag-Init, `start_with_parity_for_next_slot`
+  in Toggle, Pre-Flag-Reset in Stop-Slot
+- `ui/mw_cycle.py` Pause-Check in `_on_cycle_start`
+- NEU `tests/test_p2_omni_redesign.py` (20 Tests T1-T20 für AC1-AC15)
+- `tests/test_omni_tx.py` (Migration: 11 → 4 Tests, restliche in P2)
+- `tests/test_p1_omni_start.py` (API-Migration `enable` →
+  `start_with_parity_for_next_slot(True)`)
+- `tests/test_modules.py` Block (5 → 3 Tests, alte block_cycles entfernt)
+- `tests/test_patterns.py` Block (4 Tests migriert auf neue API)
+- `main.py` APP_VERSION 0.95.22 → 0.95.23
+- Plan-Files: `prompts/p2_omni_redesign_v[1,2,3].md`,
+  `prompts/p2_omni_redesign_r1_v2.md`,
+  `prompts/p2_omni_redesign_session_context_v3.md`.
+
+**Tests 1014 → 1023 gruen** (+9 effektiv: -11 alte + 20 neue,
+V3 prognostizierte +20 ohne alte-Test-Reduktion).
+
+**Hardware-Garantie ANT1:** OMNI emittet kein TX direkt, nur Slot-Filter.
+TX laeuft weiter via `encoder.transmit()` → `radio.set_tx_antenna("ANT1")`
+zentral (`core/encoder.py:334`). Final-R1 0 KP-Findings.
+
+**Naechster Schritt fuer Mike (Field-Test V3 §6):**
+1. Diversity, Easter-Egg an, btn_omni_cq sichtbar.
+2. Klick → CQ sofort + Statusbar `Ω Even=1 Odd=0`.
+3. **5+ Slots durchlaufen** (Bug-Fix-Beweis: vor v0.95.23 starb Loop nach 2
+   TX-Slots).
+4. Block-Wechsel automatisch bei Rollover (slot 4→0).
+5. CQ-Reply → QSO normal → nach RR73 OMNI-Resume mit korrekter Parität.
+6. Caller-Queue: nach QSO direkt nächstes QSO, OMNI bleibt pausiert.
+7. Toggle off → CQ stoppt, OMNI inaktiv.
+8. HALT → alles gestoppt, kein Resume.
+9. Bandwechsel/Mode-Wechsel → OMNI stoppt automatisch.
+
+**Push pending** — v0.95.16-23 + P2-Tool + P3 zusammen wenn Field-Tests
+positiv.
+
+---
+
+**Vorher (08.05.):** **P1.OMNI-START fertig (v0.95.22) — OMNI-CQ-Toggle
+aktiviert jetzt zusaetzlich den CQ-Loop in qso_state.** Tests 1003 → 1014.
+P1.OMNI-START hat den Toggle scharf gestellt aber den Bug nicht behoben
+(Stuck-State nach 2 TX-Slots). P2.OMNI-REDESIGN v0.95.23 ist der
+Architektur-Refactor der den eigentlichen Bug behebt.
 
 **P1.OMNI-START (NEU 08.05., post-Compact):** Mike-Field-Test 16:08 UTC
 (Diversity, Easter-Egg lange aktiv): Klick auf btn_omni_cq → Statusbar

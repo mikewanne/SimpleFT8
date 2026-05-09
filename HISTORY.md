@@ -5,6 +5,153 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-09 v0.95.23 — P2.OMNI-REDESIGN: Voller Refactor (Flag-Pattern + Pause/Resume + Auto-Rollover)
+
+**Mike-Auftrag 09.05.2026:** Voller Refactor, kein Pflaster. P1.OMNI-START
+(v0.95.22, 08.05.) hatte den OMNI-CQ-Toggle scharf geschaltet — Mike-Field-
+Test zeigte: CQ-Loop stirbt nach 2 TX-Slots. Bug latent seit v0.78
+(30.04.2026).
+
+**Wurzel (Code-Verifikation 09.05.):**
+- `core/qso_state.py:177` `_send_cq()` setzt `_set_state(CQ_CALLING)` VOR
+  `send_message.emit(msg)`. Bei OMNI-RX-Slot returnt der Listener
+  (`mw_qso._on_send_message`) ohne TX → State ist bereits CQ_CALLING →
+  `on_cycle_end()` greift nicht mehr → CQ-Loop tot.
+- Plus: 80-Counter-Block-Switch (Diversity-OPERATE_CYCLES-Überrest aus v0.78).
+- Plus: `_on_try_replace_pending_tx` (P1.9 Replace-Pfad) inkonsistent —
+  pausierte OMNI nicht (R1-V2 K1-Befund).
+
+**Voller Workflow:**
+V1 (`prompts/p2_omni_redesign_v1.md`) →
+V2 Self-Review 15 Lessons (`prompts/p2_omni_redesign_v2.md`) →
+R1-Lauf-1+2 (initial+truncated) →
+R1-V2 DeepSeek-Reasoner 304 Z. (`prompts/p2_omni_redesign_r1_v2.md`) →
+V3 Compact-fest 15 ACs/20 Tests/7 Commits (`prompts/p2_omni_redesign_v3.md`) →
+Mike-Freigabe → Compact #3 → Code → **Final-R1 („Code freigegeben.
+Keine Architektur- oder Logikfehler. Implementierungsreif.")**.
+
+**R1-V2-Findings (mit V3-Bewertung):**
+- K1 ⛔ ANGENOMMEN: `_on_try_replace_pending_tx` fehlte `_omni_tx.pause()`
+  → DRY-Helper `_pause_omni_if_active` für 3 Entry-Pfade.
+- S1 ❌ VERWORFEN als R1-Halluzination: R1 nahm an `_resume_cq_if_needed`
+  läuft VOR mw_qso-Listener. Code-Beweis `main_window.py:597-599` keine
+  ConnectionType → AutoConnection → bei gleichem GUI-Thread DirectConnection
+  → `qso_*.emit()` SYNCHRON → mw_qso-Slot komplett (inkl. OMNI-Resume) BEVOR
+  `_resume_cq_if_needed`. Kein ungefilterter CQ.
+- S2 ✅ ANGENOMMEN: `block_cycles`-Param komplett raus aus Konstruktor +
+  `get_instance` (klarer als „ignorieren").
+- S3 ✅ ANGENOMMEN: AC14-Test als Integrationstest mit Listener-Mock.
+- L1/L8/L13 ✅ ANGENOMMEN: 3 Code-Kommentare (Flag-Lock-Hinweis,
+  encoder.tx_even-Setter-Doku, is_even_cycle-Docstring).
+
+**Geaenderte Files (7 Code + 4 Test + main.py + 4 Plan-Files):**
+
+- `core/omni_tx.py` (Refactor — Commit 1):
+  - `block_cycles`-Param + `_cycle_count` + `_pending_switch` + `enable()`
+    + `on_qso_started()` + `cycles_until_block_switch` ENTFERNT.
+  - NEU `start_with_parity_for_next_slot(next_is_even)` (Block-Wahl per
+    nächster Slot-Parität — „kein Slot verschwenden").
+  - NEU `pause()` / `resume()` / `is_paused()` (QSO-Pause friert
+    `_slot_index` ein).
+  - `advance()` ohne `qso_active`-Param, Block-Switch automatisch bei
+    rollover (slot_index 4→0).
+  - `get_instance()` ohne block_cycles-Param.
+- `core/qso_state.py` (Flag-Pattern — Commit 2):
+  - `_omni_skip_state_change: bool = False` Init.
+  - `_send_cq()`: State-Wechsel kommt NACH `emit()`, Flag-Check verhindert
+    State-Wechsel zu CQ_CALLING bei OMNI-RX-Slot.
+  - `_resume_cq_if_needed()`: S1-Doku-Top-Kommentar (DirectConnection-
+    Annahme dokumentiert für künftigen Multi-Thread-Refactor).
+- `core/timing.py` (Doku — Commit 3): `is_even_cycle()` Docstring (aktueller
+  Zyklus, NICHT der nächste — Aufrufer invertieren mit `not is_even_cycle()`).
+- `core/encoder.py` (Doku — Commit 3): `tx_even`-Inline-Kommentar (letzter
+  Setter gewinnt — Design-bedingt, jeder Pfad setzt für seinen TX die
+  korrekte Parität).
+- `ui/mw_qso.py` (Helper + Pfade — Commit 4):
+  - NEU `_pause_omni_if_active()` Helper (DRY für 3 Entry-Pfade).
+  - NEU `_maybe_resume_omni()` Helper (DRY für 3 Exit-Pfade).
+  - 3 Entry-Pfade: `_on_station_clicked`, `_on_tx_slot_for_partner`
+    (nur wenn nicht courtesy), `_on_try_replace_pending_tx` (K1-Fix).
+  - 3 Exit-Pfade: `_on_qso_complete`, `_on_qso_confirmed`, `_on_qso_timeout`.
+  - `_on_send_message`: Flag-Pattern statt `calls_made -=1`-Pflaster.
+  - `_on_state_changed`: `omni_tx.on_qso_started()` Call entfernt.
+  - `_on_qso_complete` Duplikat-Pfad ruft auch `_maybe_resume_omni()`.
+- `ui/main_window.py` (Anpassungen — Commit 5):
+  - `_omni_was_active_pre_qso: bool = False` Init.
+  - `get_instance()` ohne block_cycles.
+  - `_on_btn_omni_cq_toggled`: `start_with_parity_for_next_slot(next_is_even)`
+    statt `enable()`.
+  - `_on_omni_stopped`: setzt zusätzlich `_omni_was_active_pre_qso = False`
+    (Stop-while-QSO → kein Resume).
+- `ui/mw_cycle.py` (Pause-Check — Commit 5):
+  - `_on_cycle_start`: `if not _omni_tx.is_paused(): _omni_tx.advance()`
+    statt `_omni_tx.advance(qso_active=_in_qso)`.
+- NEU `tests/test_p2_omni_redesign.py` (Commit 6): 20 Tests T1-T20 für
+  AC1-AC15 (5-Slot-Pattern, Block-Rollover, start_with_parity, Pause/Resume,
+  Flag-Pattern, 3 Pause-Helper-Pfade, 3 Resume-Helper-Pfade, Caller-Queue-
+  Schutz, HALT, API-Cleanup).
+- `tests/test_omni_tx.py` (Migration — Commit 6): von 11 Tests auf 4 Tests
+  geschrumpft — Pattern/Block-Switch/Pause sind jetzt in test_p2_omni_redesign.
+  Bleiben: 7 Stop-Reason-Tests (parametrize) + disable-Wrapper + Initial-State
+  + Stop-Cleanup.
+- `tests/test_p1_omni_start.py` (Migration — Commit 6): API-Migration
+  `enable()` → `start_with_parity_for_next_slot(next_is_even=True)`,
+  `OmniTX(block_cycles=80)` → `OmniTX()`.
+- `tests/test_modules.py` (partielle Migration — Commit 6): 5 OMNI-Tests
+  reduziert auf 3 (block_cycles-min-Guard + qso_reset + pending_switch +
+  qso_blocks_counter ENTFERNT — Funktionalität in test_p2_omni_redesign).
+- `tests/test_patterns.py` (Migration — Commit 6): 4 OMNI-Tests migriert auf
+  neue API (block_cycles raus, enable → start_with_parity, block_switch
+  rollover-basiert).
+- `main.py` APP_VERSION 0.95.22 → 0.95.23.
+- Plan-Files: `prompts/p2_omni_redesign_v[1,2,3].md`,
+  `prompts/p2_omni_redesign_r1_v2.md`,
+  `prompts/p2_omni_redesign_session_context_v3.md`.
+
+**Tests:** 1014 → **1023 gruen (+9)**, V3 prognostizierte +20 — Differenz
+durch Migration: 11 alte test_omni_tx Tests → 4 neue (-7), test_modules
+5 → 3 (-2). Effektiv: -11 alte, +20 neue, +0 patterns/p1_omni_start = +9.
+
+**Final-R1 (DeepSeek-Reasoner, in=70027/out=1385 Tokens):**
+> Der V3-Plan ist implementierungsreif und adressiert alle Kritikpunkte aus
+> R1-V2. Die beigefügten Code-Dateien spiegeln den Plan exakt wider. Die
+> Tests sind strukturiert und decken die ACs ab. ... Es gibt keine offenen
+> Architektur- oder Logikfehler.
+
+3 kleine R1-Anmerkungen:
+- `next_is_even = not timer.is_even_cycle()` Berechnung — im Code korrekt.
+- `_main_window._omni_was_active_pre_qso`-Reference im Plan-Snippet — im
+  finalen Code direkt `self._omni_was_active_pre_qso` (QSOMixin ist Teil
+  von MainWindow). R1 hat das im Code-Review konsistent bestätigt.
+- `_maybe_resume_omni` Slot-Index-Reset → korrekt für Resume-Pfad
+  („kein Slot verschwenden" — nächster Slot wird sauber gewählt).
+
+**Atomare Commits (Plan-Reihenfolge V3 §12):**
+1. `core/omni_tx.py` Refactor (block_cycles raus, neue API)
+2. `core/qso_state.py` Flag-Pattern + Doku
+3. `core/timing.py` + `core/encoder.py` Doku-Kommentare
+4. `ui/mw_qso.py` Helper + 3 Entry- + 3 Exit-Pfade
+5. `ui/main_window.py` + `ui/mw_cycle.py` Anpassungen
+6. Tests migrieren + neue Tests
+7. APP_VERSION 0.95.23 + Doku (HISTORY+HANDOFF+CLAUDE+Memory)
+
+**Field-Test-Pflicht (vor Push):**
+- Diversity, Easter-Egg an, btn_omni_cq sichtbar.
+- Klick btn_omni_cq → CQ sofort, Statusbar `Ω Even=1 Odd=0`.
+- 5 Slots durchlaufen → CQ-Loop läuft weiter (Bug-Fix-Beweis: vor v0.95.23
+  starb der Loop nach 2 TX-Slots).
+- Block-Wechsel automatisch bei Rollover (slot 4→0).
+- CQ-Reply → QSO normal → nach RR73 OMNI-Resume mit korrekter Parität.
+- Caller-Queue voll: nach QSO bleibt OMNI pausiert, nächstes QSO sofort.
+- Toggle off → CQ stoppt, OMNI inaktiv.
+- HALT mit OMNI aktiv → alles gestoppt, kein Resume.
+- Bandwechsel → OMNI stoppt automatisch.
+
+**Push pending** — v0.95.16-23 + P2-Tool + P3 zusammen wenn Field-Tests
+positiv.
+
+---
+
 ## 2026-05-08 v0.95.22 — P1.OMNI-START: OMNI-CQ-Toggle aktiviert jetzt CQ-Loop
 
 **Mike-Field-Test 08.05.2026 16:08 UTC** (Diversity, Easter-Egg lange aktiv):
