@@ -5,6 +5,174 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-09 v0.95.24 — P2.OMNI-PATTERN-FIX: Mid-Cycle-Pretrigger + Encoder-Queue
+
+**Mike-Field-Test v0.95.23, 09.05.2026 08:34-08:37 UTC:** OMNI-CQ-Pattern
+verschoben um +30s. TX nur in Pos 0 jedes Blocks, RX-Slots kollabiert.
+Erwartete 5-Slot-Sequenz Block 1 (E-TX, O-TX, E-RX, O-RX, E-RX) wurde
+zu langem Lueckenmuster mit nur jedem 5. Slot TX.
+
+**Wurzel:** `_send_cq` lief am Slot-START via `on_cycle_end` →
+`_next_slot_boundary` berechnet TX-Slot fuer aktuellen oder naechsten
+Slot, dann Sleep bis kurz vor TX-Boundary. Bei Slot-Start-Aufruf liegt
+`overshoot=0.8s > 0.3s` (v0.80 Fix B Schwelle) → Drift-Schutz schiebt
+TX um 2 Slots weiter. OMNI-Pattern verliert Block-Synchronitaet.
+
+**Loesung (R1-bestaetigt):**
+1. **Encoder-Queue (Commit 1):** `core/encoder.py:transmit()` queut zweite
+   Message in `_pending_tx_message` statt SKIP. Worker-Loop `_tx_worker`
+   liest Queue nach jedem Inner-Run und sendet rekursiv ohne Thread-
+   Restart. `abort()` und Replace-Pfad in `_tx_worker_inner` verdraengen
+   die Queue (Notaus-Semantik / Plan-Wechsel).
+2. **Mid-Cycle-Pretrigger (Commit 2):** `ui/mw_cycle.py:_omni_pretrigger
+   _check` bei `cycle_pos > duration - 1.3s` ausgeloest, ruft
+   `omni_tx.peek_next()` (NEU, ohne State-Mutation) → setzt
+   `encoder.tx_even` + `qso_sm._was_pretriggered=True` + `qso_sm._send_cq()`.
+   `qso_state.on_cycle_end` CQ_WAIT-Branch skipt zweites `_send_cq` wenn
+   Flag True. Encoder hat Sleep-Vorlauf > 0 → kein v0.80 Drift-Schutz.
+
+**Voller Workflow:**
+V1 (`prompts/p2_omni_pattern_fix_v1.md`) →
+V2 16 Lessons + L17-Race (`prompts/p2_omni_pattern_fix_v2.md`) →
+R1 DeepSeek-Reasoner empfiehlt Variante 2 Encoder-Queue
+(`prompts/p2_omni_pattern_fix_r1.md`) →
+V3 Compact-fest 18 ACs / 16 neue Tests / 3 atomare Commits
+(`prompts/p2_omni_pattern_fix_v3.md`) → Mike-Freigabe → Compact #4 →
+Code (3 Commits) → **Final-R1 (DeepSeek-Reasoner, in=71310/out=2456
+Tokens: „Plan ist fertig zur Implementierung. ... Go for it!", 0
+KP-Findings, 5 Hinweise alle als KISS-Trade-offs / Bestaetigungen)**.
+
+**R1-Final-Findings (alle adressiert oder bewusst KISS verworfen):**
+- Logging bei Re-Trigger im selben Cycle (Cosmetic, KISS verworfen —
+  Flag verhindert Trigger korrekt, kein Log noetig).
+- `on_cycle_end` Reset im CQ_WAIT (R1 BESTAETIGT korrekt).
+- `peek_next` bei inactive OMNI (R1 BESTAETIGT, Aufrufer prueft active).
+- Mode-abhaengiger Pretrigger-Offset 1.3s (R1-Mathe: FT4/FT2
+  `sleep_dur > 0` immer eingehalten — keine Mode-Differenzierung noetig).
+- `tx_finished` nach jedem Inner-Run kein Doppel-Trigger (R1 BESTAETIGT).
+
+**Geaenderte Files (5 Code + 2 Test NEU + main.py + 4 Plan-Files):**
+
+- `core/encoder.py` (Commit 1):
+  - `__init__`: `_pending_tx_message: str | None = None` (geschuetzt
+    durch `_replace_lock`).
+  - `transmit()`: SKIP-Zweig bei `_is_transmitting` durch Queue-Pfad
+    ersetzt (`with _replace_lock: _pending_tx_message = message`).
+  - `_tx_worker`: Outer-Loop `while True:` liest `_pending_tx_message`
+    nach jedem Inner-Run, sendet weiter ohne Thread-Restart.
+    `_is_transmitting` bleibt im Loop True damit weitere `transmit()`
+    weiter queuen koennen.
+  - `abort()`: `with _replace_lock: _pending_tx_message = None` —
+    Notaus leert Queue.
+  - `_tx_worker_inner` Replace-Pfad: zusaetzlich `_pending_tx_message =
+    None` — Replace verdraengt Queue (Plan-Wechsel-Semantik).
+
+- `core/omni_tx.py` (Commit 2):
+  - `peek_next()` NEU: returnt
+    `(next_slot_index, next_block, target_even, is_tx)` OHNE
+    State-Mutation. Rollover bei `next_slot_index == 0` schaltet Block
+    um. Paritaet analog zu `should_tx`.
+
+- `core/qso_state.py` (Commit 2):
+  - `__init__`: `_was_pretriggered: bool = False`-Flag mit Doku
+    (Lebenszyklus: gesetzt von mw_cycle, reset von qso_state, beide
+    GUI-Thread → kein Lock).
+  - `on_cycle_end` CQ_WAIT-Branch: bei `_was_pretriggered=True` Flag
+    reset, KEIN zweites `_send_cq` (sonst Doppel-TX im selben Slot).
+    Sonst klassischer Pfad unveraendert.
+
+- `ui/main_window.py` (Commit 2):
+  - `_init` ergaenzt: `_omni_pretriggered: bool = False`-Flag
+    (Reentrancy-Schutz GUI-Thread, da `_on_cycle_tick` ~10 Hz feuert
+    und Schwelle ~13 Ticks breit ist).
+  - `_on_omni_stopped`: `_omni_pretriggered = False` Reset bei
+    OMNI-Stop (Re-Start sauber).
+
+- `ui/mw_cycle.py` (Commit 2):
+  - Modul-Konstante `_OMNI_PRETRIGGER_OFFSET_S = 1.3` (= |TARGET_TX_OFFSET|
+    + 0.5, FlexRadio-TX-Buffer-Latenz).
+  - `_on_cycle_tick`: ruft `_omni_pretrigger_check(sic, dur)`.
+  - `_omni_pretrigger_check` NEU: 5 Pre-Conds (`_omni_pretriggered`-Flag
+    + `omni.active && !is_paused` + `qso_sm.cq_mode` +
+    `state in (IDLE, CQ_WAIT, CQ_CALLING)` + Schwellen-Fenster). TX-Slot:
+    `peek_next` → `encoder.tx_even` + `qso_sm._was_pretriggered=True` +
+    `qso_sm._send_cq()`. RX-Slot: nur Flag setzen (Pattern-Slot via
+    `advance` weitergerueckt).
+  - `_on_cycle_start`: `_omni_pretriggered = False` Reset fuer naechsten
+    Cycle.
+
+- `ui/mw_qso.py` (Commit 2):
+  - `_on_send_message` CQ-Pfad: Pretrigger-Bypass-Pfad (wenn
+    `_was_pretriggered=True`): nur Counter-Inkrement, kein
+    `should_tx`-Check (Pretrigger hat naechsten-Slot bereits validiert).
+    Klassischer Pfad bleibt fuer Toggle-Initial-CQ + Resume-Initial-CQ.
+  - `_on_cancel` HALT: defensive `qso_sm._was_pretriggered = False`.
+
+- NEU `tests/test_encoder_queue.py` (Commit 1, 9 Tests):
+  - 3× Queue-Pfad (Active-TX, Last-One-Wins, Idle-Path).
+  - 2× Replace-Verdraengt-Queue (request_replace + Replace-Pfad-
+    Simulation).
+  - 2× Abort-Verdraengt-Queue (Standard + idempotent).
+  - 2× Init/Lock-Lifecycle (Init-None + gemeinsames `_replace_lock`).
+
+- NEU `tests/test_p2_omni_pattern_fix.py` (Commit 3, 16 Tests):
+  - T1-T6: `peek_next()` (Block 1 Pos 0/1, Rollover, Block 2 Pos 0,
+    no-mutation, RX-Tuple).
+  - T7-T11: `_was_pretriggered` Flag (Init False, Skip-Effect, Reset-
+    Effect, klassischer Pfad, CQ_WAIT-only-Wirkung).
+  - T12-T16: `_OMNI_PRETRIGGER_OFFSET_S=1.3`, peek_next idempotent,
+    inactive OMNI, paused OMNI, vollstaendige 5-Slot-Sequenz mit
+    Block-Wechsel.
+
+- `main.py` APP_VERSION 0.95.23 → 0.95.24.
+
+- Plan-Files: `prompts/p2_omni_pattern_fix_v[1-3].md` +
+  `prompts/p2_omni_pattern_fix_r1.md`.
+
+**Tests:** 1023 → **1048 gruen** (+25 effektiv: +9 Encoder-Queue
+[Commit 1] + +16 Pattern-Fix [Commit 3]). V3 prognostizierte +16 (T9-T11
+Encoder-Queue als 3 Tests gefuehrt — Defense-Tests gefunden).
+
+**Atomare Commits (3 Code + 1 Doku):**
+- Commit 1 `6a86764`: encoder.py Queue + tests/test_encoder_queue.py NEU
+  + 4 Plan-Files.
+- Commit 2 `337e4ca`: omni_tx peek_next + main_window/mw_cycle/mw_qso/
+  qso_state Pretrigger.
+- Commit 3 `0ab90a8`: tests/test_p2_omni_pattern_fix.py NEU +
+  main.py APP_VERSION.
+- Commit 4 (Doku, dieser): HISTORY+HANDOFF+CLAUDE+Memory.
+
+**Push pending** — v0.95.16-24 + P2-Tool + P3 zusammen wenn Field-Test
+positiv.
+
+**Field-Test-Pflicht (Mike, V3 §8):**
+1. Activate Test: OMNI-Toggle bei Slot N (Even/Odd egal) → erste TX im
+   naechsten Slot. Slot-Tag korrekt.
+2. Pattern Block 1: aktivieren so dass next_is_even=True → erwartet TX
+   Even, TX Odd, RX, RX, RX in 5 aufeinanderfolgenden Slots.
+3. Pattern Block 2: aktivieren so dass next_is_even=False → erwartet TX
+   Odd, TX Even, RX, RX, RX.
+4. **10-Slot-Loop (KRITISCHER BUG-FIX-BEWEIS):** 2 volle Blocks. Pattern
+   bleibt EXAKT — kein +30s Drift wie in v0.95.23.
+5. QSO-Reply mid-OMNI → QSO normal → nach RR73 OMNI-Resume mit Pos 0.
+6. Caller-Queue: nach QSO direkt naechstes QSO ohne OMNI-Resume.
+7. Toggle off → OMNI stoppt, Pre-Flag reset.
+8. HALT mid-OMNI → alles stoppt, kein Resume.
+9. Bandwechsel/Mode-Wechsel → OMNI stoppt automatisch.
+
+**Lessons:**
+- Drift-Schutz aus v0.80 ist Slot-Start-spezifisch — bei Mid-Cycle-
+  Triggern faellt er weg, weil Encoder Sleep-Vorlauf hat.
+- Pretrigger ist universelles Pattern fuer „TX im naechsten Slot
+  einplanen ohne Drift" — zukuenftige Auto-Hunt-Verbesserungen koennten
+  davon profitieren.
+- DeepSeek-R1-Mathe bei Mode-Variation (FT4/FT2 Pretrigger-Schwelle):
+  korrekte Verifikation aller Modi statt KISS-Hack.
+- Encoder-Queue-Refactor funktioniert nahtlos mit P1.9 Replace-Logic
+  (separates Lock fuer beide, gleiches `_replace_lock`).
+
+---
+
 ## 2026-05-09 v0.95.23 — P2.OMNI-REDESIGN: Voller Refactor (Flag-Pattern + Pause/Resume + Auto-Rollover)
 
 **Mike-Auftrag 09.05.2026:** Voller Refactor, kein Pflaster. P1.OMNI-START

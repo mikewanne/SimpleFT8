@@ -1,6 +1,93 @@
 # HANDOFF — SimpleFT8
 
-**Stand 2026-05-09 (v0.95.23):** **P2.OMNI-REDESIGN fertig — voller Refactor:
+**Stand 2026-05-09 (v0.95.24):** **P2.OMNI-PATTERN-FIX fertig — Mid-Cycle-
+Pretrigger + Encoder-Queue.** Tests 1023 → 1048 gruen (+25 effektiv: +9
+Encoder-Queue + +16 Pattern-Fix).
+
+**P2.OMNI-PATTERN-FIX (NEU 09.05., post v0.95.23):** Mike-Field-Test
+v0.95.23 zeigt OMNI-CQ-Pattern verschoben um +30s. TX nur in Pos 0 jedes
+Blocks, RX-Slots kollabiert. Wurzel: `_send_cq` lief am Slot-START via
+`on_cycle_end` → Encoder `overshoot=0.8s > 0.3s` → v0.80 Fix B
+(Drift-Schutz) schiebt TX um 2 Slots.
+
+**Loesung (R1-bestaetigt, V3 Variante 2 + Option E):**
+1. **Encoder-Queue (Commit 1):** `transmit()` queut zweite Message statt
+   SKIP. Worker-Loop sendet beide nacheinander. Replace + Abort
+   verdraengen die Queue.
+2. **Mid-Cycle-Pretrigger (Commit 2):** OMNI plant TX bei
+   `cycle_pos > dur - 1.3s` fuer NAECHSTEN Slot. Encoder hat dann
+   Sleep-Vorlauf > 0 → kein v0.80 Drift-Schutz triggert.
+
+**Voller Workflow:**
+V1 (`prompts/p2_omni_pattern_fix_v1.md`) →
+V2 16 Lessons + L17-Race (`v2.md`) →
+R1 DeepSeek-Reasoner empfiehlt Variante 2 Encoder-Queue (`r1.md`) →
+V3 Compact-fest 18 ACs / 16 neue Tests / 3 Commits (`v3.md`) →
+Mike-Freigabe → Compact #4 → Code → **Final-R1 („Plan ist fertig zur
+Implementierung. ... Go for it!", in=71310/out=2456 Tokens, 0 KP-Findings,
+5 Hinweise alle als KISS-Trade-offs / Bestaetigungen)**.
+
+**Geaenderte Files (5 Code + 2 Test NEU + main.py + 4 Plan-Files):**
+- `core/encoder.py` Queue-Mechanismus (Commit 1):
+  - `_pending_tx_message`-Field (geschuetzt durch `_replace_lock`)
+  - `transmit()`: SKIP-Zweig durch Queue-Pfad ersetzt
+  - `_tx_worker`: Outer-Loop liest Queue nach jedem Inner-Run
+  - `abort()`: leert Queue (Notaus-Semantik)
+  - `_tx_worker_inner` Replace-Pfad: leert Queue (Plan-Wechsel)
+- `core/omni_tx.py` `peek_next()` (Commit 2): naechster Slot voraus
+  OHNE State-Mutation → (next_idx, next_block, target_even, is_tx)
+- `core/qso_state.py` `_was_pretriggered`-Flag (Commit 2): on_cycle_end
+  CQ_WAIT-Branch skipt zweites `_send_cq` wenn Flag True
+- `ui/main_window.py` `_omni_pretriggered`-Flag (Reentrancy GUI-Thread)
+  + Reset in `_on_omni_stopped`
+- `ui/mw_cycle.py` `_OMNI_PRETRIGGER_OFFSET_S=1.3`-Konstante +
+  `_omni_pretrigger_check`-Methode + Reset in `_on_cycle_start`
+- `ui/mw_qso.py` Pretrigger-Bypass-Pfad in `_on_send_message` +
+  defensive `_was_pretriggered=False` Reset bei HALT
+- NEU `tests/test_encoder_queue.py` (9 Tests: Queue/Replace/Abort/
+  Init/Lock-Lifecycle)
+- NEU `tests/test_p2_omni_pattern_fix.py` (16 Tests: peek_next/
+  _was_pretriggered/Pretrigger-Konstante/Reentrancy/inactive/paused/
+  5-Slot-Sequenz)
+- `main.py` APP_VERSION 0.95.23 → 0.95.24
+- Plan-Files: `prompts/p2_omni_pattern_fix_v[1-3].md` +
+  `prompts/p2_omni_pattern_fix_r1.md`
+
+**Tests 1023 → 1048 gruen** (+25, V3 prognostizierte +16 — die +9
+Encoder-Queue-Tests waren in Commit 1 mit, V3 hatte sie nur als 3 Tests
+T9-T11 vorgesehen, mehr Defense-Tests gefunden).
+
+**R1-Final-Findings (alle als Hinweise / Bestaetigungen):**
+- Logging beim Re-Trigger im selben Cycle (Cosmetic, KISS verworfen)
+- on_cycle_end Reset im CQ_WAIT korrekt (BESTAETIGT)
+- peek_next bei inactive OMNI funktional (BESTAETIGT, Aufrufer prueft
+  active vorher)
+- Mode-abhaengiger Pretrigger-Offset 1.3s funktioniert fuer FT8/FT4/FT2
+  (R1 Mathe: sleep_dur immer > 0)
+- tx_finished nach jedem Inner-Run kein Doppel-Trigger (BESTAETIGT)
+
+**Hardware-Garantie ANT1:** unveraendert. OMNI emittet kein TX direkt,
+TX laeuft via `encoder.transmit()` → `radio.set_tx_antenna("ANT1")`.
+
+**Naechster Schritt fuer Mike (Field-Test V3 §8):**
+1. Activate Test: OMNI-Toggle bei Slot N → erste TX im naechsten Slot.
+2. Pattern Block 1 / Block 2: 5 aufeinanderfolgende Slots, exakte
+   E-TX/O-TX/E-RX/O-RX/E-RX bzw. O-TX/E-TX/O-RX/E-RX/O-RX.
+3. Block-Rollover: nach 5 Slots automatischer Block-Wechsel ohne Luecke.
+4. **10-Slot-Loop (KRITISCHER BUG-FIX-BEWEIS):** 2 volle Blocks. Pattern
+   bleibt EXAKT — kein +30s Drift wie in v0.95.23.
+5. QSO-Reply mid-OMNI → QSO normal → nach RR73 Resume mit Pos 0.
+6. Caller-Queue: nach QSO direkt naechstes QSO ohne OMNI-Resume.
+7. Toggle off → OMNI stoppt, Pre-Flag reset.
+8. HALT mid-OMNI → alles stoppt, kein Resume.
+9. Bandwechsel/Mode-Wechsel → OMNI stoppt automatisch.
+
+**Push pending** — v0.95.16-24 + P2-Tool + P3 zusammen wenn
+Field-Tests positiv.
+
+---
+
+**Vorher (09.05., v0.95.23):** **P2.OMNI-REDESIGN fertig — voller Refactor:
 Flag-Pattern + Pause/Resume + Auto-Rollover.** Tests 1023 gruen.
 
 **P2.OMNI-REDESIGN (NEU 09.05., post-Compact #3):** Mike-Auftrag voller
