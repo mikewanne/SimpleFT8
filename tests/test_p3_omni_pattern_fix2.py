@@ -426,6 +426,151 @@ def test_update_omni_tx_sets_button_text_inactive(app):
     assert panel.btn_omni_cq.text() == "OMNI CQ"
 
 
+# ─────────────────────────────────────────────────────────────────────
+# T7 — qso_panel.add_listening Format (Commit 3)
+# ─────────────────────────────────────────────────────────────────────
+
+
+def test_add_listening_format_even_slot(app):
+    """T7 (AC9): add_listening schreibt 'HH:MM:SS [E] ← Horche …' bei
+    Even-Slot. Format konsistent mit add_rx."""
+    from ui.qso_panel import QSOPanel
+    panel = QSOPanel()
+    panel.add_listening(slot_start_ts=1778320500.0, tx_even=True)
+    text = panel.log_view.toPlainText()
+    assert "[E]" in text
+    assert "Horche" in text
+
+
+def test_add_listening_format_odd_slot(app):
+    """T7b: Odd-Slot zeigt [O]."""
+    from ui.qso_panel import QSOPanel
+    panel = QSOPanel()
+    panel.add_listening(slot_start_ts=1778320515.0, tx_even=False)
+    text = panel.log_view.toPlainText()
+    assert "[O]" in text
+    assert "Horche" in text
+
+
+def test_add_listening_uses_slot_start_ts_not_now(app):
+    """T7c: UTC-Zeit kommt aus slot_start_ts, nicht aus time.time().
+    Pattern-konsistent mit add_tx/add_rx."""
+    import time as _t
+    from ui.qso_panel import QSOPanel
+    panel = QSOPanel()
+    # Definierter Timestamp: 1778320500 = 09:55:00 UTC (modulo 15)
+    ts = 1778320500.0
+    expected_utc = _t.strftime("%H:%M:%S", _t.gmtime(ts))
+    panel.add_listening(slot_start_ts=ts, tx_even=True)
+    text = panel.log_view.toPlainText()
+    assert expected_utc in text
+
+
+# ─────────────────────────────────────────────────────────────────────
+# T6 — RX-Slot-Skip ruft add_listening (Commit 3)
+# ─────────────────────────────────────────────────────────────────────
+
+
+def test_rx_slot_skip_calls_add_listening(app, omni_fresh):
+    """T6 (AC8): _on_send_message bei OMNI-RX-Slot-Skip ruft
+    qso_panel.add_listening. Lebenszeichen in stillen Slots."""
+    from ui.mw_qso import QSOMixin
+
+    sm = QSOStateMachine("DA1MHH", "JO31")
+    sm.cq_mode = True
+    sm._omni_skip_state_change = False
+
+    omni = OmniTX()
+    omni.start_with_parity_for_next_slot(next_is_even=True)
+    omni.advance()  # Pos 1
+    omni.advance()  # Pos 2 = RX → should_tx returnt (False, None)
+
+    stub = MagicMock()
+    stub.qso_sm = sm
+    stub.encoder = MagicMock()
+    stub._omni_tx = omni
+    stub._has_sent_cq = False
+    stub.timer = MagicMock(cycle_duration=15.0)
+    stub.qso_panel = MagicMock()
+    stub.presence_can_tx = MagicMock(return_value=True)
+
+    bound = QSOMixin._on_send_message.__get__(stub, type(stub))
+    bound("CQ DA1MHH JO31")
+
+    # add_listening wurde gerufen mit (slot_start_ts, is_even)
+    stub.qso_panel.add_listening.assert_called_once()
+    args = stub.qso_panel.add_listening.call_args
+    # Erstes Arg: float Slot-Start-Timestamp
+    assert isinstance(args[0][0], float)
+    # Zweites Arg: bool tx_even
+    assert isinstance(args[0][1], bool)
+    # qso_sm._omni_skip_state_change wurde gesetzt (RX-Skip-Flag)
+    assert sm._omni_skip_state_change is True
+    # Encoder NICHT gerufen (TX skipped)
+    stub.encoder.transmit.assert_not_called()
+
+
+# ─────────────────────────────────────────────────────────────────────
+# T9 — _on_omni_stopped ruft timer.stop() (Commit 1+2 Integration)
+# ─────────────────────────────────────────────────────────────────────
+
+
+def test_omni_stop_calls_pretrigger_timer_stop(app, omni_fresh):
+    """T9 (AC11/AC14-AC16): _on_omni_stopped cancelt pending QTimer
+    fuer ALLE Stop-Reasons. Damit greift Mode/Band/RX-Mode-Wechsel
+    automatisch (laufen alle ueber omni_stopped-Signal)."""
+    from ui.main_window import MainWindow
+
+    # Mock des MainWindow-_on_omni_stopped-Slots (zu tief verschachtelt
+    # für direkten Stub) — wir testen ueber das Signal-Pattern statt-
+    # dessen mit einem reduzierten Stub.
+    from PySide6.QtCore import QTimer
+
+    stub = MagicMock()
+    stub._omni_pretrigger_timer = MagicMock(spec=QTimer)
+    stub._omni_pretriggered = True  # vorher gesetzt
+    stub._omni_was_active_pre_qso = True  # vorher
+    stub.qso_sm = MagicMock(cq_mode=True)
+    stub.control_panel = MagicMock()
+
+    # MainWindow._on_omni_stopped binden
+    bound = MainWindow._on_omni_stopped.__get__(stub, type(stub))
+    bound("manual_halt")
+
+    # Timer.stop wurde gerufen
+    stub._omni_pretrigger_timer.stop.assert_called_once()
+    # Pretriggered-Flag invalidiert
+    assert stub._omni_pretriggered is False
+    # Pre-QSO-Flag invalidiert
+    assert stub._omni_was_active_pre_qso is False
+
+
+def test_omni_stop_works_for_all_stop_reasons(app, omni_fresh):
+    """T9b: Stop-Reason ist egal — alle laufen ueber den selben Slot.
+    Verifiziert dass mode/band/rx_mode/totmann/easter_egg/superseded
+    alle den Timer canceln."""
+    from ui.main_window import MainWindow
+    from PySide6.QtCore import QTimer
+
+    reasons = ["manual_halt", "ft_mode_change", "band_change",
+               "rx_mode_change", "totmann_expired", "easter_egg_off",
+               "superseded"]
+
+    for reason in reasons:
+        stub = MagicMock()
+        stub._omni_pretrigger_timer = MagicMock(spec=QTimer)
+        stub._omni_pretriggered = True
+        stub._omni_was_active_pre_qso = True
+        stub.qso_sm = MagicMock(cq_mode=True)
+        stub.control_panel = MagicMock()
+
+        bound = MainWindow._on_omni_stopped.__get__(stub, type(stub))
+        bound(reason)
+
+        stub._omni_pretrigger_timer.stop.assert_called_once(), (
+            f"Timer-Stop fehlt für Reason {reason}")
+
+
 def test_update_omni_tx_button_text_synced_with_omega_symbol(app):
     """T3c: Button-Text + _omni_active-Flag werden synchron im selben
     update_omni_tx-Aufruf gesetzt — kein State-Drift.

@@ -199,6 +199,20 @@ class QSOPanel(QWidget):
         tag = "[E]" if tx_even else "[O]"
         self._append_colored(f"{utc} {tag} ←  Empf.   {message}", "#44BBFF")
 
+    def add_listening(self, slot_start_ts: float, tx_even: bool):
+        """OMNI RX-Slot-Anzeige (Mike-Wunsch P3.OMNI-PATTERN-FIX-2 v0.95.25).
+
+        Lebenszeichen in stillen RX-Slots — Mike sieht dass App lauft
+        auch wenn keine Stationen decodiert wurden. Aufgerufen aus
+        mw_qso._on_send_message bei OMNI-RX-Slot-Skip.
+
+        Format wie add_rx: 'HH:MM:SS [E/O] ←  Horche  …' in Grau (#666).
+        Spam-begrenzt durch _auto_trim_by_age (5min Window).
+        """
+        utc = time.strftime("%H:%M:%S", time.gmtime(slot_start_ts))
+        tag = "[E]" if tx_even else "[O]"
+        self._append_colored(f"{utc} {tag} ←  Horche  …", "#666666")
+
     def add_qso_complete(self, their_call: str):
         """QSO als abgeschlossen markieren."""
         self._qso_count += 1

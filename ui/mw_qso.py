@@ -380,6 +380,14 @@ class QSOMixin:
                         self.qso_sm._omni_skip_state_change = True
                         print(f"[OMNI-TX] RX-Slot → skip CQ "
                               f"({self._omni_tx.slot_label})")
+                        # P3.OMNI-PATTERN-FIX-2 (v0.95.25): RX-Slot-Anzeige
+                        # im QSO-Panel — Lebenszeichen wenn nichts gesendet
+                        # wird. Mike-Wunsch: er soll sehen dass App laeuft.
+                        now = time.time()
+                        slot_dur = self.timer.cycle_duration
+                        slot_start = now - (now % slot_dur)
+                        is_even = int(slot_start / slot_dur) % 2 == 0
+                        self.qso_panel.add_listening(slot_start, is_even)
                         return
                     # TX-Slot: Encoder auf richtige Paritaet setzen
                     if target_even is not None:

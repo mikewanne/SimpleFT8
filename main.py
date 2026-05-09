@@ -13,7 +13,7 @@ import atexit
 import signal
 from pathlib import Path
 
-APP_VERSION = "0.95.24"
+APP_VERSION = "0.95.25"
 
 # ── Single-Instance-Lock — verhindert ZWEI gleichzeitige Apps ──
 # Mike-Anweisung 2026-05-05 (mehrfach!): nur EINE Instanz darf laufen.
