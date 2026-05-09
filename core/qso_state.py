@@ -123,6 +123,12 @@ class QSOStateMachine(QObject):
         self._was_cq = False            # CQ-Modus vor Hunt-Start
         self._dbg = QSODebugLog()       # QSO Debug Logger
         self._caller_queue: list = []   # Warteliste: Stationen die während QSO gerufen haben
+        # P2.OMNI-REDESIGN v4.0 (v0.95.23): Flag-Pattern fuer OMNI-RX-Slot.
+        # Listener (mw_qso._on_send_message) setzt True wenn TX wegen
+        # OMNI-RX-Slot geskippt wird → _send_cq macht KEINEN State-Wechsel
+        # zu CQ_CALLING. Vermeidet stuck-State der den CQ-Loop killt
+        # (Bug v0.78-v0.95.22: State CQ_CALLING blockierte on_cycle_end-Re-CQ).
+        self._omni_skip_state_change: bool = False
 
     def _set_state(self, new_state: QSOState):
         old = self.state.name
@@ -162,7 +168,14 @@ class QSOStateMachine(QObject):
             self._set_state(QSOState.IDLE)
 
     def _send_cq(self):
-        """CQ-Ruf senden."""
+        """CQ-Ruf senden.
+
+        P2.OMNI-REDESIGN v4.0 (v0.95.23) Flag-Pattern: State-Wechsel zu
+        CQ_CALLING kommt NACH emit(). Listener (mw_qso._on_send_message)
+        kann via _omni_skip_state_change=True signalisieren dass TX wegen
+        OMNI-RX-Slot geskippt wurde — dann bleibt der State auf vor-Wert
+        (CQ_WAIT/IDLE), on_cycle_end() triggert weiterhin den Re-CQ.
+        """
         # P1.9 Defense-in-Depth (v0.95.3): falls _pending_reply bereits
         # gesetzt ist (Race: Replace-Request kam zu spaet aber Reply ist
         # gemerkt), direkt Reply verarbeiten statt nochmal CQ zu senden.
@@ -171,11 +184,15 @@ class QSOStateMachine(QObject):
                   f"→ process statt CQ")
             self._process_cq_reply()
             return
-        self._pending_reply = None  # Alte Antwort verwerfen
         msg = f"CQ {self.my_call} {self.my_grid}"
         self._dbg.log("TX", f"Sende: '{msg}'")
-        self._set_state(QSOState.CQ_CALLING)
+        # _omni_skip_state_change: Flag wird nur im GUI-Thread (qso_sm) gesetzt
+        # und gelesen. Listener läuft via DirectConnection synchron im selben
+        # Thread → kein Lock nötig.
+        self._omni_skip_state_change = False
         self.send_message.emit(msg)
+        if not self._omni_skip_state_change:
+            self._set_state(QSOState.CQ_CALLING)
 
     def _process_cq_reply(self):
         """Gemerkte CQ-Antwort verarbeiten (nach TX-Ende)."""
@@ -391,7 +408,19 @@ class QSOStateMachine(QObject):
 
     def _resume_cq_if_needed(self):
         """Nach Timeout/Hunt: CQ wieder aufnehmen wenn vorher CQ-Modus aktiv war.
-        Wenn Warteliste nicht leer: direkt nächste Station antworten."""
+        Wenn Warteliste nicht leer: direkt nächste Station antworten.
+
+        WICHTIG (P2.OMNI-REDESIGN v4.0 S1-Doku): Aufrufer-Pattern ist
+        immer 'qso_*.emit() → _resume_cq_if_needed()'. main_window.py:597-599
+        verbindet die qso_complete/qso_confirmed/qso_timeout-Slots ohne
+        explizite ConnectionType → Qt.AutoConnection → bei gleichem
+        GUI-Thread → Qt.DirectConnection → emit() läuft synchron.
+        mw_qso-Listener (inkl. OMNI-Resume via _maybe_resume_omni) läuft
+        komplett bevor diese Methode _send_cq() aufruft → der CQ wird
+        dann durch den OMNI-Slot-Filter korrekt gefiltert. Kein
+        ungefilterter CQ. Bei künftigem Multi-Thread-Refactor explizit
+        prüfen (siehe V3 R1-V2 Halluzination-Discussion S1).
+        """
         if self.cq_mode or self._was_cq:
             self.cq_mode = True
             self.qso.timeout_cycles = 0
