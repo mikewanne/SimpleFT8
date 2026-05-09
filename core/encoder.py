@@ -53,7 +53,14 @@ class Encoder(QObject):
         self._decoder = None
         self._tx_thread = None
         self._is_transmitting = False
-        self.tx_even = None  # None=nächster Slot, True=even, False=odd
+        # tx_even: None=nächster Slot, True=even, False=odd.
+        # Wird vor jedem TX gesetzt — CQ-Pfad in _on_send_message,
+        # Hunt-Pfad in _on_station_clicked, Reply-Pfad in
+        # _on_tx_slot_for_partner, Replace-Pfad in
+        # _on_try_replace_pending_tx. Letzter Setter gewinnt — das ist
+        # Design-bedingt, jeder Pfad setzt für seinen TX die korrekte
+        # Parität. Auto-Hunt nutzt _on_station_clicked indirekt.
+        self.tx_even = None
         self._mode = "FT8"  # "FT8", "FT4", "FT2"
         # v0.80 Fix A2: cancelable sleep. abort() weckt _tx_worker_inner
         # aus dem Slot-Wait-Sleep auf — sonst schlaeft er bis zu 14s und

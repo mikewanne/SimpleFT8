@@ -55,6 +55,12 @@ class FT8Timer(QObject):
         return int(self.utc_now() / self.cycle_duration)
 
     def is_even_cycle(self) -> bool:
+        """True wenn der AKTUELL laufende Zyklus gerade Parität hat.
+
+        NICHT der nächste Zyklus. Aufrufer die wissen wollen ob der
+        nächste Slot Even ist (z.B. OMNI-Block-Wahl, CQ-Slot-Setter)
+        invertieren: ``next_is_even = not timer.is_even_cycle()``.
+        """
         return self.current_cycle_number() % 2 == 0
 
     def start(self):
