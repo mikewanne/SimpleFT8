@@ -1,15 +1,15 @@
-"""SimpleFT8 Pattern Tests — Validierung aller Antennen- und TX-Patterns.
+"""SimpleFT8 Pattern Tests — Validierung aller Antennen-Patterns.
 
 Prueft:
 - Paritaets-Verteilung (Even+Odd fuer jede Antenne)
 - Loop-Uebergang nahtlos (max N hintereinander)
 - Ratio korrekt
-- OMNI-TX Even/Odd Alternierung
+
+OMNI-CQ Pattern-Tests siehe tests/test_omni_cq_worker.py.
 """
 
 import pytest
 from core.diversity import DiversityController
-from core.omni_tx import OmniTX
 
 
 # ─── Hilfsfunktionen ─────────────────────────────────────────────────────────
@@ -299,49 +299,4 @@ def test_phase3_was_early_stopped_flag_resets_on_band_change():
     assert dc._measure_step == 0
 
 
-# ─── OMNI-TX Pattern ─────────────────────────────────────────────────────────
-
-def test_omni_tx_pattern():
-    """P2.OMNI-REDESIGN v4.0: 5-Slot-Pattern, 4 TX und 6 RX in 10 Slots."""
-    omni = OmniTX()
-    omni.start_with_parity_for_next_slot(next_is_even=True)
-    pattern = []
-    for _ in range(10):
-        send, _ = omni.should_tx()
-        pattern.append(send)
-        omni.advance()
-    tx_count = pattern.count(True)
-    rx_count = pattern.count(False)
-    assert tx_count == 4, f"Erwartet 4 TX in 10 Slots: {pattern}"
-    assert rx_count == 6, f"Erwartet 6 RX in 10 Slots: {pattern}"
-
-def test_omni_tx_even_odd_alternation():
-    """Block 1: Even zuerst, Block 2: Odd zuerst."""
-    omni = OmniTX()
-    omni.start_with_parity_for_next_slot(next_is_even=True)  # Block 1
-    # Block 1: erste TX should_tx → target_even=True (Even first)
-    send1, even1 = omni.should_tx()
-    assert send1 and even1 is True, f"Block 1 Pos 0: should be TX Even, got send={send1} even={even1}"
-    omni.advance()
-    send2, even2 = omni.should_tx()
-    assert send2 and even2 is False, f"Block 1 Pos 1: should be TX Odd, got send={send2} even={even2}"
-
-def test_omni_tx_seamless():
-    """OMNI-TX Pattern muss nahtlos loopen (5-Slot Muster, 3 Durchlaeufe)."""
-    omni = OmniTX()
-    omni.start_with_parity_for_next_slot(next_is_even=True)
-    pattern = []
-    for _ in range(15):  # 3 volle Durchlaeufe
-        send, _ = omni.should_tx()
-        pattern.append(send)
-        omni.advance()
-    assert pattern == [True,True,False,False,False] * 3
-
-def test_omni_tx_block_switch():
-    """P2.OMNI-REDESIGN v4.0: Blockwechsel automatisch bei rollover slot_index 4→0."""
-    omni = OmniTX()
-    omni.start_with_parity_for_next_slot(next_is_even=True)
-    assert omni.block == 1
-    for _ in range(5):  # 5 advances → wieder slot 0 → Block-Switch
-        omni.advance()
-    assert omni.block == 2, f"Block sollte 2 sein: {omni.block}"
+# OMNI-CQ Pattern-Tests siehe tests/test_omni_cq_worker.py (P4.OMNI-NEUBAU).

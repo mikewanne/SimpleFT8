@@ -57,46 +57,7 @@ def test_ntp_deadband():
     ntp_time.reset(keep_correction=False)
 
 
-# ── OMNI-TX (P2.OMNI-REDESIGN v4.0) ─────────────────────────────────────────
-
-def test_omni_tx_disabled():
-    """Deaktiviert → should_tx() immer True."""
-    from core.omni_tx import OmniTX
-    omni = OmniTX()
-    send, _ = omni.should_tx()
-    assert send is True
-
-
-def test_omni_tx_pattern():
-    """5-Slot-Muster: TX,TX,RX,RX,RX (zwei volle Durchlaeufe)."""
-    from core.omni_tx import OmniTX
-    omni = OmniTX()
-    omni.start_with_parity_for_next_slot(next_is_even=True)
-    pattern = []
-    for _ in range(10):
-        send, _ = omni.should_tx()
-        pattern.append("TX" if send else "RX")
-        omni.advance()
-    expected = ["TX", "TX", "RX", "RX", "RX", "TX", "TX", "RX", "RX", "RX"]
-    assert pattern == expected, f"Muster falsch: {pattern}"
-    omni.disable()
-
-
-def test_omni_tx_block_switch_on_rollover():
-    """Block-Wechsel automatisch bei rollover slot_index 4→0 (P2 v4.0).
-
-    Ersatz fuer alten test_omni_tx_block_switch (war block_cycles=10-basiert).
-    """
-    from core.omni_tx import OmniTX
-    omni = OmniTX()
-    omni.start_with_parity_for_next_slot(next_is_even=True)  # Block 1
-    assert omni.block == 1
-    # 5× advance → wieder slot_index=0 → Block-Switch
-    for _ in range(5):
-        omni.advance()
-    assert omni._slot_index == 0
-    assert omni.block == 2, f"Block nach 5 advances: {omni.block}"
-    omni.disable()
+# ── OMNI-CQ Pattern-Tests siehe tests/test_omni_cq_worker.py (P4.OMNI-NEUBAU) ─
 
 
 # ── Diversity ────────────────────────────────────────────────────────────────

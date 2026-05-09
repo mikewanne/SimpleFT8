@@ -5,6 +5,115 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-09 v0.96.0 — P4.OMNI-NEUBAU: eigenständiger OMNI-Worker, kein qso_state-Hack mehr
+
+**Architektur-Refactor nach 4 Fehlversuchen v0.95.22-25.** OMNI-CQ ist
+jetzt ein eigenes Modul `core/omni_cq.py` mit eigenem Worker-Thread und
+absolut-UTC-Slot-Boundaries (Vorbild `core/encoder.py:_tx_worker`). Kein
+`qso_state.cq_mode`-Hack, kein `cycle_tick`-Pretrigger, keine
+Encoder-Queue.
+
+**3-Schichten-Architektur (V3 §1):**
+- Normal-CQ → `qso_state.cq_mode` (unverändert)
+- OMNI-CQ → `core/omni_cq.OmniCQ` (NEU, eigener Worker)
+- Gemeinsamer QSO-Hunt-Pfad bei eingehender Antwort: Listener in
+  `mw_cycle.on_message_decoded` ruft `qso_state.start_qso(...)` —
+  selbe State-Machine wie Hunt-Klick.
+
+**Voller Workflow:** Schritt 0 (Code-Verifikation) → V1 → V2 (20
+Lessons L1-L20) → R1 (DeepSeek-Reasoner: 17/20 ✅ + 5 Findings R1-R5)
+→ V3 (961 Z., Compact-fest, alle Findings eingearbeitet) → Final-R1
+(„V3 ist implementierungsreif, 0 KP, 4 nicht-blockierende Hinweise
+F-1..F-4") → Cold-Start-Test (Mike) fand 4 weitere ⛔-Bugs in V3
+(`self._timer` falsch, `my_call`/`my_grid` als Attribut existieren
+nicht, `auto_hunt.cancel()` existiert nicht, RX-Slot-Parität
+hardcoded) → V3 §0.5 NEU mit verifizierter Code-Pfad-Tabelle → Mike-
+Freigabe → Compact → Code (8 atomare Commits).
+
+**8 atomare Commits:**
+- **C1** (`b813c53`) Migration alte OMNI-Tests RAUS — 6 Files / ~87
+  Tests gelöscht (test_p1_omni_start, test_p2_omni_redesign,
+  test_p2_omni_pattern_fix, test_p3_omni_pattern_fix2, test_omni_tx,
+  test_encoder_queue).
+- **C2** (`678fc44`) NEU `core/omni_cq.py` (~340 Z.) — `OmniCQ(QObject)`
+  mit Signals (omni_started/stopped, slot_action, cq_freq_changed,
+  counter_changed), 5-Slot-Pattern (TX-TX-RX-RX-RX), Block 1 Even-First
+  / Block 2 Odd-First, Sticky-Frequenz mit Recheck alle 4 Blöcke, R1
+  R1-R3 Defense (PRELEAD 2.0s, encoder.tx_even im Listener, Worker-
+  Join in resume_after_qso). Plus `tests/test_omni_cq_worker.py` mit
+  37 Unit-Tests (T1-T20 + 2 Bonus + parametrize-Splits).
+- **C3** (`1d76457`) `encoder.transmit(message, *, tx_even=None,
+  audio_freq_hz=None) -> bool` — atomare API, Setter unter
+  `_replace_lock` zusammen mit is_transmitting-Check. Queue
+  (`_pending_tx_message`) + Outer-Loop in `_tx_worker` raus (war
+  P2-OMNI-Workaround, nicht mehr nötig). P1.9 `request_replace` bleibt.
+- **C4** (`037806c`) Rückbau `core/qso_state.py` — `_omni_skip_state_change`
+  + `_was_pretriggered` Flags + on_cycle_end-CQ_WAIT-Pretrigger-Schutz
+  raus. `_send_cq()` wieder linear: emit + `_set_state(CQ_CALLING)`.
+- **C5** (`b58c5df`) Rückbau `ui/mw_cycle.py` — `_omni_pretrigger_check`
+  + `_omni_pretrigger_fire_impl` + `_OMNI_PRETRIGGER_OFFSET_S` raus.
+  `_on_cycle_start` ohne `omni_tx.advance()` und QTimer-Start. Plus
+  Cleanup in `main_window.py` (QTimer-Init + Connect zu nicht-
+  existierender Methode raus) + `mw_qso.py` (defensiver
+  `qso_sm._was_pretriggered=False` raus).
+- **C6** (`aa622b8`) Anschluss `main_window.py` (OmniCQ-Init + 4
+  Signal-Slots, `_on_btn_omni_cq_toggled` Rewrite ohne
+  `qso_sm.start_cq()`, R1 R4 Defense in `_on_omni_stopped`, neue Slots
+  `_on_omni_freq_changed` / `_on_omni_counter_changed` /
+  `_on_omni_slot_action`, `_update_statusbar` Ω migriert) +
+  `mw_qso.py` (`_pause_omni_if_active` API, `_maybe_resume_omni` mit
+  Caller-Queue-Pop V2-L10, `_on_tx_finished` `_last_qso_tx_even`
+  V2-L3, `_on_send_message` OMNI-Bypass-Block KOMPLETT raus,
+  `_on_cancel` HALT auf omni_cq.stop) + `mw_cycle.on_message_decoded`
+  (Listener-Pfad mit `_pause_omni_if_active` + `encoder.tx_even = not
+  msg._tx_even` + `qso_state.start_qso`, R1 R2!). Plus 14
+  Integration-Tests `tests/test_omni_cq_integration.py` (I1-I14 mit
+  `_FakeMW(QSOMixin, CycleMixin)`-Helper).
+- **C7** (`19cbada`) Stop-Trigger `mw_radio.py` (3 Stellen:
+  `_on_mode_changed` → mode_change, `_on_band_changed` → band_change,
+  `_on_rx_mode_changed` → rx_mode_change). Auto-Hunt-Coupling +
+  Totmann + HALT in `main_window` wurden bereits in C6 mitmigriert.
+- **C8** (dieser) Löschen `core/omni_tx.py` (~250 Z.) + 7 OMNI-TX-
+  Direktreferenz-Tests aus `test_modules.py` und `test_patterns.py`.
+  APP_VERSION 0.95.25 → 0.96.0. Doku (HISTORY+HANDOFF+CLAUDE+Memory).
+
+**Geänderte Files:** 15 Code/Test (1311 +, 2045 −, netto -734 Zeilen).
+NEU: `core/omni_cq.py`, `tests/test_omni_cq_worker.py`,
+`tests/test_omni_cq_integration.py`. GELÖSCHT: `core/omni_tx.py`,
+`tests/test_p1_omni_start.py`, `tests/test_p2_omni_redesign.py`,
+`tests/test_p2_omni_pattern_fix.py`, `tests/test_p3_omni_pattern_fix2.py`,
+`tests/test_omni_tx.py`, `tests/test_encoder_queue.py`.
+
+**Test-Bilanz:** 1069 → 1026 grün (-43 netto). C1 -87, C2 +37, C6 +14,
+C8 -7. Alle Tests nach jedem Commit grün.
+
+**R1-Findings R1-R5 (alle in V3+Code adressiert):**
+- R1 ⛔ `_OMNI_TX_PRELEAD_S`=2.0 (von 1.5 — 0.7s Marge zu Encoder-Wake)
+- R2 ⛔ `mw_cycle.on_message_decoded` setzt `encoder.tx_even = not
+  msg._tx_even` VOR `start_qso` (analog mw_qso:171-176)
+- R3 ⚠️ `resume_after_qso` joint alten Worker (Defense-in-Depth)
+- R4 ⚠️ `_on_omni_stopped` setzt `_omni_was_active_pre_qso=False`
+- R5 dokumentiert: 2 Antworten in 1 RX-Slot — zweite ignoriert (akzeptabel)
+
+**Final-R1-Hinweise F-1..F-4:** alle in V3 §4 dokumentiert,
+nicht-blockierend, kein zusätzlicher Code-Change nötig.
+
+**Hardware-Garantie ANT1:** OMNI emittet kein TX direkt — ruft
+`encoder.transmit(...)` auf, der zentral
+`radio.set_tx_antenna("ANT1")` setzt (`core/encoder.py:334`). Kein
+Extra-Check nötig.
+
+**Field-Test-Pflicht (Mike, vor Push):** V3 §6 17-Punkte-Plan F1-F17
+(10-Slot-Loop = Pattern-Beweis, Block-Wechsel slot 4→0, CQ-Antwort
+mid-OMNI mit Resume + Block-Wahl, alle 5 Stop-Reasons,
+Auto-Hunt-Coupling in beide Richtungen, RX-Slot „Horche...",
+Caller-Queue mit OMNI-pausiert).
+
+**Push pending** — v0.95.16-0.96.0 + P2-Tool zusammen wenn Field-Test
+positiv.
+
+---
+
 ## 2026-05-09 v0.95.25 — P3.OMNI-PATTERN-FIX-2: QTimer-Pretrigger + Button-Label + RX-Slot-Horche
 
 **Mike-Field-Test v0.95.24, 09.05.2026 11:55-12:00 UTC:** OMNI-Pattern
