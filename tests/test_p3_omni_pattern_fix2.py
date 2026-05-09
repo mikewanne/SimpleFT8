@@ -401,3 +401,48 @@ def test_omni_pretrigger_offset_constant(app):
     """Sanity: _OMNI_PRETRIGGER_OFFSET_S unveraendert von P2 (1.3s)."""
     from ui.mw_cycle import _OMNI_PRETRIGGER_OFFSET_S
     assert _OMNI_PRETRIGGER_OFFSET_S == 1.3
+
+
+# ─────────────────────────────────────────────────────────────────────
+# T3 — Button-Label Update via update_omni_tx (Commit 2)
+# ─────────────────────────────────────────────────────────────────────
+
+
+def test_update_omni_tx_sets_button_text_active(app):
+    """T3 (AC3-AC5): update_omni_tx(True) setzt Button-Label
+    'OMNI CQ (aktiv)'. Mike sieht damit eindeutig ob OMNI aktiv ist."""
+    from ui.control_panel import ControlPanel
+    panel = ControlPanel()
+    panel.update_omni_tx(True)
+    assert panel.btn_omni_cq.text() == "OMNI CQ (aktiv)"
+
+
+def test_update_omni_tx_sets_button_text_inactive(app):
+    """T3b: update_omni_tx(False) setzt Button-Label 'OMNI CQ'."""
+    from ui.control_panel import ControlPanel
+    panel = ControlPanel()
+    panel.update_omni_tx(True)   # erst auf aktiv
+    panel.update_omni_tx(False)  # dann zurueck
+    assert panel.btn_omni_cq.text() == "OMNI CQ"
+
+
+def test_update_omni_tx_button_text_synced_with_omega_symbol(app):
+    """T3c: Button-Text + _omni_active-Flag werden synchron im selben
+    update_omni_tx-Aufruf gesetzt — kein State-Drift.
+
+    Note: isVisible() greift im offscreen-Modus nicht zuverlaessig
+    (Parent nicht visible). Wir pruefen statt dessen das interne
+    _omni_active-Flag das von update_omni_tx gesetzt wird.
+    """
+    from ui.control_panel import ControlPanel
+    panel = ControlPanel()
+    # Initial: inaktiv
+    assert panel.btn_omni_cq.text() == "OMNI CQ"
+    # Aktiv
+    panel.update_omni_tx(True)
+    assert panel.btn_omni_cq.text() == "OMNI CQ (aktiv)"
+    assert panel._omni_active is True
+    # Wieder inaktiv
+    panel.update_omni_tx(False)
+    assert panel.btn_omni_cq.text() == "OMNI CQ"
+    assert panel._omni_active is False

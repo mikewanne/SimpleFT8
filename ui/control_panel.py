@@ -1625,7 +1625,12 @@ class ControlPanel(QWidget):
         )
 
     def update_omni_tx(self, active: bool) -> None:
-        """Ω-Symbol ein-/ausblenden je nach OMNI-TX Status."""
+        """Ω-Symbol + Button-Text ein-/ausblenden je nach OMNI-TX Status.
+
+        P3.OMNI-PATTERN-FIX-2 (v0.95.25): Button-Label dynamisch.
+        Mike-Wunsch 09.05.2026: ohne Aktiv-Status-Anzeige klickt er
+        mehrfach aus Unsicherheit → manual_halt-Spam.
+        """
         self._omni_active = active
         self._omni_symbol.setVisible(active)
         color = "#222" if active else "#333"
@@ -1633,6 +1638,10 @@ class ControlPanel(QWidget):
             f"color: {color}; font-family: {_FONT}; font-size: 10px; "
             "border: none; background: transparent;"
         )
+        if hasattr(self, 'btn_omni_cq'):
+            self.btn_omni_cq.setText(
+                "OMNI CQ (aktiv)" if active else "OMNI CQ"
+            )
 
     def update_propagation(self, conditions, active_band: Optional[str] = None) -> None:
         """Propagations-Balken unter Band-Buttons aktualisieren.
