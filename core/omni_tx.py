@@ -1,4 +1,4 @@
-"""OMNI-TX v3.2 — Automatische Slot-Rotation für maximale CQ-Reichweite.
+"""OMNI-TX v4.0 — Automatische Slot-Rotation für maximale CQ-Reichweite.
 
 Konzept:
   Normales CQ erreicht nur 50% aller aktiven Operatoren pro Zyklus
@@ -10,14 +10,24 @@ Konzept:
   Trotzdem ~20-30% mehr CQ-Antworten durch doppelte Hörerbasis.
 
 5-Slot-Muster (wiederholt sich):
-  Position 0: TX  ← Even oder Odd je nach Startparität
-  Position 1: TX  ← entgegengesetzter Slot
+  Position 0: TX  ← Even oder Odd je nach Block
+  Position 1: TX  ← entgegengesetzte Paritaet
   Position 2: RX
   Position 3: RX
   Position 4: RX  ← extra Hörslot für sauberen Übergang
 
-Block-Wechsel nach block_cycles Zyklen (Plan v3.2 Default: 80).
-Bei QSO-Start: Zähler zurücksetzen (aktueller Block läuft weiter).
+Block 1: E-TX, O-TX, E-RX, O-RX, E-RX
+Block 2: O-TX, E-TX, O-RX, E-RX, O-RX
+
+Block-Switch v4.0 (P2.OMNI-REDESIGN):
+  Automatisch bei rollover (slot_index 4→0). Kein 80-Zyklen-Counter mehr
+  (war Diversity-OPERATE_CYCLES-Überrest aus v0.78).
+
+Pause/Resume v4.0:
+  Während QSO friert _slot_index ein (pause). Nach QSO ruft mw_qso
+  start_with_parity_for_next_slot(next_is_even) — Block neu gewählt damit
+  kein Slot verschwendet wird ("kein Slot verschwenden":
+  next_is_even → Block 1, sonst Block 2).
 """
 
 from __future__ import annotations
@@ -41,11 +51,13 @@ class OmniTX(QObject):
     und Qt-Lifecycle (deleteLater etc.) greift.
 
     Verwendung:
-        omni = OmniTX(block_cycles=80)
-        # Zu Beginn jedes Zyklus:
-        if omni.active and not omni.should_tx():
-            skip_tx_this_cycle()
-        omni.advance(qso_active=qso_sm.is_busy())
+        omni = OmniTX()
+        omni.start_with_parity_for_next_slot(next_is_even=True)
+        # Pro Zyklus (mw_cycle._on_cycle_start):
+        if not omni.is_paused():
+            omni.advance()
+        # Im TX-Pfad (mw_qso._on_send_message):
+        send_ok, target_even = omni.should_tx()
     """
 
     # Qt-Signal: wird bei JEDEM stop_omni_tx(reason) emittiert.
@@ -54,22 +66,14 @@ class OmniTX(QObject):
     #          "superseded"
     omni_stopped = Signal(str)
 
-    def __init__(self, block_cycles: int = 80):
-        """
-        Args:
-            block_cycles: Zyklen pro Block vor dem Wechsel.
-                          Plan v3.2: 80 (eigene OMNI-TX-Konstante seit v0.93,
-                          frueher von diversity_operate_cycles abgeleitet).
-        """
+    def __init__(self):
         super().__init__()
         self.active: bool = False
         self.block: int = 1             # Aktueller Block (1 oder 2)
-        self.block_cycles: int = max(10, block_cycles)
-        self._cycle_count: int = 0      # Zyklen im aktuellen Block
         self._slot_index: int = 0       # Position im 5-Slot-Muster (0-4)
-        self._pending_switch: bool = False  # Block-Wechsel angefordert, wartet auf Pos 0
-        self.cq_even_count: int = 0     # Zaehler: CQ auf Even gesendet
-        self.cq_odd_count: int = 0      # Zaehler: CQ auf Odd gesendet
+        self._paused: bool = False      # QSO-Pause: _slot_index friert ein
+        self.cq_even_count: int = 0     # Zaehler: CQ auf Even gesendet (Statusbar)
+        self.cq_odd_count: int = 0      # Zaehler: CQ auf Odd gesendet (Statusbar)
 
     # ─────────────────────────────────────────────────────────────────────────
     # Haupt-API
@@ -98,57 +102,72 @@ class OmniTX(QObject):
         # Block 1: Even first → Pos 0=Even, Pos 1=Odd
         # Block 2: Odd first  → Pos 0=Odd,  Pos 1=Even
         if self.block == 1:
-            target_even = (self._slot_index == 0)  # Pos 0=Even, Pos 1=Odd
+            target_even = (self._slot_index == 0)
         else:
-            target_even = (self._slot_index == 1)  # Pos 0=Odd, Pos 1=Even
+            target_even = (self._slot_index == 1)
 
         return True, target_even
 
-    def advance(self, qso_active: bool = False) -> None:
-        """Nächsten Zyklus voranschreiten.
+    def advance(self) -> None:
+        """Nächsten Slot voranschreiten (5-Slot-Muster).
 
-        Muss EINMAL pro FT8-Zyklus aufgerufen werden (nach Dekodierung).
+        Muss EINMAL pro FT8-Zyklus aufgerufen werden (mw_cycle._on_cycle_start).
+        Aufrufer muss vorher is_paused() prüfen — pausiertes OMNI hält den
+        Slot-Index fest, damit nach QSO-Ende sauber resumed wird.
 
-        Args:
-            qso_active: True wenn gerade ein QSO läuft.
-                        Bei True: Zähler wird NICHT erhöht (aktueller Block bleibt).
+        Block-Switch v4.0: automatisch bei rollover slot_index 4→0.
         """
         if not self.active:
             return
         self._slot_index = (self._slot_index + 1) % 5
-        # Pending Switch: Block-Wechsel wurde angefordert aber war nicht an Muster-Grenze
-        if self._pending_switch and self._slot_index == 0:
-            self._do_switch_block()
-            return
-        if not qso_active:
-            self._cycle_count += 1
-            if self._cycle_count >= self.block_cycles:
-                self._switch_block()
+        if self._slot_index == 0:
+            old_block = self.block
+            self.block = 2 if self.block == 1 else 1
+            logger.info(f"[OMNI-TX] Block-Rollover {old_block} → {self.block}")
 
-    def on_qso_started(self) -> None:
-        """QSO begann → Zähler zurücksetzen, Block beibehalten.
+    # ─────────────────────────────────────────────────────────────────────────
+    # Aktivierung / Pause / Stop (P2.OMNI-REDESIGN v4.0)
+    # ─────────────────────────────────────────────────────────────────────────
 
-        Begründung: der Slot läuft gerade gut, nicht unnötig wechseln.
-        Durch unterschiedliche QSO-Häufigkeit entsteht natürliche
-        Variabilität in den Block-Längen.
+    def start_with_parity_for_next_slot(self, next_is_even: bool) -> None:
+        """OMNI aktivieren mit Block-Wahl basierend auf Parität des nächsten Slots.
+
+        „Kein Slot verschwenden": Mike's Designentscheidung 09.05.2026.
+        next_is_even=True  → Block 1 (E-TX, O-TX, ...) → erste TX auf Even
+        next_is_even=False → Block 2 (O-TX, E-TX, ...) → erste TX auf Odd
+
+        Idempotent: kann auch aus Resume-Pfad aufgerufen werden während
+        active=True — überschreibt Block + Slot-Index sauber neu.
         """
-        if not self.active:
-            return
-        self._cycle_count = 0
-        logger.debug(f"[OMNI-TX] QSO begonnen → Zähler reset (Block {self.block})")
-
-    # ─────────────────────────────────────────────────────────────────────────
-    # Aktivierung / Stop
-    # ─────────────────────────────────────────────────────────────────────────
-
-    def enable(self) -> None:
-        """OMNI-TX aktivieren — Slot-Index, Block, Counter und Pending-Switch zuruecksetzen."""
-        self.active = True
-        self._cycle_count = 0
+        self.block = 1 if next_is_even else 2
         self._slot_index = 0
-        self._pending_switch = False
-        self.block = 1
-        logger.info("[OMNI-TX] Aktiviert — Even+Odd Slot-Rotation")
+        self.active = True
+        self._paused = False
+        logger.info(
+            f"[OMNI-TX] Start (next_is_even={next_is_even} → Block {self.block})"
+        )
+
+    def pause(self) -> None:
+        """OMNI während QSO pausieren — _slot_index friert ein.
+
+        QSO ist heilig (Mike 09.05.2026): nur HALT unterbricht. Pause
+        verhindert dass advance() während QSO weiterläuft, danach wird
+        per start_with_parity_for_next_slot neu gestartet.
+        """
+        self._paused = True
+
+    def resume(self) -> None:
+        """OMNI nach QSO fortsetzen — _slot_index läuft weiter.
+
+        Nicht direkt nach QSO-Ende verwendet — mw_qso ruft stattdessen
+        start_with_parity_for_next_slot mit aktueller Parität auf, damit
+        kein Slot verschwendet wird. resume() bleibt für Symmetrie/Tests.
+        """
+        self._paused = False
+
+    def is_paused(self) -> bool:
+        """True wenn OMNI pausiert ist (QSO läuft)."""
+        return self._paused
 
     def stop_omni_tx(self, reason: str) -> None:
         """OMNI-TX-Session beenden. Emittiert omni_stopped(reason).
@@ -162,19 +181,17 @@ class OmniTX(QObject):
             easter_egg_off    — Easter-Egg deaktiviert waehrend OMNI aktiv
             superseded        — Anderer Mode-Button (Auto-Hunt) wurde gestartet
 
-        Cleanup ist immer identisch: active=False, slot_index=0, cycle_count=0,
-        _pending_switch=False (Bug-Fix: sonst springt Block nach Re-enable() sofort).
+        Cleanup ist immer identisch: active=False, slot_index=0, _paused=False.
         """
         self.active = False
         self._slot_index = 0
-        self._cycle_count = 0
-        self._pending_switch = False
+        self._paused = False
         logger.info(f"[OMNI-TX] Stop (reason={reason})")
         self.omni_stopped.emit(reason)
 
     def disable(self) -> None:
         """Backwards-compat Thin-Wrapper. Bestehende Aufrufer (Easter-Egg-Disable
-        in main_window.py:546-548) bleiben funktional, neuer Pfad geht ueber
+        in main_window.py:642) bleiben funktional, neuer Pfad geht ueber
         stop_omni_tx(reason)."""
         self.stop_omni_tx("easter_egg_off")
 
@@ -188,34 +205,8 @@ class OmniTX(QObject):
         if not self.active:
             return "normal"
         action = "TX" if _TX_PATTERN[self._slot_index] else "RX"
-        return f"B{self.block} [{self._slot_index}/4] {action}"
-
-    @property
-    def cycles_until_block_switch(self) -> int:
-        """Verbleibende Zyklen bis zum nächsten Block-Wechsel."""
-        return max(0, self.block_cycles - self._cycle_count)
-
-    # ─────────────────────────────────────────────────────────────────────────
-    # Intern
-    # ─────────────────────────────────────────────────────────────────────────
-
-    def _switch_block(self) -> None:
-        """Block-Wechsel anfordern — wird an naechster Muster-Grenze (Position 0) ausgefuehrt."""
-        if self._slot_index == 0:
-            self._do_switch_block()
-        else:
-            self._pending_switch = True
-            logger.debug(f"[OMNI-TX] Block-Wechsel angefordert, warte auf Muster-Grenze "
-                         f"(aktuell Position {self._slot_index})")
-
-    def _do_switch_block(self) -> None:
-        """Block tatsaechlich wechseln (nur an Position 0)."""
-        old_block = self.block
-        self.block = 2 if self.block == 1 else 1
-        self._cycle_count = 0
-        self._pending_switch = False
-        logger.info(f"[OMNI-TX] Block {old_block} → Block {self.block} "
-                    f"(nach {self.block_cycles} Zyklen)")
+        suffix = " PAUSED" if self._paused else ""
+        return f"B{self.block} [{self._slot_index}/4] {action}{suffix}"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -225,9 +216,9 @@ class OmniTX(QObject):
 _instance: Optional[OmniTX] = None
 
 
-def get_instance(block_cycles: int = 40) -> OmniTX:
-    """Singleton-Accessor. block_cycles beim ersten Aufruf übergeben."""
+def get_instance() -> OmniTX:
+    """Singleton-Accessor. P2.OMNI-REDESIGN v4.0: kein block_cycles-Param mehr."""
     global _instance
     if _instance is None:
-        _instance = OmniTX(block_cycles=block_cycles)
+        _instance = OmniTX()
     return _instance
