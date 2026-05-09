@@ -29,40 +29,62 @@ class QSOMixin:
     Enthaelt: Station anklicken, CQ, QSO-State Callbacks, QRZ Upload.
     """
 
-    # ── P2.OMNI-REDESIGN v4.0 (v0.95.23): DRY-Helpers fuer Pause/Resume ─────
+    # ── P4.OMNI-NEUBAU (v0.96.0): DRY-Helpers fuer Pause/Resume ──────────────
 
     def _pause_omni_if_active(self) -> None:
         """OMNI pausieren + Pre-QSO-Flag setzen wenn OMNI aktiv.
 
-        Aufruf-Stellen (3 QSO-Entry-Pfade — alle zentral hier wegen K1):
+        Aufruf-Stellen (4 QSO-Entry-Pfade):
           1. _on_station_clicked (Hunt-Klick)
           2. _on_tx_slot_for_partner (CQ-Reply, nur nicht-courtesy)
-          3. _on_try_replace_pending_tx (P1.9 Replace, R1-V2 K1-Fix)
+          3. _on_try_replace_pending_tx (P1.9 Replace)
+          4. mw_cycle.on_message_decoded (OMNI-Listener — Antwort an uns)
 
         Setzt _omni_was_active_pre_qso=True damit _maybe_resume_omni
         nach QSO-Ende sauber resumed. _slot_index friert während QSO ein.
         """
-        if self._omni_tx.active:
-            self._omni_tx.pause()
+        if self._omni_cq.is_active() and not self._omni_cq.is_paused():
+            self._omni_cq.pause()
             self._omni_was_active_pre_qso = True
 
     def _maybe_resume_omni(self) -> None:
-        """OMNI nach QSO-Ende fortsetzen — nur wenn vorher aktiv und
-        Caller-Queue leer. Aufruf-Stellen: _on_qso_complete (RR73 fertig),
-        _on_qso_confirmed (73 empfangen), _on_qso_timeout.
+        """OMNI nach QSO-Ende fortsetzen — nur wenn vorher aktiv. Bei
+        Caller-Queue mit wartenden Anrufern: nächstes QSO direkt starten
+        (OMNI bleibt pausiert, V2-L10 — kein qso_state.cq_mode-Pfad mehr).
 
-        „Kein Slot verschwenden" (Mike 09.05.2026): Block-Wahl per nächster
-        Slot-Parität — next_is_even → Block 1, sonst Block 2.
+        Aufruf-Stellen: _on_qso_complete (RR73), _on_qso_confirmed (73),
+        _on_qso_timeout.
 
-        Bei nicht-leerer Caller-Queue bleibt OMNI pausiert — _resume_cq_if_needed
-        startet das nächste QSO direkt, dort greift wieder _pause_omni_if_active.
+        Block-Wahl nach letztem QSO-Slot (Mike-Spec):
+          - QSO endete auf Even → Block 2 (Odd-First)
+          - QSO endete auf Odd  → Block 1 (Even-First)
         """
         if not getattr(self, '_omni_was_active_pre_qso', False):
             return
+        # V2-L10: Caller-Queue selbst abarbeiten — OMNI hat kein qso_state.cq_mode
+        # mehr, also greift _resume_cq_if_needed nicht.
         if self.qso_sm._caller_queue:
-            return  # nächstes QSO direkt anschliessen, OMNI bleibt pausiert
-        next_is_even = not self.timer.is_even_cycle()
-        self._omni_tx.start_with_parity_for_next_slot(next_is_even)
+            next_msg = self.qso_sm._caller_queue.pop(0)
+            self.qso_sm.queue_changed.emit(
+                [m.caller for m in self.qso_sm._caller_queue])
+            their_even = getattr(next_msg, '_tx_even', None)
+            if their_even is not None:
+                self.encoder.tx_even = not their_even
+            else:
+                self.encoder.tx_even = None
+            # OMNI bleibt pausiert (idempotent — _omni_was_active_pre_qso bleibt
+            # True bis ein QSO-Exit-Pfad ohne Caller-Queue greift).
+            self.qso_sm.start_qso(
+                their_call=next_msg.caller,
+                their_grid=(next_msg.grid_or_report
+                            if next_msg.is_grid else ""),
+                freq_hz=next_msg.freq_hz,
+                their_snr=next_msg.snr,
+            )
+            return
+        # Queue leer → echtes Resume mit Block-Wahl nach letztem TX-Slot.
+        last_qso_was_even = bool(getattr(self, '_last_qso_tx_even', True))
+        self._omni_cq.resume_after_qso(last_qso_was_even)
         self._omni_was_active_pre_qso = False
 
     def _antenna_pref_label(self, call: str) -> str:
@@ -264,10 +286,12 @@ class QSOMixin:
         # P1.14 W6: Auto-Hunt freigeben (sonst dauerhaft pausiert nach HALT)
         if self._auto_hunt.active:
             self._auto_hunt.on_manual_qso_end()
-        # P1.OMNI-START (v0.95.22): OMNI ebenfalls stoppen — ohne diesen Branch
-        # blieb omni_tx.active=True nach HALT, Inkonsistenz mit Button-State.
-        if self._omni_tx.active:
-            self._omni_tx.stop_omni_tx("manual_halt")
+        # OMNI ebenfalls stoppen — ohne diesen Branch bleibt OMNI aktiv
+        # nach HALT, Inkonsistenz mit Button-State.
+        if self._omni_cq.is_active():
+            self._omni_cq.stop("manual_halt")
+        # V2-L3: Slot-Tracking sauber resetten beim HALT.
+        self._last_qso_tx_even = None
         self.qso_panel.add_info("HALT — alles gestoppt")
         self.statusBar().showMessage("HALT — CQ, QSO, TX, OMNI gestoppt", 5000)
         print("[HALT] Alles gestoppt")
@@ -325,6 +349,9 @@ class QSOMixin:
         """TX abgeschlossen — PTT aus, zurueck zu RX."""
         self.control_panel.set_tx_active(False)
         self.qso_sm.on_message_sent()
+        # V2-L3: letzten TX-Slot fuer OMNI-Block-Wahl nach QSO-Ende merken.
+        # _last_qso_tx_even=True → naechstes Resume waehlt Block 2 (Odd-First).
+        self._last_qso_tx_even = bool(self.encoder.tx_even)
         # P1.24: gepufferter Station-Klick aus TX-Phase jetzt nachholen
         # (is_transmitting ist hier False, state-Cleanup ist im
         # _on_station_clicked-TX-Pfad bereits passiert)
@@ -338,64 +365,18 @@ class QSOMixin:
     def _on_send_message(self, message: str):
         """FT8-Nachricht encoden und ueber FlexRadio senden.
 
-        P2.OMNI-REDESIGN v4.0 (v0.95.23): Flag-Pattern fuer OMNI-RX-Slot.
-        Vorher wurde calls_made-- als Pflaster benutzt, aber State blieb auf
-        CQ_CALLING haengen → on_cycle_end greift nicht mehr → CQ-Loop tot.
-        Jetzt setzt RX-Slot _omni_skip_state_change=True; qso_state._send_cq
-        ueberspringt dann den State-Wechsel, on_cycle_end re-CQ greift.
+        P4.OMNI-NEUBAU (v0.96.0): OMNI-Bypass-Block raus. OMNI hat seinen
+        eigenen Worker-Thread (core/omni_cq.py) der direkt encoder.transmit()
+        ruft — qso_state.send_message wird ausschliesslich vom Normal-CQ /
+        Hunt-Pfad emittiert.
         """
-        # Operator Presence Check (Totmannschalter, gesetzl. Pflicht DE)
+        # Operator Presence Check (Totmannschalter, gesetzl. Pflicht DE).
         # Laufende QSOs werden IMMER zu Ende gefuehrt!
         if not self.presence_can_tx():
             print(f"[Presence] TX blockiert (Operator abwesend): '{message}'")
             return
         if message.startswith("CQ "):
             self._has_sent_cq = True
-            # OMNI-TX: CQ-Slot-Steuerung mit Even/Odd Paritaet (Flag-Pattern v4.0)
-            if self._omni_tx.active:
-                # P2.OMNI-PATTERN-FIX (v0.95.24): Pretrigger-Pfad hat
-                # tx_even bereits gesetzt + naechsten-Slot-Pos validiert via
-                # peek_next + _was_pretriggered=True. should_tx wuerde hier
-                # auf den AKTUELLEN Slot pruefen — der ist aber schon
-                # vorbei. Daher Pretrigger-Bypass: Counter inkrementieren,
-                # State-Wechsel passiert wie gewohnt.
-                if getattr(self.qso_sm, '_was_pretriggered', False):
-                    if self.encoder.tx_even is True:
-                        self._omni_tx.cq_even_count += 1
-                    elif self.encoder.tx_even is False:
-                        self._omni_tx.cq_odd_count += 1
-                    print(f"[OMNI-TX] Pretrigger-TX "
-                          f"({self._omni_tx.slot_label}, naechster Slot)")
-                else:
-                    # Klassischer Pfad (Toggle-Initial-CQ, Resume-Initial-CQ):
-                    # _send_cq wurde aus on_cycle_end heraus aufgerufen,
-                    # should_tx-Filter prueft current-Slot-Pos.
-                    send_ok, target_even = self._omni_tx.should_tx()
-                    if not send_ok:
-                        # RX-Slot: TX skip + State-Wechsel-Skip via Flag
-                        self.qso_sm._omni_skip_state_change = True
-                        print(f"[OMNI-TX] RX-Slot → skip CQ "
-                              f"({self._omni_tx.slot_label})")
-                        # P3.OMNI-PATTERN-FIX-2 (v0.95.25): RX-Slot-Anzeige
-                        # im QSO-Panel — Lebenszeichen wenn nichts gesendet
-                        # wird. Mike-Wunsch: er soll sehen dass App laeuft.
-                        now = time.time()
-                        slot_dur = self.timer.cycle_duration
-                        slot_start = now - (now % slot_dur)
-                        is_even = int(slot_start / slot_dur) % 2 == 0
-                        self.qso_panel.add_listening(slot_start, is_even)
-                        return
-                    # TX-Slot: Encoder auf richtige Paritaet setzen
-                    if target_even is not None:
-                        self.encoder.tx_even = target_even
-                        parity_str = "Even" if target_even else "Odd"
-                        print(f"[OMNI-TX] TX auf {parity_str} "
-                              f"({self._omni_tx.slot_label})")
-                        # Statusbar-Counter (Even/Odd-Verteilung)
-                        if target_even:
-                            self._omni_tx.cq_even_count += 1
-                        else:
-                            self._omni_tx.cq_odd_count += 1
         print(f"[TX] → '{message}' auf {self.encoder.audio_freq_hz} Hz")
         # v0.80 Fix A2: wenn bereits ein TX gescheduled ist (z.B. alter
         # Retry-TX im Sleep), erst abbrechen. Sonst werden zwei TX-Worker

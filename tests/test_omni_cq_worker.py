@@ -76,6 +76,12 @@ def test_initial_state_inactive(app):
 # ---------------------------------------------------------------------------
 # T2 / T3 — start mit Paritaet -> Block-Wahl
 # ---------------------------------------------------------------------------
+def _block_worker_boundaries(omni: OmniCQ) -> None:
+    """Worker-Boundary auf 100s in der Zukunft mocken — Worker schlaeft
+    in stop_event.wait(100), Pattern-State bleibt stabil fuer Asserts."""
+    omni._compute_next_boundary = lambda target_even: time.time() + 100.0
+
+
 @pytest.mark.parametrize(
     "next_is_even, expected_block",
     [(True, 1), (False, 2)],
@@ -83,8 +89,7 @@ def test_initial_state_inactive(app):
 )
 def test_start_paritaet_waehlt_block(app, next_is_even, expected_block):
     omni, *_ = _make_omni()
-    # Worker-Loop sofort blockieren via stop_event-Trick: wir blockieren NICHT
-    # hier — start() spawnt den Thread, wir warten kurz und stoppen sauber.
+    _block_worker_boundaries(omni)
     omni.start(next_is_even=next_is_even)
     try:
         assert omni._block == expected_block
@@ -169,6 +174,7 @@ def test_block_rollover_after_5_slots(app):
 )
 def test_resume_after_qso_chooses_block(app, last_qso_was_even, expected_block):
     omni, *_ = _make_omni()
+    _block_worker_boundaries(omni)
     omni.start(next_is_even=True)  # erst hochfahren
     omni.pause()
     try:
@@ -184,6 +190,7 @@ def test_resume_after_qso_chooses_block(app, last_qso_was_even, expected_block):
 # ---------------------------------------------------------------------------
 def test_resume_starts_from_pos_0_always(app):
     omni, *_ = _make_omni()
+    _block_worker_boundaries(omni)
     omni.start(next_is_even=False)  # Block 2
     omni._slot_index = 3  # mid-Block einfrieren
     omni.pause()
@@ -200,6 +207,7 @@ def test_resume_starts_from_pos_0_always(app):
 # ---------------------------------------------------------------------------
 def test_pause_freezes_state(app):
     omni, *_ = _make_omni()
+    _block_worker_boundaries(omni)
     omni.start(next_is_even=True)
     omni._slot_index = 2
     omni._block_count = 7
@@ -225,6 +233,7 @@ def test_pause_freezes_state(app):
 )
 def test_stop_cleans_state(app, reason):
     omni, *_ = _make_omni()
+    _block_worker_boundaries(omni)
     captured: list[str] = []
     omni.omni_stopped.connect(lambda r: captured.append(r))
     omni.start(next_is_even=True)
@@ -368,6 +377,7 @@ def test_atomic_transmit_api_audio_freq_kwarg(app):
 # ---------------------------------------------------------------------------
 def test_resume_joins_old_worker(app):
     omni, *_ = _make_omni()
+    _block_worker_boundaries(omni)
     omni.start(next_is_even=True)
     omni.pause()
     # Faked alten Worker injizieren (lebt noch) — resume_after_qso muss joinen.

@@ -9,6 +9,7 @@ Kernlogik ist in 4 Mixins aufgeteilt:
 
 import math
 import threading
+import time
 from pathlib import Path
 
 from PySide6.QtWidgets import (
@@ -247,15 +248,24 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
 
     def _init_optional_features(self):
         """OMNI-TX (Easter Egg, Feldtest), Auto-Hunt, AP-Lite — alle deaktiviert by default."""
-        # OMNI-TX: Initialisieren (deaktiviert), Easter Egg verbinden
-        # P2.OMNI-REDESIGN v4.0 (v0.95.23): block_cycles-Counter weg
-        # (war Diversity-OPERATE_CYCLES-Überrest). Block-Switch jetzt
-        # automatisch bei slot_index 4→0 Rollover.
-        from core import omni_tx as _omni
-        self._omni_tx = _omni.get_instance()
-        # v0.78: Signal omni_stopped(reason) → UI raeumt auf
-        self._omni_tx.omni_stopped.connect(self._on_omni_stopped)
-        # v0.78: Button-Klick → start/stop_omni_tx
+        # OMNI-CQ: Initialisieren (deaktiviert) — eigener Worker-Thread
+        # mit absolut-UTC-Boundaries (P4.OMNI-NEUBAU v0.96.0). Kein
+        # qso_state.cq_mode-Hack, keine cycle_tick-Pretrigger.
+        from core.omni_cq import OmniCQ
+        self._omni_cq = OmniCQ(
+            encoder=self.encoder,
+            diversity_ctrl=self._diversity_ctrl,
+            timer=self.timer,
+            my_call=self.settings.callsign,
+            my_grid=self.settings.locator,
+        )
+        self._omni_cq.omni_stopped.connect(self._on_omni_stopped)
+        self._omni_cq.cq_freq_changed.connect(self._on_omni_freq_changed)
+        self._omni_cq.counter_changed.connect(self._on_omni_counter_changed)
+        self._omni_cq.slot_action.connect(self._on_omni_slot_action)
+        # V2-L3: letzten TX-Slot fuer Block-Wahl nach QSO-Ende tracken.
+        self._last_qso_tx_even: bool | None = None
+        # Button-Klick → start/stop OMNI
         self.control_panel.btn_omni_cq.toggled.connect(self._on_btn_omni_cq_toggled)
         self.control_panel.easter_egg_toggle_clicked.connect(self._on_easter_egg_toggle)
 
@@ -643,8 +653,8 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
             # Aktive Modi sauber stoppen — Signal-Slots kuemmern sich um UI-Cleanup
             if self._auto_hunt.active:
                 self._auto_hunt.stop_auto_hunt("easter_egg_off")
-            if self._omni_tx.active:
-                self._omni_tx.disable()  # → omni_stopped("easter_egg_off") → _on_omni_stopped
+            if self._omni_cq.is_active():
+                self._omni_cq.stop("easter_egg_off")
             # R1-Fix: 5s UI-Cooldown abbrechen wenn Button versteckt wird —
             # sonst inkonsistenter Button-State bei naechster Easter-Egg-Aktivierung
             if self._auto_hunt_cooldown_timer.isActive():
@@ -679,19 +689,17 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
     # ── OMNI-TX UI-Lifecycle (v0.78) ─────────────────────────────
 
     def _on_btn_omni_cq_toggled(self, checked: bool):
-        """User-Klick auf btn_omni_cq: enable + start CQ-Loop / stop CQ-Loop.
+        """User-Klick auf btn_omni_cq: OMNI starten/stoppen.
 
-        P1.OMNI-START (v0.95.22): Aktiviert ZUSAETZLICH den CQ-Loop in qso_state,
-        sonst greift OMNI-Slot-Filter nie. Mutually-exclusive: laufender Auto-Hunt
-        wird via "superseded" gestoppt.
+        P4.OMNI-NEUBAU (v0.96.0): OMNI ist eigenstaendig — kein
+        qso_state.cq_mode mehr. OMNI emittet selbst CQ via encoder.transmit().
+        Bei eingehender Antwort uebergibt mw_cycle.on_message_decoded
+        an qso_state.start_qso (Hunt-Pfad).
 
-        Bei aktivem QSO (state nicht in IDLE/CQ_WAIT, also QSO laeuft):
-        Toggle blockieren mit Statusbar-Hinweis. Sonst haette Mike einen
-        aktivierten Button ohne Wirkung (start_cq macht silent no-op).
+        Mutually-exclusive: laufender Auto-Hunt wird via 'superseded' gestoppt.
+        Bei aktivem QSO Toggle blockieren (UX-Hilfe — verhindert Klick-Nirvana).
         """
-        if checked and not self._omni_tx.active:
-            # P1.OMNI-START: nur wenn kein QSO laeuft. start_cq() selbst akzeptiert
-            # state in (IDLE, CQ_WAIT). Konsistent dazu blockieren wir alle anderen.
+        if checked and not self._omni_cq.is_active():
             if self.qso_sm.state not in (QSOState.IDLE, QSOState.CQ_WAIT):
                 btn = self.control_panel.btn_omni_cq
                 btn.blockSignals(True)
@@ -705,50 +713,51 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
                 return
             if self._auto_hunt.active:
                 self._auto_hunt.stop_auto_hunt("superseded")
-            # P2.OMNI-REDESIGN v4.0 (v0.95.23): start_with_parity_for_next_slot
-            # statt enable() — „kein Slot verschwenden": next_is_even → Block 1,
-            # sonst Block 2 (Mike's Designentscheidung 09.05.2026).
-            next_is_even = not self.timer.is_even_cycle()
-            self._omni_tx.start_with_parity_for_next_slot(next_is_even)
-            # P1.OMNI-START: CQ-Loop in qso_state aktivieren —
-            # OMNI-Filter in _on_send_message greift erst wenn jemand
-            # send_message("CQ ...") emittet. start_cq() macht genau das.
-            self.qso_sm.start_cq()
+            self._omni_cq.start()
             self.control_panel.update_omni_tx(True)
             self._update_statusbar()
-            print(f"[OMNI-TX] User-Start (next_is_even={next_is_even})")
-        elif not checked and self._omni_tx.active:
-            self._omni_tx.stop_omni_tx("manual_halt")
+            print("[OMNI-CQ] User-Start")
+        elif not checked and self._omni_cq.is_active():
+            self._omni_cq.stop("manual_halt")
 
     def _on_omni_stopped(self, reason: str):
-        """Slot fuer omni_stopped(reason): Button-State + Statusbar zuruecksetzen.
+        """Slot fuer OmniCQ.omni_stopped(reason): Button-State + Statusbar
+        zuruecksetzen + Pre-QSO-Flag invalidieren.
 
-        P1.OMNI-START (v0.95.22): ALLE Stop-Reasons stoppen den CQ-Loop in
-        qso_state — sonst bleibt cq_mode=True haengen waehrend OMNI nicht
-        mehr lauft. Plus _was_cq=False (R1-SOLLTE): bei Stop-while-QSO soll
-        nach QSO-Ende KEIN regulaeres CQ resumen — Mike hat OMNI bewusst
-        gestoppt.
-
-        Im Gegensatz zu Auto-Hunt KEIN UI-Reflexions-Cooldown — OMNI ist passiver,
-        kein Bot-Tarn-Schutz noetig.
+        R1 R4 KRITISCH: _omni_was_active_pre_qso explizit auf False — sonst
+        koennte ein Caller-Queue-QSO nach Stop fälschlich `_maybe_resume_omni`
+        triggern.
         """
         btn = self.control_panel.btn_omni_cq
         btn.blockSignals(True)
         btn.setChecked(False)
         btn.blockSignals(False)
-        # P1.OMNI-START: CQ-Loop stoppen (idempotent — stop_cq macht nix wenn cq_mode=False)
-        if self.qso_sm.cq_mode:
-            self.qso_sm.stop_cq()
-        # P1.OMNI-START R1-SOLLTE: bei Stop-while-QSO _was_cq invalidieren
-        # damit _resume_cq_if_needed nach QSO-Ende kein regulaeres CQ startet.
-        self.qso_sm._was_cq = False
-        # P2.OMNI-REDESIGN v4.0 (v0.95.23): Pre-QSO-Flag invalidieren —
-        # bei Stop wahrend QSO soll _maybe_resume_omni nach QSO-Ende
-        # KEIN OMNI resumen (Mike hat OMNI bewusst gestoppt).
         self._omni_was_active_pre_qso = False
+        # V2-L3 Defense-in-Depth: Slot-Tracking nullen.
+        self._last_qso_tx_even = None
         self.control_panel.update_omni_tx(False)
         self._update_statusbar()
-        print(f"[OMNI-TX-UI] Stop ({reason})")
+        print(f"[OMNI-CQ-UI] Stop ({reason})")
+
+    def _on_omni_freq_changed(self, freq_hz: int):
+        """OMNI hat neue CQ-Audiofrequenz gewählt (Sticky-Gap-Algo)."""
+        print(f"[OMNI-CQ] CQ-Audiofrequenz: {freq_hz} Hz")
+        self._update_statusbar()
+
+    def _on_omni_counter_changed(self, even: int, odd: int):
+        """OMNI Even/Odd-Counter geändert — Statusbar aktualisieren."""
+        self._update_statusbar()
+
+    @Slot(str, bool, bool)
+    def _on_omni_slot_action(self, label: str, is_tx: bool, target_even: bool):
+        """OMNI-Worker emittet Slot-Action — RX-Slots als „Horche..." anzeigen.
+
+        TX-Slots laufen ohnehin ueber encoder.tx_started → qso_panel.add_tx,
+        also zeigen wir hier nur RX-Slots. target_even ist die echte
+        UTC-Slot-Paritaet (V2-L8).
+        """
+        if not is_tx:
+            self.qso_panel.add_listening(time.time(), target_even)
 
     # ── Auto-Hunt UI-Lifecycle (v0.75) ───────────────────────────
 
@@ -758,8 +767,8 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         Mutually-exclusive: laufendes OMNI-TX wird via "superseded" gestoppt.
         """
         if checked and not self._auto_hunt.active:
-            if self._omni_tx.active:
-                self._omni_tx.stop_omni_tx("superseded")
+            if self._omni_cq.is_active():
+                self._omni_cq.stop("superseded")
             self._auto_hunt.start_auto_hunt(600)
             self._auto_hunt_polling_timer.start()
             self._on_auto_hunt_polling_tick()  # initialer Text-Set
@@ -974,9 +983,9 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
             "diversity": "DIVERSITY",
         }
         mode_str = mode_labels.get(self._rx_mode, "Normal")
-        if getattr(self, '_omni_tx', None) and self._omni_tx.active:
-            omni_str = (f"  Ω Even={self._omni_tx.cq_even_count} "
-                        f"Odd={self._omni_tx.cq_odd_count}")
+        if getattr(self, '_omni_cq', None) and self._omni_cq.is_active():
+            omni_str = (f"  Ω Even={self._omni_cq.cq_even_count} "
+                        f"Odd={self._omni_cq.cq_odd_count}")
         else:
             omni_str = ""
         # DT-Korrektur Status — nur DT-Label gruen, Statusbar bleibt grau
@@ -1114,8 +1123,8 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
             if self._auto_hunt.active:
                 self._auto_hunt.stop_auto_hunt("totmann_expired")
             # v0.78: OMNI-TX bei Totmann-Expire stoppen (analog Auto-Hunt)
-            if self._omni_tx.active:
-                self._omni_tx.stop_omni_tx("totmann_expired")
+            if self._omni_cq.is_active():
+                self._omni_cq.stop("totmann_expired")
             # CQ stoppen (aber laufendes QSO zu Ende fuehren!)
             if self.qso_sm.cq_mode:
                 # Nur CQ stoppen wenn KEIN aktives QSO laeuft

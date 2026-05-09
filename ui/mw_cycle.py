@@ -805,4 +805,27 @@ class CycleMixin:
                 slot_start_ts=getattr(msg, '_slot_start_ts', None),
             )
 
+        # P4.OMNI-NEUBAU (v0.96.0) Listener-Pfad: wenn OMNI live + nicht
+        # pausiert + Antwort an uns (kein 73, kein RR73) → OMNI pausieren,
+        # encoder.tx_even auf Gegenparitaet setzen (R1 R2!), dann via
+        # qso_state.start_qso an Hunt-State-Machine uebergeben. KEIN
+        # qso_sm.on_message_received danach (start_qso konsumiert die Antwort).
+        if (self._omni_cq.is_active()
+                and not self._omni_cq.is_paused()
+                and msg.target == self.settings.callsign
+                and not msg.is_73 and not msg.is_rr73):
+            self._pause_omni_if_active()
+            their_even = getattr(msg, '_tx_even', None)
+            if their_even is not None:
+                self.encoder.tx_even = not their_even
+            else:
+                self.encoder.tx_even = None
+            self.qso_sm.start_qso(
+                their_call=msg.caller,
+                their_grid=msg.grid_or_report if msg.is_grid else "",
+                freq_hz=msg.freq_hz,
+                their_snr=msg.snr,
+            )
+            return
+
         self.qso_sm.on_message_received(msg)
