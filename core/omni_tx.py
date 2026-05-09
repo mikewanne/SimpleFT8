@@ -125,6 +125,34 @@ class OmniTX(QObject):
             self.block = 2 if self.block == 1 else 1
             logger.info(f"[OMNI-TX] Block-Rollover {old_block} → {self.block}")
 
+    def peek_next(self) -> tuple:
+        """Schaut den nächsten Slot voraus OHNE State-Mutation.
+
+        P2.OMNI-PATTERN-FIX (v0.95.24): Mid-Cycle-Pretrigger braucht zu
+        wissen welche Paritaet/Block der naechste Slot haben wird, bevor
+        advance() den State weiterbewegt. Returnt das was advance() +
+        should_tx() in 1 Slot zurueckliefern wuerden.
+
+        Returns:
+            (next_slot_index, next_block, target_even, is_tx)
+            - is_tx=False  → RX-Slot, target_even ist None
+            - is_tx=True   → TX-Slot, target_even ist True/False (Even/Odd)
+        """
+        next_slot_index = (self._slot_index + 1) % 5
+        next_block = self.block
+        if next_slot_index == 0:
+            # Rollover → Block wechselt
+            next_block = 2 if self.block == 1 else 1
+        is_tx = _TX_PATTERN[next_slot_index]
+        if not is_tx:
+            return next_slot_index, next_block, None, False
+        # TX-Slot: Paritaet bestimmen (analog should_tx)
+        if next_block == 1:
+            target_even = (next_slot_index == 0)
+        else:
+            target_even = (next_slot_index == 1)
+        return next_slot_index, next_block, target_even, True
+
     # ─────────────────────────────────────────────────────────────────────────
     # Aktivierung / Pause / Stop (P2.OMNI-REDESIGN v4.0)
     # ─────────────────────────────────────────────────────────────────────────

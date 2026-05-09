@@ -224,6 +224,12 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         # Gesetzt von _pause_omni_if_active in 3 Entry-Pfaden, geloescht
         # bei Resume oder bei OMNI-HALT/Stop.
         self._omni_was_active_pre_qso: bool = False
+        # P2.OMNI-PATTERN-FIX (v0.95.24): Pretrigger-Reentrancy-Schutz.
+        # Verhindert dass _on_cycle_tick den Pretrigger im selben Cycle
+        # mehrfach ausloest (cycle_tick feuert ~10 Hz, Schwellen-Fenster
+        # ist 1.3s breit → ~13 Ticks). Reset in _on_cycle_start (neuer
+        # Slot) + _on_cancel (HALT) + _on_omni_stopped.
+        self._omni_pretriggered: bool = False
         # P3 v0.95.20: Audio-Dump-Settings (in mw_cycle._on_cycle_decoded gelesen)
         self._audio_dump_enabled = self.settings.get("audio_dump_enabled", False)
         self._audio_dump_max_files = self.settings.get("audio_dump_max_files", 200)
@@ -746,6 +752,9 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         # bei Stop wahrend QSO soll _maybe_resume_omni nach QSO-Ende
         # KEIN OMNI resumen (Mike hat OMNI bewusst gestoppt).
         self._omni_was_active_pre_qso = False
+        # P2.OMNI-PATTERN-FIX (v0.95.24): Pretrigger-Flag reset, sonst
+        # bleibt bei Re-Start (Toggle off→on) ein veralteter Trigger.
+        self._omni_pretriggered = False
         self.control_panel.update_omni_tx(False)
         self._update_statusbar()
         print(f"[OMNI-TX-UI] Stop ({reason})")

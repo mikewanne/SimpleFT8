@@ -17,6 +17,14 @@ from core import ntp_time
 from core.station_accumulator import accumulate_stations
 from radio.presets import PREAMP_PRESETS
 
+# P2.OMNI-PATTERN-FIX (v0.95.24): Mid-Cycle-Pretrigger-Schwelle.
+# Encoder schlaeft bis next_boundary - 1.3s (TARGET_TX_OFFSET) und
+# braucht von dort sleep_dur > 0 — sonst greift v0.80 Fix B Drift-
+# Schutz und schiebt TX um 2 Slots. Wir triggern _send_cq mid-cycle
+# bei cycle_pos > duration - PRETRIGGER_OFFSET → encoder hat sleep
+# Vorlauf > 0. 1.3s = FlexRadio-TX-Buffer-Latenz (= |TARGET_TX_OFFSET|).
+_OMNI_PRETRIGGER_OFFSET_S = 1.3
+
 
 def compute_local_conditions(stations: dict) -> tuple[int, int, float]:
     """P1.19/P1.21: 5-Sterne-Empfang-Score aus Stations-Dict.
@@ -571,9 +579,65 @@ class CycleMixin:
         if not self.rx_panel._rx_active:
             return
         self.control_panel.update_cycle_bar(seconds_in_cycle, cycle_duration)
+        # P2.OMNI-PATTERN-FIX (v0.95.24): Mid-Cycle-Pretrigger fuer OMNI.
+        # Loest _send_cq fuer den NAECHSTEN Slot bei cycle_pos > dur-1.3s
+        # aus, sodass Encoder Sleep-Vorlauf hat und kein v0.80 Drift-Schutz
+        # triggert. Pattern bleibt korrekt.
+        self._omni_pretrigger_check(seconds_in_cycle, cycle_duration)
+
+    def _omni_pretrigger_check(self, sic: float, dur: float) -> None:
+        """Mid-Cycle-Pretrigger fuer OMNI.
+
+        P2.OMNI-PATTERN-FIX (v0.95.24): Wurzel der +30s-Pattern-Drift war
+        dass _send_cq am Slot-START (via on_cycle_end) lief → Encoder
+        overshoot=0.8s > 0.3s → v0.80 Fix B verschob TX um 2 Slots.
+
+        Loesung: bei cycle_pos > duration - 1.3s _send_cq fuer NAECHSTEN
+        Slot ausloesen. Encoder kommt aus Sleep mit Vorlauf, kein Drift.
+
+        Pre-Conds (alle Bedingungen muessen wahr sein):
+        - OMNI active + nicht paused
+        - cq_mode (sonst keine CQ-Loop)
+        - state in IDLE/CQ_WAIT/CQ_CALLING (kein QSO laufend)
+        - Reentrancy-Flag _omni_pretriggered=False
+        - cycle_pos im Schwellen-Fenster
+        """
+        if self._omni_pretriggered:
+            return
+        if not self._omni_tx.active or self._omni_tx.is_paused():
+            return
+        if not self.qso_sm.cq_mode:
+            return
+        if self.qso_sm.state not in (QSOState.IDLE, QSOState.CQ_WAIT,
+                                      QSOState.CQ_CALLING):
+            return
+        threshold = dur - _OMNI_PRETRIGGER_OFFSET_S
+        if sic < threshold:
+            return
+        # Pretrigger ausfuehren (atomar via Flag)
+        self._omni_pretriggered = True
+        next_idx, next_block, target_even, is_tx = self._omni_tx.peek_next()
+        if not is_tx:
+            # RX-Slot: Pattern-Slot wird via advance() in _on_cycle_start
+            # weitergerueckt, kein _send_cq. Flag bleibt True (verhindert
+            # Re-Trigger im selben Cycle), wird in _on_cycle_start reset.
+            return
+        # TX-Slot: Encoder hat Sleep-Vorlauf (sleep_dur > 0)
+        self.encoder.tx_even = target_even
+        # Pretrigger-Flag in qso_sm setzen damit on_cycle_end im naechsten
+        # Slot KEIN doppeltes _send_cq triggert (V3 §2.5).
+        self.qso_sm._was_pretriggered = True
+        self.qso_sm._send_cq()
+        print(f"[OMNI-Pretrigger] Pos {next_idx} Block {next_block} "
+              f"target_even={target_even} cycle_pos={sic:.2f}s")
 
     @Slot(int, bool)
     def _on_cycle_start(self, cycle_num: int, is_even: bool):
+        # P2.OMNI-PATTERN-FIX (v0.95.24): Pretrigger-Flag fuer naechsten
+        # Cycle reset. Erstes _on_cycle_tick im neuen Slot kann dann
+        # wieder pretriggern (sobald Schwelle erreicht).
+        self._omni_pretriggered = False
+
         # ── Anzeige zurücksetzen wenn kein TX ──────────────────
         if not self.encoder.is_transmitting:
             self.control_panel.update_tx_peak(0.0)

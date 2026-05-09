@@ -268,6 +268,10 @@ class QSOMixin:
         # blieb omni_tx.active=True nach HALT, Inkonsistenz mit Button-State.
         if self._omni_tx.active:
             self._omni_tx.stop_omni_tx("manual_halt")
+        # P2.OMNI-PATTERN-FIX (v0.95.24): Pretrigger-Flags fuer sauberen
+        # Re-Start invalidieren. _on_omni_stopped resettet self._omni_pretriggered
+        # bereits — hier defensiv zusaetzlich qso_sm._was_pretriggered.
+        self.qso_sm._was_pretriggered = False
         self.qso_panel.add_info("HALT — alles gestoppt")
         self.statusBar().showMessage("HALT — CQ, QSO, TX, OMNI gestoppt", 5000)
         print("[HALT] Alles gestoppt")
@@ -353,22 +357,41 @@ class QSOMixin:
             self._has_sent_cq = True
             # OMNI-TX: CQ-Slot-Steuerung mit Even/Odd Paritaet (Flag-Pattern v4.0)
             if self._omni_tx.active:
-                send_ok, target_even = self._omni_tx.should_tx()
-                if not send_ok:
-                    # RX-Slot: TX skip + State-Wechsel-Skip via Flag
-                    self.qso_sm._omni_skip_state_change = True
-                    print(f"[OMNI-TX] RX-Slot → skip CQ ({self._omni_tx.slot_label})")
-                    return
-                # TX-Slot: Encoder auf richtige Paritaet setzen
-                if target_even is not None:
-                    self.encoder.tx_even = target_even
-                    parity_str = "Even" if target_even else "Odd"
-                    print(f"[OMNI-TX] TX auf {parity_str} ({self._omni_tx.slot_label})")
-                    # Statusbar-Counter (Even/Odd-Verteilung)
-                    if target_even:
+                # P2.OMNI-PATTERN-FIX (v0.95.24): Pretrigger-Pfad hat
+                # tx_even bereits gesetzt + naechsten-Slot-Pos validiert via
+                # peek_next + _was_pretriggered=True. should_tx wuerde hier
+                # auf den AKTUELLEN Slot pruefen — der ist aber schon
+                # vorbei. Daher Pretrigger-Bypass: Counter inkrementieren,
+                # State-Wechsel passiert wie gewohnt.
+                if getattr(self.qso_sm, '_was_pretriggered', False):
+                    if self.encoder.tx_even is True:
                         self._omni_tx.cq_even_count += 1
-                    else:
+                    elif self.encoder.tx_even is False:
                         self._omni_tx.cq_odd_count += 1
+                    print(f"[OMNI-TX] Pretrigger-TX "
+                          f"({self._omni_tx.slot_label}, naechster Slot)")
+                else:
+                    # Klassischer Pfad (Toggle-Initial-CQ, Resume-Initial-CQ):
+                    # _send_cq wurde aus on_cycle_end heraus aufgerufen,
+                    # should_tx-Filter prueft current-Slot-Pos.
+                    send_ok, target_even = self._omni_tx.should_tx()
+                    if not send_ok:
+                        # RX-Slot: TX skip + State-Wechsel-Skip via Flag
+                        self.qso_sm._omni_skip_state_change = True
+                        print(f"[OMNI-TX] RX-Slot → skip CQ "
+                              f"({self._omni_tx.slot_label})")
+                        return
+                    # TX-Slot: Encoder auf richtige Paritaet setzen
+                    if target_even is not None:
+                        self.encoder.tx_even = target_even
+                        parity_str = "Even" if target_even else "Odd"
+                        print(f"[OMNI-TX] TX auf {parity_str} "
+                              f"({self._omni_tx.slot_label})")
+                        # Statusbar-Counter (Even/Odd-Verteilung)
+                        if target_even:
+                            self._omni_tx.cq_even_count += 1
+                        else:
+                            self._omni_tx.cq_odd_count += 1
         print(f"[TX] → '{message}' auf {self.encoder.audio_freq_hz} Hz")
         # v0.80 Fix A2: wenn bereits ein TX gescheduled ist (z.B. alter
         # Retry-TX im Sleep), erst abbrechen. Sonst werden zwei TX-Worker

@@ -129,6 +129,13 @@ class QSOStateMachine(QObject):
         # zu CQ_CALLING. Vermeidet stuck-State der den CQ-Loop killt
         # (Bug v0.78-v0.95.22: State CQ_CALLING blockierte on_cycle_end-Re-CQ).
         self._omni_skip_state_change: bool = False
+        # P2.OMNI-PATTERN-FIX (v0.95.24): Pretrigger-Flag.
+        # Wird von mw_cycle._omni_pretrigger_check gesetzt VOR _send_cq.
+        # on_cycle_end (am Slot-Start) prueft + reset es: bei True KEIN
+        # zweites _send_cq (sonst Doppel-TX im selben Slot).
+        # Lebenszyklus: gesetzt von mw_cycle (GUI-Thread), reset von
+        # qso_state (GUI-Thread) — kein Lock noetig.
+        self._was_pretriggered: bool = False
 
     def _set_state(self, new_state: QSOState):
         old = self.state.name
@@ -337,7 +344,13 @@ class QSOStateMachine(QObject):
             # TX-Slot → RX-Slot (1 Zyklus warten) → TX-Slot
             self.qso.timeout_cycles += 1
             if self.qso.timeout_cycles >= 1 and self.cq_mode:
-                self._send_cq()
+                # P2.OMNI-PATTERN-FIX (v0.95.24): Pretrigger lief mid-cycle
+                # bereits → Slot ist schon „verbraucht". Flag reset, kein
+                # zweites _send_cq (sonst Doppel-TX im selben Slot).
+                if self._was_pretriggered:
+                    self._was_pretriggered = False
+                else:
+                    self._send_cq()
             return
 
         if self.state in (QSOState.WAIT_REPORT, QSOState.WAIT_RR73):
