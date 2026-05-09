@@ -268,10 +268,6 @@ class QSOMixin:
         # blieb omni_tx.active=True nach HALT, Inkonsistenz mit Button-State.
         if self._omni_tx.active:
             self._omni_tx.stop_omni_tx("manual_halt")
-        # P2.OMNI-PATTERN-FIX (v0.95.24): Pretrigger-Flags fuer sauberen
-        # Re-Start invalidieren. _on_omni_stopped resettet self._omni_pretriggered
-        # bereits — hier defensiv zusaetzlich qso_sm._was_pretriggered.
-        self.qso_sm._was_pretriggered = False
         self.qso_panel.add_info("HALT — alles gestoppt")
         self.statusBar().showMessage("HALT — CQ, QSO, TX, OMNI gestoppt", 5000)
         print("[HALT] Alles gestoppt")
