@@ -219,6 +219,11 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self._active_qso_targets: set = set()  # Stationen im aktiven QSO → 150s Aging
         self._pending_station_click = None  # P1.24: Klick waehrend TX → Buffer fuer naechsten Slot
         self._recent_logged_calls: dict[tuple[str, str], float] = {}  # P1.7 (v0.95.19): ADIF-Dedup (call, band) → ts
+        # P2.OMNI-REDESIGN v4.0 (v0.95.23): True wenn OMNI VOR aktuellem QSO
+        # aktiv war — _maybe_resume_omni resumed dann nach QSO-Ende.
+        # Gesetzt von _pause_omni_if_active in 3 Entry-Pfaden, geloescht
+        # bei Resume oder bei OMNI-HALT/Stop.
+        self._omni_was_active_pre_qso: bool = False
         # P3 v0.95.20: Audio-Dump-Settings (in mw_cycle._on_cycle_decoded gelesen)
         self._audio_dump_enabled = self.settings.get("audio_dump_enabled", False)
         self._audio_dump_max_files = self.settings.get("audio_dump_max_files", 200)
@@ -243,11 +248,11 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
     def _init_optional_features(self):
         """OMNI-TX (Easter Egg, Feldtest), Auto-Hunt, AP-Lite — alle deaktiviert by default."""
         # OMNI-TX: Initialisieren (deaktiviert), Easter Egg verbinden
-        # Plan v3.2: block_cycles=80 (eigene OMNI-TX-Default seit v0.93,
-        # frueher von diversity_operate_cycles abgeleitet)
+        # P2.OMNI-REDESIGN v4.0 (v0.95.23): block_cycles-Counter weg
+        # (war Diversity-OPERATE_CYCLES-Überrest). Block-Switch jetzt
+        # automatisch bei slot_index 4→0 Rollover.
         from core import omni_tx as _omni
-        _block_cycles = 80
-        self._omni_tx = _omni.get_instance(block_cycles=_block_cycles)
+        self._omni_tx = _omni.get_instance()
         # v0.78: Signal omni_stopped(reason) → UI raeumt auf
         self._omni_tx.omni_stopped.connect(self._on_omni_stopped)
         # v0.78: Button-Klick → start/stop_omni_tx
@@ -700,14 +705,18 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
                 return
             if self._auto_hunt.active:
                 self._auto_hunt.stop_auto_hunt("superseded")
-            self._omni_tx.enable()
+            # P2.OMNI-REDESIGN v4.0 (v0.95.23): start_with_parity_for_next_slot
+            # statt enable() — „kein Slot verschwenden": next_is_even → Block 1,
+            # sonst Block 2 (Mike's Designentscheidung 09.05.2026).
+            next_is_even = not self.timer.is_even_cycle()
+            self._omni_tx.start_with_parity_for_next_slot(next_is_even)
             # P1.OMNI-START: CQ-Loop in qso_state aktivieren —
             # OMNI-Filter in _on_send_message greift erst wenn jemand
             # send_message("CQ ...") emittet. start_cq() macht genau das.
             self.qso_sm.start_cq()
             self.control_panel.update_omni_tx(True)
             self._update_statusbar()
-            print("[OMNI-TX] User-Start")
+            print(f"[OMNI-TX] User-Start (next_is_even={next_is_even})")
         elif not checked and self._omni_tx.active:
             self._omni_tx.stop_omni_tx("manual_halt")
 
@@ -733,6 +742,10 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         # P1.OMNI-START R1-SOLLTE: bei Stop-while-QSO _was_cq invalidieren
         # damit _resume_cq_if_needed nach QSO-Ende kein regulaeres CQ startet.
         self.qso_sm._was_cq = False
+        # P2.OMNI-REDESIGN v4.0 (v0.95.23): Pre-QSO-Flag invalidieren —
+        # bei Stop wahrend QSO soll _maybe_resume_omni nach QSO-Ende
+        # KEIN OMNI resumen (Mike hat OMNI bewusst gestoppt).
+        self._omni_was_active_pre_qso = False
         self.control_panel.update_omni_tx(False)
         self._update_statusbar()
         print(f"[OMNI-TX-UI] Stop ({reason})")

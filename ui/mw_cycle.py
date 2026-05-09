@@ -584,12 +584,12 @@ class CycleMixin:
 
         self.qso_sm.on_cycle_end()
 
-        # OMNI-TX: pro Zyklus voranschreiten (nach QSO-State-Update)
-        _in_qso = self.qso_sm.state not in (
-            QSOState.IDLE, QSOState.TIMEOUT,
-            QSOState.CQ_CALLING, QSOState.CQ_WAIT,
-        )
-        self._omni_tx.advance(qso_active=_in_qso)
+        # OMNI-TX: pro Zyklus voranschreiten (P2.OMNI-REDESIGN v4.0).
+        # Wenn pausiert (QSO laeuft via _pause_omni_if_active): _slot_index
+        # friert ein, kein advance. Block-Switch jetzt automatisch bei
+        # rollover (slot_index 4→0) — kein 80-Counter mehr.
+        if not self._omni_tx.is_paused():
+            self._omni_tx.advance()
 
         # Diversity: Antenne umschalten bei jedem Zyklus (non-blocking)
         if self._rx_mode == "diversity" and self.radio.ip and self.rx_panel._rx_active:
