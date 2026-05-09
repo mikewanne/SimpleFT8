@@ -208,8 +208,8 @@ class RadioMixin:
         # v0.75/v0.78: aktive Power-Modi bei FT-Mode-Wechsel (FT8/FT4/FT2) stoppen
         if hasattr(self, "_auto_hunt") and self._auto_hunt.active:
             self._auto_hunt.stop_auto_hunt("ft_mode_change")
-        if hasattr(self, "_omni_tx") and self._omni_tx.active:
-            self._omni_tx.stop_omni_tx("ft_mode_change")
+        if hasattr(self, "_omni_cq") and self._omni_cq.is_active():
+            self._omni_cq.stop("mode_change")
         self.settings.set("mode", mode)
         self.timer.set_mode(mode)
         # CQ-Freq Dwell/Recalc-Intervall an neuen Modus anpassen
@@ -322,9 +322,9 @@ class RadioMixin:
         if self._auto_hunt.active:
             self._auto_hunt.set_band(band)
             self._auto_hunt.on_band_change()
-        # v0.78: OMNI-TX bei Bandwechsel stoppen
-        if hasattr(self, "_omni_tx") and self._omni_tx.active:
-            self._omni_tx.stop_omni_tx("band_change")
+        # OMNI bei Bandwechsel stoppen
+        if hasattr(self, "_omni_cq") and self._omni_cq.is_active():
+            self._omni_cq.stop("band_change")
         if self._rx_mode == "diversity":
             self.control_panel.update_diversity_ratio("50:50", "measure", 0,
                                                       self._diversity_ctrl.MEASURE_CYCLES)
@@ -407,8 +407,8 @@ class RadioMixin:
         old_mode = self._rx_mode
         # v0.78: bei RX-Mode-Wechsel Easter-Egg-Override und aktive Power-Modi stoppen
         if mode != old_mode:
-            if hasattr(self, "_omni_tx") and self._omni_tx.active:
-                self._omni_tx.stop_omni_tx("rx_mode_change")
+            if hasattr(self, "_omni_cq") and self._omni_cq.is_active():
+                self._omni_cq.stop("rx_mode_change")
             if hasattr(self, "_auto_hunt") and self._auto_hunt.active:
                 self._auto_hunt.stop_auto_hunt("rx_mode_change")
             self._easter_egg_active = False
