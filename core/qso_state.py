@@ -123,19 +123,6 @@ class QSOStateMachine(QObject):
         self._was_cq = False            # CQ-Modus vor Hunt-Start
         self._dbg = QSODebugLog()       # QSO Debug Logger
         self._caller_queue: list = []   # Warteliste: Stationen die während QSO gerufen haben
-        # P2.OMNI-REDESIGN v4.0 (v0.95.23): Flag-Pattern fuer OMNI-RX-Slot.
-        # Listener (mw_qso._on_send_message) setzt True wenn TX wegen
-        # OMNI-RX-Slot geskippt wird → _send_cq macht KEINEN State-Wechsel
-        # zu CQ_CALLING. Vermeidet stuck-State der den CQ-Loop killt
-        # (Bug v0.78-v0.95.22: State CQ_CALLING blockierte on_cycle_end-Re-CQ).
-        self._omni_skip_state_change: bool = False
-        # P2.OMNI-PATTERN-FIX (v0.95.24): Pretrigger-Flag.
-        # Wird von mw_cycle._omni_pretrigger_check gesetzt VOR _send_cq.
-        # on_cycle_end (am Slot-Start) prueft + reset es: bei True KEIN
-        # zweites _send_cq (sonst Doppel-TX im selben Slot).
-        # Lebenszyklus: gesetzt von mw_cycle (GUI-Thread), reset von
-        # qso_state (GUI-Thread) — kein Lock noetig.
-        self._was_pretriggered: bool = False
 
     def _set_state(self, new_state: QSOState):
         old = self.state.name
@@ -175,13 +162,11 @@ class QSOStateMachine(QObject):
             self._set_state(QSOState.IDLE)
 
     def _send_cq(self):
-        """CQ-Ruf senden.
+        """CQ-Ruf senden (Normal-CQ, nicht OMNI).
 
-        P2.OMNI-REDESIGN v4.0 (v0.95.23) Flag-Pattern: State-Wechsel zu
-        CQ_CALLING kommt NACH emit(). Listener (mw_qso._on_send_message)
-        kann via _omni_skip_state_change=True signalisieren dass TX wegen
-        OMNI-RX-Slot geskippt wurde — dann bleibt der State auf vor-Wert
-        (CQ_WAIT/IDLE), on_cycle_end() triggert weiterhin den Re-CQ.
+        OMNI-CQ laeuft seit P4.OMNI-NEUBAU (v0.96.0) ueber `core/omni_cq.py`
+        mit eigenem Worker-Thread. qso_state.cq_mode steuert ausschliesslich
+        den Normal-CQ-Pfad.
         """
         # P1.9 Defense-in-Depth (v0.95.3): falls _pending_reply bereits
         # gesetzt ist (Race: Replace-Request kam zu spaet aber Reply ist
@@ -193,13 +178,8 @@ class QSOStateMachine(QObject):
             return
         msg = f"CQ {self.my_call} {self.my_grid}"
         self._dbg.log("TX", f"Sende: '{msg}'")
-        # _omni_skip_state_change: Flag wird nur im GUI-Thread (qso_sm) gesetzt
-        # und gelesen. Listener läuft via DirectConnection synchron im selben
-        # Thread → kein Lock nötig.
-        self._omni_skip_state_change = False
         self.send_message.emit(msg)
-        if not self._omni_skip_state_change:
-            self._set_state(QSOState.CQ_CALLING)
+        self._set_state(QSOState.CQ_CALLING)
 
     def _process_cq_reply(self):
         """Gemerkte CQ-Antwort verarbeiten (nach TX-Ende)."""
@@ -339,18 +319,12 @@ class QSOStateMachine(QObject):
             return
 
         if self.state == QSOState.CQ_WAIT:
-            # Im CQ-Modus: nach 1 RX-Zyklus ohne Antwort nochmal CQ
+            # Im CQ-Modus: nach 1 RX-Zyklus ohne Antwort nochmal CQ.
             # Funktioniert fuer alle Modi gleich (Even/Odd Alternation):
-            # TX-Slot → RX-Slot (1 Zyklus warten) → TX-Slot
+            # TX-Slot → RX-Slot (1 Zyklus warten) → TX-Slot.
             self.qso.timeout_cycles += 1
             if self.qso.timeout_cycles >= 1 and self.cq_mode:
-                # P2.OMNI-PATTERN-FIX (v0.95.24): Pretrigger lief mid-cycle
-                # bereits → Slot ist schon „verbraucht". Flag reset, kein
-                # zweites _send_cq (sonst Doppel-TX im selben Slot).
-                if self._was_pretriggered:
-                    self._was_pretriggered = False
-                else:
-                    self._send_cq()
+                self._send_cq()
             return
 
         if self.state in (QSOState.WAIT_REPORT, QSOState.WAIT_RR73):
