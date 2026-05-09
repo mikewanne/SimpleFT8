@@ -27,7 +27,7 @@ def _make_setup(state=QSOState.IDLE):
     """Minimaler Stub aus QSOStateMachine + OmniTX fuer Toggle-Test ohne MainWindow."""
     sm = QSOStateMachine("DA1MHH", "JN58")
     sm._set_state(state)
-    omni = OmniTX(block_cycles=80)
+    omni = OmniTX()
     return sm, omni
 
 
@@ -40,7 +40,7 @@ def test_omni_toggle_starts_cq_loop(app):
     sent: list[str] = []
     sm.send_message.connect(lambda m: sent.append(m))
     # Simuliere _on_btn_omni_cq_toggled(True) — Sequenz aus Diff 2.1
-    omni.enable()
+    omni.start_with_parity_for_next_slot(next_is_even=True)
     sm.start_cq()
     assert omni.active is True
     assert sm.cq_mode is True
@@ -52,7 +52,7 @@ def test_omni_toggle_starts_cq_loop(app):
 def test_omni_toggle_off_stops_cq_loop(app):
     """Toggle off → omni stop + cq_mode=False + _was_cq=False."""
     sm, omni = _make_setup(state=QSOState.IDLE)
-    omni.enable()
+    omni.start_with_parity_for_next_slot(next_is_even=True)
     sm.start_cq()
     # Simuliere Toggle off → omni.stop_omni_tx + _on_omni_stopped (Diff 2.2)
     omni.stop_omni_tx("manual_halt")
@@ -75,7 +75,7 @@ def test_omni_toggle_off_stops_cq_loop(app):
 def test_omni_external_stop_resets_cq(app, reason):
     """ALLE Stop-Reasons triggern qso_sm.stop_cq() + _was_cq=False (Diff 2.2)."""
     sm, omni = _make_setup(state=QSOState.IDLE)
-    omni.enable()
+    omni.start_with_parity_for_next_slot(next_is_even=True)
     sm.start_cq()
     assert omni.active and sm.cq_mode
     omni.stop_omni_tx(reason)
@@ -99,7 +99,7 @@ def test_omni_blocked_during_active_qso(app):
     # Simuliere Toggle-Versuch — Block muss vor enable()/start_cq() greifen
     blocked = sm.state not in (QSOState.IDLE, QSOState.CQ_WAIT)
     if not blocked:
-        omni.enable()
+        omni.start_with_parity_for_next_slot(next_is_even=True)
         sm.start_cq()
     assert omni.active is False
     assert sm.cq_mode is False
@@ -111,7 +111,7 @@ def test_omni_blocked_during_active_qso(app):
 def test_halt_stops_omni(app):
     """HALT-Button (cancel()) muss OMNI ebenfalls stoppen (Diff 2.3)."""
     sm, omni = _make_setup(state=QSOState.IDLE)
-    omni.enable()
+    omni.start_with_parity_for_next_slot(next_is_even=True)
     sm.start_cq()
     # Simuliere _on_cancel-Sequenz aus Diff 2.3
     sm.stop_cq()
@@ -133,7 +133,7 @@ def test_omni_active_cq_reply_sets_was_cq(app):
     wird — bei Stop wird _was_cq=False ueber Diff 2.2 gesetzt).
     """
     sm, omni = _make_setup(state=QSOState.CQ_CALLING)
-    omni.enable()
+    omni.start_with_parity_for_next_slot(next_is_even=True)
     sm.cq_mode = True
     # CQ-Reply von EV81AB an uns mit Locator KN12 (is_grid=True)
     msg = FT8Message(

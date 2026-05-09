@@ -302,8 +302,9 @@ def test_phase3_was_early_stopped_flag_resets_on_band_change():
 # ─── OMNI-TX Pattern ─────────────────────────────────────────────────────────
 
 def test_omni_tx_pattern():
-    omni = OmniTX(block_cycles=10)
-    omni.enable()
+    """P2.OMNI-REDESIGN v4.0: 5-Slot-Pattern, 4 TX und 6 RX in 10 Slots."""
+    omni = OmniTX()
+    omni.start_with_parity_for_next_slot(next_is_even=True)
     pattern = []
     for _ in range(10):
         send, _ = omni.should_tx()
@@ -316,8 +317,8 @@ def test_omni_tx_pattern():
 
 def test_omni_tx_even_odd_alternation():
     """Block 1: Even zuerst, Block 2: Odd zuerst."""
-    omni = OmniTX(block_cycles=10)
-    omni.enable()
+    omni = OmniTX()
+    omni.start_with_parity_for_next_slot(next_is_even=True)  # Block 1
     # Block 1: erste TX should_tx → target_even=True (Even first)
     send1, even1 = omni.should_tx()
     assert send1 and even1 is True, f"Block 1 Pos 0: should be TX Even, got send={send1} even={even1}"
@@ -326,9 +327,9 @@ def test_omni_tx_even_odd_alternation():
     assert send2 and even2 is False, f"Block 1 Pos 1: should be TX Odd, got send={send2} even={even2}"
 
 def test_omni_tx_seamless():
-    """OMNI-TX Pattern muss nahtlos loopen (5-Slot Muster)."""
-    omni = OmniTX(block_cycles=10)
-    omni.enable()
+    """OMNI-TX Pattern muss nahtlos loopen (5-Slot Muster, 3 Durchlaeufe)."""
+    omni = OmniTX()
+    omni.start_with_parity_for_next_slot(next_is_even=True)
     pattern = []
     for _ in range(15):  # 3 volle Durchlaeufe
         send, _ = omni.should_tx()
@@ -337,14 +338,10 @@ def test_omni_tx_seamless():
     assert pattern == [True,True,False,False,False] * 3
 
 def test_omni_tx_block_switch():
-    """Blockwechsel aendert TX-Slot Parity (Even→Odd)."""
-    omni = OmniTX(block_cycles=10)
-    omni.enable()
+    """P2.OMNI-REDESIGN v4.0: Blockwechsel automatisch bei rollover slot_index 4→0."""
+    omni = OmniTX()
+    omni.start_with_parity_for_next_slot(next_is_even=True)
     assert omni.block == 1
-    for _ in range(12):  # 10 Zyklen + 2 fuer Grenze
+    for _ in range(5):  # 5 advances → wieder slot 0 → Block-Switch
         omni.advance()
-    # Block muss gewechselt haben (evtl. pending)
-    if omni._pending_switch:
-        while omni._slot_index != 0:
-            omni.advance()
     assert omni.block == 2, f"Block sollte 2 sein: {omni.block}"

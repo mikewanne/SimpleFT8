@@ -57,21 +57,21 @@ def test_ntp_deadband():
     ntp_time.reset(keep_correction=False)
 
 
-# ── OMNI-TX ──────────────────────────────────────────────────────────────────
+# ── OMNI-TX (P2.OMNI-REDESIGN v4.0) ─────────────────────────────────────────
 
 def test_omni_tx_disabled():
     """Deaktiviert → should_tx() immer True."""
     from core.omni_tx import OmniTX
-    omni = OmniTX(block_cycles=10)
+    omni = OmniTX()
     send, _ = omni.should_tx()
     assert send is True
 
 
 def test_omni_tx_pattern():
-    """5-Slot-Muster: TX,TX,RX,RX,RX."""
+    """5-Slot-Muster: TX,TX,RX,RX,RX (zwei volle Durchlaeufe)."""
     from core.omni_tx import OmniTX
-    omni = OmniTX(block_cycles=10)
-    omni.enable()
+    omni = OmniTX()
+    omni.start_with_parity_for_next_slot(next_is_even=True)
     pattern = []
     for _ in range(10):
         send, _ = omni.should_tx()
@@ -82,33 +82,20 @@ def test_omni_tx_pattern():
     omni.disable()
 
 
-def test_omni_tx_block_switch():
-    """Block-Wechsel nach block_cycles Zyklen."""
+def test_omni_tx_block_switch_on_rollover():
+    """Block-Wechsel automatisch bei rollover slot_index 4→0 (P2 v4.0).
+
+    Ersatz fuer alten test_omni_tx_block_switch (war block_cycles=10-basiert).
+    """
     from core.omni_tx import OmniTX
-    omni = OmniTX(block_cycles=10)
-    omni.enable()
-    for _ in range(10):
-        omni.advance()
-    assert omni.block == 2, f"Block nach 10: {omni.block}"
-    omni.disable()
-
-
-def test_omni_tx_min_guard():
-    """block_cycles Guard: min 10."""
-    from core.omni_tx import OmniTX
-    omni = OmniTX(block_cycles=3)
-    assert omni.block_cycles == 10
-
-
-def test_omni_tx_qso_reset():
-    """QSO-Start setzt Zykluszaehler zurueck."""
-    from core.omni_tx import OmniTX
-    omni = OmniTX(block_cycles=10)
-    omni.enable()
+    omni = OmniTX()
+    omni.start_with_parity_for_next_slot(next_is_even=True)  # Block 1
+    assert omni.block == 1
+    # 5× advance → wieder slot_index=0 → Block-Switch
     for _ in range(5):
         omni.advance()
-    omni.on_qso_started()
-    assert omni._cycle_count == 0
+    assert omni._slot_index == 0
+    assert omni.block == 2, f"Block nach 5 advances: {omni.block}"
     omni.disable()
 
 
@@ -1523,32 +1510,10 @@ def test_cq_freq_dynamic_range_upper():
     assert 1800 <= freq <= 2550, f"CQ-Freq {freq} ausserhalb dynamischem Suchbereich"
 
 
-def test_omni_tx_pending_switch():
-    """OMNI-TX: Block-Wechsel wird korrekt verzoegert bis Position 0."""
-    from core.omni_tx import OmniTX
-    omni = OmniTX(block_cycles=10)  # Minimum ist 10 (max(10, n))
-    omni.enable()
-    # 12 Zyklen voranschreiten → Block-Wechsel muss angefordert werden
-    for _ in range(12):
-        omni.advance()
-    # Block sollte gewechselt haben (10 Zyklen + 2 extra fuer Grenze)
-    # Wenn pending_switch noch True, weiter bis Position 0
-    if omni._pending_switch:
-        while omni._slot_index != 0:
-            omni.advance()
-    assert omni.block == 2, f"Block sollte 2 sein nach Wechsel, ist {omni.block}"
-    assert not omni._pending_switch, "pending_switch muss nach Wechsel False sein"
-
-
-def test_omni_tx_qso_blocks_counter():
-    """OMNI-TX: Waehrend QSO zaehlt der Block-Counter nicht hoch."""
-    from core.omni_tx import OmniTX
-    omni = OmniTX(block_cycles=10)
-    omni.enable()
-    for _ in range(10):
-        omni.advance(qso_active=True)
-    assert omni._cycle_count == 0, f"Counter sollte 0 sein bei QSO, ist {omni._cycle_count}"
-    assert omni.block == 1, "Block sollte 1 bleiben bei dauerhaftem QSO"
+# P2.OMNI-REDESIGN v4.0 (v0.95.23): test_omni_tx_pending_switch und
+# test_omni_tx_qso_blocks_counter entfernt. Ersatz:
+# - Block-Switch: Auto-Rollover via tests/test_p2_omni_redesign.py T3
+# - QSO-Pause: Pause/Resume-Lifecycle via T6/T7/T8 in test_p2_omni_redesign
 
 
 def test_cq_freq_finds_gap_in_dynamic_range():
