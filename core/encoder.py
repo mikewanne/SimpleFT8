@@ -75,12 +75,6 @@ class Encoder(QObject):
         self._audio_started = False
         self._replace_message: str | None = None
         self._replace_lock = threading.Lock()
-        # P2.OMNI-PATTERN-FIX (v0.95.24): Queue fuer zweite Message bei
-        # bereits laufendem TX. Vorher SKIP mit Warning, jetzt nachgereicht
-        # im naechsten Slot. Worker-Loop in _tx_worker liest sie. Schutz
-        # via _replace_lock (gemeinsam mit _replace_message — kein
-        # eigenes Lock noetig, beide schreiben ist GUI-Thread-only).
-        self._pending_tx_message: str | None = None
 
     def set_protocol(self, mode: str):
         """Protokoll wechseln."""
@@ -97,14 +91,9 @@ class Encoder(QObject):
         v0.80 Fix A2: setzt zusaetzlich _abort_event, damit der TX-Worker
         aus seinem Slot-Wait-Sleep aufwacht. Ohne Event bleibt der Worker
         bis zu 14s im time.sleep haengen und sendet veraltete Messages.
-
-        P2.OMNI-PATTERN-FIX (v0.95.24): leert die Queue. Abort ist
-        Notaus-Semantik — wartende TX-Slots werden verworfen.
         """
         self._is_transmitting = False
         self._abort_event.set()
-        with self._replace_lock:
-            self._pending_tx_message = None
         print("[Encoder] TX abgebrochen")
 
     def request_replace(self, message: str) -> bool:
@@ -186,67 +175,59 @@ class Encoder(QObject):
             self.encoding_error.emit(f"Encoder-Fehler: {e}")
             return None
 
-    def transmit(self, message: str):
+    def transmit(self, message: str, *,
+                 tx_even: bool | None = None,
+                 audio_freq_hz: int | None = None) -> bool:
         """FT8-Nachricht encoden und zum naechsten Zyklusbeginn senden.
 
-        P2.OMNI-PATTERN-FIX (v0.95.24): Bei bereits laufendem TX wird die
-        Message in die Queue gelegt statt verworfen. Worker-Loop sendet sie
-        nach Abschluss des aktuellen TX. Replace + Abort verdraengen die
-        Queue (siehe abort() / Replace-Pfad in _tx_worker_inner).
+        Atomare API (P4.OMNI-NEUBAU C3): tx_even und audio_freq_hz werden
+        UNTER Lock gesetzt, dann startet der Worker. Verhindert Race wenn
+        zwei Aufrufer parallel transmit() rufen oder Setter und Start
+        nicht atomar koppeln (Encoder-Worker liest tx_even in
+        _next_slot_boundary).
+
+        Returns True wenn Worker gestartet, False wenn TX bereits laeuft.
+        Bestehende Aufrufer ohne kwargs (mw_qso._on_send_message) ignorieren
+        das Return — Verhalten kompatibel.
         """
         # v0.80 Race-Fix (R1-Final-Review): alten TX-Thread sauber beenden,
         # bevor neuer startet. Sonst kann das finally des alten Threads
         # _is_transmitting=False setzen NACHDEM der neue Thread True gesetzt
         # hat → State desynchronisiert, weitere abort()-Aufrufe wirkungslos.
-        # Race-Window: zwischen abort() und neuem transmit() laeuft das
-        # finally des alten Workers asynchron.
         if (self._tx_thread is not None
                 and self._tx_thread.is_alive()
                 and threading.current_thread() is not self._tx_thread):
             self._tx_thread.join(timeout=0.5)
-        if self._is_transmitting:
-            with self._replace_lock:
-                self._pending_tx_message = message
-            print(f"[TX] Queued (TX aktiv): '{message}'")
-            return
+        with self._replace_lock:
+            if self._is_transmitting:
+                return False
+            if tx_even is not None:
+                self.tx_even = tx_even
+            if audio_freq_hz is not None:
+                self.audio_freq_hz = audio_freq_hz
         self._tx_thread = threading.Thread(
             target=self._tx_worker, args=(message,), daemon=True
         )
         self._tx_thread.start()
+        return True
 
     def _tx_worker(self, message: str):
         """TX-Worker: Timing → PTT → Audio via VITA-49 → PTT off.
 
-        P2.OMNI-PATTERN-FIX (v0.95.24): rekursiver Outer-Loop fuer Queue.
-        Nach Abschluss eines TX wird _pending_tx_message geprueft. Falls
-        gesetzt, laeuft naechster TX im selben Worker (kein Thread-
-        Restart). _is_transmitting bleibt waehrend des gesamten Loops
-        True, damit weitere transmit()-Aufrufe weiter queuen koennen.
+        Single-Pass (P4.OMNI-NEUBAU C3): vorher gab es einen rekursiven
+        Outer-Loop mit _pending_tx_message-Queue. OMNI verwendet jetzt
+        seinen eigenen Worker (core/omni_cq.py) und braucht keine
+        Encoder-Queue mehr. P1.9 Replace-Pfad bleibt im Inner.
         """
         self._is_transmitting = True
-        # v0.80 Fix A2: Event vor jedem TX zuruecksetzen
+        # v0.80 Fix A2: Event vor jedem TX zuruecksetzen.
         self._abort_event.clear()
         # P1.9 Fix (v0.95.3): Replace-State pro TX-Zyklus zuruecksetzen.
         self._audio_started = False
         with self._replace_lock:
             self._replace_message = None
-            # Queue NICHT hier loeschen — kann zwischen transmit-Aufruf
-            # und Worker-Start gesetzt worden sein.
         try:
-            while True:
-                self._tx_worker_inner(message)
-                # tx_worker_inner emittet tx_finished am Ende.
-                # Pruefe Queue fuer naechsten TX-Durchlauf.
-                with self._replace_lock:
-                    next_msg = self._pending_tx_message
-                    self._pending_tx_message = None
-                    # Reset fuer naechsten Inner-Run
-                    self._audio_started = False
-                    self._abort_event.clear()
-                if next_msg is None:
-                    break
-                message = next_msg
-                print(f"[TX] Queued-TX naechster Slot: '{message}'")
+            self._tx_worker_inner(message)
         finally:
             self._is_transmitting = False
             self._audio_started = False
@@ -317,11 +298,6 @@ class Encoder(QObject):
                         if self._replace_message is not None:
                             message = self._replace_message
                             self._replace_message = None
-                            # P2.OMNI-PATTERN-FIX: Replace verdraengt Queue.
-                            # Wenn die State-Machine den aktuellen TX
-                            # ersetzt, ist auch der gequeute "naechste" TX
-                            # obsolet (Plan-Wechsel).
-                            self._pending_tx_message = None
                             self._abort_event.clear()
                             print(f"[Encoder] TX-Replace → '{message}'")
                             continue
