@@ -1,8 +1,561 @@
 # HANDOFF — SimpleFT8
 
+# ⛔⛔⛔ DRINGEND — NEUE SESSION ZUERST LESEN ⛔⛔⛔
+
+## Stand 2026-05-09 Abend: OMNI-CQ FUNKTIONIERT NICHT — Neubau ueber Architektur-Refactor noetig
+
+**Aktueller Code-Stand:** v0.95.25 ist gepushed/committed, 1069 Tests
+gruen — aber Live-Field-Test zeigt: **OMNI-Pattern voellig kaputt.**
+Pattern-Beobachtung 12:32-12:36 UTC: 1 TX alle ~75s mit teilweise
+2:15 Min Luecken. Kein 5-Slot-Pattern erkennbar.
+
+**4 Fehlversuche in Folge (v0.95.22-25):**
+- v0.95.22 P1.OMNI-START: CQ-Loop stirbt nach 2 TX-Slots
+- v0.95.23 P2.OMNI-REDESIGN (voller Refactor): Pattern +30s verschoben
+- v0.95.24 P2.OMNI-PATTERN-FIX (Pretrigger + Encoder-Queue):
+  1 TX alle 75s
+- v0.95.25 P3.OMNI-PATTERN-FIX-2 (QTimer + Fallback): Pattern
+  voellig kaputt, QTimer hat im Field-Test NICHT gefeuert
+
+**Wurzel (Mike-Vision, mehrfach eingefordert, ich habe ignoriert):**
+OMNI-CQ ist eine **EIGENE Struktur**, NICHT eine Variante des
+Normal-CQ-Modus. Alle 4 Versuche haben OMNI in den qso_state.cq_mode-
+Pfad gehackt — jeder produzierte neue Race-Bedingungen.
+
+## ⛔ KORREKTE Architektur (3 Schichten, Mike-Anweisung)
+
+```
+NORMAL-CQ-MODUS              OMNI-CQ-MODUS
+─────────────────            ─────────────────
+qso_state.py                 omni_cq.py (NEU, eigene Layer)
+- start_cq()                 - eigener Worker-Thread mit
+- _send_cq()                   absolut-UTC-Slot-Boundaries
+- on_cycle_end CQ_WAIT       - 5-Slot-Pattern intern verwaltet
+- cq_mode-Flag               - eigene Even/Odd-Counter
+                             - eigener TX-Trigger zu Encoder
+
+         ↓ (bei eingehendem Reply)         ↓ (bei eingehendem Reply)
+
+         GEMEINSAMER QSO-PFAD
+         ─────────────────────
+         qso_state.py (Hunt-States)
+         - WAIT_REPORT, WAIT_RR73, WAIT_73
+         - TX_REPORT, TX_RR73, TX_73
+         - on_message_received
+         - _process_cq_reply
+         - QSOData
+```
+
+## Aufgabe naechste Session: P4.OMNI-NEUBAU
+
+1. **Pflicht-Lese:** `memory/feedback_omni_separate_architecture.md`
+   (Architektur-Vision + Why + How + Beweis)
+2. **Pflicht-Lese:** Plan-Files `prompts/p3_omni_pattern_fix2_v[1-3].md`
+   (zeigen den falschen Pfad — als Negativbeispiel)
+3. **Pflicht-Workflow:** V1→V2(Self-Review)→R1(DeepSeek-Reasoner)→V3
+   →Mike-Freigabe → Compact → Code → Final-R1 → Field-Test
+4. **NICHT TUN:**
+   - qso_state.cq_mode reuse fuer OMNI
+   - Pretrigger via cycle_tick / QTimer
+   - Encoder-Queue fuer OMNI-Pretrigger
+   - „Quick-Fix"-Mentalitaet — Mike: „das ist ft8 da gibts nur
+     funktioniert oder nicht"
+5. **Implementations-Skizze (V1-Ausgangspunkt):**
+   - NEU `core/omni_cq.py` — eigene OMNI-CQ-State-Machine
+   - Worker-Thread mit `time.time() / SLOT` absolut-UTC-Boundary
+     (analog `core/encoder.py:_next_slot_boundary`)
+   - `OmniCQ.start(next_is_even)` startet Thread
+   - `OmniCQ.stop()` setzt Stop-Event, Thread laeuft aus
+   - Worker-Loop:
+     ```
+     while running:
+         next_boundary = next slot boundary (UTC absolute)
+         action = self._get_action_for_slot(next_boundary)
+         sleep_until(next_boundary - 1.5s)  # Vorlauf
+         if action.is_tx:
+             self.encoder.tx_even = action.target_even
+             self.encoder.transmit("CQ ...")
+         else:
+             self.qso_panel.add_listening(...)  # via Signal
+         self._slot_index = (self._slot_index + 1) % 5
+         if self._slot_index == 0:
+             self.block = 2 if self.block == 1 else 1
+     ```
+   - `OmniCQ.pause_for_qso()` — Worker stoppt, qso_state uebernimmt
+   - `OmniCQ.resume_for_next_slot(next_is_even)` — Worker startet neu
+     mit korrektem Block
+   - **Keine Abhaengigkeit von qso_state.cq_mode/_send_cq/cycle_tick.**
+6. **Code-Rueckbau:**
+   - `core/qso_state.py` — Flag `_omni_skip_state_change` raus,
+     `_was_pretriggered` raus, on_cycle_end CQ_WAIT-Fallback-Branch
+     raus.
+   - `core/encoder.py` — `_pending_tx_message` Queue raus
+     (war OMNI-spezifisch). transmit-Verhalten zurueck zu
+     SKIP-bei-aktiv (oder ggf. behalten falls fuer Replace noch
+     gebraucht — V1 klaeren).
+   - `ui/main_window.py` — `_omni_pretrigger_timer` raus,
+     `_omni_pretriggered`-Flag raus, `_omni_was_active_pre_qso` ggf.
+     raus.
+   - `ui/mw_cycle.py` — `_omni_pretrigger_check` raus,
+     `_omni_pretrigger_fire_impl` raus, Timer-Start in
+     `_on_cycle_start` raus, `_OMNI_PRETRIGGER_OFFSET_S`-Konstante
+     raus.
+   - `ui/mw_qso.py` — Pretrigger-Bypass-Pfad in `_on_send_message`
+     raus, OMNI-RX-Slot-Skip → omni_cq-eigener-Pfad,
+     `_pause_omni_if_active` / `_maybe_resume_omni`-Helper umbauen
+     auf neue OMNI-API.
+   - `core/omni_tx.py` — KOMPLETT raus oder als Datenklasse fuer
+     `_TX_PATTERN`-Konstante reduzieren (Pattern-Definition kann
+     bleiben, State-Machine geht in `omni_cq.py`).
+   - `tests/test_p2_omni_redesign.py` + `test_p2_omni_pattern_fix.py`
+     + `test_p3_omni_pattern_fix2.py` + `test_omni_tx.py` +
+     `test_p1_omni_start.py` + `test_encoder_queue.py` —
+     vermutlich komplett raus oder migriert.
+
+7. **App-Verhalten in Zwischenzeit:** OMNI-Toggle funktioniert nicht
+   sauber. **Mike sollte OMNI nicht im Live-Funkbetrieb nutzen** bis
+   Neubau fertig + Field-Test positiv.
+
+## Geaenderte Files seit v0.95.21 (alle 4 OMNI-Versuche)
+
+**v0.95.22 (P1.OMNI-START, Commits Code-1 + `36e365d` + Doku):**
+- `ui/main_window.py` `_on_btn_omni_cq_toggled` + `_on_omni_stopped`
+- `ui/mw_qso.py` `_on_cancel`
+- NEU `tests/test_p1_omni_start.py`
+
+**v0.95.23 (P2.OMNI-REDESIGN, 7 atomare Commits):**
+- `core/omni_tx.py` Refactor (block_cycles raus, peek-Logik intern)
+- `core/qso_state.py` `_omni_skip_state_change`-Flag-Pattern in
+  `_send_cq`
+- `core/timing.py` is_even_cycle-Docstring
+- `core/encoder.py` tx_even-Inline-Kommentar
+- `ui/mw_qso.py` 2 Helpers + 3 Entry/Exit-Pfade + Flag-Pattern in
+  `_on_send_message`
+- `ui/main_window.py` Pre-QSO-Flag-Init,
+  `start_with_parity_for_next_slot`
+- `ui/mw_cycle.py` Pause-Check in `_on_cycle_start`
+- NEU `tests/test_p2_omni_redesign.py`
+- Migrationen: `tests/test_omni_tx.py`, `test_p1_omni_start.py`,
+  `test_modules.py`, `test_patterns.py`
+
+**v0.95.24 (P2.OMNI-PATTERN-FIX, Commits `6a86764` + `337e4ca` +
+`0ab90a8` + Doku):**
+- `core/encoder.py` Queue-Mechanismus (`_pending_tx_message`,
+  Outer-Loop in `_tx_worker`, abort+Replace-Pfad-Verdraengen-Queue)
+- `core/omni_tx.py` `peek_next()`
+- `core/qso_state.py` `_was_pretriggered`-Flag + on_cycle_end
+  CQ_WAIT-Schutz
+- `ui/main_window.py` `_omni_pretriggered`-Flag-Init + Reset
+- `ui/mw_cycle.py` `_OMNI_PRETRIGGER_OFFSET_S=1.3` +
+  `_omni_pretrigger_check` + Reset
+- `ui/mw_qso.py` Pretrigger-Bypass + HALT-Reset
+- NEU `tests/test_encoder_queue.py`
+- NEU `tests/test_p2_omni_pattern_fix.py`
+
+**v0.95.25 (P3.OMNI-PATTERN-FIX-2, 4 Commits):**
+- `ui/main_window.py` QTimer-Init+Stop-Connect
+- `ui/mw_cycle.py` Timer-Start, `_omni_pretrigger_fire_impl` NEU,
+  `_omni_pretrigger_check` zu Fallback (`dur-0.5s`)
+- `ui/control_panel.py` `update_omni_tx` setText (Button-Label)
+- `ui/qso_panel.py` `add_listening` NEU
+- `ui/mw_qso.py` `add_listening`-Aufruf in RX-Slot-Skip
+- NEU `tests/test_p3_omni_pattern_fix2.py`
+
+## Tests-Stand
+1069 gruen (`./venv/bin/python3 -m pytest tests/ -q`). Tests dokumentieren
+das aktuelle (kaputte) OMNI-Verhalten. Beim Neubau koennen viele
+geloescht werden.
+
+## Plan-Files (alle Versuche, NICHT als Vorlage nehmen — Architektur war falsch)
+- `prompts/p1_omni_start_v[1-3].md` (v0.95.22)
+- `prompts/p2_omni_redesign_v[1-3].md` + `_r1_v2.md` +
+  `_session_context_v3.md` (v0.95.23)
+- `prompts/p2_omni_pattern_fix_v[1-3].md` + `_r1.md` (v0.95.24)
+- `prompts/p3_omni_pattern_fix2_v[1-3].md` (v0.95.25)
+
+## Memory-Pflicht-Verweise (bei naechster Session SOFORT lesen)
+- `feedback_omni_separate_architecture.md` ⛔ PFLICHT
+- `feedback_workflow_no_exceptions.md`
+- `feedback_workflow_works_with_deepseek.md`
+- `feedback_session_lifecycle.md`
+
+## Field-Test-Pflicht nach P4.OMNI-NEUBAU (Push-Voraussetzung)
+1. OMNI-Toggle: Button → „OMNI CQ (aktiv)" (das Label-Update bleibt
+   aus v0.95.25 — control_panel.update_omni_tx funktioniert).
+2. **5+ Slots OMNI-Loop = Drift-Beweis ohne Verschiebung.**
+3. Block 1 EXAKT: Sende [E], Sende [O], 3× Horche.
+4. Block 2 EXAKT: Sende [O], Sende [E], 3× Horche.
+5. **10-Slot-Loop = 2 volle Bloecke ohne Drift.**
+6. CQ-Reply mid-OMNI → QSO normal → nach RR73 OMNI-Resume mit Pos 0.
+7. Toggle off / HALT / Mode-Wechsel / Bandwechsel: OMNI stoppt.
+
+## Push-Status
+**KEIN Push** seit v0.95.16. Lokal sind v0.95.16-25 + P2-Tool + P3
+gesammelt. Nach P4.OMNI-NEUBAU: alle zusammen pushen, ABER: Mike
+entscheidet ob v0.95.22-25 (alle OMNI-Versuche) komplett aus History
+geraeumt werden (interactive rebase oder squash) oder als
+Negativbeispiele drin bleiben.
+
+---
+
+## ⛔ Lese-Reihenfolge fuer neue Session (in dieser Reihenfolge!)
+
+1. **Dieser DRINGEND-Block** (Architektur-Vision, 4 Fehlversuche,
+   nicht-tun-Liste, KRITISCHE-Korrekturen-Tabelle).
+2. **`docs/OMNI_TX_DESIGN.md`** ⛔ — Mike's ORIGINAL-Spec von 30.04.2026.
+   80-Zyklen-Block-Wechsel, QSO-Reset-Logik, Frequenz-Logik, soziale
+   Argumentation. **Diese ist die WAHRHEIT.**
+3. **`memory/feedback_omni_separate_architecture.md`** — 3-Schichten-
+   Architektur-Bibel, NICHT in Frage stellen.
+4. **`CLAUDE.md`** Workflow-Pflicht + Hardware-Warnung + Architektur-
+   Konventionen.
+5. **`memory/MEMORY.md`** Index — andere Pflicht-Memorys identifizieren.
+6. **`HISTORY.md`** letzte 5 Eintraege (v0.95.21-25) — fuer Code-
+   Verstaendnis.
+7. **Pflicht-Bestaetigung mit je einer Zeile.**
+
+## App-Start + Single-Instance-Lock
+
+```bash
+cd "/Users/mikehammerer/Documents/KI N8N Projekte/FT8/SimpleFT8"
+./venv/bin/python3 main.py
+```
+
+- `~/.simpleft8/simpleft8.lock` (fcntl) verhindert 2. Instanz.
+- `~/.simpleft8/simpleft8.log` ist Hauptlog (logger-modul, ~42 MB
+  rotated nicht). Print-Statements gehen in stdout — bei
+  `python3 main.py > log.log 2>&1` ist Buffering aktiv (block-buffered
+  ~4096 Byte), Logs erscheinen verzögert. Echte Logs lieber via
+  `simpleft8.log` lesen.
+- App killen: `pkill -f "SimpleFT8.*main\.py"` + Lock loeschen.
+
+## Tests-Konventionen
+
+- `./venv/bin/python3 -m pytest tests/ -q` (1069 gruen Stand v0.95.25).
+- Qt-Tests benoetigen `os.environ.setdefault("QT_QPA_PLATFORM",
+  "offscreen")`.
+- **pytest-qt ist NICHT installiert.** QTimer-Tests via
+  `unittest.mock.MagicMock(spec=QTimer)` + Mock-Methode-Call-Asserts.
+- Mixin-Methoden in Tests: `Mixin.method.__get__(stub, type(stub))`
+  fuer gebundene Aufrufe.
+- `isVisible()` greift im offscreen-Modus nicht zuverlaessig (Parent
+  nicht visible) — stattdessen interne Flags wie `_omni_active`
+  pruefen.
+
+## Code-Struktur — getrennt vs. gemeinsam
+
+### Getrennt pro CQ-Modus
+
+| Modus | Module |
+|---|---|
+| **Normal-CQ** | `core/qso_state.py` (cq_mode, _send_cq, on_cycle_end CQ_WAIT-Branch, start_cq, stop_cq) |
+| **OMNI-CQ** (NEU bauen) | `core/omni_cq.py` NEU + Worker-Thread, eigene 5-Slot-State-Machine |
+
+### Gemeinsam genutzt (sowohl Normal als auch OMNI)
+
+| Layer | Module | Was |
+|---|---|---|
+| **Hunt-States** | `core/qso_state.py` | WAIT_REPORT, WAIT_RR73, WAIT_73, TX_REPORT, TX_RR73, TX_73, TX_73_COURTESY |
+| **Reply-Handling** | `core/qso_state.py:on_message_received` + `_process_cq_reply` | Egal welcher CQ-Modus, eingehende CQ-Antwort wird hier verarbeitet |
+| **QSO-Daten** | `core/qso_state.py:QSOData` | Active QSO Tracking |
+| **Encoder** | `core/encoder.py` | TX-Audio + VITA-49 + Sleep-Mathematik. EINE Instanz, beide CQ-Modi rufen `transmit(...)` |
+| **Decoder** | `core/decoder.py` | RX + ft8lib + 5-Pass + Diversity-Merger |
+| **Timing** | `core/timing.py` | UTC-Slot-Boundaries (`cycle_tick`, `cycle_start`) |
+| **UI Statusbar** | `ui/main_window.py:_update_statusbar` + `ui/control_panel.py:update_omni_tx` | OMNI-Counter Even/Odd, Versions-Label-Color, btn_omni_cq Text |
+| **QSO-Panel** | `ui/qso_panel.py` | add_tx, add_rx, add_listening (NEU v0.95.25), add_qso_complete, add_info |
+| **Auto-Hunt** | `core/auto_hunt.py` | Mutually-exclusive zu OMNI (via `superseded`-Reason) |
+| **Caller-Queue** | `core/qso_state.py:_caller_queue` | Stationen die waehrend QSO gerufen haben — nach QSO-Ende abgearbeitet |
+| **ADIF-Logging** | `log/adif.py` | log_qso |
+| **Antennen-Praeferenzen** | `core/antenna_pref.py` | best_ant pro Station |
+
+### CQ-Modus-Uebergaenge bei eingehendem Anruf
+
+```
+Eingehender CQ-Reply (von decoder.message_decoded → qso_state.on_message_received)
+        │
+        ├── if state == CQ_CALLING (Normal-CQ aktiv):
+        │     _pending_reply = msg
+        │     try_replace_pending_tx.emit(msg) → mw_qso._on_try_replace_pending_tx
+        │     → encoder.request_replace(...) (P1.9 Fix)
+        │     ODER bei TX-Ende: _process_cq_reply()
+        │
+        ├── if state == CQ_WAIT (Normal-CQ Pause):
+        │     _process_cq_reply() direkt (kein laufender TX)
+        │
+        └── if OMNI-CQ aktiv (NEU mit omni_cq.py):
+              omni_cq.pause_for_qso()
+              start_qso(their_call, their_grid, freq_hz, their_snr=msg.snr)
+              [QSO-Ablauf wie Normal: WAIT_REPORT → WAIT_RR73 → WAIT_73 → TX_73_COURTESY]
+              Nach qso_complete/qso_confirmed/qso_timeout:
+                omni_cq.resume_for_next_slot(next_is_even=...)
+```
+
+### Caller-Queue-Verhalten (gilt fuer beide CQ-Modi)
+
+- Stationen rufen waehrend QSO laeuft → `_caller_queue.append(call)`
+  (in qso_state.on_message_received).
+- Bei QSO-Ende: `_resume_cq_if_needed()` — wenn Queue nicht leer:
+  naechste Station aus Queue als `_pending_reply` setzen, direkt
+  `_process_cq_reply` (kein neuer CQ-Ruf).
+- Wichtig: bei OMNI-Resume nach QSO darf die Caller-Queue NICHT
+  ignoriert werden. Implementierung muss Queue VOR omni_cq.resume
+  pruefen.
+
+## FT8-Konventionen (kurz)
+
+### Slot-Parität / Even / Odd
+
+- FT8-Slot = 15.0s (FT4=7.5, FT2=3.8). UTC-Slot-Boundaries bei
+  `cycle_num = int(now / SLOT)`. is_even = `cycle_num % 2 == 0`.
+- Konvention: Station A sendet Even-Slot, Station B antwortet Odd-Slot
+  (alternierend). „Even sendet" ↔ „Odd hört zu".
+- Empfangs-Anzeige im QSO-Panel: `[E]` (Even) / `[O]` (Odd).
+
+### `encoder.tx_even`
+
+- `tx_even=True` → next_boundary fuer Even-Slot
+- `tx_even=False` → next_boundary fuer Odd-Slot
+- `tx_even=None` → next-best Slot (CQ-Initial)
+- Letzter Setter gewinnt — Design (CQ-Pfad in `_on_send_message`,
+  Hunt-Pfad in `_on_station_clicked`, Reply-Pfad in
+  `_on_tx_slot_for_partner`, Replace-Pfad in
+  `_on_try_replace_pending_tx`).
+
+### Encoder-Sleep-Mathematik (`core/encoder.py:_tx_worker_inner`)
+
+```python
+TARGET_TX_OFFSET = -0.8        # FlexRadio-TX-Buffer 1.3s + WSJT-X 0.5s
+next_boundary = self._next_slot_boundary()  # mit tx_even-Constraint
+sleep_dur = (next_boundary + TARGET_TX_OFFSET - 0.5) - time.time()
+# = next_boundary - 1.3 - now
+
+if sleep_dur > 0.001:
+    aborted = self._abort_event.wait(timeout=sleep_dur)
+    # ... Replace-Pfad, abort-Pfad
+
+# Drift-Schutz (v0.80 Fix B)
+silence_secs = max(0.0, (next_boundary + TARGET_TX_OFFSET) - now)
+if silence_secs < 0.1:
+    overshoot = now - (next_boundary + TARGET_TX_OFFSET)
+    if overshoot > 0.3:
+        # Drift-Risiko zu hoch → naechsten passenden Slot
+        next_boundary += (2 * SLOT) if tx_even is not None else SLOT
+```
+
+**Konsequenz fuer OMNI-Neubau:** Worker-Thread MUSS `transmit` so
+frueh aufrufen dass `sleep_dur > 0.001` immer gilt — d.h. spaetestens
+bei `cycle_pos = SLOT - 1.5s` (1.5s Sicherheits-Reserve).
+
+### OMNI 5-Slot-Pattern + Block-Logik (Mike's ORIGINAL-Plan 30.04.2026)
+
+⛔ **PFLICHT-LESE: `docs/OMNI_TX_DESIGN.md`** — vollstaendige Original-
+Design-Spec von Mike. Diese ist die WAHRHEIT. Mein bisheriger Code
+(v0.95.22-25) hat KRITISCHE Punkte daraus ignoriert:
+
+```
+Block 1 (Even-First, laeuft 80 Zyklen):
+  Pos 0: Even SENDEN
+  Pos 1: Odd  SENDEN
+  Pos 2: Even HOEREN
+  Pos 3: Odd  HOEREN
+  Pos 4: Even HOEREN  ← extra Slot, sauberer Uebergang
+
+Block 2 (Odd-First, laeuft 80 Zyklen):
+  Pos 0: Odd  SENDEN
+  Pos 1: Even SENDEN
+  Pos 2: Odd  HOEREN
+  Pos 3: Even HOEREN
+  Pos 4: Odd  HOEREN  ← extra Slot, sauberer Uebergang
+```
+
+**Hoerslot-Bilanz ueber beide Bloecke (Mike's Kernidee):**
+```
+Block 1: 3× Even gehoert | 2× Odd gehoert
+Block 2: 2× Even gehoert | 3× Odd gehoert
+→ Ueber beide Bloecke perfekt ausgeglichen ✅
+→ Kein Slot verloren beim Uebergang ✅
+```
+
+### ⛔ KRITISCHE Korrekturen — was mein Code FALSCH gemacht hat
+
+| Mike's ORIGINAL-Plan | Mein v0.95.22-25 Code (FALSCH) | Korrekt |
+|---|---|---|
+| **80-Zyklen-Block-Wechsel** | slot_index 4 → 0 Rollover (Block wechselt alle 5 Slots!) | Block laeuft 80 Zyklen lang (= 16 Pattern-Durchlaeufe) bevor er wechselt |
+| **QSO-Reset:** bei QSO startet → Wechselzaehler RESET, AKTUELLER Block laeuft weiter | Ich habe Block-Counter komplett raus genommen (block_cycles=80 → 0) | Bei QSO: `_cycle_count = 0`, Block bleibt. Begruendung: „der Slot laeuft gerade gut, nicht wechseln" |
+| **Audiofrequenz:** Mitte des freien Bereichs aus CQ-Histogramm, BLEIBT FEST | (nicht falsch — bleibt fest) | Bestaetigt — nur einmal beim Activate setzen, dann unveraendert |
+| **Block-Wahl bei Activate:** „erster freier Slot" | Ich habe `next_is_even`-Paritaet eingefuehrt | Pruefen ob `next_is_even` korrekt ist oder Mike „erster freier Slot" anders meint (z.B. wenn aktueller Slot ODD → starte mit Block 2 weil Pos 0 = Odd) |
+| **Sendeanteil Bilanz:** Block 1 + Block 2 = 4 TX + 6 RX = 40% Sendeanteil (vs Normal 50%) | (nicht falsch wenn 5-Slot-Pattern korrekt) | Bestaetigt im Argumentations-Teil |
+
+**KRITISCHSTER Fehler:** der 80-Zyklen-Block-Wechsel war nie
+implementiert. Ich habe in v0.95.23 `block_cycles=80` als „Diversity-
+OPERATE_CYCLES-Ueberrest" entfernt — DAS WAR FALSCH. Mike wollte das
+genau so. 80 Zyklen = ~20 Minuten = sinnvolle Block-Dauer fuer
+„zwei Hoerergruppen ausgewogen erreichen".
+
+### QSO-Ablauf nach erster Antwort (Mike's Plan)
+
+```
+Antwort auf Even → QSO laeuft Even/Odd Rhythmus
+Antwort auf Odd  → QSO laeuft Odd/Even Rhythmus
+→ normaler Ablauf, gemeinsame State-Machine uebernimmt
+→ Wechselzaehler RESET, aktueller Block bleibt
+```
+
+→ omni_cq.py muss bei `pause_for_qso()` den `_cycle_count` zuruecksetzen
+   aber Block + Pattern beibehalten. Bei `resume_for_next_slot()`
+   einfach weitermachen (slot_index = 0 fuer naechsten Block-Pattern-
+   Anfang, Block bleibt).
+
+## Thread-Modell
+
+| Thread | Was laeuft | Wichtig |
+|---|---|---|
+| **GUI (Main)** | Qt-Eventloop, alle Slots, qso_state, mw_*-Mixins, Settings, ADIF | Decoder-Result-Verarbeitung BLOCKIERT GUI-Thread (Slot-Ende) → cycle_tick + QTimer-Verzoegerung. **Wurzel der OMNI-Bugs.** |
+| **Encoder-Worker** (`core/encoder.py:_tx_worker`) | TX-Audio, Sleep, VITA-49-Send | Daemon-Thread. `_abort_event.wait(...)` cancelable Sleep. Outer-Loop fuer Queue (in v0.95.24-25, vermutlich raus bei OMNI-Neubau). |
+| **Decoder-Worker** (`core/decoder.py`) | RX-Audio, ft8lib-decode, 5-Pass, Diversity-Merger | Wake bei `cycle_pos = SLOT - WAKE_OFFSET[mode]` (FT8 = 12.5s). Emittet `cycle_decoded` + pro msg `message_decoded` + `cycle_finished`. |
+| **Timing-Worker** (`core/timing.py:_tick_loop`) | UTC-Slot-Boundary-Detection | `time.sleep(0.1)`-Polling, emittet `cycle_tick` + `cycle_start`. |
+| **Stats-Worker** (`core/station_stats.py`) | Stats-Logging async | Daemon-Thread + Queue. |
+| **Single-Instance-Lock-Thread** | atexit-Cleanup | fcntl-Lock-Datei. |
+| **OMNI-Worker** (NEU `core/omni_cq.py`) | OMNI 5-Slot-Pattern | Eigener Thread mit absolut-UTC-Sleep. Trigger `encoder.transmit(...)` direkt, `qso_panel.add_listening(...)` via Signal (cross-thread Qt). |
+
+## Workflow-Pflicht (CLAUDE.md)
+
+JEDE Code-Aenderung > 5 Zeilen:
+
+1. **V1** (Diagnose-Plan + Loesungs-Skizze + ACs)
+2. **V2** (Self-Review als frische KI, Lessons L1-Lx, Code-Verifikation)
+3. **R1** (DeepSeek-Reasoner via `tools/deepseek_review.py`):
+   ```bash
+   cat prompts/p4_omni_neubau_v2.md | ./venv/bin/python3 tools/deepseek_review.py \
+     [files...] > /tmp/r1_p4.txt
+   ```
+4. **V3** (Compact-fest, R1-Findings einarbeiten)
+5. **Mike-Freigabe** abwarten
+6. **Compact** (Kontext-Schoner)
+7. **Code** in atomaren Commits (1 Commit pro Feature/Fix)
+8. **Final-R1** Code-Review nach Code
+9. **Field-Test** mit Mike — **Pflicht** vor Push
+10. **Doku-Commit** (HISTORY+HANDOFF+CLAUDE+Memory in dieser Reihenfolge)
+
+**Trivial-Klausel:** Tippfehler/Style/<5 Zeilen brauchen kein
+Workflow. ALLES andere SCHON. Mike hat das mehrfach eingefordert.
+
+## Mike-Kommunikations-Stil
+
+- **Knapp, direkt, oft kein Punkt am Ende.** Auf Augenhoehe.
+- **„funktioniert oder nicht"** — keine Mischformen, kein „bisschen
+  besser", kein „sollte gehen".
+- **Frust signalisiert Bug-Signal:** wenn Mike hartnaeckig ist, hat er
+  meistens recht — NICHT auf Hardware-Fehler tippen ohne Code-
+  Verifikation. (Memory `feedback_mike_haftnaeckig_oft_recht.md`).
+- **Architektur-Entscheidungen sind nicht verhandelbar:** wenn Mike
+  3-Schichten-Architektur sagt, ist das die Premise. NICHT versuchen
+  in Plan zu „ueberzeugen" davon abzuweichen.
+- **Designentscheidungen schlagen DeepSeek-Konventionen** bei
+  Hobby-Tool-UI (Memory `feedback_mike_design_overrides_convention.md`).
+- **„nochmal" / „kompletter Workflow"** = Pflicht-Trigger fuer
+  V1→V2→R1→V3.
+- **Field-Test ist Pflicht** vor Push. Mike testet selbst.
+
+## Was die neue KI NICHT tun darf
+
+- ❌ qso_state.cq_mode reuse fuer OMNI (4 Fehlversuche, 6 Stunden
+  verloren).
+- ❌ Pretrigger via cycle_tick / QTimer / Cycle-Tick-Fallback /
+  irgendeine Variante mit GUI-Thread-Abhaengigkeit.
+- ❌ Encoder-Queue als Pretrigger-Hilfe.
+- ❌ „Quick-Fix" statt Architektur-Refactor.
+- ❌ Tests gruen = Funktioniert. **NEIN — Field-Test ist Wahrheit.**
+- ❌ Architektur-Vision in Frage stellen oder „verbessern" wollen.
+- ❌ Plan-Files aus v0.95.22-25 als Vorlage nehmen (Architektur war
+  falsch).
+- ❌ Push ohne Mike's explizite Anweisung.
+- ❌ **80-Zyklen-Block-Counter wegrationalisieren** — Mike-Original-
+  Plan: Block laeuft 80 Zyklen, das ist die Kernidee. Ich habe ihn in
+  v0.95.23 als „OPERATE_CYCLES-Ueberrest" entfernt — DAS WAR FALSCH.
+- ❌ **slot_index 4→0 als Block-Switch interpretieren** — das ist nur
+  Pattern-Wiederholung INNERHALB des aktuellen Blocks. Block-Switch
+  passiert ALLE 80 Zyklen.
+- ❌ **QSO-Reset = Block-Wechsel** — Mike-Plan: bei QSO Wechselzaehler
+  RESET, AKTUELLER Block laeuft weiter. Begruendung: „der Slot laeuft
+  gerade gut, nicht wechseln."
+
+## Konkrete V1-Ausgangspunkte (P4.OMNI-NEUBAU)
+
+1. **Schritt 0 Code-Verifikation:**
+   - `core/qso_state.py:170` `_send_cq` — wird nach Rueckbau Normal-CQ-only.
+   - `core/qso_state.py:on_cycle_end` CQ_WAIT-Branch — bleibt fuer
+     Normal-CQ.
+   - `core/encoder.py:_tx_worker_inner` Sleep-Mathematik — V1 nutzt
+     diese als Ausgangspunkt fuer OMNI-Worker-Sleep-Berechnung.
+   - `core/encoder.py:_pending_tx_message` Queue — V1 entscheidet
+     ob raus oder fuer Replace bleibt.
+   - `core/omni_tx.py` — V1 entscheidet: komplett raus oder als
+     Pattern-Konstanten-Modul reduzieren.
+
+2. **omni_cq.py Skizze (V1 verfeinert):**
+   - `class OmniCQ(QObject)` mit Signals fuer GUI-Updates
+     (omni_started, omni_stopped, slot_action(slot_label, is_tx)).
+   - `start(next_is_even)` — startet Worker-Thread.
+   - `stop(reason)` — setzt stop_event, Thread laeuft aus.
+   - `pause_for_qso()` — stop_event setzen aber state behalten.
+   - `resume_for_next_slot(next_is_even)` — neuer Thread mit
+     `_slot_index=0` und Block-Wahl.
+   - Worker-Loop in eigenem Thread, nutzt `time.time()`-basiertes
+     Sleep zu absolut-Slot-Boundary minus Vorlauf.
+
+3. **Integration mw_qso (V1):**
+   - User-Toggle ON: `OmniCQ.start(next_is_even=...)`. KEIN
+     `qso_sm.start_cq()`.
+   - Eingehender CQ-Reply waehrend OMNI active:
+     `omni_cq.pause_for_qso()` + `qso_sm.start_qso(...)` mit
+     Hunt-States.
+   - QSO-Ende-Pfade (`qso_complete`, `qso_confirmed`, `qso_timeout`):
+     pruefen ob OMNI vor QSO aktiv war + Caller-Queue leer →
+     `omni_cq.resume_for_next_slot(...)`. Bei Caller-Queue nicht leer:
+     direkt naechstes QSO ohne Resume.
+   - HALT (`_on_cancel`): `omni_cq.stop("manual_halt")`.
+   - Mode/Band-Wechsel: `omni_cq.stop("ft_mode_change")` etc.
+
+4. **Encoder-Aenderungen (V1):**
+   - Queue raus oder behalten je nach Replace-Bedarf.
+   - SKIP-bei-aktiv zurueck (oder warning + skip).
+
+5. **Tests-Strategie (V1):**
+   - NEU `tests/test_p4_omni_neubau.py` — Worker-Thread-Lifecycle,
+     Slot-Action-Sequenz, Pause/Resume, Stop-Reasons.
+   - `test_p3_omni_pattern_fix2.py` + `test_p2_omni_pattern_fix.py` +
+     `test_p2_omni_redesign.py` + `test_encoder_queue.py` + ggf.
+     `test_p1_omni_start.py` + `test_omni_tx.py` — komplett raus
+     oder migriert.
+   - Worker-Thread-Tests mit `threading.Event`-Mock + sleep-Mock.
+
+6. **Field-Test-Plan (V1):**
+   - Activate Test
+   - 5-Slot-Pattern Block 1 + Block 2
+   - 10-Slot-Loop = Drift-Beweis
+   - QSO mid-OMNI
+   - Caller-Queue (mehrere Stationen)
+   - Toggle off / HALT / Mode/Band-Wechsel
+
+## Was im Repo aktuell offen ist (Stand v0.95.25)
+
+- 4 OMNI-Versuche v0.95.22-25 committed, alle nicht funktional fuer
+  echtes OMNI-Pattern.
+- 1069 Tests gruen — Tests bestaetigen das aktuelle (kaputte) Verhalten.
+- Plan-Files in `prompts/p[123]_*.md` — Negativbeispiele.
+- App-Verhalten: OMNI nicht im Live-Funkbetrieb nutzen.
+- Push pending — Mike entscheidet ob v0.95.22-25 squashed werden.
+- TODO.md pruefen — moeglicherweise alte OMNI-TODOs offen.
+
+---
+
+# HISTORISCHER STAND (vor OMNI-Krise)
+
 **Stand 2026-05-09 (v0.95.25):** **P3.OMNI-PATTERN-FIX-2 fertig —
 QTimer-Pretrigger + Button-Label + RX-Slot-Horche.** Tests 1048 → 1069
-gruen (+21).
+gruen (+21). [⛔ Field-Test 12:32 UTC: Pattern voellig kaputt — siehe
+oben „DRINGEND".]
 
 **P3.OMNI-PATTERN-FIX-2 (NEU 09.05., post v0.95.24 Field-Test):** Mike-
 Field-Test 11:55-12:00 UTC zeigte 4 Probleme: (1) GUI-Tick-Latency macht
