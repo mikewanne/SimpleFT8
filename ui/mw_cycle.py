@@ -585,22 +585,24 @@ class CycleMixin:
         # triggert. Pattern bleibt korrekt.
         self._omni_pretrigger_check(seconds_in_cycle, cycle_duration)
 
-    def _omni_pretrigger_check(self, sic: float, dur: float) -> None:
-        """Mid-Cycle-Pretrigger fuer OMNI.
+    def _omni_pretrigger_fire_impl(self) -> None:
+        """Pretrigger-Logik — gemeinsam fuer QTimer-Pfad UND
+        Cycle-Tick-Fallback.
 
-        P2.OMNI-PATTERN-FIX (v0.95.24): Wurzel der +30s-Pattern-Drift war
-        dass _send_cq am Slot-START (via on_cycle_end) lief → Encoder
-        overshoot=0.8s > 0.3s → v0.80 Fix B verschob TX um 2 Slots.
+        P3.OMNI-PATTERN-FIX-2 (v0.95.25): Wird primaer vom QTimer
+        ausgeloest (in main_window._on_cycle_start gestartet, exakt zur
+        Schwelle dur-1.3s). Cycle-Tick-Pfad (_omni_pretrigger_check) ruft
+        diese Methode als Fallback wenn QTimer ausnahmsweise nicht
+        gefeuert hat.
 
-        Loesung: bei cycle_pos > duration - 1.3s _send_cq fuer NAECHSTEN
-        Slot ausloesen. Encoder kommt aus Sleep mit Vorlauf, kein Drift.
+        Idempotent ueber _omni_pretriggered-Flag — wer zuerst feuert,
+        gewinnt; der andere returnt.
 
         Pre-Conds (alle Bedingungen muessen wahr sein):
+        - Reentrancy-Flag _omni_pretriggered=False
         - OMNI active + nicht paused
         - cq_mode (sonst keine CQ-Loop)
         - state in IDLE/CQ_WAIT/CQ_CALLING (kein QSO laufend)
-        - Reentrancy-Flag _omni_pretriggered=False
-        - cycle_pos im Schwellen-Fenster
         """
         if self._omni_pretriggered:
             return
@@ -610,9 +612,6 @@ class CycleMixin:
             return
         if self.qso_sm.state not in (QSOState.IDLE, QSOState.CQ_WAIT,
                                       QSOState.CQ_CALLING):
-            return
-        threshold = dur - _OMNI_PRETRIGGER_OFFSET_S
-        if sic < threshold:
             return
         # Pretrigger ausfuehren (atomar via Flag)
         self._omni_pretriggered = True
@@ -629,7 +628,38 @@ class CycleMixin:
         self.qso_sm._was_pretriggered = True
         self.qso_sm._send_cq()
         print(f"[OMNI-Pretrigger] Pos {next_idx} Block {next_block} "
-              f"target_even={target_even} cycle_pos={sic:.2f}s")
+              f"target_even={target_even}")
+
+    def _omni_pretrigger_check(self, sic: float, dur: float) -> None:
+        """Cycle-Tick-Fallback fuer OMNI-Pretrigger.
+
+        P3.OMNI-PATTERN-FIX-2 (v0.95.25): PRIMAER laeuft Pretrigger via
+        QTimer (in main_window._on_cycle_start gestartet, Qt.PreciseTimer
+        garantiert ~50ms Genauigkeit). Dieser Cycle-Tick-Pfad ist
+        Defense-in-Depth fuer den Fall dass QTimer aus irgendeinem
+        Grund nicht gefeuert hat (extreme Eventloop-Verzoegerung,
+        Bug in QTimer-Lifecycle).
+
+        Fallback-Schwelle ist deshalb spaet (dur - 0.5s): wenn QTimer
+        aktiv waere, hat er bei dur - 1.3s bereits gefeuert +
+        _omni_pretriggered=True gesetzt → return. Dieser Pfad greift
+        nur wenn das nicht passiert ist.
+        """
+        if self._omni_pretriggered:
+            return  # QTimer hat schon gefeuert (Normalfall)
+        if not self._omni_tx.active or self._omni_tx.is_paused():
+            return
+        if not self.qso_sm.cq_mode:
+            return
+        if self.qso_sm.state not in (QSOState.IDLE, QSOState.CQ_WAIT,
+                                      QSOState.CQ_CALLING):
+            return
+        fallback_threshold = dur - 0.5  # Notfall-Schwelle
+        if sic < fallback_threshold:
+            return
+        print(f"[OMNI-Pretrigger-FALLBACK] cycle_pos={sic:.2f}s — "
+              f"QTimer hat NICHT gefeuert!")
+        self._omni_pretrigger_fire_impl()
 
     @Slot(int, bool)
     def _on_cycle_start(self, cycle_num: int, is_even: bool):
@@ -637,6 +667,20 @@ class CycleMixin:
         # Cycle reset. Erstes _on_cycle_tick im neuen Slot kann dann
         # wieder pretriggern (sobald Schwelle erreicht).
         self._omni_pretriggered = False
+
+        # P3.OMNI-PATTERN-FIX-2 (v0.95.25): QTimer fuer Mid-Cycle-Pretrigger.
+        # Mathematik (V2 L2): Pretrigger soll bei cycle_pos = dur - 1.3s
+        # feuern. Encoder berechnet sleep_dur = next_boundary +
+        # TARGET_TX_OFFSET (-0.8) - 0.5 - now. Bei cycle_pos = dur - 1.3
+        # ist sleep_dur = 0 — exakt an der Sicherheitsgrenze. Sicheres
+        # Fenster fuer Pretrigger: [dur-1.3, dur-0.8] = 500ms breit.
+        # Qt.PreciseTimer trifft das ~50ms genau (vs >1500ms bei
+        # cycle_tick-Signal-Queue wenn Decoder GUI-Thread blockiert).
+        # start() nach start() ersetzt alten Timeout (Restart-Semantik).
+        if self._omni_tx.active and not self._omni_tx.is_paused():
+            delay_ms = int((self.timer.cycle_duration -
+                            _OMNI_PRETRIGGER_OFFSET_S) * 1000)
+            self._omni_pretrigger_timer.start(delay_ms)
 
         # ── Anzeige zurücksetzen wenn kein TX ──────────────────
         if not self.encoder.is_transmitting:

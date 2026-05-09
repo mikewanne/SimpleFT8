@@ -230,6 +230,19 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         # ist 1.3s breit → ~13 Ticks). Reset in _on_cycle_start (neuer
         # Slot) + _on_cancel (HALT) + _on_omni_stopped.
         self._omni_pretriggered: bool = False
+        # P3.OMNI-PATTERN-FIX-2 (v0.95.25): QTimer fuer Mid-Cycle-Pretrigger.
+        # Wurzel: cycle_tick wird von Decoder-Blocking um >1s verzoegert →
+        # Pretrigger zu spaet → v0.80 Drift-Schutz schiebt 2 Slots → Pattern
+        # verschoben. Loesung: QTimer.singleShot mit Qt.PreciseTimer im GUI-
+        # Thread (typisch 0-50ms Drift). cycle_tick-basierter Pretrigger
+        # bleibt als Fallback (Schwelle dur-0.5s).
+        # Restart-Semantik: start() nach start() ersetzt alten Timeout.
+        # Stop-Reason-zentral: omni_stopped → _on_omni_stopped → timer.stop().
+        self._omni_pretrigger_timer = QTimer(self)
+        self._omni_pretrigger_timer.setSingleShot(True)
+        self._omni_pretrigger_timer.setTimerType(Qt.TimerType.PreciseTimer)
+        self._omni_pretrigger_timer.timeout.connect(
+            self._omni_pretrigger_fire_impl)
         # P3 v0.95.20: Audio-Dump-Settings (in mw_cycle._on_cycle_decoded gelesen)
         self._audio_dump_enabled = self.settings.get("audio_dump_enabled", False)
         self._audio_dump_max_files = self.settings.get("audio_dump_max_files", 200)
@@ -755,6 +768,11 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         # P2.OMNI-PATTERN-FIX (v0.95.24): Pretrigger-Flag reset, sonst
         # bleibt bei Re-Start (Toggle off→on) ein veralteter Trigger.
         self._omni_pretriggered = False
+        # P3.OMNI-PATTERN-FIX-2 (v0.95.25): pending QTimer cancelen — alle
+        # Stop-Reasons (manual_halt, ft_mode_change, band_change,
+        # rx_mode_change, totmann_expired, easter_egg_off, superseded)
+        # laufen ueber omni_stopped → dieser Slot. stop() ist idempotent.
+        self._omni_pretrigger_timer.stop()
         self.control_panel.update_omni_tx(False)
         self._update_statusbar()
         print(f"[OMNI-TX-UI] Stop ({reason})")
