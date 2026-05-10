@@ -1,4 +1,4 @@
-# SimpleFT8 TODO — Stand 10.05.2026 (v0.96.1)
+# SimpleFT8 TODO — Stand 10.05.2026 (v0.96.2)
 
 > **Mike-Regel 07.05.2026:** Offene Aufgaben gehoeren AUSSCHLIESSLICH
 > in diese Datei. Nicht in CLAUDE.md, nicht in HANDOFF.md. Diese Datei
@@ -6,45 +6,32 @@
 
 ---
 
-## 🔥 TOP — P5.OMNI-PATTERN-FIX-3 (aktiv vorbereitet, fresh-Instanz übernimmt)
+## 🔥 TOP — P5 Field-Test (Mike, post-Code)
 
-**Trigger fuer fresh-Instanz:** „omni pattern fix3 starten" oder „p5 starten"
+**Status:** Code fertig (v0.96.2), Final-R1 „Push freigegeben". Tests
+**1034 grün**. App ist gestoppt — Mike startet sie selbst für Field-Test.
 
-**Issues (beide im selben Workflow):**
+**Field-Test 7-Punkte-Plan (V3 §6 F1-F7):**
 
-### Issue B (kritisch) — Pos 1 (TX nach TX) immer encoder-busy
-- Field-Test 10.05.2026 ~06:30 UTC zeigte: nach Pos 0 TX-E sendet
-  Encoder bis ~:43; bei :45 cycle_start für Pos 1 ist `_is_transmitting`
-  noch True → `transmit()` returnt False → Pattern-Hälfte tot.
-- Log: `[OMNI-CQ] encoder.transmit busy -> Slot B1 [1/4] TX-O uebersprungen`
-- Pos 4 RX-E fehlt zusätzlich im Display (Sekundär-Effekt, in V1 verifizieren).
-- **Architektur-Fix erforderlich** (4 Optionen A-D in Diagnose-File).
+| F | Test | Erwartung |
+|---|---|---|
+| F1 | App starten, Diversity aktiv, OMNI toggeln. | OMNI-Start-Log + CQ-Audiofreq-Set. |
+| F2 | 10-Slot-Loop beobachten (2 vollständige Blöcke). | qso_panel zeigt: B1 TX-E :30, TX-O :45, RX-E :60, RX-O :75, RX-E :90 → B2 TX-O :105, TX-E :120, RX-O :135, RX-E :150, RX-O :165. **Alle 10 Einträge auf Slot-Boundaries (Issue A geprüft).** |
+| F3 | Log checken `~/.simpleft8/simpleft8.log`. | KEIN `encoder.transmit busy -> ...`. KEIN `Pending TX verfallen`. (Issue B geprüft.) |
+| F4 | OMNI stoppen (manual_halt). | Stop-Log + Reset. |
+| F5 | OMNI starten, Bandwechsel mid-OMNI auf 20m FT8. | OMNI auto-stop (band_change). Erneut starten → läuft sauber. |
+| F6 | OMNI starten, Modus auf FT4 wechseln. | OMNI stoppt (mode_change Normal) ODER läuft mit FT4 7.5s-Slots (Diversity). |
+| F7 | OMNI starten, eingehende Antwort auf CQ. | OMNI pausiert. QSO via qso_state. Nach QSO: OMNI resumed. |
 
-### Issue A (kosmetisch) — Horche-Zeit auf Slot-Boundary
-- `ui/main_window.py:760` ruft `add_listening(time.time(), ...)` mit
-  Wall-Time. Soll: `floor(time.time()/cycle_duration)*cycle_duration`
-  → `:00`/`:15`/`:30`/`:45` bei FT8.
-- 1 Zeile, geht als AC in P5-V3 mit.
+**Bestanden wenn:** F1+F2+F3 sauber laufen ohne busy-Logs. F4-F7 sind
+Regressionstests. Bei Fehlschlag → Folge-Workflow P6 mit vollem
+V1→V2→R1→V3.
 
-### Files (vorbereitet)
+## 🚀 Push (zusammen mit Field-Test-Freigabe)
 
-- `prompts/p5_omni_pattern_fix3_diagnose.md` — Compact-feste Diagnose,
-  4 Optionen, AC-Vorschlag, R1-Fragen.
-- `memory/project_p5_omni_pattern_fix3.md` — Trigger-File, 16-Punkt-Anleitung.
-- `memory/feedback_r1_encoder_busy_blindspot.md` — neue Pflicht-Lesson.
-
-### APP_VERSION-Plan
-
-`v0.96.1 → v0.96.2` (Patch-Bump: Race-Fix + Display-Korrektur).
-
-### Test-Bilanz erwartet
-
-1020 → ~1025-1030 grün.
-
-### Push-Status
-
-KEIN Push (origin) seit v0.95.16. Lokal sind v0.95.16-0.96.1 + P2-Tool
-gesammelt. Push erst nach P5 Field-Test grün.
+KEIN Push (origin) seit v0.95.16. Lokal gesammelt seit dann:
+**v0.95.16-0.96.2 + P2-Tool**. Push erst nach Mike-Field-Test-OK
+mit `git push origin main`.
 
 ---
 

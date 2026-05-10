@@ -5,6 +5,70 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-10 v0.96.2 — P5.OMNI-PATTERN-FIX-3: Encoder-Pending-Queue + Slot-Boundary-Display
+
+**Auslöser:** Field-Test 10.05.2026 ~06:30 UTC (v0.96.1) zeigte 2 Issues:
+- Issue B (kritisch): Pos 1 (TX-nach-TX) IMMER busy (3× im Log
+  reproduziert), Pattern halb tot.
+- Issue A (kosmetisch): `add_listening`-Zeit zeigt Wall-Time
+  (`time.time()`) statt UTC-Slot-Boundary `:00`/`:15`/`:30`/`:45`.
+
+**Wurzel Issue B (R1-bestätigt):** FT8 12.64s Audio + 1.3s
+FlexRadio-Buffer-Drain + PTT-Off + Thread-Jitter → `_is_transmitting=False`
+fällt bei `:42.8-:44.5`. Pos 1 cycle_start `:45` hat Race-Window
+0-2.2s, in Praxis < 1s wegen Buffer-Drain → 100% busy.
+
+**Lösung Variante A (R1-Empfehlung, KISS-konform):** Encoder-Queue mit
+Pending-Verfall. `transmit()` queut Pending statt `return False`.
+Worker-Finally konsumiert Pending direkt via `_run_one_tx_pass`-Loop.
+Verfall-Schwelle `1.5 * cycle_duration` (FT8: 22.5s). `_pending_tx +
+_pending_queued_at` UNTER `_replace_lock` (R1-KRITISCH gegen Race).
+
+**F1-KRITISCH (Cold-Start-Test entdeckt):** Abort-Race im Pending-Loop —
+`_run_one_tx_pass` cleart `_abort_event` und setzt `_is_transmitting=True`.
+Wenn `abort()` zwischen Pass-1 und Pending-Re-Trigger feuert, geht abort
+verloren. **Fix:** `if self._abort_event.is_set(): return` VOR Re-Trigger.
+
+**Lösung Issue A:** `main_window.py:760` `add_listening(time.time(), ...)`
+→ `add_listening((now // cycle_dur) * cycle_dur, ...)`. Löst gleichzeitig
+die Phänomene "Pos 4 RX-E fehlt" und ":44 [O] Horche" durch korrekte
+Slot-Boundary-Anzeige (R1's Display-Bug-Diagnose: Wall-Time-Verschiebung
+um 0.1-0.4s ließ Einträge "verschoben"/"fehlend" wirken). 1 Stein, 3 Fliegen.
+
+**Workflow:** V1 → V2 (Self-Review) → R1 (DeepSeek-Reasoner) → V3
+(Compact-fest) → Cold-Start-Test → Mike-Freigabe → Code → Final-R1 →
+Field-Test pending. Plan-Files: `prompts/p5_omni_pattern_fix3_*`.
+
+**Atomare Commits (6):**
+- C1 (`229e98c`): `core/encoder.py` Pending-TX-Queue + Verfall + F1-Abort-Schutz
+- C2 (`96f5714`): `tests/test_encoder_pending.py` NEU (T1, T9-T13, 8 Tests)
+- C3 (`333411a`): `ui/main_window.py:760` Slot-Boundary in `add_listening`
+- C4 (`955aeb0`): `tests/test_main_window_slot_boundary.py` NEU (T7+T8) +
+  `tests/test_omni_cq_signal.py` ERWEITERT (T2N Pending-Counter)
+- C5 (`31f2f41`): `main.py:16` APP_VERSION 0.96.1 → 0.96.2
+- C5a (`5408534`): Final-R1-Review + Test-Werte-Korrektur (R1's SOLLTE-FIX)
+
+**Final-R1-Bilanz:** 0 KRITISCH + 1 SOLLTE-FIX (parametrize-Werte
+rechnerisch korrigiert) + 1 KOENNTE (FT2-Floating-Point akademisch).
+R1-Quote: „Push freigegeben. Code ist merge-bereit."
+
+**Tests:** 1020 → **1034 grün** (+14, V3 prognostizierte ~1029,
++5 Bonus durch Test-Splits T11a+b, T12+b, T7-Querschnitt).
+
+**APP_VERSION:** v0.96.1 → v0.96.2. Push pending bis Mike-Freigabe nach
+Field-Test 7-Punkte-Plan F1-F7 (V3 §6).
+
+**R1-Blindspot-Lesson aktiviert:** Bei TX-TX-Konsekutiv-Plänen MUSS R1
+explizit nach Encoder-Throughput gefragt werden. Bei P4-V5 hatte R1 das
+verpasst → Field-Test-Bug. P5-Prompt hatte die Pflicht-Frage explizit
+enthalten — R1 hat den Race korrekt diagnostiziert.
+
+**Cold-Start-Test bewährt:** F1 KRITISCH wurde NUR durch Cold-Start-Test
+nach Compact-Vorbereitung gefunden — R1 + Self-Review hatten ihn
+übersehen. Bestätigt `feedback_compact_save_cold_start_test.md`.
+
+---
+
 ## 2026-05-10 — P5.OMNI-PATTERN-FIX-3 vorbereitet (kein Code-Bump)
 
 **Auslöser:** Field-Test v0.96.1 (P4-V5) ~06:30 UTC zeigte zwei Issues:
