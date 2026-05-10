@@ -320,7 +320,14 @@ class RadioMixin:
         self._normal_stations = {}
         self.control_panel.update_decode_count(0)
         # Diversity Controller bei Bandwechsel: Neueinmessung + Histogram leeren
-        _dlog("BAND", "_diversity_ctrl.on_band_change() -> startet Mess (6 Zyklen)")
+        # P21-Fix (Mike 10.05.): on_band_change() startet Mess. Wenn Radio
+        # noch nicht verbunden, wird der Antennen-Switch im Decoder-Cycle
+        # geskipped (radio.ip=False) und _handle_diversity_measure macht
+        # ebenfalls nichts (siehe mw_cycle.py P21-Fix). Sobald Radio
+        # verbindet, laeuft die Mess automatisch beim naechsten Slot an.
+        radio_ready = bool(self.radio.ip)
+        _dlog("BAND", f"_diversity_ctrl.on_band_change() radio_ready={radio_ready} "
+              f"-> startet Mess (6 Zyklen)")
         self._diversity_ctrl.on_band_change()
         self.control_panel.update_freq_histogram(
             self._diversity_ctrl.get_histogram_data())

@@ -223,8 +223,19 @@ class CycleMixin:
 
         IMMER aufzeichnen — auch mit 0 Stationen! Sonst haengt die Messung
         bei Antennen die nichts empfangen (Bug #9: 4/8 haengt).
+
+        P21-Fix (Mike 10.05.): NICHT aufzeichnen wenn Radio noch nicht
+        verbunden — Antennen-Switch kann dann nicht greifen, Counter
+        wuerde hochlaufen ohne dass je A2 dran war = falsche Mess-Daten.
+        Stattdessen warten bis Radio verbunden ist, dann startet Mess
+        natuerlich beim naechsten Slot mit echtem Switch.
         """
         from core.debug_log import debug_log as _dlog
+        if not self.radio.ip:
+            _dlog("DIV-MEAS",
+                  "SKIP — radio.ip=False, warte auf Verbindung "
+                  "(record_measurement uebersprungen)")
+            return
         valid = [m for m in (messages or []) if m.snr is not None and m.snr > -20]
         station_count = len(valid)
         score = sum(max(0.0, float(m.snr + 30)) for m in valid) if valid else 0.0
@@ -634,15 +645,15 @@ class CycleMixin:
 
         # Diversity: Antenne umschalten bei jedem Zyklus (non-blocking)
         from core.debug_log import debug_log as _dlog
+        # P21 Debug-Log: warum (kein) Switch?
+        if self._rx_mode == "diversity" and not (self.radio.ip and self.rx_panel._rx_active):
+            _dlog("ANT", f"SKIP — radio.ip={bool(self.radio.ip)} "
+                  f"rx_active={self.rx_panel._rx_active}")
         if self._rx_mode == "diversity" and self.radio.ip and self.rx_panel._rx_active:
             # BUG-1: TX-Schutz — waehrend TX keine Antenne umschalten!
             if self.encoder.is_transmitting:
                 _dlog("ANT", "SKIP — encoder.is_transmitting")
                 return
-        elif self._rx_mode == "diversity":
-            # Diagnose-Log: warum kein Switch obwohl diversity an?
-            _dlog("ANT", f"SKIP — radio.ip={bool(self.radio.ip)} "
-                  f"rx_active={self.rx_panel._rx_active}")
 
             with self._diversity_lock:  # BUG-2: Race Condition Guard
                 # Queue: aktuelle Antenne + Phase merken BEVOR umgeschaltet wird.
