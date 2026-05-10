@@ -159,6 +159,11 @@ class CycleMixin:
             else:
                 if self._diversity_ctrl.tick_slot():
                     self._diversity_ctrl.update_proposed_freq(qso_active=False)
+                    # P7.OMNI-SIMPLIFY: OMNI-Counter ueber Such-Trigger
+                    # inkrementieren. Bei _OMNI_FLIP_AFTER_SEARCHES (=10)
+                    # Triggern -> flip_tx_parity (alle ~10 Min Wechsel).
+                    if hasattr(self, '_omni_cq'):
+                        self._omni_cq.on_search_trigger()
         self.control_panel.update_freq_histogram(
             self._diversity_ctrl.get_histogram_data())
 
