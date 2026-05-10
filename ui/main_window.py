@@ -54,6 +54,10 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self.resize(1400, 700)
         self._apply_dark_theme()
 
+        # P26 (10.05.2026): Connect-Modal-Attribut frueh deklariert damit
+        # Worker-Thread safe darauf zugreifen kann (lokale Referenz holen).
+        self._connect_dialog = None
+
         # Initialisierung in fester Reihenfolge — siehe Helper-Docstrings.
         self._init_core_components()
         self._init_qso_log()
@@ -72,7 +76,13 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
 
         # Timer + Radio starten (NACH OMNI-TX/Auto-Hunt/AP-Lite Init!)
         self.timer.start()
-        self._start_radio()
+        # P26 (10.05.2026): _start_radio deferred via singleShot, damit
+        # __init__ erst durchlaeuft + window.show() das Hauptfenster
+        # sichtbar macht, BEVOR der Connect-Modal-Dialog mit exec() den
+        # GUI-Thread blockiert. Sonst saehe der User nur den Modal-Dialog
+        # ohne Hauptfenster dahinter.
+        from PySide6.QtCore import QTimer as _QTimerStartRadio
+        _QTimerStartRadio.singleShot(0, self._start_radio)
 
         # UI mit gespeicherten Settings synchronisieren
         self.control_panel._set_band(settings.band)
