@@ -224,6 +224,7 @@ class CycleMixin:
         IMMER aufzeichnen — auch mit 0 Stationen! Sonst haengt die Messung
         bei Antennen die nichts empfangen (Bug #9: 4/8 haengt).
         """
+        from core.debug_log import debug_log as _dlog
         valid = [m for m in (messages or []) if m.snr is not None and m.snr > -20]
         station_count = len(valid)
         score = sum(max(0.0, float(m.snr + 30)) for m in valid) if valid else 0.0
@@ -231,6 +232,10 @@ class CycleMixin:
         weak_count = len([m for m in valid if m.snr < -10])
         # Phase-Diff: erkennt measure→operate Uebergang fuer GUI-Lock-Aufhebung
         old_phase = self._diversity_ctrl.phase
+        # P21: vor record_measurement
+        _dlog("DIV-MEAS", f"record ant={ant} stations={station_count} "
+              f"score={score:.1f} avg_snr={avg_snr:.1f} "
+              f"step_pre={self._diversity_ctrl.measure_step}")
         with self._diversity_lock:
             self._diversity_ctrl.record_measurement(
                 ant, score,
@@ -240,6 +245,8 @@ class CycleMixin:
             )
             self._diversity_ctrl.sync_from_stations(self._diversity_stations)
             self._diversity_ctrl.update_proposed_freq()
+        _dlog("DIV-MEAS", f"after record step_post={self._diversity_ctrl.measure_step} "
+              f"phase={self._diversity_ctrl.phase}")
         # GUI-Lock weg sobald Re-Measurement durch ist (8 Slots → _evaluate)
         if old_phase == "measure" and self._diversity_ctrl.phase == "operate":
             self._set_gain_measure_lock(False)
@@ -626,10 +633,16 @@ class CycleMixin:
             self._omni_cq.on_cycle_start(cycle_num, is_even)
 
         # Diversity: Antenne umschalten bei jedem Zyklus (non-blocking)
+        from core.debug_log import debug_log as _dlog
         if self._rx_mode == "diversity" and self.radio.ip and self.rx_panel._rx_active:
             # BUG-1: TX-Schutz — waehrend TX keine Antenne umschalten!
             if self.encoder.is_transmitting:
+                _dlog("ANT", "SKIP — encoder.is_transmitting")
                 return
+        elif self._rx_mode == "diversity":
+            # Diagnose-Log: warum kein Switch obwohl diversity an?
+            _dlog("ANT", f"SKIP — radio.ip={bool(self.radio.ip)} "
+                  f"rx_active={self.rx_panel._rx_active}")
 
             with self._diversity_lock:  # BUG-2: Race Condition Guard
                 # Queue: aktuelle Antenne + Phase merken BEVOR umgeschaltet wird.
@@ -697,10 +710,22 @@ class CycleMixin:
                     scoring_mode=self._diversity_ctrl.scoring_mode,
                 )
 
+            # P21 Debug-Log: VOR Antennen-Switch (zeigt Plan)
+            _dlog("ANT", f"SWITCH plan: cmd={ant_cmd} gain={gain}dB "
+                  f"phase={self._diversity_ctrl.phase} "
+                  f"step={self._diversity_ctrl.measure_step}/"
+                  f"{self._diversity_ctrl.MEASURE_CYCLES} "
+                  f"current_ant={self._diversity_current_ant}")
+
             # BUG-3: ant_cmd + gain als Argumente, nicht als Closure
             def _switch(cmd=ant_cmd, g=gain):
-                self.radio.set_rx_antenna(cmd)
-                self.radio.set_rfgain(g)
+                try:
+                    self.radio.set_rx_antenna(cmd)
+                    self.radio.set_rfgain(g)
+                    _dlog("ANT", f"SWITCH done: cmd={cmd} gain={g}dB OK")
+                except Exception as exc:
+                    _dlog("ANT", f"SWITCH FAILED: cmd={cmd} gain={g}dB exc={exc!r}")
+                    raise
             threading.Thread(target=_switch, daemon=True).start()
 
     def _update_histogram(self, messages):

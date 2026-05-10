@@ -273,12 +273,17 @@ class RadioMixin:
 
     @Slot(str)
     def _on_band_changed(self, band: str):
+        # P21 Debug-Log: Bandwechsel-Anfang
+        from core.debug_log import debug_log as _dlog
+        _dlog("BAND", f"_on_band_changed -> {band} (alt: {self.settings.band}, "
+              f"rx_mode={getattr(self, '_rx_mode', '?')})")
         # Pipeline-Lock-Schutz (v0.92 R1-Audit): blockiert auch programmatische
         # Pfade die UI-Button-Disable umgehen wuerden. Ohne diese Pruefung
         # konnte `reset()` in `_diversity_ctrl.on_band_change()` den Phase-
         # Check in `record_measurement` aushebeln → Daten-Leck zwischen Baendern.
         if getattr(self, '_gain_measure_locked', False):
             current = self.settings.band
+            _dlog("BAND", f"IGNORED — pipeline locked, bleibe auf {current}")
             print(f"[Bandwechsel ignoriert: Pipeline laeuft, bleibe auf {current}]")
             self.control_panel._set_band(current)  # UI-Sync zurueck
             return
@@ -315,6 +320,7 @@ class RadioMixin:
         self._normal_stations = {}
         self.control_panel.update_decode_count(0)
         # Diversity Controller bei Bandwechsel: Neueinmessung + Histogram leeren
+        _dlog("BAND", "_diversity_ctrl.on_band_change() -> startet Mess (6 Zyklen)")
         self._diversity_ctrl.on_band_change()
         self.control_panel.update_freq_histogram(
             self._diversity_ctrl.get_histogram_data())
@@ -384,6 +390,7 @@ class RadioMixin:
         if not bandpilot_acted and self._rx_mode == "diversity":
             ft_mode = self.settings.get("mode", "FT8")
             scoring = getattr(self._diversity_ctrl, 'scoring_mode', 'normal')
+            _dlog("BAND", f"_check_diversity_preset({band}, {ft_mode}, scoring={scoring})")
             self._check_diversity_preset(band, ft_mode, scoring)
             return  # _check_diversity_preset ruft _update_statusbar auf
         self._update_statusbar()
@@ -795,6 +802,10 @@ class RadioMixin:
         # v0.93: Cache-Reuse vs Standard-Pfad
         # - cached_ratio gesetzt → Phase=operate, kein Lock, kein Phase 3.
         # - sonst → Standard-Pfad (Lock VOR reset, Phase=measure).
+        from core.debug_log import debug_log as _dlog
+        _dlog("DIV-EN", f"_enable_diversity scoring={scoring_mode} "
+              f"cached_ratio={cached_ratio} (Pfad: "
+              f"{'CACHE-REUSE' if cached_ratio else 'PHASE-MEASURE'})")
         if cached_ratio is not None:
             # Cache-Reuse: kein Lock, Phase direkt operate
             self._diversity_ctrl.reset()
@@ -1056,6 +1067,9 @@ class RadioMixin:
 
         ratio_status = self._assess_ratio(band, ft_mode, scoring)
         gain_status = self._assess_gain(band, ft_mode, scoring)
+        from core.debug_log import debug_log as _dlog
+        _dlog("DIV-CACHE", f"_check_diversity_preset {band}/{ft_mode} "
+              f"scoring={scoring} -> ratio={ratio_status} gain={gain_status}")
         print(f"[Diversity] Cache-Status {band}/{ft_mode}: "
               f"ratio={ratio_status}, gain={gain_status}")
 
@@ -1065,6 +1079,7 @@ class RadioMixin:
             self._pending_ratio_status = ratio_status
             self._pending_diversity_scoring = scoring
             gain_scoring = "snr" if scoring == "dx" else "stations"
+            _dlog("DIV-CACHE", "BRANCH=gain_stale -> DXTuneDialog (volle Pipeline)")
             print(f"[Diversity] {band}/{ft_mode}: Gain stale → DXTuneDialog")
             self._start_dx_tuning(scoring_mode=gain_scoring)
             self._update_statusbar()
@@ -1073,6 +1088,7 @@ class RadioMixin:
         if gain_status == "missing":
             # Komplett unkalibriert → volle Pipeline (Gain + Ratio).
             gain_scoring = "snr" if scoring == "dx" else "stations"
+            _dlog("DIV-CACHE", "BRANCH=gain_missing -> volle Pipeline (Gain+Ratio)")
             print(f"[Diversity] {band}/{ft_mode}: Gain missing → volle Pipeline")
             self._pending_dx_diversity = True
             self._pending_diversity_scoring = scoring
@@ -1082,12 +1098,15 @@ class RadioMixin:
         # gain_status == "fresh":
         if ratio_status == "fresh":
             # Beides frisch → Cache-Reuse (still, kein Toast).
+            _dlog("DIV-CACHE", "BRANCH=both_fresh -> Cache-Reuse (kein Mess)")
             if self._try_diversity_cache_reuse(band, ft_mode, scoring):
                 self._update_statusbar()
             return
 
         # Ratio stale/missing, Gain fresh → stille Auto-Ratio-Messung.
         # _enable_diversity startet Phase=measure → Phase 3 laeuft automatisch.
+        _dlog("DIV-CACHE", f"BRANCH=ratio_{ratio_status}_gain_fresh "
+              f"-> Auto-Phase-3-Mess")
         print(f"[Diversity] {band}/{ft_mode}: Ratio {ratio_status} mit Gain "
               f"fresh → automatische Ratio-Messung (Phase 3)")
         self._enable_diversity(scoring_mode=scoring)
