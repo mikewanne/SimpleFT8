@@ -163,6 +163,46 @@ Fallback `time.strftime("%H%M%S", time.gmtime())`. Wenn der Decoder
 
 ---
 
+## 📋 P20.LOG-ROTATION (Mike-Wunsch 10.05.2026)
+
+**Symptom:** `~/.simpleft8/simpleft8.log` wird append-only geschrieben.
+Datei waechst unendlich, nach Wochen MB-gross. Bug-Diagnose im alten
+Log schwierig (nicht klar welcher Tag was war).
+
+**Soll:**
+- Eine Datei pro Tag: `simpleft8-2026-05-10.log`
+- Aelter als N Tage (z.B. 7) automatisch loeschen
+- Aktueller Tag: `simpleft8.log` Symlink → heutige Datei
+
+**Files:**
+- `main.py:32` `_log_file = open(...)` durch `TimedRotatingFileHandler`
+  oder Custom-Lösung ersetzen
+
+**Aufwand:** ~1h
+
+---
+
+## 📋 P21.STRUKTURIERTES-DEBUG-LOG (Mike-Wunsch 10.05.2026)
+
+**Symptom:** Bug-Diagnose schwierig weil Log-Eintraege oft kontextlos
+sind (z.B. `[Diversity] 48 St. | A1>A2: 0` ohne Antenne/Uhrzeit).
+
+**Soll:** An wichtigen Stellen strukturierte Eintraege mit:
+- Datum + Uhrzeit (statt nur HH:MM:SS)
+- Aktive Antenne (A1/A2)
+- Aktuelle Mode/Band/Mess-Phase
+- Encoder-Status (TX/RX/idle)
+
+**Files:**
+- `core/diversity.py` Antennen-Switch-Pfad
+- `core/decoder.py` Mess-Pass-Output
+- `core/encoder.py` TX-Pfad
+- `core/ntp_time.py` DT-Korrektur-Pfad
+
+**Aufwand:** ~2h Diagnose + Refactor (welche Stellen brauchen mehr Kontext?)
+
+---
+
 ## 📋 P19.DX-CACHE-IGNORIERT-BEI-MODE-WECHSEL (Field-Test 10.05. Mike)
 
 **Symptom:** NORMAL → DIVERSITY DX wechseln macht **komplette Neu-
