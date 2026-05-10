@@ -13,7 +13,9 @@ Felder (gain_timestamp + ratio_timestamp) gespiegelt.
 """
 
 import json
+import os
 import shutil
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -38,6 +40,11 @@ class PresetStore:
         self._filepath = CALIB_DIR / filename
         self._lock = threading.Lock()
         self._data: dict[str, dict] = {}
+        # P22: Memory-Buffer fuer atomares Persist. Phase-2-Werte landen
+        # hier (stage_gain), Phase-3-Erfolg committet beide zusammen
+        # (commit_with_ratio). Ohne Phase-3 → kein Disk-Write → kein
+        # Half-State.
+        self._staged: dict[str, dict] = {}
         self._load()
 
     # ── Hilfsmethoden ────────────────────────────────────────────────────────
@@ -108,9 +115,36 @@ class PresetStore:
                   f"ANT1={ant1}dB ANT2={ant2}dB (gemessen {measured}, {age_str} alt)")
 
     def _save_locked(self) -> None:
+        """Atomic Write via tempfile + os.replace (P22, P2-Pattern).
+
+        Verhindert korrupte JSON bei Mid-Write-Crash. Bei Exception:
+        tempfile aufraeumen, Exception re-raise — Aufrufer
+        (save_gain/save_ratio/commit_with_ratio) wickelt return-False ab.
+        """
         self._filepath.parent.mkdir(parents=True, exist_ok=True)
-        with self._filepath.open("w") as f:
-            json.dump(self._data, f, indent=2)
+        tmp = tempfile.NamedTemporaryFile(
+            mode="w",
+            dir=str(self._filepath.parent),
+            delete=False,
+            prefix=".tmp_",
+            suffix=".json",
+        )
+        try:
+            json.dump(self._data, tmp, indent=2)
+            tmp.flush()
+            os.fsync(tmp.fileno())
+            tmp.close()
+            os.replace(tmp.name, str(self._filepath))
+        except Exception:
+            try:
+                tmp.close()
+            except Exception:
+                pass
+            try:
+                os.unlink(tmp.name)
+            except OSError:
+                pass
+            raise
 
     def _key(self, band: str, ft_mode: str) -> str:
         return f"{band}_{ft_mode}"
@@ -123,10 +157,20 @@ class PresetStore:
             return self._data.get(self._key(band, ft_mode))
 
     def is_valid_gain(self, band: str, ft_mode: str) -> bool:
-        """True wenn Gain-Kalibrierung vorhanden UND < 6h alt."""
+        """True wenn Gain-Kalibrierung vorhanden UND < 6h alt UND ratio
+        existiert.
+
+        P22: Half-State-Reject. Diese Methode ist fuer Diversity-Stores
+        gedacht — wenn `ratio`-Feld fehlt, ist der Eintrag halb-fertig
+        (Phase 2 done, Phase 3 brach ab) und darf nicht als „kalibriert"
+        gelten. Normal-Mode-Presets nutzen settings.normal_presets, nicht
+        diese Methode.
+        """
         with self._lock:
             entry = self._data.get(self._key(band, ft_mode))
         if not entry or "gain_timestamp" not in entry:
+            return False
+        if "ratio" not in entry:                # P22 Half-State-Reject
             return False
         return (time.time() - entry["gain_timestamp"]) < GAIN_VALIDITY_SECONDS
 
@@ -170,11 +214,16 @@ class PresetStore:
 
     def save_gain(self, band: str, ft_mode: str, *,
                   rxant: str, ant1_gain: int, ant2_gain: int,
-                  ant1_avg: float = 0.0, ant2_avg: float = 0.0) -> None:
-        """Gain-Kalibrierung speichern (setzt gain_timestamp → startet 6h-Frist)."""
+                  ant1_avg: float = 0.0, ant2_avg: float = 0.0) -> bool:
+        """Gain-Kalibrierung speichern (setzt gain_timestamp → 6h-Frist).
+
+        P22-R1-K3: returnt False bei Disk-Fehler statt Exception bis in
+        den GUI-Thread. Aufrufer kann optional reagieren, App crasht nicht.
+        """
         key = self._key(band, ft_mode)
         with self._lock:
-            entry = dict(self._data.get(key) or {})
+            old_entry = self._data.get(key)
+            entry = dict(old_entry or {})
             entry.update({
                 "rxant":          rxant,
                 "ant1_gain":      int(ant1_gain),
@@ -185,25 +234,147 @@ class PresetStore:
                 "measured":       time.strftime("%Y-%m-%d %H:%M"),
             })
             self._data[key] = entry
-            self._save_locked()
+            try:
+                self._save_locked()
+            except Exception as exc:
+                # Rollback in-memory entry
+                if old_entry is None:
+                    self._data.pop(key, None)
+                else:
+                    self._data[key] = old_entry
+                print(f"[PresetStore] save_gain Disk-Fehler {key}: {exc}")
+                return False
         band_fmt = self._format_band(key)
         print(f"[Kalibrierung] Gespeichert: {band_fmt} {self._mode_label} — "
               f"ANT1={ant1_gain}dB ANT2={ant2_gain}dB")
+        return True
 
     def save_ratio(self, band: str, ft_mode: str, *,
-                   ratio: str, dominant: Optional[str]) -> None:
-        """Diversity-Ratio nach Einmessen ergänzen (setzt ratio_timestamp → 1h-Frist)."""
+                   ratio: str, dominant: Optional[str]) -> bool:
+        """Diversity-Ratio ergänzen (setzt ratio_timestamp → 1h-Frist).
+
+        P22-R1-K3: returnt False bei Disk-Fehler statt Exception bis in
+        den GUI-Thread.
+        """
         key = self._key(band, ft_mode)
         with self._lock:
-            entry = dict(self._data.get(key) or {})
+            old_entry = self._data.get(key)
+            entry = dict(old_entry or {})
             entry["ratio"]           = ratio
             entry["dominant"]        = dominant or "A1"
             entry["ratio_timestamp"] = time.time()
             self._data[key]          = entry
-            self._save_locked()
+            try:
+                self._save_locked()
+            except Exception as exc:
+                if old_entry is None:
+                    self._data.pop(key, None)
+                else:
+                    self._data[key] = old_entry
+                print(f"[PresetStore] save_ratio Disk-Fehler {key}: {exc}")
+                return False
         band_fmt = self._format_band(key)
         print(f"[Kalibrierung] Ratio gespeichert: {band_fmt} {self._mode_label} "
               f"→ {ratio} (dominant: {dominant or 'A1'})")
+        return True
+
+    # ── P22 Atomic Stage / Commit / Discard ─────────────────────────────
+
+    def stage_gain(self, band: str, ft_mode: str, *,
+                   rxant: str, ant1_gain: int, ant2_gain: int,
+                   ant1_avg: float = 0.0, ant2_avg: float = 0.0) -> None:
+        """P22: Phase-2-Werte in Memory parken. KEIN Disk-Write.
+
+        Werte landen erst auf Disk wenn `commit_with_ratio` aufgerufen
+        wird (Phase 3 erfolgreich) oder werden via `discard_staged`/
+        `discard_all_staged` verworfen (Cancel, App-Quit, Adaptiv-Stop).
+        """
+        key = self._key(band, ft_mode)
+        with self._lock:
+            self._staged[key] = {
+                "rxant":     rxant,
+                "ant1_gain": int(ant1_gain),
+                "ant2_gain": int(ant2_gain),
+                "ant1_avg":  round(float(ant1_avg), 1),
+                "ant2_avg":  round(float(ant2_avg), 1),
+            }
+        band_fmt = self._format_band(key)
+        print(f"[Kalibrierung] Staged (Memory): {band_fmt} {self._mode_label} — "
+              f"ANT1={ant1_gain}dB ANT2={ant2_gain}dB")
+
+    def commit_with_ratio(self, band: str, ft_mode: str, *,
+                          ratio: str, dominant: Optional[str]) -> bool:
+        """P22: staged Gain + Ratio atomar persistieren.
+
+        R1-K1: Staged wird erst nach erfolgreichem Disk-Write entfernt —
+        bei Disk-Fehler bleibt der staged-Eintrag erhalten und der
+        in-memory entry wird zurueckgerollt.
+        R1-K3: Exception wird gefangen, returnt False.
+
+        Returns:
+            True bei Erfolg.
+            False wenn nichts staged (Aufrufer-Bug) ODER Disk-Fehler.
+        """
+        key = self._key(band, ft_mode)
+        now = time.time()
+        with self._lock:
+            staged = self._staged.get(key)
+            if staged is None:
+                return False  # nichts zu committen → Aufrufer-Bug
+            old_entry = self._data.get(key)
+            entry = dict(old_entry or {})
+            entry.update(staged)
+            entry["gain_timestamp"]  = now
+            entry["ratio"]           = ratio
+            entry["dominant"]        = dominant or "A1"
+            entry["ratio_timestamp"] = now
+            entry["measured"]        = time.strftime("%Y-%m-%d %H:%M")
+            self._data[key] = entry
+            try:
+                self._save_locked()
+            except Exception as exc:
+                # Rollback in-memory; staged bleibt fuer Retry
+                if old_entry is None:
+                    self._data.pop(key, None)
+                else:
+                    self._data[key] = old_entry
+                print(f"[PresetStore] commit_with_ratio Disk-Fehler "
+                      f"{key}: {exc}. Staged bleibt erhalten.")
+                return False
+            # Erst nach erfolgreichem Disk-Write staged entfernen
+            self._staged.pop(key, None)
+        band_fmt = self._format_band(key)
+        print(f"[Kalibrierung] Atomar committed: {band_fmt} {self._mode_label} — "
+              f"Gain+Ratio={ratio} (dominant: {dominant or 'A1'})")
+        return True
+
+    def discard_staged(self, band: str, ft_mode: str) -> bool:
+        """P22: Einzelnen staged-Eintrag verwerfen.
+
+        Returns True wenn etwas im Buffer war, False sonst.
+        """
+        key = self._key(band, ft_mode)
+        with self._lock:
+            removed = self._staged.pop(key, None) is not None
+        if removed:
+            band_fmt = self._format_band(key)
+            print(f"[Kalibrierung] Staged verworfen: {band_fmt} {self._mode_label}")
+        return removed
+
+    def discard_all_staged(self) -> int:
+        """P22: Alle staged-Eintraege verwerfen (App-Quit-Pfad).
+
+        Returns Anzahl entfernter Keys.
+        """
+        with self._lock:
+            n = len(self._staged)
+            self._staged.clear()
+        return n
+
+    def has_staged(self, band: str, ft_mode: str) -> bool:
+        """P22-Diagnostik: ist ein staged-Eintrag fuer band+mode da?"""
+        with self._lock:
+            return self._key(band, ft_mode) in self._staged
 
     # ── Migration aus config.json ─────────────────────────────────────────────
 
