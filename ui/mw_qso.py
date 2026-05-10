@@ -110,19 +110,24 @@ class QSOMixin:
 
     @Slot(str, bool, float)
     def _on_tx_started(self, message: str, tx_even: bool, slot_start_ts: float):
-        """TX begonnen — Nachricht mit einheitlichem Antennen-Label ins QSO-Panel.
-
-        Verwendet `_antenna_pref_label` damit Format identisch zu Rufe...-Eintrag
-        und Statusbar ist (verhindert Verwirrung wie z.B. 'ANT1 Δ1.0dB').
+        """TX begonnen — Nachricht ins QSO-Panel.
 
         tx_even/slot_start_ts vom Encoder durchgereicht — qso_panel zeigt
         damit den korrekten Slot-Tag/Zeitstempel der TX-Aktion.
+
+        P23: bei aktivem OMNI-CQ wird der Down-Counter (`omni.cq_remaining`)
+        durchgereicht und qso_panel haengt Suffix `↻N` an die TX-Zeile.
         """
         # P15 (10.05.2026 Mike-Field-Test): ANT-Label NICHT mehr bei Sende.
         # Hardware sendet IMMER ANT1 (verriegelt), Label hier waere irrefuehrend.
         # Label gehoert hinter Empf.-Eintrag (siehe mw_cycle.on_message_decoded).
+        omni_remaining = None
+        omni = getattr(self, '_omni_cq', None)
+        if omni is not None and omni.is_active() and not omni.is_paused():
+            omni_remaining = omni.cq_remaining
         self.qso_panel.add_tx(message, "",
-                              tx_even=tx_even, slot_start_ts=slot_start_ts)
+                              tx_even=tx_even, slot_start_ts=slot_start_ts,
+                              omni_remaining=omni_remaining)
 
     @Slot(object)
     def _on_station_clicked(self, msg: FT8Message):
