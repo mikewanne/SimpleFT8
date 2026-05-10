@@ -75,6 +75,15 @@ class Encoder(QObject):
         self._audio_started = False
         self._replace_message: str | None = None
         self._replace_lock = threading.Lock()
+        # P5.OMNI-PATTERN-FIX-3 (v0.96.2): Pending-TX-Queue fuer OMNI-konsekutive
+        # TX-Slots. Wenn transmit() bei laufendem TX gerufen wird (Pos 1 nach Pos 0
+        # bei FT8 immer der Fall — Audio-Drain 12.8-14.5s, Pos 1 bei :45 hat oft
+        # < 1s Race-Window), wird der naechste Job gequeueet statt return False.
+        # Worker-Finally konsumiert Pending direkt → naechster TX startet ohne
+        # neuen Thread-Schwung.
+        # Beide Felder UNTER _replace_lock geschuetzt (R1-KRITISCH gegen Race).
+        self._pending_tx: tuple[str, bool | None, int | None] | None = None
+        self._pending_queued_at: float = 0.0
 
     def set_protocol(self, mode: str):
         """Protokoll wechseln."""
@@ -186,9 +195,17 @@ class Encoder(QObject):
         nicht atomar koppeln (Encoder-Worker liest tx_even in
         _next_slot_boundary).
 
-        Returns True wenn Worker gestartet, False wenn TX bereits laeuft.
-        Bestehende Aufrufer ohne kwargs (mw_qso._on_send_message) ignorieren
-        das Return — Verhalten kompatibel.
+        Returns True wenn Worker gestartet ODER Pending gequeueet wurde
+        (P5.OMNI-PATTERN-FIX-3: Pending-Konsum im Worker-Finally bedient
+        den naechsten Slot-TX). Bestehende Aufrufer ohne kwargs
+        (mw_qso._on_send_message) ignorieren das Return — Verhalten
+        kompatibel.
+
+        Pending-Verhalten (v0.96.2):
+        - Aufruf bei laufendem TX → Pending-Queue (statt return False)
+        - Worker-finally checkt Pending → konsumiert wenn Ziel-Slot noch
+          erreichbar (target_slot - queued_at < 1.5 * cycle_duration)
+        - Sonst Pending-Verfall mit Log-Warning
         """
         # v0.80 Race-Fix (R1-Final-Review): alten TX-Thread sauber beenden,
         # bevor neuer startet. Sonst kann das finally des alten Threads
@@ -200,7 +217,12 @@ class Encoder(QObject):
             self._tx_thread.join(timeout=0.5)
         with self._replace_lock:
             if self._is_transmitting:
-                return False
+                # P5.OMNI-PATTERN-FIX-3: statt return False → Pending queuen.
+                # Wenn bereits Pending vorhanden, ueberschreiben (letzter
+                # Aufrufer gewinnt — analog tx_even-Setter "letzter setzt").
+                self._pending_tx = (message, tx_even, audio_freq_hz)
+                self._pending_queued_at = time.time()
+                return True
             if tx_even is not None:
                 self.tx_even = tx_even
             if audio_freq_hz is not None:
@@ -212,12 +234,67 @@ class Encoder(QObject):
         return True
 
     def _tx_worker(self, message: str):
-        """TX-Worker: Timing → PTT → Audio via VITA-49 → PTT off.
+        """TX-Worker: Single-Pass + Pending-Konsum-Loop.
 
-        Single-Pass (P4.OMNI-NEUBAU C3): vorher gab es einen rekursiven
-        Outer-Loop mit _pending_tx_message-Queue. OMNI verwendet jetzt
-        seinen eigenen Worker (core/omni_cq.py) und braucht keine
-        Encoder-Queue mehr. P1.9 Replace-Pfad bleibt im Inner.
+        P5.OMNI-PATTERN-FIX-3 (v0.96.2): nach Single-Pass wird die
+        Pending-Queue konsumiert. Wenn `transmit()` waehrend des Workers
+        ein Pending gesetzt hat, wird es hier direkt re-getriggert (kein
+        neuer Thread). Verfall wenn Ziel-Slot > 1.5 * cycle_duration in
+        der Vergangenheit.
+
+        Abort-Schutz (F1-KRITISCH): vor Re-Trigger Pruefung
+        `_abort_event.is_set()` — sonst wuerde `_run_one_tx_pass` den
+        abort cleared (clear() + _is_transmitting=True) und damit
+        abort() ueberschreiben.
+        """
+        # Ausgelagerte Single-Pass-Logik
+        self._run_one_tx_pass(message)
+
+        # P5.OMNI-PATTERN-FIX-3: Pending-Konsum-Loop
+        # Eigene Iteration statt Rekursion → Stack-sicher bei mehreren
+        # konsekutiven Pendings (theoretisch nur 1 erwartet, aber sicher).
+        while True:
+            with self._replace_lock:
+                pending = self._pending_tx
+                queued_at = self._pending_queued_at
+                self._pending_tx = None
+                self._pending_queued_at = 0.0
+            if pending is None:
+                return
+            # F1-KRITISCH-Fix: abort-Check VOR Re-Trigger.
+            # _run_one_tx_pass cleart _abort_event und setzt
+            # _is_transmitting=True — wuerde abort() ueberschreiben.
+            # Wenn abort() zwischen Pass-1 und Pending-Konsum gefeuert hat,
+            # MUESSEN wir hier rausspringen ohne Re-Trigger.
+            if self._abort_event.is_set():
+                print("[Encoder] Pending verworfen (abort waehrend Loop)")
+                return
+            msg, p_tx_even, p_audio_hz = pending
+            # Verfall-Schwelle: ist Ziel-Slot noch erreichbar?
+            # _SLOT in Sekunden. Bei FT8 = 15s, Schwelle = 22.5s.
+            _SLOT = {"FT8": 15.0, "FT4": 7.5, "FT2": 3.8}.get(self._mode, 15.0)
+            target_slot = self._compute_target_slot(p_tx_even, _SLOT)
+            if target_slot - queued_at > _SLOT * 1.5:
+                print(f"[Encoder] Pending TX verfallen "
+                      f"(target={target_slot:.1f}, queued_at={queued_at:.1f}, "
+                      f"diff={target_slot - queued_at:.1f}s > {_SLOT * 1.5:.1f}s)")
+                return
+            # Re-Trigger: Setter unter Lock, dann _run_one_tx_pass
+            with self._replace_lock:
+                if p_tx_even is not None:
+                    self.tx_even = p_tx_even
+                if p_audio_hz is not None:
+                    self.audio_freq_hz = p_audio_hz
+            self._run_one_tx_pass(msg)
+            # Loop pruft erneut auf Pending (sehr seltener Fall — z.B.
+            # 3+ konsekutive transmit-Aufrufe waehrend Worker laeuft).
+
+    def _run_one_tx_pass(self, message: str) -> None:
+        """Single-Pass TX (vorher inline in _tx_worker).
+
+        P5.OMNI-PATTERN-FIX-3: ausgelagert damit Pending-Konsum im
+        _tx_worker-Loop denselben Pfad nutzt. Verhalten 1:1 wie alter
+        _tx_worker (Z. 222-233 vor v0.96.2).
         """
         self._is_transmitting = True
         # v0.80 Fix A2: Event vor jedem TX zuruecksetzen.
@@ -231,6 +308,30 @@ class Encoder(QObject):
         finally:
             self._is_transmitting = False
             self._audio_started = False
+
+    def _compute_target_slot(self, tx_even: bool | None, slot_dur: float) -> float:
+        """Naechster passender Slot-Start als Wall-Time.
+
+        P5.OMNI-PATTERN-FIX-3: spiegelt _next_slot_boundary, aber slot_dur
+        extern uebergeben (Pending-Konsum-Loop muss _SLOT lokal kennen).
+        Liefert immer einen Slot-Start in der Zukunft (oder current Slot
+        wenn cycle_pos < 0.5s). Bei tx_even=None: naechster beliebiger Slot.
+        """
+        now = time.time()
+        cycle_num = int(now / slot_dur)
+        cycle_pos = now % slot_dur
+        is_even = (cycle_num % 2 == 0)
+        if tx_even is None:
+            if cycle_pos < 0.5:
+                return float(cycle_num * slot_dur)
+            return float((cycle_num + 1) * slot_dur)
+        if is_even == tx_even and cycle_pos < 0.5:
+            return float(cycle_num * slot_dur)
+        next_num = cycle_num + 1
+        next_boundary = float(next_num * slot_dur)
+        if (next_num % 2 == 0) != tx_even:
+            next_boundary += slot_dur
+        return next_boundary
 
     def _next_slot_boundary(self) -> float:
         """Naechste passende Slot-Grenze als Unix-Timestamp.
