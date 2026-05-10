@@ -1,4 +1,4 @@
-# SimpleFT8 TODO — Stand 10.05.2026 (v0.96.2)
+# SimpleFT8 TODO — Stand 10.05.2026 (v0.96.4)
 
 > **Mike-Regel 07.05.2026:** Offene Aufgaben gehoeren AUSSCHLIESSLICH
 > in diese Datei. Nicht in CLAUDE.md, nicht in HANDOFF.md. Diese Datei
@@ -6,32 +6,58 @@
 
 ---
 
-## 🔥 TOP — P5 Field-Test (Mike, post-Code)
+## 🔥 TOP — P7 Field-Test (Mike, post-Code)
 
-**Status:** Code fertig (v0.96.2), Final-R1 „Push freigegeben". Tests
-**1034 grün**. App ist gestoppt — Mike startet sie selbst für Field-Test.
+**Status:** Code fertig (v0.96.4), Final-R1 „Push freigegeben"
+(0 KRITISCH/SOLLTE/KOENNTE). Tests **1008 grün**. App gestoppt —
+Mike startet selbst für Field-Test.
 
-**Field-Test 7-Punkte-Plan (V3 §6 F1-F7):**
+**Field-Test 8-Punkte-Plan (V3 §6 F1-F8):**
 
 | F | Test | Erwartung |
 |---|---|---|
-| F1 | App starten, Diversity aktiv, OMNI toggeln. | OMNI-Start-Log + CQ-Audiofreq-Set. |
-| F2 | 10-Slot-Loop beobachten (2 vollständige Blöcke). | qso_panel zeigt: B1 TX-E :30, TX-O :45, RX-E :60, RX-O :75, RX-E :90 → B2 TX-O :105, TX-E :120, RX-O :135, RX-E :150, RX-O :165. **Alle 10 Einträge auf Slot-Boundaries (Issue A geprüft).** |
-| F3 | Log checken `~/.simpleft8/simpleft8.log`. | KEIN `encoder.transmit busy -> ...`. KEIN `Pending TX verfallen`. (Issue B geprüft.) |
-| F4 | OMNI stoppen (manual_halt). | Stop-Log + Reset. |
-| F5 | OMNI starten, Bandwechsel mid-OMNI auf 20m FT8. | OMNI auto-stop (band_change). Erneut starten → läuft sauber. |
-| F6 | OMNI starten, Modus auf FT4 wechseln. | OMNI stoppt (mode_change Normal) ODER läuft mit FT4 7.5s-Slots (Diversity). |
-| F7 | OMNI starten, eingehende Antwort auf CQ. | OMNI pausiert. QSO via qso_state. Nach QSO: OMNI resumed. |
+| F1 | App start, Diversity, OMNI toggeln | OMNI-Start-Log + CQ-Audiofreq-Set + erster CQ in aktuellem Slot |
+| F2 | 5-10 Min beobachten | CQ-Ruf in EINER Paritaet (z.B. nur Even-Slots :30/:00). Andere Slots leer im qso_panel. **Diversity-Anzeige zeigt beide Antennen wechselnd** (kein „nur eine"). |
+| F3 | Statusbar checken | `Ω CQ=X (E)` oder `(O)` zeigt aktuellen Stand |
+| F4 | 10 Min weiterlaufen lassen | Paritaets-Wechsel automatisch (Log: „Paritaets-Wechsel auf Odd"). qso_panel zeigt ab dann CQ in anderer Paritaet (z.B. nur Odd :45/:15) |
+| F5 | Antwort kommt waehrend OMNI | OMNI pausiert, QSO laeuft normal. Nach QSO: OMNI resumed in alter Paritaet |
+| F6 | 1h warten → Diversity Re-Mess (90s) | OMNI sendet **nicht** waehrend Mess. Nach Mess: OMNI sendet wieder |
+| F7 | Bandwechsel mid-OMNI | OMNI auto-stop (band_change), App stabil |
+| F8 | Mode-Wechsel auf Normal | OMNI auto-stop (mode_change), App stabil |
 
-**Bestanden wenn:** F1+F2+F3 sauber laufen ohne busy-Logs. F4-F7 sind
-Regressionstests. Bei Fehlschlag → Folge-Workflow P6 mit vollem
-V1→V2→R1→V3.
+**Bestanden wenn:** F1-F4 sauber + F2 zeigt Diversity beide Antennen.
 
 ## 🚀 Push (zusammen mit Field-Test-Freigabe)
 
 KEIN Push (origin) seit v0.95.16. Lokal gesammelt seit dann:
-**v0.95.16-0.96.2 + P2-Tool**. Push erst nach Mike-Field-Test-OK
+**v0.95.16-0.96.4 + P2-Tool**. Push erst nach Mike-Field-Test-OK
 mit `git push origin main`.
+
+---
+
+## 📋 P8.MESS-STATUS-DIALOG (geplant nach P7)
+
+**Mike-Wunsch 10.05.2026:** Modal-Dialog während Diversity-Mess-Phase.
+
+**Spec:**
+- Trigger: `_diversity_ctrl.start_measure()` aufgerufen → Dialog öffnen
+- Modal blockierend (sperrt UI dauerhaft im Vordergrund)
+- Inhalt:
+  - Titel: "Diversity-Antennen werden neu eingemessen"
+  - Aktuelle Antenne (A1/A2)
+  - Slot-Counter (z.B. "Slot 3 von 6")
+  - Restzeit (z.B. "~45s")
+  - Optional: bisheriger Ratio + Live-Werte
+- Schließt automatisch wenn `_diversity_ctrl.phase` zurück auf "operate"
+
+**Workflow:** eigener V1→V2→R1→V3 nach P7 abgeschlossen.
+
+**Files:**
+- NEU `ui/mess_status_dialog.py` (QDialog Subclass analog zu existing dx_tune_dialog.py)
+- `ui/mw_cycle.py` Hook nach `start_measure()` → Dialog öffnen
+- `ui/mw_cycle.py` Phase-Wechsel "measure" → "operate" → Dialog schließen
+
+**Aufwand:** ~1-2h V1+V2+R1+V3+Code
 
 ---
 

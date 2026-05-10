@@ -5,6 +5,73 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-10 v0.96.4 — P7.OMNI-SIMPLIFY: Single-Slot + Such-Counter
+
+**Auslöser:** P5 (Pending-Queue, v0.96.2) und P6 (Pair-Audio, v0.96.3)
+lösten Pos-1-Encoder-Race nicht sauber:
+- P5 Field-Test: Pending-Verfall (29.8s > 22.5s) → Pos 1 nie gesendet, Pattern halb tot
+- P6 Field-Test: 27.6s durchgehend `_is_transmitting=True` blockt Diversity-
+  Antennen-Switching → Mike sieht „nur eine Antenne"
+
+**Wurzel:** TX-TX-konsekutiv in 15s-Slots passt physisch nicht zu Encoder
++ Diversity. Beide Workarounds verbiegen Encoder/Diversity um das alte
+Pattern zu retten.
+
+**Mike-Spec 10.05.:** Pattern ändern statt Encoder/Diversity verbiegen.
+Diversity ist UNANTASTBAR (Kern-USP).
+
+**Lösung:**
+- OMNI = Single-Slot-CQ in EINER Paritaet (Even ODER Odd)
+- Wechsel ueber existierenden Diversity-Such-Counter alle ~10 Min
+  (`_OMNI_FLIP_AFTER_SEARCHES = 10` × 60s/Such bei FT8)
+- Kein TX waehrend Diversity-Mess-Phase (90s alle 1h)
+- Sticky Audio-Frequenz ueber Paritaets-Wechsel hinweg
+- Counter pausiert automatisch bei QSO via existing `reset_search_counter()`
+
+**Code-Aenderungen:**
+- `core/encoder.py`: P5+P6 zurueckgerollt (-272 Zeilen). transmit_pair,
+  _tx_pair_*, _pending_*, _run_one_tx_pass, _compute_target_slot WEG.
+- `core/omni_cq.py`: 305 → 246 Zeilen (-19%). 5-Slot-Pattern + Block 1/2 +
+  _pair_in_progress WEG. Neu: on_search_trigger, flip_tx_parity,
+  cq_count_changed (1 Counter), parity_flipped Signals.
+- `ui/mw_cycle.py:160`: 1-Zeile-Hook nach `tick_slot()==True` →
+  `_omni_cq.on_search_trigger()`
+- `ui/main_window.py`: Statusbar `Ω CQ=X (E/O/—)` statt Even/Odd-Doppel-
+  Counter. _on_omni_slot_action vereinfacht zu pass.
+
+**Robustheit:**
+- V2-L9 / R1-SF-2: Fresh-Compute is_even aus `time.time()` (Schutz gegen
+  P6-Beobachtung 14s Signal-Latenz)
+- R1-SF-1: on_search_trigger prueft `_paused` (Defense-in-Depth)
+- R1-SF-3: T14 Test fuer pause-noop
+
+**Workflow:** V1 → V2 (Self-Review, 12 Lessons) → R1 (DeepSeek-Reasoner,
+„V3 freigegeben für Code", 0 KRITISCH + 3 SOLLTE-FIX integriert) → V3
+Compact-fest → Mike-Freigabe → Code C1-C7 → Final-R1 („Push freigegeben",
+0 KRITISCH/SOLLTE/KOENNTE — minimalistisch und KISS-konform).
+
+**Atomare Commits (7):**
+- C1 (`ac254a5`): encoder.py P5+P6 zurueckrollen (-272 Z.)
+- C2 (`3f98caf`): omni_cq.py radikale Vereinfachung (305 → 246 Z.)
+- C3 (`741f526`): mw_cycle.py Such-Trigger-Hook (1 Zeile)
+- C4 (`332c9f8`): main_window.py Signal+Statusbar
+- C5 (`956ef61`): tests neu T1-T14 + alte raus (-524 Z. netto)
+- C6 (`3111cfe`): APP_VERSION 0.96.3 → 0.96.4
+- C7: Doku (HISTORY + HANDOFF + CLAUDE + TODO + Memory + Spec)
+
+**Tests:** 1024 → **1008 grün** (-16 netto: 13 alte raus, 19 neue rein).
+V3-Plan war ~1005, +3 Bonus.
+
+**Code-Bilanz:** netto **~800 Zeilen weniger Code** im Repo (Encoder + OMNI
++ Tests).
+
+**APP_VERSION:** v0.96.3 → v0.96.4. Push pending bis Mike-Field-Test grün.
+
+**P8.MESS-STATUS-DIALOG:** geplant nach P7 (Modal-Dialog während 90s
+Diversity-Mess-Phase). In `TODO.md` dokumentiert.
+
+---
+
 ## 2026-05-10 v0.96.2 — P5.OMNI-PATTERN-FIX-3: Encoder-Pending-Queue + Slot-Boundary-Display
 
 **Auslöser:** Field-Test 10.05.2026 ~06:30 UTC (v0.96.1) zeigte 2 Issues:
