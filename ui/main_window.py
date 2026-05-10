@@ -261,7 +261,10 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         )
         self._omni_cq.omni_stopped.connect(self._on_omni_stopped)
         self._omni_cq.cq_freq_changed.connect(self._on_omni_freq_changed)
-        self._omni_cq.counter_changed.connect(self._on_omni_counter_changed)
+        # P7.OMNI-SIMPLIFY: cq_count_changed (1 Counter mit Paritaet) +
+        # parity_flipped (UI-Notification bei Wechsel)
+        self._omni_cq.cq_count_changed.connect(self._on_omni_cq_count_changed)
+        self._omni_cq.parity_flipped.connect(self._on_omni_parity_flipped)
         self._omni_cq.slot_action.connect(self._on_omni_slot_action)
         # V2-L3: letzten TX-Slot fuer Block-Wahl nach QSO-Ende tracken.
         self._last_qso_tx_even: bool | None = None
@@ -744,30 +747,28 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         print(f"[OMNI-CQ] CQ-Audiofrequenz: {freq_hz} Hz")
         self._update_statusbar()
 
-    def _on_omni_counter_changed(self, even: int, odd: int):
-        """OMNI Even/Odd-Counter geändert — Statusbar aktualisieren."""
+    @Slot(int, bool)
+    def _on_omni_cq_count_changed(self, count: int, tx_even: bool):
+        """OMNI CQ-Counter erhoeht — Statusbar aktualisieren."""
+        self._update_statusbar()
+
+    @Slot(bool)
+    def _on_omni_parity_flipped(self, new_tx_even: bool):
+        """OMNI Paritaets-Wechsel — User-Notification + Statusbar."""
+        parity_str = "Even" if new_tx_even else "Odd"
+        print(f"[OMNI-CQ-UI] Paritaets-Wechsel auf {parity_str}")
         self._update_statusbar()
 
     @Slot(str, bool, bool)
     def _on_omni_slot_action(self, label: str, is_tx: bool, target_even: bool):
-        """OMNI-Worker emittet Slot-Action — RX-Slots als „Horche..." anzeigen.
+        """P7.OMNI-SIMPLIFY: OMNI emittet slot_action NUR bei TX-Slot.
 
-        TX-Slots laufen ohnehin ueber encoder.tx_started → qso_panel.add_tx,
-        also zeigen wir hier nur RX-Slots. target_even ist die echte
-        UTC-Slot-Paritaet (V2-L8).
+        TX-Slot wird ueber encoder.tx_started -> qso_panel.add_tx angezeigt
+        (Sende-Eintrag). Hier ist nichts zu tun. RX-Anzeige (Horche) entfaellt
+        bei P7 — OMNI ist passiver CQ-Modus, RX-Stationen kommen ueber
+        rx_panel an.
         """
-        if not is_tx:
-            # P5.OMNI-PATTERN-FIX-3 (v0.96.2): Slot-Boundary statt Wall-Time.
-            # GUI-Latency / Qt-QueuedConnection koennen 100-400ms nach echter
-            # Slot-Boundary einschlagen → time.time() wuerde z.B. 04:26:30.4
-            # zeigen. floor(now / cycle_duration) * cycle_duration gibt :30.0
-            # sauber. Loest gleichzeitig die Phaenomene "Pos 4 RX-E fehlt"
-            # und ":44 [O] Horche" durch korrekte Slot-Boundary-Anzeige
-            # (R1-Diagnose: Display-Bug wegen Wall-Time-Verschiebung).
-            slot_dur = self.timer.cycle_duration
-            now = time.time()
-            slot_start = (now // slot_dur) * slot_dur
-            self.qso_panel.add_listening(slot_start, target_even)
+        pass
 
     # ── Auto-Hunt UI-Lifecycle (v0.75) ───────────────────────────
 
@@ -994,8 +995,15 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         }
         mode_str = mode_labels.get(self._rx_mode, "Normal")
         if getattr(self, '_omni_cq', None) and self._omni_cq.is_active():
-            omni_str = (f"  Ω Even={self._omni_cq.cq_even_count} "
-                        f"Odd={self._omni_cq.cq_odd_count}")
+            # P7.OMNI-SIMPLIFY: 1 Counter mit aktueller Paritaet (E/O/?).
+            parity = self._omni_cq.cq_tx_even
+            if parity is True:
+                parity_str = "E"
+            elif parity is False:
+                parity_str = "O"
+            else:
+                parity_str = "—"  # noch nicht initialisiert
+            omni_str = f"  Ω CQ={self._omni_cq.cq_count} ({parity_str})"
         else:
             omni_str = ""
         # DT-Korrektur Status — nur DT-Label gruen, Statusbar bleibt grau
