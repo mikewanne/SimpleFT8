@@ -1,154 +1,125 @@
-"""SimpleFT8 OMNI-CQ — signal-basiert, GUI-Thread, kein Worker.
+"""OMNI-CQ — Single-Slot-CQ-Modus mit Such-Counter-Paritaets-Wechsel.
 
-Architektur (P4.OMNI-NEUBAU V5, 09.05.2026):
-- Eigenstaendiges Modul (KEIN qso_state.cq_mode-Hack).
-- Slot-Synchronisation kommt vom existing FT8Timer.cycle_start-Signal
-  (1x pro 15s-Slot bei FT8). on_cycle_start laeuft im GUI-Thread —
-  kein eigener Thread, keine Sleep-Logik, keine Boundary-Berechnung.
-- 5-Slot-Pattern (TX-TX-RX-RX-RX). Block 1 Even-First, Block 2 Odd-First.
-- Toggle-Start: IMMER Block 1 (KISS). Rollover automatisch nach 5 Slots.
-- Frequenz-Sticky: 1x am ersten TX setzen, fest bis stop().
-- Bei eingehender Antwort: pause() — Uebergabe an qso_state.start_qso()
-  laeuft via mw_cycle.on_message_decoded (C6, unveraendert).
-- Block-Wahl nach QSO: endet auf Even -> Block 2, endet auf Odd -> Block 1.
+P7.OMNI-SIMPLIFY (v0.96.4, 10.05.2026 Mike-Spec):
+- Sendet CQ in EINER Slot-Paritaet (Even ODER Odd)
+- Paritaet wird automatisch alle ~10 Min gewechselt (Such-Counter)
+- Diversity-Re-Mess pausiert OMNI (kein TX waehrend Mess-Phase)
+- Sticky Audio-Frequenz ueber Paritaets-Wechsel hinweg
 
-Hardware-Garantie ANT1: OMNI emittet kein TX direkt. TX laeuft via
-encoder.transmit(), welcher zentral radio.set_tx_antenna("ANT1") setzt.
-Kein Extra-Check noetig.
+Eigenstaendiges Modul (KEIN qso_state.cq_mode-Hack — Memory-Pflicht
+feedback_omni_separate_architecture.md).
 
-Lessons-Learned (v0.96.0 Worker-Bug, 09.05.2026):
-- Tests rufen on_cycle_start direkt auf — KEIN Worker-Mock, KEIN
-  Sleep-Mock, KEIN Boundary-Mock. Wenn ein Mock genau die Logik
-  ueberschreibt die der Test pruefen sollte, validiert er die Mock-
-  Implementierung statt des echten Codes. Vor jedem Mock fragen:
-  "Ersetzt dieser Mock den Pfad den der Test pruefen sollte?" — JA
-  bedeutet Test wertlos.
+Lifecycle:
+  start()                    -> _active=True, _cq_tx_even=None
+  on_cycle_start(c, is_even) -> erster Aufruf: setzt _cq_tx_even=fresh_is_even
+                                + _init_audio_freq, sendet im selben Slot.
+                                Folgende Aufrufe: nur senden wenn fresh_is_even
+                                matcht.
+  on_search_trigger()        -> Counter ++; bei >= 10 -> flip_tx_parity()
+  flip_tx_parity()           -> _cq_tx_even toggle (True<->False)
+  pause() / resume_after_qso(...) -> Lifecycle (Resume nimmt last_was_even
+                                     fuer API-Kompat, ignoriert Wert)
+  stop(reason)               -> Reset alles
 """
 from __future__ import annotations
 
 import logging
-
+import time
 from PySide6.QtCore import QObject, Signal, Slot
-
 
 logger = logging.getLogger(__name__)
 
 
-class OmniCQ(QObject):
-    """OMNI-CQ State-Machine, signal-getriggert.
+# Wechsel-Schwelle: nach N Such-Triggern flip Paritaet.
+# FT8: 60s/Such x 10 = 10 Min Wechsel-Intervall.
+_OMNI_FLIP_AFTER_SEARCHES = 10
 
-    Aufrufer-Pfad: FT8Timer.cycle_start -> mw_cycle._on_cycle_start ->
-    OmniCQ.on_cycle_start(cycle_num, is_even).
+
+class OmniCQ(QObject):
+    """Single-Slot-CQ mit Such-Counter-Wechsel.
 
     Signals:
-        omni_started: () — Start ausgeloest (vor erstem cycle_start).
-        omni_stopped: (str) — Stop-Reason ("manual_halt", "band_change", ...).
-        slot_action: (str, bool, bool) — (label, is_tx, target_even).
-            target_even bei TX-Slots = Pattern-Paritaet, bei RX-Slots = echte
-            UTC-Slot-Paritaet (is_even aus dem Signal-Parameter).
-        cq_freq_changed: (int) — neue CQ-Audiofrequenz in Hz (1x am Start).
-        counter_changed: (int, int) — (cq_even, cq_odd) bei TX-Erfolg.
+        omni_started: () — bei start()
+        omni_stopped: (reason: str)
+        slot_action: (label: str, is_tx: bool, target_even: bool)
+                     P7: emit nur bei TX-Slot (kein RX-Branch mehr)
+        cq_freq_changed: (audio_hz: int)
+        cq_count_changed: (count: int, current_tx_even: bool)
+        parity_flipped: (new_tx_even: bool) — bei flip_tx_parity()
     """
 
     omni_started = Signal()
     omni_stopped = Signal(str)
     slot_action = Signal(str, bool, bool)
     cq_freq_changed = Signal(int)
-    counter_changed = Signal(int, int)
+    cq_count_changed = Signal(int, bool)
+    parity_flipped = Signal(bool)
 
-    # 5-Slot-Pattern (TX-TX-RX-RX-RX). Block 1 Even-First / Block 2 Odd-First.
-    _TX_PATTERN = (True, True, False, False, False)
-    _FALLBACK_AUDIO_HZ = 1500   # AC12: wenn diversity.get_free_cq_freq()=None
+    _FALLBACK_AUDIO_HZ = 1500
 
     def __init__(self, encoder, diversity_ctrl, timer,
                  my_call: str, my_grid: str):
         super().__init__()
         self._encoder = encoder
         self._diversity = diversity_ctrl
-        self._timer = timer            # nur fuer API-Kompat (Tests/Init)
+        self._timer = timer
         self._my_call = my_call
         self._my_grid = my_grid
 
         self._active = False
         self._paused = False
-        self._slot_index = 0
-        self._block = 1                # 1=Even-First, 2=Odd-First
         self._cq_audio_hz: int | None = None
-        self._cq_even_count = 0
-        self._cq_odd_count = 0
-        # P6.OMNI-DOUBLE-AUDIO: Flag dass aktueller Block Pair-Modus laeuft
-        # (Pos 0 hat transmit_pair gestartet, Pos 1 darf encoder NICHT
-        # erneut rufen).
-        self._pair_in_progress = False
+        self._cq_tx_even: bool | None = None
+        self._cq_count = 0
+        self._search_trigger_count = 0
 
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
+    # ── Public API ────────────────────────────────────────────────────
+
     def start(self) -> None:
-        """OMNI starten — IMMER Block 1 (AC5, KISS).
-
-        Idempotent: bei _active=True ist der Aufruf no-op (AC1).
-        """
+        """OMNI starten — _cq_tx_even bleibt None bis erster on_cycle_start."""
         if self._active:
             return
         self._active = True
         self._paused = False
-        self._slot_index = 0
-        self._block = 1
         self._cq_audio_hz = None
-        self._cq_even_count = 0
-        self._cq_odd_count = 0
-        self._pair_in_progress = False
+        self._cq_tx_even = None
+        self._cq_count = 0
+        self._search_trigger_count = 0
         self.omni_started.emit()
-        logger.info("[OMNI-CQ] Start (Block 1)")
+        logger.info("[OMNI-CQ] Start")
 
     def stop(self, reason: str) -> None:
-        """OMNI stoppen + voller State-Reset.
-
-        Idempotent (AC20): bei _active=False ist der Aufruf no-op.
-        """
         if not self._active:
             return
         self._active = False
         self._paused = False
-        self._slot_index = 0
-        self._block = 1
         self._cq_audio_hz = None
-        self._cq_even_count = 0
-        self._cq_odd_count = 0
-        self._pair_in_progress = False
+        self._cq_tx_even = None
+        self._cq_count = 0
+        self._search_trigger_count = 0
         self.omni_stopped.emit(reason)
         logger.info("[OMNI-CQ] Stop (%s)", reason)
 
     def pause(self) -> None:
-        """Pause — _slot_index friert ein, _active bleibt True (AC17).
-
-        Idempotent: bei nicht-active oder bereits-paused no-op.
-        """
         if not self._active or self._paused:
             return
         self._paused = True
         logger.info("[OMNI-CQ] Pause (QSO laeuft)")
 
-    def resume_after_qso(self, last_was_even: bool) -> None:
-        """Nach QSO-Ende fortsetzen — Block-Wahl anhand letztem QSO-Slot.
+    def resume_after_qso(self, last_was_even: bool | None = None) -> None:
+        """API-Kompat (Pos-Param ignoriert in P7).
 
-        Mike-Spec / AC18: endet auf Even -> Block 2, endet auf Odd -> Block 1.
-        Beide starten ab Pos 0. cq_audio_hz BLEIBT (AC14).
-
-        Pre-Check: wenn nicht pausiert no-op + log warning. Schuetzt vor
-        falschem Aufruf nach stop().
+        last_was_even-Block-Wahl entfaellt — _cq_tx_even bleibt unveraendert.
+        Sync ueber echte Re-Mess (via on_search_trigger), NICHT ueber Resume.
         """
         if not self._paused:
             logger.warning(
-                "[OMNI-CQ] resume_after_qso aufgerufen ohne pause — ignoriert"
+                "[OMNI-CQ] resume_after_qso ohne pause — ignoriert"
             )
             return
-        self._block = 2 if last_was_even else 1
-        self._slot_index = 0
         self._paused = False
-        logger.info("[OMNI-CQ] Resume (last_even=%s -> Block %d)",
-                    last_was_even, self._block)
+        parity_str = "E" if self._cq_tx_even else "O"
+        logger.info("[OMNI-CQ] Resume (Paritaet bleibt %s)", parity_str)
 
     def is_active(self) -> bool:
         return self._active
@@ -157,138 +128,107 @@ class OmniCQ(QObject):
         return self._paused
 
     @property
-    def cq_even_count(self) -> int:
-        return self._cq_even_count
+    def cq_count(self) -> int:
+        return self._cq_count
 
     @property
-    def cq_odd_count(self) -> int:
-        return self._cq_odd_count
+    def cq_tx_even(self) -> bool | None:
+        return self._cq_tx_even
 
     @property
     def cq_audio_hz(self) -> int | None:
         return self._cq_audio_hz
 
-    # ------------------------------------------------------------------
-    # Cycle-Start Hook (vom mw_cycle._on_cycle_start gerufen)
-    # ------------------------------------------------------------------
+    # ── Cycle-Hook (vom mw_cycle._on_cycle_start) ────────────────────
+
     @Slot(int, bool)
     def on_cycle_start(self, cycle_num: int, is_even: bool) -> None:
-        """Pro Slot 1x — entscheidet TX/RX, advanced State.
+        """Pro Slot 1x — entscheidet ob OMNI sendet.
 
-        Defense-in-Depth-Guard (AC7): no-op wenn nicht aktiv oder pausiert.
-        Pattern-Entscheidung basiert auf _slot_index — is_even (echte
-        UTC-Slot-Paritaet) wird nur fuer RX-Anzeige genutzt.
+        R1-SF-2 / V2-L9: cycle_num UND is_even Parameter werden IGNORIERT.
+        Paritaet wird FRESH aus time.time() berechnet (Robustheit gegen
+        Signal-Latenz, im P6-Field-Test 14s Latenz beobachtet -> falsche
+        Paritaet via signal). Parameter bleiben in der Signatur fuer
+        Qt-Slot-Kompat (`@Slot(int, bool)` bindet an cycle_start signal).
         """
         if not self._active or self._paused:
             return
-        is_tx, target_even = self._next_slot_action()
-        if is_tx:
-            self._do_tx_slot(target_even)
-        else:
-            self._do_rx_slot(is_even)
-        self._advance_state()
 
-    # ------------------------------------------------------------------
-    # Internal — testbar einzeln
-    # ------------------------------------------------------------------
-    def _next_slot_action(self) -> tuple[bool, bool]:
-        """Liefert (is_tx, target_even) fuer den AKTUELLEN _slot_index.
+        # V2-L12: kein Senden waehrend Diversity-Mess-Phase
+        if self._diversity.phase != "operate":
+            return
 
-        target_even ist nur fuer TX-Slots semantisch — Block 1 Pos 0=Even,
-        Pos 1=Odd; Block 2 Pos 0=Odd, Pos 1=Even.
-        """
-        is_tx = self._TX_PATTERN[self._slot_index]
-        if not is_tx:
-            return False, False
-        if self._block == 1:
-            target_even = (self._slot_index == 0)
-        else:
-            target_even = (self._slot_index == 1)
-        return True, target_even
+        # V2-L9 Fresh-Compute is_even — robust gegen Signal-Latenz
+        slot_dur = self._timer.cycle_duration
+        fresh_is_even = (int(time.time() / slot_dur) % 2 == 0)
 
-    def _do_tx_slot(self, target_even: bool) -> None:
-        """TX-Slot ausfuehren.
+        # Erster Aufruf: Paritaet aus aktuellem Slot waehlen
+        if self._cq_tx_even is None:
+            self._cq_tx_even = fresh_is_even
 
-        P6.OMNI-DOUBLE-AUDIO (v0.96.3, Mike-Vorschlag 10.05.2026):
-        - Pos 0: ruft encoder.transmit_pair(msg0, msg1) — sendet beide
-          Slots (Pos 0 + Pos 1) als EIN PTT-Cycle. Pos 1 wird vom selben
-          Worker mit dranghaengt -> kein Encoder-Race, kein Drift-Konflikt.
-          Counter+slot_action fuer Pos 0 wird sofort emit (Pair gestartet).
-          Counter+slot_action fuer Pos 1 wird im _do_tx_slot Pos-1-Aufruf
-          emit (siehe _pair_in_progress-Flag).
-        - Pos 1: encoder ist im Pair-Mode, transmit nicht erneut rufen.
-          Nur Counter+slot_action emit.
-        - Andere Slots: legacy single-pass (sollte nie passieren in OMNI
-          mit aktuellem _TX_PATTERN, aber Defense-in-Depth).
-
-        AC8: Reihenfolge bei Erfolg: counter_changed.emit -> slot_action.emit.
-        """
+        # Frequenz initialisieren wenn noch nicht (sticky)
         if self._cq_audio_hz is None:
             self._init_audio_freq()
+
+        # Nur senden wenn aktueller Slot die richtige Paritaet hat
+        if fresh_is_even != self._cq_tx_even:
+            return
+
         cq_msg = f"CQ {self._my_call} {self._my_grid}"
-
-        # Pair-Mode-Erkennung: Pos 0 + Pos 1 sind beide TX (per Pattern).
-        # Pos 0 startet das Pair, Pos 1 ist no-op fuer encoder (Pair laeuft).
-        is_pos_0 = (self._slot_index == 0)
-        is_pos_1 = (self._slot_index == 1)
-
-        ok = True  # default: counter+slot_action immer emit (auch bei pos1)
-
-        if is_pos_0:
-            # Pos 1's target_even ist invertiert zu Pos 0's
-            tx_even_1 = not target_even
-            ok = self._encoder.transmit_pair(
-                cq_msg, cq_msg,
-                tx_even_0=target_even, tx_even_1=tx_even_1,
-                audio_freq_hz=self._cq_audio_hz,
-            )
-            self._pair_in_progress = ok  # Flag fuer Pos 1
-        elif is_pos_1:
-            # Pair laeuft schon -> KEIN encoder.transmit, nur Anzeige.
-            # _pair_in_progress sollte True sein wenn Pos 0 erfolgreich war.
-            if not getattr(self, "_pair_in_progress", False):
-                # Edge-Case: Pos 0 hatte Pair-Start verworfen, Pos 1 muss
-                # solo senden. Fallback auf single transmit.
-                ok = self._encoder.transmit(
-                    cq_msg, tx_even=target_even,
-                    audio_freq_hz=self._cq_audio_hz,
-                )
-            # else: Pair-Worker hat Pos 1 schon im Stream, hier nur emit
-            self._pair_in_progress = False  # zuruecksetzen fuer naechsten Block
-        else:
-            # Defense-in-Depth: andere TX-Slot-Position (sollte nie sein)
-            ok = self._encoder.transmit(
-                cq_msg, tx_even=target_even,
-                audio_freq_hz=self._cq_audio_hz,
-            )
-
-        label = self._slot_label(True, target_even)
+        ok = self._encoder.transmit(
+            cq_msg, tx_even=self._cq_tx_even,
+            audio_freq_hz=self._cq_audio_hz,
+        )
         if ok:
-            if target_even:
-                self._cq_even_count += 1
-            else:
-                self._cq_odd_count += 1
-            self.counter_changed.emit(self._cq_even_count, self._cq_odd_count)
-            self.slot_action.emit(label, True, target_even)
+            self._cq_count += 1
+            self.cq_count_changed.emit(self._cq_count, self._cq_tx_even)
+            label = self._slot_label(True, self._cq_tx_even)
+            self.slot_action.emit(label, True, self._cq_tx_even)
         else:
+            label = self._slot_label(True, self._cq_tx_even)
             logger.warning(
-                "[OMNI-CQ] encoder busy -> Slot %s uebersprungen",
-                label,
+                "[OMNI-CQ] encoder busy -> Slot %s uebersprungen", label
             )
 
-    def _do_rx_slot(self, is_even: bool) -> None:
-        """RX-Slot — slot_action mit echter UTC-Slot-Paritaet emittieren."""
-        label = self._slot_label(False, is_even)
-        self.slot_action.emit(label, False, is_even)
+    # ── Such-Counter-Hook (vom mw_cycle._refresh_diversity_freq_view) ─
 
-    def _advance_state(self) -> None:
-        """Ein Slot weiter — bei Pos 4 Rollover auf 0 + Block-Wechsel."""
-        self._slot_index = (self._slot_index + 1) % 5
-        if self._slot_index == 0:
-            self._block = 2 if self._block == 1 else 1
+    def on_search_trigger(self) -> None:
+        """Diversity Such-Trigger gefeuert — Counter ++.
+
+        Bei _OMNI_FLIP_AFTER_SEARCHES (=10) Triggern: flip_tx_parity().
+
+        R1-SF-1 Defense-in-Depth: prueft auch _paused (existing mw_cycle
+        TX-Schutz greift bereits via reset_search_counter, aber zukuenftige
+        Hook-Aenderungen sollen den Counter nicht versehentlich waehrend
+        QSO inkrementieren).
+        """
+        if not self._active or self._paused:
+            return
+        self._search_trigger_count += 1
+        if self._search_trigger_count >= _OMNI_FLIP_AFTER_SEARCHES:
+            self._search_trigger_count = 0
+            self.flip_tx_parity()
+
+    def flip_tx_parity(self) -> None:
+        """Paritaets-Wechsel — toggle _cq_tx_even.
+
+        Public fuer Tests + manueller Trigger (zukuenftig UI-Button).
+        No-op wenn nicht aktiv oder _cq_tx_even noch None (vor erstem
+        on_cycle_start).
+        """
+        if not self._active:
+            return
+        if self._cq_tx_even is None:
+            return
+        self._cq_tx_even = not self._cq_tx_even
+        self.parity_flipped.emit(self._cq_tx_even)
+        parity_str = "Even" if self._cq_tx_even else "Odd"
+        logger.info("[OMNI-CQ] Paritaets-Wechsel auf %s", parity_str)
+
+    # ── Internal ──────────────────────────────────────────────────────
 
     def _init_audio_freq(self) -> None:
-        """Sticky-Frequenz beim ersten TX setzen (AC12). Fallback 1500 Hz."""
+        """Sticky-Frequenz beim ersten TX setzen. Fallback _FALLBACK_AUDIO_HZ."""
         freq = self._diversity.get_free_cq_freq()
         if freq is None:
             logger.warning(
@@ -298,8 +238,9 @@ class OmniCQ(QObject):
             freq = self._FALLBACK_AUDIO_HZ
         self._cq_audio_hz = int(freq)
         self.cq_freq_changed.emit(self._cq_audio_hz)
+        logger.info("[OMNI-CQ] CQ-Audiofrequenz: %d Hz", self._cq_audio_hz)
 
     def _slot_label(self, is_tx: bool, target_even: bool) -> str:
         parity = "E" if target_even else "O"
         kind = "TX" if is_tx else "RX"
-        return f"B{self._block} [{self._slot_index}/4] {kind}-{parity}"
+        return f"{kind}-{parity}"
