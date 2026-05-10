@@ -1,10 +1,73 @@
-# SimpleFT8 TODO — Stand 10.05.2026 (v0.96.8)
+# SimpleFT8 TODO — Stand 10.05.2026 (v0.96.8, neue Session)
 
 > **Mike-Regel 07.05.2026:** Offene Aufgaben gehoeren AUSSCHLIESSLICH
 > in diese Datei. Nicht in CLAUDE.md, nicht in HANDOFF.md. Diese Datei
 > ist die einzige Quelle fuer Backlog/Bugs/Feature-Wuensche.
 
 ---
+
+# 🟢 STATUS-ÜBERSICHT (für neue Session)
+
+**Aktuelle Version:** v0.96.8 (10.05.2026)
+**Tests:** 1056 grün
+**App-Stand:** läuft, OMNI + Diversity funktionsfähig, Field-Test diverse
+Punkte heute durchgelaufen. Push pending — v0.95.16 - v0.96.8 lokal
+gesammelt, noch nicht auf origin.
+
+## ✅ Heute erledigt (10.05.2026)
+
+| Version | Was |
+|---|---|
+| **v0.96.5** | P16.UI-CLEANUP-BUNDLE (P9+P11+P15: Remess-Countdown, Statusbar-Refresh, Antennen-Label) |
+| **v0.96.6** | P22.PRESET-ATOMARITAET + **P8.MESS-MODAL** (atomares Speichern Gain+Ratio + WindowModal-Sperre während Mess) |
+| **v0.96.7** | P23.OMNI-COUNTER-EIGEN (eigener Down-Counter pro Modus, sichtbar als `↻10` in TX-Display) |
+| **v0.96.8** | P21.DEBUG-LOG + DIV-MEAS-RADIO-GUARD (an/aus in Settings, Skip wenn radio.ip=False) |
+
+## 🔥 OFFEN — Hohe Priorität
+
+| ID | Was | Aufwand | Hinweis |
+|---|---|---|---|
+| **P12** | QSO-POSTPROCESSING-ASYNC — App hängt 1 Min nach QSO (PSK + ADIF + QRZ + Locator-DB synchron) | 3-4h Workflow | Mike erwähnt seit Wochen — Hoch-Prio |
+| **P26** | MODAL-RADIO-CONNECT — Dialog während FlexRadio-Connect läuft | 1.5h | **Löst evtl. P25 mit** (Mess startet erst NACH Connect = sauberer als Skip-Workaround) |
+| **P25** | RADIO-IP-LATE-SETTING — Wurzel warum `radio.ip` spät gesetzt wird | 2h Diagnose | Wenn P26 gebaut: P25 evtl. obsolet (Modal sperrt Mess bis Connect da) |
+
+## 📋 OFFEN — Mittlere Priorität
+
+| ID | Was | Aufwand |
+|---|---|---|
+| **P24** | App soll letzten RX-Mode (Normal/Std/DX) merken — heute startet immer Normal | 1h Lite |
+| **P10** | PSK-BACKOFF-RESET — Backoff von 60min auf 5min ODER Reset-Button | 1-2h |
+| **P14** | DT-WERTE-ASYMMETRISCH — NTP-Korrektur-Issue | 2h Diagnose |
+| **P13** | RX-PANEL-SLOT-TIMES — Wall-Time vs Slot-Boundary | 1-2h |
+
+## 🛠 OFFEN — Niedrige Priorität
+
+| ID | Was | Aufwand |
+|---|---|---|
+| **P18** | DT-KORR-3X-RELOAD — kosmetisch, 3-fach Reload-Log | 30min |
+| **P20** | LOG-ROTATION für simpleft8.log (Debug-Log macht das schon, hier geht's um den Haupt-Log) | 1h |
+
+## 📦 Push pending
+
+KEIN Push seit v0.95.16. Lokal gesammelt: **v0.95.16 → v0.96.8 + P2-Tool +
+P3-Audio-Dump + P21-Debug-Log**. Push erst wenn Mike alle Field-Tests
+abgenommen hat. Aktueller Stand: P22/P23/P21/P16 alle field-getestet OK.
+
+## ✅ Heute RESOLVED (zur Klarheit)
+
+- **P17** (DX-Init-Hang): aufgelöst durch erfolgreichen Phase-2-Mess + P22
+  Half-State-Reject + P21 Radio-Guard
+- **P19** (DX-Cache-Ignoriert): gleiche Wurzel wie P17, gleiche Lösung
+- **P9** (Remess-Countdown): in P16-Bundle erledigt
+- **P11** (Statusbar-Parity-Refresh): in P16-Bundle erledigt
+- **P15** (Antennen-Label): in P16-Bundle erledigt
+- **P21** (Strukturiertes-Debug-Log): heute in v0.96.8 implementiert
+- **P22** (Preset-Atomaritaet): in v0.96.6 implementiert + field-getestet
+- **P23** (OMNI-Counter-Eigen): in v0.96.7 implementiert + field-getestet
+
+---
+
+# 📋 OFFENE WORKFLOWS (Detail-Beschreibungen)
 
 ## 📋 P24.LAST-RX-MODE-PERSIST (Mike-Wunsch 10.05. 17:10)
 
@@ -82,6 +145,15 @@ P22 kopiert.
 
 **Schweregrad:** Mittel — UX (verhindert Confusion bei langen
 Connect-Zeiten und löst möglicherweise auch P21-Problem).
+
+**Claude-Hinweis 17:30 UTC:** P26 löst nebenbei vermutlich auch
+P25-Symptome — wenn Mike den Modal-Dialog sieht statt zu denken
+„App ist tot", weiß er warum die Mess wartet. Plus: das Modal könnte
+selbst die Mess-Start-Steuerung übernehmen (Mess startet erst NACH
+Connect-Erfolg, sauber statt Skip-Workaround). Beim Bauen von P26
+würde ich vorschlagen P21-Skip-Fix beizubehalten als Defense-in-Depth,
+aber das Modal wäre der primäre Schutz. → **Wenn P26 gebaut wird,
+P25 evtl. komplett obsolet.**
 
 ---
 
