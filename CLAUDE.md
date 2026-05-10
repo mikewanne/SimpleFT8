@@ -105,8 +105,8 @@ auf Display 2 (Position 1024,0) verschieben. Mike macht von dort
 Fernwartung — App MUSS auf dem mittleren Bildschirm landen.
 
 **Start:** `cd "/Users/mikehammerer/Documents/KI N8N Projekte/FT8/SimpleFT8" && ./venv/bin/python3 main.py`
-**Aktueller Stand:** **v0.96.4 P7.OMNI-SIMPLIFY — Single-Slot + Such-Counter, Code fertig + Final-R1 „Push freigegeben", Field-Test pending (10.05.2026)** — P5 (Pending-Queue, v0.96.2) + P6 (Pair-Audio, v0.96.3) brachen Diversity (Mike: „nur eine Antenne"). Mike-Spec 10.05.: Diversity UNANTASTBAR, Pattern aendern statt Encoder/Diversity verbiegen. Loesung: OMNI = Single-Slot-CQ in EINER Paritaet, Wechsel ueber existierenden Diversity-Such-Counter alle ~10 Min (`_OMNI_FLIP_AFTER_SEARCHES = 10` x 60s/Such bei FT8). Kein TX waehrend Diversity-Mess (90s alle 1h). `core/encoder.py` P5+P6 zurueckgerollt (-272 Z.). `core/omni_cq.py` 305 → 246 Z. (-19%): 5-Slot-Pattern + Block 1/2 + Pair-Logik WEG. Neu: `on_search_trigger`, `flip_tx_parity`, `cq_count_changed (int, bool)`, `parity_flipped (bool)` Signals. `ui/mw_cycle.py:160` 1-Zeile-Hook. `ui/main_window.py` Statusbar `Ω CQ=X (E/O/—)`. **Robustheit:** Fresh-Compute is_even aus time.time() (V2-L9), Mess-Phase-Skip (V2-L12), Defense-in-Depth `_paused`-Check in `on_search_trigger` (R1-SF-1). **7 atomare Commits:** C1 (`ac254a5` encoder), C2 (`3f98caf` omni_cq), C3 (`741f526` mw_cycle), C4 (`332c9f8` main_window), C5 (`956ef61` tests neu), C6 (`3111cfe` APP_VERSION), C7 (Doku). **Final-R1: „Push freigegeben"** (0 KRITISCH/SOLLTE/KOENNTE — „minimalistisch und KISS-konform"). **Test-Bilanz: 1024 → 1008 grün** (V3-Plan ~1005, +3 Bonus). Code netto **~800 Zeilen weniger** im Repo. **Trigger nach Compact:** „omni v0.96.4 field-test" → KI lädt V3 §6 8-Punkte-Plan F1-F8. Push pending — v0.95.16-0.96.4 + P2-Tool gesammelt. **Plan-Files:** prompts/p7_omni_simplify_v[1,2,3].md + _r1.md + _final_r1.md.
-**Tests:** `./venv/bin/python3 -m pytest tests/ -q` → **1008 passed** v0.96.4 (Qt-Smoke-Tests via `QT_QPA_PLATFORM=offscreen`)
+**Aktueller Stand:** **v0.96.6 P22+P8 ATOMARES PERSIST + MESS-MODAL — Code fertig, Final-R1 + Field-Test pending (10.05.2026)** — Mike-Diagnose 14:35: Half-State im `presets_dx.json`/`presets_standard.json` führt nach Restart zu endlosen Phase-3-Versuchen wenn Wurzel-Bedingung noch da. Phase 2 schreibt sofort, Phase 3 nur bei Erfolg → Disk-Halbstand bei Hang/Crash/Cancel. **Loesung 2-Bausteine:** (1) Atomares Persist in `core/preset_store.py` — `stage_gain` (Memory) + `commit_with_ratio` (atomar Disk) + `discard_staged` (Cancel). `is_valid_gain` lehnt Half-State ab. Atomic write tempfile+os.replace. R1-K1: staged-erst-nach-success. R1-K3: Exception-Catch+rollback statt re-raise. (2) `ui/mess_status_dialog.py` NEU — WindowModal sperrt UI während Phase 3 (kein Bandwechsel/Modus/Hunt/CQ), zeigt Antenne+Schritt+Restzeit, Cancel räumt staged+Diversity auf. **Stall-Detector NICHT gebaut** (Mike-Klärung Q1: Wurzel unbestätigt → P23 separat). **8 atomare Commits geplant:** C1 preset_store, C2 PresetStore-Tests, C3 mess_status_dialog NEU, C4 mw_radio Pipeline+Helpers, C5 mw_cycle commit+Modal-Close, C6 main_window closeEvent, C7 P22-Tests NEU, C8 APP_VERSION+Doku. **Test-Bilanz: 1019 → 1034 grün** (+15 Pipeline+Modal). **Final-R1 + Field-Test (V3 §8 5 Punkte) ausstehend.** **Plan-Files:** prompts/p22_preset_atomic_v[1,2,3].md + _r1.md.
+**Tests:** `./venv/bin/python3 -m pytest tests/ -q` → **1034 passed** v0.96.6 (Qt-Smoke-Tests via `QT_QPA_PLATFORM=offscreen`)
 **Vor Commits:** Tests grün + bei nicht-trivialen Änderungen DeepSeek-Review (`pal codereview` model `deepseek-chat`) — bereits durch globale §0 + Projektregeln gefordert.
 
 ⚠️ **DeepSeek-Workflow Stand 2026-04-28:**
@@ -215,6 +215,31 @@ Format-Stolpersteine (3 vs 5 Tabellenspalten, Rescue extern in `stations/`,
 DX-Modus zählt nur SNR<-10) sind dort dokumentiert inkl. Code-Vorlage.
 Mike's „Tagestrend"-Anfragen → stundenweise Tabelle, nicht nur Pooled-Mean.
 **Git:** branch `main`, Repo aktiv, Statistics-Daten committed
+
+---
+
+## Kommunikation bei Problemen (PFLICHT)
+
+Wenn ein Bug oder Problem auftaucht, IMMER zuerst eine verständliche Erklärung
+auf Deutsch ohne KI-Codes, ohne interne Bezeichnungen (P17, P19, ratio_timestamp
+etc.), ohne Fachjargon:
+
+1. **Was passiert** — in normalen Sätzen, so als würde ich es einem Funker
+   erklären der kein Programmierer ist.
+2. **Was konkret kaputt ist** — ein Satz, klar benannt.
+3. **Was ich als nächstes mache** — ein Satz.
+
+Erst DANACH (und nur wenn Mike fragt) technische Details, Dateinamen, interne
+Bezeichnungen. Mike will verstehen was los ist, bevor er entscheidet ob er
+weitermacht oder eine Pause braucht.
+
+**Schlechtes Beispiel:** „P19 ist Folge von P17 — ratio_timestamp wird in Phase 3
+gesetzt, Phase 3 hängt bei DX wegen P17 (Antennen-Switch greift nicht → MESSEN
+0/6 → Ratio nie gespeichert)."
+
+**Gutes Beispiel:** „Die App hängt beim Antennen-Vergleich weil sie ANT1 und ANT2
+nicht umschaltet. Deswegen wird kein Messergebnis gespeichert, und beim
+Neustart fängt sie wieder von vorne an. Ich fixe jetzt den Antennen-Switch."
 
 ---
 

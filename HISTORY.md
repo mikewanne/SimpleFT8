@@ -5,6 +5,99 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-10 v0.96.6 — P22.PRESET-ATOMARITAET + P8.MESS-MODAL
+
+**Auslöser:** Mike-Diagnose 14:35 nach P17/P19-Resolve: Half-State im
+`presets_dx.json` / `presets_standard.json` führt nach App-Restart zu
+endlosen Phase-3-Versuchen wenn die Wurzel-Bedingung (z.B. Antennen-Switch
+greift nicht) noch da ist. Phase 2 schreibt sofort persistent, Phase 3
+schreibt nur bei Erfolg → Disk-Halbstand bei Hang/Crash/Cancel.
+
+**Lösung — zwei zusammenhängende Bausteine:**
+
+1. **Atomares Persist (P22):** Phase-2-Werte landen erst im Memory-Buffer
+   (`stage_gain`). Phase-3-Erfolg committed Gain + Ratio gemeinsam
+   (`commit_with_ratio`). Hang/Cancel/App-Quit → discard, kein Disk-Write.
+   `is_valid_gain` lehnt Half-State (gain ohne ratio) explizit ab.
+2. **Mess-Modal (P8):** WindowModal-Dialog während Phase 3 sperrt
+   Hauptfenster (kein Bandwechsel/Modus/Hunt/CQ möglich), zeigt aktuelle
+   Antenne + Schritt + Restzeit. Cancel-Button räumt staged + Diversity auf.
+
+**Robustheit:**
+- R1-K1: staged wird erst nach erfolgreichem `os.replace` aus dem
+  Buffer entfernt. Bei Disk-Fehler bleibt staged für Retry, in-memory
+  rollback.
+- R1-K3: `save_gain` / `save_ratio` / `commit_with_ratio` fangen Disk-
+  Exceptions, returnen False, App crasht nicht.
+- Atomic File Write: `tempfile.NamedTemporaryFile` + `os.fsync` +
+  `os.replace` (P2-Pattern). Verhindert korrupte JSON bei Mid-Write-Crash.
+- WindowModal (NICHT ApplicationModal) — Decoder-Signale kommen weiter
+  durch.
+- App-Quit `closeEvent` cleart staged in beiden Stores.
+
+**Bewusst nicht gebaut (Mike-Klärung 10.05.):**
+- KEIN Stall-Detector / Auto-Fallback. Mike-Zitat: „Q1 ist nicht
+  bestätigt das es an der Antennenmessung lag." Wurzel-Diagnose
+  (Antennen-Switch greift nicht beim Mess-Start in DX) wird separat als
+  P23 behandelt.
+
+**Code-Änderungen:**
+- `core/preset_store.py` (+158 Zeilen): `stage_gain`, `commit_with_ratio`,
+  `discard_staged`, `discard_all_staged`, `has_staged`. `is_valid_gain`
+  Half-State-Reject. Atomic `_save_locked`. `save_gain`/`save_ratio`
+  Exception-Catch + Rollback + `bool` return.
+- `ui/mess_status_dialog.py` (NEU, 158 Zeilen): MessStatusDialog
+  WindowModal mit Tick-Timer, Cancel-Button, set_cycle_dur Helper.
+- `ui/mw_radio.py` (+92 Zeilen): `_on_dx_tune_accepted` Pipeline-Pfad
+  entscheidet zwischen `save_gain` (Normal/Cache-Reuse) und `stage_gain`
+  (Diversity volle Pipeline). `_open_mess_status_dialog`,
+  `_on_mess_status_cancelled`, `_close_mess_status_dialog` Helper.
+  Modal-Open in `_enable_diversity` Phase=measure-Pfad.
+- `ui/mw_cycle.py` (+24 Zeilen): `save_ratio` → `commit_with_ratio`
+  mit Fallback. Adaptiv-Stop-Branch ruft `discard_staged`. Modal-Close
+  beim Phase-Wechsel measure→operate.
+- `ui/main_window.py` (+18 Zeilen): `closeEvent` cleart staged in beiden
+  Stores + schliesst Modal hart falls offen.
+- `tests/test_preset_store.py` (+150 Zeilen): T1-T8 + multi_band-Test.
+  Bestehende Tests die Half-State-toleranz prüften → angepasst auf
+  vollständigen Eintrag.
+- `tests/test_p22_preset_atomic.py` (NEU, 290 Zeilen): T9-T18 Pipeline +
+  Modal + Lifecycle.
+
+**Atomare Commits (8):**
+- C1 `core/preset_store.py` Atomic Methods
+- C2 `tests/test_preset_store.py` T1-T8 + Anpassungen
+- C3 `ui/mess_status_dialog.py` NEU
+- C4 `ui/mw_radio.py` Pipeline + Modal-Helpers
+- C5 `ui/mw_cycle.py` commit + Modal-Close
+- C6 `ui/main_window.py` closeEvent staged-Cleanup
+- C7 `tests/test_p22_preset_atomic.py` Pipeline+Modal-Tests
+- C8 `main.py` APP_VERSION 0.96.5 → 0.96.6 + HISTORY/HANDOFF/Memory
+
+**Test-Bilanz:** 1019 → 1034 grün (+15 nach Anpassung der 2 Half-State-
+Tests, +13 neue PresetStore-Tests, +15 neue Pipeline+Modal-Tests).
+
+**Workflow:** V1 → V2 (15 Self-Review-Lessons) → R1 (4 KRITISCH K1-K4 +
+4 SOLLTE S1-S4 + 3 KOENNTE C1-C3) → V3 (R1-K1/K2/K3 angenommen,
+K4 entfällt mit Stall-Detector-Verzicht; S1/S2/S3 angenommen;
+S4/C1-C3 abgelehnt mit Begründung). Mike-Klärung Q1=nicht bauen,
+Q2=Modal sperrt UI, Q3=Adaptiv-Stop weiter ohne Persist.
+
+**Field-Test pending (V3 §8, 5 Punkte F1-F5):**
+F1 App-Start DX → Modal öffnet, UI gesperrt.
+F2 Mess läuft sauber durch → Modal auto-close, File hat beide Timestamps.
+F3 Mid-Mess Cancel → discard, Diversity disabled, kein Half-State.
+F4 Mid-Mess Cmd-Q → beim Restart `is_valid_gain==False`, volle Pipeline.
+F5 Disk-Permission-Fehler → App crasht nicht, staged bleibt im Memory.
+
+**Plan-Files:**
+- `prompts/p22_preset_atomic_v1.md` (V1 initial)
+- `prompts/p22_preset_atomic_v2.md` (V2 nach Self-Review)
+- `prompts/p22_preset_atomic_r1_prompt.md` + `_r1.md` (DeepSeek-R1)
+- `prompts/p22_preset_atomic_v3.md` (Compact-fest, EINZIGE WAHRHEIT)
+
+---
+
 ## 2026-05-10 v0.96.4 — P7.OMNI-SIMPLIFY: Single-Slot + Such-Counter
 
 **Auslöser:** P5 (Pending-Queue, v0.96.2) und P6 (Pair-Audio, v0.96.3)

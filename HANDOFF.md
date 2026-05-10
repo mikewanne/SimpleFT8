@@ -1,14 +1,86 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-10 ~12:00 UTC: P7.OMNI-SIMPLIFY ERLEDIGT, Field-Test pending
+## Stand 2026-05-10 ~15:30 UTC: P22+P8 ATOMARES PERSIST + MESS-MODAL — Code fertig, Final-R1 + Field-Test pending
 
-**Code:** v0.96.4 lokal commited (C1-C6 + C7 Doku). 7 atomare Commits seit v0.96.3.
-**Tests:** **1008 grün** (1024 → 1008, V3-Plan war ~1005).
-**Final-R1:** „Push freigegeben" — 0 KRITISCH, 0 SOLLTE-FIX, 0 KOENNTE
-(„minimalistisch und KISS-konform").
-**Field-Test:** 8-Punkte-Plan V3 §6 F1-F8 ausstehend, Mike startet App selbst.
-**App:** gestoppt. **Push pending** bis Mike-Freigabe nach Field-Test —
-v0.95.16-0.96.4 + P2-Tool zusammen.
+**Code:** v0.96.6 lokal — C1-C8 atomare Commits ausstehend (alle Aenderungen
+auf disk, noch nicht committed). 8 Commits geplant.
+**Tests:** **1034 grün** (1019 → 1034, +15 Pipeline+Modal-Tests).
+**Final-R1:** noch nicht gelaufen — als naechste Aufgabe.
+**Field-Test:** 5-Punkte-Plan V3 §8 F1-F5 ausstehend, Mike startet App selbst.
+**App:** gestoppt. **Push pending** bis Final-R1 + Field-Test gruen —
+v0.95.16-0.96.6 + P2-Tool + P3 zusammen.
+
+## Was P22+P8 fixt
+
+**Wurzel:** `presets_dx.json` / `presets_standard.json` koennen Half-State
+enthalten (Phase 2 schreibt sofort, Phase 3 schreibt nur bei Erfolg). Wenn
+Phase 3 haengt (z.B. Antennen-Switch greift nicht in DX), bleibt Disk-
+Halbstand → Restart triggert wieder Phase-3-Versuch → endlose Schleife.
+
+**Loesung:**
+- **Atomares Persist:** `stage_gain` (Memory) + `commit_with_ratio` (atomar
+  Disk) + `discard_staged` (Cancel/Crash). Phase 2 alleine produziert
+  keinen Disk-Eintrag mehr.
+- **Mess-Modal:** WindowModal sperrt UI waehrend Phase 3 — kein
+  Bandwechsel/Modus/Hunt/CQ. Cancel-Button raeumt staged + Diversity auf.
+- **Half-State-Reject:** `is_valid_gain` lehnt Eintraege ohne `ratio`-Feld
+  ab → Restart faellt sauber in `gain missing`-Branch (volle Pipeline).
+- **Disk-Fehler-Schutz:** alle Schreibmethoden fangen Exception, returnen
+  False, App crasht nicht. Atomic write via tempfile + os.replace.
+
+**Bewusst nicht gebaut (Mike-Klaerung):** Stall-Detector — Wurzel ist
+nicht bestaetigt das es an der Antennenmessung lag (Hänger war bei
+QSO-Ende = P12). Wurzel-Diagnose Antennen-Switch separat als P23.
+
+## Atomare Commits (8 geplant — noch nicht gepushed)
+
+- C1 `core/preset_store.py` Atomic Methods + is_valid_gain Reject + atomic save
+- C2 `tests/test_preset_store.py` T1-T8 + Anpassungen (48 Tests gruen)
+- C3 `ui/mess_status_dialog.py` NEU — MessStatusDialog WindowModal
+- C4 `ui/mw_radio.py` Pipeline (stage vs save) + Modal-Helpers
+- C5 `ui/mw_cycle.py` commit_with_ratio + Modal-Close
+- C6 `ui/main_window.py` closeEvent staged-Cleanup + Modal hart schliessen
+- C7 `tests/test_p22_preset_atomic.py` (NEU, 15 Tests Pipeline+Modal)
+- C8 `main.py` APP_VERSION 0.96.5 → 0.96.6 + HISTORY/HANDOFF/Memory
+
+## Field-Test-Plan (V3 §8, 5 Punkte)
+
+| F | Test | Erwartung |
+|---|---|---|
+| F1 | App-Start in Diversity DX | Modal oeffnet, zeigt Antenne/Schritt/Restzeit, Hauptfenster gesperrt (Bandwechsel-Klick = kein Effekt) |
+| F2 | Mess laeuft sauber durch (6 Schritte FT8) | Modal auto-close nach phase=operate. File enthaelt `gain_*` UND `ratio_*` mit gleichem Timestamp |
+| F3 | Mid-Mess Cancel-Button | Modal weg, Diversity disabled, App auf Normal-Mode zurueck. File: kein neuer Eintrag |
+| F4 | Mid-Mess Cmd-Q | Beim naechsten Start `is_valid_gain==False` (Half-State weg), volle Pipeline laeuft |
+| F5 | Disk-Permission-Fehler (chmod 000 auf kalibrierung-Dir) | App crasht NICHT, Log-Eintrag, Modal schliesst (phase=operate erreicht), staged bleibt im Memory |
+
+**Bestanden wenn:** F1-F4 sauber. F5 ist Bonus-Robustheit.
+
+## Plan-Files
+
+- ✅ `prompts/p22_preset_atomic_v1.md` (V1 initial)
+- ✅ `prompts/p22_preset_atomic_v2.md` (V2 Self-Review, 15 Lessons)
+- ✅ `prompts/p22_preset_atomic_r1_prompt.md` + `_r1.md` (R1 4×KRITISCH + 4×SOLLTE)
+- ✅ `prompts/p22_preset_atomic_v3.md` (Compact-fest, EINZIGE WAHRHEIT)
+
+## Mike-Klaerung dokumentiert
+
+- **Q1 (Stall-Fallback):** NICHT bauen — Wurzel unbestaetigt. P23 separat.
+- **Q2 (Bandwechsel mid-Mess):** Modal sperrt → kann nicht passieren.
+- **Q3 (Adaptiv-Stop ohne Persist):** Bestehender v0.91-Cache-Schutz bleibt.
+
+## Naechste Aufgabe
+
+1. **Final-R1 Review** mit `tools/deepseek_review.py` (deepseek-reasoner)
+   ueber alle aenderten Files. Findings einarbeiten oder ablehnen.
+2. **Atomare Commits C1-C8** nach Final-R1-OK.
+3. **Field-Test 5 Punkte** durch Mike.
+4. **Push** v0.95.16-0.96.6 + P2-Tool + P3 wenn Field-Test gruen.
+
+## Bisheriger P7-Stand (v0.96.4)
+
+P7.OMNI-SIMPLIFY ist **erledigt** und im Repo. Field-Test war erfolgreich
+(QSO mit OH3BY Finnland). P16 (UI-Cleanup-Bundle, v0.96.5) wurde
+zwischenzeitlich committed. P22+P8 ist die naechste Stufe.
 
 ## Was P7 gefixt hat
 
