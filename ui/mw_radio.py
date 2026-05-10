@@ -44,7 +44,12 @@ class RadioMixin:
     """
 
     def _start_radio(self):
-        """FlexRadio verbinden und Decoder starten (mit Auto-Retry)."""
+        """FlexRadio verbinden und Decoder starten (mit Auto-Retry).
+
+        P26 (10.05.2026): Modal-Dialog waehrend Connect-Versuch.
+        Aufgerufen via QTimer.singleShot(0, ...) aus MainWindow.__init__,
+        damit Hauptfenster zuerst sichtbar ist (Modal poppt darueber).
+        """
         # Audio-Callback + Signals verbinden
         self.radio.on_audio_callback = self.decoder.feed_audio
         self.radio.error.connect(lambda msg: print(f"[Radio] {msg}"))
@@ -71,17 +76,60 @@ class RadioMixin:
         )
         self.encoder.tx_finished.connect(self._on_tx_finished)
 
+        # P26: Modal-Dialog VOR Worker-Thread aufbauen + signal-connect.
+        # connect VOR thread.start() damit auch sehr-schnelle Connects
+        # sauber landen (Qt: accept() vor exec() → exec returned sofort).
+        from ui.connect_status_dialog import ConnectStatusDialog
+        self._connect_dialog = ConnectStatusDialog(self)
+        self.radio.connected.connect(
+            self._connect_dialog.accept,
+            Qt.ConnectionType.QueuedConnection,
+        )
+
         # Auto-Connect im Hintergrund
         self.control_panel.set_connection_status("searching")
         threading.Thread(
             target=self._connect_worker, daemon=True
         ).start()
 
+        # Modal blockiert GUI-Thread (WindowModal: Decoder/Signale laufen).
+        # Returns wenn:
+        #   - radio.connected feuert → dialog.accept() → exec() returned Accepted
+        #   - User klickt "ohne Radio weiter" → reject() → Rejected
+        #   - User klickt "Beenden" → QApplication.quit() → exec() returned
+        self._connect_dialog.exec()
+
+        # Cleanup nach exec()-Return
+        try:
+            self.radio.connected.disconnect(self._connect_dialog.accept)
+        except (TypeError, RuntimeError):
+            pass  # bereits disconnected oder Dialog tot
+        self._connect_dialog = None
+
     def _connect_worker(self):
-        """Verbindung im Hintergrund herstellen."""
-        ok = self.radio.auto_connect(max_retries=10, retry_delay=3.0)
+        """Verbindung im Hintergrund herstellen mit Modal-Updates."""
+        # K1-Fix R1: lokale Referenz (atomarer Read), Worker hat eigenen
+        # Snapshot. Auch wenn _connect_dialog spaeter auf None gesetzt wird,
+        # bleibt unsere Referenz gueltig — Crash-Schutz via try/except.
+        dlg = self._connect_dialog
+
+        def on_attempt(attempt: int, max_attempts: int) -> None:
+            if dlg is not None:
+                try:
+                    dlg.attempt_changed.emit(attempt, max_attempts)
+                except RuntimeError:
+                    pass  # Dialog destroyed (User klickte "weiter"/"Beenden")
+
+        ok = self.radio.auto_connect(
+            max_retries=10, retry_delay=3.0, on_attempt=on_attempt
+        )
         if not ok:
             self.control_panel.set_connection_status("disconnected")
+            if dlg is not None:
+                try:
+                    dlg.failed_signal.emit()
+                except RuntimeError:
+                    pass
 
     def _on_radio_connected(self):
         """Wird aufgerufen wenn FlexRadio verbunden ist."""
