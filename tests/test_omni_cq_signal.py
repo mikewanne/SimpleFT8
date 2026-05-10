@@ -1,12 +1,11 @@
-"""Unit-Tests fuer P4.OMNI-NEUBAU V5 — core/omni_cq.py (signal-basiert).
+"""Unit-Tests fuer P7.OMNI-SIMPLIFY — core/omni_cq.py (single-slot v0.96.4).
 
-Deckt V3 §6 T1-T22 ab. Tests rufen on_cycle_start direkt auf — KEIN
-Worker-Mock, KEIN Sleep-Mock, KEIN Boundary-Mock.
+Mike-Spec 10.05.2026: OMNI = Single-Slot-CQ in EINER Paritaet, Wechsel
+ueber Diversity-Such-Counter alle ~10 Min.
 
-Lesson aus v0.96.0 (feedback_test_critical_path_not_mock.md): wenn ein
-Mock genau die Logik ueberschreibt die der Test pruefen sollte, validiert
-er die Mock-Implementierung statt des echten Codes. Vor jedem Mock
-fragen: "Ersetzt dieser Mock den Pfad den der Test pruefen sollte?".
+Deckt V3 §5 AC1-AC13 + R1-SF-1 ab. Tests rufen on_cycle_start direkt mit
+synthetischen Werten — KEIN Worker/Sleep-Mock (Lesson
+feedback_test_critical_path_not_mock.md).
 """
 from __future__ import annotations
 
@@ -14,38 +13,33 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import sys
+import time
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from PySide6.QtWidgets import QApplication
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from core.omni_cq import OmniCQ  # noqa: E402
+from core.omni_cq import OmniCQ, _OMNI_FLIP_AFTER_SEARCHES  # noqa: E402
 
 
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
 @pytest.fixture(scope="module")
 def app():
     return QApplication.instance() or QApplication([])
 
 
-def _make_omni(*, free_cq_freq: int | None = 1500):
-    """Test-Setup: OmniCQ mit Mock-Encoder/Diversity/Timer.
-
-    Returns: (omni, encoder, diversity, timer) fuer Test-Asserts.
-    KEIN Worker-Mock, KEIN Sleep-Mock, KEIN Boundary-Mock.
-    """
+def _make_omni(*, free_cq_freq: int | None = 1500,
+               diversity_phase: str = "operate"):
+    """Test-Setup: OmniCQ mit Mock-Encoder/Diversity/Timer."""
     encoder = MagicMock()
     encoder.transmit = MagicMock(return_value=True)
-    encoder.transmit_pair = MagicMock(return_value=True)
     diversity = MagicMock()
     diversity.get_free_cq_freq = MagicMock(return_value=free_cq_freq)
+    # phase als gewoehnliche Property (str) — testbar via direct set
+    diversity.phase = diversity_phase
     timer = MagicMock()
     timer.cycle_duration = 15.0
-    timer.is_even_cycle = MagicMock(return_value=False)
     omni = OmniCQ(
         encoder=encoder,
         diversity_ctrl=diversity,
@@ -56,471 +50,318 @@ def _make_omni(*, free_cq_freq: int | None = 1500):
     return omni, encoder, diversity, timer
 
 
-# ===========================================================================
-# T1 — initial state
-# ===========================================================================
-def test_initial_state_inactive(app):
-    omni, *_ = _make_omni()
-    assert omni.is_active() is False
-    assert omni.is_paused() is False
-    assert omni.cq_even_count == 0
-    assert omni.cq_odd_count == 0
-    assert omni.cq_audio_hz is None
-    assert omni._slot_index == 0
-    assert omni._block == 1
+# ── T1: AC1 Initial-State ──────────────────────────────────────────
 
 
-# ===========================================================================
-# T2 — start initialisiert Block 1 ab Pos 0 (AC1, AC5)
-# ===========================================================================
-def test_start_initializes_block1_pos0(app):
+def test_start_initial_state(app):
+    """T1 (AC1): start setzt _active=True, alles andere Default."""
     omni, *_ = _make_omni()
-    captured: list[None] = []
-    omni.omni_started.connect(lambda: captured.append(None))
     omni.start()
     assert omni.is_active() is True
     assert omni.is_paused() is False
-    assert omni._block == 1            # AC5: IMMER Block 1
-    assert omni._slot_index == 0
-    assert omni._cq_audio_hz is None
-    assert omni._cq_even_count == 0
-    assert omni._cq_odd_count == 0
-    assert len(captured) == 1          # AC22: omni_started emittet 1x
+    assert omni.cq_count == 0
+    assert omni.cq_tx_even is None
+    assert omni.cq_audio_hz is None
+    assert omni._search_trigger_count == 0
 
 
-# ===========================================================================
-# T3 — start idempotent bei bereits aktivem OMNI (AC1)
-# ===========================================================================
-def test_start_idempotent_on_already_active(app):
-    omni, *_ = _make_omni()
-    omni.start()
-    omni._slot_index = 3              # Pattern-State manipulieren
-    omni._block = 2
-    captured: list[None] = []
-    omni.omni_started.connect(lambda: captured.append(None))
-    omni.start()                       # zweiter Aufruf — no-op
-    assert omni._slot_index == 3      # nicht zurueckgesetzt
-    assert omni._block == 2
-    assert captured == []              # kein zweites omni_started
+# ── T2: AC2 Erster Cycle setzt _cq_tx_even aus fresh time ──────────
 
 
-# ===========================================================================
-# T4 — Block 1 Pos 0: encoder.transmit mit tx_even=True (AC2, AC8)
-# ===========================================================================
-def test_block1_pos0_calls_encoder_transmit_tx_even(app):
-    """P6: Pos 0 ruft transmit_pair (msg0+msg1 gemeinsam), nicht transmit."""
+@pytest.mark.parametrize("fake_time, expected_tx_even", [
+    (16005.0, True),    # 16005/15 = 1067 -> Even
+    (16020.0, False),   # 16020/15 = 1068 -> Even? 1068%2==0 -> True. Korrektur:
+    # cycle 1067 = odd? 1067%2=1 -> odd. 1068=even.
+    # Lass das pytest selbst berechnen
+])
+def test_first_cycle_sets_tx_even_from_fresh_time(app, fake_time, expected_tx_even):
+    """T2 (AC2): _cq_tx_even = fresh_is_even beim ersten on_cycle_start."""
     omni, encoder, *_ = _make_omni()
+    # parametrize-Werte sind nur Anker — echte Erwartung dynamisch berechnen
+    expected = (int(fake_time / 15.0) % 2 == 0)
+    omni.start()
+    with patch("core.omni_cq.time.time", return_value=fake_time):
+        omni.on_cycle_start(cycle_num=999, is_even=False)  # signal-is_even ignoriert
+    assert omni.cq_tx_even is expected
+
+
+# ── T3: AC3 Matching Slot -> encoder.transmit + emits ──────────────
+
+
+def test_matching_cycle_calls_encoder_transmit_and_emits(app):
+    """T3 (AC3): Slot mit passender Paritaet -> encoder.transmit + counter + emits."""
+    omni, encoder, *_ = _make_omni()
+    captured_count: list[tuple[int, bool]] = []
+    captured_slot: list[tuple[str, bool, bool]] = []
+    omni.cq_count_changed.connect(
+        lambda c, e: captured_count.append((c, e))
+    )
+    omni.slot_action.connect(
+        lambda lbl, tx, tev: captured_slot.append((lbl, tx, tev))
+    )
+    omni.start()
+    # fake_time so wahlen dass cycle_num gerade ist (Even)
+    fake_time = 15.0  # cycle 1 -> odd. Lass uns 30.0 nehmen -> cycle 2 -> even
+    fake_time = 30.0  # cycle 2 -> even
+    with patch("core.omni_cq.time.time", return_value=fake_time):
+        omni.on_cycle_start(cycle_num=999, is_even=False)
+    assert omni.cq_tx_even is True  # fresh ist Even
+    encoder.transmit.assert_called_once_with(
+        "CQ DA1MHH JN58", tx_even=True, audio_freq_hz=1500,
+    )
+    assert omni.cq_count == 1
+    assert captured_count == [(1, True)]
+    assert len(captured_slot) == 1
+    assert captured_slot[0][1] is True   # is_tx
+    assert captured_slot[0][2] is True   # tx_even
+
+
+# ── T4: AC4 Non-matching Slot -> kein encoder ──────────────────────
+
+
+def test_non_matching_cycle_skips_encoder(app):
+    """T4 (AC4): Slot mit anderer Paritaet -> KEIN encoder.transmit."""
+    omni, encoder, *_ = _make_omni()
+    omni.start()
+    omni._cq_tx_even = True  # OMNI sendet in Even
+    omni._cq_audio_hz = 1500  # bereits initialisiert
+    fake_time = 15.0  # cycle 1 -> Odd (mismatch)
+    with patch("core.omni_cq.time.time", return_value=fake_time):
+        omni.on_cycle_start(cycle_num=999, is_even=True)
+    encoder.transmit.assert_not_called()
+    assert omni.cq_count == 0
+
+
+# ── T5: AC5 No-op waehrend Diversity-Mess-Phase ────────────────────
+
+
+def test_skips_during_diversity_measure_phase(app):
+    """T5 (AC5): on_cycle_start no-op wenn diversity.phase != 'operate'."""
+    omni, encoder, diversity, _ = _make_omni(diversity_phase="measure")
     omni.start()
     omni.on_cycle_start(cycle_num=100, is_even=True)
-    encoder.transmit_pair.assert_called_once_with(
-        "CQ DA1MHH JN58", "CQ DA1MHH JN58",
-        tx_even_0=True, tx_even_1=False,
-        audio_freq_hz=1500,
-    )
     encoder.transmit.assert_not_called()
-    assert omni._slot_index == 1
-    assert omni._pair_in_progress is True
+    assert omni.cq_tx_even is None  # nicht initialisiert
 
 
-# ===========================================================================
-# T5 — Block 1 Pos 1: encoder.transmit mit tx_even=False (AC2, AC8)
-# ===========================================================================
-def test_block1_pos1_calls_encoder_transmit_tx_odd(app):
-    """P6: Pos 1 ruft NICHT transmit (Pair laeuft schon vom Pos-0-Aufruf).
+# ── T6: AC6 flip_tx_parity toggelt + emit parity_flipped ───────────
 
-    Setzt _pair_in_progress=True (simuliert Pos 0 hat Pair gestartet).
-    Pos 1 darf encoder NICHT erneut rufen, aber Counter+slot_action emit.
-    """
-    omni, encoder, *_ = _make_omni()
+
+def test_flip_tx_parity_toggles_and_emits(app):
+    """T6 (AC6): flip toggelt _cq_tx_even, emit parity_flipped(new_value)."""
+    omni, *_ = _make_omni()
+    captured: list[bool] = []
+    omni.parity_flipped.connect(lambda new: captured.append(new))
     omni.start()
-    omni._slot_index = 1               # Pos 1 = TX-O in Block 1
-    omni._pair_in_progress = True      # simuliere Pos 0 hat Pair gestartet
-    omni._cq_audio_hz = 1500           # Audio-Freq aus Pos 0
-    omni.on_cycle_start(cycle_num=101, is_even=False)
-    # WICHTIG: weder transmit noch transmit_pair erneut gerufen
-    encoder.transmit.assert_not_called()
-    encoder.transmit_pair.assert_not_called()
-    assert omni._slot_index == 2
-    assert omni._cq_odd_count == 1     # Counter trotzdem hoch
-    assert omni._pair_in_progress is False  # Flag zurueckgesetzt fuer naechsten Block
+    omni._cq_tx_even = True
+    omni.flip_tx_parity()
+    assert omni.cq_tx_even is False
+    assert captured == [False]
+    omni.flip_tx_parity()
+    assert omni.cq_tx_even is True
+    assert captured == [False, True]
 
 
-# ===========================================================================
-# T6 — Block 1 Pos 2/3/4: kein transmit, slot_action emittet "Horche" (AC2, AC9)
-# ===========================================================================
-@pytest.mark.parametrize(
-    "slot_index, signal_is_even",
-    [(2, True), (3, False), (4, True)],
-)
-def test_block1_pos_2_3_4_no_transmit_emits_horche(app, slot_index,
-                                                   signal_is_even):
-    omni, encoder, *_ = _make_omni()
+# ── T7: AC7 flip bei _cq_tx_even=None -> no-op ─────────────────────
+
+
+def test_flip_tx_parity_noop_when_uninitialized(app):
+    """T7 (AC7): flip vor erstem on_cycle_start (_cq_tx_even=None) -> no-op."""
+    omni, *_ = _make_omni()
+    captured: list[bool] = []
+    omni.parity_flipped.connect(lambda new: captured.append(new))
     omni.start()
-    omni._slot_index = slot_index
-    captured: list[tuple[str, bool, bool]] = []
-    omni.slot_action.connect(
-        lambda lbl, tx, tev: captured.append((lbl, tx, tev))
-    )
-    omni.on_cycle_start(cycle_num=200, is_even=signal_is_even)
-    encoder.transmit.assert_not_called()
-    assert len(captured) == 1
-    label, is_tx, target_even = captured[0]
-    assert is_tx is False
-    assert target_even is signal_is_even   # AC9: echte UTC-Paritaet
+    assert omni.cq_tx_even is None
+    omni.flip_tx_parity()
+    assert omni.cq_tx_even is None
+    assert captured == []
 
 
-# ===========================================================================
-# T7 — Rollover Block 1 -> Block 2: erster TX nach Rollover ist tx_odd (AC3, AC4, AC10)
-# ===========================================================================
-def test_rollover_block1_to_block2_first_tx_is_odd(app):
-    omni, encoder, *_ = _make_omni()
+def test_flip_tx_parity_noop_when_inactive(app):
+    """T7b: flip bei nicht-aktivem OMNI -> no-op."""
+    omni, *_ = _make_omni()
+    captured: list[bool] = []
+    omni.parity_flipped.connect(lambda new: captured.append(new))
+    # nicht gestartet -> _active=False
+    omni._cq_tx_even = True  # manuell setzen
+    omni.flip_tx_parity()
+    assert captured == []
+
+
+# ── T8: AC8 on_search_trigger Counter + Flip bei Threshold ─────────
+
+
+def test_on_search_trigger_counts_and_flips_at_threshold(app):
+    """T8 (AC8): Counter inkrementiert, bei _OMNI_FLIP_AFTER_SEARCHES flip + Reset."""
+    omni, *_ = _make_omni()
+    captured: list[bool] = []
+    omni.parity_flipped.connect(lambda new: captured.append(new))
     omni.start()
-    omni._slot_index = 4               # Pos 4 = letzte RX-Slot in Block 1
-    # RX-Slot triggert advance, Pos 4 -> 0 = Block-Rollover
-    omni.on_cycle_start(cycle_num=300, is_even=True)
-    assert omni._slot_index == 0
-    assert omni._block == 2            # AC4: Rollover automatisch
-    encoder.transmit.assert_not_called()  # Pos 4 war RX
-    encoder.transmit_pair.assert_not_called()
+    omni._cq_tx_even = True  # initialisiert (sonst flip no-op)
 
-    # P6: Naechster Slot in Block 2 Pos 0 = TX-O ruft transmit_pair (Pair-Mode)
-    omni.on_cycle_start(cycle_num=301, is_even=False)
-    encoder.transmit_pair.assert_called_once_with(
-        "CQ DA1MHH JN58", "CQ DA1MHH JN58",
-        tx_even_0=False, tx_even_1=True,
-        audio_freq_hz=1500,
-    )
+    # _OMNI_FLIP_AFTER_SEARCHES - 1 mal triggern: noch kein Flip
+    for _ in range(_OMNI_FLIP_AFTER_SEARCHES - 1):
+        omni.on_search_trigger()
+    assert omni._search_trigger_count == _OMNI_FLIP_AFTER_SEARCHES - 1
+    assert omni.cq_tx_even is True
+    assert captured == []
+
+    # N-ter Trigger: flip + Counter-Reset
+    omni.on_search_trigger()
+    assert omni._search_trigger_count == 0
+    assert omni.cq_tx_even is False
+    assert captured == [False]
 
 
-# ===========================================================================
-# T8 — Block 2 Pos 1: encoder.transmit mit tx_even=True (AC3)
-# ===========================================================================
-def test_block2_pos1_tx_even(app):
-    """P6: Block 2 Pos 1 — Pair laeuft schon, kein erneuter encoder-Call."""
-    omni, encoder, *_ = _make_omni()
+def test_on_search_trigger_inactive_noop(app):
+    """T8b: on_search_trigger no-op wenn nicht aktiv."""
+    omni, *_ = _make_omni()
+    omni.on_search_trigger()  # nicht gestartet
+    assert omni._search_trigger_count == 0
+
+
+# ── T10: AC10 Pause: _cq_tx_even bleibt; Resume: bleibt ────────────
+
+
+def test_pause_resume_preserves_parity(app):
+    """T10 (AC10): pause + resume_after_qso bewahren _cq_tx_even."""
+    omni, *_ = _make_omni()
     omni.start()
-    omni._block = 2
-    omni._slot_index = 1               # Pos 1 = TX-E in Block 2
-    omni._pair_in_progress = True      # Pos 0 hat Pair gestartet
+    omni._cq_tx_even = True
     omni._cq_audio_hz = 1500
-    omni.on_cycle_start(cycle_num=400, is_even=True)
-    encoder.transmit.assert_not_called()
-    encoder.transmit_pair.assert_not_called()
-    assert omni._slot_index == 2
-    assert omni._cq_even_count == 1
-    assert omni._pair_in_progress is False
+    omni._cq_count = 5
 
-
-# ===========================================================================
-# T9 — Block 2 -> Block 1 Rollover (AC4)
-# ===========================================================================
-def test_block2_rollover_back_to_block1(app):
-    omni, *_ = _make_omni()
-    omni.start()
-    omni._block = 2
-    omni._slot_index = 4
-    omni.on_cycle_start(cycle_num=500, is_even=False)
-    assert omni._slot_index == 0
-    assert omni._block == 1            # zurueck zu Block 1
-
-
-# ===========================================================================
-# T10 — Block-Alternation permanent ueber 15 Slots (AC4)
-# ===========================================================================
-def test_block_alternation_permanent_15_slots(app):
-    omni, *_ = _make_omni()
-    omni.start()
-    blocks_seen = []
-    for i in range(15):
-        blocks_seen.append(omni._block)
-        omni.on_cycle_start(cycle_num=600 + i, is_even=(i % 2 == 0))
-    # Slots 0-4 = Block 1, 5-9 = Block 2, 10-14 = Block 1
-    assert blocks_seen[0:5] == [1, 1, 1, 1, 1]
-    assert blocks_seen[5:10] == [2, 2, 2, 2, 2]
-    assert blocks_seen[10:15] == [1, 1, 1, 1, 1]
-    # Nach 15 Slots: slot_index zurueck auf 0, Block 2 (16. Slot waere Block 2)
-    assert omni._slot_index == 0
-    assert omni._block == 2
-
-
-# ===========================================================================
-# T11 — pause friert _slot_index, _active bleibt True (AC17)
-# ===========================================================================
-def test_pause_freezes_slot_index_active_stays_true(app):
-    omni, *_ = _make_omni()
-    omni.start()
-    omni._slot_index = 3
-    omni._block = 2
-    omni.pause()
-    assert omni.is_active() is True   # AC17: bleibt True
-    assert omni.is_paused() is True
-    assert omni._slot_index == 3      # eingefroren
-    assert omni._block == 2
-    # idempotent: zweiter pause-Aufruf no-op
     omni.pause()
     assert omni.is_paused() is True
+    assert omni.cq_tx_even is True   # bleibt
+    assert omni.cq_count == 5         # bleibt
+
+    omni.resume_after_qso(last_was_even=False)
+    assert omni.is_paused() is False
+    assert omni.cq_tx_even is True   # bleibt (last_was_even ignoriert)
+    assert omni.cq_count == 5
 
 
-# ===========================================================================
-# T12 — on_cycle_start waehrend Pause = no-op (AC7, AC17)
-# ===========================================================================
-def test_on_cycle_start_during_pause_no_op(app):
-    omni, encoder, *_ = _make_omni()
+# ── T11: AC11 Frequenz-Sticky ueber Flip ───────────────────────────
+
+
+def test_frequency_sticky_across_flip(app):
+    """T11 (AC11): _cq_audio_hz bleibt unveraendert ueber Paritaets-Wechsel."""
+    omni, encoder, diversity, _ = _make_omni(free_cq_freq=1700)
     omni.start()
-    omni._slot_index = 0
-    omni.pause()
-    omni.on_cycle_start(cycle_num=700, is_even=True)
-    encoder.transmit.assert_not_called()
-    assert omni._slot_index == 0      # nicht advanced
+    # Erster on_cycle_start -> Frequenz initialisiert
+    with patch("core.omni_cq.time.time", return_value=30.0):
+        omni.on_cycle_start(cycle_num=1, is_even=True)
+    assert omni.cq_audio_hz == 1700
+
+    # Flip -> Frequenz bleibt
+    omni.flip_tx_parity()
+    assert omni.cq_audio_hz == 1700
+
+    # diversity.get_free_cq_freq nur 1x gerufen (sticky)
+    assert diversity.get_free_cq_freq.call_count == 1
 
 
-# ===========================================================================
-# T13 — resume_after_qso(even=True) -> Block 2 ab Pos 0 (AC18)
-# ===========================================================================
-def test_resume_after_qso_even_chooses_block2_pos0(app):
+# ── T12: AC12 stop reset ────────────────────────────────────────────
+
+
+def test_stop_resets_all_state(app):
+    """T12 (AC12): stop setzt alles zurueck."""
     omni, *_ = _make_omni()
     omni.start()
-    omni._slot_index = 3              # mid-Block einfrieren
+    omni._cq_tx_even = True
+    omni._cq_audio_hz = 1500
+    omni._cq_count = 7
+    omni._search_trigger_count = 3
+
+    omni.stop("manual_halt")
+    assert omni.is_active() is False
+    assert omni.is_paused() is False
+    assert omni.cq_tx_even is None
+    assert omni.cq_audio_hz is None
+    assert omni.cq_count == 0
+    assert omni._search_trigger_count == 0
+
+
+# ── T13: AC13 resume_after_qso Signatur kompatibel ─────────────────
+
+
+def test_resume_after_qso_signature_compat(app):
+    """T13 (AC13): resume_after_qso ohne Argument UND mit last_was_even."""
+    omni, *_ = _make_omni()
+    omni.start()
+    omni._cq_tx_even = True
+    omni.pause()
+
+    # Ohne Argument
+    omni.resume_after_qso()
+    assert omni.is_paused() is False
+
+    # Wieder Pausieren + mit Argument
     omni.pause()
     omni.resume_after_qso(last_was_even=True)
-    assert omni._block == 2            # AC18: even -> Block 2
-    assert omni._slot_index == 0
     assert omni.is_paused() is False
-    assert omni.is_active() is True
-
-
-# ===========================================================================
-# T14 — resume_after_qso(even=False) -> Block 1 ab Pos 0 (AC18)
-# ===========================================================================
-def test_resume_after_qso_odd_chooses_block1_pos0(app):
-    omni, *_ = _make_omni()
-    omni.start()
-    omni._block = 2
-    omni._slot_index = 3
     omni.pause()
     omni.resume_after_qso(last_was_even=False)
-    assert omni._block == 1            # AC18: odd -> Block 1
-    assert omni._slot_index == 0
     assert omni.is_paused() is False
+    # Argument wird ignoriert -> Paritaet bleibt
+    assert omni.cq_tx_even is True
 
 
-# ===========================================================================
-# T15 — resume_after_qso no-op wenn nicht pausiert (AC18 Pre-Check, R1)
-# ===========================================================================
-def test_resume_after_qso_no_op_when_not_paused(app):
+# ── T14: R1-SF-3 on_search_trigger waehrend Pause -> no-op ─────────
+
+
+def test_on_search_trigger_during_pause_noop(app):
+    """T14 (R1-SF-1/SF-3): Defense-in-Depth — Counter zaehlt nicht waehrend Pause."""
     omni, *_ = _make_omni()
     omni.start()
-    omni._slot_index = 2
-    omni._block = 2
-    # NICHT pause() rufen — resume_after_qso muss no-op sein
-    omni.resume_after_qso(last_was_even=True)
-    assert omni._block == 2            # unveraendert
-    assert omni._slot_index == 2
+    omni._cq_tx_even = True
+    omni.pause()
+    omni.on_search_trigger()
+    assert omni._search_trigger_count == 0  # no-op trotz active=True
 
 
-# ===========================================================================
-# T16 — stop reset full state (AC20, AC21, parametrize 8 reasons)
-# ===========================================================================
-@pytest.mark.parametrize(
-    "reason",
-    ["manual_halt", "band_change", "mode_change", "rx_mode_change",
-     "totmann_expired", "superseded", "easter_egg_off", "test_cleanup"],
-)
-def test_stop_resets_full_state(app, reason):
+# ── Zusatz: omni_started Signal ────────────────────────────────────
+
+
+def test_start_emits_omni_started(app):
+    """omni_started.emit beim ersten start()."""
+    omni, *_ = _make_omni()
+    captured: list[None] = []
+    omni.omni_started.connect(lambda: captured.append(None))
+    omni.start()
+    assert captured == [None]
+    # idempotent: zweiter start kein Emit
+    omni.start()
+    assert captured == [None]
+
+
+def test_stop_emits_omni_stopped_with_reason(app):
+    """omni_stopped.emit mit reason."""
     omni, *_ = _make_omni()
     captured: list[str] = []
     omni.omni_stopped.connect(lambda r: captured.append(r))
     omni.start()
-    omni._slot_index = 3
-    omni._block = 2
-    omni._cq_even_count = 5
-    omni._cq_odd_count = 4
-    omni._cq_audio_hz = 1700
-    omni.stop(reason)
-    assert omni.is_active() is False
-    assert omni.is_paused() is False
-    assert omni._slot_index == 0
-    assert omni._block == 1
-    assert omni._cq_audio_hz is None
-    assert omni._cq_even_count == 0
-    assert omni._cq_odd_count == 0
-    assert captured == [reason]
-    # idempotent: zweiter stop-Aufruf no-op
-    omni.stop(reason)
-    assert captured == [reason]        # kein zweites Emit
+    omni.stop("band_change")
+    assert captured == ["band_change"]
 
 
-# ===========================================================================
-# T17 — Frequenz-Init aus diversity beim ersten TX (AC12)
-# ===========================================================================
-def test_freq_init_from_diversity_first_tx(app):
-    omni, encoder, diversity, _ = _make_omni(free_cq_freq=2300)
-    captured: list[int] = []
-    omni.cq_freq_changed.connect(lambda f: captured.append(f))
-    omni.start()
-    assert omni._cq_audio_hz is None
-    omni.on_cycle_start(cycle_num=800, is_even=True)
-    diversity.get_free_cq_freq.assert_called_once()
-    assert omni._cq_audio_hz == 2300
-    assert captured == [2300]
-    # P6: encoder bekommt die Sticky-Freq via transmit_pair
-    args, kwargs = encoder.transmit_pair.call_args
-    assert kwargs["audio_freq_hz"] == 2300
-
-
-# ===========================================================================
-# T18 — Fallback 1500 wenn diversity None returnt (AC12)
-# ===========================================================================
-def test_freq_fallback_1500_when_diversity_none(app):
-    omni, encoder, *_ = _make_omni(free_cq_freq=None)
-    captured: list[int] = []
-    omni.cq_freq_changed.connect(lambda f: captured.append(f))
-    omni.start()
-    omni.on_cycle_start(cycle_num=900, is_even=True)
-    assert omni._cq_audio_hz == 1500
-    assert captured == [1500]
-
-
-# ===========================================================================
-# T19 — Frequenz-Sticky: 1x init, dann fest ueber 5 Cycles (AC13)
-# ===========================================================================
-def test_freq_sticky_during_omni_5_cycles(app):
-    """P6: Pos 0 ruft transmit_pair (1x), Pos 1 macht no-op (Pair laeuft).
-    Pos 2-4 sind RX. Insgesamt: 1x transmit_pair, 0x transmit.
-    """
-    omni, encoder, diversity, _ = _make_omni(free_cq_freq=1700)
-    omni.start()
-    # 5 Slots durchlaufen — diversity nur 1x rufen
-    for i in range(5):
-        omni.on_cycle_start(cycle_num=1000 + i, is_even=(i % 2 == 0))
-    # diversity nur 1x gerufen (beim 1. TX-Slot Pos 0)
-    assert diversity.get_free_cq_freq.call_count == 1
-    assert omni._cq_audio_hz == 1700
-    # P6: Pair wurde 1x gerufen (Pos 0 startet, Pos 1 darf nicht erneut),
-    # transmit garnicht.
-    assert encoder.transmit_pair.call_count == 1
-    assert encoder.transmit.call_count == 0
-    args, kwargs = encoder.transmit_pair.call_args
-    assert kwargs["audio_freq_hz"] == 1700
-
-
-# ===========================================================================
-# T20 — Frequenz behaelt Wert ueber pause/resume (AC14)
-# ===========================================================================
-def test_freq_kept_during_pause_resume(app):
-    omni, _enc, diversity, _ = _make_omni(free_cq_freq=1800)
-    omni.start()
-    omni.on_cycle_start(cycle_num=1100, is_even=True)   # init freq
-    assert omni._cq_audio_hz == 1800
-    omni.pause()
-    assert omni._cq_audio_hz == 1800   # bleibt
-    omni.resume_after_qso(last_was_even=True)
-    assert omni._cq_audio_hz == 1800   # bleibt
-    # diversity wurde NICHT erneut gerufen
-    assert diversity.get_free_cq_freq.call_count == 1
-
-
-# ===========================================================================
-# T21 — encoder busy: kein Counter, kein slot_action, aber advance (AC11, R1)
-# ===========================================================================
-def test_encoder_busy_no_counter_no_slot_action_but_advance(app):
-    """P6: Pair-Mode busy (transmit_pair returnt False) -> kein Counter,
-    kein slot_action, _pair_in_progress bleibt False, aber _slot_index advanced.
-    """
+def test_busy_encoder_no_count(app):
+    """encoder.transmit returnt False -> kein Counter, kein slot_action."""
     omni, encoder, *_ = _make_omni()
-    encoder.transmit_pair.return_value = False    # Pair busy
+    encoder.transmit.return_value = False
+    captured_count: list[tuple[int, bool]] = []
+    captured_slot: list = []
+    omni.cq_count_changed.connect(
+        lambda c, e: captured_count.append((c, e))
+    )
+    omni.slot_action.connect(
+        lambda *args: captured_slot.append(args)
+    )
     omni.start()
-    captured_counter: list[tuple[int, int]] = []
-    captured_slot: list[tuple[str, bool, bool]] = []
-    omni.counter_changed.connect(
-        lambda e, o: captured_counter.append((e, o))
-    )
-    omni.slot_action.connect(
-        lambda lbl, tx, tev: captured_slot.append((lbl, tx, tev))
-    )
-    omni.on_cycle_start(cycle_num=1200, is_even=True)
-    # transmit_pair gerufen, aber Counter unveraendert
-    encoder.transmit_pair.assert_called_once()
-    assert omni._cq_even_count == 0
-    assert omni._cq_odd_count == 0
-    assert captured_counter == []
-    assert captured_slot == []                 # kein slot_action bei busy
-    # AC10: _slot_index advanced trotzdem (Pattern-Sync)
-    assert omni._slot_index == 1
-    assert omni._pair_in_progress is False     # Pair nicht aktiv
-
-
-# ===========================================================================
-# T22 — Alle 5 Signale werden korrekt emittet (AC22-26)
-# ===========================================================================
-def test_signals_emitted_correctly(app):
-    omni, _enc, _div, _ = _make_omni(free_cq_freq=1600)
-    started: list[None] = []
-    stopped: list[str] = []
-    slot_actions: list[tuple[str, bool, bool]] = []
-    freq_changes: list[int] = []
-    counter_changes: list[tuple[int, int]] = []
-    omni.omni_started.connect(lambda: started.append(None))
-    omni.omni_stopped.connect(lambda r: stopped.append(r))
-    omni.slot_action.connect(
-        lambda lbl, tx, tev: slot_actions.append((lbl, tx, tev))
-    )
-    omni.cq_freq_changed.connect(lambda f: freq_changes.append(f))
-    omni.counter_changed.connect(
-        lambda e, o: counter_changes.append((e, o))
-    )
-
-    omni.start()                               # AC22: omni_started
-    omni.on_cycle_start(cycle_num=1300, is_even=True)   # Pos 0 TX-E
-    omni.on_cycle_start(cycle_num=1301, is_even=False)  # Pos 1 TX-O
-    omni.on_cycle_start(cycle_num=1302, is_even=True)   # Pos 2 RX-E
-    omni.stop("manual_halt")                   # AC23
-
-    assert len(started) == 1                   # omni_started 1x (AC22)
-    assert stopped == ["manual_halt"]          # omni_stopped (AC23)
-    assert freq_changes == [1600]              # cq_freq_changed 1x (AC25)
-    assert counter_changes == [(1, 0), (1, 1)]  # 2x TX-Erfolg (AC26)
-    # slot_action: 2x TX (AC24) + 1x RX = 3
-    assert len(slot_actions) == 3
-    assert slot_actions[0][1] is True          # TX
-    assert slot_actions[1][1] is True          # TX
-    assert slot_actions[2][1] is False         # RX
-
-
-# ===========================================================================
-# T2N (P5.OMNI-PATTERN-FIX-3) — Pos 1 mit transmit.return_value=True
-# (Pending-Pfad) emittet counter+slot_action
-# ===========================================================================
-def test_omni_pos1_counter_and_slot_action_when_pending_returns_true(app):
-    """T2N (P5 V3 §7, AC-B1, AC-B2): komplementaer zu existing Z. 401 Test
-    der `transmit.return_value=False` mockt (busy-Skip-Branch).
-
-    Mit Variante A (P5 v0.96.2) returnt der echte Encoder bei busy NICHT
-    mehr False sondern True (Pending-Queue). OMNI's `_do_tx_slot` triggert
-    dann counter_changed.emit + slot_action.emit (Praxis-Pfad).
-    """
-    omni, encoder, *_ = _make_omni()
-    encoder.transmit.return_value = True   # Pending-Mock (echter P5-Pfad)
-    omni.start()
-    captured_counter: list[tuple[int, int]] = []
-    captured_slot: list[tuple[str, bool, bool]] = []
-    omni.counter_changed.connect(
-        lambda e, o: captured_counter.append((e, o))
-    )
-    omni.slot_action.connect(
-        lambda lbl, tx, tev: captured_slot.append((lbl, tx, tev))
-    )
-    # Pos 1 in Block 1 → TX-O (target_even=False)
-    omni._slot_index = 1
-    omni.on_cycle_start(cycle_num=1201, is_even=False)
-    # encoder.transmit gerufen mit Pending-Erfolgs-Return
+    with patch("core.omni_cq.time.time", return_value=30.0):
+        omni.on_cycle_start(cycle_num=1, is_even=True)
     encoder.transmit.assert_called_once()
-    # Counter + slot_action emittet (Praxis-Pfad)
-    assert omni._cq_odd_count == 1
-    assert omni._cq_even_count == 0
-    assert captured_counter == [(0, 1)]
-    assert len(captured_slot) == 1
-    assert captured_slot[0][1] is True       # is_tx=True
-    assert captured_slot[0][2] is False      # target_even=False (Pos 1 Block 1)
-    # _slot_index advanced (gleich wie busy-Pfad)
-    assert omni._slot_index == 2
+    assert omni.cq_count == 0
+    assert captured_count == []
+    assert captured_slot == []

@@ -235,18 +235,24 @@ def test_listener_pauses_omni_and_sets_tx_even(app):
 # ===========================================================================
 # I7 — _maybe_resume_omni nach QSO-Ende waehlt Block nach last_qso_tx_even
 # ===========================================================================
-def test_qso_complete_resumes_omni_with_block_choice(app):
+def test_qso_complete_resumes_omni_keeps_parity(app):
+    """P7.OMNI-SIMPLIFY: Resume nach QSO bewahrt _cq_tx_even (kein Block-Wechsel mehr).
+
+    last_was_even-Argument wird ignoriert. Sync via Re-Mess (Such-Counter),
+    nicht via Resume.
+    """
     mw = _make_fake_mw(app)
     MainWindow._on_btn_omni_cq_toggled(mw, True)
     try:
+        mw._omni_cq._cq_tx_even = True   # OMNI war auf Even
         mw._omni_cq.pause()
         mw._omni_was_active_pre_qso = True
-        mw._last_qso_tx_even = True   # endete auf Even -> Block 2
+        mw._last_qso_tx_even = True
         QSOMixin._maybe_resume_omni(mw)
-        # Block 2 (Odd-First, _block=2) und Pos 0
+        # OMNI aktiv + Paritaet bleibt Even (nicht durch Block-Logik getoggelt)
         assert mw._omni_cq.is_active() is True
-        assert mw._omni_cq._block == 2
-        assert mw._omni_cq._slot_index == 0
+        assert mw._omni_cq.is_paused() is False
+        assert mw._omni_cq._cq_tx_even is True   # bleibt Even
         # Flag zurueckgesetzt
         assert mw._omni_was_active_pre_qso is False
     finally:
@@ -343,16 +349,19 @@ def test_omni_toggle_stops_auto_hunt(app):
 # ===========================================================================
 # I13 — RX-Slot emittet 'Horche...' (V2-L8)
 # ===========================================================================
-def test_rx_slot_emits_horche_to_qso_panel(app):
+def test_omni_slot_action_no_listening_in_p7(app):
+    """P7.OMNI-SIMPLIFY: _on_omni_slot_action ist no-op (kein RX-Branch mehr).
+
+    OMNI emittet slot_action NUR bei TX-Slot in P7. RX-Anzeige (Horche)
+    entfaellt — OMNI ist passiver CQ-Modus. add_listening wird NICHT mehr
+    von OMNI gerufen.
+    """
     mw = _make_fake_mw(app)
-    # Direkt-Aufruf des Slots (RX-Slot mit echter Paritaet)
-    MainWindow._on_omni_slot_action(mw, "B1 [2/4] RX-E", False, True)
-    mw.qso_panel.add_listening.assert_called_once()
-    args, kwargs = mw.qso_panel.add_listening.call_args
-    assert args[1] is True   # target_even (echte UTC-Slot-Paritaet)
-    # TX-Slot loest add_listening NICHT aus (nur RX)
-    mw.qso_panel.add_listening.reset_mock()
-    MainWindow._on_omni_slot_action(mw, "B1 [0/4] TX-E", True, True)
+    # RX-Slot: kein add_listening
+    MainWindow._on_omni_slot_action(mw, "RX-E", False, True)
+    mw.qso_panel.add_listening.assert_not_called()
+    # TX-Slot: auch kein add_listening (TX laeuft ueber tx_started -> add_tx)
+    MainWindow._on_omni_slot_action(mw, "TX-E", True, True)
     mw.qso_panel.add_listening.assert_not_called()
 
 
