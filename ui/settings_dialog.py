@@ -436,6 +436,26 @@ class SettingsDialog(QDialog):
         self.audio_dump_cb.toggled.connect(self.audio_dump_max_spin.setEnabled)
         self.audio_dump_max_spin.setEnabled(self.audio_dump_cb.isChecked())
 
+        layout.addWidget(_hline())
+
+        # Block 5: Debug-Log (P21 v0.96.8) — Mike-Spec 10.05.2026
+        debug_lbl = QLabel(
+            "Schreibt strategische Diagnose-Eintraege (Bandwechsel, "
+            "Antennen-Switch, Phase-Uebergaenge) nach "
+            "<b>~/.simpleft8/debug_YYYY-MM-DD.log</b>. 1 Datei pro Tag, "
+            "aeltere als gestern werden beim App-Start geloescht."
+        )
+        debug_lbl.setWordWrap(True)
+        debug_lbl.setStyleSheet("color: #888;")
+        layout.addWidget(debug_lbl)
+
+        self.debug_log_cb = QCheckBox("Debug-Log schreiben")
+        self.debug_log_cb.setToolTip(
+            "Bei Bug-Hunt einschalten — Mike + Claude koennen das Log "
+            "zusammen auswerten und sehen wo der Code-Pfad bricht."
+        )
+        layout.addWidget(self.debug_log_cb)
+
         layout.addStretch()
         return tab
 
@@ -488,6 +508,8 @@ class SettingsDialog(QDialog):
         self.audio_dump_cb.setChecked(self.settings.get("audio_dump_enabled", False))
         self.audio_dump_max_spin.setValue(self.settings.get("audio_dump_max_files", 200))
         self.audio_dump_max_spin.setEnabled(self.audio_dump_cb.isChecked())
+        # P21 v0.96.8: Debug-Log
+        self.debug_log_cb.setChecked(self.settings.get("debug_log_enabled", False))
         # v0.88 Bandpilot Stunden-Logik
         mode = self.settings.get("bandpilot_mode", "off")
         self.bandpilot_mode_combo.setCurrentIndex(
@@ -613,6 +635,10 @@ class SettingsDialog(QDialog):
         # P3 v0.95.20: Audio-Dump
         self.settings.set("audio_dump_enabled", self.audio_dump_cb.isChecked())
         self.settings.set("audio_dump_max_files", self.audio_dump_max_spin.value())
+        # P21 v0.96.8: Debug-Log — Toggle SOFORT anwenden (kein Restart noetig)
+        from core import debug_log as _dbg
+        _dbg.set_enabled(self.debug_log_cb.isChecked())
+        self.settings.set("debug_log_enabled", self.debug_log_cb.isChecked())
         # v0.88 Bandpilot Stunden-Logik
         self.settings.set("bandpilot_mode",
                           {0: "off", 1: "auto", 2: "manual"}[self.bandpilot_mode_combo.currentIndex()])

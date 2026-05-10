@@ -497,6 +497,14 @@ def main():
         sys.exit(0)
 
     settings = Settings()
+
+    # P21 v0.96.8: Debug-Log Init + Cleanup (Mike-Spec 10.05.2026)
+    from core import debug_log as _dbg
+    n_deleted = _dbg.cleanup_old_files(keep_days=1)
+    if n_deleted:
+        print(f"[Debug-Log] {n_deleted} alte Datei(en) geloescht")
+    _dbg.set_enabled(settings.get("debug_log_enabled", False))
+
     window = MainWindow(settings)
     window.show()
 
