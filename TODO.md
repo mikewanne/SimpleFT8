@@ -1,8 +1,93 @@
-# SimpleFT8 TODO — Stand 08.05.2026 (v0.95.22)
+# SimpleFT8 TODO — Stand 10.05.2026 (v0.96.1)
 
 > **Mike-Regel 07.05.2026:** Offene Aufgaben gehoeren AUSSCHLIESSLICH
 > in diese Datei. Nicht in CLAUDE.md, nicht in HANDOFF.md. Diese Datei
 > ist die einzige Quelle fuer Backlog/Bugs/Feature-Wuensche.
+
+---
+
+## 🔥 TOP — P5.OMNI-PATTERN-FIX-3 (aktiv vorbereitet, fresh-Instanz übernimmt)
+
+**Trigger fuer fresh-Instanz:** „omni pattern fix3 starten" oder „p5 starten"
+
+**Issues (beide im selben Workflow):**
+
+### Issue B (kritisch) — Pos 1 (TX nach TX) immer encoder-busy
+- Field-Test 10.05.2026 ~06:30 UTC zeigte: nach Pos 0 TX-E sendet
+  Encoder bis ~:43; bei :45 cycle_start für Pos 1 ist `_is_transmitting`
+  noch True → `transmit()` returnt False → Pattern-Hälfte tot.
+- Log: `[OMNI-CQ] encoder.transmit busy -> Slot B1 [1/4] TX-O uebersprungen`
+- Pos 4 RX-E fehlt zusätzlich im Display (Sekundär-Effekt, in V1 verifizieren).
+- **Architektur-Fix erforderlich** (4 Optionen A-D in Diagnose-File).
+
+### Issue A (kosmetisch) — Horche-Zeit auf Slot-Boundary
+- `ui/main_window.py:760` ruft `add_listening(time.time(), ...)` mit
+  Wall-Time. Soll: `floor(time.time()/cycle_duration)*cycle_duration`
+  → `:00`/`:15`/`:30`/`:45` bei FT8.
+- 1 Zeile, geht als AC in P5-V3 mit.
+
+### Files (vorbereitet)
+
+- `prompts/p5_omni_pattern_fix3_diagnose.md` — Compact-feste Diagnose,
+  4 Optionen, AC-Vorschlag, R1-Fragen.
+- `memory/project_p5_omni_pattern_fix3.md` — Trigger-File, 16-Punkt-Anleitung.
+- `memory/feedback_r1_encoder_busy_blindspot.md` — neue Pflicht-Lesson.
+
+### APP_VERSION-Plan
+
+`v0.96.1 → v0.96.2` (Patch-Bump: Race-Fix + Display-Korrektur).
+
+### Test-Bilanz erwartet
+
+1020 → ~1025-1030 grün.
+
+### Push-Status
+
+KEIN Push (origin) seit v0.95.16. Lokal sind v0.95.16-0.96.1 + P2-Tool
+gesammelt. Push erst nach P5 Field-Test grün.
+
+---
+
+## 🛠️ META: CLAUDE.md + Memory Restrukturierung
+
+> **Analyse 09.05.2026** — CLAUDE.md ist 673 Zeilen (Ziel: ~120 Zeilen). Memory hat 57 Dateien, Index 73 Zeilen.
+
+### Ursachen des Bloats (identifiziert)
+
+1. **`feedback_todo_history_pflicht.md`-Regel**: "nach jedem Task → CLAUDE.md Header updaten" → nach 20+ Features
+   reines Anhängen ohne Kürzen → "Aktueller Stand"-Block wächst unbegrenzt.
+2. **Workflow dreifach beschrieben**: V1→V2→R1→V3 steht in CLAUDE.md (Z. 5-30), nochmal Z. 161-170,
+   nochmal in 4 Memory-Feedback-Dateien + docs/WORKFLOW.md. Quelle der Wahrheit: docs/WORKFLOW.md.
+3. **Philosophie + Leitsätze in CLAUDE.md**: Z. 133-199+ gehören in docs/PHILOSOPHY.md (bestehend?),
+   nicht in die Kontext-Datei.
+4. **DeepSeek-Tool-Details in CLAUDE.md**: Z. 109-131 (Helper-Skript, Kosten, Tabelle) → Memory oder
+   docs/DEEPSEEK_WORKFLOW.md.
+5. **Memory-Index-Bloat**: ~30 ✅-ERLEDIGT Project-Einträge belegen Index-Zeilen. Completed → archivieren.
+
+### Plan (4 Schritte, KEIN Workflow nötig — das ist Doku, kein Code)
+
+**Schritt 1 — CLAUDE.md auf ~120 Zeilen schrumpfen:**
+- Behalten (fett): Workflow-Pflicht-Block (Z. 5-30), Hardware-Warnung ANT1/ANT2 (Z. 32-57),
+  Session-Lifecycle-Kurzfassung (Z. 60-94), Aktueller-Stand-Header (1 kompakte Zeile), Start-Befehl.
+- Raus (mit Verweis): Philosophie → `docs/PHILOSOPHY.md`, Leitsätze → `docs/PHILOSOPHY.md`,
+  DeepSeek-Tool-Details → Memory `feedback_workflow_works_with_deepseek.md`,
+  Feature-Workflow-Abschnitt → `docs/WORKFLOW.md` (Verweis genügt).
+- Neue Prune-Regel: "Aktueller Stand = max 3 Zeilen. Alte Stände raus."
+
+**Schritt 2 — docs/ Dateien anlegen/aktualisieren:**
+- `docs/PHILOSOPHY.md` — Projekt-Philosophie + Programmier-Leitsätze (bestehende Datei prüfen)
+- `docs/ARCHITECTURE.md` — Modul-Übersicht, Klassen, Signal-Flow (bestehende Datei prüfen)
+- `docs/KNOWN_BUGS.md` — Offene Bugs mit Diagnose (statt in CLAUDE.md)
+
+**Schritt 3 — Memory-Index bereinigen:**
+- Alle ✅-ERLEDIGT project_*.md Einträge aus MEMORY.md entfernen (die Dateien selbst behalten)
+- Nur noch ⏳-pending + ⚠️-aktiv + ⛔-PFLICHT im Index → Ziel < 40 Zeilen
+
+**Schritt 4 — `feedback_todo_history_pflicht.md` Prune-Ergänzung:**
+- Zusatz: "Beim CLAUDE.md-Update: Aktueller-Stand-Block auf max 3 Zeilen begrenzen, alten Stand raus."
+
+### Trigger
+"claude.md restrukturieren" oder "meta aufräumen" → diesen Plan ausführen.
 
 ---
 

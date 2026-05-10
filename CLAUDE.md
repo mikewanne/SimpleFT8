@@ -80,11 +80,14 @@ HISTORY.md ob X nicht schon drin ist.
 ⛔ **PFLICHT NACH JEDEM ERLEDIGTEN FIX/FEATURE (Mike 01.05.2026):**
 Reihenfolge VOR der naechsten Aufgabe:
 1. **HISTORY.md** anhaengen — `## YYYY-MM-DD vX.YY — Kurztitel` + Eintrag.
-2. **HANDOFF.md** in BEIDEN Verzeichnissen identisch updaten (TODO-Punkt
-   raus, neuer Stand rein, Test-Count).
-3. **CLAUDE.md** Header in BEIDEN Verzeichnissen updaten (`Aktueller Stand`
-   + Test-Count).
+2. **HANDOFF.md** updaten (TODO-Punkt raus, neuer Stand rein, Test-Count).
+3. **CLAUDE.md** Header updaten (`Aktueller Stand` + Test-Count).
 4. **Memory** wenn Lesson gelernt.
+
+> **Hinweis (Mike 10.05.2026):** `FT8/HANDOFF.md` und `FT8/CLAUDE.md`
+> sind Symlinks auf die echten Dateien in `SimpleFT8/`. Nur die echten
+> Dateien editieren — die Symlinks aktualisieren sich automatisch.
+> KEIN Doppel-Update mehr noetig.
 
 Bei Halluzination einer TODO-Liste (Mike 01.05.: ich hatte
 `_reset_defaults` als offen vorgeschlagen, war aber in v0.79 schon erledigt)

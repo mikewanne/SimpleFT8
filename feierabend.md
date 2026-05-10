@@ -1,15 +1,19 @@
 # Feierabend-Routine – SimpleFT8
 
+> **Mike 10.05.2026:** `FT8/HANDOFF.md` und `FT8/CLAUDE.md` sind
+> Symlinks auf die echten Dateien in `SimpleFT8/`. Nur die echten
+> Dateien in `SimpleFT8/` editieren — der Symlink im Eltern-Ordner
+> aktualisiert sich automatisch. KEIN Doppel-Update mehr.
+
 Führe diese Schritte ohne Rückfragen und ohne Kommentar durch:
 
-## 1. CLAUDE.md aktualisieren (in BEIDEN Verzeichnissen)
+## 1. CLAUDE.md aktualisieren
 
-Überschreibe identisch in:
-- `/Users/mikehammerer/Documents/KI N8N Projekte/FT8/SimpleFT8/CLAUDE.md`
-- `/Users/mikehammerer/Documents/KI N8N Projekte/FT8/CLAUDE.md` → NUR die Abschnitte ab `# SimpleFT8 — Claude Kontext` (den JOHNBOY-Header davor stehen lassen)
+Editiere: `/Users/mikehammerer/Documents/KI N8N Projekte/FT8/SimpleFT8/CLAUDE.md`
+(`FT8/CLAUDE.md` ist Symlink — wird automatisch synchron).
 
-Erste Zeile des SimpleFT8-Blocks ist immer:
-"Lies nach dieser Datei sofort auch HANDOFF.md und bestätige beide mit je einer Zeile."
+Erste Zeile ist immer:
+"Lies nach dieser Datei sofort auch HANDOFF.md und HISTORY.md und bestätige alle drei mit je einer Zeile."
 
 Danach token-dicht, nur das Wesentliche:
 
@@ -23,11 +27,10 @@ Danach token-dicht, nur das Wesentliche:
 - Offene TODOs (nur echte, keine erledigten)
 - Bekannte Fallen & Bugs
 
-## 2. HANDOFF.md aktualisieren (in BEIDEN Verzeichnissen)
+## 2. HANDOFF.md aktualisieren
 
-Überschreibe identisch — gleicher Inhalt, zwei Speicherorte:
-- `/Users/mikehammerer/Documents/KI N8N Projekte/FT8/SimpleFT8/HANDOFF.md`
-- `/Users/mikehammerer/Documents/KI N8N Projekte/FT8/HANDOFF.md`
+Editiere: `/Users/mikehammerer/Documents/KI N8N Projekte/FT8/SimpleFT8/HANDOFF.md`
+(`FT8/HANDOFF.md` ist Symlink — wird automatisch synchron).
 
 Inhalt:
 - Heute erledigt
@@ -63,8 +66,8 @@ Inhalt pro Eintrag:
 Gib exakt das aus:
 
 ```
-✅ CLAUDE.md aktualisiert – SimpleFT8 + FT8/
-✅ HANDOFF.md aktualisiert – SimpleFT8 + FT8/ (identische Kopie)
+✅ CLAUDE.md aktualisiert (SimpleFT8/, Symlink in FT8/ folgt)
+✅ HANDOFF.md aktualisiert (SimpleFT8/, Symlink in FT8/ folgt)
 ✅ HISTORY.md ergänzt – lückenlose Änderungshistorie
 ✅ Terminal schließen
 ✅ Morgen: cd SimpleFT8 ODER cd FT8 → claude1 → lädt automatisch

@@ -5,6 +5,94 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-10 — P5.OMNI-PATTERN-FIX-3 vorbereitet (kein Code-Bump)
+
+**Auslöser:** Field-Test v0.96.1 (P4-V5) ~06:30 UTC zeigte zwei Issues:
+
+1. **Issue B (kritisch):** Pos 1 (TX nach TX) IMMER encoder-busy →
+   Pattern halb tot. Log: `[OMNI-CQ] encoder.transmit busy -> Slot
+   B1 [1/4] TX-O uebersprungen` (3× pro Toggle-Run reproduziert).
+   Pos 4 RX-E fehlt zusätzlich im qso_panel-Display.
+2. **Issue A (kosmetisch):** Horche-Zeile zeigt Wall-Time
+   (z.B. `04:26:44`) statt UTC-Slot-Boundary (`:45`).
+
+**Wurzel Issue B:** Encoder-Worker-Thread setzt `_is_transmitting=False`
+im `finally` ~:43.5-:44 (FT8 15s Slot, TX-Audio :30-:43.5). Pos 1
+cycle_start kommt :45 — Race-Window 0.5-1.5s. Praxis: bei FT8 ist
+Pos 1 IMMER busy. V3 §8 (P4-V5 Out-of-Scope) hatte Encoder-Queue +
+Mid-Cycle-Pretrigger explizit verboten — der Race ist
+architektonisch eingebaut.
+
+**R1-Blindspot dokumentiert:** R1 hat in P4-V5 Klärungsfrage 3
+(Decoder-Blockade) Variante A „kein Schutz" als KISS abgesegnet,
+aber den Encoder-Throughput-Race nicht erkannt. Neue Pflicht-Lesson
+`feedback_r1_encoder_busy_blindspot.md` mit Checkliste für künftige
+Pläne mit konsekutiven TX-Slots.
+
+**Vorbereitete Files (kein Code-Bump, nur Doku/Plan):**
+
+- `prompts/p5_omni_pattern_fix3_diagnose.md` — Compact-feste Diagnose:
+  Symptome, Wurzel-Analyse, 4 Lösungsoptionen A-D mit Trade-offs,
+  AC-Vorschlag (B1-B6 + A1-A2 + Z1-Z2), R1-Fragen-Liste.
+- `memory/project_p5_omni_pattern_fix3.md` — Trigger-File mit 16-Punkt-
+  Anleitung. Triggers: „omni pattern fix3 starten" oder „p5 starten".
+- `memory/feedback_r1_encoder_busy_blindspot.md` — neue Pflicht-Lesson.
+- `memory/MEMORY.md` — Index ergänzt mit P5-Trigger + Lesson.
+- `HANDOFF.md` — Stand aktualisiert (P5 vorbereitet, fresh-Instanz
+  übernimmt).
+- `TODO.md` — P5 als TOP-Item.
+
+**Lösungsoptionen für P5 (R1 zur Bewertung in V2-Workflow):**
+
+| Option | Kern | Trade-off |
+|---|---|---|
+| A | Encoder-Queue zurück | Wenig OMNI-Code, V3-§8-Verbot kippen |
+| B | Mid-Cycle-Pretrigger via cycle_tick | Wie P2.OMNI-PATTERN-FIX, V3-§8 kippen |
+| C | Pattern auf 3 Slots (1 TX) | Mike-Spec ändern, kein Race |
+| D | TX-Slots nicht-konsekutiv (Pos 0 + Pos 2) | Mike-Spec ändern, Encoder-Idle dazwischen |
+
+Mike-Empfehlung (mein Vorschlag): **Variante A** — KISS-konform,
+keine Mike-Spec-Änderung, einziger Verstoß: P4-V3-§8-Verbot kippen
+(gerechtfertigt durch Field-Test-Evidence).
+
+**APP_VERSION-Plan:** v0.96.1 → v0.96.2 (Patch-Bump nach P5-Code).
+
+**Push-Status:** weiterhin KEIN Push seit v0.95.16. Lokal v0.95.16-0.96.1
++ P2-Tool. Push wartet bis P5 Field-Test grün.
+
+**Tests aktuell:** 1020 grün (unverändert seit v0.96.1 C9).
+
+---
+
+## 2026-05-10 — Symlinks für CLAUDE.md + HANDOFF.md (kein Code-Bump)
+
+Mike hat manuell `FT8/CLAUDE.md` und `FT8/HANDOFF.md` als Symlinks auf
+die echten Dateien in `SimpleFT8/` gesetzt:
+
+```
+FT8/CLAUDE.md  -> SimpleFT8/CLAUDE.md
+FT8/HANDOFF.md -> SimpleFT8/HANDOFF.md
+```
+
+Damit entfällt die „in BEIDEN Verzeichnissen identisch updaten"-Regel.
+Folgende Stellen wurden bereinigt (Pflicht-Doku, kein Workflow-Skip
+da Doku-only):
+
+- `SimpleFT8/CLAUDE.md` — Reihenfolge-Block reduziert auf 1 Pfad +
+  Symlink-Hinweis.
+- `SimpleFT8/feierabend.md` — komplett umgeschrieben, nur SimpleFT8/-Pfade.
+- `SimpleFT8/docs/SESSION_WORKFLOW.md` — Datei-Matrix + Phase 2 + Phase 3
+  Bestätigungs-Block: alle „beide Pfade"-Hinweise raus.
+- `memory/MEMORY.md` — Index-Eintrag angepasst.
+- `memory/feedback_todo_history_pflicht.md` — Sequenz auf 1 Pfad +
+  Symlink-Hinweis.
+- `memory/feedback_session_lifecycle.md` — Phase 2 Block.
+
+Historische Dateien (`prompts/*_v[1-3].md`, `project_*_in_progress.md`)
+wurden nicht angefasst — sind Snapshots.
+
+---
+
 ## 2026-05-10 v0.96.1 — P4.OMNI-NEUBAU V5: Worker-Thread-Bug gefixt durch Signal-Refactor
 
 **Auslöser:** Field-Test 09.05.2026 mit Mike (v0.96.0) zeigte Pattern komplett

@@ -36,10 +36,10 @@ R1-Review (DeepSeek-R1) fand 3 echte Findings:
 
 | Datei | Rolle | Schreib-Frequenz | Lese-Pflicht |
 |---|---|---|---|
-| **CLAUDE.md** (beide Pfade) | Stabile Regeln + Header mit aktuellem Stand | Bei jedem Release | **Session-Start (PFLICHT)** |
+| **CLAUDE.md** (`SimpleFT8/`, Symlink in `FT8/`) | Stabile Regeln + Header mit aktuellem Stand | Bei jedem Release | **Session-Start (PFLICHT)** |
 | **MEMORY.md** | Index aller persistenten Lessons | Bei neuer Lesson | **Session-Start (PFLICHT, vor HISTORY)** |
 | **HISTORY.md** | Chronologisch, append-only | Nach jedem Fix/Feature | **Session-Start (letzte 3-5 Eintraege)** |
-| **HANDOFF.md** (beide Pfade) | Aktueller Snapshot + offene Punkte | Nach jedem Fix/Feature | **Session-Start (PFLICHT)** |
+| **HANDOFF.md** (`SimpleFT8/`, Symlink in `FT8/`) | Aktueller Snapshot + offene Punkte | Nach jedem Fix/Feature | **Session-Start (PFLICHT)** |
 | **memory/*.md** | Lessons-Detail | Bei neuer Lesson | Bei Bedarf (verwiesen aus MEMORY.md) |
 | **prompts/*.md** | V1/V2/V3 Archiv pro Feature | Pro Feature-Workflow | Selten (Backtracking) |
 | **docs/WORKFLOW.md** | Feature-Workflow V1.1 | Stabil, selten | Bei Bedarf |
@@ -129,17 +129,18 @@ Release): Reihenfolge IMMER in dieser Sequenz, BEVOR naechste Aufgabe:
 
 1. **HISTORY.md** anhaengen — `## YYYY-MM-DD vX.YY — Kurztitel` + voller
    Eintrag (Workflow-Reflexion, R1-Findings, Lessons).
-2. **HANDOFF.md** beide Pfade synchron — TODO-Punkt raus, neuer Stand
-   rein, Test-Count.
-3. **CLAUDE.md** beide Pfade synchron — Header `Aktueller Stand: vX.YY`
-   + Test-Count.
+2. **HANDOFF.md** updaten (`SimpleFT8/HANDOFF.md`) — TODO-Punkt raus,
+   neuer Stand rein, Test-Count.
+3. **CLAUDE.md** Header updaten (`SimpleFT8/CLAUDE.md`) —
+   `Aktueller Stand: vX.YY` + Test-Count.
 4. **Memory** — neue Lesson? Eintrag schreiben + MEMORY.md-Index
    ergaenzen (mit ⛔-Marker bei PFLICHT-Eintraegen).
 
-**Sync-Reihenfolge der beiden Pfade (R1-P6):**
-`cp FT8/CLAUDE.md SimpleFT8/CLAUDE.md` IMMER NACH dem Edit der
-Master-Datei (FT8/), VOR dem Test-Count-Update. So vermeidet man
-divergente Test-Count-Stände.
+> **Mike 10.05.2026:** `FT8/HANDOFF.md` und `FT8/CLAUDE.md` sind
+> Symlinks auf `SimpleFT8/HANDOFF.md` bzw. `SimpleFT8/CLAUDE.md`.
+> Nur die echten Dateien in `SimpleFT8/` editieren — der Symlink im
+> Eltern-Ordner aktualisiert sich automatisch. KEIN `cp`, KEIN
+> Doppel-Edit mehr noetig.
 
 ### 2c. Versionsbump-Heuristik (R1-P4-Fix)
 
@@ -234,9 +235,9 @@ nicht-trivialen Punkt aktualisiert hat (siehe 2b), ist Phase 3 nur
 ein **Verifikations-Check**:
 
 1. **HISTORY.md** — letzten Eintrag auf Vollstaendigkeit pruefen.
-2. **HANDOFF.md** beide Pfade synchron + Stand auf neueste Version.
-3. **CLAUDE.md** beide Pfade synchron, Header korrekt, Test-Count
-   stimmt mit `pytest -q | tail -1`.
+2. **HANDOFF.md** Stand auf neueste Version (Symlink-Pflege entfaellt).
+3. **CLAUDE.md** Header korrekt, Test-Count stimmt mit
+   `pytest -q | tail -1`.
 4. **MEMORY.md** + memory/*.md — alle heutigen Lessons drin?
 5. **App-Status** — laeuft die App noch oder beendet? Ports frei?
 6. **Bestaetigungs-Block ausgeben** (3c).
@@ -245,8 +246,8 @@ ein **Verifikations-Check**:
 
 ```
 ✅ HISTORY.md — [N] Release-Eintraege heute (vX.AA, vX.BB, ...)
-✅ HANDOFF.md — beide Pfade auf vX.YY, NNN Tests, offene Punkte gepflegt
-✅ CLAUDE.md — beide Pfade auf vX.YY, Test-Count NNN
+✅ HANDOFF.md — vX.YY, NNN Tests, offene Punkte gepflegt
+✅ CLAUDE.md — vX.YY, Test-Count NNN
 ✅ MEMORY — [N] neue Lessons / [N] aktualisiert
 ✅ App: [Status — laeuft / beendet / weiter geplant]
 ✅ Morgen: cd SimpleFT8 ODER cd FT8 → claude1 → laedt automatisch
