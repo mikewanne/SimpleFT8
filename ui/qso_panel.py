@@ -158,13 +158,18 @@ class QSOPanel(QWidget):
 
     def add_tx(self, message: str, ant_label: str = "",
                tx_even: bool | None = None,
-               slot_start_ts: float | None = None):
+               slot_start_ts: float | None = None,
+               omni_remaining: int | None = None):
         """Eigene gesendete Nachricht — IMMER ins Log (Mike-Wunsch v0.78:
         keine Sammelanzeige, alle CQ-Rufe einzeln untereinander sichtbar).
 
         tx_even/slot_start_ts: bevorzugte Slot-Quelle (vom Encoder
         durchgereicht, latenz-frei). Fallback fuer Tests/alte Caller:
         time.time() zur Aufruf-Zeit.
+
+        omni_remaining: P23 — wenn nicht None: Suffix `  ↻{n}` direkt an
+        die Hauptzeile anhaengen (in Hauptfarbe). ant_label kommt danach
+        in seiner grauen Akzentfarbe wie heute.
         """
         if slot_start_ts is None or tx_even is None:
             now = time.time()
@@ -174,6 +179,8 @@ class QSOPanel(QWidget):
         utc = time.strftime("%H:%M:%S", time.gmtime(slot_start_ts))
         tag = "[E]" if tx_even else "[O]"
         line = f"{utc} {tag} →  Sende   {message}"
+        if omni_remaining is not None:
+            line = f"{line}  ↻{omni_remaining}"
         if ant_label:
             self._append_two_color(line, "#FFAA00", f"   {ant_label}", "#888888")
         else:
