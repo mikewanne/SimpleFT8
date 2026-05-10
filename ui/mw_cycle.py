@@ -583,6 +583,12 @@ class CycleMixin:
 
         self.qso_sm.on_cycle_end()
 
+        # P4.OMNI-NEUBAU V5 (10.05.2026): signal-getriggerter OMNI-CQ — laeuft
+        # NACH qso_sm.on_cycle_end() (Normal-CQ Re-Trigger zuerst, OMNI-Pattern
+        # advanced danach). hasattr-Guard fuer isolierte Test-Setups.
+        if hasattr(self, '_omni_cq'):
+            self._omni_cq.on_cycle_start(cycle_num, is_even)
+
         # Diversity: Antenne umschalten bei jedem Zyklus (non-blocking)
         if self._rx_mode == "diversity" and self.radio.ip and self.rx_panel._rx_active:
             # BUG-1: TX-Schutz — waehrend TX keine Antenne umschalten!

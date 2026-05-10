@@ -4,8 +4,8 @@ Deckt V3 §5 I1-I14 ab. Ohne komplettes MainWindow-Init: wir bauen einen
 Fake-MainWindow mit den OMNI-relevanten Attributen und rufen die
 ungebundenen Mixin/MainWindow-Methoden direkt auf.
 
-Worker-Thread wird via Boundary-Mock blockiert — sonst Race zwischen
-Thread-Start und Assert-Aufruf.
+V5 (10.05.2026): OmniCQ ist signal-basiert (kein Worker-Thread mehr) —
+kein Boundary-Mock noetig. Tests rufen die Public-API direkt auf.
 """
 from __future__ import annotations
 
@@ -109,16 +109,13 @@ def _make_fake_mw(app, callsign: str = "DA1MHH",
     mw.rx_panel._rx_active = True
     mw.rx_panel.set_active_call = MagicMock()
 
-    # OMNI-CQ — echte Instanz, Worker-Boundary mocken (sonst Race).
+    # OMNI-CQ — echte Instanz (V5 signal-basiert, kein Worker-Mock noetig).
     mw._omni_cq = OmniCQ(
         encoder=mw.encoder,
         diversity_ctrl=mw._diversity_ctrl,
         timer=mw.timer,
         my_call=callsign,
         my_grid=locator,
-    )
-    mw._omni_cq._compute_next_boundary = (
-        lambda target_even: time.time() + 100.0
     )
     # MainWindow connectet im Init omni_stopped → _on_omni_stopped. Wir
     # bilden das nach (HALT-Test braucht das, sonst wird Pre-QSO-Flag
