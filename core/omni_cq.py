@@ -76,6 +76,10 @@ class OmniCQ(QObject):
         self._cq_audio_hz: int | None = None
         self._cq_even_count = 0
         self._cq_odd_count = 0
+        # P6.OMNI-DOUBLE-AUDIO: Flag dass aktueller Block Pair-Modus laeuft
+        # (Pos 0 hat transmit_pair gestartet, Pos 1 darf encoder NICHT
+        # erneut rufen).
+        self._pair_in_progress = False
 
     # ------------------------------------------------------------------
     # Public API
@@ -94,6 +98,7 @@ class OmniCQ(QObject):
         self._cq_audio_hz = None
         self._cq_even_count = 0
         self._cq_odd_count = 0
+        self._pair_in_progress = False
         self.omni_started.emit()
         logger.info("[OMNI-CQ] Start (Block 1)")
 
@@ -111,6 +116,7 @@ class OmniCQ(QObject):
         self._cq_audio_hz = None
         self._cq_even_count = 0
         self._cq_odd_count = 0
+        self._pair_in_progress = False
         self.omni_stopped.emit(reason)
         logger.info("[OMNI-CQ] Stop (%s)", reason)
 
@@ -201,19 +207,61 @@ class OmniCQ(QObject):
         return True, target_even
 
     def _do_tx_slot(self, target_even: bool) -> None:
-        """TX-Slot ausfuehren — encoder.transmit() atomar mit kwargs.
+        """TX-Slot ausfuehren.
+
+        P6.OMNI-DOUBLE-AUDIO (v0.96.3, Mike-Vorschlag 10.05.2026):
+        - Pos 0: ruft encoder.transmit_pair(msg0, msg1) — sendet beide
+          Slots (Pos 0 + Pos 1) als EIN PTT-Cycle. Pos 1 wird vom selben
+          Worker mit dranghaengt -> kein Encoder-Race, kein Drift-Konflikt.
+          Counter+slot_action fuer Pos 0 wird sofort emit (Pair gestartet).
+          Counter+slot_action fuer Pos 1 wird im _do_tx_slot Pos-1-Aufruf
+          emit (siehe _pair_in_progress-Flag).
+        - Pos 1: encoder ist im Pair-Mode, transmit nicht erneut rufen.
+          Nur Counter+slot_action emit.
+        - Andere Slots: legacy single-pass (sollte nie passieren in OMNI
+          mit aktuellem _TX_PATTERN, aber Defense-in-Depth).
 
         AC8: Reihenfolge bei Erfolg: counter_changed.emit -> slot_action.emit.
-        AC11: Bei encoder-busy (False) keine Counter-Inkrement, keine
-        slot_action — nur log warning. _slot_index advanced trotzdem
-        (AC10, _advance_state ist Aufruferseite).
         """
         if self._cq_audio_hz is None:
             self._init_audio_freq()
         cq_msg = f"CQ {self._my_call} {self._my_grid}"
-        ok = self._encoder.transmit(
-            cq_msg, tx_even=target_even, audio_freq_hz=self._cq_audio_hz,
-        )
+
+        # Pair-Mode-Erkennung: Pos 0 + Pos 1 sind beide TX (per Pattern).
+        # Pos 0 startet das Pair, Pos 1 ist no-op fuer encoder (Pair laeuft).
+        is_pos_0 = (self._slot_index == 0)
+        is_pos_1 = (self._slot_index == 1)
+
+        ok = True  # default: counter+slot_action immer emit (auch bei pos1)
+
+        if is_pos_0:
+            # Pos 1's target_even ist invertiert zu Pos 0's
+            tx_even_1 = not target_even
+            ok = self._encoder.transmit_pair(
+                cq_msg, cq_msg,
+                tx_even_0=target_even, tx_even_1=tx_even_1,
+                audio_freq_hz=self._cq_audio_hz,
+            )
+            self._pair_in_progress = ok  # Flag fuer Pos 1
+        elif is_pos_1:
+            # Pair laeuft schon -> KEIN encoder.transmit, nur Anzeige.
+            # _pair_in_progress sollte True sein wenn Pos 0 erfolgreich war.
+            if not getattr(self, "_pair_in_progress", False):
+                # Edge-Case: Pos 0 hatte Pair-Start verworfen, Pos 1 muss
+                # solo senden. Fallback auf single transmit.
+                ok = self._encoder.transmit(
+                    cq_msg, tx_even=target_even,
+                    audio_freq_hz=self._cq_audio_hz,
+                )
+            # else: Pair-Worker hat Pos 1 schon im Stream, hier nur emit
+            self._pair_in_progress = False  # zuruecksetzen fuer naechsten Block
+        else:
+            # Defense-in-Depth: andere TX-Slot-Position (sollte nie sein)
+            ok = self._encoder.transmit(
+                cq_msg, tx_even=target_even,
+                audio_freq_hz=self._cq_audio_hz,
+            )
+
         label = self._slot_label(True, target_even)
         if ok:
             if target_even:
@@ -224,7 +272,7 @@ class OmniCQ(QObject):
             self.slot_action.emit(label, True, target_even)
         else:
             logger.warning(
-                "[OMNI-CQ] encoder.transmit busy -> Slot %s uebersprungen",
+                "[OMNI-CQ] encoder busy -> Slot %s uebersprungen",
                 label,
             )
 

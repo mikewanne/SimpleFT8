@@ -40,6 +40,7 @@ def _make_omni(*, free_cq_freq: int | None = 1500):
     """
     encoder = MagicMock()
     encoder.transmit = MagicMock(return_value=True)
+    encoder.transmit_pair = MagicMock(return_value=True)
     diversity = MagicMock()
     diversity.get_free_cq_freq = MagicMock(return_value=free_cq_freq)
     timer = MagicMock()
@@ -107,27 +108,41 @@ def test_start_idempotent_on_already_active(app):
 # T4 — Block 1 Pos 0: encoder.transmit mit tx_even=True (AC2, AC8)
 # ===========================================================================
 def test_block1_pos0_calls_encoder_transmit_tx_even(app):
+    """P6: Pos 0 ruft transmit_pair (msg0+msg1 gemeinsam), nicht transmit."""
     omni, encoder, *_ = _make_omni()
     omni.start()
     omni.on_cycle_start(cycle_num=100, is_even=True)
-    encoder.transmit.assert_called_once_with(
-        "CQ DA1MHH JN58", tx_even=True, audio_freq_hz=1500,
+    encoder.transmit_pair.assert_called_once_with(
+        "CQ DA1MHH JN58", "CQ DA1MHH JN58",
+        tx_even_0=True, tx_even_1=False,
+        audio_freq_hz=1500,
     )
+    encoder.transmit.assert_not_called()
     assert omni._slot_index == 1
+    assert omni._pair_in_progress is True
 
 
 # ===========================================================================
 # T5 — Block 1 Pos 1: encoder.transmit mit tx_even=False (AC2, AC8)
 # ===========================================================================
 def test_block1_pos1_calls_encoder_transmit_tx_odd(app):
+    """P6: Pos 1 ruft NICHT transmit (Pair laeuft schon vom Pos-0-Aufruf).
+
+    Setzt _pair_in_progress=True (simuliert Pos 0 hat Pair gestartet).
+    Pos 1 darf encoder NICHT erneut rufen, aber Counter+slot_action emit.
+    """
     omni, encoder, *_ = _make_omni()
     omni.start()
     omni._slot_index = 1               # Pos 1 = TX-O in Block 1
+    omni._pair_in_progress = True      # simuliere Pos 0 hat Pair gestartet
+    omni._cq_audio_hz = 1500           # Audio-Freq aus Pos 0
     omni.on_cycle_start(cycle_num=101, is_even=False)
-    encoder.transmit.assert_called_once_with(
-        "CQ DA1MHH JN58", tx_even=False, audio_freq_hz=1500,
-    )
+    # WICHTIG: weder transmit noch transmit_pair erneut gerufen
+    encoder.transmit.assert_not_called()
+    encoder.transmit_pair.assert_not_called()
     assert omni._slot_index == 2
+    assert omni._cq_odd_count == 1     # Counter trotzdem hoch
+    assert omni._pair_in_progress is False  # Flag zurueckgesetzt fuer naechsten Block
 
 
 # ===========================================================================
@@ -166,11 +181,14 @@ def test_rollover_block1_to_block2_first_tx_is_odd(app):
     assert omni._slot_index == 0
     assert omni._block == 2            # AC4: Rollover automatisch
     encoder.transmit.assert_not_called()  # Pos 4 war RX
+    encoder.transmit_pair.assert_not_called()
 
-    # Naechster Slot in Block 2 Pos 0 = TX-O (AC3)
+    # P6: Naechster Slot in Block 2 Pos 0 = TX-O ruft transmit_pair (Pair-Mode)
     omni.on_cycle_start(cycle_num=301, is_even=False)
-    encoder.transmit.assert_called_once_with(
-        "CQ DA1MHH JN58", tx_even=False, audio_freq_hz=1500,
+    encoder.transmit_pair.assert_called_once_with(
+        "CQ DA1MHH JN58", "CQ DA1MHH JN58",
+        tx_even_0=False, tx_even_1=True,
+        audio_freq_hz=1500,
     )
 
 
@@ -178,15 +196,19 @@ def test_rollover_block1_to_block2_first_tx_is_odd(app):
 # T8 — Block 2 Pos 1: encoder.transmit mit tx_even=True (AC3)
 # ===========================================================================
 def test_block2_pos1_tx_even(app):
+    """P6: Block 2 Pos 1 — Pair laeuft schon, kein erneuter encoder-Call."""
     omni, encoder, *_ = _make_omni()
     omni.start()
     omni._block = 2
     omni._slot_index = 1               # Pos 1 = TX-E in Block 2
+    omni._pair_in_progress = True      # Pos 0 hat Pair gestartet
+    omni._cq_audio_hz = 1500
     omni.on_cycle_start(cycle_num=400, is_even=True)
-    encoder.transmit.assert_called_once_with(
-        "CQ DA1MHH JN58", tx_even=True, audio_freq_hz=1500,
-    )
+    encoder.transmit.assert_not_called()
+    encoder.transmit_pair.assert_not_called()
     assert omni._slot_index == 2
+    assert omni._cq_even_count == 1
+    assert omni._pair_in_progress is False
 
 
 # ===========================================================================
@@ -341,8 +363,8 @@ def test_freq_init_from_diversity_first_tx(app):
     diversity.get_free_cq_freq.assert_called_once()
     assert omni._cq_audio_hz == 2300
     assert captured == [2300]
-    # encoder bekommt die Sticky-Freq
-    args, kwargs = encoder.transmit.call_args
+    # P6: encoder bekommt die Sticky-Freq via transmit_pair
+    args, kwargs = encoder.transmit_pair.call_args
     assert kwargs["audio_freq_hz"] == 2300
 
 
@@ -363,6 +385,9 @@ def test_freq_fallback_1500_when_diversity_none(app):
 # T19 — Frequenz-Sticky: 1x init, dann fest ueber 5 Cycles (AC13)
 # ===========================================================================
 def test_freq_sticky_during_omni_5_cycles(app):
+    """P6: Pos 0 ruft transmit_pair (1x), Pos 1 macht no-op (Pair laeuft).
+    Pos 2-4 sind RX. Insgesamt: 1x transmit_pair, 0x transmit.
+    """
     omni, encoder, diversity, _ = _make_omni(free_cq_freq=1700)
     omni.start()
     # 5 Slots durchlaufen — diversity nur 1x rufen
@@ -371,12 +396,12 @@ def test_freq_sticky_during_omni_5_cycles(app):
     # diversity nur 1x gerufen (beim 1. TX-Slot Pos 0)
     assert diversity.get_free_cq_freq.call_count == 1
     assert omni._cq_audio_hz == 1700
-    # Beide TX-Calls (Pos 0 + Pos 1) bekamen 1700 Hz
-    tx_calls = [c for c in encoder.transmit.call_args_list]
-    assert len(tx_calls) == 2
-    for call in tx_calls:
-        _, kwargs = call
-        assert kwargs["audio_freq_hz"] == 1700
+    # P6: Pair wurde 1x gerufen (Pos 0 startet, Pos 1 darf nicht erneut),
+    # transmit garnicht.
+    assert encoder.transmit_pair.call_count == 1
+    assert encoder.transmit.call_count == 0
+    args, kwargs = encoder.transmit_pair.call_args
+    assert kwargs["audio_freq_hz"] == 1700
 
 
 # ===========================================================================
@@ -399,8 +424,11 @@ def test_freq_kept_during_pause_resume(app):
 # T21 — encoder busy: kein Counter, kein slot_action, aber advance (AC11, R1)
 # ===========================================================================
 def test_encoder_busy_no_counter_no_slot_action_but_advance(app):
+    """P6: Pair-Mode busy (transmit_pair returnt False) -> kein Counter,
+    kein slot_action, _pair_in_progress bleibt False, aber _slot_index advanced.
+    """
     omni, encoder, *_ = _make_omni()
-    encoder.transmit.return_value = False    # busy
+    encoder.transmit_pair.return_value = False    # Pair busy
     omni.start()
     captured_counter: list[tuple[int, int]] = []
     captured_slot: list[tuple[str, bool, bool]] = []
@@ -411,14 +439,15 @@ def test_encoder_busy_no_counter_no_slot_action_but_advance(app):
         lambda lbl, tx, tev: captured_slot.append((lbl, tx, tev))
     )
     omni.on_cycle_start(cycle_num=1200, is_even=True)
-    # encoder.transmit gerufen, aber Counter unveraendert
-    encoder.transmit.assert_called_once()
+    # transmit_pair gerufen, aber Counter unveraendert
+    encoder.transmit_pair.assert_called_once()
     assert omni._cq_even_count == 0
     assert omni._cq_odd_count == 0
     assert captured_counter == []
     assert captured_slot == []                 # kein slot_action bei busy
     # AC10: _slot_index advanced trotzdem (Pattern-Sync)
     assert omni._slot_index == 1
+    assert omni._pair_in_progress is False     # Pair nicht aktiv
 
 
 # ===========================================================================
