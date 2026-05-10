@@ -76,25 +76,109 @@ def _signal_release_and_exit(signum, frame):
     sys.exit(0)
 
 
+_simpleft8_window_pids_cache: set[int] | None = None
+
+
+def _get_simpleft8_window_pids() -> set[int]:
+    """Cached osascript-Query: PIDs aller Prozesse mit "SimpleFT8" im Window-Title.
+
+    Mike-Vorschlag 10.05.2026 (Primaer-Strategie nach 5x verkackten
+    Doppel-Instanz-Bugs): macOS System Events fragt direkt nach Fenstern.
+    Robust gegen Pfad-Leerzeichen, Wrapper-Scripts, lsof-Permission-Fails.
+
+    Cache wird in _kill_all_simpleft8_instances einmal pro Lauf gesetzt
+    und in _is_simpleft8_pid genutzt — verhindert 100x osascript-Aufruf
+    beim Filter ueber alle pgrep-Kandidaten.
+    """
+    global _simpleft8_window_pids_cache
+    if _simpleft8_window_pids_cache is not None:
+        return _simpleft8_window_pids_cache
+    pids: set[int] = set()
+    try:
+        result = subprocess.run(
+            ["osascript", "-e",
+             '''tell application "System Events"
+                set foundPIDs to {}
+                repeat with proc in (every process whose visible is true)
+                    try
+                        repeat with w in (every window of proc)
+                            set wTitle to name of w as string
+                            if wTitle contains "SimpleFT8" then
+                                set end of foundPIDs to (unix id of proc as string)
+                                exit repeat
+                            end if
+                        end repeat
+                    end try
+                end repeat
+                set AppleScript's text item delimiters to ","
+                return foundPIDs as string
+            end tell'''],
+            capture_output=True, text=True, timeout=5,
+        )
+        for token in result.stdout.strip().split(","):
+            token = token.strip()
+            if token.isdigit():
+                pids.add(int(token))
+    except Exception:
+        pass
+    _simpleft8_window_pids_cache = pids
+    return pids
+
+
 def _is_simpleft8_pid(pid: int) -> bool:
-    """Prueft ob PID eine SimpleFT8-Instanz ist (CWD enthaelt 'SimpleFT8').
+    """Prueft ob PID eine SimpleFT8-Instanz ist — 4-Wege-Check.
 
     Wichtig: pgrep auf 'python.*main\\.py' findet ALLE main.py-Apps im System
-    (z.B. Websdr-Cockpit). Nur Prozesse mit CWD im SimpleFT8-Verzeichnis
-    duerfen gekillt werden!
+    (z.B. Websdr-Cockpit). Nur Prozesse die wirklich SimpleFT8 sind duerfen
+    gekillt werden!
+
+    Bug 10.05.2026: 13079 lief 4 Tage parallel zu neuer v0.96.2 — Wurzel:
+    - ps -o command zeigt nur 'python main.py' (kein "SimpleFT8" im argv)
+    - lsof CWD truncated bei Leerzeichen ("KI N8N Projekte" → "n/.../KI")
+    → beide Wege failen, alte Instanz unter dem Radar.
+
+    Fix: 4 Wege parallel — EIN Treffer reicht:
+    1. PRIMAER: osascript Window-Title-Check (Mike-Vorschlag, robustest)
+    2. ps -o command — argv enthaelt 'SimpleFT8' (greift bei abs. Pfaden)
+    3. lsof CWD — kann bei Leerzeichen brechen, bleibt als Defense-in-Depth
+    4. Lockfile-PID-Match
     """
+    # Weg 1: Window-Title-Check (cached osascript-Query)
+    if pid in _get_simpleft8_window_pids():
+        return True
+
+    # Weg 2: ps -o command (voller argv inkl. python-pfad + script-pfad)
     try:
-        # macOS lsof: -a verknuepft -p und -d mit AND (sonst OR — listet alles!)
+        result = subprocess.run(
+            ["ps", "-p", str(pid), "-o", "command="],
+            capture_output=True, text=True, timeout=2,
+        )
+        if "SimpleFT8" in result.stdout:
+            return True
+    except Exception:
+        pass
+
+    # Weg 3: lsof CWD-Check (legacy, kann bei Leerzeichen brechen)
+    try:
         result = subprocess.run(
             ["lsof", "-a", "-p", str(pid), "-d", "cwd", "-Fn"],
             capture_output=True, text=True, timeout=2,
         )
-        # lsof -Fn output: "n/path/to/cwd"
         for line in result.stdout.split("\n"):
             if line.startswith("n") and "SimpleFT8" in line:
                 return True
     except Exception:
         pass
+
+    # Weg 4: Lockfile-PID-Match
+    try:
+        if _LOCK_FILE.exists():
+            content = _LOCK_FILE.read_text().strip()
+            if content == str(pid):
+                return True
+    except Exception:
+        pass
+
     return False
 
 
