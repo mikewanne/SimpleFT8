@@ -8,6 +8,8 @@ import struct
 import threading
 import time
 import re
+from typing import Callable, Optional
+
 import numpy as np
 from PySide6.QtCore import QObject, Signal
 
@@ -86,12 +88,26 @@ class FlexRadio(QObject):
     # Exponential Backoff Stufen in Sekunden (DeepSeek: in FlexRadio kapseln)
     _RECONNECT_DELAYS = [5, 10, 20, 40, 60]
 
-    def auto_connect(self, max_retries: int = 5, retry_delay: float = 3.0):
+    def auto_connect(
+        self,
+        max_retries: int = 5,
+        retry_delay: float = 3.0,
+        on_attempt: Optional[Callable[[int, int], None]] = None,
+    ) -> bool:
         """Auto-Discovery + Connect mit Retry bis Radio gefunden.
 
         Fuer den ersten Start: max_retries/retry_delay wie gehabt.
+        on_attempt: Optional Callback (P26) fuer UI-Anzeige des
+            aktuellen Versuchs (1-indexed). Aufgerufen am Beginn jedes
+            Versuchs. Exceptions werden geschluckt.
         """
         for attempt in range(max_retries):
+            if on_attempt is not None:
+                try:
+                    on_attempt(attempt + 1, max_retries)
+                except Exception:
+                    pass  # Modal-Tot ist kein FlexRadio-Problem
+
             if not self.ip:
                 devices = self.discover(timeout=2.0)
                 if devices:
