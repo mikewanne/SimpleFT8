@@ -163,6 +163,28 @@ Fallback `time.strftime("%H%M%S", time.gmtime())`. Wenn der Decoder
 
 ---
 
+## 📋 P15.ANT-LABEL-VERTAUSCHT (Field-Test 10.05. Mike)
+
+**Symptom:** "(ANT2 ↑2.0 dB)"-Label erscheint hinter **Sende**-Eintrag
+im qso_panel. FALSCH — Hardware sendet IMMER ANT1 (verriegelt). Label
+gehört hinter **Empfangs**-Eintrag um zu zeigen welche Antenne RX
+besser war.
+
+**Diagnose:** `ui/mw_qso.py:90-129`:
+- `_antenna_pref_label(call)` liefert " (ANT2 ↑2.0 dB)"
+- Wird in `qso_panel.add_tx(message, ant_label, ...)` als ant_label
+  uebergeben → Label hinter Sende-Eintrag
+- Soll: `qso_panel.add_rx(message, ..., ant_label=...)` Label hinter
+  Empf.-Eintrag
+
+**Files:**
+- `ui/mw_qso.py:121-129` — Label bei add_tx weg, statt bei add_rx zufuegen
+- `ui/qso_panel.py:add_rx` — neuer optionaler ant_label-Param
+
+**Aufwand:** ~30 Min trivialer UI-Fix
+
+---
+
 ## 📋 P14.DT-WERTE-ASYMMETRISCH (Field-Test 10.05. Mike)
 
 **Symptom:** RX-Stationen zeigen DT fast alle im Minus (-0.1 bis -1.7),
