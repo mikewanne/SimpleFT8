@@ -270,21 +270,43 @@ class CycleMixin:
                 _scoring = getattr(self._diversity_ctrl, 'scoring_mode', 'normal')
                 _store = getattr(self, '_dx_store', None) if _scoring == "dx" else getattr(self, '_standard_store', None)
                 if _store and not _early_stopped:
-                    _store.save_ratio(
+                    # P22: atomares Persist — staged Gain (aus Phase 2) +
+                    # ratio (aus Phase 3) gemeinsam schreiben. Bei Disk-
+                    # Fehler oder fehlendem staged → Fallback save_ratio
+                    # damit kein kompletter Daten-Verlust.
+                    ok = _store.commit_with_ratio(
                         self.settings.band, self.settings.mode,
                         ratio=self._diversity_ctrl.ratio,
                         dominant=self._diversity_ctrl.dominant,
                     )
+                    if not ok:
+                        print("[mw_cycle] commit_with_ratio failed → "
+                              "save_ratio Fallback")
+                        _store.save_ratio(
+                            self.settings.band, self.settings.mode,
+                            ratio=self._diversity_ctrl.ratio,
+                            dominant=self._diversity_ctrl.dominant,
+                        )
                 elif _early_stopped:
+                    # P22-A11: Adaptiv-Stop = kein Persist (v0.91 Cache-
+                    # Schutz). Staged Eintrag verwerfen damit Memory sauber
+                    # bleibt.
+                    if _store:
+                        _store.discard_staged(
+                            self.settings.band, self.settings.mode)
                     print("[mw_cycle] Adaptiv-Stop-Ratio NICHT gecached "
                           "(weniger Messdaten als regulaerer Pfad)")
-                # Rückwärtskompatibilität
-                self.settings.save_diversity_preset(
-                    mode=self.settings.mode,
-                    band=self.settings.band,
-                    ratio=self._diversity_ctrl.ratio,
-                    dominant=self._diversity_ctrl.dominant,
-                )
+                # Rückwärtskompatibilität: NUR bei nicht-early_stopped
+                # schreiben. Sonst entsteht Half-State über die zwei
+                # Speicher hinweg (kalibrierung-File leer, settings hat
+                # Ratio) — Final-R1 KRITISCH 10.05.2026.
+                if not _early_stopped:
+                    self.settings.save_diversity_preset(
+                        mode=self.settings.mode,
+                        band=self.settings.band,
+                        ratio=self._diversity_ctrl.ratio,
+                        dominant=self._diversity_ctrl.dominant,
+                    )
                 cq_freq = self._diversity_ctrl.get_free_cq_freq()
                 if cq_freq:
                     self.encoder.audio_freq_hz = cq_freq
@@ -294,6 +316,9 @@ class CycleMixin:
                 self.control_panel.update_freq_histogram(
                     self._diversity_ctrl.get_histogram_data()
                 )
+                # P22 / P8: Mess-Modal automatisch schliessen
+                if hasattr(self, '_close_mess_status_dialog'):
+                    self._close_mess_status_dialog()
         elif self._diversity_ctrl.phase == "measure":
             self._diversity_in_operate = False
 
