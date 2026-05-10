@@ -1,8 +1,87 @@
-# SimpleFT8 TODO — Stand 10.05.2026 (v0.96.4)
+# SimpleFT8 TODO — Stand 10.05.2026 (v0.96.8)
 
 > **Mike-Regel 07.05.2026:** Offene Aufgaben gehoeren AUSSCHLIESSLICH
 > in diese Datei. Nicht in CLAUDE.md, nicht in HANDOFF.md. Diese Datei
 > ist die einzige Quelle fuer Backlog/Bugs/Feature-Wuensche.
+
+---
+
+## 📋 P24.LAST-RX-MODE-PERSIST (Mike-Wunsch 10.05. 17:10)
+
+**Symptom:** App startet IMMER in Normal-Modus, egal in welchem Modus
+sie beendet wurde (Diversity Standard / Diversity DX).
+
+**Mike-Zitat:** „nicht schöner fix aber ein fix" (kommentiert das
+aktuelle Verhalten dass NORMAL nach Restart erzwungen wird).
+
+**Soll:** App speichert beim Beenden den aktuellen RX-Mode (`normal`,
+`diversity_standard`, `diversity_dx`) in Settings und stellt ihn beim
+nächsten Start wieder her.
+
+**Files (vermutet):**
+- `config/settings.py` neue Key `last_rx_mode`
+- `ui/main_window.py` `closeEvent` speichert
+- `ui/main_window.py` Init liest + setzt RX-Mode
+
+**Aufwand:** ~1h Workflow-Lite (V1 + Code, kein R1 weil trivial).
+
+**Schweregrad:** Mittel — UX-Annoyance, kein Daten-Verlust.
+
+---
+
+## 📋 P25.RADIO-IP-LATE-SETTING (Wurzel-Diagnose 10.05.)
+
+**Symptom:** Beim App-Start ist `self.radio.ip` falsy (False/leer)
+obwohl Audio-Stream (DAX) bereits Stationen liefert. Dauer unklar
+(Sekunden? Minuten?). Trigger fuer den heute via Skip-Fix umgangenen
+0/6-Hänger.
+
+**Workaround heute (P21 v0.96.8):** `_handle_diversity_measure` skipped
+wenn `radio.ip=False` → wartet bis Connection da. Sobald `radio.ip` True
+wird, läuft Mess natürlich an.
+
+**Wurzel-Frage:** WARUM ist `radio.ip` lange False?
+- Reconnect-Loop läuft im Hintergrund?
+- Audio-DAX-Stream und TCP-Connect sind separate Pfade?
+- Initialisierungs-Reihenfolge in `MainWindow.__init__`?
+
+**Files (vermutet):**
+- `radio/flexradio.py` Connect-Logik + ip-Property
+- `ui/mw_radio.py` Init + Reconnect-Mechanik
+
+**Aufwand:** ~2h Diagnose + ggf. Fix.
+
+**Schweregrad:** Niedrig (Workaround greift) — aber Wurzel-Bug bleibt
+und kann anderswo Probleme machen.
+
+---
+
+## 📋 P26.MODAL-RADIO-CONNECT (Mike-Wunsch 10.05. 17:15)
+
+**Symptom:** Während FlexRadio gesucht/verbunden wird, sieht Mike das
+nicht prominent — kleine Statusmeldung rechts im UI „beachtet keiner".
+
+**Mike-Spec:**
+- Modal-Dialog im Vordergrund während Connect läuft
+- KEIN OK-Button, KEIN Abbruch — nur Info „FlexRadio wird verbunden"
+- Sobald Radio verbunden → Dialog ausblenden
+- Alternativ ODER zusätzlich: prominente Statusmeldung rechts
+  (gross, sichtbar) — aber Modal ist Mike's bevorzugte Variante
+
+**Pattern:** analog `MessStatusDialog` aus P22/P8 — WindowModal (NICHT
+ApplicationModal weil Reconnect-Logik im Hintergrund laufen muss).
+Auto-Close bei Connect-Erfolg via `radio.connected`-Signal.
+
+**Files (vermutet):**
+- `ui/connect_status_dialog.py` NEU (analog `mess_status_dialog.py`)
+- `ui/mw_radio.py` Open-Hook beim Connect-Start, Close-Hook bei
+  `radio.connected`-Signal
+
+**Aufwand:** ~1.5h V1+Code+Test. KEIN voller Workflow weil Pattern aus
+P22 kopiert.
+
+**Schweregrad:** Mittel — UX (verhindert Confusion bei langen
+Connect-Zeiten und löst möglicherweise auch P21-Problem).
 
 ---
 
