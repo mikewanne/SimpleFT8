@@ -1,15 +1,80 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-10 ~17:00 UTC: P23.OMNI-COUNTER-EIGEN — Code fertig, Final-R1 + Field-Test pending
+## Stand 2026-05-10 ~18:30 UTC: P26.CONNECT-MODAL — Code fertig + Final-R1 OK, Field-Test pending
 
-**Code:** v0.96.7 lokal — C1-C8 atomare Commits ausstehend (alle
-Aenderungen auf disk, noch nicht committed).
-**Tests:** **1049 grün** (1035 → 1049, +14 effektiv: 17 neue P23-Tests,
-3 search_trigger-Tests gelöscht).
-**Final-R1:** noch nicht gelaufen — als naechste Aufgabe.
-**Field-Test:** 5-Punkte-Plan V3 §7 F1-F5 ausstehend, Mike startet App selbst.
-**App:** gestoppt. **Push pending** bis Final-R1 + Field-Test gruen —
-v0.95.16-0.96.7 + P2-Tool + P3 zusammen.
+**Code:** v0.96.9 lokal — alle Änderungen auf disk, atomare Commits
+C1-C6 ausstehend.
+**Tests:** **1070 grün** (1056 → 1070, +14 P26-Tests).
+**Final-R1:** „Push freigegeben" (0 KRITISCH + 2 SOLLTE für „nächstes
+Major-Release", keine Push-Blocker).
+**Field-Test:** 6-Punkte-Plan V3 §8 F1-F6 ausstehend, Mike startet App selbst.
+**App:** gestoppt. **Push pending** bis Field-Test grün —
+v0.95.16-0.96.9 + P2-Tool + P3 + P21-Debug-Log + P26 zusammen.
+
+## Was P26 fixt
+
+Beim App-Start war heute nicht prominent sichtbar was die App tut
+(FlexRadio-Suche nur als kleiner Status-Indikator rechts). Plus: keine
+Möglichkeit die App ohne Radio zu starten (Test/Debug, Mike 200 km vom
+Radio entfernt). Lösung: WindowModal-Dialog mit Spinner + „Versuch X
+von 10", Auto-Close bei Connect, „ohne Radio weiter"-Text-Link
+(klein/dezent, kein Demo-Modus-Button) + „Beenden"-Button.
+
+**Architektur-Highlight (R1-K2-Fix):** `_start_radio()` wird via
+`QTimer.singleShot(0, ...)` aus MainWindow-Init deferred — sonst würde
+`dialog.exec()` den restlichen Init blockieren und Hauptfenster wäre
+unsichtbar.
+
+**Race-Schutz (R1-K1-Fix):** Worker holt lokale Dialog-Referenz +
+`try/except RuntimeError` um jedes `emit`. PySide6 wirft RuntimeError
+beim emit auf destroyed C++-Object — V2 hatte fälschlich „swallowed"
+angenommen.
+
+## Atomare Commits (ausstehend)
+
+- C1 `radio/flexradio.py` `on_attempt`-Param in `auto_connect`
+- C2 `ui/connect_status_dialog.py` NEU
+- C3 `ui/mw_radio.py` Modal-Lifecycle in `_start_radio` + Worker
+- C4 `ui/main_window.py` `_connect_dialog`-Attribut + singleShot-Defer
+- C5 `tests/test_p26_connect_modal.py` NEU (14 Tests)
+- C6 `main.py` APP_VERSION 0.96.8 → 0.96.9 + HISTORY/HANDOFF/CLAUDE/Memory
+
+## Field-Test-Plan (V3 §8, 6 Punkte)
+
+| F | Test | Erwartung |
+|---|---|---|
+| F1 | App-Start mit Radio AN | Modal kurz sichtbar, Spinner, „Versuch 1 von 10", schließt sofort wenn Connect da, Hauptfenster sichtbar |
+| F2 | App-Start mit Radio AUS | Modal bleibt offen, Spinner, „Versuch 1...10", nach ~50s „Verbindung fehlgeschlagen" + ✗, Buttons aktiv |
+| F3 | „ohne Radio weiter" mid-Connect | Modal weg, Hauptfenster sichtbar, Status „disconnected", App läuft GUI-only |
+| F4 | „Beenden" Click | App schließt sofort sauber |
+| F5 | Mid-Run-Disconnect (Radio aus während App läuft) | KEIN neues Modal, heutige Reconnect-Anzeige im Status-Indikator |
+| F6 | Connect SEHR schnell (lokales LAN) | Modal flackert kurz auf und ist weg — kein UI-Glitch |
+
+**Bestanden wenn:** F1-F4 sauber. F5+F6 sind Robustheits-Bonus.
+
+## Plan-Files
+
+- ✅ `prompts/p26_connect_modal_v1.md` (V1 initial)
+- ✅ `prompts/p26_connect_modal_v2.md` (V2 Self-Review, 14 Lessons)
+- ✅ `prompts/p26_connect_modal_r1_prompt.md` + `_r1.md` (Pre-Code R1: 3 KRITISCH + 3 SOLLTE)
+- ✅ `prompts/p26_connect_modal_v3.md` (Compact-fest, R1-K1/K2/K3-Fixes)
+- ✅ `prompts/p26_connect_modal_final_r1_prompt.md` + `_final_r1.md` („Push freigegeben")
+
+## Naechste Aufgabe
+
+1. **Field-Test 6 Punkte** durch Mike (App-Start mit/ohne Radio,
+   Buttons, Mid-Run-Disconnect).
+2. **Atomare Commits C1-C6** wenn Field-Test grün.
+3. **Push** v0.95.16-0.96.9 + P2-Tool + P3 + P21 + P26 zusammen.
+
+---
+
+## Vorheriger Stand (v0.96.7 P23.OMNI-COUNTER-EIGEN)
+
+**Code:** v0.96.7 — C1-C8 atomare Commits ausstehend.
+**Tests:** **1049 grün** (1035 → 1049, +14 effektiv).
+**Final-R1:** noch nicht gelaufen — vor Push fällig.
+**Field-Test:** 5-Punkte-Plan V3 §7 F1-F5 ausstehend.
 
 ## Was P23 fixt
 

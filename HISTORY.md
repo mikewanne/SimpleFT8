@@ -5,6 +5,81 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-10 v0.96.9 — P26.CONNECT-MODAL
+
+**Auslöser:** Mike-Wunsch 10.05.2026 17:15 UTC. „Während FlexRadio
+gesucht/verbunden wird, sieht man das nicht prominent — kleine
+Statusmeldung rechts beachtet keiner. Modal mit Spinner. Plus: Bypass
+für Test/Debug, weil Mike auch ohne Radio (200 km weg, ausgeschaltet)
+die App starten will."
+
+**Zweck:** Modaler Status-Dialog beim App-Start während FlexRadio-
+Connect-Versuch. Zeigt Spinner + „Versuch X von 10". Schließt sich
+automatisch wenn `connected`-Signal kommt. User kann jederzeit „ohne
+Radio weiter" (kleiner Text-Link, App läuft GUI-only) oder „Beenden"
+(App schließt) klicken. Nur beim App-Start, nicht bei mid-Run-Reconnect.
+
+### Code
+
+- **`ui/connect_status_dialog.py` (NEU, ~165 Z.):** `ConnectStatusDialog`
+  WindowModal-Dialog. Cross-thread Qt-Signals `attempt_changed(int, int)`
+  + `failed_signal()`. 3-Punkt-Spinner-Animation via QTimer 500ms.
+  Failed-State stoppt Spinner, setzt rotes ✗, ändert Label auf
+  „Verbindung fehlgeschlagen — Radio aus oder nicht erreichbar". Style
+  konsistent mit `MessStatusDialog` (P22).
+- **`ui/main_window.py`:** `_connect_dialog`-Attribut früh deklariert
+  (Worker-Thread-Zugriff). `_start_radio()` wird **NICHT mehr direkt aus
+  `__init__`** aufgerufen sondern via `QTimer.singleShot(0, self._start_radio)`
+  deferred, damit `window.show()` zuerst läuft und Modal über sichtbarem
+  Hauptfenster aufgeht (R1-K2-Fix).
+- **`ui/mw_radio.py` `_start_radio` + `_connect_worker`:** Modal vor
+  Worker-Thread-Start, `radio.connected.connect(dialog.accept,
+  QueuedConnection)` für Auto-Close. `dialog.exec()` blockiert GUI-Thread
+  (WindowModal lässt Decoder-Signale weiterlaufen). Cleanup nach Return:
+  Signal-Disconnect + `_connect_dialog = None`. Worker holt **lokale**
+  Dialog-Referenz (R1-K1-Fix für Race), emittet via `try/except RuntimeError`.
+- **`radio/flexradio.py` `auto_connect`:** Optional-Param
+  `on_attempt: Optional[Callable[[int, int], None]] = None`. 1-indexed
+  Aufruf am Beginn jedes Versuchs. Exceptions im Callback geschluckt
+  (Modal-Tot ist kein FlexRadio-Problem).
+
+### Tests
+
+`tests/test_p26_connect_modal.py` (NEU, 14 Tests):
+T1-T7 Layout/Smoke, T8-T9 Signal/Slot, T10 emit nach Dialog-Destroy
+(R1-K1-Race), T11 connected-emit während exec() (R1-K3-Race), T12-T14
+auto_connect Callback + Abwärtskompatibilität.
+
+**Test-Bilanz: 1056 → 1070 grün** (+14 wie V3 prognostizierte).
+
+### Workflow
+
+V1 → V2 (14 Lessons) → R1 (3 KRITISCH + 3 SOLLTE) → V3 (Compact-fest,
+EINZIGE WAHRHEIT) → Code → Final-R1 („Push freigegeben", 0 KRITISCH +
+2 SOLLTE für „nächstes Major-Release"). Plan-Files
+`prompts/p26_connect_modal_v[1,2,3].md` + `_r1.md` + `_final_r1.md`.
+
+### R1-Lessons (für künftige Modal-Patterns)
+
+**K2 (Goldwert):** `exec()` in MainWindow-Init-Pfad → blockiert restliche
+`__init__`-Steps + `window.show()` → User sieht nur Modal ohne Hauptfenster.
+Fix: `QTimer.singleShot(0, fn)` deferred. Dieses Pattern ist Pflicht für
+JEDEN Modal-Open-Aufruf der innerhalb von `MainWindow.__init__` liegt.
+
+**K1:** PySide6 Signal-Emit nach C++-Object-Destroy wirft `RuntimeError`
+(NICHT „swallowed", wie V2 fälschlich annahm). Worker-Pattern
+verbindlich: lokale Referenz + `try/except RuntimeError` um jedes
+`emit`. Auch wenn `self._connect_dialog is not None` geprüft wird —
+zwischen Check und Call ist nicht atomar.
+
+### Field-Test
+
+V3 §8 6 Punkte F1-F6 ausstehend (Mike startet App selbst). Push
+pending bis Field-Test grün — v0.95.16-0.96.9 + P2-Tool + P3 +
+P21-Debug-Log + P26 zusammen.
+
+---
+
 ## 2026-05-10 v0.96.8 — P21.DEBUG-LOG + DIV-MEAS-RADIO-GUARD
 
 **Auslöser:** Mike-Field-Test 16:30 UTC v0.96.7: bei App-Start in

@@ -1,4 +1,4 @@
-# SimpleFT8 TODO — Stand 10.05.2026 (v0.96.8, neue Session)
+# SimpleFT8 TODO — Stand 10.05.2026 (v0.96.9, P26 fertig)
 
 > **Mike-Regel 07.05.2026:** Offene Aufgaben gehoeren AUSSCHLIESSLICH
 > in diese Datei. Nicht in CLAUDE.md, nicht in HANDOFF.md. Diese Datei
@@ -8,11 +8,10 @@
 
 # 🟢 STATUS-ÜBERSICHT (für neue Session)
 
-**Aktuelle Version:** v0.96.8 (10.05.2026)
-**Tests:** 1056 grün
-**App-Stand:** läuft, OMNI + Diversity funktionsfähig, Field-Test diverse
-Punkte heute durchgelaufen. Push pending — v0.95.16 - v0.96.8 lokal
-gesammelt, noch nicht auf origin.
+**Aktuelle Version:** v0.96.9 (10.05.2026)
+**Tests:** 1070 grün
+**App-Stand:** Code fertig, Field-Test pending. Push pending —
+v0.95.16 - v0.96.9 + P2-Tool + P3 + P21 + P26 lokal gesammelt.
 
 ## ✅ Heute erledigt (10.05.2026)
 
@@ -22,14 +21,15 @@ gesammelt, noch nicht auf origin.
 | **v0.96.6** | P22.PRESET-ATOMARITAET + **P8.MESS-MODAL** (atomares Speichern Gain+Ratio + WindowModal-Sperre während Mess) |
 | **v0.96.7** | P23.OMNI-COUNTER-EIGEN (eigener Down-Counter pro Modus, sichtbar als `↻10` in TX-Display) |
 | **v0.96.8** | P21.DEBUG-LOG + DIV-MEAS-RADIO-GUARD (an/aus in Settings, Skip wenn radio.ip=False) |
+| **v0.96.9** | **P26.CONNECT-MODAL** (Modal beim App-Start mit Spinner + „Versuch X von 10" + „ohne Radio weiter" + „Beenden". R1-K2-Goldwert: `_start_radio` deferred via singleShot. R1-K1-Race-Fix: lokale Dialog-Referenz + try/except RuntimeError. Final-R1 „Push freigegeben") |
 
 ## 🔥 OFFEN — Hohe Priorität
 
 | ID | Was | Aufwand | Hinweis |
 |---|---|---|---|
 | **P12** | QSO-POSTPROCESSING-ASYNC — App hängt 1 Min nach QSO (PSK + ADIF + QRZ + Locator-DB synchron) | 3-4h Workflow | Mike erwähnt seit Wochen — Hoch-Prio |
-| **P26** | MODAL-RADIO-CONNECT — Dialog während FlexRadio-Connect läuft | 1.5h | **Löst evtl. P25 mit** (Mess startet erst NACH Connect = sauberer als Skip-Workaround) |
-| **P25** | RADIO-IP-LATE-SETTING — Wurzel warum `radio.ip` spät gesetzt wird | 2h Diagnose | Wenn P26 gebaut: P25 evtl. obsolet (Modal sperrt Mess bis Connect da) |
+| **P27** | MESS-GUARD — vor Antennen/Diversity/Gain-Mess prüfen ob Radio verbunden (Mike-Wunsch 10.05. 17:35: „BVOR MESSUNG SIND WIR ÜBERHAUPT VERBUNDEN?") | 1.5h Workflow | aus P26-Spec ausgegliedert |
+| **P25** | RADIO-IP-LATE-SETTING — Wurzel warum `radio.ip` spät gesetzt wird | 2h Diagnose | Mike 10.05. ~18:00: „radio ist nicht spät, wird normal gesucht und gefunden" → evtl. obsolet, vor Push prüfen |
 
 ## 📋 OFFEN — Mittlere Priorität
 
@@ -49,9 +49,10 @@ gesammelt, noch nicht auf origin.
 
 ## 📦 Push pending
 
-KEIN Push seit v0.95.16. Lokal gesammelt: **v0.95.16 → v0.96.8 + P2-Tool +
-P3-Audio-Dump + P21-Debug-Log**. Push erst wenn Mike alle Field-Tests
-abgenommen hat. Aktueller Stand: P22/P23/P21/P16 alle field-getestet OK.
+KEIN Push seit v0.95.16. Lokal gesammelt: **v0.95.16 → v0.96.9 + P2-Tool +
+P3-Audio-Dump + P21-Debug-Log + P26-Connect-Modal**. Push erst wenn
+Mike alle Field-Tests abgenommen hat. Aktueller Stand: P22/P23/P21/P16
+field-getestet OK; P26 Field-Test ausstehend (V3 §8 6 Punkte).
 
 ## ✅ Heute RESOLVED (zur Klarheit)
 
