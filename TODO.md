@@ -61,6 +61,127 @@ mit `git push origin main`.
 
 ---
 
+## 📋 P9.REMESS-COUNTDOWN-UI (Field-Test 10.05. Mike)
+
+**Symptom:** Re-Mess-Countdown in Antennen-Panel springt in 10-Min-Blöcken
+(58 → 48 → 38) statt jede Minute zu aktualisieren. Irritierend.
+
+**Soll:** Countdown updated alle 60s (oder noch häufiger), Format
+`XX min YY s` damit User Fortschritt sieht.
+
+**Files (vermutet):**
+- `ui/control_panel.py` oder `ui/antenna_card.py` — Countdown-Display
+- Trigger: `_diversity_ctrl.seconds_until_search` oder analog für Re-Mess
+
+**Aufwand:** ~30 Min (trivialer UI-Fix, vermutlich ohne vollen Workflow)
+
+---
+
+## 📋 P10.PSK-BACKOFF-RESET (Field-Test 10.05. Mike)
+
+**Symptom:** App's PSK-Reporter-Polling geht bei Server-Errors (502/503/
+Timeout) in exponentielles Backoff bis 60 Min. Wenn Server wieder läuft,
+fragt App stundenlang nicht mehr — Anzeige bleibt leer obwohl Mike
+gehört wird (Direct-API-Test 10.05.: 15 Stationen weltweit hörten DA1MHH).
+
+**Soll (Optionen — Mike entscheidet im V1):**
+1. BACKOFF_MAX von 3600s auf 300s (5 Min) senken
+2. Manueller Reset-Button in UI
+3. Auto-Reset bei OMNI-Start oder Mode-Wechsel
+
+**Files:**
+- `core/psk_reporter.py:42-43` BACKOFF-Konstanten
+- ggf. `ui/control_panel.py` für Reset-Button
+- `ui/main_window.py` für Auto-Reset-Hook
+
+**Workaround sofort:** App neu starten → Backoff resettet.
+
+**Aufwand:** ~1h V1→V2→R1→V3+Code
+
+---
+
+## 📋 P11.STATUSBAR-PARITY-REFRESH (Field-Test 10.05. Mike, P7-Folge)
+
+**Symptom:** Nach OMNI-Paritäts-Wechsel zeigt Statusbar `Ω CQ=X (O)`
+weiterhin alte Parität, obwohl `_cq_tx_even` korrekt geflipped ist.
+TX-Anzeige im qso_panel ist korrekt (zeigt neue Parität).
+
+**Diagnose:** `parity_flipped`-Signal wird emit + `_on_omni_parity_flipped`
+ruft `_update_statusbar()`. Aber UI-Refresh hängt evtl. an QTimer der
+zu selten läuft, oder `_update_statusbar` nutzt veraltete Werte.
+
+**Files:**
+- `ui/main_window.py` `_update_statusbar` + `_on_omni_parity_flipped`
+- ggf. statusbar-Refresh-Timer prüfen
+
+**Aufwand:** ~30 Min (UI-Bug, trivial)
+
+---
+
+## 📋 P12.QSO-POSTPROCESSING-ASYNC (besteht seit Wochen, Mike 10.05.)
+
+**Symptom:** Nach jedem QSO-Ende hängt GUI 1-2 Min ("Beachball"). App
+läuft weiter (Decoder-Thread arbeitet, 35-84% CPU), aber UI-Thread
+ist blockiert.
+
+**Vermutete Ursachen (alle parallel):**
+- `core/psk_reporter.py` Polling im GUI-Thread mit 30-90s Timeouts
+- ADIF-Save (`log/adif.py`) Disk-I/O blocking
+- QRZ-Upload-Trigger (HTTPS-POST mit Timeout)
+- Locator-DB-Save (atomic-Write)
+- Statistik-Logging
+
+**Soll:** Alle blocking I/O nach QSO-Ende in Worker-Thread auslagern
+(`QThread` oder `concurrent.futures.ThreadPoolExecutor`).
+
+**Files:**
+- `ui/mw_qso.py` QSO-End-Handler
+- `core/psk_reporter.py` (separat von P10)
+- `log/adif.py`
+- `core/locator_db.py`
+
+**Aufwand:** ~2-3h V1→V2→R1→V3+Code (komplex weil mehrere Pfade)
+
+---
+
+## 📋 P13.RX-PANEL-SLOT-TIMES (Field-Test 10.05. Mike, besteht seit v0.95.16+)
+
+**Symptom:** RX-Panel zeigt krumme Wall-Time-Zeiten (z.B. 10:51:42)
+statt FT8-Slot-Boundaries (10:51:30 oder 10:51:45). Mike erinnert
+sich an Slot-Zeiten in vorigen Versionen.
+
+**Diagnose:** `ui/rx_panel.py:280` nutzt `msg._utc_display` oder
+Fallback `time.strftime("%H%M%S", time.gmtime())`. Wenn der Decoder
+`_utc_display` nicht setzt, kommt Wall-Time durch.
+
+**Files:**
+- `ui/rx_panel.py` (letzte Aenderung Commit `7e8df00` v0.95.16)
+- `core/decoder.py` setzt `msg._utc_display` / `_utc_str` / `_slot_start_ts`?
+- ggf. `core/message.py` Format
+
+**Aufwand:** ~1-2h (Decoder-Pfad muss verstanden werden)
+
+---
+
+## 📋 P14.DT-WERTE-ASYMMETRISCH (Field-Test 10.05. Mike)
+
+**Symptom:** RX-Stationen zeigen DT fast alle im Minus (-0.1 bis -1.7),
+sollten ausgeglichen zwischen + und - sein. Statusbar zeigt
+`DT: +0.40s (n=17)` aktive Korrektur — funktioniert nicht symmetrisch.
+
+**Diagnose:** `core/ntp_time.py` DT-Korrektur konvergiert evtl. zu
+weit in eine Richtung. Beobachtung passt nicht zu Erwartungswert
+(Korrektur sollte RX-DT auf 0 zentrieren).
+
+**Files:**
+- `core/ntp_time.py` Median-Berechnung + Damping
+- `core/decoder.py` `DT_BUFFER_OFFSET` (FT8=2.0)
+- ggf. `dt.md` Doku als Referenz
+
+**Aufwand:** ~2h Diagnose + Fix (Audio-Buffer-Timing-Issue)
+
+---
+
 ## 🛠️ META: CLAUDE.md + Memory Restrukturierung
 
 > **Analyse 09.05.2026** — CLAUDE.md ist 673 Zeilen (Ziel: ~120 Zeilen). Memory hat 57 Dateien, Index 73 Zeilen.
