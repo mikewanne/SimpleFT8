@@ -1,0 +1,166 @@
+"""SimpleFT8 ConnectStatusDialog — Modal beim App-Start waehrend
+FlexRadio gesucht / verbunden wird.
+
+P26 (10.05.2026): User soll wissen was die App tut, und einen Bypass
+haben falls Radio nicht da ist (Test/Debug, Radio aus, 200km weg).
+
+WindowModal damit Qt-Event-Loop weiterlaeuft (Decoder, Reconnect-Logik).
+Auto-Close bei `connected`-Signal vom Aufrufer (mw_radio) connectet.
+Cancel: "ohne Radio weiter" (Demo-Modus) oder "Beenden" (App schliesst).
+
+Cross-thread Signals:
+    attempt_changed(int, int)  — Worker meldet Versuch X von Y
+    failed_signal()            — Worker meldet alle Versuche durch
+
+Beide via Qt-AutoConnection — Worker-Thread emittet, Slot laeuft im
+GUI-Thread (Qt erkennt Cross-Thread → QueuedConnection).
+"""
+
+from PySide6.QtCore import Qt, QTimer, Signal, Slot
+from PySide6.QtGui import QFont
+from PySide6.QtWidgets import (
+    QApplication,
+    QDialog,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QVBoxLayout,
+)
+
+
+class ConnectStatusDialog(QDialog):
+    """Modaler Status-Dialog waehrend FlexRadio-Connect."""
+
+    attempt_changed = Signal(int, int)
+    failed_signal = Signal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._dots_state = 0
+        self._failed = False
+
+        self.setWindowTitle("FlexRadio wird verbunden")
+        self.setFixedSize(440, 220)
+        self.setModal(True)
+        self.setWindowModality(Qt.WindowModality.WindowModal)
+        # ApplicationModal wuerde Decoder-Signale blocken — verboten.
+        # WindowModal blockiert nur Input am Parent, Event-Loop laeuft.
+
+        self._setup_ui()
+
+        self._tick_timer = QTimer(self)
+        self._tick_timer.timeout.connect(self._tick_dots)
+        self._tick_timer.start(500)
+        self._tick_dots()  # initialer Punkt
+
+        # Cross-thread Signal/Slot Wiring
+        self.attempt_changed.connect(self.set_attempt)
+        self.failed_signal.connect(self.set_failed)
+
+    # ── UI ──────────────────────────────────────────────────────────────────
+
+    def _setup_ui(self):
+        self.setStyleSheet("""
+            QDialog { background-color: #16192b; }
+            QLabel  { background-color: transparent; color: #CCC; }
+            QPushButton {
+                background-color: #2a2f4a;
+                color: #DDD;
+                border: 1px solid #444;
+                padding: 6px 14px;
+                border-radius: 3px;
+            }
+            QPushButton:hover { background-color: #3a4060; }
+            QPushButton#weiterLink {
+                background: transparent;
+                border: none;
+                color: #6a99c4;
+                text-decoration: underline;
+                padding: 0;
+                text-align: left;
+            }
+            QPushButton#weiterLink:hover { color: #99c4e3; }
+        """)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 18, 20, 16)
+        layout.setSpacing(10)
+
+        title = QLabel("FlexRadio wird verbunden")
+        title.setFont(QFont("", 13, QFont.Weight.Bold))
+        title.setStyleSheet("color: #7CC; background-color: transparent;")
+        layout.addWidget(title)
+
+        self._spinner_label = QLabel(".")
+        self._spinner_label.setFont(QFont("Menlo", 18, QFont.Weight.Bold))
+        self._spinner_label.setStyleSheet("color: #7CC;")
+        self._spinner_label.setFixedHeight(28)
+        layout.addWidget(self._spinner_label)
+
+        self._attempt_label = QLabel("Verbindungsaufbau läuft...")
+        self._attempt_label.setFont(QFont("Menlo", 11))
+        layout.addWidget(self._attempt_label)
+
+        layout.addStretch()
+
+        btn_row = QHBoxLayout()
+        self._btn_weiter = QPushButton("ohne Radio weiter")
+        self._btn_weiter.setObjectName("weiterLink")
+        self._btn_weiter.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_weiter.clicked.connect(self._on_continue_without_radio)
+        btn_row.addWidget(self._btn_weiter)
+
+        btn_row.addStretch()
+
+        self._btn_quit = QPushButton("Beenden")
+        self._btn_quit.clicked.connect(self._on_quit)
+        btn_row.addWidget(self._btn_quit)
+        layout.addLayout(btn_row)
+
+    # ── Animation + Status ─────────────────────────────────────────────────
+
+    @Slot()
+    def _tick_dots(self):
+        self._dots_state = (self._dots_state + 1) % 3
+        self._spinner_label.setText("." * (self._dots_state + 1))
+
+    @Slot(int, int)
+    def set_attempt(self, attempt: int, max_attempts: int) -> None:
+        """Versuchs-Counter aktualisieren (Worker-Callback)."""
+        if self._failed:
+            return
+        self._attempt_label.setText(f"Versuch {attempt} von {max_attempts}")
+
+    @Slot()
+    def set_failed(self) -> None:
+        """Worker meldet: alle Versuche durch, kein Connect."""
+        self._failed = True
+        try:
+            self._tick_timer.stop()
+        except Exception:
+            pass
+        self._spinner_label.setText("✗")
+        self._spinner_label.setStyleSheet("color: #c44;")
+        self._attempt_label.setText(
+            "Verbindung fehlgeschlagen — Radio aus oder nicht erreichbar"
+        )
+
+    # ── Buttons ────────────────────────────────────────────────────────────
+
+    def _on_continue_without_radio(self):
+        """User-Bypass: App startet ohne Radio (Demo-Modus)."""
+        self.reject()
+
+    def _on_quit(self):
+        """User-Quit: App schliesst sauber."""
+        QApplication.quit()
+        self.reject()  # falls quit() Event-Loop noch nicht beendet hat
+
+    # ── Lifecycle ──────────────────────────────────────────────────────────
+
+    def closeEvent(self, ev):
+        try:
+            self._tick_timer.stop()
+        except Exception:
+            pass
+        super().closeEvent(ev)
