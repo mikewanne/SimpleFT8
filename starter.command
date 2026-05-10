@@ -42,18 +42,40 @@ fi
 
 if [ -n "$RUNNING_PID" ]; then
     PROC_INFO=$(ps -p "$RUNNING_PID" -o pid,etime,command 2>/dev/null | tail -1)
-    MSG="SimpleFT8 läuft bereits (PID $RUNNING_PID).
-
-$PROC_INFO
-
-Bitte die laufende Instanz benutzen oder zuerst manuell beenden:
-  pkill -9 -f \"SimpleFT8.*main.py\"
-  rm -f ~/.simpleft8/simpleft8.lock"
-    echo "$MSG"
-    osascript -e "display dialog \"$MSG\" with title \"SimpleFT8 Starter\" buttons {\"OK\"} default button \"OK\" with icon stop" 2>/dev/null
+    # Auffaelliger Terminal-Banner — bleibt sichtbar weil 'read' am Ende
+    echo ""
+    echo "╔════════════════════════════════════════════════════════════════╗"
+    echo "║  ⛔  SimpleFT8 läuft bereits — KEIN zweiter Start              ║"
+    echo "╠════════════════════════════════════════════════════════════════╣"
+    echo "║"
+    echo "║  PID:        $RUNNING_PID"
+    echo "║  Process:    $PROC_INFO"
+    echo "║"
+    echo "║  Wenn die App tatsaechlich nicht mehr laeuft:"
+    echo "║    pkill -9 -f \"SimpleFT8.*main.py\""
+    echo "║    rm -f ~/.simpleft8/simpleft8.lock"
+    echo "║"
+    echo "╚════════════════════════════════════════════════════════════════╝"
+    echo ""
+    # AppleScript-Dialog (Bonus, falls Accessibility erlaubt)
+    osascript -e "display dialog \"SimpleFT8 läuft bereits (PID $RUNNING_PID)\" with title \"SimpleFT8 Starter\" buttons {\"OK\"} default button \"OK\" with icon stop giving up after 10" 2>/dev/null &
+    # Terminal-Pause damit Mike den Banner LESEN kann (Doppelklick-Fall:
+    # Terminal wuerde sonst sofort zumachen).
+    echo "Drücke Enter zum Schliessen (oder warte 30s) ..."
+    read -t 30 -r _ || true
     exit 1
 fi
 
-# Sauber — App starten
+# Sauber — App starten (python3 blockiert Terminal solange App laeuft)
 echo "[Starter] Keine laufende Instanz — starte SimpleFT8 v$(grep '^APP_VERSION' main.py | head -1 | cut -d'"' -f2)"
 ./venv/bin/python3 main.py
+EXIT_CODE=$?
+# Wenn App mit Fehler endete (z.B. acquire_single_instance_lock failed):
+# Terminal offen halten damit Mike die Fehlermeldung sieht.
+if [ $EXIT_CODE -ne 0 ]; then
+    echo ""
+    echo "⛔ SimpleFT8 endete mit Exit-Code $EXIT_CODE"
+    echo "Drücke Enter zum Schliessen (oder warte 30s) ..."
+    read -t 30 -r _ || true
+fi
+exit $EXIT_CODE
