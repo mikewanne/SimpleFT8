@@ -757,8 +757,8 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self._update_statusbar()
 
     @Slot(int, bool)
-    def _on_omni_cq_count_changed(self, count: int, tx_even: bool):
-        """OMNI CQ-Counter erhoeht — Statusbar aktualisieren."""
+    def _on_omni_cq_count_changed(self, remaining: int, tx_even: bool):
+        """OMNI CQ-Counter (P23: Down-Counter) — Statusbar aktualisieren."""
         self._update_statusbar()
 
     @Slot(bool)
@@ -1012,6 +1012,7 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         mode_str = mode_labels.get(self._rx_mode, "Normal")
         if getattr(self, '_omni_cq', None) and self._omni_cq.is_active():
             # P7.OMNI-SIMPLIFY: 1 Counter mit aktueller Paritaet (E/O/?).
+            # P23: Down-Counter cq_remaining (zaehlt von TARGET nach 1).
             parity = self._omni_cq.cq_tx_even
             if parity is True:
                 parity_str = "E"
@@ -1019,7 +1020,7 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
                 parity_str = "O"
             else:
                 parity_str = "—"  # noch nicht initialisiert
-            omni_str = f"  Ω CQ={self._omni_cq.cq_count} ({parity_str})"
+            omni_str = f"  Ω CQ={self._omni_cq.cq_remaining} ({parity_str})"
         else:
             omni_str = ""
         # DT-Korrektur Status — nur DT-Label gruen, Statusbar bleibt grau
