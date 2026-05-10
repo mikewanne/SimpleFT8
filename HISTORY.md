@@ -5,6 +5,90 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-10 v0.96.7 — P23.OMNI-COUNTER-EIGEN
+
+**Auslöser:** Mike-Vorschlag 10.05.2026 nach P22-Code-Phase: OMNI-CQ-
+Paritaets-Wechsel haengt heute am Diversity-Such-Counter (60s ×
+`_OMNI_FLIP_AFTER_SEARCHES=10` = ~10 Min). Coupling zur Diversity-Mess-
+Mechanik macht OMNI brüchig — wenn Mess hängt, kein Such-Trigger, kein
+Wechsel. Mike will eigenen Counter: sichtbar, robust, unabhängig.
+
+**Mike-Spec:**
+- Counter pro Modus: FT8=10, FT4=20, FT2=40 (alle ~5 Min Wallclock)
+- Counter zaehlt DOWN nach jedem TX. Bei 0: flip + Reset auf TARGET
+- QSO eingehend → Counter Reset auf TARGET (positiv-Verstaerkung)
+- Antennen-Mess fertig → Counter Reset auf TARGET ("neuer Slot")
+- Bandwechsel/Modus-Wechsel → OMNI **stop** (heutiges Verhalten)
+- Display: TX-Zeile bekommt Suffix `↻N` (z.B. `13:30:45 [O] →  Sende
+  CQ DA1MHH JN58  ↻10`)
+- Statusbar: `Ω CQ=10 (E)` mit Down-Counter
+
+**Code-Änderungen:**
+- `core/omni_cq.py`:
+  - `_OMNI_TARGETS = {"FT8": 10, "FT4": 20, "FT2": 40}` neu
+  - `_OMNI_FLIP_AFTER_SEARCHES = 10` weg
+  - `_search_trigger_count` Feld weg, `on_search_trigger` Methode weg
+  - `_cq_count` (UP) → `_cq_remaining` (DOWN) + `_cq_target`
+  - `cq_count` Property → `cq_remaining` + `cq_target`
+  - `start()`: target aus `timer.mode` abgeleitet
+  - `on_cycle_start`: nach erfolgreichem TX dekrementieren, bei
+    `remaining == 0` Auto-Flip + Reset, **GENAU 1 Emit pro Slot**
+    (kein Zwischen-0 für UI-Flicker)
+  - `resume_after_qso`: Counter Reset auf TARGET + Emit
+  - `reset_counter_after_measure`: NEU — aus mw_cycle bei measure→operate
+- `ui/mw_cycle.py`:
+  - `_omni_cq.on_search_trigger()`-Hook in `_refresh_diversity_freq_view`
+    (Z. 163-166) WEG
+  - `_omni_cq.reset_counter_after_measure()`-Aufruf im Phase-Übergang
+    measure→operate NEU
+- `ui/qso_panel.py:add_tx`: optional `omni_remaining`-Parameter,
+  Suffix `  ↻{n}` an Hauptzeile (KISS, ohne neuen Helper)
+- `ui/mw_qso.py:_on_tx_started`: bei aktivem OMNI `omni.cq_remaining`
+  durchreichen
+- `ui/main_window.py`: `_on_omni_cq_count_changed` Parameter
+  `count → remaining`. Statusbar nutzt `cq_remaining`.
+
+**Tests:**
+- `tests/test_omni_cq_signal.py` migriert: T8/T8b/T14 (search_trigger-
+  Tests) **gelöscht**, T1/T3/T4/T10/T12/busy_encoder **angepasst**
+  (cq_count → cq_remaining), Rest bleibt (16 grün, vorher 19).
+- `tests/test_p23_omni_counter.py` NEU: 17 Tests T1-T16 + Bonus.
+
+**Atomare Commits (8):**
+- C1 `core/omni_cq.py` Counter-Refactor
+- C2 `tests/test_omni_cq_signal.py` Migration
+- C3 `ui/mw_cycle.py` Hook-Umbau (search-trigger raus, mess-reset rein)
+- C4 `ui/qso_panel.py` add_tx Suffix
+- C5 `ui/mw_qso.py` _on_tx_started Counter-Read
+- C6 `ui/main_window.py` Statusbar-Update
+- C7 `tests/test_p23_omni_counter.py` NEU
+- C8 `main.py` APP_VERSION 0.96.6 → 0.96.7 + HISTORY/HANDOFF/CLAUDE/Memory
+
+**Test-Bilanz:** 1035 → 1049 grün (+14 effektiv: 17 neue P23 - 3
+gelöschte search_trigger).
+
+**Workflow:** V1 → V2 (8 Self-Review-Lessons) → R1 (2 KRITISCH K1-K2 +
+3 SOLLTE S1-S3 + 2 KOENNTE) → V3 (alle K + S adressiert: K1 Tests-
+Migration explizit pro Test, K2 KISS-Variante ohne neuen
+`_append_three_color`-Helper, S1 T7 Spy-Pattern explizit, S2 T17
+Streichung dokumentiert, S3 erledigt durch K2). Mike-Klärung 3 Fragen
+(Counter-Werte, Stop bei Bandwechsel, Pause bei Mess) vorweg geklärt.
+
+**Field-Test pending (V3 §7, 5 Punkte F1-F5):**
+F1 App-Start FT8+OMNI → Statusbar `Ω CQ=10 (E)`, TX-Zeile `↻10`
+F2 5 Min beobachten → Counter 10→1, dann Auto-Flip + `↻10` in anderer Parität
+F3 Modus-Wechsel zu FT4 → OMNI stop, neu an → `↻20`
+F4 QSO eingehend → nach QSO Counter zurück auf TARGET
+F5 Antennenmessung fertig → Counter zurück auf TARGET
+
+**Plan-Files:**
+- `prompts/p23_omni_counter_v1.md` (V1 initial, 10 Sektionen)
+- `prompts/p23_omni_counter_v2.md` (V2 Self-Review, 8 Lessons)
+- `prompts/p23_omni_counter_r1_prompt.md` + `_r1.md` (R1)
+- `prompts/p23_omni_counter_v3.md` (Compact-fest, EINZIGE WAHRHEIT)
+
+---
+
 ## 2026-05-10 v0.96.6 — P22.PRESET-ATOMARITAET + P8.MESS-MODAL
 
 **Auslöser:** Mike-Diagnose 14:35 nach P17/P19-Resolve: Half-State im

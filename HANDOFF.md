@@ -1,5 +1,82 @@
 # HANDOFF — SimpleFT8
 
+## Stand 2026-05-10 ~17:00 UTC: P23.OMNI-COUNTER-EIGEN — Code fertig, Final-R1 + Field-Test pending
+
+**Code:** v0.96.7 lokal — C1-C8 atomare Commits ausstehend (alle
+Aenderungen auf disk, noch nicht committed).
+**Tests:** **1049 grün** (1035 → 1049, +14 effektiv: 17 neue P23-Tests,
+3 search_trigger-Tests gelöscht).
+**Final-R1:** noch nicht gelaufen — als naechste Aufgabe.
+**Field-Test:** 5-Punkte-Plan V3 §7 F1-F5 ausstehend, Mike startet App selbst.
+**App:** gestoppt. **Push pending** bis Final-R1 + Field-Test gruen —
+v0.95.16-0.96.7 + P2-Tool + P3 zusammen.
+
+## Was P23 fixt
+
+OMNI-CQ-Paritaets-Wechsel haengt heute am Diversity-Such-Counter (60s ×
+10 = ~10 Min). Coupling zur Diversity-Mess-Mechanik: wenn Mess hängt,
+kein Such-Trigger, kein Wechsel. Mike will eigenen Counter im OMNI:
+sichtbar (`↻10`), zaehlt DOWN (10→1), bei 0 Auto-Flip + Reset auf
+TARGET. Modus-spezifische Targets: FT8=10, FT4=20, FT2=40 (alle ~5 Min
+Wallclock).
+
+**Counter-Resets:**
+- QSO eingehend (Mike: „guter Slot, neuer Anfang")
+- Antennenmessung fertig (neuer Slot nach Mess)
+
+**Stop-Trigger (heutiges Verhalten):**
+- Bandwechsel
+- Modus-Wechsel
+
+## Atomare Commits (8 geplant — noch nicht gepushed)
+
+- C1 `core/omni_cq.py` Counter-Refactor + on_search_trigger raus
+- C2 `tests/test_omni_cq_signal.py` Migration (3 LOESCHEN, 6 ANPASSEN)
+- C3 `ui/mw_cycle.py` Hook-Umbau (search-trigger raus, mess-reset rein)
+- C4 `ui/qso_panel.py` add_tx Suffix `↻N`
+- C5 `ui/mw_qso.py` _on_tx_started Counter-Read
+- C6 `ui/main_window.py` Statusbar nutzt cq_remaining
+- C7 `tests/test_p23_omni_counter.py` NEU — 17 Tests
+- C8 `main.py` APP_VERSION 0.96.6 → 0.96.7 + HISTORY/HANDOFF/CLAUDE/Memory
+
+## Field-Test-Plan (V3 §7, 5 Punkte)
+
+| F | Test | Erwartung |
+|---|---|---|
+| F1 | App-Start FT8+OMNI | Statusbar `Ω CQ=10 (E)`, TX-Zeile endet auf `↻10` |
+| F2 | 5 Min beobachten | Counter 10→9→...→1, dann Auto-Flip + `↻10` in anderer Paritaet (Log: „Paritaets-Wechsel auf Odd") |
+| F3 | Modus-Wechsel zu FT4 + OMNI neu an | `Ω CQ=20` + TX-Zeile `↻20` |
+| F4 | QSO eingehend | Nach QSO: Counter zurueck auf TARGET, naechste TX-Zeile `↻TARGET` |
+| F5 | Antennenmessung fertig | Counter zurueck auf TARGET (kommt eh alle ~1h, kein Trigger noetig) |
+
+**Bestanden wenn:** F1-F4 sauber. F5 in echter Mess beobachten.
+
+## Plan-Files
+
+- ✅ `prompts/p23_omni_counter_v1.md` (V1 initial, 10 Sektionen)
+- ✅ `prompts/p23_omni_counter_v2.md` (V2 Self-Review, 8 Lessons)
+- ✅ `prompts/p23_omni_counter_r1_prompt.md` + `_r1.md` (R1: 2×KRITISCH + 3×SOLLTE)
+- ✅ `prompts/p23_omni_counter_v3.md` (Compact-fest, EINZIGE WAHRHEIT)
+
+## Naechste Aufgabe
+
+1. **Final-R1 Review** mit `tools/deepseek_review.py` (deepseek-reasoner)
+   ueber alle aenderten Files.
+2. **Atomare Commits C1-C8** nach Final-R1-OK.
+3. **Field-Test 5 Punkte** durch Mike.
+4. **Push** v0.95.16-0.96.7 + P2-Tool + P3 wenn Field-Test gruen.
+
+## Bisheriger Stand (vor P23)
+
+- v0.96.4 P7.OMNI-SIMPLIFY: Single-Slot-CQ. Field-Test erfolgreich (QSO mit OH3BY).
+- v0.96.5 P16.UI-CLEANUP-BUNDLE: P9+P11+P15 zusammen.
+- v0.96.6 P22.PRESET-ATOMARITAET + P8.MESS-MODAL: atomares Persist von
+  Gain+Ratio + WindowModal-Mess-Sperre + Final-R1 KRITISCH-Fix
+  (Settings-Bw-Compat schrieb auch bei Adaptiv-Stop). 8 Commits drin
+  (`aac7945` bis `0614e91`).
+
+## Vorheriger HANDOFF-Inhalt (P22+P8)
+
 ## Stand 2026-05-10 ~15:30 UTC: P22+P8 ATOMARES PERSIST + MESS-MODAL — Code fertig, Final-R1 + Field-Test pending
 
 **Code:** v0.96.6 lokal — C1-C8 atomare Commits ausstehend (alle Aenderungen
