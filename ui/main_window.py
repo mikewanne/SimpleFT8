@@ -757,7 +757,17 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         UTC-Slot-Paritaet (V2-L8).
         """
         if not is_tx:
-            self.qso_panel.add_listening(time.time(), target_even)
+            # P5.OMNI-PATTERN-FIX-3 (v0.96.2): Slot-Boundary statt Wall-Time.
+            # GUI-Latency / Qt-QueuedConnection koennen 100-400ms nach echter
+            # Slot-Boundary einschlagen → time.time() wuerde z.B. 04:26:30.4
+            # zeigen. floor(now / cycle_duration) * cycle_duration gibt :30.0
+            # sauber. Loest gleichzeitig die Phaenomene "Pos 4 RX-E fehlt"
+            # und ":44 [O] Horche" durch korrekte Slot-Boundary-Anzeige
+            # (R1-Diagnose: Display-Bug wegen Wall-Time-Verschiebung).
+            slot_dur = self.timer.cycle_duration
+            now = time.time()
+            slot_start = (now // slot_dur) * slot_dur
+            self.qso_panel.add_listening(slot_start, target_even)
 
     # ── Auto-Hunt UI-Lifecycle (v0.75) ───────────────────────────
 
