@@ -160,9 +160,18 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         # Getrennte Preset-Dateien für Standard und DX (2h-Frist pro Band+FTMode)
         self._standard_store = PresetStore("presets_standard.json")
         self._dx_store = PresetStore("presets_dx.json")
-        # Einmalige Migration aus altem config.json-Format
-        self._standard_store.migrate_from_settings(self.settings._data, mode="standard")
-        self._dx_store.migrate_from_settings(self.settings._data, mode="dx")
+        # Einmalige Migration aus altem config.json-Format.
+        # P22 Final-R1 SOLLTE-1: Exception-Wrap damit ein Disk-Fehler in
+        # der Migration den App-Start nicht crasht (migrate_from_settings
+        # ruft intern _save_locked auf, das bei Fehler re-raised).
+        for _store, _mode in (
+            (self._standard_store, "standard"),
+            (self._dx_store, "dx"),
+        ):
+            try:
+                _store.migrate_from_settings(self.settings._data, mode=_mode)
+            except Exception as _exc:
+                print(f"[Kalibrierung] Migration {_mode} uebersprungen: {_exc}")
 
     def _init_qso_log(self):
         """QSO-Verzeichnis (Worked-Before) aus aktuellem Pfad + adif_import_path laden.
@@ -1284,6 +1293,25 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         # TX-Modus wird in Schritt 8 ueber PSKReporter befuellt, nicht hier.
 
     def closeEvent(self, event):
+        # P22 / P8: Mess-Modal hart schliessen falls noch offen (App-Quit
+        # mid-Phase-3) — sonst bleibt Modal als Fantom haengen.
+        dlg = getattr(self, '_mess_status_dialog', None)
+        if dlg:
+            try:
+                dlg.reject()
+            except Exception:
+                pass
+            self._mess_status_dialog = None
+
+        # P22-A10: Staged Preset-Eintraege verwerfen (kein Half-State auf Disk).
+        for store_attr in ('_standard_store', '_dx_store'):
+            store = getattr(self, store_attr, None)
+            if store and hasattr(store, 'discard_all_staged'):
+                n = store.discard_all_staged()
+                if n:
+                    print(f"[App-Quit] {n} staged Preset-Eintrag(e) "
+                          f"in {store_attr} verworfen")
+
         # P1.QRZ-UPLOAD-UI (KP-3): Bulk-Worker sauber stoppen vor App-Close.
         # Disconnect VOR cancel(), sonst kann Worker noch finished.emit() auf
         # zerstoertem Dialog/Slot feuern.
