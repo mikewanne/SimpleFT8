@@ -1,11 +1,11 @@
-"""Unit-Tests fuer P7.OMNI-SIMPLIFY — core/omni_cq.py (single-slot v0.96.4).
+"""Unit-Tests fuer OMNI-CQ — core/omni_cq.py.
 
-Mike-Spec 10.05.2026: OMNI = Single-Slot-CQ in EINER Paritaet, Wechsel
-ueber Diversity-Such-Counter alle ~10 Min.
+P7.OMNI-SIMPLIFY (v0.96.4): Single-Slot-CQ-Modul.
+P23.OMNI-COUNTER-EIGEN (v0.96.7): eigener Down-Counter pro Modus,
+KEIN Coupling mehr zu Diversity-Such-Counter.
 
-Deckt V3 §5 AC1-AC13 + R1-SF-1 ab. Tests rufen on_cycle_start direkt mit
-synthetischen Werten — KEIN Worker/Sleep-Mock (Lesson
-feedback_test_critical_path_not_mock.md).
+Tests rufen on_cycle_start direkt mit synthetischen Werten —
+KEIN Worker/Sleep-Mock (Lesson feedback_test_critical_path_not_mock.md).
 """
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ import pytest
 from PySide6.QtWidgets import QApplication
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from core.omni_cq import OmniCQ, _OMNI_FLIP_AFTER_SEARCHES  # noqa: E402
+from core.omni_cq import OmniCQ, _OMNI_TARGETS  # noqa: E402
 
 
 @pytest.fixture(scope="module")
@@ -54,15 +54,17 @@ def _make_omni(*, free_cq_freq: int | None = 1500,
 
 
 def test_start_initial_state(app):
-    """T1 (AC1): start setzt _active=True, alles andere Default."""
+    """T1 (AC1): start setzt _active=True, Counter auf TARGET (FT8=10),
+    Paritaet bleibt None bis erster on_cycle_start."""
     omni, *_ = _make_omni()
     omni.start()
     assert omni.is_active() is True
     assert omni.is_paused() is False
-    assert omni.cq_count == 0
+    # P23: Counter ist Down-Counter, beginnt bei TARGET (FT8=10)
+    assert omni.cq_remaining == _OMNI_TARGETS["FT8"]
+    assert omni.cq_target == _OMNI_TARGETS["FT8"]
     assert omni.cq_tx_even is None
     assert omni.cq_audio_hz is None
-    assert omni._search_trigger_count == 0
 
 
 # ── T2: AC2 Erster Cycle setzt _cq_tx_even aus fresh time ──────────
@@ -89,7 +91,9 @@ def test_first_cycle_sets_tx_even_from_fresh_time(app, fake_time, expected_tx_ev
 
 
 def test_matching_cycle_calls_encoder_transmit_and_emits(app):
-    """T3 (AC3): Slot mit passender Paritaet -> encoder.transmit + counter + emits."""
+    """T3 (AC3): Slot mit passender Paritaet -> encoder.transmit + Counter
+    dekrementiert + emits.
+    P23: Counter zaehlt down (TARGET-1 nach erstem TX, nicht 1 hoch)."""
     omni, encoder, *_ = _make_omni()
     captured_count: list[tuple[int, bool]] = []
     captured_slot: list[tuple[str, bool, bool]] = []
@@ -100,8 +104,8 @@ def test_matching_cycle_calls_encoder_transmit_and_emits(app):
         lambda lbl, tx, tev: captured_slot.append((lbl, tx, tev))
     )
     omni.start()
+    target = omni.cq_target  # FT8 = 10
     # fake_time so wahlen dass cycle_num gerade ist (Even)
-    fake_time = 15.0  # cycle 1 -> odd. Lass uns 30.0 nehmen -> cycle 2 -> even
     fake_time = 30.0  # cycle 2 -> even
     with patch("core.omni_cq.time.time", return_value=fake_time):
         omni.on_cycle_start(cycle_num=999, is_even=False)
@@ -109,8 +113,9 @@ def test_matching_cycle_calls_encoder_transmit_and_emits(app):
     encoder.transmit.assert_called_once_with(
         "CQ DA1MHH JN58", tx_even=True, audio_freq_hz=1500,
     )
-    assert omni.cq_count == 1
-    assert captured_count == [(1, True)]
+    # P23: nach 1 TX ist remaining = TARGET - 1
+    assert omni.cq_remaining == target - 1
+    assert captured_count == [(target - 1, True)]
     assert len(captured_slot) == 1
     assert captured_slot[0][1] is True   # is_tx
     assert captured_slot[0][2] is True   # tx_even
@@ -120,16 +125,19 @@ def test_matching_cycle_calls_encoder_transmit_and_emits(app):
 
 
 def test_non_matching_cycle_skips_encoder(app):
-    """T4 (AC4): Slot mit anderer Paritaet -> KEIN encoder.transmit."""
+    """T4 (AC4): Slot mit anderer Paritaet -> KEIN encoder.transmit.
+    P23: Counter bleibt unveraendert wenn kein TX."""
     omni, encoder, *_ = _make_omni()
     omni.start()
+    target = omni.cq_target
     omni._cq_tx_even = True  # OMNI sendet in Even
     omni._cq_audio_hz = 1500  # bereits initialisiert
     fake_time = 15.0  # cycle 1 -> Odd (mismatch)
     with patch("core.omni_cq.time.time", return_value=fake_time):
         omni.on_cycle_start(cycle_num=999, is_even=True)
     encoder.transmit.assert_not_called()
-    assert omni.cq_count == 0
+    # P23: kein TX -> Counter unveraendert auf TARGET
+    assert omni.cq_remaining == target
 
 
 # ── T5: AC5 No-op waehrend Diversity-Mess-Phase ────────────────────
@@ -188,58 +196,33 @@ def test_flip_tx_parity_noop_when_inactive(app):
     assert captured == []
 
 
-# ── T8: AC8 on_search_trigger Counter + Flip bei Threshold ─────────
+# ── T8 / T8b ENTFERNT (P23): on_search_trigger entfaellt komplett.
+#    Auto-Flip ist jetzt eigene Counter-Logik in on_cycle_start. ─────
 
 
-def test_on_search_trigger_counts_and_flips_at_threshold(app):
-    """T8 (AC8): Counter inkrementiert, bei _OMNI_FLIP_AFTER_SEARCHES flip + Reset."""
-    omni, *_ = _make_omni()
-    captured: list[bool] = []
-    omni.parity_flipped.connect(lambda new: captured.append(new))
-    omni.start()
-    omni._cq_tx_even = True  # initialisiert (sonst flip no-op)
-
-    # _OMNI_FLIP_AFTER_SEARCHES - 1 mal triggern: noch kein Flip
-    for _ in range(_OMNI_FLIP_AFTER_SEARCHES - 1):
-        omni.on_search_trigger()
-    assert omni._search_trigger_count == _OMNI_FLIP_AFTER_SEARCHES - 1
-    assert omni.cq_tx_even is True
-    assert captured == []
-
-    # N-ter Trigger: flip + Counter-Reset
-    omni.on_search_trigger()
-    assert omni._search_trigger_count == 0
-    assert omni.cq_tx_even is False
-    assert captured == [False]
-
-
-def test_on_search_trigger_inactive_noop(app):
-    """T8b: on_search_trigger no-op wenn nicht aktiv."""
-    omni, *_ = _make_omni()
-    omni.on_search_trigger()  # nicht gestartet
-    assert omni._search_trigger_count == 0
-
-
-# ── T10: AC10 Pause: _cq_tx_even bleibt; Resume: bleibt ────────────
+# ── T10: AC10 Pause: _cq_tx_even bleibt; Resume: Counter Reset ─────
 
 
 def test_pause_resume_preserves_parity(app):
-    """T10 (AC10): pause + resume_after_qso bewahren _cq_tx_even."""
+    """T10 (AC10): pause bewahrt _cq_tx_even + remaining.
+    P23: resume_after_qso resettet remaining auf TARGET ("guter Slot")."""
     omni, *_ = _make_omni()
     omni.start()
+    target = omni.cq_target
     omni._cq_tx_even = True
     omni._cq_audio_hz = 1500
-    omni._cq_count = 5
+    omni._cq_remaining = 5  # mid-Counter Stand
 
     omni.pause()
     assert omni.is_paused() is True
     assert omni.cq_tx_even is True   # bleibt
-    assert omni.cq_count == 5         # bleibt
+    assert omni.cq_remaining == 5    # pause aendert remaining nicht
 
     omni.resume_after_qso(last_was_even=False)
     assert omni.is_paused() is False
     assert omni.cq_tx_even is True   # bleibt (last_was_even ignoriert)
-    assert omni.cq_count == 5
+    # P23: Resume = neuer Slot, Counter zurueck auf TARGET
+    assert omni.cq_remaining == target
 
 
 # ── T11: AC11 Frequenz-Sticky ueber Flip ───────────────────────────
@@ -266,21 +249,20 @@ def test_frequency_sticky_across_flip(app):
 
 
 def test_stop_resets_all_state(app):
-    """T12 (AC12): stop setzt alles zurueck."""
+    """T12 (AC12): stop setzt alles zurueck.
+    P23: remaining auf 0, target auf default."""
     omni, *_ = _make_omni()
     omni.start()
     omni._cq_tx_even = True
     omni._cq_audio_hz = 1500
-    omni._cq_count = 7
-    omni._search_trigger_count = 3
+    omni._cq_remaining = 7
 
     omni.stop("manual_halt")
     assert omni.is_active() is False
     assert omni.is_paused() is False
     assert omni.cq_tx_even is None
     assert omni.cq_audio_hz is None
-    assert omni.cq_count == 0
-    assert omni._search_trigger_count == 0
+    assert omni.cq_remaining == 0
 
 
 # ── T13: AC13 resume_after_qso Signatur kompatibel ─────────────────
@@ -308,17 +290,8 @@ def test_resume_after_qso_signature_compat(app):
     assert omni.cq_tx_even is True
 
 
-# ── T14: R1-SF-3 on_search_trigger waehrend Pause -> no-op ─────────
-
-
-def test_on_search_trigger_during_pause_noop(app):
-    """T14 (R1-SF-1/SF-3): Defense-in-Depth — Counter zaehlt nicht waehrend Pause."""
-    omni, *_ = _make_omni()
-    omni.start()
-    omni._cq_tx_even = True
-    omni.pause()
-    omni.on_search_trigger()
-    assert omni._search_trigger_count == 0  # no-op trotz active=True
+# ── T14 ENTFERNT (P23): on_search_trigger entfaellt — kein Pause-
+#    Schutz mehr noetig. ────────────────────────────────────────────
 
 
 # ── Zusatz: omni_started Signal ────────────────────────────────────
@@ -347,7 +320,8 @@ def test_stop_emits_omni_stopped_with_reason(app):
 
 
 def test_busy_encoder_no_count(app):
-    """encoder.transmit returnt False -> kein Counter, kein slot_action."""
+    """encoder.transmit returnt False -> kein Decrement, kein Emit, kein slot_action.
+    P23: remaining bleibt auf TARGET wenn TX nicht erfolgte."""
     omni, encoder, *_ = _make_omni()
     encoder.transmit.return_value = False
     captured_count: list[tuple[int, bool]] = []
@@ -359,9 +333,11 @@ def test_busy_encoder_no_count(app):
         lambda *args: captured_slot.append(args)
     )
     omni.start()
+    target = omni.cq_target
     with patch("core.omni_cq.time.time", return_value=30.0):
         omni.on_cycle_start(cycle_num=1, is_even=True)
     encoder.transmit.assert_called_once()
-    assert omni.cq_count == 0
+    # P23: kein TX -> remaining unveraendert auf TARGET
+    assert omni.cq_remaining == target
     assert captured_count == []
     assert captured_slot == []
