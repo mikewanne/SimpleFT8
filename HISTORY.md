@@ -5,6 +5,105 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-10 v0.96.8 — P21.DEBUG-LOG + DIV-MEAS-RADIO-GUARD
+
+**Auslöser:** Mike-Field-Test 16:30 UTC v0.96.7: bei App-Start in
+Diversity haengt MESSEN bei `0/6`, nur ANT1 dekodiert. Reproduzierbar
+nach jedem App-Restart. Mike: „du stocherst da wie doof rum, mache ein
+log wo das reingeschrieben wird was man auswerten kann" + „mach es zum
+an und abwählen in den einstellungen wie Debug LOG schreiben".
+
+**Mike-Strategie:** strategische Bisection-Debug-Punkte → wenn Eintrag X
+da, Code lief bis dahin; wenn X fehlt, Bug VOR Stelle X. KISS, klassisches
+Funker-Vorgehen („wo bricht der Signalweg?").
+
+### Teil 1: P21.DEBUG-LOG Infrastruktur
+
+**Code:**
+- `core/debug_log.py` (NEU, 95 Zeilen): `debug_log(category, message)`
+  Helper. 1 Datei pro Tag (`~/.simpleft8/debug_YYYY-MM-DD.log`),
+  thread-safe, no-op wenn deaktiviert (kein Disk-Write). Cleanup beim
+  App-Start: Dateien älter als gestern werden gelöscht.
+- `ui/settings_dialog.py`: Block 5 in „Daten & Tools" mit Checkbox
+  „Debug-Log schreiben" + sofort-Apply via `_dbg.set_enabled()`.
+- `main.py`: `cleanup_old_files(keep_days=1)` + `set_enabled()` beim
+  App-Start.
+- `tests/test_debug_log.py` (NEU, 7 Tests): disabled no-op, enabled
+  writes, cleanup keeps_recent + skips_unparseable + empty,
+  disk-error no-crash.
+
+**Strategische Debug-Punkte:**
+- `_on_band_changed`: Anfang + IGNORED-Pfad + `on_band_change()`-Call
+  + `_check_diversity_preset`-Call.
+- `_check_diversity_preset`: Cache-Status (ratio + gain) + Branch-
+  Entscheidung (gain_stale|missing|fresh).
+- `_enable_diversity`: Pfad-Marker (CACHE-REUSE vs PHASE-MEASURE).
+- `mw_cycle.py:_on_cycle_start`: Antennen-Switch SKIP-Pfade
+  (encoder.is_transmitting | radio.ip | rx_active), SWITCH plan
+  (vor Thread-Start), SWITCH done/FAILED (im Thread).
+- `_handle_diversity_measure`: vor + nach `record_measurement`
+  (ant + stations + score + step_pre/post).
+
+### Teil 2: DIV-MEAS-RADIO-GUARD (Bug-Fix via Debug-Log-Diagnose)
+
+**Diagnose aus Debug-Log:**
+```
+14:52:57.041 [ANT] SKIP — radio.ip=False rx_active=True
+```
+Beim App-Start ist `radio.ip` noch `False` (TCP-Connect noch nicht
+durch), Audio-Stream läuft aber bereits über DAX (separater Pfad).
+Antennen-Switch konnte nicht ausgeführt werden, aber `record_measurement`
+lief trotzdem mit `ant=A1` (current_ant default) → Counter
+inkrementierte mit falschen Daten → Mess endete mit garbage oder hing.
+
+**Mike-Spec 17:00 UTC:** „Mess erst NACH Verbindung starten. Sobald
+Radio verbindet, soll Mess natürlich anlaufen."
+
+**Fix (`ui/mw_cycle.py:_handle_diversity_measure`):**
+```python
+if not self.radio.ip:
+    _dlog("DIV-MEAS", "SKIP — radio.ip=False, warte auf Verbindung")
+    return
+```
+
+Plus Korrektur eines fehlerhaften vorigen Edit-Versuchs: SKIP-Pfad-Log
+und Antennen-Switch-Block waren in `if/elif` mit verschobener
+Einrückung ineinander verschachtelt. Jetzt korrekt: SKIP-Log
+unabhängig vor dem if-Block.
+
+**Field-Test 17:03 UTC (Mike):**
+1. App neu gestartet → MESSEN lief sauber durch (Pattern A1, A1, A2,
+   A2, A1, A2 in 6 Slots, Phase wechselte measure → operate um 15:03:27)
+2. P22 Atomic-Persist verifiziert: `presets_standard.json` 20m_FT8
+   bekam **frischen** ratio_timestamp (15:03:27) + neue Werte
+   (`30:70`, dominant `A2` — vorher 70:30/A1).
+3. App neu gestartet (immer noch initial in Normal-Modus, kein
+   schöner Fix → P24-TODO „letzten Modus merken"), Wechsel auf
+   Diversity Standard → **Cache-Reuse-Pfad sauber:** Verstärker +
+   Antennen-Verhältnis übersprungen (beide Werte frisch < 6h / < 1h),
+   beide Antennen sofort aktiv.
+
+**Atomare Commits (3):**
+- `5c5128e` P21.DEBUG-LOG: Helper-Modul + Settings-Toggle + App-Start Init
+- `b621f12` P21.DEBUG-LOG: Strategische Debug-Punkte
+- `54cb7b5` P21.DIV-MEAS-RADIO-GUARD: Mess wartet auf Radio-Verbindung
+
+**Test-Bilanz:** 1049 → 1056 grün (+7 Debug-Log-Tests).
+
+**Workflow:** **KEIN voller V1→V2→R1→V3** weil Logging-Mechanik trivial
++ Mike-Spec eindeutig + Mike explizit „mach es". Nach Field-Test +
+Bug-Diagnose: Skip-Fix als KISS-Patch ohne Workflow (Mike-Spec klar +
+1 if-Block). Workflow-Lite ist OK wenn alle drei Bedingungen erfüllt.
+
+**Offene Folge-TODOs:**
+- P24 (NEU): App soll sich letzten RX-Mode merken (Normal/Diversity-
+  Standard/DX) statt immer auf Normal zu starten.
+- P25 (NEU): Diagnose warum `radio.ip` beim App-Start spät gesetzt wird
+  obwohl Audio-Stream (DAX) bereits läuft. Connect-Pfad-Untersuchung.
+  Skip-Fix verhindert Hänger, aber Wurzel ist nicht gefixt.
+
+---
+
 ## 2026-05-10 v0.96.7 — P23.OMNI-COUNTER-EIGEN
 
 **Auslöser:** Mike-Vorschlag 10.05.2026 nach P22-Code-Phase: OMNI-CQ-
