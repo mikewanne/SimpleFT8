@@ -456,3 +456,42 @@ def test_signals_emitted_correctly(app):
     assert slot_actions[0][1] is True          # TX
     assert slot_actions[1][1] is True          # TX
     assert slot_actions[2][1] is False         # RX
+
+
+# ===========================================================================
+# T2N (P5.OMNI-PATTERN-FIX-3) — Pos 1 mit transmit.return_value=True
+# (Pending-Pfad) emittet counter+slot_action
+# ===========================================================================
+def test_omni_pos1_counter_and_slot_action_when_pending_returns_true(app):
+    """T2N (P5 V3 §7, AC-B1, AC-B2): komplementaer zu existing Z. 401 Test
+    der `transmit.return_value=False` mockt (busy-Skip-Branch).
+
+    Mit Variante A (P5 v0.96.2) returnt der echte Encoder bei busy NICHT
+    mehr False sondern True (Pending-Queue). OMNI's `_do_tx_slot` triggert
+    dann counter_changed.emit + slot_action.emit (Praxis-Pfad).
+    """
+    omni, encoder, *_ = _make_omni()
+    encoder.transmit.return_value = True   # Pending-Mock (echter P5-Pfad)
+    omni.start()
+    captured_counter: list[tuple[int, int]] = []
+    captured_slot: list[tuple[str, bool, bool]] = []
+    omni.counter_changed.connect(
+        lambda e, o: captured_counter.append((e, o))
+    )
+    omni.slot_action.connect(
+        lambda lbl, tx, tev: captured_slot.append((lbl, tx, tev))
+    )
+    # Pos 1 in Block 1 → TX-O (target_even=False)
+    omni._slot_index = 1
+    omni.on_cycle_start(cycle_num=1201, is_even=False)
+    # encoder.transmit gerufen mit Pending-Erfolgs-Return
+    encoder.transmit.assert_called_once()
+    # Counter + slot_action emittet (Praxis-Pfad)
+    assert omni._cq_odd_count == 1
+    assert omni._cq_even_count == 0
+    assert captured_counter == [(0, 1)]
+    assert len(captured_slot) == 1
+    assert captured_slot[0][1] is True       # is_tx=True
+    assert captured_slot[0][2] is False      # target_even=False (Pos 1 Block 1)
+    # _slot_index advanced (gleich wie busy-Pfad)
+    assert omni._slot_index == 2
