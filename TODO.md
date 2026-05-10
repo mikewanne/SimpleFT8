@@ -163,6 +163,64 @@ Fallback `time.strftime("%H%M%S", time.gmtime())`. Wenn der Decoder
 
 ---
 
+## 📋 P17.DIVERSITY-DX-START-INIT-BUG (Field-Test 10.05. Mike, BLOCKIEREND)
+
+**Symptom:** Bei App-Start direkt in **DIVERSITY DX**-Modus haengt Mess
+bei `MESSEN 0/6`. Antennen-Switch greift nicht — alle Stationen werden
+nur auf A1 empfangen, A2=0.
+
+**Log-Beweis:**
+```
+[Diversity] 48 St. | A1>A2: 0 | A2>A1: 0 (0%) | Nur A1: 48 | Nur A2: 0
+[Diversity] 50 St. | A1>A2: 0 | A2>A1: 0 (0%) | Nur A1: 50 | Nur A2: 0
+```
+
+**Konsequenz:**
+- A2 sammelt keine Decode-Daten
+- `_measure_step` inkrementiert nie (in `add_measurement` nur bei
+  Antennen-Switch-Decode)
+- Mess haengt ewig 0/6
+- OMNI kann nicht senden (V2-L12 Schutz: phase != "operate")
+
+**Workaround:** NORMAL → DIVERSITY STANDARD wechseln + Kalibrieren →
+laeuft. Aber DIVERSITY DX direkt nach Start = Bug.
+
+**Reproduzierbar:** Mike heute zweimal beobachtet (ca. 11:00 + 13:45).
+
+**Files (vermutet):**
+- `ui/mw_radio.py` Mode-Switch-Logik bei DX
+- `core/diversity.py` Mess-Initialisierung
+- ggf. fehlt eine Antennen-Init beim ersten Slot in DX
+
+**Aufwand:** ~2-3h (Diagnose + Fix + Test). VORSICHT: Mike-Spec
+"Diversity ist UNANTASTBAR" — nur das Init-Verhalten beim DX-Start
+fixen, keine Hauptlogik aendern.
+
+**Schweregrad:** **BLOCKIEREND** — verhindert ProduktivOnut von OMNI in DX-Modus.
+
+---
+
+## 📋 P18.DT-KORR-3X-RELOAD (Field-Test 10.05. Mike, Diagnose)
+
+**Symptom:** Beim App-Start wird DT-Korrektur fuer aktuelles Band 3×
+aus File geladen:
+```
+[DT-Korr] FT8_20m: Gespeicherter Wert +0.650s geladen
+[DT-Korr] FT8_20m: Gespeicherter Wert +0.650s geladen
+[DT-Korr] FT8_20m: Gespeicherter Wert +0.650s geladen
+```
+
+**Vermutung:** Initial-Load + Bandwechsel-Reload + Mode-Setup-Reload =
+3×. Funktional egal (Wert ist deterministisch), aber ineffizient + irritiert
+beim Log-Lesen.
+
+**Aufwand:** ~30 Min Diagnose (wer ruft `_load_for_current_key()` 3×?)
++ ggf. Konsolidierung auf 1 Aufruf.
+
+**Schweregrad:** Niedrig (kosmetisch, keine Regression).
+
+---
+
 ## 📋 P15.ANT-LABEL-VERTAUSCHT (Field-Test 10.05. Mike)
 
 **Symptom:** "(ANT2 ↑2.0 dB)"-Label erscheint hinter **Sende**-Eintrag
