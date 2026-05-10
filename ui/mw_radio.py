@@ -826,6 +826,8 @@ class RadioMixin:
                 "50:50", "measure", 0,
                 self._diversity_ctrl.MEASURE_CYCLES,
                 scoring_mode=scoring_mode)
+            # P22 / P8: Modal oeffnen (sperrt UI waehrend Mess-Phase).
+            self._open_mess_status_dialog()
         self.control_panel.update_diversity_counts(0, 0)
 
         ft_mode = mode  # bereits oben gesetzt
@@ -901,8 +903,87 @@ class RadioMixin:
         # Werte stehen sowieso im Diversity-Display der Antennen-Kachel.
         return True
 
+    # ── P22 / P8: Mess-Modal-Lifecycle ───────────────────────────────────
+
+    def _open_mess_status_dialog(self):
+        """P22 / P8: Modal oeffnet sich zu Beginn von Phase 3 (Antennen-
+        vergleich). WindowModal sperrt Hauptfenster, laesst Event-Loop
+        laufen (Decoder-Signale kommen weiter durch).
+
+        Wird aus `_enable_diversity` (Phase=measure-Pfad) gerufen.
+        Schliesst sich automatisch via `mw_cycle._handle_diversity_measure`
+        beim Phase-Wechsel measure→operate.
+        """
+        if getattr(self, '_mess_status_dialog', None):
+            return  # schon offen
+        try:
+            from ui.mess_status_dialog import MessStatusDialog
+            from core.timing import UTCSyncTimer
+            cycle_s = UTCSyncTimer.CYCLE_DURATIONS.get(self.settings.mode, 15.0)
+            dlg = MessStatusDialog(self._diversity_ctrl, parent=self)
+            dlg.set_cycle_dur(cycle_s)
+            dlg.rejected.connect(self._on_mess_status_cancelled)
+            self._mess_status_dialog = dlg
+            dlg.show()  # NICHT exec — exec wuerde Event-Loop blocken
+            print("[Diversity] Mess-Modal geoeffnet (UI gesperrt)")
+        except Exception as exc:
+            print(f"[Diversity] Mess-Modal Fehler: {exc}")
+            self._mess_status_dialog = None
+
+    def _on_mess_status_cancelled(self):
+        """Cancel-Button im Mess-Modal: discard staged + Diversity aus.
+
+        Wird ueber das `rejected`-Signal des Dialogs getriggert. Wenn das
+        Modal automatisch geschlossen wurde (accept aus mw_cycle), kommt
+        `rejected` nicht — diese Methode laeuft also nur bei echtem Cancel.
+        """
+        dlg = getattr(self, '_mess_status_dialog', None)
+        self._mess_status_dialog = None
+        if not dlg or not dlg.cancelled:
+            return  # auto-close → kein Cleanup-Pfad
+        print("[Diversity] Mess vom User abgebrochen — Cleanup")
+        band, ft_mode = self.settings.band, self.settings.mode
+        for store in (getattr(self, '_standard_store', None),
+                      getattr(self, '_dx_store', None)):
+            if store:
+                store.discard_staged(band, ft_mode)
+        # Diversity-Pipeline-Flags ruecksetzen damit kein Geister-State bleibt
+        self._pending_dx_diversity = False
+        self._pending_ratio_status = None
+        self._disable_diversity()
+
+    def _close_mess_status_dialog(self):
+        """Auto-Close fuer Phase-Wechsel measure→operate.
+
+        Wird aus mw_cycle._handle_diversity_measure gerufen sobald
+        commit_with_ratio (oder Adaptiv-Stop) durch ist.
+
+        Final-R1 KOENNTE-1: Tick-Timer vor accept() stoppen damit kein
+        Spaet-Tick auf zerstoertes Widget zugreift.
+        """
+        dlg = getattr(self, '_mess_status_dialog', None)
+        if not dlg:
+            return
+        self._mess_status_dialog = None
+        try:
+            if hasattr(dlg, '_tick_timer'):
+                dlg._tick_timer.stop()
+        except Exception:
+            pass
+        try:
+            dlg.accept()  # schliesst ohne `cancelled` Flag → kein Cleanup
+        except Exception:
+            pass
+
     def _disable_diversity(self):
         """Diversity deaktivieren: zurueck auf ANT1."""
+        # P22 Final-R1 SOLLTE-2: staged-Daten beim Disable verwerfen, damit
+        # Memory bei Re-Activate nicht mit alten Half-State-Werten startet.
+        band, ft_mode = self.settings.band, self.settings.mode
+        for store in (getattr(self, '_standard_store', None),
+                      getattr(self, '_dx_store', None)):
+            if store and hasattr(store, 'discard_staged'):
+                store.discard_staged(band, ft_mode)
         # RX-Liste + QSO-Panel leeren bei Antennen-Modus-Wechsel
         self.rx_panel.table.setRowCount(0)
         self._diversity_stations = {}
@@ -1189,7 +1270,16 @@ class RadioMixin:
                 self.statusBar().showMessage("DIVERSITY SETUP AKTIV — Bedienung gesperrt", 0)
 
     def _on_dx_tune_accepted(self):
-        """DX Tuning erfolgreich — Preset speichern."""
+        """DX Tuning erfolgreich — Preset speichern.
+
+        P22 (10.05.2026): Pipeline-Pfad entscheidet ob save_gain (sofort
+        Disk) oder stage_gain (Memory, commit nach Phase 3) genutzt wird.
+        - Normal-Mode → save_gain (kein Phase 3 geplant)
+        - Diversity + pending_ratio == "fresh" → save_gain (Cache-Reuse,
+          Phase 3 wird übersprungen)
+        - Diversity + volle Pipeline → stage_gain (commit_with_ratio
+          folgt aus mw_cycle._handle_diversity_measure nach Phase 3)
+        """
         dialog = self._dx_tune_dialog
         if dialog is None:
             return
@@ -1199,15 +1289,36 @@ class RadioMixin:
         gain_mode = getattr(self, '_gain_scoring_mode', 'snr')
         div_scoring = "dx" if gain_mode == "snr" else "normal"
         store = getattr(self, '_dx_store', None) if div_scoring == "dx" else getattr(self, '_standard_store', None)
+
+        # P22: Pipeline-Pfad bestimmen BEVOR wir schreiben.
+        # will_run_phase3 = True → stage_gain (Memory), False → save_gain (Disk).
+        _pending_ratio = getattr(self, '_pending_ratio_status', None)
+        will_run_phase3 = (
+            self._rx_mode == "diversity"
+            and _pending_ratio != "fresh"
+        )
         if store:
-            store.save_gain(
-                band, ft_mode,
-                rxant=r.get("best_ant", "ANT1"),
-                ant1_gain=r.get("ant1_gain", r.get("best_gain", 0)),
-                ant2_gain=r.get("ant2_gain", r.get("best_gain", 0)),
-                ant1_avg=r.get("ant1_avg", 0.0),
-                ant2_avg=r.get("ant2_avg", 0.0),
-            )
+            if will_run_phase3:
+                store.stage_gain(
+                    band, ft_mode,
+                    rxant=r.get("best_ant", "ANT1"),
+                    ant1_gain=r.get("ant1_gain", r.get("best_gain", 0)),
+                    ant2_gain=r.get("ant2_gain", r.get("best_gain", 0)),
+                    ant1_avg=r.get("ant1_avg", 0.0),
+                    ant2_avg=r.get("ant2_avg", 0.0),
+                )
+                # V3-A10 Konsistenz: stage_gain immer parallel zu
+                # _pending_dx_diversity = True (commit folgt aus mw_cycle).
+                self._pending_dx_diversity = True
+            else:
+                store.save_gain(
+                    band, ft_mode,
+                    rxant=r.get("best_ant", "ANT1"),
+                    ant1_gain=r.get("ant1_gain", r.get("best_gain", 0)),
+                    ant2_gain=r.get("ant2_gain", r.get("best_gain", 0)),
+                    ant1_avg=r.get("ant1_avg", 0.0),
+                    ant2_avg=r.get("ant2_avg", 0.0),
+                )
         # Rückwärtskompatibilität: auch in Settings speichern (für alten Code)
         scoring = gain_mode
         self.settings.save_dx_preset(
