@@ -118,15 +118,10 @@ class QSOMixin:
         tx_even/slot_start_ts vom Encoder durchgereicht — qso_panel zeigt
         damit den korrekten Slot-Tag/Zeitstempel der TX-Aktion.
         """
-        ant_label = ""
-        if not message.startswith("CQ "):
-            if hasattr(self, 'qso_sm') and self.qso_sm.qso:
-                call = self.qso_sm.qso.their_call
-                if call:
-                    # _antenna_pref_label liefert " (ANT...)" → fuehrendes Leerzeichen
-                    # entfernen, qso_panel.add_tx setzt eigene Trennspaces.
-                    ant_label = self._antenna_pref_label(call).lstrip()
-        self.qso_panel.add_tx(message, ant_label,
+        # P15 (10.05.2026 Mike-Field-Test): ANT-Label NICHT mehr bei Sende.
+        # Hardware sendet IMMER ANT1 (verriegelt), Label hier waere irrefuehrend.
+        # Label gehoert hinter Empf.-Eintrag (siehe mw_cycle.on_message_decoded).
+        self.qso_panel.add_tx(message, "",
                               tx_even=tx_even, slot_start_ts=slot_start_ts)
 
     @Slot(object)

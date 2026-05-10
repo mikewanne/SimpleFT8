@@ -754,10 +754,17 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
 
     @Slot(bool)
     def _on_omni_parity_flipped(self, new_tx_even: bool):
-        """OMNI Paritaets-Wechsel — User-Notification + Statusbar."""
+        """OMNI Paritaets-Wechsel — User-Notification + Statusbar.
+
+        P11 (10.05.2026 Mike-Field-Test): force repaint() weil Qt-EventLoop
+        showMessage() manchmal verzoegert anzeigt — Mike sah veraltetes (O)
+        nach Flip auf Even.
+        """
         parity_str = "Even" if new_tx_even else "Odd"
         print(f"[OMNI-CQ-UI] Paritaets-Wechsel auf {parity_str}")
         self._update_statusbar()
+        # P11: force-repaint damit der neue Wert sofort sichtbar ist
+        self.statusBar().repaint()
 
     @Slot(str, bool, bool)
     def _on_omni_slot_action(self, label: str, is_tx: bool, target_even: bool):
@@ -1077,10 +1084,18 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
 
     def _tick_cq_countdown(self):
         """Sekündlicher Update des CQ-Freq-Countdown-Balkens.
-        Wert kommt aus slot-synchronem Such-Counter (~60s, friert bei Pause ein)."""
+        Wert kommt aus slot-synchronem Such-Counter (~60s, friert bei Pause ein).
+
+        P9 (10.05.2026 Mike-Field-Test): zusaetzlich Re-Mess-Countdown jede
+        Sekunde refresht (vorher nur bei Diversity-Switch ~10 Min sichtbar).
+        """
         if self._rx_mode == "diversity" and self._diversity_ctrl.cq_freq_hz is not None:
             self.control_panel.update_cq_freq_countdown(
                 self._diversity_ctrl.seconds_until_search)
+            # P9: Re-Mess-Countdown jede Sekunde (greift nur in operate-Phase
+            # wegen current-text-Check in update_remeasure_countdown)
+            self.control_panel.update_remeasure_countdown(
+                self._diversity_ctrl.seconds_until_remeasure)
         else:
             self.control_panel.set_cq_countdown_visible(False)
 

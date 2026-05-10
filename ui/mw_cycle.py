@@ -810,10 +810,18 @@ class CycleMixin:
 
         # RX zuerst anzeigen, dann verarbeiten (sonst erscheint TX-Antwort vor RX im Log)
         if msg.target == self.settings.callsign:
+            # P15 (10.05.2026 Mike-Field-Test): ANT-Label hinter RX-Eintrag,
+            # NICHT hinter Sende. TX laeuft IMMER ueber ANT1 (verriegelt),
+            # Label gehoert NUR zum Empfangs-Eintrag (zeigt welche Antenne
+            # besser empfing).
+            ant_label = ""
+            if hasattr(self, '_antenna_pref_label') and msg.caller:
+                ant_label = self._antenna_pref_label(msg.caller).lstrip()
             self.qso_panel.add_rx(
                 msg.raw,
                 tx_even=getattr(msg, '_tx_even', None),
                 slot_start_ts=getattr(msg, '_slot_start_ts', None),
+                ant_label=ant_label,
             )
 
         # P4.OMNI-NEUBAU (v0.96.0) Listener-Pfad: wenn OMNI live + nicht

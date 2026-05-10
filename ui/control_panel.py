@@ -1550,6 +1550,37 @@ class ControlPanel(QWidget):
                 self._a1_pct["50%"].setStyleSheet(_DIV_PCT_TEAL)
                 self._a2_pct["50%"].setStyleSheet(_DIV_PCT_TEAL)
 
+    def update_remeasure_countdown(self, seconds: int) -> None:
+        """P9 (10.05.2026 Mike-Field-Test): nur _phase_label-Text mit
+        aktuellem Re-Mess-Countdown updaten — jede Sekunde aufrufbar.
+
+        Ohne ratio/phase Args damit aus _tick_cq_countdown (1Hz) gerufen
+        werden kann ohne den teuren ratio-Update zu wiederholen.
+
+        Format: 'X Min YY s' damit User Fortschritt sieht (vorher nur
+        'X Min' → 10-Min-Sprung weil Z.661 update_diversity_ratio nicht
+        jeden Slot greift).
+        """
+        # Nur updaten wenn _phase_label aktuell den Re-Mess-Countdown zeigt.
+        # Bei Mess-Phase ('● MESSEN X/Y') oder NEUEINMESSUNG nicht ueberschreiben.
+        current = self._phase_label.text()
+        if current.startswith("●") or "Neuberechnung" not in current:
+            return
+        mins = max(0, int(seconds // 60))
+        secs = max(0, int(seconds % 60))
+        if mins <= 2:
+            color = "#FF8800"
+        elif mins <= 10:
+            color = "#FFCC00"
+        else:
+            color = "#888888"
+        label_txt = (f"Diversity Neuberechnung in {mins} Min {secs:02d} s"
+                     if mins > 0 else f"Diversity Neuberechnung in {secs} s")
+        self._phase_label.setText(label_txt)
+        self._phase_label.setStyleSheet(
+            f"color:{color};font-size:9px;font-family:{_FONT};font-style:italic;"
+        )
+
     def update_diversity_counts(self, a1_count: int, a2_count: int,
                                 a1_avg_snr: float = None, a2_avg_snr: float = None,
                                 scoring_mode: str = "normal",

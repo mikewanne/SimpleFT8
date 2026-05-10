@@ -182,13 +182,19 @@ class QSOPanel(QWidget):
 
     def add_rx(self, message: str,
                tx_even: bool | None = None,
-               slot_start_ts: float | None = None):
+               slot_start_ts: float | None = None,
+               ant_label: str = ""):
         """Empfangene Antwort anzeigen.
 
         tx_even/slot_start_ts: bevorzugte Slot-Quelle (Decoder-gesetzt
         ueber msg._tx_even / msg._slot_start_ts). Fallback fuer Tests/
         alte Caller: time.time() zur Aufruf-Zeit (kann durch Decoder-
         Latenz im Folge-Slot landen — nur fuer Mocks akzeptabel).
+
+        ant_label: P15 (10.05.2026 Mike-Field-Test) — '(ANT2 ↑X.X dB)'
+        zeigt welche Antenne RX gewann. Hinter Empf.-Eintrag in Grau.
+        TX-Hardware sendet IMMER ANT1 (verriegelt) — Label gehoert NUR
+        zum RX-Eintrag.
         """
         if slot_start_ts is None or tx_even is None:
             now = time.time()
@@ -197,7 +203,11 @@ class QSOPanel(QWidget):
             tx_even = int(slot_start_ts / slot) % 2 == 0
         utc = time.strftime("%H:%M:%S", time.gmtime(slot_start_ts))
         tag = "[E]" if tx_even else "[O]"
-        self._append_colored(f"{utc} {tag} ←  Empf.   {message}", "#44BBFF")
+        line = f"{utc} {tag} ←  Empf.   {message}"
+        if ant_label:
+            self._append_two_color(line, "#44BBFF", f"   {ant_label}", "#888888")
+        else:
+            self._append_colored(line, "#44BBFF")
 
     def add_listening(self, slot_start_ts: float, tx_even: bool):
         """OMNI RX-Slot-Anzeige (Mike-Wunsch P3.OMNI-PATTERN-FIX-2 v0.95.25).
