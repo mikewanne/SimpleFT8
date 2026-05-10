@@ -82,9 +82,9 @@ def test_add_listening_skipped_for_tx_slots(app):
 @pytest.mark.parametrize(
     "slot_dur, fake_now, expected_slot_start",
     [
-        (15.0, 16004.5, 15990.0),       # FT8 - parallel zu T7 zur Sicherheit
-        (7.5, 16004.5, 16002.0),         # FT4: floor(16004.5/7.5)=2133 → *7.5=15997.5? PRUEFEN
-        (3.8, 16004.5, 15998.6),         # FT2: floor(16004.5/3.8)=4211 → *3.8=15999.8? PRUEFEN
+        (15.0, 16004.5, 15990.0),    # FT8: floor(16004.5/15)=1066 → 1066*15=15990.0
+        (7.5, 16004.5, 15997.5),     # FT4: floor(16004.5/7.5)=2133 → 2133*7.5=15997.5
+        (3.8, 16004.5, 16001.8),     # FT2: floor(16004.5/3.8)=4211 → 4211*3.8=16001.8
     ],
 )
 def test_add_listening_uses_slot_boundary_all_modes(
