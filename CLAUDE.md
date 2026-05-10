@@ -102,14 +102,14 @@ auf Display 2 (Position 1024,0) verschieben. Mike macht von dort
 Fernwartung — App MUSS auf dem mittleren Bildschirm landen.
 
 **Start:** `cd "/Users/mikehammerer/Documents/KI N8N Projekte/FT8/SimpleFT8" && ./venv/bin/python3 main.py`
-**Aktueller Stand:** **P4.OMNI-NEUBAU (09.05.2026 spät, v0.96.0)** — eigenständiger OMNI-Worker in core/omni_cq.py mit absolut-UTC-Slot-Boundaries. 4 Fehlversuche (v0.95.22-25) ersetzt durch 3-Schichten-Architektur (Normal-CQ + OMNI-CQ + gemeinsamer Hunt-Pfad). Voller Workflow V1→V2(20 Lessons)→R1(17/20 ✅ + 5 Findings)→V3(961 Z. Compact-fest)→Final-R1(0 KP, 4 Hinweise)→Cold-Start-Test fand 4 weitere Bugs→V3 §0.5 NEU→Compact→Code (8 atomare Commits C1-C8). Geänderte Files (15): NEU core/omni_cq.py (~340 Z.) + tests/test_omni_cq_worker.py (37 Tests) + tests/test_omni_cq_integration.py (14 Tests). UMGEBAUT: encoder.py (atomare transmit-API), qso_state.py (Flags raus), main_window.py (OmniCQ-Init + 4 Slots), mw_qso.py (Helper + Listener-Call), mw_cycle.py (on_message_decoded Listener-Pfad), mw_radio.py (3 Stop-Trigger). GELÖSCHT: core/omni_tx.py + 6 alte Test-Files. Tests 1069→1026 grün. APP_VERSION 0.95.25→0.96.0. Field-Test 17-Punkte-Plan V3 §6 ausstehend. Push pending (v0.95.16-0.96.0 + P2-Tool zusammen).
-**Tests:** `./venv/bin/python3 -m pytest tests/ -q` → 1026 passed (Qt-Smoke-Tests via `QT_QPA_PLATFORM=offscreen`)
+**Aktueller Stand:** **v0.96.1 P4.OMNI-NEUBAU V5 Signal-Refactor — Code fertig, Field-Test pending (10.05.2026)** — Worker-Thread-Bug aus v0.96.0 (Pos 2/3/4 in einem Slot) behoben durch Architektur-Wechsel auf signal-getriggertes Modul. `core/omni_cq.py` von 337 Z. Worker auf ~250 Z. signal-basiert (`on_cycle_start(@Slot int, bool)` läuft im GUI-Thread, von `mw_cycle._on_cycle_start` gerufen — analog Normal-CQ seit v0.78). 5-Slot-Pattern Block 1/Block 2 mit Auto-Rollover, Toggle-Start IMMER Block 1 (KISS), Frequenz-Sticky 1× am ersten TX. **2 atomare Commits:** C9 (`0368427`, Code+Tests+1-Zeile-Connect+Plan-Files) + C10 (Doku+APP_VERSION). Tests `test_omni_cq_worker.py` (37) gelöscht — Mock `_block_worker_boundaries` hatte den kritischen Pfad versteckt (Lesson `feedback_test_critical_path_not_mock.md`). NEU `test_omni_cq_signal.py` mit 22 Test-Funktionen → 31 effektive Tests durch parametrize, **KEIN Worker-Mock, KEIN Sleep-Mock, KEIN Boundary-Mock**. **Test-Bilanz: 1026 → 1020 grün** (V3 erwartete ~1010, parametrize +9). **Trigger nach Compact:** „omni v5 field-test" → KI lädt project_p4_omni_neubau.md + V3 §6 17-Punkte-Field-Test-Plan F1-F17. Push pending — v0.95.16-0.96.1 + P2-Tool gesammelt. **Plan-Files:** prompts/p4_omni_neubau_v5_signal_v[1,2,3].md + _r1.md.
+**Tests:** `./venv/bin/python3 -m pytest tests/ -q` → **1020 passed** v0.96.1 (Qt-Smoke-Tests via `QT_QPA_PLATFORM=offscreen`)
 **Vor Commits:** Tests grün + bei nicht-trivialen Änderungen DeepSeek-Review (`pal codereview` model `deepseek-chat`) — bereits durch globale §0 + Projektregeln gefordert.
 
 ⚠️ **DeepSeek-Workflow Stand 2026-04-28:**
 
 **Direkt-API ist jetzt Default-Werkzeug** (nicht mehr `pal chat`-MCP):
-- Helper: `tools/deepseek_review.py` — kein Token-Limit (65K Context)
+- Helper: `tools/deepseek_review.py` — kein Token-Limit (128K Context)
 - Aufruf: `cat prompt.md | ./venv/bin/python3 tools/deepseek_review.py file1.py file2.py`
 - Key in `~/.deepseek_key` (chmod 600, ausserhalb Repo)
 
@@ -235,7 +235,7 @@ direkter Sprung in `/plan`:
    — Symptome präzise beschreiben, Datei:Zeile-Referenzen, Akzeptanzkriterien.
 2. **Rolle frischer KI: Self-Review → V2** (Claude)
    — Was fehlt? Was ist mehrdeutig? Was übersieht V1? Lücken füllen, V2 schreiben.
-3. **V2 an DeepSeek** (`pal chat` model `deepseek-chat`)
+3. **V2 an DeepSeek** (`tools/deepseek_review.py`, model `deepseek-reasoner`)
    — DeepSeek bekommt explizit den Auftrag den Prompt zu kritisieren und
    konkret zu verbessern (nicht das Problem zu lösen).
 4. **DeepSeek-Findings einarbeiten → V3** (Claude)
@@ -330,12 +330,15 @@ core/
   propagation.py      HamQSL + _apply_seasonal_correction(band, condition, utc_hour, month)
                       60m fehlt in XML → Interpolation 40m/80m (day+night getrennt, implementiert)
   ap_lite.py          ⛔ UNGETESTET — Feldtest ausstehend (SCORE_THRESHOLD=0.75)
-  omni_tx.py          ⛔ DEAKTIVIERT — Implementation v0.78 in Vorbereitung.
-                      5-Slot-Pattern Even/Odd-Rotation, Diversity-only Feature
-                      (Mode-gekoppelt). Stop-Reasons: band_change, mode_change,
-                      totmann_expired, manual_halt. Aktivierung via Direkt-
-                      Toggle btn_omni_cq (sichtbar nur in Diversity).
-                      → Vollstaendige Design-Spec: docs/OMNI_TX_DESIGN.md
+  omni_cq.py          OMNI-CQ signal-getriggert (v0.96.1+).
+                      on_cycle_start(@Slot int, bool) im GUI-Thread, von
+                      mw_cycle._on_cycle_start gerufen. 5-Slot Even/Odd
+                      Pattern (TX-TX-RX-RX-RX), Block-Auto-Rollover bei
+                      slot_index 4→0, Toggle-Start IMMER Block 1, Frequenz-
+                      Sticky 1× am ersten TX. Diversity-only, btn_omni_cq
+                      Easter-Egg (Klick auf Version). KEIN Worker-Thread,
+                      keine Sleep-Logik, keine Boundary-Berechnung mehr.
+                      → Spec: memory project_omni_cq_spec.md (verbindlich)
   auto_hunt.py        Auto-Hunt Logik (v0.78: wird Diversity-only Feature
                       analog OMNI — Mode-gekoppelt, btn_auto_hunt nur in
                       Diversity sichtbar; Mode-Wechsel zu Normal stoppt

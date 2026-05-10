@@ -5,6 +5,111 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-10 v0.96.1 — P4.OMNI-NEUBAU V5: Worker-Thread-Bug gefixt durch Signal-Refactor
+
+**Auslöser:** Field-Test 09.05.2026 mit Mike (v0.96.0) zeigte Pattern komplett
+kaputt — Pos 2/3/4 alle in einem Slot statt verteilt über 45 s. Wurzel:
+Worker-Loop in `core/omni_cq.py` rief `_advance_state` direkt nach `emit`,
+nächste Iteration berechnete `_compute_next_boundary` mit `now` der noch
+VOR der gerade verarbeiteten Boundary lag → lieferte dieselbe Boundary →
+`sleep_dur ≤ 0` → emit sofort. Pos 2/3/4 rasten in EINEM Slot durch.
+
+**Lessons-Learned (zentral):** Die 37 Worker-Tests waren grün weil ein
+Helper `_block_worker_boundaries` genau die sleep-Logik überschrieb die
+der Test eigentlich prüfen sollte (Worker schläft 100 s in `stop_event.wait`,
+kritischer Pfad nie getriggert). Tests die den kritischen Pfad wegmocken
+sind keine Tests. Memory: `feedback_test_critical_path_not_mock.md`.
+
+**Architektur-Refactor (V5, Mike-Vorschlag):** kopiere wie Normal-CQ
+funktioniert — nutze `FT8Timer.cycle_start`-Signal das 1× pro 15 s-Slot
+emittet. `OmniCQ.on_cycle_start(@Slot int, bool)` läuft im GUI-Thread.
+Kein Worker-Thread, keine Sleep-Logik, keine Boundary-Berechnung.
+
+**Workflow:** V1 (236 Z.) → V2 (370 Z., 6 Self-Review-Findings + 3
+Mike-Klärungen) → R1 DeepSeek-Reasoner („Spezifikation durchdacht und
+weitgehend widerspruchsfrei", 10 Findings + 3 Klärungs-Stellungnahmen
+alle Variante A KISS) → V3 (476 Z., Compact-fest, 22 Tests T1-T22) →
+Cold-Start-Test (10/10 Code-Pfade verifiziert).
+
+**core/omni_cq.py (337 → ~250 Z., komplett umgeschrieben):**
+- `start()` IMMER Block 1 (R1-bestätigt KISS, AC5). Idempotent.
+- 5-Slot-Pattern (TX-TX-RX-RX-RX). Block 1 Even-First, Block 2 Odd-First.
+  Auto-Rollover bei `_slot_index 4 → 0` (`_advance_state`).
+- `on_cycle_start(cycle_num, is_even)`: Defense-Guard
+  `if not _active or _paused: return`, Pattern-Decision via `_slot_index`,
+  TX (Pos 0/1) → `encoder.transmit(msg, tx_even=..., audio_freq_hz=...)`,
+  RX (Pos 2/3/4) → `slot_action.emit(label, is_tx=False, is_even)`.
+- `pause()` setzt `_paused=True`, `_active` bleibt — Slot-Index friert ein.
+- `resume_after_qso(last_was_even)`: Block-Wahl (Even → Block 2,
+  Odd → Block 1), Pre-Check `if not _paused: return`, ab Pos 0,
+  `_cq_audio_hz` BLEIBT (AC14).
+- Frequenz-Sticky 1× am ersten TX setzen, fest bis `stop()` (AC13).
+- `encoder.transmit` busy (False): kein Counter, kein `slot_action`,
+  `_slot_index` advanced trotzdem (AC10/AC11, KISS).
+- 5 Signals: `omni_started`, `omni_stopped(reason)`,
+  `slot_action(label, is_tx, target_even)`, `cq_freq_changed(int)`,
+  `counter_changed(even, odd)`.
+
+**ui/mw_cycle.py:** 1 Zeile am Ende von `_on_cycle_start` (nach
+`qso_sm.on_cycle_end()`, vor Diversity-Block) — `hasattr`-Guard für
+isolierte Test-Setups.
+
+**Tests:**
+- `tests/test_omni_cq_worker.py` GELÖSCHT (37 Tests obsolet, Worker-Mock
+  versteckte kritischen Pfad).
+- `tests/test_omni_cq_signal.py` NEU — 22 Test-Funktionen T1-T22,
+  durch parametrize 31 effektive Tests. KEIN Worker-Mock, KEIN Sleep-Mock,
+  KEIN Boundary-Mock — Tests rufen `on_cycle_start` direkt auf.
+- `tests/test_omni_cq_integration.py` migriert (`_compute_next_boundary`-
+  Lambda raus, kein Thread mehr).
+
+**Test-Bilanz:** 1026 → 1020 grün (V3 erwartete ~1010, parametrize +9).
+
+**Hardware:** OMNI emittet kein TX direkt — `encoder.transmit()` setzt
+zentral `radio.set_tx_antenna("ANT1")` (`core/encoder.py:363`).
+
+**APP_VERSION:** 0.96.0 → 0.96.1 (Patch-Bump: Bug-Fix Architektur-Refactor).
+
+**2 atomare Commits:**
+- C9: `core/omni_cq.py` Refactor + Tests + 1-Zeile-Connect.
+- C10: APP_VERSION + Doku (HISTORY + HANDOFF beide + CLAUDE beide + Memory).
+
+**Plan-Files:** `prompts/p4_omni_neubau_v5_signal_v[1,2,3].md` + `_r1.md`.
+
+**Field-Test (Mike, V3 §6 17 Punkte F1-F17) + Push pending.**
+
+---
+
+## 2026-05-09 — DeepSeek-R1-Workflow-Optimierung + Tool-Fixes
+
+**Auslöser:** Analyse der DeepSeek-Integration (128K-Upgrade-Session) — zwei
+stille Bugs in den Review-Scripts + veraltete Stellen in Doku gefunden.
+
+**tools/deepseek_review.py:**
+- `temperature: 0.3` entfernt — R1 unterstützt den Parameter nicht, wurde
+  stillschweigend ignoriert.
+- `max_tokens` 8000 → 16000 — R1 verbraucht 4-8K Tokens intern für seine
+  Reasoning-Chain; bei 8000 blieben nur 2-3K für die eigentliche Antwort.
+- Warnschwelle 60K ("65K") → 110K ("128K").
+
+**tools/deepseek_review_high.py:**
+- `temperature: 0.3` entfernt.
+
+**docs/WORKFLOW.md → v1.2:**
+- Context-Limit 65K → 128K (~512KB Code).
+- Ergänzt: R1 hat kein "lost in the middle"-Problem (MoE + MLA Architektur).
+- Neue Guideline: Files >500 Zeilen splitten oder relevante Sektion extrahieren.
+
+**CLAUDE.md:**
+- Z. 238: `pal chat model deepseek-chat` → `tools/deepseek_review.py` (veraltet seit 28.04.).
+- Context-Angabe 65K → 128K.
+- Modul-Tabelle: `omni_tx.py` DEAKTIVIERT → aktueller Stand `omni_cq.py` v0.96.0+.
+
+**TODO.md:**
+- META-Abschnitt: CLAUDE.md + Memory Restrukturierungsplan (Trigger: "claude.md restrukturieren").
+
+---
+
 ## 2026-05-09 v0.96.0 — P4.OMNI-NEUBAU: eigenständiger OMNI-Worker, kein qso_state-Hack mehr
 
 **Architektur-Refactor nach 4 Fehlversuchen v0.95.22-25.** OMNI-CQ ist

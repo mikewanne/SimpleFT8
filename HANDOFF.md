@@ -1,111 +1,79 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-09 spät: P4.OMNI-NEUBAU code-fertig, Field-Test pending
+## Stand 2026-05-10: v0.96.1 P4.OMNI-NEUBAU V5 Signal-Refactor — Code fertig, Field-Test pending
 
-**Aktueller Stand:** v0.96.0, **1026 Tests grün**. Alle 8 atomaren
-Commits gepusht in den lokalen `main`-Branch. **Push (origin) noch
-nicht** — Mike entscheidet nach Field-Test.
+**Trigger nach Compact:** **„omni v5 field-test"** — KI lädt
+`memory/project_p4_omni_neubau.md` (jetzt ✅) und führt Mike durch das
+17-Punkte-Field-Test-Plan V3 §6.
 
-OMNI-CQ wurde nach 4 Fehlversuchen (v0.95.22-25) **als eigenständiges
-Modul** `core/omni_cq.py` neu gebaut — eigener Worker-Thread mit
-absolut-UTC-Slot-Boundaries, kein `qso_state.cq_mode`-Hack. Voller
-Workflow V1 → V2 (20 Lessons) → R1 (DeepSeek-R1 in=57386/out=13346,
-17/20 ✅ + 5 Findings R1-R5) → V3 (961 Z. Compact-fest) → Final-R1
-(„V3 ist implementierungsreif, 0 KP, 4 nicht-blockierende Hinweise
-F-1..F-4") → Cold-Start-Test fand 4 weitere ⛔-Bugs in V3 → V3 §0.5
-NEU mit verifizierter Code-Pfad-Tabelle → Mike-Freigabe → Compact →
-Code → 1026 Tests grün.
+## Was passiert ist (10.05.2026)
 
-## Geänderte Files (15 Code/Test, +1311/-2045 Zeilen)
+1. **C9 Code-Phase:** `core/omni_cq.py` von 337 Z. Worker-Thread auf
+   ~250 Z. signal-getriggert refactored. Worker-Bug aus v0.96.0
+   (Pos 2/3/4 in einem Slot) durch Architektur-Wechsel komplett
+   eliminiert.
+2. **Tests:** `test_omni_cq_worker.py` gelöscht (37 obsolet),
+   `test_omni_cq_signal.py` NEU mit 22 Test-Funktionen → 31 effektive
+   Tests durch parametrize. `test_omni_cq_integration.py` migriert.
+3. **Test-Bilanz:** 1026 → **1020 grün** (V3 erwartete ~1010,
+   parametrize +9).
+4. **APP_VERSION-Bump:** 0.96.0 → 0.96.1.
+5. **2 atomare Commits:**
+   - C9 (`0368427`): Code + Tests + 1-Zeile-Connect mw_cycle + Plan-Files.
+   - C10: Doku (HISTORY+HANDOFF+CLAUDE+Memory) + main.py.
 
-**NEU:**
-- `core/omni_cq.py` (~340 Z.) — `OmniCQ(QObject)` mit Worker-Thread,
-  5-Slot-Pattern, Sticky-Frequenz, Pause/Resume-Lifecycle.
-- `tests/test_omni_cq_worker.py` (37 Tests) — Unit-Tests T1-T20 +
-  Bonus-Tests.
-- `tests/test_omni_cq_integration.py` (14 Tests) — I1-I14 mit
-  `_FakeMW(QSOMixin, CycleMixin)`-Helper (umgeht volles MainWindow-Init).
+## Architektur-Eckdaten V5
 
-**UMGEBAUT:**
-- `core/encoder.py` — `transmit(message, *, tx_even=None,
-  audio_freq_hz=None) -> bool` atomare API. `_pending_tx_message`-Queue
-  + `_tx_worker` Outer-Loop raus (war P2-OMNI-Workaround). P1.9
-  `request_replace` bleibt.
-- `core/qso_state.py` — `_omni_skip_state_change` + `_was_pretriggered`
-  Flags raus. `_send_cq` wieder linear: emit + `_set_state(CQ_CALLING)`.
-- `ui/main_window.py` — OmniCQ-Init mit 4 Signal-Slots,
-  `_on_btn_omni_cq_toggled` Rewrite (kein `qso_sm.start_cq()` mehr,
-  AC12), `_on_omni_stopped` mit R1 R4 Reset, neue Slots
-  `_on_omni_freq_changed` / `_on_omni_counter_changed` /
-  `_on_omni_slot_action`, Easter-Egg + Auto-Hunt-Coupling + Totmann
-  + Statusbar-Ω auf `_omni_cq` migriert. QTimer-Pretrigger raus.
-- `ui/mw_qso.py` — `_pause_omni_if_active` + `_maybe_resume_omni` mit
-  Caller-Queue-Pop (V2-L10), `_on_tx_finished` `_last_qso_tx_even`
-  (V2-L3), `_on_send_message` OMNI-Bypass-Block KOMPLETT raus,
-  `_on_cancel` HALT auf `_omni_cq.stop`.
-- `ui/mw_cycle.py` — Pretrigger-Logik raus, `on_message_decoded`
-  Listener-Pfad NEU (R1 R2!).
-- `ui/mw_radio.py` — 3 Stop-Trigger (`_on_mode_changed` /
-  `_on_band_changed` / `_on_rx_mode_changed`) auf `_omni_cq.stop`.
+```
+FT8Timer.cycle_start (Signal int, bool, 1× pro 15 s)
+        ↓ Qt.QueuedConnection
+mw_cycle._on_cycle_start(cycle_num, is_even)
+        ↓ NACH qso_sm.on_cycle_end():
+self._omni_cq.on_cycle_start(cycle_num, is_even)
+        ↓ Defense-Guard `if not _active or _paused: return`
+        ├── Pos 0/1 (TX) → encoder.transmit(msg, tx_even=..., audio_freq_hz=...)
+        │                  ↓ Encoder-Thread schedulet UTC-Slot selbst
+        │                  → counter_changed.emit + slot_action.emit (TX)
+        └── Pos 2/3/4 (RX) → slot_action.emit (RX, is_tx=False, is_even-Signal)
+        ↓ _slot_index = (slot_index + 1) % 5; bei 0 → Block wechseln
+```
 
-**GELÖSCHT:**
-- `core/omni_tx.py` (~250 Z., obsolet)
-- `tests/test_p1_omni_start.py`, `test_p2_omni_redesign.py`,
-  `test_p2_omni_pattern_fix.py`, `test_p3_omni_pattern_fix2.py`,
-  `test_omni_tx.py`, `test_encoder_queue.py` (~87 Tests).
-- `test_modules.py` + `test_patterns.py`: 7 Direkt-OmniTX-Tests raus.
+**Pattern verbindlich:**
+- Block 1 Even-First: TX-E, TX-O, RX-E, RX-O, RX-E
+- Block 2 Odd-First:  TX-O, TX-E, RX-O, RX-E, RX-O
+- Toggle-Start IMMER Block 1 (KISS, R1-bestätigt)
+- QSO-Resume: endet Even → Block 2, endet Odd → Block 1
+- Frequenz 1× am ersten TX setzen, fest bis stop()
 
-## 8 atomare Commits
+## Field-Test V3 §6 (Mike, Push-Voraussetzung) — 17 Punkte F1-F17
 
-| C# | Hash | Inhalt |
-|---|---|---|
-| C1 | `b813c53` | Migration alte OMNI-Tests RAUS (-87 Tests) |
-| C2 | `678fc44` | NEU `core/omni_cq.py` + 37 Worker-Tests |
-| C3 | `1d76457` | `encoder.transmit` atomare API + Queue raus |
-| C4 | `037806c` | Rückbau `core/qso_state.py` |
-| C5 | `b58c5df` | Rückbau `ui/mw_cycle.py` (Pretrigger raus) |
-| C6 | `aa622b8` | Anschluss main_window + mw_qso + Listener + 14 Integration-Tests |
-| C7 | `19cbada` | Stop-Trigger `mw_radio.py` |
-| C8 | (dieser) | Löschen `core/omni_tx.py` + APP_VERSION 0.96.0 + Doku |
+**Was zu beweisen ist:**
+- 10-Slot-Loop ohne Drift, sichtbar in qso_panel
+- Block 1 EXAKT TX-E, TX-O, RX-E, RX-O, RX-E (5 Slots)
+- Block 2 EXAKT TX-O, TX-E, RX-O, RX-E, RX-O (5 Slots, Auto-Rollover)
+- CQ-Antwort mid-OMNI: pause + QSO + RR73 + Resume mit Block-Wahl
+  (Even → Block 2, Odd → Block 1)
+- Caller-Queue mit OMNI-pausiert (next QSO direkt, OMNI bleibt paused
+  bis Queue leer)
+- Alle 7 Stop-Reasons sauber: `manual_halt`, `band_change`,
+  `mode_change`, `rx_mode_change`, `totmann_expired`, `superseded`
+  (Auto-Hunt-Toggle), `easter_egg_off`
+- Auto-Hunt-Coupling in beide Richtungen
+- RX-Slot „Horche..." sichtbar im qso_panel mit echter UTC-Slot-Parität
+- Nur 1× pro Run `cq_freq_changed`-Signal (Sticky)
 
-Test-Bilanz: **1069 → 1026 grün** (-43 netto). Alle Tests nach JEDEM
-Commit grün.
+**Hardware-Garantie ANT1:** OMNI emittet kein TX direkt —
+`encoder.transmit()` setzt zentral `radio.set_tx_antenna("ANT1")`
+(`core/encoder.py:363`). Kein Extra-Check nötig.
 
-## Field-Test-Pflicht (Mike, vor Push, V3 §6 17 Punkte)
+## Memory-Verweise
 
-**Vorbedingungen:**
-- App auf Stand v0.96.0 (`./venv/bin/python3 main.py` — APP_VERSION
-  zeigt 0.96.0).
-- Diversity-Modus aktiv (Vorbedingung für btn_omni_cq Sichtbarkeit).
-- ANT1 als TX-Antenne verifiziert (HW-Garantie zentral via
-  `encoder.transmit`).
-- 40m oder 20m FT8.
-
-**Punkte F1-F17:**
-1. F1: btn_omni_cq → Statusbar zeigt „Ω Even=0 Odd=0" + Label „OMNI CQ (aktiv)".
-2. F2: 10-Slot-Loop, KEIN Pattern-Drift gegenüber v0.95.25 (4 TX, 6 RX).
-3. F3: Block 1 EXAKT: TX [E], TX [O], RX [E], RX [O], RX [E].
-4. F4: Block 2 EXAKT: TX [O], TX [E], RX [O], RX [E], RX [O].
-5. F5: CQ-Antwort mid-OMNI: OMNI pausiert + QSO + RR73 mit korrekter Slot-Parität.
-6. F6: QSO endet auf Even → Resume mit Block 2 (TX-O zuerst).
-7. F7: QSO endet auf Odd → Resume mit Block 1 (TX-E zuerst).
-8. F8: btn_omni_cq erneut → Stop, Ω verschwindet, reason `manual_halt` im Log.
-9. F9: Bandwechsel mid-OMNI → Stop reason `band_change` (laufender TX läuft Slot zu Ende).
-10. F10: Mode Diversity → Normal → Stop reason `rx_mode_change`.
-11. F11: 15 min ohne Eingabe + ohne QSO → Stop reason `totmann_expired`.
-12. F12: 4 Blöcke Wartezeit → Log-Eintrag „Sticky" oder „Switch" mit Hz-Werten.
-13. F13: RX-Slots im QSO-Panel als „Horche..." sichtbar (Format `HH:MM:SS [E/O] ←  Horche  …`).
-14. F14: btn_auto_hunt klicken während OMNI aktiv → OMNI stoppt mit `superseded`.
-15. F15: btn_omni_cq klicken während Auto-Hunt aktiv → Auto-Hunt stoppt.
-16. F16: 2 Antworten in 1 RX-Slot — erste startet QSO, zweite ignoriert.
-17. F17: Caller-Queue: während QSO läuft 2. Anrufer kommt → nach QSO direkt 2. QSO, OMNI bleibt pausiert.
-
-## Push-Status
-
-**KEIN Push** seit v0.95.16. Lokal sind v0.95.16-0.96.0 + P2-Tool
-(`tools/adif_archive.py`) gesammelt. Nach Field-Test entscheidet Mike
-ob alle zusammen gepusht werden oder ob v0.95.22-25 (alle OMNI-Versuche)
-via interactive rebase / squash aus der History geräumt werden.
+- `project_p4_omni_neubau.md` — V5 ✅ Code fertig, Field-Test pending
+- `project_omni_cq_spec.md` — Mike-Spec (verbindlich)
+- `feedback_omni_separate_architecture.md` — 3-Schichten-Architektur
+- `feedback_test_critical_path_not_mock.md` — Lesson aus v0.96.0-Bug
+- `feedback_compact_save_cold_start_test.md` — Cold-Start-Test-Pflicht
+- `feedback_workflow_no_exceptions.md` — Workflow-Pflicht
 
 ## App-Start
 
@@ -120,25 +88,9 @@ cd "/Users/mikehammerer/Documents/KI N8N Projekte/FT8/SimpleFT8"
 ## Tests
 
 `QT_QPA_PLATFORM=offscreen ./venv/bin/python3 -m pytest tests/ -q`
-→ **1026 grün** Stand v0.96.0.
+→ **1020 grün** Stand v0.96.1.
 
-## Plan-Files (P4.OMNI-NEUBAU)
+## Push-Status
 
-- `prompts/p4_omni_neubau_v1.md` — V1 (~350 Z.)
-- `prompts/p4_omni_neubau_v2.md` — V2 mit 20 Lessons L1-L20
-- `prompts/p4_omni_neubau_r1_prompt.md` + `_r1.md` — R1-Review
-- `prompts/p4_omni_neubau_v3.md` — **Compact-fester Plan** (961 Z.,
-  einzige Wahrheit für Code-Phase, jetzt umgesetzt)
-- `prompts/p4_omni_neubau_final_r1_prompt.md` + `_final_r1.md` —
-  Final-R1 („implementierungsreif, 0 KP")
-- `prompts/p4_omni_neubau_code_excerpts.md` — Code-Excerpts für R1
-  (~120 KB, gekürzte Vollfiles)
-
-## Memory-Verweise
-
-Bei nächster Session relevant:
-- `project_p4_omni_neubau.md` (Status: ✅ Code fertig, Field-Test pending)
-- `project_omni_cq_spec.md` (Mike-Spec, verbindlich)
-- `feedback_omni_separate_architecture.md` (Architektur-Vision)
-- `feedback_compact_save_cold_start_test.md` (Lesson aus diesem Refactor)
-- `feedback_workflow_no_exceptions.md` (Workflow-Pflicht)
+KEIN Push (origin) seit v0.95.16. Lokal sind v0.95.16-0.96.1 + P2-Tool
+gesammelt. Push erst nach Field-Test V5 positiv.
