@@ -163,6 +163,29 @@ Fallback `time.strftime("%H%M%S", time.gmtime())`. Wenn der Decoder
 
 ---
 
+## 📋 P19.DX-CACHE-IGNORIERT-BEI-MODE-WECHSEL (Field-Test 10.05. Mike)
+
+**Symptom:** NORMAL → DIVERSITY DX wechseln macht **komplette Neu-
+kalibrierung** obwohl gueltiger Cache da sein sollte (Cache 2h gueltig
+laut CLAUDE.md, Mike erinnert sich an 6h).
+
+**Soll:** Cache pruefen → wenn vorhanden + nicht stale → laden + Kali-
+brierung ueberspringen. Erst wenn stale → neu kalibrieren.
+
+**Mike-Zitat:** „die ja speichern soll und die dann 6 stunden oder so
+gueltig ist er juenger wird die geladen und kalibrirung uebersprungen"
+
+**Files (vermutet):**
+- `ui/mw_radio.py` Mode-Switch zu DIVERSITY DX
+- `core/diversity.py` oder `core/preset_store.py` Cache-Lade-Logik
+- ggf. zusammen mit P17 (auch Diversity-DX-Init-Issue)
+
+**Aufwand:** ~1-2h Diagnose + Fix. Vermutlich ueberlappt mit P17.
+
+**Schweregrad:** Hoch — verhindert produktiven Wechsel zu DX.
+
+---
+
 ## 📋 P17.DIVERSITY-DX-START-INIT-BUG (Field-Test 10.05. Mike, BLOCKIEREND)
 
 **Symptom:** Bei App-Start direkt in **DIVERSITY DX**-Modus haengt Mess
