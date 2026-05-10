@@ -203,6 +203,45 @@ sind (z.B. `[Diversity] 48 St. | A1>A2: 0` ohne Antenne/Uhrzeit).
 
 ---
 
+## 📋 P22.PRESET-ATOMARITAET (Mike-Analyse 10.05. nach P17/P19-Resolve)
+
+**Mike-Analyse 14:35:** „wenn eine von beiden eintraegen verstaerkung
+und/oder diversity fehlt oder fehlerhaft ist und nur einer geladen
+werden kann kommt es vermutlich zu den fehler weil die app entweder
+beide oder keinen wert erwartet"
+
+**Architektur-Schwaeche:** `presets_dx.json` / `presets_standard.json`
+speichert `gain_timestamp` und `ratio_timestamp` separat. Wenn Phase 1
+(Verstaerker) erfolgreich aber Phase 2 (Antennenvergleich) haengt,
+verbleibt Half-State (gain fresh, ratio stale). Bei jedem Restart wird
+Phase 2 wieder versucht → wenn die Wurzel-Bedingung nicht weg ist
+(z.B. Race), Endlos-Schleife.
+
+**Loesungs-Optionen:**
+
+1. **Atomares Speichern:** beide Felder zusammen oder gar nicht.
+   Phase 1 schreibt nichts in File bis Phase 2 fertig ist (gespeichert
+   im Memory). Wenn Phase 2 hängt → kein Disk-Write → Restart fängt
+   sauber wieder vorne an.
+
+2. **Robustheit-Fallback:** wenn Phase 2 nach N Versuchen (oder Timeout
+   90s) fehlschlaegt → Default-Ratio 50:50 mit aktuellem
+   ratio_timestamp speichern. App nicht in Endlos-Schleife stecken.
+
+3. **Beides:** atomares Speichern PLUS Fallback bei Phase-2-Fehlschlag.
+
+**Files:**
+- `core/preset_store.py` `update_gain` + `update_ratio`
+- `ui/mw_radio.py` `_check_diversity_preset` Half-State-Logik
+- `ui/mw_cycle.py` Phase-3-Erfolgs-Pfad
+
+**Aufwand:** ~2-3h V1→V2→R1→V3+Code.
+
+**Schweregrad:** Hoch (latenter Bug, kann jederzeit wieder auftreten
+wenn Phase 2 mal wieder haengt).
+
+---
+
 ## ✅ P17 + P19 RESOLVED (10.05.2026 ~14:30 Field-Test Mike)
 
 **Aufloesung:** P17 (DX-Init-Hang) und P19 (DX-Cache-Ignoriert) waren
