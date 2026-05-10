@@ -75,15 +75,6 @@ class Encoder(QObject):
         self._audio_started = False
         self._replace_message: str | None = None
         self._replace_lock = threading.Lock()
-        # P5.OMNI-PATTERN-FIX-3 (v0.96.2): Pending-TX-Queue fuer OMNI-konsekutive
-        # TX-Slots. Wenn transmit() bei laufendem TX gerufen wird (Pos 1 nach Pos 0
-        # bei FT8 immer der Fall — Audio-Drain 12.8-14.5s, Pos 1 bei :45 hat oft
-        # < 1s Race-Window), wird der naechste Job gequeueet statt return False.
-        # Worker-Finally konsumiert Pending direkt → naechster TX startet ohne
-        # neuen Thread-Schwung.
-        # Beide Felder UNTER _replace_lock geschuetzt (R1-KRITISCH gegen Race).
-        self._pending_tx: tuple[str, bool | None, int | None] | None = None
-        self._pending_queued_at: float = 0.0
 
     def set_protocol(self, mode: str):
         """Protokoll wechseln."""
@@ -190,22 +181,9 @@ class Encoder(QObject):
         """FT8-Nachricht encoden und zum naechsten Zyklusbeginn senden.
 
         Atomare API (P4.OMNI-NEUBAU C3): tx_even und audio_freq_hz werden
-        UNTER Lock gesetzt, dann startet der Worker. Verhindert Race wenn
-        zwei Aufrufer parallel transmit() rufen oder Setter und Start
-        nicht atomar koppeln (Encoder-Worker liest tx_even in
-        _next_slot_boundary).
+        UNTER Lock gesetzt, dann startet der Worker.
 
-        Returns True wenn Worker gestartet ODER Pending gequeueet wurde
-        (P5.OMNI-PATTERN-FIX-3: Pending-Konsum im Worker-Finally bedient
-        den naechsten Slot-TX). Bestehende Aufrufer ohne kwargs
-        (mw_qso._on_send_message) ignorieren das Return — Verhalten
-        kompatibel.
-
-        Pending-Verhalten (v0.96.2):
-        - Aufruf bei laufendem TX → Pending-Queue (statt return False)
-        - Worker-finally checkt Pending → konsumiert wenn Ziel-Slot noch
-          erreichbar (target_slot - queued_at < 1.5 * cycle_duration)
-        - Sonst Pending-Verfall mit Log-Warning
+        Returns True wenn Worker gestartet, False wenn TX bereits laeuft.
         """
         # v0.80 Race-Fix (R1-Final-Review): alten TX-Thread sauber beenden,
         # bevor neuer startet. Sonst kann das finally des alten Threads
@@ -217,12 +195,7 @@ class Encoder(QObject):
             self._tx_thread.join(timeout=0.5)
         with self._replace_lock:
             if self._is_transmitting:
-                # P5.OMNI-PATTERN-FIX-3: statt return False → Pending queuen.
-                # Wenn bereits Pending vorhanden, ueberschreiben (letzter
-                # Aufrufer gewinnt — analog tx_even-Setter "letzter setzt").
-                self._pending_tx = (message, tx_even, audio_freq_hz)
-                self._pending_queued_at = time.time()
-                return True
+                return False
             if tx_even is not None:
                 self.tx_even = tx_even
             if audio_freq_hz is not None:
@@ -234,224 +207,11 @@ class Encoder(QObject):
         return True
 
     def _tx_worker(self, message: str):
-        """TX-Worker: Single-Pass + Pending-Konsum-Loop.
+        """TX-Worker: Single-Pass.
 
-        P5.OMNI-PATTERN-FIX-3 (v0.96.2): nach Single-Pass wird die
-        Pending-Queue konsumiert. Wenn `transmit()` waehrend des Workers
-        ein Pending gesetzt hat, wird es hier direkt re-getriggert (kein
-        neuer Thread). Verfall wenn Ziel-Slot > 1.5 * cycle_duration in
-        der Vergangenheit.
-
-        Abort-Schutz (F1-KRITISCH): vor Re-Trigger Pruefung
-        `_abort_event.is_set()` — sonst wuerde `_run_one_tx_pass` den
-        abort cleared (clear() + _is_transmitting=True) und damit
-        abort() ueberschreiben.
-        """
-        # Ausgelagerte Single-Pass-Logik
-        self._run_one_tx_pass(message)
-
-        # P5.OMNI-PATTERN-FIX-3: Pending-Konsum-Loop
-        # Eigene Iteration statt Rekursion → Stack-sicher bei mehreren
-        # konsekutiven Pendings (theoretisch nur 1 erwartet, aber sicher).
-        while True:
-            with self._replace_lock:
-                pending = self._pending_tx
-                queued_at = self._pending_queued_at
-                self._pending_tx = None
-                self._pending_queued_at = 0.0
-            if pending is None:
-                return
-            # F1-KRITISCH-Fix: abort-Check VOR Re-Trigger.
-            # _run_one_tx_pass cleart _abort_event und setzt
-            # _is_transmitting=True — wuerde abort() ueberschreiben.
-            # Wenn abort() zwischen Pass-1 und Pending-Konsum gefeuert hat,
-            # MUESSEN wir hier rausspringen ohne Re-Trigger.
-            if self._abort_event.is_set():
-                print("[Encoder] Pending verworfen (abort waehrend Loop)")
-                return
-            msg, p_tx_even, p_audio_hz = pending
-            # Verfall-Schwelle: ist Ziel-Slot noch erreichbar?
-            # _SLOT in Sekunden. Bei FT8 = 15s, Schwelle = 22.5s.
-            _SLOT = {"FT8": 15.0, "FT4": 7.5, "FT2": 3.8}.get(self._mode, 15.0)
-            target_slot = self._compute_target_slot(p_tx_even, _SLOT)
-            if target_slot - queued_at > _SLOT * 1.5:
-                print(f"[Encoder] Pending TX verfallen "
-                      f"(target={target_slot:.1f}, queued_at={queued_at:.1f}, "
-                      f"diff={target_slot - queued_at:.1f}s > {_SLOT * 1.5:.1f}s)")
-                return
-            # Re-Trigger: Setter unter Lock, dann _run_one_tx_pass
-            with self._replace_lock:
-                if p_tx_even is not None:
-                    self.tx_even = p_tx_even
-                if p_audio_hz is not None:
-                    self.audio_freq_hz = p_audio_hz
-            self._run_one_tx_pass(msg)
-            # Loop pruft erneut auf Pending (sehr seltener Fall — z.B.
-            # 3+ konsekutive transmit-Aufrufe waehrend Worker laeuft).
-
-    def transmit_pair(self, msg0: str, msg1: str, *,
-                      tx_even_0: bool, tx_even_1: bool,
-                      audio_freq_hz: int) -> bool:
-        """OMNI-DOUBLE-AUDIO (P6, v0.96.3): 2 TX in EINEM PTT-Cycle.
-
-        Mike-Vorschlag 10.05.2026: statt 2x transmit() (PTT-Off + PTT-On +
-        Buffer-Drain Theater zwischen Slots → Pos 1 verfaellt physisch),
-        einfach EIN Audio-Block bauen mit:
-
-            [Audio-0 (12.64s)] [Stille (~3.8s)] [Audio-1 (12.64s)]
-
-        PTT bleibt durchgehend AN. Hardware-schonender, robuster, einfacher.
-        Kein Encoder-Race, kein Drift-Guard-Konflikt fuer Pos 1.
-
-        Returns True wenn Worker gestartet, False wenn busy oder
-        Encoding-Fehler.
-        """
-        if (self._tx_thread is not None
-                and self._tx_thread.is_alive()
-                and threading.current_thread() is not self._tx_thread):
-            self._tx_thread.join(timeout=0.5)
-        with self._replace_lock:
-            if self._is_transmitting:
-                return False
-            self.audio_freq_hz = audio_freq_hz
-            self.tx_even = tx_even_0
-        self._tx_thread = threading.Thread(
-            target=self._tx_pair_worker,
-            args=(msg0, msg1, tx_even_0, tx_even_1),
-            daemon=True,
-        )
-        self._tx_thread.start()
-        return True
-
-    def _tx_pair_worker(self, msg0: str, msg1: str,
-                        tx_even_0: bool, tx_even_1: bool) -> None:
-        """Pair-TX-Worker: Setup + Lifecycle + Cleanup."""
-        self._is_transmitting = True
-        self._abort_event.clear()
-        self._audio_started = False
-        try:
-            self._tx_pair_inner(msg0, msg1, tx_even_0, tx_even_1)
-        finally:
-            self._is_transmitting = False
-            self._audio_started = False
-
-    def _tx_pair_inner(self, msg0: str, msg1: str,
-                       tx_even_0: bool, tx_even_1: bool) -> None:
-        """Eigentliche Pair-Logik: encode + concat + send."""
-        _SLOT = {"FT8": 15.0, "FT4": 7.5, "FT2": 3.8}.get(self._mode, 15.0)
-
-        # 1. Beide Audios encoden VORAB (Encoding-Fehler -> abort).
-        audio_0 = self.encode_message(msg0)
-        if audio_0 is None:
-            print(f"[Encoder-Pair] Encoding msg0 fehlgeschlagen: '{msg0}'")
-            self.tx_finished.emit()
-            return
-        audio_1 = self.encode_message(msg1)
-        if audio_1 is None:
-            print(f"[Encoder-Pair] Encoding msg1 fehlgeschlagen: '{msg1}'")
-            self.tx_finished.emit()
-            return
-        # Trim trailing silence (analog single-pass)
-        if len(audio_0) > TRIM_SAMPLES:
-            audio_0 = audio_0[:-TRIM_SAMPLES]
-        if len(audio_1) > TRIM_SAMPLES:
-            audio_1 = audio_1[:-TRIM_SAMPLES]
-
-        # 2. Slot-Boundaries: boundary_0 = naechster passender, boundary_1 = +1 Slot
-        boundary_0 = self._next_slot_boundary()
-        boundary_1 = boundary_0 + _SLOT
-
-        # 3. Sleep bis kurz vor boundary_0 (analog single-pass)
-        sleep_dur = (boundary_0 + TARGET_TX_OFFSET - 0.5) - time.time()
-        if sleep_dur > 0.001:
-            aborted = self._abort_event.wait(timeout=sleep_dur)
-            if aborted:
-                print("[Encoder-Pair] abgebrochen vor TX")
-                self.tx_finished.emit()
-                return
-
-        if not self._is_transmitting:
-            print("[Encoder-Pair] abgebrochen (vor Sleep-Ende)")
-            self.tx_finished.emit()
-            return
-
-        # 4. Silence-Padding pre-audio_0 berechnen
-        now = time.time()
-        silence_pre_secs = max(0.0, (boundary_0 + TARGET_TX_OFFSET) - now)
-        if silence_pre_secs < 0.1:
-            overshoot = now - (boundary_0 + TARGET_TX_OFFSET)
-            if overshoot > 0.3:
-                # Drift zu hoch -> Pair komplett abbrechen (kein Half-Pair).
-                # OMNI's _do_tx_slot kann beim naechsten Block neu starten.
-                print(f"[Encoder-Pair] Drift overshoot={overshoot:.2f}s -> ABORT pair")
-                self.tx_finished.emit()
-                return
-            silence_pre_secs = 0.0
-
-        # 5. Mittel-Stille: audio_0 endet bei boundary_0 + audio_0_dur,
-        # audio_1 muss bei boundary_1 - 0.8 = boundary_0 + _SLOT - 0.8 starten.
-        # silence_mid = (boundary_1 - 0.8) - (boundary_0 - 0.8 + audio_0_dur)
-        #             = _SLOT - audio_0_dur
-        audio_0_dur = len(audio_0) / SAMPLE_RATE_FT8
-        silence_mid_secs = max(0.0, _SLOT - audio_0_dur)
-
-        silence_pre_samples = int(silence_pre_secs * SAMPLE_RATE_FT8)
-        silence_mid_samples = int(silence_mid_secs * SAMPLE_RATE_FT8)
-
-        # 6. Audio-Block zusammenbauen
-        audio_full = np.concatenate([
-            np.zeros(silence_pre_samples, dtype=np.int16),
-            audio_0,
-            np.zeros(silence_mid_samples, dtype=np.int16),
-            audio_1,
-        ])
-
-        total_dur = len(audio_full) / SAMPLE_RATE_FT8
-        utc = time.strftime("%H:%M:%S", time.gmtime(time.time()))
-        print(f"[TX-PAIR] {utc} Freq={self.audio_freq_hz}Hz "
-              f"msg0='{msg0}' msg1='{msg1}' | "
-              f"silence_pre={silence_pre_secs:.2f}s audio0={audio_0_dur:.2f}s "
-              f"silence_mid={silence_mid_secs:.2f}s audio1={len(audio_1)/SAMPLE_RATE_FT8:.2f}s "
-              f"total={total_dur:.2f}s")
-
-        # 7. PTT an (durchgehend fuer beide Sendungen)
-        if self._radio:
-            self._radio.set_tx_antenna("ANT1")
-            self._radio.ptt_on()
-
-        with self._replace_lock:
-            self._audio_started = True
-
-        # 8. tx_started fuer msg0
-        self.tx_started.emit(msg0, tx_even_0, boundary_0)
-
-        # 9. Mid-Stream Timer: nach _SLOT Sekunden tx_started fuer msg1.
-        # Daemon-Thread, cancelable bei Abort.
-        def _emit_pos1():
-            if self._is_transmitting:  # nur emit wenn Pair noch laeuft
-                self.tx_started.emit(msg1, tx_even_1, boundary_1)
-        pos1_timer = threading.Timer(_SLOT, _emit_pos1)
-        pos1_timer.daemon = True
-        pos1_timer.start()
-
-        # 10. Audio senden (blocking ~27.6s bei FT8)
-        if self._radio:
-            self._radio.send_audio(audio_full, sample_rate=SAMPLE_RATE_FT8)
-
-        # 11. PTT aus
-        if self._radio:
-            self._radio.ptt_off()
-
-        # Timer cancel falls Pair vorzeitig endete (selten)
-        pos1_timer.cancel()
-        self.tx_finished.emit()
-
-    def _run_one_tx_pass(self, message: str) -> None:
-        """Single-Pass TX (vorher inline in _tx_worker).
-
-        P5.OMNI-PATTERN-FIX-3: ausgelagert damit Pending-Konsum im
-        _tx_worker-Loop denselben Pfad nutzt. Verhalten 1:1 wie alter
-        _tx_worker (Z. 222-233 vor v0.96.2).
+        Pre-P5/P6-Stand (P7.OMNI-SIMPLIFY v0.96.4): kein Pending-Loop,
+        kein Pair. OMNI nutzt jetzt single-slot CQ + Such-Counter-
+        Wechsel (siehe core/omni_cq.py).
         """
         self._is_transmitting = True
         # v0.80 Fix A2: Event vor jedem TX zuruecksetzen.
@@ -465,30 +225,6 @@ class Encoder(QObject):
         finally:
             self._is_transmitting = False
             self._audio_started = False
-
-    def _compute_target_slot(self, tx_even: bool | None, slot_dur: float) -> float:
-        """Naechster passender Slot-Start als Wall-Time.
-
-        P5.OMNI-PATTERN-FIX-3: spiegelt _next_slot_boundary, aber slot_dur
-        extern uebergeben (Pending-Konsum-Loop muss _SLOT lokal kennen).
-        Liefert immer einen Slot-Start in der Zukunft (oder current Slot
-        wenn cycle_pos < 0.5s). Bei tx_even=None: naechster beliebiger Slot.
-        """
-        now = time.time()
-        cycle_num = int(now / slot_dur)
-        cycle_pos = now % slot_dur
-        is_even = (cycle_num % 2 == 0)
-        if tx_even is None:
-            if cycle_pos < 0.5:
-                return float(cycle_num * slot_dur)
-            return float((cycle_num + 1) * slot_dur)
-        if is_even == tx_even and cycle_pos < 0.5:
-            return float(cycle_num * slot_dur)
-        next_num = cycle_num + 1
-        next_boundary = float(next_num * slot_dur)
-        if (next_num % 2 == 0) != tx_even:
-            next_boundary += slot_dur
-        return next_boundary
 
     def _next_slot_boundary(self) -> float:
         """Naechste passende Slot-Grenze als Unix-Timestamp.
