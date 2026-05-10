@@ -159,11 +159,11 @@ class CycleMixin:
             else:
                 if self._diversity_ctrl.tick_slot():
                     self._diversity_ctrl.update_proposed_freq(qso_active=False)
-                    # P7.OMNI-SIMPLIFY: OMNI-Counter ueber Such-Trigger
-                    # inkrementieren. Bei _OMNI_FLIP_AFTER_SEARCHES (=10)
-                    # Triggern -> flip_tx_parity (alle ~10 Min Wechsel).
-                    if hasattr(self, '_omni_cq'):
-                        self._omni_cq.on_search_trigger()
+                    # P23: OMNI-Counter ist jetzt OMNI-eigen — kein Such-
+                    # Trigger-Coupling mehr (vor v0.96.7). Auto-Flip passiert
+                    # in core/omni_cq.py:on_cycle_start wenn remaining 0
+                    # erreicht. Reset bei Mess-Ende ueber
+                    # reset_counter_after_measure (siehe _handle_diversity_measure).
         self.control_panel.update_freq_histogram(
             self._diversity_ctrl.get_histogram_data())
 
@@ -319,6 +319,12 @@ class CycleMixin:
                 # P22 / P8: Mess-Modal automatisch schliessen
                 if hasattr(self, '_close_mess_status_dialog'):
                     self._close_mess_status_dialog()
+                # P23: nach Antennen-Mess Counter im OMNI auf TARGET resetten
+                # (Mike-Spec "neuer Slot, neuer Anfang"). No-op wenn OMNI
+                # nicht aktiv oder pausiert (resume_after_qso macht reset selbst).
+                omni = getattr(self, '_omni_cq', None)
+                if omni is not None:
+                    omni.reset_counter_after_measure()
         elif self._diversity_ctrl.phase == "measure":
             self._diversity_in_operate = False
 
