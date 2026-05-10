@@ -203,7 +203,30 @@ sind (z.B. `[Diversity] 48 St. | A1>A2: 0` ohne Antenne/Uhrzeit).
 
 ---
 
-## 📋 P19.DX-CACHE-IGNORIERT-BEI-MODE-WECHSEL (Field-Test 10.05. Mike)
+## ✅ P17 + P19 RESOLVED (10.05.2026 ~14:30 Field-Test Mike)
+
+**Aufloesung:** P17 (DX-Init-Hang) und P19 (DX-Cache-Ignoriert) waren
+beide Folge davon dass Phase 2 (Antennenvergleichs-Mess) NIE sauber
+abgeschlossen hat fuer DX-Mode → ratio_timestamp blieb auf Default
+50:50, beim Restart triggert App immer wieder Phase 2-Versuch.
+
+**Auflöser:** Heute lief Phase 2 erstmals erfolgreich durch (ratio=30:70,
+dominant=A2 in presets_dx.json gespeichert mit aktuellem
+ratio_timestamp).
+
+**Test-Bestätigung Mike 14:30:**
+- App-Restart in Normal ✓
+- Wechsel zu DX → alles wie es sein soll ✓
+- Wechsel zu Normal → alles gut ✓
+- Wechsel zu Diversity Standard → beide Antennen aktiv ✓
+
+**Offen:** WARUM Phase 2 vorher nicht durchlief. Vermutung: zu frueher
+Mode-Wechsel oder Race bei Antennen-Switch. Wenn Bug nochmal auftritt
+→ Re-Diagnose.
+
+---
+
+## 📋 P19.DX-CACHE-IGNORIERT-BEI-MODE-WECHSEL (Field-Test 10.05. Mike) [RESOLVED]
 
 **Symptom:** NORMAL → DIVERSITY DX wechseln macht **komplette Neu-
 kalibrierung** obwohl gueltiger Cache da sein sollte (Cache 2h gueltig
