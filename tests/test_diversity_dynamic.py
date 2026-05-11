@@ -37,10 +37,32 @@ def test_activate_sets_active(ctrl_pair):
     assert static.dynamic_active is True
 
 
-def test_activate_resets_ratio(ctrl_pair):
+def test_activate_keeps_cache_ratio(ctrl_pair):
+    """P35-AK5: Ratio != 50:50 (Cache-Reuse) bleibt nach activate erhalten."""
     static, dynamic = ctrl_pair
     static.ratio = "70:30"
     static.dominant = "A1"
+    dynamic.activate()
+    # P35-Aenderung: bestehendes Ratio bleibt (vorher P34: 50:50-Reset)
+    assert static.ratio == "70:30"
+    assert static.dominant == "A1"
+
+
+def test_activate_resets_5050_ratio(ctrl_pair):
+    """P35-AK5: Ratio=50:50 (kein Cache) bleibt 50:50 nach activate."""
+    static, dynamic = ctrl_pair
+    static.ratio = "50:50"
+    static.dominant = None
+    dynamic.activate()
+    assert static.ratio == "50:50"
+    assert static.dominant is None
+
+
+def test_activate_with_none_ratio_becomes_5050(ctrl_pair):
+    """P35-AK5: Ratio=None wird auf 50:50 gesetzt (defensive)."""
+    static, dynamic = ctrl_pair
+    static.ratio = None
+    static.dominant = None
     dynamic.activate()
     assert static.ratio == "50:50"
     assert static.dominant is None

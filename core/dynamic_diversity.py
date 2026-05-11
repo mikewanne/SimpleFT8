@@ -72,11 +72,19 @@ class DynamicDiversityController(QObject):
         return self._active
 
     def activate(self) -> None:
-        """Toggle AUS→AN: 50:50-Reset, Buffer leer, ggf. Statik-Mess abbrechen.
+        """Toggle AUS→AN: Buffer leer, ggf. Statik-Mess abbrechen.
 
         AK4: Falls Statik gerade in Phase=measure laeuft, wird sie sofort
         abgebrochen (Phase→operate, _last_measured_at refresh). Mike-Field-
         Erwartung: sofortige Reaktion auf Toggle, keine 60s Wartezeit.
+
+        **P35-AK5 (R1-Q4 KRITISCH):** Ratio wird NUR auf 50:50 zurueckgesetzt
+        wenn aktuell auch 50:50 (oder None). Ein Cache-Reuse-Ratio
+        (70:30/30:70) bleibt erhalten — Dynamic startet damit, fuellt
+        Buffer leer, und ueberschreibt erst nach 5+5 Slots wenn evaluate
+        eine andere Entscheidung trifft. Mike-Use-Case: Diversity DX mit
+        Cache 70:30 -> Toggle AN soll 70:30 behalten, nicht auf 50:50
+        zurueckwerfen.
 
         Hinweis: GUI-Lock-Aufhebung (_set_cq_locked etc) macht der Toggle-
         Handler im main_window — dieser Controller weiss nichts vom GUI.
@@ -93,11 +101,18 @@ class DynamicDiversityController(QObject):
                 logger.info("[Dynamic] Statik-Mess-Phase abgebrochen "
                             "(Toggle AN waehrend measure)")
                 debug_log("DYNAMIC", "Statik-Mess-Phase abgebrochen")
-            # 50:50-Reset
-            self._diversity_ctrl.ratio = "50:50"
-            self._diversity_ctrl.dominant = None
-        logger.info("[Dynamic] Aktiviert (Buffer leer, Ratio 50:50)")
-        debug_log("DYNAMIC", "activate -> Buffer leer, Ratio 50:50")
+            # P35-AK5: Ratio nur resetten wenn 50:50 (oder None).
+            # Cache-Reuse-Ratio (70:30/30:70) bleibt erhalten.
+            current_ratio = self._diversity_ctrl.ratio
+            if current_ratio in (None, "50:50"):
+                self._diversity_ctrl.ratio = "50:50"
+                self._diversity_ctrl.dominant = None
+                debug_log("DYNAMIC", "activate -> Buffer leer, Ratio 50:50")
+            else:
+                debug_log("DYNAMIC",
+                          f"activate -> Buffer leer, Ratio behalten "
+                          f"({current_ratio}, dominant={self._diversity_ctrl.dominant})")
+        logger.info("[Dynamic] Aktiviert (Buffer leer)")
 
     def deactivate(self) -> None:
         """Toggle AN→AUS: aktuelles Ratio bleibt stehen, _last_measured_at
