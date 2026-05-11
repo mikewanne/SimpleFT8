@@ -46,6 +46,7 @@ v0.95.16 - v0.96.9 + P2-Tool + P3 + P21 + P26 lokal gesammelt.
 |---|---|---|
 | **P18** | DT-KORR-3X-RELOAD — kosmetisch, 3-fach Reload-Log | 30min |
 | **P20** | LOG-ROTATION für simpleft8.log (Debug-Log macht das schon, hier geht's um den Haupt-Log) | 1h |
+| **P29** | OMNI-CQ QSO-Panel-Anzeige: bei Paritäts-Wechsel (Even↔Odd) Leerzeile dazwischen + Even-Slot etwas dunklere Farbe (selber Farbton, nur ein wenig dunkler) zur optischen Unterscheidung | 1h |
 
 ## 📦 Push pending
 
@@ -69,6 +70,34 @@ field-getestet OK; P26 Field-Test ausstehend (V3 §8 6 Punkte).
 ---
 
 # 📋 OFFENE WORKFLOWS (Detail-Beschreibungen)
+
+## 📋 P29.OMNI-CQ-PANEL-PARITY-SEPARATION (Mike-Wunsch 11.05. ~05:15)
+
+**Symptom:** OMNI-CQ sendet im Even- UND Odd-Slot, im QSO-Panel laufen
+die `→ Sende CQ DA1MHH JO31 ↻N`-Zeilen ohne optische Trennung
+hintereinander. Mike will auf einen Blick sehen welche Paritäts-Phase
+gerade läuft.
+
+**Soll:**
+1. Bei **Paritäts-Wechsel** (Even-Block → Odd-Block oder umgekehrt)
+   eine **Leerzeile** zwischen den TX-Zeilen einfügen.
+2. **Even-Sende-Zyklus etwas dunklere Farbe** (Mike: „ein wenig dunkler,
+   nicht ganz dunkel — Farbe sollte beibehalten werden"). Aktuelle TX-
+   Farbe ist `#FFAA00` (Orange) — Even-Variante z.B. `#CC8800` oder
+   `#E09600` (selber Hue, niedrigere Lightness).
+
+**Files (vermutet):**
+- `ui/qso_panel.py` `add_tx(message, omni_remaining=None, ant_label=...)`
+  bekommt neuen Param `tx_even: bool` und detektiert Paritäts-Wechsel
+  via internem `_last_omni_parity`-State.
+- ggf. Helper `_append_blank_line()` für die Trennzeile.
+
+**Aufwand:** ~1h Lite — Style + State. Trivial-Klausel vermutlich
+greifend (kleine UI-Änderung, keine Architektur).
+
+**Schweregrad:** Niedrig — reine UX, keine Funktion.
+
+---
 
 ## 📋 P24.LAST-RX-MODE-PERSIST (Mike-Wunsch 10.05. 17:10)
 
