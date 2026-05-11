@@ -245,6 +245,7 @@ class CycleMixin:
         natuerlich beim naechsten Slot mit echtem Switch.
         """
         from core.debug_log import debug_log as _dlog
+        from core.diversity import compute_slot_score
         if not self.radio.ip:
             _dlog("DIV-MEAS",
                   "SKIP — radio.ip=False, warte auf Verbindung "
@@ -252,7 +253,8 @@ class CycleMixin:
             return
         valid = [m for m in (messages or []) if m.snr is not None and m.snr > -20]
         station_count = len(valid)
-        score = sum(max(0.0, float(m.snr + 30)) for m in valid) if valid else 0.0
+        # P34: Helper-Funktion (eine Formel, beide Pipelines)
+        score = compute_slot_score(messages)
         avg_snr = (sum(m.snr for m in valid) / station_count) if station_count else -30.0
         weak_count = len([m for m in valid if m.snr < -10])
         # Phase-Diff: erkennt measure→operate Uebergang fuer GUI-Lock-Aufhebung
