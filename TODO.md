@@ -27,7 +27,8 @@ v0.95.16 - v0.96.9 + P2-Tool + P3 + P21 + P26 lokal gesammelt.
 
 | ID | Was | Aufwand | Hinweis |
 |---|---|---|---|
-| **P12** | QSO-POSTPROCESSING-ASYNC — App hängt 1 Min nach QSO (PSK + ADIF + QRZ + Locator-DB synchron) | 3-4h Workflow | Mike erwähnt seit Wochen — Hoch-Prio |
+| **P30** | MEMORY-LEAK 124 GB nach Tagen Laufzeit — Mike musste App killen | 2-3h Diagnose | **KRITISCH**. Verdacht: AP-Lite Sound-File-Aufzeichnung auf SSD. Detail unten. |
+| **P12** | QSO-POSTPROCESSING-ASYNC — App hängt 1 Min nach QSO (logbook.refresh ist Wurzel) | **PARTIAL-FIX 11.05.** Logbuch nur letzte 500 (commit folgt). Sauberer Async-Refresh weiter offen | Mike-Diagnose 11.05.: logbook.refresh() lädt 20 MB ADIF jedes Mal neu |
 | **P27** | MESS-GUARD — vor Antennen/Diversity/Gain-Mess prüfen ob Radio verbunden (Mike-Wunsch 10.05. 17:35: „BVOR MESSUNG SIND WIR ÜBERHAUPT VERBUNDEN?") | 1.5h Workflow | aus P26-Spec ausgegliedert |
 | **P25** | RADIO-IP-LATE-SETTING — Wurzel warum `radio.ip` spät gesetzt wird | 2h Diagnose | Mike 10.05. ~18:00: „radio ist nicht spät, wird normal gesucht und gefunden" → evtl. obsolet, vor Push prüfen |
 
@@ -70,6 +71,44 @@ field-getestet OK; P26 Field-Test ausstehend (V3 §8 6 Punkte).
 ---
 
 # 📋 OFFENE WORKFLOWS (Detail-Beschreibungen)
+
+## 🔥 P30.MEMORY-LEAK 124 GB (Mike-Notfall 11.05. ~05:25)
+
+**Symptom:** Mike musste App beenden — **124 GB Speicher**
+(„speicherleak"). Problem besteht seit Tagen.
+
+**Mike-Verdacht:** App schreibt Sound-Files zur AP-Lite-Analyse
+auf SSD. Vermutlich Datei-Handles nicht geschlossen ODER Audio-
+Buffer im RAM gehalten statt freigegeben.
+
+**Klärung nötig: RAM oder Disk?**
+- 124 GB ist plausibel für RAM auf M3 Max (128 GB), wäre extrem
+- ODER 124 GB SSD-Voll (Sound-Files seit Tagen)
+
+**Verdächtige Pfade:**
+- `core/decoder.py` — Audio-Buffer + 5-Pass-Subtraktion
+- `core/encoder.py` — Audio-Pre-Generation
+- AP-Lite-Recording (Disk-Writes auf SSD, evtl. Sample-Aggregation
+  im RAM)
+- `core/audio_dump.py` (P3) — Roh-Audio-Slot-Dump, nur FT8, FIFO-
+  Cleanup — aber FIFO greift evtl. nicht?
+
+**Diagnose-Schritte:**
+1. App neu starten, Activity Monitor offen lassen, RAM-Verlauf beobachten
+2. Welche Files wachsen auf SSD? `du -sh ~/.simpleft8/` und
+   `du -sh audio_dump/` und `du -sh statistics/`
+3. AP-Lite-Recording-Pfad finden + Output-Größe prüfen
+4. Memory-Profiling via `tracemalloc` (Python-Builtin) — App startet,
+   nach 30 Min Snapshot
+5. **Sofort-Mitigation:** AP-Lite-Recording oder Audio-Dump
+   temporär deaktivieren bis Wurzel geklärt
+
+**Aufwand:** 2-3h Diagnose + ggf. Fix.
+
+**Schweregrad:** **KRITISCH** — App-Crash nach Tagen, Mike kann nicht
+durchgehend laufen lassen, blockt Push.
+
+---
 
 ## 📋 P29.OMNI-CQ-PANEL-PARITY-SEPARATION (Mike-Wunsch 11.05. ~05:15)
 

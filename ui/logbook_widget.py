@@ -15,6 +15,13 @@ from core.geo import callsign_to_country
 _FONT = "Menlo"
 _BG = "#0d0d1a"
 
+# P12-Fix (Mike 11.05.2026): Logbuch ist nur rudimentaer — nur die
+# letzten N QSOs in der Tabelle anzeigen. Verhindert 60s-Hang nach
+# QSO bei grossen ADIF-Files (~100k Records → QTableWidget-Tod).
+# DXCC/QSO-Counter laufen weiter ueber ALLE Records (Python-Schleife,
+# schnell), nur die Anzeige ist gekappt.
+_LOGBOOK_MAX_ROWS = 500
+
 # Spalten-Definition: (ADIF-Key, Header-Text, min-Breite)
 _COLUMNS = [
     ("_DATETIME",  "Datum",        68),
@@ -242,6 +249,10 @@ class LogbookWidget(QWidget):
         P1.QRZ-UPLOAD-UI-2: hochgeladene QSOs sollen weiter sichtbar bleiben,
         aber NICHT erneut hochgeladen werden (Filter via _SOURCE_FILE in
         mw_qso._on_qrz_upload).
+
+        P12-Fix (Mike 11.05.2026): _all_records enthaelt alles fuer
+        DXCC/QSO-Counter, aber nur die neuesten _LOGBOOK_MAX_ROWS landen
+        in der QTableWidget (sonst 60s-Hang bei ~100k Records).
         """
         if directory:
             self._adif_dir = directory
@@ -251,7 +262,16 @@ class LogbookWidget(QWidget):
         if hochgeladen_dir.is_dir():
             records_archived = parse_all_adif_files(hochgeladen_dir)
         self._all_records = records_active + records_archived
-        self._populate_table(self._all_records)
+        # Neueste zuerst: sortiert nach QSO_DATE + TIME_ON (beide ADIF-
+        # Strings im sortierbaren Format YYYYMMDD / HHMM[SS]).
+        self._all_records.sort(
+            key=lambda r: (r.get("QSO_DATE", ""), r.get("TIME_ON", "")),
+            reverse=True,
+        )
+        # Nur die neuesten _LOGBOOK_MAX_ROWS in die Tabelle. Counter
+        # laufen unten weiter ueber das volle _all_records.
+        display = self._all_records[:_LOGBOOK_MAX_ROWS]
+        self._populate_table(display)
         self._update_counters()
 
     def refresh(self):
@@ -312,9 +332,14 @@ class LogbookWidget(QWidget):
         self.qso_count_label.setText(f"{len(self._all_records)} QSOs")
 
     def _on_filter_changed(self, text: str):
-        """Tabelle nach Suchbegriff filtern."""
+        """Tabelle nach Suchbegriff filtern.
+
+        P12-Fix: bei leerem Filter wieder nur die neuesten N anzeigen,
+        bei Filter ebenfalls auf N kappen (sonst Hang bei breitem
+        Suchbegriff wie 'DL').
+        """
         if not text.strip():
-            self._populate_table(self._all_records)
+            self._populate_table(self._all_records[:_LOGBOOK_MAX_ROWS])
             return
         text = text.upper()
         filtered = [
@@ -324,7 +349,7 @@ class LogbookWidget(QWidget):
                 or text in callsign_to_country(r.get("CALL", "")).upper()
                 or text in r.get("GRIDSQUARE", "").upper())
         ]
-        self._populate_table(filtered)
+        self._populate_table(filtered[:_LOGBOOK_MAX_ROWS])
 
     def _on_row_clicked(self, row: int, col: int):
         """Zeile angeklickt → QSO-Daten aus UserRole lesen (sortier-sicher)."""
