@@ -63,8 +63,7 @@ def call_deepseek(prompt: str, key: str, model: str) -> dict:
     payload = {
         "model": model,
         "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.3,
-        "max_tokens": 8000,
+        "max_tokens": 16000,  # R1: reasoning + answer combined; 8K war zu knapp
     }
     req = urllib.request.Request(
         API_URL,
@@ -108,8 +107,8 @@ def main() -> None:
 
     tokens = estimate_tokens(prompt)
     sys.stderr.write(f"[deepseek] ~{tokens} Tokens, {len(files)} File(s) → {model}\n")
-    if tokens > 60000:
-        sys.stderr.write(f"[deepseek] WARNUNG: nahe Context-Limit (65K).\n")
+    if tokens > 110000:
+        sys.stderr.write(f"[deepseek] WARNUNG: nahe Context-Limit (128K).\n")
     if model == DEFAULT_MODEL:
         sys.stderr.write(f"[deepseek] R1 denkt — kann 6-30s dauern ...\n")
 
