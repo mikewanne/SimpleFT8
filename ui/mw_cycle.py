@@ -95,12 +95,17 @@ class CycleMixin:
 
         if self._rx_mode == "diversity" and messages:
             self._handle_diversity_operate(messages, ant)
+        elif self._rx_mode == "normal":
+            self._handle_normal_mode(messages)
+        elif messages:
+            self._handle_dx_tune_mode(messages)
 
-        # P34: Dynamic-Diversity Slot-Datenerfassung (nach operate-Handler).
-        # Gate: Toggle AN + Diversity + operate-Phase + Messages vorhanden.
-        # AK9: Score-Formel via Modul-Helper compute_slot_score (identisch
-        # zur Statik). Antenne ant ist aus _pop_diversity_queue (race-frei
-        # vom Slot-Start).
+        # P34: Dynamic-Diversity Slot-Datenerfassung (separater if-Block,
+        # NICHT in der elif-Kette oben — sonst zerreisst es den normal/
+        # dx_tune-Pfad). Gate: Toggle AN + Diversity + operate-Phase +
+        # Messages vorhanden. Score via Modul-Helper compute_slot_score
+        # (identisch zur Statik). Antenne ant aus _pop_diversity_queue
+        # (race-frei vom Slot-Start).
         if (self._rx_mode == "diversity"
                 and was_phase == "operate"
                 and getattr(self, "_dynamic_ctrl", None) is not None
@@ -109,10 +114,6 @@ class CycleMixin:
             from core.diversity import compute_slot_score
             score = compute_slot_score(messages)
             self._dynamic_ctrl.record_slot(ant, score)
-        elif self._rx_mode == "normal":
-            self._handle_normal_mode(messages)
-        elif messages:
-            self._handle_dx_tune_mode(messages)
 
         # v0.82 Fix E: on_decoder_finished wird NICHT mehr hier aufgerufen.
         # Qt-FIFO sendet cycle_decoded VOR message_decoded → on_decoder_finished
