@@ -5,6 +5,64 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-11 v0.97.1 — P35.DIVERSITY-STARTUP-FIX (3 Bugs nach P34-Field-Test)
+
+**Mike-Field-Test 11.05.2026** entdeckte 3 Bugs nach P34.DIVERSITY-DYNAMIC:
+
+- **Bug A — Statik-Mess haengt bei radio.ip=None**:
+  Wenn Mike „ohne Radio weiter" im P26-Modal klickt oder App-Start vor
+  Radio-Connect zu Diversity führt → `_handle_diversity_measure` skipt
+  (P21-Fix) → step bleibt 0 → Antennen-Queue füllt sich nur mit
+  (A1, "measure")-Einträgen → spätere Slots laufen nur auf ANT1.
+
+- **Bug B — `activate()` leert Queue + current_ant nicht**:
+  Mein P34 `_apply_dynamic_toggle` resettet `_diversity_ant_queue` und
+  `_diversity_current_ant` nicht. Bei Toggle AN mitten in hängender
+  Mess-Phase bleiben (A1, "measure")-Einträge im Queue, P34-Hook
+  überspringt (was_phase != "operate") → Buffer A2 NIE gefüllt obwohl
+  ANT2 mehrfach geswitcht wird.
+
+- **Bug B5 — Diversity↔Diversity-Wechsel deaktiviert Dynamic**:
+  Mike's Toggle ging beim Mode-Wechsel verloren. Mike-Wunsch (Q3):
+  Toggle überlebt Session, nur App-Quit + manuelles AUS deaktiviert.
+
+**Workflow:** V1 → V2 → R1 → V3 → 5 atomare Commits → Final-R1 → Field-Test.
+
+**Code-Änderungen:**
+- `core/dynamic_diversity.py` `activate()` (AK5, R1-Q4 KRITISCH):
+  Cache-Reuse-Ratio respektieren — NUR auf 50:50 zurücksetzen wenn
+  aktuell 50:50/None. Cache-Wert (70:30/30:70) bleibt erhalten.
+- `ui/main_window.py` `_apply_dynamic_toggle` + `_init_diversity_state`:
+  Queue + current_ant Reset unter `_diversity_lock` BEVOR activate().
+  `_pending_diversity_init=None` Init.
+- `ui/mw_radio.py` `_enable_diversity`: Defer bei radio.ip=None
+  (`_pending_diversity_init=scoring`, Phase=operate, Ratio=50:50).
+- `ui/mw_radio.py` `_on_radio_connected`: Resume via
+  `_check_diversity_preset` (NICHT `_enable_diversity` direkt → R1-Q7
+  voller Cache+Gain-Pfad). Idempotenz: Flag VOR Resume auf None.
+- `ui/mw_radio.py` `_activate_diversity_with_scoring`: Auto-Reactivate
+  via `_apply_dynamic_toggle(True)` wenn `settings.dynamic_diversity_enabled`.
+- `ui/mw_radio.py` `_enable_diversity` Z.887-890: Queue+current_ant
+  unter Lock (Final-R1-Threading-Concern aus Alt-Code).
+
+**Tests (`tests/test_p35_startup_bugs.py` NEU, 11 Tests):**
+- 3x Bug A (defer, resume, idempotent)
+- 4x Bug B (Queue Reset, Cache-Ratio preserve/reset)
+- 4x Bug B5 (Auto-Reactivate, Settings-Toggle survives)
+
+**P34-Tests angepasst (`tests/test_diversity_dynamic.py`):**
+- `test_activate_resets_ratio` → `test_activate_keeps_cache_ratio`
+  (P35-AK5: 70:30 bleibt, nicht 50:50-Reset)
+- Plus `test_activate_resets_5050_ratio` + `test_activate_with_none_ratio_becomes_5050`
+
+**Test-Bilanz: 1116 → 1129 grün** (+13: 11 P35 + 2 P34-Anpassung).
+
+**Final-R1: „Push freigegeben"** nach Lock-Fix in `_enable_diversity`.
+
+**Field-Test pending** (Mike, F1-F8 in V3 §6). Push pending bis Field-Test grün.
+
+**Plan-Files:** prompts/p35_diversity_startup_fix_v[1,2,3]+r1+final_r1.md.
+
 ## 2026-05-11 v0.97.0 — P34.DIVERSITY-DYNAMIC (Code fertig, Field-Test pending)
 
 **Mike-Vision:** Antennen-Verhältnis im laufenden Betrieb live anpassen statt

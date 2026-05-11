@@ -1,4 +1,4 @@
-# SimpleFT8 TODO — Stand 11.05.2026 (v0.97.0, P34 fertig)
+# SimpleFT8 TODO — Stand 11.05.2026 (v0.97.1, P35 fertig)
 
 > **Mike-Regel 07.05.2026:** Offene Aufgaben gehoeren AUSSCHLIESSLICH
 > in diese Datei. Nicht in CLAUDE.md, nicht in HANDOFF.md. Diese Datei
@@ -8,16 +8,17 @@
 
 # 🟢 STATUS-ÜBERSICHT (für neue Session)
 
-**Aktuelle Version:** v0.97.0 (11.05.2026)
-**Tests:** 1111 grün
-**App-Stand:** P34.DIVERSITY-DYNAMIC Code fertig, Field-Test 12 Punkte
-pending. Push pending — v0.95.16 - v0.97.0 + P2-Tool + P3 + P21 + P26 +
-P34 lokal gesammelt.
+**Aktuelle Version:** v0.97.1 (11.05.2026)
+**Tests:** 1129 grün
+**App-Stand:** P35.DIVERSITY-STARTUP-FIX Code fertig, Field-Test 8 Punkte
+pending. Push pending — v0.95.16 - v0.97.1 + P2-Tool + P3 + P21 + P26 +
+P34 + P35 lokal gesammelt.
 
-## ✅ 11.05.2026 erledigt (v0.97.0)
+## ✅ 11.05.2026 erledigt (v0.97.1)
 
 | Version | Was |
 |---|---|
+| **v0.97.1** | **P35.DIVERSITY-STARTUP-FIX** — 3 Bugs aus P34-Field-Test gefixt. **Bug A:** `_enable_diversity` bei radio.ip=None defer + Resume via `_check_diversity_preset`. **Bug B:** `_apply_dynamic_toggle` resettet Queue+current_ant unter Lock. **Bug B5:** Settings-Toggle überlebt Session (Auto-Reactivate). **AK5 R1-Q4 KRITISCH:** activate() respektiert Cache-Reuse-Ratio (70:30 bleibt). 5 atomare Commits. Tests 1116 → 1129 (+13). Plan-Files prompts/p35_diversity_startup_fix_v[1,2,3]+r1+final_r1.md. Field-Test V3 §6 F1-F8 pending. Push pending. |
 | **v0.97.0** | **P34.DIVERSITY-DYNAMIC** — Antennen-Verhältnis live im Betrieb anpassen (statt 1× pro Stunde 90s-UI-Sperre). ENTWEDER-ODER zur Statik (Toggle in Settings, NICHT persistiert). Modul `core/dynamic_diversity.py` NEU + 2 Helper-Funktionen in `core/diversity.py`. Antennen-Panel Phase-Label wird **blau** wenn aktiv. 9 atomare Commits. Tests 1070 → 1111 (+41). Plan-Files prompts/p34_diversity_dynamic_v[1,2,3]+r1.md (Compact-fest). Field-Test V3 §5 F1-F12 pending. Push pending. |
 
 ## ✅ Heute erledigt (10.05.2026)

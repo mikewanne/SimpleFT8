@@ -884,8 +884,11 @@ class RadioMixin:
         self._normal_stations = {}
         self.qso_panel.log_view.clear()
         self.control_panel.update_decode_count(0)
-        self._diversity_current_ant = "A1"
-        self._diversity_ant_queue = deque()  # (ant, phase) Tupel
+        # P35 Final-R1: Queue + current_ant unter Lock (Decoder-Thread popped
+        # parallel in mw_cycle._on_cycle_decoded mit _diversity_lock).
+        with self._diversity_lock:
+            self._diversity_current_ant = "A1"
+            self._diversity_ant_queue = deque()  # (ant, phase) Tupel
         # MEASURE_CYCLES × Modus-Multiplikator (gleiche Mess-Zeit fuer alle Modi).
         # OPERATE_CYCLES ist seit v0.93 zeit-basiert (1h-Frist) — kein
         # Settings/Modus-Skalierung mehr noetig.

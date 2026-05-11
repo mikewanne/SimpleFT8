@@ -1,5 +1,59 @@
 # HANDOFF — SimpleFT8
 
+## Stand 2026-05-11 abends: P35.DIVERSITY-STARTUP-FIX v0.97.1 Code fertig
+
+**Code:** v0.97.1 lokal — 3 Bugs nach Mike's P34-Field-Test 11.05. gefixt.
+**Tests:** **1129 grün** (+13 gegenüber v0.97.0).
+**Push:** pending bis Mike Field-Test F1-F8 (V3 §6) bestätigt.
+
+## Was P35 fixt
+
+3 Bugs die Mike beim P34-Field-Test entdeckte:
+
+- **Bug A:** Statik-Mess hing bei radio.ip=None → Antennen-Switch nur auf
+  ANT1. Fix: bei radio.ip=None Init aufschieben, nach Radio-Connect via
+  `_check_diversity_preset` nachholen.
+- **Bug B:** `_apply_dynamic_toggle` leerte Queue + current_ant nicht →
+  P34-Hook bekam alte (A1, "measure")-Einträge, Buffer A2 blieb leer.
+  Fix: Queue + current_ant unter Lock VOR activate() resetten.
+- **Bug B5:** Toggle verlor bei Mode-Wechsel. Mike-Q3-Wunsch: Toggle
+  überlebt Session. Fix: `_activate_diversity_with_scoring` ruft
+  `_apply_dynamic_toggle(True)` wenn Settings-Toggle AN.
+
+**Plus AK5 (R1-Q4 KRITISCH):** `activate()` respektiert Cache-Reuse-Ratio.
+Cache 70:30 wird NICHT mehr auf 50:50 zurückgesetzt beim Toggle AN.
+
+## 5 atomare Commits
+
+| # | Inhalt | Datei |
+|---|---|---|
+| C1 | `activate()` AK5 Cache-Reuse-Respekt + 2 Test-Anpassungen | `core/dynamic_diversity.py` + `tests/test_diversity_dynamic.py` |
+| C2 | `_apply_dynamic_toggle` Queue+current_ant Reset + 11 P35-Tests | `ui/main_window.py` + `tests/test_p35_startup_bugs.py` NEU |
+| C3+C4 | `_enable_diversity` Defer + Resume + Auto-Reactivate | `ui/mw_radio.py` |
+| C5 | APP_VERSION 0.97.0→0.97.1 + Doku + Final-R1-Lock-Fix | `main.py`, HISTORY/HANDOFF/CLAUDE |
+
+## Field-Test F1-F8 (Mike)
+
+V3 §6 — Auszüge:
+- **F2:** „ohne Radio weiter"-Pfad → Diversity startet sauber wenn Radio kommt
+- **F4:** Cache 70:30 + Toggle AN → **bleibt 70:30** (kein 50:50-Reset)
+- **F6+F7:** Toggle überlebt Mode-Wechsel (Diversity↔Diversity↔Normal)
+
+**Bestanden wenn F1-F4 sauber, F5-F8 wie spezifiziert.**
+
+## Plan-Files (Compact-fest)
+
+- `prompts/p35_diversity_startup_fix_v1.md` — Initial-Entwurf
+- `prompts/p35_diversity_startup_fix_v2.md` — Self-Review nach Mike-Q1-Q3
+- `prompts/p35_diversity_startup_fix_r1.md` — DeepSeek-R1-Kritik
+- `prompts/p35_diversity_startup_fix_v3.md` — **FINAL** mit 12 ACs + 11 Tests
+- `prompts/p35_diversity_startup_fix_final_r1.md` — Final-R1 nach Code
+
+## Push pending
+
+v0.95.16 → v0.96.10 → v0.97.0 → v0.97.1 alle lokal. Push nach Mike's
+Field-Test-OK.
+
 ## Stand 2026-05-11 nachmittags: P34.DIVERSITY-DYNAMIC v0.97.0 Code fertig
 
 **Code:** v0.97.0 lokal — neuer Live-Modus für Antennen-Verhältnis.
