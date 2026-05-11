@@ -40,7 +40,8 @@ class ConnectStatusDialog(QDialog):
         self._failed = False
 
         self.setWindowTitle("FlexRadio wird verbunden")
-        self.setFixedSize(440, 220)
+        # 11.05.2026: 20% kleiner (Mike-Field-Test).
+        self.setFixedSize(352, 176)
         self.setModal(True)
         self.setWindowModality(Qt.WindowModality.WindowModal)
         # ApplicationModal wuerde Decoder-Signale blocken — verboten.
@@ -97,8 +98,11 @@ class ConnectStatusDialog(QDialog):
         self._spinner_label.setFixedHeight(28)
         layout.addWidget(self._spinner_label)
 
-        self._attempt_label = QLabel("Verbindungsaufbau läuft...")
+        # 11.05.2026 Mike-Field-Test: Versuch-Counter raus, Spinner reicht.
+        # Label bleibt im Code als Failed-State-Anzeige (sonst nur ein ✗).
+        self._attempt_label = QLabel("")
         self._attempt_label.setFont(QFont("Menlo", 11))
+        self._attempt_label.setVisible(False)
         layout.addWidget(self._attempt_label)
 
         layout.addStretch()
@@ -126,10 +130,14 @@ class ConnectStatusDialog(QDialog):
 
     @Slot(int, int)
     def set_attempt(self, attempt: int, max_attempts: int) -> None:
-        """Versuchs-Counter aktualisieren (Worker-Callback)."""
-        if self._failed:
-            return
-        self._attempt_label.setText(f"Versuch {attempt} von {max_attempts}")
+        """Versuchs-Counter — 11.05.2026 Mike: Anzeige raus, Slot no-op.
+
+        Worker emittet weiterhin (API-Kompatibilitaet, kein Code-Loesch
+        in mw_radio noetig). Slot tut bewusst nichts. Failed-State
+        kommt ueber set_failed.
+        """
+        # no-op
+        return
 
     @Slot()
     def set_failed(self) -> None:
@@ -144,6 +152,7 @@ class ConnectStatusDialog(QDialog):
         self._attempt_label.setText(
             "Verbindung fehlgeschlagen — Radio aus oder nicht erreichbar"
         )
+        self._attempt_label.setVisible(True)
 
     # ── Buttons ────────────────────────────────────────────────────────────
 

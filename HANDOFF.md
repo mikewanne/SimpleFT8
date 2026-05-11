@@ -1,15 +1,19 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-10 ~18:30 UTC: P26.CONNECT-MODAL — Code fertig + Final-R1 OK, Field-Test pending
+## Stand 2026-05-11: P26.CONNECT-MODAL Field-Test ✅ + Tweak v0.96.10
 
-**Code:** v0.96.9 lokal — alle Änderungen auf disk, atomare Commits
-C1-C6 ausstehend.
-**Tests:** **1070 grün** (1056 → 1070, +14 P26-Tests).
-**Final-R1:** „Push freigegeben" (0 KRITISCH + 2 SOLLTE für „nächstes
-Major-Release", keine Push-Blocker).
-**Field-Test:** 6-Punkte-Plan V3 §8 F1-F6 ausstehend, Mike startet App selbst.
-**App:** gestoppt. **Push pending** bis Field-Test grün —
-v0.95.16-0.96.9 + P2-Tool + P3 + P21-Debug-Log + P26 zusammen.
+**Code:** v0.96.10 lokal. Mike Field-Test 11.05. ✅ „funktioniert super".
+**Tests:** **1070 grün**.
+**Field-Test-Tweak:** Versuch-Counter raus, Fenster 20% kleiner (352×176).
+**Push pending** bis Mike OK gibt — v0.95.16-0.96.10 + P2-Tool + P3 +
+P21-Debug-Log + P26 zusammen.
+
+## P26 Status
+
+- ✅ V1 → V2 → R1 → V3 → Code → Final-R1 → Field-Test
+- ✅ Mike-Approval: „funktioniert super"
+- ✅ Field-Test-Tweak v0.96.10 (Versuch-Counter raus, kleineres Fenster)
+- ⏳ Push ausstehend
 
 ## Was P26 fixt
 

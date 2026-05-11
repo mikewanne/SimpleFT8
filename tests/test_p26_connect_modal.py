@@ -35,14 +35,16 @@ def test_t1_layout_smoke(qapp):
     dlg = ConnectStatusDialog()
     try:
         assert dlg.windowTitle() == "FlexRadio wird verbunden"
-        assert dlg.size().width() == 440
-        assert dlg.size().height() == 220
+        # 11.05.2026: 20% kleiner
+        assert dlg.size().width() == 352
+        assert dlg.size().height() == 176
         assert dlg.isModal()
         assert dlg.windowModality() == Qt.WindowModality.WindowModal
         # Spinner-Label initialisiert
         assert dlg._spinner_label.text() in (".", "..", "...")
-        # Versuch-Label hat Default-Text
-        assert "Verbindungsaufbau" in dlg._attempt_label.text()
+        # Versuch-Label initial hidden (nur fuer Failed-State sichtbar).
+        # isHidden() unabhaengig von Parent-Show, isVisible() braucht Show.
+        assert dlg._attempt_label.isHidden()
     finally:
         dlg._tick_timer.stop()
         dlg.deleteLater()
@@ -68,22 +70,28 @@ def test_t2_spinner_animation_ticks(qapp):
         dlg.deleteLater()
 
 
-def test_t3_set_attempt_updates_label(qapp):
-    """T3: set_attempt(3, 10) → Label "Versuch 3 von 10"."""
+def test_t3_set_attempt_is_noop(qapp):
+    """T3: set_attempt ist no-op (11.05.2026 Mike-Field-Test).
+
+    Worker emittet weiterhin attempt_changed (API-Kompat), Slot tut
+    bewusst nichts. Label bleibt leer + unsichtbar.
+    """
     from ui.connect_status_dialog import ConnectStatusDialog
     dlg = ConnectStatusDialog()
     try:
         dlg.set_attempt(3, 10)
-        assert dlg._attempt_label.text() == "Versuch 3 von 10"
+        assert dlg._attempt_label.text() == ""
+        assert dlg._attempt_label.isHidden()
         dlg.set_attempt(7, 10)
-        assert dlg._attempt_label.text() == "Versuch 7 von 10"
+        assert dlg._attempt_label.text() == ""
+        assert dlg._attempt_label.isHidden()
     finally:
         dlg._tick_timer.stop()
         dlg.deleteLater()
 
 
 def test_t4_set_failed_state(qapp):
-    """T4: set_failed() — Spinner-Timer stop, rotes X, Label-Text."""
+    """T4: set_failed() — Spinner-Timer stop, rotes ✗, Label sichtbar."""
     from ui.connect_status_dialog import ConnectStatusDialog
     dlg = ConnectStatusDialog()
     try:
@@ -92,6 +100,8 @@ def test_t4_set_failed_state(qapp):
         assert not dlg._tick_timer.isActive()
         assert dlg._spinner_label.text() == "✗"
         assert "fehlgeschlagen" in dlg._attempt_label.text()
+        # Failed-State macht Label sichtbar (isHidden == False)
+        assert not dlg._attempt_label.isHidden()
         # Buttons bleiben aktiv
         assert dlg._btn_weiter.isEnabled()
         assert dlg._btn_quit.isEnabled()
@@ -139,17 +149,19 @@ def test_t7_window_modal(qapp):
 
 
 def test_t8_attempt_changed_signal_triggers_slot(qapp):
-    """T8: attempt_changed.emit triggert set_attempt-Slot.
+    """T8: attempt_changed.emit triggert set_attempt-Slot (no-op, kein Crash).
 
-    Im selben Thread — DirectConnection. Cross-thread (Worker → GUI) waere
-    QueuedConnection, ist nur in echtem Threading-Setup pruefbar (siehe T10).
+    11.05.2026: Slot ist no-op, aber Signal-Connection muss noch
+    funktionieren (Worker emittet weiterhin). Test prueft dass kein
+    Crash auftritt und Label leer bleibt.
     """
     from ui.connect_status_dialog import ConnectStatusDialog
     dlg = ConnectStatusDialog()
     try:
         dlg.attempt_changed.emit(5, 10)
-        # Bei DirectConnection im selben Thread: Slot laeuft synchron
-        assert dlg._attempt_label.text() == "Versuch 5 von 10"
+        # no-op Slot: Label bleibt leer + hidden
+        assert dlg._attempt_label.text() == ""
+        assert dlg._attempt_label.isHidden()
     finally:
         dlg._tick_timer.stop()
         dlg.deleteLater()

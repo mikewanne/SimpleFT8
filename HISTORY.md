@@ -5,6 +5,38 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-11 v0.96.10 — P26.CONNECT-MODAL Field-Test-Tweak
+
+**Auslöser:** Mike-Field-Test 11.05.: „Text reicht FlexRadio wird
+verbunden, Text Versuch 1 von kann raus dafür Fenster 20 Prozent kleiner
+in Breite und Höhe aber funktioniert super".
+
+**Trivial-Klausel:** Style-Anpassung, < 10 Zeilen — kein Workflow.
+
+### Code
+
+- `ui/connect_status_dialog.py`:
+  - `setFixedSize(440, 220)` → `(352, 176)` (20% kleiner B+H)
+  - `_attempt_label` initial leerer Text + `setVisible(False)`
+  - `set_attempt(...)` ist jetzt **no-op** (Worker emittet weiterhin
+    `attempt_changed`, Slot tut nichts — API-Kompat)
+  - `set_failed()` setzt Label sichtbar via `setVisible(True)`
+    (Failed-Text bleibt: „Verbindung fehlgeschlagen — Radio aus
+    oder nicht erreichbar")
+
+### Tests
+
+- T1 prüft neue Size 352×176 + Label `isHidden()`
+- T3 prüft no-op-Verhalten (Text leer, Label hidden)
+- T4 prüft Failed-State macht Label sichtbar
+- T8 angepasst auf no-op
+- `isHidden()` statt `isVisible()` weil Tests ohne `dialog.show()`
+  laufen
+
+**Test-Bilanz: 1070 → 1070 grün** (Anzahl gleich, Inhalte angepasst).
+
+---
+
 ## 2026-05-10 v0.96.9 — P26.CONNECT-MODAL
 
 **Auslöser:** Mike-Wunsch 10.05.2026 17:15 UTC. „Während FlexRadio
