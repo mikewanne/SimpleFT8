@@ -178,11 +178,12 @@ class QSOPanel(QWidget):
             tx_even = int(slot_start_ts / slot) % 2 == 0
         utc = time.strftime("%H:%M:%S", time.gmtime(slot_start_ts))
         tag = "[E]" if tx_even else "[O]"
-        line = f"{utc} {tag} →  Sende   {message}"
+        # 11.05.2026 Mike: Spalten schmaler — 1 Leerzeichen statt mehrerer.
+        line = f"{utc} {tag} → Sende {message}"
         if omni_remaining is not None:
-            line = f"{line}  ↻{omni_remaining}"
+            line = f"{line} ↻{omni_remaining}"
         if ant_label:
-            self._append_two_color(line, "#FFAA00", f"   {ant_label}", "#888888")
+            self._append_two_color(line, "#FFAA00", f" {ant_label}", "#888888")
         else:
             self._append_colored(line, "#FFAA00")
         # P1.16: _auto_trim_by_age laeuft via QTimer alle 30s, kein expliziter Aufruf hier
@@ -210,9 +211,9 @@ class QSOPanel(QWidget):
             tx_even = int(slot_start_ts / slot) % 2 == 0
         utc = time.strftime("%H:%M:%S", time.gmtime(slot_start_ts))
         tag = "[E]" if tx_even else "[O]"
-        line = f"{utc} {tag} ←  Empf.   {message}"
+        line = f"{utc} {tag} ← Empf. {message}"
         if ant_label:
-            self._append_two_color(line, "#44BBFF", f"   {ant_label}", "#888888")
+            self._append_two_color(line, "#44BBFF", f" {ant_label}", "#888888")
         else:
             self._append_colored(line, "#44BBFF")
 
@@ -228,7 +229,7 @@ class QSOPanel(QWidget):
         """
         utc = time.strftime("%H:%M:%S", time.gmtime(slot_start_ts))
         tag = "[E]" if tx_even else "[O]"
-        self._append_colored(f"{utc} {tag} ←  Horche  …", "#666666")
+        self._append_colored(f"{utc} {tag} ← Horche …", "#666666")
 
     def add_qso_complete(self, their_call: str):
         """QSO als abgeschlossen markieren."""
