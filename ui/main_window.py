@@ -236,6 +236,11 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self._diversity_stations = {}  # key → FT8Message (akkumuliert)
         self._normal_stations = {}     # key → FT8Message (Normal, 2-Min-Fenster)
         self._diversity_ctrl = DiversityController()
+        # P34: DynamicDiversityController parallel zur Statik. Default _active=False
+        # (Toggle in Settings, nicht persistiert). Signal-Connect via
+        # Qt.QueuedConnection beim spaeteren Slot-Setup.
+        from core.dynamic_diversity import DynamicDiversityController
+        self._dynamic_ctrl = DynamicDiversityController(self._diversity_ctrl)
         self._active_qso_targets: set = set()  # Stationen im aktiven QSO → 150s Aging
         self._pending_station_click = None  # P1.24: Klick waehrend TX → Buffer fuer naechsten Slot
         self._recent_logged_calls: dict[tuple[str, str], float] = {}  # P1.7 (v0.95.19): ADIF-Dedup (call, band) → ts
@@ -605,6 +610,11 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         # Marshalling, Slot laeuft GUI-thread-seitig)
         self.direction_map_signal.connect(
             self._on_direction_map_snapshot, Qt.QueuedConnection
+        )
+
+        # P34: Dynamic-Ratio-Wechsel → GUI-Slot (Decoder-Thread → GUI-Thread)
+        self._dynamic_ctrl.ratio_changed_dynamic.connect(
+            self._on_dynamic_ratio_changed, Qt.QueuedConnection
         )
 
         # RX Panel → QSO starten + RX-Toggle
@@ -1322,6 +1332,62 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
             self._direction_map_dialog.update_rx_stations(
                 points, total_decoded=len(snapshot))
         # TX-Modus wird in Schritt 8 ueber PSKReporter befuellt, nicht hier.
+
+    @Slot(str)
+    def _on_dynamic_ratio_changed(self, new_ratio: str) -> None:
+        """P34: GUI-Thread Slot. Wenn DynamicDiversityController ein neues
+        Ratio gesetzt hat, Antennen-Panel updaten (Blau-Faerbung).
+
+        Aufruf via QueuedConnection vom Decoder-Thread.
+        """
+        try:
+            self.control_panel.update_diversity_ratio(
+                new_ratio,
+                self._diversity_ctrl.phase,
+                operate_seconds_remaining=self._diversity_ctrl.seconds_until_remeasure,
+                scoring_mode=self._diversity_ctrl.scoring_mode,
+                is_dynamic=True,  # AK14: blaue Anzeige
+            )
+        except Exception as exc:
+            # Defensive: GUI-Update fehlschlagen darf den Dynamic-Pfad nicht killen
+            print(f"[Dynamic] GUI-Update Fehler: {exc}")
+
+    def _apply_dynamic_toggle(self, enabled: bool) -> None:
+        """P34: Settings-Dialog-Apply ruft das auf nachdem Toggle gesetzt wurde.
+
+        Toggle AN: activate() → 50:50-Reset + ggf. Mess abbrechen.
+        Toggle AUS: deactivate() → Ratio bleibt, Mess-Frist refresht.
+
+        Idempotent: Wiederholtes activate/deactivate wird intern ignoriert
+        durch is_active()-Check.
+        """
+        if enabled and not self._dynamic_ctrl.is_active():
+            self._dynamic_ctrl.activate()
+            # GUI-Lock aufheben falls Statik-Mess gerade laief (abgebrochen)
+            try:
+                self._set_cq_locked(False)
+                self._set_gain_measure_lock(False)
+            except Exception:
+                pass
+            # Antennen-Panel sofort updaten (50:50 + dyn-Hinweis sobald Buffer voll)
+            self.control_panel.update_diversity_ratio(
+                "50:50", self._diversity_ctrl.phase,
+                operate_seconds_remaining=self._diversity_ctrl.seconds_until_remeasure,
+                scoring_mode=self._diversity_ctrl.scoring_mode,
+                is_dynamic=True,
+            )
+            print("[Dynamic] Toggle AN — Buffer leer, Ratio 50:50, Statik pausiert")
+        elif not enabled and self._dynamic_ctrl.is_active():
+            self._dynamic_ctrl.deactivate()
+            # Antennen-Panel zurueck zur Standard-Anzeige
+            self.control_panel.update_diversity_ratio(
+                self._diversity_ctrl.ratio,
+                self._diversity_ctrl.phase,
+                operate_seconds_remaining=self._diversity_ctrl.seconds_until_remeasure,
+                scoring_mode=self._diversity_ctrl.scoring_mode,
+                is_dynamic=False,
+            )
+            print("[Dynamic] Toggle AUS — Statik uebernimmt wieder, Frist refresht")
 
     def closeEvent(self, event):
         # P22 / P8: Mess-Modal hart schliessen falls noch offen (App-Quit

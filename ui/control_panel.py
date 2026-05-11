@@ -1489,13 +1489,17 @@ class ControlPanel(QWidget):
                                scoring_mode: str = "normal",
                                # v0.92-Aliase fuer Backwards-Kompat (ignoriert wenn
                                # operate_seconds_remaining >0; sonst Cycles-Fallback)
-                               operate_cycles: int = 0, operate_total: int = 0):
+                               operate_cycles: int = 0, operate_total: int = 0,
+                               # P34: Dynamic-Modus aktiv (blaue Anzeige + Text)
+                               is_dynamic: bool = False):
         """Diversity-Anzeige aktualisieren.
 
         ratio: '70:30' | '30:70' | '50:50'
         phase: 'measure' | 'operate' | 'remeasure'
         operate_seconds_remaining: Sekunden bis zum naechsten Re-Measure (v0.93)
         scoring_mode: 'normal' (Standard) | 'dx' (DX)
+        is_dynamic: P34 — wenn True, Phase-Label wird blau („● DYNAMISCH (live)")
+                    statt „Neuberechnung in X Min." (Statik-Re-Mess gilt nicht)
         """
         mode_tag = "DX" if scoring_mode == "dx" else "Standard"
         for lbl in self._a1_pct.values():
@@ -1540,19 +1544,27 @@ class ControlPanel(QWidget):
                     self._a1_pct["50%"].setStyleSheet(_DIV_PCT_YELLOW)
                     self._a2_pct["50%"].setStyleSheet(_DIV_PCT_YELLOW)
                 return
-            mins = max(0, int(secs // 60))
-            if mins <= 2:
-                color = "#FF8800"
-            elif mins <= 10:
-                color = "#FFCC00"
+            # P34: Dynamic-Modus → eigene Anzeige (blau, kein Re-Mess-Counter)
+            if is_dynamic:
+                self._phase_label.setText("● DYNAMISCH (live)")
+                self._phase_label.setStyleSheet(
+                    f"color:#3399CC;font-size:9px;font-family:{_FONT};"
+                    "font-weight:bold;"
+                )
             else:
-                color = "#888888"
-            label_txt = (f"Diversity Neuberechnung in {mins} Min."
-                         if mins > 0 else "Diversity Neuberechnung jetzt")
-            self._phase_label.setText(label_txt)
-            self._phase_label.setStyleSheet(
-                f"color:{color};font-size:9px;font-family:{_FONT};font-style:italic;"
-            )
+                mins = max(0, int(secs // 60))
+                if mins <= 2:
+                    color = "#FF8800"
+                elif mins <= 10:
+                    color = "#FFCC00"
+                else:
+                    color = "#888888"
+                label_txt = (f"Diversity Neuberechnung in {mins} Min."
+                             if mins > 0 else "Diversity Neuberechnung jetzt")
+                self._phase_label.setText(label_txt)
+                self._phase_label.setStyleSheet(
+                    f"color:{color};font-size:9px;font-family:{_FONT};font-style:italic;"
+                )
             if ratio == "70:30":
                 self._a1_pct["70%"].setStyleSheet(_DIV_PCT_GREEN)
                 self._a2_pct["30%"].setStyleSheet(_DIV_PCT_RED)
