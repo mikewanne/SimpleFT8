@@ -1,10 +1,31 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-11 abends: P35.DIVERSITY-STARTUP-FIX v0.97.1 Code fertig
+## Stand 2026-05-11 abends: v0.97.2 P35 Bug D+E+F Live-Field-Test läuft
 
-**Code:** v0.97.1 lokal — 3 Bugs nach Mike's P34-Field-Test 11.05. gefixt.
-**Tests:** **1129 grün** (+13 gegenüber v0.97.0).
-**Push:** pending bis Mike Field-Test F1-F8 (V3 §6) bestätigt.
+**Code:** v0.97.2 lokal — Bug D+E+F nach v0.97.1 noch nachgezogen (Mike-
+Live-Diagnose während Field-Test 11.05. abends).
+**Tests:** **1131 grün** (+2 P35-Bug-E-Tests gegenüber v0.97.1).
+**Push:** pending bis Mike kompletten Field-Test grün gibt.
+
+## Mike-Live-Field-Test 11.05. abends (in Progress)
+
+- ✅ **App-Start**: 20m FT8 Normal — kein „messen 0/6"-Hänger (Bug F greift)
+- ✅ **Normal → Diversity DX**: beide Antennen aktiv, Statik-Mess sauber
+- 🔄 **Dynamic-Toggle**: blau angezeigt, Buffer füllen sich
+  (Log `[DYNAMIC] record_slot` zeigt Scores 99-117, A1=2/5 + A2=1/5
+  bei `:55:57` — wartet auf 5/5 + 5/5 für erste evaluate)
+
+## Was Bug D+E+F dazu fixten (v0.97.2)
+
+- **Bug D**: `_on_band_changed` löst `on_band_change()` nur noch bei
+  `rx_mode=diversity` UND `radio.ip` aus. Sonst Fallback Phase=operate.
+- **Bug E**: Bandpilot überschreibt NIE Normal-Modus. Skipt wenn
+  current=normal ODER target=normal. Mike-Vision: Bandpilot wählt nur
+  zwischen Diversity Standard ↔ DX.
+- **Bug F**: App-Start IMMER 20m FT8 Normal (hardcoded in `__init__`).
+  Settings-Restore für band+mode entfernt. Mike-Anweisung 11.05.
+
+Commits: `6347c0a` Bug D, `18db03f` Bug D+E + Tests, `91728f7` Bug F.
 
 ## Was P35 fixt
 

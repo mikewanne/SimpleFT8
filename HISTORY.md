@@ -5,6 +5,54 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-11 v0.97.2 — P35 Bug D+E+F (Live-Field-Test 11.05. abends)
+
+**Mike-Field-Test 11.05. nach v0.97.1** entdeckte 3 weitere Bugs die alle
+am App-Start-Pfad lagen:
+
+- **Bug D (Mike-Live-Diagnose):** `_on_band_changed` lief beim App-Start
+  unabhängig vom rx_mode → `_diversity_ctrl.on_band_change()` triggerte
+  Phase=measure obwohl rx_mode=normal oder radio.ip=None. UI zeigte
+  „MESSEN 0/6"-Hänger.
+  - **Fix** (`ui/mw_radio.py:397+`): `on_band_change()` nur bei
+    `rx_mode=diversity` UND `radio.ip` vorhanden. Sonst Phase=operate
+    als Fallback.
+
+- **Bug E (Mike-Vision):** Bandpilot überschrieb Mike's Normal-Modus-
+  Entscheidung am App-Start automatisch zu Diversity. Mike: „der
+  bandpilot soll nur untercheiden nach werten ist dx besser oder
+  Diversity standart. das hat mit dem start nix zu tun ob er diversity
+  oder normal modus startet".
+  - **Fix** (`ui/mw_radio.py:736`, `:770`): `_maybe_apply_bandpilot`
+    skipt wenn `current_mode=normal`. `_apply_bandpilot_auto` skipt
+    wenn `target=normal` (Defensive).
+
+- **Bug F (Mike-Anweisung):** Settings persistierten band+mode aus
+  letzter Session → App-Start in 40m FT4 + Diversity → Mess-Pipeline
+  in falschem Kontext.
+  - **Fix** (`ui/main_window.__init__`): App-Start IMMER 20m FT8 Normal-
+    Modus erzwingen. `settings._data["band"]="20m"`, `["mode"]="FT8"`.
+    Settings die erhalten bleiben: callsign, locator, flexradio_ip,
+    power_preset, tx_level, presets-Cache, bandpilot_mode, audio_dump.
+
+**Test-Anpassungen (`tests/test_mw_radio_bandpilot.py`):**
+- 4 Tests von `current="normal"` auf `"diversity_normal"` umgestellt
+- 2 NEU: `test_bandpilot_skips_when_current_is_normal`,
+  `test_bandpilot_rejects_normal_target`
+
+**Test-Bilanz: 1129 → 1131 grün** (+2 Bug-E-Tests).
+
+**Commits:** `6347c0a` (Bug D), `18db03f` (Bug D+E + Tests), `91728f7`
+(Bug F).
+
+**Field-Test 11.05. abends (Mike live):**
+- ✅ App-Start funktioniert einwandfrei (Bug F greift)
+- ✅ Umschalten auf Diversity keine Probleme (Bug A behoben)
+- ✅ Beide Antennen aktiv (Statik-Mess läuft sauber)
+- 🔄 Dynamic-Umschaltung läuft gerade
+
+**Push pending** bis Mike kompletten Field-Test grün gibt.
+
 ## 2026-05-11 v0.97.1 — P35.DIVERSITY-STARTUP-FIX (3 Bugs nach P34-Field-Test)
 
 **Mike-Field-Test 11.05.2026** entdeckte 3 Bugs nach P34.DIVERSITY-DYNAMIC:
