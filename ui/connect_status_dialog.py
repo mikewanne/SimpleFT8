@@ -16,8 +16,10 @@ Beide via Qt-AutoConnection — Worker-Thread emittet, Slot laeuft im
 GUI-Thread (Qt erkennt Cross-Thread → QueuedConnection).
 """
 
+from pathlib import Path
+
 from PySide6.QtCore import Qt, QTimer, Signal, Slot
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
@@ -26,6 +28,27 @@ from PySide6.QtWidgets import (
     QPushButton,
     QVBoxLayout,
 )
+
+
+def _load_radio_tower_pixmap(size: int = 44) -> QPixmap:
+    """Lucide radio-tower SVG → QPixmap. Bei Fehlern leere Pixmap."""
+    icon_path = Path(__file__).parent / "icons" / "radio_tower.svg"
+    if not icon_path.exists():
+        return QPixmap()
+    try:
+        from PySide6.QtSvg import QSvgRenderer
+        from PySide6.QtGui import QPainter
+        renderer = QSvgRenderer(str(icon_path))
+        if not renderer.isValid():
+            return QPixmap()
+        pm = QPixmap(size, size)
+        pm.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pm)
+        renderer.render(painter)
+        painter.end()
+        return pm
+    except Exception:
+        return QPixmap()
 
 
 class ConnectStatusDialog(QDialog):
@@ -87,16 +110,33 @@ class ConnectStatusDialog(QDialog):
         layout.setContentsMargins(20, 18, 20, 16)
         layout.setSpacing(10)
 
+        # 11.05.2026 Mike: Funkmast-Icon links vom Title/Spinner.
+        # Lucide radio-tower SVG, ISC/MIT-Lizenz. KISS: HBox mit Icon + VBox.
+        top_row = QHBoxLayout()
+        top_row.setSpacing(12)
+        self._icon_label = QLabel()
+        pm = _load_radio_tower_pixmap(size=44)
+        if not pm.isNull():
+            self._icon_label.setPixmap(pm)
+        self._icon_label.setFixedSize(48, 48)
+        self._icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        top_row.addWidget(self._icon_label, 0, Qt.AlignmentFlag.AlignTop)
+
+        text_col = QVBoxLayout()
+        text_col.setSpacing(6)
         title = QLabel("FlexRadio wird verbunden")
         title.setFont(QFont("", 13, QFont.Weight.Bold))
         title.setStyleSheet("color: #7CC; background-color: transparent;")
-        layout.addWidget(title)
+        text_col.addWidget(title)
 
         self._spinner_label = QLabel(".")
         self._spinner_label.setFont(QFont("Menlo", 18, QFont.Weight.Bold))
         self._spinner_label.setStyleSheet("color: #7CC;")
         self._spinner_label.setFixedHeight(28)
-        layout.addWidget(self._spinner_label)
+        text_col.addWidget(self._spinner_label)
+
+        top_row.addLayout(text_col, 1)
+        layout.addLayout(top_row)
 
         # 11.05.2026 Mike-Field-Test: Versuch-Counter raus, Spinner reicht.
         # Label bleibt im Code als Failed-State-Anzeige (sonst nur ein ✗).
