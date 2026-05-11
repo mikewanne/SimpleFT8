@@ -395,9 +395,20 @@ class RadioMixin:
         # ebenfalls nichts (siehe mw_cycle.py P21-Fix). Sobald Radio
         # verbindet, laeuft die Mess automatisch beim naechsten Slot an.
         radio_ready = bool(self.radio.ip)
-        _dlog("BAND", f"_diversity_ctrl.on_band_change() radio_ready={radio_ready} "
-              f"-> startet Mess (6 Zyklen)")
-        self._diversity_ctrl.on_band_change()
+        # P35 Bug D (Mike Field-Test 11.05.): on_band_change() nur rufen wenn
+        # Diversity-Modus aktiv UND Radio verbunden. Sonst „messen 0/6"-
+        # Anzeige haengt weil niemand misst (rx_mode=normal oder radio fehlt).
+        # Bei App-Start triggert Settings-Restore _on_band_changed mit
+        # rx_mode=normal+radio.ip=None → ohne Schutz endlose Mess-Anzeige.
+        if self._rx_mode == "diversity" and radio_ready:
+            _dlog("BAND", f"_diversity_ctrl.on_band_change() radio_ready={radio_ready} "
+                  f"-> startet Mess (6 Zyklen)")
+            self._diversity_ctrl.on_band_change()
+        else:
+            # Phase=operate als Default damit UI nicht „messen" zeigt.
+            _dlog("BAND", f"_diversity_ctrl.on_band_change() SKIP "
+                  f"(rx_mode={self._rx_mode}, radio_ready={radio_ready})")
+            self._diversity_ctrl._phase = "operate"
         self.control_panel.update_freq_histogram(
             self._diversity_ctrl.get_histogram_data())
         # Auto-Hunt: Cooldowns loeschen bei Bandwechsel
