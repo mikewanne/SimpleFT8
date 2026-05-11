@@ -1,6 +1,6 @@
 # Bandpilot Empfehlung — 40m FT8
 
-Stand: 2026-05-06 (UTC, App-Start). Quelle: `statistics/<Mode>/40m/FT8/`.
+Stand: 2026-05-11 (UTC, App-Start). Quelle: `statistics/<Mode>/40m/FT8/`.
 
 Schwellen pro Stunde: ≥ 3 Messtage UND ≥ 20 Slots pro Modus.
 
@@ -8,8 +8,8 @@ Schwellen pro Stunde: ≥ 3 Messtage UND ≥ 20 Slots pro Modus.
 |---:|---:|---:|---:|:---|
 | 00 | 3·24.1 | 5·49.5 | 3·46.8 | Diversity Standard |
 | 01 | 2·27.7 | 5·42.1 | 3·45.0 | _zu wenig Daten_ |
-| 02 | 3·30.1 | 4·38.5 | 3·41.2 | Diversity DX |
-| 03 | 3·32.1 | 4·39.9 | 2·42.3 | _zu wenig Daten_ |
+| 02 | 3·30.1 | 4·38.5 | 4·39.5 | Diversity DX |
+| 03 | 4·32.1 | 5·39.7 | 3·41.5 | Diversity DX |
 | 04 | 4·29.1 | 5·46.8 | 2·40.7 | _zu wenig Daten_ |
 | 05 | 5·33.8 | 4·49.3 | 3·47.3 | Diversity Standard |
 | 06 | 4·32.4 | 3·55.7 | 3·39.6 | Diversity Standard |
