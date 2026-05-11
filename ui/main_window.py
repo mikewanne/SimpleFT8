@@ -58,6 +58,17 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         # Worker-Thread safe darauf zugreifen kann (lokale Referenz holen).
         self._connect_dialog = None
 
+        # P35 Bug F (Mike-Anweisung 11.05.2026): App-Start IMMER auf
+        # 20m / FT8 / Normal-Modus erzwingen — kein State-Restore mehr.
+        # Mike entscheidet morgens spontan was er funken will. Settings-
+        # Datei behaelt andere Werte (Callsign, Locator, Gains, Presets),
+        # NUR band+mode werden auf Startwerte ueberschrieben. Andere
+        # Konsequenzen: bandpilot_mode/dynamic_diversity_enabled etc.
+        # bleiben aus Settings.
+        self.settings._data["band"] = "20m"
+        self.settings._data["mode"] = "FT8"
+        # _rx_mode = "normal" wird ohnehin in _init_radio_state (Z.235) gesetzt.
+
         # Initialisierung in fester Reihenfolge — siehe Helper-Docstrings.
         self._init_core_components()
         self._init_qso_log()
