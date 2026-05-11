@@ -32,6 +32,7 @@ from typing import Optional
 from PySide6.QtCore import QObject, Signal
 
 from core.diversity import evaluate_ratio  # Modul-Funktion (P34 Helper)
+from core.debug_log import debug_log
 
 logger = logging.getLogger(__name__)
 
@@ -91,10 +92,12 @@ class DynamicDiversityController(QObject):
                 self._diversity_ctrl._last_measured_at = time.time()
                 logger.info("[Dynamic] Statik-Mess-Phase abgebrochen "
                             "(Toggle AN waehrend measure)")
+                debug_log("DYNAMIC", "Statik-Mess-Phase abgebrochen")
             # 50:50-Reset
             self._diversity_ctrl.ratio = "50:50"
             self._diversity_ctrl.dominant = None
         logger.info("[Dynamic] Aktiviert (Buffer leer, Ratio 50:50)")
+        debug_log("DYNAMIC", "activate -> Buffer leer, Ratio 50:50")
 
     def deactivate(self) -> None:
         """Toggle AN→AUS: aktuelles Ratio bleibt stehen, _last_measured_at
@@ -109,7 +112,10 @@ class DynamicDiversityController(QObject):
             self._active = False
             self._diversity_ctrl.dynamic_active = False
             self._diversity_ctrl._last_measured_at = time.time()  # Mike B-Option
+            _ratio = self._diversity_ctrl.ratio
         logger.info("[Dynamic] Deaktiviert (Ratio bleibt, Statik-Frist refresht)")
+        debug_log("DYNAMIC",
+                  f"deactivate -> ratio={_ratio} bleibt, Statik-Frist refresht")
 
     def reset(self) -> None:
         """Buffer leer + 50:50. Bei Band/Modus/scoring-Wechsel.
@@ -126,6 +132,7 @@ class DynamicDiversityController(QObject):
             self._diversity_ctrl.ratio = "50:50"
             self._diversity_ctrl.dominant = None
         logger.info("[Dynamic] Reset (Buffer leer, Ratio 50:50)")
+        debug_log("DYNAMIC", "reset -> Buffer leer, Ratio 50:50")
 
     def record_slot(self, ant: str, score: float) -> None:
         """Ein Slot-Score in Buffer schieben.
@@ -147,8 +154,12 @@ class DynamicDiversityController(QObject):
             return
         with self._lock:
             self._buffer[ant].append(float(score))
-            if (len(self._buffer["A1"]) == self.BUFFER_SIZE
-                    and len(self._buffer["A2"]) == self.BUFFER_SIZE):
+            _n1 = len(self._buffer["A1"])
+            _n2 = len(self._buffer["A2"])
+            debug_log("DYNAMIC",
+                      f"record_slot ant={ant} score={score:.1f} "
+                      f"buffer A1={_n1}/5 A2={_n2}/5")
+            if (_n1 == self.BUFFER_SIZE and _n2 == self.BUFFER_SIZE):
                 self._evaluate_locked()
 
     # ── Internal ──────────────────────────────────────────────────────
@@ -168,16 +179,24 @@ class DynamicDiversityController(QObject):
         )
         old_ratio = self._diversity_ctrl.ratio
         old_dominant = self._diversity_ctrl.dominant
+        peak = max(m1, m2)
+        diff = abs(m1 - m2) / peak if peak > 0 else 0.0
+        # Jede Auswertung loggen — auch wenn kein Wechsel (zur Beobachtung)
+        debug_log("DYNAMIC",
+                  f"evaluate m1={m1:.1f} m2={m2:.1f} diff={diff * 100:.1f}% "
+                  f"-> {new_ratio} (current: {old_ratio})")
         if new_ratio == old_ratio and new_dominant == old_dominant:
             return
         self._diversity_ctrl.ratio = new_ratio
         self._diversity_ctrl.dominant = new_dominant
-        peak = max(m1, m2)
-        diff = abs(m1 - m2) / peak if peak > 0 else 0.0
         logger.info(
             "[Dynamic] Ratio-Wechsel: %s → %s (m1=%.1f m2=%.1f, diff=%.1f%%)",
             old_ratio, new_ratio, m1, m2, diff * 100
         )
+        debug_log("DYNAMIC",
+                  f"RATIO-WECHSEL {old_ratio} -> {new_ratio} "
+                  f"(A1-Buffer={list(self._buffer['A1'])} "
+                  f"A2-Buffer={list(self._buffer['A2'])})")
         self.ratio_changed_dynamic.emit(new_ratio)
 
     # ── Test-Helper (nur Tests, nicht prod) ───────────────────────────
