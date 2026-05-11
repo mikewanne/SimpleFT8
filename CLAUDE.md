@@ -2,6 +2,37 @@ Lies nach dieser Datei sofort auch HANDOFF.md **und HISTORY.md** und bestätige 
 
 ---
 
+# ⛔⛔⛔ DEEPSEEK-ZWEITMEINUNG PFLICHT BEI SCHWIERIGEN PROBLEMEN ⛔⛔⛔
+
+**Mike-Anweisung 11.05.2026 nach P34-Bug-Diagnose:**
+
+Bei jedem **schwierigen Problem** (Bug-Diagnose, Architektur-Frage,
+„warum greift mein Fix nicht?", Race-Condition, mehrere fehlgeschlagene
+Eigen-Fixes) → **IMMER DeepSeek einbinden als Zweit-Perspektive.**
+
+**Verwerfen kann man die Antwort hinterher** — aber Nicht-Einbinden ist
+die einzige Sache die nicht rueckgaengig zu machen ist.
+
+**Merksatz: „2 KIs sehen mehr als eine."**
+
+**Aufruf:** `cat prompt.md | ./venv/bin/python3 tools/deepseek_review.py file1.py file2.py`
+(Model `deepseek-reasoner` ist Default.)
+
+**Konkretes Beispiel 11.05.2026:** Mike-Symptom „Toggle Dynamic AN aber
+Statik-Mess laeuft trotzdem" — mein erster Fix hatte Smoke-Test gruen,
+aber Mike sah das Problem weiter. DeepSeek-Diagnose hat meine
+Aufmerksamkeit auf die UI-Update-Override-Schicht gelenkt (mw_cycle.py
+Z.732 ueberschreibt jeden Slot das Panel-Label). **Ohne diese
+Zweitmeinung haette ich noch lange im falschen Modul gesucht.**
+
+**Trivial-Klausel:** Tippfehler, Umbenennung, <5 Zeilen, pure Refactor
+ohne Verhaltensaenderung → DeepSeek nicht noetig.
+
+Memory: `feedback_deepseek_always_second_opinion.md` (Pruef-Trigger-
+Liste, Prompt-Pflicht, Antwort-Umgang).
+
+---
+
 # ⛔⛔⛔ WORKFLOW-PFLICHT — KEINE AUSNAHME — ABSOLUT VERBINDLICH ⛔⛔⛔
 
 **JEDE Code-Änderung — egal wie trivial sie erscheint — MUSS den vollen Workflow durchlaufen:**
