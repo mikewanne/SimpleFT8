@@ -1,13 +1,29 @@
-# OMNI-TX Design-Spec
+# OMNI-TX Design-Spec — VERALTET
+
+> **⛔ VERALTET seit 11.05.2026.** Dieses Dokument beschreibt das
+> **alte 5-Slot-Pattern (v0.78–v0.96.0)** das durch
+> **P7.OMNI-SIMPLIFY** (v0.96.4) ersetzt wurde. Es bleibt aus
+> historischen Gruenden bestehen (Design-Geschichte), spiegelt aber
+> NICHT den aktuellen Code wider.
+>
+> **Aktuelle OMNI-Spec:**
+> - User-Doku: `docs/explained/omni-tx_de.md` + `omni-tx.md`
+> - Code-Spec: `core/omni_cq.py` (~250 Zeilen, Single-Slot mit
+>   modus-spezifischem Down-Counter)
+> - Verbindliche Memory: `project_omni_cq_spec.md`
+
+---
+
+## ⛓️ Historisches Konzept (NICHT MEHR GUELTIG)
 
 **Version:** v3.2 (geplant fuer SimpleFT8 v0.78)
-**Status:** Design-Phase — Code-Implementation noch nicht begonnen
+**Status:** Ersetzt durch P7.OMNI-SIMPLIFY (v0.96.4)
 **Erstellt:** 2026-04-30 von Mike (DA1MHH) + Claude (Anthropic)
 **Workflow:** V1→V2→V3 nach `docs/WORKFLOW.md` v1.1
 
-Dieses Dokument ist die **permanente Design-Spec** fuer das OMNI-TX-Feature.
+Dieses Dokument war die **permanente Design-Spec** fuer das OMNI-TX-Feature.
 Es sammelt alle Konzept-, UI-, Logik- und Argumentations-Entscheidungen
-an einem Ort. Workflow-Snapshots (V1/V2/V3) liegen in `prompts/omni_v*.md`.
+des urspruenglichen 5-Slot-Designs.
 
 ---
 

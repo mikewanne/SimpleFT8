@@ -1,63 +1,118 @@
-# OMNI-TX — Automatic Slot Rotation
+# OMNI-CQ — Automatic Parity Switching
 
 ## In Short
 
-OMNI-TX automatically rotates between Even and Odd slots to reach 100% of active stations instead of just 50%. Less transmitting, more listening, more QSOs.
+OMNI-CQ calls CQ on **one** slot parity (Even or Odd), then
+automatically switches to the other parity after a mode-dependent
+number of transmit attempts. Over longer periods, you reach both
+listener groups instead of just one — without changing your TX duty
+cycle per slot.
 
 ## The Problem
 
-Every FT8 operator only hears the opposite slot. If you transmit on Even, you only hear Odd — and vice versa. With normal CQ, you reach exactly 50% of active stations per cycle. The other half never hears you.
+Every FT8 operator only hears the opposite slot. If you transmit on
+Even, you only hear Odd — and vice versa. With normal CQ, you reach
+exactly **50%** of active stations per cycle. The other half never
+hears you.
 
 ## How It Works
 
-OMNI-TX alternates between two blocks:
+OMNI-CQ is a **single-slot CQ** in one parity, with automatic parity
+switching after a fixed number of transmit attempts per mode:
 
-**Block 1 (Even-first):**
-```
-Even TX → Odd TX → Even RX → Odd RX → Even RX
-```
+| Mode | TX attempts per parity | Duration (wallclock) |
+|------|------------------------|----------------------|
+| FT8 | 10 | ~5 minutes |
+| FT4 | 20 | ~5 minutes |
+| FT2 | 40 | ~5 minutes |
 
-**Block 2 (Odd-first):**
-```
-Odd TX → Even TX → Odd RX → Even RX → Odd RX
-```
+A down-counter counts from the max value to zero. At 0:
+**automatic parity switch** + counter resets to the mode value. The
+counter is visible in the TX line as a `↻N` suffix.
 
-Each block runs for 80 cycles (~100 minutes), then switches. Over both blocks, Even and Odd coverage is perfectly balanced.
+```
+04:30:00 [E] → Sende CQ DA1MHH JO31 ↻10
+04:30:30 [E] → Sende CQ DA1MHH JO31 ↻9
+...
+04:35:00 [E] → Sende CQ DA1MHH JO31 ↻1
+04:35:30 [O] → Sende CQ DA1MHH JO31 ↻10   ← parity switch
+```
 
 ## Transmit Ratio
 
-| Mode | TX Slots | RX Slots | TX Ratio |
-|------|---------|---------|----------|
-| Normal (Even) | 5 of 10 | 5 of 10 | **50%** |
-| OMNI-TX | 4 of 10 | 6 of 10 | **40%** |
-
-OMNI-TX transmits 20% less, listens 20% more, but reaches both listener groups.
+OMNI-CQ does **not** change your TX duty cycle per slot. It's
+single-slot CQ — same TX ratio as normal CQ on that parity. The
+difference: parity rotates automatically every ~5 min.
 
 ## Realistic Gain
 
-- Busy bands: **20-30% more CQ responses**
-- Quiet bands: 10-20% more
-- Reason: Twice as many operators hear you
+Over longer periods (1+ hour):
+
+- **Busy bands:** ~15-25% more CQ responses than static single-slot
+  CQ — you reach both listener groups.
+- **Quiet bands:** Small effect — stations that don't hear you on
+  one parity probably won't hear you on the other either.
 
 ## QSO Behavior
 
 When a station responds:
-1. Normal QSO flow (state machine takes over)
-2. Block counter resets
-3. Current block stays (the slot is working well)
-4. After QSO ends: OMNI-TX pattern resumes
 
-## Auto-Hunt
+1. OMNI pauses, normal QSO flow (state machine takes over)
+2. After QSO ends: OMNI resumes on the **same** parity
+3. Counter resets to TARGET (positive reinforcement:
+   „good slot — keep going")
 
-When enabled, Auto-Hunt is automatically activated. Auto-Hunt responds to CQ stations using intelligent scoring (new DXCC > rare call > good SNR).
+## Antenna Measurement (Diversity)
 
-## Status
+If a diversity antenna measurement starts during OMNI:
 
-OMNI-TX is currently disabled (field test pending). Activation
-details are not publicly documented. When enabled: an Omega symbol
-appears next to the version number and the CQ button switches to
-"OMNI CQ".
+1. OMNI pauses (no TX during measurement)
+2. Measurement runs (~90 s)
+3. After measurement: OMNI resumes, counter resets to TARGET
 
-## To Observers
+## Switch Triggers Outside Counter
 
-One frequency in the waterfall. Signal switches between Even and Odd. Looks like manual slot switching — known, accepted, unobtrusive. Technically compliant: one frequency, same transmit time as any other station.
+- **Band change:** OMNI stops (user decides manually on new band)
+- **Mode change:** OMNI stops (counter would be a different size)
+
+## Diversity-only
+
+OMNI-CQ only works in **diversity mode**. In normal mode, the toggle
+button is hidden.
+
+## Activation
+
+OMNI-CQ is hidden in the UI (Easter Egg). When enabled:
+- Version number gets an Omega symbol
+- New button appears next to „CQ RUFEN": **OMNI CQ**
+  - **dark red** when inactive
+  - **green** when active
+- Status bar shows `Ω CQ=N (E)` or `Ω CQ=N (O)` with current counter
+  and parity
+
+## QSO Panel Display
+
+With OMNI active:
+- Even slots in **slightly darker orange** (#E09600)
+- Odd slots in **normal orange** (#FFAA00)
+- On parity switch: **blank line** between blocks
+- Counter suffix `↻N` on each TX line
+
+At a glance you see how far the current parity block is and when the
+next phase begins.
+
+## To Observers in the Waterfall
+
+One frequency, one station, normal CQ rhythm with occasional parity
+switches — looks like an operator switching between Even and Odd
+phases. Technically fully compliant: one TX frequency, normal
+transmit time per slot.
+
+## History
+
+Earlier concept (v0.78–v0.96.0) was a 5-slot pattern with two
+consecutive TX slots per block. Replaced with **P7.OMNI-SIMPLIFY**
+(v0.96.4) by the current single-slot pattern. Reason: consecutive
+TX-TX in 15-s slots caused encoder races and diversity conflicts.
+Current solution is KISS — one parity, one switch counter, diversity
+stays untouched.
