@@ -75,7 +75,21 @@ class Settings:
 
     def __init__(self):
         self._data = dict(DEFAULTS)
+        # P34: Dynamic-Diversity-Toggle ist RAM-only (NICHT persistiert).
+        # Bei jedem App-Start auf False. Mike-Entscheidung Testphase:
+        # verhindert dass Toggle ungewollt aktiv bleibt + Bugs falsch
+        # zugeordnet werden.
+        self._dynamic_enabled = False
         self.load()
+
+    # P34: Dynamic-Diversity Toggle (RAM-only, kein save/load)
+    @property
+    def dynamic_diversity_enabled(self) -> bool:
+        return self._dynamic_enabled
+
+    @dynamic_diversity_enabled.setter
+    def dynamic_diversity_enabled(self, value: bool):
+        self._dynamic_enabled = bool(value)
 
     def load(self):
         if CONFIG_FILE.exists():
