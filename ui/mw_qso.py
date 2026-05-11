@@ -118,6 +118,12 @@ class QSOMixin:
         P23: bei aktivem OMNI-CQ wird der Down-Counter (`omni.cq_remaining`)
         durchgereicht und qso_panel haengt Suffix `↻N` an die TX-Zeile.
         """
+        # 11.05.2026 P28: _has_sent_cq auch bei OMNI/Direkt-TX setzen.
+        # OMNI ruft encoder.transmit() direkt (umgeht _on_send_message),
+        # daher wurde _has_sent_cq nie True → PSK-Worker hat nie gefetcht.
+        # tx_started feuert fuer JEDEN TX-Pfad (Normal-CQ, OMNI, manuell).
+        if message.startswith("CQ "):
+            self._has_sent_cq = True
         # P15 (10.05.2026 Mike-Field-Test): ANT-Label NICHT mehr bei Sende.
         # Hardware sendet IMMER ANT1 (verriegelt), Label hier waere irrefuehrend.
         # Label gehoert hinter Empf.-Eintrag (siehe mw_cycle.on_message_decoded).
