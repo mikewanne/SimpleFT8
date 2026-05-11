@@ -57,7 +57,9 @@ def test_maybe_apply_bandpilot_auto_calls_set_rx_mode_direct():
         "decision": "switch",
         "decision_mode": "diversity_dx",
     }
-    s = _make_mock_self(mode="auto", current="normal", rec=rec)
+    # P35 Bug E (Mike 11.05.): Bandpilot ueberschreibt Normal NIE.
+    # Test: current=diversity_normal (statt normal) damit Bandpilot wirkt.
+    s = _make_mock_self(mode="auto", current="diversity_normal", rec=rec)
     result = RadioMixin._maybe_apply_bandpilot(s, "40m")
     assert result is True
     s._set_rx_mode_direct.assert_called_once_with("diversity_dx")
@@ -74,7 +76,9 @@ def test_maybe_apply_bandpilot_auto_no_change_does_nothing():
         "decision": "no_change",
         "decision_mode": "normal",
     }
-    s = _make_mock_self(mode="auto", current="normal", rec=rec)
+    # P35 Bug E (Mike 11.05.): Bandpilot ueberschreibt Normal NIE.
+    # Test: current=diversity_normal (statt normal) damit Bandpilot wirkt.
+    s = _make_mock_self(mode="auto", current="diversity_normal", rec=rec)
     result = RadioMixin._maybe_apply_bandpilot(s, "40m")
     assert result is False
     s._set_rx_mode_direct.assert_not_called()
@@ -93,7 +97,8 @@ def test_maybe_apply_bandpilot_manual_dialog_only_when_top1_diff():
         "decision": "switch",
         "decision_mode": "diversity_dx",
     }
-    s = _make_mock_self(mode="manual", current="normal", rec=rec)
+    # P35 Bug E: Bandpilot ueberschreibt Normal NIE.
+    s = _make_mock_self(mode="manual", current="diversity_normal", rec=rec)
     result = RadioMixin._maybe_apply_bandpilot(s, "40m")
     s._show_bandpilot_manual_dialog.assert_called_once()
     assert result is True
@@ -120,8 +125,12 @@ def test_maybe_apply_bandpilot_manual_top1_equals_current_silent():
 # ── Test 17: Statusbar-Hinweis bei zu wenig Daten ─────────────────────────────
 
 def test_maybe_apply_bandpilot_silent_when_insufficient_data():
-    """V3-AK 32 #17: Bei rec=None → Statusbar-Hinweis, kein Wechsel."""
-    s = _make_mock_self(mode="auto", current="normal", rec=None)
+    """V3-AK 32 #17: Bei rec=None → Statusbar-Hinweis, kein Wechsel.
+
+    P35 Bug E: current=diversity_normal (statt normal) damit Bandpilot
+    ueberhaupt zu rec=None kommt.
+    """
+    s = _make_mock_self(mode="auto", current="diversity_normal", rec=None)
     result = RadioMixin._maybe_apply_bandpilot(s, "40m")
     assert result is False
     s._show_bandpilot_insufficient_data.assert_called_once_with("40m", pytest.approx(s._show_bandpilot_insufficient_data.call_args[0][1]))
@@ -184,7 +193,8 @@ def test_auto_tx_active_delays_set_rx_mode():
                     ("normal", 10.0)],
         "decision": "switch", "decision_mode": "diversity_dx",
     }
-    s = _make_mock_self(mode="auto", current="normal", rec=rec,
+    # P35 Bug E: Bandpilot ueberschreibt Normal NIE.
+    s = _make_mock_self(mode="auto", current="diversity_normal", rec=rec,
                         is_transmitting=True)
     result = RadioMixin._maybe_apply_bandpilot(s, "40m")
     assert result is True
@@ -297,3 +307,37 @@ def test_manual_dialog_shows_current_marker(qapp, sample_rec):
     has_current_marker = any("●" in t and "Normal" in t for t in texts)
     assert has_current_marker
     dlg.close()
+
+
+# ── P35 Bug E (Mike 11.05.2026): Bandpilot uebersteuert Normal NIE ─────────
+
+def test_bandpilot_skips_when_current_is_normal():
+    """P35 Bug E: Bei current_mode=normal → return False, kein Recommend-
+    Aufruf. Mike-Regel: Normal ist Mike's manuelle Entscheidung."""
+    rec = {
+        "top1": "diversity_dx", "top1_mean": 50.0,
+        "ranking": [("diversity_dx", 50.0), ("diversity_normal", 30.0),
+                    ("normal", 10.0)],
+        "decision": "switch", "decision_mode": "diversity_dx",
+    }
+    s = _make_mock_self(mode="auto", current="normal", rec=rec)
+    result = RadioMixin._maybe_apply_bandpilot(s, "40m")
+    assert result is False
+    # Recommend wurde gar nicht aufgerufen
+    s._bandpilot.recommend.assert_not_called()
+    s._set_rx_mode_direct.assert_not_called()
+
+
+def test_bandpilot_rejects_normal_target():
+    """P35 Bug E: Wenn decision_mode=normal (Defensive falls Recommender
+    Normal als Top-1 zurueckgibt), Bandpilot empfiehlt NICHT."""
+    rec = {
+        "top1": "normal", "top1_mean": 50.0,
+        "ranking": [("normal", 50.0), ("diversity_dx", 30.0),
+                    ("diversity_normal", 10.0)],
+        "decision": "switch", "decision_mode": "normal",
+    }
+    s = _make_mock_self(mode="auto", current="diversity_dx", rec=rec)
+    result = RadioMixin._maybe_apply_bandpilot(s, "40m")
+    assert result is False
+    s._set_rx_mode_direct.assert_not_called()

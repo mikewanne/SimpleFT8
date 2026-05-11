@@ -479,7 +479,17 @@ class RadioMixin:
         # Wenn er aktiv geworden ist, hat _set_rx_mode_direct bereits den
         # passenden Preset-Dialog gefahren — Standard-Diversity-Preset-Pfad
         # ueberspringen, sonst doppelter Dialog.
-        bandpilot_acted = self._maybe_apply_bandpilot(band)
+        # P35 Bug E (Mike-Diagnose 11.05.): Bei App-Start ist radio.ip=None.
+        # Bandpilot-Auto-Switch ohne Radio fuehrt zu inkonsistentem State
+        # (rx_mode=diversity gesetzt, aber _check_diversity_preset returnt
+        # sofort → Init nicht durchgefuehrt → "MESSEN 0/6" haengt). Bei
+        # radio.ip=None Bandpilot ueberspringen — Mike entscheidet manuell
+        # nach Radio-Connect.
+        if not self.radio.ip:
+            _dlog("BAND", "Bandpilot SKIP — radio nicht verbunden, bleibe Normal")
+            bandpilot_acted = False
+        else:
+            bandpilot_acted = self._maybe_apply_bandpilot(band)
 
         # Diversity: Preset-Check mit Dialog + ggf. Pipeline
         if not bandpilot_acted and self._rx_mode == "diversity":
@@ -724,6 +734,13 @@ class RadioMixin:
             # dx_tuning laeuft → Bandpilot still
             return False
 
+        # P35 Bug E (Mike-Diagnose 11.05.): Bandpilot ueberschreibt
+        # Mike's manuelle Normal-Entscheidung NIE. Bandpilot's Aufgabe ist
+        # NUR zwischen Diversity-Standard und Diversity-DX zu waehlen —
+        # ob Mike ueberhaupt Diversity will, entscheidet Mike selbst.
+        if current == "normal":
+            return False
+
         utc_hour = datetime.now(timezone.utc).hour
 
         try:
@@ -753,6 +770,13 @@ class RadioMixin:
         if rec["decision"] == "no_change":
             return False
         target = rec["decision_mode"]
+
+        # P35 Bug E: Bandpilot empfiehlt NIE Normal. Defensive — sollte
+        # durch Recommender-Logik schon abgedeckt sein, aber falls dort
+        # Normal als Top-1 erscheint (z.B. wenige Diversity-Daten):
+        # Mike-Regel "Normal ist Mike's Entscheidung" enforced.
+        if target == "normal":
+            return False
 
         if not self.encoder.is_transmitting:
             # Sofort wechseln
