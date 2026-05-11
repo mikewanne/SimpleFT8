@@ -173,6 +173,20 @@ class RadioMixin:
         self.radio.meter_update.connect(self._on_meter_update)
         self.radio.swr_alarm.connect(self._on_swr_alarm)
 
+        # P35 Bug A Resume (AK7 idempotent, R1-Q7 voller Pfad):
+        # Falls _enable_diversity vor Radio-Connect aufgeschoben wurde,
+        # jetzt nachholen — aber via _check_diversity_preset (nicht
+        # _enable_diversity direkt) damit Gain-Cache + DXTuneDialog-
+        # Pfade korrekt durchlaufen werden.
+        pending_scoring = getattr(self, "_pending_diversity_init", None)
+        if pending_scoring is not None:
+            self._pending_diversity_init = None  # AK7: vor Aufruf reset
+            print(f"[Diversity] Radio verbunden — aufgeschobene Init "
+                  f"(scoring={pending_scoring})")
+            from core.debug_log import debug_log as _dlog
+            _dlog("DIV-EN", f"Resume scoring={pending_scoring}")
+            self._check_diversity_preset(band, mode, pending_scoring)
+
     def _on_radio_disconnected(self):
         """Verbindung verloren — unbegrenzt reconnecten mit Exponential Backoff."""
         self.control_panel.set_connection_status("disconnected")
@@ -585,6 +599,12 @@ class RadioMixin:
         Cache-Status-Dispatch via ``_check_diversity_preset`` analog zum
         Bandwechsel-Pfad. Mike-Vision: keine Modal-Wahl-Dialoge fuer
         Routine-Aktionen.
+
+        P35 Bug B5 (Mike Q3, 11.05.): Wenn Settings-Toggle "Dynamic AN"
+        aktiv ist, wird Dynamic am Ende automatisch (re-)aktiviert.
+        Mike-Wunsch: Toggle ueberlebt Mode-Wechsel durch die ganze Session.
+        activate() respektiert dabei Cache-Ratio (AK5 — kein 50:50-Reset
+        wenn Cache 70:30 etc. geladen wurde).
         """
         self._rx_mode = "diversity"
         self._diversity_stations = {}
@@ -597,6 +617,17 @@ class RadioMixin:
         # P1.CACHE-SIMPLE: einheitliche Dispatch-Logik
         # (Cache-Reuse / Auto-Messung / DXTuneDialog / volle Pipeline).
         self._check_diversity_preset(band, ft_mode, scoring)
+
+        # P35 Bug B5: Settings-Toggle Auto-Reactivate.
+        # Wenn Mike den Dynamic-Toggle in der Session AN hatte (auch
+        # vor diesem Mode-Wechsel), Dynamic auto-reactivieren.
+        # activate() respektiert Cache-Ratio (AK5).
+        if (getattr(self.settings, 'dynamic_diversity_enabled', False)
+                and getattr(self, "_dynamic_ctrl", None) is not None
+                and not self._dynamic_ctrl.is_active()):
+            print("[Dynamic] Auto-Reactivate nach Mode-Wechsel "
+                  "(Settings-Toggle AN)")
+            self._apply_dynamic_toggle(True)
 
     # ── Bandpilot ────────────────────────────────────────────────────────────
 
@@ -876,6 +907,26 @@ class RadioMixin:
         _dlog("DIV-EN", f"_enable_diversity scoring={scoring_mode} "
               f"cached_ratio={cached_ratio} (Pfad: "
               f"{'CACHE-REUSE' if cached_ratio else 'PHASE-MEASURE'})")
+        # P35 Bug A (Mike Field-Test 11.05.): Wenn Radio noch nicht verbunden,
+        # Init aufschieben — sonst haengt Statik-Mess (record_measurement
+        # wird in mw_cycle bei radio.ip=None geskippt, step bleibt 0,
+        # Queue fuellt sich mit (A1, "measure")-Eintraegen).
+        if not getattr(self.radio, 'ip', None):
+            self._pending_diversity_init = scoring_mode
+            # Phase=operate damit Mess-Phase nicht haengt; Ratio 50:50 als
+            # Fallback bis Radio kommt + Resume die echte Pipeline triggert.
+            self._diversity_ctrl._phase = "operate"
+            self._diversity_ctrl.ratio = "50:50"
+            self._diversity_ctrl.dominant = None
+            import time as _time
+            self._diversity_ctrl._last_measured_at = _time.time()
+            self._set_cq_locked(False)
+            self._set_gain_measure_lock(False)
+            print(f"[Diversity] Radio nicht verbunden — Init aufgeschoben "
+                  f"(scoring={scoring_mode})")
+            _dlog("DIV-EN", f"Aufgeschoben scoring={scoring_mode}")
+            return
+
         # P34 Bug-Fix (Mike Field-Test 11.05.): Wenn Dynamic-Toggle AN ist und
         # User in Diversity wechselt, soll KEINE 90-Sek-Statik-Mess starten —
         # Dynamic uebernimmt nach ~3 Min selbst. Pruefen vor Cache-Pfad damit
@@ -1059,6 +1110,7 @@ class RadioMixin:
         # Diversity-Pipeline-Flags ruecksetzen damit kein Geister-State bleibt
         self._pending_dx_diversity = False
         self._pending_ratio_status = None
+        self._pending_diversity_init = None  # P35 Bug A
         self._disable_diversity()
 
     def _close_mess_status_dialog(self):
