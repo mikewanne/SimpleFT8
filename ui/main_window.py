@@ -241,6 +241,8 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         # Qt.QueuedConnection beim spaeteren Slot-Setup.
         from core.dynamic_diversity import DynamicDiversityController
         self._dynamic_ctrl = DynamicDiversityController(self._diversity_ctrl)
+        # P35 Bug A: Flag fuer aufgeschobene Diversity-Init (radio.ip=None).
+        self._pending_diversity_init = None
         self._active_qso_targets: set = set()  # Stationen im aktiven QSO → 150s Aging
         self._pending_station_click = None  # P1.24: Klick waehrend TX → Buffer fuer naechsten Slot
         self._recent_logged_calls: dict[tuple[str, str], float] = {}  # P1.7 (v0.95.19): ADIF-Dedup (call, band) → ts
@@ -1355,13 +1357,27 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
     def _apply_dynamic_toggle(self, enabled: bool) -> None:
         """P34: Settings-Dialog-Apply ruft das auf nachdem Toggle gesetzt wurde.
 
-        Toggle AN: activate() → 50:50-Reset + ggf. Mess abbrechen.
+        Toggle AN: activate() → ggf. Mess abbrechen + (P35-AK5)
+                  Ratio-Behandlung (50:50-Reset nur wenn aktuell 50:50,
+                  Cache-Wert bleibt sonst).
         Toggle AUS: deactivate() → Ratio bleibt, Mess-Frist refresht.
+
+        P35-Fix B (AK3, Bug B): Antennen-Queue + _diversity_current_ant
+        werden VOR activate() resettet, damit alte (A1, "measure")-Eintraege
+        aus haengender Statik-Mess weg sind. Sonst blockieren sie den P34-
+        Hook in mw_cycle._on_cycle_decoded (was_phase != "operate" → skip).
 
         Idempotent: Wiederholtes activate/deactivate wird intern ignoriert
         durch is_active()-Check.
         """
         if enabled and not self._dynamic_ctrl.is_active():
+            # P35-AK3: Queue + current_ant resetten BEVOR activate().
+            # Saubere Trennung: DynamicDiversityController hat keine
+            # Referenz auf MainWindow-Attribute → Reset im UI-Layer hier.
+            from collections import deque
+            with self._diversity_lock:
+                self._diversity_ant_queue = deque()
+                self._diversity_current_ant = "A1"
             self._dynamic_ctrl.activate()
             # GUI-Lock aufheben falls Statik-Mess gerade laief (abgebrochen)
             try:
@@ -1369,14 +1385,17 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
                 self._set_gain_measure_lock(False)
             except Exception:
                 pass
-            # Antennen-Panel sofort updaten (50:50 + dyn-Hinweis sobald Buffer voll)
+            # P35-AK5: Panel mit aktuellem Ratio (kann Cache-Wert sein, nicht
+            # immer 50:50). activate() entscheidet welcher Wert gilt.
             self.control_panel.update_diversity_ratio(
-                "50:50", self._diversity_ctrl.phase,
+                self._diversity_ctrl.ratio,
+                self._diversity_ctrl.phase,
                 operate_seconds_remaining=self._diversity_ctrl.seconds_until_remeasure,
                 scoring_mode=self._diversity_ctrl.scoring_mode,
                 is_dynamic=True,
             )
-            print("[Dynamic] Toggle AN — Buffer leer, Ratio 50:50, Statik pausiert")
+            print(f"[Dynamic] Toggle AN — Buffer leer, "
+                  f"Ratio={self._diversity_ctrl.ratio}, Statik pausiert")
         elif not enabled and self._dynamic_ctrl.is_active():
             self._dynamic_ctrl.deactivate()
             # Antennen-Panel zurueck zur Standard-Anzeige
