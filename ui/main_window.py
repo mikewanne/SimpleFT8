@@ -880,23 +880,31 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
     # ── PSKReporter ──────────────────────────────────────────────
 
     def _fetch_psk_stats(self):
+        # 11.05.2026 P28: strategische Debug-Punkte fuer PSK-Pipeline
+        # (Mike: "geht anfrage raus ja/nein kommt antwort ja/nein
+        # verarbeiten wir sie ja/nein").
+        from core.debug_log import debug_log as _dbg
         if not self._has_sent_cq:
             self.control_panel.psk_label.setText("PSK: — (nur nach CQ)")
             self.control_panel.psk_label.setStyleSheet(
                 "color: #557766; font-family: Menlo; font-size: 10px; padding: 2px;"
             )
+            _dbg("PSK", "SKIP — _has_sent_cq=False (noch keine CQ gesendet)")
             return
         # Nach erster Abfrage auf 3-Min-Intervall wechseln
         if self._psk_first_fetch:
             self._psk_first_fetch = False
             self._psk_timer.setInterval(self._psk_repeat_interval)  # 5 Minuten
+            _dbg("PSK", "first fetch — Timer-Intervall auf 5 Min umgestellt")
         self._psk_band = self.settings.band.upper()
+        _dbg("PSK", f"TRIGGER fetch — band={self._psk_band} mode={self.settings.mode}")
         threading.Thread(target=self._psk_worker, daemon=True).start()
 
     def _psk_worker(self):
         import urllib.request
         import xml.etree.ElementTree as ET
         from datetime import datetime, timezone
+        from core.debug_log import debug_log as _dbg
 
         call = self.settings.callsign
         my_grid = self.settings.locator
@@ -904,20 +912,24 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         try:
             url = (f"https://retrieve.pskreporter.info/query?"
                    f"senderCallsign={call}&flowStartSeconds=-600&mode={mode}")
+            _dbg("PSK", f"REQUEST call={call} mode={mode} window=600s")
             req = urllib.request.Request(
                 url, headers={"User-Agent": "SimpleFT8/1.0"}
             )
             with urllib.request.urlopen(req, timeout=10) as resp:
                 xml_data = resp.read().decode("utf-8")
+            _dbg("PSK", f"RESPONSE OK bytes={len(xml_data)}")
 
             root = ET.fromstring(xml_data)
-            spots = []
             from core.geo import grid_to_latlon, distance_km
             my_pos = grid_to_latlon(my_grid)
             if not my_pos:
+                _dbg("PSK", f"ABORT — my_pos None fuer Grid='{my_grid}'")
                 return
 
-            for rr in root.findall(".//receptionReport"):
+            reports = root.findall(".//receptionReport")
+            spots = []
+            for rr in reports:
                 loc = rr.get("receiverLocator", "")
                 rx_call = rr.get("receiverCallsign", "")
                 rx_dxcc = rr.get("receiverDXCC", "")
@@ -930,11 +942,13 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
                     dlon = pos[1] - my_pos[1]
                     bearing = math.degrees(math.atan2(dlon, dlat)) % 360
                     spots.append((km, bearing, rx_call, rx_dxcc))
+            _dbg("PSK", f"PARSED reception_reports={len(reports)} valid_spots={len(spots)}")
 
             if not spots:
                 self.control_panel.update_psk_stats(
                     0, 0, 0, "", "", 0, 0, 0, 0
                 )
+                _dbg("PSK", "UPDATE UI: keine Spots (Label 'PSK: keine Spots')")
                 return
 
             spots.sort(key=lambda x: -x[0])
@@ -962,7 +976,12 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
                 band=self._psk_band,
                 fetch_time=self._psk_last_fetch_time,
             )
+            _dbg("PSK", (
+                f"UPDATE UI: spots={len(spots)} avg={avg_km}km max={max_spot[0]}km "
+                f"({max_spot[2]}/{max_spot[3]}) band={self._psk_band}"
+            ))
         except Exception as e:
+            _dbg("PSK", f"ERROR {type(e).__name__}: {e}")
             print(f"[PSK] Fehler: {e}")
 
     # ── Settings ─────────────────────────────────────────────────
