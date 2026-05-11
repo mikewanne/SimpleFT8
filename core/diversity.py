@@ -18,6 +18,41 @@ import time
 from typing import Optional
 
 
+# ── Modul-Helper (P34): von Statik UND Dynamic genutzt ────────────────
+
+def compute_slot_score(messages) -> float:
+    """Score eines Slots: sum(max(0, snr+30)) ueber Stationen mit snr > -20.
+
+    Identische Formel wie in ``mw_cycle._handle_diversity_measure``
+    (Z.239-241). Beide Pipelines (statische DiversityController,
+    DynamicDiversityController) rufen diese Funktion auf — eine Formel,
+    zwei Aufrufer.
+    """
+    valid = [m for m in (messages or [])
+             if m.snr is not None and m.snr > -20]
+    return sum(max(0.0, float(m.snr + 30)) for m in valid) if valid else 0.0
+
+
+def evaluate_ratio(median_a1: float, median_a2: float,
+                    threshold: float = 0.08,
+                    min_peak: float = 5.0) -> tuple[str, Optional[str]]:
+    """Verhaeltnis-Entscheidung aus 2 Medianen.
+
+    Gleicher Algorithmus wie ``DiversityController._evaluate()``
+    (Z.537-562). Liefert ``(ratio, dominant)``:
+      - "50:50", None  → Differenz < threshold oder peak <= min_peak
+      - "70:30", "A1"  → ANT1 dominiert
+      - "30:70", "A2"  → ANT2 dominiert
+    """
+    peak = max(median_a1, median_a2)
+    if peak <= min_peak:
+        return "50:50", None
+    rel_diff = abs(median_a1 - median_a2) / peak
+    if rel_diff < threshold:
+        return "50:50", None
+    return ("70:30", "A1") if median_a1 >= median_a2 else ("30:70", "A2")
+
+
 class DiversityController:
     """Periodische Antennen-Messung fuer Diversity-Modus.
 
@@ -49,6 +84,9 @@ class DiversityController:
 
     def __init__(self, scoring_mode: str = "normal"):
         self._scoring_mode = scoring_mode  # "normal" oder "dx"
+        # P34: Dynamic-Pipeline Hooks
+        self._dynamic_active = False
+        self._scoring_mode_listeners: list = []  # Callable[[str], None]
         self.reset()
         self.set_mode("FT8")  # Default — von mw_radio.py spaeter ueberschrieben
 
@@ -67,7 +105,26 @@ class DiversityController:
     @scoring_mode.setter
     def scoring_mode(self, mode: str):
         if mode in ("normal", "dx"):
+            old = self._scoring_mode
             self._scoring_mode = mode
+            # P34: Listener-Callbacks bei Wechsel benachrichtigen
+            if old != mode:
+                for cb in self._scoring_mode_listeners:
+                    try:
+                        cb(mode)
+                    except Exception as exc:
+                        print(f"[Diversity] scoring_mode listener error: {exc}")
+
+    # P34: Dynamic-Pipeline-Status (von DynamicDiversityController gesetzt)
+    @property
+    def dynamic_active(self) -> bool:
+        """True wenn DynamicDiversityController gerade aktiv ist.
+        Unterdrueckt statische Re-Mess (siehe should_remeasure)."""
+        return self._dynamic_active
+
+    @dynamic_active.setter
+    def dynamic_active(self, value: bool):
+        self._dynamic_active = bool(value)
 
     def reset(self):
         self._phase = "measure"
@@ -483,11 +540,14 @@ class DiversityController:
             cq_active: laufender CQ-Ruf blockt ebenfalls (R1 Mod 3)
 
         Logik:
+            - P34 Dynamic AN → IMMER False (Dynamic uebernimmt, keine Statik-Mess)
             - phase muss "operate" sein
             - Pause (qso/cq) blockt
             - Frist: time.time() - _last_measured_at >= REMEASURE_INTERVAL_SECONDS
             - Defensiv (R1-Hinweis V3): _last_measured_at None → True (App-Start)
         """
+        if self._dynamic_active:   # P34: Dynamic AN → keine Statik-Re-Mess
+            return False
         if self._phase != "operate":
             return False
         if qso_active or cq_active:
@@ -536,34 +596,24 @@ class DiversityController:
     def _evaluate(self):
         # Pre-v0.90 Mess-Pattern war 4xA1 + 2xA2 (struktureller Bias zu ANT1).
         # Seit v0.90 fair 3:3 — Median-Robustheit beider Antennen gleich.
+        # P34: Refactor auf Modul-Helper evaluate_ratio (gleiche Logik fuer
+        # Statik + Dynamic). Verhalten unveraendert.
         m1 = self._measurements["A1"]
         m2 = self._measurements["A2"]
 
-        # Median pro Antenne (robust gegen Ausreisser)
         s1 = statistics.median(m1) if m1 else 0.0
         s2 = statistics.median(m2) if m2 else 0.0
-        peak = max(s1, s2)
-
-        diff = 0.0
-        if peak <= self.MIN_PEAK_SCORE:
-            # Zu wenig Daten fuer zuverlaessige Entscheidung (sehr schwacher Empfang)
-            self.ratio = "50:50"
-            self.dominant = None
-        else:
-            diff = abs(s1 - s2) / peak  # relative Differenz zum Besseren
-            if diff < self.THRESHOLD:    # 8% statt 15%
-                self.ratio = "50:50"
-                self.dominant = None
-            elif s1 >= s2:
-                self.ratio = "70:30"
-                self.dominant = "A1"
-            else:
-                self.ratio = "30:70"
-                self.dominant = "A2"
+        new_ratio, new_dominant = evaluate_ratio(
+            s1, s2, threshold=self.THRESHOLD, min_peak=self.MIN_PEAK_SCORE
+        )
+        self.ratio = new_ratio
+        self.dominant = new_dominant
         self._phase = "operate"
         self._operate_cycles = 0
         self._last_measured_at = time.time()  # v0.93: 1h-Frist-Anker
         mode_tag = "DX" if self._scoring_mode == "dx" else "Normal"
+        peak = max(s1, s2)
+        diff = abs(s1 - s2) / peak if peak > 0 else 0.0
         print(f"[Diversity] Messung ({mode_tag}): A1={s1:.1f} A2={s2:.1f} "
               f"diff={diff:.3f} (>{self.THRESHOLD:.0%}?) → {self.ratio} "
               f"(dominant: {self.dominant}, Werte: A1={m1} A2={m2})")
