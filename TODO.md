@@ -1,4 +1,4 @@
-# SimpleFT8 TODO — Stand 10.05.2026 (v0.96.9, P26 fertig)
+# SimpleFT8 TODO — Stand 11.05.2026 (v0.97.0, P34 fertig)
 
 > **Mike-Regel 07.05.2026:** Offene Aufgaben gehoeren AUSSCHLIESSLICH
 > in diese Datei. Nicht in CLAUDE.md, nicht in HANDOFF.md. Diese Datei
@@ -8,10 +8,17 @@
 
 # 🟢 STATUS-ÜBERSICHT (für neue Session)
 
-**Aktuelle Version:** v0.96.9 (10.05.2026)
-**Tests:** 1070 grün
-**App-Stand:** Code fertig, Field-Test pending. Push pending —
-v0.95.16 - v0.96.9 + P2-Tool + P3 + P21 + P26 lokal gesammelt.
+**Aktuelle Version:** v0.97.0 (11.05.2026)
+**Tests:** 1111 grün
+**App-Stand:** P34.DIVERSITY-DYNAMIC Code fertig, Field-Test 12 Punkte
+pending. Push pending — v0.95.16 - v0.97.0 + P2-Tool + P3 + P21 + P26 +
+P34 lokal gesammelt.
+
+## ✅ 11.05.2026 erledigt (v0.97.0)
+
+| Version | Was |
+|---|---|
+| **v0.97.0** | **P34.DIVERSITY-DYNAMIC** — Antennen-Verhältnis live im Betrieb anpassen (statt 1× pro Stunde 90s-UI-Sperre). ENTWEDER-ODER zur Statik (Toggle in Settings, NICHT persistiert). Modul `core/dynamic_diversity.py` NEU + 2 Helper-Funktionen in `core/diversity.py`. Antennen-Panel Phase-Label wird **blau** wenn aktiv. 9 atomare Commits. Tests 1070 → 1111 (+41). Plan-Files prompts/p34_diversity_dynamic_v[1,2,3]+r1.md (Compact-fest). Field-Test V3 §5 F1-F12 pending. Push pending. |
 
 ## ✅ Heute erledigt (10.05.2026)
 
@@ -36,6 +43,7 @@ v0.95.16 - v0.96.9 + P2-Tool + P3 + P21 + P26 lokal gesammelt.
 
 | ID | Was | Aufwand |
 |---|---|---|
+| **P34-Stufe2** | Statik-Pipeline KOMPLETT entfernen (Dynamic wird Default). Erst nach mehreren Tagen erfolgreichem Field-Test der P34-Stufe1. Liste Code-Stellen siehe `prompts/p34_diversity_dynamic_v3.md` §8-Anhang. | 4-5h Workflow + eigene V1→V2→R1→V3 |
 | **P32** | RX-Panel Spalten-Konfiguration persistieren — Rechtsklick-Auswahl (km/dt/Land/...) bei App-Start wiederherstellen | 1h Lite |
 | **P33** | QSO-fertig-Meldung erscheint NACH nächster CQ-Zeile (Reihenfolge-Bug) — `✓ QSO komplett` sollte VOR `→ Sende CQ ↻N` im qso_panel stehen | 1-2h Workflow |
 | **P24** | App soll letzten RX-Mode (Normal/Std/DX) merken — heute startet immer Normal | 1h Lite |

@@ -5,6 +5,66 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-11 v0.97.0 — P34.DIVERSITY-DYNAMIC (Code fertig, Field-Test pending)
+
+**Mike-Vision:** Antennen-Verhältnis im laufenden Betrieb live anpassen statt
+nur 1× pro Stunde mit 90-Sek-UI-Sperre. Hobby-Tool-Vereinfachung.
+
+**Architektur:** ENTWEDER-ODER zur statischen Pipeline (kein Parallel-Betrieb):
+- Toggle AUS → Statik wie heute (100% unangetastet)
+- Toggle AN → Dynamic übernimmt, Statik 1h-Frist unterdrückt
+
+**Code:**
+- `core/diversity.py`: 2 Modul-Helper `compute_slot_score()` + `evaluate_ratio()`
+  (eine Formel, beide Pipelines nutzen). `_evaluate()` Refactor auf Helper
+  (kein Verhaltens-Eingriff). Neue Property `dynamic_active` + Setter +
+  `_scoring_mode_listeners` Callback-Liste. `should_remeasure()` returnt
+  False wenn `dynamic_active=True`.
+- `core/dynamic_diversity.py` NEU (~190 LOC): DynamicDiversityController als
+  QObject mit Signal `ratio_changed_dynamic`. 5er-Schiebepuffer pro Antenne
+  (`collections.deque(maxlen=5)`). Slot-für-Slot-Erfassung in `record_slot()`.
+  Auswertung in `_evaluate_locked()` sobald beide Buffer voll → Median +
+  `evaluate_ratio` Helper → setzt `diversity_ctrl.ratio/.dominant` atomar
+  unter Lock. Lifecycle: `activate()` (50:50-Reset + ggf. Statik-Mess
+  abbrechen) / `deactivate()` (Ratio bleibt + `_last_measured_at` refresh =
+  Mike B-Option gegen sofortige Re-Mess nach Toggle-AUS) / `reset()`
+  (Buffer leer + 50:50, bei Band/Mode/scoring-Wechsel).
+- `ui/mw_cycle.py`: Slot-Datenerfassung-Hook nach `_handle_diversity_operate`.
+- `ui/mw_radio.py`: Reset-Hooks in `_on_mode_changed`, `_on_band_changed`,
+  `_disable_diversity`.
+- `ui/main_window.py`: `_dynamic_ctrl`-Instanz in `__init__`, Signal-Connect
+  via `Qt.QueuedConnection`, neue Slots `_on_dynamic_ratio_changed` +
+  `_apply_dynamic_toggle`.
+- `ui/control_panel.py`: `update_diversity_ratio()` neuer Param `is_dynamic`
+  → Phase-Label „● DYNAMISCH (live)" in Blau (#3399CC) wenn aktiv.
+- `ui/settings_dialog.py`: QCheckBox „Antennen-Verhältnis dynamisch anpassen
+  (Testphase)" + Tooltip + Apply ruft `parent._apply_dynamic_toggle()`.
+- `config/settings.py`: RAM-only Property `dynamic_diversity_enabled`
+  (default False, NICHT in `_data`, NICHT in `save()`).
+
+**Spec:** prompts/p34_diversity_dynamic_v3.md (Compact-fest, 16 ACs,
+9 Commits, 26 Tests, Field-Test-Checkliste F1-F12).
+
+**Workflow:** V1 → V2 → R1 → V1-NEU (Mike-Pivot zu ENTWEDER-ODER) →
+V2-NEU → R1-NEU („deutlich weniger Findings — saubere Architektur zahlt
+sich aus") → V3 → Mike-Freigabe → 9 atomare Commits → Tests.
+
+**Test-Bilanz: 1070 → 1111 grün** (+41: 14 Helper + 15 Unit + 12
+Integration). Über V3-Prognose (~1095-1100).
+
+**Field-Test pending** (Mike, 12 Punkte F1-F12 in V3 §5). Push pending bis
+Field-Test grün. Stufe 2 (Statik komplett entfernen) als separater
+Workflow später wenn Mike sich mit Dynamic wohlfühlt.
+
+**Wichtigste Mike-Entscheidungen während Klärung:**
+- Erste R1-Antwort empfahl Flag in DiversityController (KISS). Mike
+  verworfen: Risiko für statische Pipeline. → Neues Modul + Helper-Funktionen
+  auf Modul-Ebene als Kompromiss (kein Fummeln in der Klasse).
+- Architektur vom „parallel mit Krücken" zu ENTWEDER-ODER umgestellt
+  (Mike erkannte den Konflikt selbst).
+- B-Option: `_last_measured_at = time.time()` bei `deactivate()` verhindert
+  90-Sek-UI-Sperre direkt nach Toggle-AUS.
+
 ## 2026-05-11 — Session-Bilanz (mehrere Trivial-Fixes + Debug-Logs + P12-Hotfix)
 
 Kein APP_VERSION-Bump — alles inkrementelle Fixes/Logs auf v0.96.10.
