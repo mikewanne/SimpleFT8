@@ -394,8 +394,16 @@ class RadioMixin:
         if hasattr(self, "_omni_cq") and self._omni_cq.is_active():
             self._omni_cq.stop("band_change")
         if self._rx_mode == "diversity":
-            self.control_panel.update_diversity_ratio("50:50", "measure", 0,
-                                                      self._diversity_ctrl.MEASURE_CYCLES)
+            # P34: bei Dynamic AN nicht „MESSEN 0/6" sondern blaue DYNAMISCH-
+            # Anzeige (Phase wird gleich von _enable_diversity auf operate gesetzt).
+            _is_dyn = (getattr(self, "_dynamic_ctrl", None) is not None
+                       and self._dynamic_ctrl.is_active())
+            _phase = "operate" if _is_dyn else "measure"
+            self.control_panel.update_diversity_ratio(
+                "50:50", _phase, 0,
+                self._diversity_ctrl.MEASURE_CYCLES,
+                is_dynamic=_is_dyn,
+            )
             self.control_panel.update_diversity_counts(0, 0)
         if self.radio.ip:
             self.radio.set_frequency(freq)

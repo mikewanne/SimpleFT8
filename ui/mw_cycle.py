@@ -282,12 +282,17 @@ class CycleMixin:
         # Histogram LIVE aktualisieren (auch waehrend Messung)
         self.control_panel.update_freq_histogram(
             self._diversity_ctrl.get_histogram_data())
+        # P34: is_dynamic immer aus _dynamic_ctrl-Status — sonst ueberschreibt
+        # dieser Slot-Update das blaue Label vom _on_dynamic_ratio_changed.
+        _is_dyn = (getattr(self, "_dynamic_ctrl", None) is not None
+                   and self._dynamic_ctrl.is_active())
         self.control_panel.update_diversity_ratio(
             self._diversity_ctrl.ratio, self._diversity_ctrl.phase,
             measure_step=self._diversity_ctrl.measure_step,
             measure_total=self._diversity_ctrl.MEASURE_CYCLES,
             operate_seconds_remaining=self._diversity_ctrl.seconds_until_remeasure,
             scoring_mode=self._diversity_ctrl.scoring_mode,
+            is_dynamic=_is_dyn,
         )
         # Einmessen abgeschlossen → nur beim Übergang measure→operate ausführen
         if self._diversity_ctrl.phase == "operate":
@@ -729,12 +734,17 @@ class CycleMixin:
                     gain = getattr(self, '_diversity_ant2_gain',
                                    PREAMP_PRESETS.get(band, 10) + 10)
                 ant_cmd = "ANT1" if self._diversity_current_ant == "A1" else "ANT2"
+                # P34: is_dynamic durchreichen — pro-Slot-Update darf das blaue
+                # Label nicht ueberschreiben
+                _is_dyn = (getattr(self, "_dynamic_ctrl", None) is not None
+                           and self._dynamic_ctrl.is_active())
                 self.control_panel.update_diversity_ratio(
                     self._diversity_ctrl.ratio, self._diversity_ctrl.phase,
                     measure_step=self._diversity_ctrl.measure_step,
                     measure_total=self._diversity_ctrl.MEASURE_CYCLES,
                     operate_seconds_remaining=self._diversity_ctrl.seconds_until_remeasure,
                     scoring_mode=self._diversity_ctrl.scoring_mode,
+                    is_dynamic=_is_dyn,
                 )
 
             # P21 Debug-Log: VOR Antennen-Switch (zeigt Plan)
