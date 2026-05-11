@@ -1,5 +1,24 @@
 # Diversity-Modi — Normal, Standard und DX
 
+## 🆕 Adaptive Diversity (v0.97) — Echtzeit vs. stündliche Messung
+
+### Vorher (v0.96 und früher): Statische Messung
+Zu jeder vollen Stunde hat SimpleFT8 die App für **~90 Sekunden gesperrt** um beide Antennen zu vermessen. 6 Zyklen auf ANT1, 6 Zyklen auf ANT2, Median berechnet, festes Verhältnis gewählt (50:50 wenn Differenz < 8 %, sonst 70:30 zugunsten der stärkeren Antenne). Dieses Verhältnis blieb dann eine Stunde lang fix — auch wenn sich die Ausbreitung änderte.
+
+### Jetzt (v0.97): Slot-für-Slot
+Die neue adaptive Methode sammelt Scores **in jedem laufenden Slot**. Ein rollender 5-Slot-Puffer pro Antenne (~75 Sekunden bis voll) liefert Median-Werte die mit jedem neuen Slot aktualisiert werden. Dieselbe 8 %-Schwelle wie vorher, aber der Vergleich passiert alle 15 Sekunden statt einmal pro Stunde.
+
+### Warum das wichtig ist
+- **Keine Mess-Pause** — keine UI-Sperre, keine ausgelassenen CQ-Slots
+- **Folgt echten Bedingungen** — QSB, Skip-Zone-Drift, Tageszeit-Wechsel
+- **Keine 1-Stunden-Verzögerung** — wenn das Band um 18:00 UTC nach Nordamerika öffnet, reagiert das System binnen Minuten, nicht erst beim nächsten Stundenwechsel
+- **Keine Halbzustände mehr** — keine halb geschriebenen Preset-Dateien durch abgebrochene Kalibrierung
+
+### Wie aktivieren
+Toggle in **Einstellungen → FT8 & Diversity**: „Adaptive Diversity (Testphase)". Die statische Methode bleibt als Fallback verfügbar — wenn Adaptive aus ist, läuft die stündliche Messung wie bisher. Der Toggle gilt **nur für die laufende Sitzung** (nicht persistent) — App-Neustart deaktiviert. Das Phasen-Label im Antennen-Panel wird **blau („● DYNAMISCH (live)")** wenn Adaptive aktiv ist.
+
+---
+
 ## Alle drei Modi auf einen Blick
 
 Welchen Modus soll ich nehmen? Kurze Antwort:

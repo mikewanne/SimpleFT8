@@ -41,6 +41,8 @@ SimpleFT8 kann mit einer oder zwei Antennen empfangen. Du hast drei Modi zur Aus
 | **Diversity Standard** | 2 | Wählt die Antenne mit den meisten Stationen | Die Masse — möglichst viele hören |
 | **Diversity DX** | 2 | Wählt die Antenne die schwache Signale besser hört | Die Leisen — weit entfernte Stationen |
 
+> **🆕 Adaptive Diversity (v0.97)** — Das Antennen-Verhältnis passt sich **slot-für-slot in Echtzeit** über einen rollenden 5-Slot-Puffer an. Keine stündliche 90-Sekunden-Messpause mehr — reagiert binnen Sekunden auf Ausbreitungsänderungen. 8 %-Schwelle verhindert Flackern; dynamische Umschaltung zwischen 30:70, 50:50, 70:30. Toggle in Einstellungen: „Adaptive Diversity (Testphase)". Die statische Mess-Methode bleibt als Fallback verfügbar. Volle Vorher/Nachher-Erklärung: [docs/explained/diversity-modes_de.md](docs/explained/diversity-modes_de.md).
+
 → Mehr Details: **[docs/explained/diversity-modes_de.md](docs/explained/diversity-modes_de.md)**
 
 ---

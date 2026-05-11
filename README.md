@@ -6,7 +6,7 @@
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![Platform: macOS](https://img.shields.io/badge/platform-macOS-lightgrey.svg)](https://www.apple.com/macos/)
 [![Ham Radio](https://img.shields.io/badge/ham--radio-FT8%2FFT4%2FFT2-orange.svg)](https://www.physics.princeton.edu/pulsar/k1jt/wsjtx.html)
-[![Tests](https://img.shields.io/badge/tests-616%20passed-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-1131%20passed-brightgreen.svg)]()
 
 > ⚠️  **Disclaimer / Haftungsausschluss**
 >
@@ -54,6 +54,8 @@ stations across app restarts. Fire it up, make a few QSOs, call it a day.
 - **FT2 Mode** — Native Decodium-compatible FT2 decoder/encoder (3.8s cycles, 4-GFSK, 288 sps). Community frequencies pre-configured. QSOs successfully completed. Automatic RX filter widening to 4000 Hz.
 
 - **DT Time Correction v2** — Cumulative correction from band consensus. 2-cycle measurement, 10-cycle operation, 70% damping. **Per-mode persistence**: correction values stored in `~/.simpleft8/dt_corrections.json` — instant good correction on mode switch. DT values typically ±0.1s after convergence.
+
+- **🆕 Adaptive Diversity (v0.97)** — Adjusts antenna ratio **slot-by-slot in real time** using a rolling 5-slot buffer. No more hourly 90-second measurement pause — reacts to propagation changes within seconds. 8% median-difference threshold prevents flapping; live switching between 30:70, 50:50, 70:30. Toggle in Settings: "Adaptive Diversity (Test Phase)". Static fallback remains available. See [docs/explained/diversity-modes.md](docs/explained/diversity-modes.md) for the full Before/After comparison.
 
 - **Dual-Mode Diversity** — Two scoring strategies selectable at startup:
   - **Standard**: Counts total decoded stations — best for CQ operation (maximize QSOs)
@@ -251,7 +253,7 @@ polarization, building-coupled mounting — the ideal complement for diversity r
 
 ### All Features
 
-**Tested & Working (v0.88):**
+**Tested & Working (v0.97.2):**
 - ✅ **FT8 / FT4 / FT2 modes** — all three with dedicated frequencies, auto RX filter, mode-dependent timing
 - ✅ **Auto TX Power Regulation**: Closed-loop FWDPWR feedback, clipping protection, per-band calibration
 - ✅ **Dual-Mode Diversity**: Standard (station count) + DX (weak signal count), 8% threshold, 70:30/50:50
@@ -269,7 +271,7 @@ polarization, building-coupled mounting — the ideal complement for diversity r
 - ✅ **Help Dialog**: Built-in feature docs (DE + EN) via ? button in status bar
 - ✅ **Direction Map with Live Propagation Sectors (v0.66/v0.71/v0.72)**: Rotatable 3D globe (orthographic projection) with **16 directional sector wedges** that visualize where propagation is *actually* opening *right now*: in RX-mode wedge length = unique stations heard from that bearing, in TX-mode wedge length = max distance reached in that direction (v0.71 — a single VK6 spot at 16,000 km counts more than 50 Iberian spots). Antenna color-coding (ANT1/ANT2/rescue) makes diversity contributions instantly visible. **One look at the map tells you "no vector pointing west today — don't bother trying NA on this band right now"** — operational insight, not just decoration. Aurora + Dark theme toggle (v0.72), persistent.
 - ✅ **Live Locator Mining (v0.67/v0.70 — no other FT8 client does this)**: While decoding, Maidenhead locators are extracted **directly from CQ calls and QSO replies** (`CQ R9CA LO97`, `RA4ALY DL6YJB JO31`) and written to a persistent JSON database (`~/.simpleft8/locator_cache.json`). Source priority: `cq_6 > psk_6 > qso_log_6 > _4-variants` — a 6-digit locator from a live CQ call is never overwritten by a 4-digit ADIF entry. The map therefore shows **exact station positions** instead of country centroids. Bootstrap via ADIF bulk-import (LotW, QRZ, your own log) at startup. Auto-save every 5 min + on close — survives hard kill. Currently 9,366 calls, growing with every session.
-- ✅ **1070 Unit Tests**: QSO, diversity patterns, DT, propagation, OMNI-CQ, ADIF, histograms, locator-DB, threading, protocol, diversity merger, mode-recommender (Bandpilot), Bandpilot MD-generator, Bandpilot dialogs, settings migration, help-dialog, Connect-Status-Dialog, debug-log, audio-dump, preset-atomicity, QRZ-Upload-UI
+- ✅ **1131 Unit Tests**: QSO, diversity patterns (static + adaptive), DT, propagation, OMNI-CQ, ADIF, histograms, locator-DB, threading, protocol, diversity merger, mode-recommender (Bandpilot), Bandpilot MD-generator, Bandpilot dialogs, settings migration, help-dialog, Connect-Status-Dialog, debug-log, audio-dump, preset-atomicity, QRZ-Upload-UI, Adaptive Diversity P34/P35
 - ✅ **Station Statistics**: Per-cycle logging (Normal + Diversity), 6-cycle warm-up exclusion. Raw Markdown data, no in-file summaries — analyzed by `scripts/generate_plots.py`.
 - ✅ **Diversity Analysis Plots**: `python3 scripts/generate_plots.py` → `auswertung/` — dark-theme PNGs: station timeline (Normal vs Diversity) + ANT2 wins + Rescue-Events per hour. [→ Aktuelle Auswertungen](auswertung/)
 - ✅ **Per-Station SNR Logging**: Every A1↔A2 comparison logged with both SNR values, Δ dB, winner and ★ Saved-Event when one antenna is below FT8 decode threshold (−24 dB) and the other above. Proves "ANT2 made this QSO possible."
@@ -575,6 +577,8 @@ andere Polarisierung, gebäudegebundene Befestigung — die ideale Ergänzung f�
 
 - **DT-Zeitkorrektur v2** — Kumulative Korrektur aus Band-Konsens. 2-Zyklen-Messung, 10-Zyklen-Betrieb, 70% Daempfung. **Pro Modus gespeichert**: Korrekturwerte in `~/.simpleft8/dt_corrections.json` — sofort gute Korrektur beim Modus-Wechsel. DT-Werte typisch ±0.1s nach Konvergenz.
 
+- **🆕 Adaptive Diversity (v0.97)** — Passt das Antennen-Verhaeltnis **slot-fuer-slot in Echtzeit** ueber einen rollenden 5-Slot-Puffer an. Keine stuendliche 90-Sekunden-Messpause mehr — reagiert binnen Sekunden auf Ausbreitungsaenderungen. 8 %-Schwelle verhindert Flackern; dynamische Umschaltung zwischen 30:70, 50:50, 70:30. Toggle in Einstellungen: „Adaptive Diversity (Testphase)". Die statische Mess-Methode bleibt als Fallback verfuegbar. Volle Vorher/Nachher-Erklaerung: [docs/explained/diversity-modes_de.md](docs/explained/diversity-modes_de.md).
+
 - **Dual-Mode Diversity** — Zwei Scoring-Strategien:
   - **Standard**: Zaehlt dekodierte Stationen — ideal fuer CQ-Betrieb
   - **DX**: Zaehlt schwache Stationen (SNR < -10 dB) — ideal fuer DX-Jagd (Australien bei -24 dB zaehlt, Bochum bei +12 dB nicht)
@@ -597,7 +601,7 @@ andere Polarisierung, gebäudegebundene Befestigung — die ideale Ergänzung f�
 
 ### Alle Funktionen
 
-**Getestet & funktionsfaehig (v0.88):**
+**Getestet & funktionsfaehig (v0.97.2):**
 - ✅ **FT8 / FT4 / FT2** — alle drei Modi mit eigenen Frequenzen, Auto-RX-Filter, modus-abhaengigem Timing
 - ✅ **Auto TX-Leistungsregelung**: Regelkreis mit FWDPWR-Feedback, Clipping-Schutz
 - ✅ **Dual-Mode Diversity**: Standard (Stationsanzahl) + DX (schwache Signale), 8% Schwelle
@@ -616,7 +620,7 @@ andere Polarisierung, gebäudegebundene Befestigung — die ideale Ergänzung f�
 - ✅ **Hilfe-Dialog**: Feature-Doku (DE + EN) via ? Button in Statusleiste
 - ✅ **Richtungs-Karte mit Live-Propagations-Sektoren (v0.66/v0.71/v0.72)**: Drehbarer 3D-Globus (Orthographic-Projection) mit **16 Richtungs-Sektor-Wedges** die zeigen wohin die Ausbreitung *gerade jetzt* geht: im RX-Modus = Wedge-Laenge nach Anzahl gehoerter Stationen aus dieser Richtung, im TX-Modus = Wedge-Laenge nach max-Reichweite (v0.71 — ein einziger VK6-Spot mit 16.000 km zaehlt mehr als 50 Iberien-Spots). Antennen-Farbcodierung (ANT1/ANT2/Rescue) macht Diversity-Beitraege sofort sichtbar. **Ein Blick auf die Karte sagt: „kein Vektor nach Westen heute — auf diesem Band brauche ich NA gar nicht erst zu versuchen"** — operative Information, keine Deko. Aurora + Dark Theme-Toggle (v0.72), persistent.
 - ✅ **Live Locator Mining (v0.67/v0.70 — kein anderer FT8-Client macht das)**: Während des Empfangs werden Maidenhead-Locators **direkt aus CQ-Rufen und QSO-Antworten** (`CQ R9CA LO97`, `RA4ALY DL6YJB JO31`) extrahiert und in einer persistenten JSON-Datenbank (`~/.simpleft8/locator_cache.json`) gespeichert. Source-Prioritaet: `cq_6 > psk_6 > qso_log_6 > _4-Varianten` — ein 6-stelliger Locator aus einem Live-CQ wird nie von einem 4-stelligen ADIF-Eintrag ueberschrieben. Die Karte zeigt damit **exakte Stationspositionen** statt Land-Mittelpunkte. Bootstrap via ADIF-Bulk-Import (LotW, QRZ, eigenes Logbuch) beim Start. Auto-Save alle 5 Min + bei Schliessen — uebersteht Hard-Kill. Aktuell 9.366 Calls, waechst mit jeder Session.
-- ✅ **1070 Unit Tests**: QSO, Diversity-Patterns, DT, Propagation, OMNI-CQ, ADIF, Histogramme, Locator-DB, Threading, Protocol, Diversity Merger, Mode-Recommender (Bandpilot), Bandpilot-MD-Generator, Bandpilot-Dialoge, Settings-Migration, Help-Dialog, Connect-Status-Dialog, Debug-Log, Audio-Dump, Preset-Atomaritaet, QRZ-Upload-UI
+- ✅ **1131 Unit Tests**: QSO, Diversity-Patterns (statisch + adaptive), DT, Propagation, OMNI-CQ, ADIF, Histogramme, Locator-DB, Threading, Protocol, Diversity Merger, Mode-Recommender (Bandpilot), Bandpilot-MD-Generator, Bandpilot-Dialoge, Settings-Migration, Help-Dialog, Connect-Status-Dialog, Debug-Log, Audio-Dump, Preset-Atomaritaet, QRZ-Upload-UI, Adaptive Diversity P34/P35
 - ✅ **Stations-Statistik**: Pro-Zyklus Logging (Normal + Diversity), 6-Zyklen Warmup-Ausschluss. Rohdaten im Markdown, keine In-File-Zusammenfassungen — Auswertung via `scripts/generate_plots.py`.
 - ✅ **Diversity Auswertungs-Diagramme**: `python3 scripts/generate_plots.py` → `auswertung/` — Dark-Theme PNGs: Stationen-Zeitverlauf (Normal vs Diversity) + ANT2-Wins + Rescue-Events. [→ Aktuelle Auswertungen](auswertung/)
 - ✅ **Per-Station SNR-Logging**: Jeder A1↔A2 Vergleich wird mit beiden SNR-Werten, Δ dB, Gewinner und ★ Saved-Event geloggt — wenn eine Antenne unter der FT8-Dekodierschwelle (−24 dB) liegt und die andere darüber. Beweist: "ANT2 hat dieses QSO erst möglich gemacht."
