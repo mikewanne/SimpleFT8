@@ -395,13 +395,23 @@ class QSOMixin:
         wurde, ADIF/qso_log/Antennen-Stats ueberspringen.
         UI-Cleanup (active_qso, rx_panel, auto_hunt) laeuft IMMER —
         sonst Inkonsistenzen (R1-KRITISCH).
+
+        11.05.2026 P28: strategische Debug-Punkte — Mike meldet "App
+        haengt 1 Min nach QSO". Wir loggen jeden Step + Dauer.
         """
+        # 11.05.2026 P28: Bisection-Debug-Punkte mit Wallclock-Timing
+        from core.debug_log import debug_log as _dbg
+        import time as _t
+        _t0 = _t.time()
+        _dbg("QSO-DONE", f"START call={qso_data.their_call}")
+
         # UI-Cleanup IMMER (vor Duplikat-Check) — R1-KRITISCH:
         self._active_qso_targets.discard(qso_data.their_call)
         self.rx_panel.set_active_call("")
         # Auto-Hunt: QSO erfolgreich → Pause, dann naechste Station
         if self._auto_hunt.active:
             self._auto_hunt.on_qso_complete(qso_data.their_call)
+        _dbg("QSO-DONE", f"UI-cleanup done dt={_t.time()-_t0:.3f}s")
 
         # KEIN add_qso_complete hier — kommt in _on_qso_confirmed (nach 73 oder Timeout)
 
@@ -421,12 +431,14 @@ class QSOMixin:
                   f"{int(now-last)}s geloggt → skip ADIF + qso_log + antenna_stats")
             self.qso_panel.add_info(
                 f"{call_key} Duplikat ({int(now-last)}s) — kein ADIF-Eintrag")
+            _dbg("QSO-DONE", f"DUPLIKAT skip — total dt={_t.time()-_t0:.3f}s")
             # P2.OMNI-REDESIGN v4.0: Resume-Versuch trotzdem (Symmetrie zu
             # Non-Duplikat-Pfad — UI-Cleanup lief schon, OMNI darf weiter).
             self._maybe_resume_omni()
             return  # KEIN log_qso, KEIN add_qso, KEIN log_antenna_qso
         self._recent_logged_calls[dedup_key] = now
 
+        _t_step = _t.time()
         self.adif.log_qso(
             call=qso_data.their_call,
             band=band,
@@ -440,10 +452,15 @@ class QSOMixin:
             tx_power=self.settings.power_watts,
             time_on=qso_data.start_time,
         )
+        _dbg("QSO-DONE", f"adif.log_qso dt={_t.time()-_t_step:.3f}s")
+
+        _t_step = _t.time()
         self.qso_log.add_qso(qso_data.their_call, band)
+        _dbg("QSO-DONE", f"qso_log.add_qso dt={_t.time()-_t_step:.3f}s")
 
         # Antennen-Statistik pro QSO loggen — immer schreiben, "–" wenn kein Pref
         if hasattr(self, '_stats_logger') and self._stats_logger is not None:
+            _t_step = _t.time()
             pref = None
             if self._rx_mode == "diversity" and hasattr(self, '_antenna_prefs'):
                 pref = self._antenna_prefs.get_pref(qso_data.their_call)
@@ -454,18 +471,36 @@ class QSOMixin:
                 best_ant=pref["best_ant"] if pref else None,
                 delta_db=pref["delta_db"] if pref else None,
             )
+            _dbg("QSO-DONE", f"log_antenna_qso dt={_t.time()-_t_step:.3f}s")
 
         # P2.OMNI-REDESIGN v4.0 (v0.95.23): OMNI nach RR73 fertig resumen
         # (Exit-Pfad 1 von 3). _maybe_resume_omni schuetzt sich selbst
         # via _omni_was_active_pre_qso und Caller-Queue-Check.
+        _t_step = _t.time()
         self._maybe_resume_omni()
+        _dbg("QSO-DONE", f"_maybe_resume_omni dt={_t.time()-_t_step:.3f}s")
+        _dbg("QSO-DONE", f"END total dt={_t.time()-_t0:.3f}s")
 
     @Slot(object)
     def _on_qso_confirmed(self, qso_data):
-        """73 empfangen — QSO wirklich komplett, ✓ anzeigen."""
+        """73 empfangen — QSO wirklich komplett, ✓ anzeigen.
+
+        11.05.2026 P28: Debug-Punkte mit Wallclock-Timing (Mike: "App
+        haengt 1 Min nach QSO").
+        """
+        from core.debug_log import debug_log as _dbg
+        import time as _t
+        _t0 = _t.time()
+        _dbg("QSO-CONF", f"START call={qso_data.their_call}")
+
         self.qso_panel.add_qso_complete(qso_data.their_call)
+        _dbg("QSO-CONF", f"add_qso_complete dt={_t.time()-_t0:.3f}s")
+
         # Logbuch aktualisieren (neues QSO wurde in ADIF geschrieben)
+        _t_step = _t.time()
         self.qso_panel.logbook.refresh()
+        _dbg("QSO-CONF", f"logbook.refresh dt={_t.time()-_t_step:.3f}s")
+
         # P1.14 W6: Auto-Hunt nach erfolgreichem manuellem QSO freigeben
         if self._auto_hunt.active:
             self._auto_hunt.on_manual_qso_end()
@@ -475,7 +510,10 @@ class QSOMixin:
             self.qso_panel.add_info("CQ-Modus läuft weiter...")
         # P2.OMNI-REDESIGN v4.0 (v0.95.23): OMNI nach 73-Empfang/WAIT_73-Timeout
         # /Courtesy-73-fertig resumen (Exit-Pfad 2 von 3).
+        _t_step = _t.time()
         self._maybe_resume_omni()
+        _dbg("QSO-CONF", f"_maybe_resume_omni dt={_t.time()-_t_step:.3f}s")
+        _dbg("QSO-CONF", f"END total dt={_t.time()-_t0:.3f}s")
 
     def _get_qrz_client(self):
         """QRZ Client lazy initialisieren."""
