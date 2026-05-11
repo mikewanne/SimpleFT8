@@ -127,6 +127,9 @@ def test_enable_diversity_locks_before_reset():
     s._diversity_ctrl = manager.diversity_ctrl
     s._set_cq_locked = manager.cq_lock
     s._set_gain_measure_lock = manager.gain_lock
+    # P34: Dynamic OFF (sonst nimmt Dynamic-Pfad ohne Locks)
+    s._dynamic_ctrl = MagicMock()
+    s._dynamic_ctrl.is_active = MagicMock(return_value=False)
 
     # _enable_diversity ruft viele weitere Methoden — die ignorieren wir
     try:

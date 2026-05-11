@@ -868,7 +868,35 @@ class RadioMixin:
         _dlog("DIV-EN", f"_enable_diversity scoring={scoring_mode} "
               f"cached_ratio={cached_ratio} (Pfad: "
               f"{'CACHE-REUSE' if cached_ratio else 'PHASE-MEASURE'})")
-        if cached_ratio is not None:
+        # P34 Bug-Fix (Mike Field-Test 11.05.): Wenn Dynamic-Toggle AN ist und
+        # User in Diversity wechselt, soll KEINE 90-Sek-Statik-Mess starten —
+        # Dynamic uebernimmt nach ~3 Min selbst. Pruefen vor Cache-Pfad damit
+        # auch ohne Cache keine Mess-Phase laeuft.
+        dynamic_active = (getattr(self, "_dynamic_ctrl", None) is not None
+                          and self._dynamic_ctrl.is_active())
+
+        if dynamic_active:
+            # Dynamic-Pfad: Phase=operate sofort, 50:50 als Start, kein Lock,
+            # kein Modal. Dynamic sammelt Slot-fuer-Slot, in ~3 Min uebernimmt
+            # es das Verhaeltnis. Buffer wird zur Sicherheit geleert.
+            import time as _time
+            self._diversity_ctrl.reset()
+            self._diversity_ctrl.ratio = "50:50"
+            self._diversity_ctrl.dominant = None
+            self._diversity_ctrl._phase = "operate"
+            self._diversity_ctrl._last_measured_at = _time.time()
+            self._dynamic_ctrl.reset()  # Buffer leer fuer fresh Start
+            self._set_cq_locked(False)
+            self._set_gain_measure_lock(False)
+            print(f"[Diversity] Phase=operate (Dynamic-Toggle AN) — "
+                  f"50:50 startet, Dynamic uebernimmt in ~3 Min ({scoring_mode.upper()})")
+            self.control_panel.update_diversity_ratio(
+                "50:50", "operate",
+                operate_seconds_remaining=0,
+                scoring_mode=scoring_mode,
+                is_dynamic=True,
+            )
+        elif cached_ratio is not None:
             # Cache-Reuse: kein Lock, Phase direkt operate
             self._diversity_ctrl.reset()
             self._diversity_ctrl.ratio    = cached_ratio
