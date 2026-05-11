@@ -137,8 +137,10 @@ cat prompts/feature_v2.md | ./venv/bin/python3 tools/deepseek_review.py \
 
 - **Bei Code-Reviews immer ALLE referenzierten Files anhaengen** — sonst
   halluziniert R1 „fehlt"/„nicht verbunden"-Findings (siehe Memory
-  `feedback_deepseek_files_attachment.md`). 65K Token Context-Limit ist
-  grosszuegig — lieber zu viele als zu wenige Files.
+  `feedback_deepseek_files_attachment.md`). 128K Token Context-Limit (~512KB Code)
+  ist grosszuegig — lieber zu viele als zu wenige Files.
+  R1 hat KEIN „lost in the middle"-Problem (MoE-Architektur + MLA).
+  Einzelne Files >500 Zeilen: splitten oder die relevante Sektion extrahieren.
 - **Modell: immer `deepseek-reasoner` (R1)** — staerkstes Modell, KEINE
   Ausnahme. Kein `--chat` (V4) fuer Feature-Reviews.
 - Was geschickt wird: nur **vollstaendiger V2** — niemals V1, niemals
@@ -392,6 +394,18 @@ echo "Existiert load_preset noch im Code?" | \
 ---
 
 ## Workflow-CHANGELOG
+
+### v1.2 — 2026-05-09
+
+**Auslöser:** DeepSeek-Optimierungsanalyse + 128K-Context-Upgrade.
+
+**Aenderungen:**
+- Context-Limit in Schritt 2 aktualisiert: 65K → **128K** (~512KB Code).
+- Hinweis: R1 hat kein "lost in the middle"-Problem (MoE + MLA Architektur).
+- Guideline ergaenzt: Files >500 Zeilen splitten oder relevante Sektion extrahieren.
+- `deepseek_review.py`: `temperature` entfernt (von R1 nicht unterstuetzt),
+  `max_tokens` 8000 → 16000 (R1 Reasoning beansprucht 4-8K Tokens intern).
+- `deepseek_review_high.py`: `temperature` entfernt.
 
 ### v1.1 — 2026-04-29
 
