@@ -5,6 +5,87 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-11 — Session-Bilanz (mehrere Trivial-Fixes + Debug-Logs + P12-Hotfix)
+
+Kein APP_VERSION-Bump — alles inkrementelle Fixes/Logs auf v0.96.10.
+
+### UI-Tweaks (Field-Test 11.05.)
+
+- **`b19eb22`** Diversity-Anzeige nur Minuten (Sekunden raus —
+  springt nicht mehr optisch) + OMNI-CQ-Button eigener Style: grün
+  wenn aktiv, dunkelrot wenn inaktiv.
+- **`b6cf531`** QSO-Panel Spalten schmaler — `→ Sende X`, `← Empf. X`,
+  `← Horche …` mit nur 1 Leerzeichen (vorher 2-3 Block-Spaces).
+- **`47feac1`** ConnectStatusDialog (P26) bekommt Lucide
+  `radio-tower`-SVG (ISC-Lizenz, MIT-kompatibel) — 48×48 in #7CC links
+  vom Spinner. Layout-Umbau: HBox top_row mit Icon + VBox text_col.
+- **`5498f0d`** P29 OMNI-CQ Panel-Paritäts-Trennung — bei Even↔Odd-
+  Wechsel Leerzeile, Even-TX in `#E09600` (selber Hue wie `#FFAA00`,
+  ein wenig dunkler) zur optischen Unterscheidung. Nur im OMNI-Pfad,
+  Normal-CQ bleibt einheitlich.
+
+### Debug-Logs (P28-Bisection-Pattern erweitert)
+
+- **`f9fe8b3`** PSK-Pipeline Debug-Logs in `_fetch_psk_stats` +
+  `_psk_worker` (Kategorie `PSK`): SKIP/TRIGGER/REQUEST/RESPONSE/
+  PARSED/UPDATE/ERROR. Live-Test via curl bestätigte: API liefert
+  14 Reports DA1MHH 40m FT8 in 10 Min — Bug muss in App-Pfad sein.
+- **`894f7cb`** QSO-Hang Debug-Logs mit Wallclock-Timing in
+  `_on_qso_complete` + `_on_qso_confirmed` (Kategorien `QSO-DONE`,
+  `QSO-CONF`). dt-Werte pro Step machen den Hänger lokalisierbar.
+
+### Bug-Fixes via Debug-Log-Diagnose
+
+- **`708a521` P28 PSK-Bug-Fix** — Wurzel: OMNI-CQ ruft `encoder.transmit()`
+  direkt (umgeht `_on_send_message`) → `_has_sent_cq` blieb False →
+  PSK-Worker fragte nie ab. Latenter Bug seit OMNI-Refactor. Fix in
+  `_on_tx_started` (feuert für JEDEN TX-Pfad): bei `CQ `-Prefix
+  `_has_sent_cq=True`. Beweis im Log:
+  `03:18:27 [PSK] SKIP — _has_sent_cq=False` obwohl Mike "die ganze
+  zeit cq" via OMNI rief.
+- **`d61accc` P12 Partial-Fix** — Hänger nach QSO ~60s via Log-Diagnose
+  als `logbook.refresh()` lokalisiert (RR73-Pfad nur 5 ms, dann nach
+  `add_qso_complete` Stillstand). Wurzel: `load_adif()` parst ~20 MB
+  ADIF (12.8 MB + 6.6 MB ≈ 100k Records) komplett neu + QTableWidget
+  mit allen Rows + DXCC/km pro Row. Mike-Lösung: **Logbuch nur letzte
+  500 QSOs** in der Tabelle. `_all_records` ungekürzt (Counter bleiben
+  korrekt), Display + Filter auf `_LOGBOOK_MAX_ROWS = 500` gekappt.
+  Sortierung neueste zuerst (`QSO_DATE` + `TIME_ON` desc). Sauberer
+  Async-Refresh bleibt offen.
+
+### Neue TODOs (kritisch)
+
+- **`96a7557` P29** OMNI-Panel-Paritäts-Separation — schon umgesetzt
+  (`5498f0d`).
+- **`620cdcd` P30 MEMORY-LEAK 124 GB nach Tagen** — Mike musste App
+  killen. Live-Check zeigt: `~/.simpleft8/` 45 MB, `audio_dump/`
+  existiert nicht. → 124 GB sind **RAM, nicht SSD** (Mike's
+  Sound-File-Verdacht entkräftet). Math: ~720 KB Audio-Slot × 172.000
+  Slots ≈ 30 Tage durchgehend. Verdächtige Pfade in TODO P30
+  priorisiert: locator_db `_calls`, qso_log records,
+  decoder.last_audio_24k, Dedup-Dict, AP-Lite-Buffers, qso_panel-
+  TextEdit. Eigener Workflow nötig.
+
+### Test-Bilanz
+
+**1070 grün durchgehend** (P26 14 Tests stabil, alle anderen Suites
+unverändert).
+
+### Plan-/Workflow-Files
+
+Keine neuen V1-V3-Workflow-Files — alle Heute-Fixes Trivial-Klausel
+(<5-20 Zeilen, KISS, Style/Debug-Logs).
+
+### Mike-Disziplin-Note
+
+P30 Memory-Leak ist der einzige verbleibende **kritische** Blocker
+vor Push. Logbuch-Hänger ist Partial-Fix (`d61accc`), PSK-Bug
+behoben (`708a521`). v0.95.16 → v0.96.10 + Heute-Fixes + P2-Tool +
+P3-Audio-Dump + P21-Debug-Log + P26-Connect-Modal bleiben lokal
+gesammelt für Push.
+
+---
+
 ## 2026-05-11 v0.96.10 — P26.CONNECT-MODAL Field-Test-Tweak
 
 **Auslöser:** Mike-Field-Test 11.05.: „Text reicht FlexRadio wird

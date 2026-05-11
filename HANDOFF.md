@@ -1,18 +1,42 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-11: P26.CONNECT-MODAL Field-Test ✅ + Tweak v0.96.10
+## Stand 2026-05-11 ~05:35 UTC: Session-Bilanz — viele Trivial-Fixes + P30 offen
 
-**Code:** v0.96.10 lokal. Mike Field-Test 11.05. ✅ „funktioniert super".
-**Tests:** **1070 grün**.
-**Field-Test-Tweak:** Versuch-Counter raus, Fenster 20% kleiner (352×176).
-**Push pending** bis Mike OK gibt — v0.95.16-0.96.10 + P2-Tool + P3 +
-P21-Debug-Log + P26 zusammen.
+**Code:** v0.96.10 lokal (kein VERSION-Bump heute, Patches drauf).
+**Tests:** **1070 grün** durchgehend.
+**Field-Test heute:** P26 Connect-Modal ✅, 2 QSOs erfolgreich,
+App-Kill bei 124 GB RAM → P30.
 
-## P26 Status
+## Heute fertig (alles auf v0.96.10)
+
+- ✅ Diversity-Anzeige nur Minuten (Sekunden raus — springt nicht mehr)
+- ✅ OMNI-CQ-Button: grün aktiv / dunkelrot inaktiv
+- ✅ QSO-Panel Spalten schmaler
+- ✅ Funkmast-Icon im Connect-Modal (Lucide ISC)
+- ✅ P29 OMNI-Panel-Paritäts-Trennung (Leerzeile + Even-Farbton)
+- ✅ **P28 PSK-Bug-Fix** — `_has_sent_cq` auch bei OMNI-TX
+- ✅ **P12 Partial-Fix** — Logbuch nur letzte 500 QSOs (60s-Hang weg)
+- ✅ PSK + QSO-Hang Debug-Logs (Bisection-Pattern)
+
+## Kritisch offen vor Push
+
+- ⛔ **P30 MEMORY-LEAK 124 GB nach Tagen** — eigener Workflow nötig.
+  Live-Check bestätigt: RAM nicht Disk. Verdächtige Pfade in TODO P30
+  (locator_db, qso_log, decoder.last_audio_24k, AP-Lite-Buffers, ...).
+- 📋 P12 sauberer Async-Refresh (Partial-Fix ist drin, Refactor offen)
+- 📋 P27 Mess-Guard (aus P26-Spec)
+
+## Push pending
+
+v0.95.16 → v0.96.10 + heute-Fixes + P2-Tool + P3 + P21-Debug-Log +
+P26-Connect-Modal lokal gesammelt. Vor Push: P30 angehen oder
+bewusst als „acceptable" abhaken.
+
+## P26 Status (für Kontext)
 
 - ✅ V1 → V2 → R1 → V3 → Code → Final-R1 → Field-Test
-- ✅ Mike-Approval: „funktioniert super"
-- ✅ Field-Test-Tweak v0.96.10 (Versuch-Counter raus, kleineres Fenster)
+- ✅ Mike-Approval 11.05.: „funktioniert super"
+- ✅ Field-Test-Tweak v0.96.10 + Funkmast-Icon
 - ⏳ Push ausstehend
 
 ## Was P26 fixt
