@@ -81,17 +81,25 @@ field-getestet OK; P26 Field-Test ausstehend (V3 §8 6 Punkte).
 auf SSD. Vermutlich Datei-Handles nicht geschlossen ODER Audio-
 Buffer im RAM gehalten statt freigegeben.
 
-**Klärung nötig: RAM oder Disk?**
-- 124 GB ist plausibel für RAM auf M3 Max (128 GB), wäre extrem
-- ODER 124 GB SSD-Voll (Sound-Files seit Tagen)
+**Klärung nach Live-Check 11.05.: RAM, NICHT Disk.**
+- `~/.simpleft8/` ist 45 MB (sauber)
+- `audio_dump/` existiert nicht (P3 Audio-Dump aus)
+- → 124 GB sind echtes RAM-Leak, nicht SSD-Voll
+- Math-Eingrenzung: ~720 KB Audio-Slot × 172.000 Slots ≈ 30 Tage
+  durchgehend → passt zu „seit Tagen"
 
-**Verdächtige Pfade:**
-- `core/decoder.py` — Audio-Buffer + 5-Pass-Subtraktion
-- `core/encoder.py` — Audio-Pre-Generation
-- AP-Lite-Recording (Disk-Writes auf SSD, evtl. Sample-Aggregation
-  im RAM)
-- `core/audio_dump.py` (P3) — Roh-Audio-Slot-Dump, nur FT8, FIFO-
-  Cleanup — aber FIFO greift evtl. nicht?
+**Verdächtige Pfade (Reihenfolge nach Wahrscheinlichkeit):**
+- **`core/locator_db.py` `_calls`-Dict** — wächst monoton mit jedem
+  CQ-Decode, kein Cleanup. Bei Mike's Setup vermutlich riesig.
+- **`log/qso_log.py` records** — alle QSOs in-memory, akkumuliert?
+- **`decoder.last_audio_24k`** — wird überschrieben, aber evtl. von
+  Qt-Signal-Subscribern festgehalten (`audio_dump_signal` oder
+  Cycle-Pipeline)
+- **`_recent_logged_calls`-Dict** (P1.7 Dedup, mw_qso) — 300s Window,
+  aber wird das je gepruned?
+- **AP-Lite `_buffers`** — Cap exists, aber 720 KB pro Buffer
+- **`qso_panel.log_view` QTextEdit** — `_auto_trim_by_age` läuft alle
+  30s, prüfen ob wirklich greift
 
 **Diagnose-Schritte:**
 1. App neu starten, Activity Monitor offen lassen, RAM-Verlauf beobachten
