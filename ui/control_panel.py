@@ -965,7 +965,20 @@ class _QSOStatusCard(QFrame):
         self.btn_omni_cq = QPushButton("OMNI CQ")
         self.btn_omni_cq.setCheckable(True)
         self.btn_omni_cq.setFixedHeight(26)
-        self.btn_omni_cq.setStyleSheet(_mode_btn_style)
+        # 11.05.2026 Mike: OMNI-CQ inaktiv = dunkelrot, aktiv = grün.
+        # Eigener Style, damit Mike auf einen Blick sieht ob OMNI an ist.
+        _omni_btn_style = (
+            f"QPushButton {{ background: rgba(80,0,0,0.55); color: #AA6666; "
+            f"border: 1px solid rgba(150,40,40,0.5); border-radius: 5px; "
+            f"font-size: 12px; font-weight: bold; font-family: {_FONT}; }}"
+            f"QPushButton:checked {{ background: rgba(0,150,0,0.75); color: #FFFFFF; "
+            f"border-color: rgba(0,220,0,0.75); }}"
+            f"QPushButton:hover {{ background: rgba(110,20,20,0.6); color: #DDD; }}"
+            f"QPushButton:checked:hover {{ background: rgba(0,180,0,0.85); color: #FFFFFF; }}"
+            f"QPushButton:disabled {{ background: #2a2a2a; color: #666666; "
+            f"border: 1px solid #444444; }}"
+        )
+        self.btn_omni_cq.setStyleSheet(_omni_btn_style)
         self.btn_omni_cq.hide()  # nur via Easter-Egg sichtbar
 
         self.btn_auto_hunt = QPushButton("AUTO HUNT")
@@ -1566,16 +1579,19 @@ class ControlPanel(QWidget):
         current = self._phase_label.text()
         if current.startswith("●") or "Neuberechnung" not in current:
             return
+        # 11.05.2026 Mike: nur Minuten anzeigen, Sekunden raus —
+        # die springende Sekunden-Anzeige lenkt optisch ab.
         mins = max(0, int(seconds // 60))
-        secs = max(0, int(seconds % 60))
         if mins <= 2:
             color = "#FF8800"
         elif mins <= 10:
             color = "#FFCC00"
         else:
             color = "#888888"
-        label_txt = (f"Diversity Neuberechnung in {mins} Min {secs:02d} s"
-                     if mins > 0 else f"Diversity Neuberechnung in {secs} s")
+        if mins > 0:
+            label_txt = f"Diversity Neuberechnung in {mins} Min."
+        else:
+            label_txt = "Diversity Neuberechnung gleich"
         self._phase_label.setText(label_txt)
         self._phase_label.setStyleSheet(
             f"color:{color};font-size:9px;font-family:{_FONT};font-style:italic;"
