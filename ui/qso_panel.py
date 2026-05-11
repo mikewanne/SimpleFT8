@@ -28,6 +28,9 @@ class QSOPanel(QWidget):
         self._cleanup_timer.setInterval(30_000)  # 30s
         self._cleanup_timer.timeout.connect(self._auto_trim_by_age)
         self._cleanup_timer.start()
+        # P29 (11.05.2026): letzter OMNI-TX-Parity-State fuer Leerzeilen-
+        # Trennung bei Paritaets-Wechsel. None = noch kein OMNI-TX gesehen.
+        self._last_omni_tx_even: bool | None = None
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
@@ -182,10 +185,23 @@ class QSOPanel(QWidget):
         line = f"{utc} {tag} → Sende {message}"
         if omni_remaining is not None:
             line = f"{line} ↻{omni_remaining}"
-        if ant_label:
-            self._append_two_color(line, "#FFAA00", f" {ant_label}", "#888888")
+        # P29 (11.05.2026): OMNI-CQ optische Paritaets-Trennung.
+        # - Even-Slot: leicht dunkleres Orange (selber Hue, ein wenig dunkler)
+        # - Bei Wechsel Even↔Odd: Leerzeile davor.
+        # Nur fuer OMNI-Pfad (omni_remaining is not None) — Normal-CQ bleibt
+        # einheitlich.
+        if omni_remaining is not None:
+            if (self._last_omni_tx_even is not None
+                    and self._last_omni_tx_even != tx_even):
+                self._append_colored("", "#000000")  # Leerzeile
+            self._last_omni_tx_even = tx_even
+            tx_color = "#E09600" if tx_even else "#FFAA00"
         else:
-            self._append_colored(line, "#FFAA00")
+            tx_color = "#FFAA00"
+        if ant_label:
+            self._append_two_color(line, tx_color, f" {ant_label}", "#888888")
+        else:
+            self._append_colored(line, tx_color)
         # P1.16: _auto_trim_by_age laeuft via QTimer alle 30s, kein expliziter Aufruf hier
 
     def add_rx(self, message: str,
