@@ -1041,15 +1041,16 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         mode_str = mode_labels.get(self._rx_mode, "Normal")
         if getattr(self, '_omni_cq', None) and self._omni_cq.is_active():
             # P7.OMNI-SIMPLIFY: 1 Counter mit aktueller Paritaet (E/O/?).
-            # P23: Down-Counter cq_remaining (zaehlt von TARGET nach 1).
-            parity = self._omni_cq.cq_tx_even
+            # P31 (11.05.2026): Display-Wert (pre-decrement) statt cq_remaining
+            # (post-decrement) — konsistent mit qso_panel. ↻10/9/.../1 → ↻10.
+            parity = self._omni_cq.cq_tx_even_display
             if parity is True:
                 parity_str = "E"
             elif parity is False:
                 parity_str = "O"
             else:
                 parity_str = "—"  # noch nicht initialisiert
-            omni_str = f"  Ω CQ={self._omni_cq.cq_remaining} ({parity_str})"
+            omni_str = f"  Ω CQ={self._omni_cq.cq_remaining_display} ({parity_str})"
         else:
             omni_str = ""
         # DT-Korrektur Status — nur DT-Label gruen, Statusbar bleibt grau

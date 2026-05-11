@@ -36,6 +36,8 @@ v0.95.16 - v0.96.9 + P2-Tool + P3 + P21 + P26 lokal gesammelt.
 
 | ID | Was | Aufwand |
 |---|---|---|
+| **P32** | RX-Panel Spalten-Konfiguration persistieren — Rechtsklick-Auswahl (km/dt/Land/...) bei App-Start wiederherstellen | 1h Lite |
+| **P33** | QSO-fertig-Meldung erscheint NACH nächster CQ-Zeile (Reihenfolge-Bug) — `✓ QSO komplett` sollte VOR `→ Sende CQ ↻N` im qso_panel stehen | 1-2h Workflow |
 | **P24** | App soll letzten RX-Mode (Normal/Std/DX) merken — heute startet immer Normal | 1h Lite |
 | **P10** | PSK-BACKOFF-RESET — Backoff von 60min auf 5min ODER Reset-Button | 1-2h |
 | **P14** | DT-WERTE-ASYMMETRISCH — NTP-Korrektur-Issue | 2h Diagnose |
@@ -55,6 +57,20 @@ KEIN Push seit v0.95.16. Lokal gesammelt: **v0.95.16 → v0.96.9 + P2-Tool +
 P3-Audio-Dump + P21-Debug-Log + P26-Connect-Modal**. Push erst wenn
 Mike alle Field-Tests abgenommen hat. Aktueller Stand: P22/P23/P21/P16
 field-getestet OK; P26 Field-Test ausstehend (V3 §8 6 Punkte).
+
+## ✅ 11.05.2026 RESOLVED
+
+- **P12 Logbuch-Hang nach QSO:** behoben via Partial-Fix (500-Cap, commit
+  `d61accc`). Mike-Bestätigung 11.05. ~05:55: „Einfrieren nach qso fehler
+  behoben gerade qso erfolgreich beendet. können wir abhaken."
+- **P28 PSK-Bug:** OMNI-TX hat `_has_sent_cq` nicht gesetzt, PSK-Worker
+  fragte nie ab. Fix in `_on_tx_started` (commit `708a521`). Mike-Field-
+  Test 11.05.: „psk reporter zeigt ansehr sehr gut".
+- **P31 Counter-Bug ↻9 statt ↻10:** OMNI-Counter zeigte post-decrement
+  statt pre-decrement Wert + post-Flip-Parity-Race in QSO-Panel. Fix in
+  `core/omni_cq.py` (commit folgt) — neues Display-Property
+  `cq_remaining_display` + `cq_tx_even_display`, mw_qso + Statusbar
+  lesen Display-Wert. Sequenz jetzt: ↻10 → ↻9 → ... → ↻1 → Flip → ↻10.
 
 ## ✅ Heute RESOLVED (zur Klarheit)
 
@@ -115,6 +131,68 @@ Buffer im RAM gehalten statt freigegeben.
 
 **Schweregrad:** **KRITISCH** — App-Crash nach Tagen, Mike kann nicht
 durchgehend laufen lassen, blockt Push.
+
+---
+
+## 📋 P32.RX-PANEL-COLUMN-PERSIST (Mike-Wunsch 11.05. ~05:55)
+
+**Symptom:** Im RX-Panel (Empfangsfenster) kann der User per Rechtsklick
+auf die Spaltenüberschrift auswählen welche Spalten angezeigt werden
+(z.B. km, dt, Zeit, Land etc.). Aber bei App-Restart geht die Auswahl
+verloren — Default-Spalten kommen zurück.
+
+**Mike-Wunsch:** Auswahl bei jedem Klick speichern, bei App-Start laden.
+
+**Files (vermutet):**
+- `ui/rx_panel.py` — `RxPanel` Klasse, Spalten-Definition + Rechtsklick-
+  Menü-Handler
+- `config/settings.py` — Settings-Key `rx_panel_visible_columns` (list[str])
+- `ui/main_window.py` `closeEvent` — Save vor Quit
+- App-Init — Load + Anwenden auf RX-Panel
+
+**Aufwand:** ~1h Lite. Pattern wie andere Settings-Persistenz (band,
+mode, power_preset, etc.).
+
+**Schweregrad:** Niedrig — UX-Annoyance, keine Funktion betroffen.
+
+---
+
+## 📋 P33.QSO-COMPLETE-DISPLAY-ORDER (Mike-Wunsch 11.05. ~05:55)
+
+**Symptom:** Im QSO-Panel erscheint die `✓ QSO mit X komplett`-Zeile
+NACH dem nächsten `→ Sende CQ ↻N`-Eintrag statt davor. Beispiel
+(Mike-Screenshot):
+```
+03:53:30 [E] ← Empf. EC3A 73       ← Empfang des 73 (QSO done)
+03:54:00 [E] → Sende CQ DA1MHH ↻9  ← schon nächster CQ-TX
+         ✓ QSO mit EC3A komplett   ← KOMMT ERST HIER
+03:55:00 [E] → Sende CQ DA1MHH ↻8
+```
+
+**Mike-Erwartung:** `✓ QSO komplett` direkt nach Empfang-73, vor
+nächstem CQ-Send.
+
+**Wurzel (unbestätigt):** `qso_confirmed`-Signal feuert erst in
+`on_message_sent` für `TX_73_COURTESY` (NACH Höflichkeits-73-Send).
+Bis dahin ist der nächste Slot-Start schon getriggert und OMNI hat
+einen CQ losgeschickt. Plus `add_qso_complete` hat keinen Zeitstempel
+— Append-Reihenfolge im QTextEdit kann nicht durch Slot-Zeit
+korrigiert werden.
+
+**Lösungs-Optionen:**
+- `qso_confirmed.emit` SOFORT bei 73-Empfang (nicht nach
+  Höflichkeits-73) — aber das bricht Mike's P1.10-Fix (IC-7300
+  Auto-Sequence wartet auf Höflichkeits-73)
+- `add_qso_complete` mit Slot-Time-Stempel + cleverer Insertion-Order
+  via QTextCursor (komplex)
+- Pre-resume von OMNI verzögern bis nächster-übernächster Slot
+- Eigener Workflow V1→V2→R1→V3 nötig (mehrere Abhängigkeiten:
+  qso_state TX_73_COURTESY-Pfad, OMNI-Resume-Timing, qso_panel
+  Append-Logik).
+
+**Aufwand:** 1-2h Workflow.
+
+**Schweregrad:** Niedrig (kosmetisch).
 
 ---
 

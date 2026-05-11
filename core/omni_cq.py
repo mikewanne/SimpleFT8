@@ -80,6 +80,12 @@ class OmniCQ(QObject):
         # P23: eigener Down-Counter (statt _cq_count UP + _search_trigger_count)
         self._cq_remaining = 0
         self._cq_target = _OMNI_DEFAULT_TARGET
+        # P31 (11.05.2026 Mike-Field-Test): Display-Wert PRE-decrement, fuer
+        # qso_panel + Statusbar. Mike-Erwartung: ↻10 fuer ersten Slot, ↻1
+        # fuer letzten, ↻10 fuer ersten Slot der naechsten Paritaet. Aktueller
+        # _cq_remaining ist POST-decrement (intern).
+        self._cq_remaining_display = 0
+        self._cq_tx_even_display: bool | None = None
 
     # ── Public API ────────────────────────────────────────────────────
 
@@ -98,6 +104,7 @@ class OmniCQ(QObject):
         mode = getattr(self._timer, 'mode', 'FT8')
         self._cq_target = _OMNI_TARGETS.get(mode, _OMNI_DEFAULT_TARGET)
         self._cq_remaining = self._cq_target
+        self._cq_remaining_display = self._cq_target  # P31
         self.omni_started.emit()
         logger.info("[OMNI-CQ] Start (Modus %s, Counter %d)",
                     mode, self._cq_target)
@@ -110,6 +117,8 @@ class OmniCQ(QObject):
         self._cq_audio_hz = None
         self._cq_tx_even = None
         self._cq_remaining = 0
+        self._cq_remaining_display = 0  # P31
+        self._cq_tx_even_display = None
         self._cq_target = _OMNI_DEFAULT_TARGET
         self.omni_stopped.emit(reason)
         logger.info("[OMNI-CQ] Stop (%s)", reason)
@@ -134,6 +143,8 @@ class OmniCQ(QObject):
         self._paused = False
         # P23-A3: Counter Reset auf TARGET (positiv-Verstaerkung "guter Slot")
         self._cq_remaining = self._cq_target
+        self._cq_remaining_display = self._cq_target  # P31
+        self._cq_tx_even_display = self._cq_tx_even
         parity_str = "E" if self._cq_tx_even else "O"
         logger.info("[OMNI-CQ] Resume (Counter %d, Paritaet %s)",
                     self._cq_remaining, parity_str)
@@ -154,6 +165,8 @@ class OmniCQ(QObject):
         if self._cq_remaining == self._cq_target:
             return  # nichts zu tun
         self._cq_remaining = self._cq_target
+        self._cq_remaining_display = self._cq_target  # P31
+        self._cq_tx_even_display = self._cq_tx_even
         self.cq_count_changed.emit(
             self._cq_remaining,
             bool(self._cq_tx_even) if self._cq_tx_even is not None else False,
@@ -169,8 +182,23 @@ class OmniCQ(QObject):
 
     @property
     def cq_remaining(self) -> int:
-        """P23: Down-Counter, zeigt verbleibende CQs in aktueller Paritaet."""
+        """P23: Down-Counter, INTERN — post-decrement Wert fuer naechsten Slot."""
         return self._cq_remaining
+
+    @property
+    def cq_remaining_display(self) -> int:
+        """P31 (11.05.2026): Display-Wert fuer qso_panel + Statusbar.
+
+        Pre-decrement Wert des AKTUELLEN TX-Slots. Mike-Erwartung:
+        ↻10 fuer ersten Slot in Paritaet, ↻9, ..., ↻1, dann nach Flip
+        ↻10 in neuer Paritaet.
+        """
+        return self._cq_remaining_display
+
+    @property
+    def cq_tx_even_display(self) -> bool | None:
+        """P31: Paritaet zur DISPLAY-Zeit (vor Flip)."""
+        return self._cq_tx_even_display
 
     @property
     def cq_target(self) -> int:
@@ -226,15 +254,22 @@ class OmniCQ(QObject):
             audio_freq_hz=self._cq_audio_hz,
         )
         if ok:
-            # P23-A2: dekrementieren, ggf. Auto-Flip + Reset, GENAU 1 Emit
-            # pro Slot (kein Zwischen-0 fuer UI-Flicker).
+            # P31 (11.05.2026 Mike-Field-Test): DISPLAY-Snapshot VOR Decrement+Flip.
+            # Mike-Erwartung: ↻10 fuer ersten Slot, ↻9 ... ↻1, dann Flip → ↻10
+            # in neuer Paritaet. Decrement passiert sofort danach (intern), aber
+            # qso_panel + Statusbar lesen den Display-Wert (pre-decrement).
+            self._cq_remaining_display = self._cq_remaining
+            self._cq_tx_even_display = self._cq_tx_even
+            # P23-A2: dekrementieren, ggf. Auto-Flip + Reset (interner Counter).
             self._cq_remaining -= 1
             if self._cq_remaining == 0:
                 self.flip_tx_parity()
                 self._cq_remaining = self._cq_target
-            self.cq_count_changed.emit(self._cq_remaining, self._cq_tx_even)
-            label = self._slot_label(True, self._cq_tx_even)
-            self.slot_action.emit(label, True, self._cq_tx_even)
+            self.cq_count_changed.emit(
+                self._cq_remaining_display, bool(self._cq_tx_even_display)
+            )
+            label = self._slot_label(True, self._cq_tx_even_display)
+            self.slot_action.emit(label, True, self._cq_tx_even_display)
         else:
             label = self._slot_label(True, self._cq_tx_even)
             logger.warning(

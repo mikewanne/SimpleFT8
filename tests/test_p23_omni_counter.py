@@ -97,7 +97,12 @@ def test_start_target_default_for_unknown_mode(app):
 
 
 def test_tx_decrements_remaining_by_one(app):
-    """T5: nach 1 erfolgreichem TX: remaining == TARGET-1, GENAU 1 Emit."""
+    """T5: nach 1 erfolgreichem TX: remaining == TARGET-1 (intern), GENAU 1 Emit.
+
+    P31 (11.05.2026): Display-Wert ist PRE-decrement (Mike-Erwartung: ↻10
+    fuer ersten Slot, ↻9 fuer zweiten, ...). Emit liefert pre-decrement.
+    Interner _cq_remaining bleibt post-decrement (verbleibende Versuche).
+    """
     omni, *_ = _make_omni(mode="FT8")
     captured: list[tuple[int, bool]] = []
     omni.cq_count_changed.connect(lambda r, e: captured.append((r, e)))
@@ -106,8 +111,9 @@ def test_tx_decrements_remaining_by_one(app):
     # Slot mit passender Paritaet (Even bei time=30.0/15 = cycle 2 = Even)
     with patch("core.omni_cq.time.time", return_value=30.0):
         omni.on_cycle_start(cycle_num=2, is_even=True)
-    assert omni.cq_remaining == target - 1
-    assert captured == [(target - 1, True)]
+    assert omni.cq_remaining == target - 1  # interner Counter
+    assert omni.cq_remaining_display == target  # P31: Display = pre-decrement
+    assert captured == [(target, True)]  # P31: Emit = Display-Wert
 
 
 # ── T6: encoder busy → kein Decrement, kein Emit ───────────────────
@@ -131,8 +137,13 @@ def test_tx_busy_does_not_decrement(app):
 
 
 def test_remaining_reaches_zero_triggers_flip_and_reset_with_one_emit(app):
-    """T7 (R1-S1): TARGET TXs in Folge → genau TARGET Emits (nicht TARGET+1).
-    Letzter Emit-Wert == TARGET (Reset, kein Zwischen-0). 1 parity_flipped."""
+    """T7 (R1-S1 + P31): TARGET TXs in Folge → genau TARGET Emits.
+
+    P31 (11.05.2026): Emits liefern Display-Wert (pre-decrement). Sequenz:
+    TARGET, TARGET-1, ..., 1 (statt frueher TARGET-1, ..., 1, TARGET-mit-Reset).
+    Tx_even im Emit ist DISPLAY-Paritaet (vor Flip) = True bis zum Schluss.
+    Genau 1 parity_flipped am Ende.
+    """
     omni, *_ = _make_omni(mode="FT8")
     captured_count: list[tuple[int, bool]] = []
     captured_flips: list[bool] = []
@@ -144,24 +155,19 @@ def test_remaining_reaches_zero_triggers_flip_and_reset_with_one_emit(app):
     for i in range(target):
         with patch("core.omni_cq.time.time", return_value=30.0):
             omni.on_cycle_start(cycle_num=2, is_even=True)
-            # Aber: nach Flip ist Paritaet jetzt Odd, muss Slot anpassen.
-            # Also: nach jedem Slot pruefen ob Flip passierte
-        if i < target - 1:
-            # Vor dem Flip: noch in Even
-            pass
-    # Erwartung: GENAU TARGET cq_count_changed-Emits (nicht TARGET+1 fuer
-    # den Zwischen-0)
+    # GENAU TARGET cq_count_changed-Emits
     assert len(captured_count) == target
-    # Letzter Emit = TARGET (nach Auto-Flip + Reset)
-    assert captured_count[-1][0] == target
-    # Zwischenwerte: TARGET-1, TARGET-2, ..., 1, TARGET (am Schluss)
-    expected_values = list(range(target - 1, 0, -1)) + [target]
+    # P31: Display-Sequenz pre-decrement: TARGET, TARGET-1, ..., 1
+    expected_values = list(range(target, 0, -1))
     actual_values = [c[0] for c in captured_count]
     assert actual_values == expected_values
+    # P31: tx_even im Emit ist DISPLAY-Paritaet (pre-flip) = True alle 10x
+    actual_parities = [c[1] for c in captured_count]
+    assert all(p is True for p in actual_parities)
     # Genau 1 Flip am Schluss
     assert len(captured_flips) == 1
     assert captured_flips[0] is False  # von Even auf Odd
-    # remaining ist jetzt TARGET, Paritaet ist Odd
+    # remaining (intern) ist jetzt TARGET (nach Reset), Paritaet ist Odd
     assert omni.cq_remaining == target
     assert omni.cq_tx_even is False
 

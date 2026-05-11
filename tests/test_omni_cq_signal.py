@@ -113,9 +113,10 @@ def test_matching_cycle_calls_encoder_transmit_and_emits(app):
     encoder.transmit.assert_called_once_with(
         "CQ DA1MHH JN58", tx_even=True, audio_freq_hz=1500,
     )
-    # P23: nach 1 TX ist remaining = TARGET - 1
+    # P23 intern: nach 1 TX ist remaining = TARGET - 1 (post-decrement)
+    # P31 (11.05.2026): Emit liefert pre-decrement Display-Wert = TARGET.
     assert omni.cq_remaining == target - 1
-    assert captured_count == [(target - 1, True)]
+    assert captured_count == [(target, True)]
     assert len(captured_slot) == 1
     assert captured_slot[0][1] is True   # is_tx
     assert captured_slot[0][2] is True   # tx_even

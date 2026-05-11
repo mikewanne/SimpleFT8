@@ -130,7 +130,8 @@ class QSOMixin:
         omni_remaining = None
         omni = getattr(self, '_omni_cq', None)
         if omni is not None and omni.is_active() and not omni.is_paused():
-            omni_remaining = omni.cq_remaining
+            # P31: Display-Wert (pre-decrement) statt cq_remaining (post).
+            omni_remaining = omni.cq_remaining_display
         self.qso_panel.add_tx(message, "",
                               tx_even=tx_even, slot_start_ts=slot_start_ts,
                               omni_remaining=omni_remaining)
