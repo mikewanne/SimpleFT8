@@ -95,6 +95,20 @@ class CycleMixin:
 
         if self._rx_mode == "diversity" and messages:
             self._handle_diversity_operate(messages, ant)
+
+        # P34: Dynamic-Diversity Slot-Datenerfassung (nach operate-Handler).
+        # Gate: Toggle AN + Diversity + operate-Phase + Messages vorhanden.
+        # AK9: Score-Formel via Modul-Helper compute_slot_score (identisch
+        # zur Statik). Antenne ant ist aus _pop_diversity_queue (race-frei
+        # vom Slot-Start).
+        if (self._rx_mode == "diversity"
+                and was_phase == "operate"
+                and getattr(self, "_dynamic_ctrl", None) is not None
+                and self._dynamic_ctrl.is_active()
+                and messages):
+            from core.diversity import compute_slot_score
+            score = compute_slot_score(messages)
+            self._dynamic_ctrl.record_slot(ant, score)
         elif self._rx_mode == "normal":
             self._handle_normal_mode(messages)
         elif messages:

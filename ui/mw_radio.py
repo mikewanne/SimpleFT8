@@ -258,6 +258,9 @@ class RadioMixin:
             self._auto_hunt.stop_auto_hunt("ft_mode_change")
         if hasattr(self, "_omni_cq") and self._omni_cq.is_active():
             self._omni_cq.stop("mode_change")
+        # P34: Dynamic-Buffer leeren bei Modus-Wechsel (AK10)
+        if getattr(self, "_dynamic_ctrl", None) and self._dynamic_ctrl.is_active():
+            self._dynamic_ctrl.reset()
         self.settings.set("mode", mode)
         self.timer.set_mode(mode)
         # CQ-Freq Dwell/Recalc-Intervall an neuen Modus anpassen
@@ -342,6 +345,10 @@ class RadioMixin:
         self.settings.set("band", band)
         freq = self.settings.frequency_mhz
         self._has_sent_cq = False
+
+        # P34: Dynamic-Buffer leeren bei Bandwechsel (AK10)
+        if getattr(self, "_dynamic_ctrl", None) and self._dynamic_ctrl.is_active():
+            self._dynamic_ctrl.reset()
 
         # ── BANDWECHSEL STOPPT ALLES ──────────────────────────
         # CQ-Modus sofort stoppen
@@ -1043,6 +1050,9 @@ class RadioMixin:
 
     def _disable_diversity(self):
         """Diversity deaktivieren: zurueck auf ANT1."""
+        # P34: Dynamic deaktivieren wenn Diversity aus → kein Vergleich moeglich
+        if getattr(self, "_dynamic_ctrl", None) and self._dynamic_ctrl.is_active():
+            self._dynamic_ctrl.deactivate()
         # P22 Final-R1 SOLLTE-2: staged-Daten beim Disable verwerfen, damit
         # Memory bei Re-Activate nicht mit alten Half-State-Werten startet.
         band, ft_mode = self.settings.band, self.settings.mode
