@@ -17,6 +17,16 @@ Die neue adaptive Methode sammelt Scores **in jedem laufenden Slot**. Ein rollen
 ### Wie aktivieren
 Toggle in **Einstellungen → FT8 & Diversity**: „Adaptive Diversity (Testphase)". Die statische Methode bleibt als Fallback verfügbar — wenn Adaptive aus ist, läuft die stündliche Messung wie bisher. Der Toggle gilt **nur für die laufende Sitzung** (nicht persistent) — App-Neustart deaktiviert. Das Phasen-Label im Antennen-Panel wird **blau („● DYNAMISCH (live)")** wenn Adaptive aktiv ist.
 
+### Häufige Frage: Sollten wir bei CQ nur die dominante Antenne hören?
+
+**Nein.** Wenn Adaptive z.B. 30:70 anzeigt (ANT2 dominant), wäre die Idee „während CQ-Block 100 % auf ANT2 hören statt 30 % der Slots auf ANT1 zu verschenken" intuitiv naheliegend — aber praktisch kontraproduktiv:
+
+- **Antwortende Stationen rufen 2-3× bis Bestätigung.** Bei 70 % Anteil der dominanten Antenne ist die Wahrscheinlichkeit dass mindestens eine Wiederholung in einem dominanten Slot ankommt: 2 Versuche → **94 %**, 3 Versuche → **97 %**.
+- **Die 30 % „schwächere" Slots sind QSB-Versicherung.** Wenn die starke Antenne einen kurzen Conditions-Einbruch hat, fängt die andere Antenne das ab. Forcieren auf eine Antenne → bei Einbruch verliert man komplett.
+- **Adaptive folgt Conditions slot-für-slot.** Wenn ANT2 wirklich dauerhaft besser ist, läuft das Verhältnis ohnehin dort. Manuelles Forcieren wäre Doppel-Optimierung mit weniger Robustheit.
+
+TX läuft sowieso immer über ANT1 (Hardware-Pflicht für die Regenrinne ANT2). Das ist unabhängig vom Diversity-Ratio.
+
 ---
 
 ## Alle drei Modi auf einen Blick
