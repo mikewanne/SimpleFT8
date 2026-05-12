@@ -59,6 +59,91 @@ P34 + P35 lokal gesammelt.
 | **P18** | DT-KORR-3X-RELOAD — kosmetisch, 3-fach Reload-Log | 30min |
 | **P20** | LOG-ROTATION für simpleft8.log (Debug-Log macht das schon, hier geht's um den Haupt-Log) | 1h |
 | **P29** | OMNI-CQ QSO-Panel-Anzeige: bei Paritäts-Wechsel (Even↔Odd) Leerzeile dazwischen + Even-Slot etwas dunklere Farbe (selber Farbton, nur ein wenig dunkler) zur optischen Unterscheidung | 1h |
+| **P43** | App-Name + PID im Activity Monitor sichtbar machen via `setproctitle` | 30min |
+| **P44** | Statusbar DT-Korrektur grün-Bug: nur DT-Label gruen, nicht ganzer Statusbar-Text (eigenes QLabel via addPermanentWidget) | 1h Workflow |
+| **P46** | Bandpilot Normal wieder reinholen → 3-Wege-Vergleich Normal/Std/DX | 2-3h Workflow |
+
+## 📋 P46.BANDPILOT-NORMAL-REINTEGRATION (Mike+Claude+R1 12.05.2026)
+
+**Aktueller Stand:** Bandpilot vergleicht nur Diversity Standard vs DX.
+Mike's Vision: „ganz oder gar nicht" — wenn schon Pilot, dann alle 3 Modi.
+
+**Konsens Mike + Claude + R1:**
+
+> Normal wieder rein. Architektonisch sauber, UX-konsistent, fairere
+> Pilot-Entscheidung. R1: „95 % der Bänder verliert Normal — aber die
+> 5 % Spezialfälle (dünne Datenbasis 17m/12m, resonante 20m-Antenne in
+> ruhigen Stunden, Single-Antenna-Setups) rechtfertigen den Aufwand."
+
+**Schwellen (bereits vorhanden!):**
+
+`core/mode_recommender.py`:
+```python
+MIN_DAYS_HOUR = 3        # Mindest-Messtage pro Stunde
+MIN_CYCLES_HOUR = 20     # Mindest-Zyklen pro Modus
+```
+
+→ Für Normal-Reintegration: **gleiche Schwellen verwenden.** Wenn
+Normal ≥3 Tage × ≥20 Zyklen pro Stunde hat, wird's in den Vergleich
+aufgenommen. Sonst 2-Wege-Vergleich (Std vs DX) wie heute.
+
+→ Ausreißer-Glättung: bereits durch Pooled Mean über alle Zyklen
+gewährleistet. Bei R1's Bedenken zu „nur 2-3 Datenpunkte" greift
+`MIN_CYCLES_HOUR=20` als Sicherung.
+
+**Aufwand:** 2-3h Workflow (V1→V2→R1→V3 + Code in `core/mode_recommender.py`
++ Tests + UI-Update Settings-Dialog).
+
+**Geplante Aenderungen:**
+
+1. `core/mode_recommender.py` — `compare_modes()` Normal-Slot reinholen
+2. `ui/main_window.py` bzw. Bandpilot-Handler — 3-Wege-Switch
+3. Settings-Dialog: Bandpilot-Beschreibung anpassen
+4. Tests: Normal-Wins-Szenario + Normal-Schwellen-Fail-Szenario
+
+---
+
+## 📋 P43.PROCTITLE — Activity-Monitor-Erkennbarkeit
+
+**Hintergrund (12.05.2026):** Bei der P30-Memory-Leak-Diagnose tauchte
+das Problem auf dass macOS Activity Monitor sowohl SimpleFT8 als auch
+Qwen3-TTS als „Python" anzeigt — beide nutzen das gleiche Python-Binary.
+→ Bei „128 GB Python" konnten wir nicht unterscheiden welcher Prozess
+schuld war. Stellte sich raus: TTS, nicht SimpleFT8.
+
+**Lösung — `setproctitle`-Modul:**
+
+In `main.py` ganz oben (nach den ersten Imports):
+```python
+try:
+    import setproctitle
+    import os
+    setproctitle.setproctitle(f"SimpleFT8 DA1MHH PID:{os.getpid()}")
+except ImportError:
+    pass  # optionales Modul, App läuft auch ohne
+```
+
+→ Activity Monitor zeigt dann `SimpleFT8 DA1MHH PID:12345` statt
+nur „Python". Sofort erkennbar gegen TTS und andere Python-Apps.
+
+**Installation:**
+```bash
+./venv/bin/pip install setproctitle
+```
+Plus Eintrag in `requirements.txt` falls vorhanden.
+
+**Test:**
+1. App starten, `ps -axo pid,command | grep SimpleFT8` → Name sollte
+   `SimpleFT8 DA1MHH PID:NNN` zeigen
+2. Activity Monitor öffnen → Spalte „Prozessname" zeigt es
+
+**Aufwand:** ~30 min (5 Zeilen Code + pip install + 1 Test + Doku).
+
+**Trivial-Klausel:** ja → KEIN voller V1→V2→R1→V3-Workflow nötig.
+Direkt umsetzen wenn wir das nächste Mal eh Code anfassen.
+
+**Risiko:** keins. `setproctitle` ist Standard-PyPI-Modul, weit
+verbreitet, no-op wenn fehlt (try/except).
 
 ## 📦 Push pending
 

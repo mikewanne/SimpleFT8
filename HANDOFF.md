@@ -1,6 +1,31 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-12 nachmittags: v0.97.8 P30 Diagnose-Code eingebaut
+## Stand 2026-05-12 abends: v0.97.9 P45 Stats-Guard OMNI-CQ (autonom durchgearbeitet)
+
+**Code:** v0.97.9 — OMNI-CQ wurde im `_log_stats` nicht abgefangen →
+Stats-Verfälschung während OMNI-RX-Slots. Jetzt eigener Guard-Block.
+**Tests:** **1160 grün** (1156 + 4 P45).
+**Backup vor Code:** `Appsicherungen/2026-05-12_v0.97.8_vor_p45_omni_stats_guard/`.
+**Push:** ausstehend (Mike beim Termin) — gleich nachgeholt.
+
+### Was Mike heute anstoßte (3 Themen):
+1. **DT-Korrektur grün → Statusbar grün-Bug** — in TODO als **P44**
+2. **Stats-Sperren-Check für OMNI** — **P45 erledigt** (dieser Stand)
+3. **Bandpilot Normal-Reintegration** — in TODO als **P46**
+   (Mike+Claude+R1 einig, Schwellen MIN_DAYS_HOUR=3 / MIN_CYCLES_HOUR=20
+   bereits vorhanden, nur Code-Erweiterung nötig)
+
+### Memory-Watcher läuft weiter
+Daemon PID 81237 sampelt SimpleFT8 alle 60s nach
+`~/.simpleft8/memory_watch.log`. TTS-Server bleibt aus
+(`launchctl unload`).
+
+### Vorgänger-Stand (v0.97.8)
+
+Decoder-Diagnose-Code opt-in via `SIMPLEFT8_DECODER_DIAG=1`. R1-bestätigter
+Verdacht `_audio_buffer_24k` Skip-Bug. Erste Beobachtung: RSS ~270 MB
+stabil, 0 Skips → Hauptverdacht entlastet, vermutlich war 124-GB-Crash
+hauptsächlich TTS.
 
 **Code:** v0.97.8 — Decoder-Diagnose opt-in via `SIMPLEFT8_DECODER_DIAG=1`.
 **Tests:** **1156 grün** (1148 + 8 neue P30-Tests).

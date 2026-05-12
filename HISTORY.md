@@ -5,6 +5,43 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-12 v0.97.9 — P45 Stats-Guard für OMNI-CQ
+
+**Bug:** `_log_stats` in `ui/mw_cycle.py` blockierte korrekt manuelles
+CQ + QSO + Tuning + Warmup. **ABER OMNI-CQ wurde nicht abgefangen** —
+es ist eine separate State-Machine in `core/omni_cq.py` und setzt nie
+`qso_sm.cq_mode=True`. Folge: OMNI-RX-Slots (mit anderem Antennen-
+Pattern als regulärer RX, ohne TX-Slots) wurden trotzdem in Statistik
+geloggt → Pattern-Bias.
+
+**Fix:** `_omni_cq.is_active()` als eigener Guard-Block eingebaut
+(R1-bestätigt unabhängig von `_qsm` — sicherer wenn `_qsm` mal fehlt).
+Plus: Stats-Indikator wird beim CQ/QSO/OMNI-Block jetzt konsistent grau
+gesetzt (war bisher nur bei Warmup + Tuning).
+
+**Diff:** `ui/mw_cycle.py:876-895` — 1-Zeilen-Erweiterung + Helper-
+Variables + Indikator-Set.
+
+**Workflow:** V1→V2→R1→V3. R1-K1: OMNI-Guard unabhängig von `_qsm`
+machen. R1-K2: Edge-Test OMNI+QSO gleichzeitig hinzufügen.
+
+**Tests:** 1156 → **1160 grün** (+4 P45-Tests):
+- `test_omni_active_blocks_stats`
+- `test_omni_inactive_lets_stats_through`
+- `test_no_omni_attribute_compat` (rückwärts-Kompatibilität)
+- `test_omni_and_qso_both_block` (R1-Edge-Case)
+
+**Backup:** `Appsicherungen/2026-05-12_v0.97.8_vor_p45_omni_stats_guard/`
+
+**Plan-Files:** `prompts/p45_stats_omni_guard_v[1,2,3]+r1.md`
+
+**Files modified:**
+- `ui/mw_cycle.py` (+12 LOC)
+- `main.py` (APP_VERSION 0.97.8 → 0.97.9)
+**Files new:** `tests/test_p45_omni_stats_guard.py` (+4 Tests)
+
+---
+
 ## 2026-05-12 v0.97.8 — P30 Diagnose-Code in Decoder eingebaut
 
 **Stand:** 1148 → 1156 Tests grün (+8 neue P30-Tests). KEIN Fix, sondern
