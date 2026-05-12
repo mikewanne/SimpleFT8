@@ -1,5 +1,31 @@
 # HANDOFF — SimpleFT8
 
+## Stand 2026-05-12 nachts: v0.97.6 P40 P37-Komplettierung
+
+**Code:** v0.97.6 lokal — 3 weitere Aufrufer von `update_diversity_ratio`
+reichen jetzt `current_ant` durch. Adaptive-Label zeigt RX-Antenne
+verlaesslich auch bei Ratio-Wechseln.
+**Tests:** **1140 grün** (+4 P40 vs v0.97.5).
+**Push:** pending.
+
+## P40 fixt P37-Partial-Fix
+
+Mike-Field-Test 12.05. abends: Label „● DYNAMISCH (live)" zeigte den
+RX-Antennen-Suffix nicht. P37 hatte nur 1 von 4 Aufrufern angefasst
+(klassischer Partial-Fix, Memory-Lesson verfehlt).
+
+**3 gefixte Stellen:**
+- `main_window.py:1357` `_on_dynamic_ratio_changed` (Haupt-Übeltäter,
+  bei jedem Ratio-Wechsel getriggert)
+- `mw_radio.py:990` Adaptive-Aktivierung
+- `mw_cycle.py:290` Mess-Pfad
+
+## Workflow
+
+V1 → V2 (Self-Review + Memory-Lesson zitiert) → R1 (DeepSeek, 0 KRITISCH,
+1 SOLLTE→Integration-Test umgesetzt) → V3 → Code.
+Plan-File: `prompts/p40_p37_completion_r1.md`.
+
 ## Stand 2026-05-12 nachts: v0.97.5 P39 Window-Title-Check Python-Filter
 
 **Code:** v0.97.5 lokal — osascript filtert jetzt nur Python-Prozesse

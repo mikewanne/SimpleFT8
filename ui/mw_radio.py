@@ -992,6 +992,8 @@ class RadioMixin:
                 operate_seconds_remaining=0,
                 scoring_mode=scoring_mode,
                 is_dynamic=True,
+                # P40: RX-Antennen-Suffix sofort beim Aktivieren zeigen
+                current_ant=getattr(self, "_diversity_current_ant", None),
             )
         elif cached_ratio is not None:
             # Cache-Reuse: kein Lock, Phase direkt operate

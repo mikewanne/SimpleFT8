@@ -294,6 +294,8 @@ class CycleMixin:
             operate_seconds_remaining=self._diversity_ctrl.seconds_until_remeasure,
             scoring_mode=self._diversity_ctrl.scoring_mode,
             is_dynamic=_is_dyn,
+            # P40: RX-Antennen-Suffix konsistent halten (Mess-Pfad)
+            current_ant=getattr(self, "_diversity_current_ant", None),
         )
         # Einmessen abgeschlossen → nur beim Übergang measure→operate ausführen
         if self._diversity_ctrl.phase == "operate":

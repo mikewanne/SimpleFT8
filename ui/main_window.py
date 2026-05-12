@@ -1360,6 +1360,8 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
                 operate_seconds_remaining=self._diversity_ctrl.seconds_until_remeasure,
                 scoring_mode=self._diversity_ctrl.scoring_mode,
                 is_dynamic=True,  # AK14: blaue Anzeige
+                # P40: RX-Antennen-Suffix nicht verlieren bei Ratio-Wechsel
+                current_ant=getattr(self, "_diversity_current_ant", None),
             )
         except Exception as exc:
             # Defensive: GUI-Update fehlschlagen darf den Dynamic-Pfad nicht killen

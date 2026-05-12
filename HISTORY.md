@@ -5,6 +5,51 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-12 v0.97.6 — P40 P37-Komplettierung (3 weitere current_ant-Aufrufer)
+
+**Field-Test 12.05. abends** zeigte Adaptive-Label „● DYNAMISCH (live)"
+ohne den erwarteten RX-Antennen-Suffix. P37 hatte nur 1 von 4 Aufrufer-
+Stellen von `update_diversity_ratio(is_dynamic=True)` angefasst —
+klassischer Partial-Fix (Memory `feedback_partial_fix_check_other_paths.md`).
+
+Die 3 verbliebenen Stellen ueberschrieben das Label ohne `current_ant`:
+- `main_window.py:1357` `_on_dynamic_ratio_changed` (Signal-Slot,
+  HAEUFIG getriggert bei jedem Ratio-Wechsel via QueuedConnection)
+- `mw_radio.py:990` Adaptive-Aktivierung
+- `mw_cycle.py:290` Mess-Pfad (defensive, fuer Konsistenz)
+
+**Workflow:** V1 → V2 (Self-Review + Memory-Lesson zitiert) → R1 (DeepSeek)
+→ V3 (V2 + Integration-Test) → Code.
+R1-Findings: 0 KRITISCH, 1 SOLLTE (Integration-Test fuer Slot —
+umgesetzt), 1 KOENNTE (Klassenattribut-Alternative — Overkill verworfen).
+R1-Klaerung: `_diversity_current_ant` wird im GUI-Thread gesetzt
+(Qtimer/QueuedConnection), nicht im Decoder-Thread — meine
+Cross-Thread-Race-Sorge war ueberfluessig.
+
+**Code-Aenderung (3 Stellen, je 1 Zeile `current_ant=getattr(...)`):**
+- main_window.py:1357 — `_on_dynamic_ratio_changed` reicht
+  `_diversity_current_ant` durch
+- mw_radio.py:990 — Adaptive-Aktivierung zeigt sofort RX-Antenne
+- mw_cycle.py:290 — Mess-Pfad konsistent
+
+**Tests `tests/test_p40_dynamic_ratio_slot.py` NEU (4 Tests):**
+- T1: Slot reicht `current_ant="A1"` durch zum Panel
+- T2: Slot reicht `current_ant="A2"` durch
+- T3: Wenn `_diversity_current_ant` nicht gesetzt → None (kein Crash)
+- T4: Slot setzt weiterhin `is_dynamic=True` (blaue Anzeige bleibt)
+
+Slot wird als unbound method auf Stub-Instanz aufgerufen → kein
+volles MainWindow-Setup nötig.
+
+**Test-Bilanz: 1136 → 1140 gruen** (+4 P40).
+
+**Plan-File:** `prompts/p40_p37_completion_r1.md`.
+
+**Lesson aktualisiert:** Memory `feedback_partial_fix_check_other_paths.md`
+hat heute Vorlage geliefert. Ich hatte sie nicht gleich angewendet
+bei P37 — bei P40 nachgezogen. Bei nicht-trivialen Methoden-Signatur-
+Erweiterungen IMMER `grep` ueber alle Aufrufer machen.
+
 ## 2026-05-12 v0.97.5 — P39 Window-Title-Check auf Python-Prozesse begrenzen
 
 **Bug-Diagnose 12.05.2026** (Live-Verifikation): Nach P38 zeigte sich,
