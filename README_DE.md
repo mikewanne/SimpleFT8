@@ -79,6 +79,87 @@ wird empirisch geprüft.
 
 ---
 
+### Warum Diversity bei FT8 wirklich was bringt — der Empfang ist der Engpass
+
+Verbreiteter Funker-Irrtum: *„Wenn meine Antenne sendet, empfängt sie auch
+genauso gut."* Physikalisch stimmt das für die Antenne selbst — das
+Reziprozitätsprinzip besagt: Verluste sind beim Senden und Empfangen gleich.
+**Aber in der Praxis ist das Bild asymmetrisch**, weil zwei verschiedene
+Effekte zusammenkommen.
+
+#### Effekt 1 — Asymmetrie im Link-Budget (wo der Spielraum sitzt)
+
+Die Bilanz der Übertragungsstrecke — deine Sendeleistung minus Pfadverlust
+minus Antennen-Verluste — hat auf beiden Seiten ganz unterschiedliche Reserven:
+
+- **TX-Seite hat etwa 40–50 dB Reserve über der FT8-Decode-Schwelle.**
+  100 W Sendeleistung in eine über Tuner angepasste, nicht-resonante Antenne
+  liefern rund +50 dBm an der Klemme. Selbst mit 5–10 dB Tuner-/Mismatch-Verlust
+  kommt dein Signal bei einer entfernten Gegenstation typisch 30–40 dB über
+  dem Rauschen an — weit über der FT8-Decode-Schwelle
+  (−24 dB SNR in 2500 Hz Bandbreite).
+- **RX-Seite hat nur 0–15 dB Reserve für schwache DX-Stationen.** Die
+  empfangene Signalstärke ist durch Pfadverlust und Sendeleistung der
+  Gegenstation festgelegt. Ein schwaches DX aus 8000 km mit 10 W kann bei
+  dir mit nur −115 dBm an der Antennenklemme ankommen. Mit 7 dB Tuner-Verlust
+  sind es −122 dBm — genau an oder unter der Decode-Schwelle. **Gleicher
+  Verlust, aber auf der RX-Seite ohne Spielraum.**
+
+Konsequenz: Wenn du eine nicht-resonante Antenne über Tuner betreibst,
+**funktioniert das Senden noch problemlos, aber schwache Stationen im Empfang
+verschwinden einfach unter der Schwelle.**
+
+#### Effekt 2 — Polarisations- und Richtungs-Diversity (wo die +60 % herkommen)
+
+Der größere Grund warum zwei Antennen besser sind als eine ist die
+**physikalische Diversity**:
+
+- Mike's ANT1 (Kelemen DP-201510) ist ein horizontaler Halbwellendipol.
+- Mike's ANT2 (Dachrinne, L-Form ~15 m) wirkt teilweise vertikal.
+- **Die Ionosphären-Reflexion dreht die Polarisation zufällig** (Faraday-
+  Rotation). Stationen deren Signal polarisations-gedreht ankommt werden
+  von ANT1 nur schwach empfangen — aber gut von ANT2, und umgekehrt.
+- Die beiden Antennen haben außerdem **unterschiedliche Richtcharakteristik** —
+  Richtungen die ANT1 unterdrückt, deckt ANT2 ab.
+
+Deswegen liegt der Diversity-Gewinn auf 40 m bei **+61 %**: nicht nur weil
+der Tuner-Verlust umgangen wird, sondern weil ANT2 ganze Signalpfade hört
+die ANT1 überhaupt nicht sieht.
+
+#### Warum digitale Modi anders sind als SSB/CW
+
+FT8/FT4/FT2 haben eine **harte mathematische Decode-Schwelle**. Die Costas-
+Synchronisation braucht eine definierte Minimal-Korrelation, und die LDPC-
+Fehlerkorrektur hat eine scharfe Bit-Error-Rate-Kante. Ein geübtes Ohr kann
+bei −5 dB SNR im SSB-Signal noch Wortfetzen erkennen — der FT8-Decoder nicht.
+
+Konkret: bei FT8 zählt jedes dB Empfangs-Empfindlichkeit direkt mehr
+decodierte Stationen. Bei SSB oder CW sind Sendeleistung und Antennengewinn
+wichtiger fürs *Gehört-werden* — den Rest macht der Mensch.
+
+#### Fazit für das typische Funker-Setup
+
+Die meisten Funker haben eine resonante Antenne für ein, zwei Lieblings-Bänder
+plus Tuner für alles andere. **Der Diversity-Gewinn auf den Tuner-Bändern ist
+beträchtlich:**
+
+| Band | ANT1-Status | Diversity Standard vs Normal |
+|------|-------------|:---:|
+| 40m | off-band (Tuner) | **+61 %** mehr Stationen |
+| 20m | resonant (Design-Band) | ~ −6 % (RX schon optimal) |
+| 30m, 17m, 12m | off-band (Daten wachsen) | erwartet +30 bis +60 % |
+
+**Mit 70–100 W ist die Sende-Seite selten der Engpass. Der Empfang ist es.**
+Diversity adressiert genau diesen Engpass — und der Zwei-Antennen-Effekt
+(Polarisation + Richtung) verstärkt die Tuner-Verlust-Kompensation noch.
+
+> **Begriffs-Hinweis**
+> *dBm* = Leistungs-Pegel bezogen auf 1 Milliwatt (0 dBm = 1 mW).
+> *SNR* = Signal-Rausch-Abstand. *Link-Budget* = Bilanz aller Gewinne und
+> Verluste von der PA-Endstufe bis zur Decode-Schwelle des Empfängers.
+
+---
+
 ## Screenshots
 
 **CQ-Modus mit DT-Korrektur, Propagation-Balken, Totmannschalter, PSKReporter 21 Spots (Max 6111km):**

@@ -211,6 +211,81 @@ data lives in `statistics/`, all PDFs auto-update with `python3 scripts/generate
 
 ---
 
+### Why Diversity Matters for FT8 — Receive Sensitivity is the Bottleneck
+
+A common misconception among ham operators: *"If my antenna transmits, it must
+receive equally well."* Physically the antenna is reciprocal — losses are
+identical on transmit and receive. **But in practice the picture is asymmetric**,
+because two separate effects combine.
+
+#### Effect 1 — Link-budget asymmetry (where the headroom sits)
+
+The path budget — your power minus path loss minus antenna losses — leaves very
+different reserves on each side:
+
+- **TX side has roughly 40–50 dB of headroom over the FT8 decode threshold.**
+  100 W of transmit power into a tuner-matched non-resonant antenna delivers
+  about +50 dBm at the feedpoint. Even with 5–10 dB tuner/mismatch loss, a
+  distant station typically receives your signal 30–40 dB above the noise floor
+  — well over the FT8 decode threshold (−24 dB SNR in 2500 Hz bandwidth).
+- **RX side has only 0–15 dB of headroom for weak DX.** Receive signal strength
+  is fixed by path loss and the DX station's power. A weak DX from 8000 km with
+  10 W can arrive at your antenna at −115 dBm. With 7 dB tuner loss it drops to
+  −122 dBm — right at or below the decode threshold. **Same loss, but on the
+  RX side there is no reserve.**
+
+So with a non-resonant antenna on a tuner, **transmit still works fine, but
+weak stations on receive simply disappear under the threshold.**
+
+#### Effect 2 — Polarization and sector diversity (where the +60 % comes from)
+
+The bigger reason two antennas beat one is **physical diversity**:
+
+- Mike's ANT1 (Kelemen DP-201510) is a horizontal half-wave dipole.
+- Mike's ANT2 (house gutter, L-shape ~15 m) acts partly as a vertical radiator.
+- **Ionospheric skip rotates the polarization randomly** (Faraday rotation).
+  Stations whose signal arrives polarization-shifted are weakly heard by ANT1
+  but well by ANT2 — and vice versa.
+- The two antennas also have **different azimuth patterns** — directions ANT1
+  nulls out are covered by ANT2.
+
+This is why the diversity gain on 40 m is **+61 %**: not just because the
+tuner loss is bypassed, but because ANT2 picks up entire signal paths ANT1
+never sees.
+
+#### Why digital modes care more than SSB/CW
+
+FT8/FT4/FT2 have a **hard mathematical decode threshold**. Costas synchronization
+needs a defined minimum correlation, and the LDPC error correction has a sharp
+bit-error-rate cliff. A trained ear can still pick fragments of a −5 dB SNR SSB
+signal out of the noise; the FT8 decoder cannot.
+
+Concretely: on FT8, every dB of receive sensitivity directly translates to more
+decoded stations. On SSB or CW, transmit power and antenna gain matter more for
+*being heard* — the human operator handles the rest.
+
+#### Bottom line for the typical ham setup
+
+Most hams have a resonant antenna for one or two favorite bands plus a tuner
+for everything else. **The diversity benefit on tuner-fed bands is substantial:**
+
+| Band | ANT1 status | Diversity Standard vs Normal |
+|------|-------------|:---:|
+| 40m | off-band (tuner) | **+61 %** more stations |
+| 20m | resonant (design band) | ~ −6 % (RX already optimal) |
+| 30m, 17m, 12m | off-band (data growing) | expected +30 to +60 % |
+
+**With 70–100 W, the transmit side is rarely the bottleneck. The receive side
+is.** Diversity directly attacks that bottleneck — and the two-antenna effect
+(polarization + pattern) compounds the tuner-loss recovery.
+
+> **Note on terminology**
+> *dBm* = power level relative to 1 milliwatt (0 dBm = 1 mW).
+> *SNR* = signal-to-noise ratio. *Link budget* = balance of all gains and losses
+> from transmitter PA output to receiver decode threshold.
+
+---
+
 ### Antenna Setup
 
 | Photo | Annotated |
@@ -542,6 +617,87 @@ die 20m-Messung ist der „Resonant-Archetyp".
 Jedes neue Band bestätigt oder widerlegt die Off-Band/Resonant-Hypothese.
 Alle Rohdaten in `statistics/`, alle PDFs aktualisieren sich automatisch
 mit `python3 scripts/generate_plots.py`.
+
+---
+
+### Warum Diversity bei FT8 wirklich was bringt — der Empfang ist der Engpass
+
+Verbreiteter Funker-Irrtum: *„Wenn meine Antenne sendet, empfaengt sie auch
+genauso gut."* Physikalisch stimmt das fuer die Antenne selbst — das
+Reziprozitaetsprinzip besagt: Verluste sind beim Senden und Empfangen gleich.
+**Aber in der Praxis ist das Bild asymmetrisch**, weil zwei verschiedene
+Effekte zusammenkommen.
+
+#### Effekt 1 — Asymmetrie im Link-Budget (wo der Spielraum sitzt)
+
+Die Bilanz der Uebertragungsstrecke — deine Sendeleistung minus Pfadverlust
+minus Antennen-Verluste — hat auf beiden Seiten ganz unterschiedliche Reserven:
+
+- **TX-Seite hat etwa 40–50 dB Reserve ueber der FT8-Decode-Schwelle.**
+  100 W Sendeleistung in eine ueber Tuner angepasste, nicht-resonante Antenne
+  liefern rund +50 dBm an der Klemme. Selbst mit 5–10 dB Tuner-/Mismatch-Verlust
+  kommt dein Signal bei einer entfernten Gegenstation typisch 30–40 dB ueber
+  dem Rauschen an — weit ueber der FT8-Decode-Schwelle (−24 dB SNR in 2500 Hz
+  Bandbreite).
+- **RX-Seite hat nur 0–15 dB Reserve fuer schwache DX-Stationen.** Die
+  empfangene Signalstaerke ist durch Pfadverlust und Sendeleistung der
+  Gegenstation festgelegt. Ein schwaches DX aus 8000 km mit 10 W kann bei
+  dir mit nur −115 dBm an der Antennenklemme ankommen. Mit 7 dB Tuner-Verlust
+  sind es −122 dBm — genau an oder unter der Decode-Schwelle. **Gleicher
+  Verlust, aber auf der RX-Seite ohne Spielraum.**
+
+Konsequenz: Wenn du eine nicht-resonante Antenne ueber Tuner betreibst,
+**funktioniert das Senden noch problemlos, aber schwache Stationen im Empfang
+verschwinden einfach unter der Schwelle.**
+
+#### Effekt 2 — Polarisations- und Richtungs-Diversity (wo die +60 % herkommen)
+
+Der groessere Grund warum zwei Antennen besser sind als eine ist die
+**physikalische Diversity**:
+
+- Mike's ANT1 (Kelemen DP-201510) ist ein horizontaler Halbwellendipol.
+- Mike's ANT2 (Dachrinne, L-Form ~15 m) wirkt teilweise vertikal.
+- **Die Ionosphaeren-Reflexion dreht die Polarisation zufaellig** (Faraday-
+  Rotation). Stationen deren Signal polarisations-gedreht ankommt werden
+  von ANT1 nur schwach empfangen — aber gut von ANT2, und umgekehrt.
+- Die beiden Antennen haben ausserdem **unterschiedliche Richtcharakteristik** —
+  Richtungen die ANT1 unterdrueckt, deckt ANT2 ab.
+
+Deswegen liegt der Diversity-Gewinn auf 40 m bei **+61 %**: nicht nur weil
+der Tuner-Verlust umgangen wird, sondern weil ANT2 ganze Signalpfade hoert
+die ANT1 ueberhaupt nicht sieht.
+
+#### Warum digitale Modi anders sind als SSB/CW
+
+FT8/FT4/FT2 haben eine **harte mathematische Decode-Schwelle**. Die Costas-
+Synchronisation braucht eine definierte Minimal-Korrelation, und die LDPC-
+Fehlerkorrektur hat eine scharfe Bit-Error-Rate-Kante. Ein geuebtes Ohr kann
+bei −5 dB SNR im SSB-Signal noch Wortfetzen erkennen — der FT8-Decoder nicht.
+
+Konkret: bei FT8 zaehlt jedes dB Empfangs-Empfindlichkeit direkt mehr
+decodierte Stationen. Bei SSB oder CW sind Sendeleistung und Antennengewinn
+wichtiger fuers *Gehoert-werden* — den Rest macht der Mensch.
+
+#### Fazit fuer das typische Funker-Setup
+
+Die meisten Funker haben eine resonante Antenne fuer ein, zwei Lieblings-Baender
+plus Tuner fuer alles andere. **Der Diversity-Gewinn auf den Tuner-Baendern ist
+betraechtlich:**
+
+| Band | ANT1-Status | Diversity Standard vs Normal |
+|------|-------------|:---:|
+| 40m | off-band (Tuner) | **+61 %** mehr Stationen |
+| 20m | resonant (Design-Band) | ~ −6 % (RX schon optimal) |
+| 30m, 17m, 12m | off-band (Daten wachsen) | erwartet +30 bis +60 % |
+
+**Mit 70–100 W ist die Sende-Seite selten der Engpass. Der Empfang ist es.**
+Diversity adressiert genau diesen Engpass — und der Zwei-Antennen-Effekt
+(Polarisation + Richtung) verstaerkt die Tuner-Verlust-Kompensation noch.
+
+> **Begriffs-Hinweis**
+> *dBm* = Leistungs-Pegel bezogen auf 1 Milliwatt (0 dBm = 1 mW).
+> *SNR* = Signal-Rausch-Abstand. *Link-Budget* = Bilanz aller Gewinne und
+> Verluste von der PA-Endstufe bis zur Decode-Schwelle des Empfaengers.
 
 ---
 
