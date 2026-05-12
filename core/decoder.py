@@ -13,6 +13,8 @@ Pipeline:
     → Ergebnis-Fusion + Deduplizierung
 """
 
+import os         # P30-DIAG (v0.97.8): Env-Check für opt-in Decoder-Diagnose
+import resource   # P30-DIAG: RSS-Self-Sample (macOS+Linux)
 import time
 import threading
 import numpy as np
@@ -90,6 +92,33 @@ class Decoder(QObject):
         self.last_slot_start_utc: float = 0.0
         self._band: str = "20m"
 
+        # _decode_busy + _decode_busy_lock früh initialisieren (vorher erst in
+        # _decode_loop). Macht Decoder von Anfang an thread-safe und erlaubt
+        # Tests von _emit_p30_sample ohne den vollen Loop zu starten.
+        self._decode_busy = False
+        self._decode_busy_lock = threading.Lock()
+
+        # ── P30 Diagnose-Code (v0.97.8, Mai 2026) ─────────────────────────
+        # Aktivieren via Env: SIMPLEFT8_DECODER_DIAG=1 (Neustart nötig)
+        # Default AUS = 1 Boolean-Check pro feed_audio/Skip, sonst null Overhead.
+        # Lock-Pattern:
+        #   _decode_busy_lock → schützt _decode_busy + _diag_busy_started_at
+        #   _diag_lock        → schützt _diag_feed_* + _diag_skips_*
+        #   _buffer_lock      → schützt _audio_buffer_24k (existiert)
+        # Lock-Reihenfolge wenn 2: _buffer_lock → _diag_lock (nie umgekehrt).
+        # _decode_busy_lock disjoint (nie mit anderen kombiniert).
+        self._p30_diag = os.environ.get("SIMPLEFT8_DECODER_DIAG") == "1"
+        self._diag_lock = threading.Lock()
+        self._diag_feed_calls = 0
+        self._diag_feed_samples = 0
+        self._diag_skips_total = 0
+        self._diag_skips_last_window = 0
+        self._diag_busy_started_at = 0.0  # 0.0 = nicht busy
+        self._diag_last_sample_t = time.time()
+        if self._p30_diag:
+            print("[P30-DIAG] Decoder-Diagnose AKTIV (SIMPLEFT8_DECODER_DIAG=1) "
+                  "— Neustart nötig zum Deaktivieren")
+
     def start(self):
         self._running = True
         self._decode_thread = threading.Thread(
@@ -134,16 +163,26 @@ class Decoder(QObject):
                 return
             self._startup_done = True
             print(f"[Decoder] Startup-Purge: {self._startup_samples} Samples verworfen")
+
+        # P30-DIAG: feed-Counter (nur wenn aktiv) — vor Buffer-Lock damit
+        # Diag-Erfassung unabhängig von Buffer-Operationen läuft.
+        if self._p30_diag:
+            with self._diag_lock:
+                self._diag_feed_calls += 1
+                self._diag_feed_samples += len(samples_int16)
+
         with self._buffer_lock:
             self._audio_buffer_24k.append(samples_int16.copy())
 
     # ── Scheduling Loop ───────────────────────────────────────────────────────
 
     def _decode_loop(self):
-        """Wacht auf 13.5s in jedem Slot, startet dann den Decode-Thread."""
-        self._decode_busy = False
-        self._decode_busy_lock = threading.Lock()
+        """Wacht auf 13.5s in jedem Slot, startet dann den Decode-Thread.
 
+        Note (v0.97.8): _decode_busy + _decode_busy_lock werden jetzt in
+        __init__ initialisiert (vorher hier). Damit ist der Decoder ab
+        Konstruktor thread-safe und _emit_p30_sample direkt testbar.
+        """
         while self._running:
             try:
                 now = time.time()
@@ -169,13 +208,32 @@ class Decoder(QObject):
                 else:
                     target_slot_start = now - cycle_pos + _SLOT  # nächster Slot
                     wait = _SLOT - cycle_pos + _WAKE
+
+                # P30-DIAG: regelmäßiges Sample (Body läuft nur wenn ≥60s)
+                if self._p30_diag:
+                    self._emit_p30_sample()
+
                 time.sleep(wait)
 
                 with self._decode_busy_lock:
                     if self._decode_busy:
                         print(f"[Decoder] Skip Zyklus {int(time.time()/15)}: vorheriger Decode laeuft noch")
+                        # P30-DIAG: Skip-Counter + Hang-Check (Diag-Lock innen)
+                        if self._p30_diag:
+                            with self._diag_lock:
+                                self._diag_skips_total += 1
+                                self._diag_skips_last_window += 1
+                            # _diag_busy_started_at unter _decode_busy_lock (sind drin)
+                            busy_duration = (time.time() - self._diag_busy_started_at
+                                             if self._diag_busy_started_at > 0 else 0.0)
+                            if busy_duration > 30.0:
+                                print(f"[P30-DIAG][WARN] busy_hang_detected "
+                                      f"duration={busy_duration:.0f}s — "
+                                      f"Decoder hängt vermutlich in _process_cycle")
                         continue
                     self._decode_busy = True
+                    if self._p30_diag:
+                        self._diag_busy_started_at = time.time()
 
                 with self._buffer_lock:
                     chunks = self._audio_buffer_24k
@@ -185,6 +243,8 @@ class Decoder(QObject):
                     print(f"[Decoder] Zyklus {int(time.time()/15)}: kein Audio")
                     with self._decode_busy_lock:
                         self._decode_busy = False
+                        if self._p30_diag:
+                            self._diag_busy_started_at = 0.0
                     continue
 
                 threading.Thread(
@@ -199,6 +259,8 @@ class Decoder(QObject):
                 traceback.print_exc()
                 with self._decode_busy_lock:
                     self._decode_busy = False
+                    if self._p30_diag:
+                        self._diag_busy_started_at = 0.0
 
     # ── Cycle Processing ──────────────────────────────────────────────────────
 
@@ -309,6 +371,74 @@ class Decoder(QObject):
         finally:
             with self._decode_busy_lock:
                 self._decode_busy = False
+                if self._p30_diag:
+                    self._diag_busy_started_at = 0.0
+
+    # ── P30 Diagnose-Sample ────────────────────────────────────────────────────
+
+    def _emit_p30_sample(self):
+        """P30 Diagnose-Sample (alle 60s, opt-in via SIMPLEFT8_DECODER_DIAG=1).
+
+        Format (1 Zeile pro Sample, grep-friendly):
+          [P30-DIAG] @ HH:MM:SS | RSS=XMB | buf_chunks=N buf_bytes=M
+          | feed_calls=N samples=M B/s=K | skips_total=N last60=K
+          | threads=N | busy_held=Xs
+
+        Lock-Reihenfolge: _buffer_lock → _diag_lock (siehe __init__).
+        _decode_busy_lock disjoint (eigener Block).
+        """
+        if not self._p30_diag:
+            return
+
+        now = time.time()
+        elapsed = now - self._diag_last_sample_t
+        if elapsed < 60.0:
+            return  # noch nicht Zeit
+
+        # Buffer-State (separater Lock, kurz halten)
+        with self._buffer_lock:
+            n_chunks = len(self._audio_buffer_24k)
+            total_bytes = sum(c.nbytes for c in self._audio_buffer_24k)
+
+        # Counter-Read + Reset (separater Lock)
+        with self._diag_lock:
+            calls = self._diag_feed_calls
+            samples = self._diag_feed_samples
+            skips_total = self._diag_skips_total
+            skips_last = self._diag_skips_last_window
+            self._diag_feed_calls = 0
+            self._diag_feed_samples = 0
+            self._diag_skips_last_window = 0
+
+        # Busy-State (eigener Lock, eng an _decode_busy)
+        with self._decode_busy_lock:
+            busy_start = self._diag_busy_started_at
+        busy_held = (now - busy_start) if busy_start > 0 else 0.0
+
+        bytes_per_sec = (samples * 2) / elapsed if elapsed > 0 else 0.0
+
+        # RSS (macOS=bytes, Linux=KB → wir normalisieren auf MB)
+        try:
+            rss_raw = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+            # Heuristik: macOS-Werte > 10^6 sind bytes, sonst KB
+            rss_mb = rss_raw / (1024 * 1024) if rss_raw > 1_000_000 else rss_raw / 1024
+        except Exception:
+            rss_mb = -1.0
+
+        try:
+            thread_count = threading.active_count()
+        except Exception:
+            thread_count = -1
+
+        print(f"[P30-DIAG] @ {time.strftime('%H:%M:%S', time.gmtime(now))} "
+              f"| RSS={rss_mb:.0f}MB "
+              f"| buf_chunks={n_chunks} buf_bytes={total_bytes} "
+              f"| feed_calls={calls} samples={samples} B/s={bytes_per_sec:.0f} "
+              f"| skips_total={skips_total} last60={skips_last} "
+              f"| threads={thread_count} "
+              f"| busy_held={busy_held:.0f}s")
+
+        self._diag_last_sample_t = now
 
     # ── Multi-Pass Signal Subtraction ─────────────────────────────────────────
 
