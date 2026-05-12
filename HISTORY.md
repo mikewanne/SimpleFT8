@@ -5,6 +5,48 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-12 v0.97.5 — P39 Window-Title-Check auf Python-Prozesse begrenzen
+
+**Bug-Diagnose 12.05.2026** (Live-Verifikation): Nach P38 zeigte sich,
+dass der eigentliche Bug nicht PID-Recycling war, sondern ein
+**Window-Title-False-Positive** im osascript-Primaer-Check. Browser-Tabs
+mit „SimpleFT8" im Titel (z.B. GitHub-Repo geoeffnet in Chrome) wurden
+als laufende SimpleFT8-Instanz erkannt.
+
+**Live-verifiziert:**
+```
+PID=23196 | proc=Google Chrome
+title=mikewanne/SimpleFT8: Autonomous FT8/FT4/FT2 client for FlexRadio...
+```
+
+**Workflow:** V1 → V2 (Self-Review) → R1 (DeepSeek) → V3 → Code.
+R1-Findings: 0 KRITISCH, 1 SOLLTE (Python Launcher theoretisch, praktisch
+irrelevant), 1 KOENNTE (PyInstaller-Zukunft → als Kommentar vormerkt).
+
+**Code-Aenderung (`starter.command:14-39`):**
+- osascript-Repeat-Loop erweitert um Process-Name-Filter:
+  `if procName is "Python" or procName starts with "python"`.
+- Nur Python-Prozesse werden auf Window-Title gepruefte → Browser/Editor
+  mit „SimpleFT8" im Titel werden korrekt uebersprungen.
+- Wrapper-Script `start_simpleft8_nokill.py` (Ferienhaus) bleibt
+  intakt — laeuft als Python-Process via venv-binary.
+
+**Akzeptanzkriterien:**
+- AK1: Chrome/Safari mit „SimpleFT8" im Tab-Titel → kein Match (BUGFIX)
+- AK2: SimpleFT8 laeuft (Python-Process mit „SimpleFT8"-Fenster) →
+  Match wie bisher (Status quo)
+- AK3: P38 Lock-Fallback unveraendert
+- AK4: macOS-Namen „Python"/„python3"/„python3.12" gematcht
+
+**Live-Test 12.05.:**
+- Chrome-Tab mit GitHub-Repo offen
+- Vor Fix: osascript returnt Chrome-PID 23196 → falscher Block
+- Nach Fix: osascript returnt leer → Starter laeuft sauber durch
+
+**Test-Bilanz:** 1136 unveraendert (Bash-Aenderung, keine Python-Module).
+
+**Plan-File:** `prompts/p39_window_title_python_filter_r1.md`.
+
 ## 2026-05-12 v0.97.4 — P38 PID-Recycling-Schutz im Starter-Script
 
 **Bug-Diagnose 12.05.2026** durch Mike-Screenshot: `starter.command`

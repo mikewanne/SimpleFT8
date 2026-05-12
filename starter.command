@@ -14,19 +14,27 @@ cd "$APP_DIR" || { echo "App-Verzeichnis nicht gefunden: $APP_DIR"; exit 1; }
 # ── Single-Instance-Check via Window-Title ─────────────────────────
 # osascript returnt PID des Prozesses dessen Fenster "SimpleFT8" im Titel
 # hat (oder leer wenn keine App lauft).
+#
+# P39 (12.05.2026): Nur Python-Prozesse pruefen — sonst matcht jeder
+# Browser-Tab mit "SimpleFT8" im Titel (z.B. GitHub-Repo) faelschlich.
+# Wenn SimpleFT8 mal als PyInstaller-.app gebundelt wird, heisst der
+# Process "SimpleFT8" — dann Filter um `contains "SimpleFT8"` ergaenzen.
 RUNNING_PID=$(osascript -e 'tell application "System Events"
     set foundPID to ""
     repeat with proc in (every process whose visible is true)
-        try
-            repeat with w in (every window of proc)
-                set wTitle to name of w as string
-                if wTitle contains "SimpleFT8" then
-                    set foundPID to (unix id of proc as string)
-                    exit repeat
-                end if
-            end repeat
-        end try
-        if foundPID is not "" then exit repeat
+        set procName to (name of proc as string)
+        if procName is "Python" or procName starts with "python" then
+            try
+                repeat with w in (every window of proc)
+                    set wTitle to name of w as string
+                    if wTitle contains "SimpleFT8" then
+                        set foundPID to (unix id of proc as string)
+                        exit repeat
+                    end if
+                end repeat
+            end try
+            if foundPID is not "" then exit repeat
+        end if
     end repeat
     return foundPID
 end tell' 2>/dev/null)

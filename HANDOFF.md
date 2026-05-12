@@ -1,5 +1,27 @@
 # HANDOFF — SimpleFT8
 
+## Stand 2026-05-12 nachts: v0.97.5 P39 Window-Title-Check Python-Filter
+
+**Code:** v0.97.5 lokal — osascript filtert jetzt nur Python-Prozesse
+(Browser-Tabs mit „SimpleFT8" im Titel matchen nicht mehr).
+**Tests:** 1136 unveraendert (Bash-Script-Edit).
+**Push:** mit P38-P39 zusammen pending.
+
+## P39 fixt den eigentlichen Bug
+
+P38 war PID-Recycling-Schutz im Fallback — korrekt, aber griff nicht
+beim aktuellen Browser-Tab-Fall, weil osascript-Primaer-Check schon
+falsch matcht. P39 fixt die Wurzel: nur Python-Prozesse werden gepruefte.
+
+**Live-verifiziert 12.05.:** Chrome-Tab mit GitHub-Repo offen → osascript
+returnt leer → Starter laeuft sauber durch.
+
+## Workflow
+
+V1 → V2 (Self-Review) → R1 (0 KRITISCH, 2 KOENNTE/SOLLTE praktisch
+irrelevant) → V3 (V2 + 1 Kommentar zur PyInstaller-Zukunft) → Code.
+Plan-File: `prompts/p39_window_title_python_filter_r1.md`.
+
 ## Stand 2026-05-12 nachts: v0.97.4 P38 PID-Recycling-Schutz im Starter
 
 **Code:** v0.97.4 lokal — PID-Recycling-Bug im `starter.command` gefixt.
