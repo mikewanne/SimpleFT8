@@ -99,6 +99,14 @@ field-getestet OK; P26 Field-Test ausstehend (V3 §8 6 Punkte).
 
 ## 🔥 P30.MEMORY-LEAK 124 GB (Mike-Notfall 11.05. ~05:25)
 
+**🎯 KONKRETER VERDACHT (12.05. Diagnose-Sitzung):** Skip-Bug in
+`core/decoder.py` Z.174-188 — `_audio_buffer_24k`-Liste wird NICHT
+geleert wenn ein Decode-Slot übersprungen wird (vorheriger Decode
+nicht fertig). 720 KB pro Skip-Slot, Wachstum ~432 MB/h bei
+Diversity passt zu Mike's Screenshot-Math (540 MB/h). Memory-Watcher
+läuft als Daemon (PID 72060), 1-2 Tage Korrelation abwarten dann
+voller Workflow Fix. Detail-Diagnose: siehe HISTORY 2026-05-12.
+
 **Symptom:** Mike musste App beenden — **124 GB Speicher**
 („speicherleak"). Problem besteht seit Tagen.
 

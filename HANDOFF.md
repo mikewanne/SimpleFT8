@@ -1,6 +1,27 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-12 mittags (Feierabend): v0.97.7 + Doku-Welle + ADIF-Aufräumen
+## Stand 2026-05-12 nachmittags: v0.97.8 P30 Diagnose-Code eingebaut
+
+**Code:** v0.97.8 — Decoder-Diagnose opt-in via `SIMPLEFT8_DECODER_DIAG=1`.
+**Tests:** **1156 grün** (1148 + 8 neue P30-Tests).
+**Backup vor Code:** `Appsicherungen/2026-05-12_v0.97.7_vor_p30_diagnostic_code/`.
+**Memory-Watcher-Daemon:** PID 72060 läuft, Log `~/.simpleft8/memory_watch.log`.
+**Push pending:** v0.97.8-Commits noch lokal.
+
+### Nächster Schritt — Mike aktiviert Diagnose
+
+```bash
+cd "/Users/mikehammerer/Documents/KI N8N Projekte/FT8/SimpleFT8"
+export SIMPLEFT8_DECODER_DIAG=1
+./venv/bin/python3 main.py
+```
+
+→ App 1-3 Tage in Diversity laufen lassen.
+→ Auswerten: `grep "P30-DIAG" ~/.simpleft8/debug_*.log | tail -50`
+→ Wenn `buf_chunks` steigt + `skips_total` steigt + `busy_held > 30s`:
+  Hypothese bestätigt → P30.FIX als eigener Workflow.
+
+### Vorgänger-Stand (v0.97.7)
 
 **Code:** v0.97.7 + P42-README-Passage + ADIF-Aufräumen + Stats neu.
 **Tests:** **1148 grün**, alles auf GitHub bis `569aa9b`.

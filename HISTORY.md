@@ -5,6 +5,120 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-12 v0.97.8 — P30 Diagnose-Code in Decoder eingebaut
+
+**Stand:** 1148 → 1156 Tests grün (+8 neue P30-Tests). KEIN Fix, sondern
+Mess-Code für die nächste Diagnose-Phase. Default AUS, opt-in via Env.
+
+**Was eingebaut wurde (`core/decoder.py`):**
+- `__init__`: `_decode_busy` + `_decode_busy_lock` jetzt von Anfang an
+  initialisiert (vorher erst in `_decode_loop`). Plus 8 neue
+  `_diag_*`-Felder (Counter, Locks, Timestamps).
+- `feed_audio()`: 3 Zeilen Counter-Inkrement (nur wenn `_p30_diag=True`).
+- `_decode_loop`: 1 Zeile Sample-Trigger + 3 Zeilen Hang-Check im Skip-
+  Pfad + Timestamp-Set bei `_decode_busy=True`.
+- 3 Stellen wo `_decode_busy=False` → +1 Zeile Timestamp-Reset.
+- NEU `_emit_p30_sample()`: 60s-Block-Print mit RSS+Buffer+Counter+
+  Threads+Busy-Held. Lock-Reihenfolge dokumentiert.
+
+**Default AUS = 0 Overhead** (1 Boolean-Check pro feed_audio/Skip).
+**Aktivieren:** `export SIMPLEFT8_DECODER_DIAG=1` + App-Restart.
+
+**Output-Format (1 Zeile alle 60s, grep-friendly):**
+```
+[P30-DIAG] @ 14:25:00 | RSS=512MB | buf_chunks=4 buf_bytes=2880000
+| feed_calls=600 samples=1440000 B/s=48000 | skips_total=0 last60=0
+| threads=12 | busy_held=0s
+```
+
+Bei Hang (`busy_held > 30s`) zusätzliche WARN-Zeile.
+
+**Workflow:** V1→V2→R1→V3 voll durchgezogen. Plan-Files:
+- `prompts/p30_diagnostic_code_v1.md` (initial)
+- `prompts/p30_diagnostic_code_v2.md` (Self-Review, 9 Lücken)
+- `prompts/p30_diagnostic_code_r1.md` (R1 lieferte direkt Code statt
+  Plan-Review — 2 Korrekturen K1+K2 in V3 eingebaut)
+- `prompts/p30_diagnostic_code_v3.md` (Compact-fest, freigegeben)
+
+**Backup vor Code:** `Appsicherungen/2026-05-12_v0.97.7_vor_p30_diagnostic_code/`
+mit `_BACKUP_REASON.md` und Rollback-Anleitung.
+
+**8 neue Tests (`tests/test_p30_diagnostic_code.py`):**
+T1 default-AUS, T2 env-AN, T3 feed-Counter aktiv, T4 feed-Counter passiv,
+T5 Sample-Skip <60s, T6 Sample-Format nach 60s, T7 disabled-Short-Return,
+T8 busy_hang_warn.
+
+**Nächster Schritt (eigener Workflow später):** Mike aktiviert Diagnose
+1-3 Tage, App läuft in Diversity. Mit den `[P30-DIAG]`-Daten dann
+P30.FIX (separater V1→V2→R1→V3): Skip-Pfad leert Buffer + Watchdog für
+hängenden Decode.
+
+**Files modified:** `core/decoder.py` (+85 LOC), `main.py` (APP_VERSION
+0.97.7→0.97.8).
+**Files new:** `tests/test_p30_diagnostic_code.py` (8 Tests), 4 Plan-
+Files in `prompts/`.
+
+---
+
+## 2026-05-12 — P30 Memory-Leak Diagnose (Verdacht `_audio_buffer_24k` Skip-Bug)
+
+**Stand:** Diagnose-Sitzung, KEIN Fix. Memory-Watcher als Daemon
+gestartet (`tools/memory_watcher.py` NEU, PID 72060), sampelt alle 60s
+RSS/VMS/Threads + parsed `~/.simpleft8/debug_<date>.log` nach Modus-
+Wechseln. Log nach `~/.simpleft8/memory_watch.log`. Stop:
+`pkill -f memory_watcher.py`.
+
+**Math aus Mike's Activity-Monitor-Screenshots (heute):**
+- 06:00: 1,79 GB → 13:50: 5,96 GB = **+4,17 GB / 7h50min = ~540 MB/h**
+- 124 GB / 13 GB/Tag ≈ **9-10 Tage durchgehender Laufzeit** (passt)
+
+**Konkreter Verdacht — `core/decoder.py` Z.174-188:**
+
+```python
+with self._decode_busy_lock:
+    if self._decode_busy:          # vorheriger Decode noch nicht fertig
+        print("Skip Zyklus ...")
+        continue                   # <- LISTE WIRD NICHT GELEERT
+    self._decode_busy = True
+
+with self._buffer_lock:
+    chunks = self._audio_buffer_24k    # nur hier geleert
+    self._audio_buffer_24k = []
+```
+
+`feed_audio()` schiebt Audio-Chunks kontinuierlich in
+`_audio_buffer_24k`. Wenn Decode-Slot übersprungen wird, wird die Liste
+NICHT geleert → 720 KB pro übersprungenem Slot bleibt drin.
+
+**Wachstums-Math passt:**
+- 24 kHz × 2 Bytes × 15 s = 720 KB / Slot
+- 10 Skips/Min (Diversity, CPU-Last) = 7,2 MB/Min = **432 MB/h**
+- Normal: weniger CPU-Last → seltenere Skips → langsameres Wachstum
+- Erklärt warum Diversity Hauptauslöser ist
+
+**Worst-Case Endlos-Leck:** Wenn `_process_cycle` hängt (nicht crashed),
+bleibt `_decode_busy=True` für immer → alle neuen Slots Skip → Buffer
+wächst bis OOM. Passt zu „App eingefroren bei 128 GB".
+
+**Anderes geprüft (entlastet):**
+- `core/station_stats.py`: Queue Cap=1000, lokale `rows` → niedrig
+- `core/station_accumulator.py`: aktives Aging-Pruning → niedrig
+- `core/ap_lite.py _buffers`: Cap=3 (max 2,16 MB) → niedrig
+- `core/locator_db._calls`: kein Pruning, aber Math nur ~200 MB → niedrig
+- `decoder.last_audio_24k` + `last_pcm_12k`: 1 Buffer überschrieben →
+  niedrig (außer Qt-Signal-Subscriber hält Referenz — keine gefunden)
+
+**Nächste Schritte:** 1-2 Tage Watcher laufen lassen, Korrelation
+RSS-Anstieg ↔ Modus + Skip-Häufung im debug_log bestätigen. DANN Fix
+im vollen Workflow (Skip-Pfad muss Liste leeren ODER Cap ODER
+Watchdog-Timer für hängenden Decode). DeepSeek-Zweitmeinung
+ausstehend.
+
+**Files neu:** `tools/memory_watcher.py`. **Files unverändert:**
+keine App-Code-Änderungen in dieser Diagnose-Sitzung.
+
+---
+
 ## 2026-05-12 — P42 README-Passage „Why Diversity Matters for FT8" (Doku, kein Version-Bump)
 
 Mike-Erkenntnis nach Adaptive-Field-Test: bei FT8 ist nicht das Senden,
