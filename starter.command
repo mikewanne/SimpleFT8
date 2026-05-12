@@ -36,7 +36,19 @@ end tell' 2>/dev/null)
 if [ -z "$RUNNING_PID" ] && [ -f "$HOME/.simpleft8/simpleft8.lock" ]; then
     LOCK_PID=$(cat "$HOME/.simpleft8/simpleft8.lock" 2>/dev/null)
     if [ -n "$LOCK_PID" ] && kill -0 "$LOCK_PID" 2>/dev/null; then
-        RUNNING_PID="$LOCK_PID"
+        # P38 (12.05.2026): PID-Recycling-Schutz. `kill -0` prueft nur
+        # „PID lebt", nicht „SimpleFT8 lebt". Wenn macOS die alte
+        # SimpleFT8-PID an eine andere App (z.B. Chrome) recycled hat,
+        # wuerde der Starter sonst faelschlich „laeuft bereits" melden.
+        # Bestaetigt durch Mike-Screenshot 12.05.: Lock-PID 23196 →
+        # ps zeigt /Applications/Google Chrome.app/...
+        PROC_CMD=$(ps -p "$LOCK_PID" -o command= 2>/dev/null)
+        if echo "$PROC_CMD" | grep -q "SimpleFT8.*main\.py"; then
+            RUNNING_PID="$LOCK_PID"
+        else
+            # PID recycled — stale Lock loeschen, sauber durchstarten
+            rm -f "$HOME/.simpleft8/simpleft8.lock"
+        fi
     fi
 fi
 

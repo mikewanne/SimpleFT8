@@ -1,5 +1,32 @@
 # HANDOFF — SimpleFT8
 
+## Stand 2026-05-12 nachts: v0.97.4 P38 PID-Recycling-Schutz im Starter
+
+**Code:** v0.97.4 lokal — PID-Recycling-Bug im `starter.command` gefixt.
+**Tests:** 1136 unveraendert (Bash-Aenderung, keine Python-Module).
+**Push:** zusammen mit v0.97.3 P37 nach Mike-OK.
+
+## Was P38 fixt
+
+Mike-Screenshot 12.05.2026: Starter zeigte „SimpleFT8 laeuft bereits"
+mit Process-Info `/Applications/Google Chrome.app/...`. Chrome hatte
+PID 23196 vom beendeten SimpleFT8 recycled bekommen, `kill -0` meldete
+„lebt", Mike wurde am Neustart gehindert.
+
+**Fix:** `ps -p $LOCK_PID -o command=` + `grep` auf `SimpleFT8.*main\.py`
+hinter dem `kill -0`. Wenn PID nicht zu SimpleFT8 gehoert → Lock
+loeschen + starten.
+
+**Wichtige Nicht-Identitaet:** Das ist NICHT der alte „2 unsichtbare
+Instanzen"-Bug von Mike's Debug-Sessions. Der hatte einen Cleanup-Issue
+(atexit unter Qt-Close nicht zuverlaessig) und ist ein separates
+Folgeprojekt.
+
+## Workflow
+
+V1 → V2 (Self-Review) → R1 (0 KRITISCH, 1 SOLLTE bereits quoted) → V3 → Code.
+Plan-File: `prompts/p38_pid_recycling_starter_r1.md`.
+
 ## Stand 2026-05-12 nachts: v0.97.3 P37 RX-Antennen-Anzeige im Adaptive-Label
 
 **Code:** v0.97.3 lokal — Mike-Wunsch 12.05. nach Live-Test:

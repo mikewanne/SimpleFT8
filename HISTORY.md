@@ -5,6 +5,46 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-12 v0.97.4 — P38 PID-Recycling-Schutz im Starter-Script
+
+**Bug-Diagnose 12.05.2026** durch Mike-Screenshot: `starter.command`
+blockt einen legitimen App-Neustart mit „SimpleFT8 laeuft bereits".
+Process-Info im Dialog zeigt aber `/Applications/Google Chrome.app/...`
+— eindeutig PID-Recycling. macOS hatte die freie SimpleFT8-PID 23196
+an Chrome vergeben, der alte `kill -0 $LOCK_PID` Check meldete
+faelschlich „lebt".
+
+Mike-Notiz: NICHT identisch mit dem alten Bug „2 unsichtbare Instanzen
+beim Debuggen". Das war ein separater Cleanup-Issue (atexit unter
+Qt-Window-Close nicht zuverlaessig).
+
+**Workflow:** V1 → V2 (Self-Review) → R1 (DeepSeek-Reasoner) → V3 → Code.
+R1-Findings: 0 KRITISCH, 1 SOLLTE (Lockfile-Pfad quoten — bereits in
+V2 quoted), 1 KOENNTE (rm -f Race tolerierbar fuer Hobby-Tool).
+
+**Code-Aenderung (`starter.command:36-50`):**
+- Bestehender Fallback-Check erweitert um `ps -p $LOCK_PID -o command=`
+  + `grep -q "SimpleFT8.*main\.py"` Identitaets-Pruefung.
+- Wenn Prozess NICHT SimpleFT8 ist (z.B. Chrome nach PID-Recycling):
+  Lock-Datei loeschen + sauber durchstarten.
+- Wenn doch SimpleFT8: Verhalten unveraendert (blocken).
+
+**Akzeptanzkriterien:**
+- AK1: Reguläre Doppelstart-Sperre unveraendert (Window-Title-Match)
+- AK2: PID an fremde App recycled → Recycling erkannt → Lock loeschen →
+  sauberer Start (BUGFIX)
+- AK3: PID gar nicht aktiv → `kill -0` fail → Lock ignoriert (Status quo)
+- AK4: Wrapper-Fall (`start_simpleft8_nokill.py`) unveraendert — main.py-
+  PID im Lock matcht weiterhin das grep-Pattern
+
+**Tests:** Bash-Script schwer unit-testbar. Manueller Test 12.05.:
+fremde PID in Lock → grep matcht nicht → „Lock loeschen"-Pfad greift.
+
+**Test-Bilanz:** 1136 unveraendert (nur Bash-Script-Aenderung, keine
+Python-Module beruehrt).
+
+**Plan-File:** `prompts/p38_pid_recycling_starter_r1.md`.
+
 ## 2026-05-12 v0.97.3 — P37 RX-Antennen-Anzeige im Adaptive-Label
 
 **Mike-Wunsch 12.05.2026** nach Live-Test der Adaptive Diversity: das
