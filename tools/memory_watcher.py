@@ -74,8 +74,10 @@ def find_simpleft8_pid() -> int | None:
 
     for pid in candidates:
         try:
+            # -a = AND-Filter (sonst behandelt lsof -p + -d als OR und
+            # liefert cwds aller Prozesse → falsche PID-Treffer).
             cwd_out = subprocess.run(
-                ["lsof", "-p", str(pid), "-d", "cwd", "-Fn"],
+                ["lsof", "-a", "-p", str(pid), "-d", "cwd", "-Fn"],
                 capture_output=True, text=True, timeout=5
             ).stdout
         except Exception:
