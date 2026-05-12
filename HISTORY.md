@@ -5,6 +5,64 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-12 — P42 README-Passage „Why Diversity Matters for FT8" (Doku, kein Version-Bump)
+
+Mike-Erkenntnis nach Adaptive-Field-Test: bei FT8 ist nicht das Senden,
+sondern das Empfangen schwacher Stationen das Problem — besonders bei
+nicht-resonanten (Tuner-gespeisten) Baendern. Verbreiteter Funker-Irrtum
+„wenn die Antenne sendet, empfaengt sie auch genauso gut" stimmt
+physikalisch (Reziprozitaet), aber in der Praxis ist das Bild asymmetrisch.
+
+**Workflow:** V1+V2 → R1(DeepSeek-reasoner) → V3.
+
+**R1-Wichtigste Korrektur:** mein urspruengliches Argument war
+**korrekt aber unvollstaendig**. Das Reziprozitaet+Headroom-Argument
+erklaert WARUM RX-Verluste toedlich sind — aber WARUM zwei Antennen
+besser sind als eine ist **Polarisations-/Sektor-Diversity** (Faraday-
+Rotation, unterschiedliche Pattern). Bei Mike's +61 % auf 40m ist
+Pol-Diversity der Hauptmechanismus.
+
+**R1-Findings alle eingearbeitet (5 Punkte):**
+1. KRITISCH: Pol-/Sektor-Diversity als Hauptmechanismus explizit benannt
+2. SOLLTE: schwaches Beispiel statt starkes (10W aus 8000km, -115 dBm
+   knapp an Decode-Schwelle)
+3. SOLLTE: SSB-Vergleich abgeschwaecht („Wortfetzen" statt „verstaendlich")
+4. SOLLTE: dBm, SNR, Link-Budget fuer Hobby-Funker erklaert
+5. SOLLTE: Tuner-Verlust als Bereich (5-10 dB)
+
+**Passage-Struktur** (DE+EN identisch in 3 Files: README.md EN + DE,
+README_DE.md):
+- Effekt 1: Link-Budget-Asymmetrie (TX 40-50 dB Headroom, RX 0-15 dB)
+- Effekt 2: Polarisations- und Sektor-Diversity (+61 % Hauptgrund)
+- Warum digitale Modi anders sind als SSB/CW
+- Fazit fuer typische Funker-Setups + Roadmap-Tabelle
+- Begriffs-Hinweis (dBm, SNR, Link-Budget)
+
+**Commit:** `569aa9b`. **Plan-File:** `prompts/p42_rx_vs_tx_passage_r1.md`.
+
+## 2026-05-12 — ADIF-Aufraeumung + Statistik-Aktualisierung (Doku/Daten, kein Version-Bump)
+
+Mike-Wunsch nach QRZ-Bulk-Upload-Analyse: Master-ADIFs (DA1MHH + DO4MHH,
+zusammen 19 MB) waren nicht mehr noetig fuer LocatorDB (17.080 Calls
+bereits persistent). DO4MHH-Eintraege fuehrten zu 45 Upload-Fails (falsches
+Logbook bei QRZ).
+
+**Verifikation vor Aufraeumung:** ALLE 7.975 Master-ADIF-Calls bereits in
+LocatorDB — keine Locator-Daten gehen verloren.
+
+**3 Aktionen:**
+1. Master-ADIFs nach `adif/_backup_qrz_export/` verschoben (git-ignored,
+   ausserhalb App-Bootstrap-Pfad). Bulk-Upload prueft sie nicht mehr.
+2. P2-Tool `tools/adif_archive.py` gelaufen: 20 Tages-Files (2026) zu
+   `adif/archiv/2026.adi` (40 KB, 129 QSOs) konsolidiert. Originale in
+   `adif/archiv/_konsolidiert/` als Backup.
+3. `scripts/generate_plots.py` regeneriert — neue Daten 11.05. abends +
+   12.05. morgens (Adaptive-Diversity-Aera). DE+EN PDFs aktualisiert,
+   Bandpilot-Empfehlungen neu, ~3.700 neue Statistik-Zeilen committed.
+
+**Commits:** `40f9587` (Stats), 19 MB Master-ADIFs lokal verschoben
+(nicht commit weil git-ignored).
+
 ## 2026-05-12 v0.97.7 — P41 audio_streaming-Flag fuer OMNI-CQ Antennen-Switch
 
 **Bug-Diagnose 12.05.2026 morgens** (Mike-Field-Test mit OMNI-CQ +

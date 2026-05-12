@@ -1,5 +1,87 @@
 # HANDOFF — SimpleFT8
 
+## Stand 2026-05-12 mittags (Feierabend): v0.97.7 + Doku-Welle + ADIF-Aufräumen
+
+**Code:** v0.97.7 + P42-README-Passage + ADIF-Aufräumen + Stats neu.
+**Tests:** **1148 grün**, alles auf GitHub bis `569aa9b`.
+**Field-Test heute:** Mike-Bestätigung 70:30-Pattern wird eingehalten,
+Adaptive Diversity läuft sauber.
+
+## Heute 12.05. Bilanz (Mike's „Therapie-Marathon"-Tag)
+
+**8 Versions-Bumps in einem Tag:**
+
+| Version | Inhalt |
+|---|---|
+| v0.97.0 P34 | Adaptive Diversity (Hauptfeature, slot-für-slot live) |
+| v0.97.1 P35 | Startup-Bugs A/B/B5 (defer/resume, Queue-Reset, Auto-Reactivate) |
+| v0.97.2 P35 D/E/F | Live-Field-Fixes (App-Start IMMER 20m FT8 Normal) |
+| v0.97.3 P37 | RX-Antennen-Anzeige im „● DYNAMISCH (live)"-Label |
+| v0.97.4 P38 | PID-Recycling-Schutz im starter.command |
+| v0.97.5 P39 | osascript Python-Process-Filter (Browser-Tab-Bug) |
+| v0.97.6 P40 | P37-Komplettierung (3 weitere current_ant-Aufrufer) |
+| v0.97.7 P41 | audio_streaming-Flag — OMNI-CQ Antennen-Switch entblockt |
+
+**Plus Doku/Daten ohne Version-Bump:**
+- README + Hilfe: Adaptive-Diversity-Konzept (DE + EN)
+- P42 README-Passage „Why Diversity Matters for FT8" (R1-verifizierte
+  Physik: Headroom-Asymmetrie + Pol-/Sektor-Diversity)
+- ADIF-Cleanup: Master-ADIFs in Backup, Jahresarchiv 2026 erstellt
+- Statistiken regeneriert (DE+EN PDFs, alle PNGs)
+- QRZ-Upload-Analyse + Diagnose
+
+**Workflow-Disziplin:** **alle 9 Aufgaben** voll V1→V2→R1→V3 mit
+DeepSeek durchgezogen. R1 fand kritische Fehler in:
+- P41 (abort-Race mit FlexRadio-Buffer-Latenz)
+- P42 (Pol-Diversity als Hauptmechanismus, nicht primaer Headroom)
+- P35-AK5 (Cache-Reuse-Respekt)
+- P26-K2 (Modal-exec singleShot-Defer)
+
+## Field-Test Status
+
+✅ Adaptive Diversity live verifiziert (70:30-Pattern eingehalten,
+   slot-für-slot Wechsel)
+✅ OMNI-CQ + Adaptive zusammen funktional (P41 entblockt Antennen-Switch)
+✅ App-Start IMMER 20m FT8 Normal (P35-F)
+✅ RX-Antennen-Label wechselt korrekt im Adaptive-Modus (P37+P40)
+
+## Offene Punkte (nicht heute, aus TODO.md)
+
+**🔥 Hoch:**
+- **P30** MEMORY-LEAK 124 GB nach Tagen Laufzeit (KRITISCH, Diagnose
+  steht aus)
+- **P12** QSO-Postprocessing-Hang (Partial-Fix da, sauberer Async-Refresh
+  weiter offen)
+- **P27** MESS-GUARD Radio-Verbunden-Check vor Antennen-Mess
+- **P25** RADIO-IP-LATE-SETTING prüfen ob obsolet
+
+**📋 Mittel:**
+- **P34-Stufe2** Statik-Pipeline komplett raus (nach 2-3 Wochen Adaptive
+  Field-Test)
+- **P32** RX-Panel-Spalten-Persist, **P33** QSO-fertig-Reihenfolge,
+  **P24** Last-RX-Mode-Persist
+
+**🛠 Niedrig:** P18, P20, P29
+
+## „2-Unsichtbare-Instanzen"-Bug
+
+Bei Debug-Sessions vor heute hatte Mike gelegentlich eine 2. Instanz im
+Hintergrund laufen sehen. **NICHT identisch mit P38/P39 PID-Recycling/
+Browser-Tab-Bug.** Vermutlich `atexit._release_lock_on_exit()` greift
+unter Qt-Window-Close manchmal nicht. Eigener Workflow noetig — als
+„offen" vorgemerkt.
+
+## Workflow-Lessons heute
+
+- P40 wurde Folgefix zu P37 weil Memory-Lesson `feedback_partial_fix_
+  check_other_paths.md` nicht direkt angewendet — bei P40 nachgezogen.
+  Bei Methoden-Signatur-Erweiterungen IMMER grep ueber alle Aufrufer.
+- R1-Findings haben heute MEHRFACH kritische Fehler gefangen die ich
+  uebersehen haette — Mike-Anweisung „DeepSeek IMMER bei nicht-trivialen
+  Aufgaben" hat sich klar bewaehrt.
+- Saubere Compact-feste Plan-Files (`prompts/p3[4-9]_*.md`,
+  `prompts/p4[0-2]_*.md`) ermoeglichen nahtlose Session-Wiederaufnahme.
+
 ## Stand 2026-05-12 morgens: v0.97.7 P41 audio_streaming-Flag
 
 **Code:** v0.97.7 lokal — OMNI-CQ blockierte Antennen-Switch ueber 20
