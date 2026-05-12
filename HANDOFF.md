@@ -1,5 +1,37 @@
 # HANDOFF — SimpleFT8
 
+## Stand 2026-05-12 morgens: v0.97.7 P41 audio_streaming-Flag
+
+**Code:** v0.97.7 lokal — OMNI-CQ blockierte Antennen-Switch ueber 20
+Slots wegen zu grobem `is_transmitting`-Check. Feinerer Flag
+`is_audio_streaming` (nur von ptt_on bis ptt_off True) fixt das.
+**Tests:** **1148 grün** (+8 P41).
+**Push:** done.
+
+## P41 fixt OMNI-CQ Antennen-Switch-Blockade
+
+Mike-Field-Test 12.05. morgens mit OMNI-CQ + Adaptive Diversity 30:70:
+Antennen wechselten 5 Minuten lang nicht, Adaptive-Buffer einseitig
+gefuellt, Label statisch „RX Ant1".
+
+**Wurzel:** `encoder.is_transmitting` blieb durchgaengig True ueber
+ganzem Worker-Lauf (Setup + Sleep + Audio). Bei OMNI-CQ alle 30s neuer
+Worker → keine True-Luecke zwischen den Slots.
+
+**Fix:** neuer feiner Flag `is_audio_streaming` der NUR von `ptt_on()`
+bis `ptt_off()` True ist. Deckt 1.3s FlexRadio-Buffer-Latenz mit ab.
+
+R1-KRITISCH: `abort()` darf Flag NICHT setzen (Race mit noch laufender
+send_audio im FlexRadio-Buffer). Worker-finally setzt Flag zurueck.
+
+## Workflow
+
+V1 → V2 (Self-Review) → R1 (1 KRITISCH umgesetzt + 1 SOLLTE umgesetzt +
+1 SOLLTE verworfen weil Bug-Wiederherstellung) → V3 → Code.
+Plan-File: `prompts/p41_audio_streaming_flag_r1.md`.
+
+**Backup vor Aenderung:** `Appsicherungen/2026-05-12_v0.97.6_vor_p41_omni_antenna_fix/`.
+
 ## Stand 2026-05-12 nachts: v0.97.6 P40 P37-Komplettierung
 
 **Code:** v0.97.6 lokal — 3 weitere Aufrufer von `update_diversity_ratio`

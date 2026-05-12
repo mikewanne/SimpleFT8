@@ -5,6 +5,65 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-12 v0.97.7 — P41 audio_streaming-Flag fuer OMNI-CQ Antennen-Switch
+
+**Bug-Diagnose 12.05.2026 morgens** (Mike-Field-Test mit OMNI-CQ +
+Adaptive Diversity 30:70): Hardware-Antenne wechselte 5 Minuten lang
+nicht — Debug-Log zeigt 20 Slots in Folge `[ANT] SKIP — encoder.
+is_transmitting`. Adaptive-Buffer fuellt sich einseitig (record_slot
+nur ant=A1). Label „● DYNAMISCH (live)" zeigte konstant „RX Ant1"
+obwohl Hardware noch auf ANT2 stand.
+
+**Root-Cause:** `mw_cycle.py:678-680` Antennen-Switch-Block prueft
+`encoder.is_transmitting` — der ist aber waehrend ganzem TX-Worker-Lauf
+True (inkl. Encoding ~50ms + Sleep bis Slot-Grenze + Audio + ptt_off).
+Bei OMNI-CQ startet alle 30s ein neuer TX-Worker, die Luecke zwischen
+zwei Workern ist <100ms → jeder `_on_cycle_start` (alle 15s) trifft im
+True-Fenster → kein Switch → kein on_operate_cycle() → keine choose()-
+Rotation → Pattern blockiert.
+
+**Workflow:** V1 → V2 (Self-Review) → R1 (DeepSeek-reasoner) → V3 → Code.
+R1-Findings: 1 KRITISCH (abort() darf Flag nicht setzen), 2 SOLLTE
+(Flag-Lebensdauer auf ptt_on..ptt_off ausdehnen, doppelte Barriere —
+zweites SOLLTE verworfen weil es den Original-Bug zurueckbringen wuerde),
+1 KOENNTE (Mock-Strategie umgesetzt).
+
+**Code-Aenderungen `core/encoder.py`:**
+- Neuer `_audio_streaming` Bool in `__init__`
+- Neue Property `is_audio_streaming` (Read-Only)
+- `_tx_worker_inner`: `_audio_streaming=True` direkt nach `ptt_on()`,
+  `=False` direkt nach `ptt_off()` (deckt 1.3s FlexRadio-Buffer-Latenz +
+  Stille-Padding + Audio + ptt_off ab)
+- `_tx_worker` finally: `_audio_streaming=False` als Safety-Net bei
+  Exception zwischen ptt_on und ptt_off
+- `abort()` faesst Flag NICHT an (R1-KRITISCH) — sonst Race waehrend
+  noch laufender send_audio
+
+**Code-Aenderung `ui/mw_cycle.py`:**
+- Z.678 Check: `is_audio_streaming` statt `is_transmitting`
+
+**Tests `tests/test_p41_audio_streaming_flag.py` NEU (8 Tests):**
+- T1 Init-False
+- T2 Read-only Property
+- T3 unabhaengig von is_transmitting
+- T4 True waehrend send_audio (Mock + Callback-Capture)
+- T5 False nach Worker-Ende
+- T6 False bei Encoding-Error (Flag nie gesetzt)
+- T7 Safety-Net im finally bei Exception
+- T8 R1-KRITISCH: abort() faesst Flag NICHT an
+
+**Test-Bilanz: 1140 → 1148 gruen** (+8 P41).
+
+**Backup vor Aenderung:** `Appsicherungen/2026-05-12_v0.97.6_vor_p41_omni_antenna_fix/`
+(CLAUDE.md TX-Pfad-Aenderung = Backup-Pflicht).
+
+**Plan-File:** `prompts/p41_audio_streaming_flag_r1.md`.
+
+**Erwartung im Field-Test:** Antennen-Pattern wechselt slot-fuer-slot
+auch waehrend OMNI-CQ aktiv ist. Adaptive-Buffer fuellt sich mit BEIDEN
+Antennen. Mike's Label „● DYNAMISCH (live) — RX Ant1/Ant2" wechselt
+zwischen Slots.
+
 ## 2026-05-12 v0.97.6 — P40 P37-Komplettierung (3 weitere current_ant-Aufrufer)
 
 **Field-Test 12.05. abends** zeigte Adaptive-Label „● DYNAMISCH (live)"

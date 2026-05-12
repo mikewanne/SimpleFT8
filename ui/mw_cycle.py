@@ -674,9 +674,14 @@ class CycleMixin:
             _dlog("ANT", f"SKIP — radio.ip={bool(self.radio.ip)} "
                   f"rx_active={self.rx_panel._rx_active}")
         if self._rx_mode == "diversity" and self.radio.ip and self.rx_panel._rx_active:
-            # BUG-1: TX-Schutz — waehrend TX keine Antenne umschalten!
-            if self.encoder.is_transmitting:
-                _dlog("ANT", "SKIP — encoder.is_transmitting")
+            # BUG-1: TX-Schutz — waehrend Audio aktiv rausgeht keine Antenne
+            # umschalten. P41 (12.05.2026): feinerer Flag is_audio_streaming
+            # statt is_transmitting. Letzteres blieb bei OMNI-CQ durchgaengig
+            # True (Worker-Setup+Sleep zaehlte mit) und blockierte den
+            # Antennen-Wechsel ueber 20 Slots. is_audio_streaming ist NUR
+            # von ptt_on bis ptt_off True — Switch in Slot-Pausen sicher.
+            if self.encoder.is_audio_streaming:
+                _dlog("ANT", "SKIP — encoder.is_audio_streaming")
                 return
 
             with self._diversity_lock:  # BUG-2: Race Condition Guard

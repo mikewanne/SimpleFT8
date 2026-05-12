@@ -75,6 +75,15 @@ class Encoder(QObject):
         self._audio_started = False
         self._replace_message: str | None = None
         self._replace_lock = threading.Lock()
+        # P41 (12.05.2026): feiner Flag fuer Antennen-Switch-Blocker.
+        # True NUR von ptt_on() bis ptt_off() — also waehrend wirklich
+        # Audio uebers FlexRadio rausgeht. is_transmitting bleibt auch
+        # waehrend Setup/Sleep True und blockierte den Antennen-Switch
+        # in mw_cycle.py:678 bei OMNI-CQ durchgaengig (Mike-Field-Test
+        # 12.05.: 20 Slots in Folge SKIP). Antennen-Switch unter abort
+        # ist sicher weil abort den Flag nicht anfasst — Worker-finally
+        # setzt False erst nach ptt_off (kein Audio mehr im Buffer).
+        self._audio_streaming = False
 
     def set_protocol(self, mode: str):
         """Protokoll wechseln."""
@@ -84,6 +93,19 @@ class Encoder(QObject):
     @property
     def is_transmitting(self) -> bool:
         return self._is_transmitting
+
+    @property
+    def is_audio_streaming(self) -> bool:
+        """P41: True NUR waehrend Audio aktiv ueber FlexRadio rausgeht
+        (von ptt_on bis ptt_off). Feiner als is_transmitting — erlaubt
+        Antennen-Switch in den Slot-Setup-Phasen vor TX.
+
+        Wird im TX-Worker-finally nach ptt_off auf False gesetzt
+        (R1-Empfehlung 12.05.) damit FlexRadio-Buffer-Latenz (1.3s)
+        sauber abgedeckt ist. abort() faesst diesen Flag NICHT an —
+        sonst Race mit noch laufender send_audio.
+        """
+        return self._audio_streaming
 
     def abort(self):
         """TX sofort abbrechen (Bandwechsel, Notaus, State-Change).
@@ -225,6 +247,10 @@ class Encoder(QObject):
         finally:
             self._is_transmitting = False
             self._audio_started = False
+            # P41 Safety-Net: bei Exception vor ptt_off bleibt der Flag
+            # sonst haengen. Nach Worker-Ende ist garantiert keine
+            # Audio-Uebertragung mehr aktiv.
+            self._audio_streaming = False
 
     def _next_slot_boundary(self) -> float:
         """Naechste passende Slot-Grenze als Unix-Timestamp.
@@ -356,6 +382,9 @@ class Encoder(QObject):
         if self._radio:
             self._radio.set_tx_antenna("ANT1")
             self._radio.ptt_on()
+        # P41: Audio-Streaming-Flag SETZEN ab ptt_on (deckt 1.3s FlexRadio-
+        # Buffer-Latenz + Stille-Padding + Audio + ptt_off ab).
+        self._audio_streaming = True
 
         # Slot-Quelle fuer qso_panel.add_tx: NICHT time.time() benutzen!
         # ptt_on() laeuft 1.3s VOR next_boundary (Stille-Padding davor).
@@ -374,5 +403,9 @@ class Encoder(QObject):
         # 8. PTT aus
         if self._radio:
             self._radio.ptt_off()
+        # P41: Audio-Streaming-Flag erst NACH ptt_off zuruecksetzen.
+        # Damit ist Antennen-Switch erst sicher wenn FlexRadio kein
+        # Audio mehr im Buffer hat.
+        self._audio_streaming = False
 
         self.tx_finished.emit()
