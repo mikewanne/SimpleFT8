@@ -873,13 +873,26 @@ class CycleMixin:
             if _lbl:
                 _lbl.setStyleSheet("color: #555; font-family: Menlo; font-size: 11px; padding: 0 6px;")
             return False
-        # CQ oder aktives QSO → pausieren (nur 1 Slot RX, Statistik wäre verzerrt)
-        # Robuster Check: State-Machine UND UI-Button — falls cq_mode durch Bug False ist
+        # CQ oder aktives QSO → pausieren (nur 1 Slot RX, Statistik wäre verzerrt).
+        # Robuster Check: State-Machine UND UI-Button — falls cq_mode durch Bug False ist.
+        # P45 (v0.97.9): OMNI-CQ läuft als separate State-Machine (core/omni_cq.py)
+        # und setzt qso_sm.cq_mode NIE → eigener Block, unabhängig von _qsm.
         _qsm = getattr(self, 'qso_sm', None)
         _cp = getattr(self, 'control_panel', None)
         _cq_btn = getattr(_cp, 'btn_cq', None) if _cp else None
         _cq_ui = _cq_btn is not None and _cq_btn.isChecked()
-        if _qsm and (_cq_ui or _qsm.cq_mode or _qsm.state not in (QSOState.IDLE, QSOState.TIMEOUT)):
+        _omni = getattr(self, '_omni_cq', None)
+        _omni_block = _omni is not None and _omni.is_active()
+        _qsm_block = (
+            _qsm is not None
+            and (_cq_ui or _qsm.cq_mode
+                 or _qsm.state not in (QSOState.IDLE, QSOState.TIMEOUT))
+        )
+        if _omni_block or _qsm_block:
+            _lbl = getattr(self, '_stats_indicator', None)
+            if _lbl:
+                _lbl.setStyleSheet(
+                    "color: #555; font-family: Menlo; font-size: 11px; padding: 0 6px;")
             return False
         from core.station_stats import get_active_protocol, get_active_reception_mode
         protocol = get_active_protocol(self.settings.mode)
