@@ -5,6 +5,37 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-12 v0.97.3 — P37 RX-Antennen-Anzeige im Adaptive-Label
+
+**Mike-Wunsch 12.05.2026** nach Live-Test der Adaptive Diversity: das
+Phase-Label „● DYNAMISCH (live)" soll zusaetzlich anzeigen welche
+RX-Antenne gerade aktiv ist. Mike-Zitat: „so sieht man immer schon das
+im diversity modus auch nach pattern empfangen wird und nicht nur starr
+nach antenne".
+
+**Workflow:** V1 → V2 (Self-Review) → R1 (DeepSeek) → V3 → Code.
+R1-Findings: 0 KRITISCH, 1 Test-Coverage-Verbreiterung (5 statt 1 Test).
+
+**Code-Aenderung (~6 Zeilen + 5 Tests):**
+- `ui/control_panel.py:1486` `update_diversity_ratio()`: neuer optionaler
+  Parameter `current_ant: str | None = None`. Wenn `is_dynamic=True` UND
+  `current_ant in ("A1","A2")` → Label-Text um „ — RX Ant1"/„ — RX Ant2"
+  erweitert. Sonst Label „● DYNAMISCH (live)" wie heute.
+- `ui/mw_cycle.py:742` Aufruf erweitert: `current_ant=self._diversity_current_ant`.
+  Lock-Block (Z.680) umschliesst weiterhin sowohl Schreiber als auch
+  UI-Update → kein Race.
+
+**Tests (`tests/test_p37_rx_antenna_label.py` NEU, 5 Tests, R1-Coverage):**
+- T1 `current_ant="A1"` → Label enthaelt „RX Ant1"
+- T2 `current_ant="A2"` → Label enthaelt „RX Ant2"
+- T3 `current_ant=None` → kein Anhang (Backwards-Compat)
+- T4 `current_ant="X"` (ungueltig) → kein Anhang (Robustheit)
+- T5 `is_dynamic=False` → statisches Label, kein Anhang
+
+**Test-Bilanz: 1131 → 1136 gruen** (+5 P37).
+
+**Plan-File:** `prompts/p37_rx_antenna_label_r1.md`.
+
 ## 2026-05-11 v0.97.2 — P35 Bug D+E+F (Live-Field-Test 11.05. abends)
 
 **Mike-Field-Test 11.05. nach v0.97.1** entdeckte 3 weitere Bugs die alle

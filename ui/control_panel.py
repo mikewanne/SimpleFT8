@@ -1491,7 +1491,9 @@ class ControlPanel(QWidget):
                                # operate_seconds_remaining >0; sonst Cycles-Fallback)
                                operate_cycles: int = 0, operate_total: int = 0,
                                # P34: Dynamic-Modus aktiv (blaue Anzeige + Text)
-                               is_dynamic: bool = False):
+                               is_dynamic: bool = False,
+                               # P37: aktive RX-Antenne ("A1"/"A2") fuer Live-Anzeige
+                               current_ant: str | None = None):
         """Diversity-Anzeige aktualisieren.
 
         ratio: '70:30' | '30:70' | '50:50'
@@ -1500,6 +1502,9 @@ class ControlPanel(QWidget):
         scoring_mode: 'normal' (Standard) | 'dx' (DX)
         is_dynamic: P34 — wenn True, Phase-Label wird blau („● DYNAMISCH (live)")
                     statt „Neuberechnung in X Min." (Statik-Re-Mess gilt nicht)
+        current_ant: P37 — aktive RX-Antenne ("A1"/"A2"). Nur bei is_dynamic=True
+                     wird Label um „ — RX Ant1"/„ — RX Ant2" erweitert.
+                     None/ungueltig → kein Anhang (Backwards-Compat).
         """
         mode_tag = "DX" if scoring_mode == "dx" else "Standard"
         for lbl in self._a1_pct.values():
@@ -1546,7 +1551,13 @@ class ControlPanel(QWidget):
                 return
             # P34: Dynamic-Modus → eigene Anzeige (blau, kein Re-Mess-Counter)
             if is_dynamic:
-                self._phase_label.setText("● DYNAMISCH (live)")
+                # P37: aktive RX-Antenne hinter Label, dezent
+                ant_suffix = ""
+                if current_ant == "A1":
+                    ant_suffix = " — RX Ant1"
+                elif current_ant == "A2":
+                    ant_suffix = " — RX Ant2"
+                self._phase_label.setText(f"● DYNAMISCH (live){ant_suffix}")
                 self._phase_label.setStyleSheet(
                     f"color:#3399CC;font-size:9px;font-family:{_FONT};"
                     "font-weight:bold;"

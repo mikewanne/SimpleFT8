@@ -1,5 +1,36 @@
 # HANDOFF — SimpleFT8
 
+## Stand 2026-05-12 nachts: v0.97.3 P37 RX-Antennen-Anzeige im Adaptive-Label
+
+**Code:** v0.97.3 lokal — Mike-Wunsch 12.05. nach Live-Test:
+Adaptive-Phase-Label um aktive RX-Antenne erweitert.
+**Tests:** **1136 grün** (+5 P37 vs v0.97.2).
+**Push:** pending bis Mike OK gibt.
+
+## Was P37 macht
+
+Im Antennen-Panel wird das blaue Label jetzt:
+- **„● DYNAMISCH (live) — RX Ant1"** wenn aktueller Slot ANT1 hört
+- **„● DYNAMISCH (live) — RX Ant2"** wenn aktueller Slot ANT2 hört
+- Update slot-für-slot (alle 15 s bei FT8)
+- Statik-Modus unverändert (kein RX-Anhang)
+
+So sieht Mike live dass das Diversity-Pattern wirklich slot-für-slot
+wechselt und nicht starr auf einer Antenne hängt.
+
+## Workflow V1→V2→R1→V3 (alle Schritte)
+
+- V1+V2 (Self-Review): Spec + Code-Verifikation + Race-Check
+- R1: DeepSeek-Reasoner Review → 0 KRITISCH, 1 Verbesserung (5 Tests
+  statt 1) → in V3 übernommen
+- V3 = V2 + erweiterte Test-Coverage
+- Code: 2 Files, ~6 Zeilen
+- 5 Tests grün (T1-T5 R1-Coverage)
+
+## Plan-Files
+
+- `prompts/p37_rx_antenna_label_r1.md` — R1-Review-Auftrag + V2-Plan
+
 ## Stand 2026-05-11 abends: v0.97.2 P35 Bug D+E+F Live-Field-Test läuft
 
 **Code:** v0.97.2 lokal — Bug D+E+F nach v0.97.1 noch nachgezogen (Mike-

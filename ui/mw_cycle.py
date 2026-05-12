@@ -746,6 +746,8 @@ class CycleMixin:
                     operate_seconds_remaining=self._diversity_ctrl.seconds_until_remeasure,
                     scoring_mode=self._diversity_ctrl.scoring_mode,
                     is_dynamic=_is_dyn,
+                    # P37: aktive RX-Antenne mitsenden fuer Live-Label
+                    current_ant=self._diversity_current_ant,
                 )
 
             # P21 Debug-Log: VOR Antennen-Switch (zeigt Plan)
