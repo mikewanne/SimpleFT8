@@ -141,8 +141,11 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         settings = self.settings
         self.timer = FT8Timer(settings.mode)
         self.qso_sm = QSOStateMachine(settings.callsign, settings.locator)
-        self.encoder = Encoder(settings.audio_freq_hz)
-        self.decoder = Decoder(max_freq=settings.max_decode_freq)
+        # P47 (v0.97.11): audio_freq_hz + max_decode_freq aus Settings entfernt
+        # (waren tot). Encoder-Start auf 1500 Hz (CQ-Such-Algo ueberschreibt
+        # ohnehin pro Slot); Decoder-Obergrenze konstant 3000 Hz.
+        self.encoder = Encoder(1500)
+        self.decoder = Decoder(max_freq=3000)
         self.decoder._my_call = settings.callsign
         # P3 v0.95.20: initiales Band setzen (sonst Default "20m" bei
         # erstem Audio-Dump-Slot vor Bandwechsel)
@@ -1104,9 +1107,8 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
                 f"color: {dt_color}; font-family: Menlo; "
                 f"font-size: 11px; padding: 0 6px;"
             )
-        # Filter-Anzeige pro Modus
-        _FILTERS = {"FT8": "100-3100", "FT4": "100-3100", "FT2": "100-4000"}
-        filter_str = _FILTERS.get(self.settings.mode, "100-3100")
+        # P47 (v0.97.11): Filter-Anzeige entfernt — war irrefuehrend
+        # (FT2 zeigte 100-4000 Hz, Decoder lief faktisch auf 3000 Hz).
         # AP-Lite
         ap_str = ""
         if hasattr(self, '_ap_lite') and self._ap_lite.enabled:
@@ -1142,9 +1144,10 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
                 freq_str += "  |  RX: ANT1"
         # P44 (v0.97.10): {dt_text} raus aus zentralem msg — DT erscheint
         # jetzt nur noch im eigenen _dt_indicator-Widget rechts.
+        # P47 (v0.97.11): Filter-Anzeige raus — war irrefuehrend.
         msg = (f"{self.settings.callsign}  |  {self.settings.locator}  |  "
                f"{self.settings.mode} {self.settings.band}  |  "
-               f"{freq_display}  |  Filter: {filter_str} Hz  |  "
+               f"{freq_display}  |  "
                f"{mode_str}{omni_str}{freq_str}{ap_str}")
         self.statusBar().showMessage(msg)
 
