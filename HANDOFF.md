@@ -1,5 +1,36 @@
 # HANDOFF — SimpleFT8
 
+## Stand 2026-05-13 nachts: v0.97.15 Bundle C (P10 + P13)
+
+**Code:** v0.97.15 — 2 UI/Netz-Bugs als Bundle:
+**P10 PSK-Backoff-Reset** (BACKOFF_MAX_S 60→10 Min, `_Backoff`
+thread-safe via Lock, public `reset_backoff()` + `set_mode()`,
+Auto-Trigger bei Band/Modus-Wechsel — Karten + Statusbar getrennt)
+und **P13 RX-Panel-Slot-Times** (UTC-Spalte zeigt jetzt
+Slot-Boundary statt Wall-Time; Fix in `add_message` UND
+`_populate_row` plus mixed-Type-safe Sort).
+**Tests:** **1217 grün** (1204 + 13 Bundle C).
+**Backup vor Code:** `Appsicherungen/2026-05-13_v0.97.14_vor_bundle_c/`.
+**Workflow:** V1→V2 (fand 2-Pfade-Bug Statusbar vs Karte)→R1 (3 KP +
+3 S + 2 K + 3 H, davon 1 KP Thread-Safety-Race in `_Backoff`)→V3→
+Code→Final-R1 (entdeckte zusätzlich Mode-Sync-Bug KP-1 — `_mode`
+wurde nie aktualisiert nach Mode-Wechsel; sofort gefixt mit
+`set_mode()`).
+**Push:** 3 atomare Commits, gleich folgend.
+
+### Nächste Schritte — Field-Test 5 Punkte (V3 §Field-Test)
+
+- **F1:** Bandwechsel → PSK-Statusbar ~5 Sek neue Daten (statt bis
+  5 Min Lag)
+- **F2:** Modus-Wechsel analog F1
+- **F3:** RX-Panel UTC-Spalte zeigt Slot-Boundaries (10:51:30 statt
+  10:51:42) bei FT8
+- **F4:** Bei FT4/FT2 entsprechende Boundaries
+- **F5:** Karte bei langem PSK-Server-Outage erholt sich ≤10 Min
+  statt ≤60 Min
+
+---
+
 ## Stand 2026-05-13 nachts: v0.97.14 Bundle B' (P32 + P33)
 
 **Code:** v0.97.14 — Bundle B' mit 2 UI-Bugs:

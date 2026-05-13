@@ -1,4 +1,4 @@
-# SimpleFT8 TODO — Stand 13.05.2026 (v0.97.14, Bundle B' fertig)
+# SimpleFT8 TODO — Stand 13.05.2026 (v0.97.15, Bundle C fertig)
 
 > **Mike-Regel 07.05.2026:** Offene Aufgaben gehoeren AUSSCHLIESSLICH
 > in diese Datei. Nicht in CLAUDE.md, nicht in HANDOFF.md. Diese Datei
@@ -8,11 +8,11 @@
 
 # 🟢 STATUS-ÜBERSICHT (für neue Session)
 
-**Aktuelle Version:** v0.97.14 (13.05.2026)
-**Tests:** 1204 grün
-**App-Stand:** Bundle B' (P32 RX-Panel-Spalten-Persist + P33 QSO-Komplett-
-Reihenfolge) ERLEDIGT, Field-Test 4 Punkte pending. Veraltete Punkte
-aus TODO bereinigt:
+**Aktuelle Version:** v0.97.15 (13.05.2026)
+**Tests:** 1217 grün
+**App-Stand:** Bundle C (P10 PSK-Backoff-Reset + P13 RX-Panel-Slot-Times)
+ERLEDIGT, Field-Test 5 Punkte pending. Bundle B' (P32+P33) zuvor
+erledigt (Field-Test pending). Veraltete Punkte aus TODO bereinigt:
 - **P29 OMNI-CQ-Parity-Trennung** war seit 11.05.2026 commit `5498f0d`
   erledigt — TODO veraltet, jetzt bestätigt.
 - **P49 OMNI-Pretrigger** wurde durch P48 automatisch mit-erledigt
@@ -24,6 +24,7 @@ aus TODO bereinigt:
 
 | Version | Was |
 |---|---|
+| **v0.97.15** | **Bundle C** — P10 PSK-Backoff-Reset (MAX 60→10 Min, thread-safe `_Backoff` mit Lock, public `reset_backoff()` + `set_mode()`, Auto-Trigger bei Band/Modus-Wechsel im Statusbar + Karten-Pfad). P13 RX-Panel-Slot-Times (UTC-Spalte = Slot-Boundary statt Wall-Time; Fix in `add_message` + `_populate_row` + mixed-Type-safe Sort). V2 fand 2-Pfade-Bug, Final-R1 fand zusätzlich Mode-Sync-Bug (`_mode` wurde nie aktualisiert). 13 neue Tests. |
 | **v0.97.14** | **Bundle B'** — P32 RX-Panel-Spalten persistiert über App-Restart (Settings-Key `rx_panel_hidden_cols`, defensiv gefiltert + COL_MSG-Schutz, Signal-Pattern wie country_filter). P33 `✓ QSO komplett`-Zeile erscheint jetzt direkt nach 73-Empfang (vor nächstem CQ) — 2-Signal-Split `qso_confirmed_visual` SOFORT + `qso_confirmed` nach Courtesy-Send. V2-Self-Review fand OMNI-Race in V1-Variante-A. 12 neue Tests. Final-R1 „Push freigegeben". |
 | **v0.97.13** | **P48 DT-System aufräumen + tunen** (4 Teile) — A: Hardware-Werte in Settings `radio_timing` (`tx_buffer_s=1.3`, `rx_hardware_offset_default_s=0.26`), Encoder kriegt `tx_buffer_s`-Parameter, `TARGET_TX_OFFSET` weg. B: Cross-Modus-Fallback FT4/FT2→FT8 gleiches Band. C: Hardware-Default 0.26 als Kaltstart. D: Schnell-Konvergenz im 1. Slot bei ≥10 Stationen+Stddev<0.1. **Kritischer Bug-Fix**: `_is_initial = _saved.get(_mode_key()) is None` (R1-V2 Finding 1). 17 neue Tests + 3 angepasst. Final-R1 9.5/10, 0 KP. 7 atomare Commits gepusht. |
 | **v0.97.12** | **Bundle A (P43+P20+P18)** — setproctitle (Activity Monitor), Log-Rotation (datierte Tagesdateien + Symlink + 7-Tage-Cleanup + archive/), DT-Print-Dedup. Neues Modul `core/log_setup.py`. 8 neue Tests. Final-R1 „Push freigegeben". |
@@ -64,9 +65,9 @@ aus TODO bereinigt:
 | ~~P32~~ | ~~RX-Panel Spalten-Konfiguration persistieren~~ ✅ **ERLEDIGT v0.97.14 Bundle B' (13.05.2026)** |
 | ~~P33~~ | ~~QSO-fertig-Meldung Reihenfolge-Bug~~ ✅ **ERLEDIGT v0.97.14 Bundle B' (13.05.2026)** |
 | ~~P24~~ | ~~Letzten RX-Mode merken~~ ❌ **VERWORFEN** — widerspricht Mike's P35-Bug-F-Vision (App-Start IMMER 20m FT8 Normal) |
-| **P10** | PSK-BACKOFF-RESET — Backoff von 60min auf 5min ODER Reset-Button | 1-2h |
+| ~~P10~~ | ~~PSK-Backoff-Reset~~ ✅ **ERLEDIGT v0.97.15 Bundle C (13.05.2026)** |
 | **P14** | DT-WERTE-ASYMMETRISCH — NTP-Korrektur-Issue | 2h Diagnose |
-| **P13** | RX-PANEL-SLOT-TIMES — Wall-Time vs Slot-Boundary | 1-2h |
+| ~~P13~~ | ~~RX-Panel-Slot-Times~~ ✅ **ERLEDIGT v0.97.15 Bundle C (13.05.2026)** |
 
 ## 🛠 OFFEN — Niedrige Priorität
 

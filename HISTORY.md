@@ -5,6 +5,139 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-13 v0.97.15 — Bundle C (P10 PSK-Backoff-Reset + P13 RX-Panel-Slot-Times)
+
+Zwei UI/Netz-Bugs als Bundle — beide hardware-frei, beide klein.
+
+### P10 — PSK-Backoff-Reset
+
+Bug (Mike-Field-Test 10.05.): PSK-Reporter-Polling ging bei
+Server-Errors in exponentielles Backoff bis 60 Min. Nach Recovery sah
+User stundenlang keine PSK-Daten obwohl Mike gehört wurde.
+
+Fix:
+- `core/psk_reporter.py` `BACKOFF_MAX_S` 3600 → 600 (10 Min Cap).
+- `core/psk_reporter.py` `_Backoff` thread-safe via `threading.Lock`
+  (R1-V2-KP-2 Race in `fail()` read-modify-write).
+- `core/psk_reporter.py` public `PSKReporterClient.reset_backoff()`.
+- `core/psk_reporter.py` public `PSKReporterClient.set_mode()` —
+  Final-R1-KP-1 entdeckte dass Mode-Wechsel sonst zu Spot-Queries für
+  alten Modus führt (FT8→FT4: Karte zeigt weiter FT8-Spots).
+- `ui/mw_radio.py` Helper `_reset_psk_polling_on_change()`:
+  - Statusbar-Pfad: `_psk_timer.start(0)` + `_psk_first_fetch=True` →
+    sofortiges Re-Fetch statt bis zu 5 Min warten
+  - Karten-Pfad (falls Karte offen): `client.set_mode` +
+    `client.reset_backoff`
+- Hooks in `_on_band_changed` + `_on_mode_changed` nach
+  `settings.set` aufgerufen.
+
+Mike's TODO-Option-3 (Auto-Reset bei Band/Mode-Wechsel) gewählt,
+Option-2 (manueller UI-Button) verworfen.
+
+R1-S-3 (Statusbar-Pfad eigenes Backoff) abgelehnt — Hobby-Session-
+Last vernachlässigbar, UX-Kosten erheblich (10 Min lang keine Spots
+nach Recovery). Statusbar bleibt aggressiv-poll, Karte mit Backoff.
+
+### P13 — RX-Panel-Slot-Times
+
+Bug (Mike-Field-Test 10.05.): RX-Panel UTC-Spalte zeigte krumme
+Wall-Time (10:51:42) statt FT8-Slot-Boundary (10:51:30/10:51:45).
+
+Wurzel: `ui/rx_panel.py` `add_message` UND `_populate_row` nutzten
+nur `_utc_display`/`_utc_str` als Strings — Decoder setzt aber nur
+`_slot_start_ts` (Float). Wall-Time-Fallback griff.
+
+Fix:
+- `ui/rx_panel.py` `add_message` Z.288-302: bevorzugt
+  `msg._slot_start_ts` mit `int(slot_ts)`-Rundung (R1-K2 Sub-Sekunden).
+- `ui/rx_panel.py` `_populate_row` Z.394-408: gleiche Logik (war
+  V2/V3 übersehen, beim Code-Implementieren aufgefallen — Lesson für
+  Memory).
+- `ui/rx_panel.py` `_set_sort` time-Branch: defensive Float-Key statt
+  String-Vergleich. Mixed-Type-safe (TypeError-Risiko in V2/V3 antizipiert).
+
+### R1-Findings-Bilanz V2 → V3 → Final-R1
+
+V2-R1: 3 KP + 3 S + 2 K + 3 H
+- KP-1 (`_slot_start_ts` in add_message UND _set_sort): adressiert
+- KP-2 (`_Backoff` Race read-modify-write): threading.Lock eingebaut
+- KP-3 (BACKOFF_MAX_S Code-Anpassung): erledigt
+- S-1 (public `reset_backoff`): erledigt
+- S-2 (`main_window.py` Backup-Liste): erledigt
+- S-3 (Statusbar-Pfad eigenes Backoff): abgelehnt mit Begründung
+- K-1 (Race-Guard `_psk_busy`): abgelehnt (KISS)
+- K-2 (`int(slot_ts)` Rundung): erledigt
+
+Final-R1: 1 KP + 2 S + 3 K
+- KP-1 (Mode-Sync `set_mode()`): erledigt, neuer Test
+- S-2 (Event-Wakeup Backoff): abgelehnt (worst-case 10min akzeptabel)
+- S-6 (Legacy-Sort-Float-Größenordnung): abgelehnt — Legacy-Strings
+  bleiben kleiner als Unix-Timestamps, Sortierung in Praxis korrekt
+- K-5 (_populate_row Lesson): in Memory
+- K-7 (Test-Tiefe): minimaler Stub reicht für Bug
+- K-8 (CPython-GIL-Mythos): in Memory
+
+### Tests
+
+`tests/test_p10_psk_backoff_reset.py` NEU 7 Tests:
+- T1: `BACKOFF_MAX_S` = 600
+- T2: `_Backoff.reset/fail` Sequenz unverändert
+- T3: `fail()` capped bei MAX_S
+- T4: Thread-Safety mit 10 parallel-Threads (kein Race)
+- T5: `PSKReporterClient.reset_backoff()` public
+- T6: Bug-Schutz Source-Level `_lock`
+- T7: `set_mode()` aktualisiert `_mode` (Final-R1-KP-1)
+
+`tests/test_p13_rx_panel_slot_times.py` NEU 6 Tests:
+- T1: `_slot_start_ts` gesetzt → UTC = Boundary
+- T2: ohne `_slot_start_ts` → Wall-Time-Fallback
+- T3: `int(slot_ts)` rundet Sub-Sekunden ab
+- T4: FT4 7.5s-Slots
+- T5: `_set_sort("time")` mit mixed-Type ohne TypeError
+- T6: Bug-Schutz Source-Level
+
+`tests/test_psk_reporter.py:183` angepasst (`assert BACKOFF_MAX_S == 600`).
+
+**Tests 1204 → 1217 grün** (+13: 7 P10 + 6 P13).
+
+### Backup
+
+`Appsicherungen/2026-05-13_v0.97.14_vor_bundle_c/` mit
+`core/psk_reporter.py`, `ui/main_window.py`, `ui/mw_radio.py`,
+`ui/rx_panel.py` Stand v0.97.14.
+
+### Plan-Files
+
+- `prompts/bundle_c_v1.md` — V1 Erstentwurf
+- `prompts/bundle_c_v2.md` — V2 fand 2-Pfade-Bug in V1 (Statusbar vs
+  Karte)
+- `prompts/bundle_c_r1.md` — DeepSeek-R1-V2-Antwort
+- `prompts/bundle_c_v3.md` — V3 mit R1-Findings + Float-Key-Defensive
+- `prompts/bundle_c_final_r1.md` — Final-R1 entdeckte Mode-Sync-Bug
+
+### Lessons
+
+1. **V2-Self-Review fand `_psk_worker` vs `PSKReporterClient` als
+   zwei separate Pfade** — V1 hatte nur einen gesehen. Memory-Lesson
+   „Bei Bug-Fix IMMER alle Pfade gleicher Klasse prüfen" bestätigt.
+2. **Final-R1 fand Mode-Sync-Bug** (KP-1) den V2 + V3 verpasst hatten.
+   `PSKReporterClient._mode` wird einmalig im Konstruktor gesetzt,
+   nie aktualisiert. Bei Mode-Wechsel braucht's einen Setter.
+3. **`_populate_row` 2. Bug-Stelle aufgetaucht beim Code-Schreiben**
+   (R1-K5). Lesson: in V2 systematisch alle Codepfade auflisten die
+   denselben Bug haben könnten — grep nach Pattern bevor V1.
+4. **CPython-GIL macht read-modify-write NICHT atomar** (R1-V2-KP-2).
+   V2 hatte das falsch behauptet. `current_s * factor` involviert
+   mehrere Bytecode-Instruktionen. `threading.Lock` ist nötig wenn
+   mehrere Threads schreibend zugreifen. Memory-Lesson.
+
+### Push
+
+3 atomare Commits geplant. Field-Test 5 Punkte (V3 §Field-Test) +
+Push.
+
+---
+
 ## 2026-05-13 v0.97.14 — Bundle B' (P32 RX-Panel-Spalten-Persist + P33 QSO-Komplett-Reihenfolge)
 
 Zwei voneinander unabhängige UI-Bugs als gemeinsames Bundle —
