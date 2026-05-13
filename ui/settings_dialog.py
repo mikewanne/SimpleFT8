@@ -26,8 +26,6 @@ _HINTS = {
     "max_calls": "Wie oft eine Station maximal angerufen wird bevor Timeout.\n3 = schnell weiter, 7 = hartnäckig, 99 = quasi-endlos.",
     "swr_limit": "Bei SWR ueber diesem Wert wird TX sofort gestoppt.\nSchuetzt Endstufe und Antenne.",
     "tune_power": "Leistung beim TUNE-Vorgang (Antennentuner einstellen).\nMax 20W — hoehere Werte brauchen Bestaetigung.",
-    "tx_freq": "Audio-Frequenz fuer TX im FT8-Fenster.\n1500 Hz = Standard (WSJT-X Default).\nBereich 1000-2000 Hz wird von allen Stationen dekodiert.\nUnter 800 Hz: wird von vielen Stationen ausgefiltert!",
-    "max_decode": "Obere Grenze des Dekodier-Bereichs.\n3000 Hz = Standard. Hoeher = mehr Stationen aber mehr CPU.",
 }
 
 _TAB_STYLE = """
@@ -282,15 +280,11 @@ class SettingsDialog(QDialog):
         """Tab 3: FT8-Audio, Decode, Diversity, Statistik-Checkbox."""
         tab = QWidget()
         form = QFormLayout(tab)
-        self.audio_freq = QSpinBox()
-        self.audio_freq.setRange(800, 2800)
-        self.audio_freq.setSuffix(" Hz")
-        self.audio_freq.setSingleStep(50)
-        self.max_decode_freq = QSpinBox()
-        self.max_decode_freq.setRange(1000, 5000)
-        self.max_decode_freq.setSuffix(" Hz")
-        form.addRow("TX Audio-Frequenz:", _row_with_hint(self.audio_freq, "tx_freq"))
-        form.addRow("Max. Decode-Frequenz:", _row_with_hint(self.max_decode_freq, "max_decode"))
+        # P47 (v0.97.11): TX Audio-Frequenz + Max. Decode-Frequenz raus —
+        # waren tote Einstellungen (Encoder-Wert wird vom CQ-Such-Algorithmus
+        # ohnehin pro Slot ueberschrieben, Decoder-max_freq wurde nirgends
+        # zur Laufzeit aktualisiert). Defaults hartkodiert in main_window
+        # (Encoder=1500, Decoder=3000).
         # v0.93: "Neueinmessung nach: <Zyklen>" entfernt — jetzt fest 1 h zeit-basiert
         self.stats_cb = QCheckBox("Statistik-Erfassung aktivieren")
         self.stats_cb.setToolTip(
@@ -503,8 +497,7 @@ class SettingsDialog(QDialog):
         mc = self.settings.get("max_calls", 3)
         self.max_calls_combo.setCurrentIndex({3: 0, 5: 1, 7: 2, 99: 3}.get(mc, 0))
         self.swr_limit.setValue(self.settings.get("swr_limit", 3.0))
-        self.audio_freq.setValue(self.settings.get("audio_freq_hz", 1500))
-        self.max_decode_freq.setValue(self.settings.max_decode_freq)
+        # P47 (v0.97.11): audio_freq_hz + max_decode_freq Load entfernt — Settings tot.
         # v0.93: diversity_operate_cycles entfernt — 1h-Frist zeit-basiert
         # Sprache
         lang = self.settings.get("language", "de")
@@ -643,8 +636,7 @@ class SettingsDialog(QDialog):
         self.settings.set("max_calls", int(self.max_calls_combo.currentText()))
         self.settings.set("swr_limit", self.swr_limit.value())
         self.settings.set("tune_power", self._current_tune_power)
-        self.settings.set("audio_freq_hz", self.audio_freq.value())
-        self.settings.set("max_decode_freq", self.max_decode_freq.value())
+        # P47 (v0.97.11): audio_freq_hz + max_decode_freq Save entfernt — Settings tot.
         # v0.93: diversity_operate_cycles entfernt
         self.settings.set("language", "de" if self.language_combo.currentIndex() == 0 else "en")
         self.settings.set("stats_enabled", self.stats_cb.isChecked())
@@ -690,8 +682,7 @@ class SettingsDialog(QDialog):
         self.tx_level.setValue(100)
         self.max_calls_combo.setCurrentIndex(3)  # 99
         self.swr_limit.setValue(3.0)
-        self.audio_freq.setValue(1500)
-        self.max_decode_freq.setValue(DEFAULTS.get("max_decode_freq", 3000))
+        # P47 (v0.97.11): audio_freq + max_decode_freq Reset entfernt — Widgets weg.
         self._current_tune_power = 10
         for w, btn in self._tune_btns.items():
             btn.setChecked(w == 10)
