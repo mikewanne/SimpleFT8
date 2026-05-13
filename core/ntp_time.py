@@ -52,6 +52,12 @@ _last_sample_count: int = 0
 _is_initial: bool = True
 _saved: dict = {}
 
+# P18: Dedup-Cache fuer "Gespeicherter Wert ... geladen"-Print.
+# Beim App-Start triggern mw_radio.py:167/322/458 nacheinander
+# set_mode + set_band → 3× identischer Spam. Wir printen nur wenn
+# (key, saved_val) sich aendert.
+_last_logged_load: tuple | None = None
+
 
 def _mode_key() -> str:
     """Speicher-Schluessel: 'FT8_20m', 'FT4_40m', etc."""
@@ -99,6 +105,19 @@ def _load_for_current_key() -> float:
 _load_saved()
 
 
+def _log_load_dedup(key: str, saved_val: float) -> None:
+    """P18: print nur wenn (key, saved_val) sich seit letztem Aufruf geaendert hat."""
+    global _last_logged_load
+    marker = (key, saved_val)
+    if marker == _last_logged_load:
+        return
+    if saved_val != 0.0:
+        print(f"[DT-Korr] {key}: Gespeicherter Wert {saved_val:+.3f}s geladen")
+    else:
+        print(f"[DT-Korr] {key}: Kein gespeicherter Wert, starte bei 0")
+    _last_logged_load = marker
+
+
 def set_mode(mode: str, band: str | None = None):
     """Modus (und optional Band) wechseln — gespeicherten Korrekturwert laden."""
     global _correction, _mode, _band, _phase, _cycle_count, _measure_buffer, _is_initial
@@ -114,11 +133,7 @@ def set_mode(mode: str, band: str | None = None):
         _cycle_count = 0
         _measure_buffer = []
         _is_initial = (saved_val == 0.0)
-        key = _mode_key()
-        if saved_val != 0.0:
-            print(f"[DT-Korr] {key}: Gespeicherter Wert {saved_val:+.3f}s geladen")
-        else:
-            print(f"[DT-Korr] {key}: Kein gespeicherter Wert, starte bei 0")
+        _log_load_dedup(_mode_key(), saved_val)
 
 
 def set_band(band: str):
@@ -134,11 +149,7 @@ def set_band(band: str):
         _cycle_count = 0
         _measure_buffer = []
         _is_initial = (saved_val == 0.0)
-        key = _mode_key()
-        if saved_val != 0.0:
-            print(f"[DT-Korr] {key}: Gespeicherter Wert {saved_val:+.3f}s geladen")
-        else:
-            print(f"[DT-Korr] {key}: Kein gespeicherter Wert, starte bei 0")
+        _log_load_dedup(_mode_key(), saved_val)
 
 
 def get_time() -> float:
