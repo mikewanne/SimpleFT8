@@ -141,10 +141,15 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         settings = self.settings
         self.timer = FT8Timer(settings.mode)
         self.qso_sm = QSOStateMachine(settings.callsign, settings.locator)
+        # P48 (v0.97.13): Hardware-Default fuer DT-Kaltstart aus Settings.
+        # Greift wenn weder eigener Wert noch Cross-Modus-Fallback existieren.
+        from core import ntp_time as _ntp
+        _ntp.set_hardware_default(settings.rx_hardware_offset_default_s)
         # P47 (v0.97.11): audio_freq_hz + max_decode_freq aus Settings entfernt
         # (waren tot). Encoder-Start auf 1500 Hz (CQ-Such-Algo ueberschreibt
         # ohnehin pro Slot); Decoder-Obergrenze konstant 3000 Hz.
-        self.encoder = Encoder(1500)
+        # P48 (v0.97.13): tx_buffer_s aus Settings (FlexRadio 1.3 default).
+        self.encoder = Encoder(1500, tx_buffer_s=settings.tx_buffer_s)
         self.decoder = Decoder(max_freq=3000)
         self.decoder._my_call = settings.callsign
         # P3 v0.95.20: initiales Band setzen (sonst Default "20m" bei
