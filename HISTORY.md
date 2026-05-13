@@ -5,6 +5,101 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-13 v0.97.12 — Bundle A: P43 setproctitle + P20 Log-Rotation + P18 DT-Print-Dedup
+
+**Drei kleine Quality-of-Life-Fixes als gemeinsames Bundle** — alle
+hardware-frei, kein Field-Test nötig.
+
+### P43 — setproctitle (Activity Monitor)
+
+**Hintergrund:** Bei der P30-Memory-Leak-Diagnose 12.05. konnte Mike
+nicht zwischen SimpleFT8 und Qwen3-TTS unterscheiden — beide erschienen
+als „Python" in Activity Monitor.
+
+**Fix:** Neue optionale Dependency `setproctitle>=1.3`. `main.py`
+ergänzt um try/except-Import + `setproctitle.setproctitle(f"SimpleFT8
+v{APP_VERSION}")`. `tools/remote/start_simpleft8_nokill.py` analog mit
+„SimpleFT8 (Ferienhaus)". Beide Start-Pfade sind jetzt in
+Activity Monitor + `ps -axc` eindeutig identifizierbar.
+
+### P20 — Log-Rotation für simpleft8.log
+
+**Hintergrund:** `~/.simpleft8/simpleft8.log` wuchs append-only ins
+MB-Bereich. Bug-Diagnose im alten Log schwierig (nicht klar welcher Tag
+was war).
+
+**Fix:** Neues Modul `core/log_setup.py` mit Eintritts-API
+`setup_main_log(log_dir=None)`. Layout:
+
+```
+~/.simpleft8/
++- simpleft8.log                          (Symlink → heutige Datei)
++- simpleft8-YYYY-MM-DD.log               (datierte Logs, max 7 Tage)
++- archive/simpleft8-pre-rotation-*.log   (Mike's Historie, dauerhaft)
+```
+
+- Cleanup beim App-Start: alle `simpleft8-YYYY-MM-DD.log` > 7 Tage weg.
+- `archive/`-Unterordner wird **nie** vom Cleanup angefasst (Mike's
+  bestehende `simpleft8.log` mit Wochen Historie wird einmalig
+  archiviert).
+- Symlink atomar via `os.symlink + os.replace`; bei OSError Fallback
+  auf direkten Open ohne Symlink.
+- Gesamt-Try/Except in `setup_main_log`: bei jedem Fehler Fallback auf
+  alten Pfad (`simpleft8.log` ohne Rotation), App läuft normal weiter.
+
+`main.py` Z.29-32 + `tools/remote/start_simpleft8_nokill.py` Z.22-24
+nutzen beide dieselbe Library — kein Drift möglich.
+
+### P18 — DT-Korr-Print-Spam
+
+**Hintergrund:** Beim App-Start triggern `mw_radio.py:167/322/458`
+nacheinander `set_mode + set_band` → 3× identisch
+`[DT-Korr] FT8_20m: Gespeicherter Wert +0.650s geladen`.
+
+**Fix:** `core/ntp_time.py` neuer Helper `_log_load_dedup(key, saved_val)`
++ Modul-Var `_last_logged_load`. Print nur wenn `(key, saved_val)`
+sich seit letztem Aufruf geändert hat. Aufrufer-Konsolidierung
+(Architektur-Eingriff) bewusst abgelehnt — nur Print-Dedup. Echte
+Wertänderungen weiterhin sichtbar.
+
+### Workflow
+
+V1 → V2 → R1 (3 Risiken + 1 Verbesserung + 1 Hinweis angenommen, 2
+Hinweise mit Begründung beibehalten) → V3 → Code → Final-R1 („Push
+freigegeben", 0 KP-Findings).
+
+### Tests
+
+`tests/test_p_bundle_qol.py` NEU mit 8 Tests:
+
+- T1 Source-Check setproctitle in main.py
+- T2 dated_log_filename Format
+- T3 cleanup_old_main_logs keeps recent + Symlink/Archive
+- T4 setup_main_log archiviert vorhandene File
+- T5 setup_main_log ersetzt Symlink atomar
+- T6 setup_main_log Fallback bei Symlink-OSError
+- T7 DT-Dedup skipt Repeat
+- T8 DT-Dedup loggt bei Wertänderung
+
+**Tests:** 1167 → **1175 grün** (+8, V3 prognostizierte +8).
+
+### Backup
+
+`Appsicherungen/2026-05-13_v0.97.11_vor_bundle_qol/` mit `main.py`,
+`core/ntp_time.py`, `requirements.txt`,
+`tools/remote/start_simpleft8_nokill.py` Stand v0.97.11.
+
+### Plan-Files
+
+`prompts/p_bundle_qol_{v1,v2,r1,v3,final_r1}.md` — voller
+V1→V2→R1→V3-Zyklus + Final-R1-Codereview.
+
+### Commits
+
+6 atomare Commits C1–C6.
+
+---
+
 ## 2026-05-13 v0.97.11 — P47 Tote Frequenz-Settings + Statusbar-Filter-Anzeige entfernt
 
 **Bug:** Zwei UI-Settings im Tab „FT8 & Diversity" hatten keinerlei

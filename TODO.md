@@ -56,10 +56,10 @@ P34 + P35 lokal gesammelt.
 
 | ID | Was | Aufwand |
 |---|---|---|
-| **P18** | DT-KORR-3X-RELOAD — kosmetisch, 3-fach Reload-Log | 30min |
-| **P20** | LOG-ROTATION für simpleft8.log (Debug-Log macht das schon, hier geht's um den Haupt-Log) | 1h |
+| ~~P18~~ | ~~DT-KORR-3X-RELOAD~~ ✅ **ERLEDIGT v0.97.12 Bundle A (13.05.2026)** |
+| ~~P20~~ | ~~LOG-ROTATION simpleft8.log~~ ✅ **ERLEDIGT v0.97.12 Bundle A (13.05.2026)** |
 | **P29** | OMNI-CQ QSO-Panel-Anzeige: bei Paritäts-Wechsel (Even↔Odd) Leerzeile dazwischen + Even-Slot etwas dunklere Farbe (selber Farbton, nur ein wenig dunkler) zur optischen Unterscheidung | 1h |
-| **P43** | App-Name + PID im Activity Monitor sichtbar machen via `setproctitle` | 30min |
+| ~~P43~~ | ~~setproctitle für Activity-Monitor-Erkennbarkeit~~ ✅ **ERLEDIGT v0.97.12 Bundle A (13.05.2026)** |
 | ~~P44~~ | ~~Statusbar DT-Korrektur grün-Bug~~ ✅ **ERLEDIGT v0.97.10 (13.05.2026)** |
 | **P46** | Bandpilot Normal wieder reinholen → 3-Wege-Vergleich Normal/Std/DX | 2-3h Workflow |
 | ~~P47~~ | ~~Tote Frequenz-Settings + Statusbar-Filter-Anzeige entfernen~~ ✅ **ERLEDIGT v0.97.11 (13.05.2026)** |

@@ -1,24 +1,39 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-13 mittags: v0.97.11 P47 Tote Frequenz-Settings + Statusbar-Filter raus
+## Stand 2026-05-13 nachmittags: v0.97.12 Bundle A (P43 + P20 + P18) erledigt
 
-**Code:** v0.97.11 — `audio_freq_hz` + `max_decode_freq` waren tote
-UI-Settings (Encoder wird vom CQ-Such-Algo pro Slot überschrieben,
-`decoder.max_freq` wird nie zur Laufzeit aktualisiert). Beide Settings
-+ UI-Felder + irreführende Statusbar-Anzeige (`Filter: 100-4000 Hz` für
-FT2 war Lüge — Decoder lief faktisch auf 3000 Hz) entfernt. Defaults
-hartkodiert: `Encoder(1500)` + `Decoder(max_freq=3000)`.
-`Settings.load()` popped die Keys idempotent aus alten Configs.
-**Tests:** **1167 grün** (1162 + 5 P47).
-**Backup vor Code:** `Appsicherungen/2026-05-13_v0.97.10_vor_p47_dead_freq_settings/`.
+**Code:** v0.97.12 — Drei kleine QoL-Fixes als Bundle:
+- **P43 setproctitle:** Activity Monitor zeigt jetzt „SimpleFT8 v0.97.12"
+  statt „Python" (Remote-Wrapper: „SimpleFT8 (Ferienhaus)").
+- **P20 Log-Rotation:** `simpleft8.log` ist jetzt Symlink → datierte
+  Tagesdatei. Logs >7 Tage werden automatisch gelöscht. Mike's
+  bestehende `simpleft8.log` (Wochen Historie) wandert dauerhaft nach
+  `~/.simpleft8/archive/simpleft8-pre-rotation-YYYY-MM-DD.log`.
+- **P18 DT-Print-Spam:** 3× identisches `[DT-Korr] ... geladen` beim
+  App-Start nur noch 1×.
+**Tests:** **1175 grün** (1167 + 8 Bundle A).
+**Backup vor Code:** `Appsicherungen/2026-05-13_v0.97.11_vor_bundle_qol/`.
 **Workflow:** V1→V2→R1→V3 voll durchgezogen, Final-R1 „Push freigegeben",
 0 KP-Findings.
+**Neue Dependency:** `setproctitle>=1.3` in `requirements.txt` (im
+venv installiert v1.3.7).
 **Push:** gleich folgend (6 atomare Commits C1–C6).
 
 ### Nächste mögliche Aufgaben (TODO)
 
-- **P46** Bandpilot Normal-Reintegration (2-3h Workflow, Mike+Claude+R1 einig)
-- **P43** setproctitle für Activity-Monitor-Erkennbarkeit (30min)
+- **Bundle B (UI-Persistenz)** P24 + P32 + P29 (~2.5h Workflow)
+- **Bundle C (Reihenfolge & Cache)** P33 + P10 (~2h, Field-Test-light)
+- **P46** Bandpilot Normal-Reintegration (2-3h Workflow)
+
+### Vorgänger-Stand (v0.97.11, 13.05.2026 mittags)
+
+**Code:** v0.97.11 — `audio_freq_hz` + `max_decode_freq` waren tote
+UI-Settings (Encoder vom CQ-Algo überschrieben, `decoder.max_freq` nie
+zur Laufzeit aktualisiert). Statusbar-`Filter:`-Anzeige war
+irreführend (FT2 zeigte 100-4000 Hz, Decoder lief auf 3000 Hz). Alles
+entfernt, Defaults hartkodiert.
+**Tests:** **1167 grün** (1162 + 5 P47).
+**Backup vor Code:** `Appsicherungen/2026-05-13_v0.97.10_vor_p47_dead_freq_settings/`.
 
 ### Vorgänger-Stand (v0.97.10, 13.05.2026 morgens)
 
