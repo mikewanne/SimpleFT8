@@ -79,21 +79,10 @@ class Settings:
 
     def __init__(self):
         self._data = dict(DEFAULTS)
-        # P34: Dynamic-Diversity-Toggle ist RAM-only (NICHT persistiert).
-        # Bei jedem App-Start auf False. Mike-Entscheidung Testphase:
-        # verhindert dass Toggle ungewollt aktiv bleibt + Bugs falsch
-        # zugeordnet werden.
-        self._dynamic_enabled = False
+        # P34-Stufe2 (v0.97.19): Dynamic-Diversity ist Default — kein Toggle
+        # mehr. Settings-Key `dynamic_diversity_enabled` aus alten Configs
+        # wird silent ignoriert (nicht persistiert, nicht gelesen).
         self.load()
-
-    # P34: Dynamic-Diversity Toggle (RAM-only, kein save/load)
-    @property
-    def dynamic_diversity_enabled(self) -> bool:
-        return self._dynamic_enabled
-
-    @dynamic_diversity_enabled.setter
-    def dynamic_diversity_enabled(self, value: bool):
-        self._dynamic_enabled = bool(value)
 
     def load(self):
         if CONFIG_FILE.exists():
@@ -270,13 +259,6 @@ class Settings:
         }
         self.save()
 
-    # ── Diversity Presets (Ratio pro Modus+Band) ──────────────────
-
-    def get_diversity_preset(self, mode: str, band: str) -> dict | None:
-        """Diversity-Preset laden. Key: 'FT8_20m' etc."""
-        presets = self._data.get("diversity_presets", {})
-        return presets.get(f"{mode}_{band}")
-
     # ── TX-Power pro Band ─────────────────────────────────────────
 
     def save_tx_power(self, band: str, rfpower: int):
@@ -292,17 +274,7 @@ class Settings:
             return default
         return max(10, min(80, int(val)))
 
-    # ── Diversity Presets (Ratio pro Modus+Band) ──────────────────
-
-    def save_diversity_preset(self, mode: str, band: str,
-                              ratio: str, dominant: str | None):
-        """Diversity-Ergebnis speichern (nach jeder erfolgreichen Messung)."""
-        import time
-        if "diversity_presets" not in self._data:
-            self._data["diversity_presets"] = {}
-        self._data["diversity_presets"][f"{mode}_{band}"] = {
-            "ratio": ratio,
-            "dominant": dominant,
-            "measured": time.strftime("%Y-%m-%d %H:%M"),
-        }
-        self.save()
+    # P34-Stufe2: get_diversity_preset + save_diversity_preset entfernt —
+    # Ratio wird live vom DynamicDiversityController bestimmt, nicht
+    # mehr persistiert. Alte `diversity_presets`-Keys in config.json
+    # werden silent ignoriert.

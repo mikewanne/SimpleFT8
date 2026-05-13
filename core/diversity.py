@@ -1,32 +1,32 @@
-"""SimpleFT8 Diversity Controller — periodische Antennen-Messung + CQ-Frequenzwahl.
+"""SimpleFT8 Diversity Controller — Antennen-Pattern + CQ-Frequenzwahl.
 
-Score-basierte Messung (v0.93):
-  Pro Slot wird ``sum(snr+30)`` ueber alle dekodierten Stationen akkumuliert.
-  Kontinuierliche Werte → Median liefert auch bei duenner Decoder-Dichte
-  (z.B. FT2 mit 1-2 Stationen pro Slot) statistische Aufloesung.
+P34-Stufe2 (v0.97.19, 2026-05-13): Statik-Mess-Pipeline (Phase 3) komplett
+entfernt. Die Ratio-Berechnung uebernimmt jetzt der
+``DynamicDiversityController`` (Live-Mess slot-fuer-slot, 5er-Schiebepuffer).
 
-  Der ``scoring_mode`` ("normal"/"dx") bestimmt aktuell nur die Sammlungs-
-  strategie der Aufrufer (Standard sammelt alle Stationen, DX nur SNR<-10);
-  intern wird in beiden Modi der gleiche Score gemessen.
+Hier verbleibt:
+- Modul-Helper ``compute_slot_score()`` und ``evaluate_ratio()`` (von
+  Dynamic-Pipeline genutzt).
+- ``DiversityController``: Pattern-Generator fuer 50:50/70:30/30:70 RX-
+  Antennenwechsel und CQ-Frequenz-Such-System (Histogramm + Sticky-Gap +
+  graduelle Lücken-Toleranz).
 
-Auswertung: Median ueber Slot-Scores (6-Slot fair 3:3), Schwelle 8 % rel.
-Differenz → 70:30 bzw. 30:70, sonst 50:50.
+NICHT mehr hier: Mess-Phase, _phase-State-Machine, _measurements, 1h-Re-
+Mess-Frist, MessStatusDialog-Coupling, Settings-Toggle.
 """
 
 import statistics
-import time
 from typing import Optional
 
 
-# ── Modul-Helper (P34): von Statik UND Dynamic genutzt ────────────────
+# ── Modul-Helper (P34): von DynamicDiversityController genutzt ───────
 
 def compute_slot_score(messages) -> float:
     """Score eines Slots: sum(max(0, snr+30)) ueber Stationen mit snr > -20.
 
-    Identische Formel wie in ``mw_cycle._handle_diversity_measure``
-    (Z.239-241). Beide Pipelines (statische DiversityController,
-    DynamicDiversityController) rufen diese Funktion auf — eine Formel,
-    zwei Aufrufer.
+    Identische Formel wie historisch in der Statik-Mess-Phase. Wird seit
+    P34-Stufe2 ausschliesslich von ``DynamicDiversityController`` (via
+    ``mw_cycle._on_cycle_decoded``) aufgerufen.
     """
     valid = [m for m in (messages or [])
              if m.snr is not None and m.snr > -20]
@@ -38,8 +38,7 @@ def evaluate_ratio(median_a1: float, median_a2: float,
                     min_peak: float = 5.0) -> tuple[str, Optional[str]]:
     """Verhaeltnis-Entscheidung aus 2 Medianen.
 
-    Gleicher Algorithmus wie ``DiversityController._evaluate()``
-    (Z.537-562). Liefert ``(ratio, dominant)``:
+    Liefert ``(ratio, dominant)``:
       - "50:50", None  → Differenz < threshold oder peak <= min_peak
       - "70:30", "A1"  → ANT1 dominiert
       - "30:70", "A2"  → ANT2 dominiert
@@ -54,41 +53,23 @@ def evaluate_ratio(median_a1: float, median_a2: float,
 
 
 class DiversityController:
-    """Periodische Antennen-Messung fuer Diversity-Modus.
+    """Antennen-Pattern-Generator + CQ-Frequenz-Such.
 
-    Ablauf:
-    - MESS-PHASE  (6 Zyklen): 3×A1 + 3×A2 messen
-    - BETRIEB     (60 Zyklen ≈ 15 Min): 70:30 oder 50:50
-    - Nach 60 Zyklen ohne aktives QSO → neu messen
-    Scoring: Modus-abhaengig (Normal=Stationsanzahl, DX=Top-5-SNR)
-    Schwelle: 8% relative Differenz → 50:50, sonst 70:30
+    P34-Stufe2: Reine Betriebs-Logik. KEINE Statik-Mess-Phase mehr. Die
+    Felder ``ratio`` und ``dominant`` werden vom
+    ``DynamicDiversityController`` (Live-Mess) gesetzt.
     """
 
-    MEASURE_CYCLES = 6   # 3×A1 + 3×A2 (~1,5 Min Fenster, je even+odd pro Antenne)
-    THRESHOLD = 0.08     # 8% relative Differenz fuer Antennen-Entscheidung
-    # Score-Mindest-Peak: unter dem Wert (sehr schwacher Empfang) wird auf
-    # 50:50 zurueckgefallen statt zwischen knappen Differenzen zu entscheiden.
-    # 5.0 entspricht ~1 Station bei SNR -25 oder ~0.3 Stationen bei SNR -10.
-    MIN_PEAK_SCORE = 5.0
-    # Adaptiv-Stop Phase 3 (v0.91 Block 2 #8)
-    EARLY_STOP_FRACTION = 2 / 3   # nach 2/3 von MEASURE_CYCLES pruefen
-    EARLY_STOP_THRESHOLD = 0.15   # 15% rel. Differenz, ~2× THRESHOLD=8%
-    # Such-Periode SLOT-SYNCHRON: pro Modus N Slots = ~60s (DeepSeek/Internet-Konsens)
+    THRESHOLD = 0.08     # 8% relative Differenz fuer Ratio-Entscheidung
+    MIN_PEAK_SCORE = 5.0  # Score-Mindest-Peak fuer Ratio-Entscheidung
+    # Such-Periode SLOT-SYNCHRON: pro Modus N Slots = ~60s
     _SEARCH_INTERVAL_SLOTS = {"FT8": 4, "FT4": 8, "FT2": 16}
     _CYCLE_S = {"FT8": 15.0, "FT4": 7.5, "FT2": 3.8}
     # 67:33 Pattern (6 Slots, endlos nahtlos wiederholbar)
     # A2 bekommt abwechselnd Even+Odd durch Einzelslots an Pos 2+5
     # Max 2 hintereinander, kein Sprung am Loop-Uebergang
-    _PAT_70_A1 = ("A1","A1","A2","A1","A1","A2")  # 4×A1, 2×A2 = 67:33
-    _PAT_70_A2 = ("A2","A2","A1","A2","A2","A1")  # 4×A2, 2×A1 = 67:33
-
-    def __init__(self, scoring_mode: str = "normal"):
-        self._scoring_mode = scoring_mode  # "normal" oder "dx"
-        # P34: Dynamic-Pipeline Hooks
-        self._dynamic_active = False
-        self._scoring_mode_listeners: list = []  # Callable[[str], None]
-        self.reset()
-        self.set_mode("FT8")  # Default — von mw_radio.py spaeter ueberschrieben
+    _PAT_70_A1 = ("A1", "A1", "A2", "A1", "A1", "A2")  # 4×A1, 2×A2 = 67:33
+    _PAT_70_A2 = ("A2", "A2", "A1", "A2", "A2", "A1")  # 4×A2, 2×A1 = 67:33
 
     # CQ-Frequenzwahl: 50-Hz-Histogramm der belegten Subfrequenzen
     FREQ_BIN_HZ = 50         # Bin-Breite in Hz
@@ -96,6 +77,11 @@ class DiversityController:
     FREQ_MAX_HZ = 2800       # Absolute Obergrenze (Hardware-Sicherheit)
     FREQ_MIN_GAP_HZ = 150    # Mindestbreite einer freien Lücke
     SEARCH_MARGIN_BINS = 0   # KEINE Erweiterung — Suchbereich exakt min..max der Stationen
+
+    def __init__(self, scoring_mode: str = "normal"):
+        self._scoring_mode = scoring_mode  # "normal" oder "dx"
+        self.reset()
+        self.set_mode("FT8")  # Default — von mw_radio.py spaeter ueberschrieben
 
     @property
     def scoring_mode(self) -> str:
@@ -105,74 +91,32 @@ class DiversityController:
     @scoring_mode.setter
     def scoring_mode(self, mode: str):
         if mode in ("normal", "dx"):
-            old = self._scoring_mode
             self._scoring_mode = mode
-            # P34: Listener-Callbacks bei Wechsel benachrichtigen
-            if old != mode:
-                for cb in self._scoring_mode_listeners:
-                    try:
-                        cb(mode)
-                    except Exception as exc:
-                        print(f"[Diversity] scoring_mode listener error: {exc}")
-
-    # P34: Dynamic-Pipeline-Status (von DynamicDiversityController gesetzt)
-    @property
-    def dynamic_active(self) -> bool:
-        """True wenn DynamicDiversityController gerade aktiv ist.
-        Unterdrueckt statische Re-Mess (siehe should_remeasure)."""
-        return self._dynamic_active
-
-    @dynamic_active.setter
-    def dynamic_active(self, value: bool):
-        self._dynamic_active = bool(value)
 
     def reset(self):
-        self._phase = "measure"
-        self._measure_step = 0
-        self._measurements: dict[str, list[float]] = {"A1": [], "A2": []}
-        self._operate_cycles = 0
+        """Histogramm + CQ-Such-Counter + Ratio auf Initialwerte.
+
+        P34-Stufe2: kein _phase / _measurements / _last_measured_at mehr.
+        """
         self.ratio = "50:50"
         self.dominant = None   # "A1", "A2", oder None
-        self._freq_histogram = {}  # bin_idx → Anzahl Stationen (sync aus station_accumulator)
-        self._cq_freq_hz: Optional[int] = None  # Letzte berechnete CQ-Frequenz
-        self._current_gap_width_hz: int = 0     # Sticky-State: Breite der aktuellen Lueck
-        self._search_slots_remaining = 4        # Slot-Counter (default FT8 = 4)
-        self._recalc_count = 0                  # Zaehler: wie oft wurde CQ-Freq neu berechnet
-        self._was_early_stopped = False         # Adaptiv-Stop-Flag (Cache-Schutz, v0.91 #8)
-        self._last_measured_at: Optional[float] = None  # Zeit-Frist (v0.93, gesetzt in _evaluate)
+        self._operate_cycles = 0
+        self._freq_histogram = {}  # bin_idx → Anzahl Stationen
+        self._cq_freq_hz: Optional[int] = None
+        self._current_gap_width_hz: int = 0
+        self._search_slots_remaining = 4  # Slot-Counter (default FT8 = 4)
+        self._recalc_count = 0  # Zaehler: wie oft wurde CQ-Freq neu berechnet
 
-    def can_measure(self, station_count: int = 0) -> bool:
-        """Phase 3 darf immer starten (v0.93).
-
-        Frueher: ``>= MIN_MEASURE_STATIONS = 5`` blockte FT2-Pipelines mit
-        duenner Stations-Dichte. Mit Score-basiertem Median (Mod 4) und
-        ``MIN_PEAK_SCORE``-Fallback in ``_evaluate`` ist die Schwelle
-        intrinsisch — kein Pre-Block mehr noetig. Aufrufer-Kompatibilitaet
-        (``station_count``-Argument) bleibt erhalten, wird ignoriert.
-        """
-        return True
-
-    @property
-    def _early_stop_at(self) -> int:
-        """Step ab dem Frueh-Stop geprueft wird (2/3 von MEASURE_CYCLES).
-
-        FT8: 4, FT4: 8, FT2: 16. Bei FT4/FT2 effektiv wirkungslos wegen
-        Pattern-Periode 6 — Pre-Condition len(m1)==len(m2) verhindert Stop.
-        Akzeptabel da Hobby-Use 99% FT8 (siehe record_measurement-Doc).
-        """
-        return int(self.MEASURE_CYCLES * self.EARLY_STOP_FRACTION)
+    def on_operate_cycle(self):
+        """Pro Betriebszyklus aufrufen — inkrementiert Pattern-Counter."""
+        self._operate_cycles += 1
 
     def choose(self) -> str:
-        """Antenne fuer den naechsten Zyklus waehlen.
+        """Antenne fuer den naechsten Zyklus (50:50/70:30/30:70 Pattern).
 
-        In der Mess-Phase bekommt jede Antenne mindestens ein zusammenhaengendes
-        Even+Odd-Paar (A1: Slots 0-1, A2: Slots 2-3) damit beide Paritaeten
-        empfangen werden. Slots 4-5 sind Singles (A1=even, A2=odd) zur
-        Aufrundung 3:3.
+        P34-Stufe2: nur noch Operate-Pattern (Mess-Phase existiert nicht
+        mehr).
         """
-        if self._phase == "measure":
-            # Mess-Pattern: A1,A1,A2,A2,A1,A2 — fair 3:3, Even+Odd-Paar je Antenne
-            return ("A1","A1","A2","A2","A1","A2")[self._measure_step % 6]
         if self.ratio == "70:30":
             return self._PAT_70_A1[self._operate_cycles % 6]
         if self.ratio == "30:70":
@@ -443,177 +387,3 @@ class DiversityController:
             'gap_start_hz': gap_start_hz,
             'gap_end_hz': gap_end_hz,
         }
-
-    def record_measurement(self, ant: str, score: float,
-                           station_count: int = 0, avg_snr: float = -30.0,
-                           dx_weak_count: int = 0):
-        """Score nach Messzyklus einpflegen — evaluiert nach MEASURE_CYCLES Messungen.
-
-        Args:
-            ant: "A1" oder "A2"
-            score: ``sum(snr+30)`` ueber alle dekodierten Stationen des Slots —
-                kontinuierlicher Wert, treibt die Messung (v0.93).
-            station_count: Legacy-Argument, wird ignoriert.
-            avg_snr: Legacy-Argument, wird ignoriert.
-            dx_weak_count: Legacy-Argument, wird ignoriert.
-
-        Adaptiv-Stop (v0.91 #8): Nach 2/3 der Mess-Phase pruefen ob rel_diff
-        bereits klar (>=15%). Spart ~30s bei eindeutigen Verhaeltnissen.
-
-        Cancel-Schutz: record_measurement wird vom mw_cycle/mw_radio-Pfad
-        bei Cancel/Phase-Wechsel nicht mehr aufgerufen (Phase=operate gesetzt).
-        Daher kein internes _cancelled-Flag noetig.
-
-        FT4/FT2-Hinweis: Mess-Pattern hat Periode 6. Bei FT4 (MEASURE_CYCLES=12,
-        early_stop_at=8) ergibt sich 5:3 Verteilung statt balanciert — Pre-
-        Condition len(m1)==len(m2) verhindert Stop. Effektiv profitiert nur
-        FT8 von #8. Akzeptabel da Hobby-Use 99% FT8 (R1-bestaetigt).
-        """
-        if self._phase != "measure":
-            return
-
-        # Score (sum(snr+30)) speichern — kontinuierlich, robust auch bei
-        # 1-2 Stationen pro Slot (FT2-Dichte). Ersetzt die diskreten
-        # station_count/dx_weak_count Werte aus v0.92 (R1 Mod 4).
-        self._measurements[ant].append(float(score))
-
-        self._measure_step += 1
-
-        # Adaptiv-Stop Phase 3 (v0.91 Block 2 #8) — nur wenn balanciert
-        if (self._measure_step == self._early_stop_at
-                and len(self._measurements["A1"]) == len(self._measurements["A2"])
-                and len(self._measurements["A1"]) >= 2):
-            if self._check_phase3_early_stop():
-                return  # _evaluate wurde in _check aufgerufen
-
-        if self._measure_step >= self.MEASURE_CYCLES:
-            self._evaluate()
-
-    def _check_phase3_early_stop(self) -> bool:
-        """Pruefen ob rel-Differenz >=15% nach 2/3 der Mess-Phase.
-
-        Bei Stop: _was_early_stopped=True, _evaluate() aufgerufen, ratio +
-        dominant gesetzt. mw_cycle.py darf save_ratio() bei diesem Flag NICHT
-        aufrufen (Cache-Schutz R1.4) — Adaptiv-Stop-Ratios sollen nicht
-        persistiert werden weil sie auf weniger Messdaten basieren.
-
-        Returns: True wenn Stop, False sonst.
-        """
-        m1 = self._measurements["A1"]
-        m2 = self._measurements["A2"]
-        s1 = statistics.median(m1)
-        s2 = statistics.median(m2)
-        peak = max(s1, s2)
-        if peak <= self.MIN_PEAK_SCORE:
-            return False
-
-        rel_diff = abs(s1 - s2) / peak
-
-        import time
-        ts = time.strftime("%H:%M:%S")
-
-        if rel_diff < self.EARLY_STOP_THRESHOLD:
-            print(f"[{ts}] [Diversity] Adaptiv-Stop-Check nach {self._measure_step} Zyklen — "
-                  f"rel_diff={rel_diff:.1%} < {self.EARLY_STOP_THRESHOLD:.0%} → weiter")
-            return False
-
-        # Stop! _evaluate triggern + Flag setzen
-        print(f"[{ts}] [Diversity] Adaptiv-Stop nach {self._measure_step} Zyklen — "
-              f"rel_diff={rel_diff:.1%} >= {self.EARLY_STOP_THRESHOLD:.0%}, ~30s gespart, NICHT gecached")
-        self._was_early_stopped = True
-        self._evaluate()
-        return True
-
-    def on_operate_cycle(self):
-        """Pro Betriebszyklus aufrufen."""
-        if self._phase == "operate":
-            self._operate_cycles += 1
-
-    # Re-Measure-Frist (v0.93): atmosphaerisch korrekt, modus-unabhaengig
-    REMEASURE_INTERVAL_SECONDS = 3600  # 1 Stunde
-
-    def should_remeasure(self, qso_active: bool, cq_active: bool = False) -> bool:
-        """True → DiversityController will neu messen.
-
-        Args:
-            qso_active: laufendes QSO blockt Remeasure (TX-Slots gebraucht)
-            cq_active: laufender CQ-Ruf blockt ebenfalls (R1 Mod 3)
-
-        Logik:
-            - P34 Dynamic AN → IMMER False (Dynamic uebernimmt, keine Statik-Mess)
-            - phase muss "operate" sein
-            - Pause (qso/cq) blockt
-            - Frist: time.time() - _last_measured_at >= REMEASURE_INTERVAL_SECONDS
-            - Defensiv (R1-Hinweis V3): _last_measured_at None → True (App-Start)
-        """
-        if self._dynamic_active:   # P34: Dynamic AN → keine Statik-Re-Mess
-            return False
-        if self._phase != "operate":
-            return False
-        if qso_active or cq_active:
-            return False
-        if self._last_measured_at is None:
-            return True
-        return (time.time() - self._last_measured_at) >= self.REMEASURE_INTERVAL_SECONDS
-
-    def start_measure(self):
-        self._phase = "measure"
-        self._measure_step = 0
-        self._measurements = {"A1": [], "A2": []}
-        self._was_early_stopped = False  # Cache-Schutz Flag bei Re-Measure ruecksetzen
-
-    def on_band_change(self):
-        """Bandwechsel → Neueinmessung starten."""
-        self.reset()
-        print("[Diversity] Bandwechsel — Neueinmessung gestartet (6 Zyklen)")
-
-    @property
-    def phase(self) -> str:
-        return self._phase
-
-    @property
-    def measure_step(self) -> int:
-        """Bereits abgeschlossene Messschritte (0..MEASURE_CYCLES)."""
-        return self._measure_step
-
-    @property
-    def operate_cycles(self) -> int:
-        """Bereits abgeschlossene Betriebszyklen seit letzter Messung."""
-        return self._operate_cycles
-
-    @property
-    def seconds_until_remeasure(self) -> int:
-        """Sekunden bis zum naechsten zeit-basierten Re-Measure (v0.93).
-
-        0 = ueberfaellig (Re-Measure beim naechsten freien Slot).
-        Vor erster Messung (``_last_measured_at`` None) → 0.
-        """
-        if self._last_measured_at is None:
-            return 0
-        elapsed = time.time() - self._last_measured_at
-        return max(0, int(self.REMEASURE_INTERVAL_SECONDS - elapsed))
-
-    def _evaluate(self):
-        # Pre-v0.90 Mess-Pattern war 4xA1 + 2xA2 (struktureller Bias zu ANT1).
-        # Seit v0.90 fair 3:3 — Median-Robustheit beider Antennen gleich.
-        # P34: Refactor auf Modul-Helper evaluate_ratio (gleiche Logik fuer
-        # Statik + Dynamic). Verhalten unveraendert.
-        m1 = self._measurements["A1"]
-        m2 = self._measurements["A2"]
-
-        s1 = statistics.median(m1) if m1 else 0.0
-        s2 = statistics.median(m2) if m2 else 0.0
-        new_ratio, new_dominant = evaluate_ratio(
-            s1, s2, threshold=self.THRESHOLD, min_peak=self.MIN_PEAK_SCORE
-        )
-        self.ratio = new_ratio
-        self.dominant = new_dominant
-        self._phase = "operate"
-        self._operate_cycles = 0
-        self._last_measured_at = time.time()  # v0.93: 1h-Frist-Anker
-        mode_tag = "DX" if self._scoring_mode == "dx" else "Normal"
-        peak = max(s1, s2)
-        diff = abs(s1 - s2) / peak if peak > 0 else 0.0
-        print(f"[Diversity] Messung ({mode_tag}): A1={s1:.1f} A2={s2:.1f} "
-              f"diff={diff:.3f} (>{self.THRESHOLD:.0%}?) → {self.ratio} "
-              f"(dominant: {self.dominant}, Werte: A1={m1} A2={m2})")

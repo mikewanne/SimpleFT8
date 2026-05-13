@@ -1,24 +1,21 @@
 """SimpleFT8 DynamicDiversityController — Live-Antennen-Verhaeltnis-Anpassung.
 
-P34 (v0.97.0, 2026-05-11). ENTWEDER-ODER zur statischen DiversityController-
-Pipeline:
-- Toggle AUS → Statik laeuft, DynamicDiversityController._active=False
-- Toggle AN  → Dynamic uebernimmt, Statik-Re-Mess unterdrueckt
+P34-Stufe2 (v0.97.19, 2026-05-13): einziger Pfad fuer Ratio-Bestimmung.
+Statik-Mess-Pipeline (DiversityController._phase, _measurements,
+should_remeasure, MessStatusDialog, Settings-Toggle) komplett entfernt.
 
 Slot-fuer-Slot-Erfassung in 5er-Schiebepuffer pro Antenne. Auswertung nach
 jedem Slot (sobald beide Puffer voll, je 5 Werte). Schwelle 8% identisch
-zur Statik. Median-basiert (robust gegen Ausreisser).
+zum frueheren Statik-Verfahren. Median-basiert (robust gegen Ausreisser).
 
-Lifecycle (verbindlich):
-- activate()     → _active=True, 50:50-Reset, Buffer leer, ggf. Statik-Mess abbrechen
-- deactivate()   → _active=False, Ratio bleibt, _last_measured_at refresh
+Lifecycle:
+- activate()     → _active=True, Buffer leer (P35-AK5 Cache-Reuse-Respekt)
+- deactivate()   → _active=False, Ratio bleibt
 - record_slot(ant, score) → in Buffer schieben, ggf. _evaluate()
-- reset()        → Buffer leer, Ratio 50:50 (bei Band/Mode/scoring-Wechsel)
+- reset()        → Buffer leer + Ratio 50:50 (bei Band/Mode/scoring-Wechsel)
 
 Thread-Safety: threading.Lock schuetzt Buffer + Active-Flag. Signal-Emit
 mit Qt.QueuedConnection an GUI-Thread.
-
-Verbindliche Spec: prompts/p34_diversity_dynamic_v3.md
 """
 from __future__ import annotations
 
@@ -26,8 +23,6 @@ import collections
 import logging
 import statistics
 import threading
-import time
-from typing import Optional
 
 from PySide6.QtCore import QObject, Signal
 
@@ -61,10 +56,9 @@ class DynamicDiversityController(QObject):
             "A2": collections.deque(maxlen=self.BUFFER_SIZE),
         }
         self._active = False
-        # P34: scoring_mode-Wechsel → automatisch reset
-        diversity_ctrl._scoring_mode_listeners.append(
-            lambda mode: self.reset()
-        )
+        # P34-Stufe2: scoring_mode-Wechsel-Reset wird in
+        # mw_radio._activate_diversity_with_scoring explizit getriggert
+        # (kein Listener-System mehr in DiversityController).
 
     # ── Public API ────────────────────────────────────────────────────
 
@@ -72,37 +66,22 @@ class DynamicDiversityController(QObject):
         return self._active
 
     def activate(self) -> None:
-        """Toggle AUS→AN: Buffer leer, ggf. Statik-Mess abbrechen.
+        """Aktivieren: Buffer leer.
 
-        AK4: Falls Statik gerade in Phase=measure laeuft, wird sie sofort
-        abgebrochen (Phase→operate, _last_measured_at refresh). Mike-Field-
-        Erwartung: sofortige Reaktion auf Toggle, keine 60s Wartezeit.
+        **P35-AK5 (Cache-Reuse-Respekt):** Ratio wird NUR auf 50:50
+        zurueckgesetzt wenn aktuell auch 50:50 (oder None). Bei
+        `_enable_diversity` ist V3-Default 50:50 — diese Defensive bleibt
+        fuer den Fall dass ein anderer Aufrufer (Tests, externe Hooks)
+        activate() mit bestehendem Ratio aufruft.
 
-        **P35-AK5 (R1-Q4 KRITISCH):** Ratio wird NUR auf 50:50 zurueckgesetzt
-        wenn aktuell auch 50:50 (oder None). Ein Cache-Reuse-Ratio
-        (70:30/30:70) bleibt erhalten — Dynamic startet damit, fuellt
-        Buffer leer, und ueberschreibt erst nach 5+5 Slots wenn evaluate
-        eine andere Entscheidung trifft. Mike-Use-Case: Diversity DX mit
-        Cache 70:30 -> Toggle AN soll 70:30 behalten, nicht auf 50:50
-        zurueckwerfen.
-
-        Hinweis: GUI-Lock-Aufhebung (_set_cq_locked etc) macht der Toggle-
-        Handler im main_window — dieser Controller weiss nichts vom GUI.
+        Hinweis: GUI-Lock-Aufhebung macht der Aufrufer in mw_radio —
+        dieser Controller weiss nichts vom GUI.
         """
         with self._lock:
             self._active = True
             self._buffer["A1"].clear()
             self._buffer["A2"].clear()
-            self._diversity_ctrl.dynamic_active = True
-            # AK4: Statik-Mess-Phase abbrechen
-            if self._diversity_ctrl.phase == "measure":
-                self._diversity_ctrl._phase = "operate"
-                self._diversity_ctrl._last_measured_at = time.time()
-                logger.info("[Dynamic] Statik-Mess-Phase abgebrochen "
-                            "(Toggle AN waehrend measure)")
-                debug_log("DYNAMIC", "Statik-Mess-Phase abgebrochen")
             # P35-AK5: Ratio nur resetten wenn 50:50 (oder None).
-            # Cache-Reuse-Ratio (70:30/30:70) bleibt erhalten.
             current_ratio = self._diversity_ctrl.ratio
             if current_ratio in (None, "50:50"):
                 self._diversity_ctrl.ratio = "50:50"
@@ -115,22 +94,12 @@ class DynamicDiversityController(QObject):
         logger.info("[Dynamic] Aktiviert (Buffer leer)")
 
     def deactivate(self) -> None:
-        """Toggle AN→AUS: aktuelles Ratio bleibt stehen, _last_measured_at
-        refresh.
-
-        AK5 + Mike-B-Option: _last_measured_at = time.time() verhindert
-        dass die Statik direkt nach Toggle-AUS in eine sofortige Re-Mess
-        rutscht. Das aktuelle (Dynamic-gesetzte) Verhaeltnis ist ja
-        vernuenftig — neue 1h-Frist startet jetzt.
-        """
+        """Deaktivieren: aktuelles Ratio bleibt stehen."""
         with self._lock:
             self._active = False
-            self._diversity_ctrl.dynamic_active = False
-            self._diversity_ctrl._last_measured_at = time.time()  # Mike B-Option
             _ratio = self._diversity_ctrl.ratio
-        logger.info("[Dynamic] Deaktiviert (Ratio bleibt, Statik-Frist refresht)")
-        debug_log("DYNAMIC",
-                  f"deactivate -> ratio={_ratio} bleibt, Statik-Frist refresht")
+        logger.info("[Dynamic] Deaktiviert (Ratio bleibt)")
+        debug_log("DYNAMIC", f"deactivate -> ratio={_ratio} bleibt")
 
     def reset(self) -> None:
         """Buffer leer + 50:50. Bei Band/Modus/scoring-Wechsel.

@@ -1,15 +1,20 @@
 """SimpleFT8 PresetStore — Separate JSON-Datei pro Diversity-Modus.
 
-Speichert Gain-Kalibrierung + Diversity-Ratio pro Band+FTMode.
+P34-Stufe2 (v0.97.19, 2026-05-13): nur noch Gain-Kalibrierung. Ratio-API
+entfernt — die Ratio-Bestimmung uebernimmt ``DynamicDiversityController``
+live im Betrieb.
+
+Speichert Gain-Kalibrierung pro Band+FTMode.
 Standard → ~/.simpleft8/kalibrierung/presets_standard.json
 DX       → ~/.simpleft8/kalibrierung/presets_dx.json
 
-Zwei Validity-Fenster (v0.93):
+Validity:
   - Gain  → 6 h (Hardware-Eigenschaft des RX-Verstaerkers)
-  - Ratio → 1 h (atmosphaerische Antennen-Charakteristik)
 
-Migration: alte Caches mit nur 'timestamp' werden beim Load auf beide
-Felder (gain_timestamp + ratio_timestamp) gespiegelt.
+Migration: alte Caches mit nur 'timestamp' werden beim Load auf
+gain_timestamp gespiegelt. Alte ratio/dominant/ratio_timestamp-Felder
+bleiben unangetastet drin (silent ignore, nicht mehr ausgewertet) — 1×
+Info-Log pro Key bei Load.
 """
 
 import json
@@ -24,7 +29,6 @@ from typing import Optional
 CONFIG_DIR = Path.home() / ".simpleft8"
 CALIB_DIR  = CONFIG_DIR / "kalibrierung"
 GAIN_VALIDITY_SECONDS  = 6 * 3600  # 6 Stunden (Hardware-Verstaerker)
-RATIO_VALIDITY_SECONDS = 3600      # 1 Stunde (atmosphaerisch)
 # Backwards-Compat-Alias fuer externe Importe (Default = Gain)
 VALIDITY_SECONDS = GAIN_VALIDITY_SECONDS
 
@@ -78,8 +82,8 @@ class PresetStore:
 
     @staticmethod
     def _migrate_timestamps_in_entry(entry: dict) -> None:
-        """v0.92 → v0.93 Migration: alter 'timestamp' wird auf beide neuen
-        Felder gespiegelt. Idempotent — wenn 'gain_timestamp' schon existiert,
+        """v0.92 → v0.93 Migration: alter 'timestamp' wird auf gain_timestamp
+        gespiegelt. Idempotent — wenn 'gain_timestamp' schon existiert,
         bleibt der Eintrag unangetastet.
 
         Mutiert das entry-dict in-place. Der alte 'timestamp'-Key bleibt drin
@@ -90,8 +94,7 @@ class PresetStore:
         old_ts = entry.get("timestamp")
         if old_ts is None:
             return  # nichts zu migrieren
-        entry["gain_timestamp"]  = old_ts
-        entry["ratio_timestamp"] = old_ts
+        entry["gain_timestamp"] = old_ts
 
     # ── Laden / Speichern ────────────────────────────────────────────────────
 
@@ -103,7 +106,7 @@ class PresetStore:
             except Exception:
                 self._data = {}
         for key, entry in self._data.items():
-            # v0.93 Migration: alter 'timestamp' → gain_timestamp + ratio_timestamp
+            # v0.93 Migration: alter 'timestamp' → gain_timestamp
             self._migrate_timestamps_in_entry(entry)
             band_fmt = self._format_band(key)
             ant1     = entry.get("ant1_gain", "?")
@@ -113,6 +116,10 @@ class PresetStore:
             age_str  = f"{age} Min." if age is not None else "?"
             print(f"[Kalibrierung] Geladen: {band_fmt} {self._mode_label} — "
                   f"ANT1={ant1}dB ANT2={ant2}dB (gemessen {measured}, {age_str} alt)")
+            # P34-Stufe2 (R1-F5): 1×-Info-Log pro Key wenn Ratio-Reste drin
+            if "ratio" in entry or "ratio_timestamp" in entry or "dominant" in entry:
+                print(f"[PresetStore] Ratio-Felder in {band_fmt} {self._mode_label} "
+                      f"ignoriert (Dynamic-Pipeline uebernimmt das Verhaeltnis live)")
 
     def _save_locked(self) -> None:
         """Atomic Write via tempfile + os.replace (P22, P2-Pattern).
@@ -157,32 +164,15 @@ class PresetStore:
             return self._data.get(self._key(band, ft_mode))
 
     def is_valid_gain(self, band: str, ft_mode: str) -> bool:
-        """True wenn Gain-Kalibrierung vorhanden UND < 6h alt UND ratio
-        existiert.
+        """True wenn Gain-Kalibrierung vorhanden UND < 6h alt.
 
-        P22: Half-State-Reject. Diese Methode ist fuer Diversity-Stores
-        gedacht — wenn `ratio`-Feld fehlt, ist der Eintrag halb-fertig
-        (Phase 2 done, Phase 3 brach ab) und darf nicht als „kalibriert"
-        gelten. Normal-Mode-Presets nutzen settings.normal_presets, nicht
-        diese Methode.
+        P34-Stufe2: kein ratio-Check mehr (Ratio uebernimmt Dynamic live).
         """
         with self._lock:
             entry = self._data.get(self._key(band, ft_mode))
         if not entry or "gain_timestamp" not in entry:
             return False
-        if "ratio" not in entry:                # P22 Half-State-Reject
-            return False
         return (time.time() - entry["gain_timestamp"]) < GAIN_VALIDITY_SECONDS
-
-    def is_valid_ratio(self, band: str, ft_mode: str) -> bool:
-        """True wenn Diversity-Ratio vorhanden UND < 1h alt."""
-        with self._lock:
-            entry = self._data.get(self._key(band, ft_mode))
-        if not entry or "ratio_timestamp" not in entry:
-            return False
-        if "ratio" not in entry:
-            return False
-        return (time.time() - entry["ratio_timestamp"]) < RATIO_VALIDITY_SECONDS
 
     def get_gain_age_minutes(self, band: str, ft_mode: str) -> Optional[int]:
         """Alter der Gain-Kalibrierung in Minuten oder None."""
@@ -191,14 +181,6 @@ class PresetStore:
         if not entry or "gain_timestamp" not in entry:
             return None
         return self._age_minutes_from_timestamp(entry["gain_timestamp"])
-
-    def get_ratio_age_minutes(self, band: str, ft_mode: str) -> Optional[int]:
-        """Alter der Diversity-Ratio in Minuten oder None."""
-        with self._lock:
-            entry = self._data.get(self._key(band, ft_mode))
-        if not entry or "ratio_timestamp" not in entry:
-            return None
-        return self._age_minutes_from_timestamp(entry["ratio_timestamp"])
 
     # ── Backwards-Compat (v0.92-API, leitet auf Gain-Variante) ──────────────
 
@@ -249,35 +231,6 @@ class PresetStore:
               f"ANT1={ant1_gain}dB ANT2={ant2_gain}dB")
         return True
 
-    def save_ratio(self, band: str, ft_mode: str, *,
-                   ratio: str, dominant: Optional[str]) -> bool:
-        """Diversity-Ratio ergänzen (setzt ratio_timestamp → 1h-Frist).
-
-        P22-R1-K3: returnt False bei Disk-Fehler statt Exception bis in
-        den GUI-Thread.
-        """
-        key = self._key(band, ft_mode)
-        with self._lock:
-            old_entry = self._data.get(key)
-            entry = dict(old_entry or {})
-            entry["ratio"]           = ratio
-            entry["dominant"]        = dominant or "A1"
-            entry["ratio_timestamp"] = time.time()
-            self._data[key]          = entry
-            try:
-                self._save_locked()
-            except Exception as exc:
-                if old_entry is None:
-                    self._data.pop(key, None)
-                else:
-                    self._data[key] = old_entry
-                print(f"[PresetStore] save_ratio Disk-Fehler {key}: {exc}")
-                return False
-        band_fmt = self._format_band(key)
-        print(f"[Kalibrierung] Ratio gespeichert: {band_fmt} {self._mode_label} "
-              f"→ {ratio} (dominant: {dominant or 'A1'})")
-        return True
-
     # ── P22 Atomic Stage / Commit / Discard ─────────────────────────────
 
     def stage_gain(self, band: str, ft_mode: str, *,
@@ -285,9 +238,9 @@ class PresetStore:
                    ant1_avg: float = 0.0, ant2_avg: float = 0.0) -> None:
         """P22: Phase-2-Werte in Memory parken. KEIN Disk-Write.
 
-        Werte landen erst auf Disk wenn `commit_with_ratio` aufgerufen
-        wird (Phase 3 erfolgreich) oder werden via `discard_staged`/
-        `discard_all_staged` verworfen (Cancel, App-Quit, Adaptiv-Stop).
+        Werte landen erst auf Disk wenn ``commit_gain`` aufgerufen wird
+        oder werden via ``discard_staged``/``discard_all_staged``
+        verworfen (Cancel, App-Quit, Adaptiv-Stop).
         """
         key = self._key(band, ft_mode)
         with self._lock:
@@ -302,14 +255,8 @@ class PresetStore:
         print(f"[Kalibrierung] Staged (Memory): {band_fmt} {self._mode_label} — "
               f"ANT1={ant1_gain}dB ANT2={ant2_gain}dB")
 
-    def commit_with_ratio(self, band: str, ft_mode: str, *,
-                          ratio: str, dominant: Optional[str]) -> bool:
-        """P22: staged Gain + Ratio atomar persistieren.
-
-        R1-K1: Staged wird erst nach erfolgreichem Disk-Write entfernt —
-        bei Disk-Fehler bleibt der staged-Eintrag erhalten und der
-        in-memory entry wird zurueckgerollt.
-        R1-K3: Exception wird gefangen, returnt False.
+    def commit_gain(self, band: str, ft_mode: str) -> bool:
+        """P34-Stufe2: staged Gain atomar persistieren.
 
         Returns:
             True bei Erfolg.
@@ -324,11 +271,8 @@ class PresetStore:
             old_entry = self._data.get(key)
             entry = dict(old_entry or {})
             entry.update(staged)
-            entry["gain_timestamp"]  = now
-            entry["ratio"]           = ratio
-            entry["dominant"]        = dominant or "A1"
-            entry["ratio_timestamp"] = now
-            entry["measured"]        = time.strftime("%Y-%m-%d %H:%M")
+            entry["gain_timestamp"] = now
+            entry["measured"]       = time.strftime("%Y-%m-%d %H:%M")
             self._data[key] = entry
             try:
                 self._save_locked()
@@ -338,14 +282,13 @@ class PresetStore:
                     self._data.pop(key, None)
                 else:
                     self._data[key] = old_entry
-                print(f"[PresetStore] commit_with_ratio Disk-Fehler "
+                print(f"[PresetStore] commit_gain Disk-Fehler "
                       f"{key}: {exc}. Staged bleibt erhalten.")
                 return False
             # Erst nach erfolgreichem Disk-Write staged entfernen
             self._staged.pop(key, None)
         band_fmt = self._format_band(key)
-        print(f"[Kalibrierung] Atomar committed: {band_fmt} {self._mode_label} — "
-              f"Gain+Ratio={ratio} (dominant: {dominant or 'A1'})")
+        print(f"[Kalibrierung] Atomar committed: {band_fmt} {self._mode_label} — Gain")
         return True
 
     def discard_staged(self, band: str, ft_mode: str) -> bool:
@@ -407,20 +350,8 @@ class PresetStore:
                 self._data[key] = existing
                 migrated += 1
 
-            for raw_key, entry in settings_data.get("diversity_presets", {}).items():
-                if not isinstance(entry, dict):
-                    continue
-                key = self._normalize_key(raw_key)
-                if not key:
-                    continue
-                existing = dict(self._data.get(key) or {})
-                existing["ratio"]           = entry.get("ratio", "50:50")
-                existing["dominant"]        = entry.get("dominant", "A1")
-                # Ratio aus Migration: timestamp aus altem Eintrag oder konservativ alt
-                existing["ratio_timestamp"] = entry.get(
-                    "timestamp", time.time() - RATIO_VALIDITY_SECONDS - 1
-                )
-                self._data[key] = existing
+            # P34-Stufe2: diversity_presets-Migration entfernt — Ratio wird
+            # live von DynamicDiversityController bestimmt, nicht migriert.
 
             if migrated:
                 self._save_locked()
