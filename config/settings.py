@@ -57,8 +57,6 @@ DEFAULTS = {
     "band": "20m",
     "mode": "FT8",
     "auto_mode": False,
-    "audio_freq_hz": 1500,
-    "max_decode_freq": 3000,
     "max_calls": 99,
     "tune_power": 10,
     "diversity_operate_cycles": 80,  # 80/160/240 — Betriebszyklen bis Neueinmessung
@@ -99,6 +97,10 @@ class Settings:
                 self._data.update(saved)
             except (json.JSONDecodeError, IOError):
                 pass
+        # P47: tote Frequenz-Keys aus alten Configs entfernen (v0.97.11+).
+        # Idempotent — Dict-Pop ist No-op bei fehlendem Key.
+        self._data.pop("audio_freq_hz", None)
+        self._data.pop("max_decode_freq", None)
         self._migrate_bandpilot_settings_v088()
 
     def _migrate_bandpilot_settings_v088(self):
@@ -166,14 +168,6 @@ class Settings:
         mode = self._data["mode"].lower()
         return BAND_FREQUENCIES.get(band, {}).get(mode, 14.074)
 
-    @property
-    def audio_freq_hz(self):
-        return self._data["audio_freq_hz"]
-
-    @property
-    def max_decode_freq(self):
-        return self._data["max_decode_freq"]
-
     # ── Gain Presets (getrennt: Standard + DX) ───────────────────
 
     def get_dx_preset(self, band: str, mode: str = None) -> dict | None:
@@ -222,7 +216,7 @@ class Settings:
         Spinbox-Aenderung gespeichert. Default 1500 Hz (WSJT-X-Default).
         """
         per_band = self._data.get("normal_tx_freq_per_band", {})
-        return int(per_band.get(band, self._data.get("audio_freq_hz", 1500)))
+        return int(per_band.get(band, 1500))
 
     def save_normal_tx_freq(self, band: str, freq_hz: int):
         """TX-Frequenz fuer Band speichern (Normal-Modus, manuelle Auswahl)."""
