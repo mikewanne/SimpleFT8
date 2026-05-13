@@ -5,6 +5,72 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-13 — P30 Diagnose-Auswertung: Wurzel war TTS, nicht SimpleFT8
+
+**12,5h Beobachtung mit Memory-Watcher + DIAG-Code (SimpleFT8 v0.97.9):**
+
+| Zeit | RSS | Aktivität |
+|---|---|---|
+| 15:09 Start | 235 MB | Normal-Modus, App-Init |
+| 17:09 | 291 MB | Diversity-Switch (+56 MB einmalig) |
+| 19:10 | 315 MB | Diversity-Plateau erreicht |
+| 21:11–03:14 (10h) | **316 MB konstant** | über Nacht |
+| 03:44 | **311 MB** | sogar leichte Abnahme |
+
+→ **Diagnose-Ergebnis:** SimpleFT8 ist **kerngesund**. Über 8 Stunden
+konstanter Diversity-Modus zeigt **0 MB Memory-Wachstum** und **0 Skip-
+Events** im Decoder. R1-bestätigter Verdacht `_audio_buffer_24k` Skip-
+Bug existiert im Code, **triggert aber bei Mike's Setup NIE**.
+
+**Tatsächliche Wurzel des 124-GB-Crashs:**
+
+Qwen3-TTS-Server (`com.simpleft8.tts-server` LaunchAgent) hält 2 chinesische
+Sprachmodelle (Qwen3-TTS-12Hz-1.7B-Base-8bit + CustomVoice-8bit) als
+memory-mapped Files im RAM. Mike's Activity-Monitor zeigte 5,96 GB für
+diesen Python-Prozess. Über mehrere Tage Laufzeit + Multi-Stimm-
+Anfragen → unbegrenzter Aufbau bis 128 GB → System-Freeze.
+
+**Mike-Entscheidung 13.05.:** Qwen3-TTS wird **nur on-demand** für
+Hörbuch-Vertonung verwendet (siehe Mike's Roman-Projekt). Permanenter
+Autostart abgeschafft.
+
+**Umsetzung 13.05. ~03:50:**
+
+1. **TTS LaunchAgent persistent deaktiviert:**
+   - `launchctl disable gui/$UID/com.simpleft8.tts-server`
+   - Plist umbenannt: `com.simpleft8.tts-server.plist` → `.plist.DISABLED`
+   - → wird beim Login NICHT mehr automatisch geladen, überlebt Reboot
+   - Reaktivierung 1 Befehl: `.DISABLED`-Suffix entfernen + `launchctl
+     load` + `launchctl enable`
+
+2. **Memory-Watcher gestoppt aber jederzeit reaktivierbar:**
+   - `tools/memory_watcher.py` bleibt im Repo
+   - Aktueller Daemon (PID 81237) via `pkill` gestoppt
+   - Log archiviert: `~/.simpleft8/memory_watch_2026-05-12_bis_2026-05-13_03-45.log`
+     (98 KB, 12,5h Daten — sauberer Beweis kein-Leak)
+   - Reaktivierung 1 Befehl: `nohup ./venv/bin/python3 tools/memory_watcher.py &`
+
+3. **P30-Diagnose-Code bleibt im Decoder** (v0.97.8-Einbau):
+   - Opt-in via `SIMPLEFT8_DECODER_DIAG=1`, default AUS = 0 Overhead
+   - Falls SimpleFT8 unter Spezialbedingungen doch mal leakt: 1 Env-
+     Variable + Neustart reicht für Re-Diagnose
+   - Code dauerhaft drin, kein Rückbau
+
+4. **Statistiken + PDFs neu generiert:**
+   - `auswertung/Auswertung-20m-FT8.pdf` (334 KB)
+   - `auswertung/Auswertung-40m-FT8.pdf` (325 KB)
+   - `auswertung/en/Report-20m-FT8.pdf` (324 KB)
+   - `auswertung/en/Report-40m-FT8.pdf` (316 KB)
+   - Plus Bandpilot-Empfehlungen-MDs
+
+**Files geändert:**
+- `~/Library/LaunchAgents/com.simpleft8.tts-server.plist` → `.DISABLED`
+- `~/.simpleft8/memory_watch.log` → archiviert mit Datumsspanne
+
+**Files unverändert (App-Code):** Keine.
+
+---
+
 ## 2026-05-12 v0.97.9 — P45 Stats-Guard für OMNI-CQ
 
 **Bug:** `_log_stats` in `ui/mw_cycle.py` blockierte korrekt manuelles
