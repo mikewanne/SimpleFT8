@@ -1,5 +1,46 @@
 # HANDOFF — SimpleFT8
 
+## Stand 2026-05-13 spätnachmittags: v0.97.20 P50 — Bänder-Sichtbarkeit
+
+**Code:** v0.97.20 — User kann im Settings-Dialog (Tab „FT8 & Diversity")
+nicht benötigte Bänder abwählen. Neue API `Settings.get/set_enabled_bands`
+mit defensiver Filterung. UI: 3×3-QCheckBox-Raster, Min-1-Logik (letzte
+aktive Checkbox geblockt), Reset-Button setzt alle 9 zurück. ControlPanel
+`set_visible_bands` mit R1-F1-current_band-Guarantee + R1-F2-Prop-Bar-
+mitverstecken. MainWindow `apply_visible_bands` wird beim App-Start und
+nach Settings-Apply gerufen.
+
+**Bandpilot NICHT angefasst** — R1-Q1-Empfehlung war Halluzination,
+`recommend_for_hour()` empfiehlt nur RX-MODI (Normal/Std/DX) auf
+aktuellem Band, keine Band-Wechsel.
+
+**Tests:** **1155 grün** (1144 vor P50 + 11 neue P50-Tests T1-T11).
+**Backup:** `Appsicherungen/2026-05-13_v0.97.19_vor_p50_bands_visibility/`.
+**Workflow:** V1→V2 (B1-B10 + 8 Fragen)→R1 7/10 (2 KRITISCH + 2 SOLLTE)
+→V3 (14 ACs)→Code (6 atomare Commits)→Final-R1 „Push freigegeben".
+**Push:** pending bis Mike's Field-Test-OK.
+
+### Field-Test-Checkliste F1-F8 (Mike nach App-Restart)
+
+| # | Test | Erwartung |
+|---|---|---|
+| **F1** | Settings → Tab „FT8 & Diversity" | „Sichtbare Bänder"-Block sichtbar, alle 9 angekreuzt |
+| **F2** | 60m + 80m abwählen → Speichern | Band-Panel zeigt 7 Bänder + Lücken in Zeile 2 |
+| **F3** | Settings nochmal → App-Restart | 60m/80m noch abgewählt |
+| **F4** | Alle bis auf 1 abwählen | Letzte Checkbox disabled + Tooltip „Mindestens ein Band muss aktiv sein" |
+| **F5** | 20m aktiv, 20m abwählen → OK | 20m bleibt sichtbar (R1-F1 current_band-Guarantee) |
+| **F6** | 60m aktiv mit deaktivierten Bändern → Propagation-Update | Keine Geister-Pulse auf versteckten Bändern (R1-F2) |
+| **F7** | Reset-Button in Settings | Alle 9 Checkboxen wieder angekreuzt |
+| **F8** | settings.json prüfen | `enabled_bands`-Key vorhanden nur wenn User Toggle gemacht hat |
+
+### Vorgänger-Field-Tests pending
+
+- v0.97.19 P34-Stufe2 — F1-F10 (Statik-Pipeline raus)
+- v0.97.18 Toast-Bundle — Medaillen 🥇🥈🥉
+- v0.97.17 P46 Bandpilot Normal-Reintegration
+
+---
+
 ## Stand 2026-05-13 nachmittags: v0.97.19 P34-Stufe2 — Statik-Pipeline raus
 
 **Code:** v0.97.19 — Statik-Ratio-Pipeline (Phase 3 Mess, 90 s UI-Sperre,

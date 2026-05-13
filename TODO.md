@@ -1,4 +1,4 @@
-# SimpleFT8 TODO — Stand 13.05.2026 (v0.97.15, Bundle C fertig)
+# SimpleFT8 TODO — Stand 13.05.2026 (v0.97.20, P50 Bänder-Sichtbarkeit fertig)
 
 > **Mike-Regel 07.05.2026:** Offene Aufgaben gehoeren AUSSCHLIESSLICH
 > in diese Datei. Nicht in CLAUDE.md, nicht in HANDOFF.md. Diese Datei
@@ -8,9 +8,12 @@
 
 # 🟢 STATUS-ÜBERSICHT (für neue Session)
 
-**Aktuelle Version:** v0.97.15 (13.05.2026)
-**Tests:** 1217 grün
-**App-Stand:** Bundle C (P10 PSK-Backoff-Reset + P13 RX-Panel-Slot-Times)
+**Aktuelle Version:** v0.97.20 (13.05.2026)
+**Tests:** 1155 grün
+**App-Stand:** P50 Bänder-Sichtbarkeit (Settings-Toggle) ERLEDIGT, Field-Test
+F1-F8 pending. Davor: P34-Stufe2 Statik-Pipeline raus (v0.97.19), Toast-
+Bundle (v0.97.18), P46 Bandpilot Normal-Reintegration (v0.97.17), P14 DT-
+Symmetrie (v0.97.16), Bundle C P10+P13 (v0.97.15)
 ERLEDIGT, Field-Test 5 Punkte pending. Bundle B' (P32+P33) zuvor
 erledigt (Field-Test pending). Veraltete Punkte aus TODO bereinigt:
 - **P29 OMNI-CQ-Parity-Trennung** war seit 11.05.2026 commit `5498f0d`
@@ -19,6 +22,26 @@ erledigt (Field-Test pending). Veraltete Punkte aus TODO bereinigt:
   (Encoder.target_tx_offset_s aus tx_buffer_s).
 - **P24 Last-RX-Mode-Persist** widerspricht Mike's P35-Bug-F-Vision
   (App-Start IMMER 20m FT8 Normal). Nicht implementieren.
+
+## ✅ 13.05.2026 erledigt — P50 Bänder-Sichtbarkeit (v0.97.20)
+
+- **Mike-Wunsch:** im Settings-Dialog Bänder abwählbar damit sie aus dem
+  Band-Panel verschwinden
+- **Settings-API:** `Settings.get_enabled_bands()` + `set_enabled_bands(list)`
+  mit defensiver Filterung (kein String/nicht in BAND_FREQUENCIES/Duplikate)
+- **UI:** QGroupBox „Sichtbare Bänder" in Tab „FT8 & Diversity",
+  3×3-QCheckBox-Raster, Min-1-Logik (AC3), Reset setzt zurück
+- **ControlPanel.set_visible_bands** mit R1-F1 current_band-Guarantee +
+  R1-F2 Prop-Bar-mitverstecken
+- **MainWindow.apply_visible_bands** beim App-Start und nach Settings-Apply
+- **Bandpilot NICHT angefasst** — R1-Q1 war Halluzination (recommend
+  empfiehlt MODI, keine Bänder)
+- Voller Workflow V1→V2 (10 Findings)→R1 7/10 (2 KRITISCH + 2 SOLLTE)→V3
+  (14 ACs Compact-fest)→Code→Final-R1 0 KP „Push freigegeben"
+- 11 neue P50-Tests T1-T11 inkl. T5 F1 + T8 F2 + T10 S3
+- Tests 1144 → 1155 grün
+- Backup `Appsicherungen/2026-05-13_v0.97.19_vor_p50_bands_visibility/`
+- Push pending bis Mike's Field-Test F1-F8
 
 ## ✅ 13.05.2026 erledigt — Toast-Bundle (v0.97.18)
 

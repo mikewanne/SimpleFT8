@@ -5,6 +5,64 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-13 v0.97.20 — P50 Bänder-Sichtbarkeit (Settings-Toggle)
+
+Mike-Wunsch nach P34-Stufe2: nicht benötigte Bänder im Settings-Dialog
+abwählbar machen, damit sie aus dem Band-Panel verschwinden.
+
+**Neue Settings-API:**
+- `Settings.get_enabled_bands()` — defensiv gefilterte Liste, Default
+  alle 9 Bänder (idempotent, kein Migration-Eintrag).
+- `Settings.set_enabled_bands(list)` — Filter gegen `BAND_FREQUENCIES`,
+  Duplikat-Dedup, Empty-Fallback auf Default.
+
+**UI:**
+- Neue QGroupBox „Sichtbare Bänder" in Settings-Dialog Tab
+  „FT8 & Diversity", 3×3-QCheckBox-Raster (10/12/15, 17/20/30, 40/60/80).
+- Min-1-Logik (AC3): letzte aktive Checkbox wird `setEnabled(False)` +
+  Tooltip „Mindestens ein Band muss aktiv sein".
+- Reset-Button setzt alle 9 Checkboxen zurück (R1-S3).
+
+**ControlPanel:**
+- Neue `ControlPanel.set_visible_bands(list)` → delegiert an
+  `_ModeBandCard.set_visible_bands(bands, current_band)`.
+- `_ModeBandCard._band_visible: dict[str, bool]` — Map pro Band.
+- **R1-F1 (KRITISCH) current_band-Guarantee:** das aktuelle Band bleibt
+  sichtbar auch wenn nicht in der Liste. `_set_band()` hat zusätzlich
+  Override-Logik wenn extern (Auto-Hunt etc.) ein deaktiviertes Band
+  gesetzt würde.
+- **R1-F2 (KRITISCH) Prop-Bars mitversteckt:** `set_visible_bands`
+  schaltet `prop_bars[b].setVisible(False)` für deaktivierte Bänder.
+  `update_propagation()` respektiert `_band_visible` und blendet
+  deaktivierte Bars nicht heimlich wieder ein.
+
+**MainWindow:**
+- `apply_visible_bands()` — liest Settings, ruft
+  `control_panel.set_visible_bands(bands)`.
+- Aufruf 1: am __init__-Ende nach `_set_band(settings.band)`.
+- Aufruf 2: in `_on_settings_clicked()` nach `dialog.exec()` (Pull-
+  Pattern konsistent mit anderen Settings-Updates wie TX-Level).
+
+**Bandpilot-Filter NICHT umgesetzt** — R1's Q1-Empfehlung war eine
+Halluzination. `recommend_for_hour()` empfiehlt MODI (Normal/Std/DX)
+auf einem Band, NICHT Band-Wechsel. Bandpilot kann nie ein
+deaktiviertes Band „empfehlen". C5 + T11 gestrichen. Doku in
+`prompts/p50_bands_visibility_r1.md` aktualisiert.
+
+**Workflow:** V1→V2 (10 Schwachstellen B1-B10 + 8 offene Fragen Q1-Q8)
+→ R1 7/10 mit 2 KRITISCH + 2 SOLLTE + 1 KÖNNTE → V3 Compact-fest mit
+14 ACs + 11 Tests + 8 Field-Test-Punkte → Code in atomaren Commits
+→ Final-R1 0 KP „Push freigegeben".
+
+**Tests:** 1144 → 1155 (+11 P50-Tests T1-T11). T5 (R1-F1), T8 (R1-F2),
+T10 (R1-S3) decken die kritischen Findings ab.
+
+**Backup:** `Appsicherungen/2026-05-13_v0.97.19_vor_p50_bands_visibility/`.
+**Plan-Files:** `prompts/p50_bands_visibility_v[1,2,3]+r1.md`.
+**Field-Test pending:** F1-F8 (siehe V3 §5).
+
+---
+
 ## 2026-05-13 v0.97.19 — P34-Stufe2: Statik-Ratio-Pipeline komplett raus
 
 Mike's Strategie-Wechsel nach 2 Tagen erfolgreichem Dynamic-Field-Test:
