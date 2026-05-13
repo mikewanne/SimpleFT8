@@ -5,3 +5,4 @@ ntplib>=0.4
 # PyFT8 entfernt — ersetzt durch libft8simple.dylib (C, MIT License, kgoba/ft8_lib)
 pyserial>=3.5
 paho-mqtt>=2.0
+setproctitle>=1.3
