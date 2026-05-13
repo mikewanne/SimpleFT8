@@ -174,6 +174,34 @@ Diversity adressiert genau diesen Engpass — und der Zwei-Antennen-Effekt
 
 ![Warteliste QSO](docs/screenshots/warteliste_qso.png)
 
+**Smart Antenna Selection — Antennen-Präferenz pro Rufzeichen, live im Betrieb:**
+
+![Smart Antenna Selection](docs/screenshots/smart_antenna_selection.png)
+
+Während Diversity den globalen ANT1/ANT2-Rhythmus festlegt (70:30, 50:50 oder
+30:70), arbeitet **Smart Antenna Selection** als zweite, feinere Ebene: für
+jede Station lernt die App slot-für-slot welche Antenne besser hört und um
+wie viele dB — mit 1 dB Hysterese damit es bei grenzwertigen Signalen kein
+Ping-Pong gibt.
+
+- **① RX-Panel `Ant`-Spalte** zeigt die Präferenz pro Rufzeichen: `A1` =
+  nur ANT1 hört die Station, `A2>1` = ANT2 ist besser als ANT1 (und um wie
+  viele dB), `A1>2` umgekehrt. Im Screenshot sieht man ein gemischtes Bild —
+  Beweis dass die App nicht auf einem festen Verhältnis sitzt sondern jede
+  Station einzeln bewertet.
+
+- **② TX nutzt aktiv die bessere Antenne** — wenn ein QSO mit einer Station
+  startet, schaltet der TX automatisch auf die Antenne mit dem besseren
+  Empfang (hier: `(ANT2 ↑2.0 dB)` für IK4LZH). TX läuft immer über die
+  HF-taugliche Antenne (ANT1 auf dem SimpleFT8-Demosetup); bei Anlagen mit
+  zwei sendetauglichen Antennen wird für die Dauer des QSO die bessere
+  gewählt.
+
+Das Antennen-Gedächtnis hat keinen Timeout und keine Persistierung — eine
+Station die *jetzt gerade* hörbar ist liefert immer den präzisesten Wert.
+Kein anderer FT8-Client macht das: Diversity-Empfang und Pro-Rufzeichen-
+Antennenwahl in einem QSO zu vereinen ist einzigartig bei SimpleFT8.
+
 ---
 
 ## Kern-Innovationen

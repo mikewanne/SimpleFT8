@@ -61,7 +61,7 @@ stations across app restarts. Fire it up, make a few QSOs, call it a day.
   - **Standard**: Counts total decoded stations — best for CQ operation (maximize QSOs)
   - **DX**: Counts weak stations (SNR < -10 dB) — best for DX hunting (Australia at -24 dB counts, local at +12 dB doesn't)
   - 8% threshold, median over 3 cycles per antenna (6-slot fair 3:3), 70:30 or 50:50 ratio. Button shows "DIVERSITY DX" when in DX mode.
-  - **Antenna Memory (learning)**: Every decode cycle, the system records per callsign which antenna heard it better and by how many dB. When you start a QSO with that callsign, the best antenna is selected automatically — overlaying the global Diversity rhythm for the duration of the QSO. No timeout, no persistence: a station you can hear *right now* is always the most precise value. The QSO panel shows "Calling DL3AQJ (ANT2, +6.3 dB)".
+  - **Antenna Memory (learning)**: Every decode cycle, the system records per callsign which antenna heard it better and by how many dB. When you start a QSO with that callsign, the best antenna is selected automatically — overlaying the global Diversity rhythm for the duration of the QSO. No timeout, no persistence: a station you can hear *right now* is always the most precise value. The QSO panel shows "Calling DL3AQJ (ANT2, +6.3 dB)". → see [Smart Antenna Selection](#smart-antenna-selection--per-callsign-antenna-memory) for screenshot and details.
 
 - **Bandpilot (v0.88)** — On band change SimpleFT8 looks up the **current UTC hour** and compares the three RX modes (Normal / Diversity Standard / Diversity DX) directly — no aggregation. Three behaviour modes in settings: **Off** / **Auto** (3-second toast + auto-switch with 5% tolerance) / **Manual** (dialog appears only when a different mode wins). TX-protected: switch waits for `tx_finished`. Hourly thresholds: ≥3 days + ≥20 slots per mode. ⚠️ In field test.
 
@@ -78,6 +78,32 @@ stations across app restarts. Fire it up, make a few QSOs, call it a day.
 - **RR73 Courtesy Repeat** — After QSO complete, if the other station keeps sending R-Report (didn't receive our RR73), we resend RR73 automatically (max 2×).
 
 - **Even/Odd Slot Display** — [E]/[O] tags in both RX list and QSO panel. Immediately visible which slot each station uses and which slot we transmit in.
+
+### Smart Antenna Selection — Per-Callsign Antenna Memory
+
+![Smart Antenna Selection](docs/screenshots/smart_antenna_selection.png)
+
+While Diversity decides the global ANT1/ANT2 RX rhythm (70:30, 50:50 or 30:70),
+**Smart Antenna Selection** is the second, finer layer: for every station the
+app learns — slot by slot — which antenna heard it better and by how many dB,
+with a 1 dB hysteresis to prevent ping-pong on marginal signals.
+
+1. **① RX panel `Ant` column** — shows the live preference per callsign:
+   `A1` means ANT1 is the only one hearing the station, `A2>1` means ANT2 wins
+   over ANT1 (and by how many dB), `A1>2` the reverse. In one screenshot you
+   can see a mixed pattern — proof the app does not just sit on a fixed ratio
+   but evaluates every station individually.
+
+2. **② TX uses the better antenna actively** — when you start a QSO with a
+   station, the TX automatically switches to whichever antenna heard that
+   callsign best (here: `(ANT2 ↑2.0 dB)` for IK4LZH). TX always goes through
+   the RF-rated antenna (ANT1 on the SimpleFT8 demo setup); on rigs with two
+   transmit-capable antennas the better one is selected for the entire QSO.
+
+The memory has no timeout and no persistence — a station you can hear *right
+now* is always the most precise value. No other FT8 client does this:
+combining Diversity reception with per-callsign antenna decisions inside one
+QSO is unique to SimpleFT8.
 
 ### Live Diversity Analysis — Current Data *(collection in progress)*
 
