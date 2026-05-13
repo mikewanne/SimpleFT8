@@ -158,7 +158,12 @@ def test_setup_main_log_fallback_on_symlink_error(tmp_path, monkeypatch):
 
 @pytest.fixture
 def reset_ntp(monkeypatch):
-    """Frischer DT-Modul-State fuer deterministische Tests."""
+    """Frischer DT-Modul-State fuer deterministische Tests.
+
+    Hinweis: _DT_FILE-Disk-Schutz steht in tests/conftest.py
+    (autouse-Fixture, global fuer ALLE Tests). Hier nur der
+    Modul-State-Reset fuer die Dedup-Logik.
+    """
     import core.ntp_time as nt
     monkeypatch.setattr(nt, "_last_logged_load", None)
     monkeypatch.setattr(nt, "_saved", {})
