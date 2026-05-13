@@ -1,6 +1,22 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-12 abends: v0.97.9 P45 Stats-Guard OMNI-CQ (autonom durchgearbeitet)
+## Stand 2026-05-13 morgens: v0.97.10 P44 Statusbar DT-Korrektur-Bug gefixt
+
+**Code:** v0.97.10 — DT-Status jetzt als eigenes Permanent-Widget
+`_dt_indicator` rechts neben `_stats_indicator`. Vorher hat der globale
+`setStyleSheet` während DT-Korrektur die ganze Statusbar grün gefärbt.
+**Tests:** **1162 grün** (1160 + 2 P44).
+**Backup vor Code:** `Appsicherungen/2026-05-13_v0.97.9_vor_p44_dt_indicator/`.
+**Push:** gleich folgend.
+
+### Nächste mögliche Aufgaben (TODO)
+
+- **P46** Bandpilot Normal-Reintegration (2-3h Workflow, Mike+Claude+R1 einig)
+- **P47** Tote Frequenz-Settings + Statusbar-Filter-Anzeige entfernen
+  (Mike+Claude+R1 einig, 1-2h Workflow)
+- **P43** setproctitle für Activity-Monitor-Erkennbarkeit (30min)
+
+### Vorgänger-Stand (v0.97.9, 12.05.2026 abends)
 
 **Code:** v0.97.9 — OMNI-CQ wurde im `_log_stats` nicht abgefangen →
 Stats-Verfälschung während OMNI-RX-Slots. Jetzt eigener Guard-Block.

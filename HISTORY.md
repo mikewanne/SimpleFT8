@@ -5,6 +5,43 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-13 v0.97.10 — P44 Statusbar DT-Korrektur als eigenes Label
+
+**Bug:** `_update_statusbar()` setzte bei aktiver DT-Korrektur den
+**gesamten** Statusbar-`setStyleSheet` auf grünen Text — ALLE
+Statusbar-Texte wurden grün, nicht nur das DT-Stück. Trotz Kommentar
+„nur DT-Label gruen, Statusbar bleibt grau".
+
+**Fix:** DT-Status als eigenes Permanent-Widget `_dt_indicator` rechts
+in Statusbar **direkt neben `_stats_indicator`** (Mike's Vision:
+„konsistente UX — dynamische Indikatoren rechts"). Default grau, grün
+bei aktiver Mess-Phase. Globaler Statusbar-StyleSheet wird nicht mehr
+dynamisch gewechselt.
+
+**3 Diffs in `ui/main_window.py`:**
+- `__init__` Z.462: neues `_dt_indicator` QLabel + `addPermanentWidget`
+- `_update_statusbar()` Z.1079-1094: `setStyleSheet`-Block entfernt, ersetzt
+  durch `_dt_indicator.setText/setStyleSheet`
+- `_update_statusbar()` Z.1134: `{dt_text}` raus aus zentralem msg-Aufbau
+  (sonst Doppelanzeige)
+
+**Workflow:** V1→V2→R1→V3 voll durchgezogen. R1 hat V2 ohne Kritik
+abgesegnet („Alle Änderungen atomar und können mit den drei Diffs
+eingespielt werden").
+
+**Tests:** 1160 → **1162 grün** (+2 P44):
+- `test_dt_indicator_pattern_initial_grey`
+- `test_dt_indicator_correction_phase_green` (mit Bug-Schutz-Assertion
+  „Statusbar-StyleSheet wurde NICHT verändert")
+
+**Backup:** `Appsicherungen/2026-05-13_v0.97.9_vor_p44_dt_indicator/`
+**Plan-Files:** `prompts/p44_statusbar_dt_label_v[1,2,3]+r1.md`
+
+**Files modified:** `ui/main_window.py` (+17 LOC), `main.py` (APP_VERSION
+0.97.9 → 0.97.10). **Files new:** `tests/test_p44_dt_indicator.py` (+2 Tests).
+
+---
+
 ## 2026-05-13 — P30 Diagnose-Auswertung: Wurzel war TTS, nicht SimpleFT8
 
 **12,5h Beobachtung mit Memory-Watcher + DIAG-Code (SimpleFT8 v0.97.9):**

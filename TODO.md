@@ -62,6 +62,52 @@ P34 + P35 lokal gesammelt.
 | **P43** | App-Name + PID im Activity Monitor sichtbar machen via `setproctitle` | 30min |
 | **P44** | Statusbar DT-Korrektur grün-Bug: nur DT-Label gruen, nicht ganzer Statusbar-Text (eigenes QLabel via addPermanentWidget) | 1h Workflow |
 | **P46** | Bandpilot Normal wieder reinholen → 3-Wege-Vergleich Normal/Std/DX | 2-3h Workflow |
+| **P47** | Tote Frequenz-Settings + Statusbar-Filter-Anzeige entfernen (Mike+Claude+R1 einig) | 1-2h Workflow |
+
+## 📋 P47.TOTE-FREQUENZ-SETTINGS-ENTFERNEN (Mike+Claude+R1 13.05.2026)
+
+**Konsens:** Beide Frequenz-Settings + Statusbar-Anzeige raus.
+
+**Begründung (R1-Originalton):**
+
+> „Tote Settings sind toter Code und verletzen das Prinzip der geringsten
+> Überraschung. Steuerbarkeit vortäuschen, die nicht existiert."
+
+**Was entfernt wird:**
+
+1. **TX Audio-Frequenz** (Setting + UI-Eingabe + Default-Wert)
+   - Wird vom CQ-Such-Algorithmus eh dynamisch überschrieben
+   - File: `config/settings.py` (Key entfernen), `ui/settings_dialog.py`
+     (Eingabe-Feld Tab „FT8 Diversity" raus)
+
+2. **Max. Decode-Frequenz** (Setting + UI-Eingabe + Default-Wert)
+   - Beim Modus-Wechsel automatisch gesetzt (FT8/4 → 3000, FT2 → 4000)
+   - User-Eingabe wird sofort überschrieben
+   - Gleiche Files wie 1.
+
+3. **Statusbar-Anzeige „100-3100 Hz"**
+   - File: `ui/main_window.py` `_update_statusbar()` — `_FILTERS` Dict
+     + `filter_str`-Aufbau raus
+   - Auch der `filter_str`-Einsatz im Statusbar-Text
+
+**Migration alter Configs:**
+Keine eigene Migrationslogik nötig. Settings-Objekt ignoriert unbekannte
+Keys beim Laden, schreibt sie beim Save nicht zurück → alte
+`tx_audio_freq` / `max_decode_freq` werden stillschweigend weggespült.
+
+**Tests:**
+- Tests die explizit auf diese Settings testen müssen entfernt werden
+- grep `tx_audio_freq` und `max_decode_freq` über Tests-Verzeichnis
+- Settings-Smoke-Tests bleiben sonst grün
+
+**Aufwand:** 1-2h Workflow (V1→V2→R1→V3 + Code + Tests + Doku).
+
+**Risiko:** LOW — beide Settings sind ohnehin wirkungslos, kein
+Verhalten ändert sich für aktive Nutzung.
+
+**Plan-File: P47-Workflow wird bei Umsetzung angelegt.**
+
+---
 
 ## 📋 P46.BANDPILOT-NORMAL-REINTEGRATION (Mike+Claude+R1 12.05.2026)
 
