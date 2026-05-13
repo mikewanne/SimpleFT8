@@ -5,6 +5,147 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-13 v0.97.14 — Bundle B' (P32 RX-Panel-Spalten-Persist + P33 QSO-Komplett-Reihenfolge)
+
+Zwei voneinander unabhängige UI-Bugs als gemeinsames Bundle —
+hardware-frei, beide reine UI-Sachen, gemeinsamer Workflow
+V1→V2→R1→V3→Code→Final-R1.
+
+### P32 — RX-Panel-Spalten-Persist
+
+Bug: Spalten-Auswahl im RX-Panel (Rechtsklick auf Spaltenüberschrift)
+ging beim App-Restart verloren — Defaults „alle 9 Spalten sichtbar"
+kamen zurück.
+
+Fix:
+- `ui/rx_panel.py` neuer Konstruktor-Param `hidden_cols: list[int]`
+  mit defensiver Filterung (Range-Check + Typ-Check + COL_MSG-Schutz)
+- `ui/rx_panel.py` neues Signal `hidden_cols_changed = Signal(list)`,
+  von `_toggle_column` emittiert nach jedem User-Klick
+- `ui/main_window.py` Settings-Load via `hidden_cols=settings.get(
+  "rx_panel_hidden_cols", [])` + Signal-Connect
+- `ui/mw_qso.py` neuer Slot `_on_rx_hidden_cols_changed` persistiert
+  via `settings.set + save` (analog `_on_country_filter_changed`)
+- try/except um `settings.save()` (Final-R1 S-1) — bei Disk-voll/
+  Permissions bleibt RAM-State und Session-Toggle wirkt weiter
+
+### P33 — QSO-Komplett-Reihenfolge
+
+Bug: `✓ QSO mit X komplett`-Zeile erschien NACH der nächsten
+`→ Sende CQ ↻N`-Zeile statt davor, weil `qso_confirmed.emit` erst
+nach dem Courtesy-73-Send feuerte (mindestens 1 Slot nach 73-Empfang).
+
+```
+03:53:30 [E] ← Empf. EC3A 73       ← 73 empfangen (QSO done)
+03:54:00 [E] → Sende CQ DA1MHH ↻9  ← schon nächste OMNI-CQ
+         ✓ QSO mit EC3A komplett   ← KOMMT ERST HIER (Mike's Beschwerde)
+```
+
+Fix — 2-Signal-Split:
+- `core/qso_state.py` neues Signal `qso_confirmed_visual` neben
+  bestehendem `qso_confirmed`. Visual feuert SOFORT bei 73-Empfang
+  (in `on_message_received` WAIT_73-Branch) → UI-Update vor nächstem
+  CQ. Full-Signal `qso_confirmed` bleibt am Courtesy-Send-Ende
+  (`on_message_sent` TX_73_COURTESY) für alle anderen Operationen
+  (OMNI-Resume, Auto-Hunt-Reset, Logbuch-Refresh).
+- `core/qso_state.py:317` WAIT_73-Timeout emittiert visual + full
+  direkt nacheinander (kein Courtesy-Send in diesem Pfad).
+- `core/qso_state.py:658` Hypothetischer Doppelschutz-Pfad emittiert
+  visual + full beide 1×.
+- `ui/main_window.py:680` neuer Connect `qso_confirmed_visual →
+  _on_qso_confirmed_visual`
+- `ui/mw_qso.py:496-505` neuer Slot `_on_qso_confirmed_visual` —
+  ruft NUR `add_qso_complete` (UI-Update sofort)
+- `ui/mw_qso.py:507-535` bestehender `_on_qso_confirmed`-Slot
+  `add_qso_complete` RAUS — wurde in visual-Slot gerufen. Alle
+  anderen Ops (Logbuch, Auto-Hunt, OMNI-Resume) laufen weiter wie
+  bisher am Courtesy-Send-Ende.
+
+Mike-Erwartung jetzt:
+```
+03:53:30 [E] ← Empf. EC3A 73
+         ✓ QSO mit EC3A komplett   ← direkt nach 73-Empfang
+03:54:00 [E] → Sende CQ DA1MHH ↻9
+```
+
+### Wichtig: warum 2 Signale statt 1-mit-Parameter
+
+R1-V2-Finding-K1 schlug `qso_confirmed.emit(qso, visual_only=True)`
+vor. Abgelehnt — Signal-Signatur-Änderung würde alle bestehenden
+Subscriber brechen. Repo-Konvention ist 1 Signal pro semantischer
+Aktion (`qso_complete`, `qso_timeout` etc.). 2 separate Signale geben
+klare Semantik: „QSO visuell bestätigt" vs „QSO operativ fertig
+abgewickelt".
+
+### R1-Findings-Bilanz V2 → V3 → Final-R1
+
+V2-R1: 2 KRITISCH + 2 SOLLTE + 2 KOENNTE
+- KP-1: V2-Text widersprüchlich („visual.emit überall davor") —
+  korrigiert in V3 (visual NUR bei 73-Empfang + Timeout, NICHT bei
+  Courtesy-Send)
+- KP-2: WAIT_73-Timeout-Pfad explizit dokumentiert
+- S-1+S-2: Vollständige Code-Snippets in V3
+- K-1+K-2: Beide mit Begründung abgelehnt (2-Signal sauberer,
+  `hidden_cols` intuitivere Default-Semantik)
+
+Final-R1 (Code-Review nach Implementation): **„Push freigegeben"**
+- S-1: try/except um `settings.save()` — sofort gefixt
+- K-1: grep alle `add_qso_complete`-Aufrufer — nur 1 Live-Aufruf
+  bestätigt, kein doppelter Pfad
+
+### Tests
+
+`tests/test_p32_rx_panel_persist.py` NEU mit 6 Tests:
+- T1: hidden_cols aus Konstruktor → Spalten versteckt
+- T2: ungültige Werte (Range, Typ, COL_MSG) defensiv gefiltert
+- T3: `_toggle_column` emittet sortierte Liste
+- T5: Default `None` → alle 9 Spalten sichtbar
+- T4: COL_MSG=6 niemals versteckt (Bug-Schutz)
+- T6: Sichtbar-machen emittiert leere Liste
+
+`tests/test_p33_qso_complete_order.py` NEU mit 6 Tests:
+- T1: visual.emit 1× + full.emit 0× bei 73-Empfang
+- T2: full.emit 1× nach Courtesy-Send (kein 2. visual)
+- T3: WAIT_73-Timeout emittet visual + full in Reihenfolge
+- T4: visual genau 1× pro QSO
+- T5: Hypothetischer Doppelschutz-Pfad funktioniert
+- T6: Source-Level Bug-Schutz (beide Signale definiert)
+
+**Tests 1192 → 1204 grün** (+12, V3 prognostizierte 11 — +1 Bonus).
+
+### Backup
+
+`Appsicherungen/2026-05-13_v0.97.13_vor_bundle_b/` mit
+`ui/rx_panel.py`, `ui/main_window.py`, `ui/mw_qso.py`,
+`core/qso_state.py` Stand v0.97.13.
+
+### Plan-Files
+
+- `prompts/bundle_b_v1.md` — V1 Erstentwurf
+- `prompts/bundle_b_v2.md` — V2 Self-Review (entdeckte OMNI-Race in V1)
+- `prompts/bundle_b_r1.md` — DeepSeek-R1-Antwort
+- `prompts/bundle_b_v3.md` — V3 mit R1-Findings eingearbeitet
+- `prompts/bundle_b_final_r1.md` — Final-R1-Codereview
+
+### Lessons
+
+1. **R1-V2-Review fand Plan-Widerspruch** zwischen Erklärungs-Text und
+   Code-Snippet (visual.emit „überall davor" vs Snippet zeigt nur an
+   2 Stellen). Genau das wofür R1 da ist — Plan-Konsistenz prüfen.
+2. **2-Signal-Split sauberer als 1-Signal-mit-Parameter** wenn
+   semantische Trennung existiert (UI sofort vs operativ später).
+   KISS ist nicht „minimale Signal-Anzahl" sondern „klare Semantik".
+3. **OMNI-Resume-Path war Falle in V1.** Ohne genaues Lesen von
+   `_on_qso_confirmed`-Slot wäre Variante-A in V1 ein OMNI-Race
+   geworden. V2-Self-Review hat das gefangen — Workflow-Wert bestätigt.
+
+### Push
+
+3 atomare Commits geplant. Push pending bis Mike's Field-Test 4
+Punkte (F1-F4 aus V3 §Field-Test).
+
+---
+
 ## 2026-05-13 v0.97.13 — P48 DT-System aufräumen + tunen (4 Teile)
 
 Vier zusammenhängende Verbesserungen am DT-Korrektur-System, basierend

@@ -1,4 +1,4 @@
-# SimpleFT8 TODO — Stand 11.05.2026 (v0.97.1, P35 fertig)
+# SimpleFT8 TODO — Stand 13.05.2026 (v0.97.14, Bundle B' fertig)
 
 > **Mike-Regel 07.05.2026:** Offene Aufgaben gehoeren AUSSCHLIESSLICH
 > in diese Datei. Nicht in CLAUDE.md, nicht in HANDOFF.md. Diese Datei
@@ -8,11 +8,27 @@
 
 # 🟢 STATUS-ÜBERSICHT (für neue Session)
 
-**Aktuelle Version:** v0.97.1 (11.05.2026)
-**Tests:** 1129 grün
-**App-Stand:** P35.DIVERSITY-STARTUP-FIX Code fertig, Field-Test 8 Punkte
-pending. Push pending — v0.95.16 - v0.97.1 + P2-Tool + P3 + P21 + P26 +
-P34 + P35 lokal gesammelt.
+**Aktuelle Version:** v0.97.14 (13.05.2026)
+**Tests:** 1204 grün
+**App-Stand:** Bundle B' (P32 RX-Panel-Spalten-Persist + P33 QSO-Komplett-
+Reihenfolge) ERLEDIGT, Field-Test 4 Punkte pending. Veraltete Punkte
+aus TODO bereinigt:
+- **P29 OMNI-CQ-Parity-Trennung** war seit 11.05.2026 commit `5498f0d`
+  erledigt — TODO veraltet, jetzt bestätigt.
+- **P49 OMNI-Pretrigger** wurde durch P48 automatisch mit-erledigt
+  (Encoder.target_tx_offset_s aus tx_buffer_s).
+- **P24 Last-RX-Mode-Persist** widerspricht Mike's P35-Bug-F-Vision
+  (App-Start IMMER 20m FT8 Normal). Nicht implementieren.
+
+## ✅ 13.05.2026 erledigt
+
+| Version | Was |
+|---|---|
+| **v0.97.14** | **Bundle B'** — P32 RX-Panel-Spalten persistiert über App-Restart (Settings-Key `rx_panel_hidden_cols`, defensiv gefiltert + COL_MSG-Schutz, Signal-Pattern wie country_filter). P33 `✓ QSO komplett`-Zeile erscheint jetzt direkt nach 73-Empfang (vor nächstem CQ) — 2-Signal-Split `qso_confirmed_visual` SOFORT + `qso_confirmed` nach Courtesy-Send. V2-Self-Review fand OMNI-Race in V1-Variante-A. 12 neue Tests. Final-R1 „Push freigegeben". |
+| **v0.97.13** | **P48 DT-System aufräumen + tunen** (4 Teile) — A: Hardware-Werte in Settings `radio_timing` (`tx_buffer_s=1.3`, `rx_hardware_offset_default_s=0.26`), Encoder kriegt `tx_buffer_s`-Parameter, `TARGET_TX_OFFSET` weg. B: Cross-Modus-Fallback FT4/FT2→FT8 gleiches Band. C: Hardware-Default 0.26 als Kaltstart. D: Schnell-Konvergenz im 1. Slot bei ≥10 Stationen+Stddev<0.1. **Kritischer Bug-Fix**: `_is_initial = _saved.get(_mode_key()) is None` (R1-V2 Finding 1). 17 neue Tests + 3 angepasst. Final-R1 9.5/10, 0 KP. 7 atomare Commits gepusht. |
+| **v0.97.12** | **Bundle A (P43+P20+P18)** — setproctitle (Activity Monitor), Log-Rotation (datierte Tagesdateien + Symlink + 7-Tage-Cleanup + archive/), DT-Print-Dedup. Neues Modul `core/log_setup.py`. 8 neue Tests. Final-R1 „Push freigegeben". |
+| **v0.97.11** | **P47 Tote Frequenz-Settings** — `audio_freq_hz` + `max_decode_freq` raus (UI ohne Wirkung), Statusbar-Filter-Anzeige raus. Defaults hartcodiert. 5 neue Tests. |
+| **v0.97.10** | **P44 Statusbar DT-Label** — eigenes Permanent-Widget statt globaler setStyleSheet (kein grüner Statusbar-Hintergrund mehr). 2 neue Tests. |
 
 ## ✅ 11.05.2026 erledigt (v0.97.1)
 
@@ -45,9 +61,9 @@ P34 + P35 lokal gesammelt.
 | ID | Was | Aufwand |
 |---|---|---|
 | **P34-Stufe2** | Statik-Pipeline KOMPLETT entfernen (Dynamic wird Default). Erst nach mehreren Tagen erfolgreichem Field-Test der P34-Stufe1. Liste Code-Stellen siehe `prompts/p34_diversity_dynamic_v3.md` §8-Anhang. | 4-5h Workflow + eigene V1→V2→R1→V3 |
-| **P32** | RX-Panel Spalten-Konfiguration persistieren — Rechtsklick-Auswahl (km/dt/Land/...) bei App-Start wiederherstellen | 1h Lite |
-| **P33** | QSO-fertig-Meldung erscheint NACH nächster CQ-Zeile (Reihenfolge-Bug) — `✓ QSO komplett` sollte VOR `→ Sende CQ ↻N` im qso_panel stehen | 1-2h Workflow |
-| **P24** | App soll letzten RX-Mode (Normal/Std/DX) merken — heute startet immer Normal | 1h Lite |
+| ~~P32~~ | ~~RX-Panel Spalten-Konfiguration persistieren~~ ✅ **ERLEDIGT v0.97.14 Bundle B' (13.05.2026)** |
+| ~~P33~~ | ~~QSO-fertig-Meldung Reihenfolge-Bug~~ ✅ **ERLEDIGT v0.97.14 Bundle B' (13.05.2026)** |
+| ~~P24~~ | ~~Letzten RX-Mode merken~~ ❌ **VERWORFEN** — widerspricht Mike's P35-Bug-F-Vision (App-Start IMMER 20m FT8 Normal) |
 | **P10** | PSK-BACKOFF-RESET — Backoff von 60min auf 5min ODER Reset-Button | 1-2h |
 | **P14** | DT-WERTE-ASYMMETRISCH — NTP-Korrektur-Issue | 2h Diagnose |
 | **P13** | RX-PANEL-SLOT-TIMES — Wall-Time vs Slot-Boundary | 1-2h |
@@ -58,8 +74,8 @@ P34 + P35 lokal gesammelt.
 |---|---|---|
 | ~~P18~~ | ~~DT-KORR-3X-RELOAD~~ ✅ **ERLEDIGT v0.97.12 Bundle A (13.05.2026)** |
 | ~~P20~~ | ~~LOG-ROTATION simpleft8.log~~ ✅ **ERLEDIGT v0.97.12 Bundle A (13.05.2026)** |
-| **P29** | OMNI-CQ QSO-Panel-Anzeige: bei Paritäts-Wechsel (Even↔Odd) Leerzeile dazwischen + Even-Slot etwas dunklere Farbe (selber Farbton, nur ein wenig dunkler) zur optischen Unterscheidung | 1h |
-| **P49** | OMNI-Pretrigger aus Settings (P48-Followup): `core/omni_cq.py:_OMNI_PRETRIGGER_OFFSET_S = 1.3` ist letzte hartcodierte FlexRadio-Konstante, sollte aus `settings.tx_buffer_s` kommen für IC-7300-Fork-Kompat | 30min |
+| ~~P29~~ | ~~OMNI-CQ Paritäts-Anzeige Leerzeile + Even-Slot dunkler~~ ✅ **ERLEDIGT 11.05.2026** commit `5498f0d` (TODO war veraltet, verifiziert 13.05.) |
+| ~~P49~~ | ~~OMNI-Pretrigger aus Settings~~ ✅ **ERLEDIGT durch P48 v0.97.13** (OMNI nutzt Encoder.target_tx_offset_s aus tx_buffer_s, keine separate Konstante mehr) |
 | ~~P43~~ | ~~setproctitle für Activity-Monitor-Erkennbarkeit~~ ✅ **ERLEDIGT v0.97.12 Bundle A (13.05.2026)** |
 | ~~P44~~ | ~~Statusbar DT-Korrektur grün-Bug~~ ✅ **ERLEDIGT v0.97.10 (13.05.2026)** |
 | **P46** | Bandpilot Normal wieder reinholen → 3-Wege-Vergleich Normal/Std/DX | 2-3h Workflow |

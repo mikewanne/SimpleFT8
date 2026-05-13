@@ -1,5 +1,34 @@
 # HANDOFF — SimpleFT8
 
+## Stand 2026-05-13 nachts: v0.97.14 Bundle B' (P32 + P33)
+
+**Code:** v0.97.14 — Bundle B' mit 2 UI-Bugs:
+**P32 RX-Panel-Spalten-Persist** (Spalten-Auswahl via Rechtsklick
+bleibt jetzt über App-Restart hinweg; neuer Settings-Key
+`rx_panel_hidden_cols`, defensiv gegen ungültige Werte +
+COL_MSG-Schutz; persistiert via Signal-Pattern wie `country_filter`)
+und **P33 QSO-Komplett-Reihenfolge** (`✓ QSO mit X komplett`-Zeile
+erschien NACH nächstem CQ statt davor; Fix per 2-Signal-Split
+`qso_confirmed_visual` SOFORT bei 73-Empfang für UI + `qso_confirmed`
+nach Courtesy-Send für alle anderen Ops wie OMNI-Resume).
+**Tests:** **1204 grün** (1192 + 12 Bundle B).
+**Backup vor Code:** `Appsicherungen/2026-05-13_v0.97.13_vor_bundle_b/`.
+**Workflow:** V1→V2 (Self-Review fand OMNI-Race in V1-Variante-A)→R1
+(2 KP + 2 S + 2 K)→V3→Code→Final-R1 („Push freigegeben", 0 KP, 1 S
+sofort gefixt: try/except um settings.save).
+**Push:** 3 atomare Commits, gleich folgend.
+
+### Nächste Schritte (4-Punkte-Field-Test V3 §Field-Test)
+
+- **F1:** Spalten ausblenden, App-Quit, App-Start → bleiben aus
+- **F2:** Bei QSO `← Empf. X 73` und `✓ QSO mit X komplett` im
+  SELBEN Slot, BEVOR die nächste OMNI-CQ-Zeile
+- **F3:** Nach Courtesy-73-Send: OMNI resumed wie heute, kein
+  Doppel-Eintrag
+- **F4:** WAIT_73-Timeout (3 Slots ohne 73) → trotzdem ✓ ohne Hang
+
+---
+
 ## Stand 2026-05-13 abends: v0.97.13 P48 DT-System aufräumen + tunen
 
 **Code:** v0.97.13 — Vier zusammenhängende DT-Verbesserungen basierend
