@@ -525,6 +525,7 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
             my_call=self.settings.callsign,
             my_grid=self.settings.locator,
             country_filter=self.settings.get("country_filter", []),
+            hidden_cols=self.settings.get("rx_panel_hidden_cols", []),
         )
         self.qso_panel = QSOPanel()
         # Logbuch mit ADIF-Dateien laden (AdifWriter schreibt in adif/ Unterordner)
@@ -652,6 +653,7 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self.rx_panel.station_clicked.connect(self._on_station_clicked)
         self.rx_panel.rx_toggled.connect(self._on_rx_panel_toggled)
         self.rx_panel.country_filter_changed.connect(self._on_country_filter_changed)
+        self.rx_panel.hidden_cols_changed.connect(self._on_rx_hidden_cols_changed)
 
         # Control Panel
         self.control_panel.mode_changed.connect(self._on_mode_changed)
@@ -673,6 +675,9 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self.qso_sm.state_changed.connect(self._on_state_changed)
         self.qso_sm.send_message.connect(self._on_send_message)
         self.qso_sm.qso_complete.connect(self._on_qso_complete)
+        # P33 (v0.97.14): visual feuert sofort bei 73-Empfang fuer ✓-Anzeige,
+        # confirmed (full) feuert nach Courtesy-73-Send fuer alle weiteren Ops.
+        self.qso_sm.qso_confirmed_visual.connect(self._on_qso_confirmed_visual)
         self.qso_sm.qso_confirmed.connect(self._on_qso_confirmed)
         self.qso_sm.qso_timeout.connect(self._on_qso_timeout)
         self.qso_sm.tx_slot_for_partner.connect(self._on_tx_slot_for_partner)

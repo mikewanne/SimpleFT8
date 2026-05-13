@@ -98,7 +98,12 @@ class QSOStateMachine(QObject):
     state_changed = Signal(object)
     send_message = Signal(str)
     qso_complete = Signal(object)   # RR73 gesendet → ADIF loggen
-    qso_confirmed = Signal(object)  # 73 empfangen → ✓ anzeigen
+    # P33 (v0.97.14): qso_confirmed in 2 Signale gesplittet damit ✓ vor
+    # naechstem CQ im QSO-Panel erscheint. visual feuert sofort bei
+    # 73-Empfang (nur UI-Update), full feuert nach Courtesy-Send (alle
+    # weiteren Operationen wie OMNI-Resume).
+    qso_confirmed_visual = Signal(object)  # 73 empfangen → ✓ im UI sofort
+    qso_confirmed = Signal(object)         # nach Courtesy-Send → restliche Operationen
     qso_timeout = Signal(str)
     tx_slot_for_partner = Signal(object)  # CQ-Reply: msg mit _tx_even → Encoder soll Gegentakt setzen
     caller_queued = Signal(str)     # Station zur Warteliste hinzugefügt (call)
@@ -314,6 +319,9 @@ class QSOStateMachine(QObject):
             self.qso.timeout_cycles += 1
             if self.qso.timeout_cycles >= 3:
                 print(f"[QSO] WAIT_73 Timeout — kein 73 empfangen, QSO trotzdem komplett")
+                # P33 (v0.97.14): visual+full direkt nacheinander — kein
+                # Courtesy-Send in diesem Pfad, also nichts zu trennen.
+                self.qso_confirmed_visual.emit(self.qso)
                 self.qso_confirmed.emit(self.qso)
                 self._resume_cq_if_needed()
             return
@@ -484,6 +492,9 @@ class QSOStateMachine(QObject):
             # P1.10 Fix (v0.95.4): Courtesy-73 fertig gesendet.
             # qso_complete wurde bereits in TX_RR73 (oben) gefeuert — hier nur
             # qso_confirmed (UI „QSO ✓") + CQ resumen.
+            # P33 (v0.97.14): qso_confirmed_visual wurde bereits bei 73-Empfang
+            # in on_message_received gefeuert (UI-Update sofort). Hier NUR full,
+            # sonst Doppel-Eintrag im QSO-Panel.
             self._dbg.log("TX", "Courtesy-73 fertig → qso_confirmed + resume_cq")
             self.qso_confirmed.emit(self.qso)
             self._resume_cq_if_needed()
@@ -635,6 +646,11 @@ class QSOStateMachine(QObject):
         if self.state == QSOState.WAIT_73:
             if msg.is_73 or msg.is_rr73:
                 print(f"[QSO] 73 von {msg.caller} empfangen — QSO bestätigt!")
+                # P33 (v0.97.14): visual.emit SOFORT damit ✓ vor naechstem
+                # CQ-Slot im QSO-Panel sichtbar wird. Full-Emit erst nach
+                # Courtesy-73-Send (sonst OMNI-Resume + Auto-Hunt-Reset
+                # zu frueh).
+                self.qso_confirmed_visual.emit(self.qso)
                 if not self.qso.courtesy_73_sent:
                     # P1.10 Fix (v0.95.4): einmaliges Hoeflichkeits-73 zurueck.
                     # IC-7300 wartet auf abschliessendes 73 in seiner Auto-Sequence
@@ -650,11 +666,12 @@ class QSOStateMachine(QObject):
                     # Slot-Paritaet defensiv auf Gegentakt (R1 KP1 + Plan-R1 F2):
                     self.tx_slot_for_partner.emit(msg)
                     self.send_message.emit(tx_msg)
-                    # qso_confirmed.emit + _resume_cq_if_needed in on_message_sent
-                    # fuer TX_73_COURTESY (D3).
+                    # qso_confirmed (full) feuert in on_message_sent fuer
+                    # TX_73_COURTESY (D3).
                 else:
                     # Hypothetischer Doppelschutz — wir verlassen WAIT_73 sofort
-                    # nach erstem 73 (_set_state TX_73_COURTESY).
+                    # nach erstem 73 (_set_state TX_73_COURTESY). visual schon
+                    # oben gefeuert, hier nur full + resume.
                     self.qso_confirmed.emit(self.qso)
                     self._resume_cq_if_needed()
             elif msg.is_r_report and msg.caller == self.qso.their_call:

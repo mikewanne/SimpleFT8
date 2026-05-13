@@ -49,9 +49,11 @@ class RXPanel(QWidget):
     station_clicked = Signal(object)
     rx_toggled = Signal(bool)  # True=RX ON, False=RX OFF
     country_filter_changed = Signal(list)  # gefilterte Länder (für Settings)
+    hidden_cols_changed = Signal(list)  # P32: persistierte Spalten-Sichtbarkeit
 
     def __init__(self, my_call: str = "DA1MHH", my_grid: str = "JO31",
-                 country_filter: list = None):
+                 country_filter: list = None,
+                 hidden_cols: list = None):
         super().__init__()
         self._my_call = my_call
         self._my_grid = my_grid
@@ -63,8 +65,18 @@ class RXPanel(QWidget):
         self._active_call: str = ""  # Callsign der gerade aktiv angerufenen Station
         self._qso_log = None  # QSOLog fuer Worked-Before Filter
         self._locator_db = None  # LocatorDB fuer exakte km-Berechnung pro Call
-        self._hidden_cols: set = set()
+        # P32 (v0.97.14): defensive Filterung — Range-Check + COL_MSG-Schutz.
+        # Ungueltige Eintraege (out-of-range, falscher Typ, COL_MSG) werden
+        # stillschweigend verworfen statt Crash.
+        valid_hidden = []
+        for col in (hidden_cols or []):
+            if isinstance(col, int) and 0 <= col < COL_COUNT and col != COL_MSG:
+                valid_hidden.append(col)
+        self._hidden_cols: set = set(valid_hidden)
         self._setup_ui()
+        # P32: Spalten ausblenden NACH _setup_ui (table existiert dann).
+        for col in self._hidden_cols:
+            self.table.setColumnHidden(col, True)
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
@@ -510,6 +522,8 @@ class RXPanel(QWidget):
         else:
             self._hidden_cols.discard(col)
         self.table.setColumnHidden(col, hide)
+        # P32 (v0.97.14): persistieren via Signal an MainWindow.
+        self.hidden_cols_changed.emit(sorted(self._hidden_cols))
 
     def _update_sort_colors(self):
         """Aktive Sortierung im Spaltenkopf markieren (Farbe + ▾)."""

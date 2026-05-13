@@ -236,6 +236,18 @@ class QSOMixin:
         self.settings.set("country_filter", country_filter)
         self.settings.save()
 
+    def _on_rx_hidden_cols_changed(self, cols: list):
+        """P32 (v0.97.14): RX-Panel-Spalten-Sichtbarkeit persistieren.
+
+        Final-R1 S-1: try/except um save() — bei Disk-Voll/Permission-Error
+        bleibt RAM-State erhalten + Toggle in der Session wirkt weiter.
+        """
+        self.settings.set("rx_panel_hidden_cols", cols)
+        try:
+            self.settings.save()
+        except OSError as e:
+            print(f"[P32] settings.save fehlgeschlagen: {e}")
+
     @Slot()
     def _on_cq_clicked(self):
         if self.control_panel.btn_cq.isChecked():
@@ -489,19 +501,32 @@ class QSOMixin:
         _dbg("QSO-DONE", f"END total dt={_t.time()-_t0:.3f}s")
 
     @Slot(object)
+    def _on_qso_confirmed_visual(self, qso_data):
+        """P33 (v0.97.14): Schnell-Pfad bei 73-Empfang.
+
+        Nur UI-Update (✓ QSO komplett im Panel) — alle anderen
+        Operationen (logbook.refresh, OMNI-Resume, Auto-Hunt-Reset)
+        laufen weiter im _on_qso_confirmed-Slot nach Courtesy-73-Send.
+        Dadurch erscheint ✓ vor naechstem CQ im QSO-Panel.
+        """
+        self.qso_panel.add_qso_complete(qso_data.their_call)
+
+    @Slot(object)
     def _on_qso_confirmed(self, qso_data):
-        """73 empfangen — QSO wirklich komplett, ✓ anzeigen.
+        """73 empfangen UND Courtesy-Send fertig (oder WAIT_73-Timeout).
 
         11.05.2026 P28: Debug-Punkte mit Wallclock-Timing (Mike: "App
         haengt 1 Min nach QSO").
+        P33 (v0.97.14): add_qso_complete RAUS — wurde bereits in
+        _on_qso_confirmed_visual gefeuert. Hier alle Operationen die
+        NICHT vor Courtesy-Send laufen duerfen (OMNI-Resume etc.).
         """
         from core.debug_log import debug_log as _dbg
         import time as _t
         _t0 = _t.time()
         _dbg("QSO-CONF", f"START call={qso_data.their_call}")
 
-        self.qso_panel.add_qso_complete(qso_data.their_call)
-        _dbg("QSO-CONF", f"add_qso_complete dt={_t.time()-_t0:.3f}s")
+        # P33: add_qso_complete bereits in _on_qso_confirmed_visual — kein Aufruf hier!
 
         # Logbuch aktualisieren (neues QSO wurde in ADIF geschrieben)
         _t_step = _t.time()
