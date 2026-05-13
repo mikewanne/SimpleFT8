@@ -15,6 +15,15 @@ from pathlib import Path
 
 APP_VERSION = "0.97.11"
 
+# ── P43: Activity Monitor zeigt Prozess-Namen statt nur "Python" ──
+# Bei der P30-Memory-Leak-Diagnose 12.05. konnte Mike SimpleFT8 nicht
+# von Qwen3-TTS unterscheiden — beide erschienen als "Python".
+try:
+    import setproctitle
+    setproctitle.setproctitle(f"SimpleFT8 v{APP_VERSION}")
+except ImportError:
+    pass  # setproctitle ist optional — App laeuft auch ohne
+
 # ── Single-Instance-Lock — verhindert ZWEI gleichzeitige Apps ──
 # Mike-Anweisung 2026-05-05 (mehrfach!): nur EINE Instanz darf laufen.
 # Doppelte Instanzen ruinieren Statistik (doppelte Decoder-Eintraege),
@@ -26,10 +35,13 @@ _lock_fd = None  # globale fcntl-Lock-Datei, leben bis Prozess-Ende
 # Projektverzeichnis in den Python-Pfad aufnehmen
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-# ── File Logging: stdout+stderr in ~/.simpleft8/simpleft8.log ──────────────
+# ── File Logging mit Tages-Rotation (P20) ──────────────────────────────
+# simpleft8.log ist Symlink → simpleft8-YYYY-MM-DD.log (heute).
+# Logs >7 Tage werden automatisch geloescht; Mike's Pre-Rotation-
+# Historie landet dauerhaft in ~/.simpleft8/archive/.
+from core.log_setup import setup_main_log
 _LOG_DIR = Path.home() / ".simpleft8"
-_LOG_DIR.mkdir(parents=True, exist_ok=True)
-_log_file = open(_LOG_DIR / "simpleft8.log", "a", buffering=1)
+_log_path, _log_file = setup_main_log(_LOG_DIR)
 
 
 class _Tee:

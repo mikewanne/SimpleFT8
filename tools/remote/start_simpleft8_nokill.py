@@ -17,11 +17,17 @@ PROJECT = "/Users/mikehammerer/Documents/KI N8N Projekte/FT8/SimpleFT8"
 sys.path.insert(0, PROJECT)
 os.chdir(PROJECT)
 
-# File-Logging wie in main.py
+# P43: Activity Monitor zeigt "SimpleFT8 (Ferienhaus)" statt nur "Python".
+try:
+    import setproctitle
+    setproctitle.setproctitle("SimpleFT8 (Ferienhaus)")
+except ImportError:
+    pass  # setproctitle ist optional
+
+# File-Logging mit Tages-Rotation (P20) — siehe core/log_setup.py
 from pathlib import Path
-_LOG_DIR = Path.home() / ".simpleft8"
-_LOG_DIR.mkdir(parents=True, exist_ok=True)
-_log_file = open(_LOG_DIR / "simpleft8.log", "a", buffering=1)
+from core.log_setup import setup_main_log
+_log_path, _log_file = setup_main_log()
 
 
 class _Tee:
