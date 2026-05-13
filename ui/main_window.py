@@ -460,6 +460,16 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self._stats_indicator.setVisible(self.settings.get("stats_enabled", True))
         self.statusBar().addPermanentWidget(self._stats_indicator)
 
+        # P44 (v0.97.10): DT-Korrektur als eigenes Permanent-Widget rechts
+        # in Statusbar neben _stats_indicator. Default grau, grün bei
+        # aktiver Mess-Phase. Vorher: ganzer Statusbar-StyleSheet wurde
+        # gewechselt → ALLE Texte grün (Bug).
+        self._dt_indicator = _QLabel("DT: —")
+        self._dt_indicator.setStyleSheet(
+            "color: #555; font-family: Menlo; font-size: 11px; padding: 0 6px;"
+        )
+        self.statusBar().addPermanentWidget(self._dt_indicator)
+
         # P1.QRZ-UPLOAD-UI-2: Bulk-Cancel-Widget (initial versteckt)
         from PySide6.QtWidgets import (
             QWidget as _QW, QHBoxLayout as _QHL,
@@ -1076,7 +1086,10 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
             omni_str = f"  Ω CQ={self._omni_cq.cq_remaining_display} ({parity_str})"
         else:
             omni_str = ""
-        # DT-Korrektur Status — nur DT-Label gruen, Statusbar bleibt grau
+        # DT-Korrektur Status — P44 (v0.97.10): eigenes Permanent-Widget
+        # _dt_indicator (rechts in Statusbar neben _stats_indicator).
+        # Globaler Statusbar-Style bleibt grau wie in __init__ gesetzt —
+        # nicht mehr dynamisch ändern (sonst werden ALLE Texte grün).
         from core import ntp_time
         dt_phase = ntp_time._phase
         if ntp_time._correction == 0.0 and ntp_time._is_initial:
@@ -1085,13 +1098,12 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
             dt_text, dt_color = "DT: Korrektur", "#00DD66"
         else:
             dt_text, dt_color = "DT: Aktiv", "#888"
-        # DT-Farbe in Statusbar: gruen bei Korrektur via kurzen StyleSheet-Wechsel
-        if dt_color != "#888":
-            self.statusBar().setStyleSheet(
-                f"color: {dt_color}; font-family: Menlo; font-size: 11px; background-color: #0a1a0a;")
-        else:
-            self.statusBar().setStyleSheet(
-                "color: #888; font-family: Menlo; font-size: 11px; background-color: #111;")
+        if hasattr(self, '_dt_indicator'):
+            self._dt_indicator.setText(dt_text)
+            self._dt_indicator.setStyleSheet(
+                f"color: {dt_color}; font-family: Menlo; "
+                f"font-size: 11px; padding: 0 6px;"
+            )
         # Filter-Anzeige pro Modus
         _FILTERS = {"FT8": "100-3100", "FT4": "100-3100", "FT2": "100-4000"}
         filter_str = _FILTERS.get(self.settings.mode, "100-3100")
@@ -1128,10 +1140,12 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
                             freq_str += f"  |  RX: ANT2 ↑{abs(delta):.1f} dB"
             elif self._rx_mode == "normal":
                 freq_str += "  |  RX: ANT1"
+        # P44 (v0.97.10): {dt_text} raus aus zentralem msg — DT erscheint
+        # jetzt nur noch im eigenen _dt_indicator-Widget rechts.
         msg = (f"{self.settings.callsign}  |  {self.settings.locator}  |  "
                f"{self.settings.mode} {self.settings.band}  |  "
                f"{freq_display}  |  Filter: {filter_str} Hz  |  "
-               f"{mode_str}  |  {dt_text}{omni_str}{freq_str}{ap_str}")
+               f"{mode_str}{omni_str}{freq_str}{ap_str}")
         self.statusBar().showMessage(msg)
 
         # Live-QSO-Status oben im QSO-Panel — waehrend aktivem QSO sichtbar
