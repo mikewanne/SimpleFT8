@@ -5,7 +5,7 @@ import time
 from pathlib import Path
 
 from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel,
+    QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel, QGridLayout,
     QLineEdit, QSpinBox, QDoubleSpinBox, QPushButton, QGroupBox,
     QComboBox, QMessageBox, QToolButton, QFileDialog,
     QTableWidget, QTableWidgetItem, QHeaderView,
@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, QTimer
 
-from config.settings import Settings, DEFAULTS
+from config.settings import Settings, DEFAULTS, BAND_FREQUENCIES
 from ui.styles import MSGBOX_STYLE
 
 # Info-Texte fuer die (i)-Buttons
@@ -329,7 +329,45 @@ class SettingsDialog(QDialog):
         bp_row.addWidget(bandpilot_help_btn)
         bp_row.addStretch()
         form.addRow("Bandpilot — Verhalten:", bp_row)
+
+        # ── P50 (v0.97.20) Sichtbare Bänder ─────────────────────────
+        bands_group = QGroupBox("Sichtbare Bänder")
+        bands_group.setToolTip(
+            "Nicht benötigte Bänder ausblenden — sie verschwinden aus "
+            "dem Band-Panel und Bandpilot empfiehlt sie nicht mehr.\n"
+            "Mindestens ein Band muss aktiv sein.")
+        bands_grid = QGridLayout(bands_group)
+        bands_grid.setSpacing(6)
+        self._band_checkboxes: dict = {}
+        # 3×3-Raster (sortiert von Hochfrequenz nach Niederfrequenz)
+        bands_layout = [["10m", "12m", "15m"],
+                        ["17m", "20m", "30m"],
+                        ["40m", "60m", "80m"]]
+        for row, row_bands in enumerate(bands_layout):
+            for col, b in enumerate(row_bands):
+                cb = QCheckBox(b)
+                cb.stateChanged.connect(self._on_band_visibility_toggled)
+                self._band_checkboxes[b] = cb
+                bands_grid.addWidget(cb, row, col)
+        form.addRow("", bands_group)
         return tab
+
+    def _on_band_visibility_toggled(self):
+        """P50: Min-1-Logik — letzte aktive Checkbox blocken."""
+        checked = [b for b, cb in self._band_checkboxes.items() if cb.isChecked()]
+        if len(checked) <= 1:
+            only = checked[0] if checked else None
+            for b, cb in self._band_checkboxes.items():
+                if b == only:
+                    cb.setEnabled(False)
+                    cb.setToolTip("Mindestens ein Band muss aktiv sein")
+                else:
+                    cb.setEnabled(True)
+                    cb.setToolTip("")
+        else:
+            for cb in self._band_checkboxes.values():
+                cb.setEnabled(True)
+                cb.setToolTip("")
 
     def _show_bandpilot_help(self):
         """Bandpilot-Hilfe in QMessageBox anzeigen — sprachabhaengig DE/EN."""
@@ -510,6 +548,14 @@ class SettingsDialog(QDialog):
         mode = self.settings.get("bandpilot_mode", "off")
         self.bandpilot_mode_combo.setCurrentIndex(
             {"off": 0, "auto": 1, "manual": 2}.get(mode, 0))
+        # P50 (v0.97.20): Sichtbare Bänder — Default alle 9 aktiv
+        enabled = set(self.settings.get_enabled_bands())
+        for b, cb in self._band_checkboxes.items():
+            cb.blockSignals(True)
+            cb.setChecked(b in enabled)
+            cb.blockSignals(False)
+        # Min-1-Logik einmal nach dem Load anwenden
+        self._on_band_visibility_toggled()
         # RF-Presets-Tabelle initial befüllen
         self._refresh_rf_table()
         self._update_rf_buttons_tx_state()
@@ -638,6 +684,9 @@ class SettingsDialog(QDialog):
         # v0.88 Bandpilot Stunden-Logik
         self.settings.set("bandpilot_mode",
                           {0: "off", 1: "auto", 2: "manual"}[self.bandpilot_mode_combo.currentIndex()])
+        # P50 (v0.97.20): Sichtbare Bänder
+        enabled_bands = [b for b, cb in self._band_checkboxes.items() if cb.isChecked()]
+        self.settings.set_enabled_bands(enabled_bands)
         self.settings.save()
         self.accept()
 
@@ -674,6 +723,12 @@ class SettingsDialog(QDialog):
         self.audio_dump_cb.setChecked(False)
         self.audio_dump_max_spin.setValue(200)
         self.audio_dump_max_spin.setEnabled(False)
+        # P50 (v0.97.20): Sichtbare Bänder zurück auf alle 9
+        for cb in self._band_checkboxes.values():
+            cb.blockSignals(True)
+            cb.setChecked(True)
+            cb.blockSignals(False)
+        self._on_band_visibility_toggled()
 
     def _on_map_open_clicked(self):
         """Richtungs-Karte oeffnen. Default-Modus aus Settings (rx/tx)."""

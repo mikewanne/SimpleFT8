@@ -43,6 +43,13 @@ class _FakeSettings:
     def save(self):
         pass
 
+    def get_enabled_bands(self):
+        # P50: Mock-Default alle 9 (keine Filterung im Mock)
+        return ["80m", "60m", "40m", "30m", "20m", "17m", "15m", "12m", "10m"]
+
+    def set_enabled_bands(self, bands):
+        self._d["enabled_bands"] = list(bands)
+
     @property
     def callsign(self):
         return self._d["callsign"]

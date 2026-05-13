@@ -99,6 +99,9 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self.control_panel._set_band(settings.band)
         self.control_panel._set_mode(settings.mode)
         self.control_panel.set_power_preset(settings.get("power_preset", 10))
+        # P50 (v0.97.20): Sichtbare Bänder anwenden. current_band bleibt
+        # garantiert sichtbar (R1-F1 in ControlPanel.set_visible_bands).
+        self.apply_visible_bands()
 
         # Hintergrund-Timer
         self._init_psk_polling()
@@ -1072,6 +1075,19 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
             # P3 v0.95.20: Audio-Dump-Settings live aktualisieren
             self._audio_dump_enabled = self.settings.get("audio_dump_enabled", False)
             self._audio_dump_max_files = self.settings.get("audio_dump_max_files", 200)
+            # P50 (v0.97.20): Sichtbare Bänder live aktualisieren
+            self.apply_visible_bands()
+
+    def apply_visible_bands(self):
+        """P50 (v0.97.20): Sichtbarkeits-Toggle für Band-Buttons anwenden.
+
+        Liest ``enabled_bands`` aus Settings (defensive Filter dort)
+        und gibt die Liste an ``ControlPanel.set_visible_bands``.
+        Aktuelles Band bleibt sichtbar (R1-F1 in ControlPanel).
+        Wird gerufen beim App-Start und nach Settings-Dialog-OK.
+        """
+        bands = self.settings.get_enabled_bands()
+        self.control_panel.set_visible_bands(bands)
 
     def _update_statusbar(self):
         work_freq = self.settings.frequency_mhz

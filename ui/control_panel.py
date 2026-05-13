@@ -367,6 +367,10 @@ class _ModeBandCard(QFrame):
 
         body_lay.addLayout(grid)
 
+        # P50 (v0.97.20): Sichtbarkeit pro Band — Default alle aktiv.
+        # set_visible_bands() schaltet hier um.
+        self._band_visible: dict = {b: True for b in self.band_buttons}
+
         # ── Body-Container an Card-Layout anhaengen ──────────────────────
         lay.addWidget(self._body_widget)
 
@@ -392,6 +396,31 @@ class _ModeBandCard(QFrame):
         self.set_collapsed(not self.is_collapsed())
         self.collapse_changed.emit(self.is_collapsed())
 
+    def set_visible_bands(self, bands: list, current_band: str | None = None) -> None:
+        """P50 (v0.97.20): Welche Band-Buttons sind sichtbar?
+
+        Versteckt Buttons + Prop-Bars für nicht-enthaltene Bänder.
+        F1-Guarantee: ``current_band`` (falls gesetzt) bleibt immer
+        sichtbar — auch wenn nicht in ``bands``. F2: Prop-Bars werden
+        mitversteckt; `update_propagation()` respektiert die neue
+        ``self._band_visible``-Map und blendet versteckte Bands nicht ein.
+
+        Args:
+            bands: Liste der sichtbaren Band-Strings (z.B. ["20m", "40m"]).
+            current_band: Aktuelles Band — bleibt sichtbar (F1).
+        """
+        visible = set(bands)
+        if current_band:
+            visible.add(current_band)
+        for b, btn in self.band_buttons.items():
+            is_v = b in visible
+            self._band_visible[b] = is_v
+            btn.setVisible(is_v)
+            bar = self.prop_bars.get(b)
+            if bar is not None and not is_v:
+                bar.setVisible(False)
+                self._stop_pulse(b)
+
     def update_propagation(self, conditions: dict,
                            active_band: Optional[str] = None) -> None:
         """Propagations-Balken aktualisieren.
@@ -411,6 +440,12 @@ class _ModeBandCard(QFrame):
         }
 
         for band, bar in self.prop_bars.items():
+            # P50: Versteckte Bänder bleiben unsichtbar — Propagation-Update darf
+            # nicht heimlich die Bar wieder einblenden.
+            if not self._band_visible.get(band, True):
+                bar.setVisible(False)
+                self._stop_pulse(band)
+                continue
             if not conditions:
                 bar.setVisible(False)
                 self._stop_pulse(band)
@@ -1413,8 +1448,25 @@ class ControlPanel(QWidget):
         self._current_band = band
         for b, btn in self.band_buttons.items():
             btn.setChecked(b == band)
+        # P50 (R1-F1): das aktuelle Band muss sichtbar sein, auch wenn
+        # ein externer Aufrufer (Bandpilot, Auto-Hunt, Settings-Apply)
+        # gerade ein vorher deaktiviertes Band gesetzt hat.
+        if not self._mode_band_card._band_visible.get(band, True):
+            self._mode_band_card._band_visible[band] = True
+            btn = self.band_buttons.get(band)
+            if btn is not None:
+                btn.setVisible(True)
         self._update_frequency()
         self.band_changed.emit(band)
+
+    def set_visible_bands(self, bands: list) -> None:
+        """P50 (v0.97.20): Public-API für sichtbare Band-Buttons.
+
+        Delegiert an ``_ModeBandCard.set_visible_bands`` mit
+        ``current_band``-Guarantee (R1-F1). Caller (MainWindow) ruft
+        nach Settings-Load und nach Settings-Apply.
+        """
+        self._mode_band_card.set_visible_bands(bands, current_band=self._current_band)
 
     def _update_frequency(self):
         mode_key = self._current_mode.lower()

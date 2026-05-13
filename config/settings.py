@@ -136,6 +136,44 @@ class Settings:
     def set(self, key, value):
         self._data[key] = value
 
+    # P50 (v0.97.20): Bänder-Sichtbarkeit
+    def get_enabled_bands(self) -> list[str]:
+        """Liefert die Liste der im Band-Panel sichtbaren Bänder.
+
+        Default: alle 9 Bänder. Defensiv gefiltert gegen ungültige
+        Einträge (kein String, nicht in ``BAND_FREQUENCIES``, Duplikate).
+        Bei leerer/komplett-ungültiger Liste → Fallback auf Default.
+        """
+        raw = self._data.get("enabled_bands")
+        if not isinstance(raw, list):
+            return list(BAND_FREQUENCIES.keys())
+        valid: list[str] = []
+        seen: set[str] = set()
+        for b in raw:
+            if isinstance(b, str) and b in BAND_FREQUENCIES and b not in seen:
+                valid.append(b)
+                seen.add(b)
+        if not valid:
+            return list(BAND_FREQUENCIES.keys())
+        return valid
+
+    def set_enabled_bands(self, bands: list[str]) -> None:
+        """Setzt die Liste der sichtbaren Bänder.
+
+        Defensiv: ungültige Einträge werden ignoriert. Bei leerer
+        resultierender Liste → Default (alle 9). Persistiert NICHT
+        automatisch — Caller ruft ``save()``.
+        """
+        valid: list[str] = []
+        seen: set[str] = set()
+        for b in bands:
+            if isinstance(b, str) and b in BAND_FREQUENCIES and b not in seen:
+                valid.append(b)
+                seen.add(b)
+        if not valid:
+            valid = list(BAND_FREQUENCIES.keys())
+        self._data["enabled_bands"] = valid
+
     @property
     def callsign(self):
         return self._data["callsign"]
