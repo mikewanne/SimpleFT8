@@ -68,9 +68,9 @@ class CycleMixin:
         self.control_panel.update_decode_count(len(messages) if messages else 0)
         self._update_dt_correction(messages)
 
-        ant, was_phase = "A1", "operate"
+        ant = "A1"
         if self._rx_mode == "diversity":
-            ant, was_phase = self._pop_diversity_queue()
+            ant = self._pop_diversity_queue()
 
         # v0.94: waehrend Phase 2 (DXTuneDialog) zaehlt die Hardware-Antenne
         # aus _schedule[_step], nicht das Diversity-Pattern. Sonst falsche
@@ -90,9 +90,8 @@ class CycleMixin:
                 getattr(self, "_audio_dump_max_files", 200),
             )
 
-        if self._rx_mode == "diversity" and was_phase == "measure":
-            self._handle_diversity_measure(messages, ant)
-
+        # P34-Stufe2: Statik-Mess-Phase entfernt — `was_phase` ist immer
+        # "operate" bei Diversity. Branch komplett raus.
         if self._rx_mode == "diversity" and messages:
             self._handle_diversity_operate(messages, ant)
         elif self._rx_mode == "normal":
@@ -100,14 +99,10 @@ class CycleMixin:
         elif messages:
             self._handle_dx_tune_mode(messages)
 
-        # P34: Dynamic-Diversity Slot-Datenerfassung (separater if-Block,
-        # NICHT in der elif-Kette oben — sonst zerreisst es den normal/
-        # dx_tune-Pfad). Gate: Toggle AN + Diversity + operate-Phase +
-        # Messages vorhanden. Score via Modul-Helper compute_slot_score
-        # (identisch zur Statik). Antenne ant aus _pop_diversity_queue
-        # (race-frei vom Slot-Start).
+        # P34-Stufe2: Dynamic-Diversity Slot-Datenerfassung. Gate:
+        # Diversity + Messages vorhanden + Dynamic aktiv (Defensive-Check
+        # bleibt fuer Race-Schutz wenn Diversity gerade ausgeschaltet wird).
         if (self._rx_mode == "diversity"
-                and was_phase == "operate"
                 and getattr(self, "_dynamic_ctrl", None) is not None
                 and self._dynamic_ctrl.is_active()
                 and messages):
@@ -121,10 +116,9 @@ class CycleMixin:
         # (Doppel-Report-Bug v0.81). Stattdessen haengt on_decoder_finished
         # am neuen `cycle_finished`-Decoder-Signal — siehe `_on_cycle_finished`.
 
-        # Slot-synchroner Such-Trigger + Histogramm-Refresh JEDEN Slot
-        # (unabhaengig von messages-Inhalt — _diversity_stations mit Aging ist
-        # Quelle der Wahrheit). Das fixt P1 (Histogramm-Update Guard) gleich mit.
-        if self._rx_mode == "diversity" and was_phase == "operate":
+        # P34-Stufe2: Slot-synchroner Such-Trigger + Histogramm-Refresh
+        # JEDEN Slot bei Diversity (Phase ist immer operate seit Stufe2).
+        if self._rx_mode == "diversity":
             self._refresh_diversity_freq_view()
 
         if self._dx_tune_dialog is not None:
@@ -223,152 +217,27 @@ class CycleMixin:
             self._update_statusbar()  # DT in Statusbar aktualisieren
 
     def _pop_diversity_queue(self):
-        """Antennen-Queue popleft → (ant, was_phase).
+        """Antennen-Queue popleft → ant ("A1" oder "A2").
 
         Queue IMMER poppen — auch bei 0 Stationen! Sonst geraet die Queue aus
         dem Takt wenn eine Antenne nichts empfaengt.
+
+        P34-Stufe2: was_phase nicht mehr im Tuple (kein measure mehr).
+        Backwards-Compat: alte Queue-Eintraege koennten 2-Tupel sein.
         """
         ant_queue = getattr(self, '_diversity_ant_queue', None)
         if ant_queue:
-            return ant_queue.popleft()
-        return "A1", "operate"
+            item = ant_queue.popleft()
+            # Defensive: alte 2-Tupel-Eintraege akzeptieren (sollte nicht
+            # mehr vorkommen seit Stufe2, aber Test-Setup koennte's tun).
+            if isinstance(item, tuple):
+                return item[0]
+            return item
+        return "A1"
 
-    def _handle_diversity_measure(self, messages, ant):
-        """Diversity-Mess-Phase: Messung aufzeichnen + Phase-Übergang.
-
-        IMMER aufzeichnen — auch mit 0 Stationen! Sonst haengt die Messung
-        bei Antennen die nichts empfangen (Bug #9: 4/8 haengt).
-
-        P21-Fix (Mike 10.05.): NICHT aufzeichnen wenn Radio noch nicht
-        verbunden — Antennen-Switch kann dann nicht greifen, Counter
-        wuerde hochlaufen ohne dass je A2 dran war = falsche Mess-Daten.
-        Stattdessen warten bis Radio verbunden ist, dann startet Mess
-        natuerlich beim naechsten Slot mit echtem Switch.
-        """
-        from core.debug_log import debug_log as _dlog
-        from core.diversity import compute_slot_score
-        if not self.radio.ip:
-            _dlog("DIV-MEAS",
-                  "SKIP — radio.ip=False, warte auf Verbindung "
-                  "(record_measurement uebersprungen)")
-            return
-        valid = [m for m in (messages or []) if m.snr is not None and m.snr > -20]
-        station_count = len(valid)
-        # P34: Helper-Funktion (eine Formel, beide Pipelines)
-        score = compute_slot_score(messages)
-        avg_snr = (sum(m.snr for m in valid) / station_count) if station_count else -30.0
-        weak_count = len([m for m in valid if m.snr < -10])
-        # Phase-Diff: erkennt measure→operate Uebergang fuer GUI-Lock-Aufhebung
-        old_phase = self._diversity_ctrl.phase
-        # P21: vor record_measurement
-        _dlog("DIV-MEAS", f"record ant={ant} stations={station_count} "
-              f"score={score:.1f} avg_snr={avg_snr:.1f} "
-              f"step_pre={self._diversity_ctrl.measure_step}")
-        with self._diversity_lock:
-            self._diversity_ctrl.record_measurement(
-                ant, score,
-                station_count=station_count,
-                avg_snr=avg_snr,
-                dx_weak_count=weak_count,
-            )
-            self._diversity_ctrl.sync_from_stations(self._diversity_stations)
-            self._diversity_ctrl.update_proposed_freq()
-        _dlog("DIV-MEAS", f"after record step_post={self._diversity_ctrl.measure_step} "
-              f"phase={self._diversity_ctrl.phase}")
-        # GUI-Lock weg sobald Re-Measurement durch ist (8 Slots → _evaluate)
-        if old_phase == "measure" and self._diversity_ctrl.phase == "operate":
-            self._set_gain_measure_lock(False)
-            self._set_cq_locked(False)
-            print("[Diversity] Phase=operate — GUI-Lock aufgehoben")
-        # Histogram LIVE aktualisieren (auch waehrend Messung)
-        self.control_panel.update_freq_histogram(
-            self._diversity_ctrl.get_histogram_data())
-        # P34: is_dynamic immer aus _dynamic_ctrl-Status — sonst ueberschreibt
-        # dieser Slot-Update das blaue Label vom _on_dynamic_ratio_changed.
-        _is_dyn = (getattr(self, "_dynamic_ctrl", None) is not None
-                   and self._dynamic_ctrl.is_active())
-        self.control_panel.update_diversity_ratio(
-            self._diversity_ctrl.ratio, self._diversity_ctrl.phase,
-            measure_step=self._diversity_ctrl.measure_step,
-            measure_total=self._diversity_ctrl.MEASURE_CYCLES,
-            operate_seconds_remaining=self._diversity_ctrl.seconds_until_remeasure,
-            scoring_mode=self._diversity_ctrl.scoring_mode,
-            is_dynamic=_is_dyn,
-            # P40: RX-Antennen-Suffix konsistent halten (Mess-Pfad)
-            current_ant=getattr(self, "_diversity_current_ant", None),
-        )
-        # Einmessen abgeschlossen → nur beim Übergang measure→operate ausführen
-        if self._diversity_ctrl.phase == "operate":
-            if not getattr(self, '_diversity_in_operate', False):
-                self._diversity_in_operate = True
-                self._stats_warmup_cycles = 6
-                print("[Stats] Einmessen fertig — 6 Zyklen Warmup bis Stats starten")
-                self._set_cq_locked(False)
-                # Ratio in PresetStore ergänzen (Timestamp von Gain-Messung bleibt)
-                # Cache-Schutz (v0.91 #8 R1.4): Adaptiv-Stop-Ratios NICHT persistieren —
-                # weniger Messdaten → potenziell ungenauer, soll nicht ueber 6h Cache-
-                # Validity hinweg verwendet werden.
-                _early_stopped = getattr(self._diversity_ctrl, '_was_early_stopped', False)
-                _scoring = getattr(self._diversity_ctrl, 'scoring_mode', 'normal')
-                _store = getattr(self, '_dx_store', None) if _scoring == "dx" else getattr(self, '_standard_store', None)
-                if _store and not _early_stopped:
-                    # P22: atomares Persist — staged Gain (aus Phase 2) +
-                    # ratio (aus Phase 3) gemeinsam schreiben. Bei Disk-
-                    # Fehler oder fehlendem staged → Fallback save_ratio
-                    # damit kein kompletter Daten-Verlust.
-                    ok = _store.commit_with_ratio(
-                        self.settings.band, self.settings.mode,
-                        ratio=self._diversity_ctrl.ratio,
-                        dominant=self._diversity_ctrl.dominant,
-                    )
-                    if not ok:
-                        print("[mw_cycle] commit_with_ratio failed → "
-                              "save_ratio Fallback")
-                        _store.save_ratio(
-                            self.settings.band, self.settings.mode,
-                            ratio=self._diversity_ctrl.ratio,
-                            dominant=self._diversity_ctrl.dominant,
-                        )
-                elif _early_stopped:
-                    # P22-A11: Adaptiv-Stop = kein Persist (v0.91 Cache-
-                    # Schutz). Staged Eintrag verwerfen damit Memory sauber
-                    # bleibt.
-                    if _store:
-                        _store.discard_staged(
-                            self.settings.band, self.settings.mode)
-                    print("[mw_cycle] Adaptiv-Stop-Ratio NICHT gecached "
-                          "(weniger Messdaten als regulaerer Pfad)")
-                # Rückwärtskompatibilität: NUR bei nicht-early_stopped
-                # schreiben. Sonst entsteht Half-State über die zwei
-                # Speicher hinweg (kalibrierung-File leer, settings hat
-                # Ratio) — Final-R1 KRITISCH 10.05.2026.
-                if not _early_stopped:
-                    self.settings.save_diversity_preset(
-                        mode=self.settings.mode,
-                        band=self.settings.band,
-                        ratio=self._diversity_ctrl.ratio,
-                        dominant=self._diversity_ctrl.dominant,
-                    )
-                cq_freq = self._diversity_ctrl.get_free_cq_freq()
-                if cq_freq:
-                    self.encoder.audio_freq_hz = cq_freq
-                    print(f"[Diversity] Einmessen fertig — CQ auf {cq_freq} Hz")
-                else:
-                    print("[Diversity] Einmessen fertig — CQ freigegeben")
-                self.control_panel.update_freq_histogram(
-                    self._diversity_ctrl.get_histogram_data()
-                )
-                # P22 / P8: Mess-Modal automatisch schliessen
-                if hasattr(self, '_close_mess_status_dialog'):
-                    self._close_mess_status_dialog()
-                # P23: nach Antennen-Mess Counter im OMNI auf TARGET resetten
-                # (Mike-Spec "neuer Slot, neuer Anfang"). No-op wenn OMNI
-                # nicht aktiv oder pausiert (resume_after_qso macht reset selbst).
-                omni = getattr(self, '_omni_cq', None)
-                if omni is not None:
-                    omni.reset_counter_after_measure()
-        elif self._diversity_ctrl.phase == "measure":
-            self._diversity_in_operate = False
+    # P34-Stufe2 (v0.97.19): _handle_diversity_measure entfernt. Statik-
+    # Mess-Phase existiert nicht mehr. Phase ist immer "operate" wenn
+    # Diversity aktiv; Dynamic bestimmt das Verhaeltnis live.
 
     def _feed_locator_db(self, messages):
         """Decoder-Hook: pro is_grid-Message Locator in die Locator-DB pushen.
@@ -685,34 +554,17 @@ class CycleMixin:
                 return
 
             with self._diversity_lock:  # BUG-2: Race Condition Guard
-                # Queue: aktuelle Antenne + Phase merken BEVOR umgeschaltet wird.
+                # Queue: aktuelle Antenne merken BEVOR umgeschaltet wird.
+                # P34-Stufe2: nur noch Antennen-Tag (kein was_phase mehr).
                 ant_queue = getattr(self, '_diversity_ant_queue', None)
                 if ant_queue is not None:
-                    ant_queue.append((self._diversity_current_ant, self._diversity_ctrl.phase))
+                    ant_queue.append(self._diversity_current_ant)
 
                 band = self.settings.band
 
-                # Betriebszyklus zaehlen + ggf. neu messen (v0.93: zeit-basiert)
-                if self._diversity_ctrl.phase == "operate":
-                    self._diversity_ctrl.on_operate_cycle()
-                    # qso_active = echtes QSO laeuft (NICHT CQ-Ruf)
-                    qso_active = self.qso_sm.state not in (
-                        QSOState.IDLE, QSOState.TIMEOUT,
-                        QSOState.CQ_CALLING, QSOState.CQ_WAIT,
-                    )
-                    # cq_active = CQ-Ruf laeuft (state ODER cq_mode-Flag)
-                    cq_active = (
-                        self.qso_sm.state in (QSOState.CQ_CALLING, QSOState.CQ_WAIT)
-                        or getattr(self.qso_sm, 'cq_mode', False)
-                    )
-                    if self._diversity_ctrl.should_remeasure(qso_active, cq_active):
-                        self._diversity_ctrl.start_measure()
-                        self._set_cq_locked(True)
-                        self.control_panel.update_diversity_ratio(
-                            "50:50", "remeasure", 0,
-                            self._diversity_ctrl.MEASURE_CYCLES,
-                            scoring_mode=self._diversity_ctrl.scoring_mode)
-                        print("[Diversity] Automatische Neueinmessung gestartet (1h-Frist abgelaufen)")
+                # P34-Stufe2: Betriebszyklus zaehlen — kein should_remeasure
+                # mehr (keine Statik-1h-Frist). Pattern-Counter laeuft weiter.
+                self._diversity_ctrl.on_operate_cycle()
 
                 # Smart Antenna: waehrend QSO auf beste Antenne forcieren
                 _in_qso = self.qso_sm.state not in (
@@ -742,26 +594,15 @@ class CycleMixin:
                     gain = getattr(self, '_diversity_ant2_gain',
                                    PREAMP_PRESETS.get(band, 10) + 10)
                 ant_cmd = "ANT1" if self._diversity_current_ant == "A1" else "ANT2"
-                # P34: is_dynamic durchreichen — pro-Slot-Update darf das blaue
-                # Label nicht ueberschreiben
-                _is_dyn = (getattr(self, "_dynamic_ctrl", None) is not None
-                           and self._dynamic_ctrl.is_active())
+                # P34-Stufe2: einheitliche update_diversity_ratio-Signatur.
                 self.control_panel.update_diversity_ratio(
-                    self._diversity_ctrl.ratio, self._diversity_ctrl.phase,
-                    measure_step=self._diversity_ctrl.measure_step,
-                    measure_total=self._diversity_ctrl.MEASURE_CYCLES,
-                    operate_seconds_remaining=self._diversity_ctrl.seconds_until_remeasure,
+                    self._diversity_ctrl.ratio,
                     scoring_mode=self._diversity_ctrl.scoring_mode,
-                    is_dynamic=_is_dyn,
-                    # P37: aktive RX-Antenne mitsenden fuer Live-Label
                     current_ant=self._diversity_current_ant,
                 )
 
             # P21 Debug-Log: VOR Antennen-Switch (zeigt Plan)
             _dlog("ANT", f"SWITCH plan: cmd={ant_cmd} gain={gain}dB "
-                  f"phase={self._diversity_ctrl.phase} "
-                  f"step={self._diversity_ctrl.measure_step}/"
-                  f"{self._diversity_ctrl.MEASURE_CYCLES} "
                   f"current_ant={self._diversity_current_ant}")
 
             # BUG-3: ant_cmd + gain als Argumente, nicht als Closure
@@ -812,16 +653,10 @@ class CycleMixin:
         return "A1" if ant_long == "ANT1" else "A2"
 
     def _is_antenna_tuning_active(self) -> bool:
-        """Prueft ob RF-Tuning, Radio-Suche oder Diversity-Einmessphase aktiv.
+        """Prueft ob RF-Tuning oder Phase-2-Gain-Messung aktiv ist.
 
-        Waehrend Einmessphase wird je Zyklus nur EINE Antenne gemessen —
-        Stats waeren verfaelscht (fehlende Stationen der anderen Antenne).
-
-        v0.94 Bug-Fix: Phase 2 (DXTuneDialog) blockt Stats. Frueher wurde
-        nur ``_rx_mode == "dx_tuning"`` geprueft — aber das wird im Code
-        nirgendwo gesetzt. Folge bis v0.93: Stats wurden waehrend Phase 2
-        weiter geloggt mit Diversity-Pattern-Antenne statt Hardware-
-        Antenne (sichtbar im RX-Panel, ~0.3 % Daten-Bias).
+        P34-Stufe2: Statik-Mess-Phase (`_diversity_ctrl.phase == "measure"`)
+        existiert nicht mehr. Nur noch Phase 2 (DXTuneDialog) blockt Stats.
         """
         if not getattr(self.radio, 'ip', None):
             return True
@@ -829,11 +664,6 @@ class CycleMixin:
             return True
         # v0.94: Phase 2 (Gain-Messung im DXTune-Dialog) blockt Stats
         if getattr(self, '_dx_tune_dialog', None) is not None:
-            return True
-        if (self._rx_mode == "diversity"
-                and hasattr(self, '_diversity_ctrl')
-                and self._diversity_ctrl is not None
-                and self._diversity_ctrl.phase == "measure"):
             return True
         return False
 

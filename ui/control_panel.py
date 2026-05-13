@@ -1483,142 +1483,56 @@ class ControlPanel(QWidget):
     # =====================================================================
     # Diversity Ratio Display
     # =====================================================================
-    def update_diversity_ratio(self, ratio: str, phase: str,
-                               measure_step: int = 0, measure_total: int = 8,
-                               operate_seconds_remaining: int = 0,
+    def update_diversity_ratio(self, ratio: str,
+                               *,
                                scoring_mode: str = "normal",
-                               # v0.92-Aliase fuer Backwards-Kompat (ignoriert wenn
-                               # operate_seconds_remaining >0; sonst Cycles-Fallback)
-                               operate_cycles: int = 0, operate_total: int = 0,
-                               # P34: Dynamic-Modus aktiv (blaue Anzeige + Text)
-                               is_dynamic: bool = False,
-                               # P37: aktive RX-Antenne ("A1"/"A2") fuer Live-Anzeige
-                               current_ant: str | None = None):
+                               current_ant: str | None = None,
+                               **_ignored_legacy):
         """Diversity-Anzeige aktualisieren.
 
+        P34-Stufe2 (v0.97.19): vereinfachte Signatur. Phase ist immer
+        "operate" (Statik-Pipeline raus), Anzeige ist immer
+        "● DYNAMISCH (live)".
+
         ratio: '70:30' | '30:70' | '50:50'
-        phase: 'measure' | 'operate' | 'remeasure'
-        operate_seconds_remaining: Sekunden bis zum naechsten Re-Measure (v0.93)
-        scoring_mode: 'normal' (Standard) | 'dx' (DX)
-        is_dynamic: P34 — wenn True, Phase-Label wird blau („● DYNAMISCH (live)")
-                    statt „Neuberechnung in X Min." (Statik-Re-Mess gilt nicht)
-        current_ant: P37 — aktive RX-Antenne ("A1"/"A2"). Nur bei is_dynamic=True
-                     wird Label um „ — RX Ant1"/„ — RX Ant2" erweitert.
-                     None/ungueltig → kein Anhang (Backwards-Compat).
+        scoring_mode: 'normal' (Standard) | 'dx' (DX) — nur Info
+        current_ant: aktive RX-Antenne ("A1"/"A2") fuer Label-Suffix
+
+        Backwards-Compat: ``**_ignored_legacy`` schluckt alte Parameter
+        (phase, measure_step, measure_total, operate_seconds_remaining,
+        is_dynamic, operate_cycles, operate_total) — Tests koennten sie
+        noch uebergeben.
         """
-        mode_tag = "DX" if scoring_mode == "dx" else "Standard"
         for lbl in self._a1_pct.values():
             lbl.setStyleSheet(_DIV_PCT_OFF)
         for lbl in self._a2_pct.values():
             lbl.setStyleSheet(_DIV_PCT_OFF)
 
-        if phase == "remeasure":
-            self._phase_label.setText("● NEUEINMESSUNG")
-            self._phase_label.setStyleSheet(
-                f"color:#FF6600;font-size:9px;font-family:{_FONT};font-weight:bold;"
-            )
-            self._a1_pct["50%"].setStyleSheet(_DIV_PCT_YELLOW)
-            self._a2_pct["50%"].setStyleSheet(_DIV_PCT_YELLOW)
-        elif phase == "measure":
-            step_txt = f"{measure_step}/{measure_total}" if measure_step > 0 else f"0/{measure_total}"
-            self._phase_label.setText(f"● MESSEN {step_txt}")
-            self._phase_label.setStyleSheet(
-                f"color:#FFCC00;font-size:9px;font-family:{_FONT};font-style:italic;"
-            )
-            self._a1_pct["50%"].setStyleSheet(_DIV_PCT_YELLOW)
-            self._a2_pct["50%"].setStyleSheet(_DIV_PCT_YELLOW)
-        else:
-            # v0.93: zeit-basiert. Backwards-Compat: wenn operate_seconds_remaining=0
-            # aber alte Cycles-Args gesetzt, fall-back auf Cycles (waehrend Migration).
-            secs = operate_seconds_remaining
-            if secs <= 0 and operate_total > 0:
-                # Fallback fuer alte Aufrufer
-                self._phase_label.setText(
-                    f"Diversity Neuberechnung in {operate_total - operate_cycles} Zyklen"
-                )
-                self._phase_label.setStyleSheet(
-                    f"color:#888888;font-size:9px;font-family:{_FONT};font-style:italic;"
-                )
-                if ratio == "70:30":
-                    self._a1_pct["70%"].setStyleSheet(_DIV_PCT_GREEN)
-                    self._a2_pct["30%"].setStyleSheet(_DIV_PCT_RED)
-                elif ratio == "30:70":
-                    self._a1_pct["30%"].setStyleSheet(_DIV_PCT_RED)
-                    self._a2_pct["70%"].setStyleSheet(_DIV_PCT_GREEN)
-                else:
-                    self._a1_pct["50%"].setStyleSheet(_DIV_PCT_YELLOW)
-                    self._a2_pct["50%"].setStyleSheet(_DIV_PCT_YELLOW)
-                return
-            # P34: Dynamic-Modus → eigene Anzeige (blau, kein Re-Mess-Counter)
-            if is_dynamic:
-                # P37: aktive RX-Antenne hinter Label, dezent
-                ant_suffix = ""
-                if current_ant == "A1":
-                    ant_suffix = " — RX Ant1"
-                elif current_ant == "A2":
-                    ant_suffix = " — RX Ant2"
-                self._phase_label.setText(f"● DYNAMISCH (live){ant_suffix}")
-                self._phase_label.setStyleSheet(
-                    f"color:#3399CC;font-size:9px;font-family:{_FONT};"
-                    "font-weight:bold;"
-                )
-            else:
-                mins = max(0, int(secs // 60))
-                if mins <= 2:
-                    color = "#FF8800"
-                elif mins <= 10:
-                    color = "#FFCC00"
-                else:
-                    color = "#888888"
-                label_txt = (f"Diversity Neuberechnung in {mins} Min."
-                             if mins > 0 else "Diversity Neuberechnung jetzt")
-                self._phase_label.setText(label_txt)
-                self._phase_label.setStyleSheet(
-                    f"color:{color};font-size:9px;font-family:{_FONT};font-style:italic;"
-                )
-            if ratio == "70:30":
-                self._a1_pct["70%"].setStyleSheet(_DIV_PCT_GREEN)
-                self._a2_pct["30%"].setStyleSheet(_DIV_PCT_RED)
-            elif ratio == "30:70":
-                self._a1_pct["30%"].setStyleSheet(_DIV_PCT_RED)
-                self._a2_pct["70%"].setStyleSheet(_DIV_PCT_GREEN)
-            else:  # 50:50
-                self._a1_pct["50%"].setStyleSheet(_DIV_PCT_TEAL)
-                self._a2_pct["50%"].setStyleSheet(_DIV_PCT_TEAL)
+        # P37: aktive RX-Antenne hinter Label, dezent
+        ant_suffix = ""
+        if current_ant == "A1":
+            ant_suffix = " — RX Ant1"
+        elif current_ant == "A2":
+            ant_suffix = " — RX Ant2"
+        self._phase_label.setText(f"● DYNAMISCH (live){ant_suffix}")
+        self._phase_label.setStyleSheet(
+            f"color:#3399CC;font-size:9px;font-family:{_FONT};"
+            "font-weight:bold;"
+        )
+
+        if ratio == "70:30":
+            self._a1_pct["70%"].setStyleSheet(_DIV_PCT_GREEN)
+            self._a2_pct["30%"].setStyleSheet(_DIV_PCT_RED)
+        elif ratio == "30:70":
+            self._a1_pct["30%"].setStyleSheet(_DIV_PCT_RED)
+            self._a2_pct["70%"].setStyleSheet(_DIV_PCT_GREEN)
+        else:  # 50:50
+            self._a1_pct["50%"].setStyleSheet(_DIV_PCT_TEAL)
+            self._a2_pct["50%"].setStyleSheet(_DIV_PCT_TEAL)
 
     def update_remeasure_countdown(self, seconds: int) -> None:
-        """P9 (10.05.2026 Mike-Field-Test): nur _phase_label-Text mit
-        aktuellem Re-Mess-Countdown updaten — jede Sekunde aufrufbar.
-
-        Ohne ratio/phase Args damit aus _tick_cq_countdown (1Hz) gerufen
-        werden kann ohne den teuren ratio-Update zu wiederholen.
-
-        Format: 'X Min YY s' damit User Fortschritt sieht (vorher nur
-        'X Min' → 10-Min-Sprung weil Z.661 update_diversity_ratio nicht
-        jeden Slot greift).
-        """
-        # Nur updaten wenn _phase_label aktuell den Re-Mess-Countdown zeigt.
-        # Bei Mess-Phase ('● MESSEN X/Y') oder NEUEINMESSUNG nicht ueberschreiben.
-        current = self._phase_label.text()
-        if current.startswith("●") or "Neuberechnung" not in current:
-            return
-        # 11.05.2026 Mike: nur Minuten anzeigen, Sekunden raus —
-        # die springende Sekunden-Anzeige lenkt optisch ab.
-        mins = max(0, int(seconds // 60))
-        if mins <= 2:
-            color = "#FF8800"
-        elif mins <= 10:
-            color = "#FFCC00"
-        else:
-            color = "#888888"
-        if mins > 0:
-            label_txt = f"Diversity Neuberechnung in {mins} Min."
-        else:
-            label_txt = "Diversity Neuberechnung gleich"
-        self._phase_label.setText(label_txt)
-        self._phase_label.setStyleSheet(
-            f"color:{color};font-size:9px;font-family:{_FONT};font-style:italic;"
-        )
+        """P34-Stufe2: No-Op — Re-Mess-Countdown entfaellt (Dynamic ist live)."""
+        return
 
     def update_diversity_counts(self, a1_count: int, a2_count: int,
                                 a1_avg_snr: float = None, a2_avg_snr: float = None,

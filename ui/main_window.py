@@ -1182,10 +1182,9 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         if self._rx_mode == "diversity" and self._diversity_ctrl.cq_freq_hz is not None:
             self.control_panel.update_cq_freq_countdown(
                 self._diversity_ctrl.seconds_until_search)
-            # P9: Re-Mess-Countdown jede Sekunde (greift nur in operate-Phase
-            # wegen current-text-Check in update_remeasure_countdown)
-            self.control_panel.update_remeasure_countdown(
-                self._diversity_ctrl.seconds_until_remeasure)
+            # P34-Stufe2: update_remeasure_countdown ist No-Op (1h-Frist
+            # entfallen). Aufruf bleibt fuer API-Stabilitaet zukuenftiger
+            # Refactors weg.
         else:
             self.control_panel.set_cq_countdown_visible(False)
 
@@ -1376,17 +1375,14 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
     @Slot(str)
     def _on_dynamic_ratio_changed(self, new_ratio: str) -> None:
         """P34: GUI-Thread Slot. Wenn DynamicDiversityController ein neues
-        Ratio gesetzt hat, Antennen-Panel updaten (Blau-Faerbung).
+        Ratio gesetzt hat, Antennen-Panel updaten.
 
         Aufruf via QueuedConnection vom Decoder-Thread.
         """
         try:
             self.control_panel.update_diversity_ratio(
                 new_ratio,
-                self._diversity_ctrl.phase,
-                operate_seconds_remaining=self._diversity_ctrl.seconds_until_remeasure,
                 scoring_mode=self._diversity_ctrl.scoring_mode,
-                is_dynamic=True,  # AK14: blaue Anzeige
                 # P40: RX-Antennen-Suffix nicht verlieren bei Ratio-Wechsel
                 current_ant=getattr(self, "_diversity_current_ant", None),
             )
@@ -1394,70 +1390,12 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
             # Defensive: GUI-Update fehlschlagen darf den Dynamic-Pfad nicht killen
             print(f"[Dynamic] GUI-Update Fehler: {exc}")
 
-    def _apply_dynamic_toggle(self, enabled: bool) -> None:
-        """P34: Settings-Dialog-Apply ruft das auf nachdem Toggle gesetzt wurde.
-
-        Toggle AN: activate() → ggf. Mess abbrechen + (P35-AK5)
-                  Ratio-Behandlung (50:50-Reset nur wenn aktuell 50:50,
-                  Cache-Wert bleibt sonst).
-        Toggle AUS: deactivate() → Ratio bleibt, Mess-Frist refresht.
-
-        P35-Fix B (AK3, Bug B): Antennen-Queue + _diversity_current_ant
-        werden VOR activate() resettet, damit alte (A1, "measure")-Eintraege
-        aus haengender Statik-Mess weg sind. Sonst blockieren sie den P34-
-        Hook in mw_cycle._on_cycle_decoded (was_phase != "operate" → skip).
-
-        Idempotent: Wiederholtes activate/deactivate wird intern ignoriert
-        durch is_active()-Check.
-        """
-        if enabled and not self._dynamic_ctrl.is_active():
-            # P35-AK3: Queue + current_ant resetten BEVOR activate().
-            # Saubere Trennung: DynamicDiversityController hat keine
-            # Referenz auf MainWindow-Attribute → Reset im UI-Layer hier.
-            from collections import deque
-            with self._diversity_lock:
-                self._diversity_ant_queue = deque()
-                self._diversity_current_ant = "A1"
-            self._dynamic_ctrl.activate()
-            # GUI-Lock aufheben falls Statik-Mess gerade laief (abgebrochen)
-            try:
-                self._set_cq_locked(False)
-                self._set_gain_measure_lock(False)
-            except Exception:
-                pass
-            # P35-AK5: Panel mit aktuellem Ratio (kann Cache-Wert sein, nicht
-            # immer 50:50). activate() entscheidet welcher Wert gilt.
-            self.control_panel.update_diversity_ratio(
-                self._diversity_ctrl.ratio,
-                self._diversity_ctrl.phase,
-                operate_seconds_remaining=self._diversity_ctrl.seconds_until_remeasure,
-                scoring_mode=self._diversity_ctrl.scoring_mode,
-                is_dynamic=True,
-            )
-            print(f"[Dynamic] Toggle AN — Buffer leer, "
-                  f"Ratio={self._diversity_ctrl.ratio}, Statik pausiert")
-        elif not enabled and self._dynamic_ctrl.is_active():
-            self._dynamic_ctrl.deactivate()
-            # Antennen-Panel zurueck zur Standard-Anzeige
-            self.control_panel.update_diversity_ratio(
-                self._diversity_ctrl.ratio,
-                self._diversity_ctrl.phase,
-                operate_seconds_remaining=self._diversity_ctrl.seconds_until_remeasure,
-                scoring_mode=self._diversity_ctrl.scoring_mode,
-                is_dynamic=False,
-            )
-            print("[Dynamic] Toggle AUS — Statik uebernimmt wieder, Frist refresht")
+    # P34-Stufe2 (v0.97.19): _apply_dynamic_toggle entfernt — Dynamic ist
+    # Default ohne Toggle. _enable_diversity/_disable_diversity steuern
+    # activate()/deactivate() implizit.
 
     def closeEvent(self, event):
-        # P22 / P8: Mess-Modal hart schliessen falls noch offen (App-Quit
-        # mid-Phase-3) — sonst bleibt Modal als Fantom haengen.
-        dlg = getattr(self, '_mess_status_dialog', None)
-        if dlg:
-            try:
-                dlg.reject()
-            except Exception:
-                pass
-            self._mess_status_dialog = None
+        # P34-Stufe2: MessStatusDialog gibt's nicht mehr.
 
         # P22-A10: Staged Preset-Eintraege verwerfen (kein Half-State auf Disk).
         for store_attr in ('_standard_store', '_dx_store'):

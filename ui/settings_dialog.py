@@ -294,18 +294,8 @@ class SettingsDialog(QDialog):
             "Deaktiviert = kein Hintergrund-Logging, null Overhead.")
         form.addRow("", self.stats_cb)
 
-        # P34: Dynamic-Diversity Toggle (Testphase, nicht persistiert)
-        self.dynamic_diversity_cb = QCheckBox(
-            "Antennen-Verhaeltnis dynamisch anpassen (Testphase)"
-        )
-        self.dynamic_diversity_cb.setToolTip(
-            "Statt 1× pro Stunde wird das Verhaeltnis im laufenden Betrieb\n"
-            "kontinuierlich nachjustiert (~jede Minute). Nur im Diversity-\n"
-            "Modus aktiv.\n\n"
-            "Status wird nicht gespeichert — bei jedem App-Start aus.\n"
-            "Anzeige im Antennen-Panel wird BLAU wenn dynamisch aktiv."
-        )
-        form.addRow("", self.dynamic_diversity_cb)
+        # P34-Stufe2 (v0.97.19): Dynamic-Diversity-Toggle entfernt —
+        # Dynamic ist Default ohne Toggle (Statik-Pipeline raus).
 
         # ── v0.88 Bandpilot — Stunden-Logik ──────────────────────────
         self.bandpilot_mode_combo = QComboBox()
@@ -509,10 +499,6 @@ class SettingsDialog(QDialog):
             btn.setChecked(w == tp)
         # Statistik + Debug-Konsole
         self.stats_cb.setChecked(self.settings.get("stats_enabled", True))
-        # P34: Dynamic-Diversity Toggle aus RAM-Property (nicht aus _data)
-        self.dynamic_diversity_cb.setChecked(
-            getattr(self.settings, 'dynamic_diversity_enabled', False)
-        )
         self.debug_console_cb.setChecked(self.settings.get("debug_console_visible", False))
         # P3 v0.95.20: Audio-Dump
         self.audio_dump_cb.setChecked(self.settings.get("audio_dump_enabled", False))
@@ -640,16 +626,7 @@ class SettingsDialog(QDialog):
         # v0.93: diversity_operate_cycles entfernt
         self.settings.set("language", "de" if self.language_combo.currentIndex() == 0 else "en")
         self.settings.set("stats_enabled", self.stats_cb.isChecked())
-        # P34: Dynamic-Diversity Toggle setzen (RAM-only, NICHT in settings.json).
-        # Anschliessend main_window-Handler ausloesen.
-        dynamic_new = self.dynamic_diversity_cb.isChecked()
-        self.settings.dynamic_diversity_enabled = dynamic_new
-        parent = self.parent()
-        if parent is not None and hasattr(parent, '_apply_dynamic_toggle'):
-            try:
-                parent._apply_dynamic_toggle(dynamic_new)
-            except Exception as exc:
-                print(f"[Dynamic-Toggle] Apply-Fehler: {exc}")
+        # P34-Stufe2: Dynamic-Toggle entfernt — Dynamic ist Default.
         self.settings.set("debug_console_visible", self.debug_console_cb.isChecked())
         # P3 v0.95.20: Audio-Dump
         self.settings.set("audio_dump_enabled", self.audio_dump_cb.isChecked())
@@ -692,8 +669,6 @@ class SettingsDialog(QDialog):
         self.radio_ip.setText("")  # Auto-Discovery
         self.language_combo.setCurrentIndex(0)  # Deutsch
         self.stats_cb.setChecked(True)
-        # P34: Dynamic-Diversity bei Reset zurueck auf AUS
-        self.dynamic_diversity_cb.setChecked(False)
         self.debug_console_cb.setChecked(False)
         # P3 v0.95.20: Audio-Dump
         self.audio_dump_cb.setChecked(False)
