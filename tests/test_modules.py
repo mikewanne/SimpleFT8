@@ -2067,20 +2067,21 @@ def test_antenna_pref_a1_clearly_better():
 # ── Normal-Modus TX-Frequenz Persistenz ──────────────────────────────────────
 
 def test_normal_tx_freq_default():
-    """Ohne gespeicherten Wert → audio_freq_hz Default (1500)."""
+    """Ohne gespeicherten Wert → harter 1500 Hz Fallback (P47 v0.97.11)."""
     from config.settings import Settings
     s = Settings.__new__(Settings)
-    s._data = {"audio_freq_hz": 1500}
+    s._data = {}
     assert s.get_normal_tx_freq("20m") == 1500
     assert s.get_normal_tx_freq("40m") == 1500
 
 
 def test_normal_tx_freq_per_band_save_load():
     """save_normal_tx_freq pro Band → get liefert korrekten Wert.
-    Ungesetztes Band faellt auf Default zurueck (kein Cross-Band-Leak)."""
+    Ungesetztes Band faellt auf Default zurueck (kein Cross-Band-Leak).
+    P47: Fallback ist jetzt hartkodiert 1500 (war: audio_freq_hz aus Settings)."""
     from config.settings import Settings
     s = Settings.__new__(Settings)
-    s._data = {"audio_freq_hz": 1500}
+    s._data = {}
     # save() braucht filesystem — wir testen nur die Lese-/Schreib-Logik
     # auf _data direkt (Persistenz-Test wuerde temp-config brauchen).
     s._data["normal_tx_freq_per_band"] = {"20m": 1750, "40m": 1325}
