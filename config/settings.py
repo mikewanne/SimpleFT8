@@ -65,6 +65,12 @@ DEFAULTS = {
     "stats_enabled": True,           # Stations-Statistik pro Zyklus loggen
     "debug_console_visible": False,  # Debug-Konsole ein/ausblenden
     "bandpilot_mode": "off",         # v0.88 — "off" | "auto" | "manual"
+    # P48 (v0.97.13): Radio-Timing-Hardware-Werte aus dem Code in Settings.
+    # FlexRadio-Defaults. Bei IC-7300-Fork hier andere Werte eintragen.
+    "radio_timing": {
+        "tx_buffer_s": 1.3,                    # FlexRadio VITA-49 TX-Buffer-Latenz
+        "rx_hardware_offset_default_s": 0.26,  # FlexRadio RX-Latenz empirisch (10.212 Messungen)
+    },
 }
 
 
@@ -160,6 +166,18 @@ class Settings:
     @property
     def mode(self):
         return self._data["mode"]
+
+    # P48: Radio-Hardware-Timing-Werte (FlexRadio-Defaults).
+    @property
+    def tx_buffer_s(self) -> float:
+        """FlexRadio VITA-49 TX-Buffer-Latenz in Sekunden."""
+        return float(self._data.get("radio_timing", {}).get("tx_buffer_s", 1.3))
+
+    @property
+    def rx_hardware_offset_default_s(self) -> float:
+        """FlexRadio RX-Hardware-Latenz Default fuer DT-Kaltstart."""
+        return float(self._data.get("radio_timing", {})
+                     .get("rx_hardware_offset_default_s", 0.26))
 
     @property
     def frequency_mhz(self):
