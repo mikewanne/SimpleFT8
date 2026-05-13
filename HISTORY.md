@@ -5,6 +5,125 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-13 v0.97.13 — P48 DT-System aufräumen + tunen (4 Teile)
+
+Vier zusammenhängende Verbesserungen am DT-Korrektur-System, basierend
+auf der Analyse von 10.212 DT-Median-Einträgen in Mike's Logs.
+
+### Hintergrund — empirisch belegte FlexRadio-Hardware-Latenz
+
+| Band (FT8) | N Erstkorrekturen | Roh-Median |
+|---|---|---|
+| 15m | 4 | +0.260 s |
+| 20m | 2 | +0.250 s |
+| 30m | 21 | +0.260 s |
+| 40m | 20 | +0.260 s |
+| 80m, 10m | je 1 | +0.280 s |
+
+→ FlexRadio-VITA-49-RX-Pipeline-Latenz reproduzierbar **+0.26 s ± 0.04 s**
+über alle Bänder, immer positiv. Bisher startete die App nach Kaltstart
+bei `_correction = 0.0` und musste 30+ Sekunden konvergieren.
+
+### Vier Teile
+
+**P48-A — Hardware-Werte in Settings.** Neuer `radio_timing`-Block in
+`DEFAULTS`:
+```python
+"radio_timing": {
+    "tx_buffer_s": 1.3,                    # FlexRadio TX-Buffer
+    "rx_hardware_offset_default_s": 0.26,  # FlexRadio RX-Latenz
+},
+```
+Plus 2 Properties mit defensiver `.get()`-Kette. Alte Configs ohne
+`radio_timing`-Block laden mit Defaults — kein Migration-Code nötig.
+
+`core/encoder.py`: Modul-Konstante `TARGET_TX_OFFSET = -0.8` entfernt.
+`Encoder.__init__` bekommt neuen Parameter `tx_buffer_s=1.3`,
+`self.target_tx_offset_s = 0.5 - tx_buffer_s`. 4 Verwendungen migriert.
+Mathematisch identisch zum alten Code wenn Settings auf Defaults.
+
+**P48-B — Cross-Modus-Fallback.** `_load_for_current_key` priorisiert:
+1. Eigener gemessener Wert (`FT2_30m`)
+2. Legacy-Migration (alter Schlüssel ohne Band)
+3. **NEU**: Geschwister-Modus auf gleichem Band — FT8 zuerst, FT4 als
+   Backup (FT8 hat in Mike's Daten 10k+ Einträge → solidester Median).
+   FT8 selber hat keinen Fallback (Master).
+4. Hardware-Default
+
+→ FT4/FT2 auf neuem Band startet mit FT8-Wert vom gleichen Band statt
+mit `0.0` oder unzuverlässiger 1-Stations-Messung.
+
+**P48-C — Hardware-Default als Kaltstart.** Neue Modul-Var
+`_hardware_default_offset` in `core/ntp_time.py` + `set_hardware_default()`
+Setter. `main_window._init_core_components` ruft auf mit
+`settings.rx_hardware_offset_default_s` (Default 0.26).
+
+→ Allererster Lauf auf neuem Band ohne FT8-Geschwister startet bei 0.26
+statt 0.0 — Konvergenz spart 1 Mess-Phase (~30 s).
+
+**P48-D — Schnell-Konvergenz.** Neue Modul-Konstanten
+`_FAST_CONVERGENCE_MIN_STATIONS = 10`, `_FAST_CONVERGENCE_MAX_STDEV = 0.1`.
+In `update_from_decoded`: wenn `_is_initial` UND 1. Slot UND ≥10 Stationen
+UND Streuung < 0.1 s → 1 Slot reicht statt 2.
+
+→ FT8 abends 20m mit 30+ Stationen: Konvergenz in ~15 s statt ~30 s.
+FT4/FT2 bleiben auf 2-Slot-Pfad (zu wenig Stationen).
+
+### Wichtiger Bug-Fix `_is_initial`-Semantik (R1-V2 Finding 1)
+
+Mit dem neuen Hardware-Default 0.26 wäre die alte Logik
+`_is_initial = (saved_val == 0.0)` permanent `False` gewesen →
+**Erstkorrektur-Damping und Schnell-Konvergenz wären komplett tot**.
+
+Fix: `_is_initial = _saved.get(_mode_key()) is None` — eigene gemessene
+Korrektur auf Disk als Kriterium. Cross-Modus-Fallback und Hardware-Default
+zählen NICHT als eigene Messung. So bleibt der Initial-Pfad aktiv solange
+keine eigene Messung existiert.
+
+### Workflow
+
+V1 → V2 → R1 (1 Bug + 2 Risiken + 1 Overengineering + 1 Verbesserung
+angenommen, 2 Hinweise mit Begründung beibehalten, 1 Halluzination
+widerlegt) → V3 → Code → Final-R1 („Push freigegeben", 9.5/10, 0 KP-Findings,
+2 optionale Empfehlungen).
+
+### Tests
+
+`tests/test_p48_dt_optimization.py` NEU mit 17 Tests:
+- T1+T2: Settings + Backward-Kompat
+- T3+T4: Hardware-Default Setter + Fallback
+- T5–T9: Cross-Modus-Fallback (alle 5 Fälle)
+- T10–T12: `_is_initial`-Bug-Fix verifiziert
+- T13–T15: Schnell-Konvergenz (greift/blockiert)
+- T16+T17: Encoder `target_tx_offset_s` Default + Custom
+
+Plus 3 bestehende Tests in `test_modules.py` angepasst.
+
+**Tests:** 1175 → **1192 grün** (+17, V3 prognostizierte 15, +2 Bonus).
+
+### Backup
+
+`Appsicherungen/2026-05-13_v0.97.12_vor_p48_dt_optimization/` mit
+`config/settings.py`, `core/ntp_time.py`, `core/encoder.py`,
+`ui/main_window.py`.
+
+### Plan-Files
+
+`prompts/p48_dt_optimization_{v1,v2,r1,v3,final_r1}.md`.
+
+### Commits
+
+7 atomare Commits (C1–C7).
+
+### Followup
+
+`P49 OMNI-Pretrigger aus Settings` in TODO eingetragen —
+`core/omni_cq.py:_OMNI_PRETRIGGER_OFFSET_S = 1.3` ist die letzte
+hartcodierte FlexRadio-Konstante, müsste für IC-7300-Fork auch
+parametrisiert werden. ~30 min eigener Workflow.
+
+---
+
 ## 2026-05-13 v0.97.12 — Bundle A: P43 setproctitle + P20 Log-Rotation + P18 DT-Print-Dedup
 
 **Drei kleine Quality-of-Life-Fixes als gemeinsames Bundle** — alle

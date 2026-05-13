@@ -59,6 +59,7 @@ P34 + P35 lokal gesammelt.
 | ~~P18~~ | ~~DT-KORR-3X-RELOAD~~ ✅ **ERLEDIGT v0.97.12 Bundle A (13.05.2026)** |
 | ~~P20~~ | ~~LOG-ROTATION simpleft8.log~~ ✅ **ERLEDIGT v0.97.12 Bundle A (13.05.2026)** |
 | **P29** | OMNI-CQ QSO-Panel-Anzeige: bei Paritäts-Wechsel (Even↔Odd) Leerzeile dazwischen + Even-Slot etwas dunklere Farbe (selber Farbton, nur ein wenig dunkler) zur optischen Unterscheidung | 1h |
+| **P49** | OMNI-Pretrigger aus Settings (P48-Followup): `core/omni_cq.py:_OMNI_PRETRIGGER_OFFSET_S = 1.3` ist letzte hartcodierte FlexRadio-Konstante, sollte aus `settings.tx_buffer_s` kommen für IC-7300-Fork-Kompat | 30min |
 | ~~P43~~ | ~~setproctitle für Activity-Monitor-Erkennbarkeit~~ ✅ **ERLEDIGT v0.97.12 Bundle A (13.05.2026)** |
 | ~~P44~~ | ~~Statusbar DT-Korrektur grün-Bug~~ ✅ **ERLEDIGT v0.97.10 (13.05.2026)** |
 | **P46** | Bandpilot Normal wieder reinholen → 3-Wege-Vergleich Normal/Std/DX | 2-3h Workflow |

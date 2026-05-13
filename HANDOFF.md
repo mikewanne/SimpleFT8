@@ -1,5 +1,37 @@
 # HANDOFF — SimpleFT8
 
+## Stand 2026-05-13 abends: v0.97.13 P48 DT-System aufräumen + tunen
+
+**Code:** v0.97.13 — Vier zusammenhängende DT-Verbesserungen basierend
+auf 10.212-Einträge-Analyse. **P48-A:** FlexRadio-Hardware-Werte
+(`tx_buffer_s=1.3`, `rx_hardware_offset_default_s=0.26`) aus Code in
+neuen Settings-Block `radio_timing` ausgelagert. Encoder bekommt jetzt
+`tx_buffer_s`-Parameter, `TARGET_TX_OFFSET` Modul-Konstante entfernt.
+**P48-B:** Cross-Modus-Fallback in `_load_for_current_key` — FT4/FT2
+startet mit FT8-Wert vom gleichen Band (FT8 hat solidesten Median).
+**P48-C:** Hardware-Default 0.26 als Kaltstart statt 0.0 — neuer
+Band-Start liegt sofort fast am echten Wert. **P48-D:** Schnell-
+Konvergenz im 1. Slot wenn ≥10 Stationen mit Stddev<0.1 → 1 statt
+2 Slots (~15s statt ~30s Konvergenz auf FT8 abends).
+**Wichtig:** `_is_initial`-Bug-Fix (R1-V2 Finding 1) — sonst hätte
+Hardware-Default 0.26 alle Initial-Logik tot gelegt.
+**Tests:** **1192 grün** (1175 + 17 P48).
+**Backup vor Code:** `Appsicherungen/2026-05-13_v0.97.12_vor_p48_dt_optimization/`.
+**Workflow:** V1→V2→R1 (1 Bug + 2 Risiken + 1 Verbesserung + 1 Refactor
+angenommen)→V3→Code→Final-R1 („Push freigegeben", 9.5/10, 0 KP).
+**Push:** gleich folgend (7 atomare Commits C1–C7).
+
+### Nächste mögliche Aufgaben (TODO)
+
+- **P49** OMNI-Pretrigger aus Settings (P48-Followup, ~30min) —
+  `_OMNI_PRETRIGGER_OFFSET_S = 1.3` ist letzte hartcodierte
+  FlexRadio-Konstante
+- **Bundle B (UI-Persistenz)** P24 + P32 + P29 (~2.5h)
+- **Bundle C (Reihenfolge & Cache)** P33 + P10 (~2h, Field-Test-light)
+- **P46** Bandpilot Normal-Reintegration (2-3h)
+
+### Vorgänger-Stand (v0.97.12, 13.05.2026 nachmittags)
+
 ## Stand 2026-05-13 nachmittags: v0.97.12 Bundle A (P43 + P20 + P18) erledigt
 
 **Code:** v0.97.12 — Drei kleine QoL-Fixes als Bundle:
