@@ -40,7 +40,13 @@ USER_AGENT_TMPL = "SimpleFT8/{version}"
 DEFAULT_TIMEOUT_S = 10
 DEFAULT_POLL_INTERVAL_S = 120
 BACKOFF_FACTOR = 1.5
-BACKOFF_MAX_S = 3600  # 60 Minuten
+# P10 (v0.97.15): 60 Min war zu lang fuer Hobby-Sessions — bei
+# transienten Server-Outages (502/503/Timeout) hat User nach Recovery
+# bis zu 1h keine PSK-Daten gesehen obwohl Mike gehoert wurde.
+# 10 Min ist Kompromiss: aggressiv genug fuer kurze Outages, mild
+# genug bei langer Wartung. Reset-Trigger bei Band/Modus-Wechsel in
+# mw_radio greift zusaetzlich (sofortiger Re-Fetch).
+BACKOFF_MAX_S = 600  # 10 Minuten
 
 
 @dataclass
@@ -141,22 +147,33 @@ def parse_spots(xml_text: str) -> list[Spot]:
 
 @dataclass
 class _Backoff:
-    """Exponentielles Backoff fuer Polling-Fehler."""
+    """Exponentielles Backoff fuer Polling-Fehler.
+
+    P10 (v0.97.15): Thread-safe via Lock. reset() kann von aussen
+    gerufen werden (Bandwechsel/Modus-Wechsel) waehrend Worker-Thread
+    in fail() ist — Lock verhindert dass reset zwischen read und
+    write von fail() den neuen Wert ueberschreibt (R1-KP-2).
+    """
     base_s: float
     factor: float = BACKOFF_FACTOR
     max_s: float = BACKOFF_MAX_S
     current_s: float = field(init=False)
+    _lock: threading.Lock = field(
+        init=False, default_factory=threading.Lock, repr=False
+    )
 
     def __post_init__(self):
         self.current_s = self.base_s
 
     def reset(self):
-        self.current_s = self.base_s
+        with self._lock:
+            self.current_s = self.base_s
 
     def fail(self) -> float:
         """Naechstes Intervall setzen und zurueckgeben."""
-        self.current_s = min(self.max_s, self.current_s * self.factor)
-        return self.current_s
+        with self._lock:
+            self.current_s = min(self.max_s, self.current_s * self.factor)
+            return self.current_s
 
 
 class PSKReporterClient:
@@ -318,6 +335,28 @@ class PSKReporterClient:
     def is_running(self) -> bool:
         with self._lock:
             return self._thread is not None and self._thread.is_alive()
+
+    def reset_backoff(self) -> None:
+        """P10 (v0.97.15): Backoff von aussen zuruecksetzen.
+
+        Aufruf z.B. bei Bandwechsel oder Modus-Wechsel — User-erwartete
+        Recovery. Naechster Poll-Tick laeuft mit base_s-Intervall.
+        Worker-Thread im Sleep wird NICHT interruptet — aktueller Sleep
+        laeuft bis Ende (worst-case 10 Min Latenz nach Reset).
+        """
+        self._backoff.reset()
+
+    def set_mode(self, mode: str) -> None:
+        """P10 (v0.97.15, Final-R1 KP-1): Mode-Update von aussen.
+
+        Konstruktor setzt `_mode` einmalig. Bei FT8↔FT4↔FT2-Wechsel
+        muss naechster fetch_spots() mit neuem Mode laufen — sonst
+        zeigt Karte FT8-Spots obwohl Mike auf FT4 ist. Aufruf in
+        mw_radio._reset_psk_polling_on_change.
+        """
+        new_mode = mode.upper()
+        if new_mode != self._mode:
+            self._mode = new_mode
 
     @property
     def current_interval_s(self) -> float:

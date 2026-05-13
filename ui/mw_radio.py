@@ -257,6 +257,35 @@ class RadioMixin:
         # Rotes Banner im Fenster wenn RX deaktiviert
         self._rx_warning_label.setVisible(not active)
 
+    def _reset_psk_polling_on_change(self) -> None:
+        """P10 (v0.97.15): sofortiger PSK-Re-Fetch nach Band/Modus-Wechsel.
+
+        Zwei Pfade werden zuruckgesetzt:
+        - Statusbar-Pfad (`_psk_worker`): `_psk_timer.start(0)` triggert
+          sofortiges Fetch. `_psk_first_fetch` zurueck damit naechster
+          Wechsel wieder den 2-Min-Schnellstart hat.
+        - Karten-Pfad (`PSKReporterClient.reset_backoff`): falls Karte
+          offen, Backoff zurueck auf base_s damit Karte ebenfalls
+          sofort fetched.
+
+        Defensiv `hasattr`-Check und try/except — Aufrufer-Sicherheit
+        wenn Karte nie geoeffnet wurde oder Init-Reihenfolge anders.
+        """
+        if hasattr(self, '_psk_timer'):
+            self._psk_first_fetch = True
+            self._psk_timer.start(0)
+        dlg = getattr(self, '_direction_map_dialog', None)
+        if dlg is not None:
+            canvas = getattr(dlg, '_map_canvas', None)
+            client = getattr(canvas, '_psk_client', None) if canvas else None
+            if client is not None:
+                try:
+                    # Final-R1 KP-1: Mode-Sync gegen veraltete Spot-Queries.
+                    client.set_mode(self.settings.mode)
+                    client.reset_backoff()
+                except Exception as e:
+                    print(f"[P10] PSK-Client-Update fehlgeschlagen: {e}")
+
     @Slot(str)
     def _on_mode_changed(self, mode: str):
         # Pipeline-Lock-Schutz (v0.92 R1-Audit): blockiert auch programmatische
@@ -276,6 +305,8 @@ class RadioMixin:
         if getattr(self, "_dynamic_ctrl", None) and self._dynamic_ctrl.is_active():
             self._dynamic_ctrl.reset()
         self.settings.set("mode", mode)
+        # P10 (v0.97.15): sofortiger PSK-Re-Fetch + Karten-Pfad-Reset.
+        self._reset_psk_polling_on_change()
         self.timer.set_mode(mode)
         # CQ-Freq Dwell/Recalc-Intervall an neuen Modus anpassen
         self._diversity_ctrl.set_mode(mode)
@@ -359,6 +390,12 @@ class RadioMixin:
         self.settings.set("band", band)
         freq = self.settings.frequency_mhz
         self._has_sent_cq = False
+
+        # P10 (v0.97.15): bei Bandwechsel sofortiger PSK-Re-Fetch
+        # (Statusbar-Pfad) + Backoff-Reset im Karten-Pfad falls offen.
+        # Statt bis zu 5 Min auf naechsten _psk_timer-Tick zu warten,
+        # sieht User Bands-PSK-Daten sofort.
+        self._reset_psk_polling_on_change()
 
         # P34: Dynamic-Buffer leeren bei Bandwechsel (AK10)
         if getattr(self, "_dynamic_ctrl", None) and self._dynamic_ctrl.is_active():

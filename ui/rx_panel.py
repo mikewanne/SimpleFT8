@@ -289,7 +289,16 @@ class RXPanel(QWidget):
         """Neue dekodierte Nachricht hinzufuegen."""
         if not self._rx_active:
             return
-        utc_new = getattr(msg, '_utc_display', None) or getattr(msg, '_utc_str', None) or time.strftime("%H%M%S", time.gmtime())
+        # P13 (v0.97.15): bevorzugt Slot-Boundary aus Decoder
+        # (`msg._slot_start_ts`), sonst Wall-Time-Fallback. int() rundet
+        # Sub-Sekunden ab (R1-K2).
+        slot_ts = getattr(msg, '_slot_start_ts', None)
+        if slot_ts is not None:
+            utc_new = time.strftime("%H%M%S", time.gmtime(int(slot_ts)))
+        else:
+            utc_new = (getattr(msg, '_utc_display', None)
+                       or getattr(msg, '_utc_str', None)
+                       or time.strftime("%H%M%S", time.gmtime()))
         # Sorted insert: absteigende UTC-Reihenfolge (neueste oben), HHMMSS-Stringvergleich
         insert_pos = self.table.rowCount()
         for row in range(self.table.rowCount()):
@@ -384,7 +393,15 @@ class RXPanel(QWidget):
 
         # UTC: _utc_display zeigt wann sich der Inhalt zuletzt geaendert hat
         # (nicht wann zuletzt dekodiert — das waere bei Diversity immer "jetzt")
-        utc = getattr(msg, '_utc_display', None) or getattr(msg, '_utc_str', None) or time.strftime("%H%M%S", time.gmtime())
+        # P13 (v0.97.15): bevorzugt _slot_start_ts vom Decoder fuer
+        # Slot-Boundary statt Wall-Time-Fallback.
+        slot_ts = getattr(msg, '_slot_start_ts', None)
+        if slot_ts is not None:
+            utc = time.strftime("%H%M%S", time.gmtime(int(slot_ts)))
+        else:
+            utc = (getattr(msg, '_utc_display', None)
+                   or getattr(msg, '_utc_str', None)
+                   or time.strftime("%H%M%S", time.gmtime()))
 
         # SNR
         snr_str = f"{msg.snr:+d}" if msg.snr != -30 else "?"
@@ -595,7 +612,21 @@ class RXPanel(QWidget):
         elif mode == "country":
             messages.sort(key=lambda x: x[1])
         elif mode == "time":
-            messages.sort(key=lambda x: getattr(x[0], '_utc_display', None) or getattr(x[0], '_utc_str', None) or '', reverse=True)
+            # P13 (v0.97.15): Sort auf Slot-Start-Timestamp (Float) wenn
+            # gesetzt, sonst alte HHMMSS-Strings als Float interpretieren.
+            # Defensiv gegen TypeError bei mixed-Type-Sortierung.
+            def _time_key(item):
+                m = item[0]
+                ts = getattr(m, '_slot_start_ts', None)
+                if ts is not None:
+                    return float(ts)
+                s = (getattr(m, '_utc_display', None)
+                     or getattr(m, '_utc_str', None) or '0')
+                try:
+                    return float(s)
+                except (ValueError, TypeError):
+                    return 0.0
+            messages.sort(key=_time_key, reverse=True)
 
         # Tabelle neu aufbauen
         self.table.setRowCount(0)

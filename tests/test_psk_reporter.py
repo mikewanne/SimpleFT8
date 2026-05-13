@@ -180,10 +180,11 @@ def test_backoff_reset_to_base():
     assert b.current_s == 120
 
 
-def test_backoff_default_max_is_60min():
+def test_backoff_default_max_is_10min():
+    """P10 (v0.97.15): BACKOFF_MAX_S von 60min auf 10min gesenkt."""
     b = _Backoff(base_s=120)
     assert b.max_s == BACKOFF_MAX_S
-    assert BACKOFF_MAX_S == 3600
+    assert BACKOFF_MAX_S == 600
 
 
 # ── PSKReporterClient: nicht-Netz-Tests ────────────────────
