@@ -5,6 +5,332 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-13 v0.97.19 — P34-Stufe2: Statik-Ratio-Pipeline komplett raus
+
+Mike's Strategie-Wechsel nach 2 Tagen erfolgreichem Dynamic-Field-Test:
+"dynamisch laeuft ja top — Statik-Pipeline raus". Voller Workflow autonom
+(V1→V2→R1→V3→Code→Final-R1) durchgezogen.
+
+**Was entfernt wurde:**
+- Statik-Mess-Phase (`_phase=="measure"` State-Machine in
+  `DiversityController`)
+- `MEASURE_CYCLES`, `EARLY_STOP_FRACTION`, `EARLY_STOP_THRESHOLD`,
+  `REMEASURE_INTERVAL_SECONDS` Konstanten
+- `record_measurement()`, `_check_phase3_early_stop()`, `_evaluate()`,
+  `start_measure()`, `on_band_change()`, `can_measure()`,
+  `on_operate_cycle()` weg. (`on_operate_cycle` bleibt — inkrementiert
+  Pattern-Counter.)
+- `should_remeasure()` + `seconds_until_remeasure` Property +
+  `_last_measured_at`-Feld + 1-h-Frist
+- `phase`/`measure_step`/`operate_cycles`/`_early_stop_at`/
+  `dynamic_active` Properties
+- `_scoring_mode_listeners`-Liste in `DiversityController` (Coupling
+  zur Dynamic-Pipeline via explicit `_dynamic_ctrl.reset()` in
+  `_activate_diversity_with_scoring` statt Listener-Magic)
+- `Settings.dynamic_diversity_enabled` Property + Setter
+- `Settings.save_diversity_preset()` + `get_diversity_preset()` Methoden
+- `PresetStore.is_valid_ratio()`, `get_ratio_age_minutes()`,
+  `save_ratio()`, `commit_with_ratio()` Methoden (→ `commit_gain()` als
+  Ersatz für staged Persist)
+- `ui/mess_status_dialog.py` Datei komplett gelöscht
+- `MainWindow._apply_dynamic_toggle()` (Settings-Toggle weg)
+- `MainWindow._mess_status_dialog`-Attribut + `closeEvent`-Block
+- `MainWindow._handle_diversity_measure()` (in CycleMixin)
+- `mw_radio._open_mess_status_dialog`, `_close_mess_status_dialog`,
+  `_on_mess_status_cancelled` Methoden
+- `mw_radio._try_diversity_cache_reuse`, `_assess_ratio` Methoden
+- `mw_radio.Auto-Reactivate`-Block (Z.683-688 historisch)
+- `mw_radio._pending_ratio_status`-Attribut
+- `settings_dialog.dynamic_diversity_cb` QCheckBox + Tooltip + Apply-Block
+
+**Was vereinfacht wurde:**
+- `mw_radio._enable_diversity` (3 Pfade → 1 Pfad):
+  - Deferred-Branch bei `radio.ip=None` (R1-F1 KRITISCH — KEIN
+    `_dynamic_ctrl.activate()` aufrufen, nur `_pending_diversity_init`)
+  - Normal-Branch: `_dynamic_ctrl.reset() + activate()` direkt
+  - `cached_ratio/cached_dominant/cached_age_seconds`-Parameter raus
+- `mw_radio._check_diversity_preset` (5 Branches → 2 Branches):
+  - Gain fresh → `_enable_diversity` direkt
+  - Gain stale/missing → DXTuneDialog → bei Accept `_enable_diversity`
+- `mw_radio._on_dx_tune_accepted` (Stage/Commit-Coupling raus —
+  direkter `save_gain`)
+- `mw_radio._on_dx_tune_rejected` (Stale-Acceptance-Pfad ohne
+  Cache-Ratio-Reuse)
+- `mw_cycle._on_cycle_decoded` (`was_phase`-Check raus, Phase ist
+  immer "operate" bei Diversity)
+- `mw_cycle._pop_diversity_queue` (1-Tupel statt 2-Tupel `(ant,
+  was_phase)`)
+- `mw_cycle._is_antenna_tuning_active` (`phase=="measure"`-Check raus)
+- `control_panel.update_diversity_ratio` Signatur drastisch reduziert:
+  von 9 Parametern (`ratio, phase, measure_step, measure_total,
+  operate_seconds_remaining, scoring_mode, operate_cycles, operate_total,
+  is_dynamic, current_ant`) auf 3 (`ratio, *, scoring_mode, current_ant`).
+  Backwards-Compat via `**_ignored_legacy` (R1-Hinweis-Tech-Debt für
+  v0.98 spaeter)
+- `control_panel.update_remeasure_countdown` → No-Op (1h-Frist weg)
+- `PresetStore._load`: bei alten Files mit Ratio-Resten 1×-Info-Log pro
+  Key beim Load (R1-F5)
+
+**Architektur-Kern danach:**
+- `DiversityController` ist jetzt schmal: CQ-Frequenz-Such (Histogramm
+  + Sticky-Gap + graduelle Lücken-Toleranz) + Pattern-Generator
+  (`choose()` mit 50:50/70:30/30:70 Operate-Pattern)
+- `DynamicDiversityController` ist einziger Pfad für Ratio-Bestimmung:
+  slot-für-slot 5er-Schiebepuffer, Median-basiert, evaluiert nach jedem
+  Slot wenn beide Puffer voll (~75 s bei FT8)
+- `_enable_diversity()` ruft `_dynamic_ctrl.activate()` auf, sobald
+  Radio verbunden ist
+- `_disable_diversity()` ruft `_dynamic_ctrl.deactivate()` auf
+
+**Workflow V1→V2→R1→V3:**
+- V1: Initial-Entwurf mit 14 ACs
+- V2 Self-Review: 6 offene Fragen + Edge-Cases EC7-EC12 + 15→17 Tests
+- R1 (DeepSeek-Reasoner): 1 KRITISCH (Radio.ip+activate Race) + 2
+  Risiken (`_operate_cycles`-Ersatz, Cache-Ratio-Start) + 4
+  Verbesserungen (Commit-Granularität, Info-Log, Test-Count,
+  Zeilen-Refs) + 1 Test-Hinweis (Deferred-Init)
+- V3: 20 ACs, alle R1-Findings eingearbeitet, 17 P34-Stufe2 Tests
+  inkl. T17 für Deferred-Init
+- Code: 10 atomare Commits (statt 15 nach R1-F4)
+- Final-R1: "Keine Bugs, keine kritischen Risiken. Die 6 Prüfpunkte
+  sind alle erfüllt." Push freigegeben.
+
+**Tests:** 1239 → 1144 grün. Bilanz:
+- Gelöscht (8 Files): `test_should_remeasure.py`, `test_p35_startup_bugs.py`,
+  `test_diversity_cache_reuse.py`, `test_diversity_bandwechsel.py`,
+  `test_diversity_density.py`, `test_phase2_stats_pause.py`,
+  `test_p22_preset_atomic.py`, plus `ui/mess_status_dialog.py`-Tests
+- Stark refaktoriert: `test_preset_store.py` (komplett neu),
+  `test_patterns.py` (Mess-Tests raus), `test_p1_cache_simple.py`
+  (5→2 Branches)
+- Test-Anpassungen: `test_modules.py` (Mess-spezifische raus),
+  `test_lock_coverage.py` (Lock-vor-Reset-Test raus),
+  `test_diversity_dynamic*.py` (Listener-Tests + Toggle-Tests raus),
+  `test_p37_rx_antenna_label.py` (neue Signatur),
+  `test_p40_dynamic_ratio_slot.py` (kein is_dynamic mehr)
+- NEU: `test_p34_stufe2.py` mit 15 Tests (T1-T15 + Deferred-Init R1-F1)
+
+**Backup vor Code:**
+`Appsicherungen/2026-05-13_v0.97.18_vor_p34_stufe2/` (25 Files).
+
+**Plan-Files:** `prompts/p34_stufe2_v1.md`, `_v2.md`, `_r1.md`,
+`_v3.md`, `_final_r1.md`.
+
+**Bonus:** 80m-Abbruch-Bug (Mike-Beobachtung 13.05.) ist obsolet —
+keine Mess-Phase mehr, keine "0/6-Mess-Hänger"-Symptome.
+
+**APP_VERSION 0.97.18 → 0.97.19** (Patch-Bump für reines Refactor
+ohne Feature-Add).
+
+---
+
+## 2026-05-13 v0.97.18 — Toast-Bundle (Medaillen + 6s + Manual-Dialog-Konsistenz)
+
+Mike-Field-Test nach P46-Bandpilot 13.05.2026: Auto-Toast erscheint
+korrekt bei Bandwechsel mit Ranking-Vergleich aller 3 Modi. Mike's
+Feedback:
+- „1 2 oder 3 sind nicht ersichtlich bei der kürze der anzeige
+  dass das ein Ranking ist"
+- Toast-Zeit 5s zu kurz für Ranking-Lesezeit
+
+**Loesung `ui/bandpilot_dialogs.py`:**
+- Neuer Helper `_rank_marker(idx)` → 🥇 (Top-1), 🥈 (Top-2), 🥉 (Top-3),
+  out-of-range → ""
+- `_USE_EMOJI = not os.environ.get("SIMPLEFT8_TEXT_MARKERS")` —
+  R1-SOLLTE-Defensive: Env-Var schaltet auf Text-Fallback ("Top:",
+  "2.:", "3.:") fuer Systeme ohne Color-Emoji-Renderer
+- `_TOAST_DISPLAY_MS = 6000` Konstante (war 5000ms hartcodiert)
+- `BandpilotAutoToast` Ranking-Label nutzt Marker statt `{idx + 1}.`
+- `BandpilotAutoToast` Self-Close auf `_TOAST_DISPLAY_MS`
+- `BandpilotManualDialog` Ranking-Label nutzt Marker; `●`-current-Marker
+  bleibt fuer aktuellen Modus (Doppelmarker durch unterschiedliche
+  Semantik klar getrennt)
+
+**Workflow V1→V2→R1→V3:**
+- V2 fand 2 kleinere Punkte (Konstante extrahieren, Konstanten-Test)
+- R1 9/10 mit 1 SOLLTE-FIX (Emoji-Fallback) — uebernommen
+- Final-R1 „Push freigegeben" mit 0 Findings
+
+**6 neue Tests `tests/test_toast_bundle.py`:**
+- T1 Default 🥇🥈🥉 fuer idx 0/1/2
+- T2 Out-of-range (3, -1, 100) → ""
+- T3 Auto-Toast enthaelt 🥇 + 🥈 + 🥉
+- T4 Manual-Dialog enthaelt 🥇 + ●
+- T5 `_TOAST_DISPLAY_MS == 6000`
+- T6 Env-Var `SIMPLEFT8_TEXT_MARKERS` → Text-Fallback (mit
+  `importlib.reload`-Pattern fuer Modul-Konstante)
+
+**Test-Bilanz:** 1233 → 1239 grün (+6 Toast). Push pending bis Mike's
+visuelle Bestaetigung beim naechsten Bandwechsel.
+
+**Backup:** `Appsicherungen/2026-05-13_v0.97.17_vor_toast_bundle/`.
+
+**Plan-Files:** `prompts/toast_bundle_v1.md`, `_v2.md`, `_r1_prompt.md`,
+`_r1.md`, `_v3.md`, `_final_r1.md`.
+
+**APP_VERSION 0.97.17 → 0.97.18.**
+
+---
+
+## 2026-05-13 v0.97.17 — P46 Bandpilot Normal-Reintegration
+
+Mike's Strategie-Wechsel 12.05.2026 umgesetzt: P35-Bug-E (Bandpilot
+empfiehlt NIE Normal) zurueckgenommen. Bandpilot vergleicht jetzt
+3-Wege (Normal / Diversity Standard / Diversity DX) und darf Normal
+sowohl als aktuellen Modus haben als auch als Target empfehlen.
+
+**Wurzel:** P35-Bug-E (11.05.2026, commits `18db03f`+) hat in
+`mw_radio.py` zwei Skip-Bloecke eingebaut: `current == "normal"` skipt
+gesamten Bandpilot, `target == "normal"` blockiert Wechsel-Empfehlung.
+Damalige Vorsicht weil Bandpilot nur Diversity-Vergleich war. 12.05.
+Mike-Konsens mit R1: 3-Wege-Pilot ist legitim, „ganz oder gar nicht".
+
+**Code `ui/mw_radio.py`:**
+- Z.774-779 `if current == "normal": return False` → geloescht
+- Z.811-816 `if target == "normal": return False` → geloescht
+- `_set_rx_mode_direct` Doppelaufruf-Refactor (R1-F2 SOLLTE): bei
+  `_rx_mode == "diversity"` ruft `_disable_diversity()` einmal alles
+  durch (inkl. `_apply_normal_mode`). Nur UI-only Setter
+  (btn_diversity-Text, freq_hist) bleiben separat.
+- `_apply_bandpilot_auto` pending-Tupel 4 → 5 elementig: `current`
+  zusaetzlich gespeichert (R1-F3 SOLLTE). `_on_bandpilot_tx_finished`
+  prueft Konsistenz und verwirft pending wenn User Modus zwischendurch
+  manuell geaendert hat.
+
+**Tests `tests/test_mw_radio_bandpilot.py`:**
+- 2 alte P35-Bug-E-Tests geloescht (`test_bandpilot_skips_when_current_is_normal`,
+  `test_bandpilot_rejects_normal_target`)
+- 4 Workaround-Kommentare bereinigt (P35-Bug-E-Hinweise raus)
+- 2 TX-finished-Tests auf 5-Tupel + `_current_rx_mode_string`-Mock angepasst
+
+**Neue Tests `tests/test_p46_bandpilot_normal.py` — 8 Tests:**
+- T1 Auto: current=normal → switch zu diversity_dx
+- T2 Auto: current=diversity_dx → switch zu **normal** (vorher geblockt!)
+- T3 Auto: current=normal, no_change → nichts
+- T4 Manual: current=normal → Dialog
+- T5 Manual: current=diversity_dx, top1=normal → User waehlt normal
+- T6 Auto: TX laeuft + target=normal → 5-elementiges pending
+- T7 (R1-F4 KOENNTE): current=normal + rec=None → Statusbar-Hinweis
+- T8 (R1-F3 SOLLTE): TX-pending verworfen wenn User Modus manuell wechselt
+
+**Workflow V1→V2→R1→V3:** R1 8/10 mit 1 KRITISCH (P35-Bug-E-Tests
+muessen geloescht werden) + 2 SOLLTE (F2 Doppelaufruf, F3 5-Tupel) +
+1 KOENNTE (F4 Test rec=None). Alle 4 in V3 uebernommen.
+
+**Final-R1:** 9/10 „Push freigegeben", 0 KRITISCH, 1 KOENNTE
+(Doku-Update bandpilot_de.md). Letzteres sofort gefixt:
+`docs/explained/bandpilot_de.md` + `bandpilot.md` (EN) Hinweis dass
+Normal seit P46 wieder Target sein kann.
+
+**Test-Bilanz:** 1227 → 1233 grün (+8 P46 −2 geloescht +2 angepasst).
+
+**Backup:** `Appsicherungen/2026-05-13_v0.97.16_vor_p46_bandpilot_normal/`.
+
+**Plan-Files:** `prompts/p46_bandpilot_normal_v1.md`, `_v2.md`,
+`_r1_prompt.md`, `_r1.md`, `_v3.md`, `_final_r1_prompt.md`, `_final_r1.md`.
+
+**P35-Bug-F bleibt unveraendert:** App-Start IMMER 20m FT8 Normal
+(`main_window.__init__`) — orthogonal zum Bandpilot-Pfad.
+
+**APP_VERSION 0.97.16 → 0.97.17.**
+
+---
+
+## 2026-05-13 v0.97.16 — P14 DT-Werte-Symmetrie (MAD-Outlier-Filter + Totband-Reduktion)
+
+Mike-Beobachtung 13.05.2026 ~07:30 UTC: 20m FT8 RX-Panel zeigte 20
+Stationen mit klar asymmetrischer DT-Verteilung — 11 negativ, 1 positiv
+(≥0.1), 8 nahe Null. Ausreißer bei -1.2, -0.7, -0.7, -0.4, -0.3, +0.3
+(vermutlich Mobile/QRP/QSB-verfälschte Stationen). Gespeicherte
+Korrektur stand auf +0.2705s, sollte aber bei ~0.20s liegen damit
+Median der RX-Werte um 0 zentriert ist.
+
+**Wurzel:** Zwei Schwächen im DT-Korrektur-Algorithmus in
+`core/ntp_time.py`:
+1. `statistics.median(valid)` ist robust gegen einzelne Outlier, aber
+   bei 5+ negativen Ausreißern in einer 20er-Stichprobe wandert der
+   Median selbst nach unten (Mike's Beispiel: Median -0.1 statt 0.0)
+2. `DEADBAND = 0.05` friert die Korrektur ein wenn der Median knapp
+   am Rand bleibt (R1-F1 KRITISCH)
+
+**Voller Workflow V1→V2→R1→V3→Code→Final-R1:**
+
+V1 schlug Trimmed-Median + DAMPING 0.5 vor.
+
+V2 fand Lücken (T1-Erwartung falsch, AK5-Annahme falsch, _trimmed_median-
+Helper-Name unklar).
+
+R1-Review (5/10, „Code-Schreiben NICHT freigegeben"): 2 KRITISCH-Findings —
+**F1** DEADBAND 0.05 + 10%-Trim friert bei -0.05 ein. **F2** Wurzel
+nicht untersucht: warum hat einfacher Median nicht von 0.27 auf 0.20
+gesenkt? R1 forderte Sanity-Test mit Rohdaten + DEADBAND auf 0.02
++ MAD-Filter statt Trim + DAMPING bei 0.7 lassen (KISS).
+
+V3 übernahm alle 2 KRITISCH + 3 SOLLTE + 1 KOENNTE + 2 HINWEIS:
+- MAD-basierter Outlier-Filter (Hampel) mit k=2.5
+- DEADBAND 0.05 → 0.02
+- DAMPING bei 0.7 (KISS)
+- Opt-in Debug-Logging via `SIMPLEFT8_DT_DEBUG=1`
+- T7 Sanity-Anker mit einfachem Median (R1-F2-Anti-Symptom-Fix)
+
+**Implementierung `core/ntp_time.py`:**
+
+`_filter_outliers_mad(values, k=2.5)` — neue Modul-Funktion. Hampel-
+Filter: berechnet Median + MAD (Median Absolute Deviation), entfernt
+Werte mit `|x - median| > k × MAD`. Edge-Cases: n<7 Identity (FT4/FT2-
+Schutz), MAD=0 Identity, <3 übrig nach Filter Identity (Notnagel).
+
+In `update_from_decoded`: `filtered = _filter_outliers_mad(valid)` vor
+Median-Berechnung. Fast-Path-stdev arbeitet bewusst weiter auf
+ungefilterten `valid`-Werten (konservatives Stop-Kriterium, R1-F8).
+
+`DEADBAND = 0.02` Modul-Konstante. `_DT_DEBUG = os.environ.get(
+"SIMPLEFT8_DT_DEBUG", "0") == "1"` für opt-in Debug-Print pro Slot:
+```
+[DT-DBG] FT8_20m n=20 raw=-0.100 filt=+0.000 outliers=7 corr=+0.270
+```
+
+**Effekt auf Mike's 20-Werte-Stichprobe:**
+- Median = -0.05, MAD = 0.05, Threshold = 2.5 × 0.05 = 0.125
+- Outliers entfernt: -1.2, -0.7, -0.7, -0.4, -0.3, -0.2, +0.3 (= 7)
+- Übrig: 13 Werte → Median **0.0** (statt -0.1 ungefiltert)
+- |0.0| ≤ DEADBAND 0.02 → kein Update, Korrektur 0.27 bleibt
+
+**Test-Bilanz:** 1217 → 1227 grün (+10 P14 + 1 bestehender Test
+angepasst: `test_ntp_deadband` nutzt 0.01 statt 0.05 weil 0.05 jetzt
+außerhalb Totband).
+
+**10 neue Tests (`tests/test_p14_dt_symmetry.py`):**
+- T1 MAD-Filter auf Mike's 20 Werten: ≥5 Outliers raus, Median im Totband
+- T2 n<7 Identity (FT4/FT2-Pfad)
+- T3 MAD=0 Identity
+- T4 n=10 realistisch + 1 Outlier
+- T5 Notnagel-min3 Schutz
+- T6 DEADBAND-Konstante 0.02
+- T7 **R1-F2-Sanity-Anker**: einfacher Median (MAD via monkeypatch zu
+  Identity) → `_correction` 0.27 → 0.20 ✓ (Wurzel-Algorithmus funktioniert)
+- T8 Mit MAD-Filter: Mike's Daten → `_correction` bleibt 0.27 (Totband)
+- T9 Debug-Log Opt-In via `monkeypatch.setattr(nt, "_DT_DEBUG", True)`
+- T10 Debug-Log Default-Off (mit `monkeypatch.delenv` Anti-Leak)
+
+**Final-R1-Review:** 9/10, „Push freigegeben", 0 KRITISCH. 1 KOENNTE
+(T5 prüft MAD=0-Pfad statt Notnagel — Doku-Kommentar erweitert) +
+1 HINWEIS (T10 Env-Var-Isolation — `monkeypatch.delenv` ergänzt).
+
+**Asynchroner Field-Test:** Mike's Anweisung „ich schicke immer ab und
+zu Screenshots zur Auswertung". Push pending bis Mike mehrfach
+bestätigt dass RX-Panel-Verteilung sich Richtung 0 zentriert.
+
+**Backup:** `Appsicherungen/2026-05-13_v0.97.15_vor_p14_dt_symmetry/`.
+
+**Plan-Files:** `prompts/p14_dt_symmetry_v1.md`, `_v2.md`,
+`_r1_prompt.md`, `_r1.md` (R1-Review), `_v3.md`,
+`_final_r1_prompt.md`, `_final_r1.md` (9/10).
+
+**APP_VERSION 0.97.15 → 0.97.16.**
+
+---
+
 ## 2026-05-13 v0.97.15 — Bundle C (P10 PSK-Backoff-Reset + P13 RX-Panel-Slot-Times)
 
 Zwei UI/Netz-Bugs als Bundle — beide hardware-frei, beide klein.

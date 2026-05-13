@@ -20,6 +20,45 @@ erledigt (Field-Test pending). Veraltete Punkte aus TODO bereinigt:
 - **P24 Last-RX-Mode-Persist** widerspricht Mike's P35-Bug-F-Vision
   (App-Start IMMER 20m FT8 Normal). Nicht implementieren.
 
+## ✅ 13.05.2026 erledigt — Toast-Bundle (v0.97.18)
+
+- Bandpilot-Toast + Manual-Dialog Ranking-Marker 🥇🥈🥉 statt `1./2./3.`
+- `_TOAST_DISPLAY_MS = 6000` (war 5000) — Mike-Lesezeit
+- R1-SOLLTE-Defensive: Env-Var `SIMPLEFT8_TEXT_MARKERS=1` → Text-Fallback
+- Voller Workflow V1→V2→R1 9/10→V3→Code→Final-R1 0 Findings „Push freigegeben"
+- 6 neue Tests inkl. T6 importlib.reload-Pattern
+- Tests 1233 → 1239 grün
+- Backup `Appsicherungen/2026-05-13_v0.97.17_vor_toast_bundle/`
+- Push pending bis Mike's visuelle Bestaetigung
+
+## ✅ 13.05.2026 erledigt — P46 Bandpilot Normal-Reintegration (v0.97.17)
+
+- **P46** P35-Bug-E zurueckgenommen, 3-Wege-Bandpilot (Normal/Std/DX)
+- `ui/mw_radio.py:774-779` + `:811-816` Skip+Block-Bloecke geloescht
+- R1-F2 `_set_rx_mode_direct` Doppelaufruf-Refactor
+- R1-F3 `_bandpilot_pending` 5-Tupel mit current + Konsistenz-Check
+- Voller Workflow V1→V2→R1 8/10→V3→Code→Final-R1 9/10 „Push freigegeben"
+- 8 neue P46-Tests inkl. T7 (R1-F4 rec=None) + T8 (R1-F3 Modus-Race)
+- 2 alte P35-Bug-E-Tests geloescht, 4 Workaround-Kommentare bereinigt
+- Tests 1227 → 1233 grün
+- Doku `docs/explained/bandpilot_de.md`+`.md` (EN) Hinweis ergaenzt
+- Backup `Appsicherungen/2026-05-13_v0.97.16_vor_p46_bandpilot_normal/`
+- **P35-Bug-F unveraendert** (App-Start IMMER 20m FT8 Normal)
+- Push pending bis Mike's Field-Test-OK
+
+## ✅ 13.05.2026 erledigt — P14 DT-Werte-Symmetrie (v0.97.16)
+
+- **P14** MAD-basierter Outlier-Filter (Hampel, k=2.5) in `core/ntp_time.py`
+- DEADBAND 0.05 → 0.02 (R1-F1 KRITISCH Anti-Einfrier)
+- DAMPING bleibt 0.7 (R1-F4 KISS)
+- Opt-in Debug-Log via `SIMPLEFT8_DT_DEBUG=1`
+- Voller Workflow V1→V2→R1 5/10→V3→Code→Final-R1 9/10
+- 10 neue Tests inkl. T7 Sanity-Anker (R1-F2-Anti-Symptom-Fix)
+- Tests 1217 → 1227 grün
+- Backup `Appsicherungen/2026-05-13_v0.97.15_vor_p14_dt_symmetry/`
+- Field-Test asynchron — Mike schickt Screenshots
+- Push pending bis Mike's mehrfache Bestätigung
+
 ## ✅ 13.05.2026 erledigt
 
 | Version | Was |
@@ -61,12 +100,12 @@ erledigt (Field-Test pending). Veraltete Punkte aus TODO bereinigt:
 
 | ID | Was | Aufwand |
 |---|---|---|
-| **P34-Stufe2** | Statik-Pipeline KOMPLETT entfernen (Dynamic wird Default). Erst nach mehreren Tagen erfolgreichem Field-Test der P34-Stufe1. Liste Code-Stellen siehe `prompts/p34_diversity_dynamic_v3.md` §8-Anhang. | 4-5h Workflow + eigene V1→V2→R1→V3 |
-| ~~P32~~ | ~~RX-Panel Spalten-Konfiguration persistieren~~ ✅ **ERLEDIGT v0.97.14 Bundle B' (13.05.2026)** |
+| ~~P34-Stufe2~~ | ~~Statik-Pipeline KOMPLETT entfernen~~ ✅ **ERLEDIGT v0.97.19 (13.05.2026 nachmittags)** — Voller Workflow autonom, ~250 LOC raus, 8 Test-Files gelöscht, 1 neu. Final-R1 "Push freigegeben" 0 Bugs. Field-Test F1-F10 pending. |
+| ~~P32~~ | ~~RX-Panel Spalten-Konfiguration persistieren~~ ✅ **ERLEDIGT v0.97.14 Bundle B' + Field-Test ✅ (13.05.2026 09:38 UTC)** |
 | ~~P33~~ | ~~QSO-fertig-Meldung Reihenfolge-Bug~~ ✅ **ERLEDIGT v0.97.14 Bundle B' (13.05.2026)** |
 | ~~P24~~ | ~~Letzten RX-Mode merken~~ ❌ **VERWORFEN** — widerspricht Mike's P35-Bug-F-Vision (App-Start IMMER 20m FT8 Normal) |
 | ~~P10~~ | ~~PSK-Backoff-Reset~~ ✅ **ERLEDIGT v0.97.15 Bundle C (13.05.2026)** |
-| **P14** | DT-WERTE-ASYMMETRISCH — NTP-Korrektur-Issue | 2h Diagnose |
+| ~~P14~~ | ~~DT-WERTE-ASYMMETRISCH — NTP-Korrektur-Issue~~ ✅ **ERLEDIGT v0.97.16 + Field-Test ✅ (13.05.2026 09:38 UTC)** Mike: Korrektur drift 0.2705→0.2285, Verteilung 5+/5-/10≈0 symmetrisch (vorher 11-/1+/8≈0) |
 | ~~P13~~ | ~~RX-Panel-Slot-Times~~ ✅ **ERLEDIGT v0.97.15 Bundle C (13.05.2026)** |
 
 ## 🛠 OFFEN — Niedrige Priorität
@@ -79,7 +118,7 @@ erledigt (Field-Test pending). Veraltete Punkte aus TODO bereinigt:
 | ~~P49~~ | ~~OMNI-Pretrigger aus Settings~~ ✅ **ERLEDIGT durch P48 v0.97.13** (OMNI nutzt Encoder.target_tx_offset_s aus tx_buffer_s, keine separate Konstante mehr) |
 | ~~P43~~ | ~~setproctitle für Activity-Monitor-Erkennbarkeit~~ ✅ **ERLEDIGT v0.97.12 Bundle A (13.05.2026)** |
 | ~~P44~~ | ~~Statusbar DT-Korrektur grün-Bug~~ ✅ **ERLEDIGT v0.97.10 (13.05.2026)** |
-| **P46** | Bandpilot Normal wieder reinholen → 3-Wege-Vergleich Normal/Std/DX | 2-3h Workflow |
+| ~~P46~~ | ~~Bandpilot Normal wieder reinholen → 3-Wege-Vergleich Normal/Std/DX~~ ✅ **ERLEDIGT v0.97.17 (13.05.2026 mittags)** R1 8/10→9/10, Tests 1227→1233, Field-Test pending |
 | ~~P47~~ | ~~Tote Frequenz-Settings + Statusbar-Filter-Anzeige entfernen~~ ✅ **ERLEDIGT v0.97.11 (13.05.2026)** |
 
 ## 📋 P47.TOTE-FREQUENZ-SETTINGS-ENTFERNEN (Mike+Claude+R1 13.05.2026)

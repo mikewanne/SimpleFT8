@@ -1,5 +1,134 @@
 # HANDOFF — SimpleFT8
 
+## Stand 2026-05-13 nachmittags: v0.97.19 P34-Stufe2 — Statik-Pipeline raus
+
+**Code:** v0.97.19 — Statik-Ratio-Pipeline (Phase 3 Mess, 90 s UI-Sperre,
+6-Slot-Mess-Pattern, 1 h-Re-Mess-Frist, MessStatusDialog, Settings-Toggle,
+PresetStore-Ratio-API) komplett entfernt. Dynamic
+(`DynamicDiversityController`) ist jetzt einziger Pfad für Ratio-
+Bestimmung. ~250 LOC raus, 8 Test-Files gelöscht, 1 neuer (test_p34_stufe2).
+**Tests:** **1144 grün** (1239 vor Stufe2 minus Statik-Tests plus 15 neue
+P34-Stufe2-Tests).
+**Backup vor Code:** `Appsicherungen/2026-05-13_v0.97.18_vor_p34_stufe2/`.
+**Workflow V1→V2→R1→V3:** R1-F1 KRITISCH (Radio.ip + activate Race) und 6
+weitere Findings alle in V3 eingearbeitet. **Final-R1:** "Keine Bugs, keine
+kritischen Risiken. 6 Prüfpunkte alle erfüllt — Push freigegeben."
+**Bonus:** 80m-Abbruch-Bug (13.05. Mike-Beobachtung) ist obsolet — keine
+Mess-Phase mehr.
+**Push:** pending bis Mike's Field-Test-OK.
+
+### Field-Test-Checkliste F1-F10 (Mike nach App-Restart)
+
+| # | Test | Erwartung |
+|---|---|---|
+| **F1** | App-Start | Wie heute — 20m FT8 Normal |
+| **F2** | Normal → Diversity DX (Gain frisch) | Kein DXTuneDialog. Antennen-Panel zeigt sofort "● DYNAMISCH (live) — RX Ant1", Ratio 50:50. In ~75 s erste Dynamic-Auswertung. |
+| **F3** | Normal → Diversity DX (Gain stale auf 80m) | DXTuneDialog öffnet. Cancel → kein Diversity. Bei Erfolg → wie F2. |
+| **F4** | Bandwechsel mit aktiver Diversity | Sofort wieder Phase=operate, 50:50, Buffer leer. **Keine 90-Sek-Sperre mehr**. |
+| **F5** | Modus-Wechsel (FT8→FT4) mit Diversity | Wie F4. |
+| **F6** | scoring_mode (Standard→DX) mit Diversity | Buffer leer, Ratio 50:50, neu sammeln. |
+| **F7** | 1 h ohne QSO mit Diversity AN | **Keine automatische Re-Mess.** Dynamic läuft weiter. |
+| **F8** | Toggle in Einstellungen | Settings-Dialog hat **KEINEN** Toggle "Antennen-Verhältnis dynamisch anpassen" mehr. |
+| **F9** | Antennen-Panel-Label | Immer "● DYNAMISCH (live) — RX Ant1/Ant2". **Niemals** "Messung X/6" oder "Diversity Neuberechnung in X Min." |
+| **F10** | App-Quit mit Diversity aktiv | Saubere Abschaltung. Kein Mess-Modal-Phantom. |
+
+### Naechste Schritte (Plan)
+
+1. **Mike-Field-Test P34-Stufe2** — F1-F10 sauber durchchecken
+2. **Bänder-Deaktivierung Feature** (separates Folgeprojekt nach P34-Stufe2)
+
+### Tech-Debt nach Final-R1 (v0.98+)
+
+- `control_panel.update_diversity_ratio` Signatur hat noch
+  `**_ignored_legacy` als Legacy-Schluck — in v0.98 endgültig bereinigen.
+
+---
+
+## Stand 2026-05-13 mittags: v0.97.18 Toast-Bundle (Medaillen + 6s)
+
+**Code:** v0.97.18 — Bandpilot-Toast/Manual-Dialog Ranking-Marker
+🥇🥈🥉 statt `"1./2./3."` (Mike-Feedback nach P46-Field-Test). Toast-
+Self-Close 5s → 6s. R1-SOLLTE-Defensive: Env-Var-Fallback
+`SIMPLEFT8_TEXT_MARKERS=1` aktiviert Text-Marker fuer Systeme ohne
+Color-Emoji-Renderer.
+**Tests:** **1239 grün** (1233 + 6 Toast).
+**Backup vor Code:** `Appsicherungen/2026-05-13_v0.97.17_vor_toast_bundle/`.
+**Workflow:** V1→V2 (2 Konstanten-Findings)→R1 9/10 (1 SOLLTE Fallback)
+→V3 alle uebernommen→Code→Final-R1 0 Findings „Push freigegeben".
+**Push:** pending bis Mike's visuelle Bestaetigung (Bandwechsel mit
+sichtbaren Medaillen).
+
+### Naechste Schritte (Plan)
+
+1. **Mike-Field-Test Toast** — kurz Bandwechsel, schauen ob 🥇🥈🥉
+   visuell besser ist und 6s zum Lesen reichen
+2. **P34-Stufe2: Statik-Pipeline raus** (Mike-OK 13.05.) — voller
+   Workflow ~4-5h. Macht 80m-Abbruch-Bug obsolet
+3. **Spaeter: Baender-Deaktivierung Feature** (Settings-Checkboxen
+   pro Band)
+
+---
+
+## Stand 2026-05-13 mittags: v0.97.17 P46 Bandpilot Normal-Reintegration
+
+**Code:** v0.97.17 — P35-Bug-E (Bandpilot blockt Normal) zurueckgenommen.
+Bandpilot vergleicht 3-Wege (Normal/Std/DX), darf Normal als Empfehlung
+vorschlagen, current=normal startet Bandpilot. R1-F2 Doppelaufruf-
+Refactor in `_set_rx_mode_direct`, R1-F3 TX-pending mit Modus-
+Konsistenz-Check.
+**Tests:** **1233 grün** (1227 + 8 P46 − 2 geloeschte alte Block-Tests).
+**Backup vor Code:** `Appsicherungen/2026-05-13_v0.97.16_vor_p46_bandpilot_normal/`.
+**Workflow:** V1→V2 (16 Findings, L16-Diversity-Cleanup-Frage geklaert)
+→R1 8/10 mit 1 KRITISCH + 2 SOLLTE + 1 KOENNTE → V3 alle uebernommen
+→Code→Final-R1 9/10 „Push freigegeben", 0 KRITISCH, 1 KOENNTE
+(Doku-Update bandpilot_de.md+en — sofort gefixt).
+**Push:** pending bis Mike's Field-Test-OK.
+
+### Field-Test (Mike braucht echte Bandwechsel)
+
+- **F1:** Bandwechsel von Normal-Modus auf neues Band → Bandpilot
+  aktiv, wenn Daten in Stunde vorhanden → Toast „wechselt zu X"
+- **F2:** Bandwechsel auf neues Band mit ausreichend Daten in allen
+  3 Modi und Normal als Top-1 → Auto wechselt zu Normal (zuvor
+  geblockt)
+- **F3:** Manuell-Dialog erscheint mit 3 Buttons, Normal-Button
+  klickbar
+- **F4:** Bei TX-laufend: pending wird gespeichert. Wenn User
+  zwischendurch manuell Modus wechselt → pending wird verworfen
+  (Print-Log `[Bandpilot] Pending verworfen — Modus zwischenzeitlich`)
+
+---
+
+## Stand 2026-05-13 morgens: v0.97.16 P14 DT-Werte-Symmetrie
+
+**Code:** v0.97.16 — P14 MAD-basierter Outlier-Filter + DEADBAND-Reduktion.
+Mike beobachtete im RX-Panel 11/20 negative DT-Werte mit Ausreißern bei
+-1.2/-0.7/-0.4, dadurch wandert Median nach unten und zieht Korrektur
+nicht auf 0 zentriert. Lösung: Hampel-Filter (k=2.5) entfernt Outliers
+adaptiv vor Median-Berechnung; DEADBAND 0.05 → 0.02 verhindert
+Einfrieren am Rand (R1-F1 KRITISCH).
+**Tests:** **1227 grün** (1217 + 10 P14, plus 1 bestehender Test
+angepasst weil DEADBAND-Wert geändert).
+**Backup vor Code:** `Appsicherungen/2026-05-13_v0.97.15_vor_p14_dt_symmetry/`.
+**Workflow:** V1→V2 (10 Self-Review-Findings)→R1 5/10 mit 2 KRITISCH
+(F1 Deadband-Einfrier, F2 Wurzel nicht untersucht)→V3 alle Findings
+übernommen, Trim durch MAD ersetzt→Code→Final-R1 9/10 „Push freigegeben",
+0 KRITISCH, 2 nicht-blockierende Findings beide gefixt.
+**Push:** pending bis Mike's mehrfache Field-Test-Bestätigung.
+
+### Field-Test ✅ Bestätigt (13.05.2026 09:38 UTC)
+
+Mike-Screenshots nach App-Neustart + 30 Min 30m Normal:
+- Korrektur drift: 0.2705 → 0.2285 (System aktiv, kein Einfrieren)
+- Verteilung: 5 negativ / 5 positiv / 10 nahe Null (vorher 11/-1/+8)
+- Outliers (-0.8, -0.4) im Panel sichtbar aber NICHT in der Korrektur
+  → MAD-Filter wirkt intern wie geplant
+- Diversity-Slot: ebenfalls symmetrisch, A1+A2 gleich gut
+
+**Push pending nur noch weil Bundle B' + Bundle C field-tests offen.**
+
+---
+
 ## Stand 2026-05-13 nachts: v0.97.15 Bundle C (P10 + P13)
 
 **Code:** v0.97.15 — 2 UI/Netz-Bugs als Bundle:
@@ -51,12 +180,13 @@ sofort gefixt: try/except um settings.save).
 
 ### Nächste Schritte (4-Punkte-Field-Test V3 §Field-Test)
 
-- **F1:** Spalten ausblenden, App-Quit, App-Start → bleiben aus
-- **F2:** Bei QSO `← Empf. X 73` und `✓ QSO mit X komplett` im
+- ✅ **F1:** Spalten ausblenden, App-Quit, App-Start → bleiben aus
+  **(13.05.2026 09:38 UTC bestätigt)**
+- 🟡 **F2:** Bei QSO `← Empf. X 73` und `✓ QSO mit X komplett` im
   SELBEN Slot, BEVOR die nächste OMNI-CQ-Zeile
-- **F3:** Nach Courtesy-73-Send: OMNI resumed wie heute, kein
+- 🟡 **F3:** Nach Courtesy-73-Send: OMNI resumed wie heute, kein
   Doppel-Eintrag
-- **F4:** WAIT_73-Timeout (3 Slots ohne 73) → trotzdem ✓ ohne Hang
+- 🟡 **F4:** WAIT_73-Timeout (3 Slots ohne 73) → trotzdem ✓ ohne Hang
 
 ---
 

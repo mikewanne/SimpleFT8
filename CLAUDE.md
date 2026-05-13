@@ -136,7 +136,15 @@ auf Display 2 (Position 1024,0) verschieben. Mike macht von dort
 Fernwartung — App MUSS auf dem mittleren Bildschirm landen.
 
 **Start:** `cd "/Users/mikehammerer/Documents/KI N8N Projekte/FT8/SimpleFT8" && ./venv/bin/python3 main.py`
-**Aktueller Stand:** **v0.97.15 Session 13.05.2026 — Bundle C (P10 PSK-Backoff-Reset + P13 RX-Panel-Slot-Times), Tests 1217.** P10: BACKOFF_MAX_S 3600→600 (10 Min Cap), `_Backoff` thread-safe via threading.Lock (R1-V2-KP-2 fand Race in `fail()` read-modify-write), public `reset_backoff()` + `set_mode()` an PSKReporterClient (Final-R1-KP-1 fand Mode-Sync-Bug). Helper `_reset_psk_polling_on_change` in mw_radio: bei Band/Modus-Wechsel sofortiges Statusbar-Re-Fetch via `_psk_timer.start(0)` + Karten-Pfad-Reset (falls offen). P13: UTC-Spalte zeigt jetzt FT8-Slot-Boundary (10:51:30) statt Wall-Time (10:51:42); Fix in `add_message` UND `_populate_row` (2. Bug-Stelle erst beim Code-Schreiben aufgefallen — Memory-Lesson). `_set_sort` time-Branch defensive Float-Key gegen mixed-Type-TypeError. 13 neue Tests (7 P10 + 6 P13) + 1 bestehender angepasst. Final-R1: „Push nach KP-1-Fix freigegeben". Backup `Appsicherungen/2026-05-13_v0.97.14_vor_bundle_c/`.
+**Aktueller Stand:** **v0.97.19 Session 13.05.2026 nachmittags — P34-Stufe2 Statik-Ratio-Pipeline komplett raus, Tests 1144.** Voller Workflow autonom (V1→V2→R1→V3→Code→Final-R1). Statik-Mess-Phase, `_phase`/`should_remeasure`/`MEASURE_CYCLES`/`record_measurement`/`_evaluate`, 1h-Re-Mess-Frist, MessStatusDialog (gelöscht), Settings-Toggle "dynamisch anpassen", PresetStore-Ratio-API (is_valid_ratio/save_ratio/commit_with_ratio), `Settings.save_diversity_preset` und `_apply_dynamic_toggle` alle entfernt. **DynamicDiversityController** ist jetzt einziger Pfad für Ratio-Bestimmung — `_enable_diversity()` ruft `activate()` (nur wenn Radio verbunden — R1-F1 KRITISCH Deferred-Branch). `_enable_diversity` 3 Pfade → 1 Pfad. `_check_diversity_preset` 5 Branches → 2. ~250 LOC raus. 8 Test-Files gelöscht, 1 neu (`test_p34_stufe2.py` 15 Tests). Bonus: 80m-Abbruch-Bug obsolet (keine Mess-Phase mehr → keine "0/6-Hänger"-Symptome). Final-R1: "0 Bugs, 0 kritische Risiken, Push freigegeben". Tech-Debt: `update_diversity_ratio` hat noch `**_ignored_legacy` (v0.98+ bereinigen). Backup `Appsicherungen/2026-05-13_v0.97.18_vor_p34_stufe2/`. Push pending bis Field-Test F1-F10.
+
+**Vorgänger:** **v0.97.18 Session 13.05.2026 mittags — Toast-Bundle (Medaillen + 6s + Manual-Konsistenz), Tests 1239.** Mike-Feedback nach P46-Field-Test: Ranking 1./2./3. nicht klar als Ranking erkennbar bei 5s-Toast. **Loesung `ui/bandpilot_dialogs.py`:** Neuer Helper `_rank_marker(idx)` → 🥇🥈🥉. `_USE_EMOJI`-Konstante mit Env-Var-Fallback `SIMPLEFT8_TEXT_MARKERS=1` → Text-Marker "Top:" "2.:" "3.:" (R1-SOLLTE-Defensive fuer Systeme ohne Color-Emoji). `_TOAST_DISPLAY_MS = 6000` (war 5000). BandpilotAutoToast + BandpilotManualDialog Ranking-Labels nutzen Helper, `●`-current-Marker bleibt. **R1: 9/10 1 SOLLTE → V3 uebernommen → Final-R1 0 Findings „Push freigegeben".** 6 neue Tests (T1-T6 inkl. T6 importlib.reload-Pattern fuer Env-Var-Fallback). Tests 1233→1239 grün. Backup `Appsicherungen/2026-05-13_v0.97.17_vor_toast_bundle/`. Push pending bis Mike's visuelle Bestaetigung.
+
+**Vorgänger 2:** **v0.97.17 Session 13.05.2026 mittags — P46 Bandpilot Normal-Reintegration, Tests 1233.** Mike's Strategie-Wechsel 12.05. umgesetzt: P35-Bug-E (Bandpilot empfiehlt NIE Normal) zurueckgenommen. Bandpilot vergleicht 3-Wege (Normal/Std/DX), darf Normal als Target empfehlen, current=normal startet Bandpilot. **Code `ui/mw_radio.py`:** Z.774-779+811-816 (Skip+Block) geloescht. `_set_rx_mode_direct("normal")` Doppelaufruf-Refactor (R1-F2): `_disable_diversity()` einmal aufgerufen statt 2× `_apply_normal_mode`. `_apply_bandpilot_auto` pending-Tupel 4→5 elementig mit `current` (R1-F3): `_on_bandpilot_tx_finished` verwirft pending wenn User Modus zwischendurch manuell aenderte. **Tests:** 2 alte P35-Bug-E-Tests geloescht, 4 Workaround-Kommentare bereinigt, 2 TX-finished-Tests auf 5-Tupel angepasst. **Neu:** 8 P46-Tests in `tests/test_p46_bandpilot_normal.py` (T1-T8). **Workflow V1→V2→R1→V3:** R1 8/10 mit 1 KRITISCH + 2 SOLLTE + 1 KOENNTE alle uebernommen. **Final-R1:** 9/10 „Push freigegeben", 0 KP, 1 KOENNTE (Doku) sofort gefixt: `docs/explained/bandpilot_de.md`+`bandpilot.md` Hinweis ergaenzt. Tests 1227→1233 grün. Backup `Appsicherungen/2026-05-13_v0.97.16_vor_p46_bandpilot_normal/`. **P35-Bug-F (App-Start IMMER 20m FT8 Normal) unveraendert** — orthogonal. Push pending bis Field-Test-OK.
+
+**Vorgänger:** **v0.97.16 Session 13.05.2026 morgens — P14 DT-Werte-Symmetrie (MAD-Outlier-Filter + Totband-Reduktion), Tests 1227.** Mike-Beobachtung 07:30 UTC: RX-Panel zeigt 11/20 negative DT-Werte mit Ausreißern bei -1.2/-0.7/-0.4 → Median wandert nach unten → Korrektur 0.27s zentriert nicht auf 0. **Wurzel:** `statistics.median(valid)` robust gegen einzelne Outliers, aber bei 5+ negativen Ausreißern in 20er-Stichprobe wandert Median selbst. Plus DEADBAND 0.05 friert bei -0.05 ein (R1-F1 KRITISCH). **Lösung:** Neue Helper-Funktion `_filter_outliers_mad(values, k=2.5)` in `core/ntp_time.py` (Hampel-Filter: Median + MAD, entferne |x-med|>k×MAD). Edge-Cases: n<7 Identity (FT4/FT2-Schutz), MAD=0 Identity, <3 übrig Notnagel. DEADBAND 0.05 → 0.02. DAMPING bleibt 0.7 (R1-F4 KISS). Opt-in Debug-Log via `SIMPLEFT8_DT_DEBUG=1` pro Slot: `[DT-DBG] FT8_20m n=20 raw=-0.100 filt=+0.000 outliers=7 corr=+0.270`. Fast-Path-stdev bewusst ungetrimmt (konservatives Stop-Kriterium R1-F8). Voller Workflow V1→V2 (10 Findings)→R1 5/10 mit 2 KRITISCH→V3 alle übernommen→Code→Final-R1 9/10 „Push freigegeben" 0 KP. 10 neue Tests (T7 Sanity-Anker mit einfachem Median als Wurzel-Schutz R1-F2). 1227 grün. Backup `Appsicherungen/2026-05-13_v0.97.15_vor_p14_dt_symmetry/`. Asynchroner Field-Test: Mike schickt Screenshots, Push pending bis mehrfache Bestätigung.
+
+**Vorgänger:** **v0.97.15 Session 13.05.2026 — Bundle C (P10 PSK-Backoff-Reset + P13 RX-Panel-Slot-Times), Tests 1217.** P10: BACKOFF_MAX_S 3600→600 (10 Min Cap), `_Backoff` thread-safe via threading.Lock (R1-V2-KP-2 fand Race in `fail()` read-modify-write), public `reset_backoff()` + `set_mode()` an PSKReporterClient (Final-R1-KP-1 fand Mode-Sync-Bug). Helper `_reset_psk_polling_on_change` in mw_radio: bei Band/Modus-Wechsel sofortiges Statusbar-Re-Fetch via `_psk_timer.start(0)` + Karten-Pfad-Reset (falls offen). P13: UTC-Spalte zeigt jetzt FT8-Slot-Boundary (10:51:30) statt Wall-Time (10:51:42); Fix in `add_message` UND `_populate_row` (2. Bug-Stelle erst beim Code-Schreiben aufgefallen — Memory-Lesson). `_set_sort` time-Branch defensive Float-Key gegen mixed-Type-TypeError. 13 neue Tests (7 P10 + 6 P13) + 1 bestehender angepasst. Final-R1: „Push nach KP-1-Fix freigegeben". Backup `Appsicherungen/2026-05-13_v0.97.14_vor_bundle_c/`.
 
 **Vorgänger:** **v0.97.14 Session 13.05.2026 — Bundle B' (P32 RX-Panel-Spalten-Persist + P33 QSO-Komplett-Reihenfolge), Tests 1204.** Zwei voneinander unabhängige UI-Bugs als gemeinsames Bundle. **P32:** Spalten-Auswahl im RX-Panel via Rechtsklick bleibt jetzt über App-Restart hinweg — neuer Settings-Key `rx_panel_hidden_cols`, defensiv gefiltert (Range + Typ + `COL_MSG`-Schutz), persistiert via Signal-Pattern analog `country_filter`. **P33:** `✓ QSO komplett`-Zeile erschien NACH nächstem CQ statt davor weil `qso_confirmed.emit` erst nach Courtesy-73-Send feuerte. Fix per 2-Signal-Split: neues `qso_confirmed_visual` SOFORT bei 73-Empfang (nur UI-Update), bestehendes `qso_confirmed` bleibt nach Courtesy-Send für alle anderen Ops (OMNI-Resume, Auto-Hunt-Reset, Logbuch). V2-Self-Review fand OMNI-Race in V1-Variante-A (qso_confirmed.emit hätte _maybe_resume_omni vor Courtesy-Send gerufen). 12 neue Tests. Final-R1: „Push freigegeben", 0 KP, 1 SOLLTE (try/except um settings.save) sofort gefixt. Backup `Appsicherungen/2026-05-13_v0.97.13_vor_bundle_b/`.
 
@@ -202,6 +210,13 @@ bleibt Pflicht.
 **`pal chat`-MCP** noch fuer einfache Multi-Turn-Sessions nutzbar
 (Continuation-IDs), aber Files-Limit 7077 Tokens — fuer ernste Reviews
 immer Direkt-API.
+
+**📚 Vor jedem R1-Prompt:** `docs/deepseek_lessons.md` lesen — wachsende
+Sammlung der R1-Staerken (Threading, Statistik, KISS, CSS, Atomic-
+Persist, PySide6-Modal) und R1-Schwaechen (Halluziniert fehlende Files,
+verpasst Encoder-Busy-Races, V4-Bug-Halluzinationen). Am Feierabend
+ergaenzen wenn R1 in Session verwendet wurde und etwas Ueberraschendes
+passiert ist (Format im File).
 ## ⛔ Projekt-Philosophie (PFLICHT bei Architektur-Entscheidungen!)
 
 **SimpleFT8 ist ein Hobby-Funker-Tool. KEIN Contest-Tool.** Diese Leitlinien
@@ -227,17 +242,6 @@ Implementierungen:
 einem Hobby-Funker beim Hobby-Funken? Oder waere das nur fuer Power-User /
 Contester sinnvoll?" — bei letzterem: NICHT umsetzen, in eine optionale
 Erweiterung ausgliedern oder ganz verwerfen.
-
----
-
-## 📋 Verbindlicher Feature-Workflow
-
-Fuer alle nicht-trivialen Features (>5 Zeilen Code, neue Module, Architektur-
-Aenderungen): **siehe `docs/WORKFLOW.md`** — Schritt 0 Code-Verifikation →
-V1 → V2 (Self-Review) → DeepSeek-R1-Review → V3 → Mike-Freigabe → Plan-Mode → Code.
-
-Triviale Aenderungen (Tippfehler, Kommentar-Updates, < 5 Zeilen) brauchen den
-Workflow nicht.
 
 ---
 
@@ -321,54 +325,6 @@ Neustart fängt sie wieder von vorne an. Ich fixe jetzt den Antennen-Switch."
   Wartbarkeit, Fehlerfreiheit, Tests. Trifft Code-Architektur-Entscheidungen
   innerhalb des vereinbarten Ziels eigenständig und proaktiv. Bei wirklich
   grundlegenden Weichenstellungen einmal kurz vorlegen, dann umsetzen.
-
-## Mehrstufiger Prompt-Workflow (PFLICHT bei nicht-trivialen Features/Bugs)
-
-Vor jeder nicht-trivialen Umsetzung (>5 Zeilen, neues Modul, Architekturfrage,
-mehrere Probleme zugleich) durchlaufen wir gemeinsam diesen Ablauf — KEIN
-direkter Sprung in `/plan`:
-
-1. **Probleme erkennen + Prompt V1 entwerfen** (Claude)
-   — Symptome präzise beschreiben, Datei:Zeile-Referenzen, Akzeptanzkriterien.
-2. **Rolle frischer KI: Self-Review → V2** (Claude)
-   — Was fehlt? Was ist mehrdeutig? Was übersieht V1? Lücken füllen, V2 schreiben.
-3. **V2 an DeepSeek** (`tools/deepseek_review.py`, model `deepseek-reasoner`)
-   — DeepSeek bekommt explizit den Auftrag den Prompt zu kritisieren und
-   konkret zu verbessern (nicht das Problem zu lösen).
-4. **DeepSeek-Findings einarbeiten → V3** (Claude)
-   — Kritisch prüfen (siehe DeepSeek-Caveat oben), V3 schreiben.
-5. **Mike vorlegen** — Mike liest V3, gibt Freigabe oder Korrekturen.
-6. **Planungsmodus + Umsetzung** — erst dann `/plan`, dann atomare Commits.
-
-**Trigger-Sätze von Mike** für diesen Workflow:
-- „selbe vervahrensweise wieder" / „wie bei Locator-DB"
-- „erst V1 dann zu deepseek" / „prompt entwerfen"
-
-**Wann der volle V1→V2→V3-Workflow lohnt (Trigger-Schwelle):**
-Mindestens EINES der folgenden Kriterien erfüllt → vollen Workflow fahren:
-- Task hat ≥2 unabhaengige Akzeptanzkriterien
-- Mathematisch/geometrisch (Projektion, Rotation, Filter, Algorithmen)
-- Beruehrt ≥2 Dateien oder fuehrt neues Modul ein
-- Threading/Persistence/IO neu beteiligt
-- Architektur-Entscheidung (siehe „Architektur-Entscheidungen" oben)
-
-**Wann V1 direkt reicht (Workflow uebersprungen):**
-- Tippfehler, Umbenennungen, <5 Zeilen
-- Lokaler Patch in EINER Methode ohne Architekturwirkung
-- Reines Doku-Update, Test-Anpassung an bestehende API
-- Bugfix mit klarer Datei:Zeile-Diagnose und einzigem Akzeptanzkriterium
-
-→ Bei Grenzfall lieber Workflow fahren als Sackgasse riskieren.
-   Beispiel-Mehrwert siehe v0.66 Map-UI (Sektor-Rotation): DeepSeek fand
-   1°→5°-Stabilitaetsproblem, Helper-Extraktion, Test-Reduktion.
-
-**Bei Plan-Mode selbst:** nur die Plan-Datei editieren. Read/Grep/Glob zum
-Verifizieren von Code-Behauptungen ist ok. Plan-Datei mit konkreten
-Datei:Zeile-Referenzen versehen — Subagents können das schnell verifizieren.
-
-**Begründung:** Mehrstufige Validierung verhindert Over-Engineering.
-Beispiel v0.67-Locator-DB: V2 hatte 26-Buchstaben-Splitting, LRU-Cache,
-Write-Ahead-Log — DeepSeek hat die Komplexität auf 1/4 reduziert.
 
 ## Commits
 
