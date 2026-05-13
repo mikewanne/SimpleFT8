@@ -1,20 +1,32 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-13 morgens: v0.97.10 P44 Statusbar DT-Korrektur-Bug gefixt
+## Stand 2026-05-13 mittags: v0.97.11 P47 Tote Frequenz-Settings + Statusbar-Filter raus
+
+**Code:** v0.97.11 — `audio_freq_hz` + `max_decode_freq` waren tote
+UI-Settings (Encoder wird vom CQ-Such-Algo pro Slot überschrieben,
+`decoder.max_freq` wird nie zur Laufzeit aktualisiert). Beide Settings
++ UI-Felder + irreführende Statusbar-Anzeige (`Filter: 100-4000 Hz` für
+FT2 war Lüge — Decoder lief faktisch auf 3000 Hz) entfernt. Defaults
+hartkodiert: `Encoder(1500)` + `Decoder(max_freq=3000)`.
+`Settings.load()` popped die Keys idempotent aus alten Configs.
+**Tests:** **1167 grün** (1162 + 5 P47).
+**Backup vor Code:** `Appsicherungen/2026-05-13_v0.97.10_vor_p47_dead_freq_settings/`.
+**Workflow:** V1→V2→R1→V3 voll durchgezogen, Final-R1 „Push freigegeben",
+0 KP-Findings.
+**Push:** gleich folgend (6 atomare Commits C1–C6).
+
+### Nächste mögliche Aufgaben (TODO)
+
+- **P46** Bandpilot Normal-Reintegration (2-3h Workflow, Mike+Claude+R1 einig)
+- **P43** setproctitle für Activity-Monitor-Erkennbarkeit (30min)
+
+### Vorgänger-Stand (v0.97.10, 13.05.2026 morgens)
 
 **Code:** v0.97.10 — DT-Status jetzt als eigenes Permanent-Widget
 `_dt_indicator` rechts neben `_stats_indicator`. Vorher hat der globale
 `setStyleSheet` während DT-Korrektur die ganze Statusbar grün gefärbt.
 **Tests:** **1162 grün** (1160 + 2 P44).
 **Backup vor Code:** `Appsicherungen/2026-05-13_v0.97.9_vor_p44_dt_indicator/`.
-**Push:** gleich folgend.
-
-### Nächste mögliche Aufgaben (TODO)
-
-- **P46** Bandpilot Normal-Reintegration (2-3h Workflow, Mike+Claude+R1 einig)
-- **P47** Tote Frequenz-Settings + Statusbar-Filter-Anzeige entfernen
-  (Mike+Claude+R1 einig, 1-2h Workflow)
-- **P43** setproctitle für Activity-Monitor-Erkennbarkeit (30min)
 
 ### Vorgänger-Stand (v0.97.9, 12.05.2026 abends)
 

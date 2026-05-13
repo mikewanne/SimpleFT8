@@ -5,6 +5,74 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-13 v0.97.11 — P47 Tote Frequenz-Settings + Statusbar-Filter-Anzeige entfernt
+
+**Bug:** Zwei UI-Settings im Tab „FT8 & Diversity" hatten keinerlei
+nachhaltige Wirkung:
+
+- `audio_freq_hz` (TX Audio-Frequenz, Default 1500 Hz) — wurde nur
+  als Startwert für `Encoder.__init__` genutzt. Der CQ-Such-Algorithmus
+  überschreibt `encoder.audio_freq_hz` dynamisch pro Slot, so dass
+  jede User-Eingabe innerhalb von Sekunden wieder verworfen war.
+- `max_decode_freq` (Decoder-Obergrenze, Default 3000 Hz, UI-Range
+  1000–5000) — wirkte nur einmal beim App-Start an
+  `Decoder(max_freq=...)`. **`decoder.max_freq` wird nirgends im Code
+  neu gesetzt** (`grep '\.max_freq\s*='` liefert genau 1 Treffer im
+  Decoder-`__init__`). Eine User-Eingabe von 4000 Hz wirkte nur bis
+  zum nächsten App-Neustart und auch dann nicht im laufenden Betrieb
+  veränderbar.
+
+Zusätzlich war die Statusbar-Anzeige `_FILTERS` aktiv irreführend:
+Für FT2 zeigte sie `100-4000 Hz`, der Decoder lief aber faktisch auf
+`3000 Hz` (Default unverändert beim Modus-Wechsel).
+
+**Fix:** Beide Settings, beide UI-Felder und die Statusbar-Filter-Anzeige
+ehrlich entfernt. Defaults wandern als Konstanten an die 3 Code-Stellen,
+die sie heute aus den Settings lesen. Alte JSON-Configs werden in
+`Settings.load()` idempotent gesäubert (pop ohne KeyError).
+
+**3 Diffs Code + 2 Diffs Tests + 1 neue Test-Datei:**
+
+1. **`config/settings.py`:** DEFAULTS-Keys + Properties weg,
+   `load()`-Pop für alte Configs, `get_normal_tx_freq`-Fallback
+   hartkodiert 1500.
+2. **`ui/settings_dialog.py`:** Hint-Strings + QSpinBoxes + Form-Rows
+   + Load/Save/Reset-Pfade weg.
+3. **`ui/main_window.py`:** `Encoder(1500)` + `Decoder(max_freq=3000)`,
+   `_FILTERS`/`filter_str`/`"Filter:"-Segment` raus.
+4. **`tests/test_settings_dialog_smoke.py` + `tests/test_modules.py`:**
+   Stub + expected_attrs + normal_tx_freq-Tests an entfernte Keys
+   angepasst.
+5. **`tests/test_p47_dead_freq_settings.py` (NEU):** 5 Tests
+   (T1 load-drop, T2 no-property, T3 fallback-constant, T4 per-band
+   weiterhin funktional, T5 source-no-filter Bug-Schutz).
+
+**Workflow:** V1 → V2 → R1 (2 Risiken 1 widerlegt + 1 KISS-abgelehnt,
+3 Unklarheiten alle eingebaut, 2 Verbesserungen alle eingebaut) → V3 →
+Code → Final-R1 („Push freigegeben", 0 KP-Findings).
+
+**Tests:** 1162 → **1167 grün** (+5 P47).
+
+**Verhaltensänderungen (klein, dokumentiert):**
+
+- `get_normal_tx_freq`-Fallback ist jetzt hartkodierte 1500 (war:
+  User-eingestellter `audio_freq_hz` mit Default 1500). Per-Band-Werte
+  in `normal_tx_freq_per_band` bleiben unangetastet.
+- `decoder.max_freq` ist jetzt konstant 3000 (war: User-einstellbarer
+  Wert mit Default 3000 — wirkte aber nur beim App-Start). Mike hatte
+  laut Code-Hinweisen den Default-Wert ohnehin nie verändert.
+
+**Backup vor Code:**
+`Appsicherungen/2026-05-13_v0.97.10_vor_p47_dead_freq_settings/`.
+
+**Plan-Files:**
+`prompts/p47_dead_freq_settings_{v1,v2,r1,v3,final_r1}.md` —
+voller V1→V2→R1→V3-Zyklus + Final-R1-Codereview.
+
+**Commits:** 6 atomare Commits C1–C6.
+
+---
+
 ## 2026-05-13 v0.97.10 — P44 Statusbar DT-Korrektur als eigenes Label
 
 **Bug:** `_update_statusbar()` setzte bei aktiver DT-Korrektur den

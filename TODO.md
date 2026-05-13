@@ -60,9 +60,9 @@ P34 + P35 lokal gesammelt.
 | **P20** | LOG-ROTATION für simpleft8.log (Debug-Log macht das schon, hier geht's um den Haupt-Log) | 1h |
 | **P29** | OMNI-CQ QSO-Panel-Anzeige: bei Paritäts-Wechsel (Even↔Odd) Leerzeile dazwischen + Even-Slot etwas dunklere Farbe (selber Farbton, nur ein wenig dunkler) zur optischen Unterscheidung | 1h |
 | **P43** | App-Name + PID im Activity Monitor sichtbar machen via `setproctitle` | 30min |
-| **P44** | Statusbar DT-Korrektur grün-Bug: nur DT-Label gruen, nicht ganzer Statusbar-Text (eigenes QLabel via addPermanentWidget) | 1h Workflow |
+| ~~P44~~ | ~~Statusbar DT-Korrektur grün-Bug~~ ✅ **ERLEDIGT v0.97.10 (13.05.2026)** |
 | **P46** | Bandpilot Normal wieder reinholen → 3-Wege-Vergleich Normal/Std/DX | 2-3h Workflow |
-| **P47** | Tote Frequenz-Settings + Statusbar-Filter-Anzeige entfernen (Mike+Claude+R1 einig) | 1-2h Workflow |
+| ~~P47~~ | ~~Tote Frequenz-Settings + Statusbar-Filter-Anzeige entfernen~~ ✅ **ERLEDIGT v0.97.11 (13.05.2026)** |
 
 ## 📋 P47.TOTE-FREQUENZ-SETTINGS-ENTFERNEN (Mike+Claude+R1 13.05.2026)
 
