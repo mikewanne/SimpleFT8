@@ -43,72 +43,13 @@ def test_reset_clears_buffer(ctrl_pair):
     assert dynamic.is_active() is True
 
 
-def test_scoring_mode_change_triggers_reset(ctrl_pair):
-    """scoring_mode-Wechsel ueber Callback → Buffer leer + Ratio 50:50."""
-    static, dynamic = ctrl_pair
-    dynamic.activate()
-    for _ in range(3):
-        dynamic.record_slot("A1", 100.0)
-    assert len(dynamic.buffer_a1) == 3
-
-    # Wechsel triggert Listener-Callback (siehe DiversityController.scoring_mode-setter)
-    static.scoring_mode = "dx"
-
-    # Buffer wurde via Callback geleert
-    assert dynamic.buffer_a1 == []
-    assert dynamic.buffer_a2 == []
-
-
-def test_scoring_mode_same_value_no_reset(ctrl_pair):
-    """Setter auf gleichen Wert → kein Listener-Aufruf, Buffer bleibt."""
-    static, dynamic = ctrl_pair
-    dynamic.activate()
-    dynamic.record_slot("A1", 50.0)
-
-    static.scoring_mode = "normal"  # gleicher Wert
-
-    assert dynamic.buffer_a1 == [50.0]
-
-
-def test_should_remeasure_false_when_dynamic_active(ctrl_pair):
-    """AK12: should_remeasure returnt False wenn Dynamic AN — egal Frist."""
-    static, dynamic = ctrl_pair
-    static._last_measured_at = time.time() - 86400  # 24h alt
-    dynamic.activate()
-
-    assert static.should_remeasure(qso_active=False, cq_active=False) is False
-
-
-def test_should_remeasure_normal_when_dynamic_inactive(ctrl_pair):
-    """Dynamic AUS → normales Verhalten: 24h alt → True."""
-    static, dynamic = ctrl_pair
-    static._last_measured_at = time.time() - 86400
-    # Dynamic nie aktiviert
-
-    assert static.should_remeasure(qso_active=False, cq_active=False) is True
-
-
-def test_static_evaluate_refactor_keeps_behavior(ctrl_pair):
-    """AK1 + AK2: Statische _evaluate() liefert exakt gleiche Ergebnisse
-    nach Refactor auf evaluate_ratio Helper.
-    """
-    static, _dynamic = ctrl_pair
-    # Statik-Pattern simulieren: starke ANT1, schwache ANT2
-    static._phase = "measure"
-    static._measurements = {"A1": [100.0, 100.0, 100.0],
-                             "A2": [50.0, 50.0, 50.0]}
-    static._measure_step = 6
-    static._evaluate()
-    assert static.ratio == "70:30"
-    assert static.dominant == "A1"
-    assert static.phase == "operate"
-
-    # Edge: beide schwach → 50:50
-    static._phase = "measure"
-    static._measurements = {"A1": [3.0, 3.0], "A2": [4.0, 4.0]}
-    static._evaluate()
-    assert static.ratio == "50:50"
-    assert static.dominant is None
+# P34-Stufe2 entfernte Tests:
+# - test_scoring_mode_change_triggers_reset (Listener-System raus)
+# - test_scoring_mode_same_value_no_reset (Listener-System raus)
+# - test_should_remeasure_false_when_dynamic_active (should_remeasure raus)
+# - test_should_remeasure_normal_when_dynamic_inactive (should_remeasure raus)
+# - test_static_evaluate_refactor_keeps_behavior (_evaluate raus)
+# Stattdessen: test_p34_stufe2.py deckt das neue Verhalten ab.
 
 
 def test_signal_emitted_on_ratio_change(ctrl_pair):
@@ -174,27 +115,13 @@ def test_thread_safety_concurrent_record(ctrl_pair):
     assert len(dynamic.buffer_a2) == 5
 
 
-def test_settings_toggle_not_persisted(tmp_path, monkeypatch):
-    """AK13: Toggle-Wert wird NICHT in settings.json geschrieben."""
+def test_settings_no_dynamic_diversity_enabled(tmp_path, monkeypatch):
+    """P34-Stufe2: dynamic_diversity_enabled-Property entfernt."""
     from config.settings import Settings
-    # Test-Settings-File in tmp
     monkeypatch.setattr("config.settings.CONFIG_FILE", tmp_path / "config.json")
 
     settings = Settings()
-    assert settings.dynamic_diversity_enabled is False
-    settings.dynamic_diversity_enabled = True
-    settings.save()
-
-    # Datei lesen — Toggle darf nicht drin sein
-    if (tmp_path / "config.json").exists():
-        with open(tmp_path / "config.json") as f:
-            data = json.load(f)
-        assert "_dynamic_enabled" not in data
-        assert "dynamic_diversity_enabled" not in data
-
-    # Frische Settings → Default False
-    settings2 = Settings()
-    assert settings2.dynamic_diversity_enabled is False
+    assert not hasattr(settings, 'dynamic_diversity_enabled')
 
 
 def test_deactivate_when_not_active_idempotent(ctrl_pair):

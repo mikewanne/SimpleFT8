@@ -34,7 +34,7 @@ def test_activate_sets_active(ctrl_pair):
     static, dynamic = ctrl_pair
     dynamic.activate()
     assert dynamic.is_active() is True
-    assert static.dynamic_active is True
+    # P34-Stufe2: dynamic_active-Property entfernt (kein Statik-Hook mehr).
 
 
 def test_activate_keeps_cache_ratio(ctrl_pair):
@@ -68,14 +68,9 @@ def test_activate_with_none_ratio_becomes_5050(ctrl_pair):
     assert static.dominant is None
 
 
-def test_activate_aborts_measure_phase(ctrl_pair):
-    static, dynamic = ctrl_pair
-    static._phase = "measure"
-    static._last_measured_at = None
-    dynamic.activate()
-    assert static.phase == "operate"
-    assert static._last_measured_at is not None
-    assert static._last_measured_at <= time.time() + 0.1
+# P34-Stufe2: test_activate_aborts_measure_phase entfernt — measure-Phase
+# existiert nicht mehr. test_deactivate_refreshes_remeasure_timestamp
+# entfernt — _last_measured_at + 1h-Frist sind weg.
 
 
 def test_deactivate_keeps_ratio(ctrl_pair):
@@ -85,18 +80,8 @@ def test_deactivate_keeps_ratio(ctrl_pair):
     static.dominant = "A2"
     dynamic.deactivate()
     assert dynamic.is_active() is False
-    assert static.dynamic_active is False
     assert static.ratio == "30:70"  # Ratio bleibt
     assert static.dominant == "A2"
-
-
-def test_deactivate_refreshes_remeasure_timestamp(ctrl_pair):
-    static, dynamic = ctrl_pair
-    static._last_measured_at = time.time() - 7200  # 2h alt
-    dynamic.activate()
-    dynamic.deactivate()
-    # _last_measured_at sollte frisch sein (vor < 1s)
-    assert (time.time() - static._last_measured_at) < 1.0
 
 
 def test_record_slot_a1(ctrl_pair):

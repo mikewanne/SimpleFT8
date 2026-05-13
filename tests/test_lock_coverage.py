@@ -99,62 +99,6 @@ def test_rx_mode_change_blocked_during_lock():
     s.control_panel.set_rx_mode.assert_called_once_with("diversity")
 
 
-# ───── Reihenfolge: Lock VOR Reset (test 6) ────────────────────────────
-
-
-def test_enable_diversity_locks_before_reset():
-    """_enable_diversity ruft _set_gain_measure_lock(True) VOR _diversity_ctrl.reset().
-
-    Schuetzt gegen Race-Window in dem laufende Slots ins frische
-    _measurements-Bucket schreiben koennten (R1-Audit Befund 3).
-
-    Verifikation via call-tracking auf einem gemeinsamen Manager-Mock.
-    """
-    s = MagicMock()
-    s._radio = MagicMock()
-    s._radio.ip = None  # Pfad ohne Radio-Setup
-    s.settings.mode = "FT8"
-    s.settings.band = "40m"
-    s._dx_store = MagicMock()
-    s._dx_store.get.return_value = None  # Kein Preset → einfacher Pfad
-    s._standard_store = MagicMock()
-    s._standard_store.get.return_value = None
-    s._diversity_in_operate = False
-    s._tune_token = None
-
-    # Manager-Mock fuer call-Reihenfolge
-    manager = MagicMock()
-    s._diversity_ctrl = manager.diversity_ctrl
-    s._set_cq_locked = manager.cq_lock
-    s._set_gain_measure_lock = manager.gain_lock
-    # P34: Dynamic OFF (sonst nimmt Dynamic-Pfad ohne Locks)
-    s._dynamic_ctrl = MagicMock()
-    s._dynamic_ctrl.is_active = MagicMock(return_value=False)
-
-    # _enable_diversity ruft viele weitere Methoden — die ignorieren wir
-    try:
-        RadioMixin._enable_diversity(s, "normal")
-    except (AttributeError, TypeError):
-        # Methode bricht eventuell auf Mock-Limit ab, aber die ersten
-        # 3 Aufrufe (cq_lock, gain_lock, reset) sollten geloggt sein.
-        pass
-
-    # Reihenfolge der manager-Aufrufe extrahieren
-    call_names = [c[0] for c in manager.mock_calls if c[0]]
-
-    # Erwartet: cq_lock(True), gain_lock(True), diversity_ctrl.reset() —
-    # in dieser Reihenfolge irgendwo am Anfang
-    cq_idx = next((i for i, n in enumerate(call_names) if n == "cq_lock"), None)
-    gain_idx = next((i for i, n in enumerate(call_names) if n == "gain_lock"), None)
-    reset_idx = next((i for i, n in enumerate(call_names)
-                      if n == "diversity_ctrl.reset"), None)
-
-    assert cq_idx is not None, f"cq_lock nicht aufgerufen: {call_names}"
-    assert gain_idx is not None, f"gain_lock nicht aufgerufen: {call_names}"
-    assert reset_idx is not None, f"reset nicht aufgerufen: {call_names}"
-
-    # KRITISCH: Lock vor Reset
-    assert gain_idx < reset_idx, (
-        f"gain_lock (idx {gain_idx}) muss VOR reset (idx {reset_idx}) sein. "
-        f"Call-Reihenfolge: {call_names}"
-    )
+# P34-Stufe2: test_enable_diversity_locks_before_reset entfernt — keine
+# Statik-Mess-Phase mehr, daher kein Lock-vor-Reset-Race-Window. Locks
+# werden in _enable_diversity nur noch auf False gesetzt (Aufhebung).

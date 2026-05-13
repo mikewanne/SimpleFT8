@@ -76,9 +76,10 @@ def test_slot_passes_none_when_unset(app):
     assert kwargs.get("current_ant") is None
 
 
-def test_slot_sets_is_dynamic_true(app):
-    """Slot setzt is_dynamic=True (AK14 — blaue Anzeige bleibt)."""
+def test_slot_passes_scoring_mode(app):
+    """P34-Stufe2: Slot reicht scoring_mode durch (is_dynamic-Argument
+    gibt es nicht mehr — Anzeige ist immer DYNAMISCH (live))."""
     stub = _make_stub(current_ant="A1")
     MainWindow._on_dynamic_ratio_changed(stub, "30:70")
     kwargs = stub.control_panel.update_diversity_ratio.call_args.kwargs
-    assert kwargs.get("is_dynamic") is True
+    assert kwargs.get("scoring_mode") == "normal"

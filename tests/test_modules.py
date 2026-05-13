@@ -48,12 +48,17 @@ def test_ntp_positive_correction():
 
 
 def test_ntp_deadband():
-    """DT unter 0.1s (Totband) → keine Korrektur."""
+    """DT unter DEADBAND (P14: 0.02s) → keine Korrektur.
+
+    Hinweis (P14): DEADBAND wurde von 0.05 auf 0.02 reduziert (R1-F1
+    Anti-Einfrier am Rand). Test nutzt jetzt 0.01s im Totband.
+    """
     from core import ntp_time
-    ntp_time.reset(keep_correction=False)  # Alles zuruecksetzen inkl. alter Korrektur
+    ntp_time.reset(keep_correction=False)
     for _ in range(4):
-        ntp_time.update_from_decoded([0.05] * 10)
-    assert ntp_time.get_correction() == 0.0, f"Totband: sollte 0 sein, ist {ntp_time.get_correction()}"
+        ntp_time.update_from_decoded([0.01] * 10)
+    assert ntp_time.get_correction() == 0.0, \
+        f"Totband: sollte 0 sein, ist {ntp_time.get_correction()}"
     ntp_time.reset(keep_correction=False)
 
 
@@ -75,28 +80,14 @@ def test_diversity_50_50_pattern():
     assert pattern == ["A1", "A1", "A2", "A2", "A1", "A1", "A2", "A2"]
 
 
-def test_diversity_measure_even_odd():
-    """Messphase: Antennen abwechselnd, beide Paritaeten abgedeckt."""
-    from core.diversity import DiversityController
-    dc = DiversityController()
-    dc._phase = "measure"
-    pattern = []
-    for _ in range(12):
-        pattern.append(dc.choose())
-        dc._measure_step += 1
-    # A1 und A2 muessen beide vorkommen
-    assert "A1" in pattern and "A2" in pattern
-    # Max 2 hintereinander
-    for i in range(len(pattern) - 2):
-        if pattern[i] == pattern[i+1] == pattern[i+2]:
-            assert False, f"3× gleiche Antenne ab Position {i}: {pattern}"
+# P34-Stufe2: test_diversity_measure_even_odd entfernt — Mess-Phase
+# existiert nicht mehr. Operate-Pattern-Tests in test_patterns.py.
 
 
 def test_diversity_70_30_pattern():
     """70:30 Pattern: 6-Slot endlos nahtlos, max 2 hintereinander."""
     from core.diversity import DiversityController
     dc = DiversityController()
-    dc._phase = "operate"
     dc.ratio = "70:30"
     # 3 volle Durchlaeufe (18 Slots) — Loop-Uebergang testen
     pattern = []
@@ -930,46 +921,15 @@ def test_even_odd_ft2():
     assert cycle_ft2 >= cycle_ft8 * 3  # FT2 ~4x so viele Zyklen
 
 
-# ── Diversity Presets ─────────────────────────────────────────────────────────
-
-def test_diversity_preset_save_load():
-    """Diversity-Preset speichern und laden."""
-    from config.settings import Settings
-    s = Settings()
-    s.save_diversity_preset("FT8", "20m", "70:30", "A1")
-    preset = s.get_diversity_preset("FT8", "20m")
-    assert preset is not None
-    assert preset["ratio"] == "70:30"
-    assert preset["dominant"] == "A1"
+# P34-Stufe2: test_diversity_preset_save_load + test_diversity_preset_missing
+# entfernt — save_diversity_preset/get_diversity_preset Methoden weg.
+# test_can_measure_always_true_v093 entfernt — can_measure entfernt.
 
 
-def test_diversity_preset_missing():
-    """Fehlender Preset gibt None zurueck."""
-    from config.settings import Settings
-    s = Settings()
-    assert s.get_diversity_preset("FT2", "160m") is None
-
-
-# ── can_measure() (v0.93: immer True, Score-basierter Fallback in _evaluate) ─
-
-def test_can_measure_always_true_v093():
-    """v0.93: can_measure() ist immer True — MIN_MEASURE_STATIONS entfernt.
-
-    Die Schwelle wandert nach ``_evaluate``: bei ``peak <= MIN_PEAK_SCORE``
-    faellt die Pipeline auf 50:50 zurueck statt Phase 3 zu blocken.
-    """
-    from core.diversity import DiversityController
-    dc = DiversityController()
-    assert dc.can_measure() is True
-    assert dc.can_measure(0) is True
-    assert dc.can_measure(3) is True
-    assert dc.can_measure(20) is True
-
-
-# ── Modus-Multiplikator (v0.93: nur noch MEASURE_CYCLES) ─────────────────────
+# ── Modus-Multiplikator (P34-Stufe2: MEASURE_CYCLES entfernt) ────────────
 
 def test_measure_cycles_multiplier():
-    """MEASURE_CYCLES wird mit Modus-Faktor multipliziert (v0.93).
+    """P34-Stufe2: MEASURE_CYCLES gibt es nicht mehr (Statik-Mess raus).
 
     OPERATE_CYCLES-Konstante wurde in v0.93 entfernt (zeit-basiert, 1h-Frist).
     Nur MEASURE_CYCLES skaliert noch modus-abhaengig fuer ausreichende
@@ -2338,116 +2298,10 @@ def test_dx_tune_pipeline_warmup_state():
     assert warmup == 0, "Nach Warmup: Stats aktiv (warmup=0)"
 
 
-# ── Diversity._evaluate — Antennen-Entscheidungslogik ────────────────────────
-# Hinweis: DIVERSITY_DE.md beschreibt das Verfahren als "UCB1 Bandit" — der
-# Code ist tatsaechlich Median+8%-Schwellwert (kein UCB1). Diese Tests pruefen
-# die tatsaechlich implementierte Logik in DiversityController._evaluate().
-
-def test_diversity_evaluate_below_threshold_stays_50_50():
-    """Differenz < 8% → 50:50, kein Dominant."""
-    from core.diversity import DiversityController
-    dc = DiversityController()
-    dc._phase = "measure"
-    # A1=10, A2=10 → diff=0% < 8% → 50:50
-    for _ in range(4):
-        dc._measurements["A1"].append(10.0)
-        dc._measurements["A2"].append(10.0)
-    dc._evaluate()
-    assert dc.ratio == "50:50"
-    assert dc.dominant is None
-    assert dc.phase == "operate"
-
-
-def test_diversity_evaluate_a1_dominant_70_30():
-    """A1 deutlich besser → 70:30, dominant=A1."""
-    from core.diversity import DiversityController
-    dc = DiversityController()
-    dc._phase = "measure"
-    for _ in range(4):
-        dc._measurements["A1"].append(20.0)
-        dc._measurements["A2"].append(10.0)
-    dc._evaluate()
-    # diff = 10/20 = 50% >> 8% → 70:30, A1 dominant
-    assert dc.ratio == "70:30"
-    assert dc.dominant == "A1"
-
-
-def test_diversity_evaluate_a2_dominant_30_70():
-    """A2 deutlich besser → 30:70, dominant=A2."""
-    from core.diversity import DiversityController
-    dc = DiversityController()
-    dc._phase = "measure"
-    for _ in range(4):
-        dc._measurements["A1"].append(8.0)
-        dc._measurements["A2"].append(15.0)
-    dc._evaluate()
-    # diff = 7/15 = 46.7% >> 8% → 30:70, A2 dominant
-    assert dc.ratio == "30:70"
-    assert dc.dominant == "A2"
-
-
-def test_diversity_evaluate_too_few_data_falls_back_to_50_50():
-    """peak <= 1.0 (zu wenig Daten) → 50:50 ohne Dominant."""
-    from core.diversity import DiversityController
-    dc = DiversityController()
-    dc._phase = "measure"
-    for _ in range(4):
-        dc._measurements["A1"].append(0.0)
-        dc._measurements["A2"].append(1.0)
-    dc._evaluate()
-    assert dc.ratio == "50:50"
-    assert dc.dominant is None
-
-
-def test_diversity_record_measurement_uses_score_v093():
-    """v0.93: beide Modi (Standard + DX) speichern jetzt ``score``.
-
-    Frueher (v0.92): Standard speicherte ``station_count``, DX
-    ``dx_weak_count``. Jetzt einheitlich Score (sum(snr+30)) — die
-    Aufrufer-Sammlungsstrategie unterscheidet die Modi (DX nur SNR<-10),
-    aber der gespeicherte Wert ist immer der Slot-Score.
-    """
-    from core.diversity import DiversityController
-    dc_dx = DiversityController(scoring_mode="dx")
-    dc_dx._phase = "measure"
-    dc_dx.record_measurement("A1", score=120.0, station_count=20, dx_weak_count=2)
-    dc_dx.record_measurement("A2", score=80.0, station_count=5, dx_weak_count=8)
-    assert dc_dx._measurements["A1"] == [120.0]
-    assert dc_dx._measurements["A2"] == [80.0]
-
-    dc_std = DiversityController(scoring_mode="normal")
-    dc_std._phase = "measure"
-    dc_std.record_measurement("A1", score=300.0, station_count=20, dx_weak_count=2)
-    dc_std.record_measurement("A2", score=75.0, station_count=5, dx_weak_count=8)
-    assert dc_std._measurements["A1"] == [300.0]
-    assert dc_std._measurements["A2"] == [75.0]
-
-
-def test_diversity_phase_transition_after_6_measurements():
-    """Nach MEASURE_CYCLES (6) Messungen → automatisch zu phase=operate."""
-    from core.diversity import DiversityController
-    dc = DiversityController()
-    dc._phase = "measure"
-    assert dc.phase == "measure"
-    # 5 Messungen → noch measure
-    for i in range(5):
-        ant = "A1" if i % 2 == 0 else "A2"
-        dc.record_measurement(ant, score=150.0)
-    assert dc.phase == "measure", f"Nach 5 Messungen: phase={dc.phase}"
-    # 6. Messung → _evaluate triggert → phase=operate
-    dc.record_measurement("A2", score=150.0)
-    assert dc.phase == "operate"
-    assert dc._operate_cycles == 0
-
-
-def test_diversity_record_measurement_ignored_in_operate_phase():
-    """Aufzeichnung in operate-Phase ist No-Op (nur measure-Phase aktiv)."""
-    from core.diversity import DiversityController
-    dc = DiversityController()
-    dc._phase = "operate"
-    dc.record_measurement("A1", score=99.0)
-    assert dc._measurements["A1"] == []
-    assert dc._measurements["A2"] == []
+# P34-Stufe2 (v0.97.19): Diversity._evaluate + record_measurement entfernt —
+# Statik-Mess-Pipeline existiert nicht mehr. Ratio-Bestimmung uebernimmt
+# DynamicDiversityController live (siehe test_diversity_dynamic.py + Helper-
+# Tests in test_diversity_helpers.py decken evaluate_ratio direkt ab).
 
 
 # ── AP-Lite v2.2 — kohärente Addition (Sanity-Checks) ────────────────────────

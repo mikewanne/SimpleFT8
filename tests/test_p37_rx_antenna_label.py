@@ -42,13 +42,8 @@ def _label_text(panel: ControlPanel) -> str:
 
 
 def test_dynamic_with_ant1_shows_rx_ant1(panel):
-    """T1: is_dynamic=True + current_ant='A1' → Label enthaelt 'RX Ant1'."""
-    panel.update_diversity_ratio(
-        "30:70", "operate",
-        operate_seconds_remaining=1800,
-        is_dynamic=True,
-        current_ant="A1",
-    )
+    """T1: current_ant='A1' → Label enthaelt 'RX Ant1'."""
+    panel.update_diversity_ratio("30:70", current_ant="A1")
     text = _label_text(panel)
     assert "DYNAMISCH (live)" in text
     assert "RX Ant1" in text
@@ -56,13 +51,8 @@ def test_dynamic_with_ant1_shows_rx_ant1(panel):
 
 
 def test_dynamic_with_ant2_shows_rx_ant2(panel):
-    """T2: is_dynamic=True + current_ant='A2' → Label enthaelt 'RX Ant2'."""
-    panel.update_diversity_ratio(
-        "30:70", "operate",
-        operate_seconds_remaining=1800,
-        is_dynamic=True,
-        current_ant="A2",
-    )
+    """T2: current_ant='A2' → Label enthaelt 'RX Ant2'."""
+    panel.update_diversity_ratio("30:70", current_ant="A2")
     text = _label_text(panel)
     assert "DYNAMISCH (live)" in text
     assert "RX Ant2" in text
@@ -70,40 +60,34 @@ def test_dynamic_with_ant2_shows_rx_ant2(panel):
 
 
 def test_dynamic_with_no_ant_has_no_suffix(panel):
-    """T3: is_dynamic=True + current_ant=None → kein RX-Anhang (Backwards-Compat)."""
-    panel.update_diversity_ratio(
-        "50:50", "operate",
-        operate_seconds_remaining=1800,
-        is_dynamic=True,
-        current_ant=None,
-    )
+    """T3: current_ant=None → kein RX-Anhang."""
+    panel.update_diversity_ratio("50:50", current_ant=None)
     text = _label_text(panel)
     assert text == "● DYNAMISCH (live)"
     assert "RX Ant" not in text
 
 
 def test_dynamic_with_invalid_ant_has_no_suffix(panel):
-    """T4: ungueltiges current_ant (z.B. 'X') → kein Anhang (Robustheit)."""
-    panel.update_diversity_ratio(
-        "70:30", "operate",
-        operate_seconds_remaining=1800,
-        is_dynamic=True,
-        current_ant="X",
-    )
+    """T4: ungueltiges current_ant (z.B. 'X') → kein Anhang."""
+    panel.update_diversity_ratio("70:30", current_ant="X")
     text = _label_text(panel)
     assert text == "● DYNAMISCH (live)"
     assert "RX Ant" not in text
 
 
-def test_static_mode_ignores_current_ant(panel):
-    """T5: is_dynamic=False → statisches Label, current_ant wird ignoriert."""
+def test_legacy_args_ignored(panel):
+    """P34-Stufe2: alte Parameter (phase, measure_step, is_dynamic, ...)
+    werden via **_ignored_legacy geschluckt — kein Crash."""
     panel.update_diversity_ratio(
-        "70:30", "operate",
-        operate_seconds_remaining=600,
-        is_dynamic=False,
+        "70:30",
+        scoring_mode="dx",
         current_ant="A1",
+        phase="operate",
+        measure_step=0,
+        measure_total=6,
+        operate_seconds_remaining=1800,
+        is_dynamic=True,
     )
     text = _label_text(panel)
-    assert "DYNAMISCH" not in text
-    assert "RX Ant" not in text
-    assert "Neuberechnung" in text  # Statik-Text bleibt
+    assert "DYNAMISCH (live)" in text
+    assert "RX Ant1" in text

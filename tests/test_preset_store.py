@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Tests fuer core.preset_store — v0.93 zwei Timestamps + Migration.
+"""Tests fuer core.preset_store — P34-Stufe2 (v0.97.19).
+
+Nur Gain-API (Ratio-API wurde mit Stufe2 entfernt — Dynamic uebernimmt
+Verhaeltnis-Bestimmung live).
 
 Ausfuehren:
     cd SimpleFT8
@@ -28,11 +31,11 @@ def store_factory(tmp_path, monkeypatch):
     return _factory
 
 
-# ── Save-Tests: getrennte Timestamps ────────────────────────────────────────
+# ── Save-Tests ────────────────────────────────────────────────────────────
 
 
 def test_save_gain_sets_gain_timestamp_only(store_factory):
-    """save_gain() setzt gain_timestamp, NICHT ratio_timestamp."""
+    """save_gain() setzt gain_timestamp. Ratio-Felder existieren nicht mehr."""
     store = store_factory()
     store.save_gain("40m", "FT8", rxant="ANT1",
                     ant1_gain=10, ant2_gain=20,
@@ -40,75 +43,40 @@ def test_save_gain_sets_gain_timestamp_only(store_factory):
     entry = store.get("40m", "FT8")
     assert entry is not None
     assert "gain_timestamp" in entry
-    assert "ratio_timestamp" not in entry
-
-
-def test_save_ratio_sets_ratio_timestamp_only(store_factory):
-    """save_ratio() setzt ratio_timestamp, NICHT gain_timestamp."""
-    store = store_factory()
-    store.save_ratio("40m", "FT8", ratio="70:30", dominant="A1")
-    entry = store.get("40m", "FT8")
-    assert entry is not None
-    assert "ratio_timestamp" in entry
-    assert "gain_timestamp" not in entry
-    assert entry["ratio"] == "70:30"
-    assert entry["dominant"] == "A1"
-
-
-def test_save_gain_then_ratio_keeps_both_timestamps(store_factory):
-    """Nacheinander save_gain + save_ratio: beide Timestamps gesetzt."""
-    store = store_factory()
-    store.save_gain("40m", "FT8", rxant="ANT1",
-                    ant1_gain=10, ant2_gain=20)
-    store.save_ratio("40m", "FT8", ratio="70:30", dominant="A1")
-    entry = store.get("40m", "FT8")
-    assert "gain_timestamp" in entry
-    assert "ratio_timestamp" in entry
     assert entry["ant1_gain"] == 10
-    assert entry["ratio"] == "70:30"
+    assert entry["ant2_gain"] == 20
 
 
-def test_save_ratio_does_not_refresh_gain_timestamp(store_factory):
-    """Re-Save von ratio darf gain_timestamp NICHT verändern."""
+def test_save_gain_returns_false_on_disk_error(store_factory, monkeypatch):
     store = store_factory()
-    store.save_gain("40m", "FT8", rxant="ANT1",
-                    ant1_gain=10, ant2_gain=20)
-    gain_ts_before = store.get("40m", "FT8")["gain_timestamp"]
-    time.sleep(0.01)
-    store.save_ratio("40m", "FT8", ratio="50:50", dominant=None)
-    gain_ts_after = store.get("40m", "FT8")["gain_timestamp"]
-    assert gain_ts_before == gain_ts_after
+    monkeypatch.setattr(
+        store, "_save_locked",
+        lambda: (_ for _ in ()).throw(OSError("disk full"))
+    )
+    ok = store.save_gain("40m", "FT8", rxant="ANT1",
+                         ant1_gain=10, ant2_gain=20,
+                         ant1_avg=-8.0, ant2_avg=-10.0)
+    assert ok is False
 
 
-# ── is_valid_gain Tests ─────────────────────────────────────────────────────
+# ── Validity ───────────────────────────────────────────────────────────────
 
 
 def test_is_valid_gain_within_6h_window(store_factory):
-    """Vollstaendiger Eintrag (gain + ratio) → is_valid_gain True
-    innerhalb 6h. P22: Half-State (gain ohne ratio) wird separat
-    abgelehnt — siehe `test_is_valid_gain_rejects_half_state`."""
     store = store_factory()
     store.save_gain("40m", "FT8", rxant="ANT1",
                     ant1_gain=10, ant2_gain=20)
-    store.save_ratio("40m", "FT8", ratio="70:30", dominant="A1")
     assert store.is_valid_gain("40m", "FT8") is True
 
 
 def test_is_valid_gain_after_6h_returns_false(store_factory, monkeypatch):
+    from core import preset_store as ps_mod
     store = store_factory()
     store.save_gain("40m", "FT8", rxant="ANT1",
                     ant1_gain=10, ant2_gain=20)
-    store.save_ratio("40m", "FT8", ratio="70:30", dominant="A1")
-    # Timestamp manuell auf > 6h zurückdatieren
-    entry = store.get("40m", "FT8")
-    entry["gain_timestamp"] = time.time() - 6 * 3600 - 60  # 6h + 1 Min alt
-    assert store.is_valid_gain("40m", "FT8") is False
-
-
-def test_is_valid_gain_returns_false_when_only_ratio_saved(store_factory):
-    """Nur Ratio gespeichert → kein gain_timestamp → is_valid_gain=False."""
-    store = store_factory()
-    store.save_ratio("40m", "FT8", ratio="70:30", dominant="A1")
+    # 6h+1s zurueckdatieren
+    entry = store._data[store._key("40m", "FT8")]
+    entry["gain_timestamp"] -= (ps_mod.GAIN_VALIDITY_SECONDS + 1)
     assert store.is_valid_gain("40m", "FT8") is False
 
 
@@ -117,349 +85,189 @@ def test_is_valid_gain_returns_false_when_no_entry(store_factory):
     assert store.is_valid_gain("40m", "FT8") is False
 
 
-# ── is_valid_ratio Tests ────────────────────────────────────────────────────
-
-
-def test_is_valid_ratio_within_1h_window(store_factory):
-    store = store_factory()
-    store.save_ratio("40m", "FT8", ratio="70:30", dominant="A1")
-    assert store.is_valid_ratio("40m", "FT8") is True
-
-
-def test_is_valid_ratio_after_1h_returns_false(store_factory):
-    store = store_factory()
-    store.save_ratio("40m", "FT8", ratio="70:30", dominant="A1")
-    entry = store.get("40m", "FT8")
-    entry["ratio_timestamp"] = time.time() - 3600 - 60  # 1h + 1 Min alt
-    assert store.is_valid_ratio("40m", "FT8") is False
-
-
-def test_is_valid_ratio_returns_false_when_only_gain_saved(store_factory):
-    """Nur Gain gespeichert → kein ratio_timestamp → is_valid_ratio=False."""
-    store = store_factory()
-    store.save_gain("40m", "FT8", rxant="ANT1",
-                    ant1_gain=10, ant2_gain=20)
-    assert store.is_valid_ratio("40m", "FT8") is False
-
-
-def test_is_valid_ratio_returns_false_when_no_entry(store_factory):
-    store = store_factory()
-    assert store.is_valid_ratio("40m", "FT8") is False
-
-
-# ── Migration Tests ─────────────────────────────────────────────────────────
-
-
-def test_migration_old_timestamp_to_both_fields(tmp_path, monkeypatch):
-    """v0.92 → v0.93: alter 'timestamp' → gain_timestamp + ratio_timestamp."""
-    from core import preset_store as ps_mod
-    monkeypatch.setattr(ps_mod, "CONFIG_DIR", tmp_path)
-    monkeypatch.setattr(ps_mod, "CALIB_DIR", tmp_path / "kalibrierung")
-
-    # Alten v0.92-Cache vorher anlegen
-    calib_dir = tmp_path / "kalibrierung"
-    calib_dir.mkdir(parents=True, exist_ok=True)
-    old_ts = time.time() - 1800  # 30 Min alt
-    old_data = {
-        "40m_FT8": {
-            "rxant":     "ANT1",
-            "ant1_gain": 10, "ant2_gain": 20,
-            "ant1_avg":  -8.5, "ant2_avg": -10.2,
-            "ratio":     "70:30",
-            "dominant":  "A1",
-            "timestamp": old_ts,
-            "measured":  "2026-05-04 13:45",
-        }
-    }
-    (calib_dir / "presets_standard.json").write_text(json.dumps(old_data))
-
-    # Beim Load muss Migration laufen
-    store = ps_mod.PresetStore("presets_standard.json")
-    entry = store.get("40m", "FT8")
-    assert entry["gain_timestamp"] == old_ts
-    assert entry["ratio_timestamp"] == old_ts
-    # Alter timestamp-Key bleibt drin (Backwards-Compat-Read)
-    assert entry["timestamp"] == old_ts
-
-
-def test_migration_idempotent_when_already_new_format(tmp_path, monkeypatch):
-    """Wenn gain_timestamp schon existiert: Migration tut nichts."""
-    from core import preset_store as ps_mod
-    monkeypatch.setattr(ps_mod, "CONFIG_DIR", tmp_path)
-    monkeypatch.setattr(ps_mod, "CALIB_DIR", tmp_path / "kalibrierung")
-
-    calib_dir = tmp_path / "kalibrierung"
-    calib_dir.mkdir(parents=True, exist_ok=True)
-    gain_ts  = time.time() - 1800
-    ratio_ts = time.time() - 600  # 10 Min alt
-    new_data = {
-        "40m_FT8": {
-            "rxant":           "ANT1",
-            "ant1_gain":       10, "ant2_gain": 20,
-            "ratio":           "70:30",
-            "dominant":        "A1",
-            "gain_timestamp":  gain_ts,
-            "ratio_timestamp": ratio_ts,
-        }
-    }
-    (calib_dir / "presets_standard.json").write_text(json.dumps(new_data))
-
-    store = ps_mod.PresetStore("presets_standard.json")
-    entry = store.get("40m", "FT8")
-    assert entry["gain_timestamp"] == gain_ts
-    assert entry["ratio_timestamp"] == ratio_ts
-
-
-def test_migrated_entry_passes_validity_checks(tmp_path, monkeypatch):
-    """Nach Migration: is_valid_gain + is_valid_ratio funktionieren korrekt."""
-    from core import preset_store as ps_mod
-    monkeypatch.setattr(ps_mod, "CONFIG_DIR", tmp_path)
-    monkeypatch.setattr(ps_mod, "CALIB_DIR", tmp_path / "kalibrierung")
-
-    calib_dir = tmp_path / "kalibrierung"
-    calib_dir.mkdir(parents=True, exist_ok=True)
-    # Eintrag 30 Min alt → gain valid (6h-Frist), ratio valid (1h-Frist)
-    fresh_ts = time.time() - 1800
-    (calib_dir / "presets_standard.json").write_text(json.dumps({
-        "40m_FT8": {"ratio": "70:30", "dominant": "A1", "timestamp": fresh_ts,
-                    "ant1_gain": 10, "ant2_gain": 20}
-    }))
-    store = ps_mod.PresetStore("presets_standard.json")
-    assert store.is_valid_gain("40m", "FT8") is True
-    assert store.is_valid_ratio("40m", "FT8") is True
-
-    # 2-Stunden alt: gain valid, ratio NICHT
-    old_ts = time.time() - 2 * 3600
-    (calib_dir / "presets_dx.json").write_text(json.dumps({
-        "20m_FT8": {"ratio": "30:70", "dominant": "A2", "timestamp": old_ts,
-                    "ant1_gain": 5, "ant2_gain": 15}
-    }))
-    store2 = ps_mod.PresetStore("presets_dx.json")
-    assert store2.is_valid_gain("20m", "FT8") is True
-    assert store2.is_valid_ratio("20m", "FT8") is False
-
-
-# ── Backwards-Compat (v0.92-API) ────────────────────────────────────────────
-
-
 def test_legacy_is_valid_aliases_to_gain(store_factory):
-    """Alte is_valid()-API delegt auf is_valid_gain() (kein Verhaltensbruch).
-    P22: vollstaendiger Eintrag noetig (gain + ratio)."""
     store = store_factory()
     store.save_gain("40m", "FT8", rxant="ANT1",
                     ant1_gain=10, ant2_gain=20)
-    store.save_ratio("40m", "FT8", ratio="70:30", dominant="A1")
     assert store.is_valid("40m", "FT8") is True
-    assert store.is_valid("40m", "FT8") == store.is_valid_gain("40m", "FT8")
 
 
 def test_legacy_get_age_minutes_aliases_to_gain(store_factory):
-    """Alte get_age_minutes()-API delegt auf get_gain_age_minutes()."""
     store = store_factory()
     store.save_gain("40m", "FT8", rxant="ANT1",
                     ant1_gain=10, ant2_gain=20)
-    # P22: get_gain_age_minutes prueft nur gain_timestamp (nicht ratio),
-    # bleibt also auch bei Half-State funktionsfaehig.
-    legacy_age = store.get_age_minutes("40m", "FT8")
-    new_age    = store.get_gain_age_minutes("40m", "FT8")
-    assert legacy_age == new_age
-    assert legacy_age is not None
+    age_legacy = store.get_age_minutes("40m", "FT8")
+    age_new    = store.get_gain_age_minutes("40m", "FT8")
+    assert age_legacy == age_new
 
 
-# ── P22 Half-State-Reject + Stage/Commit/Discard + Atomic Write ─────────────
+# ── Migration: alter 'timestamp' → 'gain_timestamp' ──────────────────────
 
 
-def test_is_valid_gain_rejects_half_state(store_factory):
-    """P22-A2: Eintrag mit gain_* aber ohne `ratio` → is_valid_gain False.
-    Schuetzt vor Endlos-Phase-3-Versuchen nach Hang."""
-    store = store_factory()
-    store.save_gain("40m", "FT8", rxant="ANT1",
-                    ant1_gain=10, ant2_gain=20)
-    # Kein save_ratio — Half-State
-    assert store.is_valid_gain("40m", "FT8") is False
+def test_migration_old_timestamp_to_gain_timestamp(tmp_path, monkeypatch):
+    """Alter 'timestamp'-Schluessel wird auf 'gain_timestamp' gespiegelt."""
+    from core import preset_store as ps_mod
+    monkeypatch.setattr(ps_mod, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(ps_mod, "CALIB_DIR", tmp_path / "kalibrierung")
+    (tmp_path / "kalibrierung").mkdir(parents=True, exist_ok=True)
+
+    old_ts = time.time() - 100
+    data = {
+        "40m_FT8": {
+            "ant1_gain": 10,
+            "ant2_gain": 20,
+            "rxant": "ANT1",
+            "timestamp": old_ts,
+            "measured": "2026-05-13 12:00",
+        }
+    }
+    (tmp_path / "kalibrierung" / "presets_standard.json").write_text(
+        json.dumps(data))
+
+    store = ps_mod.PresetStore("presets_standard.json")
+    entry = store.get("40m", "FT8")
+    assert entry["gain_timestamp"] == old_ts
+
+
+def test_migration_idempotent_when_already_new_format(tmp_path, monkeypatch):
+    from core import preset_store as ps_mod
+    monkeypatch.setattr(ps_mod, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(ps_mod, "CALIB_DIR", tmp_path / "kalibrierung")
+    (tmp_path / "kalibrierung").mkdir(parents=True, exist_ok=True)
+
+    new_ts = time.time() - 50
+    data = {
+        "40m_FT8": {
+            "ant1_gain": 10,
+            "ant2_gain": 20,
+            "rxant": "ANT1",
+            "gain_timestamp": new_ts,
+            "measured": "2026-05-13 12:00",
+        }
+    }
+    (tmp_path / "kalibrierung" / "presets_standard.json").write_text(
+        json.dumps(data))
+
+    store = ps_mod.PresetStore("presets_standard.json")
+    entry = store.get("40m", "FT8")
+    # Migration ist no-op wenn schon migriert
+    assert entry["gain_timestamp"] == new_ts
+
+
+# ── Stage / Commit / Discard (P34-Stufe2: commit_gain statt commit_with_ratio) ──
 
 
 def test_stage_gain_no_disk_write(store_factory, tmp_path):
-    """P22-A1 / T1: stage_gain schreibt nichts in die JSON-Datei."""
     store = store_factory()
     store.stage_gain("40m", "FT8", rxant="ANT1",
                      ant1_gain=10, ant2_gain=20)
-    file = tmp_path / "kalibrierung" / "presets_standard.json"
-    assert not file.exists()
+    # Disk-File darf NICHT existieren
+    expected = tmp_path / "kalibrierung" / "presets_standard.json"
+    assert not expected.exists()
+    # Staged-Eintrag aber drin
     assert store.has_staged("40m", "FT8") is True
-    assert store.get("40m", "FT8") is None  # nicht im persistenten _data
 
 
-def test_commit_with_ratio_writes_atomic(store_factory, tmp_path):
-    """P22-A1 / T2: commit_with_ratio schreibt staged + ratio gemeinsam,
-    Datei enthaelt beide Timestamps und staged ist danach leer."""
+def test_commit_gain_writes_atomic(store_factory, tmp_path):
     store = store_factory()
     store.stage_gain("40m", "FT8", rxant="ANT1",
-                     ant1_gain=10, ant2_gain=20,
-                     ant1_avg=-8.5, ant2_avg=-10.2)
-    ok = store.commit_with_ratio("40m", "FT8",
-                                 ratio="70:30", dominant="A1")
+                     ant1_gain=10, ant2_gain=20)
+    ok = store.commit_gain("40m", "FT8")
     assert ok is True
-    # File geschrieben
-    file = tmp_path / "kalibrierung" / "presets_standard.json"
-    assert file.exists()
-    data = json.loads(file.read_text())
-    entry = data["40m_FT8"]
-    assert "gain_timestamp" in entry
-    assert "ratio_timestamp" in entry
-    assert entry["ratio"] == "70:30"
-    assert entry["dominant"] == "A1"
-    assert entry["ant1_gain"] == 10
-    assert entry["ant2_gain"] == 20
-    # Staged leer
+    # Staged ist weg
     assert store.has_staged("40m", "FT8") is False
+    # Disk-File existiert + enthaelt Gain
+    expected = tmp_path / "kalibrierung" / "presets_standard.json"
+    assert expected.exists()
+    data = json.loads(expected.read_text())
+    assert data["40m_FT8"]["ant1_gain"] == 10
 
 
 def test_commit_without_stage_returns_false(store_factory):
-    """P22 / T3: commit_with_ratio ohne vorheriges stage_gain → False,
-    keine Disk-Aenderung."""
     store = store_factory()
-    ok = store.commit_with_ratio("40m", "FT8",
-                                 ratio="70:30", dominant="A1")
+    ok = store.commit_gain("40m", "FT8")
     assert ok is False
-    assert store.get("40m", "FT8") is None
 
 
-def test_commit_with_ratio_disk_error_keeps_staged(store_factory, monkeypatch):
-    """P22-A4 / T4 (R1-K1): Disk-Error beim Commit → staged bleibt
-    erhalten, in-memory _data wird zurueckgerollt, returnt False."""
+def test_commit_gain_disk_error_keeps_staged(store_factory, monkeypatch):
     store = store_factory()
     store.stage_gain("40m", "FT8", rxant="ANT1",
                      ant1_gain=10, ant2_gain=20)
-
-    def boom():
-        raise OSError("Disk full")
-
-    monkeypatch.setattr(store, "_save_locked", boom)
-    ok = store.commit_with_ratio("40m", "FT8",
-                                 ratio="70:30", dominant="A1")
+    monkeypatch.setattr(
+        store, "_save_locked",
+        lambda: (_ for _ in ()).throw(OSError("disk full"))
+    )
+    ok = store.commit_gain("40m", "FT8")
     assert ok is False
-    assert store.has_staged("40m", "FT8") is True   # staged bleibt
-    assert store.get("40m", "FT8") is None          # in-memory rolled back
+    # Staged bleibt fuer Retry
+    assert store.has_staged("40m", "FT8") is True
 
 
 def test_discard_staged_clears_memory(store_factory):
-    """P22 / T5: discard_staged entfernt den Eintrag, has_staged False."""
     store = store_factory()
     store.stage_gain("40m", "FT8", rxant="ANT1",
                      ant1_gain=10, ant2_gain=20)
-    assert store.discard_staged("40m", "FT8") is True
+    removed = store.discard_staged("40m", "FT8")
+    assert removed is True
     assert store.has_staged("40m", "FT8") is False
-    # Zweiter Aufruf returnt False (nichts mehr da)
-    assert store.discard_staged("40m", "FT8") is False
 
 
 def test_discard_all_staged_clears_all(store_factory):
-    """P22 / T5b: discard_all_staged cleart alle Eintraege, returnt Anzahl."""
     store = store_factory()
     store.stage_gain("40m", "FT8", rxant="ANT1",
                      ant1_gain=10, ant2_gain=20)
     store.stage_gain("20m", "FT8", rxant="ANT1",
                      ant1_gain=15, ant2_gain=25)
-    assert store.discard_all_staged() == 2
-    assert store.has_staged("40m", "FT8") is False
-    assert store.has_staged("20m", "FT8") is False
-
-
-def test_save_gain_returns_false_on_disk_error(store_factory, monkeypatch):
-    """P22-A5 / T7 (R1-K3): Disk-Error in save_gain → returnt False
-    statt Exception. App crasht nicht."""
-    store = store_factory()
-
-    def boom():
-        raise OSError("Permission denied")
-
-    monkeypatch.setattr(store, "_save_locked", boom)
-    ok = store.save_gain("40m", "FT8", rxant="ANT1",
-                         ant1_gain=10, ant2_gain=20)
-    assert ok is False
-    # in-memory wurde zurueckgerollt
-    assert store.get("40m", "FT8") is None
-
-
-def test_save_ratio_returns_false_on_disk_error(store_factory, monkeypatch):
-    """P22 / T7b: gleiche Behandlung fuer save_ratio."""
-    store = store_factory()
-
-    def boom():
-        raise OSError("Permission denied")
-
-    monkeypatch.setattr(store, "_save_locked", boom)
-    ok = store.save_ratio("40m", "FT8", ratio="50:50", dominant="A1")
-    assert ok is False
-
-
-def test_save_locked_atomic_uses_tempfile(store_factory, tmp_path, monkeypatch):
-    """P22-A6 / T8: Mid-Write-Crash hinterlaesst kein korruptes Ziel-File.
-
-    Mock os.replace raise → tempfile soll geloescht werden, Ziel-File
-    soll nicht angefasst worden sein."""
-    store = store_factory()
-    # Vorher gueltigen Stand schreiben (= Ziel-File existiert)
-    store.save_gain("40m", "FT8", rxant="ANT1",
-                    ant1_gain=10, ant2_gain=20)
-    store.save_ratio("40m", "FT8", ratio="70:30", dominant="A1")
-    target = tmp_path / "kalibrierung" / "presets_standard.json"
-    original = target.read_bytes()
-
-    # Naechster Write soll an os.replace scheitern
-    from core import preset_store as ps_mod
-    real_replace = ps_mod.os.replace
-    monkeypatch.setattr(ps_mod.os, "replace",
-                        lambda *a, **kw: (_ for _ in ()).throw(OSError("simulated")))
-    ok = store.save_gain("40m", "FT8", rxant="ANT2",
-                         ant1_gain=99, ant2_gain=99)
-    assert ok is False
-    # Ziel-File unveraendert
-    assert target.read_bytes() == original
-    # Keine .tmp_-Datei zurueckgeblieben
-    leftover = list((tmp_path / "kalibrierung").glob(".tmp_*"))
-    assert leftover == []
+    n = store.discard_all_staged()
+    assert n == 2
 
 
 def test_multi_band_stage_independent(store_factory):
-    """P22 / T18: 40m_FT8 und 20m_FT8 staged parallel, getrennt
-    commit/discard."""
     store = store_factory()
     store.stage_gain("40m", "FT8", rxant="ANT1",
                      ant1_gain=10, ant2_gain=20)
     store.stage_gain("20m", "FT8", rxant="ANT1",
                      ant1_gain=15, ant2_gain=25)
-    assert store.has_staged("40m", "FT8") is True
-    assert store.has_staged("20m", "FT8") is True
-    # Commit nur 40m
-    assert store.commit_with_ratio("40m", "FT8",
-                                   ratio="70:30", dominant="A1") is True
+    store.discard_staged("40m", "FT8")
+    # 20m staged bleibt
     assert store.has_staged("40m", "FT8") is False
     assert store.has_staged("20m", "FT8") is True
-    # Discard 20m
-    assert store.discard_staged("20m", "FT8") is True
-    assert store.has_staged("20m", "FT8") is False
 
 
-# ── Persistenz ───────────────────────────────────────────────────────────────
+def test_persistence_across_instances(tmp_path, monkeypatch):
+    from core import preset_store as ps_mod
+    monkeypatch.setattr(ps_mod, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(ps_mod, "CALIB_DIR", tmp_path / "kalibrierung")
 
-
-def test_persistence_across_instances(store_factory):
-    """save → neue Instanz lädt → beide Timestamps sichtbar."""
-    store = store_factory()
-    store.save_gain("40m", "FT8", rxant="ANT1",
-                    ant1_gain=10, ant2_gain=20)
-    store.save_ratio("40m", "FT8", ratio="70:30", dominant="A1")
-
-    store2 = store_factory()
-    entry = store2.get("40m", "FT8")
-    assert entry is not None
-    assert "gain_timestamp" in entry
-    assert "ratio_timestamp" in entry
+    store1 = ps_mod.PresetStore("presets_standard.json")
+    store1.save_gain("40m", "FT8", rxant="ANT1",
+                     ant1_gain=10, ant2_gain=20)
+    store2 = ps_mod.PresetStore("presets_standard.json")
     assert store2.is_valid_gain("40m", "FT8") is True
-    assert store2.is_valid_ratio("40m", "FT8") is True
 
 
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
+# ── P34-Stufe2: alte API ist weg ──────────────────────────────────────────
+
+
+def test_no_save_ratio_method(store_factory):
+    """P34-Stufe2: save_ratio entfernt — Ratio wird nicht mehr persistiert."""
+    store = store_factory()
+    assert not hasattr(store, 'save_ratio')
+
+
+def test_no_is_valid_ratio_method(store_factory):
+    """P34-Stufe2: is_valid_ratio entfernt."""
+    store = store_factory()
+    assert not hasattr(store, 'is_valid_ratio')
+
+
+def test_no_commit_with_ratio_method(store_factory):
+    """P34-Stufe2: commit_with_ratio entfernt (→ commit_gain)."""
+    store = store_factory()
+    assert not hasattr(store, 'commit_with_ratio')
+
+
+def test_no_get_ratio_age_minutes(store_factory):
+    """P34-Stufe2: get_ratio_age_minutes entfernt."""
+    store = store_factory()
+    assert not hasattr(store, 'get_ratio_age_minutes')
