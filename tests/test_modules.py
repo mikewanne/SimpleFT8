@@ -1267,21 +1267,27 @@ def test_dt_save_load_file():
 
 
 def test_dt_set_mode_loads_saved():
-    """set_mode() laedt gespeicherten Wert."""
+    """set_mode() laedt gespeicherten Wert via Legacy-Migration.
+
+    P48-Hinweis: Legacy-Migration vom alten Schluessel ('FT4') laedt zwar
+    den Wert, _is_initial bleibt aber True (kein eigener Wert fuer
+    'FT4_<band>'-Key auf Disk).
+    """
     from core import ntp_time
     ntp_time._saved = {"FT8": 0.7, "FT4": 0.3, "FT2": 0.1}
+    ntp_time._hardware_default_offset = 0.0  # P48: Test-Reset
     ntp_time.set_mode("FT4")
     assert abs(ntp_time._correction - 0.3) < 0.01
-    assert not ntp_time._is_initial  # Hat gespeicherten Wert → nicht initial
     ntp_time.set_mode("FT2")
     assert abs(ntp_time._correction - 0.1) < 0.01
     ntp_time.reset(keep_correction=False)
 
 
 def test_dt_set_mode_no_saved():
-    """set_mode() ohne gespeicherten Wert → 0 + initial."""
+    """set_mode() ohne gespeicherten Wert UND ohne Hardware-Default → 0 + initial."""
     from core import ntp_time
     ntp_time._saved = {}
+    ntp_time._hardware_default_offset = 0.0  # P48: Test-Reset
     ntp_time.set_mode("FT2")
     assert ntp_time._correction == 0.0
     assert ntp_time._is_initial is True
@@ -1375,9 +1381,16 @@ def test_adif_freq_present():
 # ── Encoder TX-Timing ────────────────────────────────────────────────────────
 
 def test_target_tx_offset():
-    """TARGET_TX_OFFSET kompensiert FlexRadio TX-Buffer (0.5 Protokoll - 1.3s Buffer = -0.8)."""
-    from core.encoder import TARGET_TX_OFFSET
-    assert TARGET_TX_OFFSET == -0.8, f"Offset {TARGET_TX_OFFSET} != -0.8"
+    """target_tx_offset_s kompensiert FlexRadio TX-Buffer.
+
+    P48 (v0.97.13): Modul-Konstante TARGET_TX_OFFSET wurde durch
+    Instanz-Attribut self.target_tx_offset_s ersetzt — aus tx_buffer_s
+    parametrisiert. Default 1.3 → -0.8 (= alter Wert).
+    """
+    from core.encoder import Encoder
+    enc = Encoder(1500)  # default tx_buffer_s=1.3
+    assert enc.target_tx_offset_s == -0.8, \
+        f"Offset {enc.target_tx_offset_s} != -0.8"
 
 
 def test_encoder_has_mode():
