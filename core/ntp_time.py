@@ -32,6 +32,13 @@ MAX_CORRECTION = 2.0         # Maximale Korrektur FT8 (±2.0s)
 DEADBAND = 0.05              # 50ms Totband
 DAMPING = 0.7                # 70% Daempfung fuer Folge-Korrekturen
 
+# P48-D: Schnell-Konvergenz beim Erst-Mess-Slot wenn schon viele
+# Stationen mit kleiner Streuung dabei sind — kein zweiter Slot zur
+# Bestaetigung noetig. Bei FT8 abends 20m mit 30+ Stationen sicher
+# getroffen. Bei FT4/FT2 selten erfuellt → bleiben auf 2-Slot-Pfad.
+_FAST_CONVERGENCE_MIN_STATIONS = 10
+_FAST_CONVERGENCE_MAX_STDEV = 0.1
+
 # Per-Modus engere Grenzen (FT4/FT2 haben kuerzere Slots)
 _MAX_CORR = {"FT8": 1.0, "FT4": 0.5, "FT2": 0.3}
 
@@ -57,6 +64,23 @@ _saved: dict = {}
 # set_mode + set_band → 3× identischer Spam. Wir printen nur wenn
 # (key, saved_val) sich aendert.
 _last_logged_load: tuple | None = None
+
+# P48-C: Hardware-Default fuer DT-Kaltstart. Wird von main_window beim
+# App-Start ueber set_hardware_default() aus settings.rx_hardware_offset_default_s
+# gesetzt. Default 0.0 = altes Verhalten (Backward-Kompat falls Setter
+# nie aufgerufen wird, z.B. in Test-Umgebung).
+_hardware_default_offset: float = 0.0
+
+
+def set_hardware_default(value_s: float) -> None:
+    """Wird von main_window._init_core_components aufgerufen.
+
+    Wenn keine gemessenen Werte fuer aktuellen Modus+Band UND kein
+    Cross-Modus-Fallback greift, nutzt _load_for_current_key() diesen
+    Wert als Kaltstart-Default statt 0.0.
+    """
+    global _hardware_default_offset
+    _hardware_default_offset = float(value_s)
 
 
 def _mode_key() -> str:
@@ -88,17 +112,38 @@ def _save_current():
 
 
 def _load_for_current_key() -> float:
-    """Gespeicherten Wert laden, mit Migration von altem Format ('FT8' → 'FT8_20m')."""
+    """Gespeicherten Wert laden — Prioritaet:
+    1. Eigener gemessener Wert (Modus_Band)
+    2. Legacy-Migration vom alten Schluessel (nur Modus)
+    3. P48-B: Cross-Modus-Fallback (Geschwister-Modus auf gleichem Band)
+    4. P48-C: Hardware-Default (Notfall-Kaltstart)
+    """
     key = _mode_key()
     val = _saved.get(key, None)
     if val is not None:
         return val
-    # Migration: alter Schluessel ohne Band
+    # Legacy-Migration: alter Schluessel ohne Band
     old_val = _saved.get(_mode, None)
     if old_val is not None:
         print(f"[DT-Korr] Migration: '{_mode}' → '{key}' = {old_val:+.3f}s")
         return old_val
-    return 0.0
+    # P48-B: Cross-Modus-Fallback — FT8 hat die meisten Stationen → solider
+    # Median. FT8 selber hat keinen Fallback (Master).
+    if _mode == "FT2":
+        siblings = ["FT8", "FT4"]
+    elif _mode == "FT4":
+        siblings = ["FT8"]
+    else:
+        siblings = []
+    for sibling_mode in siblings:
+        sibling_key = f"{sibling_mode}_{_band}"
+        sibling_val = _saved.get(sibling_key, None)
+        if sibling_val is not None:
+            print(f"[DT-Korr] Cross-Modus-Fallback: '{sibling_key}' "
+                  f"({sibling_val:+.3f}s) → '{key}'")
+            return sibling_val
+    # P48-C: Hardware-Default als Notfall-Kaltstart
+    return _hardware_default_offset
 
 
 # Beim Import laden
@@ -132,7 +177,11 @@ def set_mode(mode: str, band: str | None = None):
         _phase = "measure"
         _cycle_count = 0
         _measure_buffer = []
-        _is_initial = (saved_val == 0.0)
+        # P48: _is_initial = "noch keine eigene gemessene Korrektur fuer
+        # diese Mode-Band-Kombi auf Disk". Cross-Modus-Fallback und
+        # Hardware-Default ZAEHLEN NICHT als eigene Messung — sonst
+        # waere Erstkorrektur-Damping und Schnell-Konvergenz nie aktiv.
+        _is_initial = _saved.get(_mode_key()) is None
         _log_load_dedup(_mode_key(), saved_val)
 
 
@@ -148,7 +197,11 @@ def set_band(band: str):
         _phase = "measure"
         _cycle_count = 0
         _measure_buffer = []
-        _is_initial = (saved_val == 0.0)
+        # P48: _is_initial = "noch keine eigene gemessene Korrektur fuer
+        # diese Mode-Band-Kombi auf Disk". Cross-Modus-Fallback und
+        # Hardware-Default ZAEHLEN NICHT als eigene Messung — sonst
+        # waere Erstkorrektur-Damping und Schnell-Konvergenz nie aktiv.
+        _is_initial = _saved.get(_mode_key()) is None
         _log_load_dedup(_mode_key(), saved_val)
 
 
@@ -200,7 +253,17 @@ def update_from_decoded(dt_values: list) -> bool:
             _measure_buffer.append(median_dt)
             _cycle_count += 1
 
-            needed = INITIAL_MEASURE_CYCLES if _is_initial else STEADY_MEASURE_CYCLES
+            # P48-D: Schnell-Konvergenz wenn 1. Slot bereits viele Stationen
+            # mit kleiner Streuung hat → 1 statt 2 Slots warten.
+            can_fast = (
+                _is_initial
+                and _cycle_count == 1
+                and len(valid) >= _FAST_CONVERGENCE_MIN_STATIONS
+                and statistics.stdev(valid) < _FAST_CONVERGENCE_MAX_STDEV
+            )
+            needed = 1 if can_fast else (
+                INITIAL_MEASURE_CYCLES if _is_initial else STEADY_MEASURE_CYCLES
+            )
             if _cycle_count >= needed:
                 avg_median = statistics.median(_measure_buffer)
 
