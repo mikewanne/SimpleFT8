@@ -18,11 +18,12 @@ SAMPLE_RATE_FT8 = 12000
 # Die DT-Korrektur (ntp_time) gilt NUR fuer RX (Audio-Buffer-Shift im Decoder).
 # TX hat keine Decoder-Buffer-Verzoegerung — die 0.77s RX-Korrektur darf hier
 # nicht abgezogen werden, sonst sendet TX 0.67s zu frueh.
-# TX-Timing: WSJT-X Protokoll-Offset (0.5s) minus FlexRadio TX-VITA-49-Buffer-Latenz (1.3s).
-# FlexRadio puffert eingehende TX-Samples 1.3s bevor sie als RF rausgehen (konstant gemessen).
-# -0.8 = 0.5 (Protokoll) - 1.3 (Hardware-Buffer)
-# → Audio startet bei boundary-0.8s → RF bei boundary+0.5s → DT≈0
-TARGET_TX_OFFSET = -0.8
+# TX-Timing: WSJT-X Protokoll-Offset (0.5s) minus Hardware-TX-Buffer-Latenz.
+# FlexRadio puffert eingehende TX-Samples 1.3s bevor sie als RF rausgehen.
+# P48 (v0.97.13): tx_buffer_s ist jetzt aus Settings parametrisiert
+# (Encoder.__init__ Param). Default 1.3 → target_tx_offset_s = -0.8 (alter Wert).
+# Bei IC-7300-Fork: anderer Buffer-Wert in Settings → andere Offset.
+# → Audio startet bei boundary+target_tx_offset_s → RF bei boundary+0.5s → DT≈0
 # Trailing Silence trimmen: FT8-Nutzsignal ist 12.64s, Rest ist Stille.
 # slot+0.5 + 13.5s = slot+14.0s → 1.0s Puffer vor naechstem Slot (sicher)
 TRIM_SAMPLES = int(1.5 * SAMPLE_RATE_FT8)   # 18000 Samples @ 12kHz
@@ -46,9 +47,14 @@ class Encoder(QObject):
     tx_finished = Signal()
     encoding_error = Signal(str)
 
-    def __init__(self, audio_freq_hz: int = 1000):
+    def __init__(self, audio_freq_hz: int = 1000,
+                 tx_buffer_s: float = 1.3):
         super().__init__()
         self.audio_freq_hz = audio_freq_hz
+        # P48: TX-Audio-Vorlauf = 0.5s WSJT-X-Protokoll - tx_buffer_s Hardware.
+        # FlexRadio Default 1.3 → target_tx_offset_s = -0.8 (alter Wert).
+        # IC-7300-Fork wuerde anderen tx_buffer_s aus Settings bekommen.
+        self.target_tx_offset_s: float = 0.5 - tx_buffer_s
         self._radio = None
         self._decoder = None
         self._tx_thread = None
@@ -309,7 +315,7 @@ class Encoder(QObject):
 
             # 3. Sleep bis Slot-Grenze. _abort_event weckt auf bei abort()
             #    ODER bei request_replace() (P1.9).
-            sleep_dur = (next_boundary + TARGET_TX_OFFSET - 0.5) - time.time()
+            sleep_dur = (next_boundary + self.target_tx_offset_s - 0.5) - time.time()
             if sleep_dur > 0.001:
                 aborted = self._abort_event.wait(timeout=sleep_dur)
                 if aborted:
@@ -340,22 +346,22 @@ class Encoder(QObject):
         # 4. Silence-Padding berechnen (jetzt praezise, da nahe am Ziel)
         #    Stille absorbiert den restlichen Jitter des OS-Schedulers
         now = time.time()
-        # TX-Timing: NUR der feste WSJT-X Protokoll-Offset (TARGET_TX_OFFSET=0.5s).
+        # TX-Timing: NUR der feste WSJT-X Protokoll-Offset (target_tx_offset_s).
         # KEINE ntp_time Korrektur hier — die gilt nur fuer RX Audio-Buffer-Shift.
-        silence_secs = max(0.0, (next_boundary + TARGET_TX_OFFSET) - now)
+        silence_secs = max(0.0, (next_boundary + self.target_tx_offset_s) - now)
 
         # v0.80 Fix B: Drift-Guard. Schwelle 0.3s = WSJT-X-Decode-Schwelle 0.5s
         # minus 0.1s Audio-Encoding-Latency minus 0.1s Sicherheits-Marge.
         # Bei overshoot > 0.3s: lieber zum naechsten passenden Slot weiterschalten
         # als veralteten DT zu senden (vorher 5.0s-Schwelle erlaubte DT bis 0.95s).
         if silence_secs < 0.1:
-            overshoot = now - (next_boundary + TARGET_TX_OFFSET)
+            overshoot = now - (next_boundary + self.target_tx_offset_s)
             if overshoot > 0.3:
                 # Drift-Risiko zu hoch → naechsten passenden Slot nehmen.
                 # tx_even gesetzt → 2 Slots (gleiche Paritaet) sonst 1 Slot.
                 _SLOT = {"FT8": 15.0, "FT4": 7.5, "FT2": 3.8}.get(self._mode, 15.0)
                 next_boundary += (2 * _SLOT) if self.tx_even is not None else _SLOT
-                silence_secs = max(0.0, (next_boundary + TARGET_TX_OFFSET) - time.time())
+                silence_secs = max(0.0, (next_boundary + self.target_tx_offset_s) - time.time())
                 print(f"[TX] Drift-Vermeidung: overshoot={overshoot:.2f}s "
                       f"→ Slot {next_boundary:.1f}")
             else:
