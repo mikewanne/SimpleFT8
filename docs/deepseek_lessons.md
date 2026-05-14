@@ -32,16 +32,96 @@ DeepSeek-Erfahrungen aufgetreten sind. Format unten.
 
 ---
 
-## V4 Lessons (ab 15.05.2026) — Sektion noch leer
+## V4-pro Lessons (ab 14.05.2026 — 3 Cycles, empirisch)
 
-Wird gefüllt nach 2-3 V4-Pro-Review-Cycles. Erwartete Themen:
-- Halluzinations-Vergleich V4 vs V3
-- 1M-Context-Effekte (komplette Module-Reads vs File-Selektion)
-- Reasoning-Tiefe-Verschiebung
-- Format-/Stil-Veränderungen
-- Neue V4-spezifische Blindspots
+**Bilanz nach Bundle I + Bundle J + P51:**
 
-Bis dahin: V3-Patterns unten anwenden + Findings kritisch prüfen.
+| Cycle | V2-Tokens in | R1-Findings | Bugs | Halluz. | Final-R1 |
+|---|---|---|---|---|---|
+| Bundle I (v0.97.26) | 78.812 | 5 | 1 Bug rot | **0** | „Push freigegeben." |
+| Bundle J (v0.97.27) | 46.368 | 7 | 0 Bug | **0** | „Push freigegeben." |
+| P51 (v0.97.28) | 49.843 | 9 | 1 Bug rot | **0** | „Push freigegeben." |
+| **Σ** | — | **21** | 2 Bug | **0/21** | 100% |
+
+### V4-pro-Stärken (empirisch bestätigt)
+
+1. **Halluzinations-Rate 0/21** — V3 R1 hatte historisch 5-15%
+   (Bundle F: `_gain_measure_locked` halluziniert; v0.74: „Phase hängt
+   ewig" falsch). V4-pro mit 1M Context verifiziert Code-Pfade intern.
+
+2. **Code-Realität-Check** (P51 F1): V4-pro las Code-Anhang +
+   Prompt-Body, fand Diskrepanz „V2 sagt 18 Zyklen, Code hat 8". Hätte
+   ich übersehen.
+
+3. **Halluzinations-Aufdeckung in EXTERNEM Code** (Bundle I F2): V4-pro
+   las `core/encoder.py:240`-Kommentar „Pre-P5/P6 ... kein Pending-Loop,
+   P7.OMNI-SIMPLIFY v0.96.4 entfernt" und merkte dass CLAUDE.md-Notiz
+   zur Encoder-Pending-Queue veraltet ist — 1M-Context-Effekt sehr stark.
+
+4. **Subtile Korruptions-Pfade** (P51 F4 kritisch): V4-pro fand dass
+   `r.get("standard", r)` Fallback bei altem Dialog-Format DX-Store mit
+   Std-identischen Werten überschreiben würde. Cleaner `has_dual`-Check
+   eingeführt — Anti-Korruption.
+
+5. **Tote-API-Identifikation** (P51 F6): grep-fähige Code-Pfad-
+   Verifikation. `settings.save_dx_preset` ist 1× schreibend gerufen,
+   `get_dx_preset` 0×-mal lesbar → tote API. Cleanup einfach.
+
+6. **Edge-Case-Defensiven** (Bundle J F5): `delta_db == 0`-Fall im
+   `_antenna_pref_label` — HYSTERESE=1.0 macht's unwahrscheinlich, aber
+   billige Defense. Klassisch V4-pro.
+
+7. **Mike-Spec-Begründung respektiert** (Bundle J F2): V4-pro meldete
+   „Overengineering" gegen Mike's explizite Konsistenz-Spec — nach
+   Begründung im V3 nicht insistiert. Final-R1 hatte 0 KP.
+
+### V4-pro-Schwächen
+
+1. **Variablen-Zweck-Missverständnis** (P51 F3): V4-pro nahm
+   `_gain_scoring_mode` als UI-Anzeige-Variable, war aber Mess-Trigger-
+   Saver. Mehrfaches Lesen des Codes hilft nicht immer — beim Ablehnen
+   nicht insistiert.
+
+2. **Klärungsfragen-Delegation** (Bundle I F5): V4-pro meldete
+   „Vor Implementierung Klärung durch R1 herbeiführen" — anstatt selbst
+   Code zu prüfen. War trivial selbst-klärbar.
+
+### 1M-Context-Effekte
+
+- **Mehrere komplette Files** anhängen lohnt sich (vs V3-Selektion mit
+  7k-Token-Limit). Bundle J hatte 5 Files (51k in), P51 hatte 4 Files
+  (39k in) — beide unter 1M-Limit.
+- V4-pro liest **Kommentare + Doku** in den angehängten Files mit (siehe
+  Stärke #3 — fand veraltete CLAUDE.md-Notiz im `core/encoder.py`).
+- **Token-Effizienz:** V4-pro generiert ~2-3x mehr Output-Tokens als V3
+  R1 für gleichen Prompt — gibt mehr Detail + Tabellen, aber Wert ist
+  klar höher.
+
+### Format-/Stil-Veränderungen vs V3
+
+- **Tabellen-fokussierter** — V4-pro liefert fast immer eine
+  `Schwere | Finding | Datei:Zeile | Empfehlung`-Tabelle.
+- **Begründungen knapper** — V3 hatte oft 3-4-Satz-Reasoning pro
+  Finding, V4-pro liefert 1-2 Sätze. Trotzdem präzise.
+- **Final-R1 mit „Push freigegeben." als erstes Wort** — klares
+  Go/No-Go-Signal. V3 hatte oft längere Lobreden bevor das Verdikt kam.
+
+### V4-spezifische Blindspots (offen)
+
+- Keine bestätigten neuen Blindspots gefunden in 3 Cycles. V3-Blindspot
+  „Encoder-Busy-Race" (Memory `feedback_r1_encoder_busy_blindspot.md`)
+  war nicht testbar in I/J/P51 weil kein TX-TX-Konsekutiv-Plan dabei.
+  Bei nächstem OMNI-/TX-Workflow prüfen.
+
+### Empfehlung
+
+**V4-pro bleibt Default-Modell.** V3 R1 nur noch wenn V4-pro im
+Wartungs-Modus / API-Outage. Direkt-API `tools/deepseek_review.py --pro`
+ist Standard.
+
+---
+
+
 
 ---
 
