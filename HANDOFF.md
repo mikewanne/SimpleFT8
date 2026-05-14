@@ -1,5 +1,64 @@
 # HANDOFF — SimpleFT8
 
+## Stand 2026-05-14 mittags: v0.97.25 Bundle H — Bandpilot-Aware Diversity-Klick
+
+**Mike-Beobachtung** während Bundle G Field-Test: Bandpilot=Auto +
+DIVERSITY-Klick zeigt trotzdem Std/DX-Wahl-Dialog. Im Auto-Modus sollte
+Bandpilot SELBST entscheiden.
+
+**Verhalten (Normal → DIVERSITY-Klick):**
+- bp=off → Dialog wie heute
+- bp=auto + genug Daten → kein Wahl-Dialog, Toast 6s (2-er Ranking)
+- bp=auto + zu wenig Daten → Dialog mit dynamischem Mangel-Intro
+- bp=manual + genug Daten → Manual-Dialog 2 Buttons
+- bp=manual + zu wenig Daten → Dialog wie off
+
+**Code (4 atomare Commits + Doku + Plan):**
+- C1 `core/mode_recommender.py` `allowed_modes`-Parameter +
+  `code_mode_to_scoring()`
+- C2 `ui/bandpilot_dialogs.py` Hint-Anpassung current=None
+- C3 `ui/mw_radio.py` `_show_diversity_choice_dialog` extrahiert +
+  bp_mode-Dispatch in `_on_rx_mode_changed`
+- C4 `tests/test_bundle_h.py` NEU (11 Tests, Anti-Mock-Pattern via
+  synthetisches summary_24h)
+
+**R1-K1 (Auto+DXTuneDialog) teilweise übernommen:** R1 wollte
+`_enable_diversity` direkt. Position V3: DXTuneDialog ist Mess-Dialog
+(funktional nötig), kein Wahl-Dialog → Mike-Spec nicht verletzt.
+
+**Tests:** **1205 grün** (1194 → 1205, +11).
+**Backup:** `Appsicherungen/2026-05-14_v0.97.24_vor_bundle_h/`.
+**Workflow:** V1→V2→R1 7/10 (1 KRITISCH teilweise, 3 SOLLTE
+übernommen)→V3→Code→Final-R1 „Push freigegeben" 0 KP.
+**Push:** pending bis Mike's Field-Test F1-F8 + alle Vorgänger.
+
+**Statistiken/PDFs aktualisiert** (14.05.2026 mittags, `generate_plots.py`).
+
+### Field-Test-Checkliste F1-F8
+
+| # | Test | Erwartung |
+|---|---|---|
+| F1 | bp=off + Klick Div | Dialog „Welchen Modus verwenden?" (heute) |
+| F2 | bp=auto + genug Daten + Klick Div | **Kein Wahl-Dialog**, Toast 6s (🥇+🥈) |
+| F3 | bp=auto + zu wenig Daten + Klick Div | Dialog mit Mangel-Intro |
+| F4 | bp=manual + genug + Klick Div | Manual-Dialog 2 Buttons (kein ●-Hint) |
+| F5 | bp=manual + zu wenig + Klick Div | Dialog wie F3 |
+| F6 | Abbruch im Dialog | Zurück zu Normal-Button |
+| F7 | F2 + Gain stale | Toast erst, dann DXTuneDialog (UX-konsistent) |
+| F8 | Während Gain-Mess Klick | Pipeline-Lock blockiert |
+
+### Vorgänger pending
+
+- v0.97.24 Bundle G F1-F9 (Std↔DX Sub-Toggle)
+- v0.97.23 Bundle F F1-F6 (OMNI fix, cycle_bar weg, Orange)
+- v0.97.22 Bundle E F1-F9, v0.97.21 Bundle D, v0.97.20 P50 ✓
+
+### TODO
+
+W2 Gain-Sharing Std/DX-Store (separater Bundle, siehe TODO.md).
+
+---
+
 ## Stand 2026-05-14 vormittags: v0.97.24 Bundle G — Diversity Std↔DX Direkt-Toggle
 
 **Mike-Wunsch** während Bundle F Field-Test: Direktwechsel zwischen

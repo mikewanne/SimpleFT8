@@ -5,6 +5,96 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-14 v0.97.25 — Bundle H: Bandpilot-Aware Diversity-Klick
+
+Mike-Beobachtung während Bundle G Field-Test (Bilder von Settings +
+Dialog): Bandpilot=Auto + Klick auf DIVERSITY zeigt trotzdem Std/DX-
+Wahl-Dialog. Im Auto-Modus sollte Bandpilot SELBST entscheiden.
+
+### Mike-Spec
+
+Beim Klick auf DIVERSITY (Normal → Diversity):
+
+| Bandpilot | Daten | Verhalten |
+|---|---|---|
+| off | egal | Dialog wie heute |
+| auto | genug | **kein Wahl-Dialog** — Bandpilot wählt + Toast 6s mit 2-er Ranking (🥇 + 🥈, kein Normal weil User explizit Div) |
+| auto | zu wenig | Dialog dynamisch „Nicht genug Daten — bitte wählen" |
+| manual | genug | Manual-Dialog 2 Buttons Std/DX (kein ●-Hint weil current=Normal nicht im Ranking) |
+| manual | zu wenig | Dialog wie off |
+
+### Code (4 atomare Commits)
+
+**C1 `core/mode_recommender.py`:**
+- `recommend_for_hour()` neuer Parameter `allowed_modes: tuple|None`.
+  Default None → 3-Wege wie bisher. Gesetzt → Ranking nur aus Subset.
+  Bei `current_mode not in allowed_modes` (H-Pfad): Tolerance-Skip,
+  `decision="switch"`, `decision_mode=top1`.
+- `HourlyBandpilot.recommend()` Pass-through-Parameter.
+- Neue Modul-Function `code_mode_to_scoring(decision_mode) -> str`:
+  „diversity_dx" → „dx", sonst „normal" (Default-Fallback).
+
+**C2 `ui/bandpilot_dialogs.py`:**
+- `BandpilotManualDialog` bei `current=None`:
+  - ●-Marker nicht setzen
+  - Hint-Label NICHT erzeugen (sonst „● = aktueller Modus (Normal)"
+    obwohl Normal nicht im Ranking → verwirrt)
+
+**C3 `ui/mw_radio.py`:**
+- Neue Method `_show_diversity_choice_dialog(intro_text) -> str|None`
+  extrahiert aus inline-Dialog Z.578-633. Dynamischer Intro-Text,
+  WA_DeleteOnClose (R1-S1).
+- `_on_rx_mode_changed("diversity")` Refactor: bp_mode-Dispatch
+  (auto+rec → Toast+activate, manual+rec → Manual-Dialog, sonst
+  Wahl-Dialog mit dynamischem Intro). Defensive no_change-Fallback
+  (R1-S3).
+
+**C4 `tests/test_bundle_h.py` NEU** (11 Tests):
+- T1a/b/c: `recommend_for_hour` mit `allowed_modes` (ECHTE Logik,
+  synthetisches summary_24h, KEIN MagicMock — Anti-Mock-Pattern)
+- T2a/b/c/d: `code_mode_to_scoring` Mapping (4 Fälle inkl.
+  Default-Fallback)
+- T8a/b: Manual-Dialog Hint bei current=None vs current=set
+- T9: BandpilotAutoToast mit 2-elementigem Ranking
+- T10: `decision="switch"` IMMER bei H-Pfad
+
+### R1-Workflow
+
+- V2-Self-Review 10 Findings
+- R1 7/10: 1 KRITISCH (Auto+DXTuneDialog UX), 3 SOLLTE, 1 KÖNNTE
+- V3: K1 TEILWEISE übernommen mit Begründung (DXTuneDialog ist
+  Mess-Dialog, NICHT Wahl-Dialog — Mike-Spec verletzt nicht),
+  S1+S2+S3 alle übernommen
+- Final-R1: „Push freigegeben", 0 KP, K1-Position akzeptiert
+
+### Test-Bilanz
+
+- 1194 → **1205 grün** (+11, V3 prognostizierte ~12)
+
+### Backup
+
+`Appsicherungen/2026-05-14_v0.97.24_vor_bundle_h/` (3 Files).
+
+### Plan-Files
+
+`prompts/bundle_h_v[1,2,3].md` + `bundle_h_r1_prompt.md` +
+`bundle_h_final_r1.md`.
+
+### Field-Test pending F1-F8
+
+| # | Test | Erwartung |
+|---|---|---|
+| F1 | bp=off + Klick Div | Dialog „Welchen Modus verwenden?" |
+| F2 | bp=auto + genug + Klick Div | **Kein Wahl-Dialog**, Toast 6s (🥇+🥈), dann Diversity aktiv |
+| F3 | bp=auto + zu wenig + Klick Div | Dialog „Nicht genug Daten — bitte wählen" |
+| F4 | bp=manual + genug + Klick Div | Manual-Dialog 2 Buttons (kein ●-Hint) |
+| F5 | bp=manual + zu wenig + Klick Div | Dialog wie F3 |
+| F6 | Abbruch im Dialog | Zurück zu Normal-Button |
+| F7 | F2 + Gain stale | Toast erst, dann DXTuneDialog (UX-konsistent) |
+| F8 | Pipeline-Lock-Schutz | Während Gain-Mess Klick → blockiert |
+
+---
+
 ## 2026-05-14 v0.97.24 — Bundle G: Diversity Std↔DX Direkt-Toggle
 
 Mike-Wunsch während Bundle F Field-Test: Direktwechsel zwischen

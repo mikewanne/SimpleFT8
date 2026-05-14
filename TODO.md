@@ -1,8 +1,52 @@
-# SimpleFT8 TODO — Stand 14.05.2026 (v0.97.23, Bundle F fertig)
+# SimpleFT8 TODO — Stand 14.05.2026 (v0.97.24, Bundle G fertig)
 
-## 🆕 OFFEN — Mike-Wunsch 14.05.2026 vormittags (während Bundle F Field-Test)
+## 🆕 OFFEN — Bundle H: Bandpilot-Aware Diversity-Klick (Mike 14.05.2026 mittags)
 
-### Wunsch 1 — Diversity Std ↔ DX Toggle (KISS, hohe Prio) — KORRIGIERT
+**Mike's Beobachtung:** Bandpilot=Auto + Klick auf DIVERSITY → Std/DX-
+Dialog erscheint trotzdem. Aber im Auto-Modus sollte Bandpilot SELBST
+entscheiden ohne User-Dialog.
+
+**Verhalten gewünscht beim DIVERSITY-Klick (Normal → Diversity):**
+
+| Bandpilot | Daten | Verhalten |
+|---|---|---|
+| **off** | egal | Dialog „Welchen Modus verwenden?" (heute) |
+| **auto** | genug | **kein Dialog** — Bandpilot wählt + Toast 6s (nur Std/DX im Ranking, kein Normal weil User explizit Div gewählt) |
+| **auto** | zu wenig | Dialog mit dynamischem Intro „Nicht genug Daten für Bandpilot — bitte selbst wählen" |
+| **manual** | genug | Manual-Dialog mit Std/DX-Empfehlung (analog 3-Wege heute) |
+| **manual** | zu wenig | Dialog wie off (Fallback) |
+
+**Architektur (Claude + DeepSeek einig, KISS):**
+
+1. **1 dynamischer Dialog** statt 2-3 separat (nur Intro-Text variiert)
+2. `BandpilotAutoToast` UNVERÄNDERT — iteriert eh über `rec["ranking"]`,
+   2-Modi-Ranking automatisch (kein Subclass)
+3. `recommend()` um `allowed_modes`-Parameter erweitern statt neue
+   Methode (Default = alle 3, Diversity-only = 2-er Liste)
+4. Dialog-Intro dynamisch `intro_label.setText(...)`
+
+**Edge-Cases (R1):**
+- Pipeline-Lock-Check
+- `decision == "no_change"` bei auto → trotzdem Toast (anders als
+  Bandwechsel-Pfad)
+- Race bei gleichzeitigem Band+Mode-Wechsel
+
+**Aufwand:** klein, 1-2 Tage. Sofort umsetzen.
+
+---
+
+## ✅ 14.05.2026 erledigt — Bundle G Diversity Std↔DX Toggle (v0.97.24)
+
+2. Klick auf DIVERSITY-Button bei Bandpilot=Aus → direkter Toggle Std↔DX
+(kein Dialog). Bei Auto/Manual: no-op. OMNI+Hunt-Stop bei Toggle.
+11 Tests. Memory `project_bundle_g_diversity_toggle.md`.
+
+Field-Test pending (Mike-Beobachtung „Dialog im Auto-Modus unerwünscht"
+führte zu Bundle H — separater Pfad: Normal→Div Klick, nicht 2. Div-Klick).
+
+---
+
+### [HISTORISCH] Wunsch 1 — Diversity Std ↔ DX Toggle (Bundle G ERLEDIGT)
 
 **Mike-Klarstellung 14.05.2026 vormittags (nach erstem TODO-Entwurf):**
 
