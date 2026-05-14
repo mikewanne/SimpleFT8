@@ -38,7 +38,7 @@ def _build_interleaved_schedule() -> list:
             for gain in GAIN_VALUES:
                 schedule.append(("ANT2", gain))
                 schedule.append(("ANT1", gain))
-    return schedule  # 12 Eintraege
+    return schedule  # 8 Schritte (ROUNDS × 2 Antennen × 2 Gain-Stufen)
 
 
 class DXTuneDialog(QDialog):
@@ -53,7 +53,7 @@ class DXTuneDialog(QDialog):
         self._results = {}
 
         # Messplan
-        self._schedule = _build_interleaved_schedule()  # 12 Schritte
+        self._schedule = _build_interleaved_schedule()  # 8 Schritte
         self._step = 0          # aktueller Schritt im Schedule
         self._phase_data = {}   # (ant, gain) -> [snr_werte]
         self._cancelled = False
@@ -108,6 +108,11 @@ class DXTuneDialog(QDialog):
         self.detail_label.setFont(_FONT_MONO_SM)
         self.detail_label.setStyleSheet("color: #AAA;")
         layout.addWidget(self.detail_label)
+
+        # P51 (v0.97.28): Hinweis dass Messung gleichzeitig fuer beide Modi gilt.
+        self.mode_label = QLabel("Misst gleichzeitig für Standard- und DX-Modus")
+        self.mode_label.setStyleSheet("color: #66AACC; font-style: italic; font-size: 11px;")
+        layout.addWidget(self.mode_label)
 
         # Fortschritt
         self.progress = QProgressBar()
@@ -353,44 +358,79 @@ class DXTuneDialog(QDialog):
         vals = self._phase_data.get(key, [])
         return len([v for v in vals if v is not None])
 
-    def _finish(self):
-        """Alle 12 Zyklen fertig — besten Gain pro Antenne bestimmen.
+    def _best_for(self, ant: str, use_snr: bool) -> dict:
+        """P51: Liefert {gain, avg, count} fuer eine scoring-Variante.
 
-        scoring_mode='snr': Bester Top-5 SNR → maximale Empfindlichkeit (DX)
-        scoring_mode='stations': Meiste Stationen → maximaler Durchsatz (Standard)
+        use_snr=True  → DX-Optimum (bestes Top-5-SNR pro Gain-Stufe).
+        use_snr=False → Standard-Optimum (meiste Stationen pro Gain-Stufe).
+
+        Aus identischen _phase_data ergeben sich zwei unterschiedliche
+        Optima — beide ableitbar ohne neue Messung (P51-Vereinheitlichung).
+        """
+        best_gain = GAIN_VALUES[0]
+        best_score = None
+        for gain in GAIN_VALUES:
+            key = (ant, gain)
+            if self._has_overload(key):
+                continue
+            score = self._top5_avg(key) if use_snr else self._station_count(key)
+            if score is None:
+                continue
+            if best_score is None or score > best_score:
+                best_score = score
+                best_gain = gain
+        avg = self._top5_avg((ant, best_gain))
+        count = self._station_count((ant, best_gain))
+        return {
+            "gain": best_gain,
+            "avg": avg if avg is not None else -30.0,
+            "count": count,
+        }
+
+    def _build_scoring_result(self, use_snr: bool) -> dict:
+        """P51: vollstaendiger Result-Satz fuer einen scoring-Modus.
+
+        Returns dict mit ant1_gain, ant2_gain, ant1_avg, ant2_avg,
+        best_ant, best_gain — gleiche Struktur wie pre-P51 Single-Result.
+        """
+        a1 = self._best_for("ANT1", use_snr)
+        a2 = self._best_for("ANT2", use_snr)
+        if a1["avg"] >= a2["avg"]:
+            best_ant, best_gain = "ANT1", a1["gain"]
+        else:
+            best_ant, best_gain = "ANT2", a2["gain"]
+        return {
+            "ant1_gain": a1["gain"],
+            "ant2_gain": a2["gain"],
+            "ant1_avg":  a1["avg"],
+            "ant2_avg":  a2["avg"],
+            "best_ant":  best_ant,
+            "best_gain": best_gain,
+        }
+
+    def _finish(self):
+        """Alle 8 Zyklen fertig — P51: BEIDE Auswertungen parallel rechnen.
+
+        P51 (v0.97.28): Aus identischen _phase_data werden beide Optima
+        bestimmt — Standard (meiste Stationen) UND DX (bester SNR). Beide
+        Saetze liegen in self._results["standard"] und self._results["dx"].
+        Top-Level-Felder spiegeln den aktiven scoring_mode (Backwards-
+        Compat fuer Code der nur 1 Satz erwartet — z.B. set_rfgain am
+        Radio).
         """
         self._finished = True
-        use_snr = (self.scoring_mode == "snr")
 
-        for ant in ("ANT1", "ANT2"):
-            best_gain = GAIN_VALUES[0]
-            best_score = None
-            for gain in GAIN_VALUES:
-                key = (ant, gain)
-                if self._has_overload(key):
-                    continue
-                if use_snr:
-                    score = self._top5_avg(key)  # DX: bester SNR
-                else:
-                    score = self._station_count(key)  # Standard: meiste Stationen
-                if score is None:
-                    continue
-                if best_score is None or score > best_score:
-                    best_score = score
-                    best_gain = gain
-            self._results[f"{ant.lower()}_gain"] = best_gain
-            avg = self._top5_avg((ant, best_gain))
-            self._results[f"{ant.lower()}_avg"] = avg if avg is not None else -30.0
-
-        # Beste Antenne gesamt (fuer DX Tuning Modus Abwaertskompatibilitaet)
-        ant1_avg = self._results.get("ant1_avg", -30.0)
-        ant2_avg = self._results.get("ant2_avg", -30.0)
-        if ant1_avg >= ant2_avg:
-            self._results["best_ant"] = "ANT1"
-            self._results["best_gain"] = self._results["ant1_gain"]
-        else:
-            self._results["best_ant"] = "ANT2"
-            self._results["best_gain"] = self._results["ant2_gain"]
+        # P51: beide Auswertungen parallel
+        std_result = self._build_scoring_result(use_snr=False)
+        dx_result  = self._build_scoring_result(use_snr=True)
+        self._results = {
+            "standard": std_result,
+            "dx":       dx_result,
+        }
+        # Top-Level = aktive Variante (Backwards-Compat fuer set_rfgain etc.)
+        active = dx_result if self.scoring_mode == "snr" else std_result
+        for k, v in active.items():
+            self._results[k] = v
 
         # Optimale Einstellungen am Radio setzen (beste Antenne mit bestem Gain)
         ant = self._results["best_ant"]
@@ -402,13 +442,17 @@ class DXTuneDialog(QDialog):
         # UI kurz aktualisieren, dann automatisch schliessen
         ant1_gain = self._results["ant1_gain"]
         ant2_gain = self._results["ant2_gain"]
+        std_a1 = self._results["standard"]["ant1_gain"]
+        std_a2 = self._results["standard"]["ant2_gain"]
+        dx_a1  = self._results["dx"]["ant1_gain"]
+        dx_a2  = self._results["dx"]["ant2_gain"]
         self.step_label.setText("Messung abgeschlossen!")
         self.step_label.setStyleSheet("color: #44FF44; font-size: 13px; font-weight: bold;")
-        scoring_text = "nach SNR (DX)" if use_snr else "nach Stationsanzahl"
+        # P51: Display zeigt beide Auswertungen (Std + DX)
         self.detail_label.setText(
-            f"ANT1: optimaler Gain {ant1_gain} dB  |  "
-            f"ANT2: optimaler Gain {ant2_gain} dB\n"
-            f"Bewertet {scoring_text}"
+            f"Standard: ANT1={std_a1} dB  ANT2={std_a2} dB  |  "
+            f"DX: ANT1={dx_a1} dB  ANT2={dx_a2} dB\n"
+            f"Bewertet nach SNR (DX) UND Stationsanzahl (Standard)"
         )
         self.detail_label.setStyleSheet("color: #44FF44;")
         self.progress.setValue(len(self._schedule))
@@ -423,8 +467,14 @@ class DXTuneDialog(QDialog):
 
     def _update_results_display(self):
         lines = []
+        # P51: pro (ant, gain) markieren ob Std-Optimum, DX-Optimum oder beides
+        std_set = self._results.get("standard") if self._finished else None
+        dx_set  = self._results.get("dx") if self._finished else None
         for ant in ("ANT1", "ANT2"):
             ant_lines = []
+            ant_key = ant.lower()
+            std_best = std_set.get(f"{ant_key}_gain") if std_set else None
+            dx_best  = dx_set.get(f"{ant_key}_gain") if dx_set else None
             for gain in GAIN_VALUES:
                 key = (ant, gain)
                 avg = self._top5_avg(key)
@@ -436,9 +486,14 @@ class DXTuneDialog(QDialog):
                     else:
                         marker = ""
                     if self._finished and not overload:
-                        best_g = self._results.get(f"{ant.lower()}_gain")
-                        if best_g is not None and gain == best_g:
-                            marker += "  ←"
+                        is_std = std_best is not None and gain == std_best
+                        is_dx  = dx_best is not None and gain == dx_best
+                        if is_std and is_dx:
+                            marker += "  ←(Std+DX)"
+                        elif is_std:
+                            marker += "  ←(Std)"
+                        elif is_dx:
+                            marker += "  ←(DX)"
                     ant_lines.append(
                         f"  {ant} Gain {gain:2d} dB:  Ø {avg:+5.1f} dB  "
                         f"({count} St.){marker}"
