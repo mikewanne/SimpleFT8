@@ -279,6 +279,9 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self._diversity_lock = threading.Lock()  # Race Condition Guard
         self._tune_active = False
         self._tune_freq_mhz = None
+        # P53: SWR-Live-Watchdog Spike-Counter (gegen PTT-on-Glitch)
+        self._swr_spike_count = 0
+        self._swr_first_alarm_t = 0.0
 
     def _init_power_state(self):
         """Auto TX Level Regelung (zweistufig: rfpower primär, audio sekundär)."""
