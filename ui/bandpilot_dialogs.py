@@ -11,6 +11,8 @@ Beide non-modal, ``WA_DeleteOnClose``, ``Frameless | Tool``-Flags
 
 from __future__ import annotations
 
+import os
+
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QDialog,
@@ -22,6 +24,29 @@ from PySide6.QtWidgets import (
 )
 
 from core.mode_recommender import USER_LABEL
+
+
+# Toast-Bundle (v0.97.18, Mike-Feedback 13.05.): Ranking-Marker als
+# Medaillen statt Text-Ziffern. Fallback fuer Systeme ohne Color-Emoji-
+# Renderer via Env-Var `SIMPLEFT8_TEXT_MARKERS=1` (R1-SOLLTE-Defensive).
+_USE_EMOJI = not os.environ.get("SIMPLEFT8_TEXT_MARKERS")
+_MEDAL_MARKERS = ("🥇", "🥈", "🥉")
+_TEXT_MARKERS = ("Top:", "2.:", "3.:")
+
+# Self-Close-Zeit fuer BandpilotAutoToast. 5000ms war zu kurz fuer
+# Ranking-Lesezeit (Mike 13.05.) → 6000ms.
+_TOAST_DISPLAY_MS = 6000
+
+
+def _rank_marker(idx: int) -> str:
+    """Ranking-Marker fuer Top-1/2/3.
+
+    Default: 🥇🥈🥉. Mit `SIMPLEFT8_TEXT_MARKERS=1` → Text-Fallback
+    ("Top:", "2.:", "3.:") fuer Systeme ohne Color-Emoji-Renderer
+    (alte Linux-Desktops, Headless-CI).
+    """
+    markers = _MEDAL_MARKERS if _USE_EMOJI else _TEXT_MARKERS
+    return markers[idx] if 0 <= idx <= 2 else ""
 
 
 _TOAST_STYLE = """
@@ -102,15 +127,15 @@ class BandpilotAutoToast(QDialog):
         chosen.setObjectName("chosen")
         layout.addWidget(chosen)
 
-        # Ranking — alle 3 Modi mit Top-1 hervorgehoben
+        # Ranking — alle 3 Modi mit Top-1 hervorgehoben (Medaillen-Marker)
         for idx, (mode_code, mean) in enumerate(rec["ranking"]):
-            row = QLabel(f"{idx + 1}. {USER_LABEL.get(mode_code, mode_code)}: "
+            row = QLabel(f"{_rank_marker(idx)} {USER_LABEL.get(mode_code, mode_code)}: "
                          f"{mean:.1f}")
             row.setObjectName("row_top1" if idx == 0 else "row_neutral")
             layout.addWidget(row)
 
-        # Self-close nach 5 Sekunden (Mike-Feedback 04.05.: 3s zu kurz)
-        QTimer.singleShot(5000, self._safe_close)
+        # Self-close nach _TOAST_DISPLAY_MS (6000ms, Mike-Feedback 13.05.: 5s zu kurz)
+        QTimer.singleShot(_TOAST_DISPLAY_MS, self._safe_close)
 
     def _safe_close(self):
         """Robust gegen bereits-geschlossen (User-Klick auf [×] vorher)."""
@@ -157,19 +182,24 @@ class BandpilotManualDialog(QDialog):
         intro.setAlignment(Qt.AlignmentFlag.AlignLeft)
         layout.addWidget(intro)
 
-        # Werte-Anzeige (ueber Buttons) — Ranking 1./2./3.
+        # Werte-Anzeige (ueber Buttons) — Ranking mit Medaillen + current-Marker
         for idx, (mode_code, mean) in enumerate(rec["ranking"]):
             label = USER_LABEL.get(mode_code, mode_code)
-            marker = "●" if mode_code == current else " "
-            lbl = QLabel(f"  {marker}  {idx + 1}. {label:<22} "
+            # Bundle H (v0.97.25): bei current=None (z.B. H-Pfad —
+            # User wechselt von Normal in Diversity-Subset) kein ●-Marker
+            marker = "●" if current is not None and mode_code == current else " "
+            lbl = QLabel(f"  {marker}  {_rank_marker(idx)} {label:<22} "
                          f"{mean:>6.1f} Sta./Slot")
             if idx == 0:
                 lbl.setObjectName("row_top1")
             layout.addWidget(lbl)
 
-        hint = QLabel(f"●  = aktueller Modus ({USER_LABEL.get(current, current)})")
-        hint.setObjectName("hint")
-        layout.addWidget(hint)
+        # Bundle H: Hint nur zeigen wenn current gesetzt ist
+        if current is not None:
+            hint = QLabel(
+                f"●  = aktueller Modus ({USER_LABEL.get(current, current)})")
+            hint.setObjectName("hint")
+            layout.addWidget(hint)
 
         # 3 Buttons fuer direkte Modus-Wahl + Abbruch
         btn_row = QHBoxLayout()
