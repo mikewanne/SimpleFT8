@@ -483,7 +483,7 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
 
         # Bundle D (v0.97.21): Slot-Progress-Bar rechts in Statusbar.
         # Zeigt aktuellen FT8/FT4/FT2-Slot-Fortschritt (0..cycle_dur s).
-        # Farbe wechselt mit Slot-Parity: Cyan (Even) / Magenta (Odd).
+        # Farbe wechselt mit Slot-Parity: Cyan (Even) / Orange (Odd).
         # Wird sekündlich aus `_tick_cq_countdown` aktualisiert.
         from PySide6.QtWidgets import QProgressBar as _QProgressBar
         self._slot_progress_bar = _QProgressBar()
@@ -492,7 +492,7 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self._slot_progress_bar.setTextVisible(False)
         self._slot_progress_bar.setFixedSize(80, 14)
         self._slot_progress_bar.setToolTip(
-            "FT8/FT4/FT2-Slot — Cyan = Even, Magenta = Odd. "
+            "FT8/FT4/FT2-Slot — Cyan = Even, Orange = Odd. "
             "Balken füllt sich über die Slot-Dauer.")
         self._slot_progress_bar.setStyleSheet(
             "QProgressBar { border: 1px solid #333; border-radius: 2px;"
@@ -1250,7 +1250,7 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
 
         Liest `cycle_dur` vom Timer (FT8=15, FT4=7.5, FT2=3.8). Berechnet
         Fortschritt im aktuellen Slot (0..1000 Promille). Wechselt Farbe
-        je Slot-Parity: Cyan `#00CCFF` (Even) / Magenta `#FF66CC` (Odd).
+        je Slot-Parity: Cyan `#00CCFF` (Even) / Orange `#FFAA00` (Odd).
         Farb-Update nur bei Parity-Wechsel (Stylesheet-Reset ist teuer).
         """
         if not hasattr(self, "_slot_progress_bar"):
@@ -1266,7 +1266,7 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self._slot_progress_bar.setValue(int(progress_in_slot * 1000))
         if is_even != self._slot_progress_is_even:
             self._slot_progress_is_even = is_even
-            chunk = "#00CCFF" if is_even else "#FF66CC"  # cyan / magenta
+            chunk = "#00CCFF" if is_even else "#FFAA00"  # cyan / orange (Bundle F)
             self._slot_progress_bar.setStyleSheet(
                 "QProgressBar { border: 1px solid #333; border-radius: 2px;"
                 " background: #1a1a1a; }"
