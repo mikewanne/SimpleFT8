@@ -35,9 +35,9 @@ def test_t1_layout_smoke(qapp):
     dlg = ConnectStatusDialog()
     try:
         assert dlg.windowTitle() == "FlexRadio wird verbunden"
-        # 11.05.2026: 20% kleiner
+        # 11.05.2026: 20% kleiner; Bundle J (14.05.): 176→196 fuer Footer-Zeile.
         assert dlg.size().width() == 352
-        assert dlg.size().height() == 176
+        assert dlg.size().height() == 196
         assert dlg.isModal()
         assert dlg.windowModality() == Qt.WindowModality.WindowModal
         # Spinner-Label initialisiert
