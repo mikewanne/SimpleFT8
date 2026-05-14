@@ -175,6 +175,8 @@ class RadioMixin:
         # Meter an GUI koppeln
         self.radio.meter_update.connect(self._on_meter_update)
         self.radio.swr_alarm.connect(self._on_swr_alarm)
+        # P53: SWR-Limit aus Settings an Radio propagieren
+        self.radio.set_swr_limit(self.settings.get("swr_limit", 3.0))
 
         # P35 Bug A Resume (AK7 idempotent, R1-Q7 voller Pfad):
         # Falls _enable_diversity vor Radio-Connect aufgeschoben wurde,
