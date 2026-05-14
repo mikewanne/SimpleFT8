@@ -169,6 +169,7 @@ def recommend_for_hour(
     summary_24h: dict[int, dict[str, dict]],
     hour: int,
     current_mode: str | None,
+    allowed_modes: tuple[str, ...] | None = None,
 ) -> dict | None:
     """Empfehlung fuer eine bestimmte UTC-Stunde + aktuellen Modus.
 
@@ -177,16 +178,25 @@ def recommend_for_hour(
         hour: UTC-Stunde 0..23.
         current_mode: aktueller RX-Modus-String oder ``None`` (z.B.
             waehrend dx_tuning) — None → keine Empfehlung.
+        allowed_modes: Bundle H (v0.97.25) — wenn gesetzt, wird das
+            Ranking nur aus diesen Code-Modi gebildet (statt aus den
+            3 CODE_MODES). Wenn ``current_mode not in allowed_modes``,
+            wird die Tolerance-Logik geskippt und ``decision="switch"``
+            mit ``decision_mode=top1`` returnt (User-explizite
+            Subset-Wahl).
+            Default ``None`` = 3-Wege-Vergleich wie bisher.
 
     Returns:
         ``None`` wenn ``current_mode`` ist ``None`` ODER fuer die Stunde
-        nicht alle drei Modi MIN_DAYS_HOUR + MIN_CYCLES_HOUR erfuellen
-        ODER ``current_mode`` nicht im Vergleich vorkommt.
+        nicht alle relevanten Modi MIN_DAYS_HOUR + MIN_CYCLES_HOUR
+        erfuellen ODER ``current_mode`` nicht im Vergleich vorkommt
+        (nur bei allowed_modes=None).
 
         Sonst: ``dict`` mit:
             - ``top1``: Code-String des Top-Modus
             - ``top1_mean``: Pooled Mean Top-1
-            - ``ranking``: ``[(mode, mean), ...]`` 3-elementig, desc sortiert
+            - ``ranking``: ``[(mode, mean), ...]`` desc sortiert
+              (3-elementig bei allowed_modes=None, sonst len(allowed_modes))
             - ``decision``: ``"no_change"`` | ``"switch"``
             - ``decision_mode``: empfohlener neuer Modus (kann == current_mode
               sein bei ``no_change``)
@@ -194,6 +204,8 @@ def recommend_for_hour(
     Toleranz-Regel (R1-Finding A, V3-AK 12):
         Kein Wechsel wenn ``current_mean >= top1_mean - max(5%·top1_mean, 1)``.
         Toleranz wird gegen den AKTUELLEN Modus gemessen, nicht gegen Top-2.
+        Bundle H: bei `allowed_modes` + `current_mode not in allowed_modes`
+        wird Tolerance geskippt (User will explizit aus Subset wählen).
     """
     if current_mode is None:
         return None
@@ -202,8 +214,11 @@ def recommend_for_hour(
     if not modes_in_hour:
         return None
 
+    # Bundle H: wenn allowed_modes gesetzt, nur dieses Subset prüfen
+    modes_to_check = allowed_modes if allowed_modes is not None else CODE_MODES
+
     means: dict[str, float] = {}
-    for code in CODE_MODES:
+    for code in modes_to_check:
         entry = modes_in_hour.get(code, {})
         if (entry.get("days", 0) < MIN_DAYS_HOUR or
                 entry.get("cycles", 0) < MIN_CYCLES_HOUR or
@@ -211,14 +226,25 @@ def recommend_for_hour(
             return None
         means[code] = entry["mean"]
 
-    if current_mode not in means:
-        # Kann nicht passieren wenn alle 3 Code-Modi vorhanden,
-        # aber defensive: unbekannter current_mode-String.
-        return None
-
     # Sortieren descending → Top-1 erster Eintrag
     ranking = sorted(means.items(), key=lambda x: x[1], reverse=True)
     top1_mode, top1_mean = ranking[0]
+
+    # Bundle H: bei allowed_modes-Subset-Pfad current_mode nicht im
+    # Ranking → User will eh wechseln, Tolerance-Skip.
+    if allowed_modes is not None and current_mode not in means:
+        return {
+            "top1": top1_mode,
+            "top1_mean": top1_mean,
+            "ranking": ranking,
+            "decision": "switch",
+            "decision_mode": top1_mode,
+        }
+
+    if current_mode not in means:
+        # Kann nicht passieren wenn alle Modi vorhanden,
+        # aber defensive: unbekannter current_mode-String.
+        return None
 
     current_mean = means[current_mode]
     tolerance = max(0.05 * top1_mean, 1.0)
@@ -237,6 +263,21 @@ def recommend_for_hour(
         "decision": decision,
         "decision_mode": decision_mode,
     }
+
+
+def code_mode_to_scoring(decision_mode: str) -> str:
+    """Bundle H (v0.97.25): Bandpilot-Code-Modus → DiversityController.scoring_mode.
+
+    Code-Modi (CODE_MODES): „normal" / „diversity_normal" / „diversity_dx"
+    Scoring-Modi (DiversityController): „normal" (Standard) / „dx"
+
+    Naming-Kollision: „normal" als Code-Mode = Normal-RX, „normal" als
+    Scoring = Standard-Scoring in Diversity. Mapping:
+        diversity_normal → "normal" (Std-Scoring)
+        diversity_dx     → "dx"
+        andere           → "normal" (Default-Fallback)
+    """
+    return "dx" if decision_mode == "diversity_dx" else "normal"
 
 
 class HourlyBandpilotCache:
@@ -333,10 +374,15 @@ class HourlyBandpilot:
 
     def recommend(
         self, band: str, hour: int, current_mode: str | None,
+        allowed_modes: tuple[str, ...] | None = None,
     ) -> dict | None:
-        """Empfehlung fuer (band, hour, current_mode)."""
+        """Empfehlung fuer (band, hour, current_mode).
+
+        Bundle H: ``allowed_modes`` für Subset-Vergleich
+        (z.B. Diversity-only beim Klick auf DIVERSITY-Button).
+        """
         summary = self.get_summary(band)
-        return recommend_for_hour(summary, hour, current_mode)
+        return recommend_for_hour(summary, hour, current_mode, allowed_modes)
 
     def invalidate(self, band: str) -> None:
         """Cache fuer band invalidieren — naechster Aufruf re-aggregiert."""
