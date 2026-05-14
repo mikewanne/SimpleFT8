@@ -1,5 +1,50 @@
 # HANDOFF — SimpleFT8
 
+## Stand 2026-05-14 morgens: v0.97.21 Bundle D — UI-Tweaks nach P50-Field-Test
+
+**Mike-Trigger:** P50 funktioniert super (Field-Test ✓), Memory-Leak war
+TTS-Server (nicht SimpleFT8). 5 UI-Feinschliffe als Bundle:
+
+**Code v0.97.21:**
+- **A** Settings „Sichtbare Bänder" Block: Spacing 6→10 + mehr Top-Padding
+- **B** DT-Anzeige `+0.0`/`-0.0` → `0.0` (neuer Helper `_format_dt`)
+- **C** Even/Odd-Anzeige oben → Filter-Buttons (Normal-only), live RX-Panel-
+  Filterung über Signal `slot_filter_changed`, exklusive Toggle-Logik
+  (3 Zustände mit 2 Buttons)
+- **D** Diversity-Modus: Buttons ausgeblendet (zu komplex), QSO/Logbuch
+  füllen Platz, Filter immer reset bei Modus-Wechsel
+- **E** NEU Slot-Progress-Bar in Statusbar (unten rechts) — Cyan (Even)
+  / Magenta (Odd), dynamische cycle_dur (FT8/FT4/FT2)
+
+**Tests:** **1166 grün** (1155 + 11 Bundle-D T1-T11).
+**Backup:** `Appsicherungen/2026-05-14_v0.97.20_vor_bundle_d/`.
+**Workflow:** V1→V2 (10 Findings + 9 Fragen)→R1 7/10 (1 KRITISCH + 4
+SOLLTE alle übernommen)→V3 (16 ACs Compact-fest)→Code→Final-R1 0 KP
+„Push freigegeben".
+**Push:** pending bis Mike's Field-Test F1-F8.
+
+### Field-Test-Checkliste F1-F8 (Mike nach App-Restart)
+
+| # | Test | Erwartung |
+|---|---|---|
+| **F1** | Settings → Tab „FT8 & Diversity" → Bänder-Block | Sichtbar mehr Luft |
+| **F2** | RX-Panel DT-Spalte | Kein `+0.0`/`-0.0`, nur `0.0` für kleine Werte |
+| **F3** | Normal-Modus: EVEN/ODD oben | Klickbare Buttons (orange-Highlight wenn aktiv) |
+| **F4** | Klick EVEN | Nur Even-Stationen im RX-Panel sichtbar |
+| **F5** | Erneut EVEN oder ODD klicken | Filter wechselt korrekt (3 Zustände) |
+| **F6** | Modus → Diversity | EVEN/ODD verschwinden, QSO/Logbuch breiter |
+| **F7** | Modus zurück → Normal | Filter auf „beide" zurückgesetzt |
+| **F8** | Unten rechts Statusbar | 15s-Slot-Balken füllt sich, wechselt Cyan↔Magenta |
+
+### Vorgänger-Field-Tests pending
+
+- v0.97.20 P50 Bänder-Sichtbarkeit ✓ (Mike: „funktioniert super")
+- v0.97.19 P34-Stufe2 — F1-F10
+- v0.97.18 Toast-Bundle — Medaillen 🥇🥈🥉
+- v0.97.17 P46 Bandpilot Normal-Reintegration
+
+---
+
 ## Stand 2026-05-13 spätnachmittags: v0.97.20 P50 — Bänder-Sichtbarkeit
 
 **Code:** v0.97.20 — User kann im Settings-Dialog (Tab „FT8 & Diversity")

@@ -5,6 +5,71 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-14 v0.97.21 — Bundle D UI-Tweaks (nach P50 Field-Test)
+
+Mike-Feedback morgens nach P50 Field-Test ✓ (P50 funktioniert super,
+Memory-Leak war TTS-Server-Akkumulation, nicht SimpleFT8):
+
+**A) Settings „Sichtbare Bänder" Block luftiger**
+- `bands_grid.setSpacing(6)` → `setSpacing(10)` + `setContentsMargins(12, 8, 12, 10)`
+- Konsistent mit anderen Dialog-Layouts (P50-Folge-Tweak)
+
+**B) DT-Anzeige bei ±0.0 ohne Vorzeichen**
+- Mike: „bei +0.0 und -0.0 das Vorzeichen entfernen, ist 0.0 :-)"
+- Neue Helper-Funktion `_format_dt(value)` in `ui/rx_panel.py`
+- Logik: wenn `abs(round(dt, 1)) < 0.05` → `"0.0"`, sonst `f"{dt:+.1f}"`
+- Edge-Cases: `-0.0` → `"0.0"`, `±0.04` → `"0.0"`, `±0.05` → `"+0.1"`/`"-0.1"`
+
+**C) Even/Odd-Anzeige oben → Filter-Buttons (Normal-Modus only)**
+- `_even_label`/`_odd_label` (QLabel) → `_btn_even`/`_btn_odd`
+  (QPushButton checkable)
+- Exklusive Logik via `_on_slot_btn_clicked`: Klick auf einen Button
+  uncheckt den anderen, Klick auf aktiven Button = Filter aus
+- 3 Zustände mit 2 Buttons: keiner aktiv = `"both"`, einer aktiv =
+  `"even"`/`"odd"`
+- Neues Signal `slot_filter_changed(str)` in QSO-Panel
+- Filter blendet RX-Panel-Zeilen des nicht-aktiven Slots komplett aus
+  (Filter ist nur RX-Anzeige, NICHT TX/CQ-State)
+- Style: konsistent mit `rx_panel._FILTER_STYLE` (R1-S1)
+
+**D) Diversity-Modus: Buttons ausgeblendet**
+- `qso_panel.set_slot_buttons_visible(rx_mode == "normal")` in
+  `mw_radio._on_rx_mode_changed`
+- QSO/Logbuch-Buttons füllen den Platz automatisch (Expanding-Policy
+  schon da)
+- Filter immer zurück auf `"both"` bei jedem Modus-Wechsel (R1-Q4)
+
+**E) 15s-Slot-Progress-Bar in Statusbar (NEU)**
+- Mike-Vermutung „haben wir schon unten rechts" — stimmte nicht, war
+  CQ-Such-Balken im Antennen-Card. Neu in Statusbar als
+  `_slot_progress_bar` (QProgressBar 80×14 px).
+- Aktualisiert sekündlich aus `_tick_cq_countdown` über neue Methode
+  `_update_slot_progress_bar`
+- Range 0-1000 (Promille für Smooth), liest `cycle_duration` dynamisch
+  vom Timer (FT8=15, FT4=7.5, FT2=3.8) (R1-S3)
+- Farbe wechselt mit Slot-Parity:
+  - Even (Slot mit geradem Index) → **Cyan `#00CCFF`**
+  - Odd → **Magenta `#FF66CC`**
+- Farben von R1 empfohlen — keine Kollision mit grün/gelb/blau/rot,
+  neon-konform für dunkles Theme
+
+**Workflow:** V1→V2 (10 Findings + 9 Fragen)→R1 7/10 (1 KRITISCH + 4
+SOLLTE)→V3 (16 ACs Compact-fest)→Code→Final-R1 0 KP „Push freigegeben".
+
+**R1-Halluzination/Verdacht eingearbeitet:** F1 KRITISCH Signal-
+Verdrahtung war ein echter Fund — V2 hatte das nur als „TODO" erwähnt,
+R1 hat es als blocking marker. In V3 explizit als AC8.
+
+**Tests:** 1155 → 1166 (+11 Bundle-D-Tests T1-T11). T6/T7 RXPanel-
+Slot-Filter, T8 Signal-Emission, T9 Visibility, T10 Reset, T11
+Cyan/Magenta-Wechsel.
+
+**Backup:** `Appsicherungen/2026-05-14_v0.97.20_vor_bundle_d/`.
+**Plan-Files:** `prompts/bundle_d_v[1,2,3].md` + `bundle_d_r1.md`.
+**Field-Test pending:** F1-F8 (siehe V3 §8).
+
+---
+
 ## 2026-05-13 v0.97.20 — P50 Bänder-Sichtbarkeit (Settings-Toggle)
 
 Mike-Wunsch nach P34-Stufe2: nicht benötigte Bänder im Settings-Dialog

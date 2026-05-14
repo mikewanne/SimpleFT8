@@ -1,4 +1,4 @@
-# SimpleFT8 TODO — Stand 13.05.2026 (v0.97.20, P50 Bänder-Sichtbarkeit fertig)
+# SimpleFT8 TODO — Stand 14.05.2026 (v0.97.21, Bundle D UI-Tweaks fertig)
 
 > **Mike-Regel 07.05.2026:** Offene Aufgaben gehoeren AUSSCHLIESSLICH
 > in diese Datei. Nicht in CLAUDE.md, nicht in HANDOFF.md. Diese Datei
@@ -8,10 +8,13 @@
 
 # 🟢 STATUS-ÜBERSICHT (für neue Session)
 
-**Aktuelle Version:** v0.97.20 (13.05.2026)
-**Tests:** 1155 grün
-**App-Stand:** P50 Bänder-Sichtbarkeit (Settings-Toggle) ERLEDIGT, Field-Test
-F1-F8 pending. Davor: P34-Stufe2 Statik-Pipeline raus (v0.97.19), Toast-
+**Aktuelle Version:** v0.97.21 (14.05.2026)
+**Tests:** 1166 grün
+**App-Stand:** Bundle D UI-Tweaks (5 Tweaks: Settings-Padding, DT-Vorzeichen,
+Slot-Filter-Buttons, Diversity-Layout, Statusbar-Slot-Progress-Bar) ERLEDIGT,
+Field-Test F1-F8 pending. P50 Bänder-Sichtbarkeit Field-Test ✓ (Mike:
+„funktioniert super"). Memory-Leak P30 resolved (war TTS-Server, nicht
+SimpleFT8). Davor: P34-Stufe2 Statik-Pipeline raus (v0.97.19), Toast-
 Bundle (v0.97.18), P46 Bandpilot Normal-Reintegration (v0.97.17), P14 DT-
 Symmetrie (v0.97.16), Bundle C P10+P13 (v0.97.15)
 ERLEDIGT, Field-Test 5 Punkte pending. Bundle B' (P32+P33) zuvor
@@ -22,6 +25,31 @@ erledigt (Field-Test pending). Veraltete Punkte aus TODO bereinigt:
   (Encoder.target_tx_offset_s aus tx_buffer_s).
 - **P24 Last-RX-Mode-Persist** widerspricht Mike's P35-Bug-F-Vision
   (App-Start IMMER 20m FT8 Normal). Nicht implementieren.
+
+## ✅ 14.05.2026 erledigt — Bundle D UI-Tweaks (v0.97.21)
+
+5 UI-Feinschliffe nach P50 Field-Test als atomares Bundle:
+
+- **A** Settings-Block „Sichtbare Bänder" luftiger (Spacing 6→10 +
+  ContentsMargins)
+- **B** DT-Anzeige `+0.0`/`-0.0` → `0.0` (Mike: „ist 0.0 :-)"). Neuer
+  Helper `_format_dt` in `ui/rx_panel.py`. Edge-Cases: ±0.04→`0.0`,
+  ±0.05→`+0.1`/`-0.1`, -0.0 zentral abgefangen.
+- **C** Even/Odd oben → Filter-Buttons (Normal-only). Signal
+  `slot_filter_changed`, exklusive Toggle-Logik (3 Zustände mit 2 Buttons),
+  RXPanel `apply_slot_filter` blendet Zeilen aus.
+- **D** Diversity: Buttons via `set_slot_buttons_visible(False)`
+  ausgeblendet, QSO/Logbuch füllen Platz, Filter immer reset bei Modus-
+  Wechsel (R1-Q4).
+- **E** Statusbar `_slot_progress_bar` (NEU): QProgressBar 80×14 px,
+  Cyan `#00CCFF` für Even / Magenta `#FF66CC` für Odd (R1-Q5),
+  dynamische cycle_dur, sekündliches Update.
+
+R1-F1 KRITISCH Signal-Verdrahtung umgesetzt. Final-R1 „0 KP, Push
+freigegeben". Tests 1155 → 1166 (+11 T1-T11). Field-Test F1-F8 pending.
+
+**P50 Field-Test ✓** (Mike: „funktioniert super").
+**P30 Memory-Leak resolved** (war TTS-Server, nicht SimpleFT8).
 
 ## ✅ 13.05.2026 erledigt — P50 Bänder-Sichtbarkeit (v0.97.20)
 
