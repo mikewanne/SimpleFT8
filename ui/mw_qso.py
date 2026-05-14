@@ -90,8 +90,11 @@ class QSOMixin:
     def _antenna_pref_label(self, call: str) -> str:
         """Vereinheitlichtes Format fuer alle Anzeigen:
           - Normal-Modus oder ANT1 als beste Antenne → ' (ANT1)'
-          - Diversity + ANT2 ist Hysterese-Schwelle besser → ' (ANT2 ↑X.X dB)'
-        Pfeil ↑ = Diversity bringt messbaren Gewinn.
+          - Diversity + ANT2 (Regenrinne) → ' (RX: ANT2 ↑X.X dB)' mit RX-Prefix
+        Bundle J (v0.97.27): RX-Prefix nur bei ANT2 — Klarstellung dass das
+        die bevorzugte RX-Antenne ist (TX bleibt immer ANT1). Mike-Befund
+        14.05.2026: ohne 'RX:' konnte das verwirren („wartet, er hat doch
+        mit ANT2 gesendet?"). ANT1-Label bleibt symmetrisch zu Normal-Modus.
         """
         if self._rx_mode == "normal":
             return " (ANT1)"
@@ -104,9 +107,9 @@ class QSOMixin:
             return " (ANT1)"
         # ANT2 wurde gewaehlt → Hysterese-Schwelle ueberschritten = echter Gewinn
         delta = pref.get("delta_db")
-        if delta is None:
-            return " (ANT2)"
-        return f" (ANT2 ↑{abs(delta):.1f} dB)"
+        if delta is None or abs(delta) < 0.05:
+            return " (RX: ANT2)"
+        return f" (RX: ANT2 ↑{abs(delta):.1f} dB)"
 
     @Slot(str, bool, float)
     def _on_tx_started(self, message: str, tx_even: bool, slot_start_ts: float):
