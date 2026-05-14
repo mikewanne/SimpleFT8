@@ -21,6 +21,14 @@ sind unterschiedliche Grundgesamtheiten (verschiedene
 Antennen-Pattern, verschiedene Win-Rate-Logik) — Mittelwerte
 zusammenzufuehren erzeugt Bias.
 
+> **Hinweis v0.97.17 (P46, Mai 2026):** Bandpilot kann Normal sowohl
+> als aktuellen Modus haben als auch als Empfehlung vorschlagen. In
+> v0.95.20–v0.97.16 (P35-Bug-E) war Normal aus dem Pilot-Pool
+> ausgeschlossen — Mike's spaetere Vision „ganz oder gar nicht" hat
+> diese Einschraenkung zurueckgenommen. Bei Single-Antenna-Setups
+> (keine Diversity-Daten) liefert der Recommender weiterhin keine
+> Empfehlung (Schwelle nicht erfuellt).
+
 ## Datenbasis
 
 Stunden-Markdown-Dateien in `statistics/<Modus>/<Band>/FT8/`. Jede

@@ -20,6 +20,13 @@ compared directly. Reason: Diversity Standard and Diversity DX are
 different populations (different antenna patterns, different win-rate
 logic). Averaging them creates bias.
 
+> **Note v0.97.17 (P46, May 2026):** Bandpilot can use Normal both as
+> the current mode and as a recommendation target. In v0.95.20–v0.97.16
+> (P35-Bug-E), Normal was excluded from the pilot pool — Mike's later
+> "all or nothing" vision reversed that restriction. For single-antenna
+> setups (no diversity data), the recommender still returns no advice
+> (threshold not met).
+
 ## Data basis
 
 Hourly Markdown files in `statistics/<Mode>/<Band>/FT8/`. Each file
