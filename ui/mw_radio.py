@@ -1438,34 +1438,64 @@ class RadioMixin:
         r = dialog.get_results()
         band = self.settings.band
         ft_mode = self.settings.mode
-        gain_mode = getattr(self, '_gain_scoring_mode', 'snr')
-        div_scoring = "dx" if gain_mode == "snr" else "normal"
-        store = getattr(self, '_dx_store', None) if div_scoring == "dx" else getattr(self, '_standard_store', None)
 
-        # P34-Stufe2: Gain wird direkt persistiert. Keine Stage/Commit-
-        # Coupling mit Ratio mehr (Ratio ist live via Dynamic).
-        if store:
-            store.save_gain(
-                band, ft_mode,
-                rxant=r.get("best_ant", "ANT1"),
-                ant1_gain=r.get("ant1_gain", r.get("best_gain", 0)),
-                ant2_gain=r.get("ant2_gain", r.get("best_gain", 0)),
-                ant1_avg=r.get("ant1_avg", 0.0),
-                ant2_avg=r.get("ant2_avg", 0.0),
-            )
-        # Rückwärtskompatibilität: auch in Settings speichern (für alten Code)
-        scoring = gain_mode
-        self.settings.save_dx_preset(
-            band=band,
-            rxant=r.get("best_ant", "ANT1"),
-            gain=r.get("best_gain", 0),
-            ant1_avg=r.get("ant1_avg", 0.0),
-            ant2_avg=r.get("ant2_avg", 0.0),
-            ant1_gain=r.get("ant1_gain", r.get("best_gain", 0)),
-            ant2_gain=r.get("ant2_gain", r.get("best_gain", 0)),
-            scoring=scoring,
-            mode=ft_mode,
+        # P51 (v0.97.28): Dual-Save in beide Stores wenn Dialog beide
+        # Auswertungen liefert (Standard + DX aus 1 Messung). Fallback
+        # auf Single-Store wenn altes Dialog-Format (R1-V4-pro Finding 4 —
+        # verhindert Korruption des DX-Store mit identischen Std-Werten).
+        has_dual = (
+            isinstance(r.get("standard"), dict) and isinstance(r.get("dx"), dict)
         )
+        if has_dual:
+            std_data = r["standard"]
+            dx_data  = r["dx"]
+            std_ok = (
+                self._standard_store.save_gain(
+                    band, ft_mode,
+                    rxant=std_data.get("best_ant", "ANT1"),
+                    ant1_gain=std_data.get("ant1_gain", 0),
+                    ant2_gain=std_data.get("ant2_gain", 0),
+                    ant1_avg=std_data.get("ant1_avg", 0.0),
+                    ant2_avg=std_data.get("ant2_avg", 0.0),
+                )
+                if getattr(self, '_standard_store', None)
+                else False
+            )
+            dx_ok = (
+                self._dx_store.save_gain(
+                    band, ft_mode,
+                    rxant=dx_data.get("best_ant", "ANT1"),
+                    ant1_gain=dx_data.get("ant1_gain", 0),
+                    ant2_gain=dx_data.get("ant2_gain", 0),
+                    ant1_avg=dx_data.get("ant1_avg", 0.0),
+                    ant2_avg=dx_data.get("ant2_avg", 0.0),
+                )
+                if getattr(self, '_dx_store', None)
+                else False
+            )
+            if not std_ok or not dx_ok:
+                print(f"[P51] WARN save_gain returned False — "
+                      f"std_ok={std_ok}, dx_ok={dx_ok}")
+        else:
+            # Fallback: altes Dialog-Format → nur 1 Store (aktiver Modus)
+            print("[P51] Dialog ohne Dual-Result — Fallback auf Single-Store")
+            gain_mode = getattr(self, '_gain_scoring_mode', 'snr')
+            store = (getattr(self, '_dx_store', None) if gain_mode == "snr"
+                     else getattr(self, '_standard_store', None))
+            if store:
+                store.save_gain(
+                    band, ft_mode,
+                    rxant=r.get("best_ant", "ANT1"),
+                    ant1_gain=r.get("ant1_gain", r.get("best_gain", 0)),
+                    ant2_gain=r.get("ant2_gain", r.get("best_gain", 0)),
+                    ant1_avg=r.get("ant1_avg", 0.0),
+                    ant2_avg=r.get("ant2_avg", 0.0),
+                )
+
+        # P51 (R1-V4-pro F6): settings.save_dx_preset komplett raus —
+        # get_dx_preset wird nirgends im Live-Code gerufen (tote API),
+        # PresetStore ist primaere Quelle.
+
         ant1_g = r.get("ant1_gain", r.get("best_gain", 0))
         ant2_g = r.get("ant2_gain", r.get("best_gain", 0))
         self.control_panel.dx_info.setText(
