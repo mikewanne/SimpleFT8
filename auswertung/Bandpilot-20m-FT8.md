@@ -15,10 +15,10 @@ Schwellen pro Stunde: ≥ 3 Messtage UND ≥ 20 Slots pro Modus.
 | 06 | 5·37.3 | 4·42.2 | 2·60.5 | _zu wenig Daten_ |
 | 07 | 7·44.7 | 4·52.0 | 5·52.3 | Diversity DX |
 | 08 | 7·43.3 | 5·52.6 | 4·59.1 | Diversity DX |
-| 09 | 7·45.3 | 5·40.5 | 5·58.0 | Diversity DX |
-| 10 | 4·47.2 | 4·52.5 | 7·60.8 | Diversity DX |
+| 09 | 8·45.0 | 5·40.5 | 5·58.0 | Diversity DX |
+| 10 | 4·47.2 | 5·52.0 | 7·60.8 | Diversity DX |
 | 11 | 3·55.5 | 5·46.3 | 6·57.4 | Diversity DX |
-| 12 | 3·62.7 | 4·45.2 | 7·57.0 | Normal |
+| 12 | 4·61.7 | 4·45.2 | 7·57.0 | Normal |
 | 13 | 2·54.7 | 2·37.9 | 3·59.7 | _zu wenig Daten_ |
 | 14 | 4·55.1 | 5·58.3 | 6·60.3 | Diversity DX |
 | 15 | 5·64.4 | 7·61.7 | 8·61.7 | Normal |

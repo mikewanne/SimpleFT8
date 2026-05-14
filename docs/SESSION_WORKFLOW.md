@@ -239,8 +239,13 @@ ein **Verifikations-Check**:
 3. **CLAUDE.md** Header korrekt, Test-Count stimmt mit
    `pytest -q | tail -1`.
 4. **MEMORY.md** + memory/*.md — alle heutigen Lessons drin?
-5. **App-Status** — laeuft die App noch oder beendet? Ports frei?
-6. **Bestaetigungs-Block ausgeben** (3c).
+5. **`docs/deepseek_lessons.md`** — wenn R1 in dieser Session verwendet
+   wurde UND etwas Ueberraschendes passiert ist (positiv/negativ),
+   neuen Eintrag in „Aktuelle Session-Logs"-Sektion. Format steht im
+   File. Bei reinem Standard-Verhalten (R1 fand erwartbare Findings,
+   alles ging wie immer) — KEIN Eintrag noetig.
+6. **App-Status** — laeuft die App noch oder beendet? Ports frei?
+7. **Bestaetigungs-Block ausgeben** (3c).
 
 ### 3c. Bestaetigungs-Block (Format)
 
