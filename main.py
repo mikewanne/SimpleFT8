@@ -13,7 +13,7 @@ import atexit
 import signal
 from pathlib import Path
 
-APP_VERSION = "0.97.26"
+APP_VERSION = "0.97.27"
 
 # ── P43: Activity Monitor zeigt Prozess-Namen statt nur "Python" ──
 # Bei der P30-Memory-Leak-Diagnose 12.05. konnte Mike SimpleFT8 nicht
@@ -414,7 +414,7 @@ def _show_hardware_warning(app) -> bool:
     dlg.setWindowTitle("Hardware-Sicherheitshinweis")
     dlg.setModal(True)
     dlg.setWindowFlag(Qt.WindowStaysOnTopHint, True)
-    dlg.setFixedSize(540, 300)
+    dlg.setFixedSize(540, 340)
     dlg.setStyleSheet("""
         QDialog { background-color: #1a1a2e; }
         QLabel { background-color: transparent; color: #CCC; }
@@ -446,9 +446,11 @@ def _show_hardware_warning(app) -> bool:
 
     # Haftungs-Disclaimer (Machbarkeitsstudie / Hobby-Projekt)
     disclaimer = QLabel(
-        "SimpleFT8 ist eine private Machbarkeitsstudie. Nutzung auf eigene "
-        "Gefahr — fuer Schaeden an Hardware, Antennen oder Funkgeraeten "
-        "wird keine Haftung uebernommen."
+        "SimpleFT8 ist eine private Machbarkeitsstudie. Das Projekt dient "
+        "ausschließlich dem persönlichen Gebrauch und der Verifikation "
+        "technischer Möglichkeiten. Nutzung auf eigene Gefahr — für "
+        "Schäden an Hardware, Antennen oder Funkgeräten wird keine "
+        "Haftung übernommen."
     )
     disclaimer.setStyleSheet(
         "color: #888; font-family: Menlo; font-size: 11px; "
