@@ -5,6 +5,101 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-14 Abend — DeepSeek V4 Migration (system-wide)
+
+Mike-Anweisung: „Kosten irrelevant, bestes Modell mit optimalsten
+Parametern überall." Plus Ollama-Experiment beendet (war Test für
+lokales LLM, hat sich nicht durchgesetzt). Sprachausgabe läuft eh
+über TTS-Server, nicht Ollama.
+
+### Verifikation der V4-Modelle (Mike's Verdacht bestätigt)
+
+```bash
+curl https://api.deepseek.com/v1/models
+→ deepseek-v4-flash + deepseek-v4-pro live verfügbar
+```
+Plus offizielle Doku bestätigt: 1M Context, 384K Max-Output, 75%
+Rabatt v4-pro bis 31.05.2026. `deepseek-chat`/`deepseek-reasoner`
+deprecated 24.07.2026.
+
+### Geänderte Configs (44 Stellen)
+
+**Account1-Profil (FT8/SimpleFT8 Mike's-persönliche Sessions):**
+- `~/.claude-account1/settings.json`:
+  - CUSTOM_API_URL: `localhost:11434/v1` (Ollama) → `https://api.deepseek.com/v1`
+  - CUSTOM_MODEL_NAME: `qwen3:30b-a3b` → `deepseek-v4-pro`
+  - DEFAULT_MODEL: `deepseek-chat` → `deepseek-v4-pro`
+- `~/.claude-account1/pal_custom_models.json`:
+  - model_name: `deepseek-chat` → `deepseek-v4-pro`
+  - context_window: 65k → 1.000.000
+  - max_output_tokens: 8k → 131.072
+
+**Main PAL (alle anderen Claude Code Sessions):**
+- `~/.claude/custom_models.json`: v4-pro max_output 65k → **131.072**
+  (Headroom für Mega-Reviews), v4-flash 32k → 65k, v4-pro als
+  DEFAULT für ALLE Aliase (deepseek-chat/reasoner/r1 routen alle
+  zu v4-pro)
+
+**SimpleFT8/tools/deepseek_review.py:**
+- `DEFAULT_MODEL = "deepseek-reasoner"` → `"deepseek-v4-pro"`
+- `CHAT_MODEL = "deepseek-chat"` → `"deepseek-v4-flash"`
+- Neue CLI-Flags `--pro` / `--flash` (Aliase --reasoner / --chat
+  bleiben Compat)
+- Context-Warning 128K → 1M
+
+**Johnboy Nightly (alle 22 johnboy.ini):**
+- `ai_model = deepseek-chat` → `ai_model = deepseek-v4-pro`
+- Plus Python-Defaults in `Johnboy/johnboy/core/config_manager.py`,
+  `main_controller.py`, `tests/test_config_manager.py`
+
+**App-Configs:**
+- `JimBob Cockpit/cockpit_utils.py` + `routes/chat.py`
+- `Gmail Tools/config.ini` + `ki_handler.py`
+- `JimBob RAG/rag.py`
+- `N8N Assistent/tools/hook_audit.py` + `wissen_to_rag.py` +
+  `deepseek_helper.py`
+- `VibePrompt/config.py` + `core/providers.py` + `core/ai_client.py`
+  + `ui/main_window.py`
+- `SimpleFT8/tools/deepseek_review_high.py`
+
+### Wirkung sofort vs. neue Session
+
+- `tools/deepseek_review.py` (Direct-API): **sofort ab nächstem Aufruf**
+- `pal_chat`-MCP: cached `custom_models.json` beim Start → **erst bei
+  MCP-Restart = neue Claude Code Session**
+- Johnboy: läuft als eigener Prozess → **nächster nightly run**
+
+### Reflexion (Mike-Frage: hätte V4 alles besser gemacht?)
+
+Geschätzt ~20-30% weniger Halluzinationen + bessere First-Pass-
+Quality vor allem bei Race-Conditions in großen Modulen:
+- **Bundle F R1-SOLLTE-1:** V3 halluzinierte `_gain_measure_locked`
+  auf DiversityController (existiert nur in mw_radio.py). V4-Pro mit
+  1M-Context hätte den ganzen Code lesen können statt File-Selektion
+  zu raten → vermutlich Halluzination vermieden.
+- **Bundle G K1+K2:** echte Findings, V3 war hier gut.
+- **Bundle H K1:** differenzierte UX-Position nötig, V4 mit besserem
+  Reasoning hätte vielleicht selbst die Mess-vs-Wahl-Dialog-
+  Differenzierung gesehen.
+
+Kein „Wunder", aber spürbar besser. Nächste Session zeigt's.
+
+### Tests
+
+- 1205 grün (Bundle H), keine Änderungen durch DeepSeek-Migration.
+
+### Memory + Doku
+
+- `docs/deepseek_lessons.md` — bisher V3-Lessons (Stärken/Schwächen)
+  bleiben als historische Referenz, NEUE Sektion „V4 Lessons (ab
+  14.05.2026)" wird beim ersten V4-R1-Review aufgebaut
+- Memory `feedback_deepseek_strengths_weaknesses.md` — Quick-Ref
+  Update folgt nach 2-3 V4-Sessions empirischer Beobachtung
+- Memory NEU: `project_deepseek_v4_migration.md` mit Mappings +
+  Status
+
+---
+
 ## 2026-05-14 v0.97.25 — Bundle H: Bandpilot-Aware Diversity-Klick
 
 Mike-Beobachtung während Bundle G Field-Test (Bilder von Settings +

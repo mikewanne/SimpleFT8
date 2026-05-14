@@ -13,8 +13,8 @@ from pathlib import Path
 
 KEY_FILE = Path.home() / ".deepseek_key"
 API_URL = "https://api.deepseek.com/v1/chat/completions"
-DEFAULT_MODEL = "deepseek-reasoner"
-CHAT_MODEL = "deepseek-chat"
+DEFAULT_MODEL = "deepseek-v4-pro"
+CHAT_MODEL = "deepseek-v4-pro"
 
 
 def load_key() -> str:

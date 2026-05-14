@@ -5,23 +5,25 @@ Aufruf:
     cat prompt.md | ./venv/bin/python3 tools/deepseek_review.py file1.py file2.py
     cat prompt.md | ./venv/bin/python3 tools/deepseek_review.py --chat file.py
 
-Modelle:
-    --reasoner   (Default) deepseek-reasoner → R1, ~6-30s, ~$0.005/Request
-                 Mike-Entscheidung 28.04.2026: lieber langsamer + teurer +
-                 besser statt schnell + billig + durchschnitt. Quality > Speed.
+Modelle (Stand 2026-05-14 — DeepSeek V4 Generation):
+    --pro        (Default) deepseek-v4-pro → Stärkstes Reasoning, 1M Context,
+                 131K Output. ~6-30s. Mike-Anweisung 2026-05-14:
+                 'Kosten irrelevant, bestes Modell mit optimalsten Parametern'.
                  Stark fuer: Code-Review, Architektur, Race-Conditions,
-                 mathematische Korrektheit, KISS-Trade-offs, niedrige
-                 Halluzinations-Rate weil R1 intern Code-Pfade verifiziert.
-    --chat       deepseek-chat → V4-flash, ~3s, ~$0.001/Request
-                 Opt-in fuer Trivial-Fragen wo R1 overthinkt:
-                 "Ist Funktion X im Code?", Tippfehler-Suche, Pure
-                 Verifikations-Fragen ohne Trade-off.
+                 KISS-Trade-offs, niedrige Halluzinations-Rate weil V4-Pro
+                 intern Code-Pfade verifiziert. 75% Rabatt bis 31.05.2026.
+    --flash      deepseek-v4-flash → Schnell, 1M Context. ~3s.
+                 Opt-in fuer Bulk/Trivial wo Pro overthinkt.
+
+Aliase `--reasoner` / `--chat` bleiben als Compat-Pfade (mappen auf
+v4-pro / v4-flash). Alt-Namen `deepseek-reasoner` / `deepseek-chat` sind
+DEPRECATED ab 24.07.2026.
 
 Key-Datei: ~/.deepseek_key (chmod 600). Niemals im Repo.
 
 Vergleich pal-MCP vs Direkt:
 - pal MCP `chat`:     Files-Limit 7077 Tokens (~28KB Code) ← haeufig zu klein
-- Direkt-API:         65K Tokens (~260KB Code) — kompletter mw_radio.py passt rein
+- Direkt-API:         1M Tokens Context, 131K Output — ganzes Repo passt rein
 """
 
 import json
@@ -33,8 +35,8 @@ from pathlib import Path
 
 KEY_FILE = Path.home() / ".deepseek_key"
 API_URL = "https://api.deepseek.com/v1/chat/completions"
-DEFAULT_MODEL = "deepseek-reasoner"   # R1 — Quality > Speed (Mike 2026-04-28)
-CHAT_MODEL = "deepseek-chat"          # V4-flash — Opt-in fuer triviale Fragen
+DEFAULT_MODEL = "deepseek-v4-pro"    # Mike 2026-05-14: bestes Modell überall
+CHAT_MODEL = "deepseek-v4-flash"     # Opt-in fuer Bulk/Trivial
 
 
 def load_key() -> str:
@@ -96,21 +98,28 @@ def main() -> None:
 
     stdin_prompt = sys.stdin.read()
     args = sys.argv[1:]
-    model = DEFAULT_MODEL  # R1 — Quality > Speed
-    if "--chat" in args:
+    model = DEFAULT_MODEL  # v4-pro — Mike's Default (Kosten egal)
+    # --flash / --chat → Flash (Bulk/Trivial)
+    if "--flash" in args:
+        model = CHAT_MODEL
+        args.remove("--flash")
+    elif "--chat" in args:
         model = CHAT_MODEL
         args.remove("--chat")
+    # --pro / --reasoner → Pro (explizit, ist eh Default)
+    elif "--pro" in args:
+        args.remove("--pro")
     elif "--reasoner" in args:
-        args.remove("--reasoner")  # explizit, ist eh Default
+        args.remove("--reasoner")
     files = [Path(arg) for arg in args]
     prompt = build_prompt(stdin_prompt, files)
 
     tokens = estimate_tokens(prompt)
     sys.stderr.write(f"[deepseek] ~{tokens} Tokens, {len(files)} File(s) → {model}\n")
-    if tokens > 110000:
-        sys.stderr.write(f"[deepseek] WARNUNG: nahe Context-Limit (128K).\n")
+    if tokens > 900000:
+        sys.stderr.write(f"[deepseek] WARNUNG: nahe 1M Context-Limit.\n")
     if model == DEFAULT_MODEL:
-        sys.stderr.write(f"[deepseek] R1 denkt — kann 6-30s dauern ...\n")
+        sys.stderr.write(f"[deepseek] V4-Pro denkt — kann 6-30s dauern ...\n")
 
     key = load_key()
     result = call_deepseek(prompt, key, model)

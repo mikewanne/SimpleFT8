@@ -1,4 +1,26 @@
-# SimpleFT8 TODO — Stand 14.05.2026 (v0.97.24, Bundle G fertig)
+# SimpleFT8 TODO — Stand 14.05.2026 Abend (v0.97.25, Bundle H fertig + DeepSeek V4 Migration)
+
+## 🚀 OFFEN — DeepSeek V4 Lessons aufbauen (nach nächster Session)
+
+Heute Abend wurde System-wide DeepSeek V4 Migration durchgeführt
+(siehe HISTORY.md). Wirkung im PAL-MCP erst bei neuer Claude-Code-
+Session (Config-Cache). Folgearbeiten nach 2-3 V4-Reviews:
+
+- **`docs/deepseek_lessons.md`** neue Sektion „V4 Lessons (ab 15.05.)"
+  aufbauen. Aktuelle V3-Lessons (Stärken/Schwächen) als historische
+  Referenz erhalten — wir haben heute morgen festgestellt dass V3
+  z.B. Attribute halluzinierte die nicht existieren (Bundle F-R1).
+  V4 hat 1M Context → kann ganzen mw_radio.py lesen → vermutlich
+  weniger Halluzinationen. Empirisch verifizieren.
+- **Memory `feedback_deepseek_strengths_weaknesses.md`** updaten nach
+  Sample. Aufpassen: Quick-Ref-Stil, nicht zu lang.
+- **Memory NEU `feedback_v4_vs_v3_observed.md`** mit konkreten
+  Beobachtungen wenn V4 anders reagiert als V3 in identischen
+  Situationen (z.B. Halluzinations-Vergleich).
+- **Verifikation:** im ersten R1-Review Stderr-Output prüfen ob
+  `→ deepseek-v4-pro` steht (NICHT `deepseek-reasoner`).
+
+---
 
 ## 🆕 OFFEN — Bundle H: Bandpilot-Aware Diversity-Klick (Mike 14.05.2026 mittags)
 

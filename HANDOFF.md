@@ -1,5 +1,116 @@
 # HANDOFF — SimpleFT8
 
+## Stand 2026-05-14 Abend — DeepSeek V4 Migration komplett, Bundle F+G+H gepusht, Feierabend
+
+### 🚀 Beim nächsten Session-Start (morgen)
+
+**Erste Schritte:**
+
+1. `cd "/Users/mikehammerer/Documents/KI N8N Projekte/FT8/SimpleFT8"`
+2. CLAUDE.md → MEMORY.md → HISTORY.md → HANDOFF.md lesen
+   (SESSION_WORKFLOW Phase 1)
+3. **NEU ab dieser Session:** PAL-MCP nutzt jetzt **deepseek-v4-pro**
+   (1M Context, 131K Output). Falls Mike „pal R1 fragen" o.ä. sagt:
+   `model: deepseek-v4-pro` oder Alias `pro`/`r1`/`reasoner` —
+   alle routen zur gleichen V4-Pro-Instanz.
+4. App-Start (wenn Mike es will): `./venv/bin/python3 main.py`
+
+**Aktueller Code-Stand:** v0.97.25 (Bundle H), Tests **1205 grün**.
+
+### 🔴 Pending Field-Tests (Mike testet, dann Push auf GitHub)
+
+Diese Versionen sind committed aber **NICHT gepusht** bis Mike die
+Field-Tests freigibt:
+
+| Version | Bundle | Field-Test-Punkte | Status |
+|---|---|---|---|
+| v0.97.25 | **Bundle H** Bandpilot-Aware Div-Klick | F1-F8 (HANDOFF Bundle H Sektion) | pending |
+| v0.97.24 | **Bundle G** Std↔DX Direkt-Toggle | F1-F9 | pending |
+| v0.97.23 | **Bundle F** OMNI-Phase-Cleanup + cycle_bar weg + Orange | F1-F6 | pending |
+| v0.97.22 | **Bundle E** TX-Slot-Lock Refactor | F1-F9 | pending |
+| v0.97.21 | **Bundle D** UI-Tweaks (Slot-Bar Statusbar) | F1-F8 | pending |
+| v0.97.20 | **P50** Bänder-Sichtbarkeit | — | **Mike ✓** |
+| v0.97.19 | **P34-Stufe2** Statik-Pipeline raus | F1-F10 | pending |
+
+Mike kann nach Field-Test-OK: `git push origin main` (Mike-Entscheidung).
+
+### 🆕 DeepSeek V4 Migration (heute Abend abgeschlossen)
+
+**Was wurde geändert (44 Stellen system-wide):**
+
+| Ebene | Datei | Änderung |
+|---|---|---|
+| Claude-Code Account1 | `~/.claude-account1/settings.json` | CUSTOM_API_URL Ollama→DeepSeek, MODEL→v4-pro |
+| Claude-Code Account1 | `~/.claude-account1/pal_custom_models.json` | Komplett neu, v4-pro Default |
+| Claude-Code Main | `~/.claude/custom_models.json` | v4-pro max_output 65k→131k, v4-flash 32k→65k |
+| SimpleFT8-Tool | `tools/deepseek_review.py` | Default reasoner→v4-pro, neue Flags --pro/--flash |
+| Johnboy Nightly | 22× `johnboy.ini` | `ai_model = deepseek-v4-pro` |
+| Johnboy Core | `config_manager.py` + `main_controller.py` | Default v4-pro |
+| Johnboy Tests | `test_config_manager.py` | Erwartung v4-pro |
+| App-Configs | JimBob Cockpit, Gmail Tools, JimBob RAG, N8N Assistent (3 Tools), VibePrompt (4 Files), deepseek_review_high.py | v4-pro |
+
+**Sofortige Wirkung:** `tools/deepseek_review.py` (Direct-API).
+**Wirkung erst neue Session:** PAL-MCP (Config-Cache beim Start).
+**Wirkung erst nächster Lauf:** Johnboy (eigener Prozess).
+
+**Verifikations-Check** vor erstem V4-R1-Review morgen:
+```bash
+# Schnelltest dass V4-Pro antwortet:
+echo "ping, antworte nur mit pong" | ./venv/bin/python3 tools/deepseek_review.py
+# Stderr-Output muss zeigen: "→ deepseek-v4-pro" (NICHT deepseek-reasoner)
+```
+
+### 📋 Offene TODO (für nächste Session)
+
+**Hohe Prio:**
+- W2 **Gain-Sharing** zwischen `presets_standard.json` und
+  `presets_dx.json` (Hardware-Pegelausgleich, scoring-unabhängig).
+  Architektur siehe TODO.md. Aufwand: mittel.
+- **Field-Tests F-H** Mike's Feedback abwarten
+
+**DeepSeek V4 Folgearbeiten:**
+- `docs/deepseek_lessons.md`: V4-Sektion aufbauen nach 2-3 V4-R1-
+  Reviews (empirische Beobachtung — wo halluziniert V4, wo glänzt
+  V4 vs V3). Aktuelle V3-Sektionen als historische Referenz
+  erhalten.
+- Memory `feedback_deepseek_strengths_weaknesses.md`: Quick-Ref
+  Update nach Field-Sample
+- Memory NEU `feedback_r1_encoder_busy_blindspot.md` etc.: prüfen
+  ob V4 die alten R1-Halluzinationen noch produziert
+
+**Low-Prio Aufräumen:**
+- `Johnboy/tests/test_config_manager.py:30` Docstring sagt noch
+  „deepseek-chat" — nur Kommentar, kein Assert. Cosmetics.
+- `SimpleFT8/tools/deepseek_review.py:19` Kommentar erwähnt
+  „deepseek-reasoner"/„deepseek-chat" als historischen Bezug.
+  OK so.
+
+### 🎯 Wenn Mike morgen sagt „weiter mit X"
+
+| Mike-Trigger | Aktion |
+|---|---|
+| „Field-Test Bundle X war OK, push" | `git push origin main` (commits c0569e5..4bc3c84) |
+| „Bundle X hat Bug Y" | V1→V2→R1→V3-Workflow für Fix-Bundle |
+| „Gain-Sharing umsetzen" | Bundle I Workflow (TODO.md W2-Sektion) |
+| „SimpleFT8 am Ferienhaus" | Memory `project_simpleft8_ferienhaus.md` |
+| „neue Statistiken/PDFs" | `./venv/bin/python3 scripts/generate_plots.py` |
+| „Workflow für X" | Skill `.claude/skills/ft8_workflow.md` laden |
+
+### 🔧 Wichtige Pfade
+
+- Backup-Dir: `Appsicherungen/2026-05-14_v0.97.24_vor_bundle_h/` (heute)
+- Plan-Files: `prompts/bundle_[fgh]_v[1,2,3].md` + `_r1` + `_final_r1`
+- App-Logs: `~/.simpleft8/debug_YYYY-MM-DD.log`
+- Statistiken: `auswertung/` (DE) + `auswertung/en/` (EN)
+
+### ⚠️ Hardware-Erinnerung (CLAUDE.md hat Details)
+
+- ANT1 = **TX-Antenne** auf jedem Band
+- ANT2 = **NUR Empfangs-Zusatzantenne**, NIEMALS TX
+- Bei neuen TX-Modus-Features: ZUERST prüfen ob TX über ANT1 läuft
+
+---
+
 ## Stand 2026-05-14 mittags: v0.97.25 Bundle H — Bandpilot-Aware Diversity-Klick
 
 **Mike-Beobachtung** während Bundle G Field-Test: Bandpilot=Auto +
