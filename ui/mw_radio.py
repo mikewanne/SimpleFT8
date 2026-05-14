@@ -638,6 +638,39 @@ class RadioMixin:
             self._update_button_visibility()
         self._update_statusbar()
 
+    @Slot()
+    def _on_diversity_subtoggle_requested(self):
+        """Bundle G (v0.97.24): Toggle Std ↔ DX bei 2. Div-Klick.
+
+        Wird vom control_panel emittiert wenn User im Diversity-Modus
+        nochmal auf DIVERSITY klickt. Wechselt direkt zwischen
+        scoring="normal" (Standard) und scoring="dx".
+
+        Nur wirksam wenn Bandpilot=off (sonst entscheidet Bandpilot).
+        Bei Pipeline-Lock / fehlender Radio-IP no-op.
+
+        R1-K1+K2 (Bundle G): OMNI+Auto-Hunt werden gestoppt analog zu
+        `_on_rx_mode_changed` Z.541-544 — verhindert Encoder-Konflikt
+        wenn Toggle einen DXTuneDialog auslöst (fehlender Gain im
+        Ziel-Store) und schützt vor get_free_cq_freq-Race auf leeres
+        Stations-Histogramm nach _diversity_stations={}.
+        """
+        bp_mode = self.settings.get("bandpilot_mode", "off")
+        if bp_mode != "off":
+            return  # Auto/Manual: Bandpilot entscheidet, kein User-Toggle
+        if getattr(self, '_gain_measure_locked', False):
+            return  # Pipeline läuft
+        if not self.radio.ip:
+            return
+        # R1-K1+K2: OMNI+Hunt stoppen vor Sub-Mode-Wechsel
+        if hasattr(self, "_omni_cq") and self._omni_cq.is_active():
+            self._omni_cq.stop("scoring_toggle")
+        if hasattr(self, "_auto_hunt") and self._auto_hunt.active:
+            self._auto_hunt.stop_auto_hunt("scoring_toggle")
+        current = getattr(self._diversity_ctrl, 'scoring_mode', 'normal')
+        new = "dx" if current == "normal" else "normal"
+        self._activate_diversity_with_scoring(new)
+
     def _activate_diversity_with_scoring(self, scoring: str):
         """Diversity aktivieren mit explizitem scoring ('normal'|'dx').
 
