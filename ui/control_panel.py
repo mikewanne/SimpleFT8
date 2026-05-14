@@ -1196,6 +1196,7 @@ class ControlPanel(QWidget):
     preamp_changed = Signal(bool)           # Legacy, nicht mehr genutzt
     easter_egg_toggle_clicked = Signal()   # Easter Egg: Klick auf Versionsnummer
     rx_mode_changed = Signal(str)
+    diversity_subtoggle_requested = Signal()  # Bundle G: 2. Klick auf DIVERSITY → Std↔DX-Toggle
     settings_clicked = Signal()
     einmessen_clicked = Signal()
     map_clicked = Signal()  # Map-Button im PSK-Frame → MainWindow.open_direction_map
@@ -1485,8 +1486,15 @@ class ControlPanel(QWidget):
     # RX Modus (Antenne)
     # =====================================================================
     def _on_rx_mode_clicked(self, mode: str):
-        """NORMAL oder DIVERSITY Button geklickt."""
+        """NORMAL oder DIVERSITY Button geklickt.
+
+        Bundle G (v0.97.24): 2. Klick auf DIVERSITY während schon im
+        Div-Modus → Signal `diversity_subtoggle_requested` für Std↔DX-
+        Toggle (mw_radio entscheidet je nach Bandpilot-Mode).
+        """
         if mode == self._current_rx_mode:
+            if mode == "diversity":
+                self.diversity_subtoggle_requested.emit()
             return
         if mode == "normal":
             self.btn_normal.setStyleSheet(self._rx_btn_style(self._RX_STYLE_ACTIVE))
@@ -1882,7 +1890,10 @@ class ControlPanel(QWidget):
             self.btn_diversity.setToolTip("RX einschalten um Diversity zu nutzen")
         else:
             self.btn_einmessen.setToolTip("")
-            self.btn_diversity.setToolTip("")
+            self.btn_diversity.setToolTip(
+                "Klick im Normal-Modus: Auswahl Standard/DX.\n"
+                "Erneuter Klick im Diversity-Modus: wechselt zwischen "
+                "Standard und DX (nur bei Bandpilot=Aus).")
 
     def set_connection_status(self, status: str):
         """Verbindungsstatus anzeigen: 'connected', 'disconnected', 'searching', 'reconnecting'."""
