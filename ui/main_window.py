@@ -692,6 +692,9 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self.control_panel.cq_clicked.connect(self._on_cq_clicked)
         self.control_panel.tune_clicked.connect(self._on_tune_clicked)
         self.control_panel.rx_mode_changed.connect(self._on_rx_mode_changed)
+        # Bundle G (v0.97.24): 2. Div-Klick → Toggle Std↔DX
+        self.control_panel.diversity_subtoggle_requested.connect(
+            self._on_diversity_subtoggle_requested)
         self.control_panel.einmessen_clicked.connect(self._handle_dx_tuning)
         self.control_panel.settings_clicked.connect(self._on_settings_clicked)
         self.control_panel.map_clicked.connect(lambda: self.open_direction_map())
