@@ -1,4 +1,56 @@
-# SimpleFT8 TODO — Stand 14.05.2026 (v0.97.22, Bundle E TX-Slot-Lock fertig)
+# SimpleFT8 TODO — Stand 14.05.2026 (v0.97.23, Bundle F fertig)
+
+## 🆕 OFFEN — Mike-Wunsch 14.05.2026 vormittags (während Bundle F Field-Test)
+
+### Wunsch 1 — Diversity Std ↔ DX Direktwechsel (KISS, hohe Prio)
+
+**Symptom:** Im Diversity-Modus zweiter Klick auf DIVERSITY-Button =
+no-op. Heute muss Mike Std→Normal→Diversity→Dialog→DX wechseln.
+**Wunsch:** Zweiter Klick öffnet existierenden Std/DX-Dialog erneut.
+
+**Architektur:**
+- Dialog existiert bereits in `ui/mw_radio.py:608+`
+- Trigger heute: `_on_rx_mode_clicked` (control_panel.py:1489) hat
+  `if mode == self._current_rx_mode: return` als early-exit
+- Fix: bei `mode == "diversity"` UND already-diversity → Dialog
+  erneut zeigen + aktuellen Sub-Modus als Vorwahl markieren
+- ~5-10 Zeilen Code
+
+**Edge-Case:** Cancel im Dialog → bleibt im aktuellen Sub-Modus (kein
+unbeabsichtigter Wechsel).
+
+**DeepSeek-Bewertung:** ✅ KISS, trivial, Risiken minimal (Dialog ist
+modal → kein Doppel-Open).
+
+### Wunsch 2 — Gain-Sharing zwischen Std/DX-Store (Mittel, abhängig W1)
+
+**Symptom:** Bei Sub-Modus-Wechsel Std↔DX wird Gain-Messung erneut
+gemacht obwohl Gain Hardware-Eigenschaft ist (Antennen-Pegelausgleich).
+**Wunsch:** Eine Mess-Reihe → beide Stores.
+
+**Code-Verifikation (core/preset_store.py):**
+- `presets_standard.json` + `presets_dx.json` haben beide
+  `ant1_gain`/`ant2_gain` (zusätzlich zu `ratio`/`dominant`).
+- Gain ist scoring-unabhängig (Hardware-Pegelausgleich).
+- Ratio + dominant bleiben getrennt (scoring-spezifisch).
+
+**Pragma-Lösung (DeepSeek):** beim `commit_gain` in Store A automatisch
+auch in Store B schreiben (gleicher Timestamp). 10-15 Zeilen.
+
+**Edge-Cases:**
+- User kalibriert nur einen Modus neu → überschreibt anderen
+  (logisch korrekt: Hardware-Wert).
+- Bestehende getrennte Einträge bleiben erhalten, beim ersten Sync
+  vereinheitlicht.
+- DeepSeek: „grenzwertig overengineering, zentraler Gain-Store wäre
+  sauberer aber Datenmodell-Änderung". Claude-Position: pragmatisch
+  reicht für Mike-only-Hobby.
+
+**Reihenfolge:** W1 zuerst (trivial), dann W2.
+
+---
+
+
 
 > **Mike-Regel 07.05.2026:** Offene Aufgaben gehoeren AUSSCHLIESSLICH
 > in diese Datei. Nicht in CLAUDE.md, nicht in HANDOFF.md. Diese Datei
