@@ -57,14 +57,17 @@ class ConnectStatusDialog(QDialog):
     attempt_changed = Signal(int, int)
     failed_signal = Signal()
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, app_version: str = ""):
         super().__init__(parent)
         self._dots_state = 0
         self._failed = False
+        # Bundle J (v0.97.27): Footer-Version aus main.APP_VERSION mitgeben.
+        self._app_version = app_version
 
         self.setWindowTitle("FlexRadio wird verbunden")
         # 11.05.2026: 20% kleiner (Mike-Field-Test).
-        self.setFixedSize(352, 176)
+        # Bundle J: 176→196 fuer Footer-Zeile.
+        self.setFixedSize(352, 196)
         self.setModal(True)
         self.setWindowModality(Qt.WindowModality.WindowModal)
         # ApplicationModal wuerde Decoder-Signale blocken — verboten.
@@ -160,6 +163,15 @@ class ConnectStatusDialog(QDialog):
         self._btn_quit.clicked.connect(self._on_quit)
         btn_row.addWidget(self._btn_quit)
         layout.addLayout(btn_row)
+
+        # Bundle J (v0.97.27): Footer-Zeile unten rechts mit Version + MIT.
+        # 5-7 Sek waehrend Connect-Phase sichtbar — User sieht Version + Lizenz.
+        version_text = self._app_version or "?"
+        self._footer_label = QLabel(f"SimpleFT8 v{version_text} · MIT License")
+        self._footer_label.setStyleSheet(
+            "color: #666; font-size: 9pt; background-color: transparent;"
+        )
+        layout.addWidget(self._footer_label, 0, Qt.AlignmentFlag.AlignRight)
 
     # ── Animation + Status ─────────────────────────────────────────────────
 
