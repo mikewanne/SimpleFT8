@@ -31,7 +31,6 @@ def _make_cycle_mock(rx_mode="diversity", messages_count=3, dynamic_active=False
     s.decoder.dump_last_slot = MagicMock()
     s._audio_dump_enabled = False
     s._diversity_ctrl = MagicMock()
-    s._diversity_ctrl.phase = "operate"
     s._pop_diversity_queue = MagicMock(return_value=("A2", "operate"))
     s._resolve_hardware_antenna = MagicMock(side_effect=lambda x: x)
     s._assign_slot_parity = MagicMock()

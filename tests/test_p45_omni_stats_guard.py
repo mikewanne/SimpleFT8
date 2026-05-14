@@ -61,7 +61,6 @@ def cycle_mixin():
     obj.radio.ip = "192.168.1.68"
     obj._dx_tune_dialog = None
     obj._diversity_ctrl = MagicMock()
-    obj._diversity_ctrl.phase = "operate"
     obj._diversity_ctrl.scoring_mode = "normal"
 
     # _stats_indicator (None → kein UI-Update nötig)

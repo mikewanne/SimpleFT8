@@ -5,7 +5,8 @@ A) Settings „Sichtbare Bänder" Padding luftiger
 B) DT-Anzeige +0.0/-0.0 → 0.0 (Mike-Feedback: „ist 0.0 :-)")
 C) Even/Odd-Anzeige oben → Filter-Buttons (Normal-only)
 D) Diversity: Buttons ausgeblendet, QSO/Logbuch füllen Breite
-E) Statusbar: 15s-Slot-Progress-Bar mit Cyan/Magenta-Wechsel
+E) Statusbar: 15s-Slot-Progress-Bar mit Cyan/Orange-Wechsel
+   (Bundle F: Magenta → Orange umgestellt)
 
 11 Tests T1-T11.
 """
@@ -172,7 +173,7 @@ def test_t10_qso_panel_set_tx_slot_lock_buttons(qapp):
 
 def test_t11_slot_progress_bar_color_switch(qapp):
     """T11: _update_slot_progress_bar wechselt Style zwischen Cyan und
-    Magenta je Slot-Parity."""
+    Orange je Slot-Parity (Bundle F: war Magenta)."""
     # Wir simulieren _update_slot_progress_bar isoliert ohne MainWindow,
     # weil MainWindow zu schwer aufzubauen ist.
     from PySide6.QtWidgets import QProgressBar
@@ -209,6 +210,6 @@ def test_t11_slot_progress_bar_color_switch(qapp):
         bound_method()
         assert self_mock._slot_progress_is_even is False
         style = self_mock._slot_progress_bar.styleSheet()
-        assert "#FF66CC" in style, f"Expected magenta (#FF66CC) in style: {style}"
+        assert "#FFAA00" in style, f"Expected orange (#FFAA00) in style: {style}"
     finally:
         _t.time = real_time

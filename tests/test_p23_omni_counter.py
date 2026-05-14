@@ -33,8 +33,7 @@ def app():
 
 def _make_omni(*, mode: str = "FT8",
                cycle_duration: float = 15.0,
-               free_cq_freq: int | None = 1500,
-               diversity_phase: str = "operate"):
+               free_cq_freq: int | None = 1500):
     """Test-Setup: OmniCQ mit Mock-Encoder/Diversity/Timer.
 
     `mode` wird auf timer.mode gesetzt (steuert _OMNI_TARGETS-Lookup).
@@ -44,7 +43,6 @@ def _make_omni(*, mode: str = "FT8",
     encoder.transmit = MagicMock(return_value=True)
     diversity = MagicMock()
     diversity.get_free_cq_freq = MagicMock(return_value=free_cq_freq)
-    diversity.phase = diversity_phase
     timer = MagicMock()
     timer.cycle_duration = cycle_duration
     timer.mode = mode

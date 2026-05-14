@@ -29,15 +29,12 @@ def app():
     return QApplication.instance() or QApplication([])
 
 
-def _make_omni(*, free_cq_freq: int | None = 1500,
-               diversity_phase: str = "operate"):
+def _make_omni(*, free_cq_freq: int | None = 1500):
     """Test-Setup: OmniCQ mit Mock-Encoder/Diversity/Timer."""
     encoder = MagicMock()
     encoder.transmit = MagicMock(return_value=True)
     diversity = MagicMock()
     diversity.get_free_cq_freq = MagicMock(return_value=free_cq_freq)
-    # phase als gewoehnliche Property (str) — testbar via direct set
-    diversity.phase = diversity_phase
     timer = MagicMock()
     timer.cycle_duration = 15.0
     omni = OmniCQ(
@@ -141,17 +138,8 @@ def test_non_matching_cycle_skips_encoder(app):
     assert omni.cq_remaining == target
 
 
-# ── T5: AC5 No-op waehrend Diversity-Mess-Phase ────────────────────
-
-
-def test_skips_during_diversity_measure_phase(app):
-    """T5 (AC5): on_cycle_start no-op wenn diversity.phase != 'operate'."""
-    omni, encoder, diversity, _ = _make_omni(diversity_phase="measure")
-    omni.start()
-    omni.on_cycle_start(cycle_num=100, is_even=True)
-    encoder.transmit.assert_not_called()
-    assert omni.cq_tx_even is None  # nicht initialisiert
-
+# ── T5: Bundle F (14.05.2026) — Phase-Check entfernt nach P34-Stufe2,
+#       Test gelöscht (testete obsolete Logik). Siehe bundle_f_v3.md.
 
 # ── T6: AC6 flip_tx_parity toggelt + emit parity_flipped ───────────
 
