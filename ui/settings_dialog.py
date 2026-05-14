@@ -336,11 +336,17 @@ class SettingsDialog(QDialog):
             "Nicht benötigte Bänder ausblenden — sie verschwinden aus "
             "dem Band-Panel und Bandpilot empfiehlt sie nicht mehr.\n"
             "Mindestens ein Band muss aktiv sein.")
+        # Bundle I (v0.97.26): Stylesheet-Scope auf bands_group beschränkt
+        # damit andere QCheckBoxes im Dialog NICHT betroffen sind.
+        bands_group.setStyleSheet(
+            "QCheckBox::indicator { width: 18px; height: 18px; }"
+        )
         bands_grid = QGridLayout(bands_group)
-        # Bundle D (v0.97.21): luftigeres Spacing + mehr Top-Padding
-        # damit der Block nicht gedrängt wirkt (Mike-Feedback nach P50)
-        bands_grid.setSpacing(10)
-        bands_grid.setContentsMargins(12, 8, 12, 10)
+        # Bundle I (v0.97.26): Spacing 10→16 + Margins 12/8/12/10 → 16
+        # allseits. Mike-Feedback nach Bundle D: 3×3 wirkte weiter
+        # gedrungen, Checkboxen klebten aneinander.
+        bands_grid.setSpacing(16)
+        bands_grid.setContentsMargins(16, 16, 16, 16)
         self._band_checkboxes: dict = {}
         # 3×3-Raster (sortiert von Hochfrequenz nach Niederfrequenz)
         bands_layout = [["10m", "12m", "15m"],
