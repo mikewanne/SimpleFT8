@@ -2,25 +2,53 @@
 
 ## 🆕 OFFEN — Mike-Wunsch 14.05.2026 vormittags (während Bundle F Field-Test)
 
-### Wunsch 1 — Diversity Std ↔ DX Direktwechsel (KISS, hohe Prio)
+### Wunsch 1 — Diversity Std ↔ DX Toggle (KISS, hohe Prio) — KORRIGIERT
 
-**Symptom:** Im Diversity-Modus zweiter Klick auf DIVERSITY-Button =
-no-op. Heute muss Mike Std→Normal→Diversity→Dialog→DX wechseln.
-**Wunsch:** Zweiter Klick öffnet existierenden Std/DX-Dialog erneut.
+**Mike-Klarstellung 14.05.2026 vormittags (nach erstem TODO-Entwurf):**
+
+> „Bei Bandpilot Auto entscheidet er eh, da keine Änderung. Bei Aus
+> müsste der Dialog erscheinen NUR wenn ich von Normal auf Diversity
+> klicke. Bin ich Diversity DX und klicke nochmal Diversity, soll
+> direkt auf Standard wechseln ohne Rückfrage. Bin ich Standard und
+> klicke nochmal Diversity → direkt zu DX. Weil sonst würde ich
+> Normal klicken."
+
+**Logik-Matrix (Bandpilot=Aus):**
+
+| Aktueller Modus | Klick auf | Aktion |
+|---|---|---|
+| Normal | NORMAL | no-op |
+| Normal | DIVERSITY | **Dialog Std/DX** (bereits implementiert) |
+| Div Standard | DIVERSITY | **direkt → Div DX** (Toggle, kein Dialog) |
+| Div DX | DIVERSITY | **direkt → Div Standard** (Toggle, kein Dialog) |
+| Div (egal) | NORMAL | → Normal (heute schon) |
+
+**Bandpilot=Auto:** keine Änderung in `_on_rx_mode_clicked` (Bandpilot
+entscheidet via `_apply_bandpilot_auto` programmatisch).
 
 **Architektur:**
-- Dialog existiert bereits in `ui/mw_radio.py:608+`
-- Trigger heute: `_on_rx_mode_clicked` (control_panel.py:1489) hat
-  `if mode == self._current_rx_mode: return` als early-exit
-- Fix: bei `mode == "diversity"` UND already-diversity → Dialog
-  erneut zeigen + aktuellen Sub-Modus als Vorwahl markieren
-- ~5-10 Zeilen Code
+- `control_panel._on_rx_mode_clicked` (Z.1487+): early-exit
+  `if mode == self._current_rx_mode: return` ersetzen durch
+  Toggle-Branch:
+  - bei `mode == "diversity"` UND already-diversity UND
+    `bandpilot_mode == "off"` → emit neues Signal
+    `diversity_subtoggle_requested`
+- `mw_radio` empfängt Signal, prüft aktuellen `scoring_mode`,
+  ruft `_activate_diversity_with_scoring(opposite)` (existiert).
+- Settings-Check `bandpilot_mode == "off"` braucht Lookup über
+  `self.settings.get_bandpilot_mode()`.
 
-**Edge-Case:** Cancel im Dialog → bleibt im aktuellen Sub-Modus (kein
-unbeabsichtigter Wechsel).
+**Edge-Cases:**
+- Bandpilot=Auto + Div-Klick → kein Toggle (Auto entscheidet selbst).
+  Anzeige neutral, keine User-Verwirrung.
+- Während Mess-Phase (DXTuneDialog modal) → Klick blockiert (Dialog
+  fängt alle Inputs).
+- Bandpilot pending (Toast offen) während User klickt → Bandpilot
+  cancelt sich selbst via existierende Logik (R1-F3 Bundle E).
 
-**DeepSeek-Bewertung:** ✅ KISS, trivial, Risiken minimal (Dialog ist
-modal → kein Doppel-Open).
+**DeepSeek-Bewertung:** ✅ KISS, ~10-15 Zeilen, Risiken minimal.
+Mike's Logik ist *konsistenter* als Dialog-Variante (weniger Klicks,
+keine Pseudo-Wahl wenn nur 1 Option sinnvoll).
 
 ### Wunsch 2 — Gain-Sharing zwischen Std/DX-Store (Mittel, abhängig W1)
 

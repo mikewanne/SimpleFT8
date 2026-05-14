@@ -5,6 +5,102 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-14 v0.97.24 — Bundle G: Diversity Std↔DX Direkt-Toggle
+
+Mike-Wunsch während Bundle F Field-Test: Direktwechsel zwischen
+Diversity Standard und DX bei wiederholtem Klick auf DIVERSITY-Button
+(Bandpilot=Aus). Spart Umweg über NORMAL.
+
+### Mike-Spec (Klarstellung gegenüber V1-Entwurf)
+
+> „Bei Bandpilot Auto entscheidet er eh, da keine Änderung. Bei Aus
+> müsste der Dialog erscheinen NUR wenn ich von Normal auf Diversity
+> klicke. Bin ich Diversity DX und klicke nochmal Diversity, soll
+> direkt auf Standard wechseln ohne Rückfrage. Bin ich Standard und
+> klicke nochmal Diversity → direkt zu DX. Weil sonst würde ich
+> Normal klicken."
+
+### Logik-Matrix (Bandpilot=Aus)
+
+| Aktueller Modus | Klick | Aktion |
+|---|---|---|
+| Normal | NORMAL | no-op |
+| Normal | DIVERSITY | Dialog Std/DX (unverändert) |
+| Div Standard | DIVERSITY | **direkt → Div DX** (Toggle, kein Dialog) |
+| Div DX | DIVERSITY | **direkt → Div Standard** (Toggle, kein Dialog) |
+| Div (egal) | NORMAL | → Normal (unverändert) |
+
+Bandpilot=Auto/Manual: kein Toggle (Bandpilot dominant).
+
+### Code (5 atomare Commits + Plan-Files)
+
+**C1 `ui/control_panel.py`:**
+- Neues Signal `diversity_subtoggle_requested = Signal()`
+- `_on_rx_mode_clicked` erweitert: bei `mode == _current_rx_mode ==
+  "diversity"` → emit Signal statt no-op
+- btn_diversity Tooltip dokumentiert Verhalten (R1-SOLLTE-1)
+
+**C2 `ui/mw_radio.py`:**
+- Neuer Slot `_on_diversity_subtoggle_requested` mit 3-fach-Guard
+  (`bp_mode == "off"` + `_gain_measure_locked = False` + `radio.ip`)
+- **R1-K1+K2 KRITISCH**: OMNI-CQ + Auto-Hunt vor Sub-Mode-Wechsel
+  stoppen (`stop("scoring_toggle")`). Verhindert Encoder-Konflikt
+  wenn Toggle DXTuneDialog auslöst (Ziel-Store ohne Gain) und
+  schützt vor get_free_cq_freq-Race auf leeres Stations-Histogramm.
+- Ruft `_activate_diversity_with_scoring(new)` mit Toggle-Wert.
+
+**C3 `ui/main_window.py`:** Signal-Connect.
+
+**C4 `tests/test_bundle_g.py` NEU** (11 Tests):
+- T1-T2: Toggle Std↔DX bei bp=off
+- T3-T6: Guards (auto/manual/gain_locked/no_ip)
+- T7+T7b: Signal-Emit (Div+) / kein Emit (Normal-)
+- T8: **Integration mit ECHTEM DiversityController** (Memory-Lesson
+  `feedback_test_critical_path_not_mock.md`)
+- T9-T10: OMNI/Hunt-Stop bei Toggle (R1-K1+K2-Coverage)
+
+### R1-Workflow
+
+- V2-Self-Review 10 Findings
+- R1 8/10: 2 KRITISCH (OMNI/Hunt-Race, DXTuneDialog-Race),
+  2 SOLLTE (Manual-Doku, Integration-Test), 2 KÖNNTE (Naming, Helper)
+- V3: K1+K2+S1+S2 übernommen, K3+Naming KISS abgelehnt
+- Final-R1: „Push freigegeben", keine kritischen Punkte übersehen
+
+### Test-Bilanz
+
+- 1183 → **1194 grün** (+11: V3 prognostizierte +10, T7b Bonus)
+
+### Backup
+
+`Appsicherungen/2026-05-14_v0.97.23_vor_bundle_g/` (3 Files).
+
+### Plan-Files
+
+`prompts/bundle_g_v[1,2,3].md` + `bundle_g_r1_prompt.md` +
+`bundle_g_final_r1.md`.
+
+### Field-Test pending F1-F9
+
+| # | Test | Erwartung |
+|---|---|---|
+| F1 | Normal → DIVERSITY-Klick | Dialog Std/DX (heute) |
+| F2 | Div Std → DIVERSITY-Klick | **direkt DX** ohne Dialog |
+| F3 | Div DX → DIVERSITY-Klick | **direkt Standard** ohne Dialog |
+| F4 | Bandpilot=Auto + Div-Klick | Kein Toggle |
+| F5 | Bandpilot=Manual + Div-Klick | Kein Toggle |
+| F6 | OMNI aktiv + Toggle | OMNI gestoppt |
+| F7 | Auto-Hunt aktiv + Toggle | Hunt gestoppt |
+| F8 | CQ aktiv + Toggle | CQ läuft weiter, Stations-Reset transparent |
+| F9 | Während Gain-Mess Toggle | Toggle blockiert |
+
+### Offen (TODO)
+
+- W2 Gain-Sharing zwischen Std/DX-Store (separater Bundle, Mike-
+  Wunsch siehe TODO.md)
+
+---
+
 ## 2026-05-14 v0.97.23 — Bundle F: 3 Bugs nach Mike-Field-Test
 
 Mike's Field-Test v0.97.22 (Bundle E) meldete 3 Bugs nach Diversity-Wechsel:

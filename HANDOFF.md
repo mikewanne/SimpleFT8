@@ -1,5 +1,61 @@
 # HANDOFF — SimpleFT8
 
+## Stand 2026-05-14 vormittags: v0.97.24 Bundle G — Diversity Std↔DX Direkt-Toggle
+
+**Mike-Wunsch** während Bundle F Field-Test: Direktwechsel zwischen
+Diversity Standard und DX bei wiederholtem Klick auf DIVERSITY-Button
+(Bandpilot=Aus). Spart Umweg über NORMAL.
+
+**Logik (Bandpilot=Aus):** Div Std → DIVERSITY → direkt DX; Div DX →
+DIVERSITY → direkt Standard. Bandpilot=Auto/Manual: kein Toggle.
+
+**Code (4 atomare Commits + Doku + Plan-Files):**
+- C1 `control_panel.py` neues Signal `diversity_subtoggle_requested`
+  + Toggle-Branch in `_on_rx_mode_clicked` + Tooltip
+- C2 `mw_radio.py` neuer Slot `_on_diversity_subtoggle_requested` mit
+  3-fach-Guard + **R1-K1+K2: OMNI+Hunt-Stop** (Encoder-Konflikt-Schutz
+  bei DXTuneDialog-Auslösung durch Toggle)
+- C3 `main_window.py` Signal-Connect
+- C4 `tests/test_bundle_g.py` NEU (11 Tests, T8 mit ECHTEM
+  DiversityController, T9+T10 für R1-K1+K2)
+
+**Tests:** **1194 grün** (1183 → 1194, +11).
+**Backup:** `Appsicherungen/2026-05-14_v0.97.23_vor_bundle_g/`.
+**Workflow:** V1→V2 (10 Findings)→R1 8/10 (2 KRITISCH übernommen,
+K3/Naming KISS abgelehnt)→V3 (10 ACs)→Code→Final-R1 „Push freigegeben"
+keine KP.
+**Push:** pending bis Mike's Field-Test F1-F9 + Bundle F + alle Vorgänger.
+
+### Field-Test-Checkliste F1-F9
+
+| # | Test | Erwartung |
+|---|---|---|
+| F1 | Normal → DIVERSITY-Klick | Dialog Std/DX (heute) |
+| F2 | Div Std → DIVERSITY-Klick | **direkt DX** ohne Dialog |
+| F3 | Div DX → DIVERSITY-Klick | **direkt Standard** ohne Dialog |
+| F4 | Bandpilot=Auto + Div-Klick | Kein Toggle (no-op) |
+| F5 | Bandpilot=Manual + Div-Klick | Kein Toggle (no-op) |
+| F6 | OMNI aktiv + Toggle | OMNI gestoppt mit „scoring_toggle" |
+| F7 | Auto-Hunt aktiv + Toggle | Hunt gestoppt analog |
+| F8 | CQ aktiv + Toggle | CQ läuft weiter, Stations-Reset transparent |
+| F9 | Während Gain-Mess Toggle | Toggle ignoriert (Pipeline-Lock) |
+
+### Vorgänger-Field-Tests pending
+
+- v0.97.23 Bundle F F1-F6 (OMNI sendet, kein cycle_bar, Orange)
+- v0.97.22 Bundle E F1-F9 (TX-Slot-Lock)
+- v0.97.21 Bundle D F1-F8
+- v0.97.20 P50 ✓
+- v0.97.19 P34-Stufe2
+
+### Offen (TODO.md)
+
+W2 — Gain-Sharing zwischen `presets_standard.json` und `presets_dx.json`
+(Hardware-Pegelausgleich, scoring-unabhängig). Spart Mess-Reihe pro
+Sub-Modus-Wechsel.
+
+---
+
 ## Stand 2026-05-14 vormittags: v0.97.23 Bundle F — 3 Bugs nach Field-Test
 
 **Mike-Field-Test v0.97.22** (Diversity-Wechsel auf 30m) meldete:
