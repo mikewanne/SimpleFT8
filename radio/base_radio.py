@@ -220,6 +220,10 @@ class RadioInterface(ABC):
         """TX-Audiopegel setzen."""
         pass
 
+    def set_swr_limit(self, value: float) -> None:
+        """SWR-Limit setzen — Default-Pass für Radios ohne SWR-Schutz."""
+        pass
+
     # ── Preamp / Gain ─────────────────────────────────────────────
 
     def set_preamp(self, level: int) -> bool:

@@ -944,6 +944,12 @@ class FlexRadio(QObject):
         """Return True if SWR is below the safety limit."""
         return self._last_swr < self._swr_limit
 
+    def set_swr_limit(self, value: float) -> None:
+        """SWR-Limit setzen — Clamp auf [1.5, 10.0] gegen kaputte Settings (P53)."""
+        v = max(1.5, min(10.0, float(value)))
+        self._swr_limit = v
+        print(f"[FlexRadio] SWR-Limit auf {v:.1f} gesetzt")
+
     def set_tx_level(self, level: float):
         """Set TX audio level (0.0 bis 1.0). Hard-cap auf 1.0 — kein Software-Gain.
         mic_level 0-100 steuert FlexRadio-Eingangsempfindlichkeit."""
