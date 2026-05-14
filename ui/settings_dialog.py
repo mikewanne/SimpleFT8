@@ -677,6 +677,10 @@ class SettingsDialog(QDialog):
         self.settings.set("tx_level", self.tx_level.value())
         self.settings.set("max_calls", int(self.max_calls_combo.currentText()))
         self.settings.set("swr_limit", self.swr_limit.value())
+        # P53: Live an Radio propagieren wenn verbunden
+        parent = self.parent()
+        if parent is not None and hasattr(parent, "radio") and getattr(parent.radio, "ip", None):
+            parent.radio.set_swr_limit(self.swr_limit.value())
         self.settings.set("tune_power", self._current_tune_power)
         # P47 (v0.97.11): audio_freq_hz + max_decode_freq Save entfernt — Settings tot.
         # v0.93: diversity_operate_cycles entfernt
