@@ -269,6 +269,12 @@ def test_t9_intent_klausel_in_disclaimer():
 
 
 def test_t9b_app_version_bumped():
-    """APP_VERSION ist 0.97.27 nach Bundle J."""
+    """APP_VERSION ist >= 0.97.27 nach Bundle J (Bumps moeglich)."""
     import main as main_module
-    assert main_module.APP_VERSION == "0.97.27"
+    parts = main_module.APP_VERSION.split(".")
+    major = int(parts[0])
+    minor = int(parts[1])
+    patch = int(parts[2])
+    assert (major, minor, patch) >= (0, 97, 27), (
+        f"APP_VERSION {main_module.APP_VERSION} < 0.97.27"
+    )
