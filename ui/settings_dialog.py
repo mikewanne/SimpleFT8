@@ -15,6 +15,8 @@ from PySide6.QtCore import Qt, QTimer
 
 from config.settings import Settings, DEFAULTS, BAND_FREQUENCIES
 from ui.styles import MSGBOX_STYLE
+# Bundle J (v0.97.27): einheitlicher Help-Dialog mit Scrollbar (Mike-Designentscheidung).
+from ui.simple_help_dialog import show_simple_help
 
 # Info-Texte fuer die (i)-Buttons
 _HINTS = {
@@ -57,9 +59,8 @@ def _make_info_btn(hint: str) -> QToolButton:
         QToolButton:hover { background: #444; color: #FFF; }
     """)
     btn.setToolTip(hint)
-    btn.clicked.connect(lambda: QMessageBox.information(
-        btn.window(), "Info", hint
-    ))
+    # Bundle J: einheitlicher Help-Dialog mit Scrollbar statt QMessageBox.
+    btn.clicked.connect(lambda: show_simple_help(btn.window(), "Info", hint))
     return btn
 
 
@@ -379,7 +380,11 @@ class SettingsDialog(QDialog):
                 cb.setToolTip("")
 
     def _show_bandpilot_help(self):
-        """Bandpilot-Hilfe in QMessageBox anzeigen — sprachabhaengig DE/EN."""
+        """Bandpilot-Hilfe in einheitlichem Help-Dialog anzeigen — sprachabhaengig DE/EN.
+
+        Bundle J (v0.97.27): SimpleHelpDialog mit Scrollbar statt QMessageBox
+        (war nicht resizable, langer Markdown abgeschnitten).
+        """
         lang = self.settings.get("language", "de")
         doc_name = "bandpilot.md" if lang == "en" else "bandpilot_de.md"
         # Pfad: SimpleFT8/docs/explained/<doc_name> — App-Root via __file__
@@ -389,12 +394,8 @@ class SettingsDialog(QDialog):
             text = doc_path.read_text(encoding="utf-8")
         except OSError:
             text = "(Hilfe-Datei nicht gefunden / Help file missing)"
-        msg = QMessageBox(self)
-        msg.setWindowTitle("Bandpilot — Hilfe" if lang != "en" else "Bandpilot — Help")
-        msg.setTextFormat(Qt.TextFormat.MarkdownText)
-        msg.setText(text)
-        msg.setStyleSheet(MSGBOX_STYLE)
-        msg.exec()
+        title = "Bandpilot — Hilfe" if lang != "en" else "Bandpilot — Help"
+        show_simple_help(self, title, text, markdown=True)
 
     def _build_tab_data(self) -> QWidget:
         """Tab 4: CSV-Export + Karte + Debug-Konsole (3 Bloecke mit HLine)."""
