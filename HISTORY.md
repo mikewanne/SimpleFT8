@@ -5,6 +5,82 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-14 v0.97.22 — Bundle E TX-Slot-Lock Refactor
+
+Mike-Korrektur nach Bundle-D: „ich hatte mich falsch ausgedrückt — ich
+will nicht Stationen filtern, sondern TX-Slot festlegen (SmartSDR-Style)."
+
+**Refactor von Bundle-D RX-Filter zu TX-Slot-Lock:**
+
+**Settings-API** (`config/settings.py`):
+- Neuer Key `tx_slot_lock` ∈ {"none", "even", "odd"}, Default `"none"`
+- `get_tx_slot_lock()` / `set_tx_slot_lock(lock)` mit defensivem Filter
+
+**Helper `resolve_tx_slot`** (`core/qso_state.py`, Modul-Funktion):
+- Args: `their_even`, `lock_status`, `rx_mode`
+- CQ-Pfad (their_even=None): `None` ohne Lock, `True`/`False` mit Lock
+- Hunt-Pfad (their_even=True/False): `not their_even` ohne Lock,
+  bei Lock-Match `target`, bei Mismatch `None` (Caller blockt)
+- `rx_mode != "normal"` ignoriert Lock komplett (Lock nur Normal)
+- R1-S3 zentraler Helper für alle 4 TX-Pfade
+
+**UI-Buttons** (`ui/qso_panel.py`):
+- Signal `slot_filter_changed` → `tx_slot_lock_changed`
+  (Werte "none"/"even"/"odd")
+- Neue Methode `set_tx_slot_lock_buttons(lock)` mit `blockSignals`
+- Tooltips angepasst: „TX-Slot-Lock: senden nur im Even-Slot (hören im Odd)"
+- `reset_slot_filter` entfernt (Lock persistiert, kein Reset bei Mode-
+  Wechsel — nur Sichtbarkeit ändert sich)
+
+**MainWindow** (`ui/main_window.py`):
+- Signal-Connect: `tx_slot_lock_changed → _on_tx_slot_lock_changed`
+- Handler persistiert in Settings + speichert atomic
+- Bei App-Start: `set_tx_slot_lock_buttons(get_tx_slot_lock())` lädt
+  Buttons aus Settings
+
+**Mw_radio** (`ui/mw_radio.py`):
+- Bei `_on_rx_mode_changed`:
+  - `set_slot_buttons_visible(mode == "normal")` (Bundle-D unverändert)
+  - Bei Normal: `set_tx_slot_lock_buttons(get_tx_slot_lock())` lädt
+    State aus Settings (R1-AC15)
+
+**TX-Pfade nutzen Helper** (3 Stellen patched):
+- `ui/mw_qso.py` `_on_station_clicked` (Hunt): Pre-Validierung VOR
+  QSO-State-Mutation. Bei Mismatch → `qso_panel.add_info(...)` mit
+  konkretem Hinweis + return.
+- `ui/mw_qso.py` `_on_cq_clicked` (CQ-Start): Helper bestimmt
+  TX-Slot inkl. Lock-Wirkung.
+- `ui/mw_qso.py` `_on_tx_slot_for_partner` (CQ-Reply + Courtesy):
+  Helper mit defensiver Fallback bei `None` (sollte nicht vorkommen
+  weil Hunt vorher validiert).
+
+**RX-Panel Bundle-D Rollback** (`ui/rx_panel.py`):
+- `_slot_filter` State entfernt
+- `apply_slot_filter()` Methode entfernt
+- `_row_should_hide` Slot-Check entfernt
+- `_format_dt` Helper bleibt (Bundle-D-B)
+
+**R1-Pragma-Entscheidungen:**
+- F1 Thread-Safety: keine zusätzliche threading.Lock — GIL macht
+  atomare Single-Reference-Writes safe für `encoder.tx_even`
+- S2 Auto-Hunt-Pause: NICHT explizit umgesetzt. Auto-Hunt läuft weiter
+  bei dauerhaftem Mismatch — Hobby-Funker-Kontext, max 10 Min Hard-Cap
+  wirkt eh als Sicherheitsnetz
+
+**Workflow:** V1→V2 (10 Findings + 7 Fragen)→R1 6/10 (2 KRITISCH F1+F2
++ 4 SOLLTE)→V3 (16 ACs Compact-fest)→Code→Final-R1 0 Findings „Push
+freigegeben".
+
+**Tests:** 1166 → 1179 (+13 Bundle-E-Tests T1-T8 inkl. T1b/c/T2b/c/d
+für Edge-Cases). Bundle-D-Tests T6/T7 auf neuen Stand (Rollback-Check
++ Signal-Rename). T8 angepasst auf `tx_slot_lock_changed`.
+
+**Backup:** `Appsicherungen/2026-05-14_v0.97.21_vor_bundle_e_refactor/`.
+**Plan-Files:** `prompts/bundle_e_v[1,2,3].md` + `bundle_e_r1.md`.
+**Field-Test pending:** F1-F9 (siehe V3 §6).
+
+---
+
 ## 2026-05-14 v0.97.21 — Bundle D UI-Tweaks (nach P50 Field-Test)
 
 Mike-Feedback morgens nach P50 Field-Test ✓ (P50 funktioniert super,

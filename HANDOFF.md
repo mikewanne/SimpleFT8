@@ -1,5 +1,51 @@
 # HANDOFF — SimpleFT8
 
+## Stand 2026-05-14 morgens: v0.97.22 Bundle E — TX-Slot-Lock Refactor
+
+**Mike-Korrektur:** „ich hatte mich falsch ausgedrückt — ich will nicht
+Stationen filtern, sondern TX-Slot festlegen (SmartSDR-Style)."
+
+**Refactor von Bundle-D Filter → TX-Slot-Lock:**
+- Settings `tx_slot_lock` ∈ {"none","even","odd"} persistiert
+- Helper `resolve_tx_slot(their_even, lock_status, rx_mode)` in
+  `core/qso_state.py` zentralisiert TX-Slot-Wahl + Lock-Wirkung
+- 3 TX-Pfade gepatcht: Hunt (Pre-Validierung blockt Mismatch),
+  CQ-Start, CQ-Reply
+- RX-Filter-Code in `rx_panel.py` zurückgebaut
+- Lock greift NUR Normal-Modus; in Diversity Buttons ausgeblendet,
+  State in Settings bleibt
+- Bei Mode-Wechsel zu Normal: Buttons aus Settings geladen
+
+**Tests:** **1179 grün** (1166 + 13 Bundle-E T1-T8 inkl. Edge-Cases).
+**Backup:** `Appsicherungen/2026-05-14_v0.97.21_vor_bundle_e_refactor/`.
+**Workflow:** V1→V2 (10 Findings + 7 Fragen)→R1 6/10 (2 KRITISCH F1+F2
++ 4 SOLLTE)→V3 (16 ACs Compact-fest)→Code→Final-R1 0 Findings „Push
+freigegeben".
+**Push:** pending bis Mike's Field-Test F1-F9.
+
+### Field-Test-Checkliste F1-F9
+
+| # | Test | Erwartung |
+|---|---|---|
+| **F1** | Normal-Modus, EVEN klicken | Orange-Highlight + persist |
+| **F2** | CQ rufen mit Even-Lock | TX nur in Even-Slot |
+| **F3** | Station in Odd-Slot klicken (Lock=even) | QSO startet (Gegentakt=Even, passt) |
+| **F4** | Station in Even-Slot klicken (Lock=even) | Klick ignoriert + `add_info`-Hinweis |
+| **F5** | ODD klicken | Wechselt (EVEN aus, ODD an) |
+| **F6** | EVEN erneut klicken | Uncheck → Lock=none |
+| **F7** | App neu starten | Lock-State wiederhergestellt |
+| **F8** | Modus → Diversity | Buttons weg, Lock in Settings bleibt |
+| **F9** | Zurück Normal | Buttons aus Settings geladen |
+
+### Vorgänger-Field-Tests pending
+
+- v0.97.21 Bundle D UI-Tweaks F1-F8 (Settings-Padding, DT-Vorzeichen,
+  Slot-Progress-Bar — diese bleiben unverändert in Bundle E)
+- v0.97.20 P50 Bänder-Sichtbarkeit ✓ (Mike: „funktioniert super")
+- v0.97.19 P34-Stufe2
+
+---
+
 ## Stand 2026-05-14 morgens: v0.97.21 Bundle D — UI-Tweaks nach P50-Field-Test
 
 **Mike-Trigger:** P50 funktioniert super (Field-Test ✓), Memory-Leak war

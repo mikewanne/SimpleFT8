@@ -1,4 +1,4 @@
-# SimpleFT8 TODO — Stand 14.05.2026 (v0.97.21, Bundle D UI-Tweaks fertig)
+# SimpleFT8 TODO — Stand 14.05.2026 (v0.97.22, Bundle E TX-Slot-Lock fertig)
 
 > **Mike-Regel 07.05.2026:** Offene Aufgaben gehoeren AUSSCHLIESSLICH
 > in diese Datei. Nicht in CLAUDE.md, nicht in HANDOFF.md. Diese Datei
@@ -8,11 +8,12 @@
 
 # 🟢 STATUS-ÜBERSICHT (für neue Session)
 
-**Aktuelle Version:** v0.97.21 (14.05.2026)
-**Tests:** 1166 grün
-**App-Stand:** Bundle D UI-Tweaks (5 Tweaks: Settings-Padding, DT-Vorzeichen,
-Slot-Filter-Buttons, Diversity-Layout, Statusbar-Slot-Progress-Bar) ERLEDIGT,
-Field-Test F1-F8 pending. P50 Bänder-Sichtbarkeit Field-Test ✓ (Mike:
+**Aktuelle Version:** v0.97.22 (14.05.2026)
+**Tests:** 1179 grün
+**App-Stand:** Bundle E TX-Slot-Lock Refactor (Mike-Korrektur Bundle-D:
+Even/Odd = TX-Slot-Lock SmartSDR-Style, nicht RX-Filter) ERLEDIGT,
+Field-Test F1-F9 pending. Davor Bundle D UI-Tweaks (Settings-Padding,
+DT-Vorzeichen, Slot-Progress-Bar bleiben unverändert). P50 Bänder-Sichtbarkeit Field-Test ✓ (Mike:
 „funktioniert super"). Memory-Leak P30 resolved (war TTS-Server, nicht
 SimpleFT8). Davor: P34-Stufe2 Statik-Pipeline raus (v0.97.19), Toast-
 Bundle (v0.97.18), P46 Bandpilot Normal-Reintegration (v0.97.17), P14 DT-
@@ -25,6 +26,29 @@ erledigt (Field-Test pending). Veraltete Punkte aus TODO bereinigt:
   (Encoder.target_tx_offset_s aus tx_buffer_s).
 - **P24 Last-RX-Mode-Persist** widerspricht Mike's P35-Bug-F-Vision
   (App-Start IMMER 20m FT8 Normal). Nicht implementieren.
+
+## ✅ 14.05.2026 erledigt — Bundle E TX-Slot-Lock Refactor (v0.97.22)
+
+Mike-Korrektur nach Bundle-D: „ich wollte nicht filtern, sondern TX-Slot
+festlegen (SmartSDR-Style)." Refactor:
+
+- Settings `tx_slot_lock` ∈ {"none","even","odd"} persistiert
+- Helper `resolve_tx_slot(their_even, lock_status, rx_mode)` in
+  `core/qso_state.py` als Modul-Funktion (R1-S3 zentral)
+- 3 TX-Pfade gepatcht: Hunt (Pre-Validierung), CQ-Start, CQ-Reply
+- Lock greift NUR Normal-Modus, in Diversity Buttons aus + State
+  bleibt in Settings
+- Bundle-D RX-Filter-Code komplett zurückgebaut
+- Signal `slot_filter_changed` → `tx_slot_lock_changed`
+- Bei Mode-Wechsel zu Normal: UI aus Settings geladen
+- Mismatch-Klick → `add_info("Klick auf X ignoriert — Slot-Lock=Y, ...")`
+
+R1-Pragma:
+- F1 Thread-Safety: GIL atomar reicht
+- S2 Auto-Hunt-Pause: nicht nötig (10-Min-Hard-Cap)
+
+Final-R1 „0 Findings, Push freigegeben". Tests 1166 → 1179 (+13).
+Field-Test F1-F9 pending.
 
 ## ✅ 14.05.2026 erledigt — Bundle D UI-Tweaks (v0.97.21)
 
