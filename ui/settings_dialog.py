@@ -337,7 +337,10 @@ class SettingsDialog(QDialog):
             "dem Band-Panel und Bandpilot empfiehlt sie nicht mehr.\n"
             "Mindestens ein Band muss aktiv sein.")
         bands_grid = QGridLayout(bands_group)
-        bands_grid.setSpacing(6)
+        # Bundle D (v0.97.21): luftigeres Spacing + mehr Top-Padding
+        # damit der Block nicht gedrängt wirkt (Mike-Feedback nach P50)
+        bands_grid.setSpacing(10)
+        bands_grid.setContentsMargins(12, 8, 12, 10)
         self._band_checkboxes: dict = {}
         # 3×3-Raster (sortiert von Hochfrequenz nach Niederfrequenz)
         bands_layout = [["10m", "12m", "15m"],

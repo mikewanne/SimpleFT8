@@ -28,6 +28,20 @@ COL_COUNT = 9
 _FONT = QFont("Menlo", 11)
 _FONT_SEP = QFont("Menlo", 9)
 
+
+def _format_dt(dt: float) -> str:
+    """Bundle D (v0.97.21): DT mit Vorzeichen, aber kein '+0.0'/'-0.0'.
+
+    Rundet auf 1 Nachkommastelle. Wenn das Ergebnis auf 0.0 rundet
+    (egal ob +0.04 oder -0.04), wird '0.0' ohne Vorzeichen ausgegeben.
+    Für |dt| >= 10 wird auf ganze Sekunde gerundet.
+    """
+    if abs(dt) >= 10:
+        return f"{dt:.0f}"
+    if abs(round(dt, 1)) < 0.05:
+        return "0.0"
+    return f"{dt:+.1f}"
+
 _COLOR_CQ = QColor("#FF4444")
 _COLOR_DIRECTED = QColor("#FFD700")
 _COLOR_DONE = QColor("#44FF44")
@@ -62,6 +76,9 @@ class RXPanel(QWidget):
         self._rx_active = True
         self._country_filter: set = set(country_filter or [])
         self._ant_filter: int = 0  # 0=alle, 1=A1, 2=A2
+        # Bundle D (v0.97.21): Slot-Filter (Normal-only, von QSO-Panel).
+        # "both" = beide Slots sichtbar, "even"/"odd" = nur dieser Slot.
+        self._slot_filter: str = "both"
         self._active_call: str = ""  # Callsign der gerade aktiv angerufenen Station
         self._qso_log = None  # QSOLog fuer Worked-Before Filter
         self._locator_db = None  # LocatorDB fuer exakte km-Berechnung pro Call
@@ -406,9 +423,11 @@ class RXPanel(QWidget):
         # SNR
         snr_str = f"{msg.snr:+d}" if msg.snr != -30 else "?"
 
-        # DT
-        dt_str = (f"{msg.dt:+.1f}" if abs(msg.dt) < 10
-                  else f"{msg.dt:.0f}")
+        # DT — Bundle D (v0.97.21): bei Rundung auf 0.0 kein Vorzeichen
+        # anzeigen (Mike-Feedback: „+0.0/-0.0 ist 0.0 :-)").
+        # Edge-Case Python: -0.0 != 0.0 als Float, deshalb explizit
+        # über abs(round(...)).
+        dt_str = _format_dt(msg.dt)
 
         # Freq
         freq_str = str(msg.freq_hz)
@@ -727,7 +746,32 @@ class RXPanel(QWidget):
             caller = getattr(msg, 'caller', '')
             if caller and self._qso_log.is_worked(caller):
                 return True
+        # Bundle D (v0.97.21): Slot-Filter (Normal-only)
+        if self._slot_filter != "both":
+            tx_even = getattr(msg, '_tx_even', None)
+            if tx_even is None:
+                # ohne Slot-Info kann nicht gefiltert werden → sichtbar
+                pass
+            elif self._slot_filter == "even" and not tx_even:
+                return True
+            elif self._slot_filter == "odd" and tx_even:
+                return True
         return False
+
+    def apply_slot_filter(self, slot_filter: str) -> None:
+        """Bundle D (v0.97.21): Slot-Filter live anwenden.
+
+        Args:
+            slot_filter: "both" | "even" | "odd". Andere Werte → "both".
+
+        Wird vom QSO-Panel via Signal getriggert. Filter blendet RX-
+        Zeilen des nicht-aktiven Slots aus (R1-Q1: komplett ausblenden,
+        nicht ausgegraut). Nur RX-Anzeige — NICHT TX/CQ-State (V2 B5).
+        """
+        if slot_filter not in ("both", "even", "odd"):
+            slot_filter = "both"
+        self._slot_filter = slot_filter
+        self._apply_filters()
 
     def _apply_filters(self):
         """Alle aktiven Filter auf die Tabelle anwenden."""

@@ -17,6 +17,9 @@ class QSOPanel(QWidget):
     """QSO-Verlaufsfenster mit Tabs: Live Log + Logbuch."""
 
     upload_qrz = Signal()  # QRZ.com Upload angefordert
+    # Bundle D (v0.97.21): Slot-Filter (Normal-only) — emittet
+    # "both"|"even"|"odd". MainWindow verdrahtet mit RXPanel.apply_slot_filter.
+    slot_filter_changed = Signal(str)
 
     def __init__(self):
         super().__init__()
@@ -42,21 +45,50 @@ class QSOPanel(QWidget):
         head_row.setContentsMargins(2, 0, 2, 0)
         head_row.setSpacing(8)
 
-        # Links: EVEN/ODD
-        slot_container = QWidget()
-        slot_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        slot_row = QHBoxLayout(slot_container)
+        # Bundle D (v0.97.21): Links EVEN/ODD als Filter-Buttons
+        # (Normal-Modus only). In Diversity ausgeblendet via
+        # set_slot_buttons_visible(False). 2 exclusive QPushButtons
+        # mit "both"-Default (keiner checked = beide Slots sichtbar).
+        self._slot_container = QWidget()
+        self._slot_container.setSizePolicy(QSizePolicy.Policy.Expanding,
+                                           QSizePolicy.Policy.Fixed)
+        slot_row = QHBoxLayout(self._slot_container)
         slot_row.setContentsMargins(0, 0, 0, 0)
         slot_row.setSpacing(4)
-        self._even_label = QLabel("EVEN")
-        self._odd_label  = QLabel("ODD")
-        for lbl in (self._even_label, self._odd_label):
-            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            lbl.setFixedHeight(22)
-            lbl.setFont(QFont("Menlo", 10, QFont.Weight.Bold))
-            lbl.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        slot_row.addWidget(self._even_label)
-        slot_row.addWidget(self._odd_label)
+        self._btn_even = QPushButton("EVEN")
+        self._btn_odd = QPushButton("ODD")
+        for btn in (self._btn_even, self._btn_odd):
+            btn.setCheckable(True)
+            btn.setFixedHeight(22)
+            btn.setFont(QFont("Menlo", 10, QFont.Weight.Bold))
+            btn.setSizePolicy(QSizePolicy.Policy.Expanding,
+                              QSizePolicy.Policy.Fixed)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        # Stylesheet konsistent mit rx_panel _FILTER_STYLE (R1-S1)
+        slot_btn_style = (
+            "QPushButton { background: #222; color: #888;"
+            " border: 1px solid #444; border-radius: 3px; padding: 2px 8px; }"
+            "QPushButton:hover { background: #2a2a2a; color: #CCC; }"
+            "QPushButton:checked { background: #883300; color: #FFF;"
+            " border-color: #FF6622; }"
+        )
+        self._btn_even.setStyleSheet(slot_btn_style)
+        self._btn_odd.setStyleSheet(slot_btn_style)
+        self._btn_even.setToolTip(
+            "Filter: nur Even-Slot-Stationen anzeigen.\n"
+            "Klick erneut zum Aufheben des Filters.")
+        self._btn_odd.setToolTip(
+            "Filter: nur Odd-Slot-Stationen anzeigen.\n"
+            "Klick erneut zum Aufheben des Filters.")
+        self._btn_even.clicked.connect(lambda: self._on_slot_btn_clicked("even"))
+        self._btn_odd.clicked.connect(lambda: self._on_slot_btn_clicked("odd"))
+        slot_row.addWidget(self._btn_even)
+        slot_row.addWidget(self._btn_odd)
+        # Legacy-Aliase fuer alten Code-Pfad — verweisen auf Buttons.
+        # _update_slot_display ist No-Op geworden (Slot-Live ist jetzt
+        # in der Statusbar als _slot_progress_bar, Bundle D AC13-15).
+        self._even_label = self._btn_even
+        self._odd_label = self._btn_odd
 
         # Rechts: QSO/Logbuch Tab-Buttons
         tabs_container = QWidget()
@@ -79,14 +111,14 @@ class QSOPanel(QWidget):
         tabs_row.addWidget(self._btn_tab_qso)
         tabs_row.addWidget(self._btn_tab_log)
 
-        head_row.addWidget(slot_container, 1)
+        head_row.addWidget(self._slot_container, 1)
         head_row.addWidget(tabs_container, 1)
+        # Bundle D AC11: bei verstecktem slot_container füllen
+        # QSO+Logbuch-Buttons den Platz (Expanding ist schon gesetzt).
+        self._tabs_container = tabs_container
         layout.addLayout(head_row)
-
-        self._slot_timer = QTimer(self)
-        self._slot_timer.timeout.connect(self._update_slot_display)
-        self._slot_timer.start(500)
-        self._update_slot_display()
+        # Bundle D: _slot_timer entfaellt — Slot-Live-Indikator ist jetzt
+        # die _slot_progress_bar in der Statusbar (cyan/magenta).
 
         # ── Inhalt: QStackedWidget ersetzt QTabWidget ──
         self.tabs = QStackedWidget()
@@ -266,26 +298,60 @@ class QSOPanel(QWidget):
         self._append_colored(f"       {text}", "#666666")
 
     def _update_slot_display(self):
-        """EVEN/ODD Label alle 500ms aktualisieren — zeigt aktuellen TX-Slot."""
-        now = time.time()
-        # Modus-abhaengige Slot-Dauer (FT8=15, FT4=7.5, FT2=3.8)
-        slot = getattr(self, '_cycle_duration', 15.0)
-        cycle_num = int(now / slot)
-        is_even = (cycle_num % 2 == 0)
-        active   = "#00FF88"   # hell grün = aktiver Slot
-        inactive = "#333344"   # dunkel = inaktiver Slot
-        txt_act  = "#000000"
-        txt_inact= "#555566"
-        if is_even:
-            self._even_label.setStyleSheet(
-                f"background:{active}; color:{txt_act}; border-radius:3px;")
-            self._odd_label.setStyleSheet(
-                f"background:{inactive}; color:{txt_inact}; border-radius:3px;")
+        """Bundle D (v0.97.21): No-Op geworden.
+
+        Vorher: färbte _even_label/_odd_label im 500ms-Takt mit Live-
+        Slot-Highlight. Jetzt sind EVEN/ODD Filter-Buttons (kein Live-
+        Indikator mehr). Slot-Phase wird in der Statusbar
+        (_slot_progress_bar mit cyan/magenta) angezeigt.
+
+        Bleibt als Stub damit alter Code-Pfad nicht crasht.
+        """
+        return
+
+    def _on_slot_btn_clicked(self, parity: str) -> None:
+        """Bundle D (v0.97.21): Slot-Filter-Button-Klick.
+
+        Exklusive Logik: Klick auf einen Button checkt ihn, uncheckt
+        den anderen. Klick auf bereits aktiven Button uncheckt ihn →
+        Filter aus (= "both"). Emittet ``slot_filter_changed``.
+        """
+        if parity == "even":
+            if self._btn_even.isChecked():
+                self._btn_odd.setChecked(False)
+        elif parity == "odd":
+            if self._btn_odd.isChecked():
+                self._btn_even.setChecked(False)
+        # Filter-State berechnen
+        e = self._btn_even.isChecked()
+        o = self._btn_odd.isChecked()
+        if e and not o:
+            slot_filter = "even"
+        elif o and not e:
+            slot_filter = "odd"
         else:
-            self._even_label.setStyleSheet(
-                f"background:{inactive}; color:{txt_inact}; border-radius:3px;")
-            self._odd_label.setStyleSheet(
-                f"background:{active}; color:{txt_act}; border-radius:3px;")
+            slot_filter = "both"
+        self.slot_filter_changed.emit(slot_filter)
+
+    def set_slot_buttons_visible(self, visible: bool) -> None:
+        """Bundle D (v0.97.21): EVEN/ODD-Buttons-Container ein-/ausblenden.
+
+        In Diversity-Modus: ausblenden (zu komplex für Filter-Logik in
+        Diversity). MainWindow ruft auf bei rx_mode-Wechsel. QSO/Logbuch-
+        Buttons füllen den Platz automatisch (Expanding-Policy).
+        """
+        self._slot_container.setVisible(visible)
+
+    def reset_slot_filter(self) -> None:
+        """Bundle D (v0.97.21): Filter auf „both" zurücksetzen.
+
+        Wird bei Modus-Wechsel (Normal↔Diversity) gerufen. Beide Buttons
+        uncheck + slot_filter_changed("both") emittet damit RX-Panel
+        auch reagiert.
+        """
+        self._btn_even.setChecked(False)
+        self._btn_odd.setChecked(False)
+        self.slot_filter_changed.emit("both")
 
     def _append_colored(self, text: str, color: str):
         cursor = self.log_view.textCursor()

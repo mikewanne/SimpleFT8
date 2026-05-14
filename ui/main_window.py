@@ -481,6 +481,27 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         )
         self.statusBar().addPermanentWidget(self._dt_indicator)
 
+        # Bundle D (v0.97.21): Slot-Progress-Bar rechts in Statusbar.
+        # Zeigt aktuellen FT8/FT4/FT2-Slot-Fortschritt (0..cycle_dur s).
+        # Farbe wechselt mit Slot-Parity: Cyan (Even) / Magenta (Odd).
+        # Wird sekündlich aus `_tick_cq_countdown` aktualisiert.
+        from PySide6.QtWidgets import QProgressBar as _QProgressBar
+        self._slot_progress_bar = _QProgressBar()
+        self._slot_progress_bar.setRange(0, 1000)
+        self._slot_progress_bar.setValue(0)
+        self._slot_progress_bar.setTextVisible(False)
+        self._slot_progress_bar.setFixedSize(80, 14)
+        self._slot_progress_bar.setToolTip(
+            "FT8/FT4/FT2-Slot — Cyan = Even, Magenta = Odd. "
+            "Balken füllt sich über die Slot-Dauer.")
+        self._slot_progress_bar.setStyleSheet(
+            "QProgressBar { border: 1px solid #333; border-radius: 2px;"
+            " background: #1a1a1a; }"
+            "QProgressBar::chunk { background: #00CCFF; border-radius: 1px; }"
+        )
+        self._slot_progress_is_even = True
+        self.statusBar().addPermanentWidget(self._slot_progress_bar)
+
         # P1.QRZ-UPLOAD-UI-2: Bulk-Cancel-Widget (initial versteckt)
         from PySide6.QtWidgets import (
             QWidget as _QW, QHBoxLayout as _QHL,
@@ -535,6 +556,8 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self.qso_panel.logbook.load_adif(Path.cwd() / "adif")
         self.qso_panel.upload_qrz.connect(self._on_qrz_upload)
         self.qso_panel.logbook.qso_clicked.connect(self._on_logbook_qso_clicked)
+        # Bundle D (v0.97.21): Slot-Filter Signal-Verdrahtung (R1-F1).
+        self.qso_panel.slot_filter_changed.connect(self.rx_panel.apply_slot_filter)
         # Tab-Wechsel: Detail-Overlay zuruecksetzen wenn User vom Logbuch weg navigiert
         self.qso_panel.tabs.currentChanged.connect(self._on_qso_tab_changed)
         self.control_panel = ControlPanel(callsign=self.settings.callsign)
@@ -1194,6 +1217,8 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
 
         P9 (10.05.2026 Mike-Field-Test): zusaetzlich Re-Mess-Countdown jede
         Sekunde refresht (vorher nur bei Diversity-Switch ~10 Min sichtbar).
+        Bundle D (v0.97.21): zusätzlich Slot-Progress-Bar in der Statusbar
+        aktualisieren (cyan/magenta je Slot-Parity).
         """
         if self._rx_mode == "diversity" and self._diversity_ctrl.cq_freq_hz is not None:
             self.control_panel.update_cq_freq_countdown(
@@ -1203,6 +1228,36 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
             # Refactors weg.
         else:
             self.control_panel.set_cq_countdown_visible(False)
+        # Bundle D: Slot-Progress-Bar
+        self._update_slot_progress_bar()
+
+    def _update_slot_progress_bar(self):
+        """Bundle D (v0.97.21): Statusbar-Slot-Balken aktualisieren.
+
+        Liest `cycle_dur` vom Timer (FT8=15, FT4=7.5, FT2=3.8). Berechnet
+        Fortschritt im aktuellen Slot (0..1000 Promille). Wechselt Farbe
+        je Slot-Parity: Cyan `#00CCFF` (Even) / Magenta `#FF66CC` (Odd).
+        Farb-Update nur bei Parity-Wechsel (Stylesheet-Reset ist teuer).
+        """
+        if not hasattr(self, "_slot_progress_bar"):
+            return
+        cycle_dur = getattr(self.timer, "cycle_duration", 15.0)
+        if cycle_dur <= 0:
+            return
+        import time as _t
+        now = _t.time()
+        cycle_num = int(now / cycle_dur)
+        is_even = (cycle_num % 2 == 0)
+        progress_in_slot = (now % cycle_dur) / cycle_dur
+        self._slot_progress_bar.setValue(int(progress_in_slot * 1000))
+        if is_even != self._slot_progress_is_even:
+            self._slot_progress_is_even = is_even
+            chunk = "#00CCFF" if is_even else "#FF66CC"  # cyan / magenta
+            self._slot_progress_bar.setStyleSheet(
+                "QProgressBar { border: 1px solid #333; border-radius: 2px;"
+                " background: #1a1a1a; }"
+                f"QProgressBar::chunk {{ background: {chunk}; border-radius: 1px; }}"
+            )
 
     def _restore_geometry(self):
         """Fenstergeometrie + Splitter-Breiten aus Settings laden."""
