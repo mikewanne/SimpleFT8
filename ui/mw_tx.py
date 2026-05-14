@@ -97,12 +97,62 @@ class TXMixin:
 
     @Slot(float)
     def _on_swr_alarm(self, swr: float):
-        now = time.time()
-        if now - getattr(self, '_last_swr_alarm', 0) < 10:
-            return  # Cooldown: max 1 Alarm pro 10s
-        self._last_swr_alarm = now
-        self.statusBar().showMessage(f"SWR ALARM: {swr:.1f} — TX gestoppt! Tuner/Antenne pruefen.", 10000)
-        print(f"[SWR] Alarm: {swr:.1f} — TX gestoppt")
+        """P53: Live-SWR-Watchdog während TX.
+
+        Feuert bei jedem VITA-49-Meter-Update wenn SWR ≥ Limit und
+        FlexRadio._is_transmitting=True (radio/flexradio.py:1388). Auch
+        von ptt_on() Pre-Check (Z.957) bevor TX überhaupt startet.
+
+        Stop-Block läuft nur bei 2 aufeinanderfolgenden Alarms innerhalb
+        500 ms (Spike-Schutz gegen PTT-on-Glitch) UND laufendem TX
+        (encoder.is_transmitting=True).
+        """
+        from PySide6.QtWidgets import QMessageBox
+        from core.qso_state import QSOState
+
+        # AC3: Pre-TX-Alarm aus ptt_on() ignorieren — kein laufender TX
+        if not self.encoder.is_transmitting:
+            self._swr_spike_count = 0
+            return
+
+        now = time.monotonic()
+
+        # 1. Alarm ODER altes Fenster (> 500 ms) → neu starten
+        if self._swr_spike_count == 0 or (now - self._swr_first_alarm_t) > 0.5:
+            self._swr_spike_count = 1
+            self._swr_first_alarm_t = now
+            return
+
+        # 2. Alarm innerhalb 500 ms — Stop auslösen
+        # AC4(1): Reset SOFORT, gegen 3. Alarm noch in der Qt-Queue
+        self._swr_spike_count = 0
+        limit = self.settings.get("swr_limit", 3.0)
+
+        # AC4(2)-(7): Stop-Block antennen-neutral (ANT1 bleibt ANT1)
+        self.encoder.abort()
+        if self.radio.ip:
+            self.radio.ptt_off()
+        if self.qso_sm.cq_mode or self.qso_sm.state != QSOState.IDLE:
+            self.qso_sm.stop_cq()
+            self.qso_sm.cancel()
+            self.control_panel.set_cq_active(False)
+        if hasattr(self, "_omni_cq") and self._omni_cq.is_active():
+            self._omni_cq.stop("swr_block")
+        if hasattr(self, "_auto_hunt") and self._auto_hunt.active:
+            self._auto_hunt.stop_auto_hunt("swr_block")
+
+        # AC7: Panel-Eintrag VOR Modal (Modal blockiert Event-Loop)
+        self.qso_panel.add_info(f"⚠ TX abgebrochen — SWR {swr:.1f}")
+
+        print(f"[P53] SWR-Watchdog: TX gestoppt — SWR {swr:.1f} >= Limit {limit:.1f}")
+
+        # AC6: Modal
+        QMessageBox.warning(
+            self,
+            "SWR-Schutz ausgelöst",
+            f"TX abgebrochen — SWR {swr:.1f} (Limit {limit:.1f}).\n"
+            "Antenne tunen oder SWR-Limit in Einstellungen prüfen."
+        )
 
     def _auto_adjust_tx_level(self):
         """Zweistufige TX-Regelung (kein PI-Controller):
