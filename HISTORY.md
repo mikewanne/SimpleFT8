@@ -3,6 +3,84 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-14 v0.97.26 — Bundle I (Settings-Spacing + QSO-Reihenfolge + OMNI-Race)
+
+Drei orthogonale Befunde aus Mike-Field-Test 14.05.2026 nachmittags
+zusammen eingespielt — voller V1→V2→R1→V3-Workflow mit DeepSeek-V4-pro
+(Erstnutzung seit Migration), Final-R1 „Push freigegeben" 0 Findings.
+
+**Punkt 1 — Settings „Sichtbare Bänder" gedrungen.** Bundle D
+(v0.97.21) hatte Spacing 6→10 erhöht. Mike-Visual-Check 14.05.:
+weiter zu eng. Bundle I-Fix in `ui/settings_dialog.py:333-356`:
+Spacing 10→16, Margins (12,8,12,10)→(16,16,16,16), Stylesheet
+`QCheckBox::indicator { width: 18px; height: 18px; }` lokal auf
+`bands_group` (Scope-Begrenzung damit andere Dialog-Checkboxes
+nicht betroffen).
+
+**Punkt 2 — „✓ QSO komplett" vor Courtesy-73 (P33-Korrektur).**
+P33 (Bundle B', v0.97.14) hatte 2-Signal-Split eingeführt damit
+Bestätigung nicht NACH nächstem CQ erscheint — sie feuerte SOFORT
+bei 73-Empfang. Mike-Feedback 14.05.: zu früh, sollte zwischen
+Courtesy-Send und nächstem CQ erscheinen. Mike-Logik: „wenn wir
+IMMER das 2. 73 senden, können wir das QSO komplett auch danach
+zeigen — dann ist das sauber und vor dem nächsten CQ." Fix in
+`core/qso_state.py`: `qso_confirmed_visual.emit` aus
+`on_message_received` WAIT_73-Branch (Z.692) entfernt, in
+`on_message_sent` TX_73_COURTESY-Branch (Z.538) hinzugefügt.
+Plus: hypothetischer Doppelschutz-Pfad (Z.720, `courtesy_73_sent`
+schon True) feuert visual + full direkt nacheinander damit kein
+QSO ohne Bestätigung bleibt.
+
+**Punkt 4 — OMNI-CQ Race beim Mode-Wechsel.** Mike-Field-Test:
+OMNI war an, Mode-Wechsel zwischen Diversity↔Normal, OMNI-Schalter
+ging visuell aus, **EIN** weiterer CQ-Slot wurde gesendet (aus
+normalem CQ-Pfad, kein `↻N`-Suffix → `qso_sm.cq_mode`). Danach
+Stille. Wurzel: `_on_rx_mode_changed` Z.541-545 stoppte nur OMNI
++ AutoHunt, nicht den normalen CQ + nicht den armed-en Encoder-
+Slot. R1-V4-pro Finding 1 (Bug rot): `qso_sm.stop_cq()` allein
+reicht nicht, `encoder.abort()` + `ptt_off()` notwendig damit
+kein armed Slot durchrutscht. Fix: Stop-Block analog Bandwechsel-
+Pattern (Z.404-414) — `stop_cq + cancel + set_cq_active(False) +
+encoder.abort + ptt_off` als komplettes Paket.
+
+**R1-V4-pro Erstnutzung — Lessons:**
+- V4-pro fand 5 Findings (1 Bug rot, 2 Risiko orange, 1 Hinweis
+  grau, 1 Unklarheit gelb). Alle nach Code-Verifikation
+  angenommen.
+- V4-pro stark bei Code-Halluzinations-Aufdeckung: Finding 2 fand
+  dass CLAUDE.md-Notiz zur Encoder-Pending-Queue veraltet ist
+  (P7.OMNI-SIMPLIFY v0.96.4 hat sie entfernt) — sehr gute
+  Code-Verifikation in 1M-Context.
+- V4-pro schwach bei Klärungsfragen (Finding 5 hat „R1-Klärung
+  herbeiführen" gesagt statt selbst Code zu prüfen — Self-Check
+  klärte es trivial).
+- Tokens: in 71.064, out 7.748, total 78.812. Antwort-Zeit ~15s.
+- Tracking für `docs/deepseek_lessons.md` V4-Sektion.
+
+**Atomare Commits (geplant):**
+- C1 Backup `Appsicherungen/2026-05-14_v0.97.25_vor_bundle_i/`
+- C2 `ui/settings_dialog.py` Spacing+Stylesheet
+- C3 `tests/test_settings_dialog_smoke.py` T1.1-T1.5
+- C4 `core/qso_state.py` Signal-Verschiebung
+- C5 `tests/test_p33_qso_complete_order.py` neu T2.1-T2.8 +
+  `tests/test_bundle_d.py` Spacing-Wert angepasst
+- C6 `ui/mw_radio.py` Stop-Block-Erweiterung
+- C7 `tests/test_bundle_i.py` NEU mit T4.1-T4.8
+- C8 APP_VERSION + Doku + Memory
+
+**Tests:** 1205 → 1220 (+15). 8 Bundle-I-Tests + 5 Settings-Smoke-
+Tests + 2 P33-Tests netto. Final-R1 (V4-pro) 0 Findings.
+
+**Push pending** bis Mike-Field-Test F1-F3 (Settings-Luftigkeit,
+QSO-Reihenfolge, OMNI-Race-Stop).
+
+**Bekannte Lücke (out of scope, dokumentiert):** wenn Courtesy-Send
+abgebrochen wird (User QSO Finish während TX, App-Crash, Encoder-
+Fehler, Mode-Wechsel mid-Slot), fehlt die Visual-Bestätigung
+obwohl `qso_complete` schon gefeuert wurde und das QSO im ADIF
+landet. Fix-Plan nur falls Mike Bedarf meldet.
+
+
 ---
 
 ## 2026-05-14 Abend — DeepSeek V4 Migration (system-wide)

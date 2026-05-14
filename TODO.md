@@ -1,4 +1,331 @@
-# SimpleFT8 TODO — Stand 14.05.2026 Abend (v0.97.25, Bundle H fertig + DeepSeek V4 Migration)
+# SimpleFT8 TODO — Stand 14.05.2026 nachmittags (v0.97.26, Bundle I fertig — Field-Test F1-F7 pending)
+
+## ✅ 14.05.2026 erledigt — Bundle I (Settings-Spacing + QSO-Reihenfolge + OMNI-Race) v0.97.26
+
+Drei orthogonale Befunde aus Mike-Field-Test 14.05.2026 nachmittags
+zusammen einspielen — voller V1→V2→R1→V3-Workflow mit DeepSeek-V4-pro
+(Erstnutzung), Final-R1 „Push freigegeben" 0 Findings.
+
+**Punkt 1:** Settings „Sichtbare Bänder" Spacing 10→16, Margins
+(12,8,12,10)→(16,16,16,16), Stylesheet `QCheckBox::indicator 18×18` lokal
+auf `bands_group` (Scope-Begrenzung).
+
+**Punkt 2:** `qso_confirmed_visual.emit` von `on_message_received`
+WAIT_73-Branch (Z.692) in `on_message_sent` TX_73_COURTESY-Branch (Z.538)
+verschoben — Reihenfolge im QSO-Panel: Empf. 73 → Sende 73 → ✓ QSO komplett.
+
+**Punkt 4 (OMNI-Race):** Stop-Block in `_on_rx_mode_changed`
+(`ui/mw_radio.py:541-560`) erweitert analog Bandwechsel-Pattern:
+`stop_cq + cancel + set_cq_active(False) + encoder.abort + ptt_off`.
+R1-V4-pro Finding 1: `qso_sm.stop_cq()` allein reicht nicht.
+
+**Tests:** 1205 → 1220 (+15). Memory `project_bundle_i_settings_qso_omni.md`.
+Push pending bis Field-Test F1-F7.
+
+---
+
+## 🆕 OFFEN — Bundle J: Connect-Modal-Branding + Help-Dialog + Pre-TX-Guard + RX-Label (Mike 14.05.2026 nachmittags)
+
+**Trigger:** Mike-Field-Test 14.05.2026 nachmittags + Klärungs-Gespräch.
+**Aufwand-Schätzung:** klein, ~1 Tag inkl. Tests + Workflow.
+**Komplettes Bundle:** 4 UI-/Sicherheits-Tweaks die einzeln zu klein
+für eigenen Workflow sind aber zusammen gut gebündelt werden können.
+
+### J-Punkt 1 — Connect-Modal Version + MIT-Lizenz unten rechts
+
+**Wo:** P26-Connect-Modal (Antennen-Animations-Dialog beim App-Start
+während FlexRadio-Verbindung).
+
+**Was rein:**
+- Versionsnummer + MIT-Lizenz unten rechts in der Ecke
+- Format: `v{APP_VERSION} · MIT License` (synchron mit `main.py:APP_VERSION`, kein Hardcode)
+- Schrift klein (z.B. 9-10pt), halb-transparent, dezent
+- `setAlignment(Qt.AlignBottom | Qt.AlignRight)` auf einem Label
+
+**Sichtbarkeitszeit:** 5-7 Sek während Connect-Phase → genug Zeit dass User es lesen kann.
+
+**Zusätzlich:** `LICENSE`-Datei mit MIT-Text im Repo-Root anlegen falls noch nicht vorhanden.
+
+### J-Punkt 2 — Einheitlicher Help-Dialog mit Scrollbar
+
+**Trigger-Problem:** Aktuell sind alle `?`-Buttons im Settings-Dialog mit
+`QMessageBox` realisiert (siehe `ui/settings_dialog.py:_show_bandpilot_help`
++ andere). `QMessageBox` ist **nicht resizable**, Größe richtet sich nach
+Text-Länge → bei langem Markdown (Bandpilot-Hilfe!) wird's schmal +
+hoch → unten abgeschnitten + KEINE Scrollbar möglich. Mike-Screenshot
+14.05. zeigt Bandpilot-Hilfe nicht lesbar.
+
+**Lösung:** Eigener Help-Dialog `ui/help_dialog.py`:
+- `QDialog` mit `QTextBrowser` (Markdown-fähig + automatischer Scrollbalken)
+- Modal (`setWindowModality(Qt.ApplicationModal)`)
+- Feste Mindest-Größe **700×600 px**, resizable nach oben
+- Hintergrund-Farbe **synchron mit App-Theme** (dunkel — nicht weiß abgesetzt wie bei QMessageBox)
+- Schließen: Esc + Close-Button
+- Helper-Funktion `show_help(parent, title, markdown_text)` — überall reinrufbar
+
+**Wo umstellen:** Alle `?`-Buttons in `ui/settings_dialog.py` (Rufzeichen,
+Sendeleistung, Tune-Leistung, SWR-Limit, Anrufversuche, Bandpilot, etc.) +
+ggf. weitere `_show_*_help`-Methoden. Einheitlich für KURZE und LANGE Texte.
+
+**Wichtig:** Konsistenz > Optimum-pro-Dialog — auch kurze Erklärungen
+landen im 700×600-Fenster mit Weißraum. Das ist OK, schadet nichts.
+
+### J-Punkt 3 — Pre-TX ANT1-Guard (Hardware-Sicherheit)
+
+**Trigger-Befund:** Code-Verifikation 14.05. zeigte: `set_tx_antenna("ANT1")`
+wird **nur an 3 Stellen** im Code aufgerufen (`mw_radio.py:1486, 1618, 1703`)
+— bei RX-Mode-Wechsel + Preset-Laden. **NICHT vor jedem TX-Slot.**
+
+**Problem:** Wenn User mid-session am SmartSDR/Radio die TX-Antenne
+manuell auf ANT2 schaltet → App weiß davon nichts → nächster TX-Slot
+sendet über ANT2 (Regenrinne) → **Hardware-Risiko**.
+
+**Mike-Frage 14.05. nachmittags zu diesem Szenario.**
+
+**Lösung Variante A (Mike's Wahl, KISS):**
+Vor jedem `encoder.start_tx(...)` (oder direkt vor `send_message.emit`)
+zwingend `radio.set_tx_antenna("ANT1")` setzen. Defensiv, idempotent,
+kostet pro TX-Slot ~1 SmartSDR-Command (~ms).
+
+**Wo einbauen:** Vermutlich `ui/mw_qso.py` direkt vor jedem
+`encoder.start_tx`-Aufruf — Pfade prüfen, Helper-Methode wenn mehrere
+Stellen.
+
+**NICHT umgesetzt (Variante B, abgelehnt):** Polling-Watchdog der die
+Antenne live überwacht und auto-zurücksetzt. Für Mike als Single-User
+overkill, Variante A reicht.
+
+### J-Punkt 4 — RX-Antennen-Label Klarheit
+
+**Trigger-Befund Screenshot 14.05.:**
+```
+HALT - alles gestoppt
+Rufe Y060GW... (ANT2 +1.0 dB)
+```
+
+Das Label `(ANT2 +1.0 dB)` liest sich wie „TX über ANT2", ist aber
+tatsächlich die **bessere RX-Antenne** für diese Station (Antenna-
+Preference aus `core/antenna_pref.py`). Gefährlich nahe an Hardware-
+Verstoß-Wahrnehmung.
+
+**Fix:** Label-Prefix `RX:` ergänzen — Mike's Wahl Variante A.
+
+**Wo:** `ui/mw_qso.py:_antenna_pref_label()` (gibt heute `"(ANT2, +1.0 dB)"`).
+Auch alle RX-Panel-Zeilen wo `(ANT2 ↑1.0 dB)` steht → konsistent
+`RX:` davor.
+
+**Neue Notation:**
+- Diversity-Modus: `(RX: ANT2, +1.0 dB)`
+- Normal-Modus: **unverändert** `(ANT1)` (kein RX-Prefix nötig weil
+  nur eine Antenne existiert — Mike-Klärung: „egal weil immer ANT1")
+
+**Nebeneffekt:** Demonstrations-Wirkung deutlich besser — andere Funker
+sehen sofort „boah, der empfängt mit Regenrinne als zweite Antenne".
+
+### Tests + Workflow
+
+- Volle Workflow-Pflicht (V1→V2→R1→V3 mit DeepSeek-V4-pro).
+- Tests: pro Punkt 2-4 neue Tests (Bundle-J-Suite).
+- Backup `Appsicherungen/2026-05-15_v0.97.26_vor_bundle_j/` (oder
+  passende Datierung) vor Code-Start.
+- Field-Test F1-F4 für jeden Punkt einzeln.
+
+---
+
+## 🆕 OFFEN — P52: Statistik-Toggle raus + 90-Tage-Rolling-Window (Mike 14.05.2026 nachmittags)
+
+**Trigger:** Mike-Klärung 14.05.: Settings-Toggle „Statistik-Erfassung
+aktivieren" macht keinen Sinn weil **Bandpilot ohne Stats blind** ist
+und **Auswertungen** sie brauchen. Plus: Stats wachsen unbegrenzt
+(~1 MB/Tag bei 40m-FT8-24h-Betrieb) → nach Jahren unübersichtlich.
+
+### Was tun
+
+1. **Toggle komplett raus** aus `ui/settings_dialog.py` (Block
+   „Statistik-Erfassung aktivieren" entfernen)
+2. **Stats sind immer an** — kein Settings-Key mehr, keine Wahl mehr
+3. **Rolling-Window 90 Tage:** Dateien in `statistics/<Modus>/<Band>/<Proto>/YYYY-MM-DD_HH.md`
+   die älter als 90 Tage sind beim **App-Start** automatisch löschen
+   (analog Log-Rotation Bundle A P20, leise, atomar)
+4. **Settings-Migration:** alter Key `stats_enabled` beim Load
+   idempotent gepoppt damit alte Configs sauber wandern (analog P47-Pattern)
+
+### Warum 90 Tage
+
+| Use-Case | Lookback |
+|---|---|
+| Bandpilot Live-Empfehlung | 24h |
+| Bundle-D Slot-Bar / Quick-Stats | ~1 Woche |
+| Pooled-Mean-Analysen (Mike's Diagramme) | 5-7 Tage Soll, 2-4 Wochen verteilt |
+| Reserve / Vergleich Jahreszeiten | ~30 Tage |
+| **Total mit Puffer** | **90 Tage** |
+
+→ Genug Puffer für saisonale Vergleiche, aber Disk-Footprint bleibt
+~30 MB max. Wenn Mike länger will → später hochsetzen.
+
+### Wo umsetzen
+
+- `core/log_setup.py` oder neue `core/stats_cleanup.py`: Funktion
+  `cleanup_stats_older_than_days(stats_dir, days=90)` analog
+  `cleanup_old_logs`
+- `main.py` beim App-Start: cleanup-Call (vor App-Init oder im
+  Hintergrund-Thread um Start nicht zu verzögern)
+- `ui/settings_dialog.py`: Toggle + zugehöriger Code raus
+- `config/settings.py`: `stats_enabled`-Key beim Load entfernen
+  (idempotent)
+- Tests: cleanup-Funktion (Datei-Mock), Settings-Migration
+
+**Aufwand:** klein-mittel, ~0.5-1 Tag. Workflow nötig.
+
+---
+
+## 🆕 OFFEN — P53: SWR-Live-Watchdog (Hardware-Sicherheit) (Mike 14.05.2026 nachmittags)
+
+**Trigger:** Mike-Field-Test 14.05.: nasse Antenne nach Regen → SWR>30
+bei sofortigem TX mit 70W. **`swr_limit` (3.0) in Settings hat NICHT
+gegriffen** weil der Check nur vor der Gain-Messung läuft
+(`mw_radio.py:1334`), nicht im normalen TX-Pfad. FlexRadio-Hardware-
+Schutz + Tuner haben Mike's Hardware gerettet — Glück gehabt, aber
+Lücke im App-Code.
+
+### Architektur
+
+**SWR ist LIVE während TX verfügbar** (FlexRadio VITA-49-Telemetrie,
+`radio.last_swr` wird kontinuierlich aktualisiert).
+
+**Live-Watchdog während TX:**
+1. Während `encoder.is_transmitting=True`: Timer alle **200 ms**
+   `radio.last_swr` lesen
+2. **Spike-Schutz:** 2 aufeinanderfolgende Messungen > `swr_limit`
+   (~400 ms Bestätigung) — schützt gegen PTT-on-Glitch (50-100 ms
+   Einschwing-Spike)
+3. Bei Auslösung:
+   - `encoder.abort()` + `radio.ptt_off()` SOFORT (mid-slot)
+   - Watchdog-Timer stoppt mit PTT-off
+4. **Modal-Dialog** (Mike's Wahl, kein nicht-modal):
+   - Text: „**TX abgebrochen — SWR X.X (Limit Y.Y)**. Antenne tunen
+     oder SWR-Limit in Einstellungen prüfen."
+   - User muss bewusst wegklicken (nicht übersehen)
+5. **Komplett-Stop** (Mike's Wahl, „keine Lücken in der Bedienung"):
+   - `qso_sm.stop_cq()` + `cancel()` + `set_cq_active(False)`
+   - `_omni_cq.stop("swr_block")`
+   - `_auto_hunt.stop_auto_hunt("swr_block")`
+6. **Wiederaufnahme nur bewusst** durch User (CQ-Klick / OMNI-Klick) —
+   kein Auto-Resume, kein Cooldown
+7. **QSO-Panel-Eintrag** zur Historie: `⚠ TX abgebrochen — SWR X.X`
+
+### Hardware-Sicherheit
+
+- Stop-Block darf **KEINE Antennen-Umschaltung** triggern
+  (`set_tx_antenna` nicht aufrufen — ANT1 bleibt ANT1, CLAUDE.md
+  HARDWARE-WARNUNG)
+- `encoder.abort()` + `ptt_off()` sind antennen-neutral
+
+### Wo umsetzen
+
+- `ui/mw_tx.py` oder eigene `ui/swr_watchdog.py`-Klasse: `QTimer`
+  während TX, Spike-Counter
+- Hook in `encoder.start_tx`-Pfad (Watchdog start) und
+  `_on_tx_finished` (Watchdog stop)
+- Stop-Block-Pattern analog Bundle I (mit `stop_cq + cancel +
+  set_cq_active(False) + encoder.abort + ptt_off`)
+- Tests: Mock-Spike-Szenario, Spike-Schutz, modal-Dialog-Trigger,
+  Antennen-NICHT-umgeschaltet (`set_tx_antenna`-Spy)
+
+**Aufwand:** mittel, 1-1.5 Tage. Threading + Race-Conditions + Spike-
+Robustheit → voller Workflow Pflicht.
+
+---
+
+## 🆕 OFFEN — P54: Auto-Tune bei Bandwechsel (Settings-Toggle) (Mike 14.05.2026 nachmittags)
+
+**Trigger:** Eng verwandt mit P53 — zusätzliche Sicherheit/Komfort
+bei Bandwechsel. Mike's Wahl: NUR Bandwechsel (20m→40m), NICHT
+Modus-Wechsel (FT8↔FT4) und NICHT Normal↔Diversity.
+
+### Settings-Block
+
+Neuer Block in `ui/settings_dialog.py` Tab „TX & Schutz":
+
+| Setting | Werte | Default |
+|---|---|---|
+| Auto-Tune bei Bandwechsel | Checkbox An/Aus | **AN** |
+| Tune-Timeout | Sekunden-Eingabe (z.B. 5-60) | **15 s** |
+
+Tune-Power kommt aus bereits existierendem `tune_power`-Setting
+(5W / 10W / 20W).
+
+### Ablauf
+
+1. Bandwechsel löst aus → `_on_band_changed` läuft heute schon
+2. Nach Band-Setup + vor erstem TX: **Auto-Tune-Modal öffnen** wenn
+   Setting aktiv
+3. Modal-Inhalt:
+   - Spinner + Text „Auto-Tune läuft… (SWR X.X)"
+   - **Auto-Close** wenn Tune fertig (SWR < `swr_limit`) ODER
+     Timeout erreicht
+   - Kein OK-Button — User muss nicht klicken
+4. Bei Timeout (Default 15 s, einstellbar):
+   - Modal schließt automatisch
+   - **Warning-Dialog** „**Auto-Tune fehlgeschlagen** — SWR konnte
+     nicht unter X gebracht werden. Antenne prüfen, manuelles
+     Eingreifen nötig."
+   - **TX-Block** (analog P53 Komplett-Stop)
+   - User muss bewusst weitermachen
+
+### Wichtig
+
+- Tune-Power kommt aus Settings (`tune_power`) — nicht hardcoded
+- Tuning läuft über bestehende Radio-API (`radio.tune(power_watts)`)
+- Wenn `radio.ip` nicht gesetzt (kein Radio verbunden) → Auto-Tune
+  silent skip
+- Hardware-Pflicht: TX läuft während Tune über ANT1 (existiert
+  schon in Tune-Pfad)
+
+### Wo umsetzen
+
+- `ui/auto_tune_dialog.py` NEU — Modal mit Spinner + Timer
+- `ui/mw_radio.py:_on_band_changed`: nach Band-Setup Auto-Tune-Hook
+  einfügen wenn Settings-Toggle aktiv
+- `config/settings.py`: neue Keys `auto_tune_enabled`, `auto_tune_timeout_s`
+- `ui/settings_dialog.py`: Setting-Block einbauen
+- Tests: Auto-Tune-Trigger bei Bandwechsel, Auto-Tune-NICHT bei
+  Mode-Wechsel, Timeout-Verhalten, Settings-Toggle-Effekt
+
+**Aufwand:** mittel, 1-1.5 Tage. Modal-Dialog + Timeout-Handling +
+TX-Block-Integration. Workflow Pflicht.
+
+---
+
+## 🆕 OFFEN — Intent-Klausel im App-Start-Bestätigungsdialog erweitern (klein, Mike 14.05.2026 nachmittags)
+
+**Trigger:** Mike-Sorge bei eventueller Veröffentlichung — Belt-and-
+suspenders zur MIT-Lizenz: Intent-Klausel im bestehenden
+Hardware-Warnungs-Bestätigungsdialog erweitern.
+
+### Wortlaut
+
+> „Dieses Projekt entstand als persönliches Bastel-Tool für meinen eigenen
+> Funkbetrieb (DA1MHH). Der Quellcode steht unter MIT-Lizenz zur freien
+> Verwendung — die Nutzung erfolgt jedoch ausschließlich auf eigene Gefahr.
+> Keine Gewährleistung, keine Haftung für Hardware-Defekte, Funklizenz-
+> Verstöße oder andere Folgen. ANT1 = TX-Antenne (immer). ANT2 = nur RX
+> (NIEMALS TX, Regenrinne nicht für Sendeleistung geeignet)."
+
+### Wo
+
+`ui/startup_disclaimer_dialog.py` (oder wo das aktuell lebt) — Text
+des Bestätigungsdialogs erweitern. „Verstanden"-Button bleibt wie
+heute. Persistenz „nicht mehr zeigen wenn bestätigt" bleibt wie
+heute.
+
+**Aufwand:** trivial, ~5 Min. Könnte mit Bundle J gebündelt werden
+weil thematisch zum Connect-Modal-Branding passt (beides Lizenz +
+Disclaimer-Thema). Oder als atomarer eigener Commit.
+
+---
+
+## ⚠️ ALT — Bundle H Bandpilot-Aware Diversity-Klick (v0.97.25, 14.05.2026 mittags, Field-Test pending)
 
 ## 🚀 OFFEN — DeepSeek V4 Lessons aufbauen (nach nächster Session)
 
@@ -22,7 +349,82 @@ Session (Config-Cache). Folgearbeiten nach 2-3 V4-Reviews:
 
 ---
 
-## 🆕 OFFEN — Bundle H: Bandpilot-Aware Diversity-Klick (Mike 14.05.2026 mittags)
+## 🆕 OFFEN — P51 Gain-Messung vereinheitlichen (1 Messung, 2 Auswertungen) (Mike 14.05.2026 nachmittags)
+
+**Mike's Beobachtung:** Aktuell wird die Gain-Messung pro Scoring-Modus
+separat durchgeführt — d.h. wenn ich zufällig Standard messe um 10:00 und
+5 Minuten später auf DX wechsle, muss ich nochmal komplett einmessen.
+Beide Messungen werden in getrennten Stores abgelegt (`presets_standard.json`
+und `presets_dx.json`) und können divergieren (siehe 20m FT8 14.05.: Std
+ANT1=10/ANT2=10, DX ANT1=20/ANT2=10).
+
+**Architektur-Klarstellung (Code-Analyse 14.05.):** Die 18-Zyklus-
+Roh-Messung im `DXTuneDialog` ist scoring-UNABHÄNGIG — sie misst pro
+Slot+Antenne+Gain-Stufe die Antennen-Pegel. Nur die **Auswertung** ist
+scoring-spezifisch:
+- **Standard-Scoring (`'normal'`):** „welche Gain-Stufe gibt mehr **Stationen**"
+- **DX-Scoring (`'snr'`):** „welche Gain-Stufe gibt bessere **SNR**, besonders SNR<-10"
+
+→ Aus identischen Roh-Daten ergeben sich **zwei** unterschiedliche optimale
+Gain-Werte — beide aber sind aus EINER Messung ableitbar.
+
+**Gewünschtes Verhalten:**
+
+| Aktuell | Geplant |
+|---|---|
+| Gain-Messung läuft mit `_gain_scoring_mode` | gleiche Messung, aber **beide Auswertungen** parallel rechnen |
+| Schreibt nur in 1 Store (Std oder DX) | Schreibt in **beide** Stores |
+| Modus-Wechsel ≤ Gain-Validität: trotzdem neu messen | Modus-Wechsel ≤ Gain-Validität: **direkt nutzen** ohne Neu-Messung |
+
+**Umsetzung (skizziert, kein Plan):**
+
+1. `DXTuneDialog.get_results()` erweitern um beide Auswertungen zurückzugeben
+   (z.B. `{"standard": {...}, "dx": {...}}`) statt nur den einen aktiven
+   Scoring-Modus.
+2. `_on_dx_tune_accepted` in `ui/mw_radio.py` (Z.1406+): beide Stores
+   (`_standard_store` und `_dx_store`) mit jeweiligem Werte-Satz beschreiben.
+3. `_gain_scoring_mode` bleibt aber wird nur noch für die UI-Anzeige
+   verwendet („welche Bewertung wird gerade ausgespielt"), nicht für die
+   Speicher-Entscheidung.
+4. Statusbar/Dialog-Text während Messung: „Messung läuft (gilt für beide
+   Modi)" statt „Messung Standard / Messung DX".
+5. Tests: `DXTuneDialog` returns beide Sätze; mw_radio schreibt in beide
+   Stores; bestehende Stage/Commit-Pipelines bleiben atomar.
+
+**Begründung (warum lohnt sich das):**
+
+- **50% weniger Mess-Zeit im Alltag.** Heute: 18 Zyklen × 2 Modi = 36
+  Zyklen pro Band+FT_Mode. Künftig: 18 Zyklen total.
+- **Konsistente Werte über Modi-Wechsel.** Heute können Std-Werte aus
+  Vormittag und DX-Werte aus Nachmittag mit komplett anderen Bedingungen
+  (Sonne, Storungen, Antennen-Pattern) verheiratet sein. Künftig: beide
+  Werte aus derselben Mess-Situation.
+- **Weniger Friktion für den Funker.** Mode-Wechsel mid-session ist heute
+  ein 90-Sek-Block. Künftig: instant.
+- **Schließt sich an P34-Stufe2 (Statik-Pipeline raus) an** — auch dort
+  war das Ziel weniger Mess-Aufwand. Hier geht's um den Gain-Teil der
+  noch da ist.
+
+**Edge-Cases zum Aufpassen (DeepSeek-R1-Prüfung später):**
+
+- **Migration bestehender Werte:** Mike's 20m hat heute Std 10/10 und
+  DX 20/10. Bei nächster Messung: beide Stores werden überschrieben →
+  divergierter Zustand verschwindet. Kein Reset nötig, aber im V1 prüfen
+  ob das wirklich der erwünschte Weg ist.
+- **Bug-Risiko bei nur-einer-Bewertung:** Wenn die Standard-Auswertung
+  einen Bug hat (z.B. crash bei zu wenigen Stationen) aber die Roh-Daten
+  ok sind, darf das nicht die DX-Auswertung mitreißen. Try/Except pro
+  Auswertung.
+- **`_gain_scoring_mode` als Settings-Key:** wird der Modus-Toggle (Std↔DX)
+  überhaupt noch im Dialog gebraucht? Mike's Idee impliziert „immer beides
+  rechnen" — der Toggle entfällt vielleicht ganz.
+
+**Aufwand:** mittel, 1-2 Tage inkl. Test-Refactor. Workflow nötig (DXTune-
+Dialog ist sensitive Strecke).
+
+---
+
+## 🆕 OFFEN_HISTORICAL — Bundle H: Bandpilot-Aware Diversity-Klick (Mike 14.05.2026 mittags)
 
 **Mike's Beobachtung:** Bandpilot=Auto + Klick auf DIVERSITY → Std/DX-
 Dialog erscheint trotzdem. Aber im Auto-Modus sollte Bandpilot SELBST

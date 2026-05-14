@@ -1,6 +1,6 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-14 Abend — DeepSeek V4 Migration komplett, Bundle F+G+H gepusht, Feierabend
+## Stand 2026-05-14 nachmittags — Bundle I (Settings-Spacing + QSO-Reihenfolge + OMNI-Race) Code fertig, Field-Test pending
 
 ### 🚀 Beim nächsten Session-Start (morgen)
 
@@ -9,22 +9,35 @@
 1. `cd "/Users/mikehammerer/Documents/KI N8N Projekte/FT8/SimpleFT8"`
 2. CLAUDE.md → MEMORY.md → HISTORY.md → HANDOFF.md lesen
    (SESSION_WORKFLOW Phase 1)
-3. **NEU ab dieser Session:** PAL-MCP nutzt jetzt **deepseek-v4-pro**
-   (1M Context, 131K Output). Falls Mike „pal R1 fragen" o.ä. sagt:
-   `model: deepseek-v4-pro` oder Alias `pro`/`r1`/`reasoner` —
-   alle routen zur gleichen V4-Pro-Instanz.
+3. **DeepSeek V4-pro Default:** PAL-MCP + Direkt-API
+   (`tools/deepseek_review.py`) routen alle auf `deepseek-v4-pro`
+   (1M Context, 131K Output). Alias `pro`/`r1`/`reasoner` → V4-pro.
 4. App-Start (wenn Mike es will): `./venv/bin/python3 main.py`
 
-**Aktueller Code-Stand:** v0.97.25 (Bundle H), Tests **1205 grün**.
+**Aktueller Code-Stand:** v0.97.26 (Bundle I), Tests **1220 grün**.
 
-### 🔴 Pending Field-Tests (Mike testet, dann Push auf GitHub)
+### 🔴 Bundle I Field-Test pending (nächste Session)
 
-Diese Versionen sind committed aber **NICHT gepusht** bis Mike die
-Field-Tests freigibt:
+**Bundle I (v0.97.26) — Settings + QSO-Reihenfolge + OMNI-Race-Stop:**
+
+| F# | Was prüfen |
+|---|---|
+| **F1** | Settings → Tab „FT8 & Diversity" → GroupBox „Sichtbare Bänder" wirkt deutlich luftiger als vorher (Spacing 16, Margins 16, Indicator 18×18) |
+| **F2** | Andere Checkboxes im Settings-Dialog (z.B. „Statistik-Erfassung aktivieren") haben NICHT die neue Indicator-Größe — nur „Sichtbare Bänder"-Box |
+| **F3** | Vollendetes QSO: Reihenfolge im QSO-Panel ist `Empf. 73` → `Sende ... 73 ↻N` → `✓ QSO mit X komplett` → (nächster CQ) |
+| **F4** | Force-73 via QSO Finish in WAIT_73: gleiche Reihenfolge wie F3 |
+| **F5** | OMNI CQ aktiv → Mode-Wechsel Normal↔Diversity → **kein verzögerter CQ** wird gesendet, OMNI-Counter weg, kein `→ Sende CQ` mehr |
+| **F6** | Normaler CQ aktiv (kein OMNI) → Mode-Wechsel → CQ-Stop sauber, kein verzögerter Slot |
+| **F7** | Bandpilot=Auto + aktiver CQ + programmatischer Mode-Wechsel durch Bandpilot → CQ wird gestoppt (Mike-Spec: OK) |
+
+### 🔴 Pending Field-Tests (älter)
+
+Diese Versionen sind committed aber **NICHT gepusht** bis Field-Tests OK:
 
 | Version | Bundle | Field-Test-Punkte | Status |
 |---|---|---|---|
-| v0.97.25 | **Bundle H** Bandpilot-Aware Div-Klick | F1-F8 (HANDOFF Bundle H Sektion) | pending |
+| v0.97.26 | **Bundle I** Settings/QSO-Reihenfolge/OMNI-Race | F1-F7 (oben) | pending |
+| v0.97.25 | **Bundle H** Bandpilot-Aware Div-Klick | F1-F8 | pending |
 | v0.97.24 | **Bundle G** Std↔DX Direkt-Toggle | F1-F9 | pending |
 | v0.97.23 | **Bundle F** OMNI-Phase-Cleanup + cycle_bar weg + Orange | F1-F6 | pending |
 | v0.97.22 | **Bundle E** TX-Slot-Lock Refactor | F1-F9 | pending |
