@@ -542,6 +542,21 @@ class RadioMixin:
                 self._omni_cq.stop("rx_mode_change")
             if hasattr(self, "_auto_hunt") and self._auto_hunt.active:
                 self._auto_hunt.stop_auto_hunt("rx_mode_change")
+            # Bundle I (v0.97.26): normalen CQ + armed-en Encoder-Slot
+            # mit-stoppen — analog Bandwechsel-Pattern (siehe _on_band_changed).
+            # Mike-Field-Test 14.05.: OMNI war an, Mode-Wechsel stoppte OMNI
+            # visuell, aber ein verzögerter CQ-Slot wurde aus dem normalen
+            # CQ-Pfad (qso_sm.cq_mode) noch gesendet. R1-V4-pro Finding 1:
+            # encoder.abort() + ptt_off() ist nötig damit kein armed-er
+            # Slot durchrutscht.
+            if self.qso_sm.cq_mode or self.qso_sm.state != QSOState.IDLE:
+                self.qso_sm.stop_cq()
+                self.qso_sm.cancel()
+                self.control_panel.set_cq_active(False)
+            if self.encoder.is_transmitting:
+                self.encoder.abort()
+                if self.radio.ip:
+                    self.radio.ptt_off()
             self._easter_egg_active = False
 
         # Warmup: 60s keine Stats nach Moduswechsel
