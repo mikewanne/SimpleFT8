@@ -529,12 +529,15 @@ class QSOStateMachine(QObject):
             self.qso.timeout_cycles = 0
         elif self.state == QSOState.TX_73_COURTESY:
             # P1.10 Fix (v0.95.4): Courtesy-73 fertig gesendet.
-            # qso_complete wurde bereits in TX_RR73 (oben) gefeuert — hier nur
-            # qso_confirmed (UI „QSO ✓") + CQ resumen.
-            # P33 (v0.97.14): qso_confirmed_visual wurde bereits bei 73-Empfang
-            # in on_message_received gefeuert (UI-Update sofort). Hier NUR full,
-            # sonst Doppel-Eintrag im QSO-Panel.
-            self._dbg.log("TX", "Courtesy-73 fertig → qso_confirmed + resume_cq")
+            # qso_complete wurde bereits in TX_RR73 (oben) gefeuert — hier
+            # qso_confirmed_visual (UI „✓ QSO komplett") + qso_confirmed (full)
+            # + CQ resumen.
+            # Bundle I (v0.97.26): qso_confirmed_visual wandert von 73-Empfang
+            # (on_message_received WAIT_73-Branch) hierher — Mike-Wunsch:
+            # Bestätigungs-Zeile NACH Courtesy-Send, nicht davor. Reihenfolge
+            # im QSO-Panel jetzt: Empf. 73 → Sende 73 → ✓ QSO komplett.
+            self._dbg.log("TX", "Courtesy-73 fertig → qso_confirmed_visual + full + resume_cq")
+            self.qso_confirmed_visual.emit(self.qso)
             self.qso_confirmed.emit(self.qso)
             self._resume_cq_if_needed()
 
@@ -685,11 +688,13 @@ class QSOStateMachine(QObject):
         if self.state == QSOState.WAIT_73:
             if msg.is_73 or msg.is_rr73:
                 print(f"[QSO] 73 von {msg.caller} empfangen — QSO bestätigt!")
-                # P33 (v0.97.14): visual.emit SOFORT damit ✓ vor naechstem
-                # CQ-Slot im QSO-Panel sichtbar wird. Full-Emit erst nach
-                # Courtesy-73-Send (sonst OMNI-Resume + Auto-Hunt-Reset
-                # zu frueh).
-                self.qso_confirmed_visual.emit(self.qso)
+                # Bundle I (v0.97.26): visual.emit NICHT mehr hier — wandert
+                # in on_message_sent TX_73_COURTESY-Branch (NACH Courtesy-
+                # Send). Mike-Wunsch: ✓-Zeile soll zwischen „Sende 73" und
+                # nächstem CQ erscheinen, nicht direkt nach Empf. 73.
+                # P33-Hintergrund: voriger Bug war Bestätigung NACH nächstem
+                # CQ → Bundle B' hat sie SOFORT gesetzt → zu früh →
+                # Bundle I korrigiert auf NACH Courtesy.
                 if not self.qso.courtesy_73_sent:
                     # P1.10 Fix (v0.95.4): einmaliges Hoeflichkeits-73 zurueck.
                     # IC-7300 wartet auf abschliessendes 73 in seiner Auto-Sequence
@@ -709,8 +714,10 @@ class QSOStateMachine(QObject):
                     # TX_73_COURTESY (D3).
                 else:
                     # Hypothetischer Doppelschutz — wir verlassen WAIT_73 sofort
-                    # nach erstem 73 (_set_state TX_73_COURTESY). visual schon
-                    # oben gefeuert, hier nur full + resume.
+                    # nach erstem 73 (_set_state TX_73_COURTESY). Falls wir doch
+                    # hier landen: visual + full direkt nacheinander (Courtesy
+                    # ist schon gesendet, also kein Timing-Konflikt).
+                    self.qso_confirmed_visual.emit(self.qso)
                     self.qso_confirmed.emit(self.qso)
                     self._resume_cq_if_needed()
             elif msg.is_r_report and msg.caller == self.qso.their_call:
