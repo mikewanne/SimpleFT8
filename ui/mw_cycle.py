@@ -514,9 +514,10 @@ class CycleMixin:
 
     @Slot(float, float)
     def _on_cycle_tick(self, seconds_in_cycle: float, cycle_duration: float):
-        if not self.rx_panel._rx_active:
-            return
-        self.control_panel.update_cycle_bar(seconds_in_cycle, cycle_duration)
+        # Bundle F: cycle_bar im STATUS-Block entfernt — Slot-Live-Anzeige
+        # läuft jetzt ausschließlich über `_slot_progress_bar` in der
+        # Statusbar (Update via `_tick_cq_countdown`/`_update_slot_progress_bar`).
+        return
 
     @Slot(int, bool)
     def _on_cycle_start(self, cycle_num: int, is_even: bool):

@@ -1147,14 +1147,10 @@ class _QSOStatusCard(QFrame):
         self.state_label.setStyleSheet(f"color: #776644; font-family: {_FONT}; font-size: 10px;")
         lay.addWidget(self.state_label)
 
-        self.cycle_bar = QLabel("")
-        self.cycle_bar.setStyleSheet(
-            "background: rgba(255,255,255,0.04); border: 1px solid rgba(255,170,50,0.2); "
-            "border-radius: 3px; padding: 2px;"
-        )
-        self.cycle_bar.setFixedHeight(18)
-        lay.addWidget(self.cycle_bar)
-
+        # Bundle F (14.05.2026): cycle_bar entfernt — Slot-Live-Anzeige
+        # ist jetzt ausschließlich `_slot_progress_bar` in der Statusbar
+        # (kleiner Balken unten rechts, cyan/orange).
+        lay.addSpacing(4)  # ersetzt Höhe des entfernten cycle_bar (R1-SOLLTE-2)
         lay.addWidget(_sep_line())
 
         # ── Settings ──────────────────────────────────────────────
@@ -1333,7 +1329,7 @@ class ControlPanel(QWidget):
         self.utc_label = qso_card.utc_label
         self.state_label = qso_card.state_label
         self._last_state = "IDLE"
-        self.cycle_bar = qso_card.cycle_bar
+        # Bundle F: cycle_bar-Alias entfernt (Widget weg)
         self.btn_settings = qso_card.btn_settings
         self.btn_settings.clicked.connect(self.settings_clicked.emit)
         layout.addWidget(qso_card)
@@ -1944,17 +1940,9 @@ class ControlPanel(QWidget):
                 f'<span style="color:#666;">—</span>'
             )
 
-    def update_cycle_bar(self, seconds_in_cycle: float, cycle_duration: float):
-        progress = seconds_in_cycle / cycle_duration
-        filled = int(progress * 20)
-        bar = "█" * filled + "░" * (20 - filled)
-        remaining = cycle_duration - seconds_in_cycle
-        self.cycle_bar.setText(f" {bar} {remaining:.0f}s")
-        self.cycle_bar.setStyleSheet(
-            f"background-color: #1a1a2e; border: 1px solid #333; "
-            f"border-radius: 3px; padding: 2px; color: #{'FF4444' if progress > 0.8 else '00AAFF'}; "
-            f"font-family: {_FONT}; font-size: 11px;"
-        )
+    # Bundle F (14.05.2026): `update_cycle_bar` entfernt — Slot-Live-
+    # Anzeige läuft jetzt über `_slot_progress_bar` in der Statusbar
+    # (siehe `main_window._update_slot_progress_bar`).
 
     # =====================================================================
     # Clock
