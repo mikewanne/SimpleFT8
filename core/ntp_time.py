@@ -18,6 +18,7 @@ FlexRadio VITA-49 Hardware-Latenz (~0.27s). Siehe dt.md fuer Details.
 """
 
 import json
+import os
 import statistics
 import threading
 from pathlib import Path
@@ -29,8 +30,18 @@ STEADY_MEASURE_CYCLES = 2    # Folgemessungen: 2 Zyklen
 OPERATE_CYCLES = 10          # 10 Zyklen Betrieb zwischen Messungen
 MIN_STATIONS = 3             # Mindestanzahl Stationen (FT8)
 MAX_CORRECTION = 2.0         # Maximale Korrektur FT8 (±2.0s)
-DEADBAND = 0.05              # 50ms Totband
+DEADBAND = 0.02              # 20ms Totband (P14: 0.05 → 0.02, R1-F1 Anti-Einfrier)
 DAMPING = 0.7                # 70% Daempfung fuer Folge-Korrekturen
+
+# P14: MAD-basierter Outlier-Filter (Hampel-Filter, R1-F3).
+# k=2.5 entfernt bei Mike's 20-Werte-Beispiel 7 Outliers (zentrale 13 bleiben).
+_MAD_K = 2.5
+_MAD_MIN_N = 7    # Unter 7 Werten kein Filter (FT4/FT2-Schutz)
+_MAD_MIN_OUT = 3  # Notnagel: Filter darf nicht mehr als (n-3) Werte entfernen
+
+# P14: Opt-in Debug-Logging fuer Field-Test (R1-F6).
+# Aktivierung: `export SIMPLEFT8_DT_DEBUG=1 && ./venv/bin/python3 main.py`
+_DT_DEBUG = os.environ.get("SIMPLEFT8_DT_DEBUG", "0") == "1"
 
 # P48-D: Schnell-Konvergenz beim Erst-Mess-Slot wenn schon viele
 # Stationen mit kleiner Streuung dabei sind — kein zweiter Slot zur
@@ -70,6 +81,32 @@ _last_logged_load: tuple | None = None
 # gesetzt. Default 0.0 = altes Verhalten (Backward-Kompat falls Setter
 # nie aufgerufen wird, z.B. in Test-Umgebung).
 _hardware_default_offset: float = 0.0
+
+
+def _filter_outliers_mad(values: list, k: float = _MAD_K) -> list:
+    """P14: MAD-basierter Outlier-Filter (Hampel-Filter).
+
+    Median Absolute Deviation ist robuster als Standardabweichung gegen
+    Ausreisser. Werte mit |x - median| > k * MAD werden verworfen.
+
+    Edge-Cases:
+    - len(values) < _MAD_MIN_N (7): Identity, kein Filter (FT4/FT2-Schutz)
+    - MAD = 0 (alle Werte identisch): Identity
+    - Nach Filter < _MAD_MIN_OUT (3) uebrig: Identity (Notnagel)
+
+    Pure function — Thread-safe, kein State, kein Lock noetig.
+    """
+    if len(values) < _MAD_MIN_N:
+        return list(values)
+    med = statistics.median(values)
+    mad = statistics.median([abs(x - med) for x in values])
+    if mad <= 0:
+        return list(values)
+    threshold = k * mad
+    filtered = [x for x in values if abs(x - med) <= threshold]
+    if len(filtered) < _MAD_MIN_OUT:
+        return list(values)
+    return filtered
 
 
 def set_hardware_default(value_s: float) -> None:
@@ -241,7 +278,18 @@ def update_from_decoded(dt_values: list) -> bool:
     if len(valid) < _MIN:
         return False
 
-    median_dt = statistics.median(valid)
+    # P14: MAD-Filter gegen Mobile/QRP/QSB-Ausreisser (R1-F3).
+    # Fast-Path-stdev unten arbeitet bewusst weiter mit ungefilterten valid-
+    # Werten — Fast-Path soll konservativ sein und Outlier-Streuung als
+    # Stop-Kriterium nutzen (R1-F8).
+    filtered = _filter_outliers_mad(valid)
+    median_dt = statistics.median(filtered)
+
+    if _DT_DEBUG:
+        raw_med = statistics.median(valid)
+        print(f"[DT-DBG] {_mode_key()} n={len(valid)} "
+              f"raw={raw_med:+.3f} filt={median_dt:+.3f} "
+              f"outliers={len(valid) - len(filtered)} corr={_correction:+.3f}")
 
     with _lock:
         _last_median_dt = median_dt
