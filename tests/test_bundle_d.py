@@ -36,18 +36,18 @@ def tmp_settings_file(monkeypatch, tmp_path):
     return cfg_file
 
 
-# ── T1: Settings-Block setSpacing(10) ──────────────────────────────────
+# ── T1: Settings-Block luftiges Spacing (Bundle I: 10 → 16) ────────────
 
 def test_t1_settings_bands_grid_spacing(qapp, tmp_settings_file):
-    """T1: Bänder-Grid-Layout hat setSpacing(10) statt 6."""
+    """T1: Bänder-Grid-Layout hat luftiges Spacing.
+    Bundle D (v0.97.21) hob 6→10, Bundle I (v0.97.26) auf 16 weiter."""
     from config.settings import Settings
     from ui.settings_dialog import SettingsDialog
     s = Settings()
     d = SettingsDialog(s)
-    # Wir finden das QGridLayout über die Checkbox-Parent
     cb = d._band_checkboxes["20m"]
     grid = cb.parentWidget().layout()
-    assert grid.spacing() == 10, f"Expected 10, got {grid.spacing()}"
+    assert grid.spacing() >= 16, f"Expected ≥16, got {grid.spacing()}"
 
 
 # ── T2-T5: DT-Format ───────────────────────────────────────────────────

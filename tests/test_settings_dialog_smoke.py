@@ -154,3 +154,62 @@ def test_save_round_trip(dlg):
 def test_initial_tab_is_station(dlg):
     """Beim Oeffnen ist Tab 0 (Station) aktiv."""
     assert dlg.tabs.currentIndex() == 0
+
+
+# ── Bundle I (v0.97.26) — Settings „Sichtbare Bänder" Spacing ──────────────
+
+def test_bundle_i_band_checkboxes_count(dlg):
+    """T1.2: 9 Band-Checkboxes (3×3-Raster)."""
+    assert hasattr(dlg, "_band_checkboxes")
+    assert len(dlg._band_checkboxes) == 9
+
+
+def test_bundle_i_p50_min1_logic(dlg):
+    """T1.3: P50 Min-1-Logik weiterhin aktiv — letzte Checkbox bleibt disabled."""
+    # Alle bis auf eine deaktivieren
+    cbs = list(dlg._band_checkboxes.values())
+    for cb in cbs[:-1]:
+        cb.setChecked(False)
+    cbs[-1].setChecked(True)
+    dlg._on_band_visibility_toggled()
+    # Letzte aktive Checkbox darf nicht weiter abgewählt werden
+    assert cbs[-1].isEnabled() is False
+    assert "Mindestens ein Band" in cbs[-1].toolTip()
+
+
+def test_bundle_i_indicator_stylesheet(dlg):
+    """T1.4: bands_group hat Stylesheet mit 18×18 Indicator-Größe."""
+    # GroupBox via Layout-Parent der Checkboxes finden
+    any_cb = next(iter(dlg._band_checkboxes.values()))
+    group = any_cb.parentWidget()
+    style = group.styleSheet()
+    assert "width: 18px" in style
+    assert "height: 18px" in style
+    assert "QCheckBox::indicator" in style
+
+
+def test_bundle_i_stylesheet_scope_local(dlg):
+    """T1.5: Stylesheet auf bands_group beschränkt — Dialog-Root NICHT betroffen."""
+    # Andere Checkbox im Dialog (stats_cb existiert in Tab „Daten & Tools")
+    assert hasattr(dlg, "stats_cb")
+    other_cb = dlg.stats_cb
+    # Dialog-Stylesheet darf das Indicator-Override NICHT enthalten
+    # (sollte auf bands_group leben, nicht auf Dialog-Root)
+    assert "QCheckBox::indicator" not in dlg.styleSheet()
+    # other_cb's Parent (irgendwo im Dialog-Baum) darf auch keinen Indicator-
+    # Override haben — defensive check: walk up to top-level
+    parent = other_cb.parentWidget()
+    while parent is not None and parent is not dlg:
+        assert "QCheckBox::indicator" not in (parent.styleSheet() or "")
+        parent = parent.parentWidget()
+
+
+def test_bundle_i_layout_spacing_and_margins(dlg):
+    """T1.1+T1.2: Grid hat ≥16 px Spacing UND ≥16 px Margins allseits."""
+    any_cb = next(iter(dlg._band_checkboxes.values()))
+    group = any_cb.parentWidget()
+    grid = group.layout()
+    assert grid.spacing() >= 16, f"Spacing zu klein: {grid.spacing()}"
+    m = grid.contentsMargins()
+    assert m.left() >= 16 and m.top() >= 16 and m.right() >= 16 and m.bottom() >= 16, \
+        f"Margins zu klein: {m.left()}/{m.top()}/{m.right()}/{m.bottom()}"
