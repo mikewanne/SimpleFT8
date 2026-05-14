@@ -1,8 +1,34 @@
 # HANDOFF — SimpleFT8
 
+## Stand 2026-05-14 abends — P53 (SWR-Live-Watchdog) Code fertig + Final-R1 ✓, Field-Test pending
+
+**Aktueller Code-Stand:** v0.97.29 (P53), Tests **1258 grün**.
+
+### 🚀 Beim nächsten Session-Start
+
+1. `cd "/Users/mikehammerer/Documents/KI N8N Projekte/FT8/SimpleFT8"`
+2. CLAUDE.md → MEMORY.md → HISTORY.md → HANDOFF.md lesen (SESSION_WORKFLOW Phase 1)
+3. App-Start (wenn Mike es will): `./venv/bin/python3 main.py`
+
+### 🔴 P53 Field-Test pending (nächste Session)
+
+**P53 (v0.97.29) — SWR-Live-Watchdog (Hardware-Sicherheit):**
+
+| F# | Was prüfen |
+|---|---|
+| **F1** | Settings öffnen → SWR-Limit auf 2.5 → Save → Konsole zeigt `[FlexRadio] SWR-Limit auf 2.5 gesetzt` |
+| **F2** | App neu starten mit verbundenem Radio → direkt nach Connect dieselbe Konsolen-Zeile (Wert aus Settings) |
+| **F3** | Normale TX mit guter Antenne (SWR < 2) → Watchdog feuert nicht, kein Modal |
+| **F4** | Antenne abziehen (oder Tuner verstellen → SWR > 10), dann CQ klicken: FlexRadio blockt PTT direkt (existierender Pre-Check), **kein Modal** (`is_transmitting=False`) |
+| **F5** | Während TX manuell SWR hochfahren (Tuner) → nach ~500 ms Modal „SWR-Schutz ausgelöst" + QSO-Panel-Zeile „⚠ TX abgebrochen — SWR X.X" |
+| **F6** | Bei OMNI-CQ + SWR-Block: OMNI stoppt sauber, keine weiteren TX-Slots |
+| **F7** | Nach Modal-Wegklicken: kein Auto-Resume, User muss CQ/OMNI manuell starten |
+
+---
+
 ## Stand 2026-05-14 abends — P51 (Gain-Vereinheitlichung 1×/2 Auswertungen) Code fertig + Final-R1 ✓, Field-Test pending
 
-**Aktueller Code-Stand:** v0.97.28 (P51), Tests **1245 grün**.
+**Vorgänger-Code-Stand:** v0.97.28 (P51), Tests **1245 grün**.
 
 ### 🔴 P51 Field-Test pending (nächste Session)
 

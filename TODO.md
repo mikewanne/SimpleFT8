@@ -1,5 +1,64 @@
 # SimpleFT8 TODO — Stand 14.05.2026 abends (v0.97.28, P51 fertig — Field-Test F1-F7 pending)
 
+## ✅ 14.05.2026 erledigt — P53 SWR-Live-Watchdog (Hardware-Sicherheit) v0.97.29
+
+**Trigger:** Mike-Field-Test 14.05.: nasse Antenne nach Regen → SWR>30 bei
+70W, `swr_limit` greift nicht im normalen TX-Pfad. FlexRadio-Hardware-
+Schutz + Tuner haben gerettet.
+
+**Voller V1→V2→R1→V3-Workflow autonom mit DeepSeek-V4-pro.**
+
+**Wurzel-Bugs:** (1) SWR-Check nur vor Gain-Messung (`mw_radio.py:1336`).
+(2) `swr_alarm`-Signal feuerte aber Handler `mw_tx.py:99-105` zeigte nur
+Statusbar — stoppte nichts. (3) `Settings.swr_limit` nirgends an
+FlexRadio propagiert — `_swr_limit=3.0` hardcoded.
+
+**Architektur:** Statt neuem QTimer-200ms-Polling reagiert Watchdog auf
+**bestehendes `swr_alarm`-Signal** (VITA-49-Meter-Loop) — KISS.
+
+**Code:**
+- `radio/base_radio.py`: `set_swr_limit(value)` Default-Pass-Stub.
+- `radio/flexradio.py`: Setter mit Clamp `[1.5, 10.0]`.
+- `ui/main_window.py`: `_swr_spike_count=0` + `_swr_first_alarm_t=0.0`
+  explizit init (R1-F2).
+- `ui/mw_radio.py`: nach `swr_alarm.connect()` ruft
+  `radio.set_swr_limit(settings.swr_limit)`.
+- `ui/mw_tx.py:_on_swr_alarm` Komplett-Rewrite:
+  - Pre-Check `encoder.is_transmitting` (R1-AC3, gegen Pre-TX-Alarm)
+  - Spike: 2 Alarms innerhalb 500ms via `time.monotonic`
+  - Reset spike_count=0 SOFORT vor Stop-Calls
+  - Stop-Block antennen-neutral (encoder.abort + ptt_off + stop_cq +
+    cancel + set_cq_active + omni.stop + hunt.stop)
+  - `qso_panel.add_info` VOR Modal (Modal blockt sonst Event-Loop)
+  - `QMessageBox.warning` modal, kein Auto-Resume
+- `ui/settings_dialog.py`: Save-Hook propagiert live wenn `radio.ip`.
+
+**Field-Test F1-F7 pending:**
+- F1: Settings → SWR-Limit 2.5 → Konsole zeigt FlexRadio-Set
+- F2: App-Neustart → Set direkt nach Connect
+- F3: TX mit guter Antenne → kein Falsch-Alarm
+- F4: Antenne ab + CQ → Pre-PTT-Block, kein Modal
+- F5: Tuner verstellt während TX → ~500ms Modal + Panel-Eintrag
+- F6: OMNI + Block → OMNI stoppt sauber
+- F7: Nach Modal: kein Auto-Resume
+
+**R1-V4-pro:** 4 Findings (2 Bug, 2 Risiko), 4/4 angenommen,
+**Halluzinations-Rate 0/4**. Final-R1 „PUSH empfohlen", 0 KP.
+
+**V4-pro 4-Cycle-Bilanz:** 25 Findings total, 0 Halluzinationen, 100%
+verifizierbar.
+
+**7 atomare Commits:** C1 (`8270e2b`) C2 (`0d898e1`) C3 (`287ae25`)
+C4 (`29133c3`) C5 (`b38de1d`) C6 (`835b7f0`) C7 (`38ea473`).
+
+**Tests 1245 → 1258 (+13).** T5 ist Hardware-Pflicht-Test (set_tx_antenna
+NIE im Stop-Pfad). T3 ist Pre-TX-Alarm-Schutz. T13 ist
+AttributeError-Schutz für Spike-State.
+
+**Backup:** `Appsicherungen/2026-05-14_v0.97.28_vor_p53/`.
+
+---
+
 ## ✅ 14.05.2026 erledigt — P51 Gain-Messung vereinheitlichen (1 Messung, 2 Auswertungen) v0.97.28
 
 Mike-Beobachtung 14.05.: 20m FT8 hat Std-Werte 10/10 und DX-Werte 20/10
@@ -252,7 +311,7 @@ und **Auswertungen** sie brauchen. Plus: Stats wachsen unbegrenzt
 
 ---
 
-## 🆕 OFFEN — P53: SWR-Live-Watchdog (Hardware-Sicherheit) (Mike 14.05.2026 nachmittags)
+## 📋 ARCHIVIERT (Plan-Detail) — P53: SWR-Live-Watchdog (Hardware-Sicherheit) — ERLEDIGT v0.97.29
 
 **Trigger:** Mike-Field-Test 14.05.: nasse Antenne nach Regen → SWR>30
 bei sofortigem TX mit 70W. **`swr_limit` (3.0) in Settings hat NICHT

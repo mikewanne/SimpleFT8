@@ -3,6 +3,75 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-14 v0.97.29 — P53 SWR-Live-Watchdog (Hardware-Sicherheit)
+
+**Trigger:** Mike-Field-Test 14.05.2026: nasse Antenne nach Regen → SWR
+> 30 bei TX mit 70 W. `swr_limit` (3.0) aus Settings hat NICHT
+gegriffen weil (1) der existierende SWR-Check nur vor der Gain-Messung
+lief, nicht im normalen TX-Pfad; (2) das `swr_alarm`-Signal feuerte
+zwar aus dem VITA-49-Meter-Loop, aber der Handler zeigte nur Statusbar-
+Message — stoppte KEINEN TX; (3) **zweiter Bug:** `Settings.swr_limit`
+wurde nirgends an FlexRadio propagiert, das hatte `_swr_limit = 3.0`
+hardcoded. FlexRadio-Hardware-Schutz + Tuner haben Mike's PA gerettet
+— Glück.
+
+**Voller V1→V2→R1→V3-Workflow autonom mit DeepSeek-V4-pro.**
+
+**R1-V4-pro:** 4 Findings (2 Bug rot, 2 Risiko), alle 4 angenommen
+(Halluzinations-Rate 0/4):
+- 🔴 F1: `RadioInterface`-ABC ohne `set_swr_limit` → Default-Pass-Stub
+- 🔴 F2: `_swr_spike_count` uninit → AttributeError beim 1. Alarm
+- 🟠 F3: AC1-Widerspruch ≥100ms vs Code → untere Schranke gestrichen
+- 🟠 F4: AC10 nicht im Code-Anhang → Anhang erweitert
+
+**Architektur-Korrektur zur TODO-V0-Spec:** Statt neuem
+QTimer-200ms-Polling reagiert der Watchdog auf das **bestehende
+`swr_alarm`-Signal** aus dem VITA-49-Meter-Loop. KISS.
+
+**Code:**
+- `radio/base_radio.py`: `set_swr_limit(value)` Default-Pass.
+- `radio/flexradio.py`: Setter mit Clamp `[1.5, 10.0]` + Debug-Print.
+- `ui/main_window.py`: `_swr_spike_count = 0` + `_swr_first_alarm_t = 0.0`
+  explizit initialisiert.
+- `ui/mw_radio.py`: nach `swr_alarm.connect()` ruft
+  `radio.set_swr_limit(settings.swr_limit)`.
+- `ui/mw_tx.py:_on_swr_alarm` **Komplett-Rewrite**:
+  - AC3 Pre-Check: kein laufender TX → return + spike_count=0.
+  - Spike-Schutz: 2 Alarms innerhalb 500 ms via `time.monotonic`.
+  - AC4(1) Reset spike_count=0 **SOFORT** vor Stop-Calls.
+  - Stop-Block antennen-neutral (ANT1 bleibt ANT1):
+    `encoder.abort` → `ptt_off` → `qso_sm.stop_cq`/`cancel` →
+    `cp.set_cq_active(False)` → `omni_cq.stop` → `auto_hunt.stop` →
+    `qso_panel.add_info` → `QMessageBox.warning`.
+  - `add_info` **VOR** Modal (Modal blockt sonst Event-Loop).
+  - Kein Auto-Resume — User muss CQ/OMNI manuell starten.
+- `ui/settings_dialog.py`: Save-Hook propagiert live wenn `radio.ip`.
+
+**Aus Scope:** TUNE-Pfad (`tune_on` setzt `_is_transmitting` nicht →
+P54), eigener QTimer (verworfen), Cooldown (Modal blockt).
+
+**Final-R1 V4-pro:** „PUSH empfohlen — FINAL-R1 freigeben." 0 KP, 0
+Risiken, 0 Bugs. ANT1-Pflicht + KISS + Thread-Safety explizit
+bestätigt.
+
+**7 atomare Commits:** C1 (`8270e2b`) radio setter | C2 (`0d898e1`)
+main_window init | C3 (`287ae25`) mw_radio connect-hook | C4
+(`29133c3`) mw_tx handler-rewrite | C5 (`b38de1d`) settings save-hook
+| C6 (`835b7f0`) APP_VERSION | C7 (`38ea473`) 13 Tests NEU.
+
+**V4-pro Lessons P53 (4. Anwendung nach Bundle I, J, P51):**
+- F1 klassisch (Code-Realität-Check ABC-Status)
+- F2 sehr stark (AttributeError-Bug bei Mixin ohne zentralen Init)
+- Halluzinations-Rate weiter 0/X — nach 4 Cycles total 25 Findings,
+  0 Halluzinationen, **100% verifizierbar**.
+
+**Tests 1245 → 1258 grün** (+13).
+
+**Backup:** `Appsicherungen/2026-05-14_v0.97.28_vor_p53/`. Push pending
+bis Field-Test F1-F7.
+
+---
+
 ## 2026-05-14 v0.97.28 — P51 Gain-Messung vereinheitlichen (1 Messung, 2 Auswertungen)
 
 **Trigger:** Mike-Beobachtung 14.05.: 20m FT8 hat Std-Werte 10/10 und
