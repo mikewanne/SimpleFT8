@@ -576,60 +576,60 @@ class RadioMixin:
             self.control_panel._freq_hist.setVisible(False)
             self.control_panel.btn_diversity.setText("DIVERSITY")  # Reset Button-Text
         elif mode == "diversity":
-            # Scoring-Modus waehlen — vertikaler Custom-Dialog
-            from PySide6.QtWidgets import QDialog, QVBoxLayout, QPushButton, QLabel, QFrame
-            _dlg = QDialog(self)
-            _dlg.setWindowTitle("Diversity — Modus waehlen")
-            _dlg.setStyleSheet("""
-                QDialog { background-color: #1a1a2e; }
-                QLabel  { color: #CCCCCC; font-family: Menlo; font-size: 13px;
-                          padding: 8px 0 12px 0; }
-                QLabel#lbl_mode_title {
-                    color: #88AACC; background-color: #1a1a2e;
-                    padding: 10px 0px; border-radius: 4px;
-                    qproperty-alignment: AlignCenter;
-                }
-                QPushButton {
-                    background-color: #2a2a3e; color: #CCCCCC;
-                    border: 1px solid #444; border-radius: 5px;
-                    font-family: Menlo; font-size: 13px;
-                    padding: 10px 20px; min-width: 220px;
-                }
-                QPushButton:hover { background-color: #3a3a5e; }
-                QPushButton#btn_cancel {
-                    background-color: #1a1a1a; color: #888;
-                    border: 1px solid #333;
-                }
-                QPushButton#btn_cancel:hover { background-color: #2a2a2a; color: #AAA; }
-            """)
-            _lay = QVBoxLayout(_dlg)
-            _lay.setContentsMargins(24, 16, 24, 16)
-            _lay.setSpacing(8)
-            _lbl = QLabel("Welchen Modus verwenden?")
-            _lbl.setObjectName("lbl_mode_title")
-            _lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            _lay.addWidget(_lbl)
-            _btn_std = QPushButton("Diversity Standard")
-            _btn_dx  = QPushButton("Diversity DX")
-            _lay.addWidget(_btn_std)
-            _lay.addWidget(_btn_dx)
-            _sep = QFrame()
-            _sep.setFrameShape(QFrame.Shape.HLine)
-            _sep.setStyleSheet("color: #333; margin: 4px 0;")
-            _lay.addWidget(_sep)
-            _btn_cancel = QPushButton("Abbruch")
-            _btn_cancel.setObjectName("btn_cancel")
-            _lay.addWidget(_btn_cancel)
-            _result = [None]
-            _btn_std.clicked.connect(lambda: (_result.__setitem__(0, "normal"), _dlg.accept()))
-            _btn_dx.clicked.connect(lambda:  (_result.__setitem__(0, "dx"),     _dlg.accept()))
-            _btn_cancel.clicked.connect(_dlg.reject)
-            _dlg.exec()
-            if _result[0] is None:
-                self.control_panel.set_rx_mode("normal")
-                self._update_statusbar()
-                return
-            scoring = _result[0]
+            # Bundle H (v0.97.25): Bandpilot-Aware-Pfad bei Klick auf
+            # DIVERSITY. off → Wahl-Dialog (heute), auto+rec → Toast +
+            # auto-pick, auto+rec=None → Wahl-Dialog mit Mangel-Text,
+            # manual+rec → Manual-Dialog, manual+rec=None → Mangel-Dialog.
+            from datetime import datetime, timezone
+            from core.mode_recommender import code_mode_to_scoring
+
+            bp_mode = self.settings.get("bandpilot_mode", "off")
+            band = self.settings.band
+            utc_hour = datetime.now(timezone.utc).hour
+
+            rec = None
+            bp = getattr(self, "_bandpilot", None)
+            if bp is not None and bp_mode in ("auto", "manual"):
+                try:
+                    rec = bp.recommend(
+                        band, utc_hour, current_mode="normal",
+                        allowed_modes=("diversity_normal", "diversity_dx"),
+                    )
+                except Exception as e:
+                    print(f"[Bandpilot H-Path] Aggregations-Fehler: {e}")
+                    rec = None
+
+            # R1-S3: defensive no_change-Behandlung (sollte bei H eh
+            # nicht vorkommen weil current=normal nie in allowed_modes)
+            if rec is not None and rec.get("decision") == "no_change":
+                rec = None
+
+            scoring = None
+            if bp_mode == "auto" and rec is not None:
+                scoring = code_mode_to_scoring(rec["decision_mode"])
+                self._show_bandpilot_auto_toast(band, utc_hour, rec)
+            elif bp_mode == "manual" and rec is not None:
+                chosen = self._show_bandpilot_manual_dialog(
+                    band, utc_hour, rec, current=None,
+                )
+                if chosen is None:
+                    self.control_panel.set_rx_mode("normal")
+                    self._update_statusbar()
+                    return
+                scoring = code_mode_to_scoring(chosen)
+            else:
+                # off, oder (auto/manual + rec=None): dynamischer Wahl-Dialog
+                intro_text = (
+                    "Nicht genug Daten für Bandpilot — bitte selbst wählen:"
+                    if bp_mode in ("auto", "manual")
+                    else "Welchen Modus verwenden?"
+                )
+                scoring = self._show_diversity_choice_dialog(intro_text)
+                if scoring is None:
+                    self.control_panel.set_rx_mode("normal")
+                    self._update_statusbar()
+                    return
+
             self._activate_diversity_with_scoring(scoring)
 
         # v0.78: Defensive — Mode-Coupling-Update auch wenn _apply_normal_mode /
@@ -637,6 +637,74 @@ class RadioMixin:
         if hasattr(self, "_easter_egg_active"):
             self._update_button_visibility()
         self._update_statusbar()
+
+    def _show_diversity_choice_dialog(self, intro_text: str) -> str | None:
+        """Bundle H (v0.97.25): Std/DX-Wahl-Dialog mit dynamischem Intro.
+
+        Args:
+            intro_text: Dialog-Titel-Text, je nach Bandpilot-Status
+                („Welchen Modus verwenden?" bei off, „Nicht genug Daten
+                — bitte selbst wählen" bei auto/manual ohne rec).
+
+        Returns:
+            ``"normal"`` (Standard-Scoring) | ``"dx"`` | ``None`` (Abbruch).
+
+        R1-S1: WA_DeleteOnClose für saubere Speicherfreigabe.
+        """
+        from PySide6.QtWidgets import (
+            QDialog, QVBoxLayout, QPushButton, QLabel, QFrame
+        )
+        _dlg = QDialog(self)
+        _dlg.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        _dlg.setWindowTitle("Diversity — Modus waehlen")
+        _dlg.setStyleSheet("""
+            QDialog { background-color: #1a1a2e; }
+            QLabel  { color: #CCCCCC; font-family: Menlo; font-size: 13px;
+                      padding: 8px 0 12px 0; }
+            QLabel#lbl_mode_title {
+                color: #88AACC; background-color: #1a1a2e;
+                padding: 10px 0px; border-radius: 4px;
+                qproperty-alignment: AlignCenter;
+            }
+            QPushButton {
+                background-color: #2a2a3e; color: #CCCCCC;
+                border: 1px solid #444; border-radius: 5px;
+                font-family: Menlo; font-size: 13px;
+                padding: 10px 20px; min-width: 220px;
+            }
+            QPushButton:hover { background-color: #3a3a5e; }
+            QPushButton#btn_cancel {
+                background-color: #1a1a1a; color: #888;
+                border: 1px solid #333;
+            }
+            QPushButton#btn_cancel:hover { background-color: #2a2a2a; color: #AAA; }
+        """)
+        _lay = QVBoxLayout(_dlg)
+        _lay.setContentsMargins(24, 16, 24, 16)
+        _lay.setSpacing(8)
+        _lbl = QLabel(intro_text)
+        _lbl.setObjectName("lbl_mode_title")
+        _lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        _lay.addWidget(_lbl)
+        _btn_std = QPushButton("Diversity Standard")
+        _btn_dx = QPushButton("Diversity DX")
+        _lay.addWidget(_btn_std)
+        _lay.addWidget(_btn_dx)
+        _sep = QFrame()
+        _sep.setFrameShape(QFrame.Shape.HLine)
+        _sep.setStyleSheet("color: #333; margin: 4px 0;")
+        _lay.addWidget(_sep)
+        _btn_cancel = QPushButton("Abbruch")
+        _btn_cancel.setObjectName("btn_cancel")
+        _lay.addWidget(_btn_cancel)
+        _result = [None]
+        _btn_std.clicked.connect(
+            lambda: (_result.__setitem__(0, "normal"), _dlg.accept()))
+        _btn_dx.clicked.connect(
+            lambda: (_result.__setitem__(0, "dx"), _dlg.accept()))
+        _btn_cancel.clicked.connect(_dlg.reject)
+        _dlg.exec()
+        return _result[0]
 
     @Slot()
     def _on_diversity_subtoggle_requested(self):
