@@ -5,6 +5,109 @@ Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 ---
 
+## 2026-05-14 v0.97.23 — Bundle F: 3 Bugs nach Mike-Field-Test
+
+Mike's Field-Test v0.97.22 (Bundle E) meldete 3 Bugs nach Diversity-Wechsel:
+**1. OMNI CQ sendet nicht** (KRITISCH — Feature komplett tot)
+**2. Doppelter Slot-Fortschrittsbalken** (großer in QSO-Kachel + kleiner
+in Statusbar)
+**3. Magenta-Farbe** für Odd-Slot ist „rosa, nix funker-like" — Orange
+
+### Wurzel Bug 1 (OMNI tot)
+
+P34-Stufe2 (v0.97.19, 13.05.) entfernte `_phase`/`phase` aus
+`core/diversity.py` (Statik-Mess-Pipeline raus). Aber `core/omni_cq.py:232`
+griff noch auf `self._diversity.phase != "operate"` zu. AttributeError im
+Qt-Slot `on_cycle_start` (silently gefressen) → OMNI sendet nie.
+
+**Warum 1 Tag unbemerkt:** 4 Test-Files setzten
+`diversity.phase = "operate"` als MagicMock-Attribut — Mock schluckte das
+weg, echter `DiversityController` hat kein `phase`-Attribut. Klassische
+Memory-Lesson `feedback_test_critical_path_not_mock.md` (Mike 09.05.2026:
+„Tests dürfen den kritischen Pfad nicht wegmocken.").
+
+### Fix Bundle F (4 atomare Commits)
+
+**C1 `core/omni_cq.py`** — Phase-Check ersatzlos raus (KISS, P34-Stufe2
+hat Mess-Phase aufgehoben).
+
+**C2 Tests** — Mock-Cleanup in 4 Test-Files:
+- `test_omni_cq_signal.py`: `diversity_phase`-Param + Setter raus, T5
+  (`test_skips_during_diversity_measure_phase`) komplett gelöscht
+- `test_p23_omni_counter.py`: gleicher Param + Setter raus
+- `test_p45_omni_stats_guard.py`: `phase`-Zeile raus
+- `test_p34_elif_chain_intact.py`: `phase`-Zeile raus
+- `test_bundle_d.py`: Color-Assertion #FF66CC → #FFAA00, Doku Magenta →
+  Orange
+- **NEU `test_bundle_f.py`** mit 5 Bug-Schutz-Tests:
+  - T1: DiversityController hat KEIN `phase`-Attribut (Regression-Schutz)
+  - T2: OmniCQ.on_cycle_start mit ECHTEM DiversityController (kein
+    MagicMock) — verhindert Re-Mock-Antipattern
+  - T3+T4: ControlPanel hat KEIN cycle_bar/update_cycle_bar mehr
+  - T5: _slot_progress_bar Style enthält #FFAA00 für Odd, kein #FF66CC
+
+**C3 `ui/control_panel.py` + `ui/mw_cycle.py`** — cycle_bar weg:
+- QLabel-Definition + addWidget raus, ersetzt durch `lay.addSpacing(4)`
+  (R1-SOLLTE-2: Layout-Schutz gegen klebende Trennlinie unter state_label)
+- `self.cycle_bar = qso_card.cycle_bar` Alias raus
+- `update_cycle_bar()` Methode raus
+- `_on_cycle_tick` in mw_cycle.py auf No-op (Slot-Connection bleibt
+  intakt, Callback returnt sofort)
+
+**C4 `ui/main_window.py`** — Magenta → Orange:
+- Z.500 Initial-Style: bleibt Cyan (Start-Slot Even)
+- Z.1269 chunk-Konstante: `"#FF66CC"` → `"#FFAA00"`, Kommentar
+  „cyan / magenta" → „cyan / orange (Bundle F)"
+- Z.486 Klassen-Kommentar + Z.495 Tooltip + Z.1253 Docstring: alle auf
+  „Orange" umgestellt
+
+### R1-Workflow
+
+- **V2-Self-Review** fand 10 Findings inkl. Mock-Pattern-Wiederholung
+- **R1 (deepseek-reasoner)** 8/10 mit 3 SOLLTE:
+  - **SOLLTE 1 (DXTune-Race):** R1 schlug `_gain_measure_locked`-Check vor.
+    **ABGELEHNT** — Code-grep zeigte Attribut sitzt nur in `ui/mw_radio.py`,
+    NICHT in `DiversityController`. R1-Halluzination (Memory-Lesson
+    `feedback_r1_encoder_busy_blindspot.md` zutreffend). `getattr(...,
+    False)` würde immer False zurückgeben → Pseudo-Schutz. KISS-Position:
+    DXTuneDialog ist modal, User kann OMNI nicht währenddessen starten.
+  - **SOLLTE 2 (Layout):** Übernommen via `addSpacing(4)` als Höhen-
+    Ersatz für entfernte cycle_bar (war 18px).
+  - **SOLLTE 3 (Field-Test):** Übernommen — F5 ersetzt durch QSO-
+    Interaktion-Test.
+- **V3 mit 16 ACs + 6 Commits** (KÖNNTE 2: C2+C5 gemerged)
+- **Final-R1: „Push freigegeben"**, 0 KP, „SOLLTE-1-Ablehnung
+  nachvollziehbar"
+
+### Test-Bilanz
+
+- 1179 → **1183 grün** (T5 raus = -1, 5 neue Bundle-F-Tests = +5,
+  Mock-Cleanups = ±0)
+
+### Backup
+
+`Appsicherungen/2026-05-14_v0.97.22_vor_bundle_f/` (9 Files).
+
+### Plan-Files
+
+`prompts/bundle_f_v[1,2,3].md` + `bundle_f_r1_prompt.md` +
+`bundle_f_final_r1.md`.
+
+### Field-Test pending F1-F6
+
+| # | Test | Erwartung |
+|---|---|---|
+| F1 | Diversity Std/DX, OMNI klicken | **OMNI sendet sofort** |
+| F2 | OMNI 5+ Min laufen | Counter ↻10→↻1, Paritäts-Flip, Audio sticky |
+| F3 | QSO-Kachel STATUS-Block | Kein „████░░ 8s"-Balken mehr |
+| F4 | Statusbar unten rechts | Cyan→**Orange** beim Slot-Wechsel |
+| F5 | OMNI + eingehender Anrufer | OMNI pausiert, nach QSO resumed |
+| F6 | Layout STATUS-Block | „Status: IDLE \| DT" + Trennlinie nicht gedrängt |
+
+Bei OK: Push v0.97.4...v0.97.23 als Bundle.
+
+---
+
 ## 2026-05-14 v0.97.22 — Bundle E TX-Slot-Lock Refactor
 
 Mike-Korrektur nach Bundle-D: „ich hatte mich falsch ausgedrückt — ich

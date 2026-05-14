@@ -1,5 +1,56 @@
 # HANDOFF — SimpleFT8
 
+## Stand 2026-05-14 vormittags: v0.97.23 Bundle F — 3 Bugs nach Field-Test
+
+**Mike-Field-Test v0.97.22** (Diversity-Wechsel auf 30m) meldete:
+1. **OMNI CQ sendet nicht** mehr (KRITISCH)
+2. **Doppelter Slot-Balken** (großer in QSO-Kachel + kleiner Statusbar)
+3. **Magenta-Farbe** für Odd ist „nix funker-like, Mike will Orange"
+
+**Wurzel Bug 1:** P34-Stufe2 (gestern) entfernte `phase` aus
+`DiversityController`. `core/omni_cq.py:232` greift weiter darauf zu →
+AttributeError im Qt-Slot (silently) → OMNI sendet nie. 4 Test-Files
+mockten `phase = "operate"` → Tests grün, Live tot.
+
+**Fix Bundle F (4 atomare Commits + APP_VERSION + Doku):**
+- C1 `core/omni_cq.py` Phase-Check raus
+- C2 Tests: Mock-Cleanup in 4 Files + test_bundle_f.py NEU (5 Bug-Schutz-
+  Tests, T2 nutzt ECHTEN DiversityController gegen Re-Mock-Antipattern)
+- C3 `control_panel.py` + `mw_cycle.py` cycle_bar weg + `addSpacing(4)`
+  als Layout-Schutz (R1-SOLLTE-2)
+- C4 `main_window.py` `#FF66CC` → `#FFAA00` (alle 5 Stellen konsistent)
+
+**R1-SOLLTE-1 ABGELEHNT:** R1 schlug `_gain_measure_locked`-Schutz auf
+DiversityController vor, aber Attribut sitzt nur in `mw_radio.py` —
+R1-Halluzination. `getattr(..., False)` wäre Pseudo-Schutz. DXTuneDialog
+ist modal → kein realer Race.
+
+**Tests:** **1183 grün** (1179 → 1183, T5 raus -1 + Bundle F +5).
+**Backup:** `Appsicherungen/2026-05-14_v0.97.22_vor_bundle_f/`.
+**Workflow:** V1→V2 (10 Findings)→R1 8/10 (3 SOLLTE: 1 abgelehnt, 2
+übernommen)→V3 (16 ACs)→Code→Final-R1 0 KP „Push freigegeben".
+**Push:** pending bis Mike's Field-Test F1-F6 + bisherige Bundles.
+
+### Field-Test-Checkliste F1-F6
+
+| # | Test | Erwartung |
+|---|---|---|
+| F1 | Diversity Std/DX, OMNI klicken | **OMNI sendet sofort** (CQ-Zeile, Counter ↻10) |
+| F2 | OMNI 5+ Min laufen | ↻9 ↻8 ... ↻1, Flip nach 10, Audio sticky |
+| F3 | QSO-Kachel STATUS-Block | Kein „████░░ 8s"-Balken |
+| F4 | Statusbar unten rechts | Cyan → **Orange** beim Slot-Wechsel |
+| F5 | OMNI + eingehender Anrufer | OMNI pausiert, nach QSO resumed |
+| F6 | Layout STATUS-Block | Status-Zeile + Trennlinie nicht gedrängt |
+
+### Vorgänger-Field-Tests pending
+
+- v0.97.22 Bundle E TX-Slot-Lock F1-F9
+- v0.97.21 Bundle D UI-Tweaks F1-F8
+- v0.97.20 P50 Bänder-Sichtbarkeit ✓
+- v0.97.19 P34-Stufe2
+
+---
+
 ## Stand 2026-05-14 morgens: v0.97.22 Bundle E — TX-Slot-Lock Refactor
 
 **Mike-Korrektur:** „ich hatte mich falsch ausgedrückt — ich will nicht
