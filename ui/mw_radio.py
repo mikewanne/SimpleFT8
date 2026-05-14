@@ -80,7 +80,10 @@ class RadioMixin:
         # connect VOR thread.start() damit auch sehr-schnelle Connects
         # sauber landen (Qt: accept() vor exec() → exec returned sofort).
         from ui.connect_status_dialog import ConnectStatusDialog
-        self._connect_dialog = ConnectStatusDialog(self)
+        # Bundle J (v0.97.27): app_version mitgeben fuer Footer-Zeile.
+        # Lazy-Import vermeidet Circular (mw_radio wird von main.py geladen).
+        from main import APP_VERSION
+        self._connect_dialog = ConnectStatusDialog(self, app_version=APP_VERSION)
         self.radio.connected.connect(
             self._connect_dialog.accept,
             Qt.ConnectionType.QueuedConnection,
