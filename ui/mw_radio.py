@@ -558,13 +558,15 @@ class RadioMixin:
         # Decode-Qualitaet automatisch: normal=schnell, diversity=tief
         self.decoder.set_quality(mode)
 
-        # Bundle D (v0.97.21): Slot-Filter-Buttons je nach Modus
-        # sichtbar/versteckt + Filter immer reset (R1-Q4).
-        # In Normal: Buttons sichtbar, Filter „both" als Default.
-        # In Diversity: Buttons ausgeblendet (zu komplex), Filter „both".
+        # Bundle E (v0.97.22): TX-Slot-Lock-Buttons sichtbar nur in Normal.
+        # In Diversity: Buttons aus (Lock wirkt nur Normal), State in
+        # Settings bleibt persistiert. Bei Wechsel zurück Normal: Buttons
+        # aus Settings geladen.
         if hasattr(self, "qso_panel"):
             self.qso_panel.set_slot_buttons_visible(mode == "normal")
-            self.qso_panel.reset_slot_filter()
+            if mode == "normal":
+                self.qso_panel.set_tx_slot_lock_buttons(
+                    self.settings.get_tx_slot_lock())
 
         # Neuen Modus aktivieren
         if mode == "normal":

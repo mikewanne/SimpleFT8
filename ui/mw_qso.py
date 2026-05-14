@@ -164,6 +164,25 @@ class QSOMixin:
         if getattr(self, '_diversity_measuring', False):
             print(f"[QSO] Einmessen aktiv — Hunt blockiert")
             return
+        # Bundle E (v0.97.22): TX-Slot-Lock-Validierung vor allen QSO-
+        # State-Mutationen. Lock greift nur in Normal-Modus.
+        their_even_pre = getattr(msg, '_tx_even', None)
+        lock_status = self.settings.get_tx_slot_lock()
+        from core.qso_state import resolve_tx_slot as _resolve
+        resolved = _resolve(their_even_pre, lock_status,
+                            rx_mode=self._rx_mode)
+        if (resolved is None and their_even_pre is not None
+                and lock_status != "none" and self._rx_mode == "normal"):
+            # Mismatch: User hat Lock, klickt Station deren Antwort den
+            # Lock verletzen würde.
+            their_slot = "Even" if their_even_pre else "Odd"
+            our_slot = "Odd" if their_even_pre else "Even"
+            self.qso_panel.add_info(
+                f"Klick auf {msg.caller} ignoriert — "
+                f"Slot-Lock={lock_status.upper()}, "
+                f"Station sendet im {their_slot}, "
+                f"Antwort wäre im {our_slot}.")
+            return
         # P2.OMNI-REDESIGN v4.0 (v0.95.23): OMNI bei Hunt-QSO pausieren
         # (Entry-Pfad 1 von 3 — _slot_index friert ein bis _maybe_resume_omni).
         self._pause_omni_if_active()
@@ -196,13 +215,14 @@ class QSOMixin:
                 [m.caller for m in self.qso_sm._caller_queue])
         self.qso_panel.add_info(f"Rufe {msg.caller}...{self._antenna_pref_label(msg.caller)}")
         self.qso_sm.max_calls = self.settings.get("max_calls", 3)
-        # Even/Odd: sende im GEGENTEILIGEN Slot der Gegenstation
+        # Even/Odd: Helper berechnet TX-Slot inkl. Lock-Wirkung (Bundle E).
+        # Lock-Validierung wurde oben bereits durchgeführt (resolved!=None
+        # garantiert wenn wir hier landen).
         their_even = getattr(msg, '_tx_even', None)
+        self.encoder.tx_even = resolved
         if their_even is not None:
-            self.encoder.tx_even = not their_even
-            print(f"[TX] Slot: Gegenstation={'EVEN' if their_even else 'ODD'} → wir={'ODD' if their_even else 'EVEN'}")
-        else:
-            self.encoder.tx_even = None  # Fallback: nächster Slot
+            print(f"[TX] Slot: Gegenstation={'EVEN' if their_even else 'ODD'} "
+                  f"→ wir={'EVEN' if resolved else 'ODD' if resolved is False else 'AUTO'}")
         self.qso_sm.start_qso(
             their_call=msg.caller,
             their_grid=msg.grid_or_report if msg.is_grid else "",
@@ -269,10 +289,20 @@ class QSOMixin:
                         self._diversity_ctrl.get_histogram_data())
             else:
                 print(f"[CQ] Normal-Modus → manuelle TX-Frequenz {self.encoder.audio_freq_hz} Hz")
-            # CQ: immer auf festem Slot senden (aktueller Gegenteil-Slot)
-            self.encoder.tx_even = not self.timer.is_even_cycle()
+            # CQ: festen Slot. Bundle E (v0.97.22): wenn TX-Slot-Lock
+            # aktiv und Normal-Modus → Lock-Slot, sonst Gegentakt zum
+            # aktuellen Slot (Standard-Verhalten).
+            from core.qso_state import resolve_tx_slot as _resolve
+            lock_status = self.settings.get_tx_slot_lock()
+            resolved_cq = _resolve(None, lock_status, rx_mode=self._rx_mode)
+            if resolved_cq is None:
+                # Kein Lock → Standard: Gegentakt
+                self.encoder.tx_even = not self.timer.is_even_cycle()
+            else:
+                # Lock aktiv → festen Slot
+                self.encoder.tx_even = resolved_cq
             slot = "EVEN" if self.encoder.tx_even else "ODD"
-            print(f"[CQ] Fester TX-Slot: {slot}")
+            print(f"[CQ] Fester TX-Slot: {slot} (Lock={lock_status})")
             self.qso_panel.add_info("CQ-Modus gestartet")
             self.qso_sm.start_cq()
         else:
@@ -853,8 +883,17 @@ class QSOMixin:
         if not is_courtesy:
             self._pause_omni_if_active()
         if their_even is not None:
-            self.encoder.tx_even = not their_even
-            slot_str = "ODD" if their_even else "EVEN"
+            # Bundle E (v0.97.22): TX-Slot via Helper mit Lock-Wirkung.
+            from core.qso_state import resolve_tx_slot as _resolve
+            lock_status = self.settings.get_tx_slot_lock()
+            resolved = _resolve(their_even, lock_status, rx_mode=self._rx_mode)
+            if resolved is None:
+                # Mismatch — sollte praktisch nicht passieren, weil
+                # CQ-Reply nur kommt wenn QSO aktiv (das Hunt/CQ vorher
+                # validiert haben). Defensive Fallback: Standard-Gegentakt.
+                resolved = not their_even
+            self.encoder.tx_even = resolved
+            slot_str = "EVEN" if resolved else "ODD"
             kind = "Courtesy-73" if is_courtesy else "CQ-Reply"
             print(f"[TX] {kind} {msg.caller}: sie={('EVEN' if their_even else 'ODD')} → wir={slot_str}")
         # Antennen-Praeferenz-Panel-Info nur bei CQ-Reply, nicht bei Courtesy-73

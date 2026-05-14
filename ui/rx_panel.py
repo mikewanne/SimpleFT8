@@ -76,9 +76,9 @@ class RXPanel(QWidget):
         self._rx_active = True
         self._country_filter: set = set(country_filter or [])
         self._ant_filter: int = 0  # 0=alle, 1=A1, 2=A2
-        # Bundle D (v0.97.21): Slot-Filter (Normal-only, von QSO-Panel).
-        # "both" = beide Slots sichtbar, "even"/"odd" = nur dieser Slot.
-        self._slot_filter: str = "both"
+        # Bundle E (v0.97.22): Bundle-D Slot-Filter zurückgebaut —
+        # Even/Odd-Buttons sind jetzt TX-Slot-Lock, kein RX-Filter
+        # (Mike-Korrektur: SmartSDR-Style).
         self._active_call: str = ""  # Callsign der gerade aktiv angerufenen Station
         self._qso_log = None  # QSOLog fuer Worked-Before Filter
         self._locator_db = None  # LocatorDB fuer exakte km-Berechnung pro Call
@@ -746,32 +746,9 @@ class RXPanel(QWidget):
             caller = getattr(msg, 'caller', '')
             if caller and self._qso_log.is_worked(caller):
                 return True
-        # Bundle D (v0.97.21): Slot-Filter (Normal-only)
-        if self._slot_filter != "both":
-            tx_even = getattr(msg, '_tx_even', None)
-            if tx_even is None:
-                # ohne Slot-Info kann nicht gefiltert werden → sichtbar
-                pass
-            elif self._slot_filter == "even" and not tx_even:
-                return True
-            elif self._slot_filter == "odd" and tx_even:
-                return True
+        # Bundle E (v0.97.22): Bundle-D Slot-Filter zurückgebaut.
+        # Even/Odd ist jetzt TX-Slot-Lock, kein RX-Filter mehr.
         return False
-
-    def apply_slot_filter(self, slot_filter: str) -> None:
-        """Bundle D (v0.97.21): Slot-Filter live anwenden.
-
-        Args:
-            slot_filter: "both" | "even" | "odd". Andere Werte → "both".
-
-        Wird vom QSO-Panel via Signal getriggert. Filter blendet RX-
-        Zeilen des nicht-aktiven Slots aus (R1-Q1: komplett ausblenden,
-        nicht ausgegraut). Nur RX-Anzeige — NICHT TX/CQ-State (V2 B5).
-        """
-        if slot_filter not in ("both", "even", "odd"):
-            slot_filter = "both"
-        self._slot_filter = slot_filter
-        self._apply_filters()
 
     def _apply_filters(self):
         """Alle aktiven Filter auf die Tabelle anwenden."""

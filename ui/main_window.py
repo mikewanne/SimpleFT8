@@ -556,8 +556,10 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self.qso_panel.logbook.load_adif(Path.cwd() / "adif")
         self.qso_panel.upload_qrz.connect(self._on_qrz_upload)
         self.qso_panel.logbook.qso_clicked.connect(self._on_logbook_qso_clicked)
-        # Bundle D (v0.97.21): Slot-Filter Signal-Verdrahtung (R1-F1).
-        self.qso_panel.slot_filter_changed.connect(self.rx_panel.apply_slot_filter)
+        # Bundle E (v0.97.22): TX-Slot-Lock Signal — persistiert in Settings.
+        self.qso_panel.tx_slot_lock_changed.connect(self._on_tx_slot_lock_changed)
+        # Initial-Buttons aus Settings setzen (nur Normal-Modus relevant)
+        self.qso_panel.set_tx_slot_lock_buttons(self.settings.get_tx_slot_lock())
         # Tab-Wechsel: Detail-Overlay zuruecksetzen wenn User vom Logbuch weg navigiert
         self.qso_panel.tabs.currentChanged.connect(self._on_qso_tab_changed)
         self.control_panel = ControlPanel(callsign=self.settings.callsign)
@@ -1100,6 +1102,18 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
             self._audio_dump_max_files = self.settings.get("audio_dump_max_files", 200)
             # P50 (v0.97.20): Sichtbare Bänder live aktualisieren
             self.apply_visible_bands()
+
+    def _on_tx_slot_lock_changed(self, lock: str) -> None:
+        """Bundle E (v0.97.22): TX-Slot-Lock-Änderung persistieren.
+
+        Wird vom QSO-Panel emittiert beim Klick auf EVEN/ODD-Button.
+        Lock-Wert geht in Settings und gilt ab nächstem TX-Slot.
+        """
+        try:
+            self.settings.set_tx_slot_lock(lock)
+            self.settings.save()
+        except Exception as exc:
+            print(f"[TX-Slot-Lock] Save-Fehler: {exc}")
 
     def apply_visible_bands(self):
         """P50 (v0.97.20): Sichtbarkeits-Toggle für Band-Buttons anwenden.

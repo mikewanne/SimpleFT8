@@ -17,9 +17,11 @@ class QSOPanel(QWidget):
     """QSO-Verlaufsfenster mit Tabs: Live Log + Logbuch."""
 
     upload_qrz = Signal()  # QRZ.com Upload angefordert
-    # Bundle D (v0.97.21): Slot-Filter (Normal-only) — emittet
-    # "both"|"even"|"odd". MainWindow verdrahtet mit RXPanel.apply_slot_filter.
-    slot_filter_changed = Signal(str)
+    # Bundle E (v0.97.22): TX-Slot-Lock (Mike SmartSDR-Style, Normal-only)
+    # — emittet "none"|"even"|"odd". MainWindow persistiert + Settings.
+    # Wirkung: Encoder.tx_even wird auf gewählten Slot festgesetzt
+    # (via core/qso_state.resolve_tx_slot).
+    tx_slot_lock_changed = Signal(str)
 
     def __init__(self):
         super().__init__()
@@ -75,11 +77,11 @@ class QSOPanel(QWidget):
         self._btn_even.setStyleSheet(slot_btn_style)
         self._btn_odd.setStyleSheet(slot_btn_style)
         self._btn_even.setToolTip(
-            "Filter: nur Even-Slot-Stationen anzeigen.\n"
-            "Klick erneut zum Aufheben des Filters.")
+            "TX-Slot-Lock: senden nur im Even-Slot (hören im Odd).\n"
+            "Klick erneut zum Aufheben.")
         self._btn_odd.setToolTip(
-            "Filter: nur Odd-Slot-Stationen anzeigen.\n"
-            "Klick erneut zum Aufheben des Filters.")
+            "TX-Slot-Lock: senden nur im Odd-Slot (hören im Even).\n"
+            "Klick erneut zum Aufheben.")
         self._btn_even.clicked.connect(lambda: self._on_slot_btn_clicked("even"))
         self._btn_odd.clicked.connect(lambda: self._on_slot_btn_clicked("odd"))
         slot_row.addWidget(self._btn_even)
@@ -310,11 +312,12 @@ class QSOPanel(QWidget):
         return
 
     def _on_slot_btn_clicked(self, parity: str) -> None:
-        """Bundle D (v0.97.21): Slot-Filter-Button-Klick.
+        """Bundle E (v0.97.22): TX-Slot-Lock-Button-Klick.
 
         Exklusive Logik: Klick auf einen Button checkt ihn, uncheckt
         den anderen. Klick auf bereits aktiven Button uncheckt ihn →
-        Filter aus (= "both"). Emittet ``slot_filter_changed``.
+        Lock aus (= "none"). Emittet ``tx_slot_lock_changed``.
+        MainWindow persistiert den Wert in Settings.
         """
         if parity == "even":
             if self._btn_even.isChecked():
@@ -322,36 +325,40 @@ class QSOPanel(QWidget):
         elif parity == "odd":
             if self._btn_odd.isChecked():
                 self._btn_even.setChecked(False)
-        # Filter-State berechnen
+        # Lock-Wert berechnen
         e = self._btn_even.isChecked()
         o = self._btn_odd.isChecked()
         if e and not o:
-            slot_filter = "even"
+            lock = "even"
         elif o and not e:
-            slot_filter = "odd"
+            lock = "odd"
         else:
-            slot_filter = "both"
-        self.slot_filter_changed.emit(slot_filter)
+            lock = "none"
+        self.tx_slot_lock_changed.emit(lock)
 
     def set_slot_buttons_visible(self, visible: bool) -> None:
-        """Bundle D (v0.97.21): EVEN/ODD-Buttons-Container ein-/ausblenden.
+        """Bundle D/E: EVEN/ODD-Buttons-Container ein-/ausblenden.
 
-        In Diversity-Modus: ausblenden (zu komplex für Filter-Logik in
-        Diversity). MainWindow ruft auf bei rx_mode-Wechsel. QSO/Logbuch-
-        Buttons füllen den Platz automatisch (Expanding-Policy).
+        In Diversity-Modus: ausblenden (Lock wirkt eh nur Normal). Lock-
+        State in Settings bleibt persistiert. MainWindow ruft auf bei
+        rx_mode-Wechsel.
         """
         self._slot_container.setVisible(visible)
 
-    def reset_slot_filter(self) -> None:
-        """Bundle D (v0.97.21): Filter auf „both" zurücksetzen.
+    def set_tx_slot_lock_buttons(self, lock: str) -> None:
+        """Bundle E (v0.97.22): Buttons aus Settings-Wert setzen.
 
-        Wird bei Modus-Wechsel (Normal↔Diversity) gerufen. Beide Buttons
-        uncheck + slot_filter_changed("both") emittet damit RX-Panel
-        auch reagiert.
+        Wird bei App-Start (Normal-Modus) + Modus-Wechsel zurück Normal
+        aufgerufen. Setzt Buttons OHNE Signal-Emit (blockSignals).
         """
-        self._btn_even.setChecked(False)
-        self._btn_odd.setChecked(False)
-        self.slot_filter_changed.emit("both")
+        if lock not in ("none", "even", "odd"):
+            lock = "none"
+        self._btn_even.blockSignals(True)
+        self._btn_odd.blockSignals(True)
+        self._btn_even.setChecked(lock == "even")
+        self._btn_odd.setChecked(lock == "odd")
+        self._btn_even.blockSignals(False)
+        self._btn_odd.blockSignals(False)
 
     def _append_colored(self, text: str, color: str):
         cursor = self.log_view.textCursor()

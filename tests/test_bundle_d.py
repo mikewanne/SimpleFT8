@@ -82,43 +82,39 @@ def test_t5_dt_format_negative_and_large():
     assert _format_dt(-15.0) == "-15"
 
 
-# ── T6-T7: RXPanel.apply_slot_filter ───────────────────────────────────
+# ── T6-T7: Bundle-E Rollback — RX-Filter existiert nicht mehr ──────────
 
-def test_t6_rxpanel_slot_filter_state(qapp):
-    """T6: apply_slot_filter setzt _slot_filter State korrekt."""
+def test_t6_rxpanel_slot_filter_removed(qapp):
+    """T6 (Bundle E Rollback): apply_slot_filter wurde entfernt."""
     from ui.rx_panel import RXPanel
     p = RXPanel()
-    assert p._slot_filter == "both"
-    p.apply_slot_filter("even")
-    assert p._slot_filter == "even"
-    p.apply_slot_filter("odd")
-    assert p._slot_filter == "odd"
-    p.apply_slot_filter("both")
-    assert p._slot_filter == "both"
+    assert not hasattr(p, "apply_slot_filter"), \
+        "apply_slot_filter sollte mit Bundle E entfernt sein"
+    assert not hasattr(p, "_slot_filter"), \
+        "_slot_filter State sollte mit Bundle E entfernt sein"
 
 
-def test_t7_rxpanel_slot_filter_defensive(qapp):
-    """T7: ungültige Filter-Werte → Fallback 'both'."""
-    from ui.rx_panel import RXPanel
-    p = RXPanel()
-    p.apply_slot_filter("garbage")
-    assert p._slot_filter == "both"
-    p.apply_slot_filter(None)
-    assert p._slot_filter == "both"
-    p.apply_slot_filter(42)
-    assert p._slot_filter == "both"
+def test_t7_qsopanel_slot_filter_signal_removed(qapp):
+    """T7 (Bundle E Rollback): slot_filter_changed Signal wurde umbenannt."""
+    from ui.qso_panel import QSOPanel
+    p = QSOPanel()
+    # Bundle E: Signal wurde umbenannt zu tx_slot_lock_changed
+    assert not hasattr(p, "slot_filter_changed"), \
+        "slot_filter_changed sollte zu tx_slot_lock_changed umbenannt sein"
+    assert hasattr(p, "tx_slot_lock_changed"), \
+        "tx_slot_lock_changed muss existieren"
 
 
-# ── T8: QSOPanel Button-Logik ──────────────────────────────────────────
+# ── T8: QSOPanel Button-Logik (Bundle E Signal-Rename) ─────────────────
 
-def test_t8_qso_panel_slot_buttons_emit_signal(qapp):
-    """T8: Klick auf btn_even emittet slot_filter_changed('even'),
-    erneuter Klick (uncheck) emittet 'both'."""
+def test_t8_qso_panel_slot_buttons_emit_lock_signal(qapp):
+    """T8: Klick auf btn_even emittet tx_slot_lock_changed('even'),
+    erneuter Klick (uncheck) emittet 'none' (Bundle E)."""
     from ui.qso_panel import QSOPanel
     p = QSOPanel()
     emitted = []
-    p.slot_filter_changed.connect(lambda s: emitted.append(s))
-    # Klick btn_even (simulieren via setChecked + _on_slot_btn_clicked)
+    p.tx_slot_lock_changed.connect(lambda s: emitted.append(s))
+    # Klick btn_even
     p._btn_even.setChecked(True)
     p._on_slot_btn_clicked("even")
     assert emitted[-1] == "even"
@@ -127,10 +123,10 @@ def test_t8_qso_panel_slot_buttons_emit_signal(qapp):
     p._on_slot_btn_clicked("odd")
     assert emitted[-1] == "odd"
     assert not p._btn_even.isChecked()
-    # Klick btn_odd erneut → uncheck → both
+    # Klick btn_odd erneut → uncheck → none
     p._btn_odd.setChecked(False)
     p._on_slot_btn_clicked("odd")
-    assert emitted[-1] == "both"
+    assert emitted[-1] == "none"
 
 
 # ── T9: QSOPanel set_slot_buttons_visible ──────────────────────────────
@@ -148,21 +144,28 @@ def test_t9_qso_panel_buttons_visibility(qapp):
 
 # ── T10: QSOPanel reset_slot_filter ────────────────────────────────────
 
-def test_t10_qso_panel_reset_slot_filter(qapp):
-    """T10: reset_slot_filter uncheckt beide Buttons + emittet 'both'."""
+def test_t10_qso_panel_set_tx_slot_lock_buttons(qapp):
+    """T10 (Bundle E): set_tx_slot_lock_buttons setzt Buttons aus Settings-Wert
+    ohne Signal-Emit (blockSignals)."""
     from ui.qso_panel import QSOPanel
     p = QSOPanel()
     emitted = []
-    p.slot_filter_changed.connect(lambda s: emitted.append(s))
-    # Setup: btn_even aktiv
-    p._btn_even.setChecked(True)
-    p._on_slot_btn_clicked("even")
+    p.tx_slot_lock_changed.connect(lambda s: emitted.append(s))
+    # Initial: keiner
+    p.set_tx_slot_lock_buttons("even")
     assert p._btn_even.isChecked()
-    # Reset
-    p.reset_slot_filter()
+    assert not p._btn_odd.isChecked()
+    assert len(emitted) == 0, "Signal sollte BEI set_tx_slot_lock_buttons NICHT emit'n"
+    p.set_tx_slot_lock_buttons("odd")
+    assert not p._btn_even.isChecked()
+    assert p._btn_odd.isChecked()
+    p.set_tx_slot_lock_buttons("none")
     assert not p._btn_even.isChecked()
     assert not p._btn_odd.isChecked()
-    assert emitted[-1] == "both"
+    # Defensiver Filter
+    p.set_tx_slot_lock_buttons("garbage")
+    assert not p._btn_even.isChecked()
+    assert not p._btn_odd.isChecked()
 
 
 # ── T11: MainWindow Slot-Progress-Bar Style ────────────────────────────

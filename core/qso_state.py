@@ -14,6 +14,45 @@ from PySide6.QtCore import QObject, Signal
 from .message import FT8Message
 
 
+def resolve_tx_slot(their_even, lock_status: str, rx_mode: str = "normal"):
+    """Bundle E (v0.97.22): Zentraler TX-Slot-Resolver mit Lock-Wirkung.
+
+    Args:
+        their_even: ``None`` für CQ-Pfad (kein Gegenüber bekannt),
+            sonst ``True``/``False`` = Slot in dem die Gegenstation
+            transmittet.
+        lock_status: Settings-Wert ``"none"``/``"even"``/``"odd"``.
+        rx_mode: Aktueller RX-Modus (``"normal"`` oder ``"diversity"``).
+            Lock wirkt nur im Normal-Modus.
+
+    Returns:
+        ``Optional[bool]``. Bedeutung:
+        - ``True`` → TX in Even-Slot
+        - ``False`` → TX in Odd-Slot
+        - ``None`` für CQ-Pfad ohne Lock → Encoder nimmt nächsten freien Slot
+        - ``None`` als Mismatch-Signal: Caller MUSS QSO blockieren (Hunt-
+          Pfad mit Lock="even" + Station sendet Even → Antwort in Odd
+          würde Lock verletzen).
+
+    Konvention: Hunt-Pfad antwortet im Gegentakt zur Station
+    (``not their_even``).
+    """
+    # Lock greift nur in Normal-Modus
+    if rx_mode != "normal" or lock_status == "none":
+        if their_even is None:
+            return None  # CQ-Pfad: Encoder default (nächster Slot)
+        return not their_even  # Hunt-Pfad: Gegentakt
+
+    target = (lock_status == "even")  # True wenn Lock=Even, False wenn Odd
+    if their_even is None:
+        return target  # CQ-Pfad mit Lock: TX im Lock-Slot
+    # Hunt-Pfad: gewünschter TX-Slot = Gegentakt
+    desired = not their_even
+    if desired != target:
+        return None  # Mismatch — Lock blockt
+    return target
+
+
 class QSODebugLog:
     """Detailliertes QSO-Logging — wird bei jedem neuen QSO ueberschrieben."""
 

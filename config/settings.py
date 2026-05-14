@@ -136,6 +136,22 @@ class Settings:
     def set(self, key, value):
         self._data[key] = value
 
+    # Bundle E (v0.97.22): TX-Slot-Lock (Mike SmartSDR-Style).
+    # Werte: "none" (beide Slots), "even", "odd". Nur in Normal-Modus wirksam,
+    # in Diversity ist die UI ausgeblendet (State bleibt persistiert).
+    def get_tx_slot_lock(self) -> str:
+        """Liefert TX-Slot-Lock-Wert aus Settings. Default "none"."""
+        raw = self._data.get("tx_slot_lock", "none")
+        if raw not in ("none", "even", "odd"):
+            return "none"
+        return raw
+
+    def set_tx_slot_lock(self, lock: str) -> None:
+        """Setzt TX-Slot-Lock. Caller ruft `save()`."""
+        if lock not in ("none", "even", "odd"):
+            lock = "none"
+        self._data["tx_slot_lock"] = lock
+
     # P50 (v0.97.20): Bänder-Sichtbarkeit
     def get_enabled_bands(self) -> list[str]:
         """Liefert die Liste der im Band-Panel sichtbaren Bänder.
