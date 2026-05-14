@@ -228,10 +228,6 @@ class OmniCQ(QObject):
         if not self._active or self._paused:
             return
 
-        # V2-L12: kein Senden waehrend Diversity-Mess-Phase
-        if self._diversity.phase != "operate":
-            return
-
         # V2-L9 Fresh-Compute is_even — robust gegen Signal-Latenz
         slot_dur = self._timer.cycle_duration
         fresh_is_even = (int(time.time() / slot_dur) % 2 == 0)
