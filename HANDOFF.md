@@ -1,6 +1,6 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-14 nachmittags — Bundle I (Settings-Spacing + QSO-Reihenfolge + OMNI-Race) Code fertig, Field-Test pending
+## Stand 2026-05-14 spätnachmittags — Bundle J (Connect-Branding + Help-Dialog + RX-Label + Intent-Klausel) Code fertig + Final-R1 ✓, Field-Test pending
 
 ### 🚀 Beim nächsten Session-Start (morgen)
 
@@ -14,9 +14,23 @@
    (1M Context, 131K Output). Alias `pro`/`r1`/`reasoner` → V4-pro.
 4. App-Start (wenn Mike es will): `./venv/bin/python3 main.py`
 
-**Aktueller Code-Stand:** v0.97.26 (Bundle I), Tests **1220 grün**.
+**Aktueller Code-Stand:** v0.97.27 (Bundle J), Tests **1235 grün**.
 
-### 🔴 Bundle I Field-Test pending (nächste Session)
+### 🔴 Bundle J Field-Test pending (nächste Session)
+
+**Bundle J (v0.97.27) — Connect-Modal-Branding + Help-Dialog + RX-Label + Intent:**
+
+| F# | Was prüfen |
+|---|---|
+| **F1** | App-Start: Connect-Modal zeigt unten rechts „SimpleFT8 v0.97.27 · MIT License" (5-7 Sek sichtbar während Connect-Phase) |
+| **F2** | Settings öffnen → `?`-Button neben Rufzeichen → großer dunkler Dialog 700×600 mit Scrollbar, schließbar via Esc + Schließen-Button |
+| **F3** | Settings → „Bandpilot — Hilfe öffnen" → gleicher Dialog mit gerendertem Markdown, scrollbar (war vorher abgeschnitten) |
+| **F4** | Diversity-Modus, QSO mit ANT2-Pref-Station: Label `(RX: ANT2 ↑X.X dB)` im Logbuch + Status |
+| **F5** | Diversity-Modus, QSO mit ANT1-Pref-Station: Label `(ANT1)` ohne RX-Prefix |
+| **F6** | Normal-Modus, QSO: Label `(ANT1)` |
+| **F7** | App-Neustart: Hardware-Disclaimer-Dialog enthält neuen Satz „dient ausschließlich dem persönlichen Gebrauch" (Höhe 540×340 statt 540×300) |
+
+### 🔴 Bundle I Field-Test pending (vorherige Session)
 
 **Bundle I (v0.97.26) — Settings + QSO-Reihenfolge + OMNI-Race-Stop:**
 
@@ -36,6 +50,7 @@ Diese Versionen sind committed aber **NICHT gepusht** bis Field-Tests OK:
 
 | Version | Bundle | Field-Test-Punkte | Status |
 |---|---|---|---|
+| v0.97.27 | **Bundle J** Connect-Branding/Help/RX-Label/Intent | F1-F7 (oben) | pending |
 | v0.97.26 | **Bundle I** Settings/QSO-Reihenfolge/OMNI-Race | F1-F7 (oben) | pending |
 | v0.97.25 | **Bundle H** Bandpilot-Aware Div-Klick | F1-F8 | pending |
 | v0.97.24 | **Bundle G** Std↔DX Direkt-Toggle | F1-F9 | pending |

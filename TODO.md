@@ -1,4 +1,38 @@
-# SimpleFT8 TODO — Stand 14.05.2026 nachmittags (v0.97.26, Bundle I fertig — Field-Test F1-F7 pending)
+# SimpleFT8 TODO — Stand 14.05.2026 spätnachmittags (v0.97.27, Bundle J fertig — Field-Test F1-F7 pending)
+
+## ✅ 14.05.2026 erledigt — Bundle J (Connect-Modal-Branding + SimpleHelpDialog + RX-Label + Intent-Klausel) v0.97.27
+
+Vier orthogonale UI/Doku-Tweaks aus Mike-Klärungsgespräch nach Bundle I —
+voller V1→V2→R1→V3-Workflow autonom mit DeepSeek-V4-pro. Final-R1 V4-pro
+„Push freigegeben." 0 KP.
+
+**Punkt 1:** Connect-Modal Footer unten rechts „SimpleFT8 v0.97.27 · MIT
+License" via Konstruktor-Parameter `app_version` (Lazy-Import in `mw_radio`,
+kein Circular). setFixedSize 352×176 → 352×196.
+
+**Punkt 2:** Einheitlicher `SimpleHelpDialog` mit 700×600 resizable +
+QTextBrowser + Scrollbar + WindowModal + komplettes Stylesheet (R1-F3).
+Helper `show_simple_help(parent, title, text, *, markdown=False)`.
+`_make_info_btn` + `_show_bandpilot_help` umgestellt. Mike-Designentscheidung
+„Konsistenz > Optimum-pro-Dialog" — R1-F2 Overengineering-Vorwurf
+abgelehnt mit Begründung.
+
+**Punkt 3:** `_antenna_pref_label` ANT2-Zweige mit `RX:`-Prefix —
+`(RX: ANT2 ↑X.X dB)` bzw. `(RX: ANT2)` (R1-F5 delta<0.05). ANT1 bleibt
+überall ohne Prefix (Symmetrie zu Normal-Modus).
+
+**Punkt 4:** Intent-Klausel im Hardware-Disclaimer — „dient ausschließlich
+dem persönlichen Gebrauch und der Verifikation technischer Möglichkeiten."
++ Höhe 540×300 → 540×340.
+
+**Tests:** 1220 → 1235 (+15). Memory-Update folgt nach Field-Test.
+Push pending bis F1-F7.
+
+**Punkt 3 (Pre-TX ANT1-Guard) abgehakt:** Code-Verifikation 14.05.:
+`core/encoder.py:389` + `ui/mw_tx.py:83` rufen `set_tx_antenna("ANT1")`
+VOR jedem `ptt_on()` / `tune_on()` — bereits safe, keine Code-Änderung.
+
+---
 
 ## ✅ 14.05.2026 erledigt — Bundle I (Settings-Spacing + QSO-Reihenfolge + OMNI-Race) v0.97.26
 
@@ -24,7 +58,10 @@ Push pending bis Field-Test F1-F7.
 
 ---
 
-## 🆕 OFFEN — Bundle J: Connect-Modal-Branding + Help-Dialog + Pre-TX-Guard + RX-Label (Mike 14.05.2026 nachmittags)
+## 📋 ARCHIVIERT (Plan-Detail) — Bundle J Spec: Connect-Modal-Branding + Help-Dialog + Pre-TX-Guard + RX-Label
+
+> **Status: ERLEDIGT 14.05.2026 spätnachmittags (v0.97.27) — siehe oben.**
+> Plan-Detail bleibt zur Doku stehen.
 
 **Trigger:** Mike-Field-Test 14.05.2026 nachmittags + Klärungs-Gespräch.
 **Aufwand-Schätzung:** klein, ~1 Tag inkl. Tests + Workflow.

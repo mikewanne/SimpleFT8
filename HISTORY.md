@@ -3,6 +3,69 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-14 v0.97.27 — Bundle J (Connect-Modal-Branding + Help-Dialog + RX-Label + Intent-Klausel)
+
+**Trigger:** Mike-Klärungsgespräch nach Bundle I — 4 UI/Doku-Tweaks als
+gemeinsames Bundle einspielen, voller V1→V2→R1→V3-Workflow mit DeepSeek-V4-pro.
+
+**Punkt 1 — Connect-Modal Footer.** `ConnectStatusDialog` zeigt unten
+rechts in der Ecke `SimpleFT8 v0.97.27 · MIT License` (5-7 Sek während
+Connect-Phase sichtbar). Neuer Konstruktor-Parameter `app_version: str = ""`
+(R1-V4-pro Finding 1: Instance-Variable + Footer-Label-Bindung).
+Lazy-Import in `mw_radio.py:_start_radio` (`from main import APP_VERSION`)
+vermeidet Circular. setFixedSize 352×176 → 352×196.
+
+**Punkt 2 — Einheitlicher SimpleHelpDialog.** Neue Datei
+`ui/simple_help_dialog.py` mit `SimpleHelpDialog(QDialog)` +
+`show_simple_help(parent, title, text, *, markdown=False)` Helper. 700×600
+resizable, `QTextBrowser` mit Scrollbar, WindowModal, App-Theme dunkel
+(`#1a1a2e`). Vollständiges Stylesheet inkl. QScrollBar (R1-V4-pro
+Finding 3). `_make_info_btn` (Z.60) + `_show_bandpilot_help` (Z.381) in
+`settings_dialog.py` umgestellt. Mike-Designentscheidung „Konsistenz >
+Optimum-pro-Dialog" — auch kurze Hints landen im 700×600 mit Weißraum
+(R1-V4-pro Finding 2 „Overengineering" mit Mike-Spec-Begründung
+abgelehnt).
+
+**Punkt 3 — RX-Label `(RX: ANT2 ↑X.X dB)`.** `_antenna_pref_label` in
+`ui/mw_qso.py:90-109` zeigt RX-Prefix NUR bei ANT2 (Diversity). ANT1
+bleibt überall `(ANT1)` ohne Prefix — symmetrisch zu Normal-Modus.
+Mike-Befund 14.05.: ohne `RX:` verwirrte das („wartet, er hat doch mit
+ANT2 gesendet?"). Bei `delta is None OR abs(delta) < 0.05` →
+`(RX: ANT2)` ohne Pfeil (R1-V4-pro Finding 5).
+
+**Punkt 4 — Intent-Klausel im Hardware-Disclaimer.** `main.py:448-451`
+Disclaimer-Text erweitert: „Das Projekt dient ausschließlich dem
+persönlichen Gebrauch und der Verifikation technischer Möglichkeiten."
+Dialog-Höhe `setFixedSize(540, 300)` → `(540, 340)`.
+
+**Workflow:** V1→V2 (6 SR-Findings adressiert)→R1 V4-pro (7 Findings:
+0 Bug, 2 Risiko, 4 Verbesserung, 1 Hinweis — 5 angenommen, 2 abgelehnt
+mit Begründung)→V3→Code→Final-R1 V4-pro „Push freigegeben." 0 KP
+(2 Verbesserung-Hinweise akademisch: deleteLater im mw_radio nach exec
++ Markdown-Render-Block — beide unkritisch).
+
+**Tests:** 1220 → 1235 (+15). 15 neue Bundle-J-Tests in
+`tests/test_bundle_j.py` (T1, T1b, T1c, T2, T3, T3b, T4, T5, T6, T7, T7b,
+T8, T8b, T9, T9b). 1 alter P26-Test (test_t1_layout_smoke) angepasst auf
+neue Dialog-Höhe 196.
+
+**Code:**
+- `main.py`: APP_VERSION 0.97.26→0.97.27, Disclaimer-Text + 340 px Höhe.
+- `ui/connect_status_dialog.py`: Konstruktor-Param + Footer-Label.
+- `ui/simple_help_dialog.py`: NEU — Klasse + Helper.
+- `ui/settings_dialog.py`: Import + `_make_info_btn` + `_show_bandpilot_help`.
+- `ui/mw_qso.py`: `_antenna_pref_label` ANT2-Zweige.
+- `ui/mw_radio.py`: `from main import APP_VERSION` + app_version-Param.
+
+**Backup:** `Appsicherungen/2026-05-14_v0.97.26_vor_bundle_j/`.
+
+**V4-pro Lessons Bundle J:** 5 von 7 Findings echte Verbesserungen.
+Finding 5 (delta_db=0-Edge-Case) ist klassische V4-pro-Defensive die
+Claude übersehen hätte. Finding 2 (Overengineering) wurde mit
+Mike-Spec-Begründung abgelehnt — V4-pro respektiert Begründung, kein
+Insistieren. Halluzinations-Rate: 0 von 7 Findings.
+
+
 ## 2026-05-14 v0.97.26 — Bundle I (Settings-Spacing + QSO-Reihenfolge + OMNI-Race)
 
 Drei orthogonale Befunde aus Mike-Field-Test 14.05.2026 nachmittags
