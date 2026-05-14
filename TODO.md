@@ -1,4 +1,40 @@
-# SimpleFT8 TODO — Stand 14.05.2026 spätnachmittags (v0.97.27, Bundle J fertig — Field-Test F1-F7 pending)
+# SimpleFT8 TODO — Stand 14.05.2026 abends (v0.97.28, P51 fertig — Field-Test F1-F7 pending)
+
+## ✅ 14.05.2026 erledigt — P51 Gain-Messung vereinheitlichen (1 Messung, 2 Auswertungen) v0.97.28
+
+Mike-Beobachtung 14.05.: 20m FT8 hat Std-Werte 10/10 und DX-Werte 20/10
+weil zu unterschiedlichen Zeitpunkten gemessen. V1→V2→R1→V3-Workflow
+mit DeepSeek-V4-pro voll-autonom.
+
+**Code:** `DXTuneDialog._finish` rechnet jetzt **beide** Auswertungen
+aus identischen `_phase_data`. Helper `_best_for(ant, use_snr)` extrahiert
+scoring-Logik. `_results` hat Sub-Keys `"standard"` + `"dx"` mit je 6
+Feldern + Top-Level-Spiegel (Backwards-Compat). Display zeigt
+`←(Std)`/`←(DX)`/`←(Std+DX)`-Marker. `_on_dx_tune_accepted` schreibt
+beide Stores parallel mit Fallback auf Single-Store wenn Dialog ohne
+Dual-Result (verhindert Daten-Korruption R1-F4). `settings.save_dx_preset`
+komplett raus (R1-F6: tote API, `get_dx_preset` wird nirgends im
+Live-Code gerufen). APP_VERSION 0.97.27→0.97.28.
+
+**R1-V4-pro:** 9 Findings (1 Bug rot Code-Realität-Check, 4 Risiko,
+2 Verbesserung, 2 Hinweis). 6 angenommen, 3 abgelehnt mit Begründung.
+Bug F1 fand 8 vs 18 Zyklen Code-Realität — P51 spart trotzdem 50% (16→8).
+Risiko F4 kritisch: Fallback-Korruption DX-Store mit Std-Werten →
+`has_dual`-Check verhindert das.
+
+**Final-R1 V4-pro „Push freigegeben." 0 KP**, 3 INFO (Kommentar-Drift
+auf 8 Schritte gefixt).
+
+**Tests:** 1235 → 1245 (+10). T5 ist kritischer Anti-Korruption-Test
+(Fallback bei has_dual=False schreibt NICHT in DX-Store).
+
+**Praktischer Effekt:** Heute 2 Mess-Sessions à 8 Zyklen = 16 Zyklen für
+beide Modi. Künftig 1 × 8 Zyklen, beide Stores aus derselben Mess-
+Situation, instant Mode-Switch im 6h-Fenster.
+
+Push pending bis Field-Test F1-F7.
+
+---
 
 ## ✅ 14.05.2026 erledigt — Bundle J (Connect-Modal-Branding + SimpleHelpDialog + RX-Label + Intent-Klausel) v0.97.27
 
@@ -386,7 +422,10 @@ Session (Config-Cache). Folgearbeiten nach 2-3 V4-Reviews:
 
 ---
 
-## 🆕 OFFEN — P51 Gain-Messung vereinheitlichen (1 Messung, 2 Auswertungen) (Mike 14.05.2026 nachmittags)
+## 📋 ARCHIVIERT (Plan-Detail) — P51 Spec: Gain-Messung vereinheitlichen
+
+> **Status: ERLEDIGT 14.05.2026 abends (v0.97.28) — siehe oben.**
+> Plan-Detail bleibt zur Doku stehen.
 
 **Mike's Beobachtung:** Aktuell wird die Gain-Messung pro Scoring-Modus
 separat durchgeführt — d.h. wenn ich zufällig Standard messe um 10:00 und

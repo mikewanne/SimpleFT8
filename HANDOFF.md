@@ -1,5 +1,23 @@
 # HANDOFF — SimpleFT8
 
+## Stand 2026-05-14 abends — P51 (Gain-Vereinheitlichung 1×/2 Auswertungen) Code fertig + Final-R1 ✓, Field-Test pending
+
+**Aktueller Code-Stand:** v0.97.28 (P51), Tests **1245 grün**.
+
+### 🔴 P51 Field-Test pending (nächste Session)
+
+| F# | Was prüfen |
+|---|---|
+| **F1** | Diversity Standard messen (8 Zyklen ~2 Min) → Display zeigt am Ende **beide** Optima Std+DX mit Markern `←(Std)` / `←(DX)` / `←(Std+DX)` |
+| **F2** | Auf DX umschalten → kein neuer Mess-Dialog, DX-Werte sofort aktiv |
+| **F3** | Auf Standard zurück → instant, Std-Werte aktiv |
+| **F4** | 10 Min später erneut Std↔DX → kein Mess-Dialog (Gain-Frist 6h) |
+| **F5** | Nach 6h → erneuter Wechsel triggert Neumessung (8 Zyklen) |
+| **F6** | Mess-Cancel mitten in P51-Lauf → alte Werte beider Stores bleiben unverändert |
+| **F7** | Display zeigt während Messung: „Misst gleichzeitig für Standard- und DX-Modus" |
+
+---
+
 ## Stand 2026-05-14 spätnachmittags — Bundle J (Connect-Branding + Help-Dialog + RX-Label + Intent-Klausel) Code fertig + Final-R1 ✓, Field-Test pending
 
 ### 🚀 Beim nächsten Session-Start (morgen)
@@ -50,7 +68,8 @@ Diese Versionen sind committed aber **NICHT gepusht** bis Field-Tests OK:
 
 | Version | Bundle | Field-Test-Punkte | Status |
 |---|---|---|---|
-| v0.97.27 | **Bundle J** Connect-Branding/Help/RX-Label/Intent | F1-F7 (oben) | pending |
+| v0.97.28 | **P51** Gain-Vereinheitlichung 1×/2 Auswertungen | F1-F7 (oben) | pending |
+| v0.97.27 | **Bundle J** Connect-Branding/Help/RX-Label/Intent | F1-F7 | pending |
 | v0.97.26 | **Bundle I** Settings/QSO-Reihenfolge/OMNI-Race | F1-F7 (oben) | pending |
 | v0.97.25 | **Bundle H** Bandpilot-Aware Div-Klick | F1-F8 | pending |
 | v0.97.24 | **Bundle G** Std↔DX Direkt-Toggle | F1-F9 | pending |

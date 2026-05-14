@@ -3,6 +3,62 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-14 v0.97.28 — P51 Gain-Messung vereinheitlichen (1 Messung, 2 Auswertungen)
+
+**Trigger:** Mike-Beobachtung 14.05.: 20m FT8 hat Std-Werte 10/10 und
+DX-Werte 20/10 — beide aus unterschiedlichen Mess-Sessions, divergent.
+Mike: „die Roh-Messung ist ja scoring-unabhängig". V1→V2→R1→V3-Workflow
+mit DeepSeek-V4-pro voll-autonom.
+
+**Code-Verifikation:** `_phase_data` in `DXTuneDialog` ist scoring-
+unabhängig — beide Auswertungen aus identischen Rohdaten ableitbar.
+R1-V4-pro fand: Code hat tatsächlich **8 Zyklen** (`ROUNDS=2 × 2 Antennen
+× 2 Gain-Stufen`), nicht 18 wie initial gedacht. P51 spart 8 → einmal 8
+statt zweimal 8 = **50% Mess-Zeit gespart** über Mode-Wechsel.
+
+**Code:**
+- `ui/dx_tune_dialog.py`: Helper `_best_for(ant, use_snr) → dict{gain,
+  avg, count}` + `_build_scoring_result(use_snr) → dict` extrahieren
+  scoring-Logik. `_finish()` baut `_results` mit Sub-Keys `"standard"` +
+  `"dx"` + Top-Level-Spiegel des aktiven Modus (Backwards-Compat).
+  `_update_results_display` markiert pro `(ant, gain)` ob Std-/DX-/
+  beides-Optimum mit `←(Std)`, `←(DX)`, `←(Std+DX)`. Neues `mode_label`
+  „Misst gleichzeitig für Standard- und DX-Modus". `_finish` zeigt am
+  Ende beide Optima im `detail_label`.
+- `ui/mw_radio.py`: `_on_dx_tune_accepted` mit Dual-Save bei
+  `has_dual=True` (beide Stores parallel mit jeweiligen Sub-Dict-Werten,
+  WARN-Log bei Disk-Fehler). Fallback bei `has_dual=False` (altes Dialog-
+  Format) auf Single-Store wie pre-P51 — verhindert Daten-Korruption
+  des DX-Store mit Std-identischen Werten (R1-V4-pro Finding 4 kritisch).
+  `settings.save_dx_preset`-Aufrufe komplett raus (R1-F6: tote API,
+  `get_dx_preset` wird nirgends im Live-Code gerufen).
+- `main.py`: APP_VERSION 0.97.27 → 0.97.28.
+
+**R1-V4-pro Findings:** 9 Findings (1 Bug rot, 4 Risiko orange,
+2 Verbesserung gelb, 2 Hinweis grau). 6 angenommen (5 voll, 1 mit Doku),
+3 abgelehnt mit Begründung (F3 `_gain_scoring_mode`-Sub-Toggle — R1 hatte
+Variablen-Zweck missverstanden; F5 Normal-Pfad — Code-Verifikation zeigt
+separater Pfad; F9 Display-Marker Test-Spec KISS-akzeptiert).
+
+**Final-R1 V4-pro „Push freigegeben." 0 KP**, 3 INFO-Hinweise (1 Kommentar-
+Drift „12 Einträge" auf 8 korrigiert, 2 akademische Hinweise legacy/by-
+design).
+
+**Tests:** 1235 → 1245 (+10). 10 neue P51-Tests T1-T9 in
+`tests/test_p51_unified_gain.py`. T5 ist der kritische Anti-Korruption-
+Test (Fallback bei has_dual=False schreibt NICHT in DX-Store mit Std-
+Werten).
+
+**V4-pro Lessons P51:** Finding 1 (Bug rot) klassisch — V4-pro fand
+Diskrepanz zwischen V2-Spec (18 Zyklen) und tatsächlichem Code (8
+Zyklen). Finding 4 (Risiko) sehr stark — V4-pro fand subtilen Fallback-
+Korruptions-Pfad den ich übersehen hätte. Halluzinations-Rate: 0/9.
+Zeit ~30s, Tokens 39k in / 10.5k out.
+
+**Backup:** `Appsicherungen/2026-05-14_v0.97.27_vor_p51/`.
+
+---
+
 ## 2026-05-14 v0.97.27 — Bundle J (Connect-Modal-Branding + Help-Dialog + RX-Label + Intent-Klausel)
 
 **Trigger:** Mike-Klärungsgespräch nach Bundle I — 4 UI/Doku-Tweaks als
