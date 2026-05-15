@@ -43,7 +43,14 @@ class _FakeMW(QSOMixin, CycleMixin):
     Erbt QSOMixin + CycleMixin sodass _pause_omni_if_active /
     _maybe_resume_omni / on_message_decoded direkt verfuegbar sind.
     """
-    pass
+    def _abort_active_tx(self):
+        """P60 (v0.97.32): Stub für TX-Helper (echte Impl in TXMixin)."""
+        if self.encoder.is_transmitting:
+            self.encoder.abort()
+            if self.radio.ip:
+                self.radio.ptt_off()
+        if hasattr(self, "_pending_station_click"):
+            self._pending_station_click = None
 
 
 def _make_fake_mw(app, callsign: str = "DA1MHH",
