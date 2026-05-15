@@ -1,5 +1,38 @@
 # SimpleFT8 TODO — Stand 14.05.2026 abends (v0.97.28, P51 fertig — Field-Test F1-F7 pending)
 
+## ✅ 15.05.2026 erledigt — P55 Easter-Egg + Diversity-CQ-Code-Leichen entfernt v0.97.30
+
+**Trigger:** Mike-Spec 15.05.: in Diversity nur OMNI CQ (kein Normal-CQ
+auch nicht versteckt), Easter-Egg-Funktion komplett raus.
+
+**Voller V1→V2→R1→V3-Workflow autonom mit DeepSeek-V4-pro.**
+
+**Code-Removal:**
+- `_on_easter_egg_toggle`-Methode + `_easter_egg_active`-Variable raus
+  (`main_window.py`)
+- `easter_egg_toggle_clicked`-Signal + `_omni_active`-Flag +
+  Version-Label-Click-Handler raus (`control_panel.py`)
+- `btn_cq` OMNI-Label-Branches raus — jetzt reiner Normal-CQ-Button
+- 5× `_easter_egg_active`-Verweise + `hasattr`-Gates in `mw_radio.py`
+- `core/auto_hunt.py` Doc-String-Verweise auf `easter_egg_off` (R1-F1)
+- 8 irreführende Doku-Kommentare in 4 Files aktualisiert
+- 6 Source-Level-Regressions-Tests T1-T6 NEU
+
+**R1-V4-pro:** 5 Findings, 4 angenommen + 1 Doku-Akzeptanz,
+Halluzinations-Rate 0/5. F1 sehr stark (`core/auto_hunt.py` in V2
+vergessen). Final-R1 „PUSH uneingeschränkt freigeben" 0 KP.
+
+**V4-pro 5-Cycle-Bilanz:** 30 Findings total, 0 Halluzinationen.
+
+**8 atomare Commits** (C1-C7+C7b). **Tests 1258 → 1262** (+4: -2
+parametrize, +6 P55-Regression).
+
+**Backup:** `Appsicherungen/2026-05-15_v0.97.29_vor_p55/`.
+
+**Field-Test F1-F8 pending** (siehe HANDOFF).
+
+---
+
 ## ✅ 14.05.2026 erledigt — P53 SWR-Live-Watchdog (Hardware-Sicherheit) v0.97.29
 
 **Trigger:** Mike-Field-Test 14.05.: nasse Antenne nach Regen → SWR>30 bei
@@ -261,6 +294,65 @@ sehen sofort „boah, der empfängt mit Regenrinne als zweite Antenne".
 - Backup `Appsicherungen/2026-05-15_v0.97.26_vor_bundle_j/` (oder
   passende Datierung) vor Code-Start.
 - Field-Test F1-F4 für jeden Punkt einzeln.
+
+---
+
+## 🆕 OFFEN — P56: Gain-Messung kollabieren auf pro-Band (Mike 15.05.2026 morgens, DeepSeek-V4-pro bestätigt Option A)
+
+**Trigger:** Mike-Beobachtung 15.05.: Wenn auf FT4/FT2 die Gain-Messung
+fällig wird (6h-Frist abgelaufen) und nicht genug Stationen empfangbar
+sind → Mess-Hänger. Aber Gain ist Hardware-Eigenschaft pro Antenne und
+identisch für FT8/FT4/FT2 auf demselben Band → unnötige Mode-Trennung.
+
+**DeepSeek-V4-pro-Empfehlung (Brainstorm 15.05.):** Option A „Nur FT8
+misst" klar gegen Option B „Auto-Switch zu FT8". KISS-Weg. „Gain-Messung
+ist ein Setup-Schritt, der typischerweise beim ersten Start auf einem
+Band in FT8 erledigt wird — danach ist der Wert da und alle Modi
+profitieren." Option B = Kanonen auf Spatzen wegen QSO-Race + Encoder-
+State-Restore.
+
+**Mike-Spec (Klärung 15.05.):** „6 Stunden gelten ab heute nur Grenze
+wenn FT8-Betrieb ist, wenn FT4 und FT2 keine Relevanz, so haben wir
+einen Bandwert für alle 3 Modis."
+
+**Präzedenz:** P48-B (v0.97.13) — Cross-Modus-Fallback existiert bereits
+für DT-Korrektur (`FT4/FT2 → FT8` vom gleichen Band).
+
+### Was tun
+
+1. **PresetStore-Key vereinheitlichen** auf nur Band: `40m` statt
+   `40m_FT8`/`40m_FT4`/`40m_FT2`. Ein Datensatz pro Band für alle 3 Modi.
+2. **Mess-Trigger nur in FT8**:
+   - Aktiver Modus FT8 + Wert für Band fehlt/älter 6h → Mess-Dialog.
+   - Aktiver Modus FT4/FT2: **immer den existierenden Wert nehmen**,
+     auch wenn 9h/24h/7 Tage alt. **Keine 6h-Frist in FT4/FT2.**
+3. **Erstnutzung auf FT4/FT2 ohne FT8-Wert:** passiver Hinweis (Statusbar
+   oder QSO-Panel.add_info: „Bitte einmal auf FT8 wechseln zum Messen —
+   Werte gelten dann für alle FT-Modi auf diesem Band"). **Kein
+   Auto-Mode-Switch** (Mike: „bin ich nicht für").
+4. **Migration alter Datei:** alte `40m_FT8`-Einträge werden zu `40m`
+   umbenannt (FT8 als Quelle weil meiste Daten). FT4/FT2-Einträge werden
+   verworfen.
+5. **Mess-Texte modus-neutral:** schon heute weitgehend OK (geprüft —
+   `dx_tune_dialog.py` und `mw_radio.py` haben keine FT8/FT4/FT2-
+   namentlichen Strings in Mess-Phase).
+
+### Wo umsetzen
+
+- `core/preset_store.py`: Key-Format von `band_mode` auf nur `band`.
+  Migration in `load()` analog DT-Korrektur. `get_gain(band)` ohne
+  mode-Parameter.
+- `ui/mw_radio.py:_check_diversity_preset`: Mess-Trigger prüft
+  `settings.mode == "FT8"`. Sonst silent existierenden Wert nehmen +
+  Hinweis falls leer.
+- `ui/dx_tune_dialog.py`: Save unter `band`-Key statt `band_mode`.
+- Status-Indikator: einmaliger Hinweis „Bitte auf FT8 wechseln" wenn
+  Diversity-Aktivierung in FT4/FT2 ohne FT8-Wert.
+- Tests: 5-6 Tests (Migration, Mode-Trigger-Gate, FT4-mit-altem-FT8-
+  Wert, FT4-ohne-FT8-Wert-Hinweis, idempotenter Save).
+
+**Aufwand:** klein-mittel, 0.5-1 Tag. Workflow Pflicht (PresetStore-API-
+Eingriff + Migration).
 
 ---
 

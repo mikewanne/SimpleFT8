@@ -3,6 +3,63 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-15 v0.97.30 — P55 Easter-Egg + Diversity-CQ-Code-Leichen entfernt
+
+**Trigger:** Mike-Spec 15.05.2026 nach Screenshot-Analyse: „In Diversity
+soll es nur OMNI CQ geben, keinen normalen CQ auch nicht versteckt. Es
+gibt auch keine Easter-Egg-Funktion mehr. Normal ist so als wenn es ein
+ganz normales FT8-Programm wäre ohne unsere ganzen Verbesserungen."
+
+**Voller V1→V2→R1→V3-Workflow autonom mit DeepSeek-V4-pro.**
+
+**R1-V4-pro:** 5 Findings (1 Bug rot, 1 Risiko orange, 1 Verbesserung,
+2 Hinweise), 4 angenommen + 1 Doku-Kommentar-Akzeptanz. **Halluzinations-
+Rate 0/5.** Bug F1 sehr stark: `core/auto_hunt.py` war in V2-Datei-Liste
+vergessen — V4-pro hat 3 Doc-String-Easter-Egg-Verweise dort gefunden.
+
+**Code-Removal (7 atomare Commits + 1 Doku-Fix):**
+
+- C1 `main_window.py`: `_on_easter_egg_toggle`-Methode (24 Zeilen) +
+  `_easter_egg_active`-Variable + `easter_egg_toggle_clicked`-Connect
+  raus. `_update_button_visibility` simplifiziert zu 2-Wege ohne
+  Override-Branch (Normal → `btn_cq` sichtbar, Diversity → OMNI+Hunt
+  sichtbar).
+- C2 `control_panel.py`: `easter_egg_toggle_clicked`-Signal +
+  `_omni_active`-Flag + `_version_label.setCursor`+
+  `mousePressEvent`-Override raus. `_on_cq_clicked`+`set_cq_active`
+  OMNI-Label-Branches raus — `btn_cq` ist jetzt reiner Normal-CQ-Button
+  („CQ RUFEN" ↔ „CQ AKTIV ■").
+- C3 `mw_radio.py`: 5× `_easter_egg_active`-Verweise raus (1 Reset-
+  Zuweisung in `_on_rx_mode_changed` + 4× `hasattr(self,
+  "_easter_egg_active")`-Gate vor `_update_button_visibility`). Gate
+  war Pre-Init-Defensive — nicht mehr nötig nach Cleanup.
+- C4 `core/auto_hunt.py` (R1-F1): 3 Doc-String-Verweise auf
+  `easter_egg_off`-Stop-Reason raus (Signal-Header + `stop_auto_hunt`-
+  Docstring). Reasons-Liste enthält jetzt `rx_mode_change` +
+  `superseded` statt der toten Strings.
+- C5 Bestehende Tests bereinigt: `test_bundle_i.py` + `test_omni_cq_
+  integration.py` Mock-State raus, `test_auto_hunt_extended.py`
+  Parametrize-Listen ohne `"easter_egg_off"`.
+- C6 `tests/test_p55_easter_egg_removed.py` NEU (6 Source-Level-Tests
+  T1-T6 als Regressions-Schutz, T1 rekursiver grep über ui/+core/+radio/
+  mit `_strip_comments`-Helper).
+- C7 APP_VERSION 0.97.29 → 0.97.30.
+- C7b Final-R1-Nachfass: 8 irreführende Doku-Kommentare in 4 Files
+  aktualisiert (sagten noch „nur via Easter-Egg sichtbar" obwohl jetzt
+  Mode-Coupling — Doku wäre falsch geblieben).
+
+**Final-R1 V4-pro:** „Push uneingeschränkt freigeben", 0 KP.
+
+**V4-pro 5-Cycle-Bilanz:** Bundle I (5) + J (7) + P51 (9) + P53 (4) +
+P55 (5) = **30 Findings, 0 Halluzinationen, 100% verifizierbar.**
+
+**Tests 1258 → 1262 grün** (-2 parametrize, +6 P55-Regression).
+
+**Backup:** `Appsicherungen/2026-05-15_v0.97.29_vor_p55/`. Push pending
+bis Field-Test F1-F8 (siehe HANDOFF).
+
+---
+
 ## 2026-05-14 v0.97.29 — P53 SWR-Live-Watchdog (Hardware-Sicherheit)
 
 **Trigger:** Mike-Field-Test 14.05.2026: nasse Antenne nach Regen → SWR

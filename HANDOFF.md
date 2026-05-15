@@ -1,8 +1,29 @@
 # HANDOFF — SimpleFT8
 
+## Stand 2026-05-15 morgens — P55 (Easter-Egg-Cleanup) Code fertig + Final-R1 ✓, Field-Test pending
+
+**Aktueller Code-Stand:** v0.97.30 (P55), Tests **1262 grün**.
+
+### 🔴 P55 Field-Test pending (nächste Session)
+
+**P55 (v0.97.30) — Easter-Egg + Diversity-CQ-Code-Leichen entfernt:**
+
+| F# | Was prüfen |
+|---|---|
+| **F1** | App-Start: Version-Label „SimpleFT8 v0.97.30" sichtbar |
+| **F2** | Hover über Version-Label: Cursor bleibt **default** (kein Pointer-Cursor mehr) |
+| **F3** | Klick auf Version-Label: **nichts passiert** — kein Konsolen-Log, keine Button-Änderung |
+| **F4** | Mode Normal → Diversity: `btn_cq` verschwindet, OMNI CQ + AUTO HUNT erscheinen |
+| **F5** | Mode Diversity → Normal: OMNI + Hunt verschwinden, `btn_cq` erscheint mit Label „CQ RUFEN" |
+| **F6** | OMNI-CQ in Diversity starten/stoppen: funktioniert wie gehabt (Frequenz-Sticky, Slot-Pattern) |
+| **F7** | AUTO HUNT in Diversity starten/stoppen: funktioniert wie gehabt |
+| **F8** | btn_cq-Klick in Normal: Label wird „CQ AKTIV ■", normaler manueller CQ läuft |
+
+---
+
 ## Stand 2026-05-14 abends — P53 (SWR-Live-Watchdog) Code fertig + Final-R1 ✓, Field-Test pending
 
-**Aktueller Code-Stand:** v0.97.29 (P53), Tests **1258 grün**.
+**Vorgänger-Code-Stand:** v0.97.29 (P53), Tests **1258 grün**.
 
 ### 🚀 Beim nächsten Session-Start
 
