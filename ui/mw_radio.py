@@ -562,7 +562,6 @@ class RadioMixin:
                 self.encoder.abort()
                 if self.radio.ip:
                     self.radio.ptt_off()
-            self._easter_egg_active = False
 
         # Warmup: 60s keine Stats nach Moduswechsel
         import time as _time
@@ -652,10 +651,9 @@ class RadioMixin:
 
             self._activate_diversity_with_scoring(scoring)
 
-        # v0.78: Defensive — Mode-Coupling-Update auch wenn _apply_normal_mode /
+        # Mode-Coupling-Update auch wenn _apply_normal_mode /
         # _enable_diversity nicht direkt durchgelaufen sind (early-return-Pfade)
-        if hasattr(self, "_easter_egg_active"):
-            self._update_button_visibility()
+        self._update_button_visibility()
         self._update_statusbar()
 
     def _show_diversity_choice_dialog(self, intro_text: str) -> str | None:
@@ -855,8 +853,7 @@ class RadioMixin:
             self.control_panel.set_rx_mode("diversity")
             self._activate_diversity_with_scoring(scoring)
 
-        if hasattr(self, "_easter_egg_active"):
-            self._update_button_visibility()
+        self._update_button_visibility()
         self._update_statusbar()
 
     def _maybe_apply_bandpilot(self, band: str) -> bool:
@@ -1160,9 +1157,8 @@ class RadioMixin:
             )
             print(f"[Diversity] AKTIV — Standard-Gains, kein Preset fuer {band}")
 
-        # v0.78: Mode-Coupling Buttons aktualisieren (Diversity aktiv → Power-Buttons sichtbar)
-        if hasattr(self, "_easter_egg_active"):
-            self._update_button_visibility()
+        # Mode-Coupling Buttons aktualisieren (Diversity aktiv → Power-Buttons sichtbar)
+        self._update_button_visibility()
 
     def _disable_diversity(self):
         """Diversity deaktivieren: zurueck auf ANT1."""
@@ -1746,9 +1742,8 @@ class RadioMixin:
                 warned.add(band)
                 self._show_normal_preset_age_info(band, age_days, measured_str)
 
-        # v0.78: Mode-Coupling Buttons aktualisieren (rx_mode jetzt sauber gesetzt)
-        if hasattr(self, "_easter_egg_active"):
-            self._update_button_visibility()
+        # Mode-Coupling Buttons aktualisieren (rx_mode jetzt sauber gesetzt)
+        self._update_button_visibility()
 
     def _show_normal_preset_age_info(self, band: str, age_days: int, measured_str: str):
         """Info-Dialog: Normal-Preset >30 Tage alt — KALIBRIEREN-Button empfohlen."""
