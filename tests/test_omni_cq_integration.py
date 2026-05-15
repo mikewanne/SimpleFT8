@@ -132,7 +132,6 @@ def _make_fake_mw(app, callsign: str = "DA1MHH",
     mw._radio = MagicMock()
     mw._auto_hunt_cooldown_timer = MagicMock()
     mw._auto_hunt_cooldown_seconds = 0
-    mw._easter_egg_active = False
     mw._active_qso_targets = set()
     mw.radio = MagicMock()
     mw.radio.ip = ""

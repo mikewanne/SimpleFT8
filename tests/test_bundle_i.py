@@ -81,7 +81,6 @@ def _make_mw_radio(*, cq_mode: bool = False,
     obj._auto_hunt.stop_auto_hunt = MagicMock()
 
     # diversity / decoder / panels
-    obj._easter_egg_active = True
     obj._stats_warmup_cycles = 0
     obj._normal_stations = {}
     obj.rx_panel = MagicMock()

@@ -78,7 +78,6 @@ def test_double_start_restarts_timer(qapp):
 @pytest.mark.parametrize("reason,should_clear", [
     ("timer_expired", True),
     ("manual_halt", True),
-    ("easter_egg_off", True),
     ("band_change", True),
     ("ft_mode_change", True),     # v0.78: ehemals "mode_change", umbenannt
     ("rx_mode_change", True),     # v0.78: NEU (Diversity → Normal)
@@ -112,7 +111,7 @@ def test_stop_reasons_clear_cooldown_and_last_tx_even_correctly(
 @pytest.mark.parametrize("reason", [
     "timer_expired", "manual_halt", "band_change",
     "ft_mode_change", "rx_mode_change", "superseded",
-    "totmann_expired", "easter_egg_off",
+    "totmann_expired",
 ])
 def test_auto_hunt_stopped_signal_emits_with_reason(qapp, reason):
     """auto_hunt_stopped(reason) wird bei jedem Stop emittiert."""
