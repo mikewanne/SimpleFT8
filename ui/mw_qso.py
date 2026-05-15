@@ -313,6 +313,8 @@ class QSOMixin:
             self.qso_panel.add_info(f"CQ-Modus gestoppt ({count} QSOs)")
             self.qso_panel.status_label.setText(f"{count} QSO(s)")
             self.qso_panel.status_label.setStyleSheet("color: #666; font-size: 11px; padding: 2px;")
+            # P60 (v0.97.32): TX-Slot SOFORT abbrechen + Click-Puffer leeren
+            self._abort_active_tx()
             self.qso_sm.stop_cq()
             self.control_panel.update_qso_counter(0)
 
@@ -324,13 +326,9 @@ class QSOMixin:
     def _on_cancel(self):
         """HALT — stoppt ALLES: CQ, QSO, TX, Messung, OMNI, Auto-Hunt."""
         self._active_qso_targets.clear()
-        self._pending_station_click = None  # P1.24: gepufferten Klick verwerfen
         self.rx_panel.set_active_call("")
-        # TX sofort stoppen
-        if self.encoder.is_transmitting:
-            self.encoder.abort()
-            if self.radio.ip:
-                self.radio.ptt_off()
+        # TX sofort stoppen (P60: zentraler Helper, cleart auch _pending_station_click)
+        self._abort_active_tx()
         # CQ + QSO stoppen
         self.qso_sm.stop_cq()
         self.qso_sm.cancel()
