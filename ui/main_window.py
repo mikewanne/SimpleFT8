@@ -789,6 +789,8 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
             self._update_statusbar()
             print("[OMNI-CQ] User-Start")
         elif not checked and self._omni_cq.is_active():
+            # P60 (v0.97.32): TX-Slot SOFORT abbrechen + Click-Puffer leeren
+            self._abort_active_tx()
             self._omni_cq.stop("manual_halt")
 
     def _on_omni_stopped(self, reason: str):
@@ -860,6 +862,8 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
             self._on_auto_hunt_polling_tick()  # initialer Text-Set
             print("[Auto-Hunt] User-Start (10 Min)")
         elif not checked and self._auto_hunt.active:
+            # P60 (v0.97.32): TX-Slot SOFORT abbrechen + Click-Puffer leeren
+            self._abort_active_tx()
             self._auto_hunt.stop_auto_hunt("manual_halt")
 
     def _on_auto_hunt_stopped(self, reason: str):
