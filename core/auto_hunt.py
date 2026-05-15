@@ -78,7 +78,7 @@ class AutoHunt(QObject):
     # ─────────────────────────────────────────────────────────────────────────
     # Qt-Signal: wird bei JEDEM stop_auto_hunt(reason) emittiert.
     # Reasons: "timer_expired", "manual_halt", "band_change",
-    #          "mode_change", "totmann_expired", "easter_egg_off"
+    #          "mode_change", "rx_mode_change", "totmann_expired", "superseded"
     # ─────────────────────────────────────────────────────────────────────────
     auto_hunt_stopped = Signal(str)
 
@@ -144,11 +144,12 @@ class AutoHunt(QObject):
             manual_halt     — User klickte HALT-Button
             band_change     — Band wurde gewechselt
             mode_change     — FT8/FT4/FT2 wurde gewechselt
+            rx_mode_change  — Normal↔Diversity wurde gewechselt
             totmann_expired — Operator-Presence (15 Min) abgelaufen
-            easter_egg_off  — Easter-Egg deaktiviert waehrend Auto-Hunt aktiv
+            superseded      — anderer Power-Modus (z.B. OMNI) gestartet
 
         Cleanup-Logik (reason-basiert):
-            timer_expired/manual_halt/easter_egg_off/band_change/mode_change:
+            timer_expired/manual_halt/band_change/mode_change/rx_mode_change/superseded:
                 _cooldown.clear() + _last_tx_even = None
             totmann_expired:
                 _cooldown UND _last_tx_even bleiben (User soll fortsetzen)
