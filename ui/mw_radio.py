@@ -541,7 +541,7 @@ class RadioMixin:
             return
 
         old_mode = self._rx_mode
-        # v0.78: bei RX-Mode-Wechsel Easter-Egg-Override und aktive Power-Modi stoppen
+        # Bei RX-Mode-Wechsel aktive Power-Modi (OMNI, AUTO HUNT) stoppen
         if mode != old_mode:
             if hasattr(self, "_omni_cq") and self._omni_cq.is_active():
                 self._omni_cq.stop("rx_mode_change")

@@ -978,8 +978,10 @@ class _QSOStatusCard(QFrame):
         rxtx_row.addStretch()
         lay.addLayout(rxtx_row)
 
-        # 3-Button-Layout (v0.75): CQ RUFEN immer sichtbar, OMNI CQ + AUTO HUNT
-        # nur via Easter-Egg-Toggle (Klick auf Versionsnummer). TUNE-Button ist
+        # 3-Button-Layout: btn_cq sichtbar in Normal-Modus, btn_omni_cq +
+        # btn_auto_hunt sichtbar in Diversity-Modus (Mode-Coupling in
+        # MainWindow._update_button_visibility). Initial alle hidden bis
+        # _update_button_visibility nach __init__ läuft. TUNE-Button ist
         # SEPARAT und gehoert NICHT zur QButtonGroup — eigene setEnabled-Steuerung.
         _mode_btn_style = (
             f"QPushButton {{ background: rgba(120,0,0,0.45); color: #CC8888; "
@@ -1014,13 +1016,13 @@ class _QSOStatusCard(QFrame):
             f"border: 1px solid #444444; }}"
         )
         self.btn_omni_cq.setStyleSheet(_omni_btn_style)
-        self.btn_omni_cq.hide()  # nur via Easter-Egg sichtbar
+        self.btn_omni_cq.hide()  # initial hidden, sichtbar in Diversity
 
         self.btn_auto_hunt = QPushButton("AUTO HUNT")
         self.btn_auto_hunt.setCheckable(True)
         self.btn_auto_hunt.setFixedHeight(26)
         self.btn_auto_hunt.setStyleSheet(_mode_btn_style)
-        self.btn_auto_hunt.hide()  # nur via Easter-Egg sichtbar
+        self.btn_auto_hunt.hide()  # initial hidden, sichtbar in Diversity
 
         # Mutually exclusive zwischen OMNI ↔ Auto-Hunt: in main_window.py
         # _on_btn_omni_cq_toggled + _on_btn_auto_hunt_toggled mit "superseded"-

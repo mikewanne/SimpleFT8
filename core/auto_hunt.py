@@ -2,8 +2,9 @@
 
 INTERN / VERSTECKT — Keine oeffentliche Dokumentation!
 
-Aktivierung: Zusammen mit OMNI-TX via Easter Egg (Klick Versionsnummer).
-Deaktivierung: Gleicher Klick oder HALT-Button.
+Sichtbarkeit: Mode-gekoppelt — Button btn_auto_hunt ist nur im
+Diversity-Modus sichtbar (siehe MainWindow._update_button_visibility).
+Deaktivierung: HALT-Button oder Mode-Wechsel nach Normal.
 
 Funktionsweise:
   1. Nach jedem Decode-Zyklus: CQ-Stationen erkennen
@@ -67,7 +68,7 @@ class AutoHunt(QObject):
     Erbt von QObject damit Signal-Emit (Commit 4: auto_hunt_stopped) sauber
     funktioniert und Qt-Lifecycle (deleteLater etc.) greift.
 
-    Verwendung (wenn aktiviert via Easter Egg):
+    Verwendung (sichtbar im Diversity-Modus):
         auto = AutoHunt(qso_log, band)
         # Nach jedem Decode-Zyklus:
         candidate = auto.select_next(messages, current_state)

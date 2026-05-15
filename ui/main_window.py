@@ -82,7 +82,7 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self.rx_panel.set_qso_log(self.qso_log)
         self.rx_panel.set_locator_db(self.locator_db)
 
-        # Optionale Features (NACH _setup_ui, weil Easter-Egg-Signal verbunden wird)
+        # Optionale Features (NACH _setup_ui, weil Signal-Connects gemacht werden)
         self._init_optional_features()
 
         # Timer + Radio starten (NACH OMNI-TX/Auto-Hunt/AP-Lite Init!)
@@ -298,7 +298,11 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         )
 
     def _init_optional_features(self):
-        """OMNI-TX (Easter Egg, Feldtest), Auto-Hunt, AP-Lite — alle deaktiviert by default."""
+        """OMNI-TX, Auto-Hunt, AP-Lite — alle deaktiviert by default.
+
+        Sichtbarkeit von btn_omni_cq/btn_auto_hunt ist mode-gekoppelt:
+        nur im Diversity-Modus sichtbar (siehe _update_button_visibility).
+        """
         # OMNI-CQ: Initialisieren (deaktiviert) — eigener Worker-Thread
         # mit absolut-UTC-Boundaries (P4.OMNI-NEUBAU v0.96.0). Kein
         # qso_state.cq_mode-Hack, keine cycle_tick-Pretrigger.
@@ -358,7 +362,7 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         # v0.88: Bandpilot-MD-Reports beim App-Start regenerieren
         self._init_bandpilot_recommendations()
 
-        # v0.78: Initial-Sichtbarkeit der 3 Mode-Buttons (rx_mode + Easter-Egg)
+        # Initial-Sichtbarkeit der 3 Mode-Buttons (rx_mode-gekoppelt)
         self._update_button_visibility()
 
     def _init_bandpilot_recommendations(self):
