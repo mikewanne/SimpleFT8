@@ -356,6 +356,218 @@ Eingriff + Migration).
 
 ---
 
+## 🔴 OFFEN — P61: Auto-Hunt nimmt gerade abgeschlossene Station SOFORT WIEDER (Mike-Field-Test 15.05.2026 morgens)
+
+**Trigger:** Mike-Field-Test mit Auto-Hunt 15.05. zeigte: nach
+erfolgreichem QSO + Courtesy-73 wird DIESELBE Station sofort wieder
+angerufen — doppeltes QSO mit identischem Call! ADIF-Duplikat-Schutz
+greift („9A2G Duplikat (89s) — kein ADIF-Eintrag"), aber TX läuft
+komplett raus (2 Min Funkzeit verschwendet pro Dup, Etikette-
+Verletzung, Antennen-Verschleiß).
+
+**Beweis aus Screenshot 04:55-05:00 UTC:**
+```
+04:56:30 Sende 9A2G 73 ✓ komplett        (QSO #1)
+04:57:00 Sende 9A2G -17                   ← Auto-Hunt picks 9A2G WIEDER
+04:58:00 Sende 9A2G 73 ✓ komplett        (QSO #2 mit selber Station)
+04:58:30 Sende HA8RC -14                  (HA8RC #1)
+04:59:30 Sende HA8RC 73 ✓ komplett
+05:00:00 Sende HA8RC -16                  ← HA8RC WIEDER
+05:00:30 HA8RC Duplikat (89s) — kein ADIF
+```
+
+**Wurzel-Vermutung:** `core/auto_hunt.py` `select_next()` filtert die
+gerade abgeschlossene Station nicht aus der Kandidaten-Liste — sie
+ruft im nächsten Slot weiter CQ und wird wieder als „rufst-mich"-
+Match gewertet, bevor `_active_qso_targets` clearen oder Cooldown
+greift.
+
+**Was tun:**
+1. `core/auto_hunt.py` Kandidaten-Liste: kürzlich abgeschlossene Calls
+   (z.B. letzte 5 Min via `qso_log` oder eigener Recent-Set) ausschließen
+2. Plus: Pre-TX-Check vor `encoder.transmit` — wenn Ziel-Call im
+   ADIF-Cache der letzten X Min → TX abbrechen (Cooldown-Belt-Suspenders)
+3. Mike entscheiden: Cooldown-Dauer (Vorschlag: 5-10 Min, FT8-Etikette
+   sagt „kein 2. QSO im selben Slot")
+4. Tests: T1 Auto-Hunt skipt gerade abgeschlossene Station, T2 ADIF-
+   Recent-Cooldown, T3 Bug-Schutz mit Screenshot-Sequenz nachgebaut
+
+**Aufwand:** mittel, ~1-2h Code + Mike-Klärung Cooldown-Dauer.
+**Workflow Pflicht.** Wurzel-Analyse vor V1 (`core/auto_hunt.py` +
+`core/qso_state.py` Pfad genau verstehen).
+
+**Hinweis Hardware:** ANT1-TX bleibt unverändert (Stop-Pfad), nur
+Pre-TX-Filter eingreifen.
+
+---
+
+## 🆕 OFFEN — P60: Alle 3 User-Stop-Pfade brechen laufenden TX-Slot nicht ab (Mike-Field-Test 15.05.2026 morgens)
+
+**Trigger:** Mike-Test P55-F6: OMNI-CQ während aktivem TX-Slot per
+Toggle-Klick gestoppt — Button wird sofort rot, ABER der laufende
+15s-Slot wird komplett zu Ende gesendet. Mike: „Toggle = an/aus,
+nicht slot-schalter. Ich würde ja nicht im CQ-Ruf drücken wenn ich
+nicht wollte das es nicht mehr sendet."
+
+**Mike-Folge-Wunsch:** „bitte auch bei normal cq ruf überprüfen" —
+Code-Audit bestätigt: **alle 3 User-Toggle-Stop-Pfade** haben denselben
+Bug.
+
+**Wurzel — 3 Stellen ohne `encoder.abort()` + `ptt_off()`:**
+
+1. **OMNI-CQ:** `ui/main_window.py:791-792` `_on_btn_omni_cq_toggled`
+   ```python
+   elif not checked and self._omni_cq.is_active():
+       self._omni_cq.stop("manual_halt")  # ← nur Flags, kein TX-Stop
+   ```
+
+2. **Auto-Hunt:** `ui/main_window.py:862-863` `_on_btn_auto_hunt_toggled`
+   ```python
+   elif not checked and self._auto_hunt.active:
+       self._auto_hunt.stop_auto_hunt("manual_halt")  # ← nur Flags
+   ```
+
+3. **Normal-CQ:** `ui/mw_qso.py:311-317` `_on_cq_clicked` Stop-Pfad
+   ```python
+   else:
+       count = self.qso_sm.cq_qso_count
+       self.qso_panel.add_info(f"CQ-Modus gestoppt ({count} QSOs)")
+       ...
+       self.qso_sm.stop_cq()  # ← nur State-Wechsel, kein TX-Stop
+       self.control_panel.update_qso_counter(0)
+   ```
+
+Im Vergleich `_on_cancel` (HALT-Button) macht es richtig:
+```python
+if self.encoder.is_transmitting:
+    self.encoder.abort()
+    if self.radio.ip:
+        self.radio.ptt_off()
+```
+
+**Was tun:** Alle 3 Stop-Pfade um abort+ptt_off ergänzen — guarded mit
+`if self.encoder.is_transmitting:` damit nur dann eingreifen wenn TX
+wirklich läuft (sonst no-op).
+
+**Zentralisierung empfohlen:** Helper-Methode `_abort_active_tx()` in
+einem Mixin (mw_tx.py?) — single source of truth gegen Drift in Zukunft.
+
+**Tests:**
+- T1: OMNI-Stop ruft abort+ptt_off wenn encoder.is_transmitting
+- T2: Auto-Hunt-Stop analog
+- T3: Normal-CQ-Stop analog
+- T4: Wenn encoder.is_transmitting=False → kein unnötiger abort-Call
+- T5: SWR-Watchdog-Stop bleibt unverändert (Regression-Schutz)
+- T6: HALT-Pfad bleibt unverändert
+
+**Aufwand:** klein-mittel, ~45 Min Code + Workflow Pflicht (TX-Pfad-
+Eingriff über 3 Stellen, Audit nötig).
+
+---
+
+## 🆕 OFFEN — P59: CQ-Button visuelle Konsistenz Normal vs. Diversity (Mike 15.05.2026 morgens)
+
+**Trigger:** Mike-Field-Test P55: btn_cq in Normal wechselt zu „CQ AKTIV ■"
+korrekt — aber bleibt visuell rot/standard. OMNI CQ in Diversity wird grün
+wenn aktiv. **Inkonsistenz** — Mike: „sollte wie bei Diversity-Modus auch
+grün werden. (einheitlich optisch nachvollziehbar)".
+
+**Was tun:** btn_cq bei `active=True` gleichen grünen Style anwenden wie
+btn_omni_cq. `set_cq_active(True)` in `ui/control_panel.py:1822` muss
+zusätzlich `setStyleSheet(active_green_style)` setzen, bei `False` zurück
+auf Default-Style.
+
+**Wo umsetzen:**
+- `ui/control_panel.py:1809+1822` `set_cq_active` erweitern
+- Style-Konstante einmal definieren (Z.~1000 Bereich) damit beide Buttons
+  dasselbe Grün nutzen — `_cq_active_green_style` als Modul/Klassen-Konst.
+- Falls btn_omni_cq inline-Style hat: nach oben ziehen, beide Buttons nutzen
+  dieselbe Konstante.
+
+**Aufwand:** klein, ~15 Min Code. Workflow Pflicht (UI-Style-Eingriff über
+mehrere Stellen).
+
+---
+
+## ✅ 15.05.2026 erledigt — P58: SWR-Limit Save-Hook Live-Propagation v0.97.31
+
+Fix per V2-Self-Review-Erkenntnis: bereits etabliertes Pattern in Code
+(set_power/tx_audio_level werden NACH dialog.exec() im MainWindow
+propagiert). P53 hatte als einziger Pfad Inline-Propagation im Dialog
+gebaut — das hatte den Bug. Fix: 1 Zeile raus aus settings_dialog,
+1 Zeile rein in main_window + alle 3 Live-Setter unter gemeinsamem
+`if self.radio.ip:`-Guard (R1-V4-pro-F1). Tests 1262→1268 (+6).
+Field-Test F1-F3 pending. Siehe HISTORY.md v0.97.31.
+
+---
+
+## 🗄️ HISTORIE — P58: SWR-Limit Save-Hook propagiert nicht zur laufenden App (Mike-Field-Test 15.05.2026 morgens)
+
+**Trigger:** Mike-P53-Field-Test 15.05.: SWR-Limit auf 1.5 in Settings
+gespeichert während App lief — Watchdog greift NICHT (TX läuft mit
+SWR 1.9 durch). Nach App-Neustart `[FlexRadio] SWR-Limit auf 1.5
+gesetzt` korrekt im Terminal → Connect-Hook funktioniert, Save-Hook
+nicht.
+
+**Wurzel-Hypothese:** `ui/settings_dialog.py:680-683`
+```python
+parent = self.parent()
+if parent is not None and hasattr(parent, "radio") and getattr(parent.radio, "ip", None):
+    parent.radio.set_swr_limit(self.swr_limit.value())
+```
+`self.parent()` returnt vermutlich QApplication/None statt MainWindow,
+weil SettingsDialog evtl. ohne expliziten Parent-Arg konstruiert wird.
+Oder `parent.radio.ip` ist None obwohl Radio verbunden.
+
+**Was tun:**
+1. Verifizieren mit `print(f"[P58-DBG] parent={type(parent).__name__} hasattr_radio={...} radio.ip={...}")` direkt vor Save-Hook
+2. SettingsDialog-Konstruktor in `main_window.py` checken — wird `parent=self` übergeben?
+3. Fix-Optionen:
+   - Direkter Zugriff statt via `parent()`: SettingsDialog könnte Radio-Referenz im Konstruktor bekommen
+   - Signal-Pattern: SettingsDialog emittet `settings_saved`, MainWindow connectet und propagiert
+4. Beide Wege: zentralisieren — alle "live-relevanten" Settings (swr_limit, evtl. mehr in Zukunft) gehen über einen einzigen Apply-Pfad
+
+**Aufwand:** klein, ~20 Min Code. **Workflow Pflicht** weil Konstruktor-API-Eingriff.
+
+---
+
+## 🆕 OFFEN — P57: SWR-Limit auf feste 0.5-Schritte begrenzen (Mike 15.05.2026 morgens)
+
+**Trigger:** Mike-Test 15.05. P53-SWR-Watchdog: wollte 1.2 als Limit
+testen → wird im FlexRadio-Setter auf 1.5 geclampt (P53). UI erlaubt
+aber freie Float-Eingabe via `QDoubleSpinBox(1.5..10.0, step=0.5)` —
+User kann beliebige Zwischenwerte tippen (z.B. 1.2, 4.7, 8.3). Plus
+Range bis 10 ist unsinnig hoch (jeder Wert >3.5 = Hardware-Risiko).
+
+**Mike-Spec:** „nur einstellbar in 0,5er-Schritten und keine anderen
+zulassen also 1 / 1,5 / 2 / 2,5 / 3 / 3,5"
+
+### Was tun
+
+1. **`ui/settings_dialog.py:206-209`** `QDoubleSpinBox` → `QComboBox`
+   mit festen Werten `[1.0, 1.5, 2.0, 2.5, 3.0, 3.5]`. Anzeige als
+   `"1.0"`/`"1.5"` etc., Value-Cast über `float(combo.currentText())`.
+2. **`radio/flexradio.py:947-951`** `set_swr_limit` Clamp-min von
+   `1.5` → `1.0` damit UI-Wert 1.0 durchgeht (sonst Drift UI ≠ Radio).
+3. **`config/settings.py`** Default bleibt 3.0 (mittiger sicherer Wert).
+4. **Tests:** 2-3 Tests: ComboBox-Werte-Liste, Setter akzeptiert 1.0,
+   Setter clamped >3.5 nicht (max 10.0 bleibt — Defensive bei kaputtem
+   Settings-File mit altem 5.0-Wert, Migration via Load-Coerce auf
+   nächsten erlaubten Wert).
+
+### Wo umsetzen
+
+- `ui/settings_dialog.py` Block ~Z.206-213 + `_save_and_close` Z.679
+- `radio/flexradio.py:947-951`
+- Settings-Load-Coerce in `config/settings.py` (alte Werte 4.0/5.0 →
+  nächstkleinerer erlaubter Wert: 3.5)
+- Tests: `tests/test_p57_swr_limit_steps.py` NEU
+
+**Aufwand:** klein, ~30 Min Code. **Workflow Pflicht** (UI + Radio-API +
+Settings-Migration = 3 Files = nicht trivial).
+
+---
+
 ## 🆕 OFFEN — P52: Statistik-Toggle raus + 90-Tage-Rolling-Window (Mike 14.05.2026 nachmittags)
 
 **Trigger:** Mike-Klärung 14.05.: Settings-Toggle „Statistik-Erfassung
@@ -551,25 +763,20 @@ Disclaimer-Thema). Oder als atomarer eigener Commit.
 
 ## ⚠️ ALT — Bundle H Bandpilot-Aware Diversity-Klick (v0.97.25, 14.05.2026 mittags, Field-Test pending)
 
-## 🚀 OFFEN — DeepSeek V4 Lessons aufbauen (nach nächster Session)
+## ✅ ERLEDIGT 15.05.2026 — DeepSeek-Lessons-Files entfernt (Mike-Entscheidung)
 
-Heute Abend wurde System-wide DeepSeek V4 Migration durchgeführt
-(siehe HISTORY.md). Wirkung im PAL-MCP erst bei neuer Claude-Code-
-Session (Config-Cache). Folgearbeiten nach 2-3 V4-Reviews:
+V4-pro empirische Bilanz nach 5 Cycles (Bundle I + J + P51 + P53 + P55):
+**30 Findings, 0 Halluzinationen, 100% verifizierbar.** Mike-Entscheidung
+15.05.: Lessons-Files entfernen — V3-Schwächen-Liste nicht mehr relevant,
+V4-pro hat keine bekannten Schwächen. Bilanz bleibt in CLAUDE.md-Header
+dokumentiert. Falls V4-pro je halluziniert → ad-hoc Notiz im jeweiligen
+Cycle-Memory.
 
-- **`docs/deepseek_lessons.md`** neue Sektion „V4 Lessons (ab 15.05.)"
-  aufbauen. Aktuelle V3-Lessons (Stärken/Schwächen) als historische
-  Referenz erhalten — wir haben heute morgen festgestellt dass V3
-  z.B. Attribute halluzinierte die nicht existieren (Bundle F-R1).
-  V4 hat 1M Context → kann ganzen mw_radio.py lesen → vermutlich
-  weniger Halluzinationen. Empirisch verifizieren.
-- **Memory `feedback_deepseek_strengths_weaknesses.md`** updaten nach
-  Sample. Aufpassen: Quick-Ref-Stil, nicht zu lang.
-- **Memory NEU `feedback_v4_vs_v3_observed.md`** mit konkreten
-  Beobachtungen wenn V4 anders reagiert als V3 in identischen
-  Situationen (z.B. Halluzinations-Vergleich).
-- **Verifikation:** im ersten R1-Review Stderr-Output prüfen ob
-  `→ deepseek-v4-pro` steht (NICHT `deepseek-reasoner`).
+Gelöscht:
+- `docs/deepseek_lessons.md`
+- Memory `feedback_deepseek_strengths_weaknesses.md`
+- `docs/SESSION_WORKFLOW.md` Punkt 5 (Lessons-Update bei Feierabend)
+- `CLAUDE.md` „Vor jedem R1-Prompt"-Hinweis
 
 ---
 
