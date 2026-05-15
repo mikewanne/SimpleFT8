@@ -356,6 +356,18 @@ Eingriff + Migration).
 
 ---
 
+## ✅ 15.05.2026 erledigt — P60: User-Stop-Pfade Slot-Abbruch + Click-Puffer v0.97.32
+
+3 User-Toggle-Stop-Pfade (OMNI/Auto-Hunt/Normal-CQ) brachen TX-Slot
+nicht sofort ab — Helper `_abort_active_tx` in mw_tx.py NEU + HALT-
+Refactor. R1-V4-pro-F1 ROT Klassiker-Catch: `_pending_station_click`
+auch leeren. SWR-Watchdog F3-1-Zeiler Konsistenz. 6 Commits. Tests
+1268→1279 (+11). Field-Test F1-F6 pending. Siehe HISTORY.md v0.97.32.
+
+---
+
+## 🗄️ HISTORIE — P60 (Mike-Field-Test 15.05.2026 morgens, ERLEDIGT v0.97.32)
+
 ## 🔴 OFFEN — P61: Auto-Hunt nimmt gerade abgeschlossene Station SOFORT WIEDER (Mike-Field-Test 15.05.2026 morgens)
 
 **Trigger:** Mike-Field-Test mit Auto-Hunt 15.05. zeigte: nach

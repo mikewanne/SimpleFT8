@@ -3,6 +3,56 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-15 v0.97.32 — P60 User-Stop-Pfade brechen TX-Slot sofort ab + Click-Puffer
+
+**Trigger:** Mike-Field-Test P55-F6 15.05.2026 morgens: OMNI-CQ während
+aktivem TX-Slot per Toggle gestoppt — Button sofort rot, ABER 15s-Slot
+läuft komplett durch. Mike: „Toggle = an/aus, nicht Slot-Schalter."
+Code-Audit ergab: gleicher Bug in **3 User-Stop-Pfaden** (OMNI-Toggle,
+Auto-Hunt-Toggle, Normal-CQ-Toggle). Alle 3 riefen nur State-Stop
+(Flags) ohne `encoder.abort + ptt_off`.
+
+**R1-V4-pro-F1 ROT:** Zusätzlicher Bug entdeckt — `_pending_station_click`
+(Click-Puffer wenn User während TX auf Station klickt) wird in den
+neuen Stop-Pfaden NICHT geleert. Nach Stop würde `tx_finished` feuern,
+`_on_tx_finished` den gepufferten Klick lesen → ungewünschtes neues
+QSO! HALT-Button macht es richtig (cleart in `_on_cancel:327`), neue
+Pfade brauchten es auch.
+
+**R1-F2 ORANGE entkräftet:** `encoder.abort()` setzt nur Flag, kein
+synchronous `tx_finished.emit`. Worker-Thread emittet später →
+QueuedConnection → kein Race.
+
+**Fix:** Zentraler Helper `_abort_active_tx()` in `mw_tx.py` —
+encoder.abort + ptt_off + `_pending_station_click = None`. Genutzt von:
+OMNI/Auto-Hunt/Normal-CQ Toggle-Off + HALT-Refactor. SWR-Watchdog
+behält eigenen Block (komplexer Spike-Schutz-Flow) + bekommt F3-
+1-Zeiler für `_pending_station_click = None` (Konsistenz).
+
+**Workflow:** V1 (3 Optionen, Helper empfohlen) → V2 Self-Review (HALT-
+Refactor + Race-Analyse) → R1 V4-pro „KORREKTUR NÖTIG" (F1 ROT
+Click-Puffer + F2 ORANGE Race + F3 GELB SWR-Konsistenz) → V3.1
+(F1 + F2-Entkräftung) → Code → Final-R1 V4-pro „PUSH FREIGEGEBEN"
++ F3-Empfehlung eingebaut. **V4-pro 8-Cycle-Bilanz: 40 Findings total,
+0 Halluzinationen, 100% verifizierbar. R1-F1 war Klassiker — V4-pro
+hat einen Bug gefunden den die V2-Self-Review übersehen hatte.**
+
+**Code-Änderungen (6 atomare Commits geplant):**
+- C1 `ui/mw_tx.py` Helper `_abort_active_tx()` NEU + F3 in `_on_swr_alarm`
+- C2 `ui/main_window.py:_on_btn_omni_cq_toggled` + `_on_btn_auto_hunt_toggled` Stop-Pfade
+- C3 `ui/mw_qso.py:_on_cq_clicked` Normal-CQ-Stop + `_on_cancel` HALT-Refactor
+- C4 `tests/test_p60_stop_paths.py` NEU 11 Tests T1-T10 + Konsistenz-Test
+- C5 `tests/test_omni_cq_integration.py` `_FakeMW` mit `_abort_active_tx`-Stub
+- C6 `main.py` APP_VERSION 0.97.31 → 0.97.32 + Doku
+
+**Tests:** 1268 → **1279 grün** (+11 P60, alle 1279 grün nach Mock-Fix).
+
+**Field-Test pending (Mike, F1-F6):** OMNI-Stop sofort, Auto-Hunt-Stop
+sofort, Normal-CQ-Stop sofort, HALT-Regression, SWR-Watchdog-Regression,
+Bandwechsel-Regression.
+
+---
+
 ## 2026-05-15 v0.97.31 — P58 SWR-Limit Save-Hook Live-Propagation gefixt
 
 **Trigger:** Mike-Field-Test P53 15.05.2026 morgens: SWR-Limit in Settings

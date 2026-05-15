@@ -1,8 +1,49 @@
 # HANDOFF — SimpleFT8
 
+## Stand 2026-05-15 vormittags — P60 (User-Stop-Pfade Slot-Abbruch + Click-Puffer) Code fertig + Final-R1 ✓, Field-Test pending
+
+**Aktueller Code-Stand:** v0.97.32 (P60), Tests **1279 grün**.
+
+### 🔴 P60 Field-Test pending
+
+**P60 (v0.97.32) — Toggle-Stop bricht TX sofort ab:**
+
+| F# | Was prüfen |
+|---|---|
+| **F1** | OMNI CQ aktiv, während TX-Slot (3-5s nach Start) erneut klicken → TX bricht SOFORT ab (RF-Meter fällt sofort, kein Slot-Ende abgewartet) |
+| **F2** | Auto-Hunt aktiv, während Hunt-TX erneut klicken → SOFORT ab |
+| **F3** | Normal-CQ aktiv, während CQ-TX erneut klicken → SOFORT ab |
+| **F4** | HALT-Button regression — drückt während TX → alle Modi gestoppt (Helper-Refactor) |
+| **F5** | SWR-Watchdog künstlich auslösen → Modal kommt, alle Stops greifen (Regression P53) |
+| **F6** | Bandwechsel während TX → TX bricht ab (Regression Bundle I) |
+
+### 🟡 Offene Bugs aus heutiger Session (verbleibend)
+
+| # | Was | Status |
+|---|---|---|
+| P59 | CQ-Button visuelle Konsistenz Normal vs. Diversity | TODO |
+| P61 | Auto-Hunt nimmt gerade abgeschlossene Station SOFORT WIEDER | TODO — wichtig |
+| P57 | SWR-Limit 0.5-Schritte (UI-Combo) | TODO klein |
+
+### 📦 Vorgänger pending Field-Tests
+
+- P58 v0.97.31 — Mike heute schon getestet ✓ (Save-Hook live)
+- P55 v0.97.30 — alle F1-F8 ✓ heute
+- P53 v0.97.29 — F1+F2 ✓, F3-F7 im Alltag bestätigt
+- ältere Bundles per Alltagsbetrieb gesehen (Auto-Hunt, OMNI, Mode-Wechsel etc.)
+
+### 🚀 Beim nächsten Session-Start
+
+1. Standard Lese-Reihenfolge (Phase 1)
+2. P60 Field-Test F1-F6 mit Mike
+3. Dann P61 (Auto-Hunt-Dup, wichtigster Rest-Bug)
+4. Push wenn alle Field-Tests ✓
+
+---
+
 ## Stand 2026-05-15 vormittags — P58 (SWR Save-Hook Live-Propagation) Code fertig + Final-R1 ✓, Field-Test pending
 
-**Aktueller Code-Stand:** v0.97.31 (P58), Tests **1268 grün**.
+**Vorgänger-Code-Stand:** v0.97.31 (P58), Tests **1268 grün**.
 
 **Field-Tests heute (15.05. morgens) durchgeführt:**
 - ✅ P55 F1-F8 alle erledigt (Bugs P58/P59/P60/P61 dabei gefunden)
