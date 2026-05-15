@@ -1,10 +1,46 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-15 morgens — P55 (Easter-Egg-Cleanup) Code fertig + Final-R1 ✓, Field-Test pending
+## Stand 2026-05-15 vormittags — P58 (SWR Save-Hook Live-Propagation) Code fertig + Final-R1 ✓, Field-Test pending
 
-**Aktueller Code-Stand:** v0.97.30 (P55), Tests **1262 grün**.
+**Aktueller Code-Stand:** v0.97.31 (P58), Tests **1268 grün**.
 
-### 🔴 P55 Field-Test pending (nächste Session)
+**Field-Tests heute (15.05. morgens) durchgeführt:**
+- ✅ P55 F1-F8 alle erledigt (Bugs P58/P59/P60/P61 dabei gefunden)
+- ✅ P53 F1+F2 erledigt (Watchdog greift live)
+- 📦 Ältere Bundles per Alltagsbetrieb bestätigt (RX-ANT-Label, Auto-Hunt etc.)
+
+### 🔴 P58 Field-Test pending (nächste Session)
+
+**P58 (v0.97.31) — SWR-Limit Live-Propagation:**
+
+| F# | Was prüfen |
+|---|---|
+| **F1** | App läuft + verbunden → Settings öffnen → swr_limit auf 2.0 → Save → Terminal `[FlexRadio] SWR-Limit auf 2.0 gesetzt` SOFORT sichtbar (vor P58: kam erst nach App-Neustart) |
+| **F2** | Cancel/Esc im Dialog → kein Setter-Print, settings.json unverändert |
+| **F3** | Während TX swr_limit ändern + Save → bei nächster SWR-Überschreitung greift NEUER Wert (Watchdog triggert mit angepasster Schwelle) |
+
+### 🟡 Offene Bugs aus heutiger Session
+
+| # | Was | Status |
+|---|---|---|
+| P59 | CQ-Button visuelle Konsistenz Normal vs. Diversity (Mike-Wunsch) | TODO |
+| P60 | OMNI/Auto-Hunt/Normal-CQ Stop bricht TX-Slot nicht sofort ab (3 Pfade) | TODO — UX-Bug |
+| P61 | Auto-Hunt nimmt gerade abgeschlossene Station SOFORT WIEDER (Doppel-QSO) | TODO — wichtig, Funkverkehr-Etikette |
+
+### 🚀 Beim nächsten Session-Start
+
+1. `cd "/Users/mikehammerer/Documents/KI N8N Projekte/FT8/SimpleFT8"`
+2. CLAUDE.md → MEMORY.md → HISTORY.md → HANDOFF.md lesen
+3. P58 Field-Test F1-F3 mit Mike, dann Push wenn ✓
+4. Nächste Bug-Reihenfolge: P60 (Stop-Pfade) → P61 (Auto-Hunt-Dup) → P59 (kosmetisch)
+
+---
+
+## Stand 2026-05-15 morgens — P55 (Easter-Egg-Cleanup) Code fertig + Final-R1 ✓, Field-Test ✅
+
+**Vorgänger-Code-Stand:** v0.97.30 (P55), Tests **1262 grün**.
+
+### ✅ P55 Field-Test alle F1-F8 erledigt (heute 15.05. morgens)
 
 **P55 (v0.97.30) — Easter-Egg + Diversity-CQ-Code-Leichen entfernt:**
 

@@ -3,6 +3,70 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-15 v0.97.31 — P58 SWR-Limit Save-Hook Live-Propagation gefixt
+
+**Trigger:** Mike-Field-Test P53 15.05.2026 morgens: SWR-Limit in Settings
+auf 1.5 gespeichert während App lief → Watchdog griff NICHT bei realem
+SWR 1.9. Erst nach App-Neustart (Connect-Hook lädt persistierten Wert)
+funktionierte alles. **Bug:** Inline-Live-Propagation in
+`settings_dialog._save_and_close:680-683` greift nicht zur laufenden App.
+
+**Wurzel-Erkenntnis (V2-Self-Review):** Die App hat bereits eine
+etablierte Architektur für Live-Settings — sie werden NACH `dialog.exec()`
+im MainWindow propagiert (siehe `tx_audio_level`, `set_power`). P53 hat
+als einziger Code-Pfad eine Inline-Propagation IM DIALOG gebaut — und
+genau die hatte einen Bug (vermutlich `parent.radio.ip` Lifecycle-Edge-
+Case, aber Wurzel egal, da neuer Pfad sauberer).
+
+**Fix:** Inline-Pfad raus, set_swr_limit-Aufruf in
+`main_window._on_settings_clicked` nach `dialog.exec()` analog zu den
+anderen Live-Settern. Plus R1-V4-pro-F1: alle 3 Setter (tx_audio_level,
+set_power, set_swr_limit) unter gemeinsamem `if self.radio.ip:`-Guard.
+
+**Workflow:** V1 → V2 (Self-Review fand Architektur-Konsistenz-Pattern) →
+R1 V4-pro „PUSH FREIGEGEBEN" mit F1 GELB (eingearbeitet) → V3 → Code →
+Final-R1 V4-pro „PUSH FREIGEGEBEN, 0 Findings". V4-pro 7-Cycle-Bilanz:
+**35 Findings total, 0 Halluzinationen, 100% verifizierbar.**
+
+**Code-Änderungen (5 atomare Commits):**
+- C1 `ui/settings_dialog.py` Inline-Propagation Z.680-683 raus
+- C2 `ui/main_window.py:_on_settings_clicked` Setter-Block mit
+  3 Live-Settern unter `if self.radio.ip:` Guard
+- C3 `tests/test_p58_save_hook.py` NEU 6 Tests T1-T6 + `test_p53_swr_watchdog.py` T10 angepasst
+- C4 `main.py` APP_VERSION 0.97.30 → 0.97.31 + Backup
+- C5 Doku (HISTORY/HANDOFF/CLAUDE.md/Memory/TODO/MEMORY.md)
+
+**Tests:** 1262 → **1268 grün** (+6 netto: +6 P58, +0 P53 T10 angepasst).
+
+**Backup:** `Appsicherungen/2026-05-15_v0.97.30_vor_p58/`.
+
+**Field-Test pending:** F1 Save → Setter-Print sofort sichtbar,
+F2 Cancel ohne Setter-Aufruf, F3 Live-Limit-Wechsel greift bei TX.
+
+---
+
+## 2026-05-15 — DeepSeek-Lessons-Files entfernt (Mike-Entscheidung)
+
+Mike-Entscheidung 15.05.: `docs/deepseek_lessons.md` + Memory
+`feedback_deepseek_strengths_weaknesses.md` + entsprechende CLAUDE.md/
+SESSION_WORKFLOW-Hinweise entfernt. **Wurzel:** V3-Schwächen-Liste
+(Halluziniert fehlende Files, verpasst Encoder-Busy-Races) ist nicht
+mehr relevant nach DeepSeek-V4-pro-Migration (5 Cycles → 30 Findings →
+0 Halluzinationen). Lessons-Files wurden faktisch nicht mehr konsultiert
++ nicht mehr gewartet. KISS-Prinzip aus CLAUDE.md greift: weg damit.
+V4-pro 5-Cycle-Bilanz bleibt im CLAUDE.md-Header dokumentiert. Falls
+V4-pro je halluziniert → ad-hoc Notiz im jeweiligen Cycle-Memory.
+
+**Aktion:**
+- `docs/deepseek_lessons.md` gelöscht
+- Memory `feedback_deepseek_strengths_weaknesses.md` gelöscht
+- `CLAUDE.md` „Vor jedem R1-Prompt deepseek_lessons.md lesen"-Hinweis raus
+- `docs/SESSION_WORKFLOW.md` Phase-3-Punkt-5 (Lessons-Update) raus
+- `MEMORY.md` Index-Eintrag raus
+- TODO-Eintrag „V4-Lessons aufbauen" als ✓ ERLEDIGT markiert
+
+---
+
 ## 2026-05-15 v0.97.30 — P55 Easter-Egg + Diversity-CQ-Code-Leichen entfernt
 
 **Trigger:** Mike-Spec 15.05.2026 nach Screenshot-Analyse: „In Diversity
