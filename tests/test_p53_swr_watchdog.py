@@ -337,18 +337,24 @@ def test_t9_swr_limit_set_at_connect(app):
 # ─────────────────────────────────────────────────────────────────────
 
 def test_t10_swr_limit_set_on_settings_save(app):
-    """settings_dialog._save_and_close ruft parent.radio.set_swr_limit().
+    """SWR-Limit-Propagation nach Settings-Save.
 
-    Source-Level-Test damit P47-Pattern (tote Settings nicht zurück).
+    P58 (v0.97.31): Pfad gewechselt von settings_dialog (inline) zu
+    main_window._on_settings_clicked nach dialog.exec() — Architektur-
+    Konsistenz mit set_power/tx_audio_level. Inline-Pfad hatte Bug
+    (greift nicht zur laufenden App, siehe P58-TODO).
     """
-    src = Path(__file__).resolve().parent.parent / "ui" / "settings_dialog.py"
+    src = Path(__file__).resolve().parent.parent / "ui" / "main_window.py"
     text = src.read_text()
-    # In _save_and_close muss parent.radio.set_swr_limit gerufen werden
-    assert "parent.radio.set_swr_limit" in text, \
-        "P53: settings_dialog muss SWR-Limit an Radio propagieren"
-    # Mit ip-Check (kein Crash bei disconnect)
-    assert "parent.radio.ip" in text or 'getattr(parent.radio, "ip"' in text, \
-        "P53: Save-Hook muss radio.ip prüfen"
+    # In _on_settings_clicked muss set_swr_limit aufgerufen werden
+    method_start = text.find("def _on_settings_clicked")
+    assert method_start > 0, "_on_settings_clicked nicht gefunden"
+    method_end = text.find("\n    def ", method_start + 10)
+    method_body = text[method_start:method_end]
+    assert "self.radio.set_swr_limit" in method_body, \
+        "P58: main_window._on_settings_clicked muss SWR-Limit an Radio propagieren"
+    assert 'self.settings.get("swr_limit"' in method_body, \
+        "P58: set_swr_limit muss aus settings.get('swr_limit') gespeist werden"
 
 
 # ─────────────────────────────────────────────────────────────────────
