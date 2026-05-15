@@ -95,6 +95,31 @@ class TXMixin:
             self.control_panel.set_freq_display(work_freq, tune_active=False)
             print(f"[Tune] VFO zurueck auf {work_freq * 1000:.3f} kHz")
 
+    def _abort_active_tx(self) -> None:
+        """P60 (v0.97.32): TX sofort abbrechen + gepufferten Click verwerfen.
+
+        Used by: User-Stop-Toggle (OMNI/Auto-Hunt/Normal-CQ) + HALT.
+        NICHT used by: SWR-Watchdog (eigener Spike-Schutz-Flow),
+        Bandwechsel/Mode-Wechsel (eigene Cleanup-Sequenzen mit
+        zusätzlichen State-Stops).
+
+        Antennen-neutral (kein set_tx_antenna — ANT1-Pflicht).
+        No-op wenn encoder.is_transmitting=False (idempotent).
+        ptt_off nur wenn radio.ip truthy (kein Crash bei disconnect).
+
+        R1-V4-pro-F1: setzt _pending_station_click = None damit kein
+        gepufferter Klick (Station-Click während TX) nach Stop ein
+        ungewünschtes QSO startet. HALT-Pfad macht das bereits in
+        _on_cancel — neue User-Stop-Pfade brauchen es auch.
+        """
+        if self.encoder.is_transmitting:
+            self.encoder.abort()
+            if self.radio.ip:
+                self.radio.ptt_off()
+        # F1 ROT: gepufferten Station-Klick verwerfen (post-stop QSO verhindern)
+        if hasattr(self, "_pending_station_click"):
+            self._pending_station_click = None
+
     @Slot(float)
     def _on_swr_alarm(self, swr: float):
         """P53: Live-SWR-Watchdog während TX.
@@ -132,6 +157,10 @@ class TXMixin:
         self.encoder.abort()
         if self.radio.ip:
             self.radio.ptt_off()
+        # P60-F3 (v0.97.32): gepufferten Station-Click verwerfen
+        # (verhindert ungewünschtes QSO nach SWR-Abbruch)
+        if hasattr(self, "_pending_station_click"):
+            self._pending_station_click = None
         if self.qso_sm.cq_mode or self.qso_sm.state != QSOState.IDLE:
             self.qso_sm.stop_cq()
             self.qso_sm.cancel()
