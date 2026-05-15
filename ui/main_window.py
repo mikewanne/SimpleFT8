@@ -1060,11 +1060,12 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
             self._update_statusbar()
             self.qso_sm.max_calls = self.settings.get("max_calls", 3)
             # v0.93: OPERATE_CYCLES + diversity_operate_cycles entfernt (1h-Frist zeit-basiert)
-            self.radio.tx_audio_level = (
-                self.settings.get("tx_level", 100) / 100.0
-            )
+            # P58 (v0.97.31): Alle 3 Live-Setter unter gemeinsamem radio.ip-Guard
+            # (Architektur-Konsistenz, R1-V4-pro-F1)
             if self.radio.ip:
+                self.radio.tx_audio_level = self.settings.get("tx_level", 100) / 100.0
                 self.radio.set_power(self.settings.get("power_preset", 15))
+                self.radio.set_swr_limit(self.settings.get("swr_limit", 3.0))
             # Debug-Konsole Toggle aus Settings
             debug_vis = self.settings.get("debug_console_visible", False)
             self._debug_console.setVisible(debug_vis)
