@@ -321,7 +321,6 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self._last_qso_tx_even: bool | None = None
         # Button-Klick → start/stop OMNI
         self.control_panel.btn_omni_cq.toggled.connect(self._on_btn_omni_cq_toggled)
-        self.control_panel.easter_egg_toggle_clicked.connect(self._on_easter_egg_toggle)
 
         # Auto-Hunt: Initialisieren (deaktiviert, zusammen mit OMNI-TX)
         from core.auto_hunt import AutoHunt
@@ -330,7 +329,6 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self._auto_hunt.set_band(self.settings.band)
 
         # v0.75 Auto-Hunt UI-Lifecycle
-        self._easter_egg_active: bool = False
         self._auto_hunt_cooldown_seconds: int = 0
         # 1s-Polling fuer Live-Countdown waehrend aktiver Session
         self._auto_hunt_polling_timer = QTimer(self)
@@ -741,51 +739,18 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         dlg = HelpDialog(self, language=lang)
         dlg.exec()
 
-    # ── Easter Egg ───────────────────────────────────────────────
-
-    def _on_easter_egg_toggle(self):
-        """Easter Egg: Klick auf Versionsnummer = Test-Override fuer Mode-Coupling.
-
-        v0.78: Buttons sind im RX-Mode "diversity" eh sichtbar — Easter-Egg ist
-        nur Override fuer "normal". Persistiert NICHT — jede Session und jeder
-        RX-Mode-Wechsel beginnt mit deaktiviertem Override.
-        """
-        self._easter_egg_active = not self._easter_egg_active
-        if not self._easter_egg_active:
-            # Aktive Modi sauber stoppen — Signal-Slots kuemmern sich um UI-Cleanup
-            if self._auto_hunt.active:
-                self._auto_hunt.stop_auto_hunt("easter_egg_off")
-            if self._omni_cq.is_active():
-                self._omni_cq.stop("easter_egg_off")
-            # R1-Fix: 5s UI-Cooldown abbrechen wenn Button versteckt wird —
-            # sonst inkonsistenter Button-State bei naechster Easter-Egg-Aktivierung
-            if self._auto_hunt_cooldown_timer.isActive():
-                self._auto_hunt_cooldown_timer.stop()
-                self.control_panel.btn_auto_hunt.setEnabled(True)
-                self.control_panel.btn_auto_hunt.setText("AUTO HUNT")
-                self._auto_hunt_cooldown_seconds = 0
-        self._update_button_visibility()
-        print(f"[Easter-Egg] Override {'aktiv' if self._easter_egg_active else 'inaktiv'}")
-        self._update_statusbar()
-
-    # ── Mode-Coupling Buttons (v0.78) ────────────────────────────
+    # ── Mode-Coupling Buttons ────────────────────────────────────
 
     def _update_button_visibility(self):
-        """3-Button-Layout mode-abhaengig + Easter-Egg-Override.
+        """3-Button-Layout mode-abhaengig.
 
-        Plan v0.78:
-        - RX-Mode "normal":     nur btn_cq sichtbar
+        - RX-Mode "normal":     nur btn_cq sichtbar (manueller CQ)
         - RX-Mode "diversity":  btn_omni_cq + btn_auto_hunt sichtbar, btn_cq versteckt
-        - Easter-Egg-Override:  in "normal" zusaetzlich alle Power-User-Buttons sichtbar
-
-        Wird gerufen nach Init, RX-Mode-Wechsel und Easter-Egg-Toggle.
         """
         rx_mode = getattr(self, "_rx_mode", "normal")
         is_diversity = (rx_mode == "diversity")
-        show_power_buttons = is_diversity or self._easter_egg_active
-        self.control_panel.btn_omni_cq.setHidden(not show_power_buttons)
-        self.control_panel.btn_auto_hunt.setHidden(not show_power_buttons)
-        # btn_cq: in Diversity unsichtbar, sonst sichtbar
+        self.control_panel.btn_omni_cq.setHidden(not is_diversity)
+        self.control_panel.btn_auto_hunt.setHidden(not is_diversity)
         self.control_panel.btn_cq.setHidden(is_diversity)
 
     # ── OMNI-TX UI-Lifecycle (v0.78) ─────────────────────────────
