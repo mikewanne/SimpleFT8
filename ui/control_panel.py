@@ -1194,7 +1194,6 @@ class ControlPanel(QWidget):
     dx_preset_changed = Signal(str)
     tx_level_changed = Signal(int)
     preamp_changed = Signal(bool)           # Legacy, nicht mehr genutzt
-    easter_egg_toggle_clicked = Signal()   # Easter Egg: Klick auf Versionsnummer
     rx_mode_changed = Signal(str)
     diversity_subtoggle_requested = Signal()  # Bundle G: 2. Klick auf DIVERSITY → Std↔DX-Toggle
     settings_clicked = Signal()
@@ -1337,10 +1336,9 @@ class ControlPanel(QWidget):
 
         layout.addStretch()
 
-        # ── Easter Egg: Versionsnummer (OMNI-TX Aktivierung) ────────────
+        # ── Versionsnummer + OMNI-Aktiv-Indikator ───────────────────────
         self._version_row = QHBoxLayout()
         self._version_row.setContentsMargins(0, 0, 4, 2)
-        self._omni_active = False
         self._omni_symbol = QLabel("Ω")
         self._omni_symbol.setStyleSheet(
             f"color: #AA44FF; font-family: {_FONT}; font-size: 11px; "
@@ -1352,8 +1350,6 @@ class ControlPanel(QWidget):
             f"color: #666; font-family: {_FONT}; font-size: 10px; "
             "border: none; background: transparent;"
         )
-        self._version_label.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._version_label.mousePressEvent = lambda e: self.easter_egg_toggle_clicked.emit()
         self._version_row.addStretch()
         self._version_row.addWidget(self._omni_symbol)
         self._version_row.addWidget(self._version_label)
@@ -1671,7 +1667,6 @@ class ControlPanel(QWidget):
         Mike-Wunsch 09.05.2026: ohne Aktiv-Status-Anzeige klickt er
         mehrfach aus Unsicherheit → manual_halt-Spam.
         """
-        self._omni_active = active
         self._omni_symbol.setVisible(active)
         color = "#222" if active else "#333"
         self._version_label.setStyleSheet(
@@ -1808,9 +1803,7 @@ class ControlPanel(QWidget):
     # =====================================================================
     def _on_cq_clicked(self):
         self.cq_clicked.emit()
-        if self._omni_active:
-            self.btn_cq.setText("OMNI CQ ■" if self.btn_cq.isChecked() else "OMNI CQ")
-        elif self.btn_cq.isChecked():
+        if self.btn_cq.isChecked():
             self.btn_cq.setText("CQ AKTIV ■")
         else:
             self.btn_cq.setText("CQ RUFEN")
@@ -1824,10 +1817,7 @@ class ControlPanel(QWidget):
 
     def set_cq_active(self, active: bool):
         self.btn_cq.setChecked(active)
-        if self._omni_active:
-            self.btn_cq.setText("OMNI CQ ■" if active else "OMNI CQ")
-        else:
-            self.btn_cq.setText("CQ AKTIV ■" if active else "CQ RUFEN")
+        self.btn_cq.setText("CQ AKTIV ■" if active else "CQ RUFEN")
 
     def set_tx_active(self, active: bool):
         if active:
