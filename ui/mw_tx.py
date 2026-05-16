@@ -64,12 +64,33 @@ class TXMixin:
 
     @Slot(bool)
     def _on_tune_clicked(self, on: bool):
+        """Manueller TUNE-Toggle.
+
+        P63 (v0.97.36): 10W fest, Dauer aus `tune_duration_s`-Setting
+        (15 oder 30 s). Watchdog wird via `_tune_in_progress=True`
+        bypasst. Nach Stop folgt 2s-Beruhigungs-Timer und SWR-Auswertung
+        (`_tune_post_swr_check`) — bei SWR≤Limit wird der Band-Marker
+        freigegeben + Diversity automatisch fortgesetzt.
+        """
         if not self.radio.ip:
             return
+        from PySide6.QtCore import QTimer
         from config.settings import get_tune_freq_mhz
+
         if on:
+            # P63 AC5: 10W FEST (unabhängig von tune_power-Setting),
+            # Dauer aus Setting mit Whitelist {15, 30}.
+            TUNE_POWER_W = 10
+            duration_s = self.settings.get("tune_duration_s", 15)
+            if duration_s not in (15, 30):
+                duration_s = 15
+
+            # P63 AC4: Watchdog-Bypass VOR tune_on
+            self._tune_in_progress = True
+
+            # Tune-Frequenz aus TUNE_FREQS-Map (band+mode)
             tune_freq = get_tune_freq_mhz(self.settings.band, self.settings.mode)
-            # _tune_active VOR set_frequency setzen (verhindert Race mit Radio-Callback)
+            # _tune_active VOR set_frequency (verhindert Race mit Radio-Callback)
             self._tune_active = True
             if tune_freq is not None:
                 self._tune_freq_mhz = tune_freq
@@ -80,20 +101,112 @@ class TXMixin:
                 self._tune_freq_mhz = self.settings.frequency_mhz
                 print(f"[Tune] Kein Offset-Wert fuer {self.settings.band}/{self.settings.mode} "
                       f"— tune auf Arbeitsfrequenz")
+
             self.radio.set_tx_antenna("ANT1")
+            self.radio.set_rfpower_direct(TUNE_POWER_W)
             self.radio.tune_on()
             self._update_statusbar()
+            self.statusBar().showMessage(
+                f"TUNEN — {TUNE_POWER_W}W auf ANT1 für {duration_s}s ...", 0)
             display_freq = tune_freq if tune_freq is not None else self.settings.frequency_mhz
             self.control_panel.set_freq_display(display_freq, tune_active=True)
+            print(f"[P63] Manueller TUNE — {TUNE_POWER_W}W {duration_s}s")
+
+            # Auto-Stop nach Dauer mit Token-Re-Entry-Schutz
+            self._tune_auto_stop_token = object()
+            _token = self._tune_auto_stop_token
+            QTimer.singleShot(
+                duration_s * 1000,
+                lambda: self._tune_stop(_token))
         else:
-            self.radio.tune_off()
-            self._tune_active = False
-            self._tune_freq_mhz = None
-            work_freq = self.settings.frequency_mhz
-            self.radio.set_frequency(work_freq)
-            self._update_statusbar()
-            self.control_panel.set_freq_display(work_freq, tune_active=False)
-            print(f"[Tune] VFO zurueck auf {work_freq * 1000:.3f} kHz")
+            # User-Toggle off → unbedingt stop (token=None)
+            self._tune_stop(None)
+
+    def _tune_stop(self, token):
+        """TUNE beenden + 2s-Post-Check-Timer für SWR-Auswertung.
+
+        P63 (v0.97.36) AC6/AC7 + R1-F1:
+        - token=None → unbedingt (User-Toggle off)
+        - token nicht aktuell → no-op (alter Auto-Stop nach neuem TUNE)
+        - Sonst: tune_off + VFO+Power-Zurück + 2s-Timer für SWR-Check.
+          Watchdog bleibt 2s bypassed (Beruhigungszeit gegen Pre-PTT-
+          Glitches).
+        """
+        if token is not None and getattr(self, '_tune_auto_stop_token', None) is not token:
+            return  # neuer TUNE-Click hat Token gewechselt
+        if not self._tune_active:
+            return  # schon manuell gestoppt
+
+        from PySide6.QtCore import QTimer
+
+        # tune_off + VFO+Power zurück
+        self.radio.tune_off()
+        self._tune_active = False
+        self._tune_freq_mhz = None
+        work_freq = self.settings.frequency_mhz
+        self.radio.set_frequency(work_freq)
+        self.radio.set_power(self.settings.get("power_preset", 15))
+        self._update_statusbar()
+        self.control_panel.set_freq_display(work_freq, tune_active=False)
+        print(f"[Tune] VFO zurueck auf {work_freq * 1000:.3f} kHz")
+
+        self.statusBar().showMessage(
+            "TUNE beendet — prüfe SWR (2 s) ...", 2000)
+
+        # P63 R1-F1: Post-Check-Token + 2s-Timer
+        self._tune_post_check_token = object()
+        _post = self._tune_post_check_token
+        QTimer.singleShot(
+            2000,
+            lambda: self._tune_post_swr_check(_post))
+
+    def _tune_post_swr_check(self, token):
+        """P63 (v0.97.36) AC6/AC7 + R1-F1: 2s nach tune_off SWR auswerten.
+
+        - SWR ≤ Limit → Marker discard + Diversity-Resume falls aktiv
+        - SWR > Limit → Modal „Tuner konnte nicht matchen", Marker bleibt
+
+        Watchdog wird hier wieder scharf gestellt (`_tune_in_progress=False`).
+        Token-Pattern schützt vor Race bei schnellem Re-Tune.
+        """
+        if getattr(self, '_tune_post_check_token', None) is not token:
+            return  # neuer TUNE-Click hat Token rotiert
+
+        # Watchdog wieder scharf
+        self._tune_in_progress = False
+
+        if not self.radio.ip:
+            return
+
+        swr_now = self.radio.last_swr
+        swr_limit = self.settings.get("swr_limit", 3.0)
+        band = self.settings.band.upper()
+
+        from PySide6.QtWidgets import QMessageBox
+
+        if swr_now <= swr_limit:
+            was_blocked = band in self._swr_blocked_bands
+            self._swr_blocked_bands.discard(band)
+            if was_blocked:
+                self.qso_panel.add_info(
+                    f"✓ Band {band} freigegeben — SWR {swr_now:.1f}")
+                print(f"[P63] Marker freigegeben — {band} SWR {swr_now:.1f}")
+                # AC6: Diversity automatisch fortsetzen (P62-Pause greift dann)
+                if self._rx_mode == "diversity":
+                    scoring = getattr(self._diversity_ctrl, 'scoring_mode', 'normal')
+                    ft_mode = self.settings.mode
+                    self._check_diversity_preset(self.settings.band, ft_mode, scoring)
+            else:
+                self.qso_panel.add_info(f"✓ TUNE OK — SWR {swr_now:.1f}")
+        else:
+            # AC7: Marker bleibt rot
+            QMessageBox.warning(
+                self,
+                "Tuner konnte nicht matchen",
+                f"SWR weiter {swr_now:.1f} > Limit {swr_limit:.1f}.\n\n"
+                "Antenne prüfen oder TUNE wiederholen."
+            )
+        print(f"[P63] Post-TUNE — SWR {swr_now:.1f}, Limit {swr_limit:.1f}")
 
     def _abort_active_tx(self) -> None:
         """P60 (v0.97.32): TX sofort abbrechen + gepufferten Click verwerfen.
@@ -131,9 +244,21 @@ class TXMixin:
         Stop-Block läuft nur bei 2 aufeinanderfolgenden Alarms innerhalb
         500 ms (Spike-Schutz gegen PTT-on-Glitch) UND laufendem TX
         (encoder.is_transmitting=True).
+
+        P63 (v0.97.36):
+        - AC1: nach Stop _set_gain_measure_lock(False) (Bug-Fix
+          Mike-17m: Lock hing nach Watchdog → UI dauerblockiert).
+        - AC2/AC3: bei tuner_present=True Band-Marker setzen + Modal
+          „Band gesperrt — bitte TUNE"; sonst klassisches „Antenne
+          prüfen"-Modal ohne Marker.
+        - AC4: Während manuellem TUNE komplett bypassed (early return).
         """
         from PySide6.QtWidgets import QMessageBox
         from core.qso_state import QSOState
+
+        # P63 AC4: Während manuellem TUNE Watchdog komplett aus.
+        if getattr(self, "_tune_in_progress", False):
+            return
 
         # AC3: Pre-TX-Alarm aus ptt_on() ignorieren — kein laufender TX
         if not self.encoder.is_transmitting:
@@ -170,18 +295,39 @@ class TXMixin:
         if hasattr(self, "_auto_hunt") and self._auto_hunt.active:
             self._auto_hunt.stop_auto_hunt("swr_block")
 
-        # AC7: Panel-Eintrag VOR Modal (Modal blockiert Event-Loop)
-        self.qso_panel.add_info(f"⚠ TX abgebrochen — SWR {swr:.1f}")
+        # P63 AC1: Lock-Release-Bug-Fix.
+        # Vorher: _gain_measure_locked hing True wenn Watchdog während
+        # Auto-TUNE/Gain-Mess feuerte → UI dauerblockiert.
+        self._set_gain_measure_lock(False)
 
-        print(f"[P53] SWR-Watchdog: TX gestoppt — SWR {swr:.1f} >= Limit {limit:.1f}")
+        # P63 AC2/AC3: Marker-Set bei tuner_present=True
+        band = self.settings.band.upper()
+        tuner = self.settings.get("tuner_present", True)
+        if tuner:
+            self._swr_blocked_bands.add(band)
+            modal_title = "Band gesperrt — SWR zu hoch"
+            modal_text = (
+                f"Band {band} gesperrt — SWR {swr:.1f} > Limit {limit:.1f}.\n\n"
+                "Bitte manuell durch TUNE-Vorgang freischalten."
+            )
+            panel_text = f"⚠ Band {band} gesperrt — SWR {swr:.1f}"
+        else:
+            modal_title = "SWR-Schutz ausgelöst"
+            modal_text = (
+                f"TX abgebrochen — SWR {swr:.1f} > Limit {limit:.1f}.\n\n"
+                "Antenne prüfen."
+            )
+            panel_text = f"⚠ TX abgebrochen — SWR {swr:.1f}"
+
+        # AC7: Panel-Eintrag VOR Modal (Modal blockiert Event-Loop)
+        self.qso_panel.add_info(panel_text)
+
+        print(f"[P53/P63] SWR-Watchdog: TX gestoppt — "
+              f"SWR {swr:.1f} >= Limit {limit:.1f}, "
+              f"marker={'set' if tuner else 'skip'} band={band}")
 
         # AC6: Modal
-        QMessageBox.warning(
-            self,
-            "SWR-Schutz ausgelöst",
-            f"TX abgebrochen — SWR {swr:.1f} (Limit {limit:.1f}).\n"
-            "Antenne tunen oder SWR-Limit in Einstellungen prüfen."
-        )
+        QMessageBox.warning(self, modal_title, modal_text)
 
     def _auto_adjust_tx_level(self):
         """Zweistufige TX-Regelung (kein PI-Controller):

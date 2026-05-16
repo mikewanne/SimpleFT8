@@ -50,7 +50,7 @@ def cycle_mixin():
     obj.settings = MagicMock()
     obj.settings.band = "20m"
     obj.settings.mode = "FT8"
-    obj.settings.get = MagicMock(return_value=True)  # stats_enabled
+    obj.settings.get = MagicMock(return_value=True)  # generic settings.get returns True (stats_enabled-Guard wurde in P52 v0.97.41 entfernt)
 
     # _stats_warmup_cycles = 0 → kein Warmup-Block
     obj._stats_warmup_cycles = 0

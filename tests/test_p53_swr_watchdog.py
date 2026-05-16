@@ -62,6 +62,12 @@ def _make_mw_tx(*, is_transmitting: bool = True,
     obj._swr_spike_count = spike_count
     obj._swr_first_alarm_t = first_alarm_t
 
+    # P63 (v0.97.36): `_tune_in_progress` muss explizit False sein, sonst
+    # liefert MagicMock auto-truthy → Watchdog-Bypass greift in Tests.
+    obj._tune_in_progress = False
+    obj._swr_blocked_bands = set()
+    obj._set_gain_measure_lock = MagicMock()
+
     obj.encoder = MagicMock()
     obj.encoder.is_transmitting = is_transmitting
     obj.encoder.abort = MagicMock()
@@ -92,7 +98,16 @@ def _make_mw_tx(*, is_transmitting: bool = True,
     obj.qso_panel.add_info = MagicMock()
 
     obj.settings = MagicMock()
-    obj.settings.get = MagicMock(return_value=swr_limit)
+    obj.settings.band = "20m"
+
+    # P63: differenzierter settings.get — verschiedene Keys liefern
+    # verschiedene Defaults. Tests setzen tuner_present=True (Default).
+    def _settings_get(key, default=None):
+        return {
+            "swr_limit": swr_limit,
+            "tuner_present": True,
+        }.get(key, default if default is not None else swr_limit)
+    obj.settings.get = _settings_get
 
     return obj
 
@@ -244,8 +259,18 @@ def test_t5_no_set_tx_antenna_in_stop(app, monkeypatch):
 # ─────────────────────────────────────────────────────────────────────
 
 def test_t6_modal_dialog_text(app, monkeypatch):
-    """Modal-Titel 'SWR-Schutz ausgelöst' + Text enthält SWR + Limit."""
+    """Modal-Titel 'SWR-Schutz ausgelöst' + Text enthält SWR + Limit.
+
+    P63 (v0.97.36): Bei tuner_present=False bleibt der alte
+    „SWR-Schutz ausgelöst"-Pfad aktiv (KEIN Marker). Test setzt
+    tuner_present=False um den Pre-P63-Branch zu prüfen — der
+    Marker-Pfad ist in P63-eigenen Tests abgedeckt."""
     obj = _make_mw_tx(is_transmitting=True, swr_limit=2.5)
+    # P63: tuner_present=False für alten Modal-Text
+    def _get_no_tuner(key, default=None):
+        return {"swr_limit": 2.5, "tuner_present": False}.get(
+            key, default if default is not None else 2.5)
+    obj.settings.get = _get_no_tuner
 
     warning_spy = MagicMock()
     monkeypatch.setattr(QMessageBox, "warning", warning_spy)
@@ -269,9 +294,17 @@ def test_t6_modal_dialog_text(app, monkeypatch):
 # ─────────────────────────────────────────────────────────────────────
 
 def test_t7_panel_info_before_modal(app, monkeypatch):
-    """add_info läuft VOR Modal (synchroner Panel-Update, dann Modal blockt)."""
+    """add_info läuft VOR Modal (synchroner Panel-Update, dann Modal blockt).
+
+    P63 (v0.97.36): Mit tuner_present=False bleibt Panel-Text alter
+    Form „TX abgebrochen — SWR …". P63-Marker-Pfad in eigenen Tests."""
     recorder = MagicMock()
     obj = _make_mw_tx(is_transmitting=True)
+    # P63: tuner_present=False für alten Panel-Text
+    def _get_no_tuner(key, default=None):
+        return {"swr_limit": 3.0, "tuner_present": False}.get(
+            key, default if default is not None else 3.0)
+    obj.settings.get = _get_no_tuner
     obj.qso_panel.add_info = recorder.panel_add_info
 
     def fake_warning(*args, **kwargs):

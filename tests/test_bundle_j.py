@@ -255,16 +255,20 @@ def test_t8b_antenna_pref_label_normal_mode_unchanged(qapp):
 
 
 def test_t9_intent_klausel_in_disclaimer():
-    """Disclaimer-Text enthaelt 'persoenlichen Gebrauch' Substring."""
+    """Disclaimer-Text enthält Intent-Klausel mit DA1MHH + MIT-Lizenz.
+
+    v0.97.37 (15.05.2026): Wortlaut komplett ersetzt durch Mike-Spec
+    aus TODO.md Z.979-985. Alte Wörter „persönlichen Gebrauch" und
+    „Verifikation" sind entfernt — neue Patterns sind „DA1MHH" und
+    „MIT-Lizenz". Detailtests in tests/test_intent_klausel.py."""
     import main as main_module
     import inspect
     src = inspect.getsource(main_module._show_hardware_warning)
-    # Sucht den deutschen Wortlaut "persönlichen Gebrauch" im Source
-    assert "persönlichen Gebrauch" in src, (
-        "Intent-Klausel fehlt im _show_hardware_warning"
+    assert "DA1MHH" in src, (
+        "Intent-Klausel: DA1MHH-Erwähnung fehlt im _show_hardware_warning"
     )
-    assert "Verifikation" in src, (
-        "Intent-Klausel-Wortlaut 'Verifikation' fehlt"
+    assert "MIT-Lizenz" in src, (
+        "Intent-Klausel: MIT-Lizenz-Erwähnung fehlt"
     )
 
 

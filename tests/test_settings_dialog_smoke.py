@@ -30,7 +30,7 @@ class _FakeSettings:
             "swr_limit": 3.0,
             "tune_power": 10,
             "language": "de",
-            "stats_enabled": True,
+            # P52 (v0.97.41): stats_enabled entfernt — Stats immer an
             "debug_console_visible": False,
         }
 
@@ -95,7 +95,8 @@ def test_widget_attributes_accessible(dlg):
     expected_attrs = [
         "callsign", "locator", "radio_ip",
         "power", "tx_level", "max_calls_combo", "swr_limit",
-        "language_combo", "stats_cb", "debug_console_cb",
+        # P52 (v0.97.41): stats_cb entfernt — Toggle weg, Stats immer an
+        "language_combo", "debug_console_cb",
         "_tune_btns", "_current_tune_power",
         "rf_table", "_rf_band_combo",
         "btn_rf_clear_band", "btn_rf_clear_all", "_rf_info_label",
@@ -190,9 +191,11 @@ def test_bundle_i_indicator_stylesheet(dlg):
 
 def test_bundle_i_stylesheet_scope_local(dlg):
     """T1.5: Stylesheet auf bands_group beschränkt — Dialog-Root NICHT betroffen."""
-    # Andere Checkbox im Dialog (stats_cb existiert in Tab „Daten & Tools")
-    assert hasattr(dlg, "stats_cb")
-    other_cb = dlg.stats_cb
+    # Andere Checkbox im Dialog außerhalb von bands_group
+    # P52 (v0.97.41): stats_cb entfernt — debug_console_cb stattdessen
+    # (existiert in Tab „Daten & Tools")
+    assert hasattr(dlg, "debug_console_cb")
+    other_cb = dlg.debug_console_cb
     # Dialog-Stylesheet darf das Indicator-Override NICHT enthalten
     # (sollte auf bands_group leben, nicht auf Dialog-Root)
     assert "QCheckBox::indicator" not in dlg.styleSheet()

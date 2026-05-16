@@ -496,6 +496,13 @@ class CycleMixin:
         )
         if not _candidate:
             return
+        # P61 (v0.97.33): Pick-Zeitpunkt SOFORT in _recent_qso eintragen,
+        # noch BEVOR start_qso aufgerufen wird. Schuetzt gegen Race
+        # zwischen Decoder-cycle_decoded und Encoder-tx_finished — die
+        # gleiche Station darf in der naechsten Decoder-Runde nicht
+        # erneut gepickt werden auch wenn qso_log.add_qso noch nicht
+        # synchron gelaufen ist.
+        self._auto_hunt.mark_pick(_candidate.call)
         # Hunt-QSO starten (gleicher Weg wie manueller Klick)
         self._active_qso_targets.add(_candidate.call)
         self.rx_panel.set_active_call(_candidate.call)
@@ -676,8 +683,7 @@ class CycleMixin:
         """
         if not hasattr(self, '_stats_logger') or self._stats_logger is None:
             return False
-        if not self.settings.get("stats_enabled", True):
-            return False
+        # P52 (v0.97.41): stats_enabled-Toggle entfernt — Stats immer an.
         # Stats-Filter: aktive Liste der zu loggenden Baender (siehe
         # core/station_stats.py LOGGED_BANDS). Konsistent mit dem
         # eigentlichen Log-Filter in StationStats.log_cycle, damit der

@@ -319,6 +319,10 @@ class RadioMixin:
         self.decoder.set_protocol(mode)
         self.encoder.set_protocol(mode)
         self.qso_sm._mode = mode
+        # P61 (v0.97.33): AutoHunt Mode-Awareness fuer Cooldown-Key
+        # (call, band, mode) — selbe Station auf neuem Modus pickbar.
+        if hasattr(self, "_auto_hunt"):
+            self._auto_hunt.set_mode(mode)
         # Even/Odd Anzeige: Slot-Dauer fuer QSO-Panel
         _DURATIONS = {"FT8": 15.0, "FT4": 7.5, "FT2": 3.8}
         self.qso_panel._cycle_duration = _DURATIONS.get(mode, 15.0)
@@ -1215,8 +1219,20 @@ class RadioMixin:
         Logik:
         - Gain fresh  → ``_enable_diversity`` direkt (Dynamic startet)
         - Gain stale/missing → DXTuneDialog, nach OK ``_enable_diversity``
+
+        P63 (v0.97.36): Marker-Pre-Check oben — bei rotem Marker werden
+        Gain-Mess-Pipeline + Diversity-Start blockiert. User muss
+        manuellen TUNE machen damit Marker freigegeben wird.
         """
         if not getattr(self, 'radio', None) or not self.radio.ip:
+            return
+
+        # P63 AC8: Marker-Pre-Check
+        if band.upper() in self._swr_blocked_bands:
+            self.qso_panel.add_info(
+                f"⚠ Diversity blockiert — Band {band.upper()} SWR-Sperre. "
+                "Manueller TUNE zum Freischalten.")
+            self._update_statusbar()
             return
 
         gain_status = self._assess_gain(band, ft_mode, scoring)
@@ -1240,7 +1256,20 @@ class RadioMixin:
         _dlog("DIV-CACHE",
               f"BRANCH=gain_{gain_status} -> DXTuneDialog")
         print(f"[Diversity] {band}/{ft_mode}: Gain {gain_status} → DXTuneDialog")
-        self._start_dx_tuning(scoring_mode=gain_scoring)
+        # P62 (v0.97.35): 1s Pause zwischen TX-Stop und Gain-Mess-TUNE.
+        # Mike-Feedback Field-Test P60-F6: ohne Pause wirkt der Uebergang
+        # visuell wie „80W → 10W TUNE" statt sauberes „TX aus → neue
+        # Messung". Lock greift SOFORT (sperrt UI), Statusbar zeigt
+        # Hinweis, dann nach 1000ms eigentliche Tune-Pipeline. Race-Schutz
+        # via existierenden `_gain_measure_locked`-Check in
+        # `_on_band_changed`/`_on_mode_changed`/`_on_rx_mode_changed`.
+        from PySide6.QtCore import QTimer
+        self._set_gain_measure_lock(True)
+        self.statusBar().showMessage(
+            "TX gestoppt — Gain-Messung startet in 1s ...", 1500)
+        QTimer.singleShot(
+            1000,
+            lambda: self._start_dx_tuning(scoring_mode=gain_scoring))
         self._update_statusbar()
 
     def _handle_dx_tuning(self):
@@ -1310,11 +1339,28 @@ class RadioMixin:
         QTimer.singleShot(3000, _after_tune)
 
     def _start_dx_tuning(self, scoring_mode: str = "snr"):
-        """Diversity Pipeline: TUNE (automatisch) → Gain-Messung → Einmessen."""
+        """Diversity Pipeline: TUNE (automatisch) → Gain-Messung → Einmessen.
+
+        P63 (v0.97.36):
+        - AC8: Marker-Pre-Check (blockiert Auto-Pipeline bei rotem Band)
+        - AC9: Tuner=False → Auto-TUNE-Phase skip + Power-Reset (R1-F3)
+        - AC11: Auto-TUNE-Fehler-Pfad ruft `_set_gain_measure_lock(False)`
+          + setzt Marker (R1-F2)
+        - AC13: explizites `set_tx_antenna("ANT1")` vor Auto-TUNE (HW-Pflicht)
+        """
         import time as _time
         self._stats_warmup_cycles = 99999  # Blockiert bis nach Einmessen+Warmup
         self._gain_scoring_mode = scoring_mode
         from PySide6.QtCore import QTimer
+
+        # P63 AC8: Marker-Pre-Check
+        band = self.settings.band.upper()
+        if band in self._swr_blocked_bands:
+            self.qso_panel.add_info(
+                f"⚠ Gain-Messung blockiert — Band {band} SWR-Sperre. "
+                "Manueller TUNE zum Freischalten.")
+            self._set_gain_measure_lock(False)
+            return
 
         # GUI sofort sperren — bleibt bis Einmessen fertig
         self._set_gain_measure_lock(True)
@@ -1332,9 +1378,11 @@ class RadioMixin:
 
         tune_power = self.settings.get("tune_power", 10)
         swr_limit  = self.settings.get("swr_limit", 3.0)
+        tuner_present = self.settings.get("tuner_present", True)
 
-        # TUNE automatisch — immer, keine Auswahl
-        if self.radio.ip:
+        # P63 AC9/AC13: Auto-TUNE nur wenn Radio verbunden UND Tuner an
+        if self.radio.ip and tuner_present:
+            self.radio.set_tx_antenna("ANT1")     # AC13 HW-Pflicht
             self.statusBar().showMessage(
                 f"TUNEN — {tune_power}W auf ANT1 fuer 3s ...", 0)
             self.radio.set_rfpower_direct(tune_power)
@@ -1348,6 +1396,11 @@ class RadioMixin:
                 self.rx_panel.table.setRowCount(0)
                 swr = self.radio.last_swr
                 if swr > swr_limit:
+                    # P63 AC11/R1-F2: Lock-Release + Marker-Set bei SWR-Fehler
+                    self._set_gain_measure_lock(False)
+                    if self.settings.get("tuner_present", True):
+                        self._swr_blocked_bands.add(band)
+                        print(f"[P63] Auto-TUNE-Fehler → Marker {band} gesetzt")
                     from PySide6.QtWidgets import QMessageBox
                     QMessageBox.warning(
                         self, "SWR zu hoch",
@@ -1360,7 +1413,11 @@ class RadioMixin:
 
             QTimer.singleShot(3000, _after_tune)
         else:
-            # Kein Radio → direkt Gain-Messung
+            # P63 AC9/R1-F3: Kein Radio ODER Tuner=NEIN → direkt Gain-Mess.
+            # Power-Reset wenn Radio verbunden (sonst hängt User-veränderter
+            # Power-Wert nach).
+            if self.radio.ip:
+                self.radio.set_power(self.settings.get("power_preset", 15))
             self._open_dx_tune_dialog()
 
     def _open_dx_tune_dialog(self):

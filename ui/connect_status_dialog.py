@@ -209,13 +209,41 @@ class ConnectStatusDialog(QDialog):
     # ── Buttons ────────────────────────────────────────────────────────────
 
     def _on_continue_without_radio(self):
-        """User-Bypass: App startet ohne Radio (Demo-Modus)."""
+        """User-Bypass: App startet ohne Radio (Demo-Modus weiter).
+
+        Bundle-L-Revert v0.97.40 (16.05.2026, Mike-Klärung):
+        Bundle L Punkt B (v0.97.38) hatte hier `QApplication.quit()`
+        eingebaut — UX-Logik-Bug, weil beide Buttons dann dasselbe machen.
+        Mike-Klärung 16.05.: „ohne Radio weiter" = Demo-Modus weiter,
+        „Beenden" = quit. Bundle L Punkt A (Display-3-Auto-Move) bleibt.
+
+        `_tick_timer.stop()` als Defensive — beendet die Spinner-Animation
+        sauber. App läuft nach `reject()` weiter (mw_radio.py Cleanup
+        setzt `_connect_dialog = None`, Qt cleant Timer beim Parent-Destroy).
+        """
+        try:
+            self._tick_timer.stop()
+        except Exception:
+            pass
         self.reject()
 
     def _on_quit(self):
-        """User-Quit: App schliesst sauber."""
+        """User-Quit: App schliesst sauber.
+
+        Hotfix v0.97.39 (Mike-Crash-Report 15.05.2026 abends):
+        Reihenfolge `_tick_timer.stop() → reject() → QApplication.quit()`
+        ist zwingend. Vor Hotfix war Reihenfolge `quit() + reject()` mit
+        Race: `quit()` schedulete Event-Loop-Ende, danach feuerte
+        `_tick_timer` (500ms) nochmal an einen bereits destroyed Dialog →
+        `QCoreApplication::sendEvent` SIGBUS (Use-After-Free). Timer-Stop
+        entfernt den letzten pending Timer-Tick.
+        """
+        try:
+            self._tick_timer.stop()
+        except Exception:
+            pass
+        self.reject()
         QApplication.quit()
-        self.reject()  # falls quit() Event-Loop noch nicht beendet hat
 
     # ── Lifecycle ──────────────────────────────────────────────────────────
 

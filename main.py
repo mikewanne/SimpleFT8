@@ -13,7 +13,7 @@ import atexit
 import signal
 from pathlib import Path
 
-APP_VERSION = "0.97.32"
+APP_VERSION = "0.97.42"
 
 # ── P43: Activity Monitor zeigt Prozess-Namen statt nur "Python" ──
 # Bei der P30-Memory-Leak-Diagnose 12.05. konnte Mike SimpleFT8 nicht
@@ -42,6 +42,20 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from core.log_setup import setup_main_log
 _LOG_DIR = Path.home() / ".simpleft8"
 _log_path, _log_file = setup_main_log(_LOG_DIR)
+
+# ── P52 (v0.97.41): 90-Tage-Rolling-Window fuer statistics/ ──────────
+# Stats-Toggle wurde entfernt — Stats sind immer an. Damit Disk-
+# Footprint nicht unbegrenzt waechst (~1 MB/Tag): Files aelter als
+# 90 Tage beim App-Start automatisch loeschen (Cutoff aus Dateiname,
+# NICHT mtime — Backup-robust). Fail-silent.
+from core.stats_cleanup import cleanup_stats_older_than_days
+try:
+    _STATS_DIR = Path(__file__).parent / "statistics"
+    _deleted = cleanup_stats_older_than_days(_STATS_DIR, days=90)
+    if _deleted:
+        print(f"[Stats-Cleanup] {_deleted} Dateien >90 Tage geloescht")
+except Exception as _e:
+    print(f"[Stats-Cleanup] Fehler ignoriert: {_e}")
 
 
 class _Tee:
@@ -414,7 +428,10 @@ def _show_hardware_warning(app) -> bool:
     dlg.setWindowTitle("Hardware-Sicherheitshinweis")
     dlg.setModal(True)
     dlg.setWindowFlag(Qt.WindowStaysOnTopHint, True)
-    dlg.setFixedSize(540, 340)
+    # P64 Intent-Klausel (v0.97.37): Höhe 340 → 400 für erweiterten
+    # Disclaimer-Text. R1-F2 empfiehlt 400px Puffer gegen HiDPI-
+    # Font-Substitution (gegenüber V2-Vorschlag 380).
+    dlg.setFixedSize(540, 400)
     dlg.setStyleSheet("""
         QDialog { background-color: #1a1a2e; }
         QLabel { background-color: transparent; color: #CCC; }
@@ -444,13 +461,17 @@ def _show_hardware_warning(app) -> bool:
     body.setWordWrap(True)
     lay.addWidget(body)
 
-    # Haftungs-Disclaimer (Machbarkeitsstudie / Hobby-Projekt)
+    # P64 Intent-Klausel (v0.97.37): Lizenz + Hobby-Funker-Intent
+    # explizit für eventuelle GitHub-Veröffentlichung.
+    # Mike-Wortlaut bewusst persönlich gehalten (kein Anwalts-Stil).
     disclaimer = QLabel(
-        "SimpleFT8 ist eine private Machbarkeitsstudie. Das Projekt dient "
-        "ausschließlich dem persönlichen Gebrauch und der Verifikation "
-        "technischer Möglichkeiten. Nutzung auf eigene Gefahr — für "
-        "Schäden an Hardware, Antennen oder Funkgeräten wird keine "
-        "Haftung übernommen."
+        "Dieses Projekt entstand als persönliches Bastel-Tool für meinen "
+        "eigenen Funkbetrieb (DA1MHH). Der Quellcode steht unter MIT-Lizenz "
+        "zur freien Verwendung — die Nutzung erfolgt jedoch ausschließlich "
+        "auf eigene Gefahr. Keine Gewährleistung, keine Haftung für "
+        "Hardware-Defekte, Funklizenz-Verstöße oder andere Folgen. "
+        "ANT1 = TX-Antenne (immer). ANT2 = nur RX (NIEMALS TX, "
+        "Regenrinne nicht für Sendeleistung geeignet)."
     )
     disclaimer.setStyleSheet(
         "color: #888; font-family: Menlo; font-size: 11px; "
@@ -521,6 +542,9 @@ def main():
 
     window = MainWindow(settings)
     window.show()
+    # Bundle L (v0.97.38, 15.05.-10.06.2026): Fenster auf Display 3
+    # für Remote-Fernwartung. ⛔ NACH 10.06.2026 ENTFERNEN.
+    window.move_to_remote_display()
 
     sys.exit(app.exec())
 

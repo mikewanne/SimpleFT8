@@ -141,7 +141,26 @@ class QSOMixin:
 
     @Slot(object)
     def _on_station_clicked(self, msg: FT8Message):
-        """User hat eine Station in der Empfangsliste angeklickt."""
+        """User hat eine Station in der Empfangsliste angeklickt.
+
+        P63 AC8/AC12 (v0.97.36): Marker-Pre-Check FIRST — auch gegen
+        Buffering (R1-F5). Bei rotem Band wird der Klick weder
+        ausgeführt noch gebuffert.
+        """
+        # P63 AC8/AC12 R1-F5: Marker-Pre-Check inkl. Buffer-Schutz
+        band = self.settings.band.upper()
+        if band in self._swr_blocked_bands:
+            if self.encoder.is_transmitting:
+                self.statusBar().showMessage(
+                    f"TX läuft — {msg.caller} blockiert "
+                    f"(Band {band} SWR-Sperre)",
+                    3000)
+            else:
+                self.qso_panel.add_info(
+                    f"⚠ Anruf {msg.caller} blockiert — "
+                    f"Band {band} SWR-Sperre.")
+            return  # KEIN Buffer, kein State-Mutate
+
         if self.encoder.is_transmitting:
             # P1.24: Klick waehrend TX wird gebuffert + sofort State-Cleanup
             # (CQ stoppen ODER laufendes Hunt-QSO abbrechen). Aktueller TX-
@@ -274,6 +293,14 @@ class QSOMixin:
     @Slot()
     def _on_cq_clicked(self):
         if self.control_panel.btn_cq.isChecked():
+            # P63 AC8: Marker-Pre-Check FIRST
+            band = self.settings.band.upper()
+            if band in self._swr_blocked_bands:
+                self.qso_panel.add_info(
+                    f"⚠ CQ blockiert — Band {band} SWR-Sperre. "
+                    "Manueller TUNE zum Freischalten.")
+                self.control_panel.set_cq_active(False)
+                return
             # Laufendes Hunt-QSO abbrechen bevor CQ startet!
             if self.qso_sm.state not in (QSOState.IDLE, QSOState.TIMEOUT,
                                           QSOState.CQ_CALLING, QSOState.CQ_WAIT):
@@ -408,6 +435,14 @@ class QSOMixin:
         if self._pending_station_click is not None:
             buffered = self._pending_station_click
             self._pending_station_click = None
+            # P63 AC12 R1-F5: Marker-Check vor Buffer-Auswertung
+            # (Band kann sich zwischen Buffer und tx_finished geändert
+            # haben oder Watchdog hat Marker zwischendurch gesetzt).
+            if self.settings.band.upper() in self._swr_blocked_bands:
+                self.qso_panel.add_info(
+                    f"⚠ Gepufferter Klick {buffered.caller} verworfen — "
+                    f"Band {self.settings.band.upper()} SWR-Sperre")
+                return
             print(f"[QSO] TX fertig — Buffered Klick {buffered.caller} jetzt anrufen")
             self._on_station_clicked(buffered)
 
@@ -965,9 +1000,25 @@ class QSOMixin:
         print(f"[QSO] P1.9 Replace OK: CQ → '{tx_msg}'")
 
     def _on_qso_tab_changed(self, index: int):
-        """Tab-Wechsel im QSO-Panel: Detail-Overlay schliessen wenn nicht mehr im Logbuch."""
-        if index == 0:  # QSO-Tab (nicht Logbuch)
+        """Tab-Wechsel im QSO-Panel.
+
+        index=0 (QSO-Live): Detail-Overlay schliessen, ControlPanel zeigen.
+        index=1 (Logbuch): P66 (v0.97.42) — wenn eine Logbuch-Zeile bereits
+            selektiert ist, automatisch das Detail-Overlay rechts zeigen
+            (Mike-Wunsch 16.05.2026: Selektion bleibt sichtbar nach Tab-
+            Wechsel weg/zurueck). Sonst Stack-Index unveraendert.
+            try/except gegen defekte UserRole-Daten (R1-V3 Defensive).
+        """
+        if index == 0:  # QSO-Live
             self._right_stack.setCurrentIndex(0)
+        elif index == 1:  # Logbuch
+            try:
+                rec = self.qso_panel.logbook._selected_record()
+            except Exception as e:
+                print(f"[Logbuch] Tab-Auto-Show Fehler ignoriert: {e}")
+                return
+            if rec:
+                self._on_logbook_qso_clicked(rec)
 
     def _on_logbook_delete(self, record: dict):
         """QSO aus Logbuch loeschen (via Detail-Overlay Delete-Button)."""

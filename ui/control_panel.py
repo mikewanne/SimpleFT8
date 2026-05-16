@@ -983,13 +983,18 @@ class _QSOStatusCard(QFrame):
         # MainWindow._update_button_visibility). Initial alle hidden bis
         # _update_button_visibility nach __init__ läuft. TUNE-Button ist
         # SEPARAT und gehoert NICHT zur QButtonGroup — eigene setEnabled-Steuerung.
+        # Bundle K (P59, v0.97.34): Active-State einheitlich GRUEN
+        # analog btn_omni_cq (Mike-Spec „einheidlich optisch
+        # nachvollziehbar"). Inaktiv bleibt dunkelrot (TX-Funktion-Hinweis).
+        # Wirkt auf btn_cq (Normal-Modus) und btn_auto_hunt (Diversity).
         _mode_btn_style = (
             f"QPushButton {{ background: rgba(120,0,0,0.45); color: #CC8888; "
             f"border: 1px solid rgba(180,50,50,0.5); border-radius: 5px; "
             f"font-size: 12px; font-weight: bold; font-family: {_FONT}; }}"
-            f"QPushButton:checked {{ background: rgba(200,0,0,0.7); color: #FFD700; "
-            f"border-color: rgba(255,180,0,0.7); }}"
+            f"QPushButton:checked {{ background: rgba(0,150,0,0.75); color: #FFFFFF; "
+            f"border-color: rgba(0,220,0,0.75); }}"
             f"QPushButton:hover {{ background: rgba(140,0,0,0.5); color: white; }}"
+            f"QPushButton:checked:hover {{ background: rgba(0,180,0,0.85); color: #FFFFFF; }}"
             f"QPushButton:disabled {{ background: #2a2a2a; color: #666666; "
             f"border: 1px solid #444444; }}"
         )
@@ -1299,6 +1304,10 @@ class ControlPanel(QWidget):
         self.power_buttons[10].setChecked(True)
         self.btn_tune = radio_card.btn_tune
         self.btn_tune.clicked.connect(self._on_tune_clicked)
+        # P63 (v0.97.36): TUNE-Button-Sichtbarkeit via tuner_present-Setting.
+        # MainWindow ruft `set_tuner_present` nach __init__ und nach jedem
+        # Settings-Save (Live-Apply).
+        self._tuner_present = True
         self.watt_label = radio_card.watt_label
         self.swr_label = radio_card.swr_label
         self.peak_label = radio_card.peak_label
@@ -1820,6 +1829,16 @@ class ControlPanel(QWidget):
     def set_cq_active(self, active: bool):
         self.btn_cq.setChecked(active)
         self.btn_cq.setText("CQ AKTIV ■" if active else "CQ RUFEN")
+
+    def set_tuner_present(self, value: bool) -> None:
+        """P63 (v0.97.36): TUNE-Button-Sichtbarkeit live setzen.
+
+        Gerufen vom MainWindow nach `__init__` und nach jedem
+        Settings-Save. `tuner_present=False` blendet den TUNE-Button
+        komplett aus (Monoband-Operator-Use-Case).
+        """
+        self._tuner_present = bool(value)
+        self.btn_tune.setVisible(self._tuner_present)
 
     def set_tx_active(self, active: bool):
         if active:

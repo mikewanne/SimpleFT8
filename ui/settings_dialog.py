@@ -18,6 +18,29 @@ from ui.styles import MSGBOX_STYLE
 # Bundle J (v0.97.27): einheitlicher Help-Dialog mit Scrollbar (Mike-Designentscheidung).
 from ui.simple_help_dialog import show_simple_help
 
+# Bundle K (P57, v0.97.34): SWR-Limit nur in 0.5-Schritten. Combo statt
+# Spinbox damit User keinen freien Wert (z.B. 1.7) per Tastatur eingeben
+# kann. Range 1.5..5.0 — ueber 5.0 ist sowieso Hardware-Notfall, kein
+# User-Setting (Hobby-Praxis).
+_SWR_VALUES = [1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0]
+
+
+def _swr_value_to_index(value: float) -> int:
+    """Snap auf naechst-HOEHEREN Wert in _SWR_VALUES (sicherer:
+    schaerferes Limit bricht TX frueher ab). Werte ueber Maximum
+    snappen auf 5.0, unter Minimum auf 1.5."""
+    if value is None:
+        return 3  # Default 3.0
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return 3
+    for i, listval in enumerate(_SWR_VALUES):
+        if v <= listval:
+            return i
+    return len(_SWR_VALUES) - 1  # > 5.0 → 5.0
+
+
 # Info-Texte fuer die (i)-Buttons
 _HINTS = {
     "callsign": "Dein Amateurfunk-Rufzeichen (z.B. DA1MHH).\nWird in allen FT8-Nachrichten verwendet.",
@@ -203,10 +226,13 @@ class SettingsDialog(QDialog):
         self.tx_level.setSuffix(" %")
         self.max_calls_combo = QComboBox()
         self.max_calls_combo.addItems(["3", "5", "7", "99"])
-        self.swr_limit = QDoubleSpinBox()
-        self.swr_limit.setRange(1.5, 10.0)
-        self.swr_limit.setSingleStep(0.5)
-        self.swr_limit.setDecimals(1)
+        # Bundle K (P57, v0.97.34): SWR-Limit als ComboBox mit festen
+        # 0.5-Schritten 1.5..5.0. Verhindert freie Tastatur-Eingabe wie
+        # 1.7 (Mike-Spec 15.05.2026).
+        self.swr_limit = QComboBox()
+        for v in _SWR_VALUES:
+            self.swr_limit.addItem(f"{v:.1f}", v)
+        self.swr_limit.setCurrentIndex(3)  # Default 3.0
         form.addRow("Sendeleistung:", _row_with_hint(self.power, "power"))
         form.addRow("TX Audio-Pegel:", _row_with_hint(self.tx_level, "tx_level"))
         form.addRow("Anrufversuche:", _row_with_hint(self.max_calls_combo, "max_calls"))
@@ -287,16 +313,29 @@ class SettingsDialog(QDialog):
         # zur Laufzeit aktualisiert). Defaults hartkodiert in main_window
         # (Encoder=1500, Decoder=3000).
         # v0.93: "Neueinmessung nach: <Zyklen>" entfernt — jetzt fest 1 h zeit-basiert
-        self.stats_cb = QCheckBox("Statistik-Erfassung aktivieren")
-        self.stats_cb.setToolTip(
-            "Loggt pro Zyklus die Anzahl empfangener Stationen, SNR und Band.\n"
-            "Normal + Diversity (Normal/DX) — pausiert bei Antennen-Tuning.\n"
-            "Daten in statistics/<Modus>/<Band>/<Protokoll>/ (Markdown).\n"
-            "Deaktiviert = kein Hintergrund-Logging, null Overhead.")
-        form.addRow("", self.stats_cb)
+        # P52 (v0.97.41): stats_cb-Toggle entfernt — Stats sind immer an
+        # (Bandpilot + Auswertungen brauchen sie). 90-Tage-Rolling-Window
+        # auto-cleanup beim App-Start via core/stats_cleanup.py.
 
         # P34-Stufe2 (v0.97.19): Dynamic-Diversity-Toggle entfernt —
         # Dynamic ist Default ohne Toggle (Statik-Pipeline raus).
+
+        # ── P63 (v0.97.36) Tuner-Settings ───────────────────────────
+        self.tuner_present_cb = QCheckBox("Antennen-Tuner verwenden")
+        self.tuner_present_cb.setToolTip(
+            "Aktiviert die Auto-TUNE-Phase vor der Gain-Messung\n"
+            "und den manuellen TUNE-Button. Deaktivieren wenn\n"
+            "Monoband-Antennen ohne Tuner (z.B. Dipol).")
+        form.addRow("", self.tuner_present_cb)
+
+        self.tune_duration_combo = QComboBox()
+        self.tune_duration_combo.addItem("15 s", 15)
+        self.tune_duration_combo.addItem("30 s", 30)
+        self.tune_duration_combo.setToolTip(
+            "Maximale Dauer eines manuellen TUNE-Vorgangs.\n"
+            "LDG AT-200 Pro schafft Full-Tune typisch in <15s,\n"
+            "30s als Reserve für sehr unkonstante Antennen.")
+        form.addRow("TUNE-Dauer (manuell):", self.tune_duration_combo)
 
         # ── v0.88 Bandpilot — Stunden-Logik ──────────────────────────
         self.bandpilot_mode_combo = QComboBox()
@@ -534,7 +573,13 @@ class SettingsDialog(QDialog):
         self.tx_level.setValue(self.settings.get("tx_level", 100))
         mc = self.settings.get("max_calls", 3)
         self.max_calls_combo.setCurrentIndex({3: 0, 5: 1, 7: 2, 99: 3}.get(mc, 0))
-        self.swr_limit.setValue(self.settings.get("swr_limit", 3.0))
+        # Bundle K (P57): Load mit Snap-Index auf naechst-hoeheren Wert
+        _saved_swr = self.settings.get("swr_limit", 3.0)
+        _idx = _swr_value_to_index(_saved_swr)
+        if abs(_SWR_VALUES[_idx] - float(_saved_swr)) > 0.001:
+            print(f"[Settings] SWR-Limit Snap: {_saved_swr} → "
+                  f"{_SWR_VALUES[_idx]} (nur 0.5-Schritte erlaubt)")
+        self.swr_limit.setCurrentIndex(_idx)
         # P47 (v0.97.11): audio_freq_hz + max_decode_freq Load entfernt — Settings tot.
         # v0.93: diversity_operate_cycles entfernt — 1h-Frist zeit-basiert
         # Sprache
@@ -545,9 +590,12 @@ class SettingsDialog(QDialog):
         self._current_tune_power = tp
         for w, btn in self._tune_btns.items():
             btn.setChecked(w == tp)
-        # Statistik + Debug-Konsole
-        self.stats_cb.setChecked(self.settings.get("stats_enabled", True))
+        # P52 (v0.97.41): stats_cb-Load entfernt — Toggle existiert nicht mehr
         self.debug_console_cb.setChecked(self.settings.get("debug_console_visible", False))
+        # P63 (v0.97.36): Tuner-Settings
+        self.tuner_present_cb.setChecked(self.settings.get("tuner_present", True))
+        _dur = self.settings.get("tune_duration_s", 15)
+        self.tune_duration_combo.setCurrentIndex(0 if _dur == 15 else 1)
         # P3 v0.95.20: Audio-Dump
         self.audio_dump_cb.setChecked(self.settings.get("audio_dump_enabled", False))
         self.audio_dump_max_spin.setValue(self.settings.get("audio_dump_max_files", 200))
@@ -676,7 +724,8 @@ class SettingsDialog(QDialog):
         self.settings.set("power_watts", self.power.value())
         self.settings.set("tx_level", self.tx_level.value())
         self.settings.set("max_calls", int(self.max_calls_combo.currentText()))
-        self.settings.set("swr_limit", self.swr_limit.value())
+        # Bundle K (P57): currentData() liefert Float-Userdata aus addItem
+        self.settings.set("swr_limit", self.swr_limit.currentData())
         # P58 (v0.97.31): Live-Propagation an Radio NICHT mehr hier — wird
         # in main_window._on_settings_clicked nach dialog.exec() gemacht
         # (Architektur-Konsistenz mit set_power/tx_audio_level).
@@ -684,7 +733,7 @@ class SettingsDialog(QDialog):
         # P47 (v0.97.11): audio_freq_hz + max_decode_freq Save entfernt — Settings tot.
         # v0.93: diversity_operate_cycles entfernt
         self.settings.set("language", "de" if self.language_combo.currentIndex() == 0 else "en")
-        self.settings.set("stats_enabled", self.stats_cb.isChecked())
+        # P52 (v0.97.41): stats_cb-Save entfernt — Stats immer an, Toggle weg.
         # P34-Stufe2: Dynamic-Toggle entfernt — Dynamic ist Default.
         self.settings.set("debug_console_visible", self.debug_console_cb.isChecked())
         # P3 v0.95.20: Audio-Dump
@@ -700,6 +749,9 @@ class SettingsDialog(QDialog):
         # P50 (v0.97.20): Sichtbare Bänder
         enabled_bands = [b for b, cb in self._band_checkboxes.items() if cb.isChecked()]
         self.settings.set_enabled_bands(enabled_bands)
+        # P63 (v0.97.36): Tuner-Settings
+        self.settings.set("tuner_present", self.tuner_present_cb.isChecked())
+        self.settings.set("tune_duration_s", self.tune_duration_combo.currentData())
         self.settings.save()
         self.accept()
 
@@ -720,17 +772,17 @@ class SettingsDialog(QDialog):
         self.power.setValue(DEFAULTS.get("power_watts", 50))
         self.tx_level.setValue(100)
         self.max_calls_combo.setCurrentIndex(3)  # 99
-        self.swr_limit.setValue(3.0)
+        self.swr_limit.setCurrentIndex(3)  # Default 3.0 (Bundle K P57)
         # P47 (v0.97.11): audio_freq + max_decode_freq Reset entfernt — Widgets weg.
         self._current_tune_power = 10
         for w, btn in self._tune_btns.items():
             btn.setChecked(w == 10)
         # v0.93: diversity_cycles UI entfernt
         # v0.79 R1-Review-Fix: vorher fehlten radio_ip / language /
-        # stats_cb / debug_console_cb im Reset
+        # debug_console_cb im Reset
+        # P52 (v0.97.41): stats_cb-Reset entfernt — Toggle weg
         self.radio_ip.setText("")  # Auto-Discovery
         self.language_combo.setCurrentIndex(0)  # Deutsch
-        self.stats_cb.setChecked(True)
         self.debug_console_cb.setChecked(False)
         # P3 v0.95.20: Audio-Dump
         self.audio_dump_cb.setChecked(False)
@@ -742,6 +794,9 @@ class SettingsDialog(QDialog):
             cb.setChecked(True)
             cb.blockSignals(False)
         self._on_band_visibility_toggled()
+        # P63 (v0.97.36): Tuner-Settings Defaults
+        self.tuner_present_cb.setChecked(True)
+        self.tune_duration_combo.setCurrentIndex(0)  # 15 s
 
     def _on_map_open_clicked(self):
         """Richtungs-Karte oeffnen. Default-Modus aus Settings (rx/tx)."""

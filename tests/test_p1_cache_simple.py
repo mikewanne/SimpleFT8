@@ -125,8 +125,12 @@ def test_check_preset_dispatch_gain_fresh_calls_enable_diversity():
     fake_self._start_dx_tuning.assert_not_called()
 
 
-def test_check_preset_dispatch_gain_stale_opens_dialog():
-    """P34-Stufe2: Gain stale → DXTuneDialog (kein _enable_diversity sofort)."""
+def test_check_preset_dispatch_gain_stale_opens_dialog(monkeypatch):
+    """P34-Stufe2: Gain stale → DXTuneDialog (kein _enable_diversity sofort).
+
+    P62 (v0.97.35): _start_dx_tuning ist jetzt deferred via QTimer.singleShot
+    (1s Pause). Test mocked singleShot und führt den Callback aus.
+    """
     from ui.mw_radio import RadioMixin
 
     fake_self = _make_mw_self(store=_make_store_mock(
@@ -134,16 +138,24 @@ def test_check_preset_dispatch_gain_stale_opens_dialog():
     fake_self._enable_diversity = MagicMock()
     fake_self._start_dx_tuning = MagicMock()
     fake_self._update_statusbar = MagicMock()
+    fake_self._set_gain_measure_lock = MagicMock()
+
+    # P62: QTimer.singleShot mocken, Callback sofort ausführen
+    def fake_singleshot(msec, callback):
+        callback()
+    monkeypatch.setattr("PySide6.QtCore.QTimer.singleShot", fake_singleshot)
 
     RadioMixin._check_diversity_preset(fake_self, "40m", "FT8", "normal")
 
     fake_self._start_dx_tuning.assert_called_once()
     fake_self._enable_diversity.assert_not_called()
     assert fake_self._pending_dx_diversity is True
+    # P62: Lock vor Tune
+    fake_self._set_gain_measure_lock.assert_called_with(True)
 
 
-def test_check_preset_dispatch_gain_missing_opens_dialog():
-    """P34-Stufe2: Gain missing → DXTuneDialog."""
+def test_check_preset_dispatch_gain_missing_opens_dialog(monkeypatch):
+    """P34-Stufe2: Gain missing → DXTuneDialog (P62 deferred via QTimer)."""
     from ui.mw_radio import RadioMixin
 
     fake_self = _make_mw_self(store=_make_store_mock(
@@ -151,6 +163,11 @@ def test_check_preset_dispatch_gain_missing_opens_dialog():
     fake_self._enable_diversity = MagicMock()
     fake_self._start_dx_tuning = MagicMock()
     fake_self._update_statusbar = MagicMock()
+    fake_self._set_gain_measure_lock = MagicMock()
+
+    def fake_singleshot(msec, callback):
+        callback()
+    monkeypatch.setattr("PySide6.QtCore.QTimer.singleShot", fake_singleshot)
 
     RadioMixin._check_diversity_preset(fake_self, "40m", "FT8", "normal")
 

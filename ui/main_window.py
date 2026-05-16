@@ -102,6 +102,9 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         # P50 (v0.97.20): Sichtbare Bänder anwenden. current_band bleibt
         # garantiert sichtbar (R1-F1 in ControlPanel.set_visible_bands).
         self.apply_visible_bands()
+        # P63 (v0.97.36): TUNE-Button-Sichtbarkeit aus tuner_present-Setting
+        self.control_panel.set_tuner_present(
+            self.settings.get("tuner_present", True))
 
         # Hintergrund-Timer
         self._init_psk_polling()
@@ -282,6 +285,16 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         # P53: SWR-Live-Watchdog Spike-Counter (gegen PTT-on-Glitch)
         self._swr_spike_count = 0
         self._swr_first_alarm_t = 0.0
+        # P63 (v0.97.36): SWR-Block-Marker pro Band (in-memory, kein Persist).
+        # Set bei SWR-Watchdog-Alarm wenn tuner_present=True; clear nach
+        # erfolgreichem manuellem TUNE mit SWR≤Limit.
+        self._swr_blocked_bands: set[str] = set()
+        # P63: Watchdog-Bypass-Flag während manuellem TUNE (von tune_on bis
+        # 2s nach tune_off — Post-Check-Beruhigungszeit).
+        self._tune_in_progress: bool = False
+        # P63: Re-Entry-Tokens für Manuel-TUNE-Sequenz
+        self._tune_auto_stop_token = None
+        self._tune_post_check_token = None
 
     def _init_power_state(self):
         """Auto TX Level Regelung (zweistufig: rfpower primär, audio sekundär)."""
@@ -331,6 +344,8 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self._auto_hunt = AutoHunt()
         self._auto_hunt.set_qso_log(self.qso_log)
         self._auto_hunt.set_band(self.settings.band)
+        # P61 (v0.97.33): Initialer Mode fuer AutoHunt Cooldown-Key
+        self._auto_hunt.set_mode(self.settings.mode)
 
         # v0.75 Auto-Hunt UI-Lifecycle
         self._auto_hunt_cooldown_seconds: int = 0
@@ -468,12 +483,12 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
             "background-color: #111;"
         )
         # Statistik-Indikator (permanentes Widget, rechts in Statusbar)
+        # P52 (v0.97.41): immer sichtbar — Stats sind immer an, Toggle weg.
         from PySide6.QtWidgets import QLabel as _QLabel
         self._stats_indicator = _QLabel("Statistik")
         self._stats_indicator.setStyleSheet(
             "color: #555; font-family: Menlo; font-size: 11px; padding: 0 6px;"
         )
-        self._stats_indicator.setVisible(self.settings.get("stats_enabled", True))
         self.statusBar().addPermanentWidget(self._stats_indicator)
 
         # P44 (v0.97.10): DT-Korrektur als eigenes Permanent-Widget rechts
@@ -771,6 +786,17 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         Bei aktivem QSO Toggle blockieren (UX-Hilfe — verhindert Klick-Nirvana).
         """
         if checked and not self._omni_cq.is_active():
+            # P63 AC8/R1-F4: Marker-Pre-Check VOR allen anderen Checks
+            band = self.settings.band.upper()
+            if band in self._swr_blocked_bands:
+                btn = self.control_panel.btn_omni_cq
+                btn.blockSignals(True)
+                btn.setChecked(False)
+                btn.blockSignals(False)
+                self.qso_panel.add_info(
+                    f"⚠ OMNI blockiert — Band {band} SWR-Sperre. "
+                    "Manueller TUNE zum Freischalten.")
+                return
             if self.qso_sm.state not in (QSOState.IDLE, QSOState.CQ_WAIT):
                 btn = self.control_panel.btn_omni_cq
                 btn.blockSignals(True)
@@ -855,6 +881,17 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         Mutually-exclusive: laufendes OMNI-TX wird via "superseded" gestoppt.
         """
         if checked and not self._auto_hunt.active:
+            # P63 AC8/R1-F4: Marker-Pre-Check VOR allen anderen Checks
+            band = self.settings.band.upper()
+            if band in self._swr_blocked_bands:
+                btn = self.control_panel.btn_auto_hunt
+                btn.blockSignals(True)
+                btn.setChecked(False)
+                btn.blockSignals(False)
+                self.qso_panel.add_info(
+                    f"⚠ Auto-Hunt blockiert — Band {band} SWR-Sperre. "
+                    "Manueller TUNE zum Freischalten.")
+                return
             if self._omni_cq.is_active():
                 self._omni_cq.stop("superseded")
             self._auto_hunt.start_auto_hunt(600)
@@ -1082,6 +1119,9 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
             self._audio_dump_max_files = self.settings.get("audio_dump_max_files", 200)
             # P50 (v0.97.20): Sichtbare Bänder live aktualisieren
             self.apply_visible_bands()
+            # P63 (v0.97.36): Tuner-Setting → TUNE-Button-Sichtbarkeit
+            self.control_panel.set_tuner_present(
+                self.settings.get("tuner_present", True))
 
     def _on_tx_slot_lock_changed(self, lock: str) -> None:
         """Bundle E (v0.97.22): TX-Slot-Lock-Änderung persistieren.
@@ -1094,6 +1134,30 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
             self.settings.save()
         except Exception as exc:
             print(f"[TX-Slot-Lock] Save-Fehler: {exc}")
+
+    def move_to_remote_display(self):
+        """Bundle L (v0.97.38, Mike-Wunsch 15.05.-10.06.2026): Fenster
+        auf Display 3 (Position 2944,0) verschieben für Remote-Fernwartung
+        vom Ferienhaus.
+
+        Defensive Check (R1-F1): wenn Display 3 nicht physisch
+        angeschlossen ist (Position 2944,0 von keinem Screen abgedeckt),
+        bleibt das Fenster auf Main-Display — sonst wäre es offscreen
+        und unsichtbar.
+
+        ⛔ NACH 10.06.2026 ENTFERNEN: dieser Block + beide Aufrufer
+        (`main.py:main()` + `tools/remote/start_simpleft8_nokill.py`).
+        """
+        from PySide6.QtGui import QGuiApplication
+        TARGET_X, TARGET_Y = 2944, 0
+        for screen in QGuiApplication.screens():
+            geom = screen.geometry()
+            if geom.contains(TARGET_X, TARGET_Y):
+                self.move(TARGET_X, TARGET_Y)
+                print(f"[Display3] Fenster auf Display 3 verschoben "
+                      f"({TARGET_X},{TARGET_Y})")
+                return
+        print("[Display3] Display 3 nicht erkannt — bleibe auf Main-Display")
 
     def apply_visible_bands(self):
         """P50 (v0.97.20): Sichtbarkeits-Toggle für Band-Buttons anwenden.

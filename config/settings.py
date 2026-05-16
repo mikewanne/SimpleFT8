@@ -62,7 +62,8 @@ DEFAULTS = {
     "diversity_operate_cycles": 80,  # 80/160/240 — Betriebszyklen bis Neueinmessung
     "radio_type": "flex",            # "flex" = FlexRadio SmartSDR, "ic7300" = CI-V (zukünftig)
     "language": "de",                # "de" = Deutsch, "en" = English (Hilfe-Texte + Docs)
-    "stats_enabled": True,           # Stations-Statistik pro Zyklus loggen
+    # P52 (v0.97.41): stats_enabled entfernt — Stats sind immer an
+    # (Bandpilot + Auswertungen brauchen sie). Migration in load().
     "debug_console_visible": False,  # Debug-Konsole ein/ausblenden
     "bandpilot_mode": "off",         # v0.88 — "off" | "auto" | "manual"
     # P48 (v0.97.13): Radio-Timing-Hardware-Werte aus dem Code in Settings.
@@ -71,6 +72,12 @@ DEFAULTS = {
         "tx_buffer_s": 1.3,                    # FlexRadio VITA-49 TX-Buffer-Latenz
         "rx_hardware_offset_default_s": 0.26,  # FlexRadio RX-Latenz empirisch (10.212 Messungen)
     },
+    # P63 (v0.97.36): Tuner-Setting + manuelle TUNE-Dauer.
+    # Tuner=False (Monoband-Operator) skipt Auto-TUNE-Phase in
+    # Gain-Mess-Pipeline und blendet TUNE-Button aus.
+    # Dauer 15s reicht laut LDG AT-200 Pro Spec, 30s als Reserve.
+    "tuner_present": True,
+    "tune_duration_s": 15,
 }
 
 
@@ -96,6 +103,8 @@ class Settings:
         # Idempotent — Dict-Pop ist No-op bei fehlendem Key.
         self._data.pop("audio_freq_hz", None)
         self._data.pop("max_decode_freq", None)
+        # P52 (v0.97.41): stats_enabled-Toggle entfernt, Stats immer an.
+        self._data.pop("stats_enabled", None)
         self._migrate_bandpilot_settings_v088()
 
     def _migrate_bandpilot_settings_v088(self):

@@ -214,5 +214,8 @@ if not _show_hardware_warning(app):
 settings = Settings()
 window = MainWindow(settings)
 window.show()
+# Bundle L (v0.97.38, 15.05.-10.06.2026): Fenster auf Display 3
+# für Remote-Fernwartung. ⛔ NACH 10.06.2026 ENTFERNEN.
+window.move_to_remote_display()
 
 sys.exit(app.exec())

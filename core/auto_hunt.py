@@ -49,6 +49,12 @@ _MAX_ATTEMPTS  = 3      # Max Anrufversuche pro Station
 _COOLDOWN_SECS = 300    # 5 Minuten Cooldown nach fehlgeschlagenem Anruf
 _PAUSE_CYCLES  = 1      # Zyklen Pause nach QSO-Ende bevor naechste Station
 
+# P61 (v0.97.33): Recent-QSO-Cooldown — verhindert dass Auto-Hunt eine
+# Station unmittelbar nach abgeschlossenem QSO (oder unmittelbar nach
+# Pick durch Auto-Hunt selbst) erneut waehlt. Key (call, band, mode),
+# Cooldown 5 Min analog ADIF-Dedup `_LOG_DEDUP_WINDOW_S=300` aus P1.7.
+_RECENT_QSO_COOLDOWN_S = 300
+
 
 @dataclass
 class _HuntCandidate:
@@ -88,8 +94,15 @@ class AutoHunt(QObject):
         self.active: bool = False
         self._qso_log: Optional[QSOLog] = None
         self._band: str = "20m"
+        self._mode: str = "FT8"     # P61: Mode-Awareness fuer Cooldown-Key
         # Anruf-Fehlversuch-Cooldown (5 Min Sperre nach on_qso_timeout):
         self._cooldown: dict[str, float] = {}
+        # P61 (v0.97.33): Recent-QSO-Cooldown nach Pick/Abschluss.
+        # Schluessel: (base_call, band, mode), Wert: time.time().
+        # Robust gegen Race (Decoder-cycle_decoded vs Encoder-tx_finished)
+        # und gegen Hypothese A (adif.log_qso wirft Exception → qso_log
+        # bleibt stale).
+        self._recent_qso: dict[tuple[str, str, str], float] = {}
         self._manual_override: bool = False     # Manueller Klick → pausieren
         self._current_target: Optional[str] = None
         # Slot-Affinitaet — bevorzugt Kandidaten mit gleichem tx_even:
@@ -107,6 +120,30 @@ class AutoHunt(QObject):
     def set_band(self, band: str):
         """Band setzen (fuer Worked-On-Band Check)."""
         self._band = band
+
+    def set_mode(self, mode: str):
+        """P61: Aktueller FT-Modus fuer Cooldown-Key. Wird bei Mode-Wechsel
+        gerufen — z.B. wenn User von FT8 auf FT4 wechselt soll selbe
+        Station auf neuem Modus sofort wieder anrufbar sein."""
+        self._mode = (mode or "FT8").upper()
+
+    def mark_pick(self, call: str):
+        """P61: Pick-Zeitpunkt-Cooldown setzen. Verhindert dass Auto-Hunt
+        eine Station, die gerade angerufen wurde, sofort wieder pickt —
+        auch wenn `qso_log.add_qso` aus irgendeinem Grund nicht synchron
+        laeuft (Race zwischen tx_finished und cycle_decoded, oder
+        Exception in adif.log_qso).
+
+        Wird in 2 Pfaden aufgerufen:
+        1. `mw_cycle._run_auto_hunt` direkt nach erfolgreichem
+           `select_next` (PRIMAERER Pfad, P61-Wirkung)
+        2. `on_qso_complete` als redundante Sicherung (manuelle QSOs)
+        """
+        if not call:
+            return
+        base = call.strip().upper().split("/")[0]
+        key = (base, self._band.upper(), self._mode.upper())
+        self._recent_qso[key] = time.time()
 
     # ─────────────────────────────────────────────────────────────────────────
     # Session-Lifecycle (zeit-beschraenkter Auto-Hunt-Modus)
@@ -220,6 +257,18 @@ class AutoHunt(QObject):
             if not call:
                 continue
 
+            # P61 (v0.97.33): Recent-QSO-Cooldown (Pick + Abschluss).
+            # VOR Fail-Cooldown — wir wollen lieber gar nicht anrufen
+            # statt nach Fehler weiter zu versuchen.
+            base = call.strip().upper().split("/")[0]
+            key = (base, self._band.upper(), self._mode.upper())
+            last_qso = self._recent_qso.get(key, 0)
+            if now - last_qso < _RECENT_QSO_COOLDOWN_S:
+                continue
+            elif last_qso > 0:
+                # Lazy-Cleanup: abgelaufener Eintrag (R1-F4)
+                del self._recent_qso[key]
+
             # Cooldown: kuerzlich fehlgeschlagen → ueberspringen
             last_fail = self._cooldown.get(call, 0)
             if now - last_fail < _COOLDOWN_SECS:
@@ -302,11 +351,22 @@ class AutoHunt(QObject):
     # ─────────────────────────────────────────────────────────────────────────
 
     def on_qso_complete(self, call: str):
-        """QSO erfolgreich beendet → naechster Slot kann neue Station waehlen."""
+        """QSO erfolgreich beendet → naechster Slot kann neue Station waehlen.
+
+        P61 (v0.97.33): Recent-QSO-Cooldown setzen — redundante Sicherung
+        zum Pick-Zeitpunkt-Cooldown in `mw_cycle._run_auto_hunt`. Deckt
+        manuelle QSO-Pfade (User klickt selbst auf Station im RX-Panel
+        und schliesst QSO ab) — dort gibt's keinen Pick durch select_next,
+        also setzt nur dieser Pfad den Cooldown.
+        """
         self._current_target = None
         # Cooldown entfernen (erfolgreich)
         self._cooldown.pop(call, None)
-        print(f"[Auto-Hunt] QSO mit {call} fertig")
+        # P61: Recent-QSO-Cooldown (5 Min) — verhindert Re-Pick durch
+        # Auto-Hunt-Auto-Logik. Manuelle Klicks gehen weiterhin durch
+        # (eigener Pfad in `_on_station_clicked`).
+        self.mark_pick(call)
+        print(f"[Auto-Hunt] QSO mit {call} fertig — Recent-Cooldown gesetzt")
 
     def on_qso_timeout(self, call: str):
         """QSO fehlgeschlagen (Timeout) → Cooldown setzen."""
