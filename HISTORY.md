@@ -10260,3 +10260,171 @@ zu behalten ist sinnvoll (zeigt Evolution).
 Plus Mike-Bemerkung „wird für schäbige Kommentare sorgen, ist mir aber
 egal": Auto-Hunt-Beschreibung muss Bot-Schutz-Mechanismen prominent
 machen damit die Kritik im Ansatz beantwortet ist. Ehrlichkeit > Schweigen.
+
+
+## 2026-05-16 — Recherche AFuV Operator-Presence + README-Klarstellung
+
+**Trigger:** Mike-Frage 16.05. „die deutsche rechtsprechung sieht ein
+15-minuten-limit für autonomes arbeiten vor?".
+
+**Recherche-Ergebnis:** Es gibt **KEIN explizites 15-Min-Operator-Presence-
+Limit** im deutschen Amateurfunkrecht:
+- **§ 16 AFuV** (Technische/betriebliche Rahmenbedingungen) — kein Zeit-Limit
+- **§ 13 AFuV** (Fernbediente/automatisch arbeitende Stationen) — verlangt
+  **separates Rufzeichen** + **„jederzeit abschaltbar"**, aber kein Minuten-Wert
+- **10-Min-Regel** ist die **Rufzeichen-Aussendungspflicht** (alle 10 Min
+  Rufzeichen senden), NICHT Operator-Presence
+
+Die „15 Min" sind eine **verbreitete Hobby-Konvention** (auch im SimpleFT8-
+Operator-Presence-Feature so umgesetzt), aber kein kodifiziertes Limit.
+
+**Mike-Klarstellung:** „die app ist niemals für conteste gedacht. das ist
+immer nur eine machbarkeitsstudie und für den privaten gebrauch".
+
+**README-Anpassung:**
+- AFuV-Zitat korrigiert: § 16 → § 13 AFuV (der tatsächlich automatische
+  Stationen regelt)
+- Contest-Verbot-Hinweis raus (Mike-Spec: nie für Contests gedacht)
+- Identitäts-Framing geschärft: „private Machbarkeitsstudie eines
+  einzelnen Funkers (DA1MHH), kein Contest-Tool und kein Fernsteuerungs-
+  Produkt" — entkräftet Bot-Vorwürfe pragmatisch
+- Auto-Hunt-Cap bleibt 10 Min (strenger als nötig — KISS)
+
+**Quellen:**
+- [§ 13 AFuV — gesetze-im-internet.de](https://www.gesetze-im-internet.de/afuv_2005/__13.html)
+- [§ 16 AFuV — gesetze.legal](https://gesetze.legal/bund/afuv/16)
+- [AFuV 2005 — buzer.de](https://www.buzer.de/16_AFuV.htm)
+
+
+## 2026-05-16 — GitHub-Präsentation komplett überarbeitet (DeepSeek-Diskussion)
+
+**Trigger:** Mike-Anweisung 16.05.2026: „beginne mit deepseek eine konversation
+über aufbau, strukturierung und präsentation der github hauptseite". Mike-Boss-
+Auftrag: kontroverse Diskussion, angeberische/halbwahr/zu komplizierte Stellen
+identifizieren, Einigung erzielen, Code-Vorschläge in TODO ablegen.
+
+**Methodik:** 6 strukturierte DeepSeek-V4-pro-Runden mit konfrontativem Tonus
+(„kritischer Open-Source-Reviewer"). Claude als Boss-Entscheider — DeepSeek
+liefert die Schärfe, Claude wägt Pro/Contra und entscheidet was umgesetzt wird.
+
+### Runde 1 — Superlativ-Sprache („No other FT8 client does this")
+**Befund:** GridTracker existiert seit Jahren für Live-Locator-Mining aus
+WSJT-X — die Behauptung war faktisch falsch. Per-Callsign-Antenna-Memory ist
+vermutlich neu, aber „No other" als Absolut-Aussage riskant.
+**Geändert:** 3 Stellen entschärft auf persönliche Feststellung („I haven't
+seen it, but I can't guarantee no fork does it") + GridTracker explizit
+anerkannt im Locator-Mining-Eintrag.
+
+### Runde 2 — Diversity-Gewinn-Zahlen +126%
+**Befund:** Pooled Mean ohne Konfidenzintervall, p-Wert, Stratifizierung =
+methodisch eine Blackbox. „Kein Cherry-Picking"-Aussage greift zu kurz weil
+8/9/6 ungleiche Messtage = Auswahl-Bias-Risiko.
+**Geändert:** 40m-Sektion-Header umformuliert auf „Diversity rescues an
+off-band antenna" (statt „Diversity-Gewinn"). Inline-Caveat „off-band,
+suboptimal ANT1" direkt bei den Prozenten. Methodik-Block ehrlich
+umgeschrieben: „**Methodology caveats (honest)**: no CI/p-value, time-
+autocorrelated data, days not randomized, selection bias possible, I haven't
+done the proper inference statistics myself."
+
+### Runde 3 — Auto-Hunt + Bot-Vorwurf
+**Befund:** DeepSeek schärft den Vorwurf: „Hard 10-minute cap" = Bot-Schutz
+ist eigener Own-Goal-Hinweis. „No deterministic spam" Marketing-Fluff.
+„Perfect for busy days or DX sweeps" ermutigt Contest-Regel-Verstöße.
+AFuG-Kontext fehlt komplett — Mike ist DA1MHH.
+**Recherche AFuV:** Es gibt KEIN 15-Min-Operator-Presence-Limit im Gesetz.
+- § 13 AFuV (Fernbediente/automatisch arbeitende Stationen) verlangt
+  separates Rufzeichen + „jederzeit abschaltbar"
+- 10-Min-Regel ist Rufzeichen-Pflicht, NICHT Operator-Presence
+- „15 Min" sind verbreitete Hobby-Konvention, nicht kodifiziert
+**Mike-Klarstellung:** „die app ist niemals für conteste gedacht. das ist
+immer nur eine machbarkeitsstudie und für den privaten gebrauch".
+**Geändert:** AFuV-Zitat korrigiert (§ 16 → § 13), Contest-Hinweis raus,
+Identitäts-Framing geschärft auf „private Machbarkeitsstudie eines
+einzelnen Funkers (DA1MHH)". Auto-Hunt-Cap bleibt 10 Min — strenger als
+nötig ist sicherer.
+
+### Runde 4 — OMNI-CQ Seriosität
+**Befund:** DeepSeek korrigiert TX-Pattern auf 50% Duty-Cycle (nicht 40%) —
+Single-Slot-CQ ist wie normales CQ auf einer Parität. Use-Case marginal
+gegenüber manueller Even/Odd-Wahl. „Field-validated 11.05.2026" =
+Mike-validated (eine Station). Sticky-Frequenz kann QRM provozieren.
+Counter-Reset bei QSO führt bei populären Stationen zu „ewigem Even-Block".
+**Geändert:** OMNI-CQ-Beschreibung ehrlich umgeschrieben:
+- „You reach both listener groups without touching a button" → RAUS
+  (Marketing)
+- „Most valuable on busy bands" → RAUS
+- TX-Duty-Cycle klargestellt (gleich wie normales CQ)
+- „Saves the manual Even/Odd switch click — same effect by pressing
+  Even/Odd yourself" — ehrlicher Use-Case
+- Sticky-Frequenz als **bekannte Limitation** explizit erwähnt
+- Counter-Reset-Verhalten („popular call sign → same parity extended")
+  offengelegt
+- „Field-validated" → „Tested on one station (DA1MHH) — not independently
+  field-validated"
+
+### Runde 5 — Theorie-Sektion „Why Diversity matters"
+**Befund:** **DeepSeek findet physikalischen Fehler** — Faraday-Rotation
+skaliert mit **1/f²**, nicht f². Die README-Behauptung „Faraday scales
+with f² → polarization diversity stronger on 20m than 40m" ist
+**physikalisch falsch**. Auf HF dominieren ohnehin Multi-Path und
+Mode-Mischung, nicht reine Faraday-Rotation. Plus Widerspruch: +61%
+in Theorie-Tabelle vs +126% in Mess-Tabelle (veralteter Wert). Plus
+„RX already optimal" auf 20m widerspricht „ANT2 wins 79-86% of dual
+receives".
+**Geändert:**
+- Faraday-Aussage komplett umformuliert: Multi-Path + Mode-Mischung als
+  Haupt-Mechanismus, Faraday als „scales with 1/f², more relevant on
+  VHF/UHF/SatComm" korrekt platziert
+- +61% in Tabelle ersetzt durch „large gain (currently around +120%,
+  off-band asymmetry)" + Verweis auf Mess-Sektion für aktuelle Zahlen
+- „RX already optimal" Auflösung: „ANT1 alone already gets most stations
+  — Diversity time-sharing costs single-antenna decodes; ANT2 win-rate
+  is qualitative gain"
+- 20m-Tabellen-Zelle inklusive ANT2-Win-Rate-Hinweis
+
+### Runde 6 — „1131 Unit Tests" als Verkaufsargument
+**Befund:** Veraltete Zahl (tatsächlich 1352), Mock-heavy, Source-Level-
+Pattern-Tests, ohne Coverage-Info. DeepSeek: „Metrik-Wedeln. Raus damit.
+Kein seriöses Projekt wirbt mit Test-Count." Plus Field-Test-Lücke
+(SIGBUS, OMNI-CQ-Phase-Bug fanden erst Live-Tests).
+**Geändert:** Test-Count-Zeile komplett ersetzt durch ehrliche Beschreibung
+„Automated regression suite for QSO state transitions, diversity merge
+logic, protocol encoding... Mock-based for radio-hardware independence
+— field-hardening relies on real QSO sessions." Plus expliziter Field-
+Test-Lücke-Satz: „Unit tests cover internal logic; some serious bugs
+(SIGBUS v0.97.38, OMNI-CQ v0.97.22) only showed up in live field tests."
+
+### Code-Vorschläge in TODO
+
+Drei Code-Vorschläge aus der Diskussion in `TODO.md` abgelegt (Mike
+entscheidet pro Punkt):
+- **P67** — Auto-Hunt-Cap an Operator-Presence binden statt unabhängig
+- **P68** — OMNI-CQ continuous gap re-evaluation innerhalb Paritäts-Block
+- **P69** — Konfidenz-Intervalle für Diversity-Mess-Tabellen (Bootstrap)
+
+### Bilanz
+
+**Geänderte Dateien:** `README.md` (DE+EN, ~15 Stellen), `TODO.md` (P67-P69 NEU).
+
+**Wirkung:**
+- 1 physikalischer Fehler korrigiert (Faraday f² → 1/f²)
+- 1 faktisch falsche Behauptung entschärft (GridTracker-Existenz)
+- 1 inhaltlicher Widerspruch aufgelöst (+61% vs +126%)
+- Methodik-Caveats ehrlich statt verschleiernd
+- Rechtliche Behauptung korrigiert (§ 16 AFuV → § 13 AFuV)
+- Marketing-Sprech entfernt („No other does this", „Perfect for", „No
+  deterministic spam", „1131 Unit Tests" etc.)
+- Identitäts-Framing geschärft: „private Machbarkeitsstudie"
+- Field-Test-Lücke transparent
+
+**V4-pro 18-Cycle-Bilanz nach 6 Brainstorm-Runden:** 0 Halluzinationen,
+mehrere starke faktische/physikalische/methodische Findings die in der
+Selbst-Review von Claude nicht aufgefallen wären (Faraday-Fehler,
+GridTracker-Existenz, +61/+126-Widerspruch, AFuV-Paragraf-Verwechslung).
+
+**Lesson:** Eine externe konfrontative Sicht ist Gold wert für eigene
+Doku. Selbst-Review tendiert zur Verteidigung — DeepSeek hat keine
+Voreingenommenheit gegenüber „eigener" Formulierung. Wenn ein Hobby-
+Projekt nach außen geht (GitHub), lohnt sich diese Runde IMMER.
+
+Tests 1352 grün (unverändert — reine Doku-Änderungen).

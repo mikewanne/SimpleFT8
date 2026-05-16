@@ -1,4 +1,79 @@
-# SimpleFT8 TODO — Stand 16.05.2026 (v0.97.41, P52 fertig)
+# SimpleFT8 TODO — Stand 16.05.2026 (v0.97.42, GitHub-Präsentation überarbeitet)
+
+---
+
+## 🆕 OFFEN — Code-Vorschläge aus DeepSeek-Diskussion 16.05.2026 (GitHub-Review)
+
+Während der kontroversen DeepSeek-Diskussion über die GitHub-Präsentation
+sind drei mögliche Code-Änderungen aufgekommen. KEIN sofortiger Fix —
+Mike entscheidet pro Punkt.
+
+### P67 — Auto-Hunt-Cap an Operator-Presence binden (statt unabhängig)
+
+**Aktuell:** `_auto_hunt_timer` hat eine eigene 10-Minuten-Hard-Cap die
+unabhängig von Maus/Tastatur läuft. Das ist Bot-Schutz-tauglich, aber
+DeepSeek's R3-Argument: Wer das Konstrukt liest, fragt sich „warum nicht
+gleich an die existierende Operator-Presence-Logik koppeln, die schon
+auf Maus/Tastatur reagiert?"
+
+**Vorschlag:** Auto-Hunt stoppt sobald `_operator_presence_timer` ohne
+Reset abläuft (z.B. 5 Min ohne Maus-/Tastatur-Aktivität). Plus weiterhin
+10-Min-Hard-Cap als zweite Schicht.
+
+**Begründung:** Sauberer "ich-bin-wirklich-da"-Nachweis. Wenn ich vor
+dem Rechner einschlafe, stoppt Auto-Hunt nach 5 Min (nicht erst nach 10).
+
+**Pro:** Strengere Bedienpräsenz, kommt § 13 AFuV-Geist näher.
+**Contra:** Mike's bewusste Entscheidung war: Auto-Hunt-Timer MUSS
+unabhängig sein damit „ich tippe was anderes nebenher" den Bot-Cap
+nicht resetiert. Beide Wege sind valide.
+
+**Aufwand:** ~0.5 Tag inkl. Tests + Doku.
+
+---
+
+### P68 — OMNI-CQ Continuous Gap Re-Evaluation innerhalb eines Paritäts-Blocks
+
+**Aktuell:** OMNI-CQ pickt die TX-Frequenz EINMALIG am ersten TX eines
+Paritäts-Blocks. Innerhalb der 10/20/40 Versuche bleibt es bei der einmal
+gewählten Frequenz, auch wenn andere Stationen dort einsteigen.
+
+**Vorschlag:** Vor jedem TX innerhalb eines Blocks die existierende
+`_refresh_diversity_freq_view()`-Logik nutzen um zu prüfen ob die aktuelle
+Frequenz noch gut ist. Bei größerer Kollision: spätestens nach 2 weiteren
+TX-Versuchen auf neue Lücke wechseln.
+
+**Begründung:** DeepSeek R4-Punkt: „Sticky-Frequenz ist nicht QRM-konform"
+— Worst-Case wenn 10 OMNI-Nutzer dieselbe Frequenz picken und nie ausweichen.
+
+**Pro:** Bessere Co-Existenz mit anderen Stationen.
+**Contra:** Komplexität — Spec-Erweiterung in `core/omni_cq.py`.
+Aktueller Sticky-Ansatz ist KISS.
+
+**Aufwand:** ~1 Tag inkl. Tests.
+
+---
+
+### P69 — Konfidenz-Intervalle für Diversity-Mess-Tabellen
+
+**Aktuell:** README zeigt „+126%" als Punktschätzer ohne CI/p-Wert.
+README sagt offen „no confidence intervals computed".
+
+**Vorschlag:** `scripts/generate_plots.py` erweitern um Bootstrap-CI
+(z.B. 1000-fach resample der Tagesdurchschnitte). PDF-Bericht zeigt
+„+126% (95%-CI: +112% bis +141%)" statt nur Punktschätzer.
+
+**Begründung:** DeepSeek R2-Punkt: ohne Inferenz-Statistik sind die
+Zahlen für HF-Ingenieure/Statistiker entkräftet. Mit CI wird die
+Aussage hart und vertrauenswürdig.
+
+**Pro:** Wissenschaftliche Glaubwürdigkeit, entkräftet „Hobby-Bullshit-
+Bingo"-Vorwurf.
+**Contra:** ~1-2 Tage Aufwand, Statistik-Sorgfalt nötig. Aktuelle
+Methodik-Caveats im README sind als Zwischenlösung ausreichend.
+
+**Aufwand:** ~1-2 Tage inkl. Bootstrap-Implementierung in
+`generate_plots.py` und PDF-Update.
 
 ---
 
