@@ -82,13 +82,17 @@ button is hidden.
 
 ## Activation
 
-OMNI-CQ is hidden in the UI (Easter Egg). When enabled:
-- Version number gets an Omega symbol
-- New button appears next to „CQ RUFEN": **OMNI CQ**
-  - **dark red** when inactive
-  - **green** when active
-- Status bar shows `Ω CQ=N (E)` or `Ω CQ=N (O)` with current counter
+Since v0.97.30 (P55), OMNI-CQ is a **regular, visible feature** in
+Diversity mode. The **OMNI CQ** button appears permanently next to the
+CQ button when Diversity is active — no version-number click needed.
+
+- **OMNI CQ button**: dark red (off), green (on)
+- **Status bar** shows `Ω CQ=N (E)` or `Ω CQ=N (O)` with current counter
   and parity
+
+*History:* Up to v0.97.29, OMNI-CQ was a hidden Easter egg, enabled by
+clicking the version number. In P55 the Easter-egg logic was removed
+completely — see HISTORY entry v0.97.30.
 
 ## QSO Panel Display
 

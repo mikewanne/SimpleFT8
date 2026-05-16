@@ -10219,3 +10219,44 @@ Alle PNGs + PDF-Berichte (DE+EN, 40m+20m) regeneriert.
 - F2: Zurück zu Logbuch → Detail-Overlay erscheint automatisch ✓
 - F3: Logbuch ohne Selektion → ControlPanel bleibt
 - F4: Klick auf Zeile (Direct-Path) → Regression OK
+
+
+## 2026-05-16 — Doku-Update: OMNI-CQ + Auto-Hunt als reguläre Diversity-Features
+
+**Trigger:** Mike-Korrektur 16.05.2026: „[OMNI-CQ] das ist nicht mehr
+versteckt sondern ein feature von diversity modus". Plus Auto-Hunt
+explizit dokumentieren — Mike's Screenshot zeigt Auto-Hunt nach 2 QSOs
+mit Per-Station-Antennen-Preference (HA1BF auf ANT2 +1.0 dB) + Timer
+6:55 + freier CQ-Frequenz-Bereich.
+
+**DeepSeek-V4-pro Brainstorm:**
+- Empfehlung: gemeinsame neue Sektion „Diversity Active Features —
+  OMNI-CQ and Auto-Hunt" nach „Smart Antenna Selection" (beide leben
+  im Diversity-Mode, ergänzen sich CQ vs. Hunt)
+- Wortlaut DE+EN je ~200 Wörter pro Feature
+- Bot-Schutz-Aspekt prominent (10-Min-Cap, kein Maus-Reset, Pflicht-
+  Restart) — als ehrliche Antwort auf erwartbare „schäbige Kommentare"
+- Hardware-Sicherheit (TX immer ANT1) in beiden Feature-Texten +
+  Bildunterschrift explizit erwähnt
+- Easter-Egg-Erwähnung nur noch als Historie-Verweis
+
+**Geänderte Dateien:**
+- `README.md` neue Sektion (EN + DE) mit Screenshot eingebunden:
+  `docs/screenshots/auto_hunt_diversity.png` (Mike-Screenshot kopiert)
+- `docs/explained/omni-tx.md` + `omni-tx_de.md` Aktivierungs-Sektion
+  umgeschrieben: „Seit v0.97.30 reguläres sichtbares Feature, kein
+  Easter Egg mehr" + Historie-Hinweis
+- Feature-Liste-Einträge OMNI-CQ angepasst: „hidden Easter egg" →
+  „permanently visible when Diversity is active (no more Easter egg
+  since v0.97.30, P55)" mit Verweis auf neue Sektion
+
+**Tests:** 1352 grün (unverändert — reine Doku-Änderung).
+
+**Lesson:** Wenn ein Feature aus Hidden-Status in den Mainline kommt,
+müssen ALLE Doku-Stellen mit aufgeräumt werden — README-Feature-Liste,
+Detail-Doc, ggf. interne Design-Docs. Easter-Egg-Verweise als Historie
+zu behalten ist sinnvoll (zeigt Evolution).
+
+Plus Mike-Bemerkung „wird für schäbige Kommentare sorgen, ist mir aber
+egal": Auto-Hunt-Beschreibung muss Bot-Schutz-Mechanismen prominent
+machen damit die Kritik im Ansatz beantwortet ist. Ehrlichkeit > Schweigen.

@@ -84,13 +84,18 @@ der Toggle-Button ausgeblendet.
 
 ## Aktivierung
 
-OMNI-CQ ist im UI versteckt (Easter Egg). Wenn aktiviert:
-- Versionsnummer bekommt ein Omega-Symbol
-- Neuer Button neben „CQ RUFEN" erscheint: **OMNI CQ**
-  - **dunkelrot** wenn inaktiv
-  - **gruen** wenn aktiv
-- Statusbar zeigt `Ω CQ=N (E)` oder `Ω CQ=N (O)` mit aktuellem
+Seit v0.97.30 (P55) ist OMNI-CQ ein **regulaeres, sichtbares Feature**
+im Diversity-Modus. Der Button **OMNI CQ** erscheint fest neben dem
+CQ-Button, sobald Diversity aktiv ist — kein Klick auf die Versionsnummer
+mehr noetig.
+
+- **OMNI CQ-Button**: dunkelrot (inaktiv), gruen (aktiv)
+- **Statusbar**: zeigt `Ω CQ=N (E)` oder `Ω CQ=N (O)` mit aktuellem
   Counter und Paritaet
+
+*Historie:* Bis v0.97.29 war OMNI-CQ als Easter Egg versteckt und wurde
+durch Klick auf die Versionsnummer aktiviert. In P55 wurde die Easter-
+Egg-Logik komplett entfernt — siehe HISTORY-Eintrag v0.97.30.
 
 ## QSO-Panel-Anzeige
 

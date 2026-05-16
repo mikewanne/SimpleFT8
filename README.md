@@ -109,6 +109,47 @@ now* is always the most precise value. No other FT8 client does this:
 combining Diversity reception with per-callsign antenna decisions inside one
 QSO is unique to SimpleFT8.
 
+### Diversity Active Features — OMNI-CQ and Auto-Hunt
+
+![Auto-Hunt live](docs/screenshots/auto_hunt_diversity.png)
+
+*Auto-Hunt after two QSOs (G8KHF, HA1BF). HA1BF was received on ANT2
+with +1.0 dB advantage (per-callsign antenna preference). Timer shows
+6:55 min remaining. Bottom: clear CQ frequency indicator, dynamic
+diversity 50:50 active.*
+
+Both buttons live inside the Diversity Mode — they are hidden in Normal
+mode and appear automatically when Diversity is enabled.
+
+**OMNI-CQ** is a diversity-mode feature that automatically rotates CQ
+between Even and Odd parity every ~5 minutes (mode-dependent counter:
+FT8=10, FT4=20, FT2=40 attempts). You reach both listener groups
+without touching a button. The OMNI button is **permanently visible**
+when Diversity is active — no Easter egg anymore. Incoming QSOs pause
+the counter; after the QSO you continue on the same slot. Band or mode
+changes stop OMNI-CQ. All TX goes over **ANT1**, RX uses the global
+Diversity and per-callsign antenna preference. Most valuable on busy
+bands.
+
+**Auto-Hunt** picks the next CQ station from the RX list and initiates
+the QSO automatically — no manual click. Visible only in Diversity
+mode.
+
+- **Selection priority:** new DXCC > rare callsign > good SNR (> −15 dB)
+  > first reception today. Within the same score group, choice is
+  random — no deterministic spam.
+- **Bot protection:** Hard **10-minute cap** from activation,
+  independent of mouse/keyboard activity. After that, Auto-Hunt stops
+  and requires a deliberate restart click. At most 3 QSO attempts per
+  station.
+- **Hardware:** RX uses per-callsign antenna preference (the better RX
+  antenna). **TX is always on ANT1**, the only transmit-rated antenna.
+  Band or mode changes immediately stop Auto-Hunt.
+
+Perfect for busy days or DX sweeps where you don't want to click every
+30 seconds. Yes, it's automation — but with strict, user-uncircumventable
+limits and a deliberate-restart requirement after each hard cap.
+
 ### Live Diversity Analysis — Current Data *(collection in progress)*
 
 > Generated automatically from live session data via `scripts/generate_plots.py`.
@@ -392,7 +433,7 @@ polarization, building-coupled mounting — the ideal complement for diversity r
 
 **In Field Test:**
 - ⚠️ **AP-Lite v2.2**: Weak QSO rescue via coherent addition of two failed decode attempts. Threshold 0.75 calibration in progress.
-- ✅ **OMNI-CQ (v0.96.4 + v0.96.7 + v0.96.9)**: Single-slot CQ with automatic parity switching (mode-dependent down-counter, FT8=10/FT4=20/FT2=40 attempts ≈ 5 min wallclock per parity). Diversity-only, hidden Easter egg. Field-validated 11.05.2026.
+- ✅ **OMNI-CQ (v0.96.4 + v0.96.7 + v0.97.30)**: Single-slot CQ with automatic parity switching (mode-dependent down-counter, FT8=10/FT4=20/FT2=40 attempts ≈ 5 min wallclock per parity). Diversity-only — button is permanently visible when Diversity is active (no more Easter egg since v0.97.30, P55). Field-validated 11.05.2026. → see [Diversity Active Features](#diversity-active-features--omni-cq-and-auto-hunt) above.
 - ⚠️ **Bandpilot (v0.88)**: Hourly RX-mode recommendation per band — three direct values, no aggregation. 31 unit tests passing, live validation over extended operating time pending.
 
 ### FT2 Frequencies (Decodium-compatible)
@@ -771,6 +812,46 @@ andere Polarisierung, gebäudegebundene Befestigung — die ideale Ergänzung f�
   - 8% Schwelle, Median ueber 3 Zyklen pro Antenne (6-Slot fair 3:3). Button zeigt "DIVERSITY DX" im DX-Modus.
   - **Lernendes Antennen-Gedaechtnis**: Nach jedem Dekodier-Zyklus merkt sich das System pro Rufzeichen, welche Antenne besser empfangen hat und um wieviel dB. Beim QSO-Aufbau wird automatisch die beste Antenne gewaehlt — das ueberlagert den globalen Diversity-Rhythmus fuer die QSO-Dauer. Kein Timeout, keine Persistenz: eine Station die du *gerade jetzt* hoerst, ist immer der praeziseste Wert. Das QSO-Fenster zeigt z.B. "Antworte DL3AQJ (ANT2, +6.3 dB)".
 
+- **Diversity-Aktivfunktionen — OMNI-CQ und Auto-Hunt**
+
+  ![Auto-Hunt live](docs/screenshots/auto_hunt_diversity.png)
+
+  *Auto-Hunt nach zwei abgeschlossenen QSOs (G8KHF, HA1BF). HA1BF wurde
+  auf ANT2 mit +1.0 dB Vorteil empfangen (Pro-Rufzeichen-Antennen-
+  praeferenz). Timer zeigt 6:55 min Restlaufzeit. Unten: freier CQ-
+  Frequenz-Bereich, dynamische Diversity 50:50 aktiv.*
+
+  Beide Buttons leben im Diversity-Mode — im Normal-Mode versteckt,
+  bei Aktivierung von Diversity automatisch sichtbar.
+
+  - **OMNI-CQ** rotiert CQ-Rufe automatisch zwischen Even- und Odd-
+    Paritaet ca. alle 5 Minuten (modus-abhaengiger Counter: FT8=10,
+    FT4=20, FT2=40 Versuche). Du erreichst beide Hoerergruppen ohne
+    manuelles Umschalten. Der **OMNI-Button ist fest sichtbar** wenn
+    Diversity aktiv ist — **kein Easter Egg mehr** (war so bis v0.97.29).
+    Eingehende QSOs pausieren den Counter; nach QSO laeuft er auf
+    derselben Paritaet weiter. Band- oder Moduswechsel stoppen OMNI-CQ.
+    TX ueber **ANT1**, RX nutzt globale Diversity und Pro-Rufzeichen-
+    Antennenpraeferenz. Besonders nuetzlich auf belebten Baendern.
+
+  - **Auto-Hunt** waehlt automatisch die naechste CQ-Station aus der RX-
+    Liste und startet das QSO — kein manueller Klick noetig. Sichtbar
+    nur im Diversity-Mode.
+    - **Auswahl** nach Score: neues DXCC > seltenes Call > guter SNR
+      (> −15 dB) > Erstempfang heute. Bei gleichem Score zufaellig —
+      kein deterministischer Bot.
+    - **Bot-Schutz:** Harte **10-Minuten-Grenze** ab Aktivierung,
+      unabhaengig von Maus/Tastatur. Danach Stopp und bewusster
+      Neustart per Klick erforderlich. Maximal 3 QSO-Versuche pro
+      Station.
+    - **Hardware:** Der Empfang nutzt die Pro-Rufzeichen-Antennen-
+      praeferenz (bessere RX-Antenne). **TX laeuft IMMER ueber ANT1**,
+      die einzige sendetaugliche Antenne. Band- oder Moduswechsel
+      stoppen Auto-Hunt sofort.
+
+  Ja, es ist Automatisierung — aber mit strikten, vom Benutzer nicht
+  umgehbaren Grenzen und Pflicht-Neustart nach jedem Hard-Cap.
+
 - **Automatische TX-Leistungsregelung** — Zielwatt einstellen, SimpleFT8 regelt den FWDPWR-Wert automatisch.
 
 - **Smart CQ-Frequenz** — Findet freien Platz im **800–2000 Hz Sweet Spot** statt im leeren oberen Bereich.
@@ -822,7 +903,7 @@ andere Polarisierung, gebäudegebundene Befestigung — die ideale Ergänzung f�
 
 **Im Feldtest:**
 - ⚠️ **AP-Lite v2.2**: Schwache QSOs retten via kohaerenter Addition zweier fehlgeschlagener Dekodier-Versuche. Schwellwert-Kalibrierung laeuft.
-- ✅ **OMNI-CQ (v0.96.4 + v0.96.7 + v0.96.9)**: Single-Slot-CQ mit automatischem Paritaets-Wechsel (modus-spezifischer Down-Counter, FT8=10/FT4=20/FT2=40 Versuche ≈ 5 Min Wallclock pro Paritaet). Diversity-only, verstecktes Easter Egg. Field-validiert 11.05.2026.
+- ✅ **OMNI-CQ (v0.96.4 + v0.96.7 + v0.97.30)**: Single-Slot-CQ mit automatischem Paritaets-Wechsel (modus-spezifischer Down-Counter, FT8=10/FT4=20/FT2=40 Versuche ≈ 5 Min Wallclock pro Paritaet). Diversity-only — Button fest sichtbar wenn Diversity aktiv (kein Easter Egg mehr seit v0.97.30, P55). Feldvalidiert 11.05.2026. → siehe [Diversity-Aktivfunktionen](#diversity-aktivfunktionen--omni-cq-und-auto-hunt) oben.
 - ⚠️ **Bandpilot (v0.88)**: Stunden-genaue RX-Modus-Empfehlung pro Band — drei Direkt-Werte ohne Aggregation. 31 Unit-Tests gruen, Live-Validierung ueber laengere Funkzeit ausstehend.
 
 ### FT2-Frequenzen (Decodium-kompatibel)
