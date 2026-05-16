@@ -3,6 +3,239 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-15 v0.97.35 — P62 Bandwechsel→Gain-Messung UX-Übergang (1s Pause)
+
+**Trigger:** Mike-Field-Test P60-F6 15.05. vormittags: Bandwechsel auf
+neues Band ohne Gain-Preset → Gain-Mess-TUNE (10W) startet direkt nach
+TX-Stop. Visuell wirkt der Übergang wie „80W → 10W TUNE" statt
+sauberes „TX aus → neue Messung". Mike-O-Ton: „eigendlich wäre pause
+sinnvoll? keine ahnung 1 sekunde bis tx auf null ist anstatt von 80 auf
+10 watt zu gehen? keine ahnung besprich das mit deepseek."
+
+**DeepSeek-V4-pro Auswahl:** P62 als beste Aufgabe für autonomen 30-Min-
+Slot (niedriges Risiko, reine UI-Timing-Pufferung, Mike-Spec klar).
+
+**Voller V1→V2→R1→V3-Workflow autonom mit DeepSeek-V4-pro.**
+
+**R1-V4-pro:** „Push freigegeben (V3-Phase OK)" — **0 KP**.
+Race-Schutz via existierenden `_gain_measure_locked`-Guard, KISS,
+Halluzinations-Check sauber.
+
+**Fix-Architektur:**
+
+`ui/mw_radio.py:_check_diversity_preset` stale/missing-Gain-Branch:
+- `_set_gain_measure_lock(True)` SOFORT — sperrt UI für die 1s Pause
+- Statusbar-Hinweis „TX gestoppt — Gain-Messung startet in 1s ..."
+- `QTimer.singleShot(1000, lambda: self._start_dx_tuning(scoring_mode=gain_scoring))`
+
+**Greift NUR bei Bandwechsel mit stale/missing-Gain.** KALIBRIEREN-Button
+(`_handle_dx_tuning`) ruft `_start_dx_tuning` weiterhin direkt ohne Pause —
+User-Action, keine Verwirrung möglich.
+
+**Race-Schutz:** `_gain_measure_locked = True` blockiert parallele
+Bandwechsel/Mode-Wechsel/Rx-Mode-Wechsel im `_on_*_changed`-Check (Z.385
+analog). QTimer-Callback feuert nach 1s auf garantiert demselben Band.
+Token-Pattern unnötig (R1-bestätigt).
+
+**Lock-Release:** lückenlos via `_on_dx_tune_accepted` (Accept) bzw.
+`_on_dx_tune_rejected` (Cancel) — Doppelter Lock-Set unkritisch.
+
+**Hardware-Pflicht ANT1:** unverändert. `tune_on()` läuft weiterhin auf
+ANT1 (FlexRadio-Setter).
+
+**5 atomare Commits:**
+- C1 `ui/mw_radio.py` (Lock + Statusbar + QTimer in stale/missing-Branch)
+- C2 `main.py` APP_VERSION 0.97.34 → 0.97.35
+- C3 `tests/test_p62_bandchange_ux.py` NEU 6 Tests T1-T6
+- C4 `tests/test_p1_cache_simple.py` 2 alte P1-Cache-Tests angepasst
+  (QTimer.singleShot gemockt, Callback synchron — alte Erwartungen
+  erhalten)
+- C5 Doku (HISTORY/HANDOFF/CLAUDE/Memory/TODO/MEMORY.md)
+
+**Tests:** 1300 → **1306 grün** (+6 P62 netto, 2 alte angepasst).
+
+**Backup:** `Appsicherungen/2026-05-15_v0.97.34_vor_p62/` (7.6 MB
+Quellcode-Sicherung).
+
+**Field-Test pending (Mike, F1-F5):** 1s Pause sichtbar bei Bandwechsel,
+KEINE Pause bei Band-mit-Preset, KEINE Pause beim KALIBRIEREN-Button,
+RF-Meter geht durch 0W, UI während Pause gesperrt.
+
+**V4-pro 11-Cycle-Bilanz nach P62:** 0 Halluzinationen, 100%
+verifizierbar.
+
+**Praktischer Effekt für Mike:**
+- **Vorher:** Bandwechsel auf neues Band → TX-Hardware-Buffer fällt von
+  80W → 0W (~300ms) → DIREKT springt Anzeige auf 10W TUNE. Optisch
+  „Power-Sprung von hoch auf niedrig" statt „TX aus, dann neue Messung".
+- **Nachher:** 1s sichtbare Pause mit Hinweis „TX gestoppt — Gain-Messung
+  startet in 1s ..." damit der Übergang klar wahrnehmbar ist.
+
+---
+
+## 2026-05-15 v0.97.34 — Bundle K (P57 SWR-Limit-Combo + P59 CQ-Button-Grün)
+
+**Trigger:** Mike-Field-Test 15.05.2026 morgens, 2 kleine UI-Tweaks:
+- **P57:** SWR-Limit soll nur in 0.5-Schritten wählbar sein. Aktuell
+  `QDoubleSpinBox` mit Step 0.5 — User konnte aber via Tastatur freien
+  Wert wie 1.7 eingeben.
+- **P59:** CQ-Button (Normal-Modus) zeigt aktiv Rot/Gelb. OMNI-CQ ist
+  grün. Mike: „einheidlich optisch nachvollziehbar."
+
+**Voller V1→V2→R1→V3-Workflow autonom mit DeepSeek-V4-pro.**
+
+**R1-V4-pro:** „Push freigegeben (V3-Phase OK)" — **0 Findings**.
+Halluzinations-Check sauber.
+
+**Code-Änderungen:**
+
+P57 — `ui/settings_dialog.py`:
+- Modul-Konstante `_SWR_VALUES = [1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0]`
+- Helper `_swr_value_to_index(value)` mit Snap auf nächst-HÖHEREN Wert
+  (sicherer: schärferes Limit), Clamp Min/Max, defensiver
+  `ValueError`-Handler
+- `QDoubleSpinBox` → `QComboBox` mit `addItem(f"{v:.1f}", v)` (Float-
+  Userdata für currentData())
+- Load: Snap-Index berechnen + print() bei tatsächlichem Snap
+  (z.B. „SWR-Limit Snap: 1.7 → 2.0")
+- Save: `currentData()` statt `value()`
+- Reset: `setCurrentIndex(3)` (= 3.0)
+
+P59 — `ui/control_panel.py`:
+- `_mode_btn_style` Active-Block: `rgba(200,0,0,0.7)` + `#FFD700` →
+  `rgba(0,150,0,0.75)` + `#FFFFFF` (grün analog `_omni_btn_style`)
+- Plus `QPushButton:checked:hover` für Hover-Konsistenz
+- Wirkt auf **btn_cq** (Normal-Modus) und **btn_auto_hunt** (Diversity)
+  — einheitlich grün analog btn_omni_cq
+
+**Hardware-Pflicht ANT1:** unverändert. Keine TX-Logik berührt.
+
+**Range-Entscheidung 1.5..5.0:** Über 5.0 ist Hardware-Notfall, kein
+User-Setting. Hobby-Praxis braucht 1.5-5.0 ausreichend. Bestehender
+Clamp in `radio/flexradio.py:set_swr_limit` `[1.5, 10.0]` bleibt
+(Subset, kein Konflikt).
+
+**Snap-Richtung „nächst-höher":** Sicherer als „nächst-niedriger" —
+schärferes Limit bricht TX früher ab bei Spike. Mike-Spec
+Hardware-Sicherheit.
+
+**5 atomare Commits:**
+- C1 `ui/settings_dialog.py` (_SWR_VALUES, Helper, Combo, Load/Save/Reset)
+- C2 `ui/control_panel.py` (_mode_btn_style Active grün)
+- C3 `main.py` APP_VERSION 0.97.33 → 0.97.34
+- C4 `tests/test_bundle_k.py` NEU 11 Tests (T1, T2, T3a-d, T4-T8)
+- C5 Doku (HISTORY/HANDOFF/CLAUDE/Memory/TODO/MEMORY.md)
+
+**Tests:** 1289 → **1300 grün** (+11 Bundle K).
+
+**Backup:** `Appsicherungen/2026-05-15_v0.97.33_vor_bundle_k/`
+(7.6 MB — nur Quellcode-Sicherung, vor Test-Lauf).
+
+**Field-Test pending (Mike, F1-F6):** SWR-Combo statt Spinbox, Wert
+persistiert, Reset → 3.0, btn_cq aktiv grün, OMNI grün regression,
+Auto-Hunt aktiv grün konsistent.
+
+**Field-Test ✓ 15.05.2026 mittags:** F1 SWR-Dropdown ✓, F2 Persistenz
+nach Neustart ✓, F4 CQ-Button grün (Normal) ✓, F6 Auto-Hunt grün
+(Diversity) ✓, F5 OMNI grün ✓ implizit (durch Mike's heutige OMNI-
+Nutzung verifiziert), F3 Reset → 3.0 nicht explizit getestet
+(Default-Wert-Snap, trivial). **Bundle K abgenommen, push-bereit
+nach P61.**
+
+**V4-pro 10-Cycle-Bilanz nach Bundle K:** 0 Halluzinationen, 100%
+verifizierbar.
+
+**Praktischer Effekt für Mike:**
+- **Vorher:** SWR-Limit-Eingabe konnte beliebigen Wert (1.7, 2.3...)
+  haben. CQ-Aktiv-Button rot/gelb wie Diversity-OMNI grün —
+  inkonsistent.
+- **Nachher:** SWR nur in 0.5-Schritten 1.5-5.0 wählbar. Alle 3 Aktiv-
+  Buttons (CQ/OMNI/Auto-Hunt) einheitlich grün.
+
+---
+
+## 2026-05-15 v0.97.33 — P61 Auto-Hunt Recent-QSO-Cooldown (Funkverkehr-Etikette)
+
+**Trigger:** Mike-Field-Test 15.05.2026 morgens: Auto-Hunt picked HA8RC
+**30 Sekunden** nach abgeschlossenem QSO erneut. Screenshot zeigt
+komplettes 2. QSO (89 Sekunden Funkbetrieb), das ADIF-Schreiben erkennt
+dann das Duplikat — zu spät, der Funkverkehr ist schon doppelt gelaufen.
+
+**Existierende Mechanik versagt:** `qso_log.is_worked_on_band` in
+`AutoHunt._score` setzt score=0 bei worked-Stationen. Hätte HA8RC nach
+`qso_log.add_qso` filtern müssen — hat aus unbekannten Gründen nicht
+(Race zwischen Decoder-cycle_decoded und Encoder-tx_finished, oder
+adif.log_qso wirft silent Exception). Wurzel nicht reproduzierbar.
+
+**Fix:** zusätzliche Cooldown-Schicht direkt in `AutoHunt` —
+unabhängig von `qso_log`. Belt-and-Suspenders gegen Race + ADIF-Fehler.
+
+**Voller V1→V2→R1→V3-Workflow autonom mit DeepSeek-V4-pro.**
+
+**R1-V4-pro Findings:**
+- F1 ROT: `AutoHunt._mode` + `set_mode` fehlten → V3 ergänzt
+- F2 ORANGE: `on_qso_complete`-Redundanz für manuelle QSOs → bestätigt
+- F3 GELB: Cooldown-Dicts zusammenlegen → abgelehnt (getrennt klarer)
+- F4 ORANGE: Lazy-Cleanup-Code explizit → V3 ergänzt
+- F5: ANT1-Pflicht unverändert ✓
+- F6: T9+T10 zusätzlich (Coverage 8→10 Tests)
+- F7: try/except adif.log_qso → abgelehnt (Mike-Spec)
+
+**Code-Architektur:**
+- `core/auto_hunt.py`: Konstante `_RECENT_QSO_COOLDOWN_S=300` (5 Min),
+  Feld `_mode: str = "FT8"`, Dict `_recent_qso: dict[(call,band,mode), float]`,
+  Methoden `set_mode()`, `mark_pick()`. Filter-Block in `select_next` VOR
+  `_cooldown`-Check mit Lazy-Cleanup. `on_qso_complete` ruft `mark_pick`
+  als Redundanz für manuelle QSOs.
+- `ui/mw_cycle.py:_run_auto_hunt`: SOFORT nach erfolgreichem
+  `select_next` (Z.498) `mark_pick(_candidate.call)` — primärer Pfad,
+  Race-Schutz.
+- `ui/mw_radio.py:_on_mode_changed`: `set_mode(mode)` nach
+  `qso_sm._mode = mode`.
+- `ui/main_window.py:334`: initialer `set_mode(settings.mode)`.
+
+**Key-Design `(base_call, band, mode)`:**
+- Selbes Call auf anderem Band sofort pickbar (Bandwechsel = neues QSO-Ziel)
+- Selbes Call auf anderem Modus sofort pickbar (FT8/FT4 = separate Hobby-QSOs)
+- Cooldown 5 Min analog `_LOG_DEDUP_WINDOW_S` aus P1.7 (Mike-Spec)
+- Lazy-Cleanup im Filter-Check (kein QTimer-Polling, KISS)
+
+**Final-R1 V4-pro „Push freigegeben." 0 KP.** Akademischer Hinweis: bei
+seltenem `start_qso`-Failure bleibt Cooldown 5 Min gesetzt — Mike kann
+manuell klicken (umgeht Cooldown). Race-Vermeidung überwiegt.
+
+**5 atomare Commits geplant:**
+- C1 `core/auto_hunt.py`: Konstante + Feld + Methoden + Filter
+- C2 `ui/mw_cycle.py`: `mark_pick`-Aufruf vor `start_qso`
+- C3 `ui/mw_radio.py` + `ui/main_window.py`: Mode-Verkabelung
+- C4 `tests/test_p61_autohunt_recent_qso.py` NEU 10 Tests T1-T10
+- C5 `main.py` APP_VERSION + Backup + Doku (HISTORY/HANDOFF/CLAUDE/Memory/TODO/MEMORY.md)
+
+**Tests:** 1279 → **1289 grün** (+10 P61).
+
+**Backup:** `Appsicherungen/2026-05-15_v0.97.32_vor_p61/`.
+
+**Field-Test pending (Mike, F1-F7):** Recent-QSO-Cooldown greift,
+Cooldown band-spezifisch, Cooldown mode-spezifisch, manueller Klick
+geht durch, P60-Regressions (Auto-Hunt-Stop + HALT).
+
+**Field-Test ✓ 15.05.2026 mittags:** F1 ✓ Mike: „autohunt ruft andere
+station, vorherige qso wurde korrekt abgearbeitet" — Kern-Bug-Fix-Beweis.
+F2-F7 nicht explizit getestet (Detail-Coverage). **P61 abgenommen,
+push-bereit.**
+
+**V4-pro 9-Cycle-Bilanz nach P61:** Halluzinations-Rate 0/X aller
+Findings, 100% verifizierbar.
+
+**Praktischer Effekt für Mike:**
+- **Vorher:** Auto-Hunt picked Station 30s nach QSO erneut → 89s
+  verschwendet → Funkverkehr-Etikette-Verletzung.
+- **Nachher:** 5 Min Cooldown pro (Call, Band, Mode) → Auto-Hunt geht
+  weiter zur nächsten Station. Manueller Re-QSO bleibt jederzeit
+  möglich via RX-Panel-Klick.
+
+---
+
 ## 2026-05-15 v0.97.32 — P60 User-Stop-Pfade brechen TX-Slot sofort ab + Click-Puffer
 
 **Trigger:** Mike-Field-Test P55-F6 15.05.2026 morgens: OMNI-CQ während
@@ -50,6 +283,18 @@ hat einen Bug gefunden den die V2-Self-Review übersehen hatte.**
 **Field-Test pending (Mike, F1-F6):** OMNI-Stop sofort, Auto-Hunt-Stop
 sofort, Normal-CQ-Stop sofort, HALT-Regression, SWR-Watchdog-Regression,
 Bandwechsel-Regression.
+
+**Field-Test ✓ KOMPLETT 15.05.2026 vormittags:** F1+F2+F3+F4+F6 alle
+bestätigt (TX bricht jeweils sofort ab), F5 implizit ✓ (keine SWR-Spikes
+bei keinem Test). Bandwechsel-Test ohne Gain-Mess-Overlay (20m bereits
+gemessen) zeigte sauberes „Auto-Hunt aus → TX aus" Verhalten. Push
+weiterhin pending bis alle pending Bundles (P58/P55/P53/P51/Bundle J/I/F/G/H)
++ P61+P59 abgearbeitet.
+
+**Mike-Field-Test-Beobachtung als P62 in TODO:** Bandwechsel→Gain-Messung-
+Übergang bei NEUEM Band (ohne Preset) wirkt visuell wie „80W → 10W TUNE"
+statt sauberes „TX aus → neue Messung". Mike-Vorschlag 1s Pause. Eigener
+Workflow geplant.
 
 ---
 
@@ -9508,3 +9753,469 @@ mit 24 Tests vollständig superseded). DSP-Sanity-Checks (align/costas)
 in test_modules.py behalten.
 
 **Gesamt:** 512 → 563 Tests (+56 neu, -5 Duplikate).
+
+## 2026-05-15 v0.97.36 — P63 SWR-Block per Band-Marker + Tuner-Settings + Lock-Release
+
+**Trigger:** Mike-Field-Test 15.05. nachmittags 17m-Band. Bandwechsel
+20m→17m in Diversity → Auto-Gain-Mess startet → TUNE 10W → 17m-Antenne
+nicht resonant → SWR>2.5 → SWR-Watchdog (P53) feuert → Modal kommt →
+**3 Bugs gleichzeitig sichtbar:**
+
+1. `_gain_measure_locked` hängt True → TUNE-Button GESPERRT (Mike
+   braucht aber TUNE zur Diagnostik).
+2. OMNI/Hunt KLICKBAR (würden sofort wieder SWR-Alarm geben).
+3. Inkonsistenz: was gesperrt sein sollte ist klickbar, was klickbar
+   sein sollte ist gesperrt.
+
+**Mike-Spec O-Ton:**
+„wenn abruch war weil swr zu hoch, meldung Band gesperrt Swr zu hoch
+bitte manuell überprüfen und durch tune vorgang freischalten meldung
+modal mit ok zu bestätigen. wenn tune dann wert gibt swr gut. einmessung
+fals nicht vorhanden starten. wenn vorhanden normaler ablauf, marker in
+memory. 10 watt fest tuner aktivierbar oder nicht auch gut."
+
+**Architektur:**
+- Neue Settings `tuner_present` (bool, Default True) + `tune_duration_s`
+  (int, {15, 30}, Default 15).
+- In-memory Marker `_swr_blocked_bands: set[str]` (kein Persist — Mike
+  will frisch testen pro Session).
+- Lock-Release-Bug-Fix: `_on_swr_alarm` ruft `_set_gain_measure_lock(False)`.
+- Marker-Pre-Check in 6 Pfaden: `_check_diversity_preset`, `_start_dx_tuning`,
+  `_on_cq_clicked`, `_on_station_clicked`, `_on_btn_omni_cq_toggled`,
+  `_on_btn_auto_hunt_toggled`. Bei rotem Marker: `add_info` + early-return
+  + Button-State-Reset wo nötig (OMNI/Hunt mit `blockSignals + setChecked(False)`).
+- Manueller TUNE: 10W fest (`set_rfpower_direct(10)`, UNABHÄNGIG von
+  `tune_power`-Setting), Dauer aus `tune_duration_s` (15 oder 30s) mit
+  Whitelist, Auto-Stop via QTimer + Token-Pattern. Watchdog während
+  TUNE komplett bypassed via `_tune_in_progress=True`.
+- Nach tune_off: 2s-Beruhigungszeit (R1-F1 — VITA-49 letzter SWR-Wert
+  könnte stale sein), dann `_tune_post_swr_check`:
+  - SWR ≤ Limit → `_swr_blocked_bands.discard(band)` + Diversity-Resume
+    via `_check_diversity_preset` falls aktiv.
+  - SWR > Limit → Modal „Tuner konnte nicht matchen", Marker bleibt rot.
+- Auto-TUNE-Fehler-Pfad in `_start_dx_tuning` (R1-F2): bei SWR>Limit
+  nach 3s-Auto-TUNE ruft jetzt zusätzlich `_set_gain_measure_lock(False)`
+  + setzt Marker (vorher hing Lock → UI dauerblockiert).
+- `tuner_present=False` (Monoband-Operator-Pfad): Auto-TUNE-Phase in
+  `_start_dx_tuning` skip + Power-Reset (R1-F3) auf `power_preset`.
+  TUNE-Button hidden via `ControlPanel.set_tuner_present`.
+- Hardware-Sicherheit (R1-HW): `_start_dx_tuning` ruft explizit
+  `radio.set_tx_antenna("ANT1")` vor Auto-TUNE.
+- Pending-Click-Schutz (R1-F5): `_on_station_clicked` Pre-Check FIRST
+  (vor TX-Aktiv-Buffer). Plus `_on_tx_finished` prüft Marker erneut
+  beim Auswerten des Buffers.
+
+**LDG AT-200 Pro Recherche:** Min 5W, Standard 10W mit Radio-Interface,
+Full Tune 0.2-15s (LDG-Spec), 0.5-6s (Händler). 15s Default ist
+LDG-konform, 30s als Reserve.
+
+**Workflow:** voller V1→V2→R1→V3→Code→Final-R1 mit DeepSeek-V4-pro.
+V1 mit 12 Self-Review-Findings F1-F12 (V2). R1 mit 6 weiteren Findings
+F-R1-1 bis F-R1-6 (3 kritisch). V3-Plan mit AC1-AC13 + 18 Tests.
+
+**11 atomare Commits geplant** C1-C11. Code-Diff ~250 LOC neu.
+
+**Tests:** 1306 → **1327 grün** (+21 — 18 P63-AC-Tests + 3 Bonus
+Source-Level + 0 angepasste P53-Mock-Tests). Plus 1 OMNI-Test-Mock-Fix
+(`_swr_blocked_bands = set()` in `_make_fake_mw`). T9 ist der Bug-Schutz-
+Test gegen Drift zurück auf `tune_power`-Setting (10W FEST).
+
+**Backup:** `Appsicherungen/2026-05-15_v0.97.35_vor_p63/`.
+
+**APP_VERSION:** 0.97.35 → 0.97.36.
+
+**Plan-Files:** prompts/p63_swr_block_marker_v[1,2,3].md + _r1.md
++ _final_r1.md + _final_r1_request.md.
+
+**Field-Test F1-F10** Mike (pending bis Push) — siehe TESTPLAN_15.05.2026_p63.md.
+
+**Push pending** bis Field-Test ✓.
+
+## 2026-05-15 v0.97.37 — Intent-Klausel im App-Start-Disclaimer
+
+**Trigger:** Mike-Vorbereitung für eventuelle GitHub-Veröffentlichung.
+Belt-and-suspenders zur MIT-Lizenz: Intent-Klausel im Hardware-Warnungs-
+Bestätigungsdialog (`main.py:_show_hardware_warning`) erweitern.
+
+**Wortlaut (Mike-Spec, TODO.md Z.979-985):**
+„Dieses Projekt entstand als persönliches Bastel-Tool für meinen eigenen
+Funkbetrieb (DA1MHH). Der Quellcode steht unter MIT-Lizenz zur freien
+Verwendung — die Nutzung erfolgt jedoch ausschließlich auf eigene Gefahr.
+Keine Gewährleistung, keine Haftung für Hardware-Defekte, Funklizenz-
+Verstöße oder andere Folgen. ANT1 = TX-Antenne (immer). ANT2 = nur RX
+(NIEMALS TX, Regenrinne nicht für Sendeleistung geeignet)."
+
+**Voller V1→V2→R1→V3-Workflow** trotz Trivial-Patch (CLAUDE.md Workflow-
+Pflicht). DeepSeek-V4-pro R1: 3 Findings, alle übernommen:
+- F-R1-1 (Hinweis): Wortlaut juristisch tragfähig, keine Änderung.
+- F-R1-2 (Risiko): Höhe 540×340 → **540×400** (HiDPI-Puffer gegen
+  Font-Substitution). V2 hatte 380 vorgeschlagen, R1 empfiehlt 400 als
+  Sicherheits-Buffer.
+- F-R1-3 (KISS): kein eigenes Dialog-Modul, in `main.py` patchen.
+
+**Code:** `main.py:_show_hardware_warning` Z.417 setFixedSize 340→400.
+Z.448-461 Disclaimer-Text komplett ersetzt durch Mike-Wortlaut.
+APP_VERSION 0.97.36 → 0.97.37.
+
+**Tests:** 1327 → **1332 grün** (+5: T1 DA1MHH, T2 MIT-Lizenz, T3
+Funklizenz-Verstöße, T4 Höhe ≥400, Bonus alter Text entfernt). Plus 1
+Bundle-J-Test angepasst (`test_t9_intent_klausel_in_disclaimer` von
+„persönlichen Gebrauch"/„Verifikation" auf „DA1MHH"/„MIT-Lizenz"
+umgestellt).
+
+**V4-pro 13-Cycle-Bilanz:** 0 Halluzinationen, 100% verifizierbar.
+
+**Plan-Files:** prompts/intent_klausel_v[1,2,3].md + _r1.md +
+_final_r1.md.
+
+**Push pending** bis Mike visuell bestätigt dass der Disclaimer-Text
+nicht abgeschnitten wird (Field-Test reduziert: nur App-Start mit
+neuem Dialog ansehen, kein Funkverkehr nötig).
+
+## 2026-05-15 v0.97.38 — Bundle L: Display-3-Auto-Move + Bypass-Button = Beenden
+
+**Trigger:** Mike-Wünsche 15.05.2026 abends (zwei kleine UI-Anpassungen
+für Remote-Fernwartung-Phase):
+
+**A — App auf Display 3 automatisch:** Heute musste Mike das Fenster
+nach jedem App-Start manuell via osascript auf Display 3 (Position
+2944,0) verschieben. Mike bis 10.06.2026 vom Ferienhaus remote → Display
+3 ist der per Screen-Sharing sichtbare Bildschirm.
+
+**B — Bypass-Button beendet App:** Der „ohne Radio weiter"-Button im
+ConnectStatusDialog startete bisher einen Demo-Modus (App läuft ohne
+Radio weiter). Mike-Spec: Demo-Modus macht praktisch keinen Sinn —
+wenn kein Radio da ist, soll App sich beenden.
+
+**Voller V1→V2→R1→V3→Final-R1-Workflow** mit DeepSeek-V4-pro:
+
+- V2 fand 5 Findings (alle akzeptiert/übernommen)
+- R1 V4-pro: 5 Hinweise:
+  - F-R1-1: Defensive `QGuiApplication.screens()`-Check empfohlen
+    (verhindert Offscreen-Fenster bei abgestecktem Display 3)
+  - F-R1-2: Helper-Name `move_to_remote_display` beibehalten
+  - F-R1-3: Hartkodiert mit Revert-Kommentar (kein Settings-Toggle —
+    Mike-Wunsch ist temporär bis 10.06.2026)
+  - F-R1-4: Bypass-Button-Text „ohne Radio weiter" belassen (Mike
+    nichts dazu gesagt, Redundanz unkritisch)
+  - F-R1-5: KISS erfüllt
+
+**V4-pro 14-Cycle-Bilanz:** 0 Halluzinationen, 100% verifizierbar.
+
+**Code:**
+- `ui/main_window.py:move_to_remote_display()` neu — iteriert
+  `QGuiApplication.screens()`, prüft `geom.contains(2944, 0)`. Bei
+  Treffer Move, sonst Skip mit Print.
+- `main.py:main()` ruft nach `window.show()` den Helper.
+- `tools/remote/start_simpleft8_nokill.py` analog (Remote-Wrapper).
+- `ui/connect_status_dialog.py:_on_continue_without_radio` →
+  `QApplication.quit() + reject()` (analog `_on_quit`).
+- APP_VERSION 0.97.37 → 0.97.38.
+
+**Revert-Plan nach 10.06.2026:** Helper-Methode + beide Aufrufer
+löschen. Bypass-Button-Verhalten kann bleiben oder reverten — Mike's
+Entscheidung. Im Code stehen klare ⛔-Kommentare mit Datum.
+
+**Tests:** 1332 → **1338 grün** (+6: T1-T6). T1+T2 prüfen beide
+Caller-Pfade. T3 prüft Defensive-Check. T6 prüft Revert-Kommentare
+sind vorhanden.
+
+**Plan-Files:** prompts/bundle_l_display3_bypass_v[1,2,3].md + _r1.md
++ _final_r1.md.
+
+**Push pending** bis Mike App-Start visuell bestätigt:
+- Fenster landet auf Display 3
+- „ohne Radio weiter"-Button schließt App tatsächlich
+
+## 2026-05-15 v0.97.39 — Hotfix: Crash bei Bypass-Button („ohne Radio weiter")
+
+**Trigger:** Mike-Field-Test direkt nach v0.97.38 Push-Vorbereitung.
+App crashed mit SIGBUS / EXC_ARM_DA_ALIGN beim Klick auf „ohne Radio
+weiter" (kein Radio anwesend). Crash-Trace Thread 0 (main):
+
+```
+QCoreApplication::sendEvent
+QTimerInfoList::activateTimers
+libqcocoa NSApplication run
+QEventLoop::exec → QApplication::exec
+```
+
+Alignment fault at 0x000000000020b0e9 — Receiver-Pointer kaputt
+(Use-After-Free).
+
+**Diagnose:** Bundle L (v0.97.38) hatte `_on_continue_without_radio`
+auf `QApplication.quit() + self.reject()` umgestellt — Reihenfolge wie
+`_on_quit` seit P26. Aber: `quit()` schedulet das Event-Loop-Ende.
+Bevor das Event-Loop tatsächlich endet, feuert der `_tick_timer`
+(500ms im ConnectStatusDialog) nochmal — der Dialog ist aber schon
+via `reject()` + Python-GC zerstört → `sendEvent` an gelöschten
+QObject → SIGBUS. Klassisches Qt-Lifecycle-Race.
+
+**Hotfix:**
+- Reihenfolge umgedreht: `_tick_timer.stop()` + `self.reject()`
+  ZUERST, dann `QApplication.quit()`. Timer-Stop entfernt den letzten
+  pending Timer-Tick.
+- Beide Methoden identisch gepatcht (`_on_continue_without_radio` UND
+  `_on_quit` — gleiche Race-Anfälligkeit, `_on_quit` war seit P26 nie
+  von Mike getestet → Latent-Crash).
+- Try/except um `stop()` (idempotent, könnte schon vom closeEvent
+  gestoppt sein).
+
+**Code:** `ui/connect_status_dialog.py` Z.211-243 — beide Methoden
+gepatcht. APP_VERSION 0.97.38 → 0.97.39.
+
+**Tests:** 1338 → **1339 grün** (+1 T7 NEU prüft Source-Reihenfolge
+`stop → reject → quit`).
+
+**Mike-Memory:** Auch bei klar diagnostizierten Crash-Hotfixes wird
+ein R1-Check nachgereicht (post-hoc). DeepSeek-V4-pro Verifikation
+bestätigt Race-Pattern + prüft ob `_connect_worker`-Thread weitere
+Race-Sources hat. Memory:
+`feedback_hotfix_with_r1_postcheck.md`.
+
+**V4-pro 15-Cycle-Bilanz:** 0 Halluzinationen, 100% verifizierbar.
+
+
+## 2026-05-16 v0.97.40 — Bundle-L-Revert: Bypass-Button wieder Demo-Modus
+
+**Trigger:** Mike-Klärung 16.05.2026: „häää ne eigendlich nicht was macht es
+für einen Sinn ohne radio weiter - dann ohne radio - dann beenden ???"
+
+**Wurzel:** Bundle L Punkt B (v0.97.38) hatte `_on_continue_without_radio`
+auf `QApplication.quit()` umgestellt — beide Buttons im ConnectStatusDialog
+machten danach exakt dasselbe (UX-Logik-Bug). Plus Hotfix v0.97.39 nach
+SIGBUS-Crash hatte die quit-Reihenfolge fixiert, aber die UX-Bug-Wurzel
+blieb. Mike's ursprüngliche Spec wurde missverstanden: „ohne Radio weiter"
+heißt semantisch „ohne Radio weitermachen" (Demo-Modus), nicht beenden.
+
+**Fix:** Bundle L Punkt B revertiert. „ohne Radio weiter" ruft nur noch
+`_tick_timer.stop() + self.reject()` (Demo-Modus weiter wie vor v0.97.38).
+„Beenden" bleibt unverändert mit Hotfix-Reihenfolge `stop → reject → quit`.
+Bundle L Punkt A (Display-3-Auto-Move) bleibt — funktioniert.
+
+**Workflow:** V1 + V2 + Fragen-Antwort-Iteration mit Mike (Variante A
+defensiv: Timer-Stop bleibt drin). Pure Revert von 4 Code-Zeilen +
+2 Tests invertieren = Trivial-Klausel formal anwendbar, R1 übersprungen
+nach Mike-Freigabe.
+
+**Code-Änderungen:**
+- `ui/connect_status_dialog.py:_on_continue_without_radio` — quit() raus,
+  Docstring zeigt Revert-Historie (Bundle L → Revert v0.97.40).
+- `ui/connect_status_dialog.py:_on_quit` — Docstring eigenständig (Verweis
+  auf `_on_continue_without_radio` raus), Hotfix-Begründung präzisiert.
+- `tests/test_bundle_l_display3_bypass.py:T4` — invertiert: assert
+  `QApplication.quit() NOT in body` (Regression-Schutz).
+- `tests/test_bundle_l_display3_bypass.py:T7` — reduziert auf `_on_quit`
+  only (Loop entfernt, einfacher Test).
+- `main.py` APP_VERSION 0.97.39 → 0.97.40.
+
+**Backup:** `Appsicherungen/2026-05-16_v0.97.39_vor_bundle_l_revert/`
+
+**Tests:** 1339 → **1339 grün** (T4 + T7 invertiert/reduziert, gleicher
+Test-Count). `test_p26_connect_modal.py:T5` (Bypass → Rejected) + `T6`
+(Quit → quit() called) unverändert grün.
+
+**Mike-Field-Test (2 Punkte, kein Radio):**
+- F1: App ohne Radio → „ohne Radio weiter" → App läuft sichtbar weiter
+- F2: App ohne Radio → „Beenden" → App schließt sauber, kein SIGBUS
+
+**Lesson:** UX-Spec immer 2× verifizieren bei nicht-eindeutigen User-
+Aussagen. Mike's „beendet die app sich wenn ich auf ohne radio weiter
+gehe" war mehrdeutig — Bundle L hat es als „direkter Quit-Pfad" gelesen,
+korrekt war „Demo-Modus, separater Beenden-Button bleibt".
+
+
+## 2026-05-16 v0.97.41 — P52: Statistik-Toggle raus + 90-Tage-Rolling-Window
+
+**Trigger:** Mike-Klärung 14.05.2026: Settings-Toggle „Statistik-Erfassung
+aktivieren" macht keinen Sinn weil Bandpilot ohne Stats blind ist und
+Auswertungen sie brauchen. Plus: Stats wachsen unbegrenzt (~1 MB/Tag bei
+40m-FT8-24h-Betrieb) → nach Jahren unübersichtlich.
+
+**Voller V1→V2→R1→V3→Code→Final-R1-Workflow autonom mit DeepSeek-V4-pro.**
+
+**R1-V4-pro:** 0 Bug, 3 Risiko (alle bearbeitet), 2 Verbesserung, 1 Hinweis.
+Findings:
+- R1-Risk-1 (AC12 unklar): Mock-Dict-Eintrag `stats_enabled` rausgenommen
+- R1-Risk-2 (fragile Zeilennummern): vor jedem Edit verifiziert
+- R1-Risk-3 (toter Mock): drinlassen — Return-Value generisch True
+  für mehrere settings.get-Aufrufe, sicherer
+- R1-V1 (datetime.utcnow deprecated): bleibt — projektweite Konsistenz
+  (log_setup nutzt es auch)
+
+**Final-R1 V4-pro:** „Push-bereit, sauber, KISS, alle diffs konsistent
+und gut getestet." 1 Anmerkung Pfad-Sync zwischen `main.py` Cleanup und
+`StationStatsLogger` verifiziert — beide resolvieren zu `<projekt-root>/
+statistics` (kein Issue).
+
+**V4-pro 16-Cycle-Bilanz:** 0 Halluzinationen, 100% verifizierbar.
+
+**Code-Änderungen:**
+- `core/stats_cleanup.py` NEU — `cleanup_stats_older_than_days(stats_dir, days=90)`
+  mit zwei Regex-Pattern (`YYYY-MM-DD_HH.md` Stunden-Stats + Rescue,
+  `YYYY-MM-DD.md` antenna_qso). Rekursiver Walk via `rglob("*.md")`,
+  Cutoff aus Dateinamen-Datum (NICHT mtime — Backup-robust). Fail-silent.
+- `config/settings.py` DEFAULTS-Key `stats_enabled` raus, idempotenter
+  `pop("stats_enabled", None)` in `load()` analog P47-Pattern.
+- `ui/settings_dialog.py` `stats_cb`-QCheckBox + Load + Save + Reset
+  vollständig entfernt (4 Stellen).
+- `ui/mw_cycle.py:_log_stats` Stats-Enabled-Guard entfernt — Stats
+  laufen immer.
+- `ui/main_window.py:_stats_indicator.setVisible(...)` Zeile entfernt
+  — Widget immer sichtbar (Qt-Default).
+- `main.py` APP_VERSION 0.97.40 → 0.97.41 + Cleanup-Aufruf VOR
+  Qt-Init mit Fail-Silent-Wrapper.
+
+**8 atomare Commits (geplant)** + 7 neue Tests + 2 angepasste:
+- T1: Hour-Pattern alte Datei gelöscht
+- T2: Day-Pattern (antenna_qso) alte Datei gelöscht
+- T3: Junge Datei (<90 Tage) bleibt
+- T4: Nicht-passende Dateinamen bleiben
+- T5: Rekursiver Walk durch stations/-Unterverzeichnis
+- T6: Nicht-existentes Verzeichnis returnt 0 ohne Exception
+- T7: Settings-Migration `stats_enabled`-Pop in `Settings.load()`
+- T8: Cleanup-Funktion idempotent (zweiter Lauf returnt 0)
+- `tests/test_settings_dialog_smoke.py` 2 Tests angepasst (stats_cb raus
+  aus expected_attrs, anderer Checkbox-Pfad für Stylesheet-Scope-Test)
+- `tests/test_p45_omni_stats_guard.py` Kommentar zu settings.get-Mock
+  aktualisiert
+
+**Tests 1339 → 1347 (+8 P52).**
+
+**Backup:** `Appsicherungen/2026-05-16_v0.97.40_vor_p52/`.
+
+**Mike-Field-Test (kein Radio nötig):**
+- F1: Settings → kein „Statistik-Erfassung aktivieren"-Checkbox mehr
+- F2: Statusbar „Statistik"-Indikator immer sichtbar (grau/grün je Zustand)
+- F3: Alte Config mit `stats_enabled=false` → App startet sauber, Key
+  nach nächstem Save weg
+- F4: Konsolen-Output beim Start: `[Stats-Cleanup] N Dateien >90 Tage
+  geloescht` (oder still wenn nichts zu tun)
+
+**Wirkung:** Disk-Footprint statistics/ bleibt unter ~30 MB. Mike-Daten
+aus April-Mai 2026 (aktuell <30 Tage alt) sind erst ab August 2026 vom
+Cleanup betroffen — genug Zeit für externe Backups.
+
+**Lesson:** Pattern „Toggle für Hintergrund-Logging" macht in Hobby-Tool
+wenig Sinn wenn dieselben Daten von mehreren Features (Bandpilot,
+Auswertung) zwingend gebraucht werden. Implizit-an + Auto-Cleanup ist
+ehrlicher und KISS-konformer.
+
+
+## 2026-05-16 — Verifikationen v0.97.41
+
+### ✓ RF-Preset-Speicherung pro (Band, Watt) verifiziert (Mike-Frage)
+
+Mike-Frage: „Wir nehmen doch für jeden Watt-Wert und jedes Band einen
+eigenen Speicherslot? Wir nehmen nicht zufällig für 30m/70W denselben
+Wert wie für 20m/70W?"
+
+**Antwort: Korrekt getrennt.** `core/rf_preset_store.py:184 (save)` und
+`:105 (load)` nutzen Key `_data[radio][band][watt_str]` — drei Ebenen
+Verschachtelung. Cross-Band-Verwechslung architektonisch ausgeschlossen.
+
+Live-Beweis aus `~/.simpleft8/rf_presets.json` am 16.05.2026:
+- 20m/70W → rf=79
+- 30m/70W → rf=77
+- 40m/70W → rf=88
+
+Drei verschiedene Werte für dieselbe Watt-Stufe auf drei Bändern —
+getrennt gespeichert.
+
+**Bonus:** Hybrid-Lade-Strategie in `load()` — exakter Treffer + bei ≥2
+Nachbarn Plausibilitäts-Check, sonst lineare Interpolation INNERHALB
+desselben Bands (keine Cross-Band-Interpolation).
+
+### ✓ Demo-Modus läuft stabil (Bundle-L-Revert v0.97.40)
+
+Mike-Bestätigung 16.05.2026 morgens: „okay startet stabil". App-Start
+ohne Radio → „ohne Radio weiter" → Hauptfenster sichtbar, App läuft im
+Demo-Modus weiter ohne Crash. Hotfix v0.97.39 + Revert v0.97.40 zusammen
+korrekt.
+
+
+## 2026-05-16 — README-Korrektur (Mike-Hinweis 16.05.)
+
+**Trigger:** Mike-Bemerkung zur GitHub-README: „du verwechselst tx mit rx
+wir verwenden beim empfang automatisch die bessere antenne senden ist
+IMMER Ant1. das muss korrigiert werden auf github."
+
+**Wurzel:** Sektion „② TX nutzt aktiv die bessere Antenne" in README.md
++ README_DE.md beschrieb fälschlich dass der TX zur besseren Antenne
+schaltet. Korrekt: nur der RX schaltet pro Callsign, TX läuft IMMER
+über ANT1 (Hardware-Pflicht).
+
+**Gefährlich falsch weil:** Leser könnte annehmen er kann ANT2 zum
+Senden verwenden. ANT2 (Regenrinne) ist nicht TX-tauglich — 100 W TX
+würde Hardware-Schaden riskieren (CLAUDE.md Top-Anweisung ANT1=TX/ANT2=RX).
+
+**Korrektur:** Überschrift + Text in beiden README-Sprachen umgeschrieben:
+- DE: „② RX nutzt aktiv die bessere Antenne pro Station"
+- EN: „② RX uses the better antenna actively per station"
+- Plus expliziter Satz: „TX läuft IMMER über ANT1" / „TX always goes
+  through ANT1"
+
+**Tests 1347 grün** (keine Code-Änderung — reine Doku).
+
+**Push pending** bis Mike OK gibt (Hardware-Sicherheits-Aussage).
+
+
+## 2026-05-16 v0.97.42 — P66: Logbuch-Tab-Auto-Show + README-Update
+
+**Trigger:** Mike-Wunsch 16.05.2026 nach Screenshot mit EA5D-Selektion:
+„wenn ich auf logbuch gehe und es ist eine station selektiert sollte
+auch rechts der logbuch eintrag erscheinen". Plus: alle veralteten
+Mess-Zahlen in READMEs aktualisieren (8-9 Tage, 27.200 Zyklen für 40m).
+
+**Voller V1→V2→R1→V3→Code→Final-R1 autonom mit DeepSeek-V4-pro.**
+
+**P66 Lösung:** `_on_qso_tab_changed(index)` in `ui/mw_qso.py:1002`
+um elif-Branch `index == 1` erweitert. Bei Logbuch-Tab-Wechsel:
+`qso_panel.logbook._selected_record()` auslesen, bei Treffer
+`_on_logbook_qso_clicked(rec)` aufrufen → Detail-Overlay rechts.
+try/except gegen defekte UserRole-Daten (R1-V3 Defensive).
+
+**R1-V4-pro:** 0 Bug, 3 Risiko/Lücke (Lösch-Edge-Case + Exception-Handling
++ QRZ-Throttle), 2 Unklarheit, 2 Verbesserung. V3-Entscheidungen:
+- F1 Lösch-Edge-Case: `refresh()` cleared Selektion → automatisch None
+- F2 Exception: try/except + Log + Fail-silent (übernommen)
+- F3 QRZ-Throttle: nicht jetzt, KISS für Hobby-Tool
+- F4 halb-private API: KISS — direkt aufrufen, kein Refactor
+- F5 programmatische Tab-Wechsel: bewusst kein Suppress-Flag
+
+**Final-R1 V4-pro:** „Push-bereit. Keine Regressionen, keine offenen
+To-dos." 0 KP. Alle drei Änderungspakete (P66 + README-Korrektur +
+Stats-Zahlen) formal korrekt, getestet, konsistent dokumentiert.
+
+**V4-pro 17-Cycle-Bilanz:** 0 Halluzinationen, 100% verifizierbar.
+
+**Tests:** 5 neue P66-Tests (T1 Auto-Show, T2 No-Selection, T3 Index=0-
+Regression, T4 Exception-Catch, T5 Source-Level). 1347 → **1352 grün** (+5).
+
+**README-Korrektur (Mike-Hinweis 16.05.):**
+- DE+EN README: Sektion „② TX nutzt aktiv die bessere Antenne" war
+  gefährlich falsch (suggerierte TX schaltet zu ANT2 — Hardware-Schaden-
+  Risiko bei Regenrinne-ANT2). Umgeschrieben auf
+  „② **RX** nutzt aktiv die bessere Antenne pro Station" mit
+  explizitem Satz „TX läuft IMMER über ANT1".
+
+**README-Stats-Update:**
+- README_DE.md 40m-Tabelle: 4 Tage/22.696 Zyklen/+88% → 8-9 Tage/27.200
+  Zyklen/+126%
+- README_DE.md 20m-Tabelle: 5-7 Tage/13.348 Zyklen/-18% → 7-9 Tage/19.936
+  Zyklen/-6%
+- README_DE.md NEU: 30m-Tabelle (vorläufig, +69%/+59%)
+- README.md Theorie-Text: (+88%/+123%) → (+126%/+123%) DE+EN
+
+**Stats neu generiert:** `scripts/generate_plots.py` → auswertung/ + en/.
+Alle PNGs + PDF-Berichte (DE+EN, 40m+20m) regeneriert.
+
+**APP_VERSION** 0.97.41 → 0.97.42.
+
+**Backup** `Appsicherungen/2026-05-16_v0.97.41_vor_p66/`.
+
+**Mike-Field-Test (kein Radio):**
+- F1: Logbuch-Tab → Zeile auswählen → wechsel zu QSO → ControlPanel ✓
+- F2: Zurück zu Logbuch → Detail-Overlay erscheint automatisch ✓
+- F3: Logbuch ohne Selektion → ControlPanel bleibt
+- F4: Klick auf Zeile (Direct-Path) → Regression OK

@@ -94,11 +94,15 @@ with a 1 dB hysteresis to prevent ping-pong on marginal signals.
    can see a mixed pattern — proof the app does not just sit on a fixed ratio
    but evaluates every station individually.
 
-2. **② TX uses the better antenna actively** — when you start a QSO with a
-   station, the TX automatically switches to whichever antenna heard that
-   callsign best (here: `(ANT2 ↑2.0 dB)` for IK4LZH). TX always goes through
-   the RF-rated antenna (ANT1 on the SimpleFT8 demo setup); on rigs with two
-   transmit-capable antennas the better one is selected for the entire QSO.
+2. **② RX uses the better antenna actively per station** — when you start
+   a QSO, the **receive path** switches to whichever antenna heard that
+   callsign best (here: `(ANT2 ↑2.0 dB)` for IK4LZH) so the remote station
+   is heard optimally throughout the entire QSO.
+   **TX always goes through ANT1** — the only transmit-rated antenna in
+   the SimpleFT8 setup. ANT2 (gutter antenna) is receive-only and would
+   risk hardware damage at 100 W TX. On rigs with two transmit-capable
+   antennas this could be configured differently, but SimpleFT8
+   hardcodes TX = ANT1.
 
 The memory has no timeout and no persistence — a station you can hear *right
 now* is always the most precise value. No other FT8 client does this:
@@ -131,7 +135,7 @@ Detailed breakdown with rescue-only analysis: PDF report (p.3).*
 > **Note on Interpretation**
 > ANT1 (Kelemen DP-201510) is operated off-band on 40m and therefore significantly
 > less efficient on this band. ANT2 (house gutter, ~15m) falls between λ/4 and λ/2
-> for 40m and works comparatively well. The measured gains (+88%/+123% stations)
+> for 40m and works comparatively well. The measured gains (+126%/+123% stations)
 > represent an **upper bound** for off-band operation — with two well-matched
 > 40m-optimized antennas, a lower but still significant diversity gain is expected.
 > The exact opposite happens when ANT1 is on its resonant band — see the 20m results below.
@@ -538,7 +542,7 @@ Detaillierte Aufschlüsselung mit Rescue-only-Analyse: PDF-Bericht (S.3).*
 > ANT1 (Kelemen DP-201510) ist auf 40m außerhalb seines Auslegungsbandes und damit
 > deutlich suboptimal für diesen Frequenzbereich. ANT2 (Regenrinne, ~15m) liegt
 > zwischen λ/4 und λ/2 für 40m und arbeitet dort vergleichsweise gut. Die gemessenen
-> Gewinne (+88%/+123% Stationen) sind als **Obergrenze für Off-Band-Betrieb** zu
+> Gewinne (+126%/+123% Stationen) sind als **Obergrenze für Off-Band-Betrieb** zu
 > verstehen — bei zwei gleichwertigen, für 40m optimierten Antennen ist ein geringerer,
 > aber dennoch signifikanter Diversity-Gewinn zu erwarten.
 > Auf einem resonanten Band kehrt sich das Bild um — siehe 20m-Ergebnisse weiter unten.

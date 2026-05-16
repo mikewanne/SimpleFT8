@@ -1,4 +1,244 @@
-# SimpleFT8 TODO — Stand 14.05.2026 abends (v0.97.28, P51 fertig — Field-Test F1-F7 pending)
+# SimpleFT8 TODO — Stand 16.05.2026 (v0.97.41, P52 fertig)
+
+---
+
+## ✅ 16.05.2026 erledigt — P52: Statistik-Toggle raus + 90-Tage-Rolling-Window v0.97.41
+
+**Trigger:** Mike-Klärung 14.05.: Stats-Toggle macht keinen Sinn weil
+Bandpilot ohne Stats blind ist und Auswertungen sie brauchen. Plus Stats
+wuchsen unbegrenzt (~1 MB/Tag).
+
+**Voller V1→V2→R1→V3→Code→Final-R1-Workflow autonom mit DeepSeek-V4-pro.**
+
+**Architektur:** `core/stats_cleanup.py` NEU mit zwei Regex-Pattern
+(Stunden + Tag) und rekursivem rglob. Cutoff aus Dateinamen-Datum (NICHT
+mtime — Backup-robust). Settings-Migration via Pop in `Settings.load()`
+analog P47.
+
+**R1-V4-pro:** 0 Bug, 3 Risiko (alle bearbeitet), 2 Verb, 1 Hinweis.
+**Final-R1 V4-pro:** „Push-bereit, sauber, KISS, gut getestet." 0 KP.
+**V4-pro 16-Cycle-Bilanz:** 0 Halluzinationen.
+
+**Tests 1339 → 1347 (+8 P52)**. Backup `Appsicherungen/2026-05-16_v0.97.40_vor_p52/`.
+
+**Plan-Files:** `prompts/p52_stats_toggle_remove_v[1,2].md`.
+
+**Field-Test pending (kein Radio):** F1-F4 — siehe HANDOFF.md.
+
+---
+
+## ✅ 16.05.2026 erledigt — Bundle-L-Revert: Bypass = Demo-Modus v0.97.40
+
+Bundle L Punkt B (v0.97.38) hatte `_on_continue_without_radio` auf quit()
+umgestellt — UX-Logik-Bug, beide Buttons machten dasselbe. Plus Crash-Pfad.
+Revert: Bypass wieder Demo-Modus (reject only), Beenden bleibt Quit
+(Hotfix v0.97.39 Reihenfolge bleibt). Tests 1339→1339 (T4 invertiert,
+T7 reduziert). Mike-Klärung 16.05.: „häää ne eigendlich nicht…".
+
+---
+
+## 🆕 OFFEN — P64: Simulations-Modus für Tests ohne Radio (Mike 16.05.2026)
+
+**Trigger:** Mike's Frage 16.05.: „können wir später zustände auch simulieren
+wie imaginäre swr werte oder empfangende stationen oder zu komplex?"
+
+**Mike-Use-Case:** 4 Wochen ab 16.05.2026 ohne Radio-Zugriff (Mike weit weg
+vom FlexRadio). Damit UI-Tests, Bug-Fixes und neue Features trotzdem
+visuell prüfbar sind: künstliche Werte einspeisen.
+
+**Aufwand-Einschätzung Claude 16.05.:**
+
+| Was | Komplexität | Aufwand |
+|---|---|---|
+| SWR-Wert simulieren | einfach | 1-2 h |
+| Einzelne fake Decoder-Messages | mittel | 0.5 Tag |
+| Komplette QSO-Simulation | mittel-hoch | 1-2 Tage |
+| Fake-Radio als Subclass von RadioInterface | hoch (Architektur) | 2-3 Tage |
+
+**KISS-Vorschlag (V0 nicht spezifiziert):**
+
+1. **SWR-Simulator:** Env-Var `SIMPLEFT8_SIM_SWR=5.2` triggert
+   `swr_alarm.emit(5.2)` 30s nach App-Start für Watchdog-Tests
+2. **Decoder-Simulator:** Env-Var `SIMPLEFT8_SIM_STATIONS=path/to/csv`
+   liest pro Slot fake Messages, zeigt sie im RX-Panel an
+3. **Debug-Menü** (Settings-Tab „Daten & Tools"): Buttons
+   „SWR-Alarm auslösen", „Fake QSO complete", „Fake Station hinzufügen"
+4. **Fake-Radio (optional Stufe 2):** `radio_type: "sim"` in Settings,
+   `radio/sim_radio.py` als minimaler Stub (set_*/get_* no-ops, alle
+   Meter returnen plausible Werte)
+
+**Vor Beginn:** V1→V2→R1→V3 Workflow. KISS-Frage besonders wichtig —
+nur was Mike in 4 Wochen wirklich braucht, nicht universal simulator.
+
+**Aufwand-Estimate Mike-Auswahl-abhängig:** Stufe 1 (Env-Vars + Debug-
+Menü) = ~1 Tag. Stufe 2 (Fake-Radio) = +1-2 Tage.
+
+---
+
+## 🆕 OFFEN — P65: Light-Mode (Settings-Toggle Dark↔Light) (Mike 16.05.2026)
+
+**Trigger:** Mike 16.05.: „mit deepseek besprechen wie kompliziert es ist
+in einstellungen den darkmodus umschaltbar machen in normalen modus
+(farben normale app grau , welche farben für anzeigen. darkmode ist so
+top, normaler modus grau windows standart app mäßig)".
+
+**Mike-Spec klargestellt:**
+- Default bleibt **Dark-Mode** (aktuell, „top")
+- Neuer Light-Mode: Windows-Standard-Stil, hellgrau, default-system-look
+- Settings-Toggle in Tab „Daten & Tools" oder „Allgemein"
+- App-Restart erforderlich oder live-switch? — Klären
+
+**Erste Aufwandseinschätzung Claude 16.05.:**
+
+Aktuell hat die App **inline Stylesheets** an vielen Stellen verstreut
+(grep zeigt ~50+ setStyleSheet-Aufrufe in `ui/main_window.py`,
+`control_panel.py`, `rx_panel.py`, `qso_panel.py`, `connect_status_dialog.py`,
+`bandpilot_dialogs.py`, `dx_tune_dialog.py` etc.). Plus Farb-Konstanten
+wie `#00CC44` (Cyan-Akzent), `#FF66CC`/`#FFAA00` (Slot-Bar), `#16192b`
+(Dialog-BG), `#7CC` (Title-Cyan).
+
+**Zwei Wege:**
+
+**Weg A — Theme-Konstanten + Mode-Switch:**
+- Modul `ui/theme.py` mit `THEME_DARK` und `THEME_LIGHT` Dicts
+- Alle inline-Hexcodes durch `theme.cyan_accent` etc. ersetzen
+- App-Restart-Pflicht (Qt-Stylesheet-Hot-Reload ist tricky)
+- **Aufwand:** mittel-hoch, ~2-3 Tage. ~50 Stylesheet-Stellen umstellen +
+  Theme-Modul + Settings-Hook + Tests
+
+**Weg B — Qt-Stil-Override (`QApplication.setStyle("Fusion")`)**:
+- Bei Light-Mode globaler `setStyle("windowsvista")` oder `"fusion"`
+- Bestehende Stylesheets aber bleiben (überschreiben den nativen Look)
+- Funktioniert nur teilweise — sieht hybrid aus
+- **Aufwand:** klein, 0.5 Tag — aber Ergebnis vermutlich nicht „windows-
+  standard" sondern „windows-mit-Cyan-Akzenten"
+
+### DeepSeek-V4-pro Brainstorm (16.05.2026)
+
+**Empfehlung: KEINEN sauberen Light-Mode bauen — KISS-Pragmatismus.**
+
+| Weg | Aufwand | Bewertung |
+|---|---|---|
+| **A — Theme-Modul + 259 Stellen umstellen** | 3-5 Tage | Overengineering für 5%-Use-Case |
+| **B — Globaler QStyle-Wechsel** | 1-2 h | Unbrauchbar — hybride Optik, Stylesheets dominieren weiter |
+| **C — Hybrid (nur äußere Widgets hell)** | 2-3 Tage | Halbfertig-Optik durch dunkle Inseln (FrequencyHistogram etc.) |
+| **D — „Hell-Taste" Notlösung** | **1 Tag** | Nur Haupt-BG + Card-BG + Text-Farbe wechseln, Rest dark belassen. Bewusst als Not-Theme akzeptieren |
+
+**Essenzielle Farben für minimalen Light-Mode:**
+- BG `#16192b` → `#F0F0F0`
+- Card-BG `#06060c` → `#FFFFFF` + Border
+- Text `#CCC` → `#333`/`#222`
+- Buttons `#2a2f4a` → `#E0E0E0` + dunkler Rand
+- Cyan `#7CC` → ggf. `#0066AA` (Kontrast auf Weiß)
+- Grün/Orange/Magenta-Akzente: meist OK
+
+**Live-Switch:** Restart-Pflicht — Qt-Stylesheet-Hot-Reload zur Laufzeit
+ist fehleranfällig (viele Widgets setzen Style im Konstruktor).
+
+**Fallen:** CustomPainted Widgets (`FrequencyHistogramWidget`) haben
+hardgecodete `QColor`s in `paintEvent()` → bleiben dunkle Inseln. Card-
+Konstanten in `control_panel.py` (`_CARD_SS_BLUE` etc.) müssten
+dynamisch werden — der Knackpunkt für Weg A.
+
+### Mike-Entscheidung pending
+
+Optionen:
+1. **Skip** — Light-Mode kommt nicht (DeepSeek-Empfehlung, KISS)
+2. **Not-Theme (1 Tag)** — Hell-Taste mit 4-5 Farb-Swaps, dunkle Inseln
+   bleiben, als bewusste Notlösung dokumentiert
+3. **Sauberes Theme-Modul (3-5 Tage)** — wenn Mike es wirklich will
+
+Default-Empfehlung: **Skip**. Zeit lieber in echte Features stecken.
+
+---
+
+## ✅ 15.05.2026 erledigt — Bundle L: Display-3-Auto-Move + Bypass-Button=Beenden v0.97.38
+
+Mike-Wünsche während Remote-Fernwartung bis 10.06.2026. **A:** App-
+Hauptfenster automatisch auf Display 3 (2944,0) bei jedem Start, mit
+defensivem QScreen-Check (R1-F1). **B:** `_on_continue_without_radio`
+ruft `QApplication.quit() + reject()` statt Demo-Modus.
+
+Voller V1→V2→R1→V3→Code→Final-R1-Workflow. R1 5 Hinweise alle
+übernommen. Final-R1 V4-pro 0 KP „Push freigegeben." **V4-pro
+14-Cycle-Bilanz: 0 Halluzinationen.** Tests 1332→**1338** (+6).
+⛔ Revert nach 10.06.2026 — Code hat Datums-Kommentare.
+
+**Plan-Files:** prompts/bundle_l_display3_bypass_v[1,2,3].md + _r1.md
++ _final_r1.md.
+
+Push pending bis Mike App-Start visuell bestätigt.
+
+---
+
+---
+
+## ✅ 15.05.2026 erledigt — P63 SWR-Block per Band-Marker + Tuner-Settings + Lock-Release v0.97.36
+
+**Trigger:** Mike-Field-Test 15.05. nachmittags 17m-Band — SWR-Watchdog
+feuerte, danach 3 Bugs gleichzeitig sichtbar (Lock hing → TUNE gesperrt,
+OMNI/Hunt klickbar trotz SWR-Sperre, inkonsistent). Mike-Spec: Band-Marker
+pro Band in-memory, blockiert Auto-Pfade, manueller TUNE bleibt klickbar.
+
+**Voller V1→V2→R1→V3→Code→Final-R1-Workflow** mit DeepSeek-V4-pro.
+
+**V2-Findings:** 12 (F1 Halluzination `control_panel.last_swr()` → `radio.last_swr`).
+**R1-Findings:** 6 (3 kritisch: F-R1-1 Post-Tune-SWR-Race-Condition,
+F-R1-2 Auto-TUNE-Fehler ohne Lock-Release, F-R1-5 Pending-Click-Schutz).
+**Final-R1 V4-pro:** „Push freigegeben." 0 KP, 0 Findings.
+
+**V4-pro 12-Cycle-Bilanz:** 0 Halluzinationen, 100% verifizierbar.
+
+**Code:**
+- `config/settings.py` DEFAULTS: `tuner_present=True`, `tune_duration_s=15`
+- `ui/settings_dialog.py` Tab „FT8 & Diversity" Checkbox + ComboBox + Load + Save + Reset
+- `ui/main_window.py` Init `_swr_blocked_bands`/`_tune_in_progress` + Token-Pattern + 2 Toggle-Pre-Checks (OMNI + Auto-Hunt)
+- `ui/mw_tx.py:_on_swr_alarm` Lock-Release + Marker-Set + Watchdog-Bypass
+- `ui/mw_tx.py:_on_tune_clicked` + `_tune_stop` + `_tune_post_swr_check` 10W FEST, Dauer 15/30s, 2s-Beruhigungszeit
+- `ui/mw_radio.py:_check_diversity_preset` + `_start_dx_tuning` Marker-Pre-Check + ANT1 + Tuner=False-Skip + Auto-TUNE-Fehler-Lock-Release
+- `ui/mw_qso.py:_on_station_clicked` Pre-Check FIRST + `_on_tx_finished` Pending-Click-Schutz + `_on_cq_clicked` Pre-Check
+- `ui/control_panel.py:set_tuner_present` + Init-Flag
+- `main.py` APP_VERSION 0.97.36
+
+**11 atomare Commits.** Tests **1306 → 1327** (+21: 18 V3-AC-Tests + 3 Bonus
+Source-Level + 0 P53-Mock-Anpassungen + 1 OMNI-Mock-Fix).
+
+**Backup:** `Appsicherungen/2026-05-15_v0.97.35_vor_p63/`.
+
+**Field-Test F1-F10 pending** (siehe TESTPLAN_15.05.2026_p63.md). Push pending.
+
+---
+
+## ✅ 15.05.2026 erledigt — Display-3-Move für Remote-Starter (Mike-Wunsch 15.05.-10.06.2026)
+
+Memory `project_simpleft8_ferienhaus.md` aktualisiert: Display 2 → Display 3
+(Position (1024,0) → (2944,0)). osascript-Block im Memory zeigt jetzt
+Display 3 als Ziel. Bei erster Verwendung Mike prüfen lassen ob Position
+stimmt (Quartz-Check im Memory falls falsch).
+
+P63-Plan-Details (Spec, AC1-AC13, 15 Tests, 10 Field-Tests, LDG-Recherche)
+→ `prompts/p63_swr_block_marker_v[1,2,3].md` + `_r1.md` + `_final_r1.md`.
+
+---
+
+## ✅ 15.05.2026 erledigt — P62 Bandwechsel→Gain-Messung UX-Pause (1s) v0.97.35
+
+**Trigger:** Mike-Field-Test P60-F6 vormittags. DeepSeek-V4-pro hat P62
+für autonomen 30-Min-Slot ausgewählt.
+
+**Fix:** 1s `QTimer.singleShot` vor `_start_dx_tuning` in
+`_check_diversity_preset` stale/missing-Branch. Lock SOFORT + Statusbar.
+KALIBRIEREN-Button ohne Pause. Race-Schutz via `_gain_measure_locked`.
+
+**R1-V4-pro:** „Push freigegeben (V3-Phase OK)" 0 KP.
+**Final-R1 V4-pro:** „Push freigegeben." 0 KP.
+**V4-pro 11-Cycle-Bilanz:** 0 Halluzinationen.
+
+**5 atomare Commits.** Tests 1300 → **1306 grün** (+6 P62).
+**Backup:** `Appsicherungen/2026-05-15_v0.97.34_vor_p62/`.
+**Field-Test F1-F5 pending** (HANDOFF).
+
+---
 
 ## ✅ 15.05.2026 erledigt — P55 Easter-Egg + Diversity-CQ-Code-Leichen entfernt v0.97.30
 
@@ -297,6 +537,80 @@ sehen sofort „boah, der empfängt mit Regenrinne als zweite Antenne".
 
 ---
 
+## ✅ 15.05.2026 erledigt — P62 Bandwechsel→Gain-Messung UX-Pause (1s) v0.97.35
+
+**Trigger:** Mike-Field-Test P60-F6 vormittags: Bandwechsel auf neues
+Band ohne Preset → Gain-Mess-TUNE startet direkt nach TX-Stop → visuell
+„80W → 10W" statt „TX aus → neue Messung". Mike: „besprich das mit
+deepseek".
+
+**DeepSeek-V4-pro Auswahl:** P62 für autonomen 30-Min-Slot (niedriges
+Risiko, klare Spec).
+
+**Voller V1→V2→R1→V3-Workflow autonom mit DeepSeek-V4-pro.**
+
+**Fix:** `_check_diversity_preset` stale/missing-Branch:
+1. `_set_gain_measure_lock(True)` SOFORT (sperrt UI)
+2. Statusbar „TX gestoppt — Gain-Messung startet in 1s ..."
+3. `QTimer.singleShot(1000, lambda: _start_dx_tuning(...))`
+
+**Greift NUR bei Bandwechsel**, NICHT bei KALIBRIEREN-Button.
+
+**R1-V4-pro:** „Push freigegeben (V3-Phase OK)" — 0 KP.
+**Final-R1 V4-pro:** „Push freigegeben." 0 KP.
+**V4-pro 11-Cycle-Bilanz:** 0 Halluzinationen.
+
+**5 atomare Commits:**
+- C1 ui/mw_radio.py (Lock+Statusbar+QTimer)
+- C2 main.py APP_VERSION 0.97.35
+- C3 tests/test_p62_bandchange_ux.py NEU 6 Tests T1-T6
+- C4 tests/test_p1_cache_simple.py 2 alte Tests angepasst (QTimer-Mock)
+- C5 Doku
+
+**Tests:** 1300 → **1306 grün** (+6 P62).
+
+**Backup:** `Appsicherungen/2026-05-15_v0.97.34_vor_p62/`.
+
+**Field-Test F1-F5 pending** (HANDOFF).
+
+---
+
+## 🗄️ HISTORIE — P62: Bandwechsel→Gain-Messung UX-Übergang (ERLEDIGT v0.97.35)
+
+**Trigger:** Mike-Field-Test P60-F6 15.05. vormittags: Bandwechsel 30m→20m
+während Auto-Hunt-TX. Code bricht TX korrekt ab (`mw_radio._on_band_changed`
+ruft `encoder.abort() + ptt_off()`), aber direkt danach startet Gain-
+Messung mit TUNE = 10W. **Aus Funker-Sicht sieht das aus wie „80W → 10W"
+statt sauberes „TX aus → neue Messung".**
+
+Mike: „eigendlich wäre pause sinnvoll? keine ahnung 1 sekunde bis tx auf
+null ist anstatt von 80 auf 10 watt zu gehen? keine ahnung besprich das
+mit deepseek."
+
+**Mike-Vorschlag:** 1 Sekunde Pause zwischen TX-Stop und Gain-Mess-TUNE,
+damit visuell klar wird dass alter TX aus ist.
+
+**Code-Verifikation:** `ui/mw_radio.py:416-419` — `encoder.abort()` +
+`radio.ptt_off()` werden gerufen. Anschließend ruft `_enable_diversity()`
+die Gain-Mess-Pipeline an (TUNE 10W) sobald Mess-Bedingungen erfüllt
+(neues Band ohne Preset).
+
+**Aus Scope:** Bandwechsel-Stop-Logik selbst (funktioniert sauber).
+
+**Vorgehen:** Voller V1→V2→R1-V4-pro-Workflow.
+- V1: Optionen Pause-Zeit (1s/2s) oder visueller Indikator (Status-Toast
+  „TX gestoppt → Gain-Messung startet")
+- V2-Self-Review: Risiken (TX-Buffer-Latenz FlexRadio 1.3s, ist 1s
+  vielleicht zu kurz?)
+- R1-V4-pro: pro/contra Pause-Zeit, Alternative UX-Patterns, KISS-
+  Bewertung
+- V3 → Code → Final-R1
+
+**Priorität:** Niedrig (Field-Test nicht blockiert, Bandwechsel
+funktioniert sauber). Nach P61+P59 angehen.
+
+---
+
 ## 🆕 OFFEN — P56: Gain-Messung kollabieren auf pro-Band (Mike 15.05.2026 morgens, DeepSeek-V4-pro bestätigt Option A)
 
 **Trigger:** Mike-Beobachtung 15.05.: Wenn auf FT4/FT2 die Gain-Messung
@@ -368,7 +682,49 @@ auch leeren. SWR-Watchdog F3-1-Zeiler Konsistenz. 6 Commits. Tests
 
 ## 🗄️ HISTORIE — P60 (Mike-Field-Test 15.05.2026 morgens, ERLEDIGT v0.97.32)
 
-## 🔴 OFFEN — P61: Auto-Hunt nimmt gerade abgeschlossene Station SOFORT WIEDER (Mike-Field-Test 15.05.2026 morgens)
+## ✅ 15.05.2026 erledigt — P61 Auto-Hunt Recent-QSO-Cooldown v0.97.33
+
+**Trigger:** Mike-Field-Test 15.05. morgens (Screenshot): Auto-Hunt
+picked HA8RC 30s nach abgeschlossenem QSO → 89s verschwendetes 2. QSO
+→ Funkverkehr-Etikette-Verletzung.
+
+**Wurzel:** existierende `qso_log.is_worked_on_band`-Filterung versagte
+(Race Decoder/Encoder oder ADIF-Exception denkbar, nicht reproduzierbar).
+
+**Fix:** Belt-and-Suspenders Cooldown-Schicht direkt in `AutoHunt`:
+- Konstante `_RECENT_QSO_COOLDOWN_S=300` (5 Min)
+- Feld `_mode: str = "FT8"` + Methode `set_mode()`
+- Dict `_recent_qso: dict[(call,band,mode), float]`
+- Methode `mark_pick(call)` — setzt Cooldown SOFORT bei Pick
+- Filter in `select_next` VOR `_cooldown`-Check + Lazy-Cleanup
+- `on_qso_complete` ruft `mark_pick` (redundant für manuelle QSOs)
+- `mw_cycle._run_auto_hunt` ruft `mark_pick` NACH `select_next` BEVOR
+  `start_qso` (primärer Race-Schutz)
+- `mw_radio._on_mode_changed` + `main_window.__init__` → set_mode
+  verkabelt
+
+**R1-V4-pro:** 7 Findings, 5 angenommen + 2 begründet abgelehnt
+(F3 KISS-Vorschlag getrennt klarer, F7 ADIF-try/except gegen Mike-Spec).
+Halluzinations-Rate 0/7.
+
+**Final-R1 V4-pro:** „Push freigegeben." 0 KP.
+
+**5 atomare Commits:**
+- C1 core/auto_hunt.py (Konstante + Feld + Methoden + Filter)
+- C2 ui/mw_cycle.py (mark_pick vor start_qso)
+- C3 ui/mw_radio.py + ui/main_window.py (Mode-Verkabelung)
+- C4 tests/test_p61_autohunt_recent_qso.py NEU 10 Tests T1-T10
+- C5 main.py APP_VERSION + Backup + Doku
+
+**Tests:** 1279 → **1289 grün** (+10 P61).
+
+**Backup:** `Appsicherungen/2026-05-15_v0.97.32_vor_p61/`.
+
+**Field-Test F1-F7 pending** (HANDOFF).
+
+---
+
+## 🗄️ HISTORIE — P61: Auto-Hunt nimmt gerade abgeschlossene Station SOFORT WIEDER (ERLEDIGT v0.97.33)
 
 **Trigger:** Mike-Field-Test mit Auto-Hunt 15.05. zeigte: nach
 erfolgreichem QSO + Courtesy-73 wird DIESELBE Station sofort wieder
@@ -477,7 +833,45 @@ Eingriff über 3 Stellen, Audit nötig).
 
 ---
 
-## 🆕 OFFEN — P59: CQ-Button visuelle Konsistenz Normal vs. Diversity (Mike 15.05.2026 morgens)
+## ✅ 15.05.2026 erledigt — Bundle K (P57 SWR-Combo + P59 CQ-Button-Grün) v0.97.34
+
+**Trigger:** Mike-Field-Test 15.05. morgens, 2 UI-Tweaks als gemeinsames
+Bundle:
+- P57: SWR-Limit nur 0.5-Schritte (verhindert 1.7-Eingabe per Tastatur)
+- P59: CQ-Button (+ Auto-Hunt) aktiv = grün analog OMNI (Konsistenz)
+
+**Voller V1→V2→R1-V3-Workflow autonom mit DeepSeek-V4-pro.**
+
+**R1-V4-pro:** „Push freigegeben (V3-Phase OK)" — **0 Findings**.
+
+**Code:**
+- `ui/settings_dialog.py`: `_SWR_VALUES` Liste + `_swr_value_to_index`
+  Helper (Snap nächst-höher) + `QComboBox` mit 8 Werten 1.5..5.0 +
+  Load mit Snap-print + Save `currentData()` + Reset `setCurrentIndex(3)`
+- `ui/control_panel.py`: `_mode_btn_style` Active von rot/gelb auf grün
+  analog `_omni_btn_style` (wirkt auf btn_cq + btn_auto_hunt)
+
+**Hardware:** ANT1-Pflicht unverändert. Keine TX-Logik berührt.
+
+**Final-R1 V4-pro:** „Push freigegeben." 0 KP. Optionale None-Edge-Test-
+Lücke akzeptiert (Config-Default 3.0 schützt).
+
+**5 atomare Commits:**
+- C1 ui/settings_dialog.py (SWR-Combo)
+- C2 ui/control_panel.py (Active-Style grün)
+- C3 main.py APP_VERSION 0.97.34
+- C4 tests/test_bundle_k.py NEU 11 Tests
+- C5 Doku
+
+**Tests:** 1289 → **1300 grün** (+11 Bundle K).
+
+**Backup:** `Appsicherungen/2026-05-15_v0.97.33_vor_bundle_k/`.
+
+**Field-Test F1-F6 pending** (HANDOFF).
+
+---
+
+## 🗄️ HISTORIE — P59: CQ-Button visuelle Konsistenz Normal vs. Diversity (ERLEDIGT als Bundle K v0.97.34)
 
 **Trigger:** Mike-Field-Test P55: btn_cq in Normal wechselt zu „CQ AKTIV ■"
 korrekt — aber bleibt visuell rot/standard. OMNI CQ in Diversity wird grün
@@ -543,7 +937,7 @@ Oder `parent.radio.ip` ist None obwohl Radio verbunden.
 
 ---
 
-## 🆕 OFFEN — P57: SWR-Limit auf feste 0.5-Schritte begrenzen (Mike 15.05.2026 morgens)
+## 🗄️ HISTORIE — P57: SWR-Limit auf feste 0.5-Schritte begrenzen (ERLEDIGT als Bundle K v0.97.34)
 
 **Trigger:** Mike-Test 15.05. P53-SWR-Watchdog: wollte 1.2 als Limit
 testen → wird im FlexRadio-Setter auf 1.5 geclampt (P53). UI erlaubt
@@ -745,7 +1139,27 @@ TX-Block-Integration. Workflow Pflicht.
 
 ---
 
-## 🆕 OFFEN — Intent-Klausel im App-Start-Bestätigungsdialog erweitern (klein, Mike 14.05.2026 nachmittags)
+## ✅ 15.05.2026 erledigt — Intent-Klausel im App-Start-Disclaimer v0.97.37
+
+Mike-Vorbereitung für eventuelle GitHub-Veröffentlichung. Disclaimer-Text
+im Hardware-Warnungs-Dialog (`main.py:_show_hardware_warning`) erweitert
+um DA1MHH-Bastel-Tool-Intent + MIT-Lizenz + Funklizenz-Verstöße als
+Haftungs-Ausschluss. Höhe 540×340 → **540×400** (R1-V4-pro-F2 HiDPI-Puffer).
+
+**Voller V1→V2→R1→V3-Workflow** trotz Trivial-Patch. R1 3 Findings, alle
+übernommen (Wortlaut tragfähig, Höhe 400 statt 380, KISS in main.py).
+Final-R1 V4-pro: „Push-Freigabe: Ja." 0 KP. **V4-pro 13-Cycle-Bilanz:**
+0 Halluzinationen.
+
+**Code:** 6 Zeilen Diff in `main.py` + APP_VERSION 0.97.36→0.97.37.
+**Tests:** 1327→**1332** (+5: T1-T4 + Bonus, 1 Bundle-J-Test angepasst).
+**Plan-Files:** prompts/intent_klausel_v[1,2,3].md + _r1.md + _final_r1.md.
+
+Push pending bis Mike App-Start visuell bestätigt (kein Radio nötig).
+
+---
+
+## 🗄️ HISTORIE — Intent-Klausel-Spec (Mike 14.05.2026 nachmittags, ERLEDIGT)
 
 **Trigger:** Mike-Sorge bei eventueller Veröffentlichung — Belt-and-
 suspenders zur MIT-Lizenz: Intent-Klausel im bestehenden

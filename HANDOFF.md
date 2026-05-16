@@ -1,43 +1,181 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-15 vormittags — P60 (User-Stop-Pfade Slot-Abbruch + Click-Puffer) Code fertig + Final-R1 ✓, Field-Test pending
+## Stand 2026-05-16 — P66 Logbuch-Tab-Auto-Show + READMEs aktualisiert
 
-**Aktueller Code-Stand:** v0.97.32 (P60), Tests **1279 grün**.
+**Aktueller Code-Stand:** v0.97.42 (P66), Tests **1352 grün**.
 
-### 🔴 P60 Field-Test pending
-
-**P60 (v0.97.32) — Toggle-Stop bricht TX sofort ab:**
+### 🔵 v0.97.42 P66 — Logbuch-Auto-Show + READMEs (visueller Check, kein Radio)
 
 | F# | Was prüfen |
 |---|---|
-| **F1** | OMNI CQ aktiv, während TX-Slot (3-5s nach Start) erneut klicken → TX bricht SOFORT ab (RF-Meter fällt sofort, kein Slot-Ende abgewartet) |
-| **F2** | Auto-Hunt aktiv, während Hunt-TX erneut klicken → SOFORT ab |
-| **F3** | Normal-CQ aktiv, während CQ-TX erneut klicken → SOFORT ab |
-| **F4** | HALT-Button regression — drückt während TX → alle Modi gestoppt (Helper-Refactor) |
-| **F5** | SWR-Watchdog künstlich auslösen → Modal kommt, alle Stops greifen (Regression P53) |
-| **F6** | Bandwechsel während TX → TX bricht ab (Regression Bundle I) |
+| **F1** | Logbuch-Tab → Zeile auswählen → wechsel zu QSO → ControlPanel rechts ✓ |
+| **F2** | Zurück zu Logbuch-Tab → Detail-Overlay erscheint automatisch ✓ |
+| **F3** | Logbuch-Tab ohne Selektion → ControlPanel bleibt rechts |
+| **F4** | Klick auf Logbuch-Zeile direkt → Detail wie immer (Regression) |
 
-### 🟡 Offene Bugs aus heutiger Session (verbleibend)
+**Plus auf GitHub:**
+- README-Korrektur ANT1/ANT2-TX-Sicherheit (DE+EN)
+- Stats-Zahlen aktualisiert (40m 27.200 Zyklen/+126%, 20m 19.936/-6%, 30m vorläufig)
+- Diagramme + PDFs (DE+EN) neu generiert
+
+### 🔵 v0.97.41 P52 — Stats-Toggle entfernt + Auto-Cleanup (visueller Check, kein Radio)
+
+Settings-Toggle „Statistik-Erfassung aktivieren" macht keinen Sinn weil
+Bandpilot + Auswertungen Stats zwingend brauchen. Plus Auto-Cleanup
+gegen unbegrenztes Wachsen.
+
+| F# | Was prüfen |
+|---|---|
+| **F1** | Settings → kein „Statistik-Erfassung aktivieren"-Checkbox mehr |
+| **F2** | Statusbar „Statistik"-Indikator immer sichtbar (grau wenn pausiert, grün wenn loggt) |
+| **F3** | Alte Config mit `stats_enabled=false` → App startet ohne Fehler |
+| **F4** | Konsolen-Output beim Start: `[Stats-Cleanup] N Dateien >90 Tage geloescht` (oder still) |
+
+### 🔵 v0.97.40 Bundle-L-Revert — Bypass-Button (visueller Check, kein Radio)
+
+Mike-Klärung 16.05.2026: Bundle L Punkt B hatte beide Buttons auf quit()
+gesetzt = UX-Logik-Bug. Revert: „ohne Radio weiter" macht jetzt wieder
+Demo-Modus, „Beenden" bleibt der einzige Quit-Pfad.
+
+| F# | Was prüfen |
+|---|---|
+| **F1** | App ohne Radio starten → „ohne Radio weiter" klicken → Dialog weg, **Hauptfenster sichtbar**, App läuft weiter (Statusbar „RADIO: getrennt") |
+| **F2** | App ohne Radio starten → „Beenden" klicken → App schließt sauber, **kein SIGBUS** (Hotfix v0.97.39 weiter aktiv) |
+
+### 🔵 v0.97.38 Bundle L Punkt A — Display-3-Auto-Move (visueller Check)
+
+Bleibt unverändert:
+- App starten → Hauptfenster landet **automatisch auf Display 3**
+  (Position 2944,0). Defensive-Check: falls Display 3 nicht angeschlossen,
+  bleibt Fenster auf Main-Display (Print-Hinweis im Terminal).
+
+⛔ Revert nach 10.06.2026 — Code hat Kommentare mit Datum.
+
+### 🔵 v0.97.37 Intent-Klausel — Disclaimer-Text-Patch (visueller Check)
+
+Mike-Quick-Check bei nächstem App-Start (kein Radio nötig):
+- App starten → Hardware-Sicherheitshinweis-Dialog kommt
+- **Neuer Text:** „Dieses Projekt entstand als persönliches Bastel-Tool
+  für meinen eigenen Funkbetrieb (DA1MHH). Der Quellcode steht unter
+  MIT-Lizenz..." + Funklizenz-Verstöße + ANT1/ANT2
+- Höhe 540×400 (war 540×340) — Text muss komplett lesbar sein, nicht
+  abgeschnitten
+
+Wenn OK → push-bereit.
+
+### 🔴 P63 Field-Test pending — SWR-Block per Band-Marker + Tuner-Settings + Lock-Release
+
+**P63 (v0.97.36) — Mike-17m-Bug behoben + neue Settings:**
+
+| F# | Was prüfen |
+|---|---|
+| **F1** | 17m-Band: SWR-Alarm während TX → Modal „Band gesperrt — bitte TUNE", OK-Button klar |
+| **F2** | Nach Modal: TUNE-Button **KLICKBAR**, OMNI / Auto-Hunt / Normal-CQ alle **BLOCKIERT** mit Info-Eintrag im QSO-Panel |
+| **F3** | Manueller TUNE 15s mit 10W läuft durch, Auto-Stop nach 15s, „TUNE beendet — prüfe SWR (2 s) ..." sichtbar |
+| **F4** | TUNE-Erfolg auf 17m → Marker grün („✓ Band 17M freigegeben"), Gain-Mess startet automatisch (P62-1s-Pause) |
+| **F5** | TUNE-Misserfolg (SWR weiter > Limit) → Modal „Tuner konnte nicht matchen", Marker bleibt rot |
+| **F6** | Settings → „Antennen-Tuner verwenden" deaktivieren → TUNE-Button **hidden**, Gain-Mess ohne Auto-TUNE |
+| **F7** | Settings „Tuner=NEIN": SWR-Alarm → Modal „Antenne prüfen" + Stop, **KEIN** Marker |
+| **F8** | Settings „TUNE-Dauer 30s": manueller TUNE läuft 30s statt 15s |
+| **F9** | 17m rot, Wechsel auf 20m → läuft normal (Marker ist pro Band) |
+| **F10** | App-Neustart → alle Marker weg (in-memory) |
+
+### 📋 P63 Test-Plan zum Durchgehen mit Mike
+
+Siehe `TESTPLAN_15.05.2026_p63.md` mit Schritt-für-Schritt-Anleitung.
+
+### ✅ Vorgänger v0.97.35 P62 — Field-Test pending
+
+**P62 (v0.97.35) — 1s Pause zwischen TX-Stop und Gain-Mess-TUNE:**
+
+| F# | Was prüfen |
+|---|---|
+| **F1** | Diversity-Modus aktiv, Bandwechsel auf **NEUES Band ohne Preset** → 1s Pause „TX gestoppt — Gain-Messung startet in 1s ..." in der Statusbar sichtbar, DANN startet TUNE |
+| **F2** | Bandwechsel auf Band **MIT Gain-Preset** → KEINE Pause (Diversity startet sofort) |
+| **F3** | KALIBRIEREN-Button im Settings-Dialog → KEINE Pause (User-Action, direkt TUNE) |
+| **F4** | Während der 1s Pause: RF-Meter geht von 80W auf 0W (sichtbarer Nulldurchgang) bevor TUNE auf 10W springt |
+| **F5** | Während der 1s Pause: alle Buttons gesperrt (User kann nichts triggern) |
+
+### ✅ Bundle K (P57+P59) Field-Test ✓ 15.05.2026 mittags
+
+### ✅ Bundle K (P57+P59) Field-Test ✓ 15.05.2026 mittags
+
+| F# | Was geprüft | Status |
+|---|---|---|
+| F1 | Settings → SWR-Dropdown 1.5..5.0 | ✓ |
+| F2 | SWR-Wert persistiert nach App-Neustart | ✓ |
+| F3 | Reset → 3.0 | nicht explizit getestet (trivial Default-Snap) |
+| F4 | Normal-CQ aktiv = GRÜN | ✓ |
+| F5 | OMNI grün (Regression) | ✓ implizit (heutige OMNI-Nutzung) |
+| F6 | Auto-Hunt aktiv = GRÜN | ✓ |
+
+Bundle K **abgenommen** — push-bereit nach P61-Field-Test.
+
+### ✅ P61 Field-Test ✓ 15.05.2026 mittags — Recent-QSO-Cooldown
+
+| F# | Was geprüft | Status |
+|---|---|---|
+| F1 | Auto-Hunt picked andere Station nach QSO | **✓** (Mike: „autohunt ruft andere station, vorherige qso wurde korrekt abgearbeitet") |
+| F2-F7 | Detail-Coverage (Cooldown-Dauer/Band/Mode/Manuell/Regressions) | nicht explizit getestet — Kern-Bug-Fix mit F1 bewiesen |
+
+P61 **abgenommen** — push-bereit.
+
+### ✅ P60 Field-Test ✓ KOMPLETT 15.05.2026 vormittags
+
+| F# | Was geprüft | Status |
+|---|---|---|
+| F1 | OMNI-Stop während TX → SOFORT ab | ✓ |
+| F2 | Auto-Hunt-Stop während TX → SOFORT ab | ✓ |
+| F3 | Normal-CQ-Stop während TX → SOFORT ab | ✓ |
+| F4 | HALT während TX → alle Modi sofort gestoppt | ✓ |
+| F5 | SWR-Watchdog-Regression (implizit, keine SWR-Spikes) | ✓ |
+| F6 | Bandwechsel während TX → TX bricht ab | ✓ |
+
+**Beobachtung F6:** Bei NEUEM Band (ohne Preset) wirkt der Übergang
+visuell wie „80W → 10W TUNE" statt „TX aus → Messung". Mike: „1s Pause
+sinnvoll?" → **P62 (UX-Übergang)** in TODO eingetragen.
+
+### 🟡 Verbleibende Bugs (priorisiert, P57+P59 in Bundle K, P62 in v0.97.35)
 
 | # | Was | Status |
 |---|---|---|
-| P59 | CQ-Button visuelle Konsistenz Normal vs. Diversity | TODO |
-| P61 | Auto-Hunt nimmt gerade abgeschlossene Station SOFORT WIEDER | TODO — wichtig |
-| P57 | SWR-Limit 0.5-Schritte (UI-Combo) | TODO klein |
+| P56 | Gain-Messung kollabieren auf pro-Band | TODO (Option A bestätigt) |
+| P52 | Statistik-Toggle raus + 90-Tage-Rolling | TODO |
+| P54 | Auto-Tune bei Bandwechsel (Settings-Toggle) | TODO |
+
+### ✅ P60 Field-Test ✓ KOMPLETT 15.05.2026 vormittags
+
+| F# | Was geprüft | Status |
+|---|---|---|
+| F1 | OMNI-Stop während TX → SOFORT ab | ✓ |
+| F2 | Auto-Hunt-Stop während TX → SOFORT ab | ✓ |
+| F3 | Normal-CQ-Stop während TX → SOFORT ab | ✓ |
+| F4 | HALT während TX → alle Modi sofort gestoppt | ✓ |
+| F5 | SWR-Watchdog-Regression (implizit, keine SWR-Spikes) | ✓ |
+| F6 | Bandwechsel während TX → TX bricht ab | ✓ |
+
+**Beobachtung F6:** Bei NEUEM Band (ohne Preset) wirkt der Übergang
+visuell wie „80W → 10W TUNE" statt „TX aus → Messung". Mike: „1s Pause
+sinnvoll?" → **P62 (UX-Übergang)** in TODO eingetragen.
 
 ### 📦 Vorgänger pending Field-Tests
 
-- P58 v0.97.31 — Mike heute schon getestet ✓ (Save-Hook live)
-- P55 v0.97.30 — alle F1-F8 ✓ heute
+- P58 v0.97.31 — Mike schon getestet ✓ (Save-Hook live)
+- P55 v0.97.30 — alle F1-F8 ✓
 - P53 v0.97.29 — F1+F2 ✓, F3-F7 im Alltag bestätigt
-- ältere Bundles per Alltagsbetrieb gesehen (Auto-Hunt, OMNI, Mode-Wechsel etc.)
+- ältere Bundles per Alltagsbetrieb gesehen (OMNI, Mode-Wechsel etc.)
 
-### 🚀 Beim nächsten Session-Start
+### 🚀 Wenn Mike wieder da ist
 
-1. Standard Lese-Reihenfolge (Phase 1)
-2. P60 Field-Test F1-F6 mit Mike
-3. Dann P61 (Auto-Hunt-Dup, wichtigster Rest-Bug)
-4. Push wenn alle Field-Tests ✓
+1. **App neu starten** mit v0.97.34:
+   ```
+   cd "/Users/mikehammerer/Documents/KI N8N Projekte/FT8/SimpleFT8" && ./venv/bin/python3 main.py
+   ```
+2. **Bundle K Field-Test F1-F6** (UI-Sichtkontrolle, ~2 Min):
+   SWR-Dropdown, Reset, CQ-Button-Grün, OMNI-Grün, Auto-Hunt-Grün
+3. **P61 Field-Test F1-F7** (Recent-QSO-Cooldown im Funkbetrieb)
+4. Bei ✓ alle Field-Tests → Push freigegeben
+5. Verbleibende Bugs P56/P62/P52/P54 als nächste Workflow-Cycles
 
 ---
 

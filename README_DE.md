@@ -49,19 +49,26 @@ SimpleFT8 kann mit einer oder zwei Antennen empfangen. Du hast drei Modi zur Aus
 
 ### Praxis-Ergebnisse
 
-**40m FT8 (Off-Band ANT1)** — Live-Auswertung 4 Messtage, 22.696 Zyklen:
-
-| Modus | vs Normal (ohne Rescue) | vs Normal (inkl. Rescue) |
-|-------|:---:|:---:|
-| **Diversity Standard** | **+88%** | **+122%** |
-| **Diversity DX** | **+124%** | **+158%** |
-
-**20m FT8 (Resonant ANT1)** — Live-Auswertung 5–7 Messtage, 13.348 Zyklen:
+**40m FT8 (Off-Band ANT1)** — Live-Auswertung 8–9 Messtage, 27.200 Zyklen:
 
 | Modus | vs Normal (Pooled Mean) |
 |-------|:---:|
-| Diversity Standard | **−18%** |
-| Diversity DX | **−22%** |
+| **Diversity Standard** | **+126%** |
+| **Diversity DX** | **+123%** |
+
+**20m FT8 (Resonant ANT1)** — Live-Auswertung 7–9 Messtage, 19.936 Zyklen:
+
+| Modus | vs Normal (Pooled Mean) |
+|-------|:---:|
+| Diversity Standard | **−6%** |
+| Diversity DX | **−8%** |
+
+**30m FT8 (Off-Band ANT1, vorläufig)** — Live-Auswertung 1–3 Messtage:
+
+| Modus | vs Normal (Pooled Mean) |
+|-------|:---:|
+| Diversity Standard | **+69%** |
+| Diversity DX | **+59%** (vorläufig) |
 
 > **Diversity ist asymmetrisch je nach Antennen-Setup.** Auf 40m (ANT1 off-band)
 > gleicht ANT2 die schwache ANT1 aus → großer Stations-Gewinn. Auf 20m (ANT1
@@ -190,12 +197,15 @@ Ping-Pong gibt.
   Beweis dass die App nicht auf einem festen Verhältnis sitzt sondern jede
   Station einzeln bewertet.
 
-- **② TX nutzt aktiv die bessere Antenne** — wenn ein QSO mit einer Station
-  startet, schaltet der TX automatisch auf die Antenne mit dem besseren
-  Empfang (hier: `(ANT2 ↑2.0 dB)` für IK4LZH). TX läuft immer über die
-  HF-taugliche Antenne (ANT1 auf dem SimpleFT8-Demosetup); bei Anlagen mit
-  zwei sendetauglichen Antennen wird für die Dauer des QSO die bessere
-  gewählt.
+- **② RX nutzt aktiv die bessere Antenne pro Station** — wenn ein QSO
+  mit einer Station startet, schaltet der **Empfang** auf die Antenne
+  mit dem besseren Signal (hier: `(ANT2 ↑2.0 dB)` für IK4LZH) damit die
+  Gegenstation während des ganzen QSO optimal gehört wird.
+  **TX läuft IMMER über ANT1** — die einzige sendetaugliche Antenne im
+  SimpleFT8-Setup. ANT2 (Regenrinne) ist nur für Empfang und würde bei
+  TX mit 100 W Hardware-Schaden riskieren. Auf Anlagen mit zwei
+  sendetauglichen Antennen liesse sich das anpassen, aber SimpleFT8
+  erzwingt TX = ANT1 hartcodiert.
 
 Das Antennen-Gedächtnis hat keinen Timeout und keine Persistierung — eine
 Station die *jetzt gerade* hörbar ist liefert immer den präzisesten Wert.
