@@ -1,4 +1,4 @@
-# SimpleFT8 TODO — Stand 16.05.2026 (v0.97.44, P54 ERLEDIGT)
+# SimpleFT8 TODO — Stand 17.05.2026 (v0.97.45, P54-FIX ERLEDIGT)
 
 ---
 

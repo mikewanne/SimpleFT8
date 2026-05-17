@@ -332,10 +332,18 @@ class SettingsDialog(QDialog):
         self.tune_duration_combo.addItem("15 s", 15)
         self.tune_duration_combo.addItem("30 s", 30)
         self.tune_duration_combo.setToolTip(
-            "Maximale Dauer eines manuellen TUNE-Vorgangs.\n"
+            "Maximale Dauer eines TUNE-Vorgangs (manuell + Auto-Tune).\n"
             "LDG AT-200 Pro schafft Full-Tune typisch in <15s,\n"
             "30s als Reserve für sehr unkonstante Antennen.")
-        form.addRow("TUNE-Dauer (manuell):", self.tune_duration_combo)
+        form.addRow("TUNE-Dauer:", self.tune_duration_combo)
+
+        # P54 (v0.97.44): Auto-Tune bei Bandwechsel
+        self.auto_tune_band_cb = QCheckBox("Auto-TUNE bei Bandwechsel")
+        self.auto_tune_band_cb.setToolTip(
+            "Nach jedem Bandwechsel automatisch TUNE durchfuehren\n"
+            "(10 W auf ANT1, Dauer wie oben).\n"
+            "Speichert RF-Stuetzpunkt fuer schnellere TX-Power-Konvergenz.")
+        form.addRow("", self.auto_tune_band_cb)
 
         # ── v0.88 Bandpilot — Stunden-Logik ──────────────────────────
         self.bandpilot_mode_combo = QComboBox()
@@ -596,6 +604,9 @@ class SettingsDialog(QDialog):
         self.tuner_present_cb.setChecked(self.settings.get("tuner_present", True))
         _dur = self.settings.get("tune_duration_s", 15)
         self.tune_duration_combo.setCurrentIndex(0 if _dur == 15 else 1)
+        # P54 (v0.97.44): Auto-Tune bei Bandwechsel
+        self.auto_tune_band_cb.setChecked(
+            self.settings.get("auto_tune_on_band_change", True))
         # P3 v0.95.20: Audio-Dump
         self.audio_dump_cb.setChecked(self.settings.get("audio_dump_enabled", False))
         self.audio_dump_max_spin.setValue(self.settings.get("audio_dump_max_files", 200))
@@ -752,6 +763,9 @@ class SettingsDialog(QDialog):
         # P63 (v0.97.36): Tuner-Settings
         self.settings.set("tuner_present", self.tuner_present_cb.isChecked())
         self.settings.set("tune_duration_s", self.tune_duration_combo.currentData())
+        # P54 (v0.97.44): Auto-Tune bei Bandwechsel
+        self.settings.set("auto_tune_on_band_change",
+                          self.auto_tune_band_cb.isChecked())
         self.settings.save()
         self.accept()
 
@@ -797,6 +811,8 @@ class SettingsDialog(QDialog):
         # P63 (v0.97.36): Tuner-Settings Defaults
         self.tuner_present_cb.setChecked(True)
         self.tune_duration_combo.setCurrentIndex(0)  # 15 s
+        # P54 (v0.97.44): Auto-Tune bei Bandwechsel Default
+        self.auto_tune_band_cb.setChecked(True)
 
     def _on_map_open_clicked(self):
         """Richtungs-Karte oeffnen. Default-Modus aus Settings (rx/tx)."""

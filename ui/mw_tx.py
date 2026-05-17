@@ -42,6 +42,11 @@ class TXMixin:
     def _apply_rf_preset(self):
         """Lädt RF-Preset für aktuelle (radio, band, watts) — None → Settings-Default.
         Setzt _rfpower_converged + _was_converged zurück (neuer Konvergenz-Zyklus).
+
+        P54-FIX (v0.97.45): wenn rf_preset_store.load None returnt (kein
+        exakter Treffer und nicht interpolierbar), versuche
+        _kruecken_skalierung (linear vom 10W-Anker mit -10% Sicherheit).
+        Erst wenn Krücke auch None gibt, fällt auf Settings-Default zurück.
         """
         if self.radio is None:
             self._rfpower_current = 50
@@ -58,7 +63,14 @@ class TXMixin:
             self._rfpower_current = saved
             print(f"[RF-Preset] geladen: {band}_{watts}W → rf={saved}")
         else:
-            self._rfpower_current = self.settings.get_tx_power(band, default=50)
+            # P54-FIX AC5: Krücken-Skalierung wenn genau 1 Stützpunkt vorhanden
+            krucke = self._kruecken_skalierung(band, watts)
+            if krucke is not None:
+                self._rfpower_current = krucke
+            else:
+                self._rfpower_current = self.settings.get_tx_power(band, default=50)
+                print(f"[RF-Preset] Default: {band}_{watts}W → "
+                      f"rf={self._rfpower_current}")
         self._rfpower_converged = False
         self._was_converged = False
 
@@ -87,6 +99,8 @@ class TXMixin:
 
             # P63 AC4: Watchdog-Bypass VOR tune_on
             self._tune_in_progress = True
+            # P54-FIX R1-F2: Cancel-Flag reset vor Phase A (sauberer State)
+            self._tune_convergence_cancelled = False
 
             # Tune-Frequenz aus TUNE_FREQS-Map (band+mode)
             tune_freq = get_tune_freq_mhz(self.settings.band, self.settings.mode)
@@ -131,13 +145,45 @@ class TXMixin:
         - Sonst: tune_off + VFO+Power-Zurück + 2s-Timer für SWR-Check.
           Watchdog bleibt 2s bypassed (Beruhigungszeit gegen Pre-PTT-
           Glitches).
+
+        P54-FIX (v0.97.45): Vor `tune_off` läuft Phase B (Closed-Loop-
+        Convergenz bis FWDPWR ≈ 10W). R1-F6: SWR-Check VOR Phase B — wenn
+        Tuner nicht gematcht hat (SWR > Limit), Phase B skippen, kein Save.
+        Bei token=None (User-Cancel) Phase B komplett skippen.
         """
         if token is not None and getattr(self, '_tune_auto_stop_token', None) is not token:
             return  # neuer TUNE-Click hat Token gewechselt
         if not self._tune_active:
             return  # schon manuell gestoppt
 
+        # P54-FIX Final-R1-ROT: Re-Entry-Sperre. Phase B nutzt
+        # _wait_with_event_loop (Qt-Sub-Event-Loop) → User-Cancel-Click
+        # waehrend Convergenz wuerde _tune_stop(None) erneut aufrufen.
+        # Ohne Sperre: doppelte tune_off + set_frequency + set_power
+        # → Radio-State-Korruption.
+        if getattr(self, '_tune_stop_active', False):
+            # Cancel waehrend laufendem _tune_stop → nur Convergenz abbrechen
+            self._tune_convergence_cancelled = True
+            return
+        self._tune_stop_active = True
+
         from PySide6.QtCore import QTimer
+
+        # P54-FIX AC3: Phase B (Closed-Loop-Convergenz) VOR tune_off.
+        # Nur wenn token nicht None (kein User-Cancel) UND SWR OK.
+        if token is not None and self.radio.ip:
+            swr_after_match = self.radio.last_swr
+            swr_limit = self.settings.get("swr_limit", 3.0)
+            if swr_after_match <= swr_limit:
+                # Phase B: bis FWDPWR ≈ 10W konvergieren
+                self._tune_converged_rf = self._tune_converge_to_target(target_w=10)
+            else:
+                print(f"[P54-FIX] Phase B SKIP — SWR {swr_after_match:.1f} "
+                      f"> Limit {swr_limit:.1f}")
+                self._tune_converged_rf = None
+        else:
+            # User-Cancel: keine Convergenz, _tune_converged_rf bleibt None
+            self._tune_converged_rf = None
 
         # tune_off + VFO+Power zurück
         self.radio.tune_off()
@@ -160,6 +206,9 @@ class TXMixin:
             2000,
             lambda: self._tune_post_swr_check(_post))
 
+        # P54-FIX Final-R1-ROT: Re-Entry-Sperre freigeben (Stop-Pfad fertig)
+        self._tune_stop_active = False
+
     def _tune_post_swr_check(self, token):
         """P63 (v0.97.36) AC6/AC7 + R1-F1: 2s nach tune_off SWR auswerten.
 
@@ -168,6 +217,16 @@ class TXMixin:
 
         Watchdog wird hier wieder scharf gestellt (`_tune_in_progress=False`).
         Token-Pattern schützt vor Race bei schnellem Re-Tune.
+
+        P54 (v0.97.44):
+        - P54b: Bei SWR-Good wird RFPreset-Stuetzpunkt
+          `(band, watt=10, rf=10)` gespeichert wenn FWDPWR-avg plausibel
+          (2.0 < avg < 80.0). Speichert in beiden Pfaden (manuell + Auto).
+        - R1-F2: Im Auto-Tune-Mode (_auto_tune_running) wird statt
+          QMessageBox das Signal `auto_tune_done(success, swr, avg)` an
+          den AutoTuneDialog emittiert.
+        - R1-F3: Diversity-Resume nur im manuellen Pfad — beim Auto-Tune-
+          Pfad uebernimmt _on_band_changed das selbst.
         """
         if getattr(self, '_tune_post_check_token', None) is not token:
             return  # neuer TUNE-Click hat Token rotiert
@@ -175,38 +234,277 @@ class TXMixin:
         # Watchdog wieder scharf
         self._tune_in_progress = False
 
+        # Auto-Tune-Pfad merken bevor wir radio.ip pruefen (Dialog soll
+        # auch bei Verbindungsverlust ein sauberes Signal sehen).
+        is_auto = self._auto_tune_running
+        dlg = self._auto_tune_dialog
+
         if not self.radio.ip:
+            if is_auto and dlg is not None:
+                dlg.auto_tune_done.emit(False, 0.0, 0.0)
             return
 
         swr_now = self.radio.last_swr
         swr_limit = self.settings.get("swr_limit", 3.0)
         band = self.settings.band.upper()
 
+        # P54b: FWDPWR-Snapshot (auch wenn SWR-bad, nur Logging)
+        samples = list(self._fwdpwr_samples)
+        self._fwdpwr_samples.clear()
+        avg_fwdpwr = (sum(samples) / len(samples)) if samples else 0.0
+
         from PySide6.QtWidgets import QMessageBox
 
         if swr_now <= swr_limit:
             was_blocked = band in self._swr_blocked_bands
             self._swr_blocked_bands.discard(band)
+
+            # P54b (R1-F1): RFPreset-Stuetzpunkt unter nominaler Last (10 W,
+            # rf=10) speichern wenn Messwert plausibel. Schluessel ist die
+            # **nominale TUNE-Leistung** (10), nicht round(avg_fwdpwr) —
+            # sonst landet der Stuetzpunkt unter willkuerlichen Watt-Zahlen.
+            # P54-FIX (v0.97.45): konvergierter Wert statt hart rf=10.
+            # _tune_converged_rf wird in _tune_converge_to_target gesetzt
+            # (None bei Fail/Cancel/kein Signal/Phase-B-Skip).
+            rf_to_save = (self._tune_converged_rf
+                          if self._tune_converged_rf is not None else 10)
+
+            # R1-F5 ORANGE: Plausibilitäts-Check rf ∈ [3, 50] für 10W-Ziel.
+            # Werte ausserhalb dieses Bereichs sind physikalisch unrealistisch
+            # (Hardware-Anomalie oder Mess-Fehler) — KEIN Save dann.
+            if 3 <= rf_to_save <= 50:
+                self.rf_preset_store.save(
+                    self.radio.radio_type, self.settings.band, 10, rf_to_save
+                )
+                print(f"[P54-FIX] RFPreset gespeichert: "
+                      f"{self.settings.band}_10W → rf={rf_to_save} "
+                      f"(SWR {swr_now:.1f}, FWDPWR avg {avg_fwdpwr:.1f}W)")
+                # V2-F1: aktualisierten Stuetzpunkt sofort fuer Convergenz
+                # nutzen — _apply_rf_preset laedt aus Store.
+                self._apply_rf_preset()
+                # Final-R1 ROT-Fix (P54): Hardware-State mit _rfpower_current
+                # synchronisieren. Sonst divergieren intern (10) und
+                # Radio (power_preset aus _tune_stop) → naechster
+                # _auto_adjust_tx_level-Zyklus regelt falsch → Power-Spike.
+                if self.radio.ip:
+                    self.radio.set_power(self._rfpower_current)
+            else:
+                print(f"[P54-FIX] Stuetzpunkt verworfen: rf={rf_to_save} "
+                      f"out of [3..50] — Hardware-Anomalie (FWDPWR avg "
+                      f"{avg_fwdpwr:.1f}W)")
+
+            # Reset Convergenz-State fuer naechsten TUNE
+            self._tune_converged_rf = None
+
             if was_blocked:
                 self.qso_panel.add_info(
                     f"✓ Band {band} freigegeben — SWR {swr_now:.1f}")
                 print(f"[P63] Marker freigegeben — {band} SWR {swr_now:.1f}")
-                # AC6: Diversity automatisch fortsetzen (P62-Pause greift dann)
-                if self._rx_mode == "diversity":
+                # R1-F3: Diversity-Resume NUR im manuellen Pfad —
+                # _on_band_changed laeuft nach Auto-Tune sowieso weiter
+                # und ruft _check_diversity_preset selbst.
+                if not is_auto and self._rx_mode == "diversity":
                     scoring = getattr(self._diversity_ctrl, 'scoring_mode', 'normal')
                     ft_mode = self.settings.mode
                     self._check_diversity_preset(self.settings.band, ft_mode, scoring)
             else:
                 self.qso_panel.add_info(f"✓ TUNE OK — SWR {swr_now:.1f}")
+
+            # R1-F2: Auto-Tune-Pfad — Signal an Dialog statt QMessageBox.
+            if is_auto and dlg is not None:
+                dlg.auto_tune_done.emit(True, swr_now, avg_fwdpwr)
         else:
-            # AC7: Marker bleibt rot
-            QMessageBox.warning(
-                self,
-                "Tuner konnte nicht matchen",
-                f"SWR weiter {swr_now:.1f} > Limit {swr_limit:.1f}.\n\n"
-                "Antenne prüfen oder TUNE wiederholen."
-            )
+            # AC7 P63: Marker bleibt rot. R1-F2: kein QMessageBox bei Auto-Tune.
+            if is_auto and dlg is not None:
+                dlg.auto_tune_done.emit(False, swr_now, avg_fwdpwr)
+            else:
+                QMessageBox.warning(
+                    self,
+                    "Tuner konnte nicht matchen",
+                    f"SWR weiter {swr_now:.1f} > Limit {swr_limit:.1f}.\n\n"
+                    "Antenne pruefen oder TUNE wiederholen."
+                )
         print(f"[P63] Post-TUNE — SWR {swr_now:.1f}, Limit {swr_limit:.1f}")
+
+    # ── P54-FIX (v0.97.45) Closed-Loop-Convergenz ─────────────────
+
+    def _wait_with_event_loop(self, ms: int) -> None:
+        """Synchrones Warten mit aktivem Qt-Event-Loop.
+
+        Wichtig: Meter-Updates (FWDPWR-Sampling) kommen während des
+        Wartens an, weil der Sub-Event-Loop laeuft. Cancel-Button im
+        AutoTuneDialog wird auch verarbeitet.
+        """
+        from PySide6.QtCore import QEventLoop, QTimer
+        loop = QEventLoop()
+        QTimer.singleShot(ms, loop.quit)
+        loop.exec()
+
+    def _tune_converge_to_target(self, target_w: int = 10,
+                                  max_iterations: int = 5,
+                                  iter_ms: int = 1000) -> int | None:
+        """P54-FIX AC1: Closed-Loop bis FWDPWR ≈ target_w.
+
+        Voraussetzung: TUNE laeuft (radio.tune_on() + _tune_active=True),
+        Phase A (Tuner-Match) ist fertig, SWR stabil.
+
+        Args:
+            target_w: Ziel-Watt-Zahl fuer Convergenz (typisch 10).
+            max_iterations: Max Closed-Loop-Iterationen.
+            iter_ms: Wartezeit pro Iteration (ms) fuer Sample-Sammlung.
+
+        Returns:
+            Konvergierter rfpower-Slider-Wert (1-100) oder None bei
+            Fail/Cancel/Kein-Signal.
+        """
+        if not self.radio.ip:
+            return None
+
+        TOLERANCE_W = 1.0
+        MIN_SAMPLES = 2
+        # P54-FIX R1-F2: Cancel-Flag wird NICHT hier zurueckgesetzt —
+        # Reset macht der Caller (_start_auto_tune_for_band_change /
+        # _on_tune_clicked) vor Phase A. Damit kann ein User-Cancel
+        # bereits VOR Convergenz das Flag setzen und greift sofort.
+
+        rf_current = 10  # Startwert (gleicher Slider wie Phase A)
+        self.radio.set_rfpower_direct(rf_current)
+        self._fwdpwr_samples.clear()
+
+        # Initial-Sample-Phase: 1.5s sammeln vor erstem Adjust (V2-F8)
+        self._wait_with_event_loop(1500)
+
+        for iteration in range(max_iterations):
+            # R1-F2 ROT: Cancel-Flag pruefen
+            if self._tune_convergence_cancelled:
+                print("[P54-FIX] Convergenz abgebrochen (Cancel)")
+                return None
+
+            if len(self._fwdpwr_samples) < MIN_SAMPLES:
+                # Zu wenig Daten — weiter sammeln
+                self._wait_with_event_loop(iter_ms)
+                continue
+
+            samples = list(self._fwdpwr_samples)
+            self._fwdpwr_samples.clear()
+            fwdpwr = sum(samples) / len(samples)
+
+            if abs(fwdpwr - target_w) <= TOLERANCE_W:
+                print(f"[P54-FIX] Convergenz: rf={rf_current} → "
+                      f"FWDPWR≈{fwdpwr:.1f}W (Iter {iteration+1}/{max_iterations})")
+                return rf_current
+
+            # Proportionale Anpassung (analog _auto_adjust_tx_level)
+            if fwdpwr > 0.5:
+                estimated = int(rf_current * (target_w / fwdpwr))
+                step = max(1, min(15, abs(estimated - rf_current)))
+                if fwdpwr < target_w:
+                    rf_current = min(100, rf_current + step)
+                else:
+                    rf_current = max(1, rf_current - step)
+                self.radio.set_rfpower_direct(rf_current)
+                print(f"[P54-FIX] Iter {iteration+1}: FWDPWR={fwdpwr:.1f}W "
+                      f"target={target_w}W → rf={rf_current}")
+                self._wait_with_event_loop(iter_ms)
+            else:
+                print(f"[P54-FIX] Iter {iteration+1}: FWDPWR≈0 — kein Signal")
+                return None
+
+        # Max-Iterations: best-effort letzten Wert
+        print(f"[P54-FIX] Max-Iter erreicht — best-effort rf={rf_current}")
+        return rf_current
+
+    def _kruecken_skalierung(self, band: str, target_w: int) -> int | None:
+        """P54-FIX AC5: linear vom einzigen Stuetzpunkt × 0,9 Sicherheit.
+
+        Wird in _apply_rf_preset gerufen wenn rf_preset_store.load None
+        returnt (keine direkte/interpolierbare Stuetzpunkt-Match).
+
+        Args:
+            band: Aktuelles Band (z.B. "40m").
+            target_w: Gewuenschte Ziel-Watt-Zahl.
+
+        Returns:
+            Hochgerechneter rfpower (1-100) oder None wenn keine Kruecke
+            moeglich (0 oder ≥2 Stuetzpunkte).
+        """
+        if not hasattr(self, 'rf_preset_store') or self.radio is None:
+            return None
+        radio_type = self.radio.radio_type
+        all_presets = self.rf_preset_store.get_all(radio_type)
+        band_data = all_presets.get(band, {})
+
+        if len(band_data) != 1:
+            return None
+
+        anchor_watt, anchor = next(iter(band_data.items()))
+        anchor_rf = anchor.get("rf", 0)
+        if anchor_watt <= 0 or anchor_rf <= 0:
+            return None
+
+        estimated = anchor_rf * (target_w / anchor_watt) * 0.9
+        krucke = max(1, min(100, int(round(estimated))))
+        print(f"[RF-Preset] Kruecke: {band}_{target_w}W → rf={krucke} "
+              f"(Anker {anchor_watt}W=rf{anchor_rf}, linear×0.9)")
+        return krucke
+
+    # ── P54 (v0.97.44) ─────────────────────────────────────────────
+
+    def _start_auto_tune_for_band_change(self, band: str) -> bool:
+        """P54: Auto-TUNE nach Bandwechsel — modaler Dialog blockt bis fertig.
+
+        Sequenz (parallel zu _on_tune_clicked(True)):
+          1. AutoTuneDialog erstellen + Flag _auto_tune_running = True.
+          2. ANT1, 10 W, tune_on() — Hardware-Pflicht.
+          3. QTimer für Auto-Stop nach tune_duration_s.
+          4. dialog.exec() blockt bis _tune_post_swr_check Signal emittiert
+             oder Cancel/Timeout-Backup.
+
+        Returns True bei Erfolg (SWR-good), False bei Fail/Cancel/Timeout.
+        """
+        from ui.auto_tune_dialog import AutoTuneDialog
+        from PySide6.QtCore import QTimer
+        from config.settings import get_tune_freq_mhz
+
+        if not self.radio.ip:
+            return False
+
+        duration_s = self.settings.get("tune_duration_s", 15)
+        if duration_s not in (15, 30):
+            duration_s = 15
+
+        dialog = AutoTuneDialog(self, band=band, duration_s=duration_s)
+        self._auto_tune_dialog = dialog
+        self._auto_tune_running = True
+        self._fwdpwr_samples.clear()  # V2-F4: alte QSO-Samples raus
+        # P54-FIX R1-F2: Cancel-Flag reset vor Phase A
+        self._tune_convergence_cancelled = False
+
+        # Auto-Tune-Sequence (analog _on_tune_clicked(True))
+        self._tune_in_progress = True
+        tune_freq = get_tune_freq_mhz(band, self.settings.mode)
+        self._tune_active = True
+        if tune_freq is not None:
+            self._tune_freq_mhz = tune_freq
+            self.radio.set_frequency(tune_freq)
+        else:
+            self._tune_freq_mhz = self.settings.frequency_mhz
+        self.radio.set_tx_antenna("ANT1")  # AC11 Hardware-Pflicht
+        self.radio.set_rfpower_direct(10)
+        self.radio.tune_on()
+        print(f"[P54a] Auto-TUNE {band} 10 W {duration_s}s")
+
+        self._tune_auto_stop_token = object()
+        _token = self._tune_auto_stop_token
+        QTimer.singleShot(duration_s * 1000, lambda: self._tune_stop(_token))
+
+        # Modal — blockt bis Signal oder Cancel
+        result_code = dialog.exec()
+
+        # Cleanup nach Dialog-Close
+        self._auto_tune_running = False
+        self._auto_tune_dialog = None
+        return result_code == AutoTuneDialog.DialogCode.Accepted
 
     def _abort_active_tx(self) -> None:
         """P60 (v0.97.32): TX sofort abbrechen + gepufferten Click verwerfen.
@@ -421,15 +719,19 @@ class TXMixin:
     def _on_meter_update(self, name: str, value: float):
         if name == "FWDPWR":
             self.control_panel.update_watt(value)
-            if self.encoder.is_transmitting and value > 1:
+            # P54b (v0.97.44): Sampling auch waehrend TUNE — fuer
+            # RFPreset-Stuetzpunkt-Kalibrierung. _tune_active deckt
+            # sowohl manuellen als auch Auto-Tune-Pfad ab.
+            if value > 1 and (self.encoder.is_transmitting or self._tune_active):
                 self._fwdpwr_samples.append(value)
+            if self.encoder.is_transmitting and value > 1:
                 # Live-Update Clipschutz + TX-Pegel + RF waehrend TX
                 raw_peak = self.radio.tx_raw_peak
                 self.control_panel.update_tx_peak(raw_peak if raw_peak > 0.01 else value)
                 audio_pct = int(self.radio.tx_audio_level * 100)
                 self.control_panel.tx_level_label.setText(f"TX-Pegel: {audio_pct}%")
                 self.control_panel.update_rfpower(self._rfpower_current)
-            elif not self.encoder.is_transmitting:
+            elif not self.encoder.is_transmitting and not self._tune_active:
                 # TX inaktiv → Anzeige zuruecksetzen
                 self.control_panel.update_tx_peak(0.0)
         elif name == "SWR":

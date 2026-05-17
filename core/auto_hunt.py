@@ -178,16 +178,19 @@ class AutoHunt(QObject):
         """Auto-Hunt-Session beenden. Emittiert auto_hunt_stopped(reason).
 
         Reasons:
-            timer_expired   — 10-Min-Hard-Stop abgelaufen
-            manual_halt     — User klickte HALT-Button
-            band_change     — Band wurde gewechselt
-            mode_change     — FT8/FT4/FT2 wurde gewechselt
-            rx_mode_change  — Normal↔Diversity wurde gewechselt
-            totmann_expired — Operator-Presence (15 Min) abgelaufen
-            superseded      — anderer Power-Modus (z.B. OMNI) gestartet
+            timer_expired      — 10-Min-Hard-Stop abgelaufen
+            manual_halt        — User klickte HALT-Button
+            band_change        — Band wurde gewechselt
+            mode_change        — FT8/FT4/FT2 wurde gewechselt
+            rx_mode_change     — Normal↔Diversity wurde gewechselt
+            totmann_expired    — Operator-Presence (15 Min) abgelaufen
+            superseded         — anderer Power-Modus (z.B. OMNI) gestartet
+            mouse_inactive_5min — 5 Min ohne Mausbewegung (P67, zweite
+                                 Schicht ueber 10-Min-Hard-Cap)
 
         Cleanup-Logik (reason-basiert):
-            timer_expired/manual_halt/band_change/mode_change/rx_mode_change/superseded:
+            timer_expired/manual_halt/band_change/mode_change/rx_mode_change/
+            superseded/mouse_inactive_5min:
                 _cooldown.clear() + _last_tx_even = None
             totmann_expired:
                 _cooldown UND _last_tx_even bleiben (User soll fortsetzen)

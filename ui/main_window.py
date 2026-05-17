@@ -45,6 +45,10 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
     # Payload: snapshot-dict, band-string. Empfaenger: _on_direction_map_snapshot.
     direction_map_signal = Signal(dict, str)
 
+    # P67 (v0.97.43): Maus-Inaktivitaets-Limit fuer Auto-Hunt (Sekunden).
+    # Zusaetzliche Schicht ueber 10-Min-Hard-Cap. Hartkodiert, kein Setting.
+    _AUTO_HUNT_MOUSE_INACTIVITY_TIMEOUT_S = 300
+
     def __init__(self, settings: Settings):
         super().__init__()
         self.settings = settings
@@ -295,6 +299,24 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         # P63: Re-Entry-Tokens für Manuel-TUNE-Sequenz
         self._tune_auto_stop_token = None
         self._tune_post_check_token = None
+        # P54 (v0.97.44): Auto-Tune nach Bandwechsel — Flag + Dialog-Ref.
+        # _auto_tune_running blockt QMessageBox in _tune_post_swr_check
+        # (Signal-Routing zum Dialog) und unterdrueckt Diversity-Resume.
+        self._auto_tune_running: bool = False
+        self._auto_tune_dialog = None  # AutoTuneDialog | None
+        # P54-FIX (v0.97.45): Closed-Loop-Convergenz beim TUNE.
+        # _tune_converged_rf: Ergebnis aus _tune_converge_to_target,
+        # wird in _tune_post_swr_check ausgelesen für Save.
+        # _tune_convergence_cancelled: Cancel-Flag von AutoTuneDialog
+        # (gesetzt in _on_cancel_clicked/_on_backup_timeout).
+        self._tune_converged_rf: int | None = None
+        self._tune_convergence_cancelled: bool = False
+        # P54-FIX Final-R1-ROT: Re-Entry-Sperre fuer _tune_stop.
+        # Phase B oeffnet Qt-Sub-Event-Loop → User-Cancel-Click kann
+        # _tune_stop(None) parallel aufrufen → doppelte tune_off/Radio-Calls.
+        # Sperre verhindert das; Cancel wird stattdessen ueber
+        # _tune_convergence_cancelled an die laufende Schleife weitergeleitet.
+        self._tune_stop_active: bool = False
 
     def _init_power_state(self):
         """Auto TX Level Regelung (zweistufig: rfpower primär, audio sekundär)."""
@@ -467,6 +489,12 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self._presence_poll_timer = QTimer(self)
         self._presence_poll_timer.timeout.connect(self._poll_mouse_activity)
         self._presence_poll_timer.start(500)
+        # P67 (v0.97.43): Auto-Hunt-Maus-Inaktivitaets-Anker.
+        # Wird in `_on_btn_auto_hunt_toggled(True)` und `_poll_mouse_activity`
+        # gesetzt. `_on_auto_hunt_polling_tick` prueft die Differenz gegen
+        # `_AUTO_HUNT_MOUSE_INACTIVITY_TIMEOUT_S` und stoppt Auto-Hunt mit
+        # Reason `mouse_inactive_5min` bei Ueberschreitung.
+        self._auto_hunt_last_mouse_t: float = 0.0
 
     def _init_cq_countdown_timer(self):
         """CQ-Freq Countdown: sekündlich aktualisieren (unabhängig vom Decode-Zyklus)."""
@@ -894,6 +922,10 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
                 return
             if self._omni_cq.is_active():
                 self._omni_cq.stop("superseded")
+            # P67 (v0.97.43): Maus-Inaktivitaets-Anker VOR start_auto_hunt
+            # setzen — sonst koennte der initiale Polling-Tick (Z. unten)
+            # bei Default 0.0 sofort die 5-Min-Schicht ausloesen.
+            self._auto_hunt_last_mouse_t = time.monotonic()
             self._auto_hunt.start_auto_hunt(600)
             self._auto_hunt_polling_timer.start()
             self._on_auto_hunt_polling_tick()  # initialer Text-Set
@@ -934,9 +966,26 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
             self._auto_hunt_cooldown_timer.stop()
 
     def _on_auto_hunt_polling_tick(self):
-        """1s-Polling waehrend aktiver Session: Live-Countdown auf Button."""
+        """1s-Polling waehrend aktiver Session: Live-Countdown auf Button.
+
+        P67 (v0.97.43): prueft zusaetzlich die 5-Min-Maus-Inaktivitaet
+        (zweite Schicht ueber 10-Min-Hard-Cap). Bei Ueberschreitung
+        stoppt Auto-Hunt mit Reason `mouse_inactive_5min`. Laufendes
+        QSO wird NICHT abgebrochen (kein `_abort_active_tx`).
+        """
         if not self._auto_hunt.active:
             self._auto_hunt_polling_timer.stop()
+            return
+        # P67: Maus-Inaktivitaets-Check VOR Text-Update (sonst flickert
+        # die Restzeit-Anzeige eine Sekunde nach Ablauf).
+        inactivity = time.monotonic() - self._auto_hunt_last_mouse_t
+        if inactivity > self._AUTO_HUNT_MOUSE_INACTIVITY_TIMEOUT_S:
+            self.qso_panel.add_info(
+                "⏸ Auto-Hunt gestoppt — 5 Minuten ohne Mausbewegung. "
+                "Maus bewegen und AUTO HUNT-Taste druecken zum Fortsetzen."
+            )
+            print("[Auto-Hunt-UI] Stop — 5 Min Maus-Inaktivitaet")
+            self._auto_hunt.stop_auto_hunt("mouse_inactive_5min")
             return
         sec = self._auto_hunt.seconds_remaining()
         m, s = divmod(sec, 60)
@@ -1343,6 +1392,10 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         if pos != self._presence_last_mouse_pos:
             self._presence_last_mouse_pos = pos
             self._reset_presence()
+            # P67 (v0.97.43): Auto-Hunt-Maus-Inaktivitaets-Anker
+            # aktualisieren — wird in _on_auto_hunt_polling_tick gegen
+            # 5-Min-Limit geprueft.
+            self._auto_hunt_last_mouse_t = time.monotonic()
 
 
     def _reset_presence(self):

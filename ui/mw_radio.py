@@ -392,6 +392,14 @@ class RadioMixin:
             print(f"[Bandwechsel ignoriert: Pipeline laeuft, bleibe auf {current}]")
             self.control_panel._set_band(current)  # UI-Sync zurueck
             return
+        # P54 V2-F3: Re-Entry-Schutz waehrend aktivem TUNE (manuell oder
+        # auto). Sonst koennte Bandwechsel mid-tune den State korrumpieren.
+        if getattr(self, '_tune_active', False):
+            current = self.settings.band
+            _dlog("BAND", f"IGNORED — TUNE laeuft, bleibe auf {current}")
+            print(f"[Bandwechsel ignoriert: TUNE laeuft, bleibe auf {current}]")
+            self.control_panel._set_band(current)
+            return
         # Race-Schutz: ausstehende TUNE-Callbacks ungueltig machen, sonst ruft
         # ein 5-Sek-Timer aus dem alten Band-Kontext _enable_diversity() fuer
         # das jetzt verlassene Band auf.
@@ -481,6 +489,21 @@ class RadioMixin:
         self._apply_rf_preset()  # lädt aus RFPresetStore (mit Hybrid-Strategie) oder Settings-Default
         if self.radio.ip:
             self.radio.set_power(self._rfpower_current)
+        # P54 (v0.97.44): Auto-TUNE bei Bandwechsel — wenn Setting aktiv,
+        # Radio verbunden, Band nicht SWR-blockiert und Tuner vorhanden.
+        # Blockt mit modalem Dialog bis SWR-Good oder Timeout/Cancel.
+        # Speichert RFPreset-Stuetzpunkt (P54b) bei Erfolg → _apply_rf_preset
+        # wird im Post-Check ein zweites Mal aufgerufen damit der frische
+        # 10-W-Wert sofort wirkt.
+        if (self.settings.get("auto_tune_on_band_change", True)
+                and self.radio.ip
+                and band.upper() not in self._swr_blocked_bands
+                and self.settings.get("tuner_present", True)):
+            _dlog("BAND", f"_start_auto_tune_for_band_change({band})")
+            success = self._start_auto_tune_for_band_change(band)
+            if not success:
+                self.qso_panel.add_info(
+                    f"⚠ Auto-TUNE {band.upper()} fehlgeschlagen oder abgebrochen")
         # DT-Korrektur: gespeicherten Wert fuer neues Band laden
         from core import ntp_time as _ntp
         _ntp.set_band(band)

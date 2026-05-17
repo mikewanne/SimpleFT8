@@ -3,6 +3,300 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-17 v0.97.45 — P54-FIX: Echte 10W-Closed-Loop-Convergenz beim TUNE
+
+**Trigger:** Mike-Analyse 16.05. abends bis 17.05.: P54 (v0.97.44) hatte
+die Kalibrierungs-Philosophie der `RFPresetStore`-Tabelle kompromittiert.
+Mike's eigentliches Konzept war von Anfang an: beim TUNE den **echten**
+10W-Stellgrößen-Wert ermitteln (Closed-Loop hochregeln bis FWDPWR≈10W)
+und genau diesen Slider-Wert speichern — NICHT hart „rf=10 für 10W"
+unabhängig von der Antennen-Realität.
+
+Die R1-F1-„Klassiker-Catch"-Empfehlung in P54 war ein **Anti-Fix**:
+sie hatte mich auf `watt=10, rf=10` hart gebracht, was Mike's
+ursprüngliche V1-Idee (`watt=round(avg_fwdpwr)`) zerstörte. Beide
+Ansätze waren konzeptionell falsch — die echte Lösung ist
+Closed-Loop-Convergenz IM TUNE-Pfad.
+
+**Mike's Konzept im Klartext (von 17.05.):**
+- 17m Band, SWR 2,5:1, TUNE startet → Slider=10, FWDPWR=8W rauskommt
+- App **regelt Slider hoch auf 12** → FWDPWR≈10W
+- Speichere `17m, 10W = rf 12` — der echte Stellgrößen-Wert
+- Bei späterem 70W-QSO mit nur 10W-Anker: **Krücken-Multiplikation**
+  als Initial-Startwert (12×7×0.9=76), dann Closed-Loop konvergiert
+  + speichert echten 70W-Wert
+- Pro Band füllt sich Tabelle nach und nach mit echten Werten
+
+**Architektur (zwei Bausteine):**
+
+**Baustein A — Closed-Loop während TUNE:**
+- Neuer Helper `_tune_converge_to_target(target_w=10)` in
+  `ui/mw_tx.py`. Iteriert proportional bis FWDPWR≈10W (Toleranz 1W).
+  Max 5 Iterationen, je 1s Sample-Sammlung. Cancel-Flag-Check pro Iter.
+- Neuer Helper `_wait_with_event_loop(ms)` via `QEventLoop+QTimer` —
+  synchrones Warten mit aktivem GUI-Event-Loop (Meter-Updates kommen
+  während Wartezeit an).
+- TUNE wird zweiphasig:
+  - **Phase A (Tuner-Match, `duration_s - 5`s):** Slider=10 fest,
+    Tuner sucht Match, SWR stabilisiert sich.
+  - **Phase B (Closed-Loop, max 5s):** nach SWR-OK-Check
+    konvergiert rfpower bis FWDPWR≈10W.
+- `_tune_post_swr_check` speichert konvergierten Wert
+  (`_tune_converged_rf`), NICHT hart 10.
+- Plausibilitäts-Check `rf ∈ [3..50]` — Werte ausserhalb verworfen
+  (Hardware-Anomalie).
+- Sowohl manueller TUNE als auch Auto-Tune-Pfad nutzen die selbe
+  Phase-B-Logik in `_tune_stop`.
+
+**Baustein B — Krücken-Skalierung in `_apply_rf_preset`:**
+- Wenn `rf_preset_store.load()` None gibt (kein direkter Treffer und
+  nicht interpolierbar), prüfe ob genau 1 Stützpunkt für das Band
+  existiert.
+- Wenn ja: `rf = anchor_rf × (target_w / anchor_watt) × 0.9` als
+  Initial-Startwert (Sicherheits-Faktor 0.9 gegen nichtlineare
+  PA-Charakteristik bei off-band Antennen, Mike-Spec).
+- Wenn nein (0 oder ≥2 Stützpunkte): Default 50% wie bisher.
+- Closed-Loop im QSO konvergiert nach + speichert echten Wert →
+  ab 2. Stützpunkt greift wieder die normale Hybrid-Strategie.
+
+**Workflow voll durchgezogen (V1→V2→R1→V3→Code→Final-R1 + Round 2)**
+autonom mit DeepSeek-V4-pro.
+
+- **V2-Self-Review:** 10 Findings, 0 Halluzinationen.
+- **R1 (V4-pro):** **4 ROT-Findings** alle eingearbeitet:
+  - F1: `set_power` nach `_apply_rf_preset` fehlte (State-Sync).
+  - F2: Cancel-Race in Convergenz-Schleife → Cancel-Flag.
+  - F3: `_tune_converged_rf` State-Var nicht initialisiert.
+  - F4: Harte `(band, 10, 10)`-Speicherung war P54-Bug, jetzt
+    konvergierter Wert.
+- **R1-F5+F6 ORANGE:** Plausibilität rf∈[3..50] + SWR-Check vor Phase B.
+- **Final-R1 V4-pro:** 1 weiteren ROT-Bug gefunden — **Re-Entry-
+  Race in `_tune_stop`** während Phase B (Qt-Sub-Event-Loop ermöglicht
+  User-Cancel-Click parallel zum Stop-Pfad → doppelte `tune_off`-Calls).
+  Fix: Re-Entry-Sperre via `_tune_stop_active`-Flag, bei Re-Entry wird
+  nur `_tune_convergence_cancelled=True` gesetzt.
+- **Final-R1 Round 2:** „Re-Entry-Sperre korrekt umgesetzt. Es fehlt
+  nichts. **PUSH FREIGEGEBEN.**"
+
+**V4-pro 20-Cycle-Bilanz:** 0 Halluzinationen, 100% verifizierbar.
+**3 echte ROT-Bugs gefangen** in P54-FIX (R1-F1 State-Sync, R1-F4
+Lügen-Save, Final-R1 Re-Entry-Race). Mike's Workflow-Pflicht bewährt
+sich auch beim Refactor.
+
+**Code-Pfade:**
+- `ui/main_window.py` State-Vars `_tune_converged_rf`,
+  `_tune_convergence_cancelled`, `_tune_stop_active`.
+- `ui/mw_tx.py:_wait_with_event_loop` NEU (Helper).
+- `ui/mw_tx.py:_tune_converge_to_target` NEU (Closed-Loop, max 5 Iter).
+- `ui/mw_tx.py:_kruecken_skalierung` NEU (linear ×0.9 vom 1-Stützpunkt).
+- `ui/mw_tx.py:_apply_rf_preset` erweitert (Krücken-Integration).
+- `ui/mw_tx.py:_tune_stop` mit Phase B + Re-Entry-Sperre.
+- `ui/mw_tx.py:_tune_post_swr_check` Save mit konvergiertem Wert +
+  Plausibilität + `set_power`-Sync.
+- `ui/auto_tune_dialog.py` Cancel-Pfad setzt Convergenz-Cancel-Flag.
+
+**Tests:** `tests/test_p54_fix.py` NEU mit 19 Tests (Convergenz,
+Cancel, Plausibilität, Krücke, State-Init, Re-Entry-Sperre). Plus 14
+alte P54-Tests an neue Plausibilitäts-Logik (rf-Bereich statt FWDPWR-
+Bereich) angepasst.
+
+Tests 1395 → **1415 grün** (+20 netto). APP_VERSION 0.97.44 →
+0.97.45. Backup `Appsicherungen/2026-05-16_v0.97.44_vor_p54fix/`.
+
+**Push pending** bis Mike Field-Test (alle Radio-pflichtig) — siehe
+HANDOFF.md.
+
+---
+
+## 2026-05-16 v0.97.44 — P54 Auto-Tune bei Bandwechsel + RFPreset-Stützpunkt
+
+**Trigger:** Mike-Idee 16.05.: „wir machen ja einen tune bei jedem bandwechsel
+— dann können wir doch das auch gleich als 10 W für das band speichern als
+ausgangsleistungs-korrekturwert? egal wechsel band wir haben immer schon
+den 10wattwert".
+
+**Architektur (zwei verflochtene Bausteine als ein Bundle):**
+
+**P54a — Auto-Tune bei Bandwechsel:** Settings-Toggle
+`auto_tune_on_band_change` (Default True). Bei Bandwechsel öffnet
+`AutoTuneDialog` (WindowModal, blockt mit `exec()`), führt 10 W TUNE auf
+ANT1, schließt automatisch bei SWR-Good oder Timeout/Cancel.
+
+**P54b — RFPreset-Stützpunkt:** Während TUNE wird FWDPWR über die
+bestehende Meter-Loop gesampelt (`_on_meter_update` erweitert auf
+`_tune_active`). Bei SWR-Good wird `rf_preset_store.save(radio, band,
+10, 10)` aufgerufen — speichert „Slider 10 für 10 W" als nominalen
+Stützpunkt im bestehenden `core/rf_preset_store.py`. Damit hat jedes
+Band nach erstem TUNE einen 10-W-Anker für die TX-Power-Convergenz.
+
+**Wirkung:** Erstes QSO nach Bandwechsel startet mit `rf=10` statt
+50% Default — keine Hochtast-Sequenz mehr. Nach 1. QSO bei höherer
+Wattzahl hat das Band 2 Stützpunkte → Hybrid-Interpolation in
+`RFPresetStore` greift für beliebige Watt-Werte.
+
+**Workflow voll durchgezogen (V1→V2→R1→V3→Code→Final-R1)** autonom
+mit DeepSeek-V4-pro.
+
+- **V2-Self-Review:** 7 Findings, alle Code-verifiziert. Methodennamen
+  alle korrekt (keine Halluzinationen).
+- **R1 (V4-pro, 4 Files):** 6 Findings, davon **2 ROT**:
+  - **F1 ROT (Klassiker-Catch):** V1 hatte `watt=round(avg_fwdpwr)` —
+    das speichert Stützpunkte unter willkürlichen Watt-Werten (9, 11),
+    die Hybrid-Lookup für 10 W findet sie nicht zuverlässig. Korrekt:
+    `watt=10` (nominale TUNE-Leistung), `rf=10` (Slider). FWDPWR nur
+    Plausibilitäts-Check + Logging. **Übernommen.**
+  - **F2 ROT:** `_tune_post_swr_check` zeigt im manuellen Pfad
+    `QMessageBox.warning` bei SWR-Bad — Auto-Tune-Pfad würde doppelten
+    Dialog erzeugen + AutoTuneDialog könnte Success/Fail nicht
+    unterscheiden. Fix: bei `_auto_tune_running=True` nur Signal
+    emittieren, KEINE QMessageBox. **Übernommen.**
+  - **F3 ORANGE:** `_check_diversity_preset`-Resume im Post-Check nur
+    im manuellen Pfad (Auto-Tune-Bandwechsel-Logik macht das selbst
+    danach). **Übernommen.**
+  - **F4 ORANGE:** Timeout-Cleanup `_tune_in_progress=False` im
+    Cancel-Pfad. **Übernommen.**
+  - **F5 GELB:** Meter-Updates während `exec()` — kosmetisch, kein Fix.
+  - **F6 GELB:** +5 Tests (Timeout, Cancel, Verbindungsverlust,
+    Plausibilitäts-Grenzen exakt 2.0/80.0). **Übernommen.**
+
+- **Final-R1 (V4-pro, 5 Files):** 1 ROT-Finding gefunden — **State-
+  Sync-Bug:** `_apply_rf_preset()` aktualisiert `_rfpower_current` (z. B.
+  auf 10), aber `_tune_stop` hat die Hardware auf `power_preset` (15 W)
+  zurückgesetzt. Divergenz → nächster `_auto_adjust_tx_level`-Zyklus
+  regelt falsch → Power-Spike-Risiko. **Fix:** nach `_apply_rf_preset()`
+  explizit `self.radio.set_power(self._rfpower_current)` aufrufen. Plus
+  2 neue Tests (T24/T24b) für Regression-Schutz.
+
+- **Final-R1 Round 2 (V4-pro, 2 Files):** „State-Sync-Bug ist behoben,
+  neue Probleme entstehen nicht." **PUSH FREIGEGEBEN.**
+
+**V4-pro 19-Cycle-Bilanz:** 0 Halluzinationen, 100% verifizierbar.
+ROT-Findings (R1-F1 + Final-R1-State-Sync) waren echte Bugs — V4-pro
+hat sie gefangen bevor sie in Production gingen.
+
+**Code-Pfade:**
+- `config/settings.py:79-82` Default `auto_tune_on_band_change`.
+- `ui/settings_dialog.py:331-348` Toggle in Tab „FT8 & Diversity"
+  + Load/Save/Reset.
+- `ui/auto_tune_dialog.py` NEU — `AutoTuneDialog(QDialog)` mit
+  WindowModal, Spinner, Backup-Timeout, `auto_tune_done`-Signal.
+- `ui/main_window.py:301-304` State-Vars `_auto_tune_running` +
+  `_auto_tune_dialog`.
+- `ui/mw_tx.py:_on_meter_update` FWDPWR-Sampling auch bei
+  `_tune_active`.
+- `ui/mw_tx.py:_tune_post_swr_check` RFPreset-Save + Signal-Routing
+  + Diversity-Resume-Schutz + State-Sync-Fix.
+- `ui/mw_tx.py:_start_auto_tune_for_band_change` Helper mit ANT1
+  Hardware-Pflicht.
+- `ui/mw_radio.py:_on_band_changed` Re-Entry-Schutz `_tune_active`
+  + Auto-Tune-Hook nach `_apply_rf_preset()`.
+- `main.py` APP_VERSION 0.97.43 → 0.97.44.
+
+**Tests:** `tests/test_p54_auto_tune.py` NEU mit 28 Tests:
+- T1-T2 Settings (Default, Whitelist).
+- T3-T7 Gate-Logik (Setting/Radio/SWR-Block/Tuner/All).
+- T8-T8b/T11 R1-F1 Schlüssel-Korrektur (watt=10 IMMER).
+- T9-T10/T18-T19 Plausibilitäts-Grenzen (2.0 + 80.0 exakt).
+- T12 Manueller TUNE speichert ebenfalls.
+- T13-T13b FWDPWR-Sampling auch bei `_tune_active`.
+- T14-T15 R1-F2 Signal-Routing (KEINE QMessageBox bei Auto-Tune).
+- T16 R1-F3 Diversity-Resume-Schutz.
+- T17-T17b V2-F1 `_apply_rf_preset`-Re-Call.
+- T20 Verbindungsverlust → Fail-Signal.
+- T21 Hardware-Pflicht ANT1 vor `tune_on` (Source-Level).
+- T22 `_tune_in_progress` Cleanup.
+- T23 Token-Race.
+- T24-T24b Final-R1-ROT-Fix State-Sync (`radio.set_power` nach Apply).
+
+Tests 1367 → 1395 (+28 P54). Voller Smoke-Test grün
+(`pytest tests/ -q`). APP_VERSION 0.97.43 → 0.97.44. Backup
+`Appsicherungen/2026-05-16_v0.97.43_vor_p54/`.
+
+**Push pending** bis Mike Field-Test (F1-F8) bestätigt — Field-Tests
+sind RADIO-PFLICHTIG (TUNE-Hardware nötig). Erste Verifikation kann
+Mike beim nächsten Radio-Zugriff durchführen.
+
+---
+
+## 2026-05-16 v0.97.43 — P67 Auto-Hunt Mouse-Inactivity-Schicht (Variante C)
+
+**Trigger:** Mike-Wunsch nach GitHub-Präsentations-Review: zusätzliche
+Sicherheitsschicht für Auto-Hunt — neben dem bestehenden 10-Min-Hard-Cap
+soll eine 5-Min-Maus-Inaktivität die Session ebenfalls beenden.
+„Autohunt 10 Timer fest UND Mausbewegung (5 Minuten nicht bewegt)".
+Variante C: beide Mechanismen laufen parallel, wer zuerst greift beendet
+die Session.
+
+**Vorher (v0.97.42):** Auto-Hunt hatte zwei Stop-Pfade:
+1. 10-Min-Hard-Cap (`_auto_hunt_timer`, FEST, Maus-unabhängig — Bot-Tarn-
+   Schutz seit v0.75).
+2. 15-Min-Operator-Presence-Timer (Maus reset) → `totmann_expired`.
+
+Eine Maus-Inaktivität von z.B. 12 Min hat die Auto-Hunt-Session nicht
+gestoppt — nur den globalen Presence-Counter (15 Min). Als zweite,
+kürzere Schicht („Funker am PC eingeschlafen") jetzt 5 Min explizit
+für Auto-Hunt.
+
+**Lösung (Variante C):**
+- Klassen-Konstante `_AUTO_HUNT_MOUSE_INACTIVITY_TIMEOUT_S = 300` in
+  `ui/main_window.py`. Hartkodiert, kein Setting (Mike-Spec).
+- Neuer State `self._auto_hunt_last_mouse_t: float = 0.0` in
+  `_init_presence_watchdog`, nahe `_presence_last_mouse_pos`.
+- `_poll_mouse_activity` setzt bei jeder erkannten Mausbewegung
+  zusätzlich `_auto_hunt_last_mouse_t = time.monotonic()` direkt nach
+  `_reset_presence()`. Nutzt vorhandenes 500ms-Polling, kein neuer Timer.
+- `_on_btn_auto_hunt_toggled(True)` setzt den Anker VOR
+  `start_auto_hunt(600)` — wichtig, sonst würde der initiale
+  Polling-Tick (im selben Methodenkörper) mit Default 0.0 sofort den
+  5-Min-Stop auslösen.
+- `_on_auto_hunt_polling_tick` (1s-Tick, läuft schon während Session
+  aktiv) prüft Inaktivität NACH dem `if not self._auto_hunt.active`-
+  Guard, VOR dem Text-Update (sonst flickert die Restzeit-Anzeige):
+  bei `monotonic() - _auto_hunt_last_mouse_t > 300` →
+  `add_info(...) + print(...) + stop_auto_hunt("mouse_inactive_5min")`.
+- Kein `_abort_active_tx()` bei `mouse_inactive_5min` — laufender TX/QSO
+  darf zu Ende (analog `totmann_expired`/`band_change`).
+- `core/auto_hunt.py:stop_auto_hunt` Docstring um Reason
+  `mouse_inactive_5min` erweitert. Cleanup-Logik: DEFAULT-Branch
+  (`_cooldown.clear()` + `_last_tx_even = None`) — analog `manual_halt`,
+  weil Re-Start immer User-Klick ist.
+
+**Workflow voll durchgezogen (V1→V2→R1→V3→Code→Final-R1)** autonom mit
+DeepSeek-V4-pro.
+
+- **V2-Self-Review:** 2 Halluzinationen aus V1 gefunden (Methodennamen
+  `_init_presence_timer` → korrekt `_init_presence_watchdog`,
+  `_on_auto_hunt_toggled` → korrekt `_on_btn_auto_hunt_toggled`). Plus
+  Code-Pfad-Verifikation aller Annahmen via grep.
+- **R1 (V4-pro):** 4 Findings, 0 Bugs. F1+F2 ORANGE waren Bestätigung
+  der V2-Korrekturen. F3 GELB: Konstante umbenennen auf
+  `_AUTO_HUNT_MOUSE_INACTIVITY_TIMEOUT_S` (selbsterklärender) —
+  angenommen. F4 GELB: Helper-Methode für Anker-Set — abgelehnt (KISS,
+  1-Zeiler-Inline sauberer). Plus 3 Test-Empfehlungen R1-S7 (T11
+  Mehrfach-Reset, T12 Race timer+mouse, T13 Reihenfolge-Test) —
+  angenommen. UI-Text-Verbesserung „AUTO HUNT-Taste drücken" —
+  übernommen.
+- **Final-R1 (V4-pro):** 0 KP, 1 GELB (Test-Doku-Hinweis akademisch).
+  „Push-Status: FREIGEGEBEN."
+
+**V4-pro 18-Cycle-Bilanz:** weiterhin 0 Halluzinationen, 100% verifizierbar.
+
+**Tests:** `tests/test_p67_mouse_inactivity.py` NEU mit 15 Tests
+(T1 Konstante, T2 Init-Anker, T3 + T3b Polling-Anker, T4 Toggle-Anker,
+T5 Stop bei Inaktivität, T6 Grenz-Test 299s, T7 active=False, T8
+Cleanup-Default, T8b Totmann-Branch, T9 Hardware-Pflicht kein
+_abort_active_tx, T10 Docstring, T11 Mehrfach-Reset, T12 Race
+timer+mouse, T13 Reihenfolge Anker-vor-Start).
+
+Tests 1352 → 1367 (+15 P67). Voller Smoke-Test grün (`pytest tests/ -q`).
+APP_VERSION 0.97.42 → 0.97.43. Backup
+`Appsicherungen/2026-05-16_v0.97.42_vor_p67/`.
+
+**Push pending** bis Mike Field-Test (F1-F5) bestätigt — F1, F3, F5 ohne
+Radio machbar, F4 mit Radio (Verhalten bei aktivem QSO).
+
+---
+
 ## 2026-05-15 v0.97.35 — P62 Bandwechsel→Gain-Messung UX-Übergang (1s Pause)
 
 **Trigger:** Mike-Field-Test P60-F6 15.05. vormittags: Bandwechsel auf

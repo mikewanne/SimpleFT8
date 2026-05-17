@@ -1,8 +1,72 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-16 — P66 Logbuch-Tab-Auto-Show + READMEs aktualisiert
+## Stand 2026-05-17 — P54-FIX: echte 10W-Closed-Loop-Convergenz beim TUNE
 
-**Aktueller Code-Stand:** v0.97.42 (P66), Tests **1352 grün**.
+**Aktueller Code-Stand:** v0.97.45 (P54-FIX), Tests **1415 grün**.
+
+### 🟠 v0.97.45 P54-FIX — Closed-Loop-Convergenz beim TUNE (Field-Test radio-pflichtig!)
+
+P54 (v0.97.44) speicherte fälschlich „Slider 10 = 10W" hart für jedes
+Band. P54-FIX implementiert Mike's eigentliches Konzept: echte
+Closed-Loop-Convergenz während TUNE — App regelt rfpower hoch/runter
+bis FWDPWR≈10W rauskommt, speichert dann den **echten** Stellgrößen-
+Wert. Plus Krücken-Multiplikation × 0.9 für höhere Wattzahlen als
+Initial-Startwert solange nur 1 Stützpunkt existiert.
+
+**Workflow:** V1→V2→R1→V3→Code→Final-R1+Round 2. **R1: 4 ROT-Bugs**
+(`set_power` fehlte, Cancel-Race, State-Var Init, hart-Save). **Final-
+R1: 1 weiterer ROT-Bug** (Re-Entry-Race in `_tune_stop` durch
+Qt-Sub-Event-Loop). Alle eingearbeitet.
+
+**V4-pro 20-Cycle-Bilanz:** 0 Halluzinationen, 3 echte ROT-Bugs
+gefangen.
+
+| F# | Was prüfen | Radio? |
+|---|---|---|
+| **F1** | TUNE auf 40m resonant → Console-Log zeigt Convergenz-Iterationen, finaler rf-Wert plausibel (z.B. 11–14) | ja |
+| **F2** | TUNE auf 17m mit SWR 2,5:1 → Convergenz auf höheren rf-Wert (z.B. 16–22), Tabelle in Settings zeigt das | ja |
+| **F3** | TUNE auf nicht-matchbarem Band → Phase B SKIP (SWR > Limit), kein Save, Marker bleibt | ja |
+| **F4** | Erstes QSO 50W auf neuem Band ohne 50W-Eintrag → Krücke greift im Console-Log (`[RF-Preset] Krücke: 40m_50W → rf=...`) | ja |
+| **F5** | Settings-Tabelle nach mehreren Sessions → echte band-spezifische Werte (10W-Anker + höhere Wattzahlen aus QSO-Convergenz) | ja |
+| **F6** | Cancel-Button während TUNE → Schleife bricht ab, kein Save, Hardware sauber | ja |
+| **F7** | Convergenz mit Hardware-Fehler (FWDPWR=0) → Fallback rf=10, kein Crash | ja |
+| **F8** | Manueller TUNE-Klick → identische Phase A + B + Save-Logik | ja |
+
+### 🟠 v0.97.44 P54 — Auto-Tune bei Bandwechsel + 10-W-Stützpunkt (Field-Test mit Radio!)
+
+Bundle aus P54a (Auto-Tune-Dialog bei Bandwechsel) + P54b (RFPreset-
+Stützpunkt während TUNE). Beides verflochten in `_tune_post_swr_check`.
+
+**Workflow:** V1→V2→R1→V3→Code→Final-R1 (+Round 2 nach ROT-Fix).
+**R1-V4-pro:** 6 Findings (2 ROT eingearbeitet — F1 `watt=10` statt
+round(avg), F2 Signal vs. QMessageBox). **Final-R1:** 1 ROT-Bug
+(State-Sync `set_power` nach `_apply_rf_preset`) eingearbeitet. **Final-
+R1 Round 2:** „PUSH FREIGEGEBEN".
+
+| F# | Was prüfen | Radio? |
+|---|---|---|
+| **F1** | Bandwechsel 20m→40m → AutoTuneDialog öffnet, 15s TUNE → schließt bei SWR-Good. Console-Log: `[P54b] RFPreset-Stuetzpunkt: 40m_10W → rf=10` | ja |
+| **F2** | Bandwechsel auf SWR-blockiertes Band (Marker) → KEIN Dialog (Skip respektiert) | ja |
+| **F3** | Bandwechsel mit Antennen-Mismatch → Timeout/Fail → Status „TUNE fehlgeschlagen", Marker setzt | ja |
+| **F4** | Settings → Toggle „Auto-TUNE bei Bandwechsel" AUS → Bandwechsel → kein Dialog | ja |
+| **F5** | Mode-Wechsel FT8↔FT4 OHNE Bandwechsel → kein Auto-Tune | ja |
+| **F6** | Erstes QSO nach Auto-Tune → `_rfpower_current` startet bei 10 statt 50 (schnellere Konvergenz, sichtbar im Console-Log) | ja |
+| **F7** | Cancel-Button im Dialog während TUNE → Dialog schließt, kein Save, Marker bleibt unangetastet | ja |
+| **F8** | Manueller TUNE-Klick (User) → speichert ebenfalls Stützpunkt | ja |
+
+### 🟠 v0.97.43 P67 — Auto-Hunt 5-Min-Maus-Inaktivität (Field-Test, teilweise ohne Radio)
+
+Mike-Spec Variante C: Auto-Hunt-Session endet zusätzlich nach 5 Min ohne
+Mausbewegung. 10-Min-Hard-Cap bleibt parallel, wer zuerst greift gewinnt.
+Implementierung als zweite Schicht über den bestehenden Stop-Pfaden.
+
+| F# | Was prüfen | Radio? |
+|---|---|---|
+| **F1** | Auto-Hunt klicken, 5 Min Maus nicht bewegen → Button stoppt + Info-Zeile „⏸ Auto-Hunt gestoppt — 5 Minuten ohne Mausbewegung" + 5-Sek-Reflexions-Cooldown | nein |
+| **F2** | Auto-Hunt klicken, alle 4:30 kurz Maus bewegen → läuft bis 10-Min-Cap durch (Reason `timer_expired`) | nein |
+| **F3** | Auto-Hunt klicken, 4 Min still → Maus kurz bewegen → weitere 4 Min still → kein Stop (Reset funktioniert) | nein |
+| **F4** | Bei laufendem QSO 5 Min Maus still → Auto-Hunt stoppt, aktives QSO geht zu Ende (kein Abbruch) | ja |
+| **F5** | App-Start ohne Mausbewegung → Auto-Hunt klicken → 5+ Min still → genau 1 Stop, kein Sofort-Trigger | nein |
 
 ### 🔵 v0.97.42 P66 — Logbuch-Auto-Show + READMEs (visueller Check, kein Radio)
 

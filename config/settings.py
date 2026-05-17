@@ -78,6 +78,10 @@ DEFAULTS = {
     # Dauer 15s reicht laut LDG AT-200 Pro Spec, 30s als Reserve.
     "tuner_present": True,
     "tune_duration_s": 15,
+    # P54 (v0.97.44): Auto-TUNE nach Bandwechsel — schaltbar.
+    # Triggert 10 W TUNE auf ANT1 nach jedem Band-Wechsel, speichert
+    # zudem RFPreset-Stuetzpunkt fuer schnellere TX-Power-Konvergenz.
+    "auto_tune_on_band_change": True,
 }
 
 
