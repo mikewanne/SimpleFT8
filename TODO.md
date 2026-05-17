@@ -1,4 +1,4 @@
-# SimpleFT8 TODO — Stand 16.05.2026 (v0.97.42, GitHub-Präsentation überarbeitet)
+# SimpleFT8 TODO — Stand 16.05.2026 (v0.97.44, P54 ERLEDIGT)
 
 ---
 
@@ -8,27 +8,14 @@ Während der kontroversen DeepSeek-Diskussion über die GitHub-Präsentation
 sind drei mögliche Code-Änderungen aufgekommen. KEIN sofortiger Fix —
 Mike entscheidet pro Punkt.
 
-### P67 — Auto-Hunt-Cap an Operator-Presence binden (statt unabhängig)
+### ✅ P67 — Auto-Hunt 5-Min-Maus-Inaktivitäts-Schicht (Variante C) — ERLEDIGT v0.97.43
 
-**Aktuell:** `_auto_hunt_timer` hat eine eigene 10-Minuten-Hard-Cap die
-unabhängig von Maus/Tastatur läuft. Das ist Bot-Schutz-tauglich, aber
-DeepSeek's R3-Argument: Wer das Konstrukt liest, fragt sich „warum nicht
-gleich an die existierende Operator-Presence-Logik koppeln, die schon
-auf Maus/Tastatur reagiert?"
-
-**Vorschlag:** Auto-Hunt stoppt sobald `_operator_presence_timer` ohne
-Reset abläuft (z.B. 5 Min ohne Maus-/Tastatur-Aktivität). Plus weiterhin
-10-Min-Hard-Cap als zweite Schicht.
-
-**Begründung:** Sauberer "ich-bin-wirklich-da"-Nachweis. Wenn ich vor
-dem Rechner einschlafe, stoppt Auto-Hunt nach 5 Min (nicht erst nach 10).
-
-**Pro:** Strengere Bedienpräsenz, kommt § 13 AFuV-Geist näher.
-**Contra:** Mike's bewusste Entscheidung war: Auto-Hunt-Timer MUSS
-unabhängig sein damit „ich tippe was anderes nebenher" den Bot-Cap
-nicht resetiert. Beide Wege sind valide.
-
-**Aufwand:** ~0.5 Tag inkl. Tests + Doku.
+**Umgesetzt 16.05.2026 nach Mike-Entscheidung Variante C:** Auto-Hunt
+10-Min-Hard-Cap bleibt unverändert, ZUSÄTZLICHE Schicht „5 Min ohne
+Mausbewegung → Auto-Hunt stoppt". Beide parallel, wer zuerst greift
+gewinnt. Voller V1→V2→R1→V3→Code→Final-R1 mit DeepSeek-V4-pro.
+Reason `mouse_inactive_5min`. Kein `_abort_active_tx` (laufendes QSO
+darf zu Ende). Tests 1352→1367 (+15). Field-Test F1-F5 pending.
 
 ---
 
@@ -74,6 +61,55 @@ Methodik-Caveats im README sind als Zwischenlösung ausreichend.
 
 **Aufwand:** ~1-2 Tage inkl. Bootstrap-Implementierung in
 `generate_plots.py` und PDF-Update.
+
+---
+
+### P70 — ALC-Pegel-Überwachung und -Korrektur (Mike-Idee 17.05.2026)
+
+**Aktuell:** Closed-Loop regelt `rfpower` (Endstufen-Ausgangsleistung)
+gegen Ziel-Watt via FWDPWR-Feedback. `tx_audio_level` ist statisch auf
+maximal 0,75 begrenzt (CLIP_LIMIT in `mw_tx.py:648`), Software-Peak
+wird angezeigt („Clipschutz X%"). **Was fehlt:** der vom Radio
+gemeldete `HWALC`-Pegel (via VITA-49 Meter) wird empfangen, an
+`control_panel.update_alc()` weitergereicht — und die Methode ist
+`pass` (Z. 1769-1771). Wir wissen also nicht ob die Eingangsstufe
+des Flex in ALC-Kompression läuft.
+
+**Mike-Vergleich zum Icom-Setup:** Beim Icom hat Mike den USB-Audio-
+Pegel am Mac so eingestellt dass die ALC-Lampe gerade eben zuckt —
+maximale lineare Modulation ohne Übersteuerung. Das macht das Flex
+heute nicht, weil wir nur den End-Pegel (rfpower) regeln, nicht die
+Eingangs-Modulation.
+
+**Vorschlag (V0-Spec, nicht final):**
+- HWALC-Wert in der Statusleiste anzeigen (analog SWR/FWDPWR)
+- Schwellwert in Settings (z. B. „ALC max. 3 dB" als Default)
+- Closed-Loop erweitern: bei ALC > Schwelle → `tx_audio_level`
+  reduzieren BEVOR rfpower erhöht wird
+- Beim Stabilität-Pendel: ALC eben gerade messbar = optimal
+  (analog Mike's Icom-Justage)
+
+**Begründung:** Linearitäts-Spielraum sicherstellen. Aktuelle
+Software-Peak-Anzeige sagt nichts darüber ob das Radio intern
+komprimiert (= mehr IMD/Splatter ins Nachbarband).
+
+**Pro:** Sauberes Sendesignal über alle Bänder, ehrliches HF-
+Verhalten, kein „verstecktes Übersteuern". Lehrreich für Hobby-
+Funker die das vom Icom kennen.
+**Contra:** Komplexität — zwei verkoppelte Regler (audio-level
++ rfpower) brauchen sauberes Anti-Windup. Konvergenz darf nicht
+oszillieren.
+
+**Aufwand:** ~2-3 Tage inkl. V1→V2→R1→V3-Workflow, neue
+HWALC-UI-Anzeige, Closed-Loop-Erweiterung, Tests + Field-Test
+F1-F5 (Hardware-pflichtig).
+
+**Offene Fragen für V1:**
+- HWALC-Skala beim Flex: was ist „0 dB" vs. „eben sichtbar"? Erst
+  empirisch messen.
+- Reihenfolge: erst audio runter, dann rfpower hoch? Oder
+  symmetrisch?
+- Pre-TX-Test (Tune-artig) oder echte Live-Regelung im QSO?
 
 ---
 
@@ -1154,7 +1190,20 @@ Robustheit → voller Workflow Pflicht.
 
 ---
 
-## 🆕 OFFEN — P54: Auto-Tune bei Bandwechsel (Settings-Toggle) (Mike 14.05.2026 nachmittags)
+## ✅ 16.05.2026 erledigt — P54: Auto-Tune bei Bandwechsel + RFPreset-Stützpunkt (Bundle) v0.97.44
+
+Mike-Idee 16.05.: TUNE bei Bandwechsel speichert sofort 10-W-Stützpunkt.
+Voller V1→V2→R1→V3→Code→Final-R1 (+Round 2 nach ROT-Fix) autonom mit
+DeepSeek-V4-pro. R1 fand 2 ROT-Bugs (F1 Klassiker-Catch `watt=10`
+statt round(avg), F2 Signal statt QMessageBox). Final-R1 fand 1 ROT
+(State-Sync — `radio.set_power` nach `_apply_rf_preset` für Power-Spike-
+Schutz). Tests 1367→1395 (+28). **V4-pro 19-Cycle-Bilanz: 0
+Halluzinationen, 2 echte ROT-Bugs gefangen.** Field-Test F1-F8 pending
+(alle Radio-pflichtig).
+
+---
+
+## 🗄️ HISTORIE — P54 Spec (Mike 14.05.2026 nachmittags, ERLEDIGT als v0.97.44)
 
 **Trigger:** Eng verwandt mit P53 — zusätzliche Sicherheit/Komfort
 bei Bandwechsel. Mike's Wahl: NUR Bandwechsel (20m→40m), NICHT
