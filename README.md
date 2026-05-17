@@ -14,6 +14,22 @@
 >
 > *DE:* SimpleFT8 ist eine private Machbarkeitsstudie und ein persoenliches Hobby-Projekt. Nutzung auf eigene Gefahr. Es wird keine Haftung uebernommen fuer Schaeden an Hardware (Funkgeraet, PA, Antennen), Datenverlust oder regulatorische Verstoesse. Die Software wird "AS IS" ohne jegliche Garantie bereitgestellt — siehe [LICENSE](LICENSE) (MIT) fuer vollstaendige Bedingungen.
 
+> 📰 **Note for CQ DL 6/2026 readers / Hinweis fuer Leser der CQ DL 6/2026**
+>
+> *EN:* The print article was finalized about 3 weeks before publication.
+> Three details have evolved since:
+>
+> - **Algorithm (UCB1 → dynamic per-slot scoring):** UCB1 (Upper Confidence Bound, classic Multi-Armed Bandit) was the original design intent. During development we **dropped UCB1** in favor of a simpler, more robust, and **faster-adapting** approach: a heuristic SNR-scoring evaluated **every FT8 slot (15 s)** instead of in 80-cycle blocks every 20 minutes. The functional goal is identical (explore vs. exploit — find the best antenna without forgetting the other). Reaction time is measurably faster (seconds instead of 20 minutes); QSO yield is at least equivalent based on field statistics (we did not run a controlled A/B against the old pipeline). Real-world benefit: off-resonance bands, weather changes (wet antenna, snow, ice), day/night transitions, or short propagation dips no longer take 20 minutes to register. Bonus: less hidden state (no 80-cycle half-state that can hang on abort or band-change), less code, smaller bug surface.
+> - **Diversity ratio adaptation:** Same change as above — the "automatic re-measurement every 80 cycles (~20 min)" mentioned in the article was replaced in v0.97.19 with continuous per-slot evaluation. Faster, more reactive, less brittle.
+> - **Radio compatibility:** Verified on **FLEX-8400M**. The VITA-49 / TCP API is identical across the FLEX-6000 and FLEX-8000 families, so other models in those series should work — but only the FLEX-8400M has been field-tested by the author.
+>
+> *DE:* Der Artikel wurde etwa 3 Wochen vor dem Erscheinen abgegeben.
+> Drei Details haben sich seitdem entwickelt:
+>
+> - **Algorithmus (UCB1 → dynamisches Pro-Slot-Scoring):** UCB1 (Upper Confidence Bound, klassischer Multi-Armed-Bandit) war die urspruengliche Design-Idee. Im Laufe der Entwicklung haben wir UCB1 **aufgegeben** zugunsten einer einfacheren, robusteren und **schneller adaptierenden** Loesung: ein heuristisches SNR-Scoring, das in **jedem FT8-Slot (15 s)** neu bewertet wird, statt in 80-Zyklen-Bloecken alle 20 Minuten. Das funktionale Ziel ist dasselbe (Explore vs. Exploit — beste Antenne finden ohne die andere zu vergessen). Die Reaktionszeit ist messbar schneller (Sekunden statt 20 Minuten); der QSO-Ertrag ist nach den Feld-Statistiken mindestens gleichwertig (einen kontrollierten A/B-Vergleich gegen die alte Pipeline gab es nicht). Praktischer Nutzen: nicht-resonante Baender, Wetterwechsel (nasse Antenne, Schnee, Eis), Tag/Nacht-Uebergaenge oder kurzfristige Ausbreitungseinbrueche brauchen jetzt keine 20 Minuten mehr bis zur Anpassung. Plus: weniger Zustand im Hintergrund (kein 80-Zyklen-Half-State, der bei Abbruch oder Bandwechsel haengen bleibt), weniger Code, kleinere Bug-Oberflaeche.
+> - **Diversity-Verhaeltnis-Anpassung:** Folgt aus dem Punkt oben — die im Artikel beschriebene „automatische Neueinmessung alle 80 Zyklen (~20 Min)" wurde in v0.97.19 durch die kontinuierliche Pro-Slot-Bewertung ersetzt. Schneller, reaktiver, weniger fragil.
+> - **Funkgeraete-Kompatibilitaet:** Verifiziert auf **FLEX-8400M**. Die VITA-49- und TCP-API ist ueber die FLEX-6000- und FLEX-8000-Serien identisch, andere Modelle dieser Familien sollten also funktionieren — feldgetestet wurde aber nur der FLEX-8400M.
+
 > **No more manual ALC babysitting, no missed replies, no guessing the best antenna or frequency.**
 > SimpleFT8 automates your entire FT8/FT4/FT2 workflow with closed-loop power control, dual-mode diversity scoring, automatic CQ frequency optimization, and intelligent caller queuing.
 
