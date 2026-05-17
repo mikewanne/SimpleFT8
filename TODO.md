@@ -1,4 +1,4 @@
-# SimpleFT8 TODO — Stand 17.05.2026 (v0.97.45, P54-FIX ERLEDIGT)
+# SimpleFT8 TODO — Stand 17.05.2026 (v0.97.46, P69 ERLEDIGT)
 
 ---
 
@@ -41,26 +41,32 @@ Aktueller Sticky-Ansatz ist KISS.
 
 ---
 
-### P69 — Konfidenz-Intervalle für Diversity-Mess-Tabellen
+### ✅ P69 — Konfidenz-Intervalle für Diversity-Mess-Tabellen — ERLEDIGT v0.97.46
 
-**Aktuell:** README zeigt „+126%" als Punktschätzer ohne CI/p-Wert.
-README sagt offen „no confidence intervals computed".
+**Umgesetzt 17.05.2026 autonom während Mike unterwegs.** Voller
+V1→V2→R1→V3-Workflow mit DeepSeek-V4-pro. R1 fand 6 Findings, alle
+adressiert.
 
-**Vorschlag:** `scripts/generate_plots.py` erweitern um Bootstrap-CI
-(z.B. 1000-fach resample der Tagesdurchschnitte). PDF-Bericht zeigt
-„+126% (95%-CI: +112% bis +141%)" statt nur Punktschätzer.
+- `scripts/bootstrap_ci.py` NEU: Block-Bootstrap über (date, hour)-Blöcke,
+  5000 Iterationen, Percentile-CI. Threshold n < 15 → „insufficient",
+  15 ≤ n < 25 → „limited", n ≥ 25 → „ok". F-DIV0 ROT-Bug aus R1
+  abgefangen (Resample verwerfen wenn normal_mean == 0).
+- `scripts/print_ci_for_readme.py` NEU: Helper für künftige
+  README-Updates.
+- PDF-Tabelle Seite 3 zeigt jetzt 2-zeilig „Punktschätzer + 95%-CI".
+- 6 README-Tabellen (DE+EN, 40m+20m+30m) auf aktuelle Daten + CI gebracht.
 
-**Begründung:** DeepSeek R2-Punkt: ohne Inferenz-Statistik sind die
-Zahlen für HF-Ingenieure/Statistiker entkräftet. Mit CI wird die
-Aussage hart und vertrauenswürdig.
+**Wichtigste Erkenntnis:** Daten haben sich seit alter README
+weiterentwickelt. 40m Std fiel von +126% auf +62% (CI +32-+102%,
+signifikant). 20m+30m CIs enthalten 0 → kein signifikanter Effekt
+nachweisbar. Ehrlicher als die alten Punktschätzer.
 
-**Pro:** Wissenschaftliche Glaubwürdigkeit, entkräftet „Hobby-Bullshit-
-Bingo"-Vorwurf.
-**Contra:** ~1-2 Tage Aufwand, Statistik-Sorgfalt nötig. Aktuelle
-Methodik-Caveats im README sind als Zwischenlösung ausreichend.
+Tests 1415 → 1435 (+20). Push pending bis Mike-Freigabe.
 
-**Aufwand:** ~1-2 Tage inkl. Bootstrap-Implementierung in
-`generate_plots.py` und PDF-Update.
+**Followup-Idee P69b (optional, niedrig priorisiert):** BCa-Bias-
+Korrektur für Edge-Case n < 25 implementieren wenn Datenbasis bei
+einem Band längere Zeit unter Threshold bleibt. Aktuell nicht nötig
+weil 40m+20m+30m alle n ≥ 25 haben.
 
 ---
 

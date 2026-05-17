@@ -3,6 +3,70 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-17 v0.97.46 — P69: Block-Bootstrap-Konfidenz-Intervalle für Diversity-Statistiken
+
+**Trigger:** Autonomer Workflow während Mike unterwegs. Aus TODO P69
+(DeepSeek-Vorschlag aus GitHub-Review): README-Headline-Aussagen wie
+„+126%" mit Bootstrap-95%-CI härten → entkräftet „Hobby-Bullshit-Bingo"-
+Vorwurf, macht Aussagen wissenschaftlich solide. Passt auch zum neuen
+CQ-DL-Klarstellungs-Block.
+
+**Voller V1→V2→R1→V3-Workflow** mit DeepSeek-V4-pro autonom. R1 fand 6
+Findings:
+- F-DIV0 🔴 ROT: Division-by-zero in Bootstrap-Schleife wenn
+  `normal_mean == 0`. Resample verwerfen, max 10 Retries, sonst
+  ValueError.
+- F-RATIO1 🟠 ORANGE: BCa-Bias-Korrektur empfohlen. V3-Entscheidung:
+  Variante B (Percentile-CI behalten, KISS + Threshold-Schutz reicht).
+- F-THRESHOLD 🟠 ORANGE: n_min < 15 → „insufficient", 15 ≤ n_min < 25
+  → „limited", n_min ≥ 25 → „ok".
+- F-ITER 🟡 GELB: 1000 → 5000 Iterationen, Performance bleibt < 2 s.
+- F-TEST-DATA 🟡 GELB: Tests mit konstruierten Blöcken statt
+  Filesystem-Fixtures (Mock-Loader für T12).
+- F-CAVEAT-LANG 🟡 GELB: präziser Caveat-Wortlaut für README-Update.
+
+**Code in 4 atomaren Commits:**
+
+- **C1+C2:** `scripts/bootstrap_ci.py` NEU (~190 LOC) + 20 Tests
+  (`tests/test_p69_bootstrap_ci.py`). Block-Bootstrap mit Percentile-CI
+  über `(date, hour)`-Blöcke. Pooled Mean über alle Cycles aller
+  gezogenen Blöcke (matcht `_combo_summary_fair`-Logik). Unabhängiges
+  Resampling pro Modus.
+- **C3:** `generate_plots.py` PDF-Integration. `_r_ergebnisse_page`
+  optionales `ci_map`-Argument. „vs Normal"-Spalte 2-zeilig: Punktschätzer
+  + 95%-CI. Fail-silent bei Import-Fehler.
+- **C4:** `scripts/print_ci_for_readme.py` NEU (~95 LOC). Helper-Skript
+  das fertige Markdown-Tabellen-Zeilen mit CI für README-Update druckt.
+  Sign-aware Format (negative Werte als „−3%" statt „+−3%").
+- **C5:** README-Update — 6 Tabellen (DE+EN, 40m+20m+30m) auf aktuelle
+  Daten und CI gebracht. Methodik-Caveat erweitert mit Block-Bootstrap-
+  Beschreibung und „Tag-zu-Tag-Drift unmodelliert".
+- **C6:** APP_VERSION 0.97.45 → 0.97.46 + HISTORY/HANDOFF/CLAUDE/TODO.
+
+**Wichtigste Erkenntnis aus C5 — Daten haben sich seit alter README weiterentwickelt:**
+
+| Band | Modus | Alt (README) | Neu (mit CI) |
+|---|---|---|---|
+| 40m | Standard | +126% | **+62%** (CI: +32 bis +102%) |
+| 40m | DX | +123% | **+36%** (CI: +11 bis +70%) |
+| 20m | Standard | −6% | **−3%** (CI: −14 bis +10%, **0 enthalten**) |
+| 20m | DX | −8% | **+8%** (CI: −4 bis +22%, **0 enthalten**) |
+| 30m | Standard | +69% | **+9%** (CI: −9 bis +31%, **0 enthalten**) |
+| 30m | DX | +59% | **+1%** (CI: −22 bis +29%, **0 enthalten**) |
+
+**Wissenschaftliche Aussage:** Auf 40m ist Diversity-Vorteil statistisch
+signifikant (CI komplett über 0). Auf 20m und 30m ist mit der aktuellen
+Datenbasis **kein signifikanter Effekt nachweisbar** — die CIs enthalten
+0. Das ist deutlich härter und ehrlicher als die alten Punktschätzer.
+
+**V4-pro 21-Cycle-Bilanz:** 0 Halluzinationen, 1 echter ROT-Bug gefangen
+(F-DIV0).
+
+APP_VERSION 0.97.45 → 0.97.46. Tests 1415 → 1435 (+20 P69-Tests). PDFs
+neu generiert (DE + EN, 40m + 20m + 30m). Push pending bis Mike-Freigabe.
+
+---
+
 ## 2026-05-17 v0.97.45 — P54-FIX: Echte 10W-Closed-Loop-Convergenz beim TUNE
 
 **Trigger:** Mike-Analyse 16.05. abends bis 17.05.: P54 (v0.97.44) hatte

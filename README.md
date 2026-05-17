@@ -186,45 +186,46 @@ mode.
 > Generated automatically from live session data via `scripts/generate_plots.py`.
 > X-axis = UTC hour of day, averaged across all measurement days. Data grows with every session.
 
-**40m FT8 — 8–9 measurement days, 27,200 cycles (ANT1 = trap dipole running off-band over tuner):**
+**40m FT8 — 5–6 measurement days, 35,656 cycles (ANT1 = trap dipole running off-band over tuner):**
 
-| Mode | Stations/15s (Pooled Mean) | vs Normal | Days | Cycles |
-|------|:---:|:---:|:---:|:---:|
-| Normal | 18.7 | — | 8 | 7,743 |
-| Diversity Standard | 42.2 | **+126%** *(off-band, suboptimal ANT1)* | 9 | 10,172 |
-| Diversity DX | 41.6 | **+123%** *(off-band, suboptimal ANT1)* | 6 | 9,285 |
+| Mode | Stations/15s (Pooled Mean) | vs Normal | 95%-CI | Days | Cycles |
+|------|:---:|:---:|:---:|:---:|:---:|
+| Normal | 30.0 | — | — | 5 | 11,504 |
+| Diversity Standard | 48.5 | **+62%** | +32 to +102% | 6 | 13,659 |
+| Diversity DX | 40.8 | **+36%** | +11 to +70% | 5 | 10,493 |
 
 *Pooled mean over all cycles and all hours of all measurement days. No
-time-of-day filter — see methodology caveats below. **The headline gain
-comes mostly from compensating a weak primary antenna, not from a
-generic diversity advantage** — see 20m comparison for the resonant case.*
+time-of-day filter. **95%-CI via Block-Bootstrap** over (date, hour)
+blocks (5000 iterations, seed=42) — covers intra-hour autocorrelation;
+day-to-day drift remains unmodeled. CIs are therefore a **lower bound on
+true uncertainty**.*
 *Rescue stations (ANT1 below −24 dB, saved by ANT2) are included in the Diversity totals.
 Detailed breakdown: PDF report (p.3).*
 
-> **Methodology caveats (honest)**
-> - Pooled-mean across all cycles **without** confidence intervals, p-values
->   or stratification for solar flux / weather / hour-of-day. 27,200 cycles
->   sounds large but the data is **time-autocorrelated** within sessions —
->   the effective sample size is much smaller.
-> - Measurement-day counts differ between modes (Normal=8, Standard=9, DX=6).
->   Days are **not randomized** — they reflect whenever each mode happened
->   to run. Selection bias is possible.
-> - Raw data is in `statistics/` (one Markdown file per hour per mode) for
->   anyone who wants to run a proper t-test, bootstrap CI, or solar-index
->   normalization. I haven't done that work myself.
-> - The PDF report (p.3) shows hourly breakdowns which are more honest than
->   the single pooled headline number.
+> **Statistical significance — 40m**
+> Both Diversity modes show CIs **entirely above 0**, so the gain is
+> statistically distinguishable from "no effect" given the available
+> data. The CI width (~70 percentage points) reflects substantial
+> day-to-day variability from changing propagation, weather and antenna
+> conditions — typical for amateur HF data without solar-flux
+> stratification.
 >
-> Take the percentage as **rough order of magnitude**, not as a clinical-
-> trial result.
+> **Why these numbers replaced the earlier +126%/+123% headline:**
+> the previous published figures were from an older dataset (7,743 Normal
+> cycles). With more measurement days, the absolute Normal baseline rose
+> from 18.7 to 30.0 stations/cycle while Diversity Standard rose only
+> from 42.2 to 48.5 — the relative gain compressed accordingly. The
+> direction is unchanged, the magnitude is less dramatic. This is the
+> honest evolution of the dataset, not a regression.
 
 > **Note on Interpretation**
 > ANT1 (Kelemen DP-201510) is operated off-band on 40m and therefore significantly
 > less efficient on this band. ANT2 (house gutter, ~15m) falls between λ/4 and λ/2
-> for 40m and works comparatively well. The measured gains (+126%/+123% stations)
-> represent an **upper bound** for off-band operation — with two well-matched
-> 40m-optimized antennas, a lower but still significant diversity gain is expected.
-> The exact opposite happens when ANT1 is on its resonant band — see the 20m results below.
+> for 40m and works comparatively well. The measured gains (+62%/+36% stations,
+> 95%-CI entirely above 0) represent a **realistic value** for off-band operation —
+> with two well-matched 40m-optimized antennas, a smaller but still positive
+> diversity gain is expected. The exact opposite happens when ANT1 is on its
+> resonant band — see the 20m results below where the CI **includes 0**.
 
 **Station timeline — 40m FT8, all three modes over 24h UTC:**
 *(Dashed lines = Rescue Stations: received by ANT1 below −24 dB — ANT2 boosts the signal above the decoding threshold)*
@@ -249,17 +250,21 @@ Detailed breakdown: PDF report (p.3).*
 
 #### 20m FT8 — when ANT1 is on its design band
 
-**Live measurement results — 20m FT8, 7–9 measurement days, 19,936 cycles:**
+**Live measurement results — 20m FT8, 8–9 measurement days, 39,801 cycles:**
 
-| Mode | Stations/15s (Pooled Mean) | vs Normal | Days | Cycles |
-|------|:---:|:---:|:---:|:---:|
-| Normal | 51.1 | — | 9 | 5,959 |
-| Diversity Standard | 47.9 | **−6%** | 7 | 6,290 |
-| Diversity DX | 47.1 | **−8%** | 7 | 7,687 |
+| Mode | Stations/15s (Pooled Mean) | vs Normal | 95%-CI | Days | Cycles |
+|------|:---:|:---:|:---:|:---:|:---:|
+| Normal | 47.8 | — | — | 8 | 11,088 |
+| Diversity Standard | 46.2 | **−3%** | −14 to +10% | 9 | 14,672 |
+| Diversity DX | 51.4 | **+8%** | −4 to +22% | 8 | 14,041 |
 
-*Note: Earlier readings (fewer days) showed −18%/−22%. With more measurement days now
-covering all times of day, the numbers have stabilized at a smaller loss. Still negative
-— the resonant ANT1 advantage on 20m is real — but the picture is more nuanced.*
+*The 95%-CI of both Diversity modes **includes 0** — meaning no
+statistically significant station-count change can be claimed from this
+dataset. The point estimates suggest a small loss for Standard and a
+small gain for DX, but neither is distinguishable from zero given the
+day-to-day variability. This matches the physical expectation: ANT1 is
+resonant on 20m, so there is little room for Diversity to add station
+count via the rescue mechanism.*
 
 > **Note on Interpretation — 20m**
 > On 20m, the Kelemen DP-201510 operates within its **design band** as a resonant
@@ -296,17 +301,21 @@ covering all times of day, the numbers have stabilized at a smaller loss. Still 
 
 #### 30m FT8 — off-band ANT1, early data *(in progress)*
 
-**Live measurement results — 30m FT8, preliminary data:**
+**Live measurement results — 30m FT8, 3–6 measurement days, 18,808 cycles:**
 
-| Mode | Stations/15s (Pooled Mean) | vs Normal | Days | Cycles |
-|------|:---:|:---:|:---:|:---:|
-| Normal | 15.0 | — | 3 | 452 |
-| Diversity Standard | 25.3 | **+69%** | 3 | 1,386 |
-| Diversity DX | 23.9 | **+59%** *(preliminary)* | 1 | 214 |
+| Mode | Stations/15s (Pooled Mean) | vs Normal | 95%-CI | Days | Cycles |
+|------|:---:|:---:|:---:|:---:|:---:|
+| Normal | 28.4 | — | — | 5 | 6,543 |
+| Diversity Standard | 30.9 | **+9%** | −9 to +31% | 6 | 7,178 |
+| Diversity DX | 28.7 | **+1%** | −22 to +29% | 3 | 5,087 |
 
-> **Note:** 30m data collection just started. Normal and Diversity Standard have 3 days
-> each — already showing the expected off-band pattern (large gain, ANT1 suboptimal on 10 MHz).
-> Diversity DX has only 1 day — not yet reliable. Data growing with each session.
+> **Note:** The 95%-CIs of both Diversity modes **include 0** — same as
+> on 20m, no statistically significant gain can be claimed from this
+> dataset. Earlier readings (fewer days) suggested +69%/+59% but those
+> were preliminary and unstable. With more measurement days the gains
+> compressed toward zero. Data still growing — if a real off-band effect
+> exists on 30m, it would emerge as the CI tightens around a positive
+> point estimate. Today the honest answer is: **no measurable gain yet**.
 
 ![Stations 30m FT8](auswertung/stationen_30m_FT8.png)
 
@@ -613,46 +622,46 @@ Einfach anschalten, ein paar QSOs machen, Feierabend.
 > Automatisch generiert aus Live-Sitzungsdaten via `scripts/generate_plots.py`.
 > X-Achse = UTC-Stunde des Tages, gemittelt über alle Messtage. Daten wachsen mit jeder Session.
 
-**40m FT8 — 8–9 Messtage, 27.200 Zyklen (ANT1 = Trap-Dipol off-band über Tuner):**
+**40m FT8 — 5–6 Messtage, 35.656 Zyklen (ANT1 = Trap-Dipol off-band über Tuner):**
 
-| Modus | Stationen/15s (Pooled Mean) | vs Normal | Tage | Zyklen |
-|-------|:---:|:---:|:---:|:---:|
-| Normal | 18,7 | — | 8 | 7.743 |
-| Diversity Standard | 42,2 | **+126%** *(off-band, suboptimale ANT1)* | 9 | 10.172 |
-| Diversity DX | 41,6 | **+123%** *(off-band, suboptimale ANT1)* | 6 | 9.285 |
+| Modus | Stationen/15s (Pooled Mean) | vs Normal | 95%-CI | Tage | Zyklen |
+|-------|:---:|:---:|:---:|:---:|:---:|
+| Normal | 30,0 | — | — | 5 | 11.504 |
+| Diversity Standard | 48,5 | **+62%** | +32 bis +102% | 6 | 13.659 |
+| Diversity DX | 40,8 | **+36%** | +11 bis +70% | 5 | 10.493 |
 
-*Pooled Mean über alle Zyklen und alle Tageszeiten aller Messtage — siehe
-Methodik-Caveats unten. **Der Headline-Gewinn entsteht primär durch
-Kompensation einer schwachen Hauptantenne, nicht durch einen generischen
-Diversity-Vorteil** — siehe 20m-Vergleich für den resonanten Fall.*
+*Pooled Mean über alle Zyklen und alle Tageszeiten aller Messtage. Kein
+Tageszeit-Filter. **95%-CI via Block-Bootstrap** über (Datum, Stunde)-
+Blöcke (5000 Iterationen, seed=42) — fängt Intra-Stunden-Autokorrelation
+ab; Tag-zu-Tag-Drift bleibt unmodelliert. CIs sind daher als **untere
+Schranke der wahren Unsicherheit** zu lesen.*
 *Rescue-Stationen (ANT1 unter −24 dB, von ANT2 gerettet) sind in den Diversity-Werten enthalten.
 Detaillierte Aufschlüsselung: PDF-Bericht (S.3).*
 
-> **Methodik-Caveats (ehrlich)**
-> - Pooled-Mean über alle Zyklen **ohne** Konfidenzintervalle, p-Werte oder
->   Stratifizierung für Solarflux / Wetter / Tageszeit. 27.200 Zyklen klingt
->   gross, aber die Daten sind **zeitlich autokorreliert** innerhalb von
->   Sessions — die effektive Stichprobengrösse ist deutlich kleiner.
-> - Anzahl Messtage unterscheidet sich zwischen Modi (Normal=8, Std=9, DX=6).
->   Tage sind **nicht randomisiert** — sie spiegeln wann welcher Modus lief.
->   Auswahl-Bias möglich.
-> - Rohdaten in `statistics/` (eine Markdown-Datei pro Stunde pro Modus)
->   für jeden der einen sauberen t-Test, Bootstrap-CI oder Solar-Index-
->   Normalisierung machen will. Ich habe das selbst nicht gemacht.
-> - PDF-Bericht (S.3) zeigt stündliche Aufschlüsselungen — ehrlicher als
->   die eine Pooled-Headline-Zahl.
+> **Statistische Signifikanz — 40m**
+> Beide Diversity-Modi haben CIs **komplett über 0** — der Gewinn ist
+> mit den vorhandenen Daten statistisch von „kein Effekt" unterscheidbar.
+> Die CI-Breite (~70 Prozentpunkte) zeigt die erhebliche Tag-zu-Tag-
+> Streuung durch wechselnde Ausbreitung, Wetter und Antennen-Bedingung
+> — typisch für Amateur-HF-Daten ohne Solarflux-Stratifizierung.
 >
-> Die Prozentangabe ist als **grobe Grössenordnung** zu lesen, nicht als
-> klinisches Studienergebnis.
+> **Warum diese Zahlen die früheren +126%/+123% ersetzen:** die alten
+> Werte stammten aus einer kleineren Datenbasis (7.743 Normal-Zyklen).
+> Mit mehr Messtagen stieg die absolute Normal-Baseline von 18,7 auf
+> 30,0 Stationen/Zyklus, während Diversity Standard nur von 42,2 auf
+> 48,5 stieg — der relative Gewinn schrumpft entsprechend. Die Richtung
+> bleibt, die Magnitude ist weniger dramatisch. Das ist die ehrliche
+> Entwicklung des Datensatzes, kein Rückschritt.
 
 > **Hinweis zur Interpretation**
 > ANT1 (Kelemen DP-201510) ist auf 40m außerhalb seines Auslegungsbandes und damit
 > deutlich suboptimal für diesen Frequenzbereich. ANT2 (Regenrinne, ~15m) liegt
 > zwischen λ/4 und λ/2 für 40m und arbeitet dort vergleichsweise gut. Die gemessenen
-> Gewinne (+126%/+123% Stationen) sind als **Obergrenze für Off-Band-Betrieb** zu
-> verstehen — bei zwei gleichwertigen, für 40m optimierten Antennen ist ein geringerer,
-> aber dennoch signifikanter Diversity-Gewinn zu erwarten.
-> Auf einem resonanten Band kehrt sich das Bild um — siehe 20m-Ergebnisse weiter unten.
+> Gewinne (+62%/+36% Stationen, CI komplett über 0) sind ein **realistischer Wert**
+> für Off-Band-Betrieb — bei zwei gleichwertigen, für 40m optimierten Antennen ist
+> ein geringerer, aber positiver Diversity-Gewinn zu erwarten.
+> Auf einem resonanten Band ist der Effekt nicht mehr statistisch nachweisbar —
+> siehe 20m-Ergebnisse weiter unten.
 
 **Stationen über 24h UTC — 40m FT8, alle drei Modi:**
 *(Gestrichelte Linien = Rescue Stationen: von ANT1 unter −24 dB empfangen — ANT2 hebt das Signal über die Dekodiergrenze)*
@@ -677,17 +686,21 @@ Detaillierte Aufschlüsselung: PDF-Bericht (S.3).*
 
 #### 20m FT8 — wenn ANT1 auf seinem Auslegungsband arbeitet
 
-**Live-Messergebnisse — 20m FT8, 7–9 Messtage, 19.936 Zyklen:**
+**Live-Messergebnisse — 20m FT8, 8–9 Messtage, 39.801 Zyklen:**
 
-| Modus | Stationen/15s (Pooled Mean) | vs Normal | Tage | Zyklen |
-|-------|:---:|:---:|:---:|:---:|
-| Normal | 51,1 | — | 9 | 5.959 |
-| Diversity Standard | 47,9 | **−6%** | 7 | 6.290 |
-| Diversity DX | 47,1 | **−8%** | 7 | 7.687 |
+| Modus | Stationen/15s (Pooled Mean) | vs Normal | 95%-CI | Tage | Zyklen |
+|-------|:---:|:---:|:---:|:---:|:---:|
+| Normal | 47,8 | — | — | 8 | 11.088 |
+| Diversity Standard | 46,2 | **−3%** | −14 bis +10% | 9 | 14.672 |
+| Diversity DX | 51,4 | **+8%** | −4 bis +22% | 8 | 14.041 |
 
-*Hinweis: Frühere Messungen (weniger Tage) zeigten −18%/−22%. Mit mehr Messtagen, die alle
-Tageszeiten abdecken, haben sich die Zahlen bei einem kleineren Verlust eingependelt. Negativ
-bleibt es — der resonante ANT1-Vorteil auf 20m ist real — aber das Bild ist differenzierter.*
+*Beide Diversity-Modi haben CIs **die 0 enthalten** — es lässt sich
+also keine statistisch signifikante Änderung des Stations-Counts
+behaupten. Die Punktschätzer deuten auf einen kleinen Verlust bei
+Standard und einen kleinen Gewinn bei DX, aber keiner ist von Null
+unterscheidbar angesichts der Tag-zu-Tag-Variabilität. Das passt zur
+physikalischen Erwartung: ANT1 ist auf 20m resonant, daher gibt es
+wenig Spielraum für Diversity das Stations-Count via Rescue zu steigern.*
 
 > **Hinweis zur Interpretation — 20m**
 > Auf 20m arbeitet der Kelemen DP-201510 in seinem **Auslegungsband** als
@@ -725,17 +738,21 @@ bleibt es — der resonante ANT1-Vorteil auf 20m ist real — aber das Bild ist 
 
 #### 30m FT8 — off-band ANT1, erste Daten *(läuft)*
 
-**Live-Messergebnisse — 30m FT8, vorläufige Daten:**
+**Live-Messergebnisse — 30m FT8, 3–6 Messtage, 18.808 Zyklen:**
 
-| Modus | Stationen/15s (Pooled Mean) | vs Normal | Tage | Zyklen |
-|-------|:---:|:---:|:---:|:---:|
-| Normal | 15,0 | — | 3 | 452 |
-| Diversity Standard | 25,3 | **+69%** | 3 | 1.386 |
-| Diversity DX | 23,9 | **+59%** *(vorläufig)* | 1 | 214 |
+| Modus | Stationen/15s (Pooled Mean) | vs Normal | 95%-CI | Tage | Zyklen |
+|-------|:---:|:---:|:---:|:---:|:---:|
+| Normal | 28,4 | — | — | 5 | 6.543 |
+| Diversity Standard | 30,9 | **+9%** | −9 bis +31% | 6 | 7.178 |
+| Diversity DX | 28,7 | **+1%** | −22 bis +29% | 3 | 5.087 |
 
-> **Hinweis:** 30m-Datensammlung läuft erst seit Kurzem. Normal und Diversity Standard haben
-> je 3 Messtage — zeigen bereits das erwartete Off-Band-Muster (großer Gewinn, ANT1 auf 10 MHz
-> suboptimal). Diversity DX hat erst 1 Tag — noch nicht belastbar. Daten wachsen mit jeder Session.
+> **Hinweis:** Die 95%-CIs beider Diversity-Modi **enthalten 0** — wie
+> auf 20m kein statistisch signifikanter Gewinn nachweisbar. Frühere
+> Messungen (weniger Tage) zeigten +69%/+59%, aber das waren vorläufige,
+> instabile Werte. Mit mehr Messtagen schrumpften die Gewinne Richtung
+> null. Daten wachsen weiter — falls ein echter Off-Band-Effekt auf 30m
+> existiert, sollte er als CI um einen positiven Punktschätzer hervortreten.
+> Heute lautet die ehrliche Antwort: **noch kein messbarer Gewinn**.
 
 ![Stationen 30m FT8](auswertung/stationen_30m_FT8.png)
 

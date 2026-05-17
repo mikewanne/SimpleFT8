@@ -1,8 +1,36 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-17 — P54-FIX: echte 10W-Closed-Loop-Convergenz beim TUNE
+## Stand 2026-05-17 — P69: Block-Bootstrap-CI + 6 pending Field-Tests aus v0.97.40-46
 
-**Aktueller Code-Stand:** v0.97.45 (P54-FIX), Tests **1415 grün**.
+**Aktueller Code-Stand:** v0.97.46 (P69), Tests **1435 grün**.
+
+### 🟢 v0.97.46 P69 — Block-Bootstrap-CI (autonom durchgezogen, kein Field-Test nötig)
+
+Mike war unterwegs → autonomer V1→V2→R1→V3-Workflow mit DeepSeek-V4-pro
+für P69 (Konfidenz-Intervalle aus TODO). Macht die README-Aussagen
+wissenschaftlich solide.
+
+**R1 fand 6 Findings:** F-DIV0 🔴 (Resample verwerfen wenn normal_mean
+== 0), F-RATIO1 🟠 (Variante B Percentile + Threshold-Schutz),
+F-THRESHOLD 🟠 (n < 15 → insufficient, < 25 → limited), F-ITER 🟡 (5000
+Iter), F-TEST-DATA 🟡 (Mock-Loader), F-CAVEAT-LANG 🟡.
+
+**Aktuelle Daten + CI (40m signifikant, 20m+30m null im CI):**
+
+| Band | Modus | Punktschätzer | 95%-CI |
+|---|---|---|---|
+| 40m | Std | +62% | +32 bis +102% ✅ |
+| 40m | DX | +36% | +11 bis +70% ✅ |
+| 20m | Std | −3% | −14 bis +10% ⚠ |
+| 20m | DX | +8% | −4 bis +22% ⚠ |
+| 30m | Std | +9% | −9 bis +31% ⚠ |
+| 30m | DX | +1% | −22 bis +29% ⚠ |
+
+✅ = CI über 0 (signifikant), ⚠ = CI enthält 0 (nicht signifikant).
+
+**V4-pro 21-Cycle-Bilanz:** 0 Halluzinationen, 1 ROT-Bug gefangen (F-DIV0).
+
+Push pending mit den anderen pending Versionen v0.97.40-46.
 
 ### 🟠 v0.97.45 P54-FIX — Closed-Loop-Convergenz beim TUNE (Field-Test radio-pflichtig!)
 
