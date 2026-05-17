@@ -1457,7 +1457,14 @@ def _r_methodik_page(pdf: PdfPages, summary: dict, time_range: str,
     plt.close(fig)
 
 
-def _r_ergebnisse_page(pdf: PdfPages, fair_summary: dict, gen_date: str, T: dict) -> None:
+def _r_ergebnisse_page(pdf: PdfPages, fair_summary: dict, gen_date: str, T: dict,
+                       ci_map: dict[str, tuple] | None = None) -> None:
+    """Vergleichstabelle (S.3) inkl. Block-Bootstrap-95-%-CI in der vs-Normal-Spalte.
+
+    Args:
+        ci_map: Optional dict {mode -> (pt, lo, hi, flag)} aus
+            compute_mode_comparison_ci. None deaktiviert CI-Anzeige.
+    """
     mode_labels = T["mode_labels"]
     col_labels = T["p3_col_labels"]
     mode_meta = {
@@ -1477,7 +1484,12 @@ def _r_ergebnisse_page(pdf: PdfPages, fair_summary: dict, gen_date: str, T: dict
             vs, vsr, r = "—", "—", "—"
         else:
             rsc = s.get("avg_rescue", 0.0)
-            vs  = f"+{(avg / n_ref - 1) * 100:.0f}%"
+            pt_pct = (avg / n_ref - 1) * 100
+            vs = f"+{pt_pct:.0f}%"
+            if ci_map and mode in ci_map:
+                from bootstrap_ci import format_ci_short
+                ci_str = format_ci_short(*ci_map[mode])
+                vs = f"+{pt_pct:.0f}%\n{ci_str}"
             vsr = f"+{((avg + rsc) / n_ref - 1) * 100:.0f}%"
             r   = f"+{(rsc / n_ref) * 100:.0f}%"
         n_days_val = str(s.get("n_days", "—"))
@@ -1647,10 +1659,20 @@ def create_pdf_report(combos: set[tuple[str, str]], output_dir: Path,
     gen_date     = datetime.now().strftime("%Y-%m-%d %H:%M")
     pdf_path     = output_dir / T["pdf_name"]
 
+    # P69 Bootstrap-CI fuer Diversity-Modi (fail-silent bei Import-Fehler)
+    ci_map: dict[str, tuple] | None = None
+    try:
+        from bootstrap_ci import compute_mode_comparison_ci
+        ci_map = compute_mode_comparison_ci(
+            STATS_DIR, band, protocol, load_hourly_stats_fn=load_hourly_stats
+        )
+    except Exception as e:
+        print(f"  [!] CI-Berechnung fehlgeschlagen ({band}): {e}")
+
     with PdfPages(str(pdf_path)) as pdf:
         _r_title_page(pdf, summary, fair_summary, time_range, gen_date, T)  # p.1
         _r_methodik_page(pdf, summary, time_range, gen_date, T)              # p.2 (global counts)
-        _r_ergebnisse_page(pdf, fair_summary, gen_date, T)                   # p.3 (fair)
+        _r_ergebnisse_page(pdf, fair_summary, gen_date, T, ci_map=ci_map)    # p.3 (fair + CI)
         _r_diagramm_page(                                                     # p.4
             pdf, output_dir / f"stationen_{band}_{protocol}.png",
             T["p4_title"],
