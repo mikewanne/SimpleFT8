@@ -370,6 +370,10 @@ class QSOMixin:
         # V2-L3: Slot-Tracking sauber resetten beim HALT.
         self._last_qso_tx_even = None
         self.qso_panel.add_info("HALT — alles gestoppt")
+        # P81 (v0.97.53) R1-F1: HALT-Pfad emittiert weder qso_timeout noch
+        # qso_confirmed_visual — ohne Flush wuerde eine deferred Stop-Meldung
+        # dauerhaft verloren gehen.
+        self._flush_auto_hunt_stop_msg()
         self.statusBar().showMessage("HALT — CQ, QSO, TX, OMNI gestoppt", 5000)
         print("[HALT] Alles gestoppt")
 
@@ -574,8 +578,12 @@ class QSOMixin:
         Operationen (logbook.refresh, OMNI-Resume, Auto-Hunt-Reset)
         laufen weiter im _on_qso_confirmed-Slot nach Courtesy-73-Send.
         Dadurch erscheint ✓ vor naechstem CQ im QSO-Panel.
+
+        P81 (v0.97.53): nach add_qso_complete wird eine ggf. deferred
+        Auto-Hunt-Stop-Meldung ausgegeben (Mike-Wunsch: erst ✓, dann Stop-Msg).
         """
         self.qso_panel.add_qso_complete(qso_data.their_call)
+        self._flush_auto_hunt_stop_msg()
 
     @Slot(object)
     def _on_qso_confirmed(self, qso_data):
@@ -879,6 +887,9 @@ class QSOMixin:
         self._active_qso_targets.discard(their_call)
         self.rx_panel.set_active_call("")
         self.qso_panel.add_timeout(their_call)
+        # P81 (v0.97.53): deferred Auto-Hunt-Stop-Meldung nach ✗ Timeout
+        # ausgeben — Safety-Net fuer Hard-Timeout-Pfad (qso_state.py:354/392).
+        self._flush_auto_hunt_stop_msg()
         # Auto-Hunt: Timeout → Cooldown setzen, naechste Station
         if self._auto_hunt.active:
             self._auto_hunt.on_qso_timeout(their_call)

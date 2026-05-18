@@ -502,6 +502,10 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         # `_AUTO_HUNT_MOUSE_INACTIVITY_TIMEOUT_S` und stoppt Auto-Hunt mit
         # Reason `mouse_inactive_5min` bei Ueberschreitung.
         self._auto_hunt_last_mouse_t: float = 0.0
+        # P81 (v0.97.53): Wenn Polling-Tick die 5-Min-Schwelle erreicht
+        # waehrend ein QSO laeuft, wird die "Auto-Hunt gestoppt"-Meldung
+        # deferred bis nach "✓ QSO komplett" / "✗ Timeout" / HALT.
+        self._auto_hunt_stop_msg_pending: bool = False
 
     def _init_cq_countdown_timer(self):
         """CQ-Freq Countdown: sekündlich aktualisieren (unabhängig vom Decode-Zyklus)."""
@@ -929,6 +933,9 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
                 return
             if self._omni_cq.is_active():
                 self._omni_cq.stop("superseded")
+            # P81 (v0.97.53): pending Stop-Meldung beim Manual-Restart
+            # silent clearen — sonst Geister-Meldung beim naechsten QSO-Ende.
+            self._auto_hunt_stop_msg_pending = False
             # P67 (v0.97.43): Maus-Inaktivitaets-Anker VOR start_auto_hunt
             # setzen — sonst koennte der initiale Polling-Tick (Z. unten)
             # bei Default 0.0 sofort die 5-Min-Schicht ausloesen.
@@ -987,16 +994,49 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         # die Restzeit-Anzeige eine Sekunde nach Ablauf).
         inactivity = time.monotonic() - self._auto_hunt_last_mouse_t
         if inactivity > self._AUTO_HUNT_MOUSE_INACTIVITY_TIMEOUT_S:
-            self.qso_panel.add_info(
-                "⏸ Auto-Hunt gestoppt — 5 Minuten ohne Mausbewegung. "
-                "Maus bewegen und AUTO HUNT-Taste druecken zum Fortsetzen."
-            )
-            print("[Auto-Hunt-UI] Stop — 5 Min Maus-Inaktivitaet")
+            # P81 (v0.97.53): Wenn QSO laeuft, Meldung defern bis nach
+            # "✓ komplett" / "✗ Timeout" / HALT — sonst landet sie mitten
+            # im QSO-Verlauf vor dem ✓.
+            if self._qso_active_for_msg_defer():
+                self._auto_hunt_stop_msg_pending = True
+                print("[Auto-Hunt-UI] Stop — 5 Min Maus-Inaktivitaet "
+                      "(Meldung defern, QSO laeuft)")
+            else:
+                self.qso_panel.add_info(
+                    "⏸ Auto-Hunt gestoppt — 5 Minuten ohne Mausbewegung. "
+                    "Maus bewegen und AUTO HUNT-Taste druecken zum Fortsetzen."
+                )
+                print("[Auto-Hunt-UI] Stop — 5 Min Maus-Inaktivitaet")
             self._auto_hunt.stop_auto_hunt("mouse_inactive_5min")
             return
         sec = self._auto_hunt.seconds_remaining()
         m, s = divmod(sec, 60)
         self.control_panel.btn_auto_hunt.setText(f"AUTO HUNT — {m}:{s:02d}")
+
+    # ── P81 (v0.97.53) Auto-Hunt-Stop-Meldung Defer-Mechanik ──────
+
+    def _qso_active_for_msg_defer(self) -> bool:
+        """True wenn ein QSO im Gange ist, also die Stop-Meldung deferred
+        werden soll. „kein QSO" = IDLE, TIMEOUT, CQ_CALLING, CQ_WAIT.
+        """
+        from core.qso_state import QSOState
+        return self.qso_sm.state not in (
+            QSOState.IDLE, QSOState.TIMEOUT,
+            QSOState.CQ_CALLING, QSOState.CQ_WAIT,
+        )
+
+    def _flush_auto_hunt_stop_msg(self):
+        """Wenn eine deferred Stop-Meldung pending ist, jetzt im QSO-Panel
+        ausgeben und Flag loeschen. Aufgerufen aus _on_qso_confirmed_visual
+        / _on_qso_timeout / _on_cancel (HALT-Pfad, R1-F1).
+        """
+        if not self._auto_hunt_stop_msg_pending:
+            return
+        self._auto_hunt_stop_msg_pending = False
+        self.qso_panel.add_info(
+            "⏸ Auto-Hunt gestoppt — 5 Minuten ohne Mausbewegung. "
+            "Maus bewegen und AUTO HUNT-Taste druecken zum Fortsetzen."
+        )
 
     # ── Propagation ──────────────────────────────────────────────
 
