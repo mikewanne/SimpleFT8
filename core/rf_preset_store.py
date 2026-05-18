@@ -170,6 +170,18 @@ class RFPresetStore:
                 f"— evtl. veraltet"
             )
 
+    def has_anchor(self, radio: str, band: str, watt: int = 10) -> bool:
+        """P71 (v0.97.47): True wenn ein RFPreset-Eintrag fuer
+        (radio, band, watt) existiert.
+
+        Belt-and-suspenders fuer Auto-Tune-Skip in `_on_band_changed`:
+        wenn ein 10W-Anker schon gespeichert ist, ist Auto-Tune nicht
+        noetig. Fail-silent bei fehlendem Schluessel.
+        """
+        with self._lock:
+            band_data = self._data.get(radio, {}).get(band, {})
+            return str(int(watt)) in band_data
+
     def get_all(self, radio: str) -> dict:
         """Snapshot aller Einträge für aktuelles Radio (für UI-Tabelle)."""
         with self._lock:

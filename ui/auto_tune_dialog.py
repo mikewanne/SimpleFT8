@@ -5,7 +5,14 @@ Timeout). Wird vom Helper `_start_auto_tune_for_band_change` (mw_tx.py)
 gestartet, empfängt das Signal `auto_tune_done(bool, float, float)`
 und entscheidet accept()/reject().
 
-Backup-Timeout: `tune_duration_s + 5` s falls QTimer aus mw_tx hängt.
+P71 (v0.97.47):
+- Backup-Grace `_BACKUP_GRACE_S = 12` s (Phase B max 6.5 + Post-Check 2
+  + Safety 3.5). Vorher 5 s → Race mit erfolgreichem TUNE bei langsamer
+  Convergenz (Mike-Field-Test 18.05.).
+- Title `band.lower() + mode` statt `band.upper()` (Mike: "15M" sah aus
+  wie 15 Minuten).
+- Status zeigt zusätzlich Mode + Live-FWDPWR.
+- DONE FAIL-Logging bei Cancel/Timeout für grep-Diagnose.
 """
 
 from __future__ import annotations
@@ -19,6 +26,13 @@ from PySide6.QtWidgets import (
     QPushButton,
     QVBoxLayout,
 )
+
+
+# P71 (v0.97.47): Konstante mit Begründung statt magic number.
+# Phase B max 6.5 s (1.5 s initial + 5×1.0 s iter)
+# Post-Check delay 2.0 s
+# Safety buffer 3.5 s (Display-Delay + Qt-Loop slack)
+_BACKUP_GRACE_S = 12
 
 
 _STYLE = """
@@ -66,24 +80,26 @@ class AutoTuneDialog(QDialog):
     # Wird extern emittiert wenn TUNE fertig (success, swr, avg_fwdpwr).
     auto_tune_done = Signal(bool, float, float)
 
-    def __init__(self, parent, band: str, duration_s: int = 15):
+    def __init__(self, parent, band: str, duration_s: int = 15, mode: str = "FT8"):
         super().__init__(parent)
         self._parent = parent
         self._band = band
         self._duration_s = duration_s
+        self._mode = mode
         self._elapsed_s = 0
 
         self.setWindowTitle("Auto-TUNE")
         self.setWindowModality(Qt.WindowModality.WindowModal)
-        self.setFixedSize(360, 140)
+        self.setFixedSize(420, 140)
         self.setStyleSheet(_STYLE)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 16, 20, 16)
         layout.setSpacing(10)
 
-        # Titel
-        self._title_label = QLabel(f"🔧 Auto-TUNE läuft — {band.upper()}")
+        # Titel — P71: band.lower() + mode statt band.upper()
+        self._title_label = QLabel(
+            f"🔧 Auto-TUNE läuft — {band.lower()} {mode}")
         self._title_label.setStyleSheet("color: #7CC; font-size: 14px; font-weight: bold;")
         layout.addWidget(self._title_label)
 
@@ -94,8 +110,9 @@ class AutoTuneDialog(QDialog):
         self._spinner.setFixedHeight(14)
         layout.addWidget(self._spinner)
 
-        # Status
-        self._status_label = QLabel(f"10 W auf ANT1 — 0 / {duration_s} s")
+        # Status — P71: erweitert um Mode + Live-FWDPWR
+        self._status_label = QLabel(
+            f"ANT1, 10W → {mode} — 0 / {duration_s} s")
         self._status_label.setStyleSheet("color: #AAA; font-size: 11px;")
         layout.addWidget(self._status_label)
 
@@ -112,25 +129,29 @@ class AutoTuneDialog(QDialog):
         self._tick_timer.timeout.connect(self._on_tick)
         self._tick_timer.start(1000)
 
-        # Backup-Timeout (R1-F4)
+        # Backup-Timeout (R1-F4) — P71: Grace 5 → 12 s gegen Phase-B-Race
         self._backup_timer = QTimer(self)
         self._backup_timer.setSingleShot(True)
         self._backup_timer.timeout.connect(self._on_backup_timeout)
-        self._backup_timer.start((duration_s + 5) * 1000)
+        self._backup_timer.start((duration_s + _BACKUP_GRACE_S) * 1000)
 
         # Result-Signal an internen Slot
         self.auto_tune_done.connect(self._on_auto_tune_done)
 
     def _on_tick(self):
-        """1 s — Restzeit-Anzeige."""
+        """1 s — Restzeit-Anzeige. P71: erweitert um Mode + Live-FWDPWR."""
         self._elapsed_s += 1
         try:
             swr = float(self._parent.radio.last_swr)
         except (AttributeError, TypeError, ValueError):
             swr = 0.0
+        try:
+            fwdpwr = float(self._parent._fwdpwr_samples[-1])
+        except (AttributeError, IndexError, TypeError, ValueError):
+            fwdpwr = 0.0
         self._status_label.setText(
-            f"10 W auf ANT1 — {self._elapsed_s} / {self._duration_s} s · "
-            f"SWR {swr:.1f}"
+            f"ANT1, 10W → {self._mode} — {self._elapsed_s} / "
+            f"{self._duration_s} s · SWR {swr:.1f} · FWDPWR {fwdpwr:.1f}W"
         )
 
     def _on_auto_tune_done(self, success: bool, swr: float, avg_fwdpwr: float):
@@ -154,6 +175,9 @@ class AutoTuneDialog(QDialog):
         """User klickte Abbrechen — TUNE stoppen + Cleanup."""
         self._tick_timer.stop()
         self._backup_timer.stop()
+        # P71: DONE FAIL cancelled-Log fuer grep-Diagnose
+        print(f"[P54a] DONE FAIL reason=cancelled "
+              f"band={self._band} mode={self._mode}")
         # P54-FIX R1-F2 ROT: Cancel-Flag setzen damit Convergenz-Schleife
         # in _tune_converge_to_target sich beendet.
         try:
@@ -172,12 +196,17 @@ class AutoTuneDialog(QDialog):
         self.reject()
 
     def _on_backup_timeout(self):
-        """Backup-Timer (duration+5s) — falls QTimer aus mw_tx haengt.
+        """Backup-Timer (duration + _BACKUP_GRACE_S s) — falls QTimer aus
+        mw_tx haengt.
 
         R1-F4: setzt _tune_in_progress=False explizit.
         P54-FIX R1-F2: setzt _tune_convergence_cancelled=True.
+        P71: DONE FAIL timeout-Log + Grace 5 → 12 s.
         """
         self._tick_timer.stop()
+        print(f"[P54a] DONE FAIL reason=timeout "
+              f"band={self._band} mode={self._mode} "
+              f"after={self._duration_s + _BACKUP_GRACE_S}s")
         try:
             self._parent._tune_convergence_cancelled = True
         except AttributeError:

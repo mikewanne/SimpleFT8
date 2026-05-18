@@ -78,11 +78,14 @@ class TXMixin:
     def _on_tune_clicked(self, on: bool):
         """Manueller TUNE-Toggle.
 
-        P63 (v0.97.36): 10W fest, Dauer aus `tune_duration_s`-Setting
-        (15 oder 30 s). Watchdog wird via `_tune_in_progress=True`
-        bypasst. Nach Stop folgt 2s-Beruhigungs-Timer und SWR-Auswertung
+        P63 (v0.97.36): 10W fest, Dauer aus `tune_duration_s`-Setting.
+        Watchdog wird via `_tune_in_progress=True` bypasst. Nach Stop
+        folgt 2s-Beruhigungs-Timer und SWR-Auswertung
         (`_tune_post_swr_check`) — bei SWR≤Limit wird der Band-Marker
         freigegeben + Diversity automatisch fortgesetzt.
+
+        P71 (v0.97.47): Whitelist (15, 30) → (5, 10, 15) — Final-R1-Catch
+        (sonst User-Wahl 5/10 ignoriert vom manuellen TUNE-Pfad).
         """
         if not self.radio.ip:
             return
@@ -90,11 +93,11 @@ class TXMixin:
         from config.settings import get_tune_freq_mhz
 
         if on:
-            # P63 AC5: 10W FEST (unabhängig von tune_power-Setting),
-            # Dauer aus Setting mit Whitelist {15, 30}.
+            # P63 AC5: 10W FEST (unabhängig von tune_power-Setting).
+            # P71: Dauer-Whitelist konsistent mit Auto-Tune-Pfad (5/10/15).
             TUNE_POWER_W = 10
             duration_s = self.settings.get("tune_duration_s", 15)
-            if duration_s not in (15, 30):
+            if duration_s not in (5, 10, 15):
                 duration_s = 15
 
             # P63 AC4: Watchdog-Bypass VOR tune_on
@@ -206,6 +209,15 @@ class TXMixin:
             2000,
             lambda: self._tune_post_swr_check(_post))
 
+        # P75 (v0.97.48): TUNE-Button visuell zurücksetzen damit nicht
+        # gelb-aktiv stehen bleibt nach Auto-Stop-Timer. blockSignals
+        # verhindert Re-Trigger von _on_tune_clicked(False).
+        btn = getattr(self.control_panel, 'btn_tune', None)
+        if btn is not None and btn.isChecked():
+            btn.blockSignals(True)
+            btn.setChecked(False)
+            btn.blockSignals(False)
+
         # P54-FIX Final-R1-ROT: Re-Entry-Sperre freigeben (Stop-Pfad fertig)
         self._tune_stop_active = False
 
@@ -241,6 +253,9 @@ class TXMixin:
 
         if not self.radio.ip:
             if is_auto and dlg is not None:
+                # P71: DONE FAIL disconnect-Log
+                print(f"[P54a] DONE FAIL reason=disconnect "
+                      f"band={self.settings.band} mode={self.settings.mode}")
                 dlg.auto_tune_done.emit(False, 0.0, 0.0)
             return
 
@@ -312,17 +327,29 @@ class TXMixin:
 
             # R1-F2: Auto-Tune-Pfad — Signal an Dialog statt QMessageBox.
             if is_auto and dlg is not None:
+                # P71: DONE OK-Log mit Mode + Antenne + rf-Wert
+                rf_logged = rf_to_save if 3 <= rf_to_save <= 50 else "rejected"
+                _dur = self.settings.get("tune_duration_s", 15)
+                print(f"[P54a] DONE OK band={self.settings.band} "
+                      f"mode={self.settings.mode} ant=ANT1 "
+                      f"swr={swr_now:.1f} fwdpwr={avg_fwdpwr:.1f} "
+                      f"rf={rf_logged} duration={_dur}s")
                 dlg.auto_tune_done.emit(True, swr_now, avg_fwdpwr)
         else:
             # AC7 P63: Marker bleibt rot. R1-F2: kein QMessageBox bei Auto-Tune.
             if is_auto and dlg is not None:
+                # P71: DONE FAIL swr_bad-Log
+                print(f"[P54a] DONE FAIL reason=swr_bad "
+                      f"band={self.settings.band} mode={self.settings.mode} "
+                      f"swr={swr_now:.1f} limit={swr_limit:.1f}")
                 dlg.auto_tune_done.emit(False, swr_now, avg_fwdpwr)
             else:
-                QMessageBox.warning(
-                    self,
-                    "Tuner konnte nicht matchen",
-                    f"SWR weiter {swr_now:.1f} > Limit {swr_limit:.1f}.\n\n"
-                    "Antenne pruefen oder TUNE wiederholen."
+                # P75 (v0.97.48): QMessageBox raus, stattdessen rote Zeile
+                # im Live-Log. Mike-Spec „weniger Fenster die aufploppen".
+                self.qso_panel.add_info(
+                    f"⚠ Tuner konnte nicht matchen — SWR {swr_now:.1f} > "
+                    f"Limit {swr_limit:.1f}. Antenne pruefen oder TUNE "
+                    f"wiederholen."
                 )
         print(f"[P63] Post-TUNE — SWR {swr_now:.1f}, Limit {swr_limit:.1f}")
 
@@ -470,10 +497,14 @@ class TXMixin:
             return False
 
         duration_s = self.settings.get("tune_duration_s", 15)
-        if duration_s not in (15, 30):
+        # P71: Whitelist 15/30 → 5/10/15 (Mike-Spec für FT8/FT4/FT2)
+        if duration_s not in (5, 10, 15):
             duration_s = 15
 
-        dialog = AutoTuneDialog(self, band=band, duration_s=duration_s)
+        dialog = AutoTuneDialog(
+            self, band=band, duration_s=duration_s,
+            mode=self.settings.mode,
+        )
         self._auto_tune_dialog = dialog
         self._auto_tune_running = True
         self._fwdpwr_samples.clear()  # V2-F4: alte QSO-Samples raus

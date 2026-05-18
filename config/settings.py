@@ -109,6 +109,11 @@ class Settings:
         self._data.pop("max_decode_freq", None)
         # P52 (v0.97.41): stats_enabled-Toggle entfernt, Stats immer an.
         self._data.pop("stats_enabled", None)
+        # P71 (v0.97.47): tune_duration_s Whitelist 5/10/15 — alter Wert 30
+        # (oder beliebig) → Fallback 15. Idempotent.
+        _td = self._data.get("tune_duration_s")
+        if _td is not None and _td not in (5, 10, 15):
+            self._data["tune_duration_s"] = 15
         self._migrate_bandpilot_settings_v088()
 
     def _migrate_bandpilot_settings_v088(self):

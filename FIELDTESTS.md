@@ -1,5 +1,34 @@
 
 
+### F-S1.7 P75 TUNE-Button Style ohne Radio (v0.97.48, 2 Min) — F1
+
+**App starten.** TUNE-Knopf rechts neben Watt/SWR-Anzeige:
+- **F1 (Style):** Im Ruhe-Zustand ist der TUNE-Knopf **dezent dunkel-
+  gelb** (Hintergrund dunkel, Text in gedämpftem Gelb-Ton `#BBA060`).
+  NICHT mehr hell-leuchtend gelb wie früher.
+- Knopf sollte sich visuell als „Setup-Funktion bereit" lesen, nicht
+  als „aktiv". Andere Aktions-Knöpfe (CQ/OMNI/Auto-Hunt) sind weiter
+  dunkelrot inaktiv.
+
+✅ TUNE-Knopf passt zum Gesamt-Schema, klar unterscheidbar als Setup.
+
+### F-S1.6 P71 Auto-Tune Bundle ohne Radio (v0.97.47, 5 Min) — F1+F3+F4
+
+**App starten (ohne Radio).**
+- **F1 (Bug 2 Schutz):** Direkt nach App-Start → KEIN AutoTuneDialog
+  öffnet sich. Statusbar zeigt nur „Verbinden ...". (Guard-Flag
+  `_initial_band_set` greift während __init__).
+- **F3 (Bug 3 — ComboBox):** Settings öffnen → Reiter „FT8 & Diversity"
+  → TUNE-Dauer-ComboBox zeigt **3 Optionen: 5 s, 10 s, 15 s** (nicht
+  mehr 15/30). Default 15 s. Wähle 10 → Save → Settings nochmal
+  öffnen → 10 s steht da.
+- **F4 (Settings-Migration):** App schließen. Manuell `~/.simpleft8/
+  config.json` editieren: `"tune_duration_s": 30` setzen. App
+  neu starten. Settings öffnen → ComboBox zeigt **15 s** (Migration
+  hat 30 → 15 ersetzt).
+
+✅ Kein App-Start-Auto-Tune, ComboBox 5/10/15, Migration funktioniert.
+
 ### F-S1.4 P67 ohne Radio (v0.97.43, 5 Min) — F1+F3+F5
 **Auto-Hunt-Button starten** (oder via Tooltip aufrufen wenn nicht
 sichtbar — Diversity-Modus aktiv setzen).
@@ -29,6 +58,52 @@ sichtbar — Diversity-Modus aktiv setzen).
 ---
 
 ## 🟡 STUFE 2: Mittel, mit Radio nötig (~30 Min)
+
+### F-S2.5 P75 TUNE-Button Bug + Modal-Konsolidierung mit Radio (v0.97.48, 10 Min) — F2+F3+F4
+
+**Radio verbunden.**
+
+- **F2 (Bug-Fix):** Manuellen TUNE drücken → Knopf wird **grün**
+  während TUNE läuft. Nach Ablauf der TUNE-Dauer → Knopf wird
+  **automatisch zurück auf dezent-gelb** (nicht mehr stuck on green).
+  Plus: nach Auto-Stop ist der Knopf wieder klickbar (toggleable).
+- **F3 (Header-Banner):** Bandwechsel auf neues Band ohne Diversity-
+  Preset (z.B. 30m wenn nie kalibriert) → Auto-TUNE-Dialog läuft →
+  schließt sich → **DXTuneDialog öffnet mit grünem Banner ganz oben:**
+  „✓ TUNE OK — SWR X.X · jetzt 2 Min Gain-Messung läuft". Visueller
+  Übergang Phase 1 → Phase 2 statt zweier getrennter Pop-ups.
+- **F4 (QMessageBox raus):** Manuellen TUNE bei schlechtem SWR (z.B.
+  abgezogene Antenne) → **KEIN Popup** mehr. Stattdessen rote Zeile
+  im Live-Log (QSO-Panel): „⚠ Tuner konnte nicht matchen — SWR X.X >
+  Limit X.X. Antenne pruefen oder TUNE wiederholen."
+
+✅ Knopf-State sauber, Banner zeigt Übergang, weniger Popup-Chaos.
+
+### F-S2.4 P71 Auto-Tune Bundle mit Radio (v0.97.47, 10 Min) — F2+F5+F6+F7
+
+**Radio verbunden.** Voraussetzung: Settings → „Auto-TUNE bei Bandwechsel"
+ist AN.
+
+- **F2 (Bug 1+4 Race + UX):** Bandwechsel 20m → 17m → **AutoTuneDialog
+  öffnet** mit:
+  - **Title:** „🔧 Auto-TUNE läuft — 17m FT8" (kleinbuchstabig + Mode!).
+  - **Status:** „ANT1, 10W → FT8 — 0 / 15 s · SWR x.x · FWDPWR x.xW"
+    aktualisiert sich pro Sekunde.
+  - **Race-Schutz:** Bei SWR 1.9 (im Bereich) schließt Dialog VOR 27s
+    Backup-Timer (Grace +12 statt +5). **Kein „TUNE Timeout"-Modal mehr.**
+- **F5 (Bug 5 — DONE-Logs):** Console-Ausgabe (oder `~/.simpleft8/
+  simpleft8.log`) nach Auto-Tune zeigt **klare 1-Zeilen-Logs**:
+  - Erfolg: `[P54a] DONE OK band=17m mode=FT8 ant=ANT1 swr=1.9
+    fwdpwr=9.x rf=xx duration=15s`
+  - Bei SWR-bad: `[P54a] DONE FAIL reason=swr_bad band=17m mode=FT8
+    swr=3.5 limit=3.0`
+- **F6 (Regression-Schutz P63):** Bandwechsel auf bekannt-SWR-blockiertes
+  Band → Marker greift, **kein Auto-Tune-Dialog**. (P63-Logik unverändert.)
+- **F7 (Cancel-Pfad):** Bei laufendem Auto-Tune → Cancel-Button drücken.
+  Dialog schließt sofort, Console-Log: `[P54a] DONE FAIL reason=cancelled
+  band=... mode=...`. Convergenz-Schleife bricht ab.
+
+✅ Race-Fix wirkt, DONE-Logs sichtbar, Cancel sauber.
 
 ### F-S2.1 P67 mit Radio (v0.97.43, 10 Min) — F2+F4
 **Radio verbunden, Diversity-Modus aktiv, Auto-Hunt an.**

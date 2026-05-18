@@ -329,12 +329,15 @@ class SettingsDialog(QDialog):
         form.addRow("", self.tuner_present_cb)
 
         self.tune_duration_combo = QComboBox()
+        # P71 (v0.97.47): 5/10/15 s statt 15/30 s — Mike-Spec
+        # fuer FT8/FT4/FT2-Differenzierung.
+        self.tune_duration_combo.addItem("5 s", 5)
+        self.tune_duration_combo.addItem("10 s", 10)
         self.tune_duration_combo.addItem("15 s", 15)
-        self.tune_duration_combo.addItem("30 s", 30)
         self.tune_duration_combo.setToolTip(
             "Maximale Dauer eines TUNE-Vorgangs (manuell + Auto-Tune).\n"
-            "LDG AT-200 Pro schafft Full-Tune typisch in <15s,\n"
-            "30s als Reserve für sehr unkonstante Antennen.")
+            "LDG AT-200 Pro schafft Full-Tune typisch in 5-10s,\n"
+            "15s als Reserve für ungewöhnliche Antennen.")
         form.addRow("TUNE-Dauer:", self.tune_duration_combo)
 
         # P54 (v0.97.44): Auto-Tune bei Bandwechsel
@@ -602,8 +605,12 @@ class SettingsDialog(QDialog):
         self.debug_console_cb.setChecked(self.settings.get("debug_console_visible", False))
         # P63 (v0.97.36): Tuner-Settings
         self.tuner_present_cb.setChecked(self.settings.get("tuner_present", True))
+        # P71 (v0.97.47): findData mit Fallback auf 15 s bei unbekannten Werten
         _dur = self.settings.get("tune_duration_s", 15)
-        self.tune_duration_combo.setCurrentIndex(0 if _dur == 15 else 1)
+        _idx = self.tune_duration_combo.findData(_dur)
+        if _idx < 0:
+            _idx = self.tune_duration_combo.findData(15)
+        self.tune_duration_combo.setCurrentIndex(_idx)
         # P54 (v0.97.44): Auto-Tune bei Bandwechsel
         self.auto_tune_band_cb.setChecked(
             self.settings.get("auto_tune_on_band_change", True))
@@ -810,7 +817,10 @@ class SettingsDialog(QDialog):
         self._on_band_visibility_toggled()
         # P63 (v0.97.36): Tuner-Settings Defaults
         self.tuner_present_cb.setChecked(True)
-        self.tune_duration_combo.setCurrentIndex(0)  # 15 s
+        # P71 (v0.97.47): Reset auf 15 s via findData (war Index 0 = 15s alt,
+        # ist jetzt Index 2 nach Umstellung auf 5/10/15)
+        _idx_default = self.tune_duration_combo.findData(15)
+        self.tune_duration_combo.setCurrentIndex(_idx_default)
         # P54 (v0.97.44): Auto-Tune bei Bandwechsel Default
         self.auto_tune_band_cb.setChecked(True)
 

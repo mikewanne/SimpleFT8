@@ -44,12 +44,21 @@ def _build_interleaved_schedule() -> list:
 class DXTuneDialog(QDialog):
     """DX Tuning Dialog — Interleaved Messung, per-Antenne Presets."""
 
-    def __init__(self, radio, band: str, scoring_mode: str = "snr", rx_mode: str = "diversity", parent=None):
+    def __init__(self, radio, band: str, scoring_mode: str = "snr",
+                 rx_mode: str = "diversity", parent=None,
+                 prev_tune_swr: float | None = None):
+        """P75 (v0.97.48): `prev_tune_swr` zeigt grünen Header-Banner
+        wenn Dialog direkt nach erfolgreichem Auto-TUNE öffnet
+        (Bandwechsel-Pipeline). Visueller Zusammenhang Phase 1 → Phase 2,
+        damit User nicht 2 separate Fenster wahrnimmt.
+        None → kein Banner (manueller Kalibrieren-Klick, kein Vorgänger).
+        """
         super().__init__(parent)
         self.radio = radio
         self.band = band
         self.scoring_mode = scoring_mode  # "snr" (DX) oder "stations" (Standard)
         self.rx_mode = rx_mode            # "normal" oder "diversity"
+        self._prev_tune_swr = prev_tune_swr  # P75: Header-Banner-Trigger
         self._results = {}
 
         # Messplan
@@ -61,7 +70,9 @@ class DXTuneDialog(QDialog):
 
         _mode_label = self._get_mode_label()
         self.setWindowTitle(f"{_mode_label} — Kalibrierung {band}")
-        self.setFixedSize(520, 460)
+        # P75: Höhe +30 px für Banner wenn vorhanden (Phase-1-Übergang)
+        _height = 490 if prev_tune_swr is not None else 460
+        self.setFixedSize(520, _height)
         self.setModal(False)  # Non-modal damit Decoder-Signale durchkommen
         self._setup_ui()
         self._start_step()
@@ -82,6 +93,21 @@ class DXTuneDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.setSpacing(10)
         layout.setContentsMargins(16, 12, 16, 12)
+
+        # P75 (v0.97.48): Header-Banner wenn aus Auto-TUNE-Pipeline.
+        # Visueller Übergang Phase 1 (TUNE) → Phase 2 (Gain-Messung).
+        if self._prev_tune_swr is not None:
+            banner = QLabel(
+                f"✓ TUNE OK — SWR {self._prev_tune_swr:.1f} · "
+                f"jetzt 2 Min Gain-Messung läuft"
+            )
+            banner.setStyleSheet(
+                "background: rgba(0,150,0,0.25); color: #88FFAA; "
+                "padding: 6px 10px; border-radius: 4px; "
+                "font-weight: bold; font-size: 12px;"
+            )
+            banner.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            layout.addWidget(banner)
 
         # Titel
         title = QLabel(f"{self._get_mode_label()} — Kalibrierung {self.band}")

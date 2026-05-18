@@ -889,20 +889,29 @@ class _RadioCard(QFrame):
         # Zeile 2: Ausgangsleistung — [TUNE] --- [Watt  SWR]
         output_row = QHBoxLayout()
         output_row.setSpacing(8)
-        # TUNE als deutlich erkennbarer Button (raised, heller Hintergrund)
+        # TUNE — P75 (v0.97.48): Style-Cluster harmonisiert mit OMNI/CQ.
+        # Setup-Aktion (kein TX-QSO), darum eigenes Farb-Cluster:
+        #   inaktiv = dezent dunkel-gelb (Hinweis „bereit fuer Antennen-Setup")
+        #   aktiv   = grün (analog OMNI/CQ-Aktiv, „läuft gerade")
+        # Mike-Spec: einheitlich mit anderen Aktiv-Buttons, aber TUNE als
+        # Nicht-TX-Aktion farblich abgegrenzt.
         self.btn_tune = QPushButton("TUNE")
         self.btn_tune.setCheckable(True)
         self.btn_tune.setFixedHeight(28)
         self.btn_tune.setFixedWidth(60)
-        self.btn_tune.setStyleSheet(
-            f"QPushButton {{ background: #2a2a00; color: #FFD700; "
-            f"border: 2px solid #998800; border-radius: 5px; "
+        _tune_btn_style = (
+            f"QPushButton {{ background: rgba(60,50,0,0.55); color: #BBA060; "
+            f"border: 1px solid rgba(150,120,40,0.5); border-radius: 5px; "
             f"font-weight: bold; font-family: {_FONT}; font-size: 11px; "
             f"padding: 2px 6px; }}"
-            f"QPushButton:hover {{ background: #444400; border-color: #FFD700; color: #FFFF00; }}"
-            f"QPushButton:pressed {{ background: #666600; }}"
-            f"QPushButton:checked {{ background: #998800; color: #000; border-color: #FFD700; }}"
+            f"QPushButton:checked {{ background: rgba(0,150,0,0.75); color: #FFFFFF; "
+            f"border-color: rgba(0,220,0,0.75); }}"
+            f"QPushButton:hover {{ background: rgba(90,70,0,0.6); color: #DDD; }}"
+            f"QPushButton:checked:hover {{ background: rgba(0,180,0,0.85); color: #FFFFFF; }}"
+            f"QPushButton:disabled {{ background: #2a2a2a; color: #666666; "
+            f"border: 1px solid #444444; }}"
         )
+        self.btn_tune.setStyleSheet(_tune_btn_style)
         # Watt + SWR direkt nebeneinander (Anzeigen, kein Button)
         self.watt_label = QLabel("0 W")
         self.watt_label.setFixedHeight(28)

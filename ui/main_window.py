@@ -62,6 +62,12 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         # Worker-Thread safe darauf zugreifen kann (lokale Referenz holen).
         self._connect_dialog = None
 
+        # P71 (v0.97.47): Guard-Flag gegen App-Start-Auto-Tune-Trigger.
+        # True während __init__, False nach apply_visible_bands() —
+        # `_on_band_changed` in mw_radio.py liest das Flag und skipt
+        # Auto-Tune solange True.
+        self._initial_band_set = True
+
         # P35 Bug F (Mike-Anweisung 11.05.2026): App-Start IMMER auf
         # 20m / FT8 / Normal-Modus erzwingen — kein State-Restore mehr.
         # Mike entscheidet morgens spontan was er funken will. Settings-
@@ -109,6 +115,10 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         # P63 (v0.97.36): TUNE-Button-Sichtbarkeit aus tuner_present-Setting
         self.control_panel.set_tuner_present(
             self.settings.get("tuner_present", True))
+
+        # P71 (v0.97.47): Init-Phase fertig — Guard-Flag clearen damit
+        # zukünftige Bandwechsel Auto-Tune wieder triggern dürfen.
+        self._initial_band_set = False
 
         # Hintergrund-Timer
         self._init_psk_polling()

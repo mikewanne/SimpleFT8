@@ -495,15 +495,40 @@ class RadioMixin:
         # Speichert RFPreset-Stuetzpunkt (P54b) bei Erfolg → _apply_rf_preset
         # wird im Post-Check ein zweites Mal aufgerufen damit der frische
         # 10-W-Wert sofort wirkt.
+        #
+        # P71 (v0.97.47) Bug 2: Zusätzliche Guards gegen ungewollten
+        # App-Start-Trigger:
+        # - `_initial_band_set` Flag (gesetzt in MainWindow.__init__,
+        #   geclearted am Ende von __init__).
+        # - RFPresetStore-Anker-Check: wenn 10W-Eintrag bereits existiert,
+        #   ist Auto-Tune nicht nötig — Belt-and-suspenders gegen mögliche
+        #   Bandpilot-Re-Trigger-Pfade die das Flag umgehen.
+        _has_anchor = False
+        try:
+            mw = self._main_window if hasattr(self, "_main_window") else self
+            _has_anchor = self.rf_preset_store.has_anchor(
+                self.radio.radio_type, band, watt=10)
+        except (AttributeError, Exception):
+            _has_anchor = False
         if (self.settings.get("auto_tune_on_band_change", True)
                 and self.radio.ip
                 and band.upper() not in self._swr_blocked_bands
-                and self.settings.get("tuner_present", True)):
+                and self.settings.get("tuner_present", True)
+                and not getattr(self, "_initial_band_set", False)
+                and not _has_anchor):
             _dlog("BAND", f"_start_auto_tune_for_band_change({band})")
             success = self._start_auto_tune_for_band_change(band)
             if not success:
                 self.qso_panel.add_info(
                     f"⚠ Auto-TUNE {band.upper()} fehlgeschlagen oder abgebrochen")
+        elif self.settings.get("auto_tune_on_band_change", True):
+            # P71: nicht-getriggerter Auto-Tune sichtbar in Debug-Log machen
+            _reason = (
+                "initial_band_set" if getattr(self, "_initial_band_set", False)
+                else "anchor_exists" if _has_anchor
+                else "skip_other"
+            )
+            _dlog("BAND", f"Auto-TUNE skipped: reason={_reason}")
         # DT-Korrektur: gespeicherten Wert fuer neues Band laden
         from core import ntp_time as _ntp
         _ntp.set_band(band)
@@ -1444,7 +1469,14 @@ class RadioMixin:
             self._open_dx_tune_dialog()
 
     def _open_dx_tune_dialog(self):
-        """DX Tune Dialog oeffnen — NICHT-MODAL, immer im Vordergrund, GUI gesperrt."""
+        """DX Tune Dialog oeffnen — NICHT-MODAL, immer im Vordergrund, GUI gesperrt.
+
+        P75 (v0.97.48): Wenn der Auto-TUNE bei Bandwechsel gerade
+        erfolgreich war (SWR ≤ Limit), übergeben wir `prev_tune_swr` →
+        DXTuneDialog zeigt Header-Banner als visueller Übergang
+        Phase 1 (TUNE) → Phase 2 (Gain-Messung). Mike-Spec „ein Fenster
+        was erst die aktion und das beenden anzeigt".
+        """
         # Letzte Sicherheitspruefung: PTT definitiv AUS
         if self.radio.ip:
             self.radio.ptt_off()
@@ -1452,7 +1484,25 @@ class RadioMixin:
         from ui.dx_tune_dialog import DXTuneDialog
         band = self.settings.band
         scoring = getattr(self, '_gain_scoring_mode', 'snr')
-        dialog = DXTuneDialog(self.radio, band, scoring_mode=scoring, rx_mode=self._rx_mode, parent=self)
+
+        # P75: Bei aktuell-gutem SWR nach Auto-Tune Banner anzeigen.
+        # `_auto_tune_running` ist beim Eintritt schon False (Dialog-
+        # Cleanup), aber `last_swr` ist frisch. swr_limit gibt
+        # Threshold; bei stale/dead radio.ip → None.
+        prev_swr: float | None = None
+        try:
+            swr_limit = self.settings.get("swr_limit", 3.0)
+            if self.radio.ip and self.radio.last_swr is not None:
+                if 0 < self.radio.last_swr <= swr_limit:
+                    prev_swr = float(self.radio.last_swr)
+        except (AttributeError, TypeError, ValueError):
+            prev_swr = None
+
+        dialog = DXTuneDialog(
+            self.radio, band, scoring_mode=scoring,
+            rx_mode=self._rx_mode, parent=self,
+            prev_tune_swr=prev_swr,
+        )
         self._dx_tune_dialog = dialog
 
         # Immer im Vordergrund halten (verschwindet nicht hinter der GUI)

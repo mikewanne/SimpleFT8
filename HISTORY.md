@@ -3,6 +3,166 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-18 v0.97.48 — P75: TUNE-Button-Bug + Style-Harmonisierung + Fenster-Konsolidierung
+
+**Trigger:** Mike-Field-Test 18.05.2026 nach P71-Release:
+- Bug: TUNE-Knopf bleibt nach Auto-Stop-Timer gelb-aktiv (visuelle
+  Inkonsistenz — sieht aus als würde noch getunet).
+- UX-Wunsch: TUNE-Button-Style harmonisieren mit OMNI/CQ (aktiv grün,
+  inaktiv dezent-gelb als Setup-Aktion-Cluster).
+- Folge-Auftrag P74-A: Fenster-Konsolidierung — Mike sagt „viele Fenster
+  die aufploppen verwirren. Ein Fenster was erst die Aktion und das
+  Beenden anzeigt ist übersichtlicher."
+
+**Voller V1→V2→R1→V3→Code→Final-R1-Workflow** autonom mit DeepSeek-V4-pro.
+R1 entschied bei Architektur-Wahl: **Variante A (Header-Banner)** statt
+State-Machine-Refactor (KISS-Prioritaet, 30 Min vs 3-4 h).
+
+**Findings:**
+- F1 🟡 Bug-Fix: `_tune_stop` ruft `btn_tune.setChecked(False)` mit
+  `blockSignals(True/False)`. Token-Guard genug Race-Schutz.
+- F2 ⚪ Style: eigenes Cluster `_tune_btn_style` (dezent-gelb inaktiv
+  `rgba(60,50,0,0.55)` mit Text `#BBA060`, grün aktiv `rgba(0,150,0,0.75)`
+  analog OMNI). TUNE als Setup-Aktion farblich von TX-Aktionen abgegrenzt.
+- F3 EMPF: Variante A — DXTuneDialog neuer Param `prev_tune_swr`. Wenn
+  gesetzt: grüner Header-Banner „✓ TUNE OK — SWR X.X · jetzt 2 Min
+  Gain-Messung läuft". Visueller Übergang Phase 1 → Phase 2.
+- F4 🟡 QMessageBox-Eliminierung: SWR-bad manueller TUNE-Pfad nutzt
+  jetzt `qso_panel.add_info("⚠ Tuner konnte nicht matchen ...")` statt
+  Popup. SWR-Indikator in der Radio-Karte bleibt zusätzlich rot
+  (R1-Kompensation).
+- F5 ⚪ FWDPWR-Anzeige beibehalten (KISS-Check: R1 sagt Hobby-Funker
+  findet's nützlich, kein Rollback).
+- F6 🟡 Test-Coverage: 10 Tests inkl. Race-Test (T5 Token-Guard),
+  Banner-None-Pfad (T7), QMessageBox-Absence (T8+T9).
+
+**Code-Änderungen (6 atomare Commits):**
+- `ui/control_panel.py`: TUNE-Button-Style umgestellt auf eigenes
+  Cluster (Z.893-918, neue Variable `_tune_btn_style`).
+- `ui/mw_tx.py`: Button-State-Reset in `_tune_stop` (5 Zeilen).
+  QMessageBox-Block im SWR-bad-manuell-Pfad ersetzt durch
+  `qso_panel.add_info`.
+- `ui/dx_tune_dialog.py`: `__init__` Signatur erweitert um
+  `prev_tune_swr: float | None = None`. Im `_setup_ui` Banner-Block
+  als erstes Widget wenn Wert vorhanden. Höhe +30 px (490 statt 460).
+- `ui/mw_radio.py:_open_dx_tune_dialog`: Übergibt `prev_tune_swr` aus
+  `radio.last_swr` wenn SWR ≤ Limit, sonst None.
+- `tests/test_p75_button_modal.py` NEU: 10 Tests.
+
+**V4-pro 23-Cycle-Bilanz:** Architektur-Entscheidung Variante A statt B
+sauber begründet. Keine ROT-Bugs. Halluzinations-Rate 0/6.
+
+**Tests:** 1453 → 1463 grün (+10 P75). APP_VERSION 0.97.47 → 0.97.48.
+Backup `Appsicherungen/2026-05-18_v0.97.47_vor_p75/` (gezielt 5 Files).
+
+**Push pending bis Field-Test:**
+- F1 (kein Radio): TUNE-Button im Ruhe-Zustand → dezent-gelb, nicht hell.
+- F2 (Radio): Manueller TUNE → Button grün während Lauf → nach Auto-Stop
+  automatisch zurück auf dezent-gelb (Bug-Fix).
+- F3 (Radio): Bandwechsel auf neues Band ohne Preset → AutoTuneDialog →
+  schließt → DXTuneDialog öffnet mit **grünem Banner ganz oben** „✓ TUNE
+  OK — SWR X.X · jetzt 2 Min Gain-Messung läuft".
+- F4 (Radio): Manueller TUNE bei schlechtem SWR → KEIN Popup, rote
+  Zeile im QSO-Log „⚠ Tuner konnte nicht matchen ...".
+
+---
+
+## 2026-05-18 v0.97.47 — P71: Auto-Tune Bundle (5 Bugs aus Mike-Field-Test 18.05.)
+
+**Trigger:** Mike-Field-Test 18.05.2026 morgens. Screenshot zeigte "TUNE
+Timeout" Modal nach 19s bei 15s-Setting trotz SWR 1.9 (im Bereich) bei
+Bandwechsel 20m → 17m. Plus 4 weitere Bugs/UX-Punkte:
+- Auto-Tune feuert beim App-Start ungewollt (Mike: „weil nicht
+  vorhanden?", später nicht mehr → Anker fehlt)
+- Settings tune_duration_s soll konfigurierbar 5/10/15 s sein (für
+  FT8/FT4/FT2-Differenzierung)
+- Dialog-Title „Auto-TUNE läuft — 15M" sah aus wie „15 Minuten"
+- Watt-Zahl + Antenne + Mode sollen sichtbar im Dialog stehen
+- Logdatei-Eintrag für Auto-Tune-Diagnose mit klarem Success/Fail-
+  Status (Mike-Wunsch)
+
+**Voller V1→V2→R1→V3-Workflow** autonom mit DeepSeek-V4-pro. R1 fand 5
+Findings, davon 3 blocking (F1+F2+F3) + F5 angenommen, F4 KISS-akzeptiert.
+
+**Findings:**
+- F1 🔴 ROT: Backup-Timer-Race. `(duration_s + 5)*1000 = 20s`, aber
+  worst-case 15 + 6.5 (Phase B) + 2 (Post-Check) = 23.5s → Timeout-Modal
+  trotz erfolgreichem TUNE. Fix: Konstante `_BACKUP_GRACE_S = 12`
+  (6.5 + 2 + 3.5 Safety) → `(duration_s + 12) * 1000`.
+- F2 🟠 ORANGE: App-Start-Trigger-Pfad nicht eindeutig identifiziert
+  (H3 widerlegt — unconnected Signal in PySide6 wird verworfen). Belt-
+  and-suspenders: Guard-Flag `_initial_band_set` in MainWindow + RFPreset-
+  Anker-Check via neue `RFPresetStore.has_anchor(radio, band, watt)`.
+  Deckt Mike's „jetzt nicht mehr"-Beobachtung erklärbar ab.
+- F3 🟡 GELB: Settings-Migration. ComboBox `findData(-1)` führt zu
+  leerem Eintrag bei unbekanntem Wert. Fix: `findData()`-Fallback auf
+  15 in Load+Reset + defensive `Settings.load()`-Migration (alter Wert
+  30 → 15).
+- F4 🟡 GELB: FWDPWR tight coupling. Akzeptiert (KISS): try/except auf
+  `self._parent._fwdpwr_samples[-1]` mit Fallback 0.0.
+- F5 🟡 GELB: Logging-Format. Übernommen: 5 DONE-Logs (OK + 4× FAIL:
+  swr_bad, disconnect, cancelled, timeout) als grep-freundliche
+  1-Zeilen-key=value-Format mit `band mode ant swr fwdpwr rf duration`.
+
+**Code-Änderungen:**
+- `ui/auto_tune_dialog.py`: `_BACKUP_GRACE_S=12`, mode-Param, Title
+  `band.lower()+mode`, Status mit Mode+FWDPWR, Cancel+Timeout-Log,
+  setFixedSize 360→420.
+- `ui/mw_tx.py`: Whitelist (15,30) → (5,10,15), mode-Übergabe an Dialog,
+  3 DONE-Logs in `_tune_post_swr_check` (OK/swr_bad/disconnect).
+- `ui/mw_radio.py`: `_on_band_changed` Auto-Tune-Block erweitert um
+  Guard-Flag + has_anchor-Check + Debug-Log für Skip-Grund.
+- `ui/settings_dialog.py`: ComboBox addItem 5/10/15, findData-Fallback,
+  Reset auf 15.
+- `ui/main_window.py`: `_initial_band_set = True/False` Lifecycle.
+- `config/settings.py`: Load-Migration für unbekannte tune_duration_s.
+- `core/rf_preset_store.py`: neue `has_anchor()`-Methode.
+- `tests/test_p71_autotune_bundle.py` NEU: 17 Tests.
+
+**Bonus-Fix:** `tests/test_p_bundle_qol.py::test_setup_main_log_replaces_
+existing_symlink` hatte hardcoded `2026-05-10` → ab 18.05. unter Cleanup-
+Cutoff 7 Tage gefallen → relativ zu heute-3 Tage umgestellt.
+
+**Final-R1 fand 1 ORANGE-Bug:** Whitelist im manuellen TUNE-Pfad
+(`_on_tune_clicked` Z.97) wurde nicht mit-angepasst — User-Wahl 5/10 s
+in Settings wäre silently auf 15 s gemappt im manuellen TUNE. Fix:
+Whitelist auf `(5, 10, 15)` synchronisiert + Test T13.
+
+**V4-pro 22-Cycle-Bilanz:** 0 Halluzinationen, 1 ROT-Bug F1 + 1 ORANGE
+(Final-R1-Catch) gefangen. F2-Wurzel-Hypothese H3 sauber widerlegt mit
+Code-Pfad-Begründung.
+
+**Tests:** 1435 → 1453 grün (+18 P71 effektiv inkl. T13 Final-R1-Catch).
+APP_VERSION 0.97.46 → 0.97.47. Backup `Appsicherungen/2026-05-18_v0.97.46_vor_p71/`.
+
+**Push pending bis Field-Test:**
+- F1+F3+F4 ohne Radio (kein Trigger, ComboBox, Settings-Migration).
+- F2+F5+F6+F7 mit Radio (Backup-Race-Fix, DONE-Logs, SWR-Marker,
+  Cancel-Pfad). Siehe `FIELDTESTS.md`.
+
+**Mike-Field-Test-Bestätigung 18.05.:**
+- F2 (Race-Fix bei Bandwechsel) ✓ — TUNE funktioniert, kein Timeout-
+  Modal mehr.
+- F7 (manuelle TUNE-Dauer-Wahl) ✓ — 5-s-Setting greift im manuellen
+  TUNE (Final-R1-Catch wirksam).
+- UX-Beobachtung Mike: nach Auto-TUNE poppt bei fehlendem Diversity-
+  Preset zusätzlich der DXTuneDialog auf → mehrere Fenster verwirren.
+  Wunsch: Mess-Status in EINEM Fenster konsolidieren. **→ P74-A in TODO.**
+- Mike-Wunsch: Autogain-Konzept prüfen wie weit verwirklichbar.
+  **→ P74-B in TODO.**
+- **DeepSeek-V4-pro-Diskussion zu P74-A + P74-B durchgeführt**
+  (`prompts/p74_discussion.md`):
+  - P74-A: DXTuneDialog um TUNE-Phase erweitern als State-Machine
+    (`TUNE → GAIN_CYCLES → FINISHED`), AutoTuneDialog bleibt für
+    manuellen Button. KISS-OK, weniger Refactor als Wizard.
+  - P74-B: 2-Phasen-Plan empfohlen. Phase 1: Stale-Preset-Hinweis
+    (> 14 d → Statusbar-Toast). Phase 2: Cross-Band-Interpolation
+    via `PresetStore._interpolate_gain` (lineare Interpolation über
+    Mittenfrequenz). Stufen (b) Live-Adjustment + (d) SNR-Feintuning
+    verworfen (Hobby-Kontext, Funkverkehr-Risiko).
+
+---
+
 ## 2026-05-17 v0.97.46 — P69: Block-Bootstrap-Konfidenz-Intervalle für Diversity-Statistiken
 
 **Trigger:** Autonomer Workflow während Mike unterwegs. Aus TODO P69

@@ -1,8 +1,90 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-17 — P69: Block-Bootstrap-CI + 6 pending Field-Tests aus v0.97.40-46
+## Stand 2026-05-18 — P75 TUNE-Button + Modal-Konsolidierung + P71 Bundle
 
-**Aktueller Code-Stand:** v0.97.46 (P69), Tests **1435 grün**.
+**Aktueller Code-Stand:** v0.97.48 (P75), Tests **1463 grün** (+10 P75).
+
+### 🟢 v0.97.48 P75 — TUNE-Button-Bug + Style + Fenster-Konsolidierung (Variante A)
+
+Mike-Field-Test nach P71: Bug TUNE-Knopf bleibt aktiv nach Auto-Stop +
+UX-Wunsch Style-Harmonisierung mit OMNI/CQ + Folge-Auftrag P74-A
+„weniger Fenster die aufploppen". Voller V1→V2→R1→V3-Workflow autonom
+mit DeepSeek-V4-pro. R1 entschied **Variante A (Header-Banner)** statt
+State-Machine-Refactor (KISS, 30 Min vs 3-4 h).
+
+**Findings:**
+- F1 🟡 Button-Reset in `_tune_stop` mit `blockSignals` + setChecked.
+- F2 ⚪ eigenes `_tune_btn_style`-Cluster (dezent-gelb inaktiv,
+  grün aktiv analog OMNI).
+- F3 EMPF Variante A: `DXTuneDialog` neuer Param `prev_tune_swr`,
+  grüner Header-Banner als Phase-1→Phase-2-Übergang.
+- F4 🟡 SWR-bad manueller TUNE: QMessageBox → `qso_panel.add_info`.
+- F5 ⚪ FWDPWR im Status behalten (R1 Hobby-Funker findet's nützlich).
+- F6 🟡 +3 Tests (Race, Banner-None, QMessageBox-Absence).
+
+**V4-pro 23-Cycle-Bilanz:** Architektur-Entscheidung Variante A statt B
+sauber begründet. 0 Halluzinationen, 0 ROT-Bugs.
+
+**Push pending bis Field-Test** (siehe FIELDTESTS.md neu F-S1.7 + F-S2.5):
+- F1 (kein Radio): TUNE-Button dezent-gelb im Ruhe-Zustand
+- F2+F3+F4 (Radio): Auto-Stop-Reset, Banner sichtbar, kein Popup bei SWR-bad
+
+### 🟢 v0.97.47 P71 — Auto-Tune Bundle (5 Bugs aus Mike-Field-Test 18.05.)
+
+### 🟢 v0.97.47 P71 — Auto-Tune Bundle (5 Bugs aus Mike-Field-Test 18.05.)
+
+Mike-Field-Test 18.05. morgens brachte 5 Bugs: (1) Backup-Timer-Race
+(„TUNE Timeout" trotz SWR 1.9), (2) Auto-Tune feuert beim App-Start
+ungewollt, (3) Settings tune_duration_s 5/10/15 s (war 15/30), (4)
+Dialog-UX (Title „15M" verwirrt, Mode/Watt/ANT fehlen), (5) Logging
+für Diagnose. Voller V1→V2→R1→V3-Workflow mit V4-pro autonom.
+
+**Findings:**
+- F1 🔴 ROT Backup-Race: Grace 5→12 s (Phase B 6.5 + Post-Check 2 + Safety 3.5)
+- F2 🟠 ORANGE App-Start: H3 widerlegt, Belt-and-suspenders Guard-Flag
+  `_initial_band_set` + RFPreset-Anker-Check via neue `has_anchor()`
+- F3 🟡 GELB Settings-Migration: findData-Fallback + Settings.load()-Pop
+- F4 🟡 GELB FWDPWR-Coupling: KISS-akzeptiert (try/except)
+- F5 🟡 GELB Logging: 5 DONE-Logs (OK + 4× FAIL) im key=value-Format
+
+**V4-pro 22-Cycle-Bilanz:** 0 Halluzinationen, 1 ROT-Bug F1 gefangen,
+F2 sauber H3 widerlegt.
+
+**Push pending bis Field-Test** (siehe FIELDTESTS.md):
+- F1+F3+F4 ohne Radio (App-Start ohne Trigger, ComboBox 5/10/15,
+  Settings-Migration)
+- F2+F5+F6+F7 mit Radio (Race-Fix bei Bandwechsel, DONE-Logs sichtbar,
+  SWR-Marker-Regression, Cancel-Pfad)
+
+### 🟢 v0.97.46 P69 — Block-Bootstrap-CI (autonom durchgezogen, kein Field-Test nötig)
+
+Mike war unterwegs → autonomer V1→V2→R1→V3-Workflow mit DeepSeek-V4-pro
+für P69 (Konfidenz-Intervalle aus TODO). Macht die README-Aussagen
+wissenschaftlich solide.
+
+**R1 fand 6 Findings:** F-DIV0 🔴 (Resample verwerfen wenn normal_mean
+== 0), F-RATIO1 🟠 (Variante B Percentile + Threshold-Schutz),
+F-THRESHOLD 🟠 (n < 15 → insufficient, < 25 → limited), F-ITER 🟡 (5000
+Iter), F-TEST-DATA 🟡 (Mock-Loader), F-CAVEAT-LANG 🟡.
+
+**Aktuelle Daten + CI (40m signifikant, 20m+30m null im CI):**
+
+| Band | Modus | Punktschätzer | 95%-CI |
+|---|---|---|---|
+| 40m | Std | +62% | +32 bis +102% ✅ |
+| 40m | DX | +36% | +11 bis +70% ✅ |
+| 20m | Std | −3% | −14 bis +10% ⚠ |
+| 20m | DX | +8% | −4 bis +22% ⚠ |
+| 30m | Std | +9% | −9 bis +31% ⚠ |
+| 30m | DX | +1% | −22 bis +29% ⚠ |
+
+**V4-pro 21-Cycle-Bilanz:** 0 Halluzinationen, 1 ROT-Bug gefangen (F-DIV0).
+
+---
+
+### ARCHIV (alt — vor P71)
+
+**Aktueller Code-Stand (vor P71):** v0.97.46 (P69), Tests **1435 grün**.
 
 ### 🟢 v0.97.46 P69 — Block-Bootstrap-CI (autonom durchgezogen, kein Field-Test nötig)
 

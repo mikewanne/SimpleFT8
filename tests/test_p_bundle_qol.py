@@ -106,10 +106,16 @@ def test_setup_main_log_archives_existing_file(tmp_path):
 
 
 def test_setup_main_log_replaces_existing_symlink(tmp_path):
-    """Bestehender Symlink wird atomar auf heutige Datei umgebogen."""
+    """Bestehender Symlink wird atomar auf heutige Datei umgebogen.
+
+    P71-Fix (18.05.2026): Datum relativ zu heute - 3 Tage (vorher
+    hardcoded 2026-05-10, fiel ab 18.05. unter Cleanup-Cutoff von 7 Tagen).
+    """
     from core.log_setup import setup_main_log
 
-    old_dated = tmp_path / "simpleft8-2026-05-10.log"
+    # 3 Tage alt — innerhalb der 7-Tage-Aufbewahrung, aber nicht heute
+    old_date = (datetime.utcnow() - timedelta(days=3)).strftime("%Y-%m-%d")
+    old_dated = tmp_path / f"simpleft8-{old_date}.log"
     old_dated.write_text("alter Log-Content")
     os.symlink(old_dated.name, tmp_path / "simpleft8.log")
 
@@ -120,7 +126,7 @@ def test_setup_main_log_replaces_existing_symlink(tmp_path):
     assert old_dated.exists()
     assert old_dated.read_text() == "alter Log-Content"
 
-    # Symlink zeigt auf heutige Datei (nicht mehr auf 2026-05-10)
+    # Symlink zeigt auf heutige Datei (nicht mehr auf alte)
     symlink = tmp_path / "simpleft8.log"
     assert symlink.is_symlink()
     target_name = os.readlink(symlink)

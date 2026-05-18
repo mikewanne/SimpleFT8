@@ -1,4 +1,270 @@
-# SimpleFT8 TODO — Stand 17.05.2026 (v0.97.46, P69 ERLEDIGT)
+# SimpleFT8 TODO — Stand 18.05.2026 (v0.97.48, P75 ERLEDIGT)
+
+---
+
+## 🐛 P76 — TUNE-SWR-Log + Dauer-Anzeige-Diskrepanz (Mike-Field-Test 18.05. nach P75)
+
+### P76-A: Falscher SWR-Wert im TUNE-OK-Log
+
+**Symptom (Mike-Screenshot 18.05. 09:42):**
+- Während TUNE-Vorgang: SWR-Anzeige zeigt 1.2 (live)
+- Im QSO-Log steht „✓ TUNE OK — SWR 1.0" (3× hintereinander)
+- 11 W TX, 75% TX-Pegel, RF 99% — TUNE ist normal verlaufen
+
+**Vermutete Wurzel:** `_tune_post_swr_check` liest `swr_now =
+self.radio.last_swr` **2 s NACH `tune_off()`**. In diesen 2 s ist kein
+TX mehr aktiv → SWR-Messung kann auf Default 1.0 springen (kein
+gültiger Mess-Wert ohne TX-Träger). Logging zeigt deshalb 1.0 statt
+der tatsächlichen TUNE-Endwerts 1.2.
+
+**Verifikations-Bedarf:** in `radio/flexradio.py` prüfen wie
+`last_swr` aktualisiert wird wenn kein TX aktiv ist. Vermutung: bleibt
+auf letztem Mess-Wert bis nächste VITA-49-Aktualisierung — und die
+kommt schnell mit „1.0" weil kein TX.
+
+**Fix-Idee:** während Phase B (Closed-Loop-Convergenz) den letzten
+gültigen SWR-Wert in `_tune_last_valid_swr` zwischenspeichern, im
+Post-Check diesen Wert ins Log schreiben statt frischen `last_swr`.
+
+### P76-B: Auto-TUNE-Dauer länger als eingestellt
+
+**Symptom (Mike-Field-Test 18.05.):** Auto-TUNE bei Bandwechsel auf
+10m mit Setting `tune_duration_s=5` hat „wesentlich länger als 5 s"
+gedauert (gefühlt ~9 s).
+
+**Vermutete Wurzel (kein Bug, aber UX-Diskrepanz):**
+- Phase A (Tuner-Match): 5 s wie eingestellt
+- Phase B (Closed-Loop-Convergenz bis FWDPWR ≈ 10W): max 1.5 s Initial
+  + 5 × 1.0 s Iter = **bis 6.5 s zusätzlich**
+- Post-Check-Delay: 2 s
+- **Total bis Dialog zumacht: bis 5 + 6.5 + 2 = 13.5 s worst-case**
+
+Dialog-Status-Label zeigt aber nur „0 / 5 s" → User erwartet 5 s,
+sieht 9-13 s und denkt: Setting greift nicht.
+
+**Fix-Idee (UX):** Status-Label im AutoTuneDialog erweitern:
+- Phase A: „TUNE-Match: N / 5 s"
+- Phase B: „Power-Convergenz: N / max 6.5 s"
+- Post-Check: „SWR-Verifikation: 2 s"
+
+ODER (KISS-Variante): einfacheres Label „TUNE läuft — bitte warten",
+keine N/Ms-Angabe → keine falschen Erwartungen.
+
+DeepSeek-Diskussion beim Fix.
+
+---
+
+## ✅ P75 — TUNE-Button-Bug + Style + Fenster-Konsolidierung (Variante A) — ERLEDIGT v0.97.48
+
+**Umgesetzt 18.05.2026** autonom mit DeepSeek-V4-pro. Voller
+V1→V2→R1→V3-Workflow. R1 entschied **Variante A** (Header-Banner)
+statt State-Machine-Refactor (KISS-Vorrang, 30 Min vs 3-4 h).
+
+- TUNE-Button bleibt nach Auto-Stop visuell aktiv → Fix mit
+  `blockSignals + setChecked(False)` in `_tune_stop`.
+- TUNE-Style-Harmonisierung: eigenes `_tune_btn_style`-Cluster
+  (dezent-gelb inaktiv `#BBA060`, grün aktiv analog OMNI/CQ).
+- Modal-Konsolidierung Variante A: DXTuneDialog kriegt
+  `prev_tune_swr`-Param + grünen Header-Banner als Phase-1→Phase-2-
+  Übergang. AutoTuneDialog bleibt eigenständig für manuellen TUNE.
+- SWR-bad-manueller-TUNE-Pfad: QMessageBox.warning → `qso_panel.add_info`.
+
+**Tests 1453→1463 (+10)**. APP_VERSION 0.97.47→0.97.48.
+
+**P74-B Autogain (Stale-Hinweis + Cross-Band-Interpolation) bleibt
+offen** als separater Workflow.
+
+---
+
+## 🆕 P74 — UX-Konsolidierung + Autogain-Konzept (Mike-Wunsch 18.05. nach P71-Field-Test)
+
+### P74-A: Mess-/TUNE-Status in EINEM Fenster konsolidieren
+
+**Mike-Beobachtung 18.05.:** Nach Auto-TUNE-Abschluss bei Bandwechsel
+30m → ploppt der DX-Kalibrierungs-Dialog (kein Preset → 8 Zyklen Mess-
+Sequenz). Nach Kalibrierungs-Ende möglicherweise weiteres Modal. Mike:
+„viele Fenster die aufploppen verwirren. Ein Fenster was erst die
+Aktion und das Beenden anzeigt ist übersichtlicher."
+
+**Aktueller Zustand:**
+- AutoTuneDialog (Auto-TUNE bei Bandwechsel) schließt sich nach
+  Erfolg/Misserfolg sauber.
+- Wenn danach kein Diversity-Preset existiert → `_check_diversity_preset`
+  öffnet DXTuneDialog (8 Zyklen, 2 Min Messung).
+- SWR-bad-Pfad: zusätzliches QMessageBox „Tuner konnte nicht matchen"
+  (`_tune_post_swr_check` Z.321).
+
+**Lösungs-Vorschlag (KISS):**
+- AutoTuneDialog am Ende NICHT sofort schließen, sondern Erfolgs-Banner
+  zeigen + Button „Kalibrierung jetzt starten" / „Später".
+- Bei „Jetzt starten": AutoTuneDialog wechselt in Kalibrierungs-Phase
+  (gleicher Dialog, anderer Inhalt). Am Ende: Banner „Fertig — N
+  Stützpunkte gespeichert" + Schließen-Button.
+- Bei SWR-bad: Modal wegfallen lassen, Info-Banner im AutoTuneDialog
+  selbst (auch nur 1 Fenster).
+
+**Aufwand:** mittel (1-2 Stunden). UI-Refactor von 2 Dialogs zu 1
+State-Machine-Dialog. Voller V1→V2→R1→V3-Workflow Pflicht.
+
+### P74-B: Autogain prüfen — wie weit verwirklichbar?
+
+**Mike-Wunsch 18.05.:** „Lass uns prüfen wie weit wir Autogain
+verwirklichen können."
+
+**Aktueller Zustand (Recap):**
+- Diversity-Gain-Kalibrierung läuft via DXTuneDialog: 8 Zyklen × 15s = 2
+  Min, interleaved über ANT1/ANT2 × Gain 10/20 dB. User clickt
+  „Kalibrieren" oder es triggert bei fehlendem Preset automatisch.
+- Ergebnis: pro `(band, FT-Mode)` ein Std-Preset + ein DX-Preset
+  gespeichert (P51-Bundle).
+- Gain wird NICHT automatisch nachgeregelt während des Betriebs —
+  Preset bleibt fix bis User neu kalibriert.
+
+**Frage:** Kann das so weit „autogain" werden, dass:
+- (a) **Auto-Re-Kalibrierung** wenn alte Mess-Werte unzuverlässig sind
+  (Drift, andere Tageszeit, andere Solar-Conditions)?
+- (b) **Live-Gain-Adjustment** während des Betriebs (z.B. wenn Stations-
+  Anzahl plötzlich einbricht → Gain hochregeln, oder umgekehrt)?
+- (c) **Smart Initial-Gain** beim Band-Switch ohne Preset, statt 2-Min-
+  Mess-Pflicht?
+
+**Trade-offs:**
+- (a) ist machbar via Decay-Timer („Preset > 7 Tage alt → Vorschlag
+  Neu-Kalibrieren") — KISS.
+- (b) ist überengineered für Hobby-Kontext (siehe Projekt-Philosophie
+  in CLAUDE.md). Kann Funkverkehr stören.
+- (c) wäre möglich via Cross-Band-Interpolation (analog `_kruecken_
+  skalierung` aus P54-FIX): wenn 40m+20m kalibriert, 30m schätzen.
+
+**Aktion:** DeepSeek-Diskussion über Machbarkeit + Mike-Spec klären
+bevor Code-Plan. Wahrscheinlich Hybrid (a) + (c), (b) verwerfen.
+
+**Aufwand:** unklar bis Konzept steht (1-3 Tage je nach Scope).
+
+---
+
+## 🤖 DeepSeek-V4-pro-Empfehlung 18.05.2026 (`prompts/p74_discussion.md`)
+
+### P74-A — Modal-Konsolidierung: KLARES JA
+
+**Empfehlung:** **DXTuneDialog um TUNE-Phase erweitern** (State-Machine
+`TUNE → GAIN_CYCLES → FINISHED`). EIN Fenster für gesamten Pipeline-
+Pfad bei Bandwechsel ohne Preset. AutoTuneDialog bleibt nur für
+manuellen TUNE-Button.
+
+**KISS-Check:** ✓ ja, weniger UI-Refactor als komplett neuer Wizard.
+
+**Architektur-Skizze:**
+- `DXTuneDialog._state ∈ ('TUNE', 'GAIN_CYCLES', 'FINISHED')`
+- `_start_tune_phase()` ruft `radio.tune_on(10W)` + 15s-Timer
+- `_on_tune_finished(success, swr)` → SWR-OK → State `GAIN_CYCLES` +
+  `_start_step()`; SWR-bad → Fehler-Banner + Schließen
+- `mw_radio._start_dx_tuning()` überspringt separaten AutoTuneDialog,
+  ruft direkt erweiterten DXTuneDialog
+- `_tune_token` aus MainWindow im Dialog speichern (Race-Schutz bei
+  schnellen Bandwechseln)
+- `radio.connected`-Signal weiterhin im MainWindow verfolgen → Dialog
+  per `reject()` bei Disconnect
+
+**Race-Trade-off:** TUNE-Phase muss Cancel + Verbindungsverlust sauber
+abfangen (mehr State-Mgmt).
+
+### P74-B — Autogain: 2-PHASEN-PLAN
+
+**Phase 1: Stufe (a) Auto-Re-Kalibrierungs-HINWEIS**
+- Beim Bandwechsel: `gain_timestamp > 14 Tage` → dezenter Statusbar-
+  Hinweis „⚠ Gain-Kalibrierung 16 d alt — KALIBRIEREN empfohlen"
+- **Kein** automatischer Start (User-Unterbrechung vermeiden)
+- KISS-trivial: Lese-Check + Toast
+
+**Phase 2: Stufe (c) Cross-Band-Interpolation**
+- Neue Methode `PresetStore._interpolate_gain(band, ft_mode)`
+- Lineare Interpolation über Mittenfrequenz aus 2 nächsten kalibrierten
+  Bändern (z.B. 40m+20m → 30m schätzen)
+- Markiert als `"interpolated": true`, **nicht** als valid gespeichert —
+  echte Messung überschreibt später
+- Bei nur 1 Nachbar: Krücke (Werte kopieren) analog `_kruecken_skalierung`
+  aus P54-FIX
+- In `_check_diversity_preset`: bei `missing` zuerst Interpolation
+  versuchen → bei Erfolg `_enable_diversity` mit Warn-Statusbar „Gain
+  geschätzt — KALIBRIEREN zur Optimierung"
+
+**Stufen (b) Live-Adjustment + (d) SNR-Feintuning: VERWORFEN**
+für Hobby-Kontext (Funkverkehr-Risiko, Komplexität, Projekt-Philosophie).
+
+**Implementierungs-Reihenfolge:**
+1. P74-A zuerst (1-2 h, sauberer UX-Win, Voraussetzung für späteren
+   Interpolations-Pfad)
+2. P74-B Phase 1 (1 h, Statusbar-Hinweis bei stale Preset)
+3. P74-B Phase 2 (3-4 h, Interpolations-Methode + Pipeline-Hook)
+
+Alle drei: voller V1→V2→R1→V3-Workflow PFLICHT (CLAUDE.md).
+
+---
+
+## 🆕 P73 — Settings-UX-Bundle (für spätere Besprechung mit Mike)
+
+**Mike-Wunsch 18.05.2026 nach P71-Field-Test:**
+
+### P73-A: TUNE-Einstellungen gemeinsamer Tab
+**Aktuell:** TUNE-Dauer (5/10/15 s) im Tab „FT8 & Diversity", TUNE-Leistung
+in anderem Tab. Mike: „der Übersichtlichkeit halber besser unter einem Tab
+organisieren".
+
+**Vorschlag:** Eigenen Tab „TUNE" oder Untergruppe „TUNE-Einstellungen"
+mit:
+- TUNE-Dauer (5/10/15 s)
+- TUNE-Leistung
+- Auto-TUNE bei Bandwechsel (Toggle)
+- Tuner vorhanden (Toggle)
+- SWR-Limit (separat? oder hier?)
+
+**Aufwand:** 30-60 Min (UI-Reorganisation, kein Logik-Eingriff). Voller
+V1→V2→R1→V3-Workflow trotzdem PFLICHT (CLAUDE.md).
+
+### P73-B: Mess-Zyklen-Anzahl klären
+**Mike-Beobachtung:** AutoTuneDialog/DX-Tune-Dialog zeigt aktuell „8 Zyklen
+interleaved" (Code `ROUNDS=2 × 2 Antennen × 2 Gain-Stufen`). Mike erinnert
+sich „manchmal mit 6 Zyklen". Vermutung: alter Code-Stand vor P51-Refactor
+(P51 v0.97.28 hatte aus zwei Mess-Sessions à 8 = 16 → eine Session à 8
+gemacht, also 50% gespart).
+
+**Klärung:** War vor P51 mal 6 Zyklen geplant/im Code? Git-History prüfen.
+Oder ist 6 Zyklen eine UX-Idee für noch schnellere Messung (z.B.
+`ROUNDS=1.5` durch Skip einer Gain-Stufe wenn früh klar)?
+
+**Aktion:** mit Mike besprechen bevor Code-Änderung.
+
+---
+
+## ✅ P71 — Auto-Tune Bundle (5 Bugs aus Mike-Field-Test 18.05.) — ERLEDIGT v0.97.47
+
+**Umgesetzt 18.05.2026** autonom während Mike unterwegs mit DeepSeek-V4-pro.
+Voller V1→V2→R1→V3-Workflow. R1 fand 5 Findings, davon 3 blocking
+(F1+F2+F3) + F5 angenommen, F4 KISS-akzeptiert.
+
+- **Bug 1 (F1 🔴):** Backup-Timer-Race: Grace 5 → 12 s.
+- **Bug 2 (F2 🟠):** App-Start triggert Auto-Tune ungewollt: Belt-and-
+  suspenders Guard-Flag `_initial_band_set` + `RFPresetStore.has_anchor()`.
+- **Bug 3 (F3 🟡):** Settings tune_duration_s 5/10/15 s (war 15/30 s),
+  findData-Fallback + Settings.load()-Migration.
+- **Bug 4:** Title `band.lower()+mode`, Status mit Live-FWDPWR (KISS-
+  Coupling via `_fwdpwr_samples[-1]`).
+- **Bug 5 (F5 🟡):** 5 DONE-Logs in `_tune_post_swr_check` und Dialog
+  (OK + 4× FAIL: swr_bad, disconnect, cancelled, timeout).
+
+**Tests 1435→1452 grün (+17)**. APP_VERSION 0.97.46→0.97.47. Backup
+`Appsicherungen/2026-05-18_v0.97.46_vor_p71/`. **V4-pro 22-Cycle-Bilanz:
+0 Halluzinationen, 1 ROT-Bug F1 gefangen, F2-Wurzel-H3 sauber widerlegt.**
+
+**Field-Test pending (siehe FIELDTESTS.md):**
+- F1+F3+F4 ohne Radio (App-Start ohne Auto-Tune-Trigger, ComboBox-Items,
+  Settings-Migration 30 → 15).
+- F2+F5+F6+F7 mit Radio (Backup-Race-Fix, DONE-Logs, SWR-Marker, Cancel).
+
+---
+
+
 
 ---
 
