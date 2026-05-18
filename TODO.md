@@ -1,63 +1,58 @@
-# SimpleFT8 TODO — Stand 18.05.2026 (v0.97.50, P76-A + P76-C ERLEDIGT)
+# SimpleFT8 TODO — Stand 18.05.2026 (v0.97.52, P80 + P79 + P76-A + P76-C ERLEDIGT)
 
 ---
 
-## 🎨 P79 — UI: Sperr-Hinweise im QSO-Log sichtbarer machen (Mike-Field-Test 18.05.)
+## ✅ P80 — Unified Gain Store ERLEDIGT (v0.97.52, 18.05.2026 autonomer Workflow)
 
-**Mike-Feedback nach P76-C-Test (Screenshot 13:11):**
-„text in qso fenster sehr unscheinbar (dunkelgrau) evt gelb oder rot oder
-fett oder unterstrichen ??? designfrage kein echter bug, bug ist behoben.
-UI-Verbesserung in toto später abklären was am besten aussieht bezuglich
-text formulierung farbe schriftgrösse art. ist ja ne warnung denke sollte
-sichtbarer sein."
+Mike-Vorschlag: 1 Messung pro Band für alle Modi (FT8/FT4/FT2 + Normal/
+Diversity Std/Diversity DX). Hardware-Gain ist Antennen+Vorverstärker-
+Eigenschaft, modus-unabhängig.
 
-**Punkte fuer den Workflow:**
+**Was umgesetzt:**
+- Neuer Store `~/.simpleft8/kalibrierung/presets.json` mit Key=Band only.
+- `ant2_calibrated`-Feld: True = echte Diversity-Messung, False = Normal-
+  only-Migration → bei Diversity-Wechsel Re-Mess.
+- Migration aus 3 Quellen via MAX(gain_timestamp) idempotent in
+  `PresetStore.__init__`. Robust gegen korrupte JSON.
+- API: alle PresetStore-Methoden nur `band` (kein ft_mode mehr).
+- 6 Aufrufer in mw_radio.py refactored.
+- `config/settings.normal_presets` deprecated + gepoppt.
 
-1. **Text-Formulierung erweitern** (mehrere Handlungsoptionen):
-   - Aktuell: „⚠ Band 40M gesperrt — SWR 2.0 > Limit 1.5. Manueller TUNE
-     zum Freischalten nach Antennen-Check."
-   - Vorschlag: zusaetzlich „Antenne pruefen ODER SWR-Limit in
-     Einstellungen anpassen ODER manueller TUNE zum Freischalten."
+**R1-V4-pro: 7 Findings (2 ROT F1+F2, 2 ORANGE, 3 GELB), alle eingebaut.**
+**V4-pro 27-Cycle-Bilanz: 0 Halluzinationen.**
 
-2. **Style fuer Warnungen im QSO-Log:**
-   - aktuell dunkelgrau (zu unscheinbar)
-   - Vorschlag: rot/orange/gelb + fett ODER unterstrichen
-   - betroffen: alle `⚠`-add_info-Calls (SWR-Sperre, CQ blockiert,
-     OMNI blockiert, Hunt blockiert, Station-Klick blockiert,
-     Diversity blockiert)
+**Field-Test F1-F6 pending.**
 
-3. **Konsistenz mit anderen Hinweis-Typen:**
-   - „✓"-Erfolg-Zeilen (gruen)
-   - „⚠"-Warn-Zeilen (rot/orange)
-   - normale Info-Zeilen (grau)
-   - Status: existiert das schon Teil-weise? Code-Check noetig.
+---
 
-**Workflow:** V1→V2→R1→V3→Code (KISS, vermutlich `qso_panel.add_info`
-um Style-Param erweitern oder neuer `add_warning`-Helper).
+---
 
-**Nicht safety-relevant.** Folge-Bundle nach P76-A/P76-C-Field-Tests.
+## ✅ P79 — UI-Bundle ERLEDIGT (v0.97.51, 18.05.2026 nach Compact)
 
-**Weitere Punkte aus Field-Test 18.05. Nachmittag (Mike-Beobachtungen):**
+**Code fertig, Field-Test pending.** 3 von 6 Punkten code-eingespielt
+(1+2+3+5+6 zusammen via Symbol-Auto-Detect; Punkt 4 ausgenommen weil
+V2-F1 zeigte: schon im Code implementiert (`mw_radio:528-529` +
+`:1286` + `mw_tx:710`)).
 
-4. **Gain-Mess-Abbruch wegen SWR — keine Meldung im QSO-Fenster:**
-   - Wenn Diversity-Wechsel Gain-Messung startet und SWR zu hoch ist,
-     wird Gain-Mess abgebrochen. Mike sieht nur Statusbar/Mitteilungs-
-     fenster, NICHT QSO-Log.
-   - Analog zu P76-C: sollte `⚠ Diversity blockiert — Band X SWR zu hoch"
-     im QSO-Log erscheinen.
+**Was umgesetzt:**
 
-5. **Modal „Kalibrierung gespeichert" raus → QSO-Log:**
-   - `ui/mw_radio.py:1695-1729` baut separaten QDialog mit 3s Auto-Close
-     („✓ Kalibrierung 40m gespeichert. ANT1: X dB | ANT2: Y dB").
-   - Mike-Spec: weg damit, stattdessen `qso_panel.add_info`-Zeile.
-   - Spart Sekunden, fluessigerer Ablauf (analog P75 QMessageBox-Eliminierung).
+1. ✅ `mw_tx.py:401-405` Text-Erweiterung: 3 Handlungsoptionen
+   („Antenne pruefen ODER SWR-Limit in Einstellungen anpassen ODER
+   manueller TUNE zum Freischalten")
+2. ✅ `qso_panel.add_info` Symbol-Auto-Detect: ⚠ orange, ✓ grün,
+   ✗ rot, ⏳ cyan. Variante B KISS — nur Symbol gefärbt, Rest grau
+   (keine Call-Site-Migration der 30 Aufrufer).
+3. ✅ Konsistenz automatisch durch Symbol-Konvention.
+4. ⏸ **Ausgenommen** (V2-F1: alle bekannten add_info-Pfade existieren
+   bereits). Field-Test entscheidet ob spätere Ergänzung nötig.
+5. ✅ `mw_radio._show_calibration_done` Modal raus (50 LOC → 8 LOC)
+   ersetzt durch `add_info` + Statusbar-Echo 3s (R1-F6: deckt Tab-
+   Wechsel + Auto-Trim).
+6. ✅ Farbpalette an Codebasis angepasst (#FFAA00/#44FF44/#FF4444/#44BBFF).
 
-6. **Farb-Konvention im QSO-Log (Mike-Vorschlag):**
-   - Positive Meldungen („✓ Band freigegeben", „✓ Kalibrierung gespeichert")
-     → grün
-   - Negative Meldungen („⚠ Band gesperrt", „⚠ Abgebrochen") → rot
-   - Rest dunkelgrau wie heute
-   - Variante: nur Symbol/Praefix gefaerbt, Rest grau (KISS)
+**Field-Test F1-F6 pending** (alle ohne Radio durchfuehrbar).
+
+---
 
 ---
 

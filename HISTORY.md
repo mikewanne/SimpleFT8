@@ -3,6 +3,180 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-18 v0.97.52 — P80 Unified Gain Store (1 Messung pro Band, alle Modi)
+
+**Trigger:** Mike-Vorschlag nach P79: „wir müssen unbedingt die gain
+messung nur für das band machen und nicht noch für die einzelnen modis
+wie ft8 / ft4 / ft2. … es reicht doch eine einzige messung für Normal
+Diversity standart und dx und egal welcher modus oder nicht?"
+
+**Mike-Logik (technisch korrekt):** ANT1+ANT2-Gain ist Hardware-
+Eigenschaft (Antennen-Resonanz + Vorverstärker). FT8/FT4/FT2 nutzen
+gleiche Frequenz, gleiche ~3 kHz Bandbreite, gleiches Audio-Pegel-Ziel
+(−12 dBFS RMS). Normal=ANT1-only, Diversity=beide, aber Hardware-Gain
+identisch. P51 (v0.97.28) hatte Std+DX schon vereinheitlicht. P80
+treibt die Vereinfachung zu Ende: 1 Eintrag pro Band für alle Kombi-
+nationen.
+
+**Voller V1→V2→R1→V3→Code→Final-R1-Workflow** mit DeepSeek-V4-pro,
+Mike unterwegs, autonomer Workflow.
+
+**V2-Self-Review fand 5 V1-Halluzinationen:**
+- F1: Methodenname `_apply_normal_preset` → korrekt `_apply_normal_mode`.
+- F2/F3: 2 vergessene Aufrufer (`_on_connected:149`, `_on_dx_tune_rejected:1733`).
+- F4: „3-5 Test-Files" → tatsaechlich 6+ Files.
+- F5: `ant2_gain==0`-Sentinel zu fragil → `ant2_calibrated: bool`-Feld.
+
+**R1-V4-pro fand 7 Findings** (2 ROT F1+F2, 2 ORANGE F3+F4, 3 GELB F5-F7),
+ALLE übernommen:
+- **F1 ROT:** `_check_diversity_preset` muss `ant2_calibrated=True`
+  prüfen — sonst startet Diversity nach Migration mit ant2_gain=0
+  (Hardware-Fehlanwendung).
+- **F2 ROT:** `_apply_normal_mode` falsy-Fallback (`if entry.get("ant1_gain"):`)
+  würde ant1_gain=0 als „kein Eintrag" werten → `is not None`-Check.
+- **F3 ORANGE:** Std/DX-Divergenz-Log in `_on_dx_tune_accepted` (empirisch
+  identisch, aber defensiv).
+- **F4 ORANGE:** Cancel-Pfad braucht ant2_calibrated=True für Stale-
+  Acceptance.
+- **F5 GELB:** Migration-Side-Effect in `__init__` dokumentiert.
+- **F7 GELB:** `ts=0.0`-Test (Migration-Marker → is_valid_gain=False).
+
+**Architektur:**
+- Neuer Store `~/.simpleft8/kalibrierung/presets.json`
+- Key = Band only (`"20m"`, `"40m"`), kein FT-Modus-Suffix.
+- Felder: `ant1_gain, ant2_gain, ant1_avg, ant2_avg, rxant,
+  ant2_calibrated, gain_timestamp, measured`.
+- `ant2_calibrated=True` bei echter ANT1+ANT2-Messung, `False` bei
+  Normal-only-Migration (Normal-Wechsel auf Diversity → Re-Mess).
+- Migration `migrate_legacy_files()` läuft idempotent in
+  `PresetStore.__init__`. Strategie: pro Band MAX(gain_timestamp)
+  über `presets_standard.json` + `presets_dx.json` + `settings.normal_presets`.
+- Robust gegen korrupte JSON (`_safe_load_json`).
+
+**Production-Bug-Fix während Code-Phase:** `gain_scoring`-Variable
+wurde im V3-Refactor versehentlich aus `_check_diversity_preset` entfernt,
+aber Z.1329 nutzte sie noch (NameError). Live-Test in Tests gefangen,
+nachgereicht.
+
+**Aufrufer-Refactor (6 Pfade in mw_radio.py):**
+- `_on_connected` Initial-Pfad
+- `_apply_normal_mode`
+- `_assess_gain(band)` (ohne ft_mode/scoring)
+- `_check_diversity_preset(band, scoring)` mit ant2_calibrated-Check
+- `_on_dx_tune_accepted` single-save, Normal-Branch ohne save_normal_preset
+- `_on_dx_tune_rejected` ant2_calibrated-Check
+- `_enable_diversity` Preset-Load
+- `_disable_diversity` discard_staged
+- `_apply_dx_preset_for_band`
+- `_on_mode_changed` Normal-Warnung
+
+**Settings deprecation:**
+- `get_normal_preset(band)` → returnt `{}` + Print
+- `save_normal_preset(...)` → no-op + Print
+- `Settings.load()` poppt `normal_presets`-Key idempotent
+
+**Final-R1 V4-pro „PUSH FREIGEGEBEN" 0 Findings.**
+
+**V4-pro 27-Cycle-Bilanz: 0 Halluzinationen, 100% verifizierbar.**
+
+**APP_VERSION:** 0.97.51 → 0.97.52.
+
+**Tests:** 1496 → 1517 (+21 netto): 19 neue P80-Tests + 23 neu geschriebene
+test_preset_store + 6 angepasste alte Test-Files.
+
+**LOC-Bilanz:** Code netto **-100 LOC** (Vereinfachung!), Tests +250 LOC.
+
+**Backup:** `Appsicherungen/2026-05-18_v0.97.51_vor_p80/` (5 Files).
+
+**Push pending bis Field-Test:**
+- F1 — App-Start mit alten Files → Migration läuft, presets.json
+  erstellt, „[P80] Migration: N Bänder"-Log
+- F2 — Erneuter Start → kein Migration-Log (idempotent)
+- F3 — 20m FT8 → 20m FT4 → 20m FT2: KEIN Re-Mess, Gain bleibt
+- F4 (Radio) — Normal-Kalibrierung 20m → Wechsel Diversity 20m: kein Re-Mess
+- F5 (Radio) — Wechsel auf 30m mit nur normal_preset-Migration:
+  Diversity-Klick triggert Re-Mess (ant2_calibrated=False)
+- F6 — `settings.json` nach Save enthält `normal_presets` nicht mehr
+
+## 2026-05-18 v0.97.51 — P79 UI-Bundle: Symbol-Auto-Detect + 3-Optionen-SWR-Text + Modal raus
+
+**Trigger:** Mike-Field-Test 18.05.2026 nach P76-C: 6 UI-Verbesserungs-
+punkte aus laufendem Einsatz: (1) SWR-Sperre-Text zu eng formuliert,
+(2) Warnungen in QSO-Log dunkelgrau unscheinbar, (3) Style-Inkonsistenz
+zwischen ⚠/✓/Info-Zeilen, (4) Gain-Mess-SWR-Abbruch nur in Statusbar,
+(5) „Kalibrierung gespeichert"-Popup stoert Workflow, (6) Farb-
+Konvention fehlt.
+
+**Mike-Spec (Wortlaut):** „kalibrierung gespeichert als info text auch
+qso fenster, seperates info fenster modual weg, spart sekunden
+flüssigeren ablauf" + „text in qso fenster sehr unscheinbar (dunkelgrau)
+evt gelb oder rot oder fett oder unterstrichen" + „Text fehler sollte
+eindeutiger sein nicht nur Manueller TUNE zum Freischalten. sondern vlt
+noch antte überprüfen oder swr limit anpassen".
+
+**Voller V1→V2→R1→V3→Code→Final-R1-Workflow mit DeepSeek-V4-pro.**
+
+**V2-Self-Review fand 4 V1-Halluzinationen** (4 von 9 Claims daneben):
+- F1: Punkt 4 (Gain-Mess-add_info) ist im Code BEREITS implementiert
+  (`mw_radio:528-529` Auto-TUNE-Fail + `:1286` Marker-Pre-Check +
+  `mw_tx:710` Watchdog-Stop) → Mike-Entscheidung (a): Punkt 4 RAUS
+  aus V3, erst Field-Test entscheiden lassen.
+- F2: Farben angepasst an etablierte Codebasis-Palette (`#FFAA00` analog
+  Bundle F, `#44FF44` analog `add_qso_complete`, `#FF4444` analog
+  `add_timeout`, `#44BBFF` analog `add_rx`) statt V1-Empfehlung
+  `#FF6600`/`#00CC66` (zu disco-mäßig).
+- F3: Rest-Grau bleibt `#666666` (V1's `#888` zu laut).
+- F5: `text.startswith(symbol)`-Loop statt `text[0]` für Multi-Codepoint-
+  Robustheit.
+
+**R1-V4-pro: 9 Findings (0 ROT, 1 ORANGE F6, 3 GELB, 5 WEISS),
+alle uebernommen.**
+- **F6 ORANGE (kritisch):** Modal raus → ✓-Zeile nur im QSO-Tab sichtbar,
+  bei Logbuch-Tab oder `_auto_trim_by_age` (5min-Window) potentiell
+  verpasst. → Statusbar-Echo 3s zusätzlich (tab-übergreifend sichtbar,
+  non-blocking, kein Klick).
+- F1 GELB Wartungs-Kommentar in `_SYMBOL_COLORS` ✓.
+- F4 GELB Empty-Guard-Kommentar ✓.
+- F7 GELB Edge-Case-Test `add_info("⚠")` Symbol-only ✓.
+
+**Code (3 atomare Patches):**
+
+1. `ui/qso_panel.py`: Modul-Konstante `_SYMBOL_COLORS = {⚠:#FFAA00,
+   ✓:#44FF44, ✗:#FF4444, ⏳:#44BBFF}`. `add_info` mit Empty-Guard +
+   `startswith`-Loop + `_append_two_color(symbol-fg, rest-#666)` bei
+   Treffer, sonst `_append_colored(#666)`. **Keine Call-Site-Migration
+   der ~30 Aufrufer** — Variante B KISS (Mike-Praeferenz: nur
+   Symbol/Praefix gefaerbt, Rest grau lesbar bleiben).
+2. `ui/mw_tx.py:401-405`: Text-Erweiterung im manueller-TUNE-Branch:
+   „⚠ Band X gesperrt — SWR Y > Limit Z. Antenne pruefen ODER SWR-Limit
+   in Einstellungen anpassen ODER manueller TUNE zum Freischalten."
+   Tuner-fehlt-Branch unveraendert.
+3. `ui/mw_radio.py:1681-1731`: Auto-Close-QDialog 3s mit
+   WindowStaysOnTopHint → ersetzt durch 8 LOC: `qso_panel.add_info(✓-Text)`
+   + `self.statusBar().showMessage(text, 3000)` mit try/except (R1-F6).
+
+**Final-R1 V4-pro „PUSH FREIGEGEBEN" — 0 Findings.** Synergie-Effekt
+bestätigt: das ✓ in `_show_calibration_done` wird durch
+`add_info`-Auto-Detect automatisch hellgrün gerendert.
+
+**V4-pro 26-Cycle-Bilanz: 0 Halluzinationen, 100% verifizierbar.**
+
+**APP_VERSION:** 0.97.50 → 0.97.51.
+
+**Tests:** 1484 → 1496 (+12 netto): +14 P79 (T1-T12 + 2 Bonus) +
+1 ersetzter Modal-Test (3 alte raus, 1 neuer rein) - 2 Differenz-Tests.
+
+**Backup:** `Appsicherungen/2026-05-18_v0.97.50_vor_p79/` (4 Files:
+qso_panel + mw_tx + mw_radio + main).
+
+**Push pending bis Field-Test F1-F6** (V3 §5): F1+F2 add_info-Farben
+sichtbar, F3 SWR-Sperre 3-Optionen-Text, F4 Kalibrierung KEIN Modal +
+✓-Zeile + Statusbar-Echo, F5 Diversity-Kalibrierung ANT1+ANT2-Werte,
+F6 Logbuch-Tab-Wechsel waehrend Kalibrierung → Statusbar-Echo deckt ab.
+
+**LOC-Bilanz:** Netto **-22 LOC Code** (50 LOC Modal raus, 28 LOC neu
+rein), +120 LOC Tests.
+
 ## 2026-05-18 v0.97.50 — P76-C: TUNE-bad setzt Band-Marker proaktiv (P63-Luecke)
 
 **Trigger:** Mike-Field-Test nach P76-A: SWR-Limit=1.5 in Settings,

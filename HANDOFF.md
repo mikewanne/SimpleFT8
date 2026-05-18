@@ -1,8 +1,61 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-18 — P76-C + P76-A SWR-Safety + P75 + P71 Bundle
+## Stand 2026-05-18 — P80 Unified Gain Store + P79 UI-Bundle + P76-C/A
 
-**Aktueller Code-Stand:** v0.97.50 (P76-C), Tests **1484 grün** (+10 P76-C).
+**Aktueller Code-Stand:** v0.97.52 (P80), Tests **1517 grün** (+21 P80 netto).
+
+### 🟢 v0.97.52 P80 — Unified Gain Store (1 Messung pro Band, alle Modi)
+
+Mike-Vorschlag nach P79: Gain ist Hardware-Eigenschaft (Antenne +
+Vorverstärker), modus-unabhängig. 1 Messung pro Band reicht für Normal,
+Diversity Std, Diversity DX, FT8, FT4, FT2 zusammen.
+
+**Architektur:**
+- Neuer Store `~/.simpleft8/kalibrierung/presets.json` mit Key=Band only.
+- `ant2_calibrated`-Feld unterscheidet echte Diversity-Messung (True)
+  von Normal-only-Migration (False).
+- 3 Quellen migriert: presets_standard.json + presets_dx.json +
+  settings.normal_presets. MAX(gain_timestamp) wins pro Band.
+- API: alle Methoden nur `band` (kein ft_mode mehr).
+
+**V4-pro: 7 Findings (2 ROT F1+F2, 2 ORANGE, 3 GELB), Final-R1 freigegeben.**
+**V4-pro 27-Cycle-Bilanz: 0 Halluzinationen.**
+
+**Push pending bis Field-Test (alle ohne Radio möglich F1/F2/F3/F6, F4+F5 mit Radio):**
+- F1 — App-Start Migration läuft
+- F2 — Erneuter Start = no-op (idempotent)
+- F3 — 20m FT8 → 20m FT4 → 20m FT2: KEIN Re-Mess
+- F4 (Radio) — Normal-Kalibrierung 20m → Diversity-Wechsel: kein Re-Mess
+- F5 (Radio) — 30m mit Migration aus normal_presets: Diversity-Klick
+  triggert Re-Mess (ant2_calibrated=False)
+- F6 — settings.json hat normal_presets nicht mehr
+
+### 🟢 v0.97.51 P79 — UI-Bundle (Symbol-Auto-Detect + 3-Optionen-Text + Modal raus)
+
+### 🟢 v0.97.51 P79 — UI-Bundle (Symbol-Auto-Detect + 3-Optionen-Text + Modal raus)
+
+Mike-Field-Test 18.05. nach P76-C: 6 UI-Punkte (Text-Eindeutigkeit, Style-
+Sichtbarkeit, Symbol-Konsistenz, Modal-Eliminierung, Farbpalette).
+
+**3 Patches umgesetzt, Punkt 4 ausgenommen (V2-F1):**
+
+1. `qso_panel.add_info` Symbol-Auto-Detect: ⚠/✓/✗/⏳ in Farbe, Rest dezent
+   grau — keine Call-Site-Migration der 30 Aufrufer (Variante B KISS).
+2. `mw_tx.py` SWR-Sperre-Text: 3 Handlungsoptionen statt nur „TUNE".
+3. `mw_radio._show_calibration_done` Modal raus → add_info + Statusbar-
+   Echo 3s (R1-F6 ORANGE: deckt Tab-Wechsel + Auto-Trim ab).
+
+**V4-pro: 9 Findings (0 ROT, 1 ORANGE, 3 GELB, 5 WEISS), Final-R1 freigegeben.**
+**V4-pro 26-Cycle-Bilanz: 0 Halluzinationen.**
+
+**Push pending bis Field-Test:**
+- F1+F2 — `add_info("⚠ Test")` / `add_info("✓ Test")` Symbole farbig sichtbar
+- F3 — TUNE auf gesperrtem Band → 3-Optionen-Text in QSO-Log
+- F4 — Kalibrierung Normal → KEIN Popup, ✓-Zeile + Statusbar-Echo 3s
+- F5 — Kalibrierung Diversity → ANT1+ANT2-Werte in der ✓-Zeile
+- F6 — Tab auf Logbuch waehrend Kalibrierung → Statusbar-Echo sichtbar
+
+### 🟢 v0.97.50 P76-C — TUNE-bad setzt Band-Marker proaktiv (P63-Luecke)
 
 ### 🟢 v0.97.50 P76-C — TUNE-bad setzt Band-Marker proaktiv (P63-Luecke)
 
