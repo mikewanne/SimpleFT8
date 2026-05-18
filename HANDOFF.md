@@ -1,8 +1,34 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-18 — P80 Unified Gain Store + P79 UI-Bundle + P76-C/A
+## Stand 2026-05-18 — P81 Auto-Hunt-Stop-Defer + P80 Unified Gain Store + P79 UI-Bundle
 
-**Aktueller Code-Stand:** v0.97.52 (P80), Tests **1517 grün** (+21 P80 netto).
+**Aktueller Code-Stand:** v0.97.53 (P81), Tests **1533 grün** (+16 P81 netto).
+
+### 🟢 v0.97.53 P81 — Auto-Hunt-Stop-Meldung nach „✓ QSO komplett" defern
+
+Mike-Field-Test 18.05.: „⏸ Auto-Hunt gestoppt"-Meldung erschien mitten im
+QSO-Verlauf (vor „✓ komplett"). Fix: Defer-Flag `_auto_hunt_stop_msg_pending`
++ Flush in 3 QSO-Ende-Pfaden (Visual / Timeout / HALT).
+
+**Architektur (KISS):**
+- Polling-Tick prüft `_qso_active_for_msg_defer()` — wenn aktiv: Flag=True
+  (Meldung defern), sonst sofort `add_info`. `stop_auto_hunt` läuft immer.
+- Flush in `_on_qso_confirmed_visual` (Visual ✓), `_on_qso_timeout`
+  (Hard-Timeout), `_on_cancel` (HALT — R1-F1 ROT-Fix).
+- Geister-Schutz: Manual-Restart cleart Flag silent.
+
+**R1-V4-pro: 3 Findings (1 ROT F1 HALT-Pfad gefangen, 1 ORANGE
+dokumentiert, 1 GELB Naming + Test). Final-R1 „PUSH FREIGEGEBEN".**
+**V4-pro 28-Cycle-Bilanz: 0 Halluzinationen.**
+
+**Push pending bis Field-Test F1-F5 (F4 mit Radio, F1-F3+F5 ohne):**
+- F1 — Auto-Hunt + 5 Min Maus + KEIN QSO → sofortige Stop-Meldung
+- F2 — Auto-Hunt + QSO läuft + 5 Min Maus → Meldung NACH „✓ komplett"
+- F3 — Auto-Hunt + QSO + 5 Min Maus + Timeout → Meldung NACH „✗ Timeout"
+- F4 (Radio) — Auto-Hunt + QSO + 5 Min Maus + HALT → Meldung NACH HALT
+- F5 — Flag pending → Manueller Restart → KEIN Geister-Emit
+
+### 🟢 v0.97.52 P80 — Unified Gain Store (1 Messung pro Band, alle Modi)
 
 ### 🟢 v0.97.52 P80 — Unified Gain Store (1 Messung pro Band, alle Modi)
 

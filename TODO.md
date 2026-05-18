@@ -1,4 +1,45 @@
-# SimpleFT8 TODO — Stand 18.05.2026 (v0.97.52, P80 + P79 + P76-A + P76-C ERLEDIGT)
+# SimpleFT8 TODO — Stand 18.05.2026 (v0.97.53, P81 + P80 + P79 + P76 ERLEDIGT)
+
+---
+
+## ✅ P81 — Auto-Hunt-Stop-Meldung nach „✓ QSO komplett" defern ERLEDIGT (v0.97.53, 18.05.2026)
+
+Mike-Field-Test 18.05.: „⏸ Auto-Hunt gestoppt — 5 Minuten ohne
+Mausbewegung"-Meldung erschien mitten im QSO-Verlauf (zwischen RR73-Send
+und finalem ✓). Mike-Wunsch: erst „✓ QSO mit XYZ komplett", DANN die
+Stop-Meldung.
+
+**Was umgesetzt:**
+- State-Var `_auto_hunt_stop_msg_pending: bool` in MainWindow.
+- Helper `_qso_active_for_msg_defer()` — True wenn state ∉ {IDLE, TIMEOUT,
+  CQ_CALLING, CQ_WAIT}.
+- Helper `_flush_auto_hunt_stop_msg()` — emittiert deferred Meldung +
+  cleart Flag.
+- Polling-Tick (`_on_auto_hunt_polling_tick`): bei Überschreitung +
+  aktives QSO → Flag=True (defer), sonst sofort `add_info` wie bisher.
+  `stop_auto_hunt` läuft IMMER (Sicherheits-Funktion bleibt).
+- Anbindung in mw_qso.py an 3 QSO-Ende-Pfade:
+  - `_on_qso_confirmed_visual` (Normal-Visual ✓-Pfad)
+  - `_on_qso_timeout` (Hard-Timeout-Pfad, Safety-Net)
+  - `_on_cancel` (HALT-Pfad — R1-F1 ROT-Fix)
+- Geister-Schutz: `_on_btn_auto_hunt_toggled(True)` cleart Flag silent.
+
+**R1-V4-pro Findings:** 1 🔴 ROT F1 HALT-Pfad-Miss (gefangen, in
+`_on_cancel` integriert), 1 🟠 ORANGE F2 Thread-Race sehr gering
+(dokumentiert, keine Maßnahme — Qt-Timer + State-Maschine beide
+Main-Thread), 1 🟡 GELB F3 Naming + P67-T1-Test (umgesetzt).
+Final-R1 „PUSH FREIGEGEBEN ✅" 0 KP.
+**V4-pro 28-Cycle-Bilanz: 0 Halluzinationen.**
+
+**Tests:** 1517 → 1533 (+16 netto). T1-T8 inkl. parametrize über alle
+States. T8 deckt R1-F1 HALT-Pfad ab.
+
+**Field-Test pending (F4 mit Radio, F1-F3+F5 ohne):**
+- F1: Auto-Hunt + KEIN QSO + 5 Min Maus → sofortige Stop-Meldung.
+- F2: Auto-Hunt + QSO läuft + 5 Min Maus → Meldung NACH „✓ komplett".
+- F3: Auto-Hunt + QSO + 5 Min + Timeout → Meldung NACH „✗ Timeout".
+- F4 (Radio): Auto-Hunt + QSO + 5 Min + HALT → Meldung NACH HALT.
+- F5: Pending Flag → Manueller Restart → KEIN Geister-Emit.
 
 ---
 

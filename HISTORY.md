@@ -3,6 +3,79 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-18 v0.97.53 — P81 Auto-Hunt-Stop-Meldung nach „✓ QSO komplett" defern
+
+**Trigger:** Mike-Field-Test 18.05.2026 (Screenshot QSO mit IZ1JLP):
+Maus-Inaktivität 5 Min erreicht während aktives QSO → „⏸ Auto-Hunt
+gestoppt — 5 Minuten ohne Mausbewegung."-Meldung erscheint mitten im
+QSO-Verlauf zwischen RR73-Send und finalem ✓.
+
+**Mike-Wunsch:** „kleiner mini fix, erst qso beenden dann autohunt
+gestoppt meldung bringen".
+
+**Ursache:** `ui/main_window.py:_on_auto_hunt_polling_tick` ruft
+`qso_panel.add_info(...)` SOFORT auf wenn Maus-Inaktivität > 300s — egal
+ob QSO läuft. „✓ QSO mit XYZ komplett" kommt erst Sekunden später via
+`_on_qso_confirmed_visual` (mw_qso.py) nach Empfang des 73 +
+Courtesy-73-Send.
+
+**Fix (Variante A — Defer-Flag, KISS):**
+- Neue State-Var `_auto_hunt_stop_msg_pending: bool` in MainWindow.
+- Helper `_qso_active_for_msg_defer()` — True wenn `qso_sm.state` ∉
+  {IDLE, TIMEOUT, CQ_CALLING, CQ_WAIT}.
+- Helper `_flush_auto_hunt_stop_msg()` — emittiert deferred Meldung +
+  cleart Flag.
+- Polling-Tick: bei Überschreitung + aktives QSO → Flag=True (defer),
+  sonst sofort `add_info`. `stop_auto_hunt` läuft immer (Sicherheits-
+  Funktion bleibt aktiv).
+- Anbindung an 3 QSO-Ende-Pfade in mw_qso.py:
+  - `_on_qso_confirmed_visual` (Visual ✓-Pfad)
+  - `_on_qso_timeout` (Hard-Timeout-Pfad)
+  - `_on_cancel` (HALT-Pfad — R1-F1 ROT-Fix)
+- Geister-Schutz: `_on_btn_auto_hunt_toggled(True)` cleart Flag silent
+  vor `_auto_hunt_last_mouse_t = monotonic()`.
+
+**Workflow V1→V2→R1→V3→Code→Final-R1:**
+- V1: Defer-Flag-Vorschlag mit 2 Open Questions.
+- V2 Self-Review: 5 V1-Halluzinationen gefangen (State-Map zu eng,
+  `_on_qso_complete` ≠ Timeout-Pfad, `_on_qso_confirmed_visual` deckt
+  nicht alle Pfade ab, Manual-Restart-Schutz konkret formulieren,
+  Polling-Tick-Lifecycle klargestellt).
+- R1 (DeepSeek V4-pro): 1 🔴 ROT F1 (HALT-Pfad fehlt → Flag-Leak),
+  1 🟠 ORANGE F2 (Thread-Race sehr gering, keine Maßnahme), 1 🟡 GELB F3
+  (Naming `_auto_hunt_stop_msg_pending` + P67-T1-Test state=IDLE Mock).
+- V3: F1 + F3 übernommen, F2 dokumentiert.
+- Code + Tests: 7 Files patched.
+- Final-R1 V4-pro: „PUSH FREIGEGEBEN ✅" — 0 kritische Findings.
+
+**V4-pro 28-Cycle-Bilanz: 0 Halluzinationen, 100% verifizierbar.**
+
+**Files (atomic patch):**
+- `ui/main_window.py`: +30 LOC (State-Var, 2 Helper, Defer-Branch, Reset).
+- `ui/mw_qso.py`: +12 LOC (3 Flush-Aufrufe).
+- `main.py`: APP_VERSION 0.97.52 → 0.97.53.
+- `tests/test_p81_autohunt_stop_defer.py`: NEU 16 Tests (T1-T8 + 10×
+  parametrize über alle States).
+- `tests/test_p67_mouse_inactivity.py`: T5 mit `_qso_active_for_msg_defer`
+  Mock (Backwards-Compat).
+- `tests/test_p79_ui_bundle.py`, `test_p80_unified_gain.py`: APP_VERSION-
+  Bump.
+- `tests/test_omni_cq_integration.py`: `_FakeMW._flush_auto_hunt_stop_msg`
+  no-op Stub.
+
+**Tests:** 1517 → 1533 (+16 netto).
+
+**Field-Test pending (alle ohne Radio, einer mit):**
+- F1: Auto-Hunt-Start + Maus 5 Min nicht bewegen während kein QSO → sofortige
+  Stop-Meldung im QSO-Panel.
+- F2: Auto-Hunt + QSO läuft (z.B. WAIT_73) + 5 Min Maus → Auto-Hunt stoppt
+  silent, „⏸ Auto-Hunt gestoppt"-Meldung erscheint NACH „✓ QSO komplett".
+- F3: Auto-Hunt + QSO + 5 Min Maus + Timeout (kein 73) → Meldung erscheint
+  NACH „✗ XYZ — Timeout".
+- F4 (Radio): Auto-Hunt + QSO + 5 Min Maus + HALT-Klick → Meldung erscheint
+  nach „HALT — alles gestoppt".
+- F5: Flag pending → manueller Auto-Hunt-Restart → KEIN Geister-Emit.
+
 ## 2026-05-18 v0.97.52 — P80 Unified Gain Store (1 Messung pro Band, alle Modi)
 
 **Trigger:** Mike-Vorschlag nach P79: „wir müssen unbedingt die gain
