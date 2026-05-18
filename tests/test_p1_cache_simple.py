@@ -34,8 +34,8 @@ def qapp():
 
 
 def _make_store_mock(*, gain_valid=True, has_gain_timestamp=True,
-                     gain_age_offset_sec=600):
-    """Erstellt Mock-Store mit konfiguriertem Verhalten fuer is_valid_gain+get."""
+                     gain_age_offset_sec=600, ant2_calibrated=True):
+    """P80: unified store mock — band-only API, ant2_calibrated-Feld."""
     store = MagicMock()
     store.is_valid_gain = MagicMock(return_value=gain_valid)
     store.get_gain_age_minutes = MagicMock(
@@ -43,13 +43,14 @@ def _make_store_mock(*, gain_valid=True, has_gain_timestamp=True,
     entry = {}
     if has_gain_timestamp:
         entry["gain_timestamp"] = time.time() - gain_age_offset_sec
+        entry["ant2_calibrated"] = ant2_calibrated
     store.get = MagicMock(return_value=(entry or None))
     return store
 
 
 def _make_mw_self(*, store=None, scoring="normal", radio_ip="192.168.1.10",
                   rx_mode="diversity"):
-    """Erstellt Mock-self fuer RadioMixin-Methoden."""
+    """P80: 1 Store (_gain_store) statt 2."""
     from ui.mw_radio import RadioMixin
 
     fake_self = MagicMock()
@@ -59,78 +60,65 @@ def _make_mw_self(*, store=None, scoring="normal", radio_ip="192.168.1.10",
     fake_self.settings.band = "40m"
     fake_self.settings.mode = "FT8"
     fake_self._rx_mode = rx_mode
+    fake_self._swr_blocked_bands = set()
 
-    # Stores setzen
-    if scoring == "dx":
-        fake_self._dx_store = store
-        fake_self._standard_store = None
-    else:
-        fake_self._standard_store = store
-        fake_self._dx_store = None
+    # P80: 1 unified Store
+    fake_self._gain_store = store if store else MagicMock()
+    if store is None:
+        fake_self._gain_store.is_valid_gain = MagicMock(return_value=False)
+        fake_self._gain_store.get = MagicMock(return_value=None)
 
-    # Echte Helper-Methoden
-    fake_self._get_diversity_store = lambda s: (
-        fake_self._dx_store if s == "dx" else fake_self._standard_store
-    )
-    fake_self._assess_gain = lambda b, m, s: RadioMixin._assess_gain(fake_self, b, m, s)
+    fake_self._assess_gain = lambda b: RadioMixin._assess_gain(fake_self, b)
 
-    # Diversity-Controller
     fake_self._diversity_ctrl = MagicMock()
     fake_self._diversity_ctrl.scoring_mode = scoring
-
-    # Encoder + Pending-Flags
     fake_self.encoder = MagicMock()
     fake_self.encoder.is_transmitting = False
     fake_self._pending_dx_diversity = False
     fake_self._pending_diversity_scoring = None
+    fake_self.qso_panel = MagicMock()
     return fake_self
 
 
-# ── _assess_gain Tests ────────────────────────────────────────────────
+# ── _assess_gain Tests (P80: nur band) ───────────────────────────────
 
 
 def test_assess_gain_fresh_stale_missing():
     from ui.mw_radio import RadioMixin
 
     fresh = _make_mw_self(store=_make_store_mock(gain_valid=True))
-    assert RadioMixin._assess_gain(fresh, "40m", "FT8", "normal") == "fresh"
+    assert RadioMixin._assess_gain(fresh, "40m") == "fresh"
 
     stale = _make_mw_self(store=_make_store_mock(
         gain_valid=False, has_gain_timestamp=True))
-    assert RadioMixin._assess_gain(stale, "40m", "FT8", "normal") == "stale"
+    assert RadioMixin._assess_gain(stale, "40m") == "stale"
 
-    no_store = _make_mw_self(store=None)
-    assert RadioMixin._assess_gain(no_store, "40m", "FT8", "normal") == "missing"
-
-    empty = _make_mw_self(store=_make_store_mock(
+    no_store = _make_mw_self(store=_make_store_mock(
         gain_valid=False, has_gain_timestamp=False))
-    assert RadioMixin._assess_gain(empty, "40m", "FT8", "normal") == "missing"
+    assert RadioMixin._assess_gain(no_store, "40m") == "missing"
 
 
-# ── _check_diversity_preset Dispatch Tests (P34-Stufe2: 2 Branches) ─────
+# ── _check_diversity_preset Dispatch (P80: band + scoring) ───────────
 
 
 def test_check_preset_dispatch_gain_fresh_calls_enable_diversity():
-    """P34-Stufe2: Gain fresh → _enable_diversity direkt, kein DXTuneDialog."""
+    """P80: Gain fresh + ant2_calibrated=True → _enable_diversity direkt."""
     from ui.mw_radio import RadioMixin
 
-    fake_self = _make_mw_self(store=_make_store_mock(gain_valid=True))
+    fake_self = _make_mw_self(store=_make_store_mock(
+        gain_valid=True, ant2_calibrated=True))
     fake_self._enable_diversity = MagicMock()
     fake_self._start_dx_tuning = MagicMock()
     fake_self._update_statusbar = MagicMock()
 
-    RadioMixin._check_diversity_preset(fake_self, "40m", "FT8", "normal")
+    RadioMixin._check_diversity_preset(fake_self, "40m", "normal")
 
     fake_self._enable_diversity.assert_called_once_with(scoring_mode="normal")
     fake_self._start_dx_tuning.assert_not_called()
 
 
 def test_check_preset_dispatch_gain_stale_opens_dialog(monkeypatch):
-    """P34-Stufe2: Gain stale → DXTuneDialog (kein _enable_diversity sofort).
-
-    P62 (v0.97.35): _start_dx_tuning ist jetzt deferred via QTimer.singleShot
-    (1s Pause). Test mocked singleShot und führt den Callback aus.
-    """
+    """P80: Gain stale → DXTuneDialog (P62 deferred via QTimer)."""
     from ui.mw_radio import RadioMixin
 
     fake_self = _make_mw_self(store=_make_store_mock(
@@ -140,22 +128,20 @@ def test_check_preset_dispatch_gain_stale_opens_dialog(monkeypatch):
     fake_self._update_statusbar = MagicMock()
     fake_self._set_gain_measure_lock = MagicMock()
 
-    # P62: QTimer.singleShot mocken, Callback sofort ausführen
     def fake_singleshot(msec, callback):
         callback()
     monkeypatch.setattr("PySide6.QtCore.QTimer.singleShot", fake_singleshot)
 
-    RadioMixin._check_diversity_preset(fake_self, "40m", "FT8", "normal")
+    RadioMixin._check_diversity_preset(fake_self, "40m", "normal")
 
     fake_self._start_dx_tuning.assert_called_once()
     fake_self._enable_diversity.assert_not_called()
     assert fake_self._pending_dx_diversity is True
-    # P62: Lock vor Tune
     fake_self._set_gain_measure_lock.assert_called_with(True)
 
 
 def test_check_preset_dispatch_gain_missing_opens_dialog(monkeypatch):
-    """P34-Stufe2: Gain missing → DXTuneDialog (P62 deferred via QTimer)."""
+    """P80: Gain missing → DXTuneDialog."""
     from ui.mw_radio import RadioMixin
 
     fake_self = _make_mw_self(store=_make_store_mock(
@@ -169,28 +155,26 @@ def test_check_preset_dispatch_gain_missing_opens_dialog(monkeypatch):
         callback()
     monkeypatch.setattr("PySide6.QtCore.QTimer.singleShot", fake_singleshot)
 
-    RadioMixin._check_diversity_preset(fake_self, "40m", "FT8", "normal")
+    RadioMixin._check_diversity_preset(fake_self, "40m", "normal")
 
     fake_self._start_dx_tuning.assert_called_once()
     fake_self._enable_diversity.assert_not_called()
 
 
 def test_check_preset_skip_when_no_radio():
-    """Ohne Radio kein Dispatch — Methode returnt sofort."""
     from ui.mw_radio import RadioMixin
 
     fake_self = _make_mw_self(store=_make_store_mock(), radio_ip=None)
     fake_self._enable_diversity = MagicMock()
     fake_self._start_dx_tuning = MagicMock()
 
-    RadioMixin._check_diversity_preset(fake_self, "40m", "FT8", "normal")
+    RadioMixin._check_diversity_preset(fake_self, "40m", "normal")
 
     fake_self._enable_diversity.assert_not_called()
     fake_self._start_dx_tuning.assert_not_called()
 
 
 def test_check_preset_dispatch_dx_scoring():
-    """DX-Scoring: Store-Auswahl korrekt + Gain-Branch greift."""
     from ui.mw_radio import RadioMixin
 
     fake_self = _make_mw_self(
@@ -199,6 +183,6 @@ def test_check_preset_dispatch_dx_scoring():
     fake_self._start_dx_tuning = MagicMock()
     fake_self._update_statusbar = MagicMock()
 
-    RadioMixin._check_diversity_preset(fake_self, "40m", "FT8", "dx")
+    RadioMixin._check_diversity_preset(fake_self, "40m", "dx")
 
     fake_self._enable_diversity.assert_called_once_with(scoring_mode="dx")

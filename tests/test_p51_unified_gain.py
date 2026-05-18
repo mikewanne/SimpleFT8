@@ -139,17 +139,15 @@ def test_t3_divergent_optima(qapp):
 
 
 def _make_mw_self_for_accepted(has_dual=True):
-    """Stub fuer mw_radio._on_dx_tune_accepted-Unbound-Call."""
+    """P80: 1 unified _gain_store statt 2."""
     self = MagicMock()
     self.settings.band = "20m"
     self.settings.mode = "FT8"
     self._gain_scoring_mode = "snr"
     self._rx_mode = "diversity"
-    # Mock-Stores mit save_gain returnt True
-    self._standard_store = MagicMock()
-    self._standard_store.save_gain = MagicMock(return_value=True)
-    self._dx_store = MagicMock()
-    self._dx_store.save_gain = MagicMock(return_value=True)
+    # P80: 1 Store
+    self._gain_store = MagicMock()
+    self._gain_store.save_gain = MagicMock(return_value=True)
     self.radio.ip = ""  # kein Normal-Pfad-Trigger
     # Dialog-Mock
     self._dx_tune_dialog = MagicMock()
@@ -181,45 +179,38 @@ def _make_mw_self_for_accepted(has_dual=True):
 
 
 def test_t4_dual_save_both_stores(qapp):
-    """has_dual=True → beide Stores werden mit jeweiligen Sub-Werten beschrieben."""
+    """P80: has_dual=True → single-save in _gain_store mit std-Werten
+    (R1-F3: stds Stations-Scoring ist immer verfuegbar).
+    """
     from ui.mw_radio import RadioMixin
     self = _make_mw_self_for_accepted(has_dual=True)
     RadioMixin._on_dx_tune_accepted(self)
-    # _standard_store.save_gain mit Std-Werten
-    args, kwargs = self._standard_store.save_gain.call_args
-    assert kwargs["ant1_gain"] == 10
+    assert self._gain_store.save_gain.called
+    args, kwargs = self._gain_store.save_gain.call_args
+    # P80: std-Werte (Stations-Scoring) werden gespeichert
+    assert kwargs["ant1_gain"] == 10  # std-Wert (nicht 20=dx)
     assert kwargs["ant2_gain"] == 10
     assert kwargs["ant1_avg"] == -5.0
-    # _dx_store.save_gain mit DX-Werten
-    args, kwargs = self._dx_store.save_gain.call_args
-    assert kwargs["ant1_gain"] == 20
-    assert kwargs["ant2_gain"] == 20
-    assert kwargs["ant1_avg"] == 6.0
+    assert kwargs["ant2_calibrated"] is True
 
 
 def test_t5_fallback_single_save_no_corruption(qapp):
-    """R1-F4: has_dual=False → nur 1 Store, KEIN DX-Store-Save mit Std-Werten."""
+    """P80: has_dual=False → save mit Top-Level-Werten."""
     from ui.mw_radio import RadioMixin
     self = _make_mw_self_for_accepted(has_dual=False)
-    self._gain_scoring_mode = "snr"  # → dx_store ist aktiv
     RadioMixin._on_dx_tune_accepted(self)
-    # dx_store gerufen (aktiver), standard_store NICHT
-    assert self._dx_store.save_gain.called
-    assert not self._standard_store.save_gain.called
-
-
-# ── T6: Beide Stores valid nach Doppel-Save ──────────────────────────
+    assert self._gain_store.save_gain.called
+    args, kwargs = self._gain_store.save_gain.call_args
+    assert kwargs["ant1_gain"] == 15
 
 
 def test_t6_both_stores_called_with_correct_band_mode(qapp):
-    """Doppel-Save uebergibt band+mode an beide Stores."""
+    """P80: save_gain bekommt band only (kein ft_mode)."""
     from ui.mw_radio import RadioMixin
     self = _make_mw_self_for_accepted(has_dual=True)
     RadioMixin._on_dx_tune_accepted(self)
-    std_args, _ = self._standard_store.save_gain.call_args
-    dx_args, _ = self._dx_store.save_gain.call_args
-    assert std_args == ("20m", "FT8")
-    assert dx_args == ("20m", "FT8")
+    args, kwargs = self._gain_store.save_gain.call_args
+    assert args == ("20m",)  # nur band
 
 
 # ── T7: save_dx_preset NICHT mehr gerufen (R1-F6) ────────────────────

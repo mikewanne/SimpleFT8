@@ -106,17 +106,16 @@ def test_no_preset_ratio_methods(tmp_path, monkeypatch):
 
 
 def test_commit_gain_replaces_commit_with_ratio(tmp_path, monkeypatch):
-    """T8: commit_gain (P34-Stufe2-API) persistiert staged Gain ohne Ratio."""
+    """T8: commit_gain (P80-API: band-only) persistiert staged Gain."""
     from core import preset_store as ps_mod
     monkeypatch.setattr(ps_mod, "CONFIG_DIR", tmp_path)
     monkeypatch.setattr(ps_mod, "CALIB_DIR", tmp_path / "kalibrierung")
-    store = ps_mod.PresetStore("presets_standard.json")
-    store.stage_gain("40m", "FT8", rxant="ANT1",
-                     ant1_gain=10, ant2_gain=20)
-    assert store.commit_gain("40m", "FT8") is True
-    entry = store.get("40m", "FT8")
+    monkeypatch.setattr(ps_mod, "SETTINGS_PATH", tmp_path / "settings.json")
+    store = ps_mod.PresetStore()  # P80 default presets.json
+    store.stage_gain("40m", rxant="ANT1", ant1_gain=10, ant2_gain=20)
+    assert store.commit_gain("40m") is True
+    entry = store.get("40m")
     assert "gain_timestamp" in entry
-    # Kein Ratio-Feld (Stufe2)
     assert "ratio" not in entry
 
 

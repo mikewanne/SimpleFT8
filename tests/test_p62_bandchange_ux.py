@@ -82,7 +82,7 @@ def test_t4_gain_fresh_branch_ohne_qtimer():
     direkt — KEINE Pause. Pause ist nur für stale/missing-Branch."""
     src = _get_method_source("_check_diversity_preset")
     # Den fresh-Branch isolieren (vor "Gain stale oder missing"-Kommentar)
-    stale_marker = "Gain stale oder missing"
+    stale_marker = "Gain stale / missing / ant2_uncalibrated"
     idx_stale = src.find(stale_marker)
     assert idx_stale > 0, "P62: stale/missing-Branch-Marker fehlt"
     fresh_part = src[:idx_stale]
@@ -138,6 +138,7 @@ def test_t6_qtimer_singleshot_aufruf_funktional(monkeypatch):
     obj = MagicMock()
     obj.radio = MagicMock()
     obj.radio.ip = "192.168.1.100"  # connected
+    obj._swr_blocked_bands = set()
     obj._assess_gain = MagicMock(return_value="stale")  # erzwinge stale-Pfad
     obj._diversity_ctrl = MagicMock()
     obj._set_gain_measure_lock = MagicMock()
@@ -146,9 +147,14 @@ def test_t6_qtimer_singleshot_aufruf_funktional(monkeypatch):
     obj.statusBar.return_value.showMessage = MagicMock()
     obj._pending_dx_diversity = False
     obj._pending_diversity_scoring = None
+    # P80: _gain_store mock — gibt Entry mit ant2_calibrated=True zurueck
+    obj._gain_store = MagicMock()
+    obj._gain_store.get = MagicMock(return_value={
+        "gain_timestamp": 0.0, "ant2_calibrated": True})
+    obj._gain_store.is_valid_gain = MagicMock(return_value=False)  # stale
 
-    # _check_diversity_preset über Klasse aufrufen (gebundene Methode)
-    mwr.RadioMixin._check_diversity_preset(obj, "20m", "FT8", "normal")
+    # P80: _check_diversity_preset hat nur noch (band, scoring)
+    mwr.RadioMixin._check_diversity_preset(obj, "20m", "normal")
 
     assert len(calls) == 1, f"P62: erwartete genau 1 QTimer-Aufruf, got {len(calls)}"
     msec, cb = calls[0]

@@ -145,11 +145,17 @@ class RadioMixin:
         self.radio.apply_ft8_preset(band=band)
         print(f"[FlexRadio] Band: {band}, Freq: {freq:.3f} MHz")
         self._update_statusbar()  # Statusbar sofort sichtbar nach Connect
-        # Normal-Preset laden (eigener Key, nie aus Diversity-Presets)
-        normal_preset = self.settings.get_normal_preset(band)
-        gain = normal_preset.get("gain", PREAMP_PRESETS.get(band, 10))
+        # P80 (v0.97.52): Normal-Gain aus unified _gain_store laden.
+        # R1-F2 ROT: `is not None`-Check statt falsy — ant1_gain=0 ist
+        # ein gueltiger (wenn auch unwahrscheinlicher) Wert.
+        entry = self._gain_store.get(band)
+        if entry is not None and entry.get("ant1_gain") is not None:
+            gain = int(entry["ant1_gain"])
+            label = "kalibriert" if entry.get("measured") else "Standard"
+        else:
+            gain = PREAMP_PRESETS.get(band, 10)
+            label = "Standard"
         self.radio.set_rfgain(gain)
-        label = "kalibriert" if normal_preset.get("measured") else "Standard"
         self.statusBar().showMessage(f"Normal Preset {band}: G{gain}dB ({label})", 4000)
         print(f"[FlexRadio] Normal Preset {band}: G{gain}dB ({label})")
         # Leistung: RF-Preset laden (oder Settings-Default falls noch nichts gespeichert)
@@ -190,7 +196,7 @@ class RadioMixin:
                   f"(scoring={pending_scoring})")
             from core.debug_log import debug_log as _dlog
             _dlog("DIV-EN", f"Resume scoring={pending_scoring}")
-            self._check_diversity_preset(band, mode, pending_scoring)
+            self._check_diversity_preset(band, pending_scoring)
 
     def _on_radio_disconnected(self):
         """Verbindung verloren — unbegrenzt reconnecten mit Exponential Backoff."""
@@ -363,16 +369,18 @@ class RadioMixin:
         # Diversity: Preset-Check mit Dialog + ggf. Pipeline
         if self._rx_mode == "diversity":
             scoring = getattr(self._diversity_ctrl, 'scoring_mode', 'normal')
-            self._check_diversity_preset(band, mode, scoring)
+            self._check_diversity_preset(band, scoring)
             return  # _check_diversity_preset ruft _update_statusbar auf
-        # Normal-Modus: Warnung wenn kein mode-spezifisches Gain-Preset vorhanden
+        # P80: Normal-Modus-Warnung wenn kein Gain-Preset fuer dieses Band.
+        # Modus-Suffix (FT8/FT4/FT2) entfaellt — Hardware-Gain ist
+        # modus-unabhaengig.
         if self.radio.ip:
-            _std_store = getattr(self, '_standard_store', None)
-            if _std_store and _std_store.get(band, mode) is None:
+            _gs = getattr(self, '_gain_store', None)
+            if _gs and _gs.get(band) is None:
                 self.statusBar().showMessage(
-                    f"Kein Gain-Preset für {band}/{mode} — bitte KALIBRIEREN", 6000
+                    f"Kein Gain-Preset für {band} — bitte KALIBRIEREN", 6000
                 )
-                self.control_panel.dx_info.setText(f"Kein Preset ({mode})")
+                self.control_panel.dx_info.setText("Kein Preset")
                 self.control_panel.dx_info.setStyleSheet("color: #FF6600;")
         self._update_statusbar()
 
@@ -404,12 +412,6 @@ class RadioMixin:
         # ein 5-Sek-Timer aus dem alten Band-Kontext _enable_diversity() fuer
         # das jetzt verlassene Band auf.
         self._tune_token = None
-        # P76-DBG (temporaer Mike-Field-Test 18.05.): Bandwechsel-Entry mit
-        # Marker-State damit Freischalt-Pfad nachvollziehbar wird.
-        _old_band = self.settings.get("band", "??")
-        print(f"[P76-DBG] _on_band_changed {_old_band} -> {band} "
-              f"blocked_bands={sorted(self._swr_blocked_bands)} "
-              f"swr_limit={self.settings.get('swr_limit', 3.0)}")
         self.settings.set("band", band)
         freq = self.settings.frequency_mhz
         self._has_sent_cq = False
@@ -575,10 +577,9 @@ class RadioMixin:
 
         # Diversity: Preset-Check mit Dialog + ggf. Pipeline
         if not bandpilot_acted and self._rx_mode == "diversity":
-            ft_mode = self.settings.get("mode", "FT8")
             scoring = getattr(self._diversity_ctrl, 'scoring_mode', 'normal')
-            _dlog("BAND", f"_check_diversity_preset({band}, {ft_mode}, scoring={scoring})")
-            self._check_diversity_preset(band, ft_mode, scoring)
+            _dlog("BAND", f"_check_diversity_preset({band}, scoring={scoring})")
+            self._check_diversity_preset(band, scoring)
             return  # _check_diversity_preset ruft _update_statusbar auf
         self._update_statusbar()
 
@@ -839,12 +840,12 @@ class RadioMixin:
         self.control_panel.btn_diversity.setText(label)
 
         band = self.settings.band
-        ft_mode = self.settings.mode
 
         # P1.CACHE-SIMPLE: einheitliche Dispatch-Logik (Gain-Cache /
         # DXTuneDialog). _check_diversity_preset ruft am Ende
         # _enable_diversity → activate() der Dynamic-Pipeline.
-        self._check_diversity_preset(band, ft_mode, scoring)
+        # P80: ft_mode-Parameter entfaellt (modus-unabhaengiger Gain).
+        self._check_diversity_preset(band, scoring)
 
         # P34-Stufe2 (AK6): scoring_mode-Wechsel-Reset explicit. Buffer
         # leeren falls Dynamic schon laief (zB Modus-Wechsel
@@ -1182,12 +1183,8 @@ class RadioMixin:
         )
         self.control_panel.update_diversity_counts(0, 0)
 
-        ft_mode = mode  # bereits oben gesetzt
-
-        # P34-Stufe2: Preset (Gain) laden — nur Gain-Felder relevant
-        store = (getattr(self, '_dx_store', None) if scoring_mode == "dx"
-                 else getattr(self, '_standard_store', None))
-        preset = store.get(band, mode) if store else None
+        # P80: unified _gain_store, modus-unabhaengiger Gain.
+        preset = self._gain_store.get(band)
 
         if preset and "ant1_gain" in preset:
             # Preset vorhanden: per-Antenne optimierte Gains laden + sofort ans Radio
@@ -1223,13 +1220,11 @@ class RadioMixin:
         # P34: Dynamic deaktivieren wenn Diversity aus → kein Vergleich moeglich
         if getattr(self, "_dynamic_ctrl", None) and self._dynamic_ctrl.is_active():
             self._dynamic_ctrl.deactivate()
-        # P22 Final-R1 SOLLTE-2: staged-Daten beim Disable verwerfen, damit
-        # Memory bei Re-Activate nicht mit alten Half-State-Werten startet.
-        band, ft_mode = self.settings.band, self.settings.mode
-        for store in (getattr(self, '_standard_store', None),
-                      getattr(self, '_dx_store', None)):
-            if store and hasattr(store, 'discard_staged'):
-                store.discard_staged(band, ft_mode)
+        # P22 Final-R1 SOLLTE-2: staged-Daten beim Disable verwerfen.
+        # P80: nur noch 1 Store.
+        band = self.settings.band
+        if hasattr(self._gain_store, 'discard_staged'):
+            self._gain_store.discard_staged(band)
         # RX-Liste + QSO-Panel leeren bei Antennen-Modus-Wechsel
         self.rx_panel.table.setRowCount(0)
         self._diversity_stations = {}
@@ -1244,39 +1239,35 @@ class RadioMixin:
         self.control_panel.update_diversity_counts(0, 0)
         print("[Diversity] Deaktiviert")
 
-    def _get_diversity_store(self, scoring: str):
-        """P1.CACHE-SIMPLE Helper: PresetStore je nach scoring-Modus."""
-        return (getattr(self, '_dx_store', None) if scoring == "dx"
-                else getattr(self, '_standard_store', None))
+    def _assess_gain(self, band: str) -> str:
+        """P80: Gain-Cache-Status fuer band bewerten (modus-unabhaengig).
 
-    def _assess_gain(self, band: str, ft_mode: str, scoring: str) -> str:
-        """P1.CACHE-SIMPLE: Gain-Cache-Status fuer band+mode bewerten.
-
-        Returns: "fresh" (< 6h), "stale" (>= 6h, vorhanden), "missing".
+        Returns: "fresh" (< 6h + valid), "stale" (>= 6h, vorhanden),
+                 "missing" (kein Eintrag).
         """
-        store = self._get_diversity_store(scoring)
-        if not store:
-            return "missing"
-        if store.is_valid_gain(band, ft_mode):
+        store = self._gain_store
+        if store.is_valid_gain(band):
             return "fresh"
-        entry = store.get(band, ft_mode)
+        entry = store.get(band)
         if entry and "gain_timestamp" in entry:
             return "stale"
         return "missing"
 
-    def _check_diversity_preset(self, band: str, ft_mode: str, scoring: str) -> None:
+    def _check_diversity_preset(self, band: str, scoring: str) -> None:
         """Preset-Check bei Band/Modus-Wechsel mit aktiver Diversity.
 
-        P34-Stufe2 (v0.97.19): nur noch Gain-Branching — Ratio ist live
-        via ``DynamicDiversityController``.
+        P80 (v0.97.52): ft_mode raus — Gain ist band-spezifisch.
+        scoring (standard/dx) bleibt fuer DynamicDiversityController.
 
         Logik:
-        - Gain fresh  → ``_enable_diversity`` direkt (Dynamic startet)
-        - Gain stale/missing → DXTuneDialog, nach OK ``_enable_diversity``
+        - Gain fresh + ant2_calibrated=True → ``_enable_diversity`` direkt
+        - Gain stale/missing/ant2_uncalibrated → DXTuneDialog
 
         P63 (v0.97.36): Marker-Pre-Check oben — bei rotem Marker werden
-        Gain-Mess-Pipeline + Diversity-Start blockiert. User muss
-        manuellen TUNE machen damit Marker freigegeben wird.
+        Gain-Mess-Pipeline + Diversity-Start blockiert.
+
+        P80 R1-F1 ROT: ``ant2_calibrated``-Check verhindert dass Diversity
+        mit Normal-only-Migration-Werten (ant2_gain=0) startet.
         """
         if not getattr(self, 'radio', None) or not self.radio.ip:
             return
@@ -1289,27 +1280,33 @@ class RadioMixin:
             self._update_statusbar()
             return
 
-        gain_status = self._assess_gain(band, ft_mode, scoring)
-        from core.debug_log import debug_log as _dlog
-        _dlog("DIV-CACHE", f"_check_diversity_preset {band}/{ft_mode} "
-              f"scoring={scoring} -> gain={gain_status}")
-        print(f"[Diversity] Cache-Status {band}/{ft_mode}: gain={gain_status}")
+        store = self._gain_store
+        entry = store.get(band)
+        # P80 R1-F1 ROT: Diversity verlangt ant2_calibrated=True.
+        ant2_cal = bool(entry and entry.get("ant2_calibrated") is True)
+        gain_status = self._assess_gain(band)
+        gain_fresh_for_div = (gain_status == "fresh") and ant2_cal
 
-        if gain_status == "fresh":
-            _dlog("DIV-CACHE", "BRANCH=gain_fresh -> _enable_diversity direkt")
-            print(f"[Diversity] {band}/{ft_mode}: Gain fresh → Dynamic startet")
+        from core.debug_log import debug_log as _dlog
+        _dlog("DIV-CACHE", f"_check_diversity_preset {band} "
+              f"scoring={scoring} -> gain={gain_status} ant2_cal={ant2_cal}")
+        print(f"[Diversity] Cache-Status {band}: gain={gain_status} "
+              f"ant2_cal={ant2_cal}")
+
+        if gain_fresh_for_div:
+            _dlog("DIV-CACHE", "BRANCH=gain_fresh_diversity -> direkt")
+            print(f"[Diversity] {band}: Gain fresh + ant2_cal → Dynamic startet")
             self._enable_diversity(scoring_mode=scoring)
             self._update_statusbar()
             return
 
-        # Gain stale oder missing → DXTuneDialog (Gain-Mess) →
-        # nach Accept _on_dx_tune_accepted ruft _enable_diversity.
-        gain_scoring = "snr" if scoring == "dx" else "stations"
+        # Gain stale / missing / ant2_uncalibrated → DXTuneDialog
         self._pending_dx_diversity = True
         self._pending_diversity_scoring = scoring
-        _dlog("DIV-CACHE",
-              f"BRANCH=gain_{gain_status} -> DXTuneDialog")
-        print(f"[Diversity] {band}/{ft_mode}: Gain {gain_status} → DXTuneDialog")
+        _branch = ("ant2_uncalibrated" if gain_status == "fresh"
+                   else f"gain_{gain_status}")
+        _dlog("DIV-CACHE", f"BRANCH={_branch} -> DXTuneDialog")
+        print(f"[Diversity] {band}: {_branch} → DXTuneDialog")
         # P62 (v0.97.35): 1s Pause zwischen TX-Stop und Gain-Mess-TUNE.
         # Mike-Feedback Field-Test P60-F6: ohne Pause wirkt der Uebergang
         # visuell wie „80W → 10W TUNE" statt sauberes „TX aus → neue
@@ -1321,6 +1318,9 @@ class RadioMixin:
         self._set_gain_measure_lock(True)
         self.statusBar().showMessage(
             "TX gestoppt — Gain-Messung startet in 1s ...", 1500)
+        # P80: gain_scoring aus dem scoring-Parameter ableiten (snr fuer dx,
+        # stations fuer std/normal — analog _handle_dx_tuning).
+        gain_scoring = "snr" if scoring == "dx" else "stations"
         QTimer.singleShot(
             1000,
             lambda: self._start_dx_tuning(scoring_mode=gain_scoring))
@@ -1558,13 +1558,10 @@ class RadioMixin:
     def _on_dx_tune_accepted(self):
         """DX Tuning erfolgreich — Preset speichern.
 
-        P22 (10.05.2026): Pipeline-Pfad entscheidet ob save_gain (sofort
-        Disk) oder stage_gain (Memory, commit nach Phase 3) genutzt wird.
-        - Normal-Mode → save_gain (kein Phase 3 geplant)
-        - Diversity + pending_ratio == "fresh" → save_gain (Cache-Reuse,
-          Phase 3 wird übersprungen)
-        - Diversity + volle Pipeline → stage_gain (commit_with_ratio
-          folgt aus mw_cycle._handle_diversity_measure nach Phase 3)
+        P80 (v0.97.52): single-save in unified ``_gain_store`` —
+        1 Eintrag pro Band, gilt fuer Normal + Diversity Std/DX +
+        FT8/FT4/FT2. DXTuneDialog misst immer beide Antennen,
+        ``ant2_calibrated=True``.
         """
         dialog = self._dx_tune_dialog
         if dialog is None:
@@ -1573,65 +1570,42 @@ class RadioMixin:
         band = self.settings.band
         ft_mode = self.settings.mode
 
-        # P51 (v0.97.28): Dual-Save in beide Stores wenn Dialog beide
-        # Auswertungen liefert (Standard + DX aus 1 Messung). Fallback
-        # auf Single-Store wenn altes Dialog-Format (R1-V4-pro Finding 4 —
-        # verhindert Korruption des DX-Store mit identischen Std-Werten).
+        # P51-Erbe: Dialog liefert ggf. "standard"/"dx"-Sub-Keys (Stations-
+        # vs SNR-Scoring). Hardware-Gain ist identisch — wir nehmen die
+        # "standard"-Auswertung (Stations-Scoring, immer verfuegbar).
+        # P80 R1-F3 ORANGE: bei Divergenz Log-Warnung fuer Field-Test-
+        # Diagnose.
         has_dual = (
             isinstance(r.get("standard"), dict) and isinstance(r.get("dx"), dict)
         )
         if has_dual:
             std_data = r["standard"]
-            dx_data  = r["dx"]
-            std_ok = (
-                self._standard_store.save_gain(
-                    band, ft_mode,
-                    rxant=std_data.get("best_ant", "ANT1"),
-                    ant1_gain=std_data.get("ant1_gain", 0),
-                    ant2_gain=std_data.get("ant2_gain", 0),
-                    ant1_avg=std_data.get("ant1_avg", 0.0),
-                    ant2_avg=std_data.get("ant2_avg", 0.0),
-                )
-                if getattr(self, '_standard_store', None)
-                else False
-            )
-            dx_ok = (
-                self._dx_store.save_gain(
-                    band, ft_mode,
-                    rxant=dx_data.get("best_ant", "ANT1"),
-                    ant1_gain=dx_data.get("ant1_gain", 0),
-                    ant2_gain=dx_data.get("ant2_gain", 0),
-                    ant1_avg=dx_data.get("ant1_avg", 0.0),
-                    ant2_avg=dx_data.get("ant2_avg", 0.0),
-                )
-                if getattr(self, '_dx_store', None)
-                else False
-            )
-            if not std_ok or not dx_ok:
-                print(f"[P51] WARN save_gain returned False — "
-                      f"std_ok={std_ok}, dx_ok={dx_ok}")
+            dx_data = r["dx"]
+            if (std_data.get("ant1_gain") != dx_data.get("ant1_gain")
+                    or std_data.get("ant2_gain") != dx_data.get("ant2_gain")):
+                print(f"[P80] WARN Std/DX-Gain-Divergenz fuer {band}: "
+                      f"std=({std_data.get('ant1_gain')}/{std_data.get('ant2_gain')}) "
+                      f"dx=({dx_data.get('ant1_gain')}/{dx_data.get('ant2_gain')}) "
+                      f"→ nehme std-Werte")
+            save_data = std_data
         else:
-            # Fallback: altes Dialog-Format → nur 1 Store (aktiver Modus)
-            print("[P51] Dialog ohne Dual-Result — Fallback auf Single-Store")
-            gain_mode = getattr(self, '_gain_scoring_mode', 'snr')
-            store = (getattr(self, '_dx_store', None) if gain_mode == "snr"
-                     else getattr(self, '_standard_store', None))
-            if store:
-                store.save_gain(
-                    band, ft_mode,
-                    rxant=r.get("best_ant", "ANT1"),
-                    ant1_gain=r.get("ant1_gain", r.get("best_gain", 0)),
-                    ant2_gain=r.get("ant2_gain", r.get("best_gain", 0)),
-                    ant1_avg=r.get("ant1_avg", 0.0),
-                    ant2_avg=r.get("ant2_avg", 0.0),
-                )
+            print("[P80] Dialog ohne Dual-Result — Fallback auf Top-Level")
+            save_data = r
 
-        # P51 (R1-V4-pro F6): settings.save_dx_preset komplett raus —
-        # get_dx_preset wird nirgends im Live-Code gerufen (tote API),
-        # PresetStore ist primaere Quelle.
+        ok = self._gain_store.save_gain(
+            band,
+            rxant=save_data.get("best_ant", "ANT1"),
+            ant1_gain=save_data.get("ant1_gain", save_data.get("best_gain", 0)),
+            ant2_gain=save_data.get("ant2_gain", save_data.get("best_gain", 0)),
+            ant1_avg=save_data.get("ant1_avg", 0.0),
+            ant2_avg=save_data.get("ant2_avg", 0.0),
+            ant2_calibrated=True,  # DXTuneDialog misst immer beide
+        )
+        if not ok:
+            print(f"[P80] WARN save_gain returnt False fuer {band}")
 
-        ant1_g = r.get("ant1_gain", r.get("best_gain", 0))
-        ant2_g = r.get("ant2_gain", r.get("best_gain", 0))
+        ant1_g = save_data.get("ant1_gain", save_data.get("best_gain", 0))
+        ant2_g = save_data.get("ant2_gain", save_data.get("best_gain", 0))
         self.control_panel.dx_info.setText(
             f"ANT1(G{ant1_g}) + ANT2(G{ant2_g})"
         )
@@ -1643,11 +1617,12 @@ class RadioMixin:
 
         self._log_gain_result(r, band, ft_mode)
 
-        # Normal-Modus (KALIBRIEREN-Button): in normal_presets speichern, ANT1-Gain anwenden
+        # Normal-Modus (KALIBRIEREN-Button): ANT1-Gain anwenden.
+        # P80: keine separate save_normal_preset-Persistenz mehr — der
+        # save_gain-Call oben hat ant1_gain (und ant2_gain) bereits im
+        # unified Store gespeichert. Spaeterer Wechsel auf Diversity nutzt
+        # die ANT2-Werte direkt.
         if self._rx_mode == "normal":
-            import time as _time
-            ant1_g = r.get("ant1_gain", r.get("best_gain", 0))
-            self.settings.save_normal_preset(band=band, gain=ant1_g, rxant="ANT1")
             if self.radio.ip:
                 self.radio.set_rx_antenna("ANT1")
                 self.radio.set_tx_antenna("ANT1")
@@ -1655,7 +1630,7 @@ class RadioMixin:
             self.control_panel.dx_info.setText(f"G{ant1_g}dB (kalibriert)")
             self.control_panel.dx_info.setStyleSheet("")
             self._stats_warmup_cycles = 6
-            print(f"[Kalibrieren] Normal Preset {band}: G{ant1_g}dB — 4 Zyklen Warmup")
+            print(f"[Kalibrieren] Normal {band}: G{ant1_g}dB — 4 Zyklen Warmup")
             self._update_statusbar()
             self._show_calibration_done(band, ant1_g, None)
             return
@@ -1679,56 +1654,32 @@ class RadioMixin:
         self._show_calibration_done(band, ant1_g, ant2_g)
 
     def _show_calibration_done(self, band: str, ant1_g: int, ant2_g: int | None):
-        """Auto-Close-Info-Popup 'Kalibrierung abgeschlossen' — 3s, kein OK.
+        """P79 (v0.97.51): Kalibrierungs-Ergebnis als Live-Log-Zeile.
 
-        v0.83 Fix F: non-modal + Auto-Close, Mike kann waehrend der 3s
-        weiterarbeiten. WindowStaysOnTopHint + raise_+activateWindow
-        verhindern Hinten-Wandern (v0.79-Problem).
+        Mike-Wunsch Field-Test 18.05.: kalibrierung gespeichert als info
+        text auch qso fenster, separates info fenster weg, spart sekunden
+        fluessigeren ablauf. Vorher 3s-Popup-Dialog mit Top-Hint — brach
+        Workflow.
 
-        v0.79 (vorher): Modal + exec() weil non-modal hinter Hauptfenster
-        verschwand. Mit raise_+activateWindow + StaysOnTopHint sollte das
-        nicht mehr passieren. Esc schliesst Dialog vorzeitig (Qt-Default).
+        Doppelte Anzeige (QSO-Log + Statusbar 3s) deckt R1-F6 ab: wenn
+        User im Logbuch-Tab ist oder die Zeile durch `_auto_trim_by_age`
+        (5min-Window) bereits weg ist, sieht er das Echo in der Statusbar.
+        Non-blocking, kein Klick noetig.
+
+        Synergie mit qso_panel.add_info Auto-Detect (P79 Patch 1): das
+        fuehrende Haken-Symbol wird in Hellgruen (#44FF44) gerendert.
         """
-        from PySide6.QtCore import Qt as _Qt, QTimer as _QTimer
-        from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel
-        dlg = QDialog(self)
-        dlg.setWindowTitle("Kalibrierung abgeschlossen")
-        dlg.setWindowFlag(_Qt.WindowType.WindowStaysOnTopHint, True)
-        dlg.setStyleSheet(
-            "QDialog, QWidget { background-color: #16192b; }"
-        )
-        lay = QVBoxLayout(dlg)
-        lay.setContentsMargins(24, 20, 24, 16)
-        lay.setSpacing(10)
-
-        lbl_title = QLabel(f"✓  Kalibrierung {band} gespeichert.")
-        lbl_title.setStyleSheet(
-            "color: #00CC66; font-family: Menlo; font-size: 13px; font-weight: bold;"
-        )
-        lay.addWidget(lbl_title)
-
         if ant2_g is not None:
-            lbl_info = QLabel(f"ANT1: {ant1_g} dB  |  ANT2: {ant2_g} dB")
+            text = (f"✓ Kalibrierung {band} gespeichert. "
+                    f"ANT1: {ant1_g} dB | ANT2: {ant2_g} dB")
         else:
-            lbl_info = QLabel(f"ANT1: {ant1_g} dB")
-        lbl_info.setStyleSheet(
-            "color: #AAAACC; font-family: Menlo; font-size: 12px; padding: 4px 0;"
-        )
-        lay.addWidget(lbl_info)
-
-        # Auto-Close nach 3s. Timer Child von dlg → wird mit dlg
-        # zerstoert (z.B. App-Close), kein Race auf gestorbenen
-        # Python-Wrapper (R1-Final-Review-Fix).
-        _close_timer = _QTimer(dlg)
-        _close_timer.setSingleShot(True)
-        _close_timer.timeout.connect(dlg.accept)
-        _close_timer.start(3000)
-
-        # show() statt exec() = non-modal. raise_+activateWindow gegen
-        # Hinten-Wandern (R1-P1: macOS Spaces-Edge-Cases akzeptiert).
-        dlg.show()
-        dlg.raise_()
-        dlg.activateWindow()
+            text = f"✓ Kalibrierung {band} gespeichert. ANT1: {ant1_g} dB"
+        self.qso_panel.add_info(text)
+        # R1-F6: Statusbar-Echo 3s — tab-uebergreifend sichtbar.
+        try:
+            self.statusBar().showMessage(text, 3000)
+        except Exception:
+            pass  # Statusbar evtl. nicht verfuegbar (Tests/Smoke)
 
     def _on_dx_tune_rejected(self):
         """DX Tuning abgebrochen — P1.CACHE-SIMPLE: Stale-Acceptance.
@@ -1756,17 +1707,21 @@ class RadioMixin:
         if self._rx_mode == "diversity" and self.radio.ip:
             scoring = getattr(self._diversity_ctrl, 'scoring_mode', 'normal')
             band = self.settings.band
-            ft_mode = self.settings.mode
-            store = self._get_diversity_store(scoring)
-            entry = store.get(band, ft_mode) if store else None
-            if entry and "gain_timestamp" in entry:
+            entry = self._gain_store.get(band)
+            # P80 R1-F4 ORANGE: stale-Acceptance braucht ant2_calibrated=True.
+            # ant2_calibrated=False (Migration aus normal_preset) → kein
+            # Diversity-Resume, sonst startet's mit ant2_gain=0 (Hardware-
+            # Fehlanwendung).
+            if (entry is not None
+                    and "gain_timestamp" in entry
+                    and entry.get("ant2_calibrated") is True):
                 print(f"[Diversity] Cancel → Stale-Acceptance: Gain bleibt, "
                       f"Dynamic startet live")
                 self._enable_diversity(scoring_mode=scoring)
                 self._stats_warmup_cycles = 6
             else:
-                # Keine Gain-Werte vorhanden → Diversity deaktivieren
-                print(f"[Diversity] Cancel ohne Gain-Werte → Diversity AUS")
+                # Keine Diversity-Werte vorhanden → Diversity deaktivieren
+                print(f"[Diversity] Cancel ohne ANT2-Kalibrierung → Diversity AUS")
                 self._disable_diversity()
                 self.control_panel.set_rx_mode("normal")
                 self._stats_warmup_cycles = 6
@@ -1779,7 +1734,7 @@ class RadioMixin:
     def _apply_dx_preset(self, preset: dict):
         """DX-Preset am Radio anwenden."""
         rxant = preset.get("rxant", "ANT1")
-        gain = preset.get("gain", 10)
+        gain = preset.get("gain", preset.get("ant1_gain", 10))
         self.radio.set_rx_antenna(rxant)
         self.radio.set_rfgain(gain)
         self.radio.set_tx_antenna("ANT1")
@@ -1787,11 +1742,8 @@ class RadioMixin:
         print(f"[DX] Preset geladen: {rxant}, Gain {gain}")
 
     def _apply_dx_preset_for_band(self, band: str):
-        """DX-Preset fuer ein bestimmtes Band laden (nach Bandwechsel)."""
-        ft_mode = self.settings.mode
-        scoring = getattr(self._diversity_ctrl, 'scoring_mode', 'normal')
-        store = getattr(self, '_dx_store', None) if scoring == "dx" else getattr(self, '_standard_store', None)
-        preset = store.get(band, ft_mode) if store else None
+        """DX-Preset fuer ein bestimmtes Band laden (P80: unified store)."""
+        preset = self._gain_store.get(band)
         if preset:
             self._apply_dx_preset(preset)
         else:
@@ -1842,9 +1794,16 @@ class RadioMixin:
         spin.blockSignals(True)
         spin.setValue(tx_freq)
         spin.blockSignals(False)
-        preset = self.settings.get_normal_preset(band)
-        gain = preset.get("gain", PREAMP_PRESETS.get(band, 10))
-        measured_str = preset.get("measured", "")
+        # P80 (v0.97.52): Normal-Gain aus unified _gain_store.
+        # R1-F2 ROT: `is not None`-Check statt falsy — ant1_gain=0 ist
+        # ein gueltiger Wert (wenn auch unwahrscheinlich).
+        entry = self._gain_store.get(band)
+        if entry is not None and entry.get("ant1_gain") is not None:
+            gain = int(entry["ant1_gain"])
+            measured_str = entry.get("measured", "")
+        else:
+            gain = PREAMP_PRESETS.get(band, 10)
+            measured_str = ""
 
         age_days = None
         if measured_str:

@@ -260,17 +260,6 @@ class TXMixin:
         is_auto = self._auto_tune_running
         dlg = self._auto_tune_dialog
 
-        # P76-DBG (temporaer Mike-Field-Test 18.05.): Entry-State loggen
-        # damit fehlende „Band freigegeben"-Meldung diagnostiziert werden kann.
-        print(f"[P76-DBG] _tune_post_swr_check ENTRY "
-              f"is_auto={is_auto} "
-              f"frozen_swr={getattr(self, '_tune_last_valid_swr', 'MISSING')} "
-              f"radio.last_swr={self.radio.last_swr if self.radio.ip else 'no-radio'} "
-              f"swr_limit={self.settings.get('swr_limit', 3.0)} "
-              f"band={self.settings.band.upper()} "
-              f"blocked_bands={sorted(self._swr_blocked_bands)} "
-              f"tuner_present={self.settings.get('tuner_present', True)}")
-
         if not self.radio.ip:
             # P76-A SAFETY (R1-F6): Stale-State-Reset auch im Disconnect-Pfad,
             # sonst haengt gefrorener Wert von altem TUNE und naechster TUNE
@@ -307,15 +296,9 @@ class TXMixin:
 
         from PySide6.QtWidgets import QMessageBox
 
-        # P76-DBG: Branch-Entscheidung loggen
-        print(f"[P76-DBG] BRANCH swr_now={swr_now:.2f} swr_limit={swr_limit:.2f} "
-              f"-> {'SWR-OK' if swr_now <= swr_limit else 'SWR-BAD'}")
-
         if swr_now <= swr_limit:
             was_blocked = band in self._swr_blocked_bands
             self._swr_blocked_bands.discard(band)
-            print(f"[P76-DBG] SWR-OK was_blocked={was_blocked} "
-                  f"will_emit_freigegeben={was_blocked}")
 
             # P54b (R1-F1): RFPreset-Stuetzpunkt unter nominaler Last (10 W,
             # rf=10) speichern wenn Messwert plausibel. Schluessel ist die
@@ -397,11 +380,14 @@ class TXMixin:
             else:
                 # P75 (v0.97.48): QMessageBox raus, rote Zeile im Live-Log.
                 # P76-C (v0.97.50): Text variiert je nach Marker-State.
+                # P79 (v0.97.51): drei gleichwertige Handlungsoptionen
+                # explizit nennen (Mike-Feedback Field-Test 18.05.).
                 if tuner:
                     self.qso_panel.add_info(
                         f"⚠ Band {band} gesperrt — SWR {swr_now:.1f} > "
-                        f"Limit {swr_limit:.1f}. Manueller TUNE zum "
-                        f"Freischalten nach Antennen-Check."
+                        f"Limit {swr_limit:.1f}. Antenne pruefen ODER "
+                        f"SWR-Limit in Einstellungen anpassen ODER "
+                        f"manueller TUNE zum Freischalten."
                     )
                 else:
                     self.qso_panel.add_info(

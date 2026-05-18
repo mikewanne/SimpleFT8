@@ -206,21 +206,11 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         from ui.direction_map_widget import LocatorCache
         self._locator_cache = LocatorCache()
         self._direction_map_dialog = None
-        # Getrennte Preset-Dateien für Standard und DX (2h-Frist pro Band+FTMode)
-        self._standard_store = PresetStore("presets_standard.json")
-        self._dx_store = PresetStore("presets_dx.json")
-        # Einmalige Migration aus altem config.json-Format.
-        # P22 Final-R1 SOLLTE-1: Exception-Wrap damit ein Disk-Fehler in
-        # der Migration den App-Start nicht crasht (migrate_from_settings
-        # ruft intern _save_locked auf, das bei Fehler re-raised).
-        for _store, _mode in (
-            (self._standard_store, "standard"),
-            (self._dx_store, "dx"),
-        ):
-            try:
-                _store.migrate_from_settings(self.settings._data, mode=_mode)
-            except Exception as _exc:
-                print(f"[Kalibrierung] Migration {_mode} uebersprungen: {_exc}")
+        # P80 (v0.97.52): Unified Gain-Store — 1 Eintrag pro Band, gilt
+        # fuer Normal/Diversity-Std/Diversity-DX + FT8/FT4/FT2 (Hardware-
+        # Eigenschaft, modus-unabhaengig). Migration aus alten Files +
+        # settings.normal_presets laeuft idempotent im Konstruktor.
+        self._gain_store = PresetStore()  # default: presets.json
 
     def _init_qso_log(self):
         """QSO-Verzeichnis (Worked-Before) aus aktuellem Pfad + adif_import_path laden.
@@ -1172,13 +1162,7 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
             if self.radio.ip:
                 self.radio.tx_audio_level = self.settings.get("tx_level", 100) / 100.0
                 self.radio.set_power(self.settings.get("power_preset", 15))
-                _new_limit = self.settings.get("swr_limit", 3.0)
-                # P76-DBG (temporaer Mike-Field-Test 18.05.): SWR-Limit-Wechsel
-                # nachvollziehen — wichtig fuer Freischalt-Pfad-Diagnose.
-                print(f"[P76-DBG] Settings closed: swr_limit -> {_new_limit} "
-                      f"blocked_bands={sorted(self._swr_blocked_bands)} "
-                      f"band={self.settings.band.upper()}")
-                self.radio.set_swr_limit(_new_limit)
+                self.radio.set_swr_limit(self.settings.get("swr_limit", 3.0))
             # Debug-Konsole Toggle aus Settings
             debug_vis = self.settings.get("debug_console_visible", False)
             self._debug_console.setVisible(debug_vis)
@@ -1602,14 +1586,13 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
     def closeEvent(self, event):
         # P34-Stufe2: MessStatusDialog gibt's nicht mehr.
 
-        # P22-A10: Staged Preset-Eintraege verwerfen (kein Half-State auf Disk).
-        for store_attr in ('_standard_store', '_dx_store'):
-            store = getattr(self, store_attr, None)
-            if store and hasattr(store, 'discard_all_staged'):
-                n = store.discard_all_staged()
-                if n:
-                    print(f"[App-Quit] {n} staged Preset-Eintrag(e) "
-                          f"in {store_attr} verworfen")
+        # P22-A10: Staged Preset-Eintraege verwerfen (kein Half-State).
+        # P80: nur noch unified _gain_store.
+        store = getattr(self, '_gain_store', None)
+        if store and hasattr(store, 'discard_all_staged'):
+            n = store.discard_all_staged()
+            if n:
+                print(f"[App-Quit] {n} staged Preset-Eintrag(e) verworfen")
 
         # P1.QRZ-UPLOAD-UI (KP-3): Bulk-Worker sauber stoppen vor App-Close.
         # Disconnect VOR cancel(), sonst kann Worker noch finished.emit() auf

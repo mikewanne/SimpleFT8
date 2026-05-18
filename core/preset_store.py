@@ -1,25 +1,35 @@
-"""SimpleFT8 PresetStore — Separate JSON-Datei pro Diversity-Modus.
+"""SimpleFT8 Unified Gain Store (P80, v0.97.52).
 
-P34-Stufe2 (v0.97.19, 2026-05-13): nur noch Gain-Kalibrierung. Ratio-API
-entfernt — die Ratio-Bestimmung uebernimmt ``DynamicDiversityController``
-live im Betrieb.
+1 Eintrag pro Band — Hardware-Gain ist Antennen/Vorverstaerker-
+Eigenschaft, modus-unabhaengig. FT8/FT4/FT2 nutzen identische Werte.
+Normal-Modus liest ant1_gain, Diversity Std/DX nutzt beide Antennen.
 
-Speichert Gain-Kalibrierung pro Band+FTMode.
-Standard → ~/.simpleft8/kalibrierung/presets_standard.json
-DX       → ~/.simpleft8/kalibrierung/presets_dx.json
+Schema (`~/.simpleft8/kalibrierung/presets.json`):
+```
+{
+  "20m": {
+    "ant1_gain": 10, "ant2_gain": 20,
+    "ant1_avg": -15.0, "ant2_avg": -11.5,
+    "rxant": "ANT1",
+    "ant2_calibrated": true,
+    "gain_timestamp": 1779081747.65,
+    "measured": "2026-05-18 07:22"
+  }
+}
+```
 
-Validity:
-  - Gain  → 6 h (Hardware-Eigenschaft des RX-Verstaerkers)
+`ant2_calibrated` (P80, R1-F1 ROT): markiert ob aus echter ANT1+ANT2-
+Messung (True) oder Normal-only-Migration (False). Diversity-Wechsel
+verlangt True — sonst Re-Kalibrierung. Schutz gegen ant2_gain=0
+Hardware-Fehlanwendung.
 
-Migration: alte Caches mit nur 'timestamp' werden beim Load auf
-gain_timestamp gespiegelt. Alte ratio/dominant/ratio_timestamp-Felder
-bleiben unangetastet drin (silent ignore, nicht mehr ausgewertet) — 1×
-Info-Log pro Key bei Load.
+Side-Effect-Hinweis: `PresetStore.__init__` ruft beim Default-Filename
+`presets.json` einmalig `migrate_legacy_files()` (idempotent). Tests
+muessen CALIB_DIR umlenken (tmp_path + monkeypatch).
 """
 
 import json
 import os
-import shutil
 import tempfile
 import threading
 import time
@@ -27,107 +37,161 @@ from pathlib import Path
 from typing import Optional
 
 CONFIG_DIR = Path.home() / ".simpleft8"
-CALIB_DIR  = CONFIG_DIR / "kalibrierung"
-GAIN_VALIDITY_SECONDS  = 6 * 3600  # 6 Stunden (Hardware-Verstaerker)
-# Backwards-Compat-Alias fuer externe Importe (Default = Gain)
+CALIB_DIR = CONFIG_DIR / "kalibrierung"
+SETTINGS_PATH = CONFIG_DIR / "settings.json"
+GAIN_VALIDITY_SECONDS = 6 * 3600  # 6 Stunden (Hardware-Verstaerker)
+# Backwards-Compat-Alias fuer externe Importe
 VALIDITY_SECONDS = GAIN_VALIDITY_SECONDS
 
 
-class PresetStore:
-    """Thread-sicherer Preset-Speicher für einen Diversity-Modus."""
+def _safe_load_json(path: Path) -> dict:
+    """Robust gegen fehlende oder korrupte JSON. Print + leeres dict."""
+    try:
+        with path.open("r") as f:
+            data = json.load(f)
+            return data if isinstance(data, dict) else {}
+    except FileNotFoundError:
+        return {}
+    except (json.JSONDecodeError, OSError) as exc:
+        print(f"[P80] Konnte {path.name} nicht lesen: {exc} → uebersprungen")
+        return {}
 
-    def __init__(self, filename: str):
-        """filename: 'presets_standard.json' oder 'presets_dx.json'"""
-        self._filename   = filename
-        self._mode_label = self._derive_mode_label(filename)
-        self._migrate_old_file()                # Alt → Neu verschieben
+
+def migrate_legacy_files() -> int:
+    """P80: einmalige Migration alter Files in unified ``presets.json``.
+
+    Quellen:
+    1. ``presets_standard.json`` (alte Diversity-Standard-Werte)
+    2. ``presets_dx.json`` (alte Diversity-DX-Werte)
+    3. ``settings.json`` → ``normal_presets`` (Normal-Modus-Gains)
+
+    Strategie: pro Band wird der Eintrag mit MAX(gain_timestamp) zur
+    Wahrheit. ``ant2_calibrated=True`` bei PresetStore-Quelle (echte
+    ANT1+ANT2-Messung), ``False`` bei normal_presets-Quelle (nur
+    ANT1-Wert).
+
+    Idempotent: wenn ``presets.json`` existiert UND nicht-leer → no-op.
+    Robust gegen korrupte JSON (``_safe_load_json``).
+
+    Returns: Anzahl migrierter Baender (0 = no-op oder leer).
+    """
+    new_path = CALIB_DIR / "presets.json"
+    existing_new = _safe_load_json(new_path)
+    if existing_new:
+        return 0  # bereits migriert
+
+    candidates: dict[str, dict] = {}
+
+    # 1+2) Legacy PresetStore-Files
+    for legacy in ("presets_standard.json", "presets_dx.json"):
+        legacy_data = _safe_load_json(CALIB_DIR / legacy)
+        for key, entry in legacy_data.items():
+            if not isinstance(entry, dict):
+                continue
+            # "20m_FT8" → "20m"; "20m" bleibt "20m"
+            band = key.split("_")[0]
+            ts = entry.get("gain_timestamp")
+            if not band or ts is None:
+                continue
+            try:
+                ts = float(ts)
+            except (TypeError, ValueError):
+                continue
+            existing = candidates.get(band)
+            if existing is None or ts > existing["gain_timestamp"]:
+                candidates[band] = {
+                    "ant1_gain":       int(entry.get("ant1_gain", 10)),
+                    "ant2_gain":       int(entry.get("ant2_gain", 10)),
+                    "ant1_avg":        float(entry.get("ant1_avg", 0.0)),
+                    "ant2_avg":        float(entry.get("ant2_avg", 0.0)),
+                    "rxant":           entry.get("rxant", "ANT1"),
+                    "ant2_calibrated": True,
+                    "gain_timestamp":  ts,
+                    "measured":        entry.get("measured", "?"),
+                }
+
+    # 3) settings.normal_presets (nur ANT1 — kein ANT2-Wert)
+    settings_data = _safe_load_json(SETTINGS_PATH)
+    normal_presets = settings_data.get("normal_presets", {})
+    if isinstance(normal_presets, dict):
+        for band, entry in normal_presets.items():
+            if not isinstance(entry, dict):
+                continue
+            measured = entry.get("measured", "")
+            try:
+                ts = time.mktime(time.strptime(measured, "%Y-%m-%d %H:%M"))
+            except (ValueError, TypeError):
+                ts = 0.0  # uralt → is_valid_gain returnt False
+            existing = candidates.get(band)
+            if existing is None or ts > existing["gain_timestamp"]:
+                candidates[band] = {
+                    "ant1_gain":       int(entry.get("gain", 10)),
+                    "ant2_gain":       0,
+                    "ant1_avg":        0.0,
+                    "ant2_avg":        0.0,
+                    "rxant":           entry.get("rxant", "ANT1"),
+                    "ant2_calibrated": False,
+                    "gain_timestamp":  ts,
+                    "measured":        measured,
+                }
+
+    if candidates:
+        CALIB_DIR.mkdir(parents=True, exist_ok=True)
+        tmp = new_path.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(candidates, indent=2))
+        os.replace(str(tmp), str(new_path))
+        print(f"[P80] Migration: {len(candidates)} Baender → presets.json")
+
+    return len(candidates)
+
+
+class PresetStore:
+    """Unified Gain-Store (P80, v0.97.52).
+
+    Thread-sicher via ``threading.Lock``. Atomic write via tempfile +
+    ``os.replace`` (P22-Pattern, P80 beibehalten).
+
+    Stage/Commit/Discard (P22): Phase-2-Werte landen via ``stage_gain``
+    im Memory-Buffer, Phase-3-Erfolg committet via ``commit_gain``.
+    Ohne Commit kein Disk-Write — verhindert Half-State.
+    """
+
+    def __init__(self, filename: str = "presets.json"):
+        """filename: Default ``presets.json`` (unified, P80).
+
+        Side-Effect: bei Default-Filename triggert einmalige Migration
+        aus Legacy-Files (idempotent, fail-silent).
+        """
+        self._filename = filename
         self._filepath = CALIB_DIR / filename
         self._lock = threading.Lock()
         self._data: dict[str, dict] = {}
-        # P22: Memory-Buffer fuer atomares Persist. Phase-2-Werte landen
-        # hier (stage_gain), Phase-3-Erfolg committet beide zusammen
-        # (commit_with_ratio). Ohne Phase-3 → kein Disk-Write → kein
-        # Half-State.
         self._staged: dict[str, dict] = {}
+        # P80: Migration vor Load (idempotent, kein Crash bei Fehlern)
+        if filename == "presets.json":
+            try:
+                migrate_legacy_files()
+            except Exception as exc:
+                print(f"[P80] Migration-Fehler (fail-silent): {exc}")
         self._load()
 
-    # ── Hilfsmethoden ────────────────────────────────────────────────────────
-
-    @staticmethod
-    def _derive_mode_label(filename: str) -> str:
-        mapping = {
-            "presets_standard.json": "Diversity Standard",
-            "presets_dx.json":       "Diversity DX",
-        }
-        return mapping.get(filename, filename.replace(".json", ""))
-
-    def _migrate_old_file(self) -> None:
-        old_path = CONFIG_DIR / self._filename
-        new_path = CALIB_DIR  / self._filename
-        if old_path.exists() and not new_path.exists():
-            CALIB_DIR.mkdir(parents=True, exist_ok=True)
-            shutil.move(str(old_path), str(new_path))
-            print(f"[Kalibrierung] Migration: {old_path.name} → kalibrierung/{self._filename}")
-
-    @staticmethod
-    def _format_band(key: str) -> str:
-        """'40m_FT8' → '40m FT8'"""
-        return key.replace("_", " ")
-
-    @staticmethod
-    def _age_minutes_from_timestamp(ts: Optional[float]) -> Optional[int]:
-        if ts is None:
-            return None
-        return int((time.time() - ts) / 60)
-
-    @staticmethod
-    def _migrate_timestamps_in_entry(entry: dict) -> None:
-        """v0.92 → v0.93 Migration: alter 'timestamp' wird auf gain_timestamp
-        gespiegelt. Idempotent — wenn 'gain_timestamp' schon existiert,
-        bleibt der Eintrag unangetastet.
-
-        Mutiert das entry-dict in-place. Der alte 'timestamp'-Key bleibt drin
-        fuer Backwards-Read-Kompatibilitaet, wird aber nicht mehr aktualisiert.
-        """
-        if "gain_timestamp" in entry:
-            return  # bereits migriert
-        old_ts = entry.get("timestamp")
-        if old_ts is None:
-            return  # nichts zu migrieren
-        entry["gain_timestamp"] = old_ts
-
-    # ── Laden / Speichern ────────────────────────────────────────────────────
+    # ── Laden / Speichern ──────────────────────────────────────────
 
     def _load(self) -> None:
-        if self._filepath.exists():
-            try:
-                with self._filepath.open("r") as f:
-                    self._data = json.load(f)
-            except Exception:
-                self._data = {}
-        for key, entry in self._data.items():
-            # v0.93 Migration: alter 'timestamp' → gain_timestamp
-            self._migrate_timestamps_in_entry(entry)
-            band_fmt = self._format_band(key)
-            ant1     = entry.get("ant1_gain", "?")
-            ant2     = entry.get("ant2_gain", "?")
-            measured = entry.get("measured", "unbekannt")
-            age      = self._age_minutes_from_timestamp(entry.get("gain_timestamp"))
-            age_str  = f"{age} Min." if age is not None else "?"
-            print(f"[Kalibrierung] Geladen: {band_fmt} {self._mode_label} — "
-                  f"ANT1={ant1}dB ANT2={ant2}dB (gemessen {measured}, {age_str} alt)")
-            # P34-Stufe2 (R1-F5): 1×-Info-Log pro Key wenn Ratio-Reste drin
-            if "ratio" in entry or "ratio_timestamp" in entry or "dominant" in entry:
-                print(f"[PresetStore] Ratio-Felder in {band_fmt} {self._mode_label} "
-                      f"ignoriert (Dynamic-Pipeline uebernimmt das Verhaeltnis live)")
+        self._data = _safe_load_json(self._filepath)
+        for band, entry in self._data.items():
+            if not isinstance(entry, dict):
+                continue
+            age = self._age_minutes_from_timestamp(entry.get("gain_timestamp"))
+            age_str = f"{age} Min." if age is not None else "?"
+            ant2_cal = entry.get("ant2_calibrated", False)
+            print(f"[Kalibrierung] Geladen: {band} — "
+                  f"ANT1={entry.get('ant1_gain', '?')}dB "
+                  f"ANT2={entry.get('ant2_gain', '?')}dB "
+                  f"ant2_cal={ant2_cal} ({age_str} alt)")
 
     def _save_locked(self) -> None:
-        """Atomic Write via tempfile + os.replace (P22, P2-Pattern).
-
-        Verhindert korrupte JSON bei Mid-Write-Crash. Bei Exception:
-        tempfile aufraeumen, Exception re-raise — Aufrufer
-        (save_gain/save_ratio/commit_with_ratio) wickelt return-False ab.
-        """
+        """Atomic Write via tempfile + os.replace (P22-Pattern)."""
         self._filepath.parent.mkdir(parents=True, exist_ok=True)
         tmp = tempfile.NamedTemporaryFile(
             mode="w",
@@ -153,218 +217,157 @@ class PresetStore:
                 pass
             raise
 
-    def _key(self, band: str, ft_mode: str) -> str:
-        return f"{band}_{ft_mode}"
+    @staticmethod
+    def _age_minutes_from_timestamp(ts: Optional[float]) -> Optional[int]:
+        if ts is None or ts == 0.0:
+            return None
+        return int((time.time() - ts) / 60)
 
-    # ── Lesen ────────────────────────────────────────────────────────────────
+    # ── Lesen ───────────────────────────────────────────────────────
 
-    def get(self, band: str, ft_mode: str) -> Optional[dict]:
-        """Preset für Band+FTMode laden oder None."""
+    def get(self, band: str) -> Optional[dict]:
+        """Preset fuer Band laden oder None."""
         with self._lock:
-            return self._data.get(self._key(band, ft_mode))
+            return self._data.get(band)
 
-    def is_valid_gain(self, band: str, ft_mode: str) -> bool:
-        """True wenn Gain-Kalibrierung vorhanden UND < 6h alt.
+    def is_valid_gain(self, band: str) -> bool:
+        """True wenn Gain-Kalibrierung vorhanden UND < 6h alt UND ts > 0.
 
-        P34-Stufe2: kein ratio-Check mehr (Ratio uebernimmt Dynamic live).
+        ts==0.0 ist Migration-Marker (uralt, normal_preset ohne parsbares
+        Datum) → False → triggert Re-Kalibrierung.
         """
         with self._lock:
-            entry = self._data.get(self._key(band, ft_mode))
+            entry = self._data.get(band)
         if not entry or "gain_timestamp" not in entry:
             return False
-        return (time.time() - entry["gain_timestamp"]) < GAIN_VALIDITY_SECONDS
+        ts = entry["gain_timestamp"]
+        if ts == 0.0:
+            return False  # Migration-Marker
+        return (time.time() - ts) < GAIN_VALIDITY_SECONDS
 
-    def get_gain_age_minutes(self, band: str, ft_mode: str) -> Optional[int]:
-        """Alter der Gain-Kalibrierung in Minuten oder None."""
+    def get_gain_age_minutes(self, band: str) -> Optional[int]:
+        """Alter der Kalibrierung in Minuten oder None."""
         with self._lock:
-            entry = self._data.get(self._key(band, ft_mode))
-        if not entry or "gain_timestamp" not in entry:
+            entry = self._data.get(band)
+        if not entry:
             return None
-        return self._age_minutes_from_timestamp(entry["gain_timestamp"])
+        return self._age_minutes_from_timestamp(entry.get("gain_timestamp"))
 
-    # ── Backwards-Compat (v0.92-API, leitet auf Gain-Variante) ──────────────
+    # ── Schreiben (direkt) ─────────────────────────────────────────
 
-    def is_valid(self, band: str, ft_mode: str) -> bool:
-        """[v0.92-Alias] Aequivalent zu is_valid_gain()."""
-        return self.is_valid_gain(band, ft_mode)
-
-    def get_age_minutes(self, band: str, ft_mode: str) -> Optional[int]:
-        """[v0.92-Alias] Aequivalent zu get_gain_age_minutes()."""
-        return self.get_gain_age_minutes(band, ft_mode)
-
-    # ── Schreiben ────────────────────────────────────────────────────────────
-
-    def save_gain(self, band: str, ft_mode: str, *,
+    def save_gain(self, band: str, *,
                   rxant: str, ant1_gain: int, ant2_gain: int,
-                  ant1_avg: float = 0.0, ant2_avg: float = 0.0) -> bool:
+                  ant1_avg: float = 0.0, ant2_avg: float = 0.0,
+                  ant2_calibrated: bool = True) -> bool:
         """Gain-Kalibrierung speichern (setzt gain_timestamp → 6h-Frist).
 
-        P22-R1-K3: returnt False bei Disk-Fehler statt Exception bis in
-        den GUI-Thread. Aufrufer kann optional reagieren, App crasht nicht.
+        ant2_calibrated (P80, R1-F1): True = aus echter ANT1+ANT2-
+        Messung (DXTuneDialog), False = nur ANT1 (Normal-only-Migration).
+        Diversity-Wechsel verlangt True.
+
+        Returns: False bei Disk-Fehler statt Exception bis GUI-Thread.
         """
-        key = self._key(band, ft_mode)
         with self._lock:
-            old_entry = self._data.get(key)
-            entry = dict(old_entry or {})
+            old = self._data.get(band)
+            entry = dict(old or {})
             entry.update({
-                "rxant":          rxant,
-                "ant1_gain":      int(ant1_gain),
-                "ant2_gain":      int(ant2_gain),
-                "ant1_avg":       round(float(ant1_avg), 1),
-                "ant2_avg":       round(float(ant2_avg), 1),
-                "gain_timestamp": time.time(),
-                "measured":       time.strftime("%Y-%m-%d %H:%M"),
+                "rxant":           rxant,
+                "ant1_gain":       int(ant1_gain),
+                "ant2_gain":       int(ant2_gain),
+                "ant1_avg":        round(float(ant1_avg), 1),
+                "ant2_avg":        round(float(ant2_avg), 1),
+                "ant2_calibrated": bool(ant2_calibrated),
+                "gain_timestamp":  time.time(),
+                "measured":        time.strftime("%Y-%m-%d %H:%M"),
             })
-            self._data[key] = entry
+            self._data[band] = entry
             try:
                 self._save_locked()
             except Exception as exc:
-                # Rollback in-memory entry
-                if old_entry is None:
-                    self._data.pop(key, None)
+                if old is None:
+                    self._data.pop(band, None)
                 else:
-                    self._data[key] = old_entry
-                print(f"[PresetStore] save_gain Disk-Fehler {key}: {exc}")
+                    self._data[band] = old
+                print(f"[PresetStore] save_gain Disk-Fehler {band}: {exc}")
                 return False
-        band_fmt = self._format_band(key)
-        print(f"[Kalibrierung] Gespeichert: {band_fmt} {self._mode_label} — "
-              f"ANT1={ant1_gain}dB ANT2={ant2_gain}dB")
+        print(f"[Kalibrierung] Gespeichert: {band} — "
+              f"ANT1={ant1_gain}dB ANT2={ant2_gain}dB "
+              f"ant2_cal={ant2_calibrated}")
         return True
 
-    # ── P22 Atomic Stage / Commit / Discard ─────────────────────────────
+    # ── P22 Atomic Stage / Commit / Discard ────────────────────────
 
-    def stage_gain(self, band: str, ft_mode: str, *,
+    def stage_gain(self, band: str, *,
                    rxant: str, ant1_gain: int, ant2_gain: int,
-                   ant1_avg: float = 0.0, ant2_avg: float = 0.0) -> None:
-        """P22: Phase-2-Werte in Memory parken. KEIN Disk-Write.
-
-        Werte landen erst auf Disk wenn ``commit_gain`` aufgerufen wird
-        oder werden via ``discard_staged``/``discard_all_staged``
-        verworfen (Cancel, App-Quit, Adaptiv-Stop).
-        """
-        key = self._key(band, ft_mode)
+                   ant1_avg: float = 0.0, ant2_avg: float = 0.0,
+                   ant2_calibrated: bool = True) -> None:
+        """P22: Phase-2-Werte in Memory parken. KEIN Disk-Write."""
         with self._lock:
-            self._staged[key] = {
-                "rxant":     rxant,
-                "ant1_gain": int(ant1_gain),
-                "ant2_gain": int(ant2_gain),
-                "ant1_avg":  round(float(ant1_avg), 1),
-                "ant2_avg":  round(float(ant2_avg), 1),
+            self._staged[band] = {
+                "rxant":           rxant,
+                "ant1_gain":       int(ant1_gain),
+                "ant2_gain":       int(ant2_gain),
+                "ant1_avg":        round(float(ant1_avg), 1),
+                "ant2_avg":        round(float(ant2_avg), 1),
+                "ant2_calibrated": bool(ant2_calibrated),
             }
-        band_fmt = self._format_band(key)
-        print(f"[Kalibrierung] Staged (Memory): {band_fmt} {self._mode_label} — "
+        print(f"[Kalibrierung] Staged: {band} — "
               f"ANT1={ant1_gain}dB ANT2={ant2_gain}dB")
 
-    def commit_gain(self, band: str, ft_mode: str) -> bool:
+    def commit_gain(self, band: str) -> bool:
         """P34-Stufe2: staged Gain atomar persistieren.
 
-        Returns:
-            True bei Erfolg.
-            False wenn nichts staged (Aufrufer-Bug) ODER Disk-Fehler.
+        Returns True bei Erfolg, False bei nichts-staged oder Disk-Fehler.
         """
-        key = self._key(band, ft_mode)
-        now = time.time()
         with self._lock:
-            staged = self._staged.get(key)
+            staged = self._staged.get(band)
             if staged is None:
-                return False  # nichts zu committen → Aufrufer-Bug
-            old_entry = self._data.get(key)
-            entry = dict(old_entry or {})
+                return False
+            old = self._data.get(band)
+            entry = dict(old or {})
             entry.update(staged)
-            entry["gain_timestamp"] = now
-            entry["measured"]       = time.strftime("%Y-%m-%d %H:%M")
-            self._data[key] = entry
+            entry["gain_timestamp"] = time.time()
+            entry["measured"] = time.strftime("%Y-%m-%d %H:%M")
+            self._data[band] = entry
             try:
                 self._save_locked()
             except Exception as exc:
-                # Rollback in-memory; staged bleibt fuer Retry
-                if old_entry is None:
-                    self._data.pop(key, None)
+                if old is None:
+                    self._data.pop(band, None)
                 else:
-                    self._data[key] = old_entry
+                    self._data[band] = old
                 print(f"[PresetStore] commit_gain Disk-Fehler "
-                      f"{key}: {exc}. Staged bleibt erhalten.")
+                      f"{band}: {exc}. Staged bleibt erhalten.")
                 return False
-            # Erst nach erfolgreichem Disk-Write staged entfernen
-            self._staged.pop(key, None)
-        band_fmt = self._format_band(key)
-        print(f"[Kalibrierung] Atomar committed: {band_fmt} {self._mode_label} — Gain")
+            self._staged.pop(band, None)
+        print(f"[Kalibrierung] Atomar committed: {band}")
         return True
 
-    def discard_staged(self, band: str, ft_mode: str) -> bool:
-        """P22: Einzelnen staged-Eintrag verwerfen.
-
-        Returns True wenn etwas im Buffer war, False sonst.
-        """
-        key = self._key(band, ft_mode)
+    def discard_staged(self, band: str) -> bool:
+        """P22: einzelner staged-Eintrag verwerfen."""
         with self._lock:
-            removed = self._staged.pop(key, None) is not None
+            removed = self._staged.pop(band, None) is not None
         if removed:
-            band_fmt = self._format_band(key)
-            print(f"[Kalibrierung] Staged verworfen: {band_fmt} {self._mode_label}")
+            print(f"[Kalibrierung] Staged verworfen: {band}")
         return removed
 
     def discard_all_staged(self) -> int:
-        """P22: Alle staged-Eintraege verwerfen (App-Quit-Pfad).
-
-        Returns Anzahl entfernter Keys.
-        """
+        """P22: alle staged-Eintraege verwerfen (App-Quit-Pfad)."""
         with self._lock:
             n = len(self._staged)
             self._staged.clear()
         return n
 
-    def has_staged(self, band: str, ft_mode: str) -> bool:
-        """P22-Diagnostik: ist ein staged-Eintrag fuer band+mode da?"""
+    def has_staged(self, band: str) -> bool:
         with self._lock:
-            return self._key(band, ft_mode) in self._staged
+            return band in self._staged
 
-    # ── Migration aus config.json ─────────────────────────────────────────────
+    # ── Backwards-Compat (v0.92-API, leitet auf Gain-Variante) ─────
 
-    def migrate_from_settings(self, settings_data: dict, mode: str = "standard") -> None:
-        """Einmalige Migration aus altem config.json-Format."""
-        with self._lock:
-            if self._data:
-                return
+    def is_valid(self, band: str) -> bool:
+        """[v0.92-Alias] Aequivalent zu is_valid_gain()."""
+        return self.is_valid_gain(band)
 
-            gain_key = "dx_presets" if mode == "standard" else "dx_gain_presets"
-            migrated = 0
-
-            for raw_key, entry in settings_data.get(gain_key, {}).items():
-                if not isinstance(entry, dict):
-                    continue
-                key = self._normalize_key(raw_key)
-                if not key:
-                    continue
-                existing = dict(self._data.get(key) or {})
-                old_ts = entry.get("timestamp", time.time() - GAIN_VALIDITY_SECONDS - 1)
-                existing.update({
-                    "rxant":          entry.get("rxant", "ANT1"),
-                    "ant1_gain":      int(entry.get("ant1_gain", entry.get("gain", 10))),
-                    "ant2_gain":      int(entry.get("ant2_gain", entry.get("gain", 10))),
-                    "ant1_avg":       float(entry.get("ant1_avg", 0.0)),
-                    "ant2_avg":       float(entry.get("ant2_avg", 0.0)),
-                    "gain_timestamp": old_ts,
-                    "measured":       entry.get("measured", ""),
-                })
-                self._data[key] = existing
-                migrated += 1
-
-            # P34-Stufe2: diversity_presets-Migration entfernt — Ratio wird
-            # live von DynamicDiversityController bestimmt, nicht migriert.
-
-            if migrated:
-                self._save_locked()
-                print(f"[Kalibrierung] Migriert: {migrated} Einträge → {self._filepath.name}")
-
-    def _normalize_key(self, raw_key: str) -> Optional[str]:
-        """Verschiedene Key-Formate auf band_FTMODE normalisieren."""
-        FT_MODES = ("FT8", "FT4", "FT2")
-        if "_" not in raw_key:
-            return f"{raw_key}_FT8"
-        parts = raw_key.split("_", 1)
-        if parts[0] in FT_MODES:
-            return f"{parts[1]}_{parts[0]}"
-        if parts[1] in FT_MODES:
-            return raw_key
-        return None
+    def get_age_minutes(self, band: str) -> Optional[int]:
+        """[v0.92-Alias] Aequivalent zu get_gain_age_minutes()."""
+        return self.get_gain_age_minutes(band)

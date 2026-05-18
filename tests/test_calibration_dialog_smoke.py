@@ -1,10 +1,11 @@
-"""Smoke-Tests fuer _show_calibration_done Auto-Close (Fix F v0.83).
+"""Smoke-Tests fuer _show_calibration_done.
 
-Prueft:
-- QTimer wird mit 3000ms als Child von dlg gestartet
-  (R1-Final-Review-Fix: kein parentless singleShot).
-- Dialog hat KEINEN OK-Button mehr.
-- Dialog ist non-modal (setModal nicht True gesetzt).
+P79 (v0.97.51): Modal-Dialog komplett entfernt. Diese 3 Tests sind
+obsolet — die ehemaligen Dialog-Properties (3000ms-Timer, kein OK-Button,
+non-modal) sind durch „kein Dialog ueberhaupt" abgeloest. Die neue
+Source-Level-Test-Coverage liegt in `test_p79_ui_bundle.py` (T9-T11).
+
+Hier bleibt nur die Fix-G-Coverage fuer DXTuneDialog erhalten.
 """
 import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -19,86 +20,33 @@ def _ensure_app():
     return QApplication.instance() or QApplication([])
 
 
-def test_calibration_done_starts_3000ms_timer():
-    """Fix F: QTimer mit 3000ms wird auf dlg als Parent gestartet.
+def test_calibration_done_no_dialog_p79():
+    """P79: _show_calibration_done erstellt KEINEN QDialog mehr.
 
-    R1-Final-Review-Fix: Timer ist Child von dlg (nicht parentless
-    singleShot statics) damit App-Close den Timer mit dlg zerstoert
-    und kein Crash auf gestorbenem Python-Wrapper passiert.
+    Ersetzt die alten 3 Smoke-Tests (Timer/Button/Modal) — Mike-Wunsch
+    18.05.: „seperates info fenster modual weg". Loesung jetzt:
+    add_info-Zeile + Statusbar-Echo, kein Dialog.
     """
     _ensure_app()
 
     from ui.mw_radio import RadioMixin
+    from unittest.mock import MagicMock
 
     mw = QMainWindow()
+    mw.qso_panel = MagicMock()
+    # statusBar() von QMainWindow ist real verfuegbar — kein Mock noetig
     RadioMixin._show_calibration_done(mw, "20m", 20, 0)
 
+    # KEIN QDialog darf erzeugt worden sein
     dialogs = mw.findChildren(QDialog)
-    assert dialogs, "Mindestens 1 Dialog erstellt"
-    dlg = dialogs[-1]
-
-    timers = dlg.findChildren(QTimer)
-    assert timers, "QTimer muss als Child von dlg vorhanden sein"
-    timer = timers[0]
-    assert timer.isSingleShot(), "Timer muss singleShot sein"
-    assert timer.interval() == 3000, (
-        f"Timer-Interval muss 3000ms sein, war {timer.interval()}"
-    )
-    assert timer.isActive(), "Timer muss aktiv sein nach show()"
-
-    timer.stop()
-    dlg.deleteLater()
-
-
-def test_calibration_done_no_ok_button():
-    """Fix F: Dialog hat KEINEN OK-Button mehr."""
-    _ensure_app()
-
-    from ui.mw_radio import RadioMixin
-
-    mw = QMainWindow()
-    RadioMixin._show_calibration_done(mw, "40m", 15, None)
-
-    dialogs = mw.findChildren(QDialog)
-    assert dialogs, "Mindestens 1 Dialog erstellt"
-    dlg = dialogs[-1]
-
-    buttons = dlg.findChildren(QPushButton)
-    assert len(buttons) == 0, (
-        f"Kein OK-Button erlaubt (gefunden: {len(buttons)})"
+    assert len(dialogs) == 0, (
+        f"P79: Dialog-Erzeugung verboten, gefunden: {len(dialogs)}"
     )
 
-    labels = dlg.findChildren(QLabel)
-    assert len(labels) >= 2, (
-        f"Erwartet >= 2 Labels (Titel + Info), gefunden: {len(labels)}"
-    )
-
-    # Timer stoppen und dlg cleanen
-    for t in dlg.findChildren(QTimer):
-        t.stop()
-    dlg.deleteLater()
-
-
-def test_calibration_done_non_modal():
-    """Fix F: Dialog ist NICHT modal (Mike kann weiterarbeiten)."""
-    _ensure_app()
-
-    from ui.mw_radio import RadioMixin
-
-    mw = QMainWindow()
-    RadioMixin._show_calibration_done(mw, "20m", 20, 0)
-
-    dialogs = mw.findChildren(QDialog)
-    assert dialogs, "Mindestens 1 Dialog erstellt"
-    dlg = dialogs[-1]
-
-    assert not dlg.isModal(), (
-        "Dialog darf nicht modal sein — Mike soll weiterarbeiten koennen"
-    )
-
-    for t in dlg.findChildren(QTimer):
-        t.stop()
-    dlg.deleteLater()
+    # qso_panel.add_info MUSS aufgerufen worden sein
+    mw.qso_panel.add_info.assert_called_once()
+    args = mw.qso_panel.add_info.call_args[0]
+    assert args[0].startswith("✓ Kalibrierung 20m gespeichert.")
 
 
 # ── Fix G v0.86 — Falscher Kalibrierungstext im Normal-Modus ─────────────────

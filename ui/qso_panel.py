@@ -12,6 +12,19 @@ from PySide6.QtGui import QFont, QTextCursor, QColor, QTextCharFormat
 from ui.logbook_widget import LogbookWidget
 
 
+# P79 (v0.97.51): Symbol-Auto-Detect in add_info (Variante B KISS).
+# Wenn der Text mit einem dieser Symbole beginnt, wird das Symbol farbig
+# gerendert, der Rest bleibt im heutigen Dezent-Grau (#666666). Mike-Wunsch
+# „Warnungen sichtbarer, Rest lesbar". Neue Eintraege nur bei kuenftigen
+# add_info-Praefixen noetig — bestehende ~30 Call-Sites bleiben unveraendert.
+_SYMBOL_COLORS = {
+    "⚠": "#FFAA00",   # Orange (analog Bundle F v0.97.23: Magenta→Orange)
+    "✓": "#44FF44",   # Hellgruen (analog add_qso_complete)
+    "✗": "#FF4444",   # Hellrot (analog add_timeout)
+    "⏳": "#44BBFF",   # Cyan (analog add_rx)
+}
+
+
 # Signal wie von QTabWidget — Mixin sendet Index-Wechsel
 class QSOPanel(QWidget):
     """QSO-Verlaufsfenster mit Tabs: Live Log + Logbuch."""
@@ -296,7 +309,25 @@ class QSOPanel(QWidget):
         self._append_colored("─" * 30, "#333333")
 
     def add_info(self, text: str):
-        """Info-Nachricht anzeigen."""
+        """Info-Nachricht anzeigen.
+
+        P79 (v0.97.51): Symbol-Auto-Detect — beginnt der Text mit
+        ⚠/✓/✗/⏳, wird das Symbol in der zugehoerigen Farbe gerendert,
+        der Rest bleibt dezent grau (#666). KISS — keine Call-Site-
+        Migration der ~30 Aufrufer.
+        """
+        # Empty-Guard: leere Calls verworfen (kein unsichtbarer Append).
+        if not text:
+            return
+        # Symbol-Loop deterministisch (Python 3.7+ Dict-Order).
+        for symbol, color in _SYMBOL_COLORS.items():
+            if text.startswith(symbol):
+                rest = text[len(symbol):]
+                self._append_two_color(
+                    f"       {symbol}", color,
+                    rest, "#666666"
+                )
+                return
         self._append_colored(f"       {text}", "#666666")
 
     def _update_slot_display(self):

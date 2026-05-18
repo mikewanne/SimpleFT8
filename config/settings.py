@@ -109,6 +109,10 @@ class Settings:
         self._data.pop("max_decode_freq", None)
         # P52 (v0.97.41): stats_enabled-Toggle entfernt, Stats immer an.
         self._data.pop("stats_enabled", None)
+        # P80 (v0.97.52): normal_presets nach unified PresetStore migriert.
+        # Idempotent (Pop ist No-op bei fehlendem Key). Migration der Werte
+        # selbst laeuft in PresetStore.__init__ (migrate_legacy_files).
+        self._data.pop("normal_presets", None)
         # P71 (v0.97.47): tune_duration_s Whitelist 5/10/15 — alter Wert 30
         # (oder beliebig) → Fallback 15. Idempotent.
         _td = self._data.get("tune_duration_s")
@@ -269,24 +273,24 @@ class Settings:
         return presets.get(band)
 
     def get_normal_preset(self, band: str) -> dict:
-        """Normal-Modus Gain-Preset — nie aus Diversity-Presets. Standard: PREAMP_PRESETS-Wert."""
-        from radio.presets import PREAMP_PRESETS
-        presets = self._data.get("normal_presets", {})
-        if band in presets:
-            return presets[band]
-        return {"rxant": "ANT1", "gain": PREAMP_PRESETS.get(band, 10)}
+        """[DEPRECATED P80, v0.97.52] Normal-Modus Gain liegt jetzt im
+        unified ``PresetStore`` (``~/.simpleft8/kalibrierung/presets.json``).
+        Aufrufer sollen ``self._gain_store.get(band)`` nutzen.
+
+        Returnt leeres dict — alle Live-Aufrufer wurden in P80 migriert.
+        Stub bleibt fuer 1 Version als Backwards-Compat-Schutz.
+        """
+        print("[P80] DEPRECATED settings.get_normal_preset gerufen — "
+              "Aufrufer auf _gain_store.get(band) umstellen.")
+        return {}
 
     def save_normal_preset(self, band: str, gain: int, rxant: str = "ANT1"):
-        """Normal-Modus Gain-Preset speichern (nach manueller Kalibrierung)."""
-        import time
-        if "normal_presets" not in self._data:
-            self._data["normal_presets"] = {}
-        self._data["normal_presets"][band] = {
-            "rxant": rxant,
-            "gain": gain,
-            "measured": time.strftime("%Y-%m-%d %H:%M"),
-        }
-        self.save()
+        """[DEPRECATED P80, v0.97.52] No-op — Persistenz uebernimmt jetzt
+        ``PresetStore.save_gain(band, ...)`` im unified Store.
+        """
+        print(f"[P80] DEPRECATED settings.save_normal_preset({band}, "
+              f"gain={gain}) gerufen — Aufrufer auf "
+              f"_gain_store.save_gain umstellen.")
 
     def get_normal_tx_freq(self, band: str) -> int:
         """Manuell eingestellte TX-Frequenz pro Band fuer Normal-Modus.
