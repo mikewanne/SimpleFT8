@@ -327,6 +327,13 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         # Sperre verhindert das; Cancel wird stattdessen ueber
         # _tune_convergence_cancelled an die laufende Schleife weitergeleitet.
         self._tune_stop_active: bool = False
+        # P76-A SAFETY (v0.97.49): SWR-Wert direkt vor tune_off() eingefroren.
+        # FlexRadio liefert nach tune_off() ohne TX-Traeger Mess-Artefakte <1.0
+        # die in _handle_meter auf 1.0 geclamped werden → ueberschreibt
+        # _last_swr → Post-Check 2s spaeter liest 1.0 → false-OK-Bug.
+        # Freeze in _tune_stop direkt vor tune_off, Read+Reset in
+        # _tune_post_swr_check. Siehe HISTORY P76-A.
+        self._tune_last_valid_swr: float | None = None
 
     def _init_power_state(self):
         """Auto TX Level Regelung (zweistufig: rfpower primär, audio sekundär)."""
@@ -1165,7 +1172,13 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
             if self.radio.ip:
                 self.radio.tx_audio_level = self.settings.get("tx_level", 100) / 100.0
                 self.radio.set_power(self.settings.get("power_preset", 15))
-                self.radio.set_swr_limit(self.settings.get("swr_limit", 3.0))
+                _new_limit = self.settings.get("swr_limit", 3.0)
+                # P76-DBG (temporaer Mike-Field-Test 18.05.): SWR-Limit-Wechsel
+                # nachvollziehen — wichtig fuer Freischalt-Pfad-Diagnose.
+                print(f"[P76-DBG] Settings closed: swr_limit -> {_new_limit} "
+                      f"blocked_bands={sorted(self._swr_blocked_bands)} "
+                      f"band={self.settings.band.upper()}")
+                self.radio.set_swr_limit(_new_limit)
             # Debug-Konsole Toggle aus Settings
             debug_vis = self.settings.get("debug_console_visible", False)
             self._debug_console.setVisible(debug_vis)

@@ -188,6 +188,15 @@ class TXMixin:
             # User-Cancel: keine Convergenz, _tune_converged_rf bleibt None
             self._tune_converged_rf = None
 
+        # P76-A SAFETY (v0.97.49): SWR einfrieren BEVOR tune_off().
+        # Nach tune_off() liefert FlexRadio Meter-Updates ohne TX-Traeger
+        # Werte <1.0 die in _handle_meter auf 1.0 geclamped werden →
+        # ueberschreibt radio._last_swr → Post-Check 2s spaeter liest 1.0
+        # → false-OK-Bug (Phase-B-Skip-Pfad: echter SWR 2.7 verloren).
+        # Freeze unconditional (kein radio.ip-Guard — last_swr ist
+        # lokale Property, kein Hardware-Zugriff).
+        self._tune_last_valid_swr = self.radio.last_swr
+
         # tune_off + VFO+Power zurück
         self.radio.tune_off()
         self._tune_active = False
@@ -251,7 +260,22 @@ class TXMixin:
         is_auto = self._auto_tune_running
         dlg = self._auto_tune_dialog
 
+        # P76-DBG (temporaer Mike-Field-Test 18.05.): Entry-State loggen
+        # damit fehlende „Band freigegeben"-Meldung diagnostiziert werden kann.
+        print(f"[P76-DBG] _tune_post_swr_check ENTRY "
+              f"is_auto={is_auto} "
+              f"frozen_swr={getattr(self, '_tune_last_valid_swr', 'MISSING')} "
+              f"radio.last_swr={self.radio.last_swr if self.radio.ip else 'no-radio'} "
+              f"swr_limit={self.settings.get('swr_limit', 3.0)} "
+              f"band={self.settings.band.upper()} "
+              f"blocked_bands={sorted(self._swr_blocked_bands)} "
+              f"tuner_present={self.settings.get('tuner_present', True)}")
+
         if not self.radio.ip:
+            # P76-A SAFETY (R1-F6): Stale-State-Reset auch im Disconnect-Pfad,
+            # sonst haengt gefrorener Wert von altem TUNE und naechster TUNE
+            # nach Re-Connect liest stale Wert.
+            self._tune_last_valid_swr = None
             if is_auto and dlg is not None:
                 # P71: DONE FAIL disconnect-Log
                 print(f"[P54a] DONE FAIL reason=disconnect "
@@ -259,7 +283,20 @@ class TXMixin:
                 dlg.auto_tune_done.emit(False, 0.0, 0.0)
             return
 
-        swr_now = self.radio.last_swr
+        # P76-A SAFETY (v0.97.49): gefrorenen Wert lesen (waehrend TX gemessen).
+        # R1-F5+F13: KEIN Fallback auf radio.last_swr — der koennte durch
+        # Clamp-Bug (1.0) faelschlich SWR-OK signalisieren. Bei None oder <1.0
+        # garantiert in else-Branch (SWR-bad → Marker setzen + Hinweis).
+        swr_frozen = self._tune_last_valid_swr
+        self._tune_last_valid_swr = None  # IMMER Reset (Stale-Schutz)
+
+        if swr_frozen is None or swr_frozen < 1.0:
+            print(f"[P76-A] WARNUNG: Freeze ungueltig (got {swr_frozen!r}) "
+                  f"→ FAIL-Behandlung (kein false-OK durch Clamp-Bug)")
+            _swr_limit_fail = self.settings.get("swr_limit", 3.0)
+            swr_now = _swr_limit_fail + 1.0  # garantiert > limit → else-Branch
+        else:
+            swr_now = swr_frozen
         swr_limit = self.settings.get("swr_limit", 3.0)
         band = self.settings.band.upper()
 
@@ -270,9 +307,15 @@ class TXMixin:
 
         from PySide6.QtWidgets import QMessageBox
 
+        # P76-DBG: Branch-Entscheidung loggen
+        print(f"[P76-DBG] BRANCH swr_now={swr_now:.2f} swr_limit={swr_limit:.2f} "
+              f"-> {'SWR-OK' if swr_now <= swr_limit else 'SWR-BAD'}")
+
         if swr_now <= swr_limit:
             was_blocked = band in self._swr_blocked_bands
             self._swr_blocked_bands.discard(band)
+            print(f"[P76-DBG] SWR-OK was_blocked={was_blocked} "
+                  f"will_emit_freigegeben={was_blocked}")
 
             # P54b (R1-F1): RFPreset-Stuetzpunkt unter nominaler Last (10 W,
             # rf=10) speichern wenn Messwert plausibel. Schluessel ist die
@@ -336,7 +379,15 @@ class TXMixin:
                       f"rf={rf_logged} duration={_dur}s")
                 dlg.auto_tune_done.emit(True, swr_now, avg_fwdpwr)
         else:
-            # AC7 P63: Marker bleibt rot. R1-F2: kein QMessageBox bei Auto-Tune.
+            # P76-C (v0.97.50): TUNE-bad setzt Band-Marker proaktiv.
+            # Vorher wurde Marker nur vom P53-Watchdog beim TX-Versuch
+            # gesetzt — User konnte CQ klicken obwohl Tuner-Match fehlschlug.
+            # Marker-Set VOR is_auto-Abzweigung → konsistent fuer beide
+            # Pfade (manuell + Auto-Tune bei Bandwechsel).
+            tuner = self.settings.get("tuner_present", True)
+            if tuner:
+                self._swr_blocked_bands.add(band)
+
             if is_auto and dlg is not None:
                 # P71: DONE FAIL swr_bad-Log
                 print(f"[P54a] DONE FAIL reason=swr_bad "
@@ -344,13 +395,20 @@ class TXMixin:
                       f"swr={swr_now:.1f} limit={swr_limit:.1f}")
                 dlg.auto_tune_done.emit(False, swr_now, avg_fwdpwr)
             else:
-                # P75 (v0.97.48): QMessageBox raus, stattdessen rote Zeile
-                # im Live-Log. Mike-Spec „weniger Fenster die aufploppen".
-                self.qso_panel.add_info(
-                    f"⚠ Tuner konnte nicht matchen — SWR {swr_now:.1f} > "
-                    f"Limit {swr_limit:.1f}. Antenne pruefen oder TUNE "
-                    f"wiederholen."
-                )
+                # P75 (v0.97.48): QMessageBox raus, rote Zeile im Live-Log.
+                # P76-C (v0.97.50): Text variiert je nach Marker-State.
+                if tuner:
+                    self.qso_panel.add_info(
+                        f"⚠ Band {band} gesperrt — SWR {swr_now:.1f} > "
+                        f"Limit {swr_limit:.1f}. Manueller TUNE zum "
+                        f"Freischalten nach Antennen-Check."
+                    )
+                else:
+                    self.qso_panel.add_info(
+                        f"⚠ Tuner konnte nicht matchen — SWR {swr_now:.1f} > "
+                        f"Limit {swr_limit:.1f}. Antenne pruefen oder TUNE "
+                        f"wiederholen."
+                    )
         print(f"[P63] Post-TUNE — SWR {swr_now:.1f}, Limit {swr_limit:.1f}")
 
     # ── P54-FIX (v0.97.45) Closed-Loop-Convergenz ─────────────────

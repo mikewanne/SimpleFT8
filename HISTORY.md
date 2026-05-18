@@ -3,6 +3,165 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-18 v0.97.50 — P76-C: TUNE-bad setzt Band-Marker proaktiv (P63-Luecke)
+
+**Trigger:** Mike-Field-Test nach P76-A: SWR-Limit=1.5 in Settings,
+TUNE auf 40m → SWR-bad (2.0) korrekt geloggt, ABER CQ-Button blieb
+klickbar → TX startet → P53-Watchdog feuert beim ersten TX-Versuch.
+
+**Mike-Spec:** „cq ruf trotzdem möglich, bricht dann aber ab weil swr
+sperre greift. aber bedinung sollte gar nicht erst möglich sein alles
+müsste gespeert sein ausser bandwechsel oder manuelles tunen, fals ich
+problem beseitigt hab um zu prüfen und/oder band freizugeben zum funken"
+
+**Root Cause:** `_tune_post_swr_check` else-Branch (SWR-bad) hatte den
+Kommentar „AC7 P63: Marker bleibt rot" — irrefuehrend. IM CODE wurde
+KEIN `_swr_blocked_bands.add(band)` aufgerufen. Marker wurde heute nur
+in `_on_swr_alarm` (P53-Watchdog beim TX-Alarm) gesetzt.
+
+**P63-Luecke:** P63 nahm an dass Marker schon vom Watchdog gesetzt
+war wenn TUNE laeuft — aber bei initialem TUNE OHNE vorherigen TX-Alarm
+ist Marker leer → Pre-Checks in CQ/OMNI/Hunt/Station-Click greifen nicht.
+
+**Voller V1→V2→R1→V3→Code→Final-R1-Workflow** mit DeepSeek-V4-pro.
+
+**R1-V4-pro:** 12 Findings, alle ⚪ oder 🟡 (keine ROT/ORANGE).
+- F01-F06 ⚪ Architektur/Race/Hardware/Regression: alle uebernommen
+- **F07 🟡** Kommentar „AC7 P63: Marker bleibt rot" korrigieren →
+  „P76-C: Marker setzen wenn tuner_present=True"
+- **F08 🟡** P63 AC7-Doku in CLAUDE.md anpassen
+- F09 ⚪ Text-Varianten OK
+- F10 🟡 AutoTuneDialog indirekt via add_info beim naechsten Klick — KISS-akzeptiert
+
+**Final-R1 V4-pro „PUSH FREIGEGEBEN"** (knapp & klar).
+
+**V4-pro 25-Cycle-Bilanz: 0 Halluzinationen, 100% verifizierbar.**
+
+**Fix (Variante A, KISS, ~10 LOC):**
+
+Im `_tune_post_swr_check` else-Branch (SWR-bad), VOR is_auto-Abzweigung:
+```python
+tuner = self.settings.get("tuner_present", True)
+if tuner:
+    self._swr_blocked_bands.add(band)
+```
+
+Plus Text-Variante: mit Tuner „Band X gesperrt — Manueller TUNE zum
+Freischalten nach Antennen-Check", ohne Tuner „Tuner konnte nicht
+matchen — Antenne pruefen". Pattern uebernommen aus `_on_swr_alarm`.
+
+**Was bleibt klickbar (Mike-Spec):**
+- **Bandwechsel:** `_on_band_changed` blockt nicht den Wechsel (nur Auto-Tune)
+- **Manueller TUNE:** `_on_tune_clicked` hat KEINEN Marker-Check → Freischalt-Pfad
+- **Pre-Checks** (CQ/OMNI/Hunt/Station-Click/Diversity-Preset) greifen
+  ab jetzt auch bei TUNE-bad-Marker (vorher nur Watchdog-Marker)
+
+**Geaenderte Files:**
+- `main.py` APP_VERSION 0.97.49 → 0.97.50
+- `ui/mw_tx.py` else-Branch erweitert (~10 LOC)
+- `tests/test_p76c_marker_on_tune_bad.py` NEU 10 Tests T1-T10
+- `tests/test_p75_button_modal.py` T9 angepasst (sucht jetzt P76-C-Marker
+  statt alten „AC7 P63: Marker bleibt rot"-Kommentar)
+
+**Tests:** 1474 → **1484 grün** (+10 P76-C).
+
+**Backup:** `Appsicherungen/2026-05-18_v0.97.49_vor_p76c/` (mw_tx.py, main.py).
+
+**Field-Test pending bei Mike:**
+- F1 (Radio): Limit=1.5, TUNE auf 40m → SWR-bad → CQ-Klick SOFORT „⚠ CQ
+  blockiert — Band 40m SWR-Sperre" (KEIN TX-Start)
+- F2 (Radio): wie F1 + OMNI-Klick → blockiert
+- F3 (Radio): wie F1 + Auto-Hunt-Klick → blockiert
+- F4 (Radio): wie F1 + manueller TUNE bei besserem SWR → Marker geloescht
+  → CQ wieder klickbar
+- F5 (Radio): wie F1 + Bandwechsel auf 17m → bleibt klickbar
+- F6 (ohne Radio): Tests gruen → ✓ erledigt
+
+---
+
+## 2026-05-18 v0.97.49 — P76-A: SWR-Safety-Bug (False-OK durch FlexRadio-Clamp nach tune_off)
+
+**Trigger:** Mike-Field-Test 17m vormittags:
+- Live-SWR waehrend TUNE: **2.7** (Limit 2.5)
+- Erwartung: „TUNE fehlgeschlagen — SWR 2.7" + Band-Marker setzen (P63)
+- TATSAECHLICH im QSO-Log: **„✓ TUNE OK — SWR 1.0"** (3× hintereinander)
+- Band-Marker NICHT gesetzt → App glaubt 17m sicher fuer 70-W-QSO
+
+**Safety-Schaden:** User-Erwartung „Band okay" obwohl SWR > Limit. P63-Marker bleibt
+ungesetzt → kein Schutz fuer nachfolgende Auto-Pfade. Worst case 70-W-QSO → PA-Schutz
+oder Hardware-Schaden moeglich.
+
+**Root Cause (Code-verifiziert):**
+- `ui/mw_tx.py:_tune_post_swr_check` Z.262 las `swr_now = self.radio.last_swr`
+- Wurde via `QTimer.singleShot(2000, ...)` **2 Sekunden NACH `tune_off()`** ausgefuehrt
+- FlexRadio Meter-Loop laeuft post-tune_off weiter → SWR-Updates ohne TX-Traeger sind
+  chaotisch niedrig (<1.0)
+- `radio/flexradio.py:_handle_meter` Z.1389-1392: `if swr<1.0: swr=1.0` → Clamp
+- `_last_swr` wird durch Clamp-Wert ueberschrieben
+- Post-Check liest 1.0 → `1.0 <= 2.5 = swr_limit` → SWR-OK-Branch → false-OK
+
+**Mike-Fall:** Phase A misst `swr_after_match=2.7` (TX aktiv, valid) → `2.7 > 2.5`
+→ Phase B uebersprungen → `tune_off()` → 2 s spaeter `last_swr=1.0` (Clamp) → false-OK.
+
+**Voller V1→V2→R1→V3→Code→Final-R1-Workflow** autonom mit DeepSeek-V4-pro.
+
+**R1-V4-pro fand 3 sicherheitsrelevante Findings** (alle uebernommen):
+- F5 🟡 KEIN Fallback auf `radio.last_swr` — der koennte durch Clamp-Bug 1.0 sein
+  → false-OK reproduziert. Stattdessen FAIL-Behandlung bei None.
+- F6 🔴 Disconnect-Branch (`if not radio.ip: return`) braucht expliziten Reset
+  von `_tune_last_valid_swr=None` → sonst Stale-State fuer naechsten TUNE.
+- F13 🟡 `<1.0` ebenfalls FAIL behandeln (physikalisch unmoeglich, Clamp-Hinweis).
+
+**Fix (Variante A, KISS, ~15 LOC):**
+1. State-Var `_tune_last_valid_swr: float | None = None` in `main_window.py:__init__`
+2. In `_tune_stop` direkt VOR `radio.tune_off()` (Z.198):
+   `self._tune_last_valid_swr = self.radio.last_swr` — Freeze des letzten valid
+   Werts waehrend TX noch aktiv ist.
+3. In `_tune_post_swr_check`:
+   - Disconnect-Branch: `self._tune_last_valid_swr = None` (R1-F6 Stale-Schutz)
+   - Read+Reset: `swr_frozen = self._tune_last_valid_swr; self._tune_last_valid_swr = None`
+   - FAIL bei None oder <1.0: `swr_now = swr_limit + 1.0` (zwingt else-Branch)
+
+**Variante C (Sampling-deque) verworfen:** KISS — Single-Snapshot reicht, Phase B
+liefert kontinuierliche SWR-Updates, letzter Wert vor `tune_off()` ist gewollt.
+
+**Final-R1 V4-pro: „PUSH FREIGEGEBEN."** 0 KP, 0 ROT/ORANGE/Blocker. 1 🟡 Hinweis
+(Exception-Schutz) als nicht-blockierend bewertet (Reset passiert ZWISCHEN Read und
+moeglicher Exception, daher kein try/finally noetig).
+
+**V4-pro 24-Cycle-Bilanz: 0 Halluzinationen, 100% verifizierbar.** R1-F6 war
+**echter ROT-Bug** der V2-Self-Review entging — Test des Disconnect-Pfads haette
+in Praxis bei jedem Verbindungsverlust waehrend TUNE einen falschen SWR-Wert beim
+naechsten TUNE-Versuch produziert.
+
+**Geaenderte Files:**
+- `main.py` APP_VERSION 0.97.48 → 0.97.49
+- `ui/main_window.py` Init-Variable mit Marker-Kommentar
+- `ui/mw_tx.py` 2 Code-Bloecke (Freeze in `_tune_stop`, Read+Reset+FAIL +
+  Disconnect-Reset in `_tune_post_swr_check`)
+- `tests/test_p76_swr_safety.py` NEU 11 Tests T1-T11 (Source-Level + Functional
+  inkl. T10 Mike-Fall-Simulation, T11 None→FAIL-Pfad)
+- `tests/test_p54_fix.py` Helper `_make_mw_tx_for_post_check` +1 Zeile
+  (`obj._tune_last_valid_swr = swr`)
+- `tests/test_p54_auto_tune.py` Helper `_make_mw_tx_mock` +1 Zeile (analog)
+
+**Tests:** 1463 → **1474 grün** (+11). Alle bestehenden P54/P54-FIX-Tests laufen
+mit Helper-Anpassung weiter.
+
+**Backup:** `Appsicherungen/2026-05-18_v0.97.48_vor_p76a/` (3 Files: main_window.py,
+mw_tx.py, main.py — Bug-Stelle und Init).
+
+**Field-Test pending bei Mike:**
+- F1 (Radio): 17m TUNE → erwartet „⚠ Tuner konnte nicht matchen — SWR 2.7"
+  + Band-Marker rot
+- F2 (Radio): TUNE auf 40m SWR-niedrig → erwartet „✓ TUNE OK — SWR 1.2"
+  mit echtem Wert, NICHT 1.0
+- F3 (Radio): Auto-Tune Bandwechsel → AutoTuneDialog zeigt echten SWR
+- F4 (Radio): Disconnect-Re-Connect → kein Stale-State
+- F5 (ohne Radio): Test-Suite gruen → erledigt
+
+---
+
 ## 2026-05-18 v0.97.48 — P75: TUNE-Button-Bug + Style-Harmonisierung + Fenster-Konsolidierung
 
 **Trigger:** Mike-Field-Test 18.05.2026 nach P71-Release:

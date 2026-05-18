@@ -404,6 +404,12 @@ class RadioMixin:
         # ein 5-Sek-Timer aus dem alten Band-Kontext _enable_diversity() fuer
         # das jetzt verlassene Band auf.
         self._tune_token = None
+        # P76-DBG (temporaer Mike-Field-Test 18.05.): Bandwechsel-Entry mit
+        # Marker-State damit Freischalt-Pfad nachvollziehbar wird.
+        _old_band = self.settings.get("band", "??")
+        print(f"[P76-DBG] _on_band_changed {_old_band} -> {band} "
+              f"blocked_bands={sorted(self._swr_blocked_bands)} "
+              f"swr_limit={self.settings.get('swr_limit', 3.0)}")
         self.settings.set("band", band)
         freq = self.settings.frequency_mhz
         self._has_sent_cq = False

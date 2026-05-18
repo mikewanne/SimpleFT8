@@ -1,8 +1,62 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-18 — P75 TUNE-Button + Modal-Konsolidierung + P71 Bundle
+## Stand 2026-05-18 — P76-C + P76-A SWR-Safety + P75 + P71 Bundle
 
-**Aktueller Code-Stand:** v0.97.48 (P75), Tests **1463 grün** (+10 P75).
+**Aktueller Code-Stand:** v0.97.50 (P76-C), Tests **1484 grün** (+10 P76-C).
+
+### 🟢 v0.97.50 P76-C — TUNE-bad setzt Band-Marker proaktiv (P63-Luecke)
+
+Mike-Field-Test nach P76-A: SWR-Limit=1.5, TUNE auf 40m → SWR-bad korrekt
+geloggt, ABER CQ blieb klickbar → TX startet → Watchdog feuert erst beim
+TX-Versuch. Mike-Spec: schon vor TX-Klick sperren.
+
+**Root:** `_tune_post_swr_check` else-Branch hatte Kommentar „Marker bleibt rot"
+aber im Code KEIN `_swr_blocked_bands.add(band)` — P63-Luecke. Marker wurde
+heute nur vom P53-Watchdog beim TX-Alarm gesetzt.
+
+**Fix (Variante A, KISS, ~10 LOC):** Marker-Set im else-Branch wenn
+`tuner_present=True`. Pattern aus `_on_swr_alarm` uebernommen. Marker-Set
+VOR is_auto-Abzweigung → manuell + Auto-Tune konsistent. Text-Variante:
+mit Tuner „Band X gesperrt", ohne „Tuner konnte nicht matchen".
+
+**R1-V4-pro:** 12 Findings, 0 ROT/ORANGE, 4 🟡 Doku-Hinweise. Final-R1 V4-pro
+„PUSH FREIGEGEBEN" knapp & klar. **V4-pro 25-Cycle-Bilanz: 0 Halluzinationen.**
+
+**Push pending bis Field-Test:**
+- F1 (Radio): Limit=1.5, TUNE auf 40m → CQ-Klick SOFORT blockiert
+- F2-F3: OMNI/Hunt analog blockiert
+- F4: manueller TUNE bei besserem SWR → Marker geloescht
+- F5: Bandwechsel auf 17m bleibt erlaubt
+
+### 🔴 v0.97.49 P76-A — SWR-Safety-Bug (False-OK durch FlexRadio-Clamp)
+
+Mike-Field-Test 17m: SWR 2.7 (>Limit 2.5) wurde als „TUNE OK SWR 1.0" 3×
+geloggt. Safety-relevant: Band-Marker blieb ungesetzt → App glaubte 17m
+sicher fuer 70-W-QSO → Hardware-Schaden-Risiko.
+
+**Root:** `_tune_post_swr_check` las `radio.last_swr` 2 s nach `tune_off()`.
+FlexRadio Meter-Loop liefert ohne TX-Traeger Mess-Artefakte <1.0 die
+`_handle_meter` auf 1.0 clampt → `_last_swr` ueberschrieben → false-OK.
+
+**Fix (Variante A, KISS, ~15 LOC):** State-Var `_tune_last_valid_swr`,
+Freeze direkt vor `tune_off()`, Read+Reset im Post-Check, FAIL bei None
+oder <1.0 (KEIN Fallback auf `radio.last_swr`).
+
+**R1-V4-pro fand 3 Findings:** F5 (kein Last-swr-Fallback), F6 🔴 (Disconnect-Reset),
+F13 (<1.0 ebenfalls FAIL). Alle uebernommen. Final-R1 V4-pro „PUSH FREIGEGEBEN"
+0 KP, 1 🟡 nicht-blockierend.
+
+**V4-pro 24-Cycle-Bilanz:** 0 Halluzinationen. R1-F6 war echter ROT-Bug
+den V2-Self-Review uebersah.
+
+**Push pending bis Field-Test** (siehe FIELDTESTS.md neu F-P76-A):
+- F1 (Radio): 17m TUNE → „⚠ Tuner konnte nicht matchen — SWR 2.7" + Marker rot
+- F2 (Radio): TUNE 40m SWR-niedrig → „✓ TUNE OK — SWR 1.2" mit echtem Wert
+- F3 (Radio): Auto-Tune Bandwechsel → AutoTuneDialog zeigt echten SWR
+- F4 (Radio): Disconnect-Re-Connect → kein Stale-State
+- F5 (ohne Radio): Tests gruen → ✓ erledigt
+
+### 🟢 v0.97.48 P75 — TUNE-Button-Bug + Style + Fenster-Konsolidierung (Variante A)
 
 ### 🟢 v0.97.48 P75 — TUNE-Button-Bug + Style + Fenster-Konsolidierung (Variante A)
 

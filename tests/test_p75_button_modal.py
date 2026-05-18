@@ -186,9 +186,9 @@ def test_t9_swr_bad_auto_tune_only_signal():
     idx_end = src.find("def _wait_with_event_loop", idx_start)
     block = src[idx_start:idx_end]
     # Im SWR-bad-Branch: is_auto → emit, else → add_info
-    # Suche „if is_auto and dlg is not None" im SWR-bad-Sub-Block
-    # (nach else: Marker bleibt rot)
-    else_marker = block.find("AC7 P63: Marker bleibt rot")
+    # Suche P76-C-Marker im SWR-bad-Sub-Block (ersetzt alten "AC7 P63: Marker
+    # bleibt rot"-Kommentar mit v0.97.50).
+    else_marker = block.find("P76-C")
     assert else_marker > 0
     sub_block = block[else_marker:else_marker + 1500]
     assert "auto_tune_done.emit(False, swr_now" in sub_block, \

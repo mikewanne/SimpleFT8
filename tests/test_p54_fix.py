@@ -150,6 +150,9 @@ def _make_mw_tx_for_post_check(swr=1.5, fwdpwr_samples=None,
     obj.radio.ip = "192.168.1.1"
     obj.radio.last_swr = swr
     obj.radio.radio_type = "flexradio"
+    # P76-A (v0.97.49): _tune_post_swr_check liest jetzt gefrorenen Wert
+    # statt radio.last_swr. Helper muss beide setzen damit Tests valid bleiben.
+    obj._tune_last_valid_swr = swr
     obj.settings.get = MagicMock(side_effect=lambda k, d=None: {
         "swr_limit": 3.0,
     }.get(k, d))

@@ -1,32 +1,114 @@
-# SimpleFT8 TODO — Stand 18.05.2026 (v0.97.48, P75 ERLEDIGT)
+# SimpleFT8 TODO — Stand 18.05.2026 (v0.97.50, P76-A + P76-C ERLEDIGT)
 
 ---
 
-## 🐛 P76 — TUNE-SWR-Log + Dauer-Anzeige-Diskrepanz (Mike-Field-Test 18.05. nach P75)
+## 🎨 P79 — UI: Sperr-Hinweise im QSO-Log sichtbarer machen (Mike-Field-Test 18.05.)
 
-### P76-A: Falscher SWR-Wert im TUNE-OK-Log
+**Mike-Feedback nach P76-C-Test (Screenshot 13:11):**
+„text in qso fenster sehr unscheinbar (dunkelgrau) evt gelb oder rot oder
+fett oder unterstrichen ??? designfrage kein echter bug, bug ist behoben.
+UI-Verbesserung in toto später abklären was am besten aussieht bezuglich
+text formulierung farbe schriftgrösse art. ist ja ne warnung denke sollte
+sichtbarer sein."
 
-**Symptom (Mike-Screenshot 18.05. 09:42):**
-- Während TUNE-Vorgang: SWR-Anzeige zeigt 1.2 (live)
-- Im QSO-Log steht „✓ TUNE OK — SWR 1.0" (3× hintereinander)
-- 11 W TX, 75% TX-Pegel, RF 99% — TUNE ist normal verlaufen
+**Punkte fuer den Workflow:**
 
-**Vermutete Wurzel:** `_tune_post_swr_check` liest `swr_now =
-self.radio.last_swr` **2 s NACH `tune_off()`**. In diesen 2 s ist kein
-TX mehr aktiv → SWR-Messung kann auf Default 1.0 springen (kein
-gültiger Mess-Wert ohne TX-Träger). Logging zeigt deshalb 1.0 statt
-der tatsächlichen TUNE-Endwerts 1.2.
+1. **Text-Formulierung erweitern** (mehrere Handlungsoptionen):
+   - Aktuell: „⚠ Band 40M gesperrt — SWR 2.0 > Limit 1.5. Manueller TUNE
+     zum Freischalten nach Antennen-Check."
+   - Vorschlag: zusaetzlich „Antenne pruefen ODER SWR-Limit in
+     Einstellungen anpassen ODER manueller TUNE zum Freischalten."
 
-**Verifikations-Bedarf:** in `radio/flexradio.py` prüfen wie
-`last_swr` aktualisiert wird wenn kein TX aktiv ist. Vermutung: bleibt
-auf letztem Mess-Wert bis nächste VITA-49-Aktualisierung — und die
-kommt schnell mit „1.0" weil kein TX.
+2. **Style fuer Warnungen im QSO-Log:**
+   - aktuell dunkelgrau (zu unscheinbar)
+   - Vorschlag: rot/orange/gelb + fett ODER unterstrichen
+   - betroffen: alle `⚠`-add_info-Calls (SWR-Sperre, CQ blockiert,
+     OMNI blockiert, Hunt blockiert, Station-Klick blockiert,
+     Diversity blockiert)
 
-**Fix-Idee:** während Phase B (Closed-Loop-Convergenz) den letzten
-gültigen SWR-Wert in `_tune_last_valid_swr` zwischenspeichern, im
-Post-Check diesen Wert ins Log schreiben statt frischen `last_swr`.
+3. **Konsistenz mit anderen Hinweis-Typen:**
+   - „✓"-Erfolg-Zeilen (gruen)
+   - „⚠"-Warn-Zeilen (rot/orange)
+   - normale Info-Zeilen (grau)
+   - Status: existiert das schon Teil-weise? Code-Check noetig.
 
-### P76-B: Auto-TUNE-Dauer länger als eingestellt
+**Workflow:** V1→V2→R1→V3→Code (KISS, vermutlich `qso_panel.add_info`
+um Style-Param erweitern oder neuer `add_warning`-Helper).
+
+**Nicht safety-relevant.** Folge-Bundle nach P76-A/P76-C-Field-Tests.
+
+**Weitere Punkte aus Field-Test 18.05. Nachmittag (Mike-Beobachtungen):**
+
+4. **Gain-Mess-Abbruch wegen SWR — keine Meldung im QSO-Fenster:**
+   - Wenn Diversity-Wechsel Gain-Messung startet und SWR zu hoch ist,
+     wird Gain-Mess abgebrochen. Mike sieht nur Statusbar/Mitteilungs-
+     fenster, NICHT QSO-Log.
+   - Analog zu P76-C: sollte `⚠ Diversity blockiert — Band X SWR zu hoch"
+     im QSO-Log erscheinen.
+
+5. **Modal „Kalibrierung gespeichert" raus → QSO-Log:**
+   - `ui/mw_radio.py:1695-1729` baut separaten QDialog mit 3s Auto-Close
+     („✓ Kalibrierung 40m gespeichert. ANT1: X dB | ANT2: Y dB").
+   - Mike-Spec: weg damit, stattdessen `qso_panel.add_info`-Zeile.
+   - Spart Sekunden, fluessigerer Ablauf (analog P75 QMessageBox-Eliminierung).
+
+6. **Farb-Konvention im QSO-Log (Mike-Vorschlag):**
+   - Positive Meldungen („✓ Band freigegeben", „✓ Kalibrierung gespeichert")
+     → grün
+   - Negative Meldungen („⚠ Band gesperrt", „⚠ Abgebrochen") → rot
+   - Rest dunkelgrau wie heute
+   - Variante: nur Symbol/Praefix gefaerbt, Rest grau (KISS)
+
+---
+
+## ✅ P76-C — TUNE-bad setzt Band-Marker proaktiv (P63-Luecke) — ERLEDIGT v0.97.50
+
+**Umgesetzt 18.05.2026** autonom mit DeepSeek-V4-pro. Voller
+V1→V2→R1→V3→Code→Final-R1-Workflow.
+
+- Mike-Field-Test mit Limit=1.5: TUNE-bad logged korrekt aber CQ blieb klickbar
+- Root: `_tune_post_swr_check` else-Branch hatte KEIN `_swr_blocked_bands.add` —
+  P63-Luecke (Marker wurde heute nur vom Watchdog beim TX-Alarm gesetzt)
+- Fix (Variante A, ~10 LOC): Marker-Set im else-Branch wenn tuner_present=True,
+  VOR is_auto-Abzweigung (manuell + Auto-Tune konsistent)
+- R1 12 Findings, 0 ROT, 4 🟡 (alle uebernommen). Final-R1 „PUSH FREIGEGEBEN"
+- Tests 1474→1484 (+10 P76-C). Plus 1 P75-Test angepasst (Kommentar-Marker)
+- Was bleibt klickbar: Bandwechsel + manueller TUNE (Freischalt-Pfade)
+
+**Field-Test pending bei Mike** (alle Radio-pflichtig):
+- F1: Limit=1.5, TUNE 40m → SWR-bad → CQ-Klick SOFORT blockiert
+- F2: OMNI-Klick blockiert
+- F3: Auto-Hunt-Klick blockiert
+- F4: Manueller TUNE bei besserem SWR → Marker geloescht
+- F5: Bandwechsel auf 17m bleibt erlaubt
+
+---
+
+## ✅ P76-A — SWR-Safety-Bug (False-OK durch FlexRadio-Clamp) — ERLEDIGT v0.97.49
+
+**Umgesetzt 18.05.2026 nach Compact** autonom mit DeepSeek-V4-pro.
+Voller V1→V2→R1→V3→Code→Final-R1-Workflow.
+
+- Mike-Field-Test 17m: SWR 2.7 (>Limit 2.5) wurde als „TUNE OK SWR 1.0" 3× geloggt
+- Root: `_tune_post_swr_check` las `radio.last_swr` 2 s NACH `tune_off()` —
+  FlexRadio Meter-Loop liefert Werte <1.0 → `_handle_meter` Clamp auf 1.0 →
+  `_last_swr` ueberschrieben
+- Fix (Variante A, KISS, ~15 LOC): State-Var `_tune_last_valid_swr`,
+  Freeze direkt vor `tune_off()`, Read+Reset im Post-Check, FAIL bei
+  None oder <1.0
+- R1-V4-pro F5/F6/F13 alle uebernommen (F6 war echter ROT Disconnect-Stale)
+- Final-R1 V4-pro „PUSH FREIGEGEBEN" 0 KP
+- **Tests 1463→1474 (+11 P76-A)**
+
+**Field-Test pending bei Mike** (siehe FIELDTESTS.md):
+- F1 (Radio): 17m TUNE → „⚠ Tuner konnte nicht matchen — SWR 2.7" + Marker rot
+- F2 (Radio): 40m TUNE SWR-niedrig → echter Wert im Log, NICHT 1.0
+- F3 (Radio): Auto-Tune-Dialog zeigt echten SWR
+- F4 (Radio): Disconnect-Re-Connect → kein Stale-State
+
+---
+
+## 🐛 P76-B — Auto-TUNE-Dauer länger als eingestellt (Mike-Field-Test 18.05. nach P75)
 
 **Symptom (Mike-Field-Test 18.05.):** Auto-TUNE bei Bandwechsel auf
 10m mit Setting `tune_duration_s=5` hat „wesentlich länger als 5 s"
