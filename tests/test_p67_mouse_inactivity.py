@@ -128,7 +128,13 @@ def test_t4_toggle_setzt_anker():
 
 
 def test_t5_polling_tick_stoppt_bei_inactivity():
-    """delta = 301 → stop_auto_hunt("mouse_inactive_5min") + add_info."""
+    """delta = 301 → stop_auto_hunt("mouse_inactive_5min") + add_info.
+
+    P81 (v0.97.53): _qso_active_for_msg_defer wird via Mock auf False
+    geforced (= kein aktives QSO) — sonst landet der Test im Defer-Pfad
+    und add_info wird nicht aufgerufen. Defer-Pfad wird in
+    test_p81_autohunt_stop_defer.py separat geprueft.
+    """
     from ui import main_window as mw_mod
 
     obj = MagicMock()
@@ -137,6 +143,8 @@ def test_t5_polling_tick_stoppt_bei_inactivity():
     obj._auto_hunt_polling_timer = MagicMock()
     obj._auto_hunt_last_mouse_t = 0.0
     obj._abort_active_tx = MagicMock()
+    obj._qso_active_for_msg_defer = MagicMock(return_value=False)
+    obj._auto_hunt_stop_msg_pending = False
     obj.qso_panel = MagicMock()
     obj.control_panel = MagicMock()
 

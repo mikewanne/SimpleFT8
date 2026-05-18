@@ -52,6 +52,10 @@ class _FakeMW(QSOMixin, CycleMixin):
         if hasattr(self, "_pending_station_click"):
             self._pending_station_click = None
 
+    def _flush_auto_hunt_stop_msg(self):
+        """P81 (v0.97.53): no-op Stub (echte Impl in MainWindow)."""
+        pass
+
 
 def _make_fake_mw(app, callsign: str = "DA1MHH",
                   locator: str = "JN58") -> _FakeMW:
