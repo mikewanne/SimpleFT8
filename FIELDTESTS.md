@@ -1,41 +1,4 @@
-# Field-Test-Abarbeitungsliste — 17.05.2026
 
-**Sortiert: einfach/schnell zuerst → schwer/umfangreich zuletzt.**
-Ziel: Verifizieren dass die Arbeit aus v0.97.40-46 in der Praxis hält
-bevor wir alles zusammen pushen.
-
-**App-Start:**
-```
-cd "/Users/mikehammerer/Documents/KI N8N Projekte/FT8/SimpleFT8"
-./venv/bin/python3 main.py
-```
-
----
-
-## 🟢 STUFE 1: Einfach + schnell, kein Radio nötig (~15 Min)
-
-### F-S1.1 Bundle-L-Revert (v0.97.40, 1 Min)
-**App starten ohne Radio.** ConnectStatusDialog erscheint mit zwei Buttons.
-- Klick **„ohne Radio weiter"** → Dialog schließt, App läuft im Demo-Modus
-  weiter (kein Quit, anders als zwischen v0.97.38-39).
-- Klick **„Beenden"** → App-Quit.
-
-✅ Beide Buttons machen jetzt verschiedene Sachen (vor Revert: beide gleich).
-
-### F-S1.2 P52 Stats-Toggle (v0.97.41, 2 Min)
-**Settings öffnen.** Tab „FT8 & Diversity".
-- Settings-Toggle „Statistik-Erfassung aktivieren" ist **nicht mehr vorhanden**
-  (komplett raus).
-- App-Start-Log zeigt einmalig: `[Stats-Cleanup] N Dateien älter als 90 Tage gelöscht: 0` (oder N>0 falls alte Stats existieren).
-
-✅ Toggle weg, Cleanup-Log einmal sichtbar.
-
-### F-S1.3 P66 Logbuch-Tab-Auto-Show (v0.97.42, 2 Min)
-**Logbuch-Tab öffnen.** Mindestens 1 QSO-Zeile selektieren.
-- Tab-Wechsel zu QSO-Tab → Tab-Wechsel zurück zu Logbuch.
-- **Detail-Overlay rechts erscheint automatisch** (Mike-Vorschlag 16.05.).
-
-✅ Kein manueller Re-Click nötig.
 
 ### F-S1.4 P67 ohne Radio (v0.97.43, 5 Min) — F1+F3+F5
 **Auto-Hunt-Button starten** (oder via Tooltip aufrufen wenn nicht
