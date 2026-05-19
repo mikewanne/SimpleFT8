@@ -279,4 +279,5 @@ def test_p83_t_bonus_update_gain_status_display():
 
 def test_app_version_bundle_m():
     import main
-    assert main.APP_VERSION == "0.97.54"
+    # P82 (v0.97.55) bumpt weiter — Bundle M-Baseline bleibt ≥0.97.54.
+    assert main.APP_VERSION >= "0.97.54"

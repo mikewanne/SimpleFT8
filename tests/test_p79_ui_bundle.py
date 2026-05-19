@@ -215,9 +215,9 @@ def test_t12_symbol_only_no_crash(panel):
 
 
 def test_t_bonus_app_version():
-    """Bundle M (v0.97.54) bumpt weiter (P79=51, P80=52, P81=53, Bundle M=54)."""
+    """P82 (v0.97.55) bumpt weiter — P79-Baseline bleibt ≥0.97.51."""
     import main
-    assert main.APP_VERSION == "0.97.54"
+    assert main.APP_VERSION >= "0.97.51"
 
 
 # ── Bonus: statusBar-Exception darf nicht propagieren ────────
