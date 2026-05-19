@@ -2,6 +2,47 @@
 
 ---
 
+## 🆕 OFFEN — P82: „ohne Radio weiter" muss Connect immer überspringen (Mike 19.05.2026)
+
+**Symptom:** Bei App-Start startet der Connect-Worker SOFORT parallel
+zum Dialog (`ui/mw_radio.py:94` `threading.Thread(...).start()`). Wenn
+das Radio antwortet bevor Mike „ohne Radio weiter" klicken kann (bei
+120 km Distanz + Radio AN durchaus realistisch innerhalb 1-2s), gewinnt
+`radio.connected.emit` → `dialog.accept()` → App startet MIT Radio.
+
+**Mike-Spec (klar):** „warum muss ich das radio connecten wenn es an ist
+wenn ich sage ohne radio weiter dan OHNE radio weiter und ich brauche
+doch keinen connect."
+
+→ „ohne Radio weiter" muss IMMER Demo-Modus erzwingen, egal ob Radio
+antwortet oder nicht. Aktuell ist es eine Race-Condition.
+
+**Risiko:** Wenn die App ungewollt verbindet und Mike dann TX triggert
+(Auto-Hunt, CQ, TUNE), passiert echter TX auf seiner Antenne — auch
+wenn Mike eigentlich Demo-Modus wollte. **Hardware-Risiko.**
+
+**Lösungs-Ansatz (KISS, ~15 LOC):**
+- ConnectStatusDialog `_on_continue_without_radio()` setzt zusätzlich
+  ein `_user_cancelled = True` Flag.
+- Worker-Thread (`_connect_worker`) prüft vor jeder Verbindungs-Action
+  das Flag, und vor `radio.connected.emit` → wenn cancelled, NICHT
+  emitten.
+- Falls Worker schneller war als der Click und schon `accept()` getriggert
+  hat: in `_on_continue_without_radio` zusätzlich `radio.disconnect()`
+  forcieren bevor `reject()`.
+
+**Alternative (radikaler, sauberer):** Auto-Connect entfernen, User muss
+explizit „Verbinden"-Button klicken. Dann gibt's keine Race. Aber das
+ist UX-Änderung (3-Button-Dialog statt 2).
+
+**Field-Test (Mike):** App starten mit Radio AN bei 120 km → „ohne Radio
+weiter" sofort klicken → App muss sicher in Demo-Modus landen, KEINE
+Verbindung aufgebaut, KEINE echten Radio-Funktionen aktiv.
+
+**Voller Workflow V1→V2→R1→V3→Code Pflicht** (Hardware-Sicherheit).
+
+---
+
 ## ✅ P81 — Auto-Hunt-Stop-Meldung nach „✓ QSO komplett" defern ERLEDIGT (v0.97.53, 18.05.2026)
 
 Mike-Field-Test 18.05.: „⏸ Auto-Hunt gestoppt — 5 Minuten ohne
