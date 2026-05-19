@@ -315,8 +315,8 @@ def test_settings_save_normal_preset_deprecated_noop():
 
 def test_app_version_p80():
     import main
-    # P81 bumpt weiter auf 0.97.53
-    assert main.APP_VERSION == "0.97.53"
+    # Bundle M bumpt weiter auf 0.97.54
+    assert main.APP_VERSION == "0.97.54"
 
 
 def test_main_window_uses_unified_gain_store():
