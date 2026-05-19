@@ -1,22 +1,41 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-19 — P81 abgeschlossen, Bundle M ready-to-code, P82+P84 als TODO
+## Stand 2026-05-19 — Bundle M (P83+P85) abgeschlossen, P81 + P80 davor
 
-**Aktueller Code-Stand:** v0.97.53 (P81), Tests **1533 grün**. Push aktuell:
-`2b0a797`. **P80 F3 Field-Test ✓ PASSED** (Mode-Wechsel ohne Re-Mess).
+**Aktueller Code-Stand:** v0.97.54 (Bundle M), Tests **1548 grün**
+(+15 Bundle M netto). **P80 F3 Field-Test ✓ PASSED** am 19.05.
 
-### 🆕 Bundle M (Spec final, ready to code, Mike 19.05.)
+### 🟢 v0.97.54 Bundle M — P83 Gain-Status + P85 ANT2-Win-%
 
-**P83 — Status-Zeile „noch X Stunden":** dx_info-Label erweitern mit
-Verfalls-Counter, farbcodiert grün/orange/rot, KEIN extra Timer
-(aktionsgetrieben), auch im Normal-Modus. ~40 LOC + 6 Tests.
+Autonomer Workflow durchgezogen während Mike unterwegs war (Option A).
 
-**P85 — ANT2-Win-% statt Stationsanzahl:** Counts-Anzeige durch
-„ANT2-Win 86%" ersetzt, Median-geglättet (4 Zyklen synchron mit Ratio).
-~30 LOC + 4 Tests.
+**P83 — dx_info-Label mit Verfalls-Counter:**
+- Format: `ANT1(G10) + ANT2(G20) · noch 4h` (Diversity)
+  / `ANT1(G10) · noch 4h` (Normal).
+- Farbcodierung am Suffix: grün >2h, orange ≤2h, rot ≤1h, „Re-Mess fällig" stale.
+- KEIN extra Timer — aktionsgetrieben (6 Sprungmarken).
+- Auch im Normal-Modus sichtbar (vorher leer).
 
-Beide Specs in TODO.md detailliert (Bundle M Sektion). Workflow:
-V2 → R1 Final-Check → V3 → Code → Final-R1.
+**P85 — ANT2-Win-% statt Stationsanzahl:**
+- vorher: `8 St. 8 St.` (Roh-Counts, 1-Zyklus-Versatz zur Ratio).
+- nachher: `ANT2-Win 86%` (Median 4 Zyklen, synchron mit Ratio).
+- Warmup-Anzeige „Diversity läuft..." bei <4 Vergleichen.
+- DX-Mode unverändert.
+
+**R1-V4-pro:** Pre-Code-Check 8 Findings (alle eingebaut). Final-R1 0 KP
+„PUSH FREIGEBEN ✅". **V4-pro 30-Cycle-Bilanz: 0 Halluzinationen.**
+
+### Field-Tests pending (alle mit Radio, Mike beim nächsten Radio-Zugriff)
+
+- P83-F1: 6h-Verfalls-Counter zeigt korrekt
+- P83-F2: Mode-Wechsel triggert Live-Update
+- P83-F3: stale/missing-States visuell
+- P83-F4: Normal-Mode zeigt jetzt Gain-Status
+- P85-F1: Win-% statt St.-Counts in Diversity Standard
+- P85-F2: Glättung beobachten bei Wetter-Wechsel
+- P85-F3: DX-Mode bleibt „X DX"
+
+### 🟢 v0.97.53 P81 — Auto-Hunt-Stop-Meldung nach „✓ QSO komplett" defern
 
 ### 🆕 P82 + P84 (TODO notiert, kein Code)
 

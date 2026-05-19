@@ -1,8 +1,23 @@
-# SimpleFT8 TODO — Stand 18.05.2026 (v0.97.53, P81 + P80 + P79 + P76 ERLEDIGT)
+# SimpleFT8 TODO — Stand 19.05.2026 (v0.97.54, Bundle M + P81 + P80 + P79 ERLEDIGT)
 
 ---
 
-## 🆕 OFFEN — Bundle M: P83 + P85 (Mike 19.05.2026, Spec final, ready to code)
+## ✅ Bundle M ERLEDIGT (v0.97.54, 19.05.2026 autonomer Workflow)
+
+P83 (Gain-Status-Zeile mit „noch X Stunden") + P85 (ANT2-Win-% statt
+Stationsanzahl, Median 4 Zyklen). Autonom durchgezogen während Mike weg.
+
+**R1 Pre-Code:** 8 Findings (Trigger-Reduktion auf 6, HTML-Sicherheit,
+Rundungs-Logik, Reset-Pfade) — alle eingebaut.
+**Final-R1:** „PUSH FREIGEBEN ✅" 0 KP.
+**V4-pro 30-Cycle-Bilanz:** 0 Halluzinationen.
+**Tests 1533 → 1548 (+15 netto).**
+
+Field-Test F1-F7 pending (alle mit Radio).
+
+---
+
+## 🗄️ HISTORIE — Bundle M Spec (Mike 19.05.2026, ready-to-code)
 
 Zwei zusammengehörige UI-Verbesserungen in der Antennen-Kachel.
 

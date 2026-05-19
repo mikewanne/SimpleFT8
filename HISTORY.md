@@ -3,6 +3,94 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-19 v0.97.54 — Bundle M: P83 Gain-Status-Zeile + P85 ANT2-Win-%
+
+**Trigger:** Mike-Field-Test 19.05.2026 + autonomer Workflow während Mike
+weg war.
+
+### P83 — Gain-Mess-Status-Zeile mit Verfalls-Counter
+
+dx_info-Label in Antennen-Kachel zeigt nun verbleibende Verfallszeit:
+- `ANT1(G10) + ANT2(G20) · noch 4h` (Diversity, geblieben in Stunden)
+- `ANT1(G10) · noch 4h` (Normal)
+- `ANT1(G10) + ANT2(G20) · Re-Mess fällig` (stale, rot)
+- `nicht kalibriert · G10 (Std)` (missing, grau)
+
+Farbcodierung am Verfalls-Suffix:
+- grün (#44CC44) > 2h frei
+- orange (#FFAA00) ≤ 2h frei
+- rot (#FF3333) ≤ 1h frei oder stale
+
+Mike-Spec „KEIN extra Timer" — aktionsgetrieben über 6 Sprungmarken
+(`_on_radio_connected`, `_on_mode_changed`, `_on_band_changed`,
+`_enable_diversity`, `_disable_diversity`, `_on_dx_tune_accepted`).
+
+Im Normal-Modus jetzt auch sichtbar (vorher leer).
+
+### P85 — ANT2-Win-% statt Stationsanzahl
+
+Anzeige in Ratio-Display:
+- vorher: `8 St. 8 St.` (raw counts pro Zyklus, 1-Zyklus-Versatz zur
+  Ratio → Inkonsistenz „3:12 + 50:50")
+- nachher: `ANT2-Win 86%` (Median über 4 Zyklen geglättet)
+
+Use-Case (Mike): „Regen kommt → ANT2-Win 86 → 70 → 55" — Wetter-Trend
+ablesbar.
+
+Glättung über Ringpuffer `_win_rate_history: deque(maxlen=4)` in
+ControlPanel. Bei cum_total < 4 Vergleichen → „Diversity läuft..."
+Warmup-Anzeige.
+
+DX-Mode bleibt unverändert (X DX weak-counts).
+
+Reset-Trigger: `_on_mode_changed`, `_on_band_changed`,
+`_enable_diversity`, `_disable_diversity`.
+
+### Workflow
+
+- V1: Brainstorm-R1 für P83 + P85 separat.
+- V2 Self-Review: 5 V1-Halluzinationen gefangen (State-Map, Architektur,
+  Reset-Trigger, dx_info-Anfangszustand).
+- R1 (DeepSeek V4-pro) Pre-Code: 8 Findings (alle eingebaut: Trigger-
+  Reduktion auf 6, HTML-Sicherheit, Rundungs-Logik, Reset-Pfade).
+- V3: Specs fixiert.
+- Code: ~80 LOC + 14 Tests.
+- Final-R1: „PUSH FREIGEBEN ✅" 0 KP.
+
+**V4-pro 30-Cycle-Bilanz: 0 Halluzinationen, 100% verifizierbar.**
+
+### Files
+
+- `ui/mw_radio.py`: +85 LOC (2 Helper + 6 Aufrufe + Reset).
+- `ui/control_panel.py`: +25 LOC (deque-Init + reset_win_rate_history
+  + update_diversity_counts umgestellt).
+- `main.py`: APP_VERSION 0.97.53 → 0.97.54.
+- `tests/test_bundle_m_p83_p85.py`: NEU 14 Tests.
+- `tests/test_p79_ui_bundle.py`, `test_p80_unified_gain.py`:
+  APP_VERSION-Tests angepasst.
+
+**Tests:** 1533 → 1548 (+15 netto).
+
+### Field-Tests pending (alle mit Radio)
+
+- P83-F1: 6h-Verfalls-Counter zeigt korrekt nach Messung
+- P83-F2: Mode-Wechsel triggert Live-Update
+- P83-F3: stale/missing-States visuell verifizieren
+- P83-F4: Normal-Mode zeigt jetzt Gain-Status (vorher leer)
+- P85-F1: Win-% statt St.-Counts in Diversity Standard
+- P85-F2: Glättung über Zeit bei Wetter-Wechsel beobachten
+- P85-F3: DX-Mode bleibt „X DX" weak-counts
+
+### Lessons
+
+- **R1 vs V2:** R1 fand keine ROT-Findings im Pre-Code-Check, weil V2
+  schon 5 V1-Halluzinationen gefangen hatte. Bestätigt: V2-Self-Review
+  ist effektiv.
+- **HTML-RichText in QLabel:** funktioniert ohne `setTextFormat(Qt.RichText)`
+  via Auto-Detect.
+- **Aktionsgetriggert > Timer:** Mike's KISS-Spec spart Code (kein
+  Timer-Lifecycle), reicht für Stunden-Granularität.
+
 ## 2026-05-18 v0.97.53 — P81 Auto-Hunt-Stop-Meldung nach „✓ QSO komplett" defern
 
 **Trigger:** Mike-Field-Test 18.05.2026 (Screenshot QSO mit IZ1JLP):
