@@ -1252,7 +1252,37 @@ class ControlPanel(QWidget):
         # Initial: Normal-Modus → Histogramm klickbar, Spinbox sichtbar.
         # _apply_rx_mode_visibility braucht _setup_ui (UI-Elemente muessen existieren).
         self._apply_rx_mode_visibility(is_div=False)
+        # P88 (v0.97.58): Count-Labels initial passend zur Breite ausblenden,
+        # bevor erstes resizeEvent kommt (sonst kurz unlesbar sichtbar).
+        self._update_count_label_visibility()
         self._start_clock()
+
+    # P88 (v0.97.58): Responsive-Schwellwert fuer Count-Labels.
+    # Aus Mike-Field-Test Screenshots: ~385px gequetscht, 540px lesbar.
+    # Bei breitenaenderungen unter diesen Wert werden die mittleren Labels
+    # `_a1_count_label` und `_a2_count_label` in der Ratio-Row ausgeblendet.
+    _COUNT_LABEL_HIDE_THRESHOLD: int = 380
+
+    def _update_count_label_visibility(self) -> None:
+        """P88 (v0.97.58): Count-Labels bei schmaler Spalte ausblenden.
+
+        Gequetschte Labels in der Ratio-Row (`Diversity läuft...`,
+        DX-Counts, ANT2-Win-%) werden bei `width < 380px` versteckt.
+        Andere Elemente (Prozent-Labels, ANT1/ANT2-Beschriftungen) haben
+        feste minWidth und bleiben sichtbar.
+        Defensive: prueft Existenz der Labels (resizeEvent kann vor
+        `_setup_ui`-Abschluss feuern).
+        """
+        if not hasattr(self, "_a1_count_label"):
+            return
+        narrow = self.width() < self._COUNT_LABEL_HIDE_THRESHOLD
+        self._a1_count_label.setHidden(narrow)
+        self._a2_count_label.setHidden(narrow)
+
+    def resizeEvent(self, event):
+        """P88 (v0.97.58): Responsive Hide bei schmaler Spalte."""
+        super().resizeEvent(event)
+        self._update_count_label_visibility()
 
     # =====================================================================
     # UI Setup
