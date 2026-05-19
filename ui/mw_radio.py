@@ -197,6 +197,8 @@ class RadioMixin:
             from core.debug_log import debug_log as _dlog
             _dlog("DIV-EN", f"Resume scoring={pending_scoring}")
             self._check_diversity_preset(band, pending_scoring)
+        # P83 (v0.97.54): Gain-Status-Zeile initial nach Connect anzeigen.
+        self._update_gain_status_display()
 
     def _on_radio_disconnected(self):
         """Verbindung verloren — unbegrenzt reconnecten mit Exponential Backoff."""
@@ -380,8 +382,11 @@ class RadioMixin:
                 self.statusBar().showMessage(
                     f"Kein Gain-Preset für {band} — bitte KALIBRIEREN", 6000
                 )
-                self.control_panel.dx_info.setText("Kein Preset")
-                self.control_panel.dx_info.setStyleSheet("color: #FF6600;")
+        # P83 (v0.97.54): Gain-Status-Zeile aktualisieren (HTML-Format).
+        self._update_gain_status_display()
+        # P85 (v0.97.54): Win-Rate-Buffer leeren (FT-Mode-Wechsel = frische
+        # Bedingungen → neuer Trend).
+        self.control_panel.reset_win_rate_history()
         self._update_statusbar()
 
     @Slot(str)
@@ -482,9 +487,8 @@ class RadioMixin:
                 if self.radio.has_secondary_slice():
                     gain_b = PREAMP_PRESETS.get(band, 10) + 10
                     self.radio.set_rfgain_secondary(gain_b)
-                    self.control_panel.dx_info.setText(
-                        f"ANT1+ANT2 (Gain {gain_b})"
-                    )
+                    # P83 (v0.97.54): dx_info wird unten via Helper
+                    # konsistent aktualisiert (HTML-Format mit Verfall).
             elif self._rx_mode == "normal":
                 self._apply_normal_mode()
         # Per-Band TX Level laden (Auto-Regelung speichert pro Band)
@@ -581,6 +585,10 @@ class RadioMixin:
             _dlog("BAND", f"_check_diversity_preset({band}, scoring={scoring})")
             self._check_diversity_preset(band, scoring)
             return  # _check_diversity_preset ruft _update_statusbar auf
+        # P83 (v0.97.54): Gain-Status-Zeile aktualisieren (HTML-Format).
+        self._update_gain_status_display()
+        # P85 (v0.97.54): Win-Rate-Buffer leeren (frisches Band = frischer Trend).
+        self.control_panel.reset_win_rate_history()
         self._update_statusbar()
 
     @Slot(str)
@@ -1194,10 +1202,6 @@ class RadioMixin:
             if self.radio.ip:
                 self.radio.set_rx_antenna("ANT1")
                 self.radio.set_rfgain(self._diversity_ant1_gain)
-            self.control_panel.dx_info.setText(
-                f"ANT1(G{self._diversity_ant1_gain}) + "
-                f"ANT2(G{self._diversity_ant2_gain})"
-            )
             print(
                 f"[Diversity] Preset geladen: ANT1 G{self._diversity_ant1_gain}, "
                 f"ANT2 G{self._diversity_ant2_gain} (gemessen {measured})"
@@ -1206,11 +1210,12 @@ class RadioMixin:
             # Kein Preset: Standard-Gains + Hinweis
             self._diversity_ant1_gain = PREAMP_PRESETS.get(band, 10)
             self._diversity_ant2_gain = PREAMP_PRESETS.get(band, 10) + 10
-            self.control_panel.dx_info.setText(
-                f"ANT1(G{self._diversity_ant1_gain}) + "
-                f"ANT2(G{self._diversity_ant2_gain})"
-            )
             print(f"[Diversity] AKTIV — Standard-Gains, kein Preset fuer {band}")
+
+        # P83 (v0.97.54): dx_info ueber zentralen Helper aktualisieren.
+        self._update_gain_status_display()
+        # P85 (v0.97.54): Win-Rate-Buffer leeren (Diversity-Enable = frischer Start).
+        self.control_panel.reset_win_rate_history()
 
         # Mode-Coupling Buttons aktualisieren (Diversity aktiv → Power-Buttons sichtbar)
         self._update_button_visibility()
@@ -1235,7 +1240,11 @@ class RadioMixin:
         self._rx_mode = "normal"
         self._apply_normal_mode()
         self.control_panel.set_rx_mode("normal")
-        self.control_panel.dx_info.setText("")
+        # P83 (v0.97.54): dx_info zeigt nun auch im Normal-Mode den
+        # Gain-Status mit Verfalls-Counter (statt leer).
+        self._update_gain_status_display()
+        # P85 (v0.97.54): Win-Rate-Buffer leeren (Diversity beendet).
+        self.control_panel.reset_win_rate_history()
         self.control_panel.update_diversity_counts(0, 0)
         print("[Diversity] Deaktiviert")
 
@@ -1252,6 +1261,74 @@ class RadioMixin:
         if entry and "gain_timestamp" in entry:
             return "stale"
         return "missing"
+
+    def _format_gain_status(self, band: str, rx_mode: str) -> str:
+        """P83 (v0.97.54): HTML-Text fuer dx_info-Label.
+
+        Format:
+          fresh: `ANT1(G10) + ANT2(G20) · noch 4h` (Suffix farbig)
+          stale: `ANT1(G10) + ANT2(G20) · Re-Mess faellig` (rot)
+          missing: `nicht kalibriert · G10 (Std)` (grau)
+
+        Werte-Teil immer dunkelgrau (#668877), Suffix farbcodiert nach
+        verbleibender Zeit (gruen >2h, orange <=2h, rot <=1h).
+        """
+        entry = self._gain_store.get(band)
+        default_g = PREAMP_PRESETS.get(band, 10)
+        if not entry:
+            return (
+                f"<span style='color:#888;'>nicht kalibriert · "
+                f"G{default_g} (Std)</span>"
+            )
+        ts = entry.get("gain_timestamp", 0.0)
+        if not ts or ts <= 0:
+            # Migration-Marker (ts=0.0) → behandeln wie missing.
+            return (
+                f"<span style='color:#888;'>nicht kalibriert · "
+                f"G{default_g} (Std)</span>"
+            )
+        ant1_g = entry.get("ant1_gain", default_g)
+        ant2_g = entry.get("ant2_gain", 0)
+        ant2_cal = entry.get("ant2_calibrated", False)
+        if rx_mode == "diversity" and ant2_cal:
+            values = f"ANT1(G{ant1_g}) + ANT2(G{ant2_g})"
+        else:
+            values = f"ANT1(G{ant1_g})"
+        age_s = time.time() - ts
+        remaining_s = 6 * 3600 - age_s
+        if remaining_s <= 0:
+            return (
+                f"<span style='color:#668877;'>{values}</span> "
+                f"<span style='color:#FF3333;'>· Re-Mess fällig</span>"
+            )
+        remaining_h = remaining_s / 3600
+        h = max(1, round(remaining_h))
+        if remaining_h > 2:
+            color = "#44CC44"
+        elif remaining_h > 1:
+            color = "#FFAA00"
+        else:
+            color = "#FF3333"
+        return (
+            f"<span style='color:#668877;'>{values}</span> "
+            f"<span style='color:{color};'>· noch {h}h</span>"
+        )
+
+    def _update_gain_status_display(self) -> None:
+        """P83: dx_info-Label aktualisieren aus aktuellem Band+RX-Mode.
+
+        Aktions-getriggert (KEIN extra Timer, Mike-Spec 19.05.2026).
+        Aufruf-Stellen: set_band/set_mode-Handler, _enable_diversity,
+        _disable_diversity, _on_dx_tune_accepted, _on_radio_connected.
+        """
+        band = self.settings.band
+        rx_mode = self._rx_mode
+        html = self._format_gain_status(band, rx_mode)
+        self.control_panel.dx_info.setText(html)
+        # Stylesheet auf font-size + family — Farbe kommt aus HTML-Spans.
+        self.control_panel.dx_info.setStyleSheet(
+            "font-size: 10px; font-family: Menlo;"
+        )
 
     def _check_diversity_preset(self, band: str, scoring: str) -> None:
         """Preset-Check bei Band/Modus-Wechsel mit aktiver Diversity.
@@ -1606,9 +1683,6 @@ class RadioMixin:
 
         ant1_g = save_data.get("ant1_gain", save_data.get("best_gain", 0))
         ant2_g = save_data.get("ant2_gain", save_data.get("best_gain", 0))
-        self.control_panel.dx_info.setText(
-            f"ANT1(G{ant1_g}) + ANT2(G{ant2_g})"
-        )
         # Gains sofort anwenden
         self._diversity_ant1_gain = ant1_g
         self._diversity_ant2_gain = ant2_g
@@ -1616,6 +1690,10 @@ class RadioMixin:
         self._set_gain_measure_lock(False)
 
         self._log_gain_result(r, band, ft_mode)
+
+        # P83 (v0.97.54): dx_info via zentralen Helper aktualisieren —
+        # zeigt frische Messung mit „noch 6h" Verfallszeit.
+        self._update_gain_status_display()
 
         # Normal-Modus (KALIBRIEREN-Button): ANT1-Gain anwenden.
         # P80: keine separate save_normal_preset-Persistenz mehr — der
@@ -1627,8 +1705,6 @@ class RadioMixin:
                 self.radio.set_rx_antenna("ANT1")
                 self.radio.set_tx_antenna("ANT1")
                 self.radio.set_rfgain(ant1_g)
-            self.control_panel.dx_info.setText(f"G{ant1_g}dB (kalibriert)")
-            self.control_panel.dx_info.setStyleSheet("")
             self._stats_warmup_cycles = 6
             print(f"[Kalibrieren] Normal {band}: G{ant1_g}dB — 4 Zyklen Warmup")
             self._update_statusbar()
@@ -1728,7 +1804,8 @@ class RadioMixin:
         else:
             self._apply_normal_mode()
             self._stats_warmup_cycles = 6
-        self.control_panel.dx_info.setText("")
+        # P83 (v0.97.54): zentraler Helper.
+        self._update_gain_status_display()
         self._update_statusbar()
 
     def _apply_dx_preset(self, preset: dict):
@@ -1738,7 +1815,8 @@ class RadioMixin:
         self.radio.set_rx_antenna(rxant)
         self.radio.set_rfgain(gain)
         self.radio.set_tx_antenna("ANT1")
-        self.control_panel.dx_info.setText(f"{rxant}, Gain {gain} dB")
+        # P83: zentraler Helper (statt manueller Text).
+        self._update_gain_status_display()
         print(f"[DX] Preset geladen: {rxant}, Gain {gain}")
 
     def _apply_dx_preset_for_band(self, band: str):
@@ -1747,7 +1825,8 @@ class RadioMixin:
         if preset:
             self._apply_dx_preset(preset)
         else:
-            self.control_panel.dx_info.setText("kein Preset")
+            # P83: zentraler Helper zeigt „nicht kalibriert".
+            self._update_gain_status_display()
 
     @Slot(int)
     def _on_normal_tx_freq_clicked(self, freq_hz: int):
@@ -1805,24 +1884,18 @@ class RadioMixin:
             gain = PREAMP_PRESETS.get(band, 10)
             measured_str = ""
 
+        # P83 (v0.97.54): dx_info-Anzeige ueber zentralen Helper —
+        # zeigt jetzt im Normal-Mode `ANT1(G10) · noch Xh` mit
+        # Verfalls-Counter + Farbcodierung statt alter „G10dB (kalibriert)".
         age_days = None
         if measured_str:
             import datetime
             try:
                 measured_dt = datetime.datetime.strptime(measured_str, "%Y-%m-%d %H:%M")
                 age_days = (datetime.datetime.now() - measured_dt).days
-                if age_days > 7:
-                    self.control_panel.dx_info.setText(f"G{gain}dB ({age_days}d alt!)")
-                    self.control_panel.dx_info.setStyleSheet("color: #FFA500;")
-                else:
-                    self.control_panel.dx_info.setText(f"G{gain}dB (kalibriert)")
-                    self.control_panel.dx_info.setStyleSheet("")
             except Exception:
-                self.control_panel.dx_info.setText(f"G{gain}dB (kalibriert)")
-                self.control_panel.dx_info.setStyleSheet("")
-        else:
-            self.control_panel.dx_info.setText(f"G{gain}dB (Standard)")
-            self.control_panel.dx_info.setStyleSheet("color: #888888;")
+                age_days = None
+        self._update_gain_status_display()
 
         if self.radio.ip:
             self.radio.set_rx_antenna("ANT1")

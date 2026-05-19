@@ -4,6 +4,7 @@ Dark Theme Redesign mit LED-Balance-Indikator.
 """
 
 import time
+from collections import deque
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QSlider, QFrame, QGridLayout, QButtonGroup, QProgressBar, QSpinBox,
@@ -1236,6 +1237,10 @@ class ControlPanel(QWidget):
         self._rx_mode_idx = 0
         self._callsign = callsign
         self._current_rx_mode = "normal"
+        # P85 (v0.97.54): Ringpuffer fuer ANT2-Win-% Median-Glaettung
+        # ueber 4 Zyklen. Tupel (ant2_wins, total_compared). Reset bei
+        # Band/Modus/Diversity-Enable.
+        self._win_rate_history: deque = deque(maxlen=4)
         self.setMinimumWidth(_MIN_WIDTH)
         self.setAutoFillBackground(True)
         self.setStyleSheet("ControlPanel { background-color: #06060c; color: #CCC; font-family: Menlo; }")
@@ -1606,6 +1611,11 @@ class ControlPanel(QWidget):
         """P34-Stufe2: No-Op — Re-Mess-Countdown entfaellt (Dynamic ist live)."""
         return
 
+    def reset_win_rate_history(self) -> None:
+        """P85 (v0.97.54): Ringpuffer leeren. Aufgerufen bei
+        Band/Mode/Diversity-Wechsel (frische Bedingungen → frischer Trend)."""
+        self._win_rate_history.clear()
+
     def update_diversity_counts(self, a1_count: int, a2_count: int,
                                 a1_avg_snr: float = None, a2_avg_snr: float = None,
                                 scoring_mode: str = "normal",
@@ -1613,19 +1623,34 @@ class ControlPanel(QWidget):
                                 a1_weak_count: int = 0, a2_weak_count: int = 0):
         """Diversity-Counts pro Antenne.
 
-        Standard: 'X St.' pro Antenne. DX: 'X DX' (schwache Signale -20..-10 dB).
+        P85 (v0.97.54): Standard-Mode zeigt jetzt ANT2-Win-% Median-
+        geglaettet (4-Zyklus-Ringpuffer) statt Stationsanzahl.
+        Loest 1-Zyklus-Versatz-Inkonsistenz „3:12 + 50:50".
+        DX-Mode bleibt unveraendert (`X DX` weak-counts).
         """
         if a1_count == 0 and a2_count == 0:
             self._a1_count_label.setText("--")
             self._a2_count_label.setText("  --")
-        elif scoring_mode == "dx":
+            return
+        if scoring_mode == "dx":
             a1_txt = f"{a1_weak_count:02d} DX" if a1_weak_count is not None else "--"
             a2_txt = f"  {a2_weak_count:02d} DX" if a2_weak_count is not None else "  --"
             self._a1_count_label.setText(a1_txt)
             self._a2_count_label.setText(a2_txt)
-        else:
-            self._a1_count_label.setText(f"{a1_count} St.")
-            self._a2_count_label.setText(f"{a2_count} St.")
+            return
+        # P85 Standard-Mode: ANT2-Win-% geglaettet.
+        if total_compared > 0:
+            self._win_rate_history.append((ant2_wins, total_compared))
+        cum_wins = sum(x[0] for x in self._win_rate_history)
+        cum_total = sum(x[1] for x in self._win_rate_history)
+        if cum_total < 4:
+            # Warmup: nicht genug Vergleiche fuer aussagekraeftige %.
+            self._a1_count_label.setText("Diversity läuft...")
+            self._a2_count_label.setText("")
+            return
+        pct = round(100 * cum_wins / cum_total)
+        self._a1_count_label.setText(f"ANT2-Win {pct}%")
+        self._a2_count_label.setText("")
 
     def update_freq_histogram(self, data: dict):
         """Frequenz-Histogramm aktualisieren und anzeigen.
