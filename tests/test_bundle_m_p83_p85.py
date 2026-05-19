@@ -204,17 +204,23 @@ def test_p85_t8_win_rate_anzeige_nach_warmup():
 
 
 def test_p85_t9_dx_mode_unveraendert():
-    """T9: DX-Mode bleibt bei „X DX" weak-counts."""
+    """T9: DX-Mode zeigt „X DX" weak-counts NACH P87-Warmup (4+ Zyklen).
+
+    P87 (v0.97.57): DX-Mode hat jetzt 4-Zyklus-Warmup analog Standard.
+    Vor Warmup: „Diversity läuft...", nach Warmup: weak-counts.
+    """
     from PySide6.QtWidgets import QApplication
     import sys
     app = QApplication.instance() or QApplication(sys.argv)
     from ui import control_panel as cp_mod
     cp = cp_mod.ControlPanel()
-    cp.update_diversity_counts(
-        a1_count=5, a2_count=5, scoring_mode="dx",
-        ant2_wins=4, total_compared=8,  # diese werden im DX ignoriert
-        a1_weak_count=2, a2_weak_count=3,
-    )
+    # 4 Zyklen Warmup absolvieren
+    for _ in range(4):
+        cp.update_diversity_counts(
+            a1_count=5, a2_count=5, scoring_mode="dx",
+            ant2_wins=4, total_compared=8,  # diese werden im DX ignoriert
+            a1_weak_count=2, a2_weak_count=3,
+        )
     assert "DX" in cp._a1_count_label.text()
     assert "02 DX" in cp._a1_count_label.text()
     assert "03 DX" in cp._a2_count_label.text()

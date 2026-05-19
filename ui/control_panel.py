@@ -1241,6 +1241,10 @@ class ControlPanel(QWidget):
         # ueber 4 Zyklen. Tupel (ant2_wins, total_compared). Reset bei
         # Band/Modus/Diversity-Enable.
         self._win_rate_history: deque = deque(maxlen=4)
+        # P87 (v0.97.57): DX-Mode Warmup-Counter parallel zu Standard-
+        # Mode. Verhindert einseitige DX-Counts waehrend ersten 4
+        # Diversity-Zyklen (Pattern-Versatz, Mike-Spec 19.05.2026).
+        self._dx_warmup_count: int = 0
         self.setMinimumWidth(_MIN_WIDTH)
         self.setAutoFillBackground(True)
         self.setStyleSheet("ControlPanel { background-color: #06060c; color: #CCC; font-family: Menlo; }")
@@ -1612,9 +1616,14 @@ class ControlPanel(QWidget):
         return
 
     def reset_win_rate_history(self) -> None:
-        """P85 (v0.97.54): Ringpuffer leeren. Aufgerufen bei
-        Band/Mode/Diversity-Wechsel (frische Bedingungen → frischer Trend)."""
+        """P85 (v0.97.54) + P87 (v0.97.57): Diversity-Display-State reset.
+
+        Aufgerufen bei Band/Mode/Diversity-Wechsel (frische Bedingungen
+        → frischer Trend). Setzt sowohl P85-Standard-Median-Ringpuffer
+        als auch P87-DX-Warmup-Counter zurueck.
+        """
         self._win_rate_history.clear()
+        self._dx_warmup_count = 0  # P87
 
     def update_diversity_counts(self, a1_count: int, a2_count: int,
                                 a1_avg_snr: float = None, a2_avg_snr: float = None,
@@ -1633,6 +1642,15 @@ class ControlPanel(QWidget):
             self._a2_count_label.setText("  --")
             return
         if scoring_mode == "dx":
+            # P87 (v0.97.57): Warmup analog P85 Standard-Mode.
+            # Verhindert einseitige Counts (z.B. ANT1=26/ANT2=00) wenn
+            # Diversity-Pattern in den ersten Slots nur eine Antenne
+            # bedient — Widerspruch zur 50:50-Ratio-Anzeige.
+            self._dx_warmup_count += 1
+            if self._dx_warmup_count < 4:
+                self._a1_count_label.setText("Diversity läuft...")
+                self._a2_count_label.setText("")
+                return
             a1_txt = f"{a1_weak_count:02d} DX" if a1_weak_count is not None else "--"
             a2_txt = f"  {a2_weak_count:02d} DX" if a2_weak_count is not None else "  --"
             self._a1_count_label.setText(a1_txt)
