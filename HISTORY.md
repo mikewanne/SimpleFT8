@@ -3,6 +3,99 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-19 v0.97.55 — P82: „ohne Radio weiter" muss Connect IMMER überspringen
+
+**Trigger:** Mike-Field-Test 19.05.2026 (120 km vom Radio, Radio AN).
+Klick auf „ohne Radio weiter" während Connect-Worker lief → App
+startete TROTZDEM mit Radio. Race-Condition zwischen User-Klick und
+`radio.connected.emit()` via QueuedConnection. **Hardware-Risiko:**
+ungewollter TX via Auto-Hunt/CQ/TUNE wenn App gegen User-Willen
+verbunden. Autonomer Workflow während Mike weg war.
+
+### Mike-Spec (verbatim)
+
+> „warum muss ich das radio connecten wenn es an ist wenn ich sage ohne
+> radio weiter dan OHNE radio weiter und ich brauche doch keinen connect."
+
+→ „ohne Radio weiter" muss IMMER Demo-Modus erzwingen, egal ob Radio
+antwortet oder nicht.
+
+### Was umgesetzt
+
+**`ui/connect_status_dialog.py`:**
+- `__init__`: `_user_cancelled: bool = False` Flag
+- Neu: `@property was_cancelled` (lesend)
+- `_on_continue_without_radio`: setzt `_user_cancelled = True` VOR
+  `reject()` — User-Intent-Marker unabhängig von `result()`.
+
+**`ui/mw_radio.py` `_start_radio` Cleanup-Block:**
+- `was_user_cancelled = self._connect_dialog.was_cancelled` nach exec()
+- Wenn cancelled:
+  - `self._demo_mode_forced = True` (Session-weit)
+  - `self.radio.abort_reconnect()` (stoppt `reconnect_forever`-Loop)
+  - Wenn `radio._running`: `radio.disconnect()` in try/except
+  - `control_panel.set_connection_status("disconnected")`
+
+**`ui/mw_radio.py` Slot-Guards:**
+- `_on_radio_connected`: Wenn `_demo_mode_forced=True` →
+  `radio.disconnect()` + return. KEINE Hardware-Calls (`set_frequency`,
+  `apply_ft8_preset`, `decoder.start`, `create_tx_stream`).
+- `_on_radio_disconnected`: Wenn `_demo_mode_forced=True` →
+  set_connection_status + return. KEIN Reconnect-Loop, KEIN
+  decoder.stop (Decoder wurde nie gestartet).
+
+**Race-Vollständigkeit (R1-bestätigt):**
+- Worker schneller als Klick → Late-Connect → Slot-Guard greift
+- Klick vor Worker → Cleanup setzt Flag → Worker connectet später →
+  `_on_radio_connected` greift Guard → `radio.disconnect()`
+- Worker hält 30s an (10 Retries) — daemon=True, beendet sich selbst
+
+### Workflow
+
+- **V1** Code-Verifikation + Lösungs-Ansatz mit Race-Analyse
+- **V2 Self-Review:** F1 ROT — V1 unterschätzte dass `auto_connect`
+  NICHT `abort_reconnect`-Flag prüft → Worker läuft trotz Cancel weiter.
+  Lösung: Slot-Guards mit `_demo_mode_forced`-Flag statt nur Disconnect.
+- **R1 (DeepSeek V4-pro):** 0 ROT, 2 GELB (Demo-Hinweis Statusbar,
+  Race-Test mit Mock). Statusbar deckt set_connection_status schon ab.
+  Race-Test T4 eingebaut. „PUSH FREIGEBEN ✅".
+- **V3 → Code → Tests T1-T7 → Final-R1 V4-pro:** 1 NACHBESSERN
+  (try/except um `radio.disconnect()` im _start_radio analog zum
+  Slot-Guard für Konsistenz). Behoben.
+- **Final-R1 Round 2:** „Du kannst pushen."
+
+**V4-pro 31-Cycle-Bilanz: 0 Halluzinationen, 100% verifizierbar.**
+
+### Tests
+
+1548 → 1555 (+7). Tests T1-T7:
+- T1: `_user_cancelled` initial False
+- T2: `_on_continue_without_radio` setzt Flag + reject()
+- T3: `_on_quit` lässt Flag False (Quit-Pfad eindeutig)
+- T4: Race-Test — Cancel + Late-Accept → was_cancelled bleibt True
+- T5: `_demo_mode_forced=True` → `_on_radio_connected` macht
+  `radio.disconnect()` + KEIN Hardware-Setup
+- T6: `_demo_mode_forced=True` → `_on_radio_disconnected` KEIN
+  Reconnect-Worker
+- T7: `_demo_mode_forced=False` → Standard-Disconnect-Pfad
+  (decoder.stop + reconnect_worker) → Backwards-Compat
+
+APP_VERSION-Tests in test_p79/test_p80/test_bundle_m auf `>=` umgestellt.
+
+### Field-Test pending (Mike beim Zurückkehren)
+
+App starten mit Radio AN bei 120 km → „ohne Radio weiter" sofort
+klicken → App muss sicher in Demo-Modus landen:
+- F1: KEINE Verbindung aufgebaut bleibend
+- F2: KEINE Radio-Hardware-Calls
+- F3: Connection-Label „RADIO: Getrennt"
+- F4: Kein Reconnect-Countdown läuft
+- F5: TX-Buttons (TUNE/CQ/Diversity/Einmessen/Normal) disabled
+
+Backup: `Appsicherungen/2026-05-19_v0.97.54_vor_p82/`.
+
+---
+
 ## 2026-05-19 v0.97.54 — Bundle M: P83 Gain-Status-Zeile + P85 ANT2-Win-%
 
 **Trigger:** Mike-Field-Test 19.05.2026 + autonomer Workflow während Mike

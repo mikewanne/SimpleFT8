@@ -1,4 +1,37 @@
-# SimpleFT8 TODO — Stand 19.05.2026 (v0.97.54, Bundle M + P81 + P80 + P79 ERLEDIGT)
+# SimpleFT8 TODO — Stand 19.05.2026 (v0.97.55, P82 + Bundle M + P81 + P80 + P79 ERLEDIGT)
+
+---
+
+## ✅ P82 ERLEDIGT (v0.97.55, 19.05.2026 autonomer Workflow)
+
+„ohne Radio weiter" muss Connect IMMER überspringen (Hardware-Sicherheit
+gegen Race-Condition bei Radio AN + 120 km Distanz).
+
+**Fix 3 Schichten KISS:**
+- ConnectStatusDialog: `_user_cancelled`-Flag + `was_cancelled` Property
+  in `_on_continue_without_radio` VOR `reject()` gesetzt.
+- `_start_radio` Cleanup-Block: bei Cancel `_demo_mode_forced=True` +
+  `abort_reconnect` + `radio.disconnect` (try/except) falls `_running`.
+- Slot-Guards `_on_radio_connected` + `_on_radio_disconnected`: bei
+  `_demo_mode_forced` SOFORT raus — KEIN Hardware-Setup, KEIN
+  Reconnect-Loop.
+
+**V2 fand F1 ROT** (`auto_connect` prüft kein Abort-Flag → Slot-Guards
+nötig statt nur Disconnect). **R1-V4-pro:** 0 ROT, 2 GELB (Race-Test
+T4 eingebaut). **Final-R1:** 1 NACHBESSERN (try/except Konsistenz,
+behoben). Round 2: „Du kannst pushen."
+
+**V4-pro 31-Cycle-Bilanz: 0 Halluzinationen.**
+**Tests 1548 → 1555 (+7 netto).**
+
+Field-Test F1-F5 pending (Mike beim Zurückkehren, alle ohne Radio testbar):
+- F1: KEINE Verbindung aufgebaut bleibend
+- F2: KEINE Radio-Hardware-Calls
+- F3: Connection-Label „RADIO: Getrennt"
+- F4: Kein Reconnect-Countdown
+- F5: TX-Buttons disabled
+
+Backup: `Appsicherungen/2026-05-19_v0.97.54_vor_p82/`.
 
 ---
 
@@ -109,44 +142,15 @@ Counts → leichte Abweichung möglich (viele schwache vs wenig laute).
 
 ---
 
-## 🆕 OFFEN — P82: „ohne Radio weiter" muss Connect immer überspringen (Mike 19.05.2026)
+## 🗄️ HISTORIE — P82 Spec (Mike 19.05.2026, jetzt erledigt v0.97.55)
 
-**Symptom:** Bei App-Start startet der Connect-Worker SOFORT parallel
-zum Dialog (`ui/mw_radio.py:94` `threading.Thread(...).start()`). Wenn
-das Radio antwortet bevor Mike „ohne Radio weiter" klicken kann (bei
-120 km Distanz + Radio AN durchaus realistisch innerhalb 1-2s), gewinnt
-`radio.connected.emit` → `dialog.accept()` → App startet MIT Radio.
+War: Race-Condition zwischen User-Klick „ohne Radio weiter" und
+`radio.connected.emit()`. Wenn Radio bei 120 km antwortet bevor Mike
+klickt, App startet MIT Radio. Hardware-Risiko durch ungewollten TX
+via Auto-Hunt/CQ/TUNE.
 
-**Mike-Spec (klar):** „warum muss ich das radio connecten wenn es an ist
-wenn ich sage ohne radio weiter dan OHNE radio weiter und ich brauche
-doch keinen connect."
-
-→ „ohne Radio weiter" muss IMMER Demo-Modus erzwingen, egal ob Radio
-antwortet oder nicht. Aktuell ist es eine Race-Condition.
-
-**Risiko:** Wenn die App ungewollt verbindet und Mike dann TX triggert
-(Auto-Hunt, CQ, TUNE), passiert echter TX auf seiner Antenne — auch
-wenn Mike eigentlich Demo-Modus wollte. **Hardware-Risiko.**
-
-**Lösungs-Ansatz (KISS, ~15 LOC):**
-- ConnectStatusDialog `_on_continue_without_radio()` setzt zusätzlich
-  ein `_user_cancelled = True` Flag.
-- Worker-Thread (`_connect_worker`) prüft vor jeder Verbindungs-Action
-  das Flag, und vor `radio.connected.emit` → wenn cancelled, NICHT
-  emitten.
-- Falls Worker schneller war als der Click und schon `accept()` getriggert
-  hat: in `_on_continue_without_radio` zusätzlich `radio.disconnect()`
-  forcieren bevor `reject()`.
-
-**Alternative (radikaler, sauberer):** Auto-Connect entfernen, User muss
-explizit „Verbinden"-Button klicken. Dann gibt's keine Race. Aber das
-ist UX-Änderung (3-Button-Dialog statt 2).
-
-**Field-Test (Mike):** App starten mit Radio AN bei 120 km → „ohne Radio
-weiter" sofort klicken → App muss sicher in Demo-Modus landen, KEINE
-Verbindung aufgebaut, KEINE echten Radio-Funktionen aktiv.
-
-**Voller Workflow V1→V2→R1→V3→Code Pflicht** (Hardware-Sicherheit).
+→ Erledigt in v0.97.55 (siehe oben). Fix-Architektur: 3-Schichten-KISS
+(Flag im Dialog + Cleanup-Block + Slot-Guards).
 
 ---
 

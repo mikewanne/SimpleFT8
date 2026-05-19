@@ -1,11 +1,47 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-19 — Bundle M (P83+P85) abgeschlossen, P81 + P80 davor
+## Stand 2026-05-19 — P82 autonom erledigt (Hardware-Sicherheit), Bundle M + P81 davor
 
-**Aktueller Code-Stand:** v0.97.54 (Bundle M), Tests **1548 grün**
-(+15 Bundle M netto). **P80 F3 Field-Test ✓ PASSED** am 19.05.
+**Aktueller Code-Stand:** v0.97.55 (P82), Tests **1555 grün** (+7 P82
+netto). **P80 F3 Field-Test ✓ PASSED** am 19.05. Mike weg, autonomer
+Workflow durchgezogen (Option A wie bei P80/P81/Bundle M).
+
+### 🟢 v0.97.55 P82 — „ohne Radio weiter" muss Connect IMMER überspringen
+
+Mike-Field-Test 19.05.: 120 km vom Radio, Radio AN → Klick „ohne Radio
+weiter" während Connect-Worker lief → App startete TROTZDEM mit Radio.
+**Hardware-Risiko:** ungewollter TX via Auto-Hunt/CQ/TUNE.
+
+**Fix (KISS, 3 Schichten):**
+- ConnectStatusDialog: `_user_cancelled`-Flag + `was_cancelled` Property
+  in `_on_continue_without_radio` gesetzt VOR `reject()`.
+- mw_radio `_start_radio` nach exec(): Cancel-Block setzt
+  `_demo_mode_forced=True` + `abort_reconnect` + ggf. `radio.disconnect`.
+- mw_radio Slot-Guards in `_on_radio_connected` und
+  `_on_radio_disconnected`: bei `_demo_mode_forced` SOFORT raus — KEIN
+  Hardware-Setup, KEIN Reconnect-Loop.
+
+**V2 Self-Review fand F1 ROT** (`auto_connect` prüft kein
+Abort-Flag → Worker läuft trotz Cancel). Slot-Guards statt nur
+Disconnect lösen das.
+
+**R1-V4-pro:** 0 ROT, 2 GELB (Race-Test T4 eingebaut).
+**Final-R1 V4-pro:** 1 NACHBESSERN (try/except um disconnect für
+Konsistenz, behoben). Final-R1 Round 2: „Du kannst pushen."
+
+**V4-pro 31-Cycle-Bilanz: 0 Halluzinationen.**
+
+### Field-Tests P82 pending (Mike beim Zurückkehren)
+
+- F1: KEINE Verbindung aufgebaut bleibend
+- F2: KEINE Radio-Hardware-Calls
+- F3: Connection-Label „RADIO: Getrennt"
+- F4: Kein Reconnect-Countdown läuft
+- F5: TX-Buttons disabled (TUNE/CQ/Diversity/Einmessen/Normal)
 
 ### 🟢 v0.97.54 Bundle M — P83 Gain-Status + P85 ANT2-Win-%
+
+### 🟢 v0.97.54 Bundle M — P83 Gain-Status + P85 ANT2-Win-% (Vorgänger)
 
 Autonomer Workflow durchgezogen während Mike unterwegs war (Option A).
 
@@ -37,10 +73,8 @@ Autonomer Workflow durchgezogen während Mike unterwegs war (Option A).
 
 ### 🟢 v0.97.53 P81 — Auto-Hunt-Stop-Meldung nach „✓ QSO komplett" defern
 
-### 🆕 P82 + P84 (TODO notiert, kein Code)
+### 🆕 P84 (TODO notiert, kein Code)
 
-- **P82** „ohne Radio weiter" muss Connect IMMER überspringen
-  (Hardware-Sicherheit, Race-Condition aktuell)
 - **P84** Auto-Mess bei Totmann-Auslösung (Mike-Idee 19.05., Bonus)
 
 ### 🟢 v0.97.53 P81 — Auto-Hunt-Stop-Meldung nach „✓ QSO komplett" defern
