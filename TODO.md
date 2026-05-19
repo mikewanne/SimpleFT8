@@ -1,4 +1,33 @@
-# SimpleFT8 TODO — Stand 19.05.2026 (v0.97.57, P87 + P86 + P82 + Bundle M + P81 + P80 + P79 ERLEDIGT)
+# SimpleFT8 TODO — Stand 19.05.2026 (v0.97.58, P88 + P87 + P86 + P82 + Bundle M + P81 + P80 + P79 ERLEDIGT)
+
+---
+
+## ✅ P88 ERLEDIGT (v0.97.58, 19.05.2026 autonomer Workflow)
+
+Responsive Hide bei schmaler Spalte (Mike-Field-Test 19.05.
+Screenshots 14:17). Diversity-Count-Labels (`Diversity läuft...`,
+DX-Counts, ANT2-Win-%) bei schmaler Spalte gequetscht/unlesbar.
+
+**Fix KISS:**
+- Klassen-Konstante `_COUNT_LABEL_HIDE_THRESHOLD: int = 380`
+- `_update_count_label_visibility()` Helper mit `hasattr`-Defensive
+- `resizeEvent` Override + Initial-Call in `__init__` (kein Aufflackern)
+- Nur Count-Labels (`_a1_count_label`+`_a2_count_label`), andere
+  Elemente haben fix minWidth oder eigene Zeilen → unverändert
+
+**Brainstorm-R1 V4-pro:** Variante A 🟢 mit Konstante. V2 0 Findings.
+Final-R1 „PUSH FREIGEBEN ✅" 0 KP.
+
+**V4-pro 34-Cycle-Bilanz: 0 Halluzinationen.**
+**Tests 1568 → 1574 (+6 netto).**
+
+Field-Test F1-F4 pending (Mike, alle ohne Radio testbar):
+- F1: Spalte schmal → Labels verschwinden
+- F2: Spalte breit → Labels erscheinen
+- F3: Text bleibt korrekt nach Toggle
+- F4: Andere Elemente unverändert
+
+Backup: `Appsicherungen/2026-05-19_v0.97.57_vor_p88/`.
 
 ---
 

@@ -1,9 +1,30 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-19 — P87 autonom (DX-Warmup), P86 + P82 + Bundle M davor
+## Stand 2026-05-19 — P88 autonom (Responsive Hide), P87 + P86 + P82 + Bundle M davor
 
-**Aktueller Code-Stand:** v0.97.57 (P87), Tests **1568 grün** (+5 P87).
-**P83-F1 + P85-F1 + P86-F1 Field-Tests ✓ PASSED** am 19.05.
+**Aktueller Code-Stand:** v0.97.58 (P88), Tests **1574 grün** (+6 P88).
+
+### 🟢 v0.97.58 P88 — Responsive Hide bei schmaler Spalte
+
+Mike-Field-Test 19.05. (Screenshots 14:17): Diversity-Count-Labels
+(`_a1_count_label`, `_a2_count_label`) bei schmaler Control-Panel-
+Spalte gequetscht/unlesbar.
+
+**Fix KISS:** `_COUNT_LABEL_HIDE_THRESHOLD = 380px` Klassen-Konstante.
+`resizeEvent` triggert `_update_count_label_visibility` → setHidden
+unterhalb Schwelle. Initial-Call in `__init__` verhindert Aufflackern.
+
+**Brainstorm-R1 V4-pro:** Variante A 🟢 mit Konstante (statt Magic).
+V2 0 Findings. Final-R1 „PUSH FREIGEBEN ✅" 0 KP.
+
+**V4-pro 34-Cycle-Bilanz: 0 Halluzinationen.**
+
+### Field-Tests P88 pending (Mike)
+
+- F1: Spalte schmal ziehen → Count-Labels weg
+- F2: Spalte breit → Count-Labels da
+- F3: Text bleibt nach Toggle korrekt
+- F4: Andere Elemente unverändert
 
 ### 🟢 v0.97.57 P87 — DX-Mode Warmup-Anzeige analog P85
 

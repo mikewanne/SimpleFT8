@@ -3,6 +3,65 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-19 v0.97.58 — P88: Responsive Hide bei schmaler Spalte
+
+**Trigger:** Mike-Field-Test 19.05.2026 (Screenshots 14:17). Bei
+schmaler Control-Panel-Spalte werden Diversity-Count-Labels
+(`_a1_count_label`, `_a2_count_label`) in der Ratio-Row gequetscht
+und unlesbar — „Diversity läuft...", DX-Counts, ANT2-Win-%.
+
+### Mike-Spec (verbatim)
+
+> „wir sollten nicht lesbare infos bei schmaler spalte ausblenden ich
+> glaube das ist die einzigste info die betroffen ist."
+
+### Was umgesetzt
+
+**`ui/control_panel.py`:**
+- Klassen-Konstante `_COUNT_LABEL_HIDE_THRESHOLD: int = 380`
+  (aus Mike-Field-Test: ~385px gequetscht, 540px lesbar)
+- Methode `_update_count_label_visibility()` — toggelt
+  `_a1_count_label` + `_a2_count_label` per `setHidden(narrow)`
+- `resizeEvent` Override ruft Helper nach `super().resizeEvent(ev)`
+- Initial-Call in `__init__` nach `_setup_ui` (verhindert
+  kurzes Aufflackern vor erstem resizeEvent)
+- `hasattr`-Defensive (resizeEvent kann theoretisch vor _setup_ui feuern)
+
+Andere Elemente unverändert: Prozent-Labels (`70/50/30%`) haben
+fix `minWidth=30`, bleiben kompakt sichtbar. dx_info + _phase_label
+liegen in eigenen Zeilen, nicht betroffen.
+
+### Workflow
+
+- **Brainstorm-R1 V4-pro:** Variante A 🟢 (resizeEvent + Schwellwert)
+  + Konstante statt Magic Number. Varianten B/C/D verworfen.
+- **V1 → V2 Self-Review:** keine Findings (Defensive bereits in V1).
+- **V3 → Code → 6 Tests T1-T6 → Final-R1 V4-pro:** „PUSH FREIGEBEN ✅"
+  0 KP. Alle 6 Review-Fragen positiv.
+
+**V4-pro 34-Cycle-Bilanz: 0 Halluzinationen.**
+
+### Tests
+
+1568 → 1574 (+6).
+- T1: Width < 380 → labels hidden
+- T2: Width >= 380 → labels visible
+- T3: Toggle schmal/breit mehrfach inkl. Schwellwert-Grenze (379/380)
+- T4: setText während hidden persistent
+- T5: Konstante _COUNT_LABEL_HIDE_THRESHOLD == 380
+- T6: Defensive ohne _a1_count_label-Attribut
+
+### Field-Test pending (Mike)
+
+- F1: Control-Panel schmaler ziehen → Count-Labels verschwinden
+- F2: Breiter ziehen → Count-Labels erscheinen wieder
+- F3: Text bleibt nach Toggle korrekt (ANT2-Win 86% etc.)
+- F4: Andere Elemente unverändert (Ratio-Prozente, dx_info bleiben)
+
+Backup: `Appsicherungen/2026-05-19_v0.97.57_vor_p88/`.
+
+---
+
 ## 2026-05-19 v0.97.57 — P87: DX-Mode Warmup-Anzeige analog P85
 
 **Trigger:** Mike-Field-Test 19.05.2026 (Screenshot 13:51). Diversity
