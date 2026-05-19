@@ -161,8 +161,8 @@ def test_p83_t6c_migration_marker_ts_zero():
 # ──────────────────────────────────────────────────────────────────────
 
 
-def test_p85_t7_warmup_diversity_laeuft():
-    """T7: cum_total < 4 → „Diversity läuft..." Warmup-Anzeige."""
+def test_p85_t7_warmup_berechnung_laeuft():
+    """T7 (P89): cum_total < 4 → „Berechnung läuft..." Warmup-Anzeige."""
     from PySide6.QtWidgets import QApplication
     import sys
     app = QApplication.instance() or QApplication(sys.argv)
@@ -174,18 +174,18 @@ def test_p85_t7_warmup_diversity_laeuft():
         scoring_mode="normal",
         ant2_wins=1, total_compared=2,
     )
-    assert "läuft" in cp._a1_count_label.text()
+    assert cp._a1_count_label.text() == "Berechnung läuft..."
     assert cp._a2_count_label.text() == ""
 
 
-def test_p85_t8_win_rate_anzeige_nach_warmup():
-    """T8: cum_total ≥ 4 → ANT2-Win-% angezeigt."""
+def test_p85_t8_nach_warmup_labels_leer():
+    """T8 (P89): cum_total ≥ 4 → Labels leer (keine Win-% mehr)."""
     from PySide6.QtWidgets import QApplication
     import sys
     app = QApplication.instance() or QApplication(sys.argv)
     from ui import control_panel as cp_mod
     cp = cp_mod.ControlPanel()
-    # 3 Zyklen mit insgesamt 6 Vergleichen, 4 ANT2-wins
+    # 3 Zyklen mit insgesamt 6 Vergleichen
     cp.update_diversity_counts(
         a1_count=3, a2_count=3, scoring_mode="normal",
         ant2_wins=2, total_compared=3,
@@ -198,16 +198,15 @@ def test_p85_t8_win_rate_anzeige_nach_warmup():
         a1_count=3, a2_count=3, scoring_mode="normal",
         ant2_wins=1, total_compared=1,
     )
-    # cum_wins=4, cum_total=6 → 67%
-    assert "ANT2-Win 67%" in cp._a1_count_label.text()
+    # P89: nach Warmup leer, keine ANT2-Win-Anzeige mehr
+    assert cp._a1_count_label.text() == ""
     assert cp._a2_count_label.text() == ""
 
 
-def test_p85_t9_dx_mode_unveraendert():
-    """T9: DX-Mode zeigt „X DX" weak-counts NACH P87-Warmup (4+ Zyklen).
+def test_p85_t9_dx_mode_nach_warmup_leer():
+    """T9 (P89): DX-Mode nach Warmup (4+ Zyklen) → beide Labels leer.
 
-    P87 (v0.97.57): DX-Mode hat jetzt 4-Zyklus-Warmup analog Standard.
-    Vor Warmup: „Diversity läuft...", nach Warmup: weak-counts.
+    Vorher (P87): „X DX"-weak-counts. P89: keine Counts mehr, nur Warmup-Hinweis.
     """
     from PySide6.QtWidgets import QApplication
     import sys
@@ -218,14 +217,11 @@ def test_p85_t9_dx_mode_unveraendert():
     for _ in range(4):
         cp.update_diversity_counts(
             a1_count=5, a2_count=5, scoring_mode="dx",
-            ant2_wins=4, total_compared=8,  # diese werden im DX ignoriert
+            ant2_wins=4, total_compared=8,
             a1_weak_count=2, a2_weak_count=3,
         )
-    assert "DX" in cp._a1_count_label.text()
-    assert "02 DX" in cp._a1_count_label.text()
-    assert "03 DX" in cp._a2_count_label.text()
-    # Win-% wird im DX-Mode NICHT angezeigt
-    assert "Win" not in cp._a1_count_label.text()
+    assert cp._a1_count_label.text() == ""
+    assert cp._a2_count_label.text() == ""
 
 
 def test_p85_t10_reset_win_rate_history():
@@ -245,8 +241,13 @@ def test_p85_t10_reset_win_rate_history():
     assert len(cp._win_rate_history) == 0
 
 
-def test_p85_t11_zero_counts_double_dash():
-    """T11: a1+a2 = 0 → „--" anzeigen (Diversity läuft nicht / kein Decode)."""
+def test_p85_t11_zero_counts_warmup_text():
+    """T11 (P89): a1+a2 = 0 → „Berechnung läuft..." (kein „--"-Branch mehr).
+
+    P89: Der `--`-Early-Return entfällt — Standard-Mode hängt im
+    Warmup-Branch fest (cum_total bleibt 0), zeigt also den
+    Warmup-Text konsistent statt „--".
+    """
     from PySide6.QtWidgets import QApplication
     import sys
     app = QApplication.instance() or QApplication(sys.argv)
@@ -256,7 +257,8 @@ def test_p85_t11_zero_counts_double_dash():
         a1_count=0, a2_count=0, scoring_mode="normal",
         ant2_wins=0, total_compared=0,
     )
-    assert "--" in cp._a1_count_label.text()
+    assert cp._a1_count_label.text() == "Berechnung läuft..."
+    assert cp._a2_count_label.text() == ""
 
 
 # ──────────────────────────────────────────────────────────────────────

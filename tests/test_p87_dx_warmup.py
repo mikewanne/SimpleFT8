@@ -37,7 +37,7 @@ def qapp():
 
 
 def test_t1_dx_warmup_zeigt_diversity_laeuft(qapp):
-    """DX-Mode 1.-3. Aufruf → „Diversity läuft...", echte Counts NICHT sichtbar."""
+    """P89 (v0.97.59): DX-Mode 1.-3. Aufruf → „Berechnung läuft..."."""
     from ui.control_panel import ControlPanel
 
     cp = ControlPanel()
@@ -49,7 +49,7 @@ def test_t1_dx_warmup_zeigt_diversity_laeuft(qapp):
                 scoring_mode="dx",
                 a1_weak_count=26, a2_weak_count=0
             )
-            assert cp._a1_count_label.text() == "Diversity läuft...", \
+            assert cp._a1_count_label.text() == "Berechnung läuft...", \
                 f"Cycle {i}: Warmup-Text fehlt"
             assert cp._a2_count_label.text() == "", \
                 f"Cycle {i}: a2-Label muss leer sein im Warmup"
@@ -61,8 +61,8 @@ def test_t1_dx_warmup_zeigt_diversity_laeuft(qapp):
 # ── T2 — DX-Mode 4. Aufruf zeigt echte Counts ─────────────────────────
 
 
-def test_t2_dx_nach_4_zyklen_echte_counts(qapp):
-    """DX-Mode 4. Aufruf → echte Counts `26 DX` / `  06 DX`."""
+def test_t2_dx_nach_4_zyklen_labels_leer(qapp):
+    """P89 (v0.97.59): DX-Mode 4. Aufruf → beide Labels LEER (keine Counts mehr)."""
     from ui.control_panel import ControlPanel
 
     cp = ControlPanel()
@@ -73,10 +73,10 @@ def test_t2_dx_nach_4_zyklen_echte_counts(qapp):
                 scoring_mode="dx",
                 a1_weak_count=26, a2_weak_count=6
             )
-        # Nach 4 Aufrufen Warmup vorbei
+        # Nach 4 Aufrufen Warmup vorbei → P89 Labels leer
         assert cp._dx_warmup_count == 4
-        assert cp._a1_count_label.text() == "26 DX"
-        assert cp._a2_count_label.text() == "  06 DX"
+        assert cp._a1_count_label.text() == ""
+        assert cp._a2_count_label.text() == ""
     finally:
         cp.deleteLater()
 
@@ -115,8 +115,8 @@ def test_t3_reset_win_rate_history_resettet_dx_counter(qapp):
 
 
 def test_t4_standard_mode_inkrementiert_dx_counter_nicht(qapp):
-    """Standard-Mode (`scoring_mode='normal'`) darf `_dx_warmup_count`
-    NICHT inkrementieren — sonst Wechsel-Logik kaputt.
+    """Standard-Mode darf `_dx_warmup_count` NICHT inkrementieren —
+    sonst Wechsel-Logik kaputt. P89: Standard-Display nach Warmup leer.
     """
     from ui.control_panel import ControlPanel
 
@@ -131,9 +131,9 @@ def test_t4_standard_mode_inkrementiert_dx_counter_nicht(qapp):
         # Standard-Mode darf DX-Counter nicht anfassen
         assert cp._dx_warmup_count == 0, \
             "Standard-Mode darf _dx_warmup_count nicht inkrementieren"
-        # Standard-Mode-Display (P85) muss laufen
-        # cum_total=100 >= 4 → echte ANT2-Win-% Anzeige
-        assert "ANT2-Win" in cp._a1_count_label.text()
+        # P89: cum_total=100 >= 4 → Labels leer (kein ANT2-Win mehr)
+        assert cp._a1_count_label.text() == ""
+        assert cp._a2_count_label.text() == ""
     finally:
         cp.deleteLater()
 
@@ -141,24 +141,25 @@ def test_t4_standard_mode_inkrementiert_dx_counter_nicht(qapp):
 # ── T5 — Reset bei beiden Counts==0 inkrementiert NICHT ───────────────
 
 
-def test_t5_zero_counts_nicht_inkrementiert(qapp):
-    """Wenn a1_count==0 AND a2_count==0 → Early-Return VOR DX-Branch,
-    daher `_dx_warmup_count` bleibt unverändert.
+def test_t5_zero_counts_inkrementieren_warmup_counter(qapp):
+    """P89 (v0.97.59): `--`-Early-Return ENTFÄLLT. Auch bei Zero-Counts
+    inkrementiert der DX-Branch den Warmup-Counter — Display zeigt
+    „Berechnung läuft..." statt „--" für konsistente UX.
     """
     from ui.control_panel import ControlPanel
 
     cp = ControlPanel()
     try:
-        for _ in range(5):
+        for _ in range(3):
             cp.update_diversity_counts(
                 a1_count=0, a2_count=0,
                 scoring_mode="dx",
                 a1_weak_count=0, a2_weak_count=0
             )
-        assert cp._dx_warmup_count == 0, \
-            "Zero-Counts dürfen Warmup-Counter NICHT füttern"
-        # Display zeigt „--" (Reset/Init-State)
-        assert cp._a1_count_label.text() == "--"
-        assert cp._a2_count_label.text() == "  --"
+        assert cp._dx_warmup_count == 3, \
+            "P89: Zero-Counts füttern jetzt den Warmup-Counter (kein Early-Return)"
+        # Display zeigt „Berechnung läuft..." (konsistent)
+        assert cp._a1_count_label.text() == "Berechnung läuft..."
+        assert cp._a2_count_label.text() == ""
     finally:
         cp.deleteLater()
