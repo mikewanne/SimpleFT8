@@ -103,10 +103,34 @@ class RadioMixin:
         self._connect_dialog.exec()
 
         # Cleanup nach exec()-Return
+        was_user_cancelled = self._connect_dialog.was_cancelled
         try:
             self.radio.connected.disconnect(self._connect_dialog.accept)
         except (TypeError, RuntimeError):
             pass  # bereits disconnected oder Dialog tot
+
+        # P82 (v0.97.55): „ohne Radio weiter" muss Connect IMMER überspringen,
+        # auch wenn Worker erst NACH dem Klick erfolgreich connectet (Race).
+        # Reine Slot-Disconnects reichen NICHT — `radio.connect()` macht
+        # TCP-Setup unabhängig von Slots (`client gui`, `keepalive enable`,
+        # Slice-Erstellung). Daher Flag-basierte Defensive in beiden Slots
+        # `_on_radio_connected` und `_on_radio_disconnected` plus sofortiges
+        # Disconnect falls Worker schon `_running=True` gesetzt hat.
+        # Hardware-Risiko: ungewollter TX via Auto-Hunt/CQ/TUNE wenn App
+        # gegen User-Willen connected war.
+        if was_user_cancelled:
+            self._demo_mode_forced = True
+            self.radio.abort_reconnect()
+            if getattr(self.radio, "_running", False):
+                # Final-R1-Fund 1: try/except analog zum Slot-Guard
+                # (defensiv gegen Socket-Race im Worker-Shutdown).
+                try:
+                    self.radio.disconnect()
+                except Exception:
+                    pass
+            self.control_panel.set_connection_status("disconnected")
+            print("[P82] 'ohne Radio weiter' → Demo-Modus erzwungen")
+
         self._connect_dialog = None
 
     def _connect_worker(self):
@@ -135,7 +159,20 @@ class RadioMixin:
                     pass
 
     def _on_radio_connected(self):
-        """Wird aufgerufen wenn FlexRadio verbunden ist."""
+        """Wird aufgerufen wenn FlexRadio verbunden ist.
+
+        P82 (v0.97.55): User-Cancel-Override. Wenn Mike „ohne Radio weiter"
+        geklickt hat während Worker noch lief, sofort wieder trennen —
+        KEINE Hardware-Calls (`set_frequency`, `apply_ft8_preset`,
+        `decoder.start`, `create_tx_stream`). Schützt vor ungewolltem TX.
+        """
+        if getattr(self, "_demo_mode_forced", False):
+            print("[P82] Late-Connect nach User-Cancel → radio.disconnect()")
+            try:
+                self.radio.disconnect()
+            except Exception:
+                pass
+            return
         self._reconnect_attempts = 0
         self.control_panel.set_connection_status("connected")
         # Gespeichertes Band + Frequenz setzen
@@ -201,7 +238,16 @@ class RadioMixin:
         self._update_gain_status_display()
 
     def _on_radio_disconnected(self):
-        """Verbindung verloren — unbegrenzt reconnecten mit Exponential Backoff."""
+        """Verbindung verloren — unbegrenzt reconnecten mit Exponential Backoff.
+
+        P82 (v0.97.55): Bei User-Cancel (`_demo_mode_forced=True`) KEIN
+        Reconnect-Loop starten — Mike wollte Demo-Modus, kein automatisches
+        Wiederverbinden bis App-Restart.
+        """
+        if getattr(self, "_demo_mode_forced", False):
+            print("[P82] Disconnect nach User-Cancel → KEIN reconnect_forever")
+            self.control_panel.set_connection_status("disconnected")
+            return
         self.control_panel.set_connection_status("disconnected")
         self.decoder.stop()
         self._reconnect_attempts += 1

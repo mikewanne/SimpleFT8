@@ -63,6 +63,10 @@ class ConnectStatusDialog(QDialog):
         self._failed = False
         # Bundle J (v0.97.27): Footer-Version aus main.APP_VERSION mitgeben.
         self._app_version = app_version
+        # P82 (v0.97.55): User-Cancel-Flag. _start_radio liest den Wert
+        # nach exec() um zwischen User-Klick (Demo-Pflicht) und
+        # Radio-Accept (Connect erfolgreich) zu unterscheiden.
+        self._user_cancelled = False
 
         self.setWindowTitle("FlexRadio wird verbunden")
         # 11.05.2026: 20% kleiner (Mike-Field-Test).
@@ -208,6 +212,17 @@ class ConnectStatusDialog(QDialog):
 
     # ── Buttons ────────────────────────────────────────────────────────────
 
+    @property
+    def was_cancelled(self) -> bool:
+        """P82 (v0.97.55): True wenn User „ohne Radio weiter" klickte.
+
+        `_start_radio` liest dies nach exec() um Race-Condition aufzulösen:
+        Radio kann gleichzeitig connected.emit() feuern — `dialog.accept()`
+        läuft via QueuedConnection. User-Klick und Accept-Slot werden im
+        GUI-Thread sequenzialisiert. Das Flag macht User-Intent eindeutig.
+        """
+        return self._user_cancelled
+
     def _on_continue_without_radio(self):
         """User-Bypass: App startet ohne Radio (Demo-Modus weiter).
 
@@ -217,10 +232,16 @@ class ConnectStatusDialog(QDialog):
         Mike-Klärung 16.05.: „ohne Radio weiter" = Demo-Modus weiter,
         „Beenden" = quit. Bundle L Punkt A (Display-3-Auto-Move) bleibt.
 
+        P82 (v0.97.55): Flag setzen BEVOR `reject()`. mw_radio.py
+        `_start_radio` prüft Flag nach exec() und erzwingt Demo-Modus,
+        auch wenn Worker-Thread gleichzeitig oder kurz danach erfolgreich
+        connectet (Hardware-Sicherheit gegen ungewollte TX-Pfade).
+
         `_tick_timer.stop()` als Defensive — beendet die Spinner-Animation
         sauber. App läuft nach `reject()` weiter (mw_radio.py Cleanup
         setzt `_connect_dialog = None`, Qt cleant Timer beim Parent-Destroy).
         """
+        self._user_cancelled = True
         try:
             self._tick_timer.stop()
         except Exception:
