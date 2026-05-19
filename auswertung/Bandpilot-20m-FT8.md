@@ -1,6 +1,6 @@
 # Bandpilot Empfehlung — 20m FT8
 
-Stand: 2026-05-18 (UTC, App-Start). Quelle: `statistics/<Mode>/20m/FT8/`.
+Stand: 2026-05-19 (UTC, App-Start). Quelle: `statistics/<Mode>/20m/FT8/`.
 
 Schwellen pro Stunde: ≥ 3 Messtage UND ≥ 20 Slots pro Modus.
 
