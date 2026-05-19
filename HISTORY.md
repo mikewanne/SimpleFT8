@@ -3,6 +3,90 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-19 v0.97.59 — P89: Diversity-Count-Labels vereinfacht
+
+**Trigger:** Mike-Beobachtung 19.05.2026 nach P88. ANT2-Win-% (P85
+Standard-Mode) und DX-Counts (P87 DX-Mode) erzeugten Verwirrung, weil
+sie zeitlich immer 1-3 Zyklen vor dem Ratio-Sprung liefen (Hysterese
+8%). Konkretes Beispiel: 10 Slots lang ANT2-Win 25% angezeigt, Ratio
+hing auf 50:50 — User denkt „ist was kaputt".
+
+### Mike-Spec (verbatim)
+
+> „macht sinn eher berechnung läuft... sollenge wir die werte nicht
+> zusammen haben dann keine ahnung OK meldung, und dann wenn wieder
+> berechnet wird berechnung läuft ? hmmm kleine sache viele fragen"
+>
+> „kiss lösung anzeige rausnhemen son fällt mir nix vernünftiges
+> ein und wenn die antennen 50.50 anzeigen mecht sich keiner gedanken
+> und 70:30 auch nicht aber wenn eine ant 25 prozent anzeigt und
+> womöglich noch auf 30:70 steht denkt jeder ist was kaputt"
+
+### DeepSeek-Brainstorm-R1 (V4-pro)
+
+4 Varianten evaluiert: A („läuft..." ↔ „OK"), B (komplett raus),
+C (nur Warmup-Text, sonst leer), D (Sprung-Heuristik).
+
+**Empfehlung: Variante C 🟢** mit 2 Verbesserungen vs. V1:
+1. `--`-Early-Return entfernen → einheitlich „Berechnung läuft..."
+2. DX-Mode nach Warmup auch leer (kein „X DX" mehr)
+
+A verworfen (OK redundant zur Ratio), B verworfen (Warmup-Hinweis
+fehlt nach Wechsel → neue Verwirrung), D verworfen (Heuristik =
+Overengineering).
+
+### Was umgesetzt
+
+**`ui/control_panel.py` `update_diversity_counts`:**
+- DX-Branch: Warmup-Counter inkrementiert weiter → < 4 zeigt
+  „Berechnung läuft...", ≥ 4 beide Labels leer
+- Standard-Branch: Ringpuffer füttert sich bei `total_compared > 0`,
+  Anzeige „Berechnung läuft..." solange `cum_total < 4`, sonst leer
+- `--`-Early-Return bei `a1==a2==0` entfernt → Zero-Counts hängen
+  konsistent im Warmup-Text
+- ANT2-Win-%-Berechnung + DX-Weak-Count-Formatierung komplett raus
+
+**Lifecycle unverändert:**
+- `_win_rate_history = deque(maxlen=4)` bleibt (toter Code, aber
+  bewusst behalten falls Win-% später reaktiviert werden soll)
+- `_dx_warmup_count` bleibt
+- `reset_win_rate_history()` clear-t weiter beide
+- P88 Responsive-Hide bleibt funktional
+
+**`main.py`:** APP_VERSION 0.97.58 → 0.97.59
+
+**`tests/test_p89_count_labels_simplified.py`:** NEU 6 Tests T1-T6.
+
+**Tests angepasst:**
+- `test_bundle_m_p83_p85.py` T7/T8/T9/T11: alte Win-%/DX-Counts/„--"-
+  Asserts ersetzt durch leere Labels bzw. „Berechnung läuft..."
+- `test_p87_dx_warmup.py` T1/T2/T4/T5: Text-Wording „Diversity" →
+  „Berechnung", T2 jetzt leere Labels, T5 invertiert (Zero-Counts
+  inkrementieren jetzt)
+
+### Workflow & Bilanz
+
+- **Brainstorm-R1 V4-pro:** Variante C empfohlen, 2 KISS-Verbesserungen
+- **V1+V2 (Self-Review):** 5 V1-Hallu-Checks, 5 V2-Findings (F1-F5)
+- **Final-R1 V4-pro:** „PUSH FREIGEBEN" 0 KP — Implementierung exakt
+  wie spezifiziert, Edge-Cases via Reset-Mechanismus abgesichert,
+  toter Code dokumentiert, Tests sauber refactored
+
+**V4-pro 35-Cycle-Bilanz: 0 Halluzinationen.**
+
+**Tests 1574 → 1580 (+6 P89 netto, 9 angepasste alte).**
+
+### Field-Test pending (alle ohne Radio)
+
+- F1: App-Start im Diversity Standard → „Berechnung läuft..." sichtbar
+- F2: Nach 4 Zyklen → Labels leer, Ratio + Bedien-% sprechen
+- F3: Diversity AUS→AN-Toggle → Warmup-Text wieder kurz sichtbar
+- F4: Mode-Wechsel Standard ↔ DX → Warmup-Text wieder kurz
+- F5: Band-Wechsel → Warmup-Text wieder kurz
+- F6: P88 schmale Spalte → Warmup-Text auch ausgeblendet
+
+---
+
 ## 2026-05-19 v0.97.58 — P88: Responsive Hide bei schmaler Spalte
 
 **Trigger:** Mike-Field-Test 19.05.2026 (Screenshots 14:17). Bei

@@ -1,8 +1,40 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-19 — P88 autonom (Responsive Hide), P87 + P86 + P82 + Bundle M davor
+## Stand 2026-05-19 — P89 (Count-Labels vereinfacht), P88 + P87 + P86 + P82 + Bundle M davor
 
-**Aktueller Code-Stand:** v0.97.58 (P88), Tests **1574 grün** (+6 P88).
+**Aktueller Code-Stand:** v0.97.59 (P89), Tests **1580 grün** (+6 P89 netto, 9 angepasste alte).
+
+### 🟢 v0.97.59 P89 — Diversity-Count-Labels vereinfacht
+
+Mike-Beobachtung 19.05.2026 nach P88: ANT2-Win-% (P85) + DX-Counts
+(P87) erzeugten Verwirrung weil sie 1-3 Zyklen vor dem Ratio-Sprung
+liefen (Hysterese 8%). Konkret: 10 Slots ANT2-Win 25% angezeigt,
+Ratio hing auf 50:50 → User denkt „ist was kaputt".
+
+**Mike-Spec KISS:** „Berechnung läuft..." während Warmup, sonst leer.
+Ratio + Bedien-% sprechen für sich.
+
+**Fix Variante C (DeepSeek-Brainstorm-R1 empfohlen):**
+- ANT2-Win-%-Berechnung + DX-Weak-Count-Formatierung raus
+- Warmup-Branch zeigt jetzt „Berechnung läuft..." (Mike-Wording)
+- Nach Warmup: beide Labels leer (sowohl Standard als auch DX)
+- `--`-Early-Return entfernt → Zero-Counts hängen konsistent im Warmup
+- Ringpuffer + Warmup-Counter bleiben (Lifecycle unverändert)
+
+**Final-R1 V4-pro:** „PUSH FREIGEBEN" 0 KP — Edge-Cases via
+Reset-Mechanismus abgesichert, toter Code (`_win_rate_history`)
+dokumentiert behalten für mögliche spätere Reaktivierung.
+
+**V4-pro 35-Cycle-Bilanz: 0 Halluzinationen.**
+
+### Field-Tests P89 pending (alle ohne Radio)
+
+- F1: App-Start im Diversity Standard → „Berechnung läuft..." sichtbar
+- F2: Nach 4 Zyklen → Labels leer, Ratio spricht für sich
+- F3: Diversity AUS→AN-Toggle → Warmup-Text kurz sichtbar
+- F4: Mode-Wechsel Standard ↔ DX → Warmup-Text kurz
+- F5: Band-Wechsel → Warmup-Text kurz
+- F6: P88 schmale Spalte → Warmup-Text auch ausgeblendet
 
 ### 🟢 v0.97.58 P88 — Responsive Hide bei schmaler Spalte
 
