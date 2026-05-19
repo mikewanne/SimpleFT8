@@ -3,6 +3,110 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-19 v0.97.60 — P90: Connect-Worker hart abbrechen bei „ohne Radio weiter"
+
+**Trigger:** Mike-Field-Test 19.05.2026 nach v0.97.59-Start mit Radio
+AN. Trotz Klick auf „ohne Radio weiter" im Connect-Modal hat der
+FlexRadio-Worker die komplette Connect-Sequenz durchlaufen (Discovery,
+Phase 1 SmartSDR-Disconnect, Phase 2 TCP-Connect, Meter-Learning,
+Panadapter + Slice anlegen, TX-Config dax=1). App zeigte „Radio
+getrennt" — aber TCP-Verbindung stand, Slice war konfiguriert.
+
+### Mike-Frage (verbatim)
+
+> „app verbindet trotzdem in der app steht radio getrennt, ist das
+> gewollt, für das hinterher evt.zu ungewohlten verhalten ? sollen
+> wir nicht lieber wirklich erst gar keine verbindung aufbauen um
+> fehler zu vermeiden weil das radio im hintergrund doch verbunden
+> war und in irgendeinen programm pfad auf das radio zugreift"
+
+Berechtigte Sorge: Hardware-Sicherheits-Risiko zweiter Ordnung. P82
+(v0.97.55) hat nur die Symptome nach `connected.emit()` adressiert
+(Slot-Guards in `_on_radio_connected`/`_on_radio_disconnected`), aber
+die Connect-Sequenz davor lief weiter durch — `auto_connect()` und
+`connect()` in `radio/flexradio.py` hatten kein Abort-Flag.
+
+### DeepSeek-Brainstorm-R1 (V4-pro)
+
+4 Varianten evaluiert:
+- A: Bool-Flag + Checkpoints (Pattern wie `_abort_reconnect`)
+- B: `threading.Event`
+- C: Thread hard kill
+- D: Connect erst nach Dialog-Klick
+
+**Empfehlung: Variante A 🟢** mit präziser Checkpoint-Liste und
+Cleanup-Reihenfolge. KISS: baut auf bestehendem `abort_reconnect`-
+Pattern auf, nur 1 Flag + Setter + 9 Check-Punkte.
+
+### Was umgesetzt
+
+**`radio/flexradio.py`:**
+- `__init__`: `self._abort_connect: bool = False`
+- Neuer Setter `abort_connect()` analog `abort_reconnect()`
+- `auto_connect()`: Reset Flag am Anfang + 5 Checkpoints (vor Callback,
+  nach Callback, nach Discovery, vor connect, nach connect-Fail)
+- `connect()`: 4 Checkpoints (nach Phase 1, nach TCP-Connect, vor
+  Slice-Erstellung, vor Thread-Start)
+- Bei Abort: `self.disconnect()` + `return False` + Print-Log
+  „Connect-Sequenz abgebrochen (Phase X)"
+
+**`ui/mw_radio.py` `_start_radio`:**
+- Worker als Instance-Var `self._connect_thread = threading.Thread(...)`
+  (statt fire-and-forget)
+- Cleanup-Block bei `was_user_cancelled` neu strukturiert:
+  1. `abort_connect()` (signalisiert Worker)
+  2. `abort_reconnect()` (verhindert späteren Reconnect-Loop)
+  3. `disconnect()` (räumt halb-fertige Sockets auf, try/except)
+  4. `_connect_thread.join(timeout=2.0)` (wartet auf Worker-Ende)
+- P82-Slot-Guards in `_on_radio_connected`/`_on_radio_disconnected`
+  bleiben als Belt-and-suspenders (Race-Fenster `connected.emit()`
+  vor letztem Checkpoint).
+
+**`main.py`:** APP_VERSION 0.97.59 → 0.97.60
+
+**`tests/test_p90_connect_abort.py`:** NEU 8 Tests T1-T8 (Flag-Default,
+Setter, Reset, Mid-Callback-Abort, connect()-Abort nach Phase 1,
+Thread-Instance-Var via Source-Inspection, Cleanup-Reihenfolge via
+Position-Check im Source, APP_VERSION-Bump).
+
+### Workflow & Bilanz
+
+- **Code-Verifikation:** Explore-Agent hat Connect-Sequenz +
+  Threading-Modell + bestehende Abort-Patterns dokumentiert
+- **V1+V2 (Self-Review):** 6 V2-Findings (Check-Punkte, Race
+  Cleanup-Order, Worker-Join, Slot-Guards behalten, Logging,
+  Cleanup in connect bei Abort) — alle in V3 eingearbeitet
+- **Brainstorm-R1 V4-pro:** Variante A 🟢 empfohlen, alle 10 Fragen
+  beantwortet inkl. Edge-Cases (discover 2s, socket.connect 5s,
+  emit-Race)
+- **Final-R1 V4-pro:** „PUSH FREIGEBEN" 0 KP — alle 7 Review-Punkte
+  bestätigt sauber, Race-Fenster durch 2 Schichten abgesichert,
+  Hardware-Sicherheit ANT1 gewahrt
+
+**V4-pro 36-Cycle-Bilanz: 0 Halluzinationen.**
+
+**Tests 1580 → 1588 (+8 P90).**
+
+### Hardware-Sicherheit
+
+Mike's Bauchgefühl war goldrichtig. Mit P90 wird **garantiert keine
+Hardware mehr eingerichtet** wenn „ohne Radio weiter" geklickt wird:
+- TCP-Socket geschlossen vor Slice/Panadapter
+- Kein `set_tx_antenna`-Aufruf (auch nicht ANT2 versehentlich)
+- Worker-Thread sauber beendet (join mit Timeout)
+- P82-Slot-Guards als 2. Schicht für Race-Fenster
+
+### Field-Test pending (Mike, Radio AN nötig)
+
+- F1: Radio AN, App starten → schnell „ohne Radio weiter" klicken
+  → Log darf KEINE „Slice 0 aktiv" / „TX: dax=1" Zeile zeigen
+- F2: Log MUSS „Connect-Sequenz abgebrochen (Phase X)" enthalten
+- F3: App-UI „Radio getrennt", kein Hardware-Zugriff über CQ/Auto-Hunt/TUNE
+- F4: 10s warten — keine spätere Verbindung baut sich auf
+- F5: Connect-Reaktionszeit < 2s (thread.join Timeout greift gut)
+
+---
+
 ## 2026-05-19 v0.97.59 — P89: Diversity-Count-Labels vereinfacht
 
 **Trigger:** Mike-Beobachtung 19.05.2026 nach P88. ANT2-Win-% (P85

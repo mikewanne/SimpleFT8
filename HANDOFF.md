@@ -1,8 +1,45 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-19 — P89 (Count-Labels vereinfacht), P88 + P87 + P86 + P82 + Bundle M davor
+## Stand 2026-05-19 — P90 (Connect-Worker-Abort), P89 + P88 + P87 + P86 + P82 davor
 
-**Aktueller Code-Stand:** v0.97.59 (P89), Tests **1580 grün** (+6 P89 netto, 9 angepasste alte).
+**Aktueller Code-Stand:** v0.97.60 (P90), Tests **1588 grün** (+8 P90).
+
+### 🟢 v0.97.60 P90 — Connect-Worker hart abbrechen bei „ohne Radio weiter"
+
+Mike-Field-Test 19.05.2026 nach v0.97.59-Start: Trotz „ohne Radio
+weiter"-Klick lief die FlexRadio-Connect-Sequenz vollständig durch
+(Discovery, Phase 1, TCP-Connect, Meter, Panadapter, Slice, TX-Config).
+App zeigte „Radio getrennt" — aber Hardware war eingerichtet. Mike:
+„sollen wir nicht lieber wirklich erst gar keine verbindung aufbauen".
+
+**Fix (DeepSeek-Brainstorm-R1 Variante A 🟢):**
+- `radio/flexradio.py`: `_abort_connect`-Flag + Setter analog
+  `_abort_reconnect`. Reset in `auto_connect()` am Anfang, 5 Check-
+  Punkte in `auto_connect()` + 4 in `connect()`. Bei Abort:
+  `disconnect()` + `return False` + Log.
+- `ui/mw_radio.py`: Worker als `self._connect_thread`. Cleanup-Block
+  ruft `abort_connect()` → `abort_reconnect()` → `disconnect()` →
+  `thread.join(timeout=2.0)`. P82-Slot-Guards bleiben als 2. Schicht.
+
+**Final-R1 V4-pro:** „PUSH FREIGEBEN" 0 KP — Race-Fenster durch 2
+Schichten abgesichert, Hardware-Sicherheit ANT1 gewahrt (kein TX-
+Antenna-Setup vor letztem Checkpoint).
+
+**V4-pro 36-Cycle-Bilanz: 0 Halluzinationen.**
+
+### Field-Tests P90 pending (Mike, Radio AN nötig)
+
+- F1: Radio AN, App starten → schnell „ohne Radio weiter" klicken
+  → Log darf KEINE „Slice 0 aktiv" / „TX: dax=1" Zeile zeigen
+- F2: Log MUSS „Connect-Sequenz abgebrochen (Phase X)" enthalten
+- F3: UI „Radio getrennt", kein Hardware-Zugriff via CQ/Auto-Hunt/TUNE
+- F4: 10s warten — keine spätere Verbindung baut sich auf
+- F5: Cancel-Reaktion < 2s (thread.join Timeout)
+
+### Field-Tests v0.97.59 P89 ✅ (Mike 19.05. nach App-Start)
+
+„spalte breit small funktioniert auch" + „kalibrieren button ist
+weg bei normal modus" — P88 + P86 erfolgreich bestätigt.
 
 ### 🟢 v0.97.59 P89 — Diversity-Count-Labels vereinfacht
 

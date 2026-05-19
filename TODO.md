@@ -21,11 +21,9 @@ Final-R1 „PUSH FREIGEBEN ✅" 0 KP.
 **V4-pro 34-Cycle-Bilanz: 0 Halluzinationen.**
 **Tests 1568 → 1574 (+6 netto).**
 
-Field-Test F1-F4 pending (Mike, alle ohne Radio testbar):
-- F1: Spalte schmal → Labels verschwinden
-- F2: Spalte breit → Labels erscheinen
-- F3: Text bleibt korrekt nach Toggle
-- F4: Andere Elemente unverändert
+Field-Test F1-F4 ✅ Mike 19.05.2026 nach v0.97.59-Start:
+„spalte breit small funktioniert auch" — Schmal/Breit-Wechsel + Labels
+unverändert bei anderen UI-Elementen bestätigt.
 
 Backup: `Appsicherungen/2026-05-19_v0.97.57_vor_p88/`.
 
@@ -72,7 +70,8 @@ Phase 2 (Gain) ohne Phase 3 (Ratio) machte → Anti-Pattern.
 **V4-pro 32-Cycle-Bilanz: 0 Halluzinationen.**
 **Tests 1555 → 1563 (+8 netto).**
 
-Field-Test F1-F6 pending (Mike beim Zurückkehren).
+Field-Test F1-F6 ✅ Mike 19.05.2026 nach v0.97.59-Start:
+„kalibrieren button ist weg bei normal modus" — bestätigt.
 
 Backup: `Appsicherungen/2026-05-19_v0.97.55_vor_p86/`.
 
