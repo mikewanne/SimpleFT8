@@ -1343,9 +1343,14 @@ class RadioMixin:
         age_s = time.time() - ts
         remaining_s = 6 * 3600 - age_s
         if remaining_s <= 0:
+            # P86 (v0.97.56): KALIBRIEREN-Button ist Diversity-only.
+            # Im Normal-Modus Hinweis ergänzen wo Mike kalibrieren kann.
+            suffix_text = "· Re-Mess fällig"
+            if rx_mode == "normal":
+                suffix_text += " → DIVERSITY"
             return (
                 f"<span style='color:#668877;'>{values}</span> "
-                f"<span style='color:#FF3333;'>· Re-Mess fällig</span>"
+                f"<span style='color:#FF3333;'>{suffix_text}</span>"
             )
         remaining_h = remaining_s / 3600
         h = max(1, round(remaining_h))
@@ -1450,26 +1455,34 @@ class RadioMixin:
         self._update_statusbar()
 
     def _handle_dx_tuning(self):
-        """KALIBRIEREN-Button: komplette Pipeline je nach RX-Modus (v0.94).
+        """KALIBRIEREN-Button: Diversity-Mess-Pipeline (Phase 2 + Phase 3).
 
-        - **Normal:** nur Phase 2 (Gain-Messung) — Status quo.
-          Speichert Gain im PresetStore Standard, kein Phase-3-Flag gesetzt.
-        - **Diversity Standard/DX:** Phase 2 (Gain) + Phase 3 (Ratio-Messung)
-          + Cache + Timer-Reset. ``_pending_dx_diversity = True`` triggert
+        P86 (v0.97.56): Diversity-only Feature. Button ist im Normal-Mode
+        hidden (siehe `_update_button_visibility`). Normal-Mode liest
+        ANT1-Gain aus Unified Store (P80) — keine eigene Mess-Routine.
+        Defensive Early-Return falls Methode direkt im Normal-Mode
+        aufgerufen wird (z.B. via altem Code/Test).
+
+        Pipeline:
+        - Phase 2 (Gain-Messung 8 Zyklen, misst ANT1+ANT2, speichert mit
+          `ant2_calibrated=True`).
+        - Phase 3 (Ratio-Messung) — `_pending_dx_diversity=True` triggert
           nach Phase-2-Erfolg automatisch Phase 3 ueber den bestehenden
-          ``_on_dx_tune_accepted``-Pfad. ``_evaluate`` setzt am Ende
-          ``_last_measured_at = time.time()`` (= Timer-Reset auf 0/1h-Frist
-          startet von vorn).
+          `_on_dx_tune_accepted`-Pfad. `_evaluate` setzt am Ende
+          `_last_measured_at = time.time()`.
         """
+        if self._rx_mode != "diversity":
+            # P86: Button sollte hidden sein. Defensive return gegen
+            # direkten Methoden-Aufruf (Robustheit, Backwards-Compat).
+            print("[P86] KALIBRIEREN im Normal-Mode ignoriert "
+                  "(Button sollte hidden sein)")
+            return
         scoring = getattr(self._diversity_ctrl, 'scoring_mode', 'normal')
         gain_scoring = "snr" if scoring == "dx" else "stations"
-        if self._rx_mode == "diversity":
-            self._pending_dx_diversity = True
-            self._pending_diversity_scoring = scoring
-            print(f"[Kalibrierung] Diversity-Pipeline ({scoring.upper()}): "
-                  f"Phase 2 Gain + Phase 3 Ratio")
-        else:
-            print("[Kalibrierung] Normal-Modus: nur Phase 2 Gain")
+        self._pending_dx_diversity = True
+        self._pending_diversity_scoring = scoring
+        print(f"[Kalibrierung] Diversity-Pipeline ({scoring.upper()}): "
+              f"Phase 2 Gain + Phase 3 Ratio")
         self._start_dx_tuning(scoring_mode=gain_scoring)
 
     def _start_tune_only(self, after_tune_callback=None) -> None:
@@ -1971,7 +1984,7 @@ class RadioMixin:
         )
         msg.setInformativeText(
             "Eine neue Einmessung wird empfohlen.\n"
-            "Klicke dazu im Kontroll-Panel auf den KALIBRIEREN-Button."
+            "Wechsle dazu kurz in DIVERSITY und klicke KALIBRIEREN."
         )
         msg.setStandardButtons(QMessageBox.StandardButton.Ok)
         msg.setStyleSheet("""

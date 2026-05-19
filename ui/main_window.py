@@ -803,13 +803,19 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         """3-Button-Layout mode-abhaengig.
 
         - RX-Mode "normal":     nur btn_cq sichtbar (manueller CQ)
-        - RX-Mode "diversity":  btn_omni_cq + btn_auto_hunt sichtbar, btn_cq versteckt
+        - RX-Mode "diversity":  btn_omni_cq + btn_auto_hunt + btn_einmessen sichtbar, btn_cq versteckt
+
+        P86 (v0.97.56): btn_einmessen ist Diversity-only Feature (analog
+        OMNI/Auto-Hunt). Normal-Modus liest Gain aus Unified Store
+        (ant1_gain), keine eigene Mess-Routine. Vermeidet UX-Verwirrung
+        — Mike-Spec 19.05.2026.
         """
         rx_mode = getattr(self, "_rx_mode", "normal")
         is_diversity = (rx_mode == "diversity")
         self.control_panel.btn_omni_cq.setHidden(not is_diversity)
         self.control_panel.btn_auto_hunt.setHidden(not is_diversity)
         self.control_panel.btn_cq.setHidden(is_diversity)
+        self.control_panel.btn_einmessen.setHidden(not is_diversity)
 
     # ── OMNI-TX UI-Lifecycle (v0.78) ─────────────────────────────
 

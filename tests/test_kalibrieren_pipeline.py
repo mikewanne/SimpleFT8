@@ -29,14 +29,20 @@ def _make_self(*, rx_mode="normal", scoring_mode="normal"):
 # ── KALIBRIEREN je nach RX-Modus ────────────────────────────────────────────
 
 
-def test_kalibrieren_normal_only_phase2():
-    """Normal-Modus: KALIBRIEREN → nur Phase 2, kein Pending-Flag."""
+def test_kalibrieren_normal_defensive_return():
+    """P86 (v0.97.56): Normal-Modus → Defensive Return, KEIN
+    _start_dx_tuning Aufruf, KEIN _pending_dx_diversity gesetzt.
+
+    Vorher (v0.94-v0.97.55): Normal-Modus startete Phase 2 ohne Phase 3.
+    P86 entfernt diesen Pfad — KALIBRIEREN-Button ist Diversity-only.
+    """
     from ui.mw_radio import RadioMixin
     fake_self = _make_self(rx_mode="normal")
     RadioMixin._handle_dx_tuning(fake_self)
     assert fake_self._pending_dx_diversity is False, \
         "Normal-Modus darf _pending_dx_diversity NICHT setzen"
-    fake_self._start_dx_tuning.assert_called_once_with(scoring_mode="stations")
+    fake_self._start_dx_tuning.assert_not_called(), \
+        "P86: Normal-Mode-Aufruf wird durch Defensive Return ignoriert"
 
 
 def test_kalibrieren_diversity_standard_full_pipeline():
