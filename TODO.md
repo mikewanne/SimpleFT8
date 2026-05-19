@@ -2,6 +2,98 @@
 
 ---
 
+## 🆕 OFFEN — Bundle M: P83 + P85 (Mike 19.05.2026, Spec final, ready to code)
+
+Zwei zusammengehörige UI-Verbesserungen in der Antennen-Kachel.
+
+### P83 — Gain-Mess-Status-Zeile mit Verfalls-Anzeige
+
+**Mike-Wunsch:** dx_info-Label (`control_panel.py:590-592`) erweitern um
+verbleibende Verfallszeit, damit Mike vor dem Klogang sieht ob er
+manuell neu messen muss („noch 1h" = jetzt messen, „noch 5h" = OK).
+
+**Format:**
+- Diversity: `ANT1(G10) + ANT2(G20) · noch 4h`
+- Normal: `ANT1(G10) · noch 4h`
+- Stale (≥6h): `ANT1(G10) + ANT2(G20) · Re-Mess fällig` (rot)
+- Missing: `nicht kalibriert · G10 (Std)` (grau)
+
+**Farbcodierung am Verfalls-Suffix:**
+- grün >2h frei, orange ≤2h, rot ≤1h
+- Werte selbst bleiben dunkelgrau (#668877)
+
+**Update-Trigger (KEIN extra Timer, aktionsgetrieben, Mike-Spec 19.05.):**
+- Band-Wechsel
+- Modus-Wechsel (FT8/FT4/FT2)
+- RX-Mode-Wechsel (Normal/Diversity)
+- CQ-Start/Stop
+- Auto-Hunt-Start/Stop
+- OMNI-Start/Stop
+- Nach erfolgreicher Gain-Messung (Diversity-Enable / KALIBRIEREN)
+- App-Start nach Connect (initial)
+
+**Auch im Normal-Modus anzeigen** (heute leer, ändern auf ANT1-only).
+
+**Verfall-Quelle:** `core/preset_store.is_valid_gain()` + `gain_timestamp`.
+6h-Grenze schon implementiert (`mw_radio.py:1242-1254`).
+
+**DeepSeek R1 V4-pro Empfehlung:** „Format A + Update T1, in beiden Modi
+anzeigen, hoher Nutzwert für wenig Code."
+
+**Aufwand:** ~40 LOC + 6 Tests.
+
+---
+
+### P85 — ANT2-Win-% statt Stationsanzahl (Mike + DeepSeek 19.05.2026)
+
+**Mike-Beobachtung:** Stationsanzahl pro Antenne (`update_diversity_counts`
+in `control_panel.py:1609-1628`) zeigt 1-Zyklus-Versatz zur Ratio →
+Inkonsistenz „3:12 + 50:50" verwirrt.
+
+**Mike-Lösung:** Statt absoluter Counts (`8 St. 8 St.`) → ANT2-Win-%.
+„Übersichtlicher, weniger Text, jeder weiss was gemeint ist und zu
+welcher Antenne der Trend geht."
+
+**Format A (explizit):** `ANT2-Win 86%`
+- Eine Zahl statt zwei → klar
+- >50 = ANT2 dominiert, <50 = ANT1 dominiert
+- Use-Case: Wetter-Wechsel ablesbar („Regen kommt → ANT2-Win 86 → 70 → 55")
+
+**Glättung G2 (Median über 4 Zyklen, analog Ratio):**
+- Data: `ant2_wins / total_compared` (schon in `mw_cycle.py:327-359`)
+- Ringpuffer im DynamicDiversityController parallel zu existierendem
+  Median-Filter → 1 Methode-Erweiterung
+- Synchron mit Ratio-Update → keine Anachronismen mehr
+
+**DX-Modus:** bleibt aktuelles Verhalten (`X DX` weak-counts) ODER
+auch Win-% (Entscheidung beim Coding).
+
+**Restwarnung (DeepSeek):** Ratio nutzt SNR-Gewichtung, Win-% reine
+Counts → leichte Abweichung möglich (viele schwache vs wenig laute).
+„Akzeptabel im Hobby-Alltag", Tooltip ergänzen wenn Frust auftritt.
+
+**Aufwand:** ~30 LOC + 4 Tests.
+
+---
+
+### Bundle M Gesamt
+
+- 2 atomare Commits (P83 + P85)
+- ~70 LOC Code + ~10 Tests
+- APP_VERSION 0.97.53 → 0.97.54
+- Workflow: V2-Self-Review → R1 (Final-Check, da Brainstorm-R1 schon
+  durch) → V3 → Code → Final-R1
+- Voller Workflow Pflicht (>5 LOC, kein Trivial-Fall)
+
+**Field-Test pending nach Code (alle mit Radio):**
+- P83-F1: 6h-Verfalls-Counter zeigt korrekt
+- P83-F2: Mode-Wechsel triggert Live-Update
+- P83-F3: stale/missing-States visuell verifizieren
+- P85-F1: Win-% statt St.-Counts in Diversity Std
+- P85-F2: Glättung über Zeit beobachten (Trend bei Wetter-Wechsel)
+
+---
+
 ## 🆕 OFFEN — P82: „ohne Radio weiter" muss Connect immer überspringen (Mike 19.05.2026)
 
 **Symptom:** Bei App-Start startet der Connect-Worker SOFORT parallel

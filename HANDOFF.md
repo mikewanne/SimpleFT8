@@ -1,8 +1,30 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-18 — P81 Auto-Hunt-Stop-Defer + P80 Unified Gain Store + P79 UI-Bundle
+## Stand 2026-05-19 — P81 abgeschlossen, Bundle M ready-to-code, P82+P84 als TODO
 
-**Aktueller Code-Stand:** v0.97.53 (P81), Tests **1533 grün** (+16 P81 netto).
+**Aktueller Code-Stand:** v0.97.53 (P81), Tests **1533 grün**. Push aktuell:
+`2b0a797`. **P80 F3 Field-Test ✓ PASSED** (Mode-Wechsel ohne Re-Mess).
+
+### 🆕 Bundle M (Spec final, ready to code, Mike 19.05.)
+
+**P83 — Status-Zeile „noch X Stunden":** dx_info-Label erweitern mit
+Verfalls-Counter, farbcodiert grün/orange/rot, KEIN extra Timer
+(aktionsgetrieben), auch im Normal-Modus. ~40 LOC + 6 Tests.
+
+**P85 — ANT2-Win-% statt Stationsanzahl:** Counts-Anzeige durch
+„ANT2-Win 86%" ersetzt, Median-geglättet (4 Zyklen synchron mit Ratio).
+~30 LOC + 4 Tests.
+
+Beide Specs in TODO.md detailliert (Bundle M Sektion). Workflow:
+V2 → R1 Final-Check → V3 → Code → Final-R1.
+
+### 🆕 P82 + P84 (TODO notiert, kein Code)
+
+- **P82** „ohne Radio weiter" muss Connect IMMER überspringen
+  (Hardware-Sicherheit, Race-Condition aktuell)
+- **P84** Auto-Mess bei Totmann-Auslösung (Mike-Idee 19.05., Bonus)
+
+### 🟢 v0.97.53 P81 — Auto-Hunt-Stop-Meldung nach „✓ QSO komplett" defern
 
 ### 🟢 v0.97.53 P81 — Auto-Hunt-Stop-Meldung nach „✓ QSO komplett" defern
 
