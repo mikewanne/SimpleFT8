@@ -1660,44 +1660,36 @@ class ControlPanel(QWidget):
                                 scoring_mode: str = "normal",
                                 ant2_wins: int = 0, total_compared: int = 0,
                                 a1_weak_count: int = 0, a2_weak_count: int = 0):
-        """Diversity-Counts pro Antenne.
+        """Diversity-Status-Hinweis pro Antenne.
 
-        P85 (v0.97.54): Standard-Mode zeigt jetzt ANT2-Win-% Median-
-        geglaettet (4-Zyklus-Ringpuffer) statt Stationsanzahl.
-        Loest 1-Zyklus-Versatz-Inkonsistenz „3:12 + 50:50".
-        DX-Mode bleibt unveraendert (`X DX` weak-counts).
+        P89 (v0.97.59): Quantitative Anzeigen (ANT2-Win-% P85, DX-Counts
+        P87) entfernt — sie sorgten fuer Verwirrung, weil sie zeitlich
+        immer 1-3 Zyklen vor dem Ratio-Sprung liefen (Hysterese 8%).
+        Mike-Spec 19.05.2026: „Berechnung laeuft..." waehrend Warmup,
+        sonst leer — Ratio + Bedien-% sprechen fuer sich.
+
+        Ringpuffer + Warmup-Counter bleiben (Lifecycle ueber
+        reset_win_rate_history). DX-Branch zaehlt den Warmup auch ohne
+        Daten — Mike-Pattern aus P87.
         """
-        if a1_count == 0 and a2_count == 0:
-            self._a1_count_label.setText("--")
-            self._a2_count_label.setText("  --")
-            return
         if scoring_mode == "dx":
-            # P87 (v0.97.57): Warmup analog P85 Standard-Mode.
-            # Verhindert einseitige Counts (z.B. ANT1=26/ANT2=00) wenn
-            # Diversity-Pattern in den ersten Slots nur eine Antenne
-            # bedient — Widerspruch zur 50:50-Ratio-Anzeige.
             self._dx_warmup_count += 1
             if self._dx_warmup_count < 4:
-                self._a1_count_label.setText("Diversity läuft...")
+                self._a1_count_label.setText("Berechnung läuft...")
                 self._a2_count_label.setText("")
                 return
-            a1_txt = f"{a1_weak_count:02d} DX" if a1_weak_count is not None else "--"
-            a2_txt = f"  {a2_weak_count:02d} DX" if a2_weak_count is not None else "  --"
-            self._a1_count_label.setText(a1_txt)
-            self._a2_count_label.setText(a2_txt)
-            return
-        # P85 Standard-Mode: ANT2-Win-% geglaettet.
-        if total_compared > 0:
-            self._win_rate_history.append((ant2_wins, total_compared))
-        cum_wins = sum(x[0] for x in self._win_rate_history)
-        cum_total = sum(x[1] for x in self._win_rate_history)
-        if cum_total < 4:
-            # Warmup: nicht genug Vergleiche fuer aussagekraeftige %.
-            self._a1_count_label.setText("Diversity läuft...")
+            self._a1_count_label.setText("")
             self._a2_count_label.setText("")
             return
-        pct = round(100 * cum_wins / cum_total)
-        self._a1_count_label.setText(f"ANT2-Win {pct}%")
+        # Standard-Mode: Ringpuffer fuettern wenn Daten da.
+        if total_compared > 0:
+            self._win_rate_history.append((ant2_wins, total_compared))
+        cum_total = sum(x[1] for x in self._win_rate_history)
+        if cum_total < 4:
+            self._a1_count_label.setText("Berechnung läuft...")
+            self._a2_count_label.setText("")
+            return
+        self._a1_count_label.setText("")
         self._a2_count_label.setText("")
 
     def update_freq_histogram(self, data: dict):
