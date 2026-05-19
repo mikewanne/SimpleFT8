@@ -54,6 +54,10 @@ class FlexRadio(QObject):
         self._udp_socket = None
         self._running = False
         self._keepalive_running = False
+        # P90 (v0.97.60): Connect-Worker hart abbrechen bei „ohne Radio weiter".
+        # Wird am Anfang von auto_connect() reseted, von Setter abort_connect()
+        # gesetzt, an Check-Punkten in auto_connect() + connect() geprueft.
+        self._abort_connect = False
         self._sequence = 0
         self._lock = threading.Lock()
         self._client_handle = ""
@@ -100,13 +104,27 @@ class FlexRadio(QObject):
         on_attempt: Optional Callback (P26) fuer UI-Anzeige des
             aktuellen Versuchs (1-indexed). Aufgerufen am Beginn jedes
             Versuchs. Exceptions werden geschluckt.
+
+        P90: Bricht sauber ab wenn self._abort_connect von aussen
+        gesetzt wird (z.B. User klickt „ohne Radio weiter").
         """
+        # P90: Frischer Start — alter Abort-Wunsch ist vorbei
+        self._abort_connect = False
+
         for attempt in range(max_retries):
+            if self._abort_connect:
+                print("[FlexRadio] Connect-Sequenz abgebrochen (Iter-Start)")
+                return False
+
             if on_attempt is not None:
                 try:
                     on_attempt(attempt + 1, max_retries)
                 except Exception:
                     pass  # Modal-Tot ist kein FlexRadio-Problem
+
+            if self._abort_connect:
+                print("[FlexRadio] Connect-Sequenz abgebrochen (nach Callback)")
+                return False
 
             if not self.ip:
                 devices = self.discover(timeout=2.0)
@@ -115,12 +133,22 @@ class FlexRadio(QObject):
                     model = devices[0].get("model", "FlexRadio")
                     print(f"[FlexRadio] {model} gefunden @ {self.ip}")
 
+            if self._abort_connect:
+                print("[FlexRadio] Connect-Sequenz abgebrochen (nach Discovery)")
+                return False
+
             if self.ip:
                 self.disconnect()
                 time.sleep(0.5)
+                if self._abort_connect:
+                    print("[FlexRadio] Connect-Sequenz abgebrochen (vor Connect)")
+                    return False
                 ok = self.connect()
                 if ok:
                     return True
+                if self._abort_connect:
+                    # connect() hat bereits sauber aufgeraeumt
+                    return False
                 print(f"[FlexRadio] Retry {attempt + 1}/{max_retries}...")
 
             time.sleep(retry_delay)
@@ -180,6 +208,16 @@ class FlexRadio(QObject):
         """Reconnect-Schleife abbrechen."""
         self._abort_reconnect = True
 
+    def abort_connect(self):
+        """P90: Connect-Worker (auto_connect/connect) hart abbrechen.
+
+        Wird aus GUI-Thread aufgerufen wenn User „ohne Radio weiter"
+        klickt. Der Worker prueft das Flag an Check-Punkten und steigt
+        sauber aus (Sockets close via disconnect, return False).
+        Single-Writer (GUI) / Single-Reader (Worker) — bool atomar.
+        """
+        self._abort_connect = True
+
     def connect(self) -> bool:
         """Verbindung zum FlexRadio herstellen + Audio-Stream aufsetzen.
 
@@ -197,12 +235,24 @@ class FlexRadio(QObject):
             # keinen eigenen Slice erstellen.
             self._disconnect_smartsdr()
 
+            # P90: Abort-Check nach Phase 1
+            if self._abort_connect:
+                print("[FlexRadio] Connect-Sequenz abgebrochen (nach SmartSDR-Disconnect)")
+                self.disconnect()
+                return False
+
             # Phase 2: Frisch verbinden — jetzt gehoert der Slice uns
             self._tcp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self._tcp_socket.settimeout(5.0)
             self._tcp_socket.connect((self.ip, self.port))
             self._tcp_socket.settimeout(0.5)
             self._running = True
+
+            # P90: Abort-Check nach TCP-Connect (vor Greeting/Setup)
+            if self._abort_connect:
+                print("[FlexRadio] Connect-Sequenz abgebrochen (nach TCP-Connect)")
+                self.disconnect()
+                return False
 
             greeting = self._read_initial()
             print(f"[FlexRadio] Version: {greeting.get('version', '?')}")
@@ -244,6 +294,12 @@ class FlexRadio(QObject):
             self._raw_send(f"client udpport {self._udp_port}")
             time.sleep(0.5)
             self._raw_flush()
+
+            # P90: Abort-Check vor Slice-Erstellung (kritischer Hardware-Step)
+            if self._abort_connect:
+                print("[FlexRadio] Connect-Sequenz abgebrochen (vor Slice-Erstellung)")
+                self.disconnect()
+                return False
 
             # Slice finden oder erstellen (Extra-Slices lassen — Radio hat 2 RX)
             self._slice_idx = self._find_or_create_slice()
@@ -290,6 +346,12 @@ class FlexRadio(QObject):
                 print(f"[FlexRadio] RX Stream A: 0x{self._rx_stream_id:08X}")
                 # In Dispatch-Tabelle registrieren (Callback wird spaeter gesetzt)
                 self._rx_callbacks[self._rx_stream_id] = None
+
+            # P90: Letzter Abort-Check vor Thread-Start + connected-Emit
+            if self._abort_connect:
+                print("[FlexRadio] Connect-Sequenz abgebrochen (vor Thread-Start)")
+                self.disconnect()
+                return False
 
             # JETZT erst Threads starten (Setup ist fertig!)
             threading.Thread(target=self._tcp_read_loop, daemon=True).start()

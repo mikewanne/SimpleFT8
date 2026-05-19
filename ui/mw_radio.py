@@ -90,10 +90,13 @@ class RadioMixin:
         )
 
         # Auto-Connect im Hintergrund
+        # P90: Worker-Thread als Instance-Var speichern, damit Cleanup
+        # nach „ohne Radio weiter" auf sein Ende warten kann (join).
         self.control_panel.set_connection_status("searching")
-        threading.Thread(
+        self._connect_thread = threading.Thread(
             target=self._connect_worker, daemon=True
-        ).start()
+        )
+        self._connect_thread.start()
 
         # Modal blockiert GUI-Thread (WindowModal: Decoder/Signale laufen).
         # Returns wenn:
@@ -120,14 +123,29 @@ class RadioMixin:
         # gegen User-Willen connected war.
         if was_user_cancelled:
             self._demo_mode_forced = True
+            # P90 (v0.97.60): Worker hart abbrechen BEVOR er Hardware
+            # einrichtet (TCP/Panadapter/Slice/TX-Config). Reihenfolge
+            # kritisch: abort_connect FIRST signalisiert dem laufenden
+            # Worker den sofortigen Stopp, abort_reconnect verhindert
+            # spaeteren Reconnect-Loop, disconnect raeumt halb-fertige
+            # Sockets auf, join wartet auf Worker-Ende.
+            try:
+                self.radio.abort_connect()
+            except Exception:
+                pass
             self.radio.abort_reconnect()
             if getattr(self.radio, "_running", False):
-                # Final-R1-Fund 1: try/except analog zum Slot-Guard
-                # (defensiv gegen Socket-Race im Worker-Shutdown).
                 try:
                     self.radio.disconnect()
                 except Exception:
                     pass
+            # P90: Auf Worker-Ende warten (max 2s, sonst GUI-Hang).
+            # Worker bricht im Normalfall in <0.1s ab (Check-Punkte
+            # alle 1-2 Phasen), Timeout greift nur bei blockierendem
+            # socket.connect() (max 5s).
+            thread = getattr(self, "_connect_thread", None)
+            if thread is not None and thread.is_alive():
+                thread.join(timeout=2.0)
             self.control_panel.set_connection_status("disconnected")
             print("[P82] 'ohne Radio weiter' → Demo-Modus erzwungen")
 
