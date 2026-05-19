@@ -1,9 +1,32 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-19 — P86 autonom (KALIBRIEREN Diversity-only), P82 + Bundle M + P81 davor
+## Stand 2026-05-19 — P87 autonom (DX-Warmup), P86 + P82 + Bundle M davor
 
-**Aktueller Code-Stand:** v0.97.56 (P86), Tests **1563 grün** (+8 P86).
-**P80 F3 + P83-F1 + P85-F1 Field-Tests ✓ PASSED** am 19.05.
+**Aktueller Code-Stand:** v0.97.57 (P87), Tests **1568 grün** (+5 P87).
+**P83-F1 + P85-F1 + P86-F1 Field-Tests ✓ PASSED** am 19.05.
+
+### 🟢 v0.97.57 P87 — DX-Mode Warmup-Anzeige analog P85
+
+Mike-Field-Test 19.05. (Screenshot 13:51): Diversity DX gerade aktiviert,
+Ratio 50:50 hervorgehoben, aber DX-Counts 26:06 (ANT1 dominiert) →
+Widerspruch wegen Pattern-Versatz.
+
+**Fix (KISS ~10 LOC):** Cycle-Counter `_dx_warmup_count` analog P85
+Median-Buffer. < 4 → „Diversity läuft...", ≥ 4 → echte weak-counts.
+Reset-Lifecycle automatisch über bestehende `reset_win_rate_history`-
+Aufrufer (Mode/Band/Diversity-En/Disable).
+
+**Brainstorm-R1 V4-pro:** Variante A 🟢 (Konsistenz P85 > Eleganz).
+V2 keine Findings. Final-R1 „PUSH FREIGEBEN ✅" 0 KP.
+
+**V4-pro 33-Cycle-Bilanz: 0 Halluzinationen.**
+
+### Field-Tests P87 pending (Mike)
+
+- F1: Diversity DX neu → erste 3 Zyklen „Diversity läuft..."
+- F2: Nach 4. Zyklus → echte DX-Counts erscheinen
+- F3: Band-Wechsel → Counter resettet, Warmup neu
+- F4: Std↔DX-Toggle → Warmup neu
 
 ### 🟢 v0.97.56 P86 — KALIBRIEREN-Button nur in Diversity sichtbar
 

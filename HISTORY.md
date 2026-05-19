@@ -3,6 +3,74 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-19 v0.97.57 — P87: DX-Mode Warmup-Anzeige analog P85
+
+**Trigger:** Mike-Field-Test 19.05.2026 (Screenshot 13:51). Diversity
+DX gerade aktiviert auf 30m: Ratio zeigt 50:50, aber DX-Counts 26:06
+(ANT1 dominiert deutlich). Widerspruch wegen Pattern-Anfangs-Versatz —
+erste Slots gehören mehrheitlich ANT1, ANT2-Daten brauchen 4+ Zyklen.
+
+### Mike-Spec (verbatim)
+
+> „wäre es nicht besser bis wir representaive werte/durchschnitt haben
+> ein aktualisiere ... anzuzeigen als werte die noch einseitig sind?"
+
+### Was umgesetzt
+
+**`ui/control_panel.py` `__init__`:**
+- Neuer `_dx_warmup_count: int = 0` parallel zu `_win_rate_history`
+
+**`ui/control_panel.py` `reset_win_rate_history`:**
+- erweitert um `self._dx_warmup_count = 0` (gleicher Reset-Lifecycle
+  wie P85 Median-Buffer)
+
+**`ui/control_panel.py` `update_diversity_counts` DX-Branch:**
+- Inkrement `_dx_warmup_count` bei jedem Update mit Daten
+- < 4 → „Diversity läuft..." (analog P85)
+- ≥ 4 → echte weak-counts wie bisher
+
+Reset-Trigger automatisch korrekt über bestehende `reset_win_rate_history`-
+Aufrufer: `_on_mode_changed`, `_on_band_changed`, `_enable_diversity`
+(deckt Std↔DX Toggle via `_activate_diversity_with_scoring` ab),
+`_disable_diversity`.
+
+### Workflow
+
+- **Brainstorm-R1 V4-pro:** Variante A 🟢 (Cycle-Counter analog P85),
+  Variante B 🟡 (Both-Sides-Check — Risiko bei defekter ANT2 ewig
+  Warmup), Variante C 🔴 (Hybrid mit Timer — KISS-Verstoß).
+  Empfehlung: A, Konsistenz > Eleganz.
+- **V1 → V2 Self-Review:** keine Findings — Reset-Lifecycle deckt
+  Std↔DX-Toggle via `_enable_diversity`.
+- **V3 → Code → 5 Tests T1-T5 → Final-R1 V4-pro:** „PUSH FREIGEBEN ✅"
+  0 KP. Alle 6 Fragen positiv beantwortet.
+
+**V4-pro 33-Cycle-Bilanz: 0 Halluzinationen.**
+
+### Tests
+
+1563 → 1568 (+5 P87 netto, 1 P85-T9 angepasst).
+- T1: DX-Mode 1.-3. Aufruf → „Diversity läuft..." (Warmup)
+- T2: DX-Mode 4. Aufruf → echte Counts (`26 DX` / `  06 DX`)
+- T3: `reset_win_rate_history` → `_dx_warmup_count` zurück 0
+- T4: Standard-Mode unverändert (kein DX-Counter-Side-Effect)
+- T5: Zero-Counts (a1=0 AND a2=0) → KEIN Inkrement (Early-Return)
+
+P85-Test `test_p85_t9_dx_mode_unveraendert` angepasst auf 4-Zyklus-
+Warmup-Vorlauf (alte Annahme „sofort sichtbar" ungültig).
+
+### Field-Test pending (Mike)
+
+- F1: Diversity DX aktivieren → erste 3 Zyklen „Diversity läuft..."
+- F2: Nach 4. Zyklus → echte DX-Counts erscheinen
+- F3: Band-Wechsel → Counter resettet, Warmup neu
+- F4: Std↔DX-Toggle via Klick → Warmup neu
+- F5: Standard-Mode bleibt „ANT2-Win XX%"
+
+Backup: `Appsicherungen/2026-05-19_v0.97.56_vor_p87/`.
+
+---
+
 ## 2026-05-19 v0.97.56 — P86: KALIBRIEREN-Button nur in Diversity sichtbar
 
 **Trigger:** Mike-Field-Test 19.05.2026 P83-F1. UX-Verwirrung beim

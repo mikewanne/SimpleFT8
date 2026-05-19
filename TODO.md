@@ -1,4 +1,27 @@
-# SimpleFT8 TODO — Stand 19.05.2026 (v0.97.56, P86 + P82 + Bundle M + P81 + P80 + P79 ERLEDIGT)
+# SimpleFT8 TODO — Stand 19.05.2026 (v0.97.57, P87 + P86 + P82 + Bundle M + P81 + P80 + P79 ERLEDIGT)
+
+---
+
+## ✅ P87 ERLEDIGT (v0.97.57, 19.05.2026 autonomer Workflow)
+
+DX-Mode Warmup-Anzeige analog P85 Standard-Mode (Mike-Field-Test 19.05.
+Screenshot 13:51). Widerspruch zwischen 50:50-Ratio und einseitigen
+DX-Counts (26:06) wegen Pattern-Versatz beseitigt.
+
+**Fix KISS ~10 LOC:**
+- `__init__`: `_dx_warmup_count: int = 0` parallel zu `_win_rate_history`
+- `reset_win_rate_history`: erweitert um `_dx_warmup_count = 0`
+- `update_diversity_counts` DX-Branch: < 4 → „Diversity läuft...", ≥ 4 → echte Counts
+
+**Brainstorm-R1 V4-pro:** Variante A 🟢 (Konsistenz P85). V2 0 Findings.
+Final-R1 „PUSH FREIGEBEN ✅" 0 KP.
+
+**V4-pro 33-Cycle-Bilanz: 0 Halluzinationen.**
+**Tests 1563 → 1568 (+5 P87 netto, 1 P85-T9 angepasst).**
+
+Field-Test F1-F4 pending (Mike, Radio nötig für DX-Aktivierung).
+
+Backup: `Appsicherungen/2026-05-19_v0.97.56_vor_p87/`.
 
 ---
 
