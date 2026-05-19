@@ -1,4 +1,28 @@
-# SimpleFT8 TODO — Stand 19.05.2026 (v0.97.55, P82 + Bundle M + P81 + P80 + P79 ERLEDIGT)
+# SimpleFT8 TODO — Stand 19.05.2026 (v0.97.56, P86 + P82 + Bundle M + P81 + P80 + P79 ERLEDIGT)
+
+---
+
+## ✅ P86 ERLEDIGT (v0.97.56, 19.05.2026 autonomer Workflow)
+
+KALIBRIEREN-Button nur in Diversity sichtbar (Mike-KISS-Spec nach
+Field-Test P83-F1). UX-Verwirrung weil Normal-Mode-Kalibrierung nur
+Phase 2 (Gain) ohne Phase 3 (Ratio) machte → Anti-Pattern.
+
+**Fix KISS ~25 LOC:**
+- `_update_button_visibility`: btn_einmessen.setHidden(not is_diversity)
+- `_format_gain_status`: bei Normal+stale → „→ DIVERSITY"-Hinweis
+- `_handle_dx_tuning`: Defensive Early-Return im Normal-Mode
+- `_show_normal_preset_age_info`: Dialog erwähnt DIVERSITY
+
+**Brainstorm-R1 V4-pro:** Variante A 🟢 + Pfeil-Hinweis. V2 fand 1 GELB
+(bestehender Test umgeschrieben). Final-R1 „PUSH FREIGEBEN ✅" 0 KP.
+
+**V4-pro 32-Cycle-Bilanz: 0 Halluzinationen.**
+**Tests 1555 → 1563 (+8 netto).**
+
+Field-Test F1-F6 pending (Mike beim Zurückkehren).
+
+Backup: `Appsicherungen/2026-05-19_v0.97.55_vor_p86/`.
 
 ---
 

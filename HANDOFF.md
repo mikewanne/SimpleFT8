@@ -1,10 +1,36 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-19 — P82 autonom erledigt (Hardware-Sicherheit), Bundle M + P81 davor
+## Stand 2026-05-19 — P86 autonom (KALIBRIEREN Diversity-only), P82 + Bundle M + P81 davor
 
-**Aktueller Code-Stand:** v0.97.55 (P82), Tests **1555 grün** (+7 P82
-netto). **P80 F3 Field-Test ✓ PASSED** am 19.05. Mike weg, autonomer
-Workflow durchgezogen (Option A wie bei P80/P81/Bundle M).
+**Aktueller Code-Stand:** v0.97.56 (P86), Tests **1563 grün** (+8 P86).
+**P80 F3 + P83-F1 + P85-F1 Field-Tests ✓ PASSED** am 19.05.
+
+### 🟢 v0.97.56 P86 — KALIBRIEREN-Button nur in Diversity sichtbar
+
+Mike-Field-Test 19.05. P83-F1: UX-Verwirrung beim KALIBRIEREN-Button.
+Mike dachte Normal-Mode-Kalibrierung gäbe nur einen ANT1-Wert
+(Code-Realität: misst immer beide). Inkonsistenz: Normal-Mode-
+Kalibrierung machte nur Phase 2 ohne Ratio, war Anti-Pattern.
+
+**Fix (KISS, ~25 LOC):**
+- `_update_button_visibility`: `btn_einmessen.setHidden(not is_diversity)`
+- `_format_gain_status`: bei Normal-Mode + stale → „→ DIVERSITY"-Hinweis
+- `_handle_dx_tuning`: Defensive Early-Return im Normal-Mode
+- `_show_normal_preset_age_info`: Dialog erwähnt DIVERSITY
+
+**Brainstorm-R1 V4-pro:** Variante A 🟢. V2 fand 1 GELB
+(bestehender Test). Final-R1: „PUSH FREIGEBEN ✅" 0 KP.
+
+**V4-pro 32-Cycle-Bilanz: 0 Halluzinationen.**
+
+### Field-Tests P86 pending (Mike beim Zurückkehren)
+
+- F1: App im Normal → KALIBRIEREN hidden
+- F2: Wechsel Diversity → Button erscheint
+- F3: Wechsel Normal → Button verschwindet
+- F4: Normal + stale → „· Re-Mess fällig → DIVERSITY"
+- F5: Diversity + stale → nur „· Re-Mess fällig"
+- F6: 30-Tage-Dialog erwähnt DIVERSITY
 
 ### 🟢 v0.97.55 P82 — „ohne Radio weiter" muss Connect IMMER überspringen
 

@@ -3,6 +3,79 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-19 v0.97.56 — P86: KALIBRIEREN-Button nur in Diversity sichtbar
+
+**Trigger:** Mike-Field-Test 19.05.2026 P83-F1. UX-Verwirrung beim
+KALIBRIEREN-Button — Mike dachte Normal-Mode-Kalibrierung gäbe nur
+einen ANT1-Wert. Code-Realität: DXTuneDialog misst immer beide ANT.
+Aber: Normal-Mode startete nur Phase 2 (Gain) ohne Phase 3 (Ratio) —
+beim nächsten Diversity-Wechsel musste die Ratio nachgemessen werden.
+Inkonsistenz, KISS-Verstoß.
+
+### Mike-Spec (verbatim)
+
+> „kalibrieung nur in diversity sichtbar ist eine sehr gute ergänzung
+> so vermeiden wir probleme mit normal modus messung"
+
+### Was umgesetzt
+
+**`ui/main_window.py` `_update_button_visibility`:**
+- `btn_einmessen.setHidden(not is_diversity)` — analog OMNI/Auto-Hunt.
+  Konsistentes Diversity-only-Pattern.
+
+**`ui/mw_radio.py` `_format_gain_status`:**
+- Stale-Branch: bei `rx_mode=="normal"` Suffix ergänzt mit „→ DIVERSITY"
+- Im Diversity-Mode bleibt nur „· Re-Mess fällig" (Button ist sichtbar)
+
+**`ui/mw_radio.py` `_handle_dx_tuning`:**
+- Defensive Early-Return wenn `_rx_mode != "diversity"`
+- Print-Hinweis bei (unmöglichem) Normal-Mode-Klick
+- Diversity-Branch vereinfacht (kein if-else mehr nötig)
+
+**`ui/mw_radio.py` `_show_normal_preset_age_info`:**
+- Dialog-Text: „Wechsle dazu kurz in DIVERSITY und klicke KALIBRIEREN."
+
+### Workflow
+
+- **Brainstorm-R1 (V4-pro):** Variante A 🟢 empfohlen, plus „→ DIVERSITY"
+  Hinweis im Normal-Mode-Stale + Dialog-Text-Update.
+- **V1 → V2 Self-Review:** 1 GELB (bestehender Test
+  `test_kalibrieren_normal_only_phase2` testet ALTES Verhalten —
+  umgeschrieben auf neuen Defensive-Return).
+- **V3 → Code → 8 neue Tests → Final-R1 V4-pro:** „PUSH FREIGEBEN ✅"
+  0 KP. Race-Edge-Cases bestätigt geschützt durch
+  `_set_gain_measure_lock` (Modus-Wechsel während Mess blockiert).
+
+**V4-pro 32-Cycle-Bilanz: 0 Halluzinationen.**
+
+### Tests
+
+1555 → 1563 (+8). Tests T1-T6c:
+- T1: Normal-Mode hidden btn_einmessen
+- T2: Diversity-Mode sichtbar btn_einmessen
+- T3: stale + normal → „→ DIVERSITY" Hinweis im HTML
+- T4: stale + diversity → KEIN „→ DIVERSITY"
+- T5: Dialog-Text enthält „DIVERSITY"
+- T6: Normal-Mode-Klick → Defensive Return, kein _start_dx_tuning
+- T6b: Diversity-standard → scoring_mode="stations"
+- T6c: Diversity-DX → scoring_mode="snr"
+
+Plus: `test_kalibrieren_normal_only_phase2` →
+`test_kalibrieren_normal_defensive_return` umgeschrieben.
+
+### Field-Test pending (Mike)
+
+- F1: App im Normal → KALIBRIEREN-Button hidden
+- F2: Wechsel zu Diversity → Button erscheint
+- F3: Wechsel zurück Normal → Button verschwindet
+- F4: Normal mit altem Gain → dx_info „· Re-Mess fällig → DIVERSITY"
+- F5: Diversity mit altem Gain → nur „· Re-Mess fällig" (kein Pfeil)
+- F6: 30-Tage-Dialog erwähnt „DIVERSITY"
+
+Backup: `Appsicherungen/2026-05-19_v0.97.55_vor_p86/`.
+
+---
+
 ## 2026-05-19 v0.97.55 — P82: „ohne Radio weiter" muss Connect IMMER überspringen
 
 **Trigger:** Mike-Field-Test 19.05.2026 (120 km vom Radio, Radio AN).
