@@ -237,6 +237,36 @@ class SettingsDialog(QDialog):
         form.addRow("TX Audio-Pegel:", _row_with_hint(self.tx_level, "tx_level"))
         form.addRow("Anrufversuche:", _row_with_hint(self.max_calls_combo, "max_calls"))
         form.addRow("SWR-Limit:", _row_with_hint(self.swr_limit, "swr_limit"))
+        layout.addLayout(form)
+
+        # P73-A (v0.97.64): TUNE-Einstellungen konsolidiert in eigener
+        # GroupBox. Heute war Tune-Leistung in TX-Hauptform und
+        # Tuner-Checkbox/TUNE-Dauer/Auto-TUNE in „FT8 & Diversity" —
+        # User musste zwischen Tabs springen.
+        tune_box = QGroupBox("TUNE-Einstellungen")
+        tune_form = QFormLayout(tune_box)
+
+        # 1) Master-Switch: Antennen-Tuner verwenden
+        self.tuner_present_cb = QCheckBox("Antennen-Tuner verwenden")
+        self.tuner_present_cb.setToolTip(
+            "Aktiviert die Auto-TUNE-Phase vor der Gain-Messung\n"
+            "und den manuellen TUNE-Button. Deaktivieren wenn\n"
+            "Monoband-Antennen ohne Tuner (z.B. Dipol).")
+        tune_form.addRow("", self.tuner_present_cb)
+
+        # 2) TUNE-Dauer
+        self.tune_duration_combo = QComboBox()
+        # P71 (v0.97.47): 5/10/15 s statt 15/30 s — Mike-Spec.
+        self.tune_duration_combo.addItem("5 s", 5)
+        self.tune_duration_combo.addItem("10 s", 10)
+        self.tune_duration_combo.addItem("15 s", 15)
+        self.tune_duration_combo.setToolTip(
+            "Maximale Dauer eines TUNE-Vorgangs (manuell + Auto-Tune).\n"
+            "LDG AT-200 Pro schafft Full-Tune typisch in 5-10s,\n"
+            "15s als Reserve für ungewöhnliche Antennen.")
+        tune_form.addRow("TUNE-Dauer:", self.tune_duration_combo)
+
+        # 3) Tune-Leistung (5/10/20 W Buttons)
         tune_row = QHBoxLayout()
         self._tune_btns = {}
         self._current_tune_power = 10
@@ -255,8 +285,24 @@ class SettingsDialog(QDialog):
             self._tune_btns[w] = btn
         tune_row.addWidget(_make_info_btn(_HINTS["tune_power"]))
         tune_row.addStretch()
-        form.addRow("Tune-Leistung:", tune_row)
-        layout.addLayout(form)
+        tune_form.addRow("Tune-Leistung:", tune_row)
+
+        # 4) Auto-TUNE bei Bandwechsel
+        # P54 (v0.97.44)
+        self.auto_tune_band_cb = QCheckBox("Auto-TUNE bei Bandwechsel")
+        self.auto_tune_band_cb.setToolTip(
+            "Nach jedem Bandwechsel automatisch TUNE durchfuehren\n"
+            "(10 W auf ANT1, Dauer wie oben).\n"
+            "Speichert RF-Stuetzpunkt fuer schnellere TX-Power-Konvergenz.")
+        tune_form.addRow("", self.auto_tune_band_cb)
+
+        # Master-Switch-Logik: Tuner-Checkbox de/aktiviert abhängige
+        # TUNE-Widgets (R1-F1 — UX-Hinweis dass sie ohne Tuner sinnlos
+        # sind).
+        self.tuner_present_cb.toggled.connect(
+            self._update_tune_widgets_enabled)
+
+        layout.addWidget(tune_box)
 
         # RF-Presets (interne GroupBox — visuelle Trennung von TX-Schutz)
         rf_box = QGroupBox("RF-Presets pro Band+Watt")
@@ -320,33 +366,9 @@ class SettingsDialog(QDialog):
         # P34-Stufe2 (v0.97.19): Dynamic-Diversity-Toggle entfernt —
         # Dynamic ist Default ohne Toggle (Statik-Pipeline raus).
 
-        # ── P63 (v0.97.36) Tuner-Settings ───────────────────────────
-        self.tuner_present_cb = QCheckBox("Antennen-Tuner verwenden")
-        self.tuner_present_cb.setToolTip(
-            "Aktiviert die Auto-TUNE-Phase vor der Gain-Messung\n"
-            "und den manuellen TUNE-Button. Deaktivieren wenn\n"
-            "Monoband-Antennen ohne Tuner (z.B. Dipol).")
-        form.addRow("", self.tuner_present_cb)
-
-        self.tune_duration_combo = QComboBox()
-        # P71 (v0.97.47): 5/10/15 s statt 15/30 s — Mike-Spec
-        # fuer FT8/FT4/FT2-Differenzierung.
-        self.tune_duration_combo.addItem("5 s", 5)
-        self.tune_duration_combo.addItem("10 s", 10)
-        self.tune_duration_combo.addItem("15 s", 15)
-        self.tune_duration_combo.setToolTip(
-            "Maximale Dauer eines TUNE-Vorgangs (manuell + Auto-Tune).\n"
-            "LDG AT-200 Pro schafft Full-Tune typisch in 5-10s,\n"
-            "15s als Reserve für ungewöhnliche Antennen.")
-        form.addRow("TUNE-Dauer:", self.tune_duration_combo)
-
-        # P54 (v0.97.44): Auto-Tune bei Bandwechsel
-        self.auto_tune_band_cb = QCheckBox("Auto-TUNE bei Bandwechsel")
-        self.auto_tune_band_cb.setToolTip(
-            "Nach jedem Bandwechsel automatisch TUNE durchfuehren\n"
-            "(10 W auf ANT1, Dauer wie oben).\n"
-            "Speichert RF-Stuetzpunkt fuer schnellere TX-Power-Konvergenz.")
-        form.addRow("", self.auto_tune_band_cb)
+        # P73-A (v0.97.64): TUNE-Settings (Tuner-CB, TUNE-Dauer,
+        # Auto-TUNE) wandern in die GroupBox „TUNE-Einstellungen" im
+        # Tab „TX & Schutz" — siehe _build_tab_tx.
 
         # ── v0.88 Bandpilot — Stunden-Logik ──────────────────────────
         self.bandpilot_mode_combo = QComboBox()
@@ -556,6 +578,19 @@ class SettingsDialog(QDialog):
 
     # ── Event-Handler & Logik (unveraendert) ─────────────────────────
 
+    def _update_tune_widgets_enabled(self, checked: bool):
+        """P73-A (v0.97.64): Master-Switch — Tuner-Checkbox de/aktiviert
+        die abhängigen TUNE-Widgets (TUNE-Dauer, Tune-Leistung,
+        Auto-TUNE-Checkbox). UX-Hinweis dass sie ohne Tuner sinnlos sind.
+        """
+        if hasattr(self, "tune_duration_combo"):
+            self.tune_duration_combo.setEnabled(checked)
+        if hasattr(self, "auto_tune_band_cb"):
+            self.auto_tune_band_cb.setEnabled(checked)
+        if hasattr(self, "_tune_btns"):
+            for btn in self._tune_btns.values():
+                btn.setEnabled(checked)
+
     def _on_tune_power_clicked(self, watt: int):
         current = self._current_tune_power
         if watt > current:
@@ -605,6 +640,9 @@ class SettingsDialog(QDialog):
         self.debug_console_cb.setChecked(self.settings.get("debug_console_visible", False))
         # P63 (v0.97.36): Tuner-Settings
         self.tuner_present_cb.setChecked(self.settings.get("tuner_present", True))
+        # P73-A (v0.97.64): Master-Switch initial anwenden — abhängige
+        # TUNE-Widgets disabled wenn kein Tuner.
+        self._update_tune_widgets_enabled(self.tuner_present_cb.isChecked())
         # P71 (v0.97.47): findData mit Fallback auf 15 s bei unbekannten Werten
         _dur = self.settings.get("tune_duration_s", 15)
         _idx = self.tune_duration_combo.findData(_dur)
