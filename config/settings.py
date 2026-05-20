@@ -57,7 +57,7 @@ DEFAULTS = {
     "band": "20m",
     "mode": "FT8",
     "auto_mode": False,
-    "max_calls": 99,
+    "max_calls": 5,    # P98 (v0.97.70): 99 → 5 (FT8-Standard, Mike-Field-Test)
     "tune_power": 10,
     "diversity_operate_cycles": 80,  # 80/160/240 — Betriebszyklen bis Neueinmessung
     "radio_type": "flex",            # "flex" = FlexRadio SmartSDR, "ic7300" = CI-V (zukünftig)

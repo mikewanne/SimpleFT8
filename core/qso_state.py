@@ -104,7 +104,10 @@ class QSOState(Enum):
 
 MAX_QSO_DURATION = 180  # Gesamt-QSO Timeout: 3 Minuten
 MAX_STATION_CALLS = 7   # Max Anrufe auf eine Station (hart)
-MAX_RR73_RETRIES = 3    # Max Retries in WAIT_RR73
+MAX_RR73_RETRIES = 5    # P98 (v0.97.70): 3 → 5. Mike-Field-Test 20.05.:
+                        # bei „halbem QSO" (R-Report empfangen, RR73
+                        # gesendet, Gegenstation kriegt's nicht) waren
+                        # 3 Retries zu knapp → 5 gibt mehr Geduld.
 
 
 @dataclass
@@ -118,7 +121,7 @@ class QSOData:
     timeout_cycles: int = 0
     max_timeout: int = 5
     calls_made: int = 0    # Wie oft haben wir bereits gesendet
-    max_calls: int = 3     # Maximale CQ-Rufe (aus Settings)
+    max_calls: int = 5     # P98 (v0.97.70): 3 → 5. Maximale Anrufversuche in WAIT_REPORT (aus Settings).
     rr73_retries: int = 0  # Retries speziell fuer WAIT_RR73
     wait_73_retries: int = 0  # P1.11 (v0.95.19): Retries fuer WAIT_73-Hoeflichkeit (R-Report-Wiederholung), entkoppelt von rr73_retries
     courtesy_73_sent: bool = False  # P1.10 Fix (v0.95.4): max 1x pro QSO
@@ -160,7 +163,7 @@ class QSOStateMachine(QObject):
         self.cq_mode = False        # CQ-Modus aktiv
         self.cq_qso_count = 0       # Zähler: bearbeitete QSOs in CQ-Session
         self._last_snr = -10        # Letzter empfangener SNR (für Report)
-        self.max_calls = 3          # Maximale Anrufversuche (aus Settings)
+        self.max_calls = 5          # P98 (v0.97.70): Default 3 → 5. Wird in main_window.py/mw_qso.py aus Settings überschrieben.
         self._pending_reply = None      # Gemerkter CQ-Anrufer (während TX)
         self._pending_hunt_reply = None # Gemerkter Hunt-Report (während TX)
         self._pending_rr73 = None       # Gemerktes RR73 (waehrend TX_REPORT)
