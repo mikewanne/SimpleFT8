@@ -17,6 +17,12 @@ from core import ntp_time
 from core.station_accumulator import accumulate_stations
 from radio.presets import PREAMP_PRESETS
 
+# P94 (v0.97.66): Quick-73-Fenster für kürzlich gearbeitete Stationen.
+# Wenn dieselbe Station auf demselben Band innerhalb _QUICK73_WINDOW_S
+# nach abgeschlossenem QSO erneut Report/Grid sendet → einmaliges 73 als
+# Höflichkeit, danach komplett ignorieren. State-Machine bleibt unangetastet.
+_QUICK73_WINDOW_S = 1800  # 30 Min
+
 def compute_local_conditions(stations: dict) -> tuple[int, int, float]:
     """P1.19/P1.21: 5-Sterne-Empfang-Score aus Stations-Dict.
 
@@ -777,6 +783,12 @@ class CycleMixin:
                 ant_label=ant_label,
             )
 
+        # P94 (v0.97.66): Quick-73-Filter VOR OMNI/State-Machine — wenn die
+        # anrufende Station innerhalb 30 Min schon gearbeitet wurde, 1x 73
+        # senden + komplett ignorieren statt neues QSO zu starten.
+        if self._p94_quick73_filter(msg):
+            return
+
         # P4.OMNI-NEUBAU (v0.96.0) Listener-Pfad: wenn OMNI live + nicht
         # pausiert + Antwort an uns (kein 73, kein RR73) → OMNI pausieren,
         # encoder.tx_even auf Gegenparitaet setzen (R1 R2!), dann via
@@ -801,3 +813,81 @@ class CycleMixin:
             return
 
         self.qso_sm.on_message_received(msg)
+
+    def _p94_quick73_filter(self, msg: FT8Message) -> bool:
+        """P94 (v0.97.66): Quick-73-Ignore für kürzlich gearbeitete Stationen.
+
+        Wenn dieselbe Station auf demselben Band innerhalb 30 Min nach
+        abgeschlossenem QSO erneut Report/Grid sendet:
+          - Einmalig <their_call> <my_call> 73 senden
+          - Call in _quick73_sent merken → weitere Rufe komplett ignorieren
+          - State-Machine bleibt unangetastet (IDLE/CQ_WAIT/CQ_CALLING)
+
+        Return True wenn Anruf konsumiert (kein weiterer Pfad), sonst False.
+        """
+        # Nur auf direkten Anruf an uns mit Report/Grid reagieren
+        if msg.target != self.settings.callsign:
+            return False
+        if not (msg.is_grid or msg.is_report):
+            return False
+        # Nur in IDLE/CQ_WAIT/CQ_CALLING — kein Eingriff in laufendes QSO
+        if self.qso_sm.state not in (
+                QSOState.IDLE, QSOState.CQ_WAIT, QSOState.CQ_CALLING):
+            return False
+
+        band = self.settings.band.upper()
+        call = msg.caller.upper()
+        now = time.time()
+        # Defensive getattr — _recent_logged_calls/_quick73_sent leben in
+        # MainWindow.__init__, ältere Fake-MWs in Tests haben sie nicht.
+        recent = getattr(self, '_recent_logged_calls', None)
+        if recent is None:
+            return False
+        last_time = recent.get((call, band), 0.0)
+        quick73_sent = getattr(self, '_quick73_sent', None)
+        if quick73_sent is None:
+            return False
+        if now - last_time > _QUICK73_WINDOW_S:
+            # Fenster abgelaufen — normale Verarbeitung; Set räumen
+            quick73_sent.discard(call)
+            return False
+
+        # Im Fenster
+        if call in quick73_sent:
+            # Schon Quick-73 geschickt → komplett ignorieren
+            return True
+
+        # Einmaliges Quick-73 — auf Frequenz des Anrufers (WSJT-X-Praxis).
+        # R1-F3: audio_freq_hz nach TX zurücksetzen damit nächste CQ-Slot
+        # auf eigener Frequenz bleibt (encoder.audio_freq_hz ist sticky).
+        their_even = getattr(msg, '_tx_even', None)
+        tx_even = (not their_even) if their_even is not None else None
+        tx_msg = f"{msg.caller} {self.settings.callsign} 73"
+        orig_freq = self.encoder.audio_freq_hz
+
+        def _restore_freq():
+            self.encoder.audio_freq_hz = orig_freq
+            try:
+                self.encoder.tx_finished.disconnect(_restore_freq)
+            except (RuntimeError, TypeError):
+                pass
+
+        self.encoder.tx_finished.connect(_restore_freq)
+        started = self.encoder.transmit(
+            tx_msg,
+            tx_even=tx_even,
+            audio_freq_hz=int(msg.freq_hz) if msg.freq_hz else None,
+        )
+        if not started:
+            # TX läuft schon → Restore-Hook entfernen, Set NICHT markieren
+            try:
+                self.encoder.tx_finished.disconnect(_restore_freq)
+            except (RuntimeError, TypeError):
+                pass
+            return True
+
+        quick73_sent.add(call)
+        age_min = int((now - last_time) // 60)
+        self.qso_panel.add_info(
+            f"{msg.caller} → Sende 73 (bereits gearbeitet {age_min} min)")
+        return True

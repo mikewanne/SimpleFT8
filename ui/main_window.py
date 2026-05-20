@@ -275,6 +275,7 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self._active_qso_targets: set = set()  # Stationen im aktiven QSO → 150s Aging
         self._pending_station_click = None  # P1.24: Klick waehrend TX → Buffer fuer naechsten Slot
         self._recent_logged_calls: dict[tuple[str, str], float] = {}  # P1.7 (v0.95.19): ADIF-Dedup (call, band) → ts
+        self._quick73_sent: set[str] = set()  # P94 (v0.97.66): Calls denen Quick-73 schon ging
         # P2.OMNI-REDESIGN v4.0 (v0.95.23): True wenn OMNI VOR aktuellem QSO
         # aktiv war — _maybe_resume_omni resumed dann nach QSO-Ende.
         # Gesetzt von _pause_omni_if_active in 3 Entry-Pfaden, geloescht
