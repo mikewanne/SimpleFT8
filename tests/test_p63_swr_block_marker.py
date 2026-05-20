@@ -141,27 +141,43 @@ def test_t8_manual_tune_allowed_on_red_band():
 
 
 def test_t9_tune_uses_10w_fixed():
-    """AC5: `_on_tune_clicked` ruft `set_rfpower_direct(TUNE_POWER_W)`
-    mit TUNE_POWER_W=10 — UNABHÄNGIG von settings.tune_power."""
-    src = _method_src("ui/mw_tx.py", "_on_tune_clicked")
+    """AC5: TUNE-Pipeline ruft `set_rfpower_direct(TUNE_POWER_W)` mit
+    TUNE_POWER_W=10 — UNABHÄNGIG von settings.tune_power.
+
+    P95 (v0.97.67): Pipeline aus `_on_tune_clicked` in `_tune_start`
+    extrahiert (gemeinsam für regulär + Override). Test prüft jetzt
+    den Helper.
+    """
+    src = _method_src("ui/mw_tx.py", "_tune_start")
     assert "TUNE_POWER_W = 10" in src, "P63 AC5: 10W FEST fehlt"
     assert "set_rfpower_direct(TUNE_POWER_W)" in src, (
         "P63 AC5: 10W an Radio fehlt")
     # tune_power-Setting wird NICHT mehr im manuellen Pfad gelesen
-    assert "settings.get(\"tune_power\"" not in src, (
+    on_src = _method_src("ui/mw_tx.py", "_on_tune_clicked")
+    full_src = src + on_src
+    assert "settings.get(\"tune_power\"" not in full_src, (
         "P63 AC5: manueller TUNE darf settings.tune_power NICHT lesen")
 
 
-# ── T10 — Manuelle TUNE-Dauer aus Setting {15, 30} ──────────────────────
+# ── T10 — Manuelle TUNE-Dauer aus Setting (Whitelist 5/10/15) ───────────
 
 
 def test_t10_tune_duration_15_30_from_setting():
-    """AC5: Dauer kommt aus settings.tune_duration_s mit Whitelist."""
-    src = _method_src("ui/mw_tx.py", "_on_tune_clicked")
-    assert "tune_duration_s" in src, "P63 AC5: tune_duration_s-Setting fehlt"
-    assert "(15, 30)" in src, "P63 AC5: Whitelist {15, 30} fehlt"
+    """AC5: Dauer kommt aus settings.tune_duration_s mit Whitelist.
+
+    P95 (v0.97.67): Whitelist-Check + Setting-Lookup leben in
+    `_on_tune_clicked`, QTimer.singleShot mit duration_s * 1000 in
+    `_tune_start`. Test prüft beide Methoden gemeinsam.
+    """
+    on_src = _method_src("ui/mw_tx.py", "_on_tune_clicked")
+    start_src = _method_src("ui/mw_tx.py", "_tune_start")
+    full_src = on_src + start_src
+    assert "tune_duration_s" in full_src, (
+        "P63 AC5: tune_duration_s-Setting fehlt")
+    assert "(15, 30)" in full_src or "(5, 10, 15)" in full_src, (
+        "P63 AC5 / P71: Whitelist {15, 30} oder {5, 10, 15} fehlt")
     # QTimer.singleShot mit duration_s * 1000
-    assert "duration_s * 1000" in src, (
+    assert "duration_s * 1000" in full_src, (
         "P63 AC5: QTimer-Aufruf mit duration_s * 1000 fehlt")
 
 
