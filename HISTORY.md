@@ -3,6 +3,61 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-20 v0.97.64 — P73-A Settings-UX TUNE-Einstellungen konsolidiert
+
+Mike-Wunsch 18.05.2026 nach P71-Field-Test: TUNE-bezogene Settings
+waren auf 2 Tabs verteilt — Tune-Leistung in „TX & Schutz", Tuner-
+Checkbox + TUNE-Dauer + Auto-TUNE-bei-Bandwechsel in „FT8 & Diversity".
+User musste zwischen Tabs springen für eine zusammengehörige Funktion.
+
+**Fix (V3 nach R1-Brainstorm):**
+- `ui/settings_dialog.py:_build_tab_tx` — neue `QGroupBox`
+  „TUNE-Einstellungen" mit eingebettetem `QFormLayout`. Reihenfolge:
+  1. „Antennen-Tuner verwenden" (Master-Switch)
+  2. „TUNE-Dauer" (5/10/15 s ComboBox)
+  3. „Tune-Leistung" (5/10/20 W Button-Row)
+  4. „Auto-TUNE bei Bandwechsel" (Checkbox)
+- `ui/settings_dialog.py:_build_tab_ft8` — 3 Widget-Instantiierungen
+  raus (Tuner-CB, TUNE-Dauer, Auto-TUNE). Bandpilot bleibt in
+  „FT8 & Diversity".
+- **Master-Switch (R1-F1):** `tuner_present_cb.toggled.connect(
+  _update_tune_widgets_enabled)` — bei Uncheck werden die 3 abhängigen
+  TUNE-Widgets disabled (UX-Hinweis dass sie ohne Tuner sinnlos sind).
+  Initial-Aufruf in `_load_values` für korrekten Start-Zustand.
+- SWR-Limit bleibt unverändert in TX-Schutz-Hauptform (gehört zur
+  TX-Sicherheit, nicht nur TUNE).
+- Settings-Keys (`tuner_present`, `tune_duration_s`,
+  `auto_tune_on_band_change`, `tune_power`) **unverändert** — keine
+  Migration nötig, vollständig rückwärtskompatibel.
+
+**Final-R1 V4-pro:** 0 🔴 Bugs, 0 🟠 Risiken, 0 🟡. „Layout-Reorg
+korrekt, Master-Switch sicher, Save/Load-Pfade unverändert,
+KISS passt zum Hobby-Funker-Use-Case."
+
+**V4-pro 40-Cycle-Bilanz: 0 Halluzinationen.**
+
+**Tests:** 1614 → 1621 (+7 P73-A T1-T7).
+- T1: GroupBox „TUNE-Einstellungen" existiert
+- T2: tuner_present_cb + tune_duration_combo + auto_tune_band_cb in
+  GroupBox (rekursiv via `findChildren`)
+- T3: Tune-Power-Buttons (5/10/20 W) in GroupBox
+- T4: SWR-Limit NICHT in GroupBox (bleibt in Hauptform)
+- T5: Save/Load-Cycle für alle 4 TUNE-Settings-Keys grün
+- T6: Reset-Defaults setzt TUNE-Widgets auf Default (mit monkeypatch
+  für QMessageBox)
+- T7: Master-Switch — Tuner-CB uncheck → 3 abhängige disabled,
+  recheck → wieder enabled
+
+**Field-Test pending (ohne Radio nötig):**
+- F1: Settings öffnen → Tab „TX & Schutz" → neue GroupBox sichtbar
+  mit 4 TUNE-Settings in richtiger Reihenfolge
+- F2: Tab „FT8 & Diversity" → keine TUNE-Settings mehr (Bandpilot
+  bleibt)
+- F3: Tuner-Checkbox uncheck → die 3 abhängigen Widgets sichtbar
+  ausgegraut; recheck → wieder aktiv
+- F4: Settings speichern + Dialog schließen + neu öffnen → Werte
+  korrekt geladen
+
 ## 2026-05-20 v0.97.63 — P76-B Auto-TUNE-Dauer-Anzeige UX (2-Phasen-Label)
 
 Mike-Field-Test 18.05.2026 nach P75: „Auto-TUNE bei Bandwechsel auf 10m

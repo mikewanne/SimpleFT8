@@ -1,8 +1,30 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-20 — P76-B (Auto-TUNE-Dauer UX), P92 + P91 + P90 davor
+## Stand 2026-05-20 — P73-A (Settings-UX TUNE-Tab), P76-B + P92 + P91 + P90 davor
 
-**Aktueller Code-Stand:** v0.97.63 (P76-B), Tests **1614 grün** (+5 P76-B).
+**Aktueller Code-Stand:** v0.97.64 (P73-A), Tests **1621 grün** (+7 P73-A).
+
+### 🟢 v0.97.64 P73-A — Settings-UX TUNE-Einstellungen konsolidiert
+
+Mike-Wunsch 18.05.: TUNE-Settings auf 2 Tabs verteilt → User muss
+springen. Lösung: neue `QGroupBox` „TUNE-Einstellungen" in Tab
+„TX & Schutz" mit allen 4 TUNE-Settings (Tuner-CB, TUNE-Dauer,
+Tune-Leistung, Auto-TUNE-Bandwechsel).
+
+**Bonus (R1-F1):** Tuner-Checkbox als Master-Switch — bei Uncheck
+werden die 3 abhängigen Widgets disabled.
+
+Settings-Keys + Save/Load-Pfade **unverändert** (rückwärtskompatibel).
+
+**Final-R1:** 0 🔴 Bugs, 0 🟠 Risiken. **V4-pro 40-Cycle: 0 Halluzinationen.**
+
+### Field-Tests P73-A pending (ohne Radio):
+- F1: Settings → Tab „TX & Schutz" → GroupBox sichtbar mit 4 Settings
+- F2: Tab „FT8 & Diversity" → keine TUNE-Settings mehr
+- F3: Tuner uncheck → abhängige Widgets ausgegraut
+- F4: Save/Reload → Werte korrekt geladen
+
+### 🟢 v0.97.63 P76-B — Auto-TUNE-Dauer-Anzeige UX (2-Phasen-Label)
 
 ### 🟢 v0.97.63 P76-B — Auto-TUNE-Dauer-Anzeige UX (2-Phasen-Label)
 

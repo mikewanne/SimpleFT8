@@ -560,7 +560,19 @@ Alle drei: voller V1→V2→R1→V3-Workflow PFLICHT (CLAUDE.md).
 
 ---
 
-## 🆕 P73 — Settings-UX-Bundle (für spätere Besprechung mit Mike)
+## ✅ P73-A — Settings-Tab TUNE-Einstellungen ERLEDIGT v0.97.64 (20.05.2026 autonomer Workflow)
+
+Neue `QGroupBox` „TUNE-Einstellungen" in Tab „TX & Schutz" mit allen
+4 TUNE-Settings (Tuner-CB, TUNE-Dauer, Tune-Leistung, Auto-TUNE-
+Bandwechsel). Plus Master-Switch: Tuner-CB de/aktiviert abhängige
+Widgets (R1-F1). Settings-Keys unverändert. Final-R1 0 Bugs.
+Tests 1614→1621 (+7). Field-Test F1-F4 pending (ohne Radio).
+
+P73-B Mess-Zyklen bereits abgehakt (DeepSeek-Bewertung 20.05.).
+
+---
+
+## 🗄️ HISTORIE — P73 Spec (jetzt P73-A erledigt, P73-B abgehakt)
 
 **Mike-Wunsch 18.05.2026 nach P71-Field-Test:**
 
