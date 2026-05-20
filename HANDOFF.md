@@ -1,8 +1,27 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-20 — P95 (Bundle: TUNE-Rechtsklick + QSO-Spalten-Config), P94 davor
+## Stand 2026-05-20 — P96 (Power-Button-Farbe), P95 + P94 davor
 
-**Aktueller Code-Stand:** v0.97.67 (P95), Tests **1658 grün** (+20 P95).
+**Aktueller Code-Stand:** v0.97.68 (P96), Tests **1661 grün** (+3 P96).
+
+### 🟢 v0.97.68 P96 — Power-Button-Farbe permanent bei Hover
+
+Mike-Beobachtung 20.05.: ausgewählter Watt-Button (z.B. 70W)
+verlor die Hintergrundfarbe beim Mouse-Over — wirkte wie Toggle-Aus.
+
+**Ursache:** Qt-CSS-Spezifität. `:hover` stand NACH `:checked` →
+last-defined-wins → Hover-Style (grau) übermalte das Auswahl-Styling.
+
+**Fix KISS (5 LOC):**
+- Reihenfolge umgedreht: `:hover` VOR `:checked`
+- Zusätzlicher `:checked:hover` Selektor mit identischem Style zu
+  `:checked` (höhere Spezifität durch Kombination)
+
+Trivial-Klausel (Style-Fix). 3 Regressions-Tests in
+`test_p96_power_btn_color.py`.
+
+Tests 1658→1661 (+3). Field-Test ohne Radio: Power-Button auswählen
+→ Mouse-Over zeigt Farbe permanent (grün/gelb/rot je nach Wattzahl).
 
 ### 🟢 v0.97.67 P95 — Bundle: TUNE-Rechtsklick-Override + QSO-Spalten-Toggle
 

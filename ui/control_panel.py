@@ -843,12 +843,18 @@ class _RadioCard(QFrame):
             btn = QPushButton(f"{watts}")
             btn.setCheckable(True)
             btn.setFixedHeight(22)
+            # P96 (v0.97.68): `:checked:hover` MUSS expliziter Selektor sein,
+            # sonst übermalt `:hover` den ausgewählten Button beim Mouse-Over
+            # (Qt-CSS: last-defined wins bei gleicher Spezifität). Mike-Wunsch:
+            # ausgewählte Leistung behält ihre Farbe permanent (grün/gelb/rot
+            # je nach Wattzahl aus _PRESETS-Gradient).
             btn.setStyleSheet(
                 f"QPushButton {{ background: rgba(40,40,40,0.8); color: #999; "
                 f"border: 1px solid #444; border-radius: 2px; "
                 f"font-size: 9px; font-family: {_FONT}; font-weight: bold; padding: 0 1px; }}"
-                f"QPushButton:checked {{ background: {active_bg}; color: white; border-color: {active_border}; }}"
                 f"QPushButton:hover {{ background: rgba(60,60,60,0.8); color: #CCC; }}"
+                f"QPushButton:checked {{ background: {active_bg}; color: white; border-color: {active_border}; }}"
+                f"QPushButton:checked:hover {{ background: {active_bg}; color: white; border-color: {active_border}; }}"
             )
             self.power_buttons[watts] = btn
             self._power_btn_group.addButton(btn)

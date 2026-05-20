@@ -3,6 +3,37 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-20 v0.97.68 — P96 Power-Button-Farbe permanent bei Hover
+
+Mike-Beobachtung 20.05.2026 nach P95: nach Auswahl einer Leistung
+(z.B. 70W) verschwand die Hintergrundfarbe beim Mouse-Over —
+„wirkt wie Toggle-Aus, schwarz". Ausgewählter Wert sollte permanent
+farbig bleiben (grün/gelb/rot je nach Wattzahl im Gradient).
+
+**Ursache (Qt-CSS-Spezifität):** `:hover` und `:checked` haben
+identische Spezifität. Im alten Stylesheet war `:hover` NACH
+`:checked` definiert → last-defined-wins → `:hover` (grau) übermalte
+beim Mouse-Over die `:checked`-Farbe.
+
+**Fix (KISS, ~5 LOC):** zwei Stellschrauben in `ui/control_panel.py:842-855`:
+1. Reihenfolge geändert: `:hover` jetzt VOR `:checked` (last-defined-
+   wins begünstigt `:checked` statt `:hover`)
+2. Zusätzlicher kombinierter Selektor `:checked:hover` mit identischem
+   Styling zu `:checked` — höhere Spezifität durch Selektor-Kombination
+   gewinnt gegen alle Einzel-Selektoren
+
+Andere Buttons (TUNE, CQ, Diversity etc.) sind nicht betroffen — die
+nutzen entweder eigene Stile oder sind nicht checkable.
+
+Trivial-Klausel laut CLAUDE.md („Style/Doku/<5 Zeilen") — kein voller
+DeepSeek-Workflow. Drei Regressions-Tests in `test_p96_power_btn_color.py`
+gegen erneute Reihenfolge-Verwechslung.
+
+**Tests: 1658 → 1661 (+3 P96, alle grün).**
+
+Field-Test pending (ohne Radio): Power-Button auswählen → Mouse-Over
+zeigt Farbe permanent (10W=grün, 50W=gelb, 70W=orange, 100W=rot).
+
 ## 2026-05-20 v0.97.67 — P95 Bundle: TUNE-Rechtsklick + QSO-Spalten-Config
 
 Mike-Wunsch 20.05.2026 nach P94: zwei UX-Verbesserungen als Bundle.
