@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import threading
 import time
+import weakref
 from collections import deque
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -123,12 +124,18 @@ class RadioMixin:
         # gegen User-Willen connected war.
         if was_user_cancelled:
             self._demo_mode_forced = True
+            # P91 (v0.97.61): Dialog-Keepalive im GUI-Frame waehrend
+            # `thread.join`. Self-Reference RAUS BEVOR join — Worker
+            # haelt nur weakref, also keine Cleanup-Race im Worker-
+            # Thread mehr. dialog_keepalive haelt Dialog am Leben bis
+            # `deleteLater()` Qt-Cleanup im GUI-Event-Loop schedult.
+            dialog_keepalive = self._connect_dialog
+            self._connect_dialog = None
+
             # P90 (v0.97.60): Worker hart abbrechen BEVOR er Hardware
-            # einrichtet (TCP/Panadapter/Slice/TX-Config). Reihenfolge
-            # kritisch: abort_connect FIRST signalisiert dem laufenden
-            # Worker den sofortigen Stopp, abort_reconnect verhindert
-            # spaeteren Reconnect-Loop, disconnect raeumt halb-fertige
-            # Sockets auf, join wartet auf Worker-Ende.
+            # einrichtet. Reihenfolge: abort_connect signalisiert,
+            # abort_reconnect verhindert Reconnect-Loop, disconnect
+            # raeumt halb-fertige Sockets, join wartet auf Worker-Ende.
             try:
                 self.radio.abort_connect()
             except Exception:
@@ -139,26 +146,38 @@ class RadioMixin:
                     self.radio.disconnect()
                 except Exception:
                     pass
-            # P90: Auf Worker-Ende warten (max 2s, sonst GUI-Hang).
-            # Worker bricht im Normalfall in <0.1s ab (Check-Punkte
-            # alle 1-2 Phasen), Timeout greift nur bei blockierendem
-            # socket.connect() (max 5s).
             thread = getattr(self, "_connect_thread", None)
             if thread is not None and thread.is_alive():
                 thread.join(timeout=2.0)
+
+            # P91: Qt-Cleanup im GUI-Event-Loop schedulen.
+            # Python-Refcount-Drop von dialog_keepalive passiert beim
+            # Funktions-Ende dieses _start_radio → GUI-Thread = sicher.
+            if dialog_keepalive is not None:
+                try:
+                    dialog_keepalive.deleteLater()
+                except RuntimeError:
+                    pass
+
             self.control_panel.set_connection_status("disconnected")
             print("[P82] 'ohne Radio weiter' → Demo-Modus erzwungen")
-
-        self._connect_dialog = None
+        else:
+            self._connect_dialog = None
 
     def _connect_worker(self):
-        """Verbindung im Hintergrund herstellen mit Modal-Updates."""
-        # K1-Fix R1: lokale Referenz (atomarer Read), Worker hat eigenen
-        # Snapshot. Auch wenn _connect_dialog spaeter auf None gesetzt wird,
-        # bleibt unsere Referenz gueltig — Crash-Schutz via try/except.
-        dlg = self._connect_dialog
+        """Verbindung im Hintergrund herstellen mit Modal-Updates.
+
+        P91 (v0.97.61): weakref.ref statt strong ref auf den Dialog.
+        Verhindert dass beim Worker-Stack-Unwind eine Qt-Widget-
+        Destruktion im Worker-Thread laeuft (P90-Folge-Crash 20.05.
+        nach „ohne Radio weiter" + thread.join). Mit weakref haelt
+        nur der GUI-Thread eine Strong-Ref; Cleanup passiert immer
+        im GUI-Thread → keine SIGSEGV-Race.
+        """
+        dlg_ref = weakref.ref(self._connect_dialog)
 
         def on_attempt(attempt: int, max_attempts: int) -> None:
+            dlg = dlg_ref()
             if dlg is not None:
                 try:
                     dlg.attempt_changed.emit(attempt, max_attempts)
@@ -170,6 +189,7 @@ class RadioMixin:
         )
         if not ok:
             self.control_panel.set_connection_status("disconnected")
+            dlg = dlg_ref()
             if dlg is not None:
                 try:
                     dlg.failed_signal.emit()
