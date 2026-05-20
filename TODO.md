@@ -567,18 +567,27 @@ mit:
 **Aufwand:** 30-60 Min (UI-Reorganisation, kein Logik-Eingriff). Voller
 V1→V2→R1→V3-Workflow trotzdem PFLICHT (CLAUDE.md).
 
-### P73-B: Mess-Zyklen-Anzahl klären
-**Mike-Beobachtung:** AutoTuneDialog/DX-Tune-Dialog zeigt aktuell „8 Zyklen
-interleaved" (Code `ROUNDS=2 × 2 Antennen × 2 Gain-Stufen`). Mike erinnert
-sich „manchmal mit 6 Zyklen". Vermutung: alter Code-Stand vor P51-Refactor
-(P51 v0.97.28 hatte aus zwei Mess-Sessions à 8 = 16 → eine Session à 8
-gemacht, also 50% gespart).
+### ✅ P73-B: Mess-Zyklen-Anzahl klären — ABGEHAKT (20.05.2026 DeepSeek-R1-Bewertung)
 
-**Klärung:** War vor P51 mal 6 Zyklen geplant/im Code? Git-History prüfen.
-Oder ist 6 Zyklen eine UX-Idee für noch schnellere Messung (z.B.
-`ROUNDS=1.5` durch Skip einer Gain-Stufe wenn früh klar)?
+**Frage:** Lässt sich die 8-Zyklen-Kalibrierungs-Mess-Sequenz
+zeitlich verkürzen ohne Aussagekraft zu opfern?
 
-**Aktion:** mit Mike besprechen bevor Code-Änderung.
+**DeepSeek-R1-Urteil (20.05.2026, `/tmp/p73b_messzyklen_analyse.md`):**
+Aktuelles Design (8 Zyklen + Adaptiv-Stop nach Runde 1) ist bereits
+ausgewogen — typische Dauer ~1.5 Min bei offenem Band, Worst-Case 2 Min.
+
+| Optimierungsvorschlag | R1 |
+|---|---|
+| Aggressivere ΔSNR/ΔStat-Schwellen | ❌ Stichproben-Streuung >2 dB |
+| Nur 1 Gain-Stufe (20 dB) | ❌ Blindstelle bei Intermodulation |
+| 1-Runden-Default + Extend wenn unklar | ❌ Logisch äquivalent zu Schwellen-Verschärfung |
+| FT4 statt FT8 für Mess-Slots | ❌ -2.5 dB Empfindlichkeit, dünnere Datenbasis |
+| Min-Stationen 5 → 3 | ❌ Top-5-Mittelwert wird unbrauchbar |
+| Pre-Check „Preset <7 Tage skippen" | ✅ OPTIONAL, gehört zu P74-B Autogain |
+
+**Aktion:** Punkt #6 (Pre-Check via Preset-Alter + Solar-Bedingungen)
+wird im Kontext von **P74-B Autogain-Konzept** behandelt. Sonst keine
+Code-Änderung — Design bleibt wie es ist.
 
 ---
 

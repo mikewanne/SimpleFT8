@@ -3,6 +3,23 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-20 — P73-B abgehakt (Mess-Zyklen-Optimierung)
+
+Mike-Frage: lässt sich die Diversity-Kalibrierungs-Mess-Sequenz
+(8 Zyklen × 15 s = 2 Min) verkürzen ohne Aussagekraft zu opfern?
+
+**DeepSeek-R1-Bewertung 20.05.2026** (`/tmp/p73b_messzyklen_analyse.md`):
+- Aktuelles Design + Adaptiv-Stop nach Runde 1 (greift bei ΔSNR≥4 dB
+  ODER ΔStat≥50 % nach 4 Zyklen) ist bereits ausgewogen.
+- 6 von 7 Optimierungsvorschlägen würden Aussagekraft drücken
+  (Stichproben-Streuung, Intermodulation-Blindstellen, FT4-Empfindlichkeit).
+- 1 Vorschlag bleibt offen: Pre-Check „Preset <7 Tage + ähnliche
+  Solar → Re-Kalibrierung skippen" — gehört konzeptionell zu P74-B
+  Autogain (Decay-Timer + Cross-Band-Interpolation).
+
+**Ergebnis:** Kein Code-Change, P73-B abgehakt. Pre-Check-Idee wird
+im Kontext P74-B aufgegriffen.
+
 ## 2026-05-20 v0.97.62 — P92 Diversity-Sub-Toggle auch bei Bandpilot=AN
 
 Mike-UX-Wunsch: im Diversity-Modus soll der 2. Klick auf DIVERSITY
