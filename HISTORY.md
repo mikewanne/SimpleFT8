@@ -3,6 +3,72 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-20 v0.97.67 — P95 Bundle: TUNE-Rechtsklick + QSO-Spalten-Config
+
+Mike-Wunsch 20.05.2026 nach P94: zwei UX-Verbesserungen als Bundle.
+
+**Feature A — TUNE-Rechtsklick-Override:** Rechtsklick auf den
+TUNE-Button öffnet Menü mit 10s / 15s / 20s. Klick auf einen Eintrag
+startet TUNE mit dieser Dauer — unabhängig vom Settings-Wert
+`tune_duration_s`. One-shot Override. Settings bleiben unverändert.
+
+**Feature B — QSO-Panel Spalten-Konfiguration:** Rechtsklick auf das
+QSO-Log-Fenster öffnet Menü mit Toggle für „Even/Odd-Tag" und
+„Antennen-Anzeige". Wirkt auf BESTEHENDE Einträge (Re-Render via
+neue `_entries`-SOT-Liste). Persistierung in 2 Settings-Keys
+(`qso_show_eo_tag`, `qso_show_ant_label`). Analog RX-Panel-Header-
+Rechtsklick-Pattern.
+
+**Architektur (KISS, ~250 LOC):**
+
+- `ui/control_panel.py`: `_RadioCard` mit neuem `tune_override_requested`-
+  Signal + `_on_tune_button_context_menu`. ControlPanel reemittet.
+- `ui/mw_tx.py`: `_on_tune_clicked` extrahiert Pipeline in neuen
+  `_tune_start(duration_s)` Helper. Hardware-Sicherheit (10W FEST,
+  ANT1) lebt jetzt ausschließlich in `_tune_start` — wird von beiden
+  Pfaden identisch genutzt. Neuer `_on_tune_override(duration_s)` für
+  Rechtsklick-Override.
+- `ui/qso_panel.py`: `_block_timestamps` ersetzt durch `_entries: list[dict]`
+  als SOT. 6 `add_*`-Methoden refactored: `_entries.append(...)` +
+  `_render_entry(entry)`. Neue `_rerender_all` mit absoluter Scroll-
+  Position-Restore. Neue `_on_log_context_menu` mit Toggle-Actions
+  + Standard-Kontextmenü-Aktionen (Copy/SelectAll) ownership-sicher
+  via `setParent(None)` + `deleteLater`.
+- `ui/main_window.py` + `ui/mw_qso.py`: Settings-Load + Signal-Hook
+  für 2 Visibility-Flags mit try/except OSError-Schutz (analog P32).
+
+**Workflow voll durchlaufen:**
+
+- V1: `prompts/p95_bundle_v1.md` — Bundle-Spec mit 3 Varianten-
+  Diskussion für Feature B (KISS/Re-Render/Refactoring)
+- V2-Self-Review: `prompts/p95_bundle_v2.md` — 8 Findings korrigiert
+  (A-F1: `_tune_start` Helper statt Side-Channel-State, A-F2: Override-
+  Stop ohne Auto-Restart, B-F2: `_auto_trim_by_age` auf `_entries`,
+  B-F4: OMNI-Parity-Reset bei Re-Render, B-F5: 2 separate bool-Keys,
+  B-F8: Entry-Dict-Schema)
+- R1-DeepSeek (V2): 2 Findings — R1-F1 Ownership bei
+  `createStandardContextMenu` (Actions mit `setParent(None)` aus
+  std-Menü lösen), R1-F2 Scroll-Position absolut clamped statt nur
+  at_bottom-Check
+- V3 = direkte Code-Integration mit R1-Findings
+- 20 neue Tests (`tests/test_p95_bundle.py`) + 6 alte
+  `test_qso_panel_rolling.py` umgestellt auf `_entries` + 2 alte
+  P63-Tests auf neuen `_tune_start` Helper
+- Final-R1 V4-pro: **„Push-Freigabe: Ja"** 0 Blocker
+
+**V4-pro 42-Cycle-Bilanz:** 0 Halluzinationen, 2 ORANGE gefangen (R1-F1+F2).
+
+**Tests: 1638 → 1658 (+20 P95, alle grün).**
+
+**Field-Test pending (Mike):**
+- A-F1: Rechtsklick auf TUNE zeigt Menü mit 3 Optionen
+- A-F2: „TUNE 20s" startet TUNE mit 20s — Settings unverändert prüfen
+- A-F3: Während TUNE läuft → Rechtsklick → stop, kein Auto-Restart
+- B-F1: Rechtsklick im QSO-Fenster → 2 Toggle + Copy/SelectAll
+- B-F2: Toggle aus → bestehende UND neue Einträge ohne [E]/[O]
+- B-F3: Toggle aus für Ant → (ANT2 ↑X dB) weg
+- B-F4: Settings persistiert (App-Restart → Toggle-State bleibt)
+
 ## 2026-05-20 v0.97.66 — P94 Quick-73-Ignore für doppelte Anrufe
 
 Mike-Beobachtung 20.05.2026 nach P93-Field-Test (Screenshot 9A4AA):

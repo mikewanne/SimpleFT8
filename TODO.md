@@ -1,4 +1,53 @@
-# SimpleFT8 TODO — Stand 20.05.2026 (v0.97.66, P94 + P93 + P73-A + P76-B + P92 + P91 + P90 + P89 + P88 + P87 + P86 + P82 + Bundle M + P81 + P80 + P79 ERLEDIGT)
+# SimpleFT8 TODO — Stand 20.05.2026 (v0.97.67, P95 + P94 + P93 + P73-A + P76-B + P92 + P91 + P90 + P89 + P88 + P87 + P86 + P82 + Bundle M + P81 + P80 + P79 ERLEDIGT)
+
+---
+
+## ✅ P95 ERLEDIGT (v0.97.67, 20.05.2026 autonomer voller Workflow)
+
+Bundle: TUNE-Rechtsklick-Override + QSO-Spalten-Toggle. Mike-Wunsch
+20.05. nach P94.
+
+**Feature A:** Rechtsklick auf TUNE-Button → Menü 10s/15s/20s →
+TUNE startet mit dieser Dauer. Setting `tune_duration_s` UNCHANGED.
+Bei laufender TUNE: stop + kein Auto-Restart.
+
+**Feature B:** Rechtsklick im QSO-Fenster → Toggle für „Even/Odd-Tag"
+und „Antennen-Anzeige" mit speichern/laden. Wirkt auf BESTEHENDE
+Einträge (Re-Render via neue `_entries`-SOT-Liste). Plus Standard-
+QTextEdit-Aktionen (Copy/SelectAll) am Custom-Menü.
+
+**Architektur:**
+- `_RadioCard.tune_override_requested`-Signal + Kontextmenü
+- `_on_tune_clicked` → `_tune_start(duration_s)` Helper extrahiert
+  (Hardware-Sicherheit 10W FEST + ANT1 für beide Pfade identisch)
+- QSO-Panel: `_block_timestamps` → `_entries: list[dict]` als SOT,
+  6 add_*-Methoden refactored auf `_render_entry`-Pattern,
+  `_rerender_all` mit absoluter Scroll-Restore (R1-F2),
+  `_on_log_context_menu` mit Standard-Aktionen ownership-sicher
+  via `setParent(None)` (R1-F1)
+- Settings 2 neue Keys (`qso_show_eo_tag`, `qso_show_ant_label`)
+
+**Workflow voll durchgelaufen:**
+- V1: `prompts/p95_bundle_v1.md` — 3 Varianten-Diskussion Feature B
+- V2-Self-Review: `prompts/p95_bundle_v2.md` — 8 Findings korrigiert
+- R1-DeepSeek: 2 Findings (F1 createStandardContextMenu-Ownership,
+  F2 Scroll-Position absolut clamped)
+- V3 = direkte Code-Integration
+- 20 neue Tests (A-T1..T8 + B-T1..T12)
+- 6 alte qso_panel_rolling-Tests + 2 alte P63-Tests umgestellt
+- Final-R1 V4-pro: **„Push-Freigabe: Ja"** 0 Blocker
+
+**V4-pro 42-Cycle-Bilanz: 0 Halluzinationen, 2 ORANGE gefangen.**
+**Tests 1638 → 1658 (+20 P95).**
+
+Field-Test pending F1-F7 (alle ohne Radio):
+- A-F1: Rechtsklick auf TUNE zeigt Menü 10s/15s/20s
+- A-F2: „TUNE 20s" startet 20s (mit Radio: Hardware-Test)
+- A-F3: Während TUNE läuft → Rechtsklick → stop, kein Restart
+- B-F1: Rechtsklick im QSO-Fenster → 2 Toggle + Copy/SelectAll
+- B-F2: Toggle Even/Odd aus → bestehende + neue ohne [E]/[O]
+- B-F3: Toggle Ant aus → (ANT2 ↑X dB) verschwindet
+- B-F4: App-Restart → Toggle-State persistent
 
 ---
 

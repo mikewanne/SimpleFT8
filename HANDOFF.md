@@ -1,8 +1,48 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-20 — P94 (Quick-73-Ignore), P93 + P73-A + P76-B + P92 davor
+## Stand 2026-05-20 — P95 (Bundle: TUNE-Rechtsklick + QSO-Spalten-Config), P94 davor
 
-**Aktueller Code-Stand:** v0.97.66 (P94), Tests **1638 grün** (+12 P94).
+**Aktueller Code-Stand:** v0.97.67 (P95), Tests **1658 grün** (+20 P95).
+
+### 🟢 v0.97.67 P95 — Bundle: TUNE-Rechtsklick-Override + QSO-Spalten-Toggle
+
+Mike-Wunsch 20.05. zwei UX-Verbesserungen als Bundle.
+
+**Feature A:** Rechtsklick auf TUNE-Button → Menü 10s/15s/20s →
+TUNE startet mit dieser Dauer. Setting `tune_duration_s` UNCHANGED.
+Bei laufender TUNE: stop, kein Auto-Restart.
+
+**Feature B:** Rechtsklick auf QSO-Panel-Log → Toggle für
+„Even/Odd-Tag" und „Antennen-Anzeige". Wirkt auf BESTEHENDE Einträge
+(Re-Render via neue `_entries`-SOT-Liste). Persistierung in Settings
+(`qso_show_eo_tag`, `qso_show_ant_label`).
+
+**Architektur:**
+- `ui/mw_tx.py`: Pipeline aus `_on_tune_clicked` in `_tune_start`
+  extrahiert. Hardware-Sicherheit (10W FEST, ANT1) verriegelt für
+  beide Pfade identisch.
+- `ui/qso_panel.py`: `_block_timestamps` → `_entries: list[dict]` als
+  SOT. 6 add_*-Methoden refactored. `_rerender_all` mit absoluter
+  Scroll-Restore. `_on_log_context_menu` mit Standard-Aktionen
+  ownership-sicher (R1-F1 setParent(None)).
+
+**Workflow voll durchgelaufen:** V1→V2(8 Findings)→R1(2 Findings:
+F1 Ownership + F2 Scroll-Absolute)→V3+Code+Tests+Final-R1 ✅
+„Push-Freigabe: Ja" 0 Blocker.
+
+**V4-pro 42-Cycle: 0 Halluzinationen, 2 ORANGE gefangen.**
+
+Tests 1638→1658 (+20 P95). Field-Test F1-F7 pending (alle ohne Radio
+testbar — A/B-Toggle-UX).
+
+### Field-Tests P95 pending (ohne Radio):
+- A-F1: Rechtsklick auf TUNE zeigt Menü 10s/15s/20s
+- A-F2: „TUNE 20s" startet 20s TUNE (mit Radio: Hardware-Verifikation)
+- A-F3: Während TUNE läuft → Rechtsklick → stop, kein Restart
+- B-F1: Rechtsklick im QSO-Fenster → Menü mit 2 Toggle + Copy/SelectAll
+- B-F2: Toggle Even/Odd aus → bestehende + neue Einträge ohne [E]/[O]
+- B-F3: Toggle Ant aus → (ANT2 ↑X dB) verschwindet aus bestehenden
+- B-F4: App-Restart → Toggle-State persistent
 
 ### 🟢 v0.97.66 P94 — Quick-73-Ignore für doppelte Anrufe
 
