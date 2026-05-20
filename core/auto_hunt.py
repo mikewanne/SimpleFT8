@@ -51,9 +51,11 @@ _PAUSE_CYCLES  = 1      # Zyklen Pause nach QSO-Ende bevor naechste Station
 
 # P61 (v0.97.33): Recent-QSO-Cooldown — verhindert dass Auto-Hunt eine
 # Station unmittelbar nach abgeschlossenem QSO (oder unmittelbar nach
-# Pick durch Auto-Hunt selbst) erneut waehlt. Key (call, band, mode),
-# Cooldown 5 Min analog ADIF-Dedup `_LOG_DEDUP_WINDOW_S=300` aus P1.7.
-_RECENT_QSO_COOLDOWN_S = 300
+# Pick durch Auto-Hunt selbst) erneut waehlt. Key (call, band, mode).
+# P94 (v0.97.66): 5 Min → 30 Min für Konsistenz mit Quick-73-Fenster
+# (`ui/mw_cycle.py:_QUICK73_WINDOW_S`). Hard-Cap-Timer (10 Min Laufzeit)
+# bleibt unverändert — Bot-Tarn-Schutz wahren.
+_RECENT_QSO_COOLDOWN_S = 1800
 
 
 @dataclass
