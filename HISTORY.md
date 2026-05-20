@@ -3,6 +3,47 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-20 v0.97.65 — P93 Sende-Log-Eintrag auf Slot-Ende defern
+
+Mike-Beobachtung 20.05.2026 nach P73-A-Field-Test (Screenshot QSO-Panel):
+„Sende"-Eintrag erschien zur gleichen Uhrzeit wie „Empf."-Eintrag des
+vorherigen Slots, weil die App den TX schon am Slot-START loggte
+während der RX-Log natürlich am Slot-ENDE (nach Decode) kam. Optisch
+sah es aus wie „2 Meldungen gleichzeitig, dann 30 s Pause, dann wieder
+2 auf einmal".
+
+**Fix (KISS-Eingriff ~12 LOC):**
+- `ui/mw_qso.py:_on_tx_started` — Args (`message`, `tx_even`,
+  `slot_start_ts`, `omni_remaining`) in `self._pending_tx_log` dict
+  zwischenspeichern. `qso_panel.add_tx` wird NICHT mehr hier gerufen.
+- `ui/mw_qso.py:_on_tx_finished` — am Anfang: `_pending_tx_log` lesen,
+  `add_tx` damit rufen, dann auf None setzen. Defensiv via
+  `getattr(self, "_pending_tx_log", None)` falls Slot ohne vorheriges
+  `_on_tx_started` gerufen wird.
+
+**Effekt:** Sende- und Empfangs-Log-Einträge erscheinen jetzt beide am
+Slot-Ende — alle 15 s ein Eintrag, gleichmäßig im UI verteilt. **Kein
+Funkverhalten geändert** (TX läuft weiter zum Slot-Start, nur die
+Anzeige verschoben).
+
+**Andere `_on_tx_started`-Logik unverändert:** `_has_sent_cq`-Flag
+wird weiterhin sofort gesetzt (PSK-Worker-Trigger-Pfad).
+
+**Tests:** 1621 → 1626 (+5 P93).
+- T1: tx_started füllt _pending_tx_log, ruft NICHT add_tx
+- T2: tx_finished gibt _pending_tx_log via add_tx aus, leert pending
+- T3: tx_finished ohne pending Log → kein Crash, kein add_tx
+- T4: _has_sent_cq weiter in tx_started gesetzt (P28-Verhalten bleibt)
+- T5: OMNI cq_remaining_display korrekt durch pending → add_tx geleitet
+
+**Workflow-Hinweis:** Mike hat „minimaler Eingriff, mach das eben"
+gesagt — keinen vollen V1→V2→R1-Workflow gefahren, aber V2-Self-Review
+mental durchgegangen (Edge-Cases: Abort vor erstem Sample, OMNI-Pfad,
+Buffered-Click-Pfad) + Tests sichern Verhalten.
+
+Field-Test pending (mit Radio): F1 QSO-Sequenz beobachten — Sende-
+Einträge erscheinen alle 15 s gleichmäßig statt geclustert.
+
 ## 2026-05-20 v0.97.64 — P73-A Settings-UX TUNE-Einstellungen konsolidiert
 
 Mike-Wunsch 18.05.2026 nach P71-Field-Test: TUNE-bezogene Settings

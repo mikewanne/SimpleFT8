@@ -1,8 +1,24 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-20 — P73-A (Settings-UX TUNE-Tab), P76-B + P92 + P91 + P90 davor
+## Stand 2026-05-20 — P93 (Sende-Log-Eintrag defer), P73-A + P76-B + P92 davor
 
-**Aktueller Code-Stand:** v0.97.64 (P73-A), Tests **1621 grün** (+7 P73-A).
+**Aktueller Code-Stand:** v0.97.65 (P93), Tests **1626 grün** (+5 P93).
+
+### 🟢 v0.97.65 P93 — Sende-Log-Eintrag auf Slot-Ende defern
+
+Mike-Beobachtung 20.05.: „Sende"- und „Empf."-Einträge fielen optisch
+zusammen auf eine Uhrzeit (TX-Log am Slot-Start, RX-Log am Slot-Ende
+nach Decode) → 2 Einträge gleichzeitig, dann 30 s Pause.
+
+**Fix KISS:** `_on_tx_started` speichert TX-Args in `_pending_tx_log`,
+`_on_tx_finished` ruft `add_tx` damit aus. Andere TX-Logik
+(`_has_sent_cq`-Flag) unverändert. Funkverhalten unverändert — nur
+UI-Anzeige verschoben.
+
+Tests 1621→1626 (+5 P93). Field-Test mit Radio pending (QSO-Sequenz
+beobachten ob Sende-Einträge alle 15 s gleichmäßig erscheinen).
+
+### 🟢 v0.97.64 P73-A — Settings-UX TUNE-Einstellungen konsolidiert
 
 ### 🟢 v0.97.64 P73-A — Settings-UX TUNE-Einstellungen konsolidiert
 
