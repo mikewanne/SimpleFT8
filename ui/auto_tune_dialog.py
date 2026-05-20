@@ -139,7 +139,19 @@ class AutoTuneDialog(QDialog):
         self.auto_tune_done.connect(self._on_auto_tune_done)
 
     def _on_tick(self):
-        """1 s — Restzeit-Anzeige. P71: erweitert um Mode + Live-FWDPWR."""
+        """1 s — Phase-bewusste Anzeige.
+
+        P71: erweitert um Mode + Live-FWDPWR.
+        P76-B (v0.97.63): 2-Phasen-Label damit User keine falsche
+        Dauer-Erwartung aufbaut.
+          - Phase 1 (_elapsed_s <= duration_s): Soll-Anzeige
+            "X / N s" — User sieht sein Setting runterlaufen.
+          - Phase 2 (_elapsed_s > duration_s): "Leistung wird auf 10 W
+            eingeregelt · X s" — Closed-Loop-Convergenz, unbestimmte
+            Restzeit. Heller Akzent-Ton (#DDA) als visueller Hinweis.
+        Edge-Case duration_s<=0 defensiv via max(1, ·) — Settings
+        clamped real auf 5/10/15 s.
+        """
         self._elapsed_s += 1
         try:
             swr = float(self._parent.radio.last_swr)
@@ -149,10 +161,22 @@ class AutoTuneDialog(QDialog):
             fwdpwr = float(self._parent._fwdpwr_samples[-1])
         except (AttributeError, IndexError, TypeError, ValueError):
             fwdpwr = 0.0
-        self._status_label.setText(
-            f"ANT1, 10W → {self._mode} — {self._elapsed_s} / "
-            f"{self._duration_s} s · SWR {swr:.1f} · FWDPWR {fwdpwr:.1f}W"
-        )
+        effective_duration = max(1, self._duration_s)
+        if self._elapsed_s <= effective_duration:
+            # Phase 1 — Tuner-Match läuft, User sieht Setting
+            self._status_label.setStyleSheet("color: #AAA; font-size: 11px;")
+            self._status_label.setText(
+                f"ANT1, 10W → {self._mode} — {self._elapsed_s} / "
+                f"{effective_duration} s · SWR {swr:.1f} · FWDPWR {fwdpwr:.1f}W"
+            )
+        else:
+            # Phase 2 — Closed-Loop-Convergenz, kein Soll mehr
+            self._status_label.setStyleSheet("color: #DDA; font-size: 11px;")
+            self._status_label.setText(
+                f"ANT1, 10W → {self._mode} — Leistung wird auf 10 W "
+                f"eingeregelt · {self._elapsed_s} s · SWR {swr:.1f} · "
+                f"FWDPWR {fwdpwr:.1f}W"
+            )
 
     def _on_auto_tune_done(self, success: bool, swr: float, avg_fwdpwr: float):
         """Slot fuer auto_tune_done-Signal aus _tune_post_swr_check."""
