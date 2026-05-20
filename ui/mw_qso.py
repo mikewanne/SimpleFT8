@@ -302,6 +302,18 @@ class QSOMixin:
         except OSError as e:
             print(f"[P32] settings.save fehlgeschlagen: {e}")
 
+    def _save_qso_visibility(self, key: str, value: bool):
+        """P95 (v0.97.67): QSO-Panel-Spalten-Visibility persistieren.
+
+        Analog _on_rx_hidden_cols_changed mit try/except.
+        Keys: `qso_show_eo_tag`, `qso_show_ant_label`.
+        """
+        self.settings.set(key, value)
+        try:
+            self.settings.save()
+        except OSError as e:
+            print(f"[P95] settings.save fehlgeschlagen: {e}")
+
     @Slot()
     def _on_cq_clicked(self):
         if self.control_panel.btn_cq.isChecked():

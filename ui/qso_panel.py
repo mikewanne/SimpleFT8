@@ -4,7 +4,7 @@ import time
 from pathlib import Path
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QTextEdit,
-    QPushButton, QStackedWidget, QSizePolicy,
+    QPushButton, QStackedWidget, QSizePolicy, QMenu,
 )
 from PySide6.QtCore import Qt, Signal, QTimer
 from PySide6.QtGui import QFont, QTextCursor, QColor, QTextCharFormat
@@ -35,19 +35,28 @@ class QSOPanel(QWidget):
     # Wirkung: Encoder.tx_even wird auf gewählten Slot festgesetzt
     # (via core/qso_state.resolve_tx_slot).
     tx_slot_lock_changed = Signal(str)
+    # P95 (v0.97.67): Spalten-Config Rechtsklick → persistiert via MainWindow.
+    eo_tag_visibility_changed = Signal(bool)
+    ant_label_visibility_changed = Signal(bool)
 
     def __init__(self):
         super().__init__()
+        # P95 (v0.97.67): Spalten-Visibility-Flags VOR _setup_ui (wird im
+        # log_view-Context-Menu gelesen). Default: beide an.
+        self._show_eo_tag: bool = True
+        self._show_ant_label: bool = True
+        # P95: _entries als SOT für Re-Render bei Toggle. Ersetzt
+        # _block_timestamps (waren parallel zu log_view-Blocks).
+        self._entries: list[dict] = []
         self._setup_ui()
         self._qso_count = 0
-        # P1.16: zeitbasiertes Rolling-Window — Block-Timestamps parallel zu log_view-Blocks
-        self._block_timestamps: list[float] = []
         self._cleanup_timer = QTimer(self)
         self._cleanup_timer.setInterval(30_000)  # 30s
         self._cleanup_timer.timeout.connect(self._auto_trim_by_age)
         self._cleanup_timer.start()
         # P29 (11.05.2026): letzter OMNI-TX-Parity-State fuer Leerzeilen-
         # Trennung bei Paritaets-Wechsel. None = noch kein OMNI-TX gesehen.
+        # P95: bei _rerender_all() wird der State durchlaufend rekonstruiert.
         self._last_omni_tx_even: bool | None = None
 
     def _setup_ui(self):
@@ -161,6 +170,10 @@ class QSOPanel(QWidget):
                 selection-background-color: #0066AA;
             }
         """)
+        # P95 (v0.97.67): Rechtsklick auf log_view → Spalten-Toggle-Menü
+        # (Even/Odd-Tag, Antennen-Label). Persistierung via MainWindow.
+        self.log_view.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.log_view.customContextMenuRequested.connect(self._on_log_context_menu)
         live_layout.addWidget(self.log_view)
 
         self.status_label = QLabel("Keine QSOs")
@@ -213,13 +226,8 @@ class QSOPanel(QWidget):
         """Eigene gesendete Nachricht — IMMER ins Log (Mike-Wunsch v0.78:
         keine Sammelanzeige, alle CQ-Rufe einzeln untereinander sichtbar).
 
-        tx_even/slot_start_ts: bevorzugte Slot-Quelle (vom Encoder
-        durchgereicht, latenz-frei). Fallback fuer Tests/alte Caller:
-        time.time() zur Aufruf-Zeit.
-
-        omni_remaining: P23 — wenn nicht None: Suffix `  ↻{n}` direkt an
-        die Hauptzeile anhaengen (in Hauptfarbe). ant_label kommt danach
-        in seiner grauen Akzentfarbe wie heute.
+        P95 (v0.97.67): Eintrag in `_entries` + `_render_entry` für
+        Re-Render-Fähigkeit bei Toggle (Spalten-Visibility).
         """
         if slot_start_ts is None or tx_even is None:
             now = time.time()
@@ -228,28 +236,13 @@ class QSOPanel(QWidget):
             tx_even = int(slot_start_ts / slot) % 2 == 0
         utc = time.strftime("%H:%M:%S", time.gmtime(slot_start_ts))
         tag = "[E]" if tx_even else "[O]"
-        # 11.05.2026 Mike: Spalten schmaler — 1 Leerzeichen statt mehrerer.
-        line = f"{utc} {tag} → Sende {message}"
-        if omni_remaining is not None:
-            line = f"{line} ↻{omni_remaining}"
-        # P29 (11.05.2026): OMNI-CQ optische Paritaets-Trennung.
-        # - Even-Slot: leicht dunkleres Orange (selber Hue, ein wenig dunkler)
-        # - Bei Wechsel Even↔Odd: Leerzeile davor.
-        # Nur fuer OMNI-Pfad (omni_remaining is not None) — Normal-CQ bleibt
-        # einheitlich.
-        if omni_remaining is not None:
-            if (self._last_omni_tx_even is not None
-                    and self._last_omni_tx_even != tx_even):
-                self._append_colored("", "#000000")  # Leerzeile
-            self._last_omni_tx_even = tx_even
-            tx_color = "#E09600" if tx_even else "#FFAA00"
-        else:
-            tx_color = "#FFAA00"
-        if ant_label:
-            self._append_two_color(line, tx_color, f" {ant_label}", "#888888")
-        else:
-            self._append_colored(line, tx_color)
-        # P1.16: _auto_trim_by_age laeuft via QTimer alle 30s, kein expliziter Aufruf hier
+        entry = {
+            "kind": "tx", "ts": time.time(), "utc": utc, "tag": tag,
+            "tx_even": tx_even, "message": message,
+            "ant_label": ant_label, "omni_remaining": omni_remaining,
+        }
+        self._entries.append(entry)
+        self._render_entry(entry)
 
     def add_rx(self, message: str,
                tx_even: bool | None = None,
@@ -257,15 +250,8 @@ class QSOPanel(QWidget):
                ant_label: str = ""):
         """Empfangene Antwort anzeigen.
 
-        tx_even/slot_start_ts: bevorzugte Slot-Quelle (Decoder-gesetzt
-        ueber msg._tx_even / msg._slot_start_ts). Fallback fuer Tests/
-        alte Caller: time.time() zur Aufruf-Zeit (kann durch Decoder-
-        Latenz im Folge-Slot landen — nur fuer Mocks akzeptabel).
-
-        ant_label: P15 (10.05.2026 Mike-Field-Test) — '(ANT2 ↑X.X dB)'
-        zeigt welche Antenne RX gewann. Hinter Empf.-Eintrag in Grau.
-        TX-Hardware sendet IMMER ANT1 (verriegelt) — Label gehoert NUR
-        zum RX-Eintrag.
+        ant_label: P15 — '(ANT2 ↑X.X dB)' zeigt welche Antenne RX gewann.
+        P95: Eintrag in `_entries` + `_render_entry`.
         """
         if slot_start_ts is None or tx_even is None:
             now = time.time()
@@ -274,61 +260,173 @@ class QSOPanel(QWidget):
             tx_even = int(slot_start_ts / slot) % 2 == 0
         utc = time.strftime("%H:%M:%S", time.gmtime(slot_start_ts))
         tag = "[E]" if tx_even else "[O]"
-        line = f"{utc} {tag} ← Empf. {message}"
-        if ant_label:
-            self._append_two_color(line, "#44BBFF", f" {ant_label}", "#888888")
-        else:
-            self._append_colored(line, "#44BBFF")
+        entry = {
+            "kind": "rx", "ts": time.time(), "utc": utc, "tag": tag,
+            "message": message, "ant_label": ant_label,
+        }
+        self._entries.append(entry)
+        self._render_entry(entry)
 
     def add_listening(self, slot_start_ts: float, tx_even: bool):
-        """OMNI RX-Slot-Anzeige (Mike-Wunsch P3.OMNI-PATTERN-FIX-2 v0.95.25).
-
-        Lebenszeichen in stillen RX-Slots — Mike sieht dass App lauft
-        auch wenn keine Stationen decodiert wurden. Aufgerufen aus
-        mw_qso._on_send_message bei OMNI-RX-Slot-Skip.
-
-        Format wie add_rx: 'HH:MM:SS [E/O] ←  Horche  …' in Grau (#666).
-        Spam-begrenzt durch _auto_trim_by_age (5min Window).
-        """
+        """OMNI RX-Slot-Anzeige (Lebenszeichen in stillen Slots)."""
         utc = time.strftime("%H:%M:%S", time.gmtime(slot_start_ts))
         tag = "[E]" if tx_even else "[O]"
-        self._append_colored(f"{utc} {tag} ← Horche …", "#666666")
+        entry = {"kind": "listening", "ts": time.time(),
+                 "utc": utc, "tag": tag}
+        self._entries.append(entry)
+        self._render_entry(entry)
 
     def add_qso_complete(self, their_call: str):
         """QSO als abgeschlossen markieren."""
         self._qso_count += 1
-        self._append_colored(f"       ✓ QSO mit {their_call} komplett", "#44FF44")
-        self._append_colored("─" * 30, "#333333")
-        # Reset Style nach moeglicher Live-QSO-Anzeige (war gruen, fett).
+        entry = {"kind": "complete", "ts": time.time(),
+                 "their_call": their_call}
+        self._entries.append(entry)
+        self._render_entry(entry)
         self.status_label.setText(f"{self._qso_count} QSO(s) diese Session")
         self.status_label.setStyleSheet("color: #666; font-size: 11px; padding: 2px;")
 
     def add_timeout(self, their_call: str):
         """Timeout anzeigen."""
-        self._append_colored(f"       ✗ {their_call} — Timeout", "#FF4444")
-        self._append_colored("─" * 30, "#333333")
+        entry = {"kind": "timeout", "ts": time.time(),
+                 "their_call": their_call}
+        self._entries.append(entry)
+        self._render_entry(entry)
 
     def add_info(self, text: str):
         """Info-Nachricht anzeigen.
 
-        P79 (v0.97.51): Symbol-Auto-Detect — beginnt der Text mit
-        ⚠/✓/✗/⏳, wird das Symbol in der zugehoerigen Farbe gerendert,
-        der Rest bleibt dezent grau (#666). KISS — keine Call-Site-
-        Migration der ~30 Aufrufer.
+        P79 (v0.97.51): Symbol-Auto-Detect — Symbol farbig, Rest grau.
+        P95 (v0.97.67): in `_entries` für Re-Render.
         """
-        # Empty-Guard: leere Calls verworfen (kein unsichtbarer Append).
         if not text:
             return
-        # Symbol-Loop deterministisch (Python 3.7+ Dict-Order).
-        for symbol, color in _SYMBOL_COLORS.items():
-            if text.startswith(symbol):
-                rest = text[len(symbol):]
-                self._append_two_color(
-                    f"       {symbol}", color,
-                    rest, "#666666"
-                )
-                return
-        self._append_colored(f"       {text}", "#666666")
+        entry = {"kind": "info", "ts": time.time(), "text": text}
+        self._entries.append(entry)
+        self._render_entry(entry)
+
+    def _render_entry(self, e: dict):
+        """P95 (v0.97.67): Eintrag basierend auf Visibility-Flags rendern.
+
+        Wird sowohl beim Live-Append (add_*) als auch beim Re-Render
+        (Toggle) aufgerufen. P29 OMNI-Parity-Tracker wird hier gepflegt
+        (Live: durchlaufend; Re-Render: vor _rerender_all auf None reset).
+        """
+        kind = e["kind"]
+        if kind == "tx":
+            tag_str = f"{e['tag']} " if self._show_eo_tag else ""
+            line = f"{e['utc']} {tag_str}→ Sende {e['message']}"
+            omni_rem = e.get("omni_remaining")
+            if omni_rem is not None:
+                line = f"{line} ↻{omni_rem}"
+                # P29: Leerzeile bei OMNI-Paritätswechsel
+                if (self._last_omni_tx_even is not None
+                        and self._last_omni_tx_even != e['tx_even']):
+                    self._append_colored("", "#000000")
+                self._last_omni_tx_even = e['tx_even']
+                tx_color = "#E09600" if e['tx_even'] else "#FFAA00"
+            else:
+                tx_color = "#FFAA00"
+            ant = e.get("ant_label", "")
+            if ant and self._show_ant_label:
+                self._append_two_color(line, tx_color, f" {ant}", "#888888")
+            else:
+                self._append_colored(line, tx_color)
+        elif kind == "rx":
+            tag_str = f"{e['tag']} " if self._show_eo_tag else ""
+            line = f"{e['utc']} {tag_str}← Empf. {e['message']}"
+            ant = e.get("ant_label", "")
+            if ant and self._show_ant_label:
+                self._append_two_color(line, "#44BBFF",
+                                       f" {ant}", "#888888")
+            else:
+                self._append_colored(line, "#44BBFF")
+        elif kind == "listening":
+            tag_str = f"{e['tag']} " if self._show_eo_tag else ""
+            self._append_colored(
+                f"{e['utc']} {tag_str}← Horche …", "#666666")
+        elif kind == "complete":
+            self._append_colored(
+                f"       ✓ QSO mit {e['their_call']} komplett", "#44FF44")
+            self._append_colored("─" * 30, "#333333")
+        elif kind == "timeout":
+            self._append_colored(
+                f"       ✗ {e['their_call']} — Timeout", "#FF4444")
+            self._append_colored("─" * 30, "#333333")
+        elif kind == "info":
+            text = e["text"]
+            for symbol, color in _SYMBOL_COLORS.items():
+                if text.startswith(symbol):
+                    self._append_two_color(
+                        f"       {symbol}", color,
+                        text[len(symbol):], "#666666")
+                    return
+            self._append_colored(f"       {text}", "#666666")
+
+    def _rerender_all(self):
+        """P95 (v0.97.67): log_view komplett neu aus `_entries` zeichnen.
+
+        Wird bei Visibility-Toggle und nach _auto_trim_by_age gerufen.
+        Scroll-Position wird absolut wiederhergestellt (R1-F2 clamped
+        auf neues max). _last_omni_tx_even durchlaufend rekonstruiert.
+        """
+        sb = self.log_view.verticalScrollBar()
+        saved = sb.value()
+        max_before = sb.maximum()
+        at_bottom = saved >= max_before - 5
+        self.log_view.clear()
+        self._last_omni_tx_even = None
+        for entry in self._entries:
+            self._render_entry(entry)
+        if at_bottom:
+            sb.setValue(sb.maximum())
+        else:
+            sb.setValue(min(saved, sb.maximum()))
+
+    def _on_log_context_menu(self, pos):
+        """P95 (v0.97.67): Rechtsklick auf log_view → Spalten-Toggle-Menü.
+
+        Toggle für Even/Odd-Tag und Antennen-Label. Plus Standard-
+        QTextEdit-Aktionen (Copy/SelectAll) via createStandardContextMenu.
+        R1-F1: Actions setParent(None) damit sie das std-Menü überleben.
+        """
+        menu = QMenu(self)
+        menu.setStyleSheet(
+            "QMenu { background: #1a1a2e; color: #CCC; border: 1px solid #444; }"
+            "QMenu::item { padding: 4px 20px 4px 28px; }"
+            "QMenu::item:selected { background: #0066AA; }"
+            "QMenu::item:checked { color: #00AAFF; }"
+        )
+        a_eo = menu.addAction("Even/Odd-Tag")
+        a_eo.setCheckable(True)
+        a_eo.setChecked(self._show_eo_tag)
+        a_eo.triggered.connect(self._toggle_eo_tag)
+        a_ant = menu.addAction("Antennen-Anzeige")
+        a_ant.setCheckable(True)
+        a_ant.setChecked(self._show_ant_label)
+        a_ant.triggered.connect(self._toggle_ant_label)
+        # R1-F1: Standard-Aktionen (Copy/SelectAll) ownership-sicher anhängen
+        std = self.log_view.createStandardContextMenu()
+        std_actions = list(std.actions())
+        if std_actions:
+            menu.addSeparator()
+            for act in std_actions:
+                act.setParent(None)  # vom std-Menü loslösen
+                menu.addAction(act)
+        std.deleteLater()
+        menu.exec(self.log_view.mapToGlobal(pos))
+
+    def _toggle_eo_tag(self, show: bool):
+        """P95: Even/Odd-Tag ein/ausblenden + Re-Render + persistieren."""
+        self._show_eo_tag = show
+        self._rerender_all()
+        self.eo_tag_visibility_changed.emit(show)
+
+    def _toggle_ant_label(self, show: bool):
+        """P95: Antennen-Label ein/ausblenden + Re-Render + persistieren."""
+        self._show_ant_label = show
+        self._rerender_all()
+        self.ant_label_visibility_changed.emit(show)
 
     def _update_slot_display(self):
         """Bundle D (v0.97.21): No-Op geworden.
@@ -392,25 +490,27 @@ class QSOPanel(QWidget):
         self._btn_odd.blockSignals(False)
 
     def _append_colored(self, text: str, color: str):
+        """Single-Block Append in einer Farbe.
+
+        P95 (v0.97.67): kein _block_timestamps mehr — _entries ist SOT
+        und enthält die Timestamps für _auto_trim_by_age.
+        """
         cursor = self.log_view.textCursor()
         cursor.movePosition(QTextCursor.MoveOperation.End)
         self.log_view.setTextCursor(cursor)
         self.log_view.setTextColor(QColor(color))
         self.log_view.append(text)
-        # P1.16: Timestamp parallel zu Block fuer 5-Min-Rolling-Window
-        self._block_timestamps.append(time.time())
         # Auto-Scroll nach unten
         scrollbar = self.log_view.verticalScrollBar()
         scrollbar.setValue(scrollbar.maximum())
 
     def _append_two_color(self, text1: str, color1: str, text2: str, color2: str):
+        """Single-Block Append in zwei Farben (Haupttext + Akzent)."""
         cursor = self.log_view.textCursor()
         cursor.movePosition(QTextCursor.MoveOperation.End)
         self.log_view.setTextCursor(cursor)
         self.log_view.setTextColor(QColor(color1))
         self.log_view.append(text1)
-        # P1.16: Timestamp — _append_two_color erzeugt EINEN Block (append=Block, insertText=im-Block)
-        self._block_timestamps.append(time.time())
         cursor = self.log_view.textCursor()
         cursor.movePosition(QTextCursor.MoveOperation.End)
         fmt = QTextCharFormat()
@@ -421,37 +521,16 @@ class QSOPanel(QWidget):
         scrollbar.setValue(scrollbar.maximum())
 
     def _auto_trim_by_age(self, max_age_s: float = 300.0):
-        """P1.16: Eintraege aelter als max_age_s (default 5 Min) entfernen.
+        """P1.16 / P95 (v0.97.67): Einträge älter als max_age_s entfernen.
 
-        Defensiv gegen externe `clear()` (R1-KP2): synct Liste mit blockCount.
-        Mindest-Schwelle 5 verhindert Flackern bei kleinen Mengen.
+        P95: arbeitet jetzt auf `_entries` (SOT) statt parallel zum
+        log_view-Block-Count. Bei Trim → _rerender_all() zeichnet log_view
+        komplett neu. Mindest-Schwelle 5 verhindert Flackern.
         """
-        doc = self.log_view.document()
-        block_count = doc.blockCount()
-        # KP2 Resync: falls extern geleert oder Liste-out-of-sync
-        if len(self._block_timestamps) > block_count:
-            self._block_timestamps = self._block_timestamps[-block_count:]
-
         now = time.time()
         cutoff = now - max_age_s
-        n_old = sum(1 for ts in self._block_timestamps if ts < cutoff)
+        n_old = sum(1 for e in self._entries if e["ts"] < cutoff)
         if n_old < 5:  # Mindest-Schwelle gegen Flackern
             return
-
-        # Scroll-Position merken
-        scrollbar = self.log_view.verticalScrollBar()
-        was_at_bottom = scrollbar.value() >= scrollbar.maximum() - 5
-
-        cursor = QTextCursor(doc)
-        cursor.movePosition(QTextCursor.MoveOperation.Start)
-        for _ in range(n_old):
-            cursor.movePosition(
-                QTextCursor.MoveOperation.Down,
-                QTextCursor.MoveMode.KeepAnchor)
-        cursor.removeSelectedText()
-        cursor.deleteChar()
-
-        self._block_timestamps = self._block_timestamps[n_old:]
-
-        if was_at_bottom:
-            scrollbar.setValue(scrollbar.maximum())
+        self._entries = [e for e in self._entries if e["ts"] >= cutoff]
+        self._rerender_all()
