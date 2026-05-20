@@ -86,58 +86,91 @@ class TXMixin:
 
         P71 (v0.97.47): Whitelist (15, 30) → (5, 10, 15) — Final-R1-Catch
         (sonst User-Wahl 5/10 ignoriert vom manuellen TUNE-Pfad).
+
+        P95 (v0.97.67): Pipeline in `_tune_start(duration_s)` extrahiert
+        damit `_on_tune_override` ohne Side-Channel-State (Override-Attr)
+        dieselbe Sequenz fahren kann.
         """
         if not self.radio.ip:
             return
-        from PySide6.QtCore import QTimer
-        from config.settings import get_tune_freq_mhz
-
         if on:
-            # P63 AC5: 10W FEST (unabhängig von tune_power-Setting).
-            # P71: Dauer-Whitelist konsistent mit Auto-Tune-Pfad (5/10/15).
-            TUNE_POWER_W = 10
+            # P63 AC5: 10W FEST. P71: Dauer-Whitelist konsistent mit Auto-Tune.
             duration_s = self.settings.get("tune_duration_s", 15)
             if duration_s not in (5, 10, 15):
                 duration_s = 15
-
-            # P63 AC4: Watchdog-Bypass VOR tune_on
-            self._tune_in_progress = True
-            # P54-FIX R1-F2: Cancel-Flag reset vor Phase A (sauberer State)
-            self._tune_convergence_cancelled = False
-
-            # Tune-Frequenz aus TUNE_FREQS-Map (band+mode)
-            tune_freq = get_tune_freq_mhz(self.settings.band, self.settings.mode)
-            # _tune_active VOR set_frequency (verhindert Race mit Radio-Callback)
-            self._tune_active = True
-            if tune_freq is not None:
-                self._tune_freq_mhz = tune_freq
-                self.radio.set_frequency(tune_freq)
-                print(f"[Tune] VFO temporaer auf {tune_freq * 1000:.3f} kHz "
-                      f"({self.settings.band}/{self.settings.mode})")
-            else:
-                self._tune_freq_mhz = self.settings.frequency_mhz
-                print(f"[Tune] Kein Offset-Wert fuer {self.settings.band}/{self.settings.mode} "
-                      f"— tune auf Arbeitsfrequenz")
-
-            self.radio.set_tx_antenna("ANT1")
-            self.radio.set_rfpower_direct(TUNE_POWER_W)
-            self.radio.tune_on()
-            self._update_statusbar()
-            self.statusBar().showMessage(
-                f"TUNEN — {TUNE_POWER_W}W auf ANT1 für {duration_s}s ...", 0)
-            display_freq = tune_freq if tune_freq is not None else self.settings.frequency_mhz
-            self.control_panel.set_freq_display(display_freq, tune_active=True)
-            print(f"[P63] Manueller TUNE — {TUNE_POWER_W}W {duration_s}s")
-
-            # Auto-Stop nach Dauer mit Token-Re-Entry-Schutz
-            self._tune_auto_stop_token = object()
-            _token = self._tune_auto_stop_token
-            QTimer.singleShot(
-                duration_s * 1000,
-                lambda: self._tune_stop(_token))
+            self._tune_start(duration_s)
         else:
             # User-Toggle off → unbedingt stop (token=None)
             self._tune_stop(None)
+
+    def _on_tune_override(self, duration_s: int):
+        """P95 (v0.97.67): Rechtsklick-Override für TUNE-Dauer.
+
+        Mike-Spec: 10/15/20s aus Kontextmenü auf btn_tune. Setting
+        `tune_duration_s` bleibt unverändert. Wenn TUNE bereits läuft:
+        stoppen, kein Auto-Restart (User muss erneut wählen wenn neue
+        Dauer gewünscht).
+        """
+        if not self.radio.ip:
+            return
+        if duration_s not in (10, 15, 20):
+            return  # KISS: ignorieren statt clampen
+        if self.btn_tune.isChecked():
+            # TUNE läuft → stoppen, kein Auto-Restart
+            self.btn_tune.setChecked(False)
+            self._tune_stop(None)
+            return
+        # btn visuell checken + Pipeline mit Override-Dauer starten
+        self.btn_tune.setChecked(True)
+        self._tune_start(duration_s)
+
+    def _tune_start(self, duration_s: int):
+        """P95 (v0.97.67): Gemeinsamer TUNE-Start für regulär + Override.
+
+        Hardware-Sicherheit (P63 AC5, Mike-Anweisung): 10W FEST,
+        ANT1 verriegelt — unabhängig von tune_power-Setting oder
+        Override-Pfad.
+        """
+        from PySide6.QtCore import QTimer
+        from config.settings import get_tune_freq_mhz
+
+        TUNE_POWER_W = 10
+
+        # P63 AC4: Watchdog-Bypass VOR tune_on
+        self._tune_in_progress = True
+        # P54-FIX R1-F2: Cancel-Flag reset vor Phase A (sauberer State)
+        self._tune_convergence_cancelled = False
+
+        # Tune-Frequenz aus TUNE_FREQS-Map (band+mode)
+        tune_freq = get_tune_freq_mhz(self.settings.band, self.settings.mode)
+        # _tune_active VOR set_frequency (verhindert Race mit Radio-Callback)
+        self._tune_active = True
+        if tune_freq is not None:
+            self._tune_freq_mhz = tune_freq
+            self.radio.set_frequency(tune_freq)
+            print(f"[Tune] VFO temporaer auf {tune_freq * 1000:.3f} kHz "
+                  f"({self.settings.band}/{self.settings.mode})")
+        else:
+            self._tune_freq_mhz = self.settings.frequency_mhz
+            print(f"[Tune] Kein Offset-Wert fuer {self.settings.band}/{self.settings.mode} "
+                  f"— tune auf Arbeitsfrequenz")
+
+        self.radio.set_tx_antenna("ANT1")
+        self.radio.set_rfpower_direct(TUNE_POWER_W)
+        self.radio.tune_on()
+        self._update_statusbar()
+        self.statusBar().showMessage(
+            f"TUNEN — {TUNE_POWER_W}W auf ANT1 für {duration_s}s ...", 0)
+        display_freq = tune_freq if tune_freq is not None else self.settings.frequency_mhz
+        self.control_panel.set_freq_display(display_freq, tune_active=True)
+        print(f"[P63] Manueller TUNE — {TUNE_POWER_W}W {duration_s}s")
+
+        # Auto-Stop nach Dauer mit Token-Re-Entry-Schutz
+        self._tune_auto_stop_token = object()
+        _token = self._tune_auto_stop_token
+        QTimer.singleShot(
+            duration_s * 1000,
+            lambda: self._tune_stop(_token))
 
     def _tune_stop(self, token):
         """TUNE beenden + 2s-Post-Check-Timer für SWR-Auswertung.

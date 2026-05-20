@@ -8,6 +8,7 @@ from collections import deque
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QSlider, QFrame, QGridLayout, QButtonGroup, QProgressBar, QSpinBox,
+    QMenu,
 )
 
 # Qt-Konstante (in PySide6 nicht direkt exportiert) — entspricht 2^24 - 1.
@@ -755,6 +756,8 @@ class _RadioCard(QFrame):
     """
 
     collapse_changed = Signal(bool)
+    # P95 (v0.97.67): Rechtsklick-Override für TUNE-Dauer (10/15/20s)
+    tune_override_requested = Signal(int)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -913,6 +916,11 @@ class _RadioCard(QFrame):
             f"border: 1px solid #444444; }}"
         )
         self.btn_tune.setStyleSheet(_tune_btn_style)
+        # P95 (v0.97.67): Rechtsklick-Override für TUNE-Dauer (10/15/20s)
+        # unabhängig vom Setting `tune_duration_s`. One-shot Override.
+        self.btn_tune.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.btn_tune.customContextMenuRequested.connect(
+            self._on_tune_button_context_menu)
         # Watt + SWR direkt nebeneinander (Anzeigen, kein Button)
         self.watt_label = QLabel("0 W")
         self.watt_label.setFixedHeight(28)
@@ -957,6 +965,27 @@ class _RadioCard(QFrame):
         """Slot fuer Toggle-Button-Klick. Persistenz ueber Signal."""
         self.set_collapsed(not self.is_collapsed())
         self.collapse_changed.emit(self.is_collapsed())
+
+    def _on_tune_button_context_menu(self, pos) -> None:
+        """P95 (v0.97.67): Rechtsklick-Override für TUNE-Dauer.
+
+        Zeigt Menü mit 10s / 15s / 20s. Auswahl emittet
+        `tune_override_requested(duration_s)`. Setting `tune_duration_s`
+        bleibt unverändert. Pipeline-Handling im MainWindow (mw_tx).
+        """
+        if not self.btn_tune.isVisible():
+            return
+        menu = QMenu(self)
+        menu.setStyleSheet(
+            "QMenu { background: #1a1a2e; color: #CCC; border: 1px solid #444; }"
+            "QMenu::item { padding: 4px 20px 4px 20px; }"
+            "QMenu::item:selected { background: #0066AA; }"
+        )
+        for sec in (10, 15, 20):
+            act = menu.addAction(f"TUNE {sec}s")
+            act.triggered.connect(
+                lambda checked=False, s=sec: self.tune_override_requested.emit(s))
+        menu.exec(self.btn_tune.mapToGlobal(pos))
 
 
 class _QSOStatusCard(QFrame):
@@ -1208,6 +1237,9 @@ class ControlPanel(QWidget):
     cancel_clicked = Signal()
     cq_clicked = Signal()
     tune_clicked = Signal(bool)
+    # P95 (v0.97.67): Rechtsklick-Override für TUNE-Dauer (10/15/20s).
+    # Vom _RadioCard reemittet. Setting `tune_duration_s` unverändert.
+    tune_override_requested = Signal(int)
     dx_preset_changed = Signal(str)
     tx_level_changed = Signal(int)
     preamp_changed = Signal(bool)           # Legacy, nicht mehr genutzt
@@ -1352,6 +1384,10 @@ class ControlPanel(QWidget):
         self.power_buttons[10].setChecked(True)
         self.btn_tune = radio_card.btn_tune
         self.btn_tune.clicked.connect(self._on_tune_clicked)
+        # P95 (v0.97.67): Rechtsklick-Override Signal vom _RadioCard
+        # bubblen → MainWindow connectet es zu mw_tx._on_tune_override.
+        radio_card.tune_override_requested.connect(
+            self.tune_override_requested.emit)
         # P63 (v0.97.36): TUNE-Button-Sichtbarkeit via tuner_present-Setting.
         # MainWindow ruft `set_tuner_present` nach __init__ und nach jedem
         # Settings-Save (Live-Apply).

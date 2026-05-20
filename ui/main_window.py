@@ -620,6 +620,14 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self.qso_panel.tx_slot_lock_changed.connect(self._on_tx_slot_lock_changed)
         # Initial-Buttons aus Settings setzen (nur Normal-Modus relevant)
         self.qso_panel.set_tx_slot_lock_buttons(self.settings.get_tx_slot_lock())
+        # P95 (v0.97.67): Spalten-Visibility laden + Signals an Save-Hooks.
+        self.qso_panel._show_eo_tag = self.settings.get("qso_show_eo_tag", True)
+        self.qso_panel._show_ant_label = self.settings.get(
+            "qso_show_ant_label", True)
+        self.qso_panel.eo_tag_visibility_changed.connect(
+            lambda v: self._save_qso_visibility("qso_show_eo_tag", v))
+        self.qso_panel.ant_label_visibility_changed.connect(
+            lambda v: self._save_qso_visibility("qso_show_ant_label", v))
         # Tab-Wechsel: Detail-Overlay zuruecksetzen wenn User vom Logbuch weg navigiert
         self.qso_panel.tabs.currentChanged.connect(self._on_qso_tab_changed)
         self.control_panel = ControlPanel(callsign=self.settings.callsign)
@@ -751,6 +759,9 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self.control_panel.cancel_clicked.connect(self._on_cancel)
         self.control_panel.cq_clicked.connect(self._on_cq_clicked)
         self.control_panel.tune_clicked.connect(self._on_tune_clicked)
+        # P95 (v0.97.67): Rechtsklick-Override für TUNE-Dauer (10/15/20s)
+        self.control_panel.tune_override_requested.connect(
+            self._on_tune_override)
         self.control_panel.rx_mode_changed.connect(self._on_rx_mode_changed)
         # Bundle G (v0.97.24): 2. Div-Klick → Toggle Std↔DX
         self.control_panel.diversity_subtoggle_requested.connect(
