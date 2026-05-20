@@ -113,10 +113,18 @@ class QSOMixin:
 
     @Slot(str, bool, float)
     def _on_tx_started(self, message: str, tx_even: bool, slot_start_ts: float):
-        """TX begonnen — Nachricht ins QSO-Panel.
+        """TX begonnen — Flag-Setup, Log-Eintrag defern auf tx_finished.
 
-        tx_even/slot_start_ts vom Encoder durchgereicht — qso_panel zeigt
-        damit den korrekten Slot-Tag/Zeitstempel der TX-Aktion.
+        P93 (20.05.2026, v0.97.65): Sende-Log-Eintrag wandert von
+        tx_started nach tx_finished. Heute erschien „→ Sende" zum
+        Slot-START, „← Empf." zum Slot-ENDE (Decoder-Latenz). Beide
+        Einträge fielen auf die gleiche Uhrzeit → optisch „2 auf
+        einmal, dann 30 s Pause". Mit P93 erscheinen beide am
+        Slot-ENDE, alle 15 s gleichmäßig.
+
+        tx_even/slot_start_ts/omni_remaining werden in
+        `_pending_tx_log` zwischengespeichert und in `_on_tx_finished`
+        ausgegeben.
 
         P23: bei aktivem OMNI-CQ wird der Down-Counter (`omni.cq_remaining`)
         durchgereicht und qso_panel haengt Suffix `↻N` an die TX-Zeile.
@@ -135,9 +143,13 @@ class QSOMixin:
         if omni is not None and omni.is_active() and not omni.is_paused():
             # P31: Display-Wert (pre-decrement) statt cq_remaining (post).
             omni_remaining = omni.cq_remaining_display
-        self.qso_panel.add_tx(message, "",
-                              tx_even=tx_even, slot_start_ts=slot_start_ts,
-                              omni_remaining=omni_remaining)
+        # P93: Log-Args für tx_finished merken — KEIN add_tx hier
+        self._pending_tx_log = {
+            "message": message,
+            "tx_even": tx_even,
+            "slot_start_ts": slot_start_ts,
+            "omni_remaining": omni_remaining,
+        }
 
     @Slot(object)
     def _on_station_clicked(self, msg: FT8Message):
@@ -427,7 +439,22 @@ class QSOMixin:
             self.control_panel.set_cq_active(True)
 
     def _on_tx_finished(self):
-        """TX abgeschlossen — PTT aus, zurueck zu RX."""
+        """TX abgeschlossen — PTT aus, zurueck zu RX.
+
+        P93 (v0.97.65): Sende-Log-Eintrag erscheint hier (statt
+        tx_started). `_pending_tx_log` wurde vom `_on_tx_started`-Slot
+        belegt. Falls leer (z.B. Abort vor erstem Sample), kein Log.
+        """
+        # P93: Defer'ter Log-Eintrag aus tx_started
+        pending = getattr(self, "_pending_tx_log", None)
+        if pending is not None:
+            self.qso_panel.add_tx(
+                pending["message"], "",
+                tx_even=pending["tx_even"],
+                slot_start_ts=pending["slot_start_ts"],
+                omni_remaining=pending["omni_remaining"],
+            )
+            self._pending_tx_log = None
         self.control_panel.set_tx_active(False)
         self.qso_sm.on_message_sent()
         # V2-L3: letzten TX-Slot fuer OMNI-Block-Wahl nach QSO-Ende merken.
