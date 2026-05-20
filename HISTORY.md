@@ -3,6 +3,49 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-20 v0.97.63 — P76-B Auto-TUNE-Dauer-Anzeige UX (2-Phasen-Label)
+
+Mike-Field-Test 18.05.2026 nach P75: „Auto-TUNE bei Bandwechsel auf 10m
+mit `tune_duration_s=5` hat wesentlich länger als 5 s gedauert"
+(gefühlt ~9 s). Wurzel: Soll-Anzeige `N / 5 s` lief weiter während
+Phase B (Closed-Loop-Convergenz auf 10 W FWDPWR) und Post-SWR-Check
+noch liefen — real bis 13.5 s worst-case.
+
+**Fix (V3 nach R1-Brainstorm Variante B+ Hybrid):**
+- `ui/auto_tune_dialog.py:_on_tick` — 2-Phasen-Label:
+  - **Phase 1** (`_elapsed_s ≤ duration_s`): unverändertes
+    `X / N s` mit `#AAA` grau — User sieht sein Setting ehrlich
+    runterlaufen.
+  - **Phase 2** (`_elapsed_s > duration_s`): „Leistung wird auf 10 W
+    eingeregelt · X s" mit `#DDA` heller Akzent-Ton — klare Aussage
+    dass Convergenz unbestimmte Restzeit läuft, keine falsche
+    Erwartung.
+- Defensive `effective_duration = max(1, duration_s)` gegen
+  Edge-Case `duration_s ≤ 0` (R1-F1, Settings clamped real auf 5/10/15).
+- SWR + FWDPWR Live-Werte in beiden Phasen sichtbar.
+- Erfolg/Fehler/Cancel/Backup-Timeout-Pfade unverändert.
+
+**Final-R1 V4-pro:** 0 🔴 Bugs, 0 🟠 Risiken. „Logisch korrekt,
+stabil und rückwirkungsfrei. Defensive Klammerung deckt alle
+Edge-Cases ab."
+
+**V4-pro 39-Cycle-Bilanz: 0 Halluzinationen.**
+
+**Tests:** 1609 → 1614 (+5 P76-B T1-T5).
+- T1: Phase 1 Soll-Anzeige + #AAA Style
+- T2: Phase 2 ohne Soll + #DDA Style
+- T3: Phase-Wechsel-Grenze (elapsed=duration → P1, elapsed=duration+1 → P2)
+- T4: `duration_s=0` defensiv (kein `/ 0 s` Output)
+- T5: `_on_auto_tune_done` überschreibt Phase-2-Label, beide Timer gestoppt
+
+**Field-Test pending (mit Radio):**
+- F1: Bandwechsel 10m mit `tune_duration_s=5` → Phase 1 zeigt
+  „X / 5 s" für 5 s, dann Phase 2 „Leistung wird auf 10 W eingeregelt"
+  bis TUNE-OK.
+- F2: Bandwechsel 40m (klare Bedingungen) → Phase 1 läuft normal
+  durch, Phase 2 ggf. sehr kurz (Convergenz schnell).
+- F3: SWR-bad → Fehler-Branch überschreibt korrekt.
+
 ## 2026-05-20 — P73-B abgehakt (Mess-Zyklen-Optimierung)
 
 Mike-Frage: lässt sich die Diversity-Kalibrierungs-Mess-Sequenz

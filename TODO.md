@@ -371,7 +371,20 @@ Voller V1→V2→R1→V3→Code→Final-R1-Workflow.
 
 ---
 
-## 🐛 P76-B — Auto-TUNE-Dauer länger als eingestellt (Mike-Field-Test 18.05. nach P75)
+## ✅ P76-B — Auto-TUNE-Dauer-Anzeige UX — ERLEDIGT v0.97.63 (20.05.2026 autonomer Workflow)
+
+**Fix Variante B+ Hybrid (R1-empfohlen):** 2-Phasen-Label in
+`_on_tick`. Phase 1 (≤ duration_s) zeigt unveränderte Soll-Anzeige
++ #AAA grau, Phase 2 (> duration_s) zeigt „Leistung wird auf 10 W
+eingeregelt · X s" + #DDA heller Akzent. SWR/FWDPWR-Live-Werte in
+beiden Phasen sichtbar. Defensive `max(1, duration_s)` gegen
+duration_s ≤ 0. Final-R1 0 🔴 Bugs. Tests 1609→1614 (+5).
+
+Field-Test F1-F3 pending (Bandwechsel mit Radio).
+
+---
+
+## 🗄️ HISTORIE — P76-B Spec (Mike-Field-Test 18.05., jetzt erledigt)
 
 **Symptom (Mike-Field-Test 18.05.):** Auto-TUNE bei Bandwechsel auf
 10m mit Setting `tune_duration_s=5` hat „wesentlich länger als 5 s"

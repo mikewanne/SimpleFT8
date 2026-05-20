@@ -1,8 +1,32 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-20 — P92 (Diversity-Sub-Toggle bei Bandpilot=AN), P91 + P90 davor
+## Stand 2026-05-20 — P76-B (Auto-TUNE-Dauer UX), P92 + P91 + P90 davor
 
-**Aktueller Code-Stand:** v0.97.62 (P92), Tests **1609 grün** (+13 P92).
+**Aktueller Code-Stand:** v0.97.63 (P76-B), Tests **1614 grün** (+5 P76-B).
+
+### 🟢 v0.97.63 P76-B — Auto-TUNE-Dauer-Anzeige UX (2-Phasen-Label)
+
+Mike-Field-Test 18.05.: TUNE bei 10m mit `duration_s=5` zeigte
+weiterhin „N / 5 s" obwohl Phase B (Closed-Loop bis 10 W FWDPWR) +
+Post-Check noch liefen → User-Verwirrung „Setting greift nicht".
+
+**Fix:** 2-Phasen-Label in `_on_tick`:
+- Phase 1 (`_elapsed_s ≤ duration_s`): `X / N s` mit `#AAA` (gewohnt)
+- Phase 2 (`_elapsed_s > duration_s`): „Leistung wird auf 10 W
+  eingeregelt · X s" mit `#DDA` heller Akzent-Ton
+
+Defensive `max(1, duration_s)` gegen Edge-Case. SWR/FWDPWR-Live-Werte
+in beiden Phasen. Andere Pfade unverändert.
+
+**Final-R1:** 0 🔴 Bugs. **V4-pro 39-Cycle: 0 Halluzinationen.**
+
+### Field-Tests P76-B pending (mit Radio):
+- F1: Bandwechsel 10m + duration_s=5 → Phase 1 läuft 5 s,
+  dann Phase 2 „Leistung wird auf 10 W eingeregelt"
+- F2: Bandwechsel 40m → Phase 1 normal, Phase 2 evtl. sehr kurz
+- F3: SWR-bad → Fehler-Branch überschreibt korrekt
+
+### 🟢 v0.97.62 P92 — Diversity-Sub-Toggle auch bei Bandpilot=AN
 
 ### 🟢 v0.97.62 P92 — Diversity-Sub-Toggle auch bei Bandpilot=AN
 
