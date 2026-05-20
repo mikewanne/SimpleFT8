@@ -3,6 +3,51 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-20 v0.97.62 — P92 Diversity-Sub-Toggle auch bei Bandpilot=AN
+
+Mike-UX-Wunsch: im Diversity-Modus soll der 2. Klick auf DIVERSITY
+**immer** Std↔DX toggeln — auch wenn Bandpilot=auto/manual. Bandpilot
+ist Empfehlung, kein Zwang. Heute sperrte `_on_diversity_subtoggle_requested`
+bei `bp_mode != "off"` mit early return; Mike musste den Umweg
+DX→NORMAL→DIVERSITY→Wahl-Dialog→STANDARD nehmen.
+
+**Fix (V3 nach R1-Brainstorm):**
+- `ui/mw_radio.py:879+` — Block-Klausel `if bp_mode != "off": return`
+  entfernt, Docstring auf P92-Spec aktualisiert (gilt bis Bandwechsel,
+  Bandpilot ist stateless bzgl. User-Override).
+- `ui/control_panel.py:1978` — Tooltip-Hinweis „(nur bei Bandpilot=Aus)"
+  entfernt (R1-F2).
+- Override-Lifetime: gilt, bis irgendein Bandwechsel ausgelöst wird.
+  `_on_band_changed → _maybe_apply_bandpilot` ruft den Bandpilot
+  unkonditional. Wenn `bp_mode != "off"` UND Empfehlung vorliegt →
+  Bandpilot übernimmt. Ohne Empfehlung bleibt manueller Modus.
+
+**R1 Final-Codereview:** 0 🔴 Bugs. Findings:
+- 🟠 R1: `encoder.is_transmitting`-Check fehlt im Toggle-Pfad —
+  **vorbestehend**, war auch bei bp=off so. Out-of-scope für P92.
+- 🟡 V1: Kein Debounce gegen Doppelklick — Hobby-Tool, KISS, idempotent.
+
+**V4-pro 38-Cycle-Bilanz: 0 Halluzinationen.**
+
+**Tests:** 1596 → 1609 (+13 P92, parametrisiert über bp-Modi).
+- `tests/test_p92_diversity_subtoggle_bandpilot.py` NEU mit T1-T8
+  (mit Parametrisierung 13 Tests total).
+- `tests/test_bundle_g.py::test_no_toggle_when_bandpilot_auto` →
+  umgeschrieben zu `test_toggle_standard_to_dx_when_bandpilot_auto`.
+- `tests/test_bundle_g.py::test_no_toggle_when_bandpilot_manual` →
+  umgeschrieben zu `test_toggle_dx_to_standard_when_bandpilot_manual`.
+
+**Field-Test pending (mit Radio):**
+- F1: Im Diversity-DX bleiben, Klick auf DIVERSITY → wechselt direkt
+  nach Standard (kein Dialog).
+- F2: Im Diversity-Std, Klick auf DIVERSITY → wechselt direkt nach DX.
+- F3: Bandpilot=auto: gleiches Verhalten F1/F2.
+- F4: Bandpilot=manual: gleiches Verhalten F1/F2.
+- F5: Manuell auf DX gewechselt (Override) → Bandwechsel 20m→40m →
+  Bandpilot übernimmt wieder (Toast/Dialog wenn Empfehlung vorliegt).
+
+
+
 ## 2026-05-20 v0.97.61 — P91: Dialog-Lifecycle-Crash-Fix (P90 Folge-Bug)
 
 **Trigger:** Mike-Field-Test P90 F1 am 20.05.2026 nach App-Start:

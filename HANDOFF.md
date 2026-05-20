@@ -1,8 +1,39 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-20 — P91 (Dialog-Lifecycle-Crash-Fix), P90 + P89 + P88 + P87 davor
+## Stand 2026-05-20 — P92 (Diversity-Sub-Toggle bei Bandpilot=AN), P91 + P90 davor
 
-**Aktueller Code-Stand:** v0.97.61 (P91), Tests **1596 grün** (+8 P91).
+**Aktueller Code-Stand:** v0.97.62 (P92), Tests **1609 grün** (+13 P92).
+
+### 🟢 v0.97.62 P92 — Diversity-Sub-Toggle auch bei Bandpilot=AN
+
+Mike-UX-Wunsch: im Diversity-Modus soll der 2. Klick auf DIVERSITY
+**immer** Std↔DX toggeln — auch bei Bandpilot=auto/manual. Bandpilot
+ist Empfehlung, kein Zwang.
+
+**Fix:**
+- `ui/mw_radio.py:879+` Block-Klausel `if bp_mode != "off": return` raus,
+  Docstring an P92-Spec angepasst.
+- `ui/control_panel.py:1978` Tooltip-Hinweis „(nur bei Bandpilot=Aus)" raus.
+- Override-Lifetime: gilt bis Bandwechsel — `_on_band_changed →
+  _maybe_apply_bandpilot` greift dann wieder automatisch (stateless,
+  kein neuer Code).
+
+**R1 Final-Codereview:** 0 🔴 Bugs. **V4-pro 38-Cycle: 0 Halluzinationen.**
+
+### Field-Tests P92 pending (mit Radio):
+- F1: Im Diversity-DX → Klick auf DIVERSITY → direkt Standard
+- F2: Im Diversity-Std → Klick auf DIVERSITY → direkt DX
+- F3+F4: gleich bei bp=auto/manual
+- F5: Manueller Override → Bandwechsel → Bandpilot übernimmt wieder
+
+### Field-Tests bestätigt (Mike 20.05.2026 mit Radio AN):
+- ✅ **P91 Crash-Fix**: „läuft" — kein SIGSEGV mehr beim Klick auf „ohne Radio weiter"
+- ✅ **P90 Connect-Abort**: Log zeigt „Connect-Sequenz abgebrochen (nach Discovery)"
+- ✅ **Bundle M P83**: Gain-Status-Zeile „Re-Mess" rot, „noch X Std" grün — gelb-Übergang
+  wird sich später im laufenden Betrieb zeigen (aktionsgetrieben, kein Timer)
+- ✅ **P89 Warmup-Anzeige**: „Berechnung läuft..." erscheint und verschwindet
+  (Mike-Hinweis: Text ist optisch rechtsbündig wegen „..." am Ende —
+  kosmetisch, kein Bug, kein Fix-Bedarf aktuell)
 
 ### 🟢 v0.97.61 P91 — Dialog-Lifecycle-Crash-Fix (P90 Folge-Bug)
 
