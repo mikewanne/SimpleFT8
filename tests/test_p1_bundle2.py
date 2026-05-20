@@ -33,12 +33,12 @@ def _make_sm():
 
 def test_p1_11_rr73_retries_does_not_block_wait_73():
     """P1.11: voller WAIT_RR73-Counter blockiert WAIT_73-Hoeflichkeit NICHT."""
-    from core.qso_state import QSOState
+    from core.qso_state import QSOState, MAX_RR73_RETRIES
     from core.message import FT8Message
     sm = _make_sm()
     sm._set_state(QSOState.WAIT_73)
     sm.qso.their_call = "SP6AXW"
-    sm.qso.rr73_retries = 3  # voll ausgereizt
+    sm.qso.rr73_retries = MAX_RR73_RETRIES  # voll ausgereizt (P98: 5)
     sm.qso.wait_73_retries = 0
     captured = []
     sm.send_message.connect(lambda m: captured.append(m))
@@ -75,7 +75,7 @@ def test_p1_11_wait_73_max_2_retries():
 def test_p1_11_independent_counters():
     """P1.11: rr73_retries + wait_73_retries sind unabhaengig."""
     sm = _make_sm()
-    sm.qso.rr73_retries = 3
+    sm.qso.rr73_retries = 3  # beliebig — testet nur Unabhängigkeit (P98-unkritisch)
     sm.qso.wait_73_retries = 1
     assert sm.qso.rr73_retries != sm.qso.wait_73_retries
 
