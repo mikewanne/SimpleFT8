@@ -1,8 +1,45 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-20 — P97 (Collapsed-Card Status), P96+P95+P94 davor
+## Stand 2026-05-20 — P98 (Retry-Limits 3→5), P97+P96+P95+P94 davor
 
-**Aktueller Code-Stand:** v0.97.69 (P97), Tests **1671 grün** (+10 P97).
+**Aktueller Code-Stand:** v0.97.70 (P98), Tests **1681 grün** (+10 P98).
+
+### 🟢 v0.97.70 P98 — Retry-Limits 3 → 5 + Auto-Hunt-Bugfix
+
+Mike-Field-Test 20.05.: 3 Retries waren in 2 Fällen knapp (TA4SSK 3.
+Versuch gerade noch, DG8DBW 2 RR73 dann Timeout). DeepSeek-R1
+Brainstorm-Konsens: beide auf 5 hochsetzen.
+
+**Code:**
+- `MAX_RR73_RETRIES = 3 → 5` (Modul-Konstante)
+- `QSOData.max_calls` Default `3 → 5`
+- Settings-Fallbacks `3 → 5` in `main_window`, `mw_qso`
+- **R1-F2 Bugfix:** `ui/mw_cycle.py:515` war hartcodiert auf 3 →
+  jetzt aus Settings (Auto-Hunt ignorierte vorher User-Setting!)
+- Settings-Dialog Hint-Text + Reset-Default angepasst
+- `config/settings.py` initial-Default `99 → 5`
+
+**R1-F1 als P99-Folge-Ticket dokumentiert:** DG8DBW-Pfad
+(`on_message_received`-WAIT_RR73-Branch bei R-Report) hat KEINEN
+Retry-Counter — kann unbegrenzt senden. P98 deckt nur den
+„leerer Slot"-Pfad ab.
+
+**Workflow voll:** V1 → V2 (4 V2-Klärungen) → R1 (3 Findings: F1
+DG8DBW-Pfad → P99, F2 Bugfix mw_cycle, F3 Tests via Konstante) →
+V3+Code → Final-R1 ✅ „kann gepusht werden" 0 Blocker.
+
+**V4-pro 43-Cycle: 0 Halluzinationen, 1 echter Bug gefangen (R1-F2).**
+
+Tests 1671→1681 (+10 P98). Field-Test mit Radio pending.
+
+### Offene TODOs nach P98
+- **P99:** Retry-Counter im `on_message_received`-WAIT_RR73-Branch
+  (für DG8DBW-Fall: Gegenstation wiederholt R-Report ohne 73)
+
+### Field-Tests P98 pending (mit Radio):
+- F1: Station ruft 3× nicht zurück → 4./5. Versuch wirken
+- F2: Halbes QSO mit RR73-Verlust → 5 RR73 vor Timeout
+- F3: Auto-Hunt nutzt User-Setting-Wert
 
 ### 🟢 v0.97.69 P97 — Collapsed-Card Status-Suffix (Antenne + Radio)
 

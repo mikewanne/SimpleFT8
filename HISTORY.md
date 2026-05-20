@@ -3,6 +3,65 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-20 v0.97.70 — P98 Retry-Limits 3 → 5
+
+Mike-Field-Test 20.05.2026:
+- TA4SSK: 3 Sende-Versuche, beim **3.** kam die Antwort durch
+  („gerade noch erwischt")
+- DG8DBW: Report empfangen, 2× RR73 gesendet, dann Timeout (zu früh)
+
+Mike-Spec + DeepSeek-R1-Brainstorm-Konsens: beide Retry-Limits auf **5**.
+
+**Code-Änderungen:**
+- `core/qso_state.py:107` `MAX_RR73_RETRIES = 3 → 5`
+- `core/qso_state.py:124` `QSOData.max_calls: int = 3 → 5`
+- `core/qso_state.py:166` `QSOStateMachine.max_calls = 3 → 5`
+- `ui/main_window.py:1216` `get("max_calls", 3) → 5`
+- `ui/mw_qso.py:251` `get("max_calls", 3) → 5`
+- `ui/mw_cycle.py:515` **R1-F2 Bugfix:** war hartcodiert `= 3`,
+  jetzt `self.settings.get("max_calls", 5)`. Auto-Hunt ignorierte
+  vorher das User-Setting!
+- `ui/settings_dialog.py:51` Hint-Text auf neuen Default
+- `ui/settings_dialog.py:621` Load-Fallback + Combo-Default
+- `ui/settings_dialog.py:833` Reset-Default Combo-Index 1 (=5) statt 3 (=99)
+- `config/settings.py:60` Initial-Default `"max_calls": 99 → 5`
+
+**R1-Findings (alle eingebaut):**
+- **R1-F1:** DG8DBW-Pfad geht über `on_message_received`-WAIT_RR73-Branch
+  (Gegenstation wiederholt R-Report) — der hat KEINEN Retry-Counter und
+  kann unbegrenzt senden. `MAX_RR73_RETRIES` betrifft nur den
+  `on_decoder_finished`-Pfad (leerer RX-Slot). **Wird als P99-Folge-
+  Ticket dokumentiert** — eigener Retry-Zähler nötig.
+- **R1-F2 Bugfix:** `mw_cycle.py:515` Hartcodierung war ein
+  versteckter Bug — Auto-Hunt setzte `max_calls=3` egal was der User
+  konfiguriert hatte. Jetzt korrekt aus Settings.
+- **R1-F3:** Tests importieren `MAX_RR73_RETRIES` statt 5 hartcodieren
+  — bleibt synchron bei künftigen Änderungen.
+
+**Workflow voll durchlaufen:**
+- V1: `prompts/p98_retry_limits_v1.md` (mit 6 V1-Findings)
+- V2-Self-Review: `prompts/p98_retry_limits_v2.md` (V1-Findings durchdacht
+  + 4 V2-Klärungen ergänzt)
+- R1-DeepSeek (V2): 3 Findings — eingebaut (F1 als P99 dokumentiert,
+  F2 Bugfix, F3 Tests umgestellt)
+- V3 = Code-Implementierung mit R1-Findings
+- 10 Tests T1-T10 in `tests/test_p98_retry_limits.py`
+- 1 alter Test `test_p1_bundle2.py:41` auf Konstanten-Import umgestellt
+- Final-R1: **„P98 kann gepusht werden"** 0 Blocker. P99 als
+  Folge-Ticket empfohlen.
+
+**V4-pro 43-Cycle-Bilanz:** 0 Halluzinationen, 1 echter Bug gefangen
+(R1-F2 Hartcodierung).
+
+**Tests: 1671 → 1681 (+10 P98, alle grün).**
+
+Field-Test pending mit Radio:
+- F1: Station ruft 3× nicht zurück → 4./5. Versuch wirken (vorher
+  hatten wir bei 3 schon Timeout)
+- F2: Bei „halbem QSO" (Report erhalten) → 5 RR73-Versuche vor Timeout
+  (vorher 3)
+- F3: Auto-Hunt nutzt Setting-Wert (vorher ignorierte er es)
+
 ## 2026-05-20 v0.97.69 — P97 Collapsed-Card Status-Suffix (Antenne + Radio)
 
 Mike-Wunsch 20.05.2026 nach P96: bei eingeklappter Antennen-/Radio-

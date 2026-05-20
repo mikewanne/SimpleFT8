@@ -1,4 +1,43 @@
-# SimpleFT8 TODO — Stand 20.05.2026 (v0.97.67, P95 + P94 + P93 + P73-A + P76-B + P92 + P91 + P90 + P89 + P88 + P87 + P86 + P82 + Bundle M + P81 + P80 + P79 ERLEDIGT)
+# SimpleFT8 TODO — Stand 20.05.2026 (v0.97.70, P98+P97+P96+P95+P94+P93+P73-A+P76-B+P92+P91+P90+P89+P88+P87+P86+P82+Bundle M+P81+P80+P79 ERLEDIGT)
+
+---
+
+## ⚠ OFFEN — P99 (Folge-Ticket aus P98 Final-R1)
+
+**DG8DBW-Pfad Retry-Counter:** `on_message_received`-WAIT_RR73-Branch
+(qso_state.py ~Z.628-644) hat heute KEINEN Retry-Counter. Wenn die
+Gegenstation wiederholt R-Report sendet (statt 73 zu schicken), wird
+unsererseits unbegrenzt RR73 zurückgesendet — nur das 3-Min-Gesamt-
+Timeout (`MAX_QSO_DURATION`) begrenzt.
+
+**P99-Spec:** Eigener Retry-Zähler analog `rr73_retries` in diesem
+Branch, mit demselben `MAX_RR73_RETRIES = 5`-Limit. Damit ist die
+Mike-Spec „bei halbem QSO 5 Versuche" vollständig.
+
+---
+
+## ✅ P98 ERLEDIGT (v0.97.70, 20.05.2026 voller Workflow + DeepSeek)
+
+Retry-Limits 3 → 5 nach Mike-Field-Test (TA4SSK 3. Versuch knapp,
+DG8DBW 2 RR73 zu früh Timeout). DeepSeek-R1-Brainstorm-Konsens.
+
+**Code:**
+- `MAX_RR73_RETRIES = 3 → 5`
+- `QSOData.max_calls` Default `3 → 5`
+- Settings-Fallbacks alle auf 5
+- **R1-F2 Bugfix:** `mw_cycle.py:515` Hartcodierung → Settings-Lesung
+  (Auto-Hunt hatte vorher das User-Setting ignoriert!)
+- `config/settings.py` Default `99 → 5`
+
+**Workflow voll:** V1 → V2 → R1 (3 Findings: F1 DG8DBW-Pfad → P99,
+F2 Bugfix, F3 Tests via Konstante) → V3+Code+10 Tests → Final-R1 ✅
+„kann gepusht werden" 0 Blocker. **V4-pro 43-Cycle: 0 Halluzinationen,
+1 Bug gefangen.** Tests 1671 → 1681 (+10 P98).
+
+Field-Test pending F1-F3 (mit Radio):
+- F1: Station 3× nicht zurück → 4./5. Versuch wirken
+- F2: Halbes QSO mit RR73-Verlust → 5 RR73 vor Timeout
+- F3: Auto-Hunt nutzt User-Setting-Wert
 
 ---
 
