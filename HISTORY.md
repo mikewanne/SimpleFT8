@@ -3,6 +3,29 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-20 v0.97.71 — P97-Update: Status-Suffix nur bei collapsed
+
+Mike-Klärung 20.05. nach P97-Implementierung: Status-Labels sollen
+**nur sichtbar sein wenn Kachel eingeklappt**. Bei aufgeklappter
+Kachel sieht man die Info eh im Body (Mode-Buttons für Antenne,
+Power-Buttons für Radio) → doppelt = unnötig.
+
+**Fix (KISS, 2 Zeilen):**
+- `_AntenneCard.set_collapsed`: `self.lbl_ant_status.setVisible(collapsed)`
+- `_RadioCard.set_collapsed`: `self.lbl_radio_status.setVisible(collapsed)`
+
+Initial-State funktioniert automatisch — `MainWindow.__init__` ruft
+`set_collapsed(persistierter_state)` nach Card-Erstellung (Z.636+645).
+
+**Tests:** 2 neue T11+T12 in `test_p97_collapsed_card_status.py`.
+Offscreen-Tests nutzen `isHidden()` statt `isVisible()` (Widget ohne
+geshown Parent → isVisible() wäre immer False).
+
+**Tests: 1681 → 1683 (+2 P97-Update, alle grün).**
+
+Trivial-Klausel (CLAUDE.md: <5 Zeilen Code, reine UI-Anzeige-Logik).
+APP_VERSION 0.97.70 → 0.97.71.
+
 ## 2026-05-20 v0.97.70 — P98 Retry-Limits 3 → 5
 
 Mike-Field-Test 20.05.2026:

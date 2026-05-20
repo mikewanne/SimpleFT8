@@ -737,9 +737,14 @@ class _AntenneCard(QFrame):
 
         Programm-API — emitiert KEIN collapse_changed-Signal (Init-Loop-
         Schutz). User-Klick geht über _toggle_collapsed.
+
+        P97 (v0.97.71): Status-Suffix-Label NUR sichtbar bei collapsed —
+        bei aufgeklappter Kachel zeigt der Body die Info eh (Mode-Buttons),
+        sonst doppelt.
         """
         self._body_widget.setVisible(not collapsed)
         self.toggle_btn.setText("▶" if collapsed else "▼")
+        self.lbl_ant_status.setVisible(collapsed)
         if collapsed:
             self.setMaximumHeight(36)  # Header-Höhe + Margins
         else:
@@ -971,9 +976,14 @@ class _RadioCard(QFrame):
 
         Programm-API — emitiert KEIN collapse_changed-Signal (Init-Loop-
         Schutz). User-Klick geht ueber _toggle_collapsed.
+
+        P97 (v0.97.71): Status-Suffix-Label NUR sichtbar bei collapsed —
+        bei aufgeklappter Kachel zeigen die Power-Buttons die Wattzahl
+        eh, sonst doppelt.
         """
         self._body_widget.setVisible(not collapsed)
         self.toggle_btn.setText("▶" if collapsed else "▼")
+        self.lbl_radio_status.setVisible(collapsed)
         if collapsed:
             self.setMaximumHeight(36)
         else:

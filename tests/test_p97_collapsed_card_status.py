@@ -103,3 +103,31 @@ def test_t10_scoring_toggle_updates_status(panel):
     assert panel._antenne_card_status_label.text() == "— Diversity DX"
     panel.update_diversity_ratio("50:50", scoring_mode="normal")
     assert panel._antenne_card_status_label.text() == "— Diversity Standard"
+
+
+# ── P97-Update v0.97.71: Status-Label NUR bei collapsed sichtbar ─
+
+
+def test_t11_antenna_status_visible_only_when_collapsed(panel):
+    """Mike-Spec 20.05.: bei aufgeklappter Kachel sieht man Mode-Buttons
+    im Body — Status-Suffix wäre doppelt. Daher nur bei collapsed zeigen.
+
+    Offscreen-Test nutzt `isHidden()` statt `isVisible()` (Widget ist
+    nicht in einem geshow'ten Parent → isVisible() wäre immer False).
+    """
+    panel._ant_card.set_collapsed(False)
+    assert panel._antenne_card_status_label.isHidden(), (
+        "Aufgeklappte Kachel: Status-Label muss versteckt (hidden) sein")
+    panel._ant_card.set_collapsed(True)
+    assert not panel._antenne_card_status_label.isHidden(), (
+        "Eingeklappte Kachel: Status-Label darf NICHT hidden sein")
+
+
+def test_t12_radio_status_visible_only_when_collapsed(panel):
+    """Analog Radio-Kachel: Power-Buttons zeigen Wattzahl im Body."""
+    panel._radio_card.set_collapsed(False)
+    assert panel._radio_card_status_label.isHidden(), (
+        "Aufgeklappte Kachel: Radio-Status muss versteckt (hidden) sein")
+    panel._radio_card.set_collapsed(True)
+    assert not panel._radio_card_status_label.isHidden(), (
+        "Eingeklappte Kachel: Radio-Status darf NICHT hidden sein")

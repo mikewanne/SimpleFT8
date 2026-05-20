@@ -1,8 +1,20 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-20 — P98 (Retry-Limits 3→5), P97+P96+P95+P94 davor
+## Stand 2026-05-20 — P97-Update Visibility, P98+P97+P96+P95+P94 davor
 
-**Aktueller Code-Stand:** v0.97.70 (P98), Tests **1681 grün** (+10 P98).
+**Aktueller Code-Stand:** v0.97.71 (P97-Update), Tests **1683 grün** (+2).
+
+### 🟢 v0.97.71 P97-Update — Status-Suffix nur bei collapsed sichtbar
+
+Mike-Klärung: bei aufgeklappter Kachel zeigt der Body die Info eh
+(Mode-Buttons, Power-Buttons) → Status-Suffix wäre doppelt.
+
+Fix KISS (2 Zeilen):
+- `_AntenneCard.set_collapsed` + `_RadioCard.set_collapsed` schalten
+  Status-Label `setVisible(collapsed)`.
+
+Tests +2 (T11+T12 via `isHidden()` für offscreen-Robustheit).
+Tests 1681 → 1683.
 
 ### 🟢 v0.97.70 P98 — Retry-Limits 3 → 5 + Auto-Hunt-Bugfix
 
