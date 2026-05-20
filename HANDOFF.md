@@ -1,8 +1,41 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-19 — P90 (Connect-Worker-Abort), P89 + P88 + P87 + P86 + P82 davor
+## Stand 2026-05-20 — P91 (Dialog-Lifecycle-Crash-Fix), P90 + P89 + P88 + P87 davor
 
-**Aktueller Code-Stand:** v0.97.60 (P90), Tests **1588 grün** (+8 P90).
+**Aktueller Code-Stand:** v0.97.61 (P91), Tests **1596 grün** (+8 P91).
+
+### 🟢 v0.97.61 P91 — Dialog-Lifecycle-Crash-Fix (P90 Folge-Bug)
+
+Mike-Field-Test 20.05.2026: SIGSEGV-Crash beim Klick auf „ohne Radio
+weiter" nach P90-Push. Stack zeigte Worker-Thread im Dialog-Destruktor
+(`~QDialogWrapper`) — Use-After-Free durch Race mit GUI-Thread.
+
+**Crash-Ursache:** P82-Worker hatte `dlg = self._connect_dialog`
+(strong ref). P90's `thread.join` synchronisierte Worker-Termination
+auf Punkt wo GUI-Thread `_connect_dialog = None` schon gesetzt hatte
+→ Worker hielt letzte Ref → Destruktor lief im Worker-Thread → Crash.
+
+**Fix (DeepSeek-Brainstorm-R1 Variante C 🟢):**
+- `import weakref` in `ui/mw_radio.py`
+- `_connect_worker`: `dlg_ref = weakref.ref(self._connect_dialog)`
+  statt strong ref. Worker hält JETZT NIE eine Object-Referenz.
+- Cleanup-Block: `dialog_keepalive` Snapshot → `_connect_dialog = None`
+  VOR join → join → `dialog_keepalive.deleteLater()` (Qt-Cleanup im
+  GUI-Event-Loop) → implizites Refcount-Drop beim Funktions-Ende
+  im GUI-Thread = sicher.
+
+**Final-R1 V4-pro:** „PUSH FREIGEBEN" 0 KP — Crash theoretisch
+unmöglich, Pattern korrekt umgesetzt, P82-Slot-Guards bleiben aktiv.
+
+**V4-pro 37-Cycle-Bilanz: 0 Halluzinationen.**
+
+### Field-Tests P91 + P90 pending (Mike, Radio AN nötig — wiederholen!)
+
+- F1: Radio AN, App starten → „ohne Radio weiter" klicken → **KEIN Crash**
+- F2: Log MUSS „Connect-Sequenz abgebrochen (Phase X)" zeigen
+- F3: UI „Radio getrennt" ohne Hardware-Zugriff
+- F4: Mehrfach hintereinander testen (verschiedene Timings)
+- F5: Keine neuen Mac-Crash-Reports
 
 ### 🟢 v0.97.60 P90 — Connect-Worker hart abbrechen bei „ohne Radio weiter"
 

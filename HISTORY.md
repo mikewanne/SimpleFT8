@@ -3,6 +3,81 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-20 v0.97.61 — P91: Dialog-Lifecycle-Crash-Fix (P90 Folge-Bug)
+
+**Trigger:** Mike-Field-Test P90 F1 am 20.05.2026 nach App-Start:
+SIGSEGV-Crash beim Klick auf „ohne Radio weiter". Stack-Trace zeigte
+Worker-Thread (Thread 12) im Dialog-Destruktor (`~QDialogWrapper`)
+während GUI-Thread Qt-Event-Dispatch für selben Dialog machte.
+
+### Crash-Ursache
+
+P90 `thread.join(timeout=2.0)` blockt GUI-Thread → Worker terminiert
+synchron → Stack-Unwind im Worker freigibt `dlg = self._connect_dialog`
+(strong ref aus Z.159 von P82). Wenn das die letzte Referenz war
+(GUI-Thread hatte `_connect_dialog = None` schon gesetzt oder noch
+nicht — Reihenfolge-Race), läuft Qt-Widget-Destruktor im Worker-
+Thread. Qt erlaubt das nicht — Use-After-Free → SIGSEGV.
+
+**Vor P90 (P82):** Worker lief asynchron weiter nach `exec()`-Return,
+GUI-Thread machte sofort `_connect_dialog = None`. Race-Fenster
+existierte aber traf zufällig nie zu. P90's `join` hat es
+synchronisiert auf den falschen Punkt.
+
+### DeepSeek-Brainstorm-R1 (V4-pro)
+
+6 Varianten evaluiert: A (weakref), B (keepalive+deleteLater),
+C (A+B kombiniert), D (WA_DeleteOnClose), E (processEvents),
+F (join entfernen).
+
+**Empfehlung: Variante C 🟢 (Belt-and-suspenders, +5 LOC).**
+
+### Was umgesetzt
+
+**`ui/mw_radio.py`:**
+- `import weakref`
+- `_connect_worker`: `dlg_ref = weakref.ref(self._connect_dialog)`
+  statt `dlg = self._connect_dialog`. Worker hält JETZT NIE strong ref.
+- `on_attempt` Closure + failed-Branch: `dlg = dlg_ref()` → None-Check
+- Cleanup-Block bei `was_user_cancelled`:
+  1. `dialog_keepalive = self._connect_dialog` (Snapshot im GUI-Frame)
+  2. `self._connect_dialog = None` (MainWindow-Ref weg VOR join)
+  3. `abort_connect` → `abort_reconnect` → `disconnect`
+  4. `thread.join(timeout=2.0)`
+  5. `dialog_keepalive.deleteLater()` (Qt-Cleanup im GUI-Event-Loop)
+  6. (implizit) Funktions-Ende → Refcount-Drop im GUI-Thread = SAFE
+- `else`-Branch: `self._connect_dialog = None` für nicht-cancelled-Pfad
+
+**`main.py`:** APP_VERSION 0.97.60 → 0.97.61
+
+**`tests/test_p91_dialog_lifecycle.py`:** NEU 8 Tests T1-T8
+(weakref-Import, weakref.ref-Pattern, KEINE strong ref Negative-Check,
+on_attempt dlg_ref(), failed-Branch dlg_ref(), keepalive-Pattern,
+Reihenfolge None-Set vor join, APP_VERSION).
+
+### Workflow & Bilanz
+
+- **Code-Verifikation:** Crash-Stack analysiert, Race-Flow rekonstruiert
+- **V1+V2 (Self-Review):** 7 V2-Findings
+- **Brainstorm-R1 V4-pro:** Variante C empfohlen, 10 Fragen beantwortet
+- **Final-R1 V4-pro:** „PUSH FREIGEBEN" 0 KP — Pattern korrekt
+  umgesetzt, Edge-Cases via P82-Guards abgedeckt, Crash theoretisch
+  unmöglich
+
+**V4-pro 37-Cycle-Bilanz: 0 Halluzinationen.**
+
+**Tests 1588 → 1596 (+8 P91).**
+
+### Field-Test pending (Mike, Radio AN nötig — P90 F1 wiederholen!)
+
+- F1: Radio AN, App starten → „ohne Radio weiter" klicken → **KEIN Crash**
+- F2: Log MUSS „Connect-Sequenz abgebrochen (Phase X)" zeigen (P90)
+- F3: UI „Radio getrennt" ohne Hardware-Zugriff (P90)
+- F4: Mehrfach hintereinander testen (verschiedene Timings)
+- F5: Crash-Log darf KEINE neue Mac-Crash-Reports erzeugen
+
+---
+
 ## 2026-05-19 v0.97.60 — P90: Connect-Worker hart abbrechen bei „ohne Radio weiter"
 
 **Trigger:** Mike-Field-Test 19.05.2026 nach v0.97.59-Start mit Radio
