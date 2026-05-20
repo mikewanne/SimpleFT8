@@ -3,6 +3,60 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-20 v0.97.66 — P94 Quick-73-Ignore für doppelte Anrufe
+
+Mike-Beobachtung 20.05.2026 nach P93-Field-Test (Screenshot 9A4AA):
+Komplettes QSO mit 9A4AA gelaufen (RR73 + 73 + courtesy-73). 4 Minuten
+später ruft 9A4AA erneut mit Report → App startet vollen Report-
+Austausch erneut → Pile-Up + Funkzeit-Verschwendung + chaotisches
+QSO-Panel. ADIF-Dedup-Filter (300s) verhinderte nur den Logbuch-
+Eintrag, NICHT den Funkverkehr.
+
+**Mike-Spec:** Wenn dieselbe Station auf demselben Band innerhalb
+**30 Minuten** nach abgeschlossenem QSO erneut Report/Grid sendet:
+1. Einmal sauberes `<their_call> <my_call> 73` senden (höflich)
+2. Diesen Call für 30 Min komplett ignorieren (auch keine weitere
+   73-Antwort wenn er nochmal ruft)
+3. State-Machine bleibt unangetastet (IDLE/CQ_WAIT/CQ_CALLING)
+
+**Architektur (KISS Variante A aus Brainstorm-R1):**
+
+Neuer Pre-Filter `_p94_quick73_filter` in `ui/mw_cycle.py` VOR dem
+OMNI-Block und VOR `qso_sm.on_message_received`. State-Machine
+unverändert. `_recent_logged_calls` (existierender ADIF-Dedup-Cache)
+wird wiederverwendet als Datenquelle „kürzlich gearbeitete Station".
+Neue Konstante `_QUICK73_WINDOW_S = 1800` (30 Min). Neuer Set
+`_quick73_sent: set[str]` in `MainWindow.__init__` (Call-only, Band
+implizit über `_recent_logged_calls`-Key-Lookup).
+
+**Auto-Hunt-Konsistenz:** `core/auto_hunt.py:_RECENT_QSO_COOLDOWN_S`
+von 300 → 1800 (P94-Fenster). Hard-Cap-Timer (10 Min Laufzeit)
+**UNCHANGED** — Bot-Tarn-Schutz wahren.
+
+**Workflow (voll durchlaufen):**
+
+- V1: `prompts/p94_quick73_v1.md` (vor Compact gesichert)
+- V2-Self-Review: `prompts/p94_quick73_v2.md` — 12 V1-Findings
+  korrigiert (Datei-Pfad mw_qso.py→mw_cycle.py, Methoden-Name,
+  Filter-Position vor OMNI, State-Check, audio_freq_hz, etc.)
+- R1-DeepSeek: 1 🟠 (`audio_freq_hz`-Restore via `tx_finished`-Signal),
+  alle anderen 6 Punkte bestätigt
+- V3 = direkte Code-Integration mit `audio_freq_hz`-Restore-Mechanik
+- Code: ~50 LOC neuer Filter + 1 LOC Init + 1 LOC Konstante (auto_hunt)
+- 12 neue Tests (T1-T12) in `tests/test_p94_quick73.py`
+- Final-R1 V4-pro: **„PUSH FREIGEBEN ✅"** 0 Blocker, 2 Hinweise
+  (Test-Lücke Race tx_finished bewusst nicht abgedeckt — Risiko
+  near-zero; Memory-Cleanup Set könnte später periodisch — kein
+  Haltegrund)
+
+**Tests: 1626 → 1638 (+12 P94, alle grün).**
+
+**V4-pro 41-Cycle-Bilanz:** 0 Halluzinationen, 1 ORANGE durch R1
+gefangen (audio_freq_hz-Sticky).
+
+**Field-Test pending:** Mike F1-F5 mit Radio (gleiche Station ruft
+nach abgeschlossenem QSO erneut → 73 + Ignore-Verhalten verifizieren).
+
 ## 2026-05-20 v0.97.65 — P93 Sende-Log-Eintrag auf Slot-Ende defern
 
 Mike-Beobachtung 20.05.2026 nach P73-A-Field-Test (Screenshot QSO-Panel):

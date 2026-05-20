@@ -1,4 +1,46 @@
-# SimpleFT8 TODO — Stand 19.05.2026 (v0.97.58, P88 + P87 + P86 + P82 + Bundle M + P81 + P80 + P79 ERLEDIGT)
+# SimpleFT8 TODO — Stand 20.05.2026 (v0.97.66, P94 + P93 + P73-A + P76-B + P92 + P91 + P90 + P89 + P88 + P87 + P86 + P82 + Bundle M + P81 + P80 + P79 ERLEDIGT)
+
+---
+
+## ✅ P94 ERLEDIGT (v0.97.66, 20.05.2026 autonomer voller Workflow)
+
+Quick-73-Ignore für doppelte Anrufe (Mike-Field-Test 20.05. nach P93,
+Screenshot 9A4AA: QSO komplett, 4 Min später ruft Station erneut →
+voller Report-Austausch erneut → Pile-Up).
+
+**Mike-Spec:** 30 Min Fenster nach QSO-Ende. Gleiche Station ruft
+Report/Grid → einmal 73 senden → für 30 Min komplett ignorieren.
+State-Machine UNCHANGED.
+
+**Architektur KISS (R1-Variante A):** Pre-Filter `_p94_quick73_filter`
+in `ui/mw_cycle.py:on_message_decoded` VOR OMNI-Block und vor
+`qso_sm.on_message_received`. Konstante `_QUICK73_WINDOW_S = 1800`.
+Neuer Set `_quick73_sent: set[str]` in `MainWindow.__init__`. Wiederverwendung
+von `_recent_logged_calls` (existierender ADIF-Dedup-Cache) als Datenquelle.
+
+**Auto-Hunt-Konsistenz:** `core/auto_hunt.py:_RECENT_QSO_COOLDOWN_S`
+300 → 1800 (Konsistenz mit P94-Fenster). Hard-Cap-Timer (10 Min Laufzeit)
+**UNCHANGED** — Bot-Tarn-Schutz.
+
+**Workflow voll durchlaufen:**
+- V1 (vor /compact): `prompts/p94_quick73_v1.md`
+- V2-Self-Review (12 V1-Findings korrigiert): `prompts/p94_quick73_v2.md`
+- R1-DeepSeek: 1 🟠 `audio_freq_hz`-Restore via `tx_finished`-Signal
+- V3 = direkte Code-Integration mit Restore-Mechanik
+- Code ~50 LOC neu + 1 LOC Init + 1 LOC Konstante (auto_hunt)
+- 12 Tests T1-T12 in `tests/test_p94_quick73.py`
+- Final-R1 V4-pro: **„PUSH FREIGEBEN ✅"** 0 Blocker
+
+**V4-pro 41-Cycle-Bilanz: 0 Halluzinationen, 1 ORANGE gefangen.**
+**Tests 1626 → 1638 (+12 P94).**
+
+Field-Test pending F1-F5 mit Radio:
+- F1: QSO mit Station X komplett → Station ruft im Fenster erneut →
+  73 gesendet, Panel zeigt „X → Sende 73 (bereits gearbeitet N min)"
+- F2: Selbe Station ruft NOCHMAL im Fenster → komplett ignoriert
+- F3: Selbe Station > 30 Min nach QSO → normaler Report-Austausch
+- F4: Anderer Caller (frisch) → normaler Report-Austausch
+- F5: Auto-Hunt picked nicht innerhalb 30 Min (Konsistenz)
 
 ---
 

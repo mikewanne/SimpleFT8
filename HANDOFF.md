@@ -1,8 +1,48 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-20 — P93 (Sende-Log-Eintrag defer), P73-A + P76-B + P92 davor
+## Stand 2026-05-20 — P94 (Quick-73-Ignore), P93 + P73-A + P76-B + P92 davor
 
-**Aktueller Code-Stand:** v0.97.65 (P93), Tests **1626 grün** (+5 P93).
+**Aktueller Code-Stand:** v0.97.66 (P94), Tests **1638 grün** (+12 P94).
+
+### 🟢 v0.97.66 P94 — Quick-73-Ignore für doppelte Anrufe
+
+Mike-Field-Test 20.05.2026 nach P93 (Screenshot 9A4AA): QSO komplett
+(RR73+73+courtesy). 4 Min später ruft 9A4AA erneut mit Report → App
+startet vollen Report-Austausch erneut → Pile-Up + chaotisches Panel.
+ADIF-Dedup-Filter (300s) verhinderte nur den Logbuch-Eintrag, nicht
+den Funkverkehr.
+
+**Mike-Spec (Quick-73-Ignore):**
+- Innerhalb 30 Min nach QSO-Ende, gleiche Station ruft mit Report/Grid
+- → einmal `<their> <my> 73` senden (höflich)
+- → diesen Call für 30 Min komplett ignorieren (auch keine weitere 73)
+- → State-Machine bleibt IDLE/CQ_WAIT (kein neues QSO)
+
+**Architektur (KISS):** Pre-Filter `_p94_quick73_filter` in
+`ui/mw_cycle.py` VOR OMNI-Block und `qso_sm.on_message_received`.
+Konstante `_QUICK73_WINDOW_S = 1800`. Neuer Set `_quick73_sent` in
+MainWindow. Wiederverwendung von `_recent_logged_calls` als Datenquelle.
+
+**Auto-Hunt-Konsistenz:** `core/auto_hunt.py:_RECENT_QSO_COOLDOWN_S`
+300→1800 (Hard-Cap 10 Min UNCHANGED — Bot-Tarn-Schutz).
+
+**Workflow voll durchlaufen:** V1 (vor Compact) → V2 (12 Findings) →
+R1 (1 ORANGE: audio_freq_hz-Restore) → V3+Code+Tests → Final-R1
+„PUSH FREIGEBEN ✅" 0 Blocker.
+
+**V4-pro 41-Cycle:** 0 Halluzinationen, 1 ORANGE gefangen.
+
+Tests 1626→1638 (+12 P94). Field-Test F1-F5 mit Radio pending.
+
+### Field-Tests P94 pending (mit Radio):
+- F1: QSO mit Station X komplett → Station ruft im Fenster erneut →
+  einmaliges 73 wird gesendet, Panel zeigt „X → Sende 73 (bereits
+  gearbeitet N min)"
+- F2: Selbe Station ruft NOCHMAL im Fenster → komplett ignoriert,
+  kein TX, kein neuer Panel-Eintrag
+- F3: Selbe Station > 30 Min nach QSO → normaler Report-Austausch
+- F4: Anderer Caller (frisch) → normaler Report-Austausch
+- F5: Auto-Hunt picked nicht innerhalb 30 Min (Konsistenz)
 
 ### 🟢 v0.97.65 P93 — Sende-Log-Eintrag auf Slot-Ende defern
 
