@@ -1,8 +1,11 @@
 """Bundle G (14.05.2026, v0.97.23 → v0.97.24) — Diversity Sub-Mode-Toggle.
 
-Mike-Spec: bei Bandpilot=Aus soll 2. Klick auf DIVERSITY direkt zwischen
-Standard und DX wechseln (kein Dialog). Bei Bandpilot=Auto/Manual:
-no-op (Bandpilot entscheidet).
+Mike-Spec: 2. Klick auf DIVERSITY soll direkt zwischen Standard und DX
+wechseln (kein Dialog).
+
+P92 (20.05.2026, v0.97.62): Toggle ist jetzt bei ALLEN Bandpilot-Modi
+wirksam (off/auto/manual). Bandpilot ist Empfehlung, kein Zwang —
+manueller Override gilt bis nächster Bandwechsel.
 
 Logik-Matrix:
 | Aktueller Modus | Klick | Aktion |
@@ -10,8 +13,8 @@ Logik-Matrix:
 | Div Standard | DIVERSITY | → Div DX (Toggle) |
 | Div DX | DIVERSITY | → Div Standard (Toggle) |
 | Normal | DIVERSITY | Dialog Std/DX (unverändert) |
-| Bandpilot=Auto+Div | DIVERSITY | no-op |
-| Bandpilot=Manual+Div | DIVERSITY | no-op |
+| Bandpilot=Auto+Div | DIVERSITY | Toggle (P92, vorher no-op) |
+| Bandpilot=Manual+Div | DIVERSITY | Toggle (P92, vorher no-op) |
 """
 from __future__ import annotations
 
@@ -81,24 +84,29 @@ def test_toggle_dx_to_standard_when_bandpilot_off(app):
     obj._activate_diversity_with_scoring.assert_called_once_with("normal")
 
 
-# ── T3: bp=auto → no-op ────────────────────────────────────────────
+# ── T3: bp=auto → P92 Toggle Std → DX ──────────────────────────────
 
 
-def test_no_toggle_when_bandpilot_auto(app):
-    """T3: Bandpilot=auto → kein Toggle (Bandpilot entscheidet)."""
+def test_toggle_standard_to_dx_when_bandpilot_auto(app):
+    """T3 (P92, v0.97.62): bp=auto + Std → Toggle nach DX.
+
+    Vor P92 war das ein no-op (Bandpilot entschied). Mike-Spec P92:
+    User-Override jederzeit möglich, Bandpilot greift erst beim
+    nächsten Bandwechsel wieder ein.
+    """
     obj = _make_radio_mixin(bp_mode="auto", current_scoring="normal")
     obj._on_diversity_subtoggle_requested()
-    obj._activate_diversity_with_scoring.assert_not_called()
+    obj._activate_diversity_with_scoring.assert_called_once_with("dx")
 
 
-# ── T4: bp=manual → no-op ──────────────────────────────────────────
+# ── T4: bp=manual → P92 Toggle DX → Std ────────────────────────────
 
 
-def test_no_toggle_when_bandpilot_manual(app):
-    """T4: Bandpilot=manual → kein Toggle."""
+def test_toggle_dx_to_standard_when_bandpilot_manual(app):
+    """T4 (P92, v0.97.62): bp=manual + DX → Toggle nach Standard."""
     obj = _make_radio_mixin(bp_mode="manual", current_scoring="dx")
     obj._on_diversity_subtoggle_requested()
-    obj._activate_diversity_with_scoring.assert_not_called()
+    obj._activate_diversity_with_scoring.assert_called_once_with("normal")
 
 
 # ── T5: Gain-Lock → no-op ──────────────────────────────────────────
