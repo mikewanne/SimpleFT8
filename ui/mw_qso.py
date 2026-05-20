@@ -248,7 +248,7 @@ class QSOMixin:
             self.qso_sm.queue_changed.emit(
                 [m.caller for m in self.qso_sm._caller_queue])
         self.qso_panel.add_info(f"Rufe {msg.caller}...{self._antenna_pref_label(msg.caller)}")
-        self.qso_sm.max_calls = self.settings.get("max_calls", 3)
+        self.qso_sm.max_calls = self.settings.get("max_calls", 5)
         # Even/Odd: Helper berechnet TX-Slot inkl. Lock-Wirkung (Bundle E).
         # Lock-Validierung wurde oben bereits durchgeführt (resolved!=None
         # garantiert wenn wir hier landen).

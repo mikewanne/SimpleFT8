@@ -512,7 +512,10 @@ class CycleMixin:
         # Hunt-QSO starten (gleicher Weg wie manueller Klick)
         self._active_qso_targets.add(_candidate.call)
         self.rx_panel.set_active_call(_candidate.call)
-        self.qso_sm.max_calls = 3
+        # P98 (v0.97.70): aus Settings lesen statt hartcodiert (R1-F2-Bugfix).
+        # Vorher: `self.qso_sm.max_calls = 3` → Auto-Hunt ignorierte User-
+        # Setting. Jetzt konsistent mit manuellem Klick-Pfad.
+        self.qso_sm.max_calls = self.settings.get("max_calls", 5)
         # Even/Odd: sende im GEGENTEILIGEN Slot der Gegenstation
         if _candidate.tx_even is not None:
             self.encoder.tx_even = not _candidate.tx_even

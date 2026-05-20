@@ -48,7 +48,7 @@ _HINTS = {
     "radio_ip": "IP-Adresse des FlexRadio. Leer = Auto-Discovery per Broadcast.\nNur aendern wenn mehrere Radios im Netzwerk.",
     "power": "HF-Sendeleistung in Watt.\nFuer FT8 reichen 20-50W fuer weltweiten Betrieb.",
     "tx_level": "Audio-Pegel zum Radio (100% = volles Signal).\nBei ALC-Ausschlag reduzieren.",
-    "max_calls": "Wie oft eine Station maximal angerufen wird bevor Timeout.\n3 = schnell weiter, 7 = hartnäckig, 99 = quasi-endlos.",
+    "max_calls": "Wie oft eine Station maximal angerufen wird bevor Timeout.\n5 = Standard (FT8-üblich), 3 = schnell weiter, 7 = hartnäckig, 99 = quasi-endlos.",
     "swr_limit": "Bei SWR ueber diesem Wert wird TX sofort gestoppt.\nSchuetzt Endstufe und Antenne.",
     "tune_power": "Leistung beim TUNE-Vorgang (Antennentuner einstellen).\nMax 20W — hoehere Werte brauchen Bestaetigung.",
 }
@@ -617,8 +617,8 @@ class SettingsDialog(QDialog):
         self.radio_ip.setText(self.settings.get("flexradio_ip", ""))
         self.power.setValue(self.settings.power_watts)
         self.tx_level.setValue(self.settings.get("tx_level", 100))
-        mc = self.settings.get("max_calls", 3)
-        self.max_calls_combo.setCurrentIndex({3: 0, 5: 1, 7: 2, 99: 3}.get(mc, 0))
+        mc = self.settings.get("max_calls", 5)  # P98: Default 3 → 5
+        self.max_calls_combo.setCurrentIndex({3: 0, 5: 1, 7: 2, 99: 3}.get(mc, 1))
         # Bundle K (P57): Load mit Snap-Index auf naechst-hoeheren Wert
         _saved_swr = self.settings.get("swr_limit", 3.0)
         _idx = _swr_value_to_index(_saved_swr)
@@ -830,7 +830,7 @@ class SettingsDialog(QDialog):
         # Werte auf Defaults setzen (Rufzeichen/Locator behalten)
         self.power.setValue(DEFAULTS.get("power_watts", 50))
         self.tx_level.setValue(100)
-        self.max_calls_combo.setCurrentIndex(3)  # 99
+        self.max_calls_combo.setCurrentIndex(1)  # P98 (v0.97.70): Default 5 (FT8-Standard) statt 99
         self.swr_limit.setCurrentIndex(3)  # Default 3.0 (Bundle K P57)
         # P47 (v0.97.11): audio_freq + max_decode_freq Reset entfernt — Widgets weg.
         self._current_tune_power = 10

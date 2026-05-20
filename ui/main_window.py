@@ -1213,7 +1213,7 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         dialog = SettingsDialog(self.settings, self)
         if dialog.exec():
             self._update_statusbar()
-            self.qso_sm.max_calls = self.settings.get("max_calls", 3)
+            self.qso_sm.max_calls = self.settings.get("max_calls", 5)
             # v0.93: OPERATE_CYCLES + diversity_operate_cycles entfernt (1h-Frist zeit-basiert)
             # P58 (v0.97.31): Alle 3 Live-Setter unter gemeinsamem radio.ip-Guard
             # (Architektur-Konsistenz, R1-V4-pro-F1)
