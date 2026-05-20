@@ -561,6 +561,13 @@ class _AntenneCard(QFrame):
         lbl_ant = QLabel("ANTENNE")
         lbl_ant.setStyleSheet(f"color: #55BBAA; font-size: 10px; font-family: {_FONT}; font-weight: bold;")
         header_row.addWidget(lbl_ant)
+        # P97 (v0.97.69): Status-Suffix neben ANTENNE — zeigt aktuellen
+        # RX-Modus auch wenn Kachel eingeklappt. Dezente Schrift (gleiche
+        # Farbe wie ANTENNE, nicht-bold, leicht ausgegraut).
+        self.lbl_ant_status = QLabel("")
+        self.lbl_ant_status.setStyleSheet(
+            f"color: #55BBAA; font-size: 10px; font-family: {_FONT};")
+        header_row.addWidget(self.lbl_ant_status)
         header_row.addStretch()
         lay.addLayout(header_row)
 
@@ -791,6 +798,14 @@ class _RadioCard(QFrame):
             f"color: #00aacc; font-size: 10px; font-family: {_FONT}; font-weight: bold;"
         )
         header_row.addWidget(lbl_radio)
+        # P97 (v0.97.69): Status-Suffix neben RADIO — zeigt aktuelle
+        # Sendeleistung auch wenn Kachel eingeklappt. Dezente Schrift
+        # (gleiche Farbe wie RADIO, nicht-bold).
+        self.lbl_radio_status = QLabel("")
+        self.lbl_radio_status.setStyleSheet(
+            f"color: #00aacc; font-size: 10px; font-family: {_FONT};"
+        )
+        header_row.addWidget(self.lbl_radio_status)
         header_row.addStretch()
         lay.addLayout(header_row)
 
@@ -1275,6 +1290,14 @@ class ControlPanel(QWidget):
         self._rx_mode_idx = 0
         self._callsign = callsign
         self._current_rx_mode = "normal"
+        # P97 (v0.97.69): aktueller Diversity-Scoring-Modus für Header-
+        # Status-Anzeige der Antennen-Kachel ("Standard" / "DX").
+        # Wird via update_diversity_ratio/update_diversity_counts gepflegt.
+        self._current_scoring_mode = "normal"
+        # P97: aktuelle Wattzahl für Header-Status der Radio-Kachel.
+        # Default 10W — wird in __init__ nach Card-Erstellung initial
+        # vorselektiert (power_buttons[10].setChecked(True)).
+        self._current_power_watts: int | None = 10
         # P85 (v0.97.54): Ringpuffer fuer ANT2-Win-% Median-Glaettung
         # ueber 4 Zyklen. Tupel (ant2_wins, total_compared). Reset bei
         # Band/Modus/Diversity-Enable.
@@ -1394,6 +1417,14 @@ class ControlPanel(QWidget):
         # bubblen → MainWindow connectet es zu mw_tx._on_tune_override.
         radio_card.tune_override_requested.connect(
             self.tune_override_requested.emit)
+        # P97 (v0.97.69): Status-Labels neben ANTENNE/RADIO referenzieren
+        # damit Helper _refresh_antenna_status_label / _refresh_radio_status_label
+        # sie aktualisieren können (auch bei eingeklappter Kachel sichtbar).
+        self._antenne_card_status_label = ant_card.lbl_ant_status
+        self._radio_card_status_label = radio_card.lbl_radio_status
+        # Initial-Befüllung
+        self._refresh_antenna_status_label()
+        self._refresh_radio_status_label()
         # P63 (v0.97.36): TUNE-Button-Sichtbarkeit via tuner_present-Setting.
         # MainWindow ruft `set_tuner_present` nach __init__ und nach jedem
         # Settings-Save (Live-Apply).
@@ -1632,6 +1663,41 @@ class ControlPanel(QWidget):
             self.btn_diversity.setStyleSheet(self._rx_btn_style(self._RX_STYLE_DIVERSITY_ACTIVE))
         self._current_rx_mode = mode
         self._apply_rx_mode_visibility(mode == "diversity")
+        self._refresh_antenna_status_label()  # P97
+
+    def _refresh_antenna_status_label(self):
+        """P97 (v0.97.69): Header-Status der Antennen-Kachel aktualisieren.
+
+        Zeigt den aktuellen RX-Modus als dezenten Suffix neben „ANTENNE"
+        damit Mike auch bei eingeklappter Kachel sieht welcher Modus
+        läuft. Mapping:
+          - normal              → „— Normal"
+          - diversity + normal  → „— Diversity Standard"
+          - diversity + dx      → „— Diversity DX"
+        """
+        if self._current_rx_mode == "normal":
+            text = "— Normal"
+        else:
+            scoring = self._current_scoring_mode
+            if scoring == "dx":
+                text = "— Diversity DX"
+            else:
+                text = "— Diversity Standard"
+        if hasattr(self, '_antenne_card_status_label'):
+            self._antenne_card_status_label.setText(text)
+
+    def _refresh_radio_status_label(self):
+        """P97 (v0.97.69): Header-Status der Radio-Kachel aktualisieren.
+
+        Zeigt aktuelle Sendeleistung als dezenten Suffix neben „RADIO"
+        damit Mike auch bei eingeklappter Kachel die Wattzahl sieht.
+        """
+        if self._current_power_watts is None:
+            text = ""
+        else:
+            text = f"— {self._current_power_watts} W"
+        if hasattr(self, '_radio_card_status_label'):
+            self._radio_card_status_label.setText(text)
 
     # =====================================================================
     # Diversity Ratio Display
@@ -1656,6 +1722,11 @@ class ControlPanel(QWidget):
         is_dynamic, operate_cycles, operate_total) — Tests koennten sie
         noch uebergeben.
         """
+        # P97 (v0.97.69): scoring_mode für Header-Status-Anzeige tracken
+        if scoring_mode in ("normal", "dx"):
+            if scoring_mode != self._current_scoring_mode:
+                self._current_scoring_mode = scoring_mode
+                self._refresh_antenna_status_label()
         for lbl in self._a1_pct.values():
             lbl.setStyleSheet(_DIV_PCT_OFF)
         for lbl in self._a2_pct.values():
@@ -1851,6 +1922,9 @@ class ControlPanel(QWidget):
     # Power / TX Level / Tune
     # =====================================================================
     def _on_power_preset_clicked(self, watts: int):
+        # P97 (v0.97.69): Header-Status der Radio-Kachel aktualisieren
+        self._current_power_watts = int(watts)
+        self._refresh_radio_status_label()
         self.power_changed.emit(watts)
 
     def set_power_preset(self, watts: int):
@@ -1859,6 +1933,9 @@ class ControlPanel(QWidget):
         available = sorted(self.power_buttons.keys())
         best = min(available, key=lambda w: abs(w - watts))
         self.power_buttons[best].setChecked(True)
+        # P97 (v0.97.69): Header-Status der Radio-Kachel aktualisieren
+        self._current_power_watts = int(best)
+        self._refresh_radio_status_label()
 
     def _on_tx_level_changed(self, value: int):
         self.tx_level_label.setText(f"TX-Pegel: {value}%")

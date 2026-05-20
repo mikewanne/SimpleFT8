@@ -3,6 +3,48 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-20 v0.97.69 — P97 Collapsed-Card Status-Suffix (Antenne + Radio)
+
+Mike-Wunsch 20.05.2026 nach P96: bei eingeklappter Antennen-/Radio-
+Kachel sollte im Header neben „ANTENNE"/„RADIO" der aktuelle Modus
+bzw. die aktuelle Sendeleistung sichtbar bleiben — damit Mike auch
+mit collapsed Kachel weiß welcher Modus aktiv ist und mit welcher
+Wattzahl gesendet wird.
+
+**Mike-Spec:**
+- Antenne-Header: „ANTENNE — Normal" / „— Diversity Standard" /
+  „— Diversity DX"
+- Radio-Header: „RADIO — 70 W" (Wattzahl der aktuellen Auswahl)
+- Schriftfarbe wie der Header (#55BBAA für Antenne, #00aacc für Radio)
+  — dezent, „sonst wird's zu bunt"
+
+**Implementierung (KISS):**
+- `_AntenneCard.lbl_ant_status` + `_RadioCard.lbl_radio_status` als
+  Status-Label-Suffix im Header-Row (rechts neben dem Hauptlabel,
+  vor dem `addStretch()`).
+- `ControlPanel._current_scoring_mode` + `_current_power_watts` als
+  SOT-Tracker.
+- Helper `_refresh_antenna_status_label()` + `_refresh_radio_status_label()`
+- Hooks:
+  - `set_rx_mode()` ruft Antenna-Refresh
+  - `update_diversity_ratio(scoring_mode=...)` aktualisiert
+    `_current_scoring_mode` und refresht (nur bei Wechsel)
+  - `_on_power_preset_clicked()` + `set_power_preset()` aktualisieren
+    `_current_power_watts` und refreshen
+
+Andere Cards (Modus/Band) unverändert.
+
+Trivial-Klausel laut CLAUDE.md („Style/<5 Zeilen") nicht ganz zutreffend
+(~50 LOC Logik), aber reine UI-Anzeige ohne Verhaltensänderung — kein
+voller DeepSeek-Workflow. Smoke-Test verifizierte alle 5 erwarteten
+States (Normal / Diversity Std/DX, 10W/70W).
+
+**Tests: 1661 → 1671 (+10 P97, alle grün).**
+
+Field-Test pending (ohne Radio): App starten, Antenne-Kachel einklappen
+→ Suffix sichtbar. Modus-Wechsel Normal→Diversity Std→DX testen.
+Radio-Kachel einklappen, Power-Preset wechseln → Suffix passt sich an.
+
 ## 2026-05-20 v0.97.68 — P96 Power-Button-Farbe permanent bei Hover
 
 Mike-Beobachtung 20.05.2026 nach P95: nach Auswahl einer Leistung

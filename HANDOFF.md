@@ -1,8 +1,24 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-20 — P96 (Power-Button-Farbe), P95 + P94 davor
+## Stand 2026-05-20 — P97 (Collapsed-Card Status), P96+P95+P94 davor
 
-**Aktueller Code-Stand:** v0.97.68 (P96), Tests **1661 grün** (+3 P96).
+**Aktueller Code-Stand:** v0.97.69 (P97), Tests **1671 grün** (+10 P97).
+
+### 🟢 v0.97.69 P97 — Collapsed-Card Status-Suffix (Antenne + Radio)
+
+Mike-Wunsch 20.05.: bei eingeklappter Kachel im Header neben
+„ANTENNE"/„RADIO" den aktuellen Modus bzw. Sendeleistung anzeigen.
+
+- Antenne-Header: „— Normal" / „— Diversity Standard" / „— Diversity DX"
+- Radio-Header: „— 70 W" (aktuelle Auswahl)
+- Schriftfarbe wie Header (#55BBAA / #00aacc) — dezent
+
+**Implementierung:** Status-Labels in beiden Cards + 2 SOT-Tracker
+(`_current_scoring_mode`, `_current_power_watts`) + 2 Refresh-Helper
+mit Hooks an `set_rx_mode` / `update_diversity_ratio` / `set_power_preset`.
+
+Tests 1661→1671 (+10 P97). Field-Test ohne Radio: Kacheln einklappen
++ Modus/Power-Wechsel beobachten.
 
 ### 🟢 v0.97.68 P96 — Power-Button-Farbe permanent bei Hover
 
