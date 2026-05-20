@@ -877,14 +877,21 @@ class RadioMixin:
 
     @Slot()
     def _on_diversity_subtoggle_requested(self):
-        """Bundle G (v0.97.24): Toggle Std ↔ DX bei 2. Div-Klick.
+        """Bundle G (v0.97.24) + P92 (v0.97.62): Toggle Std ↔ DX bei 2. Div-Klick.
 
         Wird vom control_panel emittiert wenn User im Diversity-Modus
         nochmal auf DIVERSITY klickt. Wechselt direkt zwischen
         scoring="normal" (Standard) und scoring="dx".
 
-        Nur wirksam wenn Bandpilot=off (sonst entscheidet Bandpilot).
-        Bei Pipeline-Lock / fehlender Radio-IP no-op.
+        P92 (20.05.2026): Toggle ist jetzt bei ALLEN Bandpilot-Modi
+        wirksam (off/auto/manual). Mike-Spec: Bandpilot ist Empfehlung,
+        kein Zwang. Der manuelle Sub-Modus gilt, bis User das Band
+        wechselt — beim nächsten `_on_band_changed` ruft
+        `_maybe_apply_bandpilot` ohnehin wieder (stateless, kein
+        Override-Flag).
+
+        Bei Pipeline-Lock / fehlender Radio-IP weiterhin no-op
+        (Hardware-Sicherheit).
 
         R1-K1+K2 (Bundle G): OMNI+Auto-Hunt werden gestoppt analog zu
         `_on_rx_mode_changed` Z.541-544 — verhindert Encoder-Konflikt
@@ -892,9 +899,6 @@ class RadioMixin:
         Ziel-Store) und schützt vor get_free_cq_freq-Race auf leeres
         Stations-Histogramm nach _diversity_stations={}.
         """
-        bp_mode = self.settings.get("bandpilot_mode", "off")
-        if bp_mode != "off":
-            return  # Auto/Manual: Bandpilot entscheidet, kein User-Toggle
         if getattr(self, '_gain_measure_locked', False):
             return  # Pipeline läuft
         if not self.radio.ip:

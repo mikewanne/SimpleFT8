@@ -1978,7 +1978,7 @@ class ControlPanel(QWidget):
             self.btn_diversity.setToolTip(
                 "Klick im Normal-Modus: Auswahl Standard/DX.\n"
                 "Erneuter Klick im Diversity-Modus: wechselt zwischen "
-                "Standard und DX (nur bei Bandpilot=Aus).")
+                "Standard und DX.")
 
     def set_connection_status(self, status: str):
         """Verbindungsstatus anzeigen: 'connected', 'disconnected', 'searching', 'reconnecting'."""
