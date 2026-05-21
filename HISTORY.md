@@ -12718,3 +12718,74 @@ Tests 1714 → 1716 (+2):
 
 P66-Tests (`_on_qso_tab_changed`-Handler) unverändert grün — Handler-
 Logik bleibt, nur Trigger-Punkt verlagert.
+
+## 2026-05-21 — INFO: Bandpilot-Funktionsweise + Statistik-Retention
+
+Mike-Frage 21.05. während Field-Test (20m Normal → DIVERSITY DX wegen
+Bandpilot-Empfehlung): "Was passiert wenn ich 3 Wochen nicht funke und
+das Cleanup löscht alle Daten? Werden Bandpilot-Daten separat gespeichert?"
+
+### Wie der Bandpilot funktioniert
+
+**Generator:** `core/bandpilot_md.py` → `write_bandpilot_md(band, ft_mode,
+output_dir)`. Schreibt eine Tabelle pro Band+Modus in
+`auswertung/Bandpilot-<band>-<ft_mode>.md`.
+
+**Datenquelle:** liest **direkt** aus `statistics/<Modus>/<Band>/<Proto>/
+YYYY-MM-DD_HH.md`. **Keine separate Persistierung** — die MD-Datei wird
+bei jedem App-Start aus dem aktuellen Statistik-Stand neu erzeugt.
+
+**Aufrufer:**
+- App-Start: `ui/main_window.py:_init_bandpilot_recommendations()` ruft
+  `write_bandpilot_md` für 20m+40m FT8.
+- Headless: `scripts/generate_plots.py` macht denselben Aufruf
+  zusätzlich (Backup-Pfad für PDF-Regeneration ohne App-Start).
+
+**Empfehlungs-Logik:** pro UTC-Stunde wird für jeden Modus
+(Normal/Diversity_Standard/Diversity_Dx) der Pooled Mean berechnet
+(Stationen/15s-Zyklus). Modus mit höchstem Mean = Empfehlung.
+Bei <2 Tagen Datenbasis: "_zu wenig Daten_".
+
+**Format pro Zeile:** `| UTC | Tage·Sta./15s (Normal) | Tage·Sta./15s
+(Std) | Tage·Sta./15s (DX) | Empfehlung |`
+
+### Statistik-Retention
+
+**Cleanup:** `core/stats_cleanup.py` (P52, v0.97.41). Beim App-Start
+werden Files älter als **90 Tage** (UTC, aus Dateinamen extrahiert)
+rekursiv aus `statistics/` gelöscht. Default `days=90` in
+`stats_cleanup.cleanup_stats_older_than_days`.
+
+**Worst-Case-Analyse Mike-Frage:**
+- 3 Wochen Pause (21 Tage) → älteste Daten 69 Tage alt → Bandpilot OK
+- 30 Tage Pause → älteste 60 Tage alt → OK
+- 90+ Tage Pause → alle Daten weg → Bandpilot zeigt "zu wenig Daten"
+  bis neue Daten ≥2 Tage gesammelt sind
+
+**Warum 90 Tage:** Mike-Claude-Entscheidung 21.05. — guter Kompromiss
+zwischen saisonaler Stabilität (volles Quartal) und Vermeidung von
+Winter/Sommer-Mischung. 180 Tage wäre technisch trivial (1 Zeile),
+würde aber Empfehlungen verwässern.
+
+### Bandpilot UI-Modi
+
+**3 Bandpilot-Settings** (`config/settings.py:bandpilot_mode`):
+- `off`: keine Empfehlung, manueller Modus-Wahl
+- `auto`: empfohlener Modus wird automatisch eingestellt bei
+  Bandwechsel/Stunden-Wechsel
+- `manual`: Empfehlung wird gezeigt, aber User entscheidet
+
+**P92 (v0.97.62):** Sub-Toggle Diversity Std↔DX funktioniert seit P92
+**immer** — auch bei Bandpilot=auto/manual. Bandpilot ist Empfehlung,
+kein Zwang. Override gilt bis nächster Bandwechsel — dann übernimmt
+Bandpilot wieder die Empfehlung.
+
+### Statistik-Filter (v0.63)
+
+Nur **20m + 40m FT8** werden gespeichert (`station_stats.py`-Filter).
+Andere Bänder werden empfangen, aber nicht protokolliert
+(Skalierungs-Entscheidung — Bandpilot kann später erweitert werden).
+
+**Stand 21.05.:** auch 15m + 30m sammeln inzwischen Daten (heute live
+verifiziert: 15m DX 165 Zyklen/Tag). Filter könnte irgendwann
+entfernt werden, wenn Bandpilot-Erweiterung gewünscht.
