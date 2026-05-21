@@ -75,6 +75,7 @@ class LogbookWidget(QWidget):
 
     upload_requested = Signal()  # Fuer QRZ.com Upload
     qso_clicked = Signal(dict)   # QSO-Eintrag angeklickt → Detail-Overlay
+    export_status = Signal(str)  # P107 (v0.97.84): Statusbar-Toast nach Export
 
     def __init__(self, adif_directory: Path = None):
         super().__init__()
@@ -132,6 +133,21 @@ class LogbookWidget(QWidget):
         toolbar.addWidget(btn_upload)
         # P1.QRZ-UPLOAD-UI: Reference fuer Klick-Sperre waehrend Bulk
         self._btn_upload = btn_upload
+
+        # P107 (v0.97.84): Bulk-Export-Button — Mike-Wunsch 21.05.2026.
+        # Schreibt alle bisherigen QSOs zu 1 ADIF-File in adif/exports/.
+        btn_export = QPushButton("Export")
+        btn_export.setFixedWidth(60)
+        btn_export.setToolTip(
+            "Alle QSOs in 1 ADIF-Datei exportieren (adif/exports/)")
+        btn_export.setStyleSheet(
+            f"QPushButton {{ background: rgba(0,140,80,0.3); color: #44CC88; "
+            f"border: 1px solid #363; border-radius: 3px; font-family: {_FONT}; "
+            f"font-size: 10px; font-weight: bold; }}"
+            f"QPushButton:hover {{ background: rgba(0,160,90,0.4); color: #66EE99; }}"
+        )
+        btn_export.clicked.connect(self._on_export_clicked)
+        toolbar.addWidget(btn_export)
 
         self.btn_delete = QPushButton("Löschen")
         self.btn_delete.setFixedWidth(60)
@@ -330,6 +346,20 @@ class LogbookWidget(QWidget):
                 calls.add(call)
         self.dxcc_label.setText(f"DXCC: {len(countries)}")
         self.qso_count_label.setText(f"{len(self._all_records)} QSOs")
+
+    def _on_export_clicked(self):
+        """P107 (v0.97.84): Bulk-Export aller QSOs zu 1 ADIF-Datei.
+
+        DeepSeek-R1-KISS: festes Verzeichnis `adif/exports/`, Statusbar-
+        Toast statt Dialog. Mike-Spec 21.05.2026.
+        """
+        from log.adif import export_all_records
+        try:
+            out_path, count = export_all_records(self._adif_dir)
+            msg = f"{count} QSOs → {out_path.name} exportiert"
+            self.export_status.emit(msg)
+        except Exception as e:
+            self.export_status.emit(f"Export-Fehler: {e}")
 
     def _on_filter_changed(self, text: str):
         """Tabelle nach Suchbegriff filtern.

@@ -12586,3 +12586,53 @@ Tests 1697 grün. Field-Test pending mit Radio:
 - F2: 2. Rechtsklick während laufendem TUNE → Dauer umschalten in einem Rutsch
 - F3: Padding visuell — Häkchen mit Abstand zum Rand
 - F4: RX-Panel Spaltenauswahl + Länder-Filter ebenso
+
+---
+
+## 2026-05-21 v0.97.81-83 — Settings-Aufräumung + QRZ-Confirmed-Bug
+
+### v0.97.81 P104 — RF-Band-Farb-Buttons + Settings-Vereinfachung
+Mike-Diskussion 21.05.: RF-Presets-Tabelle ersetzt durch Band-Farb-Buttons
+(grün = hat Presets klickbar, rot = leer). Power_watts + tx_level aus
+Settings raus (überflüssig — Power-Preset im Hauptpanel ist SoT, tx_level
+fest 75%). Voller Workflow mit Final-R1-Catch (tx_levels_per_band-Race
+in _on_band_changed).
+
+### v0.97.82 P105 → da7d664 REVERTED (a3a9b62)
+Voreilige Hypothese „QSL_SENT:N/QSL_RCVD:N + MY_DXCC/COUNTRY/CQ_ZONE/
+ITU_ZONE blockieren QRZ-Confirm". Mike's SmartSDR-Vergleich widerlegte
+das: SmartSDR hat exakt dieselben Felder und wird bestätigt. Revert.
+
+### v0.97.83 P106 — ADIF auf WSJT-X-Minimal + Reparatur-Script
+Mike-Field-Test 21.05.: QRZ-Confirmed-Quote fiel ab 29.03. (letzter
+bestätigter Tag) von ~30% auf 0/40. Mike-Beobachtung: COMMENT-Spalte
+in QRZ leer trotz „SimpleFT8 v1.0" im ADIF.
+
+Hypothese (nicht bewiesen): QRZ-Match-Logik filtert Records mit
+unsinnigem COMMENT. WSJT-X (Industry-Standard FT8) schreibt KEIN
+COMMENT-Feld.
+
+Fix log/adif.py: WSJT-X-Minimal-Format. Geschriebene Felder:
+  CALL, QSO_DATE, TIME_ON, TIME_OFF, BAND, FREQ, MODE, SUBMODE,
+  RST_SENT, RST_RCVD, GRIDSQUARE (optional), MY_GRIDSQUARE,
+  STATION_CALLSIGN, TX_PWR.
+
+Entfernt: COMMENT, OPERATOR, QSL_SENT, QSL_RCVD, MY_DXCC, MY_COUNTRY,
+MY_CQ_ZONE, MY_ITU_ZONE.
+
+Reparatur-Script `tools/adif_repair.py`:
+- Liest alle ADIFs ab 29.03.
+- Schreibt sie ins neue Minimal-Format nach `adif/repaired/`
+- Plus Aggregator-Snippet das alle Files zu 1 Komplett-ADIF
+  zusammenfasst.
+
+Mike-Aktion 21.05. nach Push: alle 147 betroffenen QSOs bei QRZ
+manuell gelöscht + Komplett-ADIF neu hochgeladen. **Ergebnis offen —
+Beobachtung nächste 1-2 Tage ob Bestätigungs-Rate zurückkehrt.**
+
+Tests 1709 → 1710 (test_adif_qrz_fields angepasst: OPERATOR raus, plus
+explizite Checks dass die 8 entfernten Felder nicht mehr im ADIF stehen).
+
+Workflow-Lesson: bei „statistischer Trend kaputt"-Beobachtungen niemals
+„kein Bug, normal" sagen ohne Timeline-Audit. Mike's Daten waren immer
+Referenz. DeepSeek-V4-Initial-Diagnose („kein Bug") war falsch.

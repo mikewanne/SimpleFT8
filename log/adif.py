@@ -132,6 +132,91 @@ def parse_all_adif_files(directory: Path) -> List[Dict[str, str]]:
     return all_records
 
 
+def export_all_records(adif_directory: Path) -> tuple[Path, int]:
+    """P107 (v0.97.84): Alle ADIF-Tages-Files zu 1 Bulk-Export-File zusammenfassen.
+
+    Mike-Wunsch 21.05.2026: ein Knopf der „alle bisherigen QSOs zu einer
+    Datei für QRZ-Upload" macht. KISS — kein Datum-Range, kein File-Dialog.
+
+    Output: `adif/exports/SimpleFT8_ALL_YYYYMMDD.adi` (Datum=heute UTC).
+    Records werden chronologisch (älteste zuerst) sortiert für intuitiven
+    Upload-Verlauf.
+
+    Args:
+        adif_directory: Pfad zum SimpleFT8-Hauptverzeichnis (enthält
+            `adif/` Unterordner).
+
+    Returns:
+        (output_path, record_count). Wenn keine Records: count=0,
+        Datei wird trotzdem mit Header geschrieben.
+    """
+    src_dir = Path(adif_directory) / "adif"
+    archiv_dir = src_dir / "archiv" / "_konsolidiert"
+    out_dir = src_dir / "exports"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    date_str = time.strftime("%Y%m%d", time.gmtime())
+    out_path = out_dir / f"SimpleFT8_ALL_{date_str}.adi"
+
+    seen_keys: set[tuple] = set()
+    records: list[Dict[str, str]] = []
+    for d in (src_dir, archiv_dir):
+        if not d.exists():
+            continue
+        for adi_file in sorted(d.glob("SimpleFT8_LOG_*.adi")):
+            for rec in parse_adif_file(adi_file):
+                # Dedup: (CALL, QSO_DATE, TIME_ON) als Key
+                key = (rec.get("CALL", ""), rec.get("QSO_DATE", ""),
+                       rec.get("TIME_ON", ""))
+                if key in seen_keys:
+                    continue
+                seen_keys.add(key)
+                records.append(rec)
+    # Chronologisch (älteste zuerst) sortieren
+    records.sort(key=lambda r: r.get("QSO_DATE", "") + r.get("TIME_ON", ""))
+
+    with out_path.open("w", encoding="ascii") as f:
+        f.write(ADIF_HEADER)
+        for rec in records:
+            f.write(_rewrite_minimal(rec))
+    return out_path, len(records)
+
+
+# WSJT-X-Minimal-Whitelist — P106-Bugfix (Mike-Field-Test 21.05.).
+# Nur Felder die QRZ.com sicher matcht + nicht-blockierend interpretiert.
+# Alte ADIF-Felder die wir NICHT wollen werden silent gedroppt.
+_MINIMAL_FIELDS = (
+    "CALL", "QSO_DATE", "TIME_ON", "TIME_OFF",
+    "BAND", "FREQ", "MODE", "SUBMODE",
+    "RST_SENT", "RST_RCVD",
+    "GRIDSQUARE", "MY_GRIDSQUARE",
+    "STATION_CALLSIGN", "TX_PWR",
+)
+
+
+def _rewrite_minimal(rec: Dict[str, str]) -> str:
+    """P107 (v0.97.84): Record im WSJT-X-Minimal-Format aus Dict bauen.
+
+    Filtert Felder die seit v0.24 reingeschrieben wurden aber laut
+    Verdacht QRZ-Auto-Confirm blockieren (COMMENT, QSL_*, MY_DXCC...).
+    Plus R-Prefix-Strip für RST-Felder (Bug-B v0.95.18 retroaktiv).
+    """
+    parts = []
+    for name in _MINIMAL_FIELDS:
+        val = rec.get(name, "")
+        if not val:
+            continue
+        if name in ("RST_SENT", "RST_RCVD"):
+            val = _strip_r_prefix(val)
+        # STATION_CALLSIGN-Fallback: alte ADIFs hatten evtl. nur OPERATOR
+        if name == "STATION_CALLSIGN" and not val:
+            val = rec.get("OPERATOR", "")
+        parts.append(_field(name, val.upper() if name in (
+            "CALL", "BAND", "MODE", "SUBMODE", "GRIDSQUARE",
+            "MY_GRIDSQUARE", "STATION_CALLSIGN") else val))
+    return " ".join(parts) + " <EOR>\n"
+
+
 class AdifWriter:
     """Schreibt QSO-Einträge als ADIF-Datei (Append-Modus)."""
 

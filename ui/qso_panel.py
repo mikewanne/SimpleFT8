@@ -30,6 +30,7 @@ class QSOPanel(QWidget):
     """QSO-Verlaufsfenster mit Tabs: Live Log + Logbuch."""
 
     upload_qrz = Signal()  # QRZ.com Upload angefordert
+    export_adif = Signal(str)  # P107 (v0.97.84): Statusbar-Toast nach ADIF-Export
     # Bundle E (v0.97.22): TX-Slot-Lock (Mike SmartSDR-Style, Normal-only)
     # — emittet "none"|"even"|"odd". MainWindow persistiert + Settings.
     # Wirkung: Encoder.tx_even wird auf gewählten Slot festgesetzt
@@ -190,6 +191,8 @@ class QSOPanel(QWidget):
         # Tab 2: Logbuch
         self.logbook = LogbookWidget()
         self.logbook.upload_requested.connect(self.upload_qrz.emit)
+        # P107 (v0.97.84): Export-Status durchreichen zur MainWindow-Statusbar
+        self.logbook.export_status.connect(self.export_adif.emit)
         self.tabs.addWidget(self.logbook)
 
         layout.addWidget(self.tabs)

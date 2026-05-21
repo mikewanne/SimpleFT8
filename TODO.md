@@ -1,4 +1,54 @@
-# SimpleFT8 TODO — Stand 20.05.2026 (v0.97.70, P98+P97+P96+P95+P94+P93+P73-A+P76-B+P92+P91+P90+P89+P88+P87+P86+P82+Bundle M+P81+P80+P79 ERLEDIGT)
+# SimpleFT8 TODO — Stand 21.05.2026 (v0.97.83, P106 QRZ-ADIF-Fix offen für Verifikation)
+
+---
+
+## 🔬 BEOBACHTUNG OFFEN — P106 QRZ-Confirmed-Bug
+
+**Stand 21.05.2026 nach P106-Push (v0.97.83):**
+- Mike hat 147 reparierte QSOs zu QRZ.com hochgeladen
+  (`SimpleFT8_ALL_repaired.adi`, WSJT-X-Minimal-Format).
+- **Beobachtung 1-2 Tage**: kommen Bestätigungen zurück?
+
+**Wenn JA** → Fix-Hypothese bestätigt, COMMENT/MY_*-Felder waren das
+Problem. Tag schließen.
+
+**Wenn NEIN** → tieferer Bug. Nächste Schritte:
+1. ADIF_VER:5>3.1.4 statt 3.1.7 (SmartSDR-Header)
+2. Encoding-Check (CRLF vs LF, BOM)
+3. QRZ-Support direkt anschreiben mit ADIF-Sample
+4. PROGRAMID/PROGRAMVERSION-Header-Vergleich mit WSJT-X
+
+**Timeline-Tracking** (für Diagnose-Update):
+- 28.03.2026: letzter bestätigter QSO
+- 29.03.-05.04.2026: unbekannter Bruchpunkt
+- 17.04.2026 v0.24: Felder hinzugefügt (NICHT Verursacher, war
+  voreilige Hypothese)
+- 21.05.2026 v0.97.83 P106: ADIF auf WSJT-X-Minimal umgestellt
+- 21.05.2026: Mike Re-Upload + Beobachtung
+
+---
+
+## 🆕 OFFEN — P107 ADIF-Export-Button
+
+Mike-Wunsch 21.05. nach P106. Aktuell muss man `tools/adif_repair.py`
+manuell ausführen + Aggregator-Snippet. UI-Button wäre besser.
+
+**DeepSeek-R1-Konsens (KISS):**
+- **Wo:** Logbuch-Tab neben „QRZ"-Bulk-Upload-Button
+- **Reichweite:** alle Records, kein Datum-Range (Range später falls
+  konkret gewünscht)
+- **Output:** `adif/exports/SimpleFT8_ALL_YYYYMMDD.adi`
+- **Label:** „Logbuch exportieren"
+- **Rückmeldung:** Statusbar-Toast „N QSOs exportiert"
+- **Aufwand:** ~20 LOC
+
+**Code-Plan:**
+- Helper `log/adif.py::export_all_records(out_dir) -> Path` neu
+- `LogbookWidget`: Button + `_on_export_clicked` Slot
+- Statusbar-Update via Signal an MainWindow
+
+**Pending Mike-Freigabe** (für nächste Session) — oder Mike sagt
+„direkt umsetzen".
 
 ---
 

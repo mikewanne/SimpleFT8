@@ -615,6 +615,9 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         # Logbuch mit ADIF-Dateien laden (AdifWriter schreibt in adif/ Unterordner)
         self.qso_panel.logbook.load_adif(Path.cwd() / "adif")
         self.qso_panel.upload_qrz.connect(self._on_qrz_upload)
+        # P107 (v0.97.84): ADIF-Export-Status → Statusbar 5s Toast
+        self.qso_panel.export_adif.connect(
+            lambda msg: self.statusBar().showMessage(msg, 5000))
         self.qso_panel.logbook.qso_clicked.connect(self._on_logbook_qso_clicked)
         # Bundle E (v0.97.22): TX-Slot-Lock Signal — persistiert in Settings.
         self.qso_panel.tx_slot_lock_changed.connect(self._on_tx_slot_lock_changed)
