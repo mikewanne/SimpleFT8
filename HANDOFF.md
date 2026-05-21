@@ -1,8 +1,31 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-20 — P97-Update Visibility, P98+P97+P96+P95+P94 davor
+## Stand 2026-05-21 — P100 QSO-Button-Menü + Padding, P98+P97+P96+P95+P94 davor
 
-**Aktueller Code-Stand:** v0.97.71 (P97-Update), Tests **1683 grün** (+2).
+**Aktueller Code-Stand:** v0.97.72 (P100), Tests **1692 grün** (+9).
+
+### 🟢 v0.97.72 P100 — QSO-Button Kontextmenü + Padding-Fix
+
+Mike-Wunsch 21.05.: Rechtsklick auf QSO-Tab-Button öffnet jetzt dasselbe
+Spalten-Toggle-Menü (Even/Odd-Tag, Antennen-Anzeige) wie der Log-Bereich.
+Copy/SelectAll im Log-Menü entfernt. QMenu padding rechts 20→32px in
+QSOPanel + RXPanel (Häkchen saßen optisch am Rand).
+
+- `qso_panel.py`: `_btn_tab_qso` mit `setContextMenuPolicy` + Signal.
+  Gemeinsamer `_build_columns_menu`-Helper. `_on_log_context_menu` ohne
+  `createStandardContextMenu`. Neue Methode `_on_qso_button_context_menu`.
+- `rx_panel.py`: 2× Stylesheet-Padding 20→32px (Spalten + Länder).
+
+Tests 1683 → 1692 (+9). Field-Test ohne Radio pending F1-F4.
+
+Workflow: V1 → V2 Self-Review (Helper-Extraktion) → Code → Tests.
+R1-DeepSeek übersprungen mit Mike-Freigabe (reines UI-Wiring + CSS).
+
+---
+
+## Stand 2026-05-20 — P97-Update Visibility (älter)
+
+**Code-Stand:** v0.97.71 (P97-Update), Tests **1683 grün** (+2).
 
 ### 🟢 v0.97.71 P97-Update — Status-Suffix nur bei collapsed sichtbar
 

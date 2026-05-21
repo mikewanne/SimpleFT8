@@ -12472,3 +12472,49 @@ Voreingenommenheit gegenüber „eigener" Formulierung. Wenn ein Hobby-
 Projekt nach außen geht (GitHub), lohnt sich diese Runde IMMER.
 
 Tests 1352 grün (unverändert — reine Doku-Änderungen).
+
+---
+
+## 2026-05-21 v0.97.72 — P100 QSO-Button Kontextmenü + Padding-Fix
+
+Mike-Wunsch nach P95: das Spalten-Toggle-Menü (Even/Odd-Tag, Antennen-Anzeige)
+soll *auch* erscheinen wenn man rechts auf den QSO-Tab-Button klickt — der
+Button-Position weckt die „Spaltenkopf"-Erwartung intuitiver als der reine
+Log-Bereich. Beides parallel halten. Plus zwei Detail-Anpassungen:
+
+1. **Copy/SelectAll im Log-Bereich-Menü entfernt.** Mike: Standard-Aktionen
+   stören in einem reinen Spalten-Auswahl-Menü.
+
+2. **QMenu padding rechts 20→32px.** Häkchen saßen zuvor optisch am rechten
+   Rand. Korrektur auch im RX-Panel (Spalten-Auswahl km/UTC/SNR + Länder-
+   Filter — beide Stylesheets).
+
+**Code:**
+- `ui/qso_panel.py`: `setContextMenuPolicy + customContextMenuRequested`
+  am `_btn_tab_qso`. Neuer `_build_columns_menu()` als gemeinsamer Builder
+  für beide Pfade (Log-Bereich + Tab-Button). `_on_log_context_menu` ruft
+  nur noch den Builder (keine `createStandardContextMenu` mehr). Neue
+  Methode `_on_qso_button_context_menu`.
+- `ui/rx_panel.py`: 2× `padding: 4px 20px 4px 28px` → `4px 32px 4px 28px`.
+
+**Tests 1683 → 1692 (+9 P100):**
+- T1: QSO-Button hat `ContextMenuPolicy.CustomContextMenu`
+- T2: Signal-Connect feuert `_on_qso_button_context_menu`
+- T3-T5: Builder liefert 2 checkable Actions in korrekter Reihenfolge,
+  Trigger emittet `eo_tag_visibility_changed`
+- T6: `_on_log_context_menu` enthält kein `createStandardContextMenu` mehr
+- T7: `_on_qso_button_context_menu` nutzt Builder
+- T8: QSO-Panel-Stylesheet Padding-Verifikation
+- T9: RX-Panel-Stylesheet 2× `4px 32px ...`, 0× `4px 20px ...`
+
+**Workflow:** V1 (Mike-Spec klar) → V2 Self-Review (Helper-Extraktion gegen
+Doppel-Code) → Code → Tests. Reines UI-Wiring + CSS-Padding. R1-DeepSeek
+übersprungen mit Mike-Freigabe — Logik unverändert, nur Routing + Style.
+
+**Field-Test ohne Radio (Mike pending):**
+- F1: Rechtsklick auf QSO-Button → Menü erscheint, 2 Toggles, kein Copy/SelectAll
+- F2: Rechtsklick im Log-Bereich → gleiches Menü, ebenfalls kein Copy/SelectAll
+- F3: Häkchen optisch mit Abstand zum rechten Rand
+- F4: RX-Panel Spaltenauswahl + Länder-Filter ebenso entspannt
+
+Tests 1692 grün.
