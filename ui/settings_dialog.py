@@ -47,7 +47,7 @@ _HINTS = {
     "locator": "Maidenhead-Locator deines Standorts (4 oder 6 Zeichen).\nWird bei CQ und erstem Anruf mitgesendet.",
     "radio_ip": "IP-Adresse des FlexRadio. Leer = Auto-Discovery per Broadcast.\nNur aendern wenn mehrere Radios im Netzwerk.",
     # P104 (v0.97.81): "power" + "tx_level" Hints entfernt (Felder raus).
-    "max_calls": "Wie oft eine Station maximal angerufen wird bevor Timeout.\n5 = Standard (FT8-üblich), 3 = schnell weiter, 7 = hartnäckig, 99 = quasi-endlos.",
+    "max_calls": "Wie oft eine Station maximal angerufen wird bevor Timeout.\n5 = Standard (FT8-üblich), 3 = schnell weiter, 7 = hartnäckig (Hard-Cap).",
     "swr_limit": "Bei SWR ueber diesem Wert wird TX sofort gestoppt.\nSchuetzt Endstufe und Antenne.",
     "tune_power": "Leistung beim TUNE-Vorgang (Antennentuner einstellen).\nMax 20W — hoehere Werte brauchen Bestaetigung.",
 }
@@ -222,7 +222,8 @@ class SettingsDialog(QDialog):
         # TX-Schutz-Form (oben, ohne aeussere GroupBox)
         form = QFormLayout()
         self.max_calls_combo = QComboBox()
-        self.max_calls_combo.addItems(["3", "5", "7", "99"])
+        # P111 (v0.97.88): "99" raus — MAX_STATION_CALLS=7 Hard-Cap macht 99 sinnlos.
+        self.max_calls_combo.addItems(["3", "5", "7"])
         # Bundle K (P57, v0.97.34): SWR-Limit als ComboBox mit festen
         # 0.5-Schritten 1.5..5.0.
         self.swr_limit = QComboBox()
@@ -615,7 +616,8 @@ class SettingsDialog(QDialog):
         self.radio_ip.setText(self.settings.get("flexradio_ip", ""))
         # P104 (v0.97.81): power + tx_level-Widgets entfernt
         mc = self.settings.get("max_calls", 5)  # P98: Default 3 → 5
-        self.max_calls_combo.setCurrentIndex({3: 0, 5: 1, 7: 2, 99: 3}.get(mc, 1))
+        # P111 (v0.97.88): "99" raus — alte Settings mit 99 fallen auf 5 (Default)
+        self.max_calls_combo.setCurrentIndex({3: 0, 5: 1, 7: 2}.get(mc, 1))
         # Bundle K (P57): Load mit Snap-Index auf naechst-hoeheren Wert
         _saved_swr = self.settings.get("swr_limit", 3.0)
         _idx = _swr_value_to_index(_saved_swr)

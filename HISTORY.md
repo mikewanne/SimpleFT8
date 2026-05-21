@@ -12861,3 +12861,34 @@ DeepSeek-Brainstorm vorher konsultiert: empfahl Mischung A+B+C
 (Machbarkeitsstudie-Story + Kosten-Argument + Algorithmen-First). Konkrete
 Headline aus Brainstorm übernommen: „Diversity with One Signal Chain Unit
 (Feasibility Study)".
+
+## 2026-05-21 v0.97.88 — P111 "99" raus aus max_calls-Dropdown
+
+Mike-Frage 21.05. nach Erklärung der „99 Anrufversuche"-Setting: stellte
+sich heraus, dass `MAX_STATION_CALLS = 7` in `core/qso_state.py:106`
+ein hartcodiertes Hard-Cap ist. `station_limit = min(max_calls, 7)`
+→ Wahl von 99 ist funktional identisch mit 7. Der Hint „99 = quasi-endlos"
+war irreführend.
+
+Mike-Entscheidung: „99 kann raus, 7 ist Hard-Cap, sauberster Schritt".
+
+**Fix (3 LOC):**
+- `ui/settings_dialog.py:225`: `addItems(["3", "5", "7", "99"])` → `addItems(["3", "5", "7"])`
+- `ui/settings_dialog.py:50`: Hint angepasst — „99 = quasi-endlos" raus,
+  stattdessen „7 = hartnäckig (Hard-Cap)"
+- `ui/settings_dialog.py:618`: Mapping `{3: 0, 5: 1, 7: 2, 99: 3}` → `{3: 0, 5: 1, 7: 2}`
+
+**Migration:** alte Settings mit `max_calls=99` fallen beim Load automatisch
+auf Default-Index 1 (=5) über `dict.get(mc, 1)`-Fallback. Keine
+explizite Migration nötig — die 99 verschwindet beim nächsten
+Settings-Save.
+
+**Workflow:** Trivial-Klausel (4 LOC, pure UI-Cleanup, kein Verhaltens-
+Change). Statt vollem V1→V2→R1: Code-Verifikation + 4 Tests T1-T4 +
+voller Test-Run.
+
+Tests 1723 → 1727 (+4 P111):
+- T1: Dropdown enthält nur 3/5/7
+- T2: Hint-Text enthält kein „quasi-endlos"
+- T3: Mapping ohne 99
+- T4: Legacy-Settings 99 → Default 5
