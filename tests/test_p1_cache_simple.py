@@ -113,7 +113,7 @@ def test_check_preset_dispatch_gain_fresh_calls_enable_diversity():
 
     RadioMixin._check_diversity_preset(fake_self, "40m", "normal")
 
-    fake_self._enable_diversity.assert_called_once_with(scoring_mode="normal")
+    fake_self._enable_diversity.assert_called_once_with(scoring_mode="normal", clear_panels=True)
     fake_self._start_dx_tuning.assert_not_called()
 
 
@@ -185,4 +185,4 @@ def test_check_preset_dispatch_dx_scoring():
 
     RadioMixin._check_diversity_preset(fake_self, "40m", "dx")
 
-    fake_self._enable_diversity.assert_called_once_with(scoring_mode="dx")
+    fake_self._enable_diversity.assert_called_once_with(scoring_mode="dx", clear_panels=True)

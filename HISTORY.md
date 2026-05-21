@@ -12789,3 +12789,75 @@ Andere Bänder werden empfangen, aber nicht protokolliert
 **Stand 21.05.:** auch 15m + 30m sammeln inzwischen Daten (heute live
 verifiziert: 15m DX 165 Zyklen/Tag). Filter könnte irgendwann
 entfernt werden, wenn Bandpilot-Erweiterung gewünscht.
+
+## 2026-05-21 v0.97.87 — P110 Diversity↔Diversity Sub-Toggle skippt RX-Clear
+
+Mike-Spec 21.05. während Field-Test: beim Wechsel Std↔DX innerhalb von Diversity
+nutzen beide Modi DIESELBEN 2 Antennen mit derselben Gain-Config — nur die
+Scoring-Strategie wechselt. Stationen sind weiter empfangbar, Werte adaptieren
+sich in 1-2 Slots automatisch. Vorher wurde RX-Panel + log_view + Backend-
+Stations-Dicts unnötig geleert → optisch leere RX-Tabelle obwohl Hardware
+weiter empfängt.
+
+**Fix:** `clear_panels: bool = True` Parameter durch 3-stufige Aufrufkette
+durchgereicht:
+- `_on_diversity_subtoggle_requested` (Sub-Toggle-Pfad)
+  → `_activate_diversity_with_scoring(new, clear_panels=False)`
+  → `_check_diversity_preset(band, scoring, clear_panels=False)`
+  → `_enable_diversity(scoring_mode, clear_panels=False)`
+
+Alle Clear-Statements (`rx_panel.table.setRowCount(0)`, `_diversity_stations={}`,
+`_normal_stations={}`, `log_view.clear()`, `update_decode_count(0)`) in
+`if clear_panels:` eingebettet. Default `True` für alle anderen Pfade
+(Bandwechsel, Modewechsel FT8/FT4/FT2, Erstaktivierung Normal→Diversity).
+
+`reset_win_rate_history()` bleibt unconditional ausgeführt — R1: „Std/DX sind
+verschiedene Scoring-Modelle, alte Win-Rate ist beim Wechsel nicht mehr
+aussagekräftig".
+
+**Workflow voll:** V1 → V2-Self-Review (4 Findings) → R1-DeepSeek („KISS-konform,
+GRÜN, Bool-Parameter besser als eigener Helper") → V3 → Code → 7 Tests T1-T7
+→ Final-R1 V4-pro „Push-bereit, GRÜN ✅".
+
+**V4-pro 46-Cycle-Bilanz: 0 Halluzinationen.**
+
+Tests 1716 → 1723 (+7 P110):
+- T1: `_enable_diversity` Signatur prüft `clear_panels: bool = True`
+- T2: Clear-Block innerhalb `if clear_panels:` (alle 5 Statements)
+- T3: `_on_diversity_subtoggle_requested` ruft mit `clear_panels=False`
+- T4: `_check_diversity_preset` reicht `clear_panels` an `_enable_diversity` weiter
+- T5: `_activate_diversity_with_scoring` Signatur
+- T6: `_diversity_stations = {}` in `_activate_diversity_with_scoring` ist if-geschützt
+- T7: Bandwechsel-Pfad ruft `_check_diversity_preset` ohne `clear_panels=False`
+
+12 bestehende Tests angepasst (test_bundle_g, test_p1_cache_simple,
+test_p80_unified_gain, test_p92_diversity_subtoggle_bandpilot) — Mock-
+Assertions auf neue Signaturen erweitert.
+
+## 2026-05-21 — README massive Überarbeitung für CQ DL 6/2026 Artikel-Release
+
+CQ DL 6/2026 erscheint morgen (22.05.2026) mit Artikel über SimpleFT8 als
+Machbarkeitsstudie. Mike-Spec: README muss den Artikel-Spirit klarer
+vermitteln, ANT2-Was-auch-immer-Argument prominent machen, 4-Algorithmen-
+Einladung als Hero-Block.
+
+**Vorher:** 1093 Zeilen, Hero-Bereich war 200 Zeilen Disclaimer + Algorithmus-
+Erratum + Globus-Demo, Machbarkeitsstudie-Charakter stand unten.
+
+**Nachher:** 522 Zeilen. Hero-Block:
+- TL;DR: „Does a dual-antenna diversity system require two SCUs (€2000–3000)?
+  No. One SCU + a gutter/wire/balcony railing is enough."
+- ANT2-Was-auch-immer-Block prominent (Regenrinne, Wurfantenne, Balkongeländer,
+  alter Dipol auf Dachboden, zweites Koax)
+- 4 Algorithmen als Hero-Section mit Einladung zur Übernahme in
+  WSJT-X/JTDX/MSHV
+- KI-Workflow (Mike + Claude + DeepSeek) explizit als Team-Format
+- Test-Badge 1131 → 1716 aktualisiert
+- Disclaimer kompakt am Ende
+- Honest Limitations als eigene Section
+- CQ-DL-Hinweis kompakt (UCB1 → per-slot scoring + FLEX-8400M-only)
+
+DeepSeek-Brainstorm vorher konsultiert: empfahl Mischung A+B+C
+(Machbarkeitsstudie-Story + Kosten-Argument + Algorithmen-First). Konkrete
+Headline aus Brainstorm übernommen: „Diversity with One Signal Chain Unit
+(Feasibility Study)".

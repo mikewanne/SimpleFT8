@@ -1,10 +1,25 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-21 — P109 X-Button schliesst auch Logbuch-Tab
+## Stand 2026-05-21 — P110 Diversity↔Diversity Sub-Toggle skippt RX-Clear + README Überarbeitung
 
-**Aktueller Code-Stand:** v0.97.86 (P109), Tests **1716 grün** (+2).
+**Aktueller Code-Stand:** v0.97.87 (P110), Tests **1723 grün** (+7).
 
-### 🟢 v0.97.86 P109 — X im Detail-Overlay schliesst auch Logbuch-Tab
+**Auch heute:** README massive Überarbeitung für CQ DL 6/2026 Artikel-Release
+(1093 → 522 Zeilen), CLAUDE.md entrümpelt (52 KB → 37 KB), Statistiken +
+PDFs + Bandpilot-MDs regeneriert.
+
+### 🟢 v0.97.87 P110 — Diversity↔Diversity Clear-Skip
+
+Mike-Spec: beim Wechsel Std↔DX innerhalb Diversity Stationen nicht löschen
+(gleiche Antennen, nur Scoring wechselt). Fix: `clear_panels: bool = True`
+Parameter durch 3-stufige Aufrufkette, Sub-Toggle ruft mit `clear_panels=False`,
+alle anderen Pfade (Bandwechsel, Modewechsel) bleiben unverändert.
+
+**Workflow voll:** V1 → V2 (4 Findings) → R1 GRÜN → V3 → Code → 7 Tests → Final-R1 „GRÜN".
+
+**V4-pro 46-Cycle-Bilanz: 0 Halluzinationen.**
+
+### Vorgänger v0.97.86 P109 — X im Detail-Overlay schliesst auch Logbuch-Tab
 
 Mike-Beobachtung 21.05.: Klick auf X schloss nur Overlay, Logbuch blieb
 offen. Spec: X = QSO-Button-Verhalten (Tab + Overlay zurück auf QSO-Live).

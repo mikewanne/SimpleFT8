@@ -73,7 +73,7 @@ def test_toggle_standard_to_dx_when_bandpilot_auto(app):
     """T1: bp=auto + Std → activate('dx')."""
     obj = _make_radio_mixin(bp_mode="auto", current_scoring="normal")
     obj._on_diversity_subtoggle_requested()
-    obj._activate_diversity_with_scoring.assert_called_once_with("dx")
+    obj._activate_diversity_with_scoring.assert_called_once_with("dx", clear_panels=False)
 
 
 # ── T2: bp=manual Toggle DX → Std ──────────────────────────────────
@@ -83,7 +83,7 @@ def test_toggle_dx_to_standard_when_bandpilot_manual(app):
     """T2: bp=manual + DX → activate('normal')."""
     obj = _make_radio_mixin(bp_mode="manual", current_scoring="dx")
     obj._on_diversity_subtoggle_requested()
-    obj._activate_diversity_with_scoring.assert_called_once_with("normal")
+    obj._activate_diversity_with_scoring.assert_called_once_with("normal", clear_panels=False)
 
 
 # ── T3: Pipeline-Lock blockt in allen bp-Modi ──────────────────────
@@ -120,7 +120,7 @@ def test_omni_and_auto_hunt_stopped_on_toggle_in_bp_modes(app, bp_mode):
     obj._omni_cq.stop.assert_called_once_with("scoring_toggle")
     obj._auto_hunt.stop_auto_hunt.assert_called_once_with("scoring_toggle")
     # Und Toggle wurde gemacht
-    obj._activate_diversity_with_scoring.assert_called_once_with("dx")
+    obj._activate_diversity_with_scoring.assert_called_once_with("dx", clear_panels=False)
 
 
 # ── T6: AC2-Wächter — kein Override-Persistenz-State ───────────────

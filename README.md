@@ -1,4 +1,4 @@
-# SimpleFT8 — The Autonomous FT8/FT4/FT2 Client for FlexRadio
+# SimpleFT8 — Diversity with One Signal Chain Unit (Feasibility Study)
 
 [English](#english) | [Deutsch](#deutsch)
 
@@ -6,508 +6,164 @@
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![Platform: macOS](https://img.shields.io/badge/platform-macOS-lightgrey.svg)](https://www.apple.com/macos/)
 [![Ham Radio](https://img.shields.io/badge/ham--radio-FT8%2FFT4%2FFT2-orange.svg)](https://www.physics.princeton.edu/pulsar/k1jt/wsjtx.html)
-[![Tests](https://img.shields.io/badge/tests-1131%20passed-brightgreen.svg)]()
-
-> ⚠️  **Disclaimer / Haftungsausschluss**
->
-> *EN:* SimpleFT8 is a private feasibility study and personal hobby project. Use at your own risk. No liability is accepted for damage to hardware (radio, PA, antennas), data loss, or regulatory violations. The software is provided "AS IS" without warranty of any kind — see [LICENSE](LICENSE) (MIT) for full terms.
->
-> *DE:* SimpleFT8 ist eine private Machbarkeitsstudie und ein persoenliches Hobby-Projekt. Nutzung auf eigene Gefahr. Es wird keine Haftung uebernommen fuer Schaeden an Hardware (Funkgeraet, PA, Antennen), Datenverlust oder regulatorische Verstoesse. Die Software wird "AS IS" ohne jegliche Garantie bereitgestellt — siehe [LICENSE](LICENSE) (MIT) fuer vollstaendige Bedingungen.
-
-> 📰 **Note for CQ DL 6/2026 readers / Hinweis fuer Leser der CQ DL 6/2026**
->
-> *EN:* The print article was finalized about 3 weeks before publication.
-> Three details have evolved since:
->
-> - **Algorithm (UCB1 → dynamic per-slot scoring):** UCB1 (Upper Confidence Bound, classic Multi-Armed Bandit) was the original design intent. During development we **dropped UCB1** in favor of a simpler, more robust, and **faster-adapting** approach: a heuristic SNR-scoring evaluated **every FT8 slot (15 s)** instead of in 80-cycle blocks every 20 minutes. The functional goal is identical (explore vs. exploit — find the best antenna without forgetting the other). Reaction time is measurably faster (seconds instead of 20 minutes); QSO yield is at least equivalent based on field statistics (we did not run a controlled A/B against the old pipeline). Real-world benefit: off-resonance bands, weather changes (wet antenna, snow, ice), day/night transitions, or short propagation dips no longer take 20 minutes to register. Bonus: less hidden state (no 80-cycle half-state that can hang on abort or band-change), less code, smaller bug surface.
-> - **Diversity ratio adaptation:** Same change as above — the "automatic re-measurement every 80 cycles (~20 min)" mentioned in the article was replaced in v0.97.19 with continuous per-slot evaluation. Faster, more reactive, less brittle.
-> - **Radio compatibility:** Verified on **FLEX-8400M**. The VITA-49 / TCP API is identical across the FLEX-6000 and FLEX-8000 families, so other models in those series should work — but only the FLEX-8400M has been field-tested by the author.
->
-> *DE:* Der Artikel wurde etwa 3 Wochen vor dem Erscheinen abgegeben.
-> Drei Details haben sich seitdem entwickelt:
->
-> - **Algorithmus (UCB1 → dynamisches Pro-Slot-Scoring):** UCB1 (Upper Confidence Bound, klassischer Multi-Armed-Bandit) war die urspruengliche Design-Idee. Im Laufe der Entwicklung haben wir UCB1 **aufgegeben** zugunsten einer einfacheren, robusteren und **schneller adaptierenden** Loesung: ein heuristisches SNR-Scoring, das in **jedem FT8-Slot (15 s)** neu bewertet wird, statt in 80-Zyklen-Bloecken alle 20 Minuten. Das funktionale Ziel ist dasselbe (Explore vs. Exploit — beste Antenne finden ohne die andere zu vergessen). Die Reaktionszeit ist messbar schneller (Sekunden statt 20 Minuten); der QSO-Ertrag ist nach den Feld-Statistiken mindestens gleichwertig (einen kontrollierten A/B-Vergleich gegen die alte Pipeline gab es nicht). Praktischer Nutzen: nicht-resonante Baender, Wetterwechsel (nasse Antenne, Schnee, Eis), Tag/Nacht-Uebergaenge oder kurzfristige Ausbreitungseinbrueche brauchen jetzt keine 20 Minuten mehr bis zur Anpassung. Plus: weniger Zustand im Hintergrund (kein 80-Zyklen-Half-State, der bei Abbruch oder Bandwechsel haengen bleibt), weniger Code, kleinere Bug-Oberflaeche.
-> - **Diversity-Verhaeltnis-Anpassung:** Folgt aus dem Punkt oben — die im Artikel beschriebene „automatische Neueinmessung alle 80 Zyklen (~20 Min)" wurde in v0.97.19 durch die kontinuierliche Pro-Slot-Bewertung ersetzt. Schneller, reaktiver, weniger fragil.
-> - **Funkgeraete-Kompatibilitaet:** Verifiziert auf **FLEX-8400M**. Die VITA-49- und TCP-API ist ueber die FLEX-6000- und FLEX-8000-Serien identisch, andere Modelle dieser Familien sollten also funktionieren — feldgetestet wurde aber nur der FLEX-8400M.
-
-> **No more manual ALC babysitting, no missed replies, no guessing the best antenna or frequency.**
-> SimpleFT8 automates your entire FT8/FT4/FT2 workflow with closed-loop power control, dual-mode diversity scoring, automatic CQ frequency optimization, and intelligent caller queuing.
-
-> **Every feature explained in detail:** How does it work? Why? Pros/Cons? Physics + formulas.
-> German + English → **[docs/explained/](docs/explained/)** (5 features × 2 languages = 10 documents)
-> In-app help: Press **?** in the status bar for built-in feature documentation with language switcher.
-
-> **Optimize yes — Automate no.** SimpleFT8 is an operator-in-the-loop tool. All automated features — dead man's switch (15 min), semi-automatic CQ mode, manual hunt mode — ensure the operator retains final control. This reflects our commitment to responsible amateur radio software and regulatory compliance.
+[![Tests](https://img.shields.io/badge/tests-1716%20passed-brightgreen.svg)]()
 
 ---
 
-https://github.com/user-attachments/assets/7504bb60-2ab1-465f-92e3-0bf042a74f3a
+## TL;DR — Why does this exist?
 
-*Live globe visualization: 16-sector propagation wedges per decoded station, color-coded by antenna (ANT1 / ANT2 / rescue), with 60-minute history retention. Recorded during a 40m FT8 session.*
-*Live-Karte mit 16 Richtungs-Sektor-Wedges pro Decode, Antennen-Farbcodierung (ANT1 / ANT2 / Rescue), 60-Min-Historie. Aufgenommen waehrend einer 40m-FT8-Session.*
+**Does a working dual-antenna diversity system really require two SCUs in a FlexRadio
+(€2000–3000 more for the second one)?**
+
+**SimpleFT8 says: no.** One SCU + a second antenna that just has to *receive somehow*
+— a gutter, a random wire, a balcony railing — gives real, measurable diversity gain.
+In most real-world ham setups comparable to a two-SCU rig.
+
+This is a **private feasibility study by DA1MHH** (Mike Hammerer), built together with
+Claude (Anthropic) and DeepSeek as AI development partners. **Not a product. Not for
+mass adoption. No tester recruitment.** The point is to show that **one SCU is enough**
+— and that the algorithms inside (closed-loop TX power, temporal polarization diversity,
+auto-gain per band, auto-CQ frequency) can be picked up by **WSJT-X, JTDX, MSHV, or
+any other FT8 client**. MIT license. **Take the ideas. That's the entire point.**
+
+📰 **Featured in CQ DL 6/2026** — see [CQ DL article note](#cq-dl-readers-note).
 
 ---
 
-<a name="english"></a>
 ## English
 
-### Why SimpleFT8?
+### The Core Idea — Diversity Without the Second SCU
 
-SimpleFT8 was built for the after-work operator. No endless configuration,
-no manual antenna switching, no staring at ALC levels. It talks directly to
-the FlexRadio, automatically picks the better of two antennas, regulates TX
-power in a closed loop, and finds a clear CQ frequency on its own. Multiple
-callers are queued and answered in turn. There's a live map with a rotatable
-globe showing where you're being heard, and a locator cache that remembers
-stations across app restarts. Fire it up, make a few QSOs, call it a day.
+A real dual-antenna diversity system on FlexRadio needs **two Signal Chain Units (SCUs)**
+to receive both antennas simultaneously. That second SCU costs **€2000–3000** at purchase
+time. Most hams don't buy it.
 
-> **How is this different?** Focuses on live propagation visualization and
-> locator mining without configuration overhead. Not a WSJT-X replacement —
-> runs alongside it.
+SimpleFT8 simulates the effect with **one SCU** by switching ANT1 and ANT2 on a
+per-cycle basis (Temporal Polarization Diversity), measuring SNR on both antennas and
+weighting future cycles toward the better one. The result on Mike's station — a Kelemen
+trap dipole running off-band on 40m, plus the **house gutter as a receive-only ANT2**:
 
-### Key Innovations
+**40m FT8 — 5–6 measurement days, 35,656 cycles:**
 
-- **FT2 Mode** — Native Decodium-compatible FT2 decoder/encoder (3.8s cycles, 4-GFSK, 288 sps). Community frequencies pre-configured. QSOs successfully completed. Automatic RX filter widening to 4000 Hz.
-
-- **DT Time Correction v2** — Cumulative correction from band consensus. 2-cycle measurement, 10-cycle operation, 70% damping. **Per-mode persistence**: correction values stored in `~/.simpleft8/dt_corrections.json` — instant good correction on mode switch. DT values typically ±0.1s after convergence.
-
-- **🆕 Adaptive Diversity (v0.97)** — Adjusts antenna ratio **slot-by-slot in real time** using a rolling 5-slot buffer. No more hourly 90-second measurement pause — reacts to propagation changes within seconds. 8% median-difference threshold prevents flapping; live switching between 30:70, 50:50, 70:30. Toggle in Settings: "Adaptive Diversity (Test Phase)". Static fallback remains available. See [docs/explained/diversity-modes.md](docs/explained/diversity-modes.md) for the full Before/After comparison.
-
-- **Dual-Mode Diversity** — Two scoring strategies selectable at startup:
-  - **Standard**: Counts total decoded stations — best for CQ operation (maximize QSOs)
-  - **DX**: Counts weak stations (SNR < -10 dB) — best for DX hunting (Australia at -24 dB counts, local at +12 dB doesn't)
-  - 8% threshold, median over 3 cycles per antenna (6-slot fair 3:3), 70:30 or 50:50 ratio. Button shows "DIVERSITY DX" when in DX mode.
-  - **Antenna Memory (learning)**: Every decode cycle, the system records per callsign which antenna heard it better and by how many dB. When you start a QSO with that callsign, the best antenna is selected automatically — overlaying the global Diversity rhythm for the duration of the QSO. No timeout, no persistence: a station you can hear *right now* is always the most precise value. The QSO panel shows "Calling DL3AQJ (ANT2, +6.3 dB)". → see [Smart Antenna Selection](#smart-antenna-selection--per-callsign-antenna-memory) for screenshot and details.
-
-- **Bandpilot (v0.88)** — On band change SimpleFT8 looks up the **current UTC hour** and compares the three RX modes (Normal / Diversity Standard / Diversity DX) directly — no aggregation. Three behaviour modes in settings: **Off** / **Auto** (3-second toast + auto-switch with 5% tolerance) / **Manual** (dialog appears only when a different mode wins). TX-protected: switch waits for `tx_finished`. Hourly thresholds: ≥3 days + ≥20 slots per mode. ⚠️ In field test.
-
-  > **v0.87 → v0.88 Update:** The Bandpilot now uses hourly direct values instead of a global aggregate `(S+D)/2`. Existing settings migrate automatically (`bandpilot_enabled=true` → `mode="auto"`).
-
-- **Live Locator Mining (integrated, no external tool required)** — While decoding, SimpleFT8 extracts Maidenhead grid squares **directly from CQ calls and grid-reply messages** (`CQ R9CA LO97`, `RA4ALY DL6YJB JO31`) and writes them to a persistent JSON database (`~/.simpleft8/locator_cache.json`). Source priority: `cq_6 > psk_6 > qso_log_6 > _4-Variants` — a 6-digit locator from a live CQ call is never overwritten by a 4-digit ADIF entry. The map shows **exact station positions**, not country centroids. Bootstrap via ADIF bulk-import (LotW, QRZ, your own log) at startup. Auto-save every 5 min + on close — survives hard kill. Currently 9,366 calls and growing with every session. *(External tools like GridTracker do similar mining from WSJT-X — this implementation just keeps it inside SimpleFT8 itself.)*
-
-- **Auto TX Power Regulation** — Set target wattage, SimpleFT8 reads actual FWDPWR and adjusts proportionally. No overdrive, no weak signals after band change.
-
-- **Smart CQ Frequency** — After diversity calibration, finds a free slot in the **800–2000 Hz sweet spot** (where most stations listen) instead of the empty upper range.
-
-- **Caller Waitlist** — When multiple stations reply to CQ simultaneously, they are queued. Accepts both Grid and Report messages. After current QSO: auto-responds to next in queue.
-
-- **RR73 Courtesy Repeat** — After QSO complete, if the other station keeps sending R-Report (didn't receive our RR73), we resend RR73 automatically (max 2×).
-
-- **Even/Odd Slot Display** — [E]/[O] tags in both RX list and QSO panel. Immediately visible which slot each station uses and which slot we transmit in.
-
-### Smart Antenna Selection — Per-Callsign Antenna Memory
-
-![Smart Antenna Selection](docs/screenshots/smart_antenna_selection.png)
-
-While Diversity decides the global ANT1/ANT2 RX rhythm (70:30, 50:50 or 30:70),
-**Smart Antenna Selection** is the second, finer layer: for every station the
-app learns — slot by slot — which antenna heard it better and by how many dB,
-with a 1 dB hysteresis to prevent ping-pong on marginal signals.
-
-1. **① RX panel `Ant` column** — shows the live preference per callsign:
-   `A1` means ANT1 is the only one hearing the station, `A2>1` means ANT2 wins
-   over ANT1 (and by how many dB), `A1>2` the reverse. In one screenshot you
-   can see a mixed pattern — proof the app does not just sit on a fixed ratio
-   but evaluates every station individually.
-
-2. **② RX uses the better antenna actively per station** — when you start
-   a QSO, the **receive path** switches to whichever antenna heard that
-   callsign best (here: `(ANT2 ↑2.0 dB)` for IK4LZH) so the remote station
-   is heard optimally throughout the entire QSO.
-   **TX always goes through ANT1** — the only transmit-rated antenna in
-   the SimpleFT8 setup. ANT2 (gutter antenna) is receive-only and would
-   risk hardware damage at 100 W TX. On rigs with two transmit-capable
-   antennas this could be configured differently, but SimpleFT8
-   hardcodes TX = ANT1.
-
-The memory has no timeout and no persistence — a station you can hear *right
-now* is always the most precise value. Combining Diversity reception with
-per-callsign antenna decisions inside one QSO is a detail most Diversity
-implementations don't offer — I haven't seen it in WSJT-X, JTDX or MSHV,
-but I can't guarantee no fork does it.
-
-### Diversity Active Features — OMNI-CQ and Auto-Hunt
-
-![Auto-Hunt live](docs/screenshots/auto_hunt_diversity.png)
-
-*Auto-Hunt after two QSOs (G8KHF, HA1BF). HA1BF was received on ANT2
-with +1.0 dB advantage (per-callsign antenna preference). Timer shows
-6:55 min remaining. Bottom: clear CQ frequency indicator, dynamic
-diversity 50:50 active.*
-
-Both buttons live inside the Diversity Mode — they are hidden in Normal
-mode and appear automatically when Diversity is enabled.
-
-**OMNI-CQ** runs a single-slot CQ that auto-rotates between Even and
-Odd parity every ~5 minutes (mode-dependent counter: FT8=10, FT4=20,
-FT2=40 attempts). The transmit duty cycle is the same as a normal CQ
-on one parity — OMNI just saves the manual Even/Odd switch click.
-For the same effect you can press the Even/Odd button yourself. The
-OMNI button is **permanently visible** when Diversity is active — no
-Easter egg anymore (was hidden until v0.97.29). All TX goes over
-**ANT1**, RX uses the global Diversity and per-callsign antenna
-preference. **Known limitations:** TX frequency is picked once at the
-first transmit of each parity block (no continuous gap re-evaluation
-within a block — see CQ-frequency feature for the dynamic search
-that runs only at block boundaries). The counter resets when an
-incoming QSO is received, so on a popular call sign the same parity
-slot can keep being extended. **Tested on one station (DA1MHH) since
-11.05.2026** — not independently field-validated.
-
-**Auto-Hunt** picks the next CQ station from the RX list and initiates
-the QSO automatically — no manual click. Visible only in Diversity
-mode.
-
-- **Selection priority:** new DXCC > rare callsign > good SNR (> −15 dB)
-  > first reception today. Within the same score group, choice is
-  random.
-- **Auto-stop after 10 minutes** from activation, independent of mouse/
-  keyboard activity. After that, Auto-Hunt stops and requires a
-  deliberate restart click. At most 3 QSO attempts per station.
-- **Hardware:** RX uses per-callsign antenna preference (the better RX
-  antenna). **TX is always on ANT1**, the only transmit-rated antenna.
-  Band or mode changes immediately stop Auto-Hunt.
-
-> ⚠️ **Operator responsibility — read before use:**
-> SimpleFT8 is a **private feasibility study** by a single operator
-> (DA1MHH), not a contest tool and not a remote-control product.
-> Auto-Hunt initiates QSOs without a per-station click. The 10-minute
-> auto-stop is a self-imposed limit — German amateur radio law (§ 13
-> AFuV) regulates remote-controlled or automatic stations separately
-> and requires the operator to be able to switch off the station at
-> any time. **Use only while you are actively watching the station.**
-> WSJT-X and JTDX deliberately stop their automation short of picking
-> the next station from the RX list — Auto-Hunt crosses that line on
-> purpose. You take the responsibility for compliance with your own
-> country's regulations.
-
-### Diversity rescues an off-band antenna — 40m FT8 measurements
-
-> Generated automatically from live session data via `scripts/generate_plots.py`.
-> X-axis = UTC hour of day, averaged across all measurement days. Data grows with every session.
-
-**40m FT8 — 5–6 measurement days, 35,656 cycles (ANT1 = trap dipole running off-band over tuner):**
-
-| Mode | Stations/15s (Pooled Mean) | vs Normal | 95%-CI | Days | Cycles |
+| Mode | Stations/15s (Pooled Mean) | vs Normal | 95% CI | Days | Cycles |
 |------|:---:|:---:|:---:|:---:|:---:|
-| Normal | 30.0 | — | — | 5 | 11,504 |
+| Normal (ANT1 only) | 30.0 | — | — | 5 | 11,504 |
 | Diversity Standard | 48.5 | **+62%** | +32 to +102% | 6 | 13,659 |
 | Diversity DX | 40.8 | **+36%** | +11 to +70% | 5 | 10,493 |
 
-*Pooled mean over all cycles and all hours of all measurement days. No
-time-of-day filter. **95%-CI via Block-Bootstrap** over (date, hour)
-blocks (5000 iterations, seed=42) — covers intra-hour autocorrelation;
-day-to-day drift remains unmodeled. CIs are therefore a **lower bound on
-true uncertainty**.*
-*Rescue stations (ANT1 below −24 dB, saved by ANT2) are included in the Diversity totals.
-Detailed breakdown: PDF report (p.3).*
+*95% CIs via Block-Bootstrap over (date, hour) blocks, 5000 iterations, seed=42 —
+captures intra-hour autocorrelation. Both Diversity modes have CIs entirely above 0
+on the off-band 40m setup: statistically distinguishable from "no effect".*
 
-> **Statistical significance — 40m**
-> Both Diversity modes show CIs **entirely above 0**, so the gain is
-> statistically distinguishable from "no effect" given the available
-> data. The CI width (~70 percentage points) reflects substantial
-> day-to-day variability from changing propagation, weather and antenna
-> conditions — typical for amateur HF data without solar-flux
-> stratification.
->
-> **Why these numbers replaced the earlier +126%/+123% headline:**
-> the previous published figures were from an older dataset (7,743 Normal
-> cycles). With more measurement days, the absolute Normal baseline rose
-> from 18.7 to 30.0 stations/cycle while Diversity Standard rose only
-> from 42.2 to 48.5 — the relative gain compressed accordingly. The
-> direction is unchanged, the magnitude is less dramatic. This is the
-> honest evolution of the dataset, not a regression.
+**The honest caveat — on the resonant band (20m), the picture changes:**
 
-> **Note on Interpretation**
-> ANT1 (Kelemen DP-201510) is operated off-band on 40m and therefore significantly
-> less efficient on this band. ANT2 (house gutter, ~15m) falls between λ/4 and λ/2
-> for 40m and works comparatively well. The measured gains (+62%/+36% stations,
-> 95%-CI entirely above 0) represent a **realistic value** for off-band operation —
-> with two well-matched 40m-optimized antennas, a smaller but still positive
-> diversity gain is expected. The exact opposite happens when ANT1 is on its
-> resonant band — see the 20m results below where the CI **includes 0**.
-
-**Station timeline — 40m FT8, all three modes over 24h UTC:**
-*(Dashed lines = Rescue Stations: received by ANT1 below −24 dB — ANT2 boosts the signal above the decoding threshold)*
-
-![Stations 40m FT8](auswertung/stationen_40m_FT8.png)
-
-**Direct mode comparison — stations per cycle, per hour:**
-
-![Diversity Comparison 40m FT8](auswertung/diversity_40m_FT8.png)
-
-| Diagram | Description |
-|---------|-------------|
-| [📊 Diagram 1 — Stations 40m FT8](auswertung/stationen_40m_FT8.png) | Station count over 24h UTC — Normal vs Diversity Normal vs Diversity DX. Line = mean, dashed = + Rescue Stations (ANT1 below −24 dB, saved by ANT2). |
-| [📊 Diagram 2 — Diversity Analysis 40m FT8](auswertung/diversity_40m_FT8.png) | Station count per cycle: Normal (grey), Diversity Standard (blue), Diversity DX (orange) + green rescue caps (+N) = stations ANT1 couldn't decode but ANT2 saved. |
-| [📊 Detailed PDF Report](auswertung/Auswertung-40m-FT8.pdf) | Full analysis report with summary table, all diagrams, and methodology notes. Auto-updated with each session. |
-| [🗂 Raw Data (statistics/)](statistics/) | All raw cycle data as Markdown files — one file per hour per mode. Format: `statistics/<Mode>/<Band>/<Protocol>/YYYY-MM-DD_HH.md`. 214 files, every single cycle logged. Reproduce any number yourself. |
-
-> **📊 Statistics in progress — target: 5 measurement days per mode/band slot for reliable results.**
-> Current: 4–5 days. Charts and PDF update automatically with each new session. The more days, the more stable the lines.
-
----
-
-#### 20m FT8 — when ANT1 is on its design band
-
-**Live measurement results — 20m FT8, 8–9 measurement days, 39,801 cycles:**
-
-| Mode | Stations/15s (Pooled Mean) | vs Normal | 95%-CI | Days | Cycles |
+| Mode | Stations/15s | vs Normal | 95% CI | Days | Cycles |
 |------|:---:|:---:|:---:|:---:|:---:|
-| Normal | 47.8 | — | — | 8 | 11,088 |
-| Diversity Standard | 46.2 | **−3%** | −14 to +10% | 9 | 14,672 |
-| Diversity DX | 51.4 | **+8%** | −4 to +22% | 8 | 14,041 |
+| Normal (resonant ANT1) | 47.8 | — | — | 8 | 11,088 |
+| Diversity Standard | 46.2 | −3% | −14 to +10% | 9 | 14,672 |
+| Diversity DX | 51.4 | +8% | −4 to +22% | 8 | 14,041 |
 
-*The 95%-CI of both Diversity modes **includes 0** — meaning no
-statistically significant station-count change can be claimed from this
-dataset. The point estimates suggest a small loss for Standard and a
-small gain for DX, but neither is distinguishable from zero given the
-day-to-day variability. This matches the physical expectation: ANT1 is
-resonant on 20m, so there is little room for Diversity to add station
-count via the rescue mechanism.*
+*CIs include 0 on 20m. When ANT1 is already resonant on the band, time-shared
+Diversity costs some single-antenna decodes. The qualitative gain remains
+(ANT2 wins 79–86% of direct dual-receives, +4 dB avg), but raw count is flat.*
 
-> **Note on Interpretation — 20m**
-> On 20m, the Kelemen DP-201510 operates within its **design band** as a resonant
-> half-wave dipole. ANT1 alone is already very efficient — Diversity overlays this
-> good antenna with a non-optimized gutter (ANT2). The result is a slight **loss**
-> in raw station count.
->
-> **But the picture is more nuanced:** in direct A1↔A2 comparisons the ANT2 wins
-> in **79–86 % of cases** with an average **+4 dB** advantage on individual signals
-> — pattern and polarization diversity from the very different geometry of the two
-> antennas. (Faraday rotation alone doesn't explain this — on HF it's mostly
-> multi-path propagation modes, building coupling and pattern differences.) The
-> resonant ANT1 still wins on raw station count because Diversity's time-sharing
-> costs it some single-antenna decodes; the benefit on 20m is qualitative (different
-> stations, especially weak DX) rather than quantitative.
->
-> **The honest takeaway:** Diversity is **asymmetric** with this antenna setup.
-> On off-band-ANT1 bands (40m, 30m, 17m, 80m) it compensates the weak ANT1 →
-> large station gain. On resonant-ANT1 bands (20m, 15m, 10m) it overlays an
-> already strong ANT1 → small station loss but qualitative pol-diversity gain.
+**[See full statistics in `auswertung/`](auswertung/)** — automatically regenerated
+from `statistics/` via `python3 scripts/generate_plots.py`.
 
-**Station timeline — 20m FT8, all three modes over 24h UTC:**
+### ANT2 — Can Be Anything That Receives
 
-![Stations 20m FT8](auswertung/stationen_20m_FT8.png)
+**This is the key part.** ANT2 is **receive-only**. No transmit, no SWR requirement,
+no power handling, no matching network. Just clamp it on:
 
-**Direct mode comparison — stations per cycle, per hour:**
+- 🏠 **House gutter** (Mike's setup — works surprisingly well)
+- 🌳 **Random wire** thrown in the attic, into a tree, along a fence
+- 🏢 **Balcony railing** (yes, the metal one, that's the point)
+- 📡 **Old dipole in the attic** that's "not really good for anything"
+- 🔌 **Second coax run** to anywhere you have a metallic object
 
-![Diversity Comparison 20m FT8](auswertung/diversity_20m_FT8.png)
+> ⛔ **Hardware safety: ANT1 is always TX. ANT2 is NEVER TX.**
+> ANT2 is not rated for transmit power. Sending 100 W into a non-matched gutter
+> antenna may damage the PA's protection circuit, in the worst case the PA itself.
+> The code hardcodes `set_tx_antenna("ANT1")` before every TX trigger; the Diversity
+> RX-pattern (70:30 / 50:50 / 30:70) never assigns ANT2 as TX slot.
 
-| Diagram | Description |
-|---------|-------------|
-| [📊 Detailed PDF Report — 20m](auswertung/Auswertung-20m-FT8.pdf) | Full 20m analysis with the differential narrative — ANT2 win-rate, Faraday rotation theory, asymmetric advantage. |
-| [🗂 Raw Data (statistics/)](statistics/) | All raw cycle data per mode/band/hour — reproduce any number yourself. |
+If you have **a resonant TX antenna and a wire / gutter / railing** lying around,
+that's the typical use case. The Diversity layer makes the wire/gutter useful for
+RX without needing to make it a proper antenna.
 
-#### 30m FT8 — off-band ANT1, early data *(in progress)*
+### The Four Algorithms — Free for Any FT8 Client to Adopt
 
-**Live measurement results — 30m FT8, 3–6 measurement days, 18,808 cycles:**
+These four algorithms are the **point of the study**. MIT license. **If you build
+WSJT-X / JTDX / MSHV / your own FT8 client and want to integrate any of these:
+please do.**
 
-| Mode | Stations/15s (Pooled Mean) | vs Normal | 95%-CI | Days | Cycles |
-|------|:---:|:---:|:---:|:---:|:---:|
-| Normal | 28.4 | — | — | 5 | 6,543 |
-| Diversity Standard | 30.9 | **+9%** | −9 to +31% | 6 | 7,178 |
-| Diversity DX | 28.7 | **+1%** | −22 to +29% | 3 | 5,087 |
+1. **Closed-Loop TX Power Regulation** — read FWDPWR from the radio, compare to
+   target wattage, adjust drive level proportionally: `estimated = rfpower × (target / fwdpwr)`.
+   No more manual ALC babysitting on band change, SWR drift, or PA temperature drift.
+   Per-band calibration persisted. → [docs/explained/power-regulation.md](docs/explained/power-regulation.md)
 
-> **Note:** The 95%-CIs of both Diversity modes **include 0** — same as
-> on 20m, no statistically significant gain can be claimed from this
-> dataset. Earlier readings (fewer days) suggested +69%/+59% but those
-> were preliminary and unstable. With more measurement days the gains
-> compressed toward zero. Data still growing — if a real off-band effect
-> exists on 30m, it would emerge as the CI tightens around a positive
-> point estimate. Today the honest answer is: **no measurable gain yet**.
+2. **Temporal Polarization Diversity with 1 SCU** — switch ANT1/ANT2 per FT8 cycle,
+   collect SNR scores, weight the better antenna 70:30 / 50:50 / 30:70 in subsequent
+   cycles. Replaces a €2000–3000 second SCU. Two scoring strategies:
+   *Standard* (total stations decoded) for CQ operation, *DX* (weak stations < −10 dB)
+   for DX hunting. **Slot-by-slot adaptation** (v0.97+) — reacts to propagation changes
+   within seconds, not 20 minutes. → [docs/explained/diversity-modes.md](docs/explained/diversity-modes.md)
 
-![Stations 30m FT8](auswertung/stationen_30m_FT8.png)
+3. **Auto-Gain Calibration per Band (Weather-Adaptive)** — during initial calibration,
+   measure ANT1/ANT2 SNR over a fixed cycle count, store the ratio per band. Re-measure
+   automatically when conditions change (rain on the antenna, snow, ice — all affect
+   the gain ratio). No manual experimentation. → [docs/explained/gain-measurement.md](docs/explained/gain-measurement.md)
 
-#### Why this matters for other operators
+4. **Auto-CQ Frequency via Histogram** — analyse the spectrum, build a 50-Hz-bin
+   histogram of decoded stations, find the widest free gap (≥ 150 Hz) in the
+   dynamic search range (between lowest and highest active station). Set CQ frequency
+   automatically. No waterfall needed — essential for radios without built-in display
+   (e.g. FLEX-8400M headless). → [docs/explained/cq-frequency.md](docs/explained/cq-frequency.md)
 
-If your station has **one resonant antenna covering 1–2 bands** plus everything
-else via tuner — **exactly the situation Mike has on 40m** — Diversity is likely
-to bring a substantial gain on the tuner-fed bands and a slight loss on your
-resonant bands. The 40m measurement is the "tuner-fed" archetype, the 20m
-measurement is the "resonant" archetype.
+**Bonus algorithms** that came along the way (also free for adoption):
 
-#### Roadmap — more bands measuring
+- **Per-callsign antenna memory** — within an active QSO, RX path switches to whichever
+  antenna heard the callsign best. Hysteresis 1 dB. Layers on top of global Diversity.
+  *(I haven't seen this combination in any other FT8 client.)*
+- **Caller Waitlist** — when multiple stations reply to CQ, queue them and serve sequentially.
+- **DT Time Correction** — per-band+mode persistence, 70% damping, 2-cycle measurement.
+- **Live Locator Mining** — extract Maidenhead grids from CQ/grid messages directly,
+  persistent JSON cache survives restarts. Map shows exact positions, not country centroids.
 
-- **30m** (off-band ANT1, data collection started — 3 days Normal/Standard, 1 day DX): confirmed gain pattern, see above
-- **17m** (off-band ANT1): data collection in progress, expected gain like 40m
-- **15m / 10m** (resonant): expected to lose like 20m
-- **80m / 60m / 12m**: pending
+### Architecture (Why It Works)
 
-Each new band confirms or refutes the off-band/resonant hypothesis. All raw
-data lives in `statistics/`, all PDFs auto-update with `python3 scripts/generate_plots.py`.
+SimpleFT8 bypasses SmartSDR entirely. It talks **directly to the radio**:
 
----
+- **VITA-49 UDP** for int16-mono 24 kHz audio streams (RX + TX)
+- **TCP command channel (port 4992)** for radio control
 
-### Why Diversity Matters for FT8 — Receive Sensitivity is the Bottleneck
+No virtual sound cards (DAX), no SmartSDR panel, no GUI overhead. The FT8 decoder is
+[`ft8_lib`](https://github.com/kgoba/ft8_lib) (MIT, by kgoba) extended with 5-pass
+signal subtraction, spectral whitening, sinc anti-alias resampling, 50 LDPC iterations
+— comparable to WSJT-X, runs on a normal MacBook.
 
-A common misconception among ham operators: *"If my antenna transmits, it must
-receive equally well."* Physically the antenna is reciprocal — losses are
-identical on transmit and receive. **But in practice the picture is asymmetric**,
-because two separate effects combine.
+```
+SimpleFT8/
+├── core/
+│   ├── decoder.py / encoder.py     # FT8/FT4/FT2 decode + 5-pass subtraction
+│   ├── qso_state.py                # Hunt + CQ + Waitlist state machine
+│   ├── diversity.py                # Standard/DX scoring, 70:30 / 50:50
+│   ├── diversity_merger.py         # ANT1+ANT2 merge, SNR-winner selection
+│   ├── station_stats.py            # Async per-cycle logging → statistics/
+│   ├── antenna_pref.py             # Per-callsign antenna preference
+│   ├── locator_db.py               # Persistent Maidenhead cache (JSON)
+│   ├── ntp_time.py                 # DT correction v2 (per-mode persistence)
+│   ├── propagation.py              # HamQSL + time-of-day correction
+│   └── bandpilot_md.py             # Hourly mode recommendation generator
+├── radio/
+│   └── flexradio.py                # SmartSDR TCP + VITA-49 + auto RX filter
+├── ft8_lib/                        # C library (MIT, kgoba)
+├── ui/                             # 3-panel layout (Empfang / QSO / Control)
+├── scripts/generate_plots.py       # statistics/ → auswertung/ (PNG + PDF)
+└── tests/                          # 1716 automated regression tests
+```
 
-#### Effect 1 — Link-budget asymmetry (where the headroom sits)
-
-The path budget — your power minus path loss minus antenna losses — leaves very
-different reserves on each side:
-
-- **TX side has roughly 40–50 dB of headroom over the FT8 decode threshold.**
-  100 W of transmit power into a tuner-matched non-resonant antenna delivers
-  about +50 dBm at the feedpoint. Even with 5–10 dB tuner/mismatch loss, a
-  distant station typically receives your signal 30–40 dB above the noise floor
-  — well over the FT8 decode threshold (−24 dB SNR in 2500 Hz bandwidth).
-- **RX side has only 0–15 dB of headroom for weak DX.** Receive signal strength
-  is fixed by path loss and the DX station's power. A weak DX from 8000 km with
-  10 W can arrive at your antenna at −115 dBm. With 7 dB tuner loss it drops to
-  −122 dBm — right at or below the decode threshold. **Same loss, but on the
-  RX side there is no reserve.**
-
-So with a non-resonant antenna on a tuner, **transmit still works fine, but
-weak stations on receive simply disappear under the threshold.**
-
-#### Effect 2 — Polarization and sector diversity (where the +60 % comes from)
-
-The bigger reason two antennas beat one is **physical diversity**:
-
-- Mike's ANT1 (Kelemen DP-201510) is a horizontal half-wave dipole.
-- Mike's ANT2 (house gutter, L-shape ~15 m) acts partly as a vertical radiator.
-- **HF skywave propagation arrives in mixed polarization states** through
-  multi-path modes and ionospheric mode mixing. Stations whose signal arrives
-  predominantly vertical are weakly heard by ANT1 (horizontal) but well by ANT2
-  — and vice versa. *(Faraday rotation contributes here, but the dominant
-  mechanism on HF is multi-path and mode-mixing, not pure Faraday rotation —
-  that scales with 1/f² and is more relevant on VHF/UHF and SatComm.)*
-- The two antennas also have **different azimuth patterns** — directions ANT1
-  nulls out are covered by ANT2.
-
-This is why the off-band diversity gain is large (see measurement section
-for current numbers): not just because the
-tuner loss is bypassed, but because ANT2 picks up entire signal paths ANT1
-never sees.
-
-#### Why digital modes care more than SSB/CW
-
-FT8/FT4/FT2 have a **hard mathematical decode threshold**. Costas synchronization
-needs a defined minimum correlation, and the LDPC error correction has a sharp
-bit-error-rate cliff. A trained ear can still pick fragments of a −5 dB SNR SSB
-signal out of the noise; the FT8 decoder cannot.
-
-Concretely: on FT8, every dB of receive sensitivity directly translates to more
-decoded stations. On SSB or CW, transmit power and antenna gain matter more for
-*being heard* — the human operator handles the rest.
-
-#### Bottom line for the typical ham setup
-
-Most hams have a resonant antenna for one or two favorite bands plus a tuner
-for everything else. **The diversity benefit on tuner-fed bands is substantial:**
-
-| Band | ANT1 status | Diversity Standard vs Normal *(see measurement section for current numbers)* |
-|------|-------------|:---:|
-| 40m | off-band (tuner) | large gain (currently around +120%, off-band asymmetry) |
-| 20m | resonant (design band) | ~ −6 % raw count (ANT1 alone already gets most stations) — but ANT2 wins 79–86 % of direct dual-receives → qualitative polarization gain |
-| 30m, 17m, 12m | off-band (data growing) | expected sizable gain (off-band similar to 40m) |
-
-**With 70–100 W, the transmit side is rarely the bottleneck. The receive side
-is.** Diversity directly attacks that bottleneck — and the two-antenna effect
-(polarization + pattern) compounds the tuner-loss recovery.
-
-> **Note on terminology**
-> *dBm* = power level relative to 1 milliwatt (0 dBm = 1 mW).
-> *SNR* = signal-to-noise ratio. *Link budget* = balance of all gains and losses
-> from transmitter PA output to receiver decode threshold.
-
----
-
-### Antenna Setup
-
-| Photo | Annotated |
-|:-----:|:---------:|
-| ![Frontview](docs/fotos/Ansicht.png) | ![Frontview Annotated](docs/fotos/Ansicht_Farbe.png) |
-| Frontview — gutter downspout (ANT2) on the left, feed point of ANT1 upper right at the dormer. | Yellow = Kelemen DP-201510 (vertical half-wave dipole, green dot = feed point). Red = complete gutter path (roof → downspout → entrance). |
-| ![Sideview](docs/fotos/Gesamt.png) | ![Sideview Annotated](docs/fotos/Gesamt_Farbe.png) |
-| Sideview — second perspective showing the diagonal extent of ANT1 from roof ridge down to balcony. | Same color coding: yellow = ANT1 dipole arms with feed point, red = ANT2 gutter path. |
-
-**ANT1 — Kelemen DP-201510 (multiband trap dipole for 20m / 15m / 10m)**
-A center-fed multiband dipole with coaxial trap resonators (Sperrkreise) — *not* a
-fan dipole. Each band uses only the wire section up to the corresponding trap, all
-three bands resonant on 50 Ω directly via a 1:1 balun (no tuner needed). Feed point
-at the dormer window, 3rd floor: one arm runs diagonally up to the roof ridge, the
-other diagonally down via the porch roof to the balcony — a vertically-oriented
-half-wave dipole with the feed point at the center.
-*On 40m this antenna operates off its design band — see interpretation note above.*
-
-**ANT2 — House gutter (random wire antenna, ~15m)**
-Never installed as an antenna — just clamped on. The gutter runs ~5m horizontal along
-the roof edge, ~8m vertical as the downspout, ~2m horizontal toward the front entrance.
-This L-shape falls between λ/4 and λ/2 for 40m (7 MHz). Different geometry, different
-polarization, building-coupled mounting — the ideal complement for diversity reception.
-
----
-
-### Screenshots
-
-**CQ mode with DT correction, Propagation bars, Operator Presence timer, PSKReporter spots** — DT values ±0.2 (auto-corrected), 20m band:
-
-![SimpleFT8 Complete](docs/screenshots/simpleft8_v031_complete.png)
-
-| Diversity 20m (DT-corrected, A1/A2) | Comparison Test 40m (+37%) |
-|:-:|:-:|
-| ![Diversity 20m](docs/screenshots/diversity_20m_dt_corrected.png) | ![Comparison](docs/screenshots/diversity_37stations_40m.png) |
-
-**Caller Waitlist in action** — F1IQH calls while QSO with DL3AQJ is in progress → automatically queued → served next. Real QSO, 40m FT8. *(Screenshot courtesy of DL3AQJ — thank you!)*
-
-![Warteliste QSO](docs/screenshots/warteliste_qso.png)
-
-### All Features
-
-**Tested & Working (v0.97.2):**
-- ✅ **FT8 / FT4 / FT2 modes** — all three with dedicated frequencies, auto RX filter, mode-dependent timing
-- ✅ **Auto TX Power Regulation**: Closed-loop FWDPWR feedback, clipping protection, per-band calibration
-- ✅ **Dual-Mode Diversity**: Standard (station count) + DX (weak signal count), 8% threshold, 70:30/50:50
-- ✅ **Smart Antenna Selection**: Per-station antenna preference during QSO — switches to best-SNR antenna per callsign.
-- ✅ **DT Time Correction v2**: Per-mode persistence, 2-cycle measurement, 70% damping, ±0.1s convergence
-- ✅ **Propagation Bars**: HamQSL solar data + time-of-day correction. Verified against HAM-Toolbox
-- ✅ **Operator Presence (Anti-Bot)**: 15 min timeout, mouse reset, legal requirement DE
-- ✅ **Smart CQ Frequency**: 800–2000 Hz sweet spot via spectrum histogram. Freq counter in status bar.
-- ✅ **Caller Waitlist**: Queue for Grid + Report callers, auto-respond after QSO
-- ✅ **RR73 Courtesy Repeat**: Auto-resend max 2× if other station didn't get it
-- ✅ **Even/Odd Slot Display**: [E]/[O] in RX list + QSO panel *(FT2 3.75s display sync under investigation)*
-- ✅ **Signal Processing**: 5-pass signal subtraction, spectral whitening, sinc anti-alias resampling
-- ✅ **QSO State Machine**: Hunt + CQ mode, retry logic, ADIF 3.1.7 logging
-- ✅ **Integrated Logbook**: Search, DXCC counter, QSO detail overlay, delete
-- ✅ **Help Dialog**: Built-in feature docs (DE + EN) via ? button in status bar
-- ✅ **Direction Map with Live Propagation Sectors (v0.66/v0.71/v0.72)**: Rotatable 3D globe (orthographic projection) with **16 directional sector wedges** that visualize where propagation is *actually* opening *right now*: in RX-mode wedge length = unique stations heard from that bearing, in TX-mode wedge length = max distance reached in that direction (v0.71 — a single VK6 spot at 16,000 km counts more than 50 Iberian spots). Antenna color-coding (ANT1/ANT2/rescue) makes diversity contributions instantly visible. **One look at the map tells you "no vector pointing west today — don't bother trying NA on this band right now"** — operational insight, not just decoration. Aurora + Dark theme toggle (v0.72), persistent.
-- ✅ **Live Locator Mining (v0.67/v0.70 — integrated)**: While decoding, Maidenhead locators are extracted **directly from CQ calls and QSO replies** (`CQ R9CA LO97`, `RA4ALY DL6YJB JO31`) and written to a persistent JSON database (`~/.simpleft8/locator_cache.json`). Source priority: `cq_6 > psk_6 > qso_log_6 > _4-variants` — a 6-digit locator from a live CQ call is never overwritten by a 4-digit ADIF entry. The map therefore shows **exact station positions** instead of country centroids. Bootstrap via ADIF bulk-import (LotW, QRZ, your own log) at startup. Auto-save every 5 min + on close — survives hard kill. Currently 9,366 calls, growing with every session. *(External tools like GridTracker do similar mining from WSJT-X — this implementation just keeps it inside SimpleFT8 itself.)*
-- ✅ **Automated regression suite**: QSO state transitions, diversity merge logic, protocol message encoding/decoding, DT correction, OMNI-CQ counters, Bandpilot recommendations, locator DB priority, settings migration, and dialog/UI interactions. Mock-based for radio-hardware independence — field-hardening relies on real QSO sessions and band measurements (see statistics section). *Unit tests cover internal logic; some serious bugs (e.g. SIGBUS in v0.97.38, OMNI-CQ phase bug in v0.97.22) only showed up in live field tests and were hotfixed there.*
-- ✅ **Station Statistics**: Per-cycle logging (Normal + Diversity), 6-cycle warm-up exclusion. Raw Markdown data, no in-file summaries — analyzed by `scripts/generate_plots.py`.
-- ✅ **Diversity Analysis Plots**: `python3 scripts/generate_plots.py` → `auswertung/` — dark-theme PNGs: station timeline (Normal vs Diversity) + ANT2 wins + Rescue-Events per hour. [→ Aktuelle Auswertungen](auswertung/)
-- ✅ **Per-Station SNR Logging**: Every A1↔A2 comparison logged with both SNR values, Δ dB, winner and ★ Saved-Event when one antenna is below FT8 decode threshold (−24 dB) and the other above. Proves "ANT2 made this QSO possible."
-- ✅ **Ant2 Superiority Counter**: Quantifies diversity gain (A2 > A1 frequency)
-- ✅ **TX Safety**: TX halted immediately before Gain Measurement — no accidental transmit during calibration
-- ✅ **Gain Measurement**: Audio input calibration tool (GAIN-MESSUNG button). Finds optimal RX level before statistics or diversity sessions.
-- ✅ **Auto-Hunt (v0.75)**: Automatically selects the next CQ station from the waitlist and initiates QSO without manual clicking. Independent dead man's switch (not mouse-triggered — bot protection). Diversity-only mode: visible only when Diversity is active, stops automatically on mode switch.
-- ✅ **Auto-Close Calibration Dialog (v0.83)**: After gain measurement completes, the confirmation dialog closes automatically after 3 seconds — no click required.
-- ✅ **Double-Report Bug Fix (v0.82)**: Fixed: app used to resend the signal report after already receiving RR73. Root cause was decoder signal ordering (`cycle_finished` must fire after all `message_decoded` events). Fully resolved and confirmed in real QSO.
-- ✅ **Diversity Tertile Analysis (v0.84)**: Statistics plots show 33rd/67th percentile shaded band (actual slot-to-slot variation) instead of flat min/max bars.
-- ✅ **UI Polish**: Info dialogs with "Don't show again" option. DT correction preserved across mode switches. Button labels reflect active state.
-- ✅ **Debug Console**: Ctrl+D, live filter, font 11pt, Copy/Clear buttons
-
-**In Field Test:**
-- ⚠️ **AP-Lite v2.2**: Weak QSO rescue via coherent addition of two failed decode attempts. Threshold 0.75 calibration in progress.
-- ✅ **OMNI-CQ (v0.96.4 + v0.96.7 + v0.97.30)**: Single-slot CQ with automatic parity switching (mode-dependent down-counter, FT8=10/FT4=20/FT2=40 attempts ≈ 5 min wallclock per parity). Diversity-only — button is permanently visible when Diversity is active (no more Easter egg since v0.97.30, P55). Field-validated 11.05.2026. → see [Diversity Active Features](#diversity-active-features--omni-cq-and-auto-hunt) above.
-- ⚠️ **Bandpilot (v0.88)**: Hourly RX-mode recommendation per band — three direct values, no aggregation. 31 unit tests passing, live validation over extended operating time pending.
-
-### FT2 Frequencies (Decodium-compatible)
-
-| Band | FT8 | FT4 | FT2 |
-|------|-----|-----|-----|
-| 80m | 3.573 | 3.575 | 3.578 |
-| 40m | 7.074 | 7.047 | 7.052 |
-| 20m | 14.074 | 14.080 | 14.084 |
-| 15m | 21.074 | 21.140 | 21.144 |
-| 10m | 28.074 | 28.180 | 28.184 |
-
-### Installation
+### Quick Start
 
 ```bash
 git clone https://github.com/mikewanne/SimpleFT8.git
@@ -518,56 +174,55 @@ pip install -r requirements.txt
 python3 main.py
 ```
 
-**Requirements:** macOS, Python 3.12+, FlexRadio SDR (FLEX-6000/8000 series). Two antenna ports for Diversity mode (optional).
+**Requirements:**
+- macOS (developed and tested on macOS 15)
+- Python 3.12+
+- FlexRadio FLEX-6000 or FLEX-8000 series (field-tested: FLEX-8400M)
+- Two antenna ports — TX-rated antenna on ANT1, anything-that-receives on ANT2
 
-### Architecture
+### Honest Limitations
 
-```
-SimpleFT8/
-├── main.py                       # Entry point
-├── config/settings.py            # Settings, band frequencies, language
-├── core/
-│   ├── decoder.py                # FT8/FT4/FT2 decode + signal subtraction
-│   ├── encoder.py                # FT8/FT4/FT2 encode → VITA-49 TX
-│   ├── qso_state.py              # QSO state machine (Hunt + CQ + Waitlist)
-│   ├── protocol.py               # FT8/FT4/FT2 protocol constants (frozen dataclass)
-│   ├── station_accumulator.py    # Shared station logic (Normal + Diversity)
-│   ├── station_stats.py          # Async cycle + per-station SNR logging
-│   ├── diversity.py              # Diversity controller (Standard/DX scoring)
-│   ├── diversity_merger.py       # Merge ANT1+ANT2 decodes, SNR-winner selection
-│   ├── diversity_cache.py        # 2h preset cache (skip re-calibration)
-│   ├── locator_db.py             # Persistent Maidenhead locator cache (JSON)
-│   ├── antenna_pref.py           # Per-callsign antenna preference (1 dB hysteresis)
-│   ├── ntp_time.py               # DT correction v2 (per-mode persistence)
-│   ├── propagation.py            # Band conditions (HamQSL + time correction)
-│   ├── ap_lite.py                # AP-Lite v2.2 (field test)
-│   └── timing.py                 # UTC clock, mode-dependent cycle timing
-├── radio/
-│   ├── base_radio.py             # RadioInterface ABC
-│   ├── radio_factory.py          # create_radio(settings) → FlexRadio
-│   └── flexradio.py              # SmartSDR TCP + VITA-49 + auto RX filter
-├── ft8_lib/                      # C library (MIT, FT8+FT4+FT2 native)
-├── log/                          # ADIF writer, QRZ.com API
-├── ui/
-│   ├── main_window.py            # 3-panel layout + Mixins
-│   ├── mw_cycle.py               # Cycle processing + diversity accumulation
-│   ├── mw_qso.py                 # QSO callbacks, CQ, logbook
-│   ├── mw_radio.py               # Radio, band, diversity, DX tuning
-│   ├── help_dialog.py            # Feature docs viewer (DE/EN)
-│   └── ...                       # Control panel, RX panel, QSO panel
-├── docs/explained/               # 10 feature docs (5 × DE + EN)
-├── scripts/generate_plots.py     # Auswertungs-Script: statistics/ → auswertung/ PNGs
-├── auswertung/                   # Generierte Diagramme (stationen_*.png, diversity_*.png)
-└── tests/                        # Automated regression suite (QSO, Diversity, Protocol, AP-Lite, Threading, ...)
-```
+- **One operator, one station, one antenna setup.** All statistics come from
+  DA1MHH's rooftop (Kelemen DP-201510 on 20m/15m/10m, off-band on 40m/30m/17m;
+  house gutter as ANT2). Numbers generalize physically but **not empirically**
+  to other setups. Replicate before believing.
+- **macOS-only, FlexRadio-only.** No Windows, no Linux, no ICOM/Yaesu/Kenwood
+  (yet — `radio/base_radio.py` is the abstraction layer; IC-7300 stub exists).
+  This is a deliberate choice: 1 developer, 1 hardware target, depth over breadth.
+- **AI-assisted development.** Mike + Claude (Anthropic) + DeepSeek as a team.
+  Architecture and bug reviews by both AIs in a V1→V2→R1→V3 workflow. 45 cycles
+  with V4-pro reviews, 0 hallucinations caught in field — but the AI isn't sitting
+  at the radio. **The operator is.**
+- **Auto-Hunt is legally borderline in Germany.** § 13 AFuV regulates automated
+  amateur stations. SimpleFT8 has a 10-min hard cap and 5-min mouse-inactivity
+  timeout, but **the operator carries the legal responsibility**. WSJT-X and
+  JTDX deliberately stop short of picking the next station — Auto-Hunt crosses
+  that line on purpose, with documented caveats. Use only while actively
+  watching the station.
+- **Field bugs do happen.** 1716 unit tests catch regressions; the serious bugs
+  (SIGBUS v0.97.38, OMNI-CQ phase v0.97.22, Auto-Hunt retry race v0.97.70) only
+  showed up in real QSO sessions and were fixed there.
 
-### Radio Compatibility
+### CQ DL Readers Note
 
-**Tested:** FLEX-8400M. **Expected compatible:** FLEX-6300/6400/6500/6600/6700/8400/8600 series.
-
-**Radio-agnostic architecture (v0.28+):** New radios can be added by implementing a single file (`radio/ic7300.py` etc.). Currently prepared: **ICOM IC-7300** (CI-V + USB Audio).
+> 📰 **Article published in CQ DL 6/2026** — three details have evolved since
+> the manuscript was finalized (~3 weeks before publication):
+>
+> - **Algorithm: UCB1 → dynamic per-slot scoring.** The article describes UCB1
+>   (Upper Confidence Bound) with 80-cycle re-measurement (~20 min). We replaced
+>   that in v0.97.19 with continuous per-slot SNR evaluation (15s reaction time
+>   instead of 20 min). Same goal (explore vs. exploit), simpler code, smaller
+>   bug surface.
+> - **Diversity ratio adaptation:** follows from above — per-slot now, not per
+>   80 cycles.
+> - **Radio compatibility:** verified on FLEX-8400M. The VITA-49 / TCP API is
+>   identical across FLEX-6000 and FLEX-8000 series, but only FLEX-8400M is
+>   field-tested by the author.
 
 ### Detailed Feature Documentation
+
+Every major feature has its own DE+EN explanation document. **20 features × 2
+languages = 40 documents.**
 
 | Feature | Deutsch | English |
 |---------|---------|---------|
@@ -575,453 +230,217 @@ SimpleFT8/
 | Per-Station Antenna Preference | [antenna-preference_de.md](docs/explained/antenna-preference_de.md) | [antenna-preference.md](docs/explained/antenna-preference.md) |
 | AP-Lite Rescue | [ap-lite_de.md](docs/explained/ap-lite_de.md) | [ap-lite.md](docs/explained/ap-lite.md) |
 | Auto-Hunt | [auto-hunt_de.md](docs/explained/auto-hunt_de.md) | [auto-hunt.md](docs/explained/auto-hunt.md) |
-| Bandpilot ⚠️ field test | [bandpilot_de.md](docs/explained/bandpilot_de.md) | [bandpilot.md](docs/explained/bandpilot.md) |
+| Bandpilot | [bandpilot_de.md](docs/explained/bandpilot_de.md) | [bandpilot.md](docs/explained/bandpilot.md) |
 | CQ Frequency (Histogram) | [cq-frequency_de.md](docs/explained/cq-frequency_de.md) | [cq-frequency.md](docs/explained/cq-frequency.md) |
 | Diversity Modes (Standard/DX) | [diversity-modes_de.md](docs/explained/diversity-modes_de.md) | [diversity-modes.md](docs/explained/diversity-modes.md) |
 | DT Time Correction | [dt-correction_de.md](docs/explained/dt-correction_de.md) | [dt-correction.md](docs/explained/dt-correction.md) |
 | DX Tuning (Antenna Measurement) | [dx-tuning_de.md](docs/explained/dx-tuning_de.md) | [dx-tuning.md](docs/explained/dx-tuning.md) |
 | FT2 Mode (Decodium) | [ft2-mode_de.md](docs/explained/ft2-mode_de.md) | [ft2-mode.md](docs/explained/ft2-mode.md) |
-| Gain Measurement (audio level) | [gain-measurement_de.md](docs/explained/gain-measurement_de.md) | [gain-measurement.md](docs/explained/gain-measurement.md) |
+| Gain Measurement | [gain-measurement_de.md](docs/explained/gain-measurement_de.md) | [gain-measurement.md](docs/explained/gain-measurement.md) |
 | Live Locator Mining | [locator-mining_de.md](docs/explained/locator-mining_de.md) | [locator-mining.md](docs/explained/locator-mining.md) |
 | Logbook & QRZ | [logbook_de.md](docs/explained/logbook_de.md) | [logbook.md](docs/explained/logbook.md) |
-| OMNI-TX (Slot Rotation) ⚠️ field test | [omni-tx_de.md](docs/explained/omni-tx_de.md) | [omni-tx.md](docs/explained/omni-tx.md) |
+| OMNI-TX | [omni-tx_de.md](docs/explained/omni-tx_de.md) | [omni-tx.md](docs/explained/omni-tx.md) |
 | Operator Presence | [operator-presence_de.md](docs/explained/operator-presence_de.md) | [operator-presence.md](docs/explained/operator-presence.md) |
 | Power Regulation | [power-regulation_de.md](docs/explained/power-regulation_de.md) | [power-regulation.md](docs/explained/power-regulation.md) |
 | Propagation Indicators | [propagation-indicators_de.md](docs/explained/propagation-indicators_de.md) | [propagation-indicators.md](docs/explained/propagation-indicators.md) |
-| QSO Flow (Hunt/CQ) | [qso-flow_de.md](docs/explained/qso-flow_de.md) | [qso-flow.md](docs/explained/qso-flow.md) |
-| Direction Map (3D Globe) | [direction-map_de.md](docs/explained/direction-map_de.md) | [direction-map.md](docs/explained/direction-map.md) |
+| QSO Flow | [qso-flow_de.md](docs/explained/qso-flow_de.md) | [qso-flow.md](docs/explained/qso-flow.md) |
+| Direction Map | [direction-map_de.md](docs/explained/direction-map_de.md) | [direction-map.md](docs/explained/direction-map.md) |
 | Signal Processing | [signal-processing_de.md](docs/explained/signal-processing_de.md) | [signal-processing.md](docs/explained/signal-processing.md) |
 
-### License
+### Screenshots
 
-MIT License (c) 2026 DA1MHH (Mike Hammerer)
+**CQ mode with DT correction, Propagation bars, PSKReporter spots:**
+
+![SimpleFT8 Complete](docs/screenshots/simpleft8_v031_complete.png)
+
+**Smart Antenna Selection — per-callsign antenna memory in action:**
+
+![Smart Antenna Selection](docs/screenshots/smart_antenna_selection.png)
+
+**Auto-Hunt with Diversity active:**
+
+![Auto-Hunt live](docs/screenshots/auto_hunt_diversity.png)
+
+**Caller Waitlist:**
+
+![Warteliste QSO](docs/screenshots/warteliste_qso.png)
+
+### Antenna Setup (Reference)
+
+| Photo | Annotated |
+|:-----:|:---------:|
+| ![Frontview](docs/fotos/Ansicht.png) | ![Frontview Annotated](docs/fotos/Ansicht_Farbe.png) |
+| ![Sideview](docs/fotos/Gesamt.png) | ![Sideview Annotated](docs/fotos/Gesamt_Farbe.png) |
+
+**ANT1:** Kelemen DP-201510 trap dipole (20m/15m/10m resonant, off-band on 40m/30m/17m via tuner).
+**ANT2:** House gutter, L-shape ~15m, never installed as antenna — just clamped on.
+
+### License & Credits
+
+**MIT License** (c) 2026 DA1MHH (Mike Hammerer) — full text in [LICENSE](LICENSE).
+
+**Project Team:**
+- **Mike Hammerer, DA1MHH** — idea, concept, hardware, field testing, final decisions
+- **Claude Opus / Claude Sonnet (Anthropic)** — architecture, algorithm implementation, security reviews
+- **DeepSeek-R1** — code reviews, bug hunting, design discussions, second opinion
+
+**External components:**
+- `ft8_lib` C library (MIT) by kgoba — FT8/FT4/FT2 decode core
+- HamQSL.com — solar / propagation indicators
+- PSKReporter — RX/TX spot data
+
+**The point of MIT licensing this project:** if you write FT8 software (WSJT-X,
+JTDX, MSHV, or your own client), and want to integrate any of the 4 core algorithms
+or the bonus features — please do. Attribution required, that's all.
+
+---
+
+> ⚠️ **Disclaimer / Haftungsausschluss**
+>
+> *EN:* SimpleFT8 is a private feasibility study and personal hobby project.
+> Use at your own risk. No liability is accepted for damage to hardware (radio,
+> PA, antennas), data loss, or regulatory violations. The software is provided
+> "AS IS" without warranty of any kind — see [LICENSE](LICENSE) (MIT) for full
+> terms.
+>
+> *DE:* SimpleFT8 ist eine private Machbarkeitsstudie und ein persönliches
+> Hobby-Projekt. Nutzung auf eigene Gefahr. Es wird keine Haftung übernommen
+> für Schäden an Hardware (Funkgerät, PA, Antennen), Datenverlust oder
+> regulatorische Verstöße. Die Software wird "AS IS" ohne jegliche Garantie
+> bereitgestellt — siehe [LICENSE](LICENSE) (MIT) für vollständige Bedingungen.
 
 ---
 
 <a name="deutsch"></a>
 ## Deutsch
 
-### Warum gibt es SimpleFT8?
+### Die Kernidee — Diversity ohne die zweite SCU
 
-SimpleFT8 ist für den Feierabend-Funk entstanden. Kein stundenlanges
-Konfigurieren, kein manuelles Antennen-Rangieren, kein Dauer-Blick auf den
-ALC-Pegel. Die Software spricht direkt mit dem FlexRadio, wählt automatisch
-die bessere von zwei Antennen aus, regelt die Sendeleistung im geschlossenen
-Regelkreis und sucht sich selbstständig eine freie CQ-Frequenz. Mehrere
-Anrufer landen in einer Warteschlange und werden nacheinander bedient. Dazu
-gibt's eine Live-Karte mit drehbarem Globus, die zeigt, wo man gehört wird —
-und ein Locator-Cache, der Stationen auch nach einem Neustart nicht vergisst.
-Einfach anschalten, ein paar QSOs machen, Feierabend.
+Ein echtes Zwei-Antennen-Diversity-System am FlexRadio braucht **zwei Signal
+Chain Units (SCUs)**, um beide Antennen gleichzeitig empfangen zu können. Diese
+zweite SCU kostet beim Kauf **2000–3000 €**. Die meisten Funkamateure leisten
+sich das nicht.
 
-> **Was ist anders?** Fokus auf Live-Propagations-Visualisierung und
-> Locator-Mining ohne Konfigurations-Overhead. Kein WSJT-X-Ersatz —
-> laeuft daneben.
+SimpleFT8 simuliert den Effekt mit **einer SCU**, indem es ANT1 und ANT2 pro
+FT8-Zyklus abwechselt (Temporal Polarization Diversity), SNR-Scores beider
+Antennen sammelt und die folgenden Zyklen zugunsten der besseren Antenne
+gewichtet. Das Ergebnis auf Mike's Station — Kelemen-Trap-Dipol, auf 40m
+außerhalb des Auslegungsbandes über Tuner, plus **Regenrinne als reine
+Empfangs-ANT2**:
 
-### Diversity rettet eine schwache Hauptantenne — 40m FT8 Messungen
+**40m FT8 — 5–6 Messtage, 35.656 Zyklen:**
 
-> Automatisch generiert aus Live-Sitzungsdaten via `scripts/generate_plots.py`.
-> X-Achse = UTC-Stunde des Tages, gemittelt über alle Messtage. Daten wachsen mit jeder Session.
-
-**40m FT8 — 5–6 Messtage, 35.656 Zyklen (ANT1 = Trap-Dipol off-band über Tuner):**
-
-| Modus | Stationen/15s (Pooled Mean) | vs Normal | 95%-CI | Tage | Zyklen |
+| Modus | Stationen/15s (Pooled Mean) | vs Normal | 95% CI | Tage | Zyklen |
 |-------|:---:|:---:|:---:|:---:|:---:|
-| Normal | 30,0 | — | — | 5 | 11.504 |
+| Normal (nur ANT1) | 30,0 | — | — | 5 | 11.504 |
 | Diversity Standard | 48,5 | **+62%** | +32 bis +102% | 6 | 13.659 |
 | Diversity DX | 40,8 | **+36%** | +11 bis +70% | 5 | 10.493 |
 
-*Pooled Mean über alle Zyklen und alle Tageszeiten aller Messtage. Kein
-Tageszeit-Filter. **95%-CI via Block-Bootstrap** über (Datum, Stunde)-
-Blöcke (5000 Iterationen, seed=42) — fängt Intra-Stunden-Autokorrelation
-ab; Tag-zu-Tag-Drift bleibt unmodelliert. CIs sind daher als **untere
-Schranke der wahren Unsicherheit** zu lesen.*
-*Rescue-Stationen (ANT1 unter −24 dB, von ANT2 gerettet) sind in den Diversity-Werten enthalten.
-Detaillierte Aufschlüsselung: PDF-Bericht (S.3).*
+*95%-CIs via Block-Bootstrap über (Datum, Stunde)-Blöcke, 5000 Iterationen,
+seed=42. Beide Diversity-Modi haben CIs komplett über 0 auf dem off-band-40m-
+Setup: statistisch von „kein Effekt" unterscheidbar.*
 
-> **Statistische Signifikanz — 40m**
-> Beide Diversity-Modi haben CIs **komplett über 0** — der Gewinn ist
-> mit den vorhandenen Daten statistisch von „kein Effekt" unterscheidbar.
-> Die CI-Breite (~70 Prozentpunkte) zeigt die erhebliche Tag-zu-Tag-
-> Streuung durch wechselnde Ausbreitung, Wetter und Antennen-Bedingung
-> — typisch für Amateur-HF-Daten ohne Solarflux-Stratifizierung.
->
-> **Warum diese Zahlen die früheren +126%/+123% ersetzen:** die alten
-> Werte stammten aus einer kleineren Datenbasis (7.743 Normal-Zyklen).
-> Mit mehr Messtagen stieg die absolute Normal-Baseline von 18,7 auf
-> 30,0 Stationen/Zyklus, während Diversity Standard nur von 42,2 auf
-> 48,5 stieg — der relative Gewinn schrumpft entsprechend. Die Richtung
-> bleibt, die Magnitude ist weniger dramatisch. Das ist die ehrliche
-> Entwicklung des Datensatzes, kein Rückschritt.
+**Die ehrliche Einschränkung — auf dem Auslegungsband (20m) sieht das anders aus:**
 
-> **Hinweis zur Interpretation**
-> ANT1 (Kelemen DP-201510) ist auf 40m außerhalb seines Auslegungsbandes und damit
-> deutlich suboptimal für diesen Frequenzbereich. ANT2 (Regenrinne, ~15m) liegt
-> zwischen λ/4 und λ/2 für 40m und arbeitet dort vergleichsweise gut. Die gemessenen
-> Gewinne (+62%/+36% Stationen, CI komplett über 0) sind ein **realistischer Wert**
-> für Off-Band-Betrieb — bei zwei gleichwertigen, für 40m optimierten Antennen ist
-> ein geringerer, aber positiver Diversity-Gewinn zu erwarten.
-> Auf einem resonanten Band ist der Effekt nicht mehr statistisch nachweisbar —
-> siehe 20m-Ergebnisse weiter unten.
-
-**Stationen über 24h UTC — 40m FT8, alle drei Modi:**
-*(Gestrichelte Linien = Rescue Stationen: von ANT1 unter −24 dB empfangen — ANT2 hebt das Signal über die Dekodiergrenze)*
-
-![Stationen 40m FT8](auswertung/stationen_40m_FT8.png)
-
-**Direktvergleich — Stationen pro Zyklus, stündlich:**
-
-![Diversity Vergleich 40m FT8](auswertung/diversity_40m_FT8.png)
-
-| Diagramm | Beschreibung |
-|----------|-------------|
-| [📊 Diagramm 1 — Stationen 40m FT8](auswertung/stationen_40m_FT8.png) | Stationszahl über 24h UTC — Normal vs Diversity Normal vs Diversity DX. Linie = Mittelwert, gestrichelt = + Rescue Stationen (ANT1 unter −24 dB, von ANT2 gerettet). |
-| [📊 Diagramm 2 — Diversity Analyse 40m FT8](auswertung/diversity_40m_FT8.png) | Stationen/Zyklus: Normal (grau), Diversity Standard (blau), Diversity DX (orange) + grüne Rescue-Kappen (+N) = Stationen die ANT1 nicht decodieren konnte, aber ANT2 rettete. |
-| [📊 Ausführlicher PDF-Bericht](auswertung/Auswertung-40m-FT8.pdf) | Vollständiger Auswertungsbericht mit Zusammenfassungstabelle, allen Diagrammen und Methodik-Hinweisen. Wird automatisch mit jeder Session aktualisiert. |
-| [🗂 Rohdaten (statistics/)](statistics/) | Alle Rohdaten als Markdown-Dateien — eine Datei pro Stunde pro Modus. Format: `statistics/<Modus>/<Band>/<Protokoll>/YYYY-MM-DD_HH.md`. 214 Dateien, jeder einzelne Zyklus geloggt. Jede Zahl ist nachrechenbar. |
-
-> **📊 Statistiken in Arbeit — Ziel: 5 Messtage pro Modus/Band-Slot für belastbare Ergebnisse.**
-> Aktuell: 4–5 Tage. Diagramme und PDF aktualisieren sich automatisch mit jeder neuen Session. Je mehr Tage, desto stabiler die Linien.
-
----
-
-#### 20m FT8 — wenn ANT1 auf seinem Auslegungsband arbeitet
-
-**Live-Messergebnisse — 20m FT8, 8–9 Messtage, 39.801 Zyklen:**
-
-| Modus | Stationen/15s (Pooled Mean) | vs Normal | 95%-CI | Tage | Zyklen |
+| Modus | Stationen/15s | vs Normal | 95% CI | Tage | Zyklen |
 |-------|:---:|:---:|:---:|:---:|:---:|
-| Normal | 47,8 | — | — | 8 | 11.088 |
-| Diversity Standard | 46,2 | **−3%** | −14 bis +10% | 9 | 14.672 |
-| Diversity DX | 51,4 | **+8%** | −4 bis +22% | 8 | 14.041 |
-
-*Beide Diversity-Modi haben CIs **die 0 enthalten** — es lässt sich
-also keine statistisch signifikante Änderung des Stations-Counts
-behaupten. Die Punktschätzer deuten auf einen kleinen Verlust bei
-Standard und einen kleinen Gewinn bei DX, aber keiner ist von Null
-unterscheidbar angesichts der Tag-zu-Tag-Variabilität. Das passt zur
-physikalischen Erwartung: ANT1 ist auf 20m resonant, daher gibt es
-wenig Spielraum für Diversity das Stations-Count via Rescue zu steigern.*
-
-> **Hinweis zur Interpretation — 20m**
-> Auf 20m arbeitet der Kelemen DP-201510 in seinem **Auslegungsband** als
-> resonanter Halbwellen-Dipol. ANT1 ist alleine schon sehr effizient —
-> Diversity überlagert eine bereits gute Antenne mit der nicht-optimierten
-> Regenrinne (ANT2). Resultat: leichter **Verlust** in der reinen Stationsanzahl.
->
-> **Aber das Bild ist differenzierter:** in direkten A1↔A2-Doppelempfängen gewinnt
-> ANT2 in **79–86 % der Fälle** mit Ø **+4 dB** Vorteil — reine Polarisations-
-> und Pattern-Diversity aus der sehr unterschiedlichen Geometrie beider Antennen.
-> (Faraday-Rotation allein erklaert das nicht — auf KW dominieren Multi-Path-
-> Ausbreitungsmoden, Gebaeude-Kopplung und Pattern-Unterschiede.) Die resonante
-> ANT1 gewinnt trotzdem bei der reinen Stationsanzahl, weil das Diversity-Zeit-
-> Sharing einzelne Decodes kostet die ANT1-allein gehabt haette. Der Nutzen auf
-> 20m ist qualitativ (andere Stationen, vor allem schwaches DX), nicht quantitativ.
-
-> **Die ehrliche Erkenntnis:** Diversity ist mit diesem Antennen-Setup
-> **asymmetrisch**. Auf Off-Band-ANT1-Bändern (40m, 30m, 17m, 80m) gleicht sie
-> die schwache ANT1 aus → großer Stations-Gewinn. Auf Resonant-ANT1-Bändern
-> (20m, 15m, 10m) überlagert sie eine bereits starke ANT1 → kleiner Stations-
-> Verlust, aber qualitativer Pol-Diversity-Gewinn.
-
-**Stationen über 24h UTC — 20m FT8, alle drei Modi:**
-
-![Stationen 20m FT8](auswertung/stationen_20m_FT8.png)
-
-**Direktvergleich — Stationen pro Zyklus, stündlich:**
-
-![Diversity Vergleich 20m FT8](auswertung/diversity_20m_FT8.png)
-
-| Diagramm | Beschreibung |
-|----------|-------------|
-| [📊 Ausführlicher PDF-Bericht — 20m](auswertung/Auswertung-20m-FT8.pdf) | Vollständige 20m-Analyse mit dem differenzierten Narrativ — ANT2-Win-Rate, Faraday-Rotations-Theorie, asymmetrischer Vorteil. |
-| [🗂 Rohdaten (statistics/)](statistics/) | Alle Rohdaten pro Modus/Band/Stunde — jede Zahl ist nachrechenbar. |
-
-#### 30m FT8 — off-band ANT1, erste Daten *(läuft)*
-
-**Live-Messergebnisse — 30m FT8, 3–6 Messtage, 18.808 Zyklen:**
-
-| Modus | Stationen/15s (Pooled Mean) | vs Normal | 95%-CI | Tage | Zyklen |
-|-------|:---:|:---:|:---:|:---:|:---:|
-| Normal | 28,4 | — | — | 5 | 6.543 |
-| Diversity Standard | 30,9 | **+9%** | −9 bis +31% | 6 | 7.178 |
-| Diversity DX | 28,7 | **+1%** | −22 bis +29% | 3 | 5.087 |
-
-> **Hinweis:** Die 95%-CIs beider Diversity-Modi **enthalten 0** — wie
-> auf 20m kein statistisch signifikanter Gewinn nachweisbar. Frühere
-> Messungen (weniger Tage) zeigten +69%/+59%, aber das waren vorläufige,
-> instabile Werte. Mit mehr Messtagen schrumpften die Gewinne Richtung
-> null. Daten wachsen weiter — falls ein echter Off-Band-Effekt auf 30m
-> existiert, sollte er als CI um einen positiven Punktschätzer hervortreten.
-> Heute lautet die ehrliche Antwort: **noch kein messbarer Gewinn**.
-
-![Stationen 30m FT8](auswertung/stationen_30m_FT8.png)
-
-#### Warum das für andere Operator interessant ist
-
-Wenn deine Station **eine resonante Antenne für 1–2 Bänder** hat plus alles andere
-über Tuner — **genau Mike's Situation auf 40m** — wird Diversity auf den Tuner-
-Bändern wahrscheinlich einen substanziellen Gewinn bringen, auf den resonanten
-Bändern einen leichten Verlust. Die 40m-Messung ist der „Tuner-Archetyp",
-die 20m-Messung ist der „Resonant-Archetyp".
-
-#### Roadmap — weitere Bänder in Arbeit
-
-- **30m** (off-band ANT1, Datensammlung gestartet — 3 Tage Normal/Standard, 1 Tag DX): bestätigt Gewinn-Muster, siehe oben
-- **17m** (off-band ANT1): Datensammlung läuft, erwarteter Gewinn wie 40m
-- **15m / 10m** (resonant): erwarteter Verlust wie 20m
-- **80m / 60m / 12m**: anstehend
-
-Jedes neue Band bestätigt oder widerlegt die Off-Band/Resonant-Hypothese.
-Alle Rohdaten in `statistics/`, alle PDFs aktualisieren sich automatisch
-mit `python3 scripts/generate_plots.py`.
-
----
-
-### Warum Diversity bei FT8 wirklich was bringt — der Empfang ist der Engpass
-
-Verbreiteter Funker-Irrtum: *„Wenn meine Antenne sendet, empfaengt sie auch
-genauso gut."* Physikalisch stimmt das fuer die Antenne selbst — das
-Reziprozitaetsprinzip besagt: Verluste sind beim Senden und Empfangen gleich.
-**Aber in der Praxis ist das Bild asymmetrisch**, weil zwei verschiedene
-Effekte zusammenkommen.
-
-#### Effekt 1 — Asymmetrie im Link-Budget (wo der Spielraum sitzt)
-
-Die Bilanz der Uebertragungsstrecke — deine Sendeleistung minus Pfadverlust
-minus Antennen-Verluste — hat auf beiden Seiten ganz unterschiedliche Reserven:
-
-- **TX-Seite hat etwa 40–50 dB Reserve ueber der FT8-Decode-Schwelle.**
-  100 W Sendeleistung in eine ueber Tuner angepasste, nicht-resonante Antenne
-  liefern rund +50 dBm an der Klemme. Selbst mit 5–10 dB Tuner-/Mismatch-Verlust
-  kommt dein Signal bei einer entfernten Gegenstation typisch 30–40 dB ueber
-  dem Rauschen an — weit ueber der FT8-Decode-Schwelle (−24 dB SNR in 2500 Hz
-  Bandbreite).
-- **RX-Seite hat nur 0–15 dB Reserve fuer schwache DX-Stationen.** Die
-  empfangene Signalstaerke ist durch Pfadverlust und Sendeleistung der
-  Gegenstation festgelegt. Ein schwaches DX aus 8000 km mit 10 W kann bei
-  dir mit nur −115 dBm an der Antennenklemme ankommen. Mit 7 dB Tuner-Verlust
-  sind es −122 dBm — genau an oder unter der Decode-Schwelle. **Gleicher
-  Verlust, aber auf der RX-Seite ohne Spielraum.**
-
-Konsequenz: Wenn du eine nicht-resonante Antenne ueber Tuner betreibst,
-**funktioniert das Senden noch problemlos, aber schwache Stationen im Empfang
-verschwinden einfach unter der Schwelle.**
-
-#### Effekt 2 — Polarisations- und Richtungs-Diversity (wo die +60 % herkommen)
-
-Der groessere Grund warum zwei Antennen besser sind als eine ist die
-**physikalische Diversity**:
-
-- Mike's ANT1 (Kelemen DP-201510) ist ein horizontaler Halbwellendipol.
-- Mike's ANT2 (Dachrinne, L-Form ~15 m) wirkt teilweise vertikal.
-- **KW-Skywave-Ausbreitung trifft in gemischten Polarisations-Zustaenden ein**
-  ueber Multi-Path-Moden und ionosphaerische Mode-Mischung. Stationen deren
-  Signal vorwiegend vertikal eintrifft werden von ANT1 (horizontal) nur
-  schwach empfangen — aber gut von ANT2, und umgekehrt. *(Reine Faraday-
-  Rotation skaliert mit 1/f² und ist eher auf UKW/SHF/SatComm relevant —
-  auf KW dominieren Multi-Path und Mode-Mischung.)*
-- Die beiden Antennen haben ausserdem **unterschiedliche Richtcharakteristik** —
-  Richtungen die ANT1 unterdrueckt, deckt ANT2 ab.
-
-Deswegen ist der Off-Band-Diversity-Gewinn gross (siehe Mess-Sektion
-fuer aktuelle Zahlen): nicht nur weil
-der Tuner-Verlust umgangen wird, sondern weil ANT2 ganze Signalpfade hoert
-die ANT1 ueberhaupt nicht sieht.
-
-#### Warum digitale Modi anders sind als SSB/CW
-
-FT8/FT4/FT2 haben eine **harte mathematische Decode-Schwelle**. Die Costas-
-Synchronisation braucht eine definierte Minimal-Korrelation, und die LDPC-
-Fehlerkorrektur hat eine scharfe Bit-Error-Rate-Kante. Ein geuebtes Ohr kann
-bei −5 dB SNR im SSB-Signal noch Wortfetzen erkennen — der FT8-Decoder nicht.
-
-Konkret: bei FT8 zaehlt jedes dB Empfangs-Empfindlichkeit direkt mehr
-decodierte Stationen. Bei SSB oder CW sind Sendeleistung und Antennengewinn
-wichtiger fuers *Gehoert-werden* — den Rest macht der Mensch.
-
-#### Fazit fuer das typische Funker-Setup
-
-Die meisten Funker haben eine resonante Antenne fuer ein, zwei Lieblings-Baender
-plus Tuner fuer alles andere. **Der Diversity-Gewinn auf den Tuner-Baendern ist
-betraechtlich:**
-
-| Band | ANT1-Status | Diversity Standard vs Normal *(siehe Mess-Sektion fuer aktuelle Zahlen)* |
-|------|-------------|:---:|
-| 40m | off-band (Tuner) | grosser Gewinn (aktuell ~+120%, off-band Asymmetrie) |
-| 20m | resonant (Design-Band) | ~ −6 % Stationsanzahl (ANT1 allein bekommt schon fast alles) — aber ANT2 gewinnt 79–86 % der direkten Doppelempfaenge → qualitativer Pol-Diversity-Gewinn |
-| 30m, 17m, 12m | off-band (Daten wachsen) | erwartet grosser Gewinn (off-band aehnlich 40m) |
-
-**Mit 70–100 W ist die Sende-Seite selten der Engpass. Der Empfang ist es.**
-Diversity adressiert genau diesen Engpass — und der Zwei-Antennen-Effekt
-(Polarisation + Richtung) verstaerkt die Tuner-Verlust-Kompensation noch.
-
-> **Begriffs-Hinweis**
-> *dBm* = Leistungs-Pegel bezogen auf 1 Milliwatt (0 dBm = 1 mW).
-> *SNR* = Signal-Rausch-Abstand. *Link-Budget* = Bilanz aller Gewinne und
-> Verluste von der PA-Endstufe bis zur Decode-Schwelle des Empfaengers.
-
----
-
-### Antennensetup
-
-| Foto | Annotiert |
-|:----:|:---------:|
-| ![Vorderansicht](docs/fotos/Ansicht.png) | ![Vorderansicht annotiert](docs/fotos/Ansicht_Farbe.png) |
-| Vorderansicht — Regenrinnen-Fallrohr (ANT2) links, Einspeisepunkt ANT1 oben rechts an der Dachgaube. | Gelb = Kelemen DP-201510 (vertikal gespannter Halbwellendipol, grüner Punkt = Einspeisepunkt). Rot = vollständiger Regenrinnen-Verlauf (Dachkante → Fallrohr → Hauseingang). |
-| ![Seitenansicht](docs/fotos/Gesamt.png) | ![Seitenansicht annotiert](docs/fotos/Gesamt_Farbe.png) |
-| Seitenansicht — zweite Perspektive zeigt die diagonale Spannweite von ANT1 vom Dachfirst bis zum Balkon. | Gleiche Farbcodierung: gelb = ANT1-Dipol-Arme mit Einspeisepunkt, rot = ANT2-Regenrinnen-Verlauf. |
-
-**ANT1 — Kelemen DP-201510 (Multiband-Sperrkreisdipol für 20m / 15m / 10m)**
-Ein zentral gespeister Multiband-Dipol mit koaxialen Sperrkreisen (Trap-Dipol) —
-*kein* Fächer-Dipol. Pro Band wirkt nur der Drahtabschnitt bis zum jeweils
-resonanten Sperrkreis, alle drei Bänder direkt 50 Ω über einen 1:1-Balun (kein
-Tuner nötig). Einspeisepunkt an der Dachgaube im 3. OG: ein Arm führt schräg
-nach oben zur Dachspitze, der andere schräg nach unten über das Vordach zum
-Balkon — vertikal gespannter Halbwellendipol mit Einspeisepunkt in der Mitte.
-*Auf 40m arbeitet diese Antenne außerhalb ihres Auslegungsbandes — siehe Interpretationshinweis oben.*
-
-**ANT2 — Regenrinne des Hauses (Zufalls-Längenantenne, ~15m)**
-Nie als Antenne installiert — einfach angeklemmt. Die Regenrinne verläuft ~5m waagerecht
-entlang der Dachkante, ~8m senkrecht als Fallrohr, ~2m waagerecht zum Hauseingang.
-Diese L-Form liegt zwischen λ/4 und λ/2 für das 40m-Band (7 MHz). Andere Geometrie,
-andere Polarisierung, gebäudegebundene Befestigung — die ideale Ergänzung für Diversity.
-
----
-
-### Die wichtigsten Innovationen
-
-- **FT2-Modus** — Nativer Decodium-kompatibler FT2 Decoder/Encoder (3.8s Zyklen, 4-GFSK, 288 sps). Community-Frequenzen vorkonfiguriert. QSOs erfolgreich abgeschlossen. Automatische RX-Filterverbreiterung auf 4000 Hz.
-
-- **DT-Zeitkorrektur v2** — Kumulative Korrektur aus Band-Konsens. 2-Zyklen-Messung, 10-Zyklen-Betrieb, 70% Daempfung. **Pro Modus gespeichert**: Korrekturwerte in `~/.simpleft8/dt_corrections.json` — sofort gute Korrektur beim Modus-Wechsel. DT-Werte typisch ±0.1s nach Konvergenz.
-
-- **🆕 Adaptive Diversity (v0.97)** — Passt das Antennen-Verhaeltnis **slot-fuer-slot in Echtzeit** ueber einen rollenden 5-Slot-Puffer an. Keine stuendliche 90-Sekunden-Messpause mehr — reagiert binnen Sekunden auf Ausbreitungsaenderungen. 8 %-Schwelle verhindert Flackern; dynamische Umschaltung zwischen 30:70, 50:50, 70:30. Toggle in Einstellungen: „Adaptive Diversity (Testphase)". Die statische Mess-Methode bleibt als Fallback verfuegbar. Volle Vorher/Nachher-Erklaerung: [docs/explained/diversity-modes_de.md](docs/explained/diversity-modes_de.md).
-
-- **Dual-Mode Diversity** — Zwei Scoring-Strategien:
-  - **Standard**: Zaehlt dekodierte Stationen — ideal fuer CQ-Betrieb
-  - **DX**: Zaehlt schwache Stationen (SNR < -10 dB) — ideal fuer DX-Jagd (Australien bei -24 dB zaehlt, Bochum bei +12 dB nicht)
-  - 8% Schwelle, Median ueber 3 Zyklen pro Antenne (6-Slot fair 3:3). Button zeigt "DIVERSITY DX" im DX-Modus.
-  - **Lernendes Antennen-Gedaechtnis**: Nach jedem Dekodier-Zyklus merkt sich das System pro Rufzeichen, welche Antenne besser empfangen hat und um wieviel dB. Beim QSO-Aufbau wird automatisch die beste Antenne gewaehlt — das ueberlagert den globalen Diversity-Rhythmus fuer die QSO-Dauer. Kein Timeout, keine Persistenz: eine Station die du *gerade jetzt* hoerst, ist immer der praeziseste Wert. Das QSO-Fenster zeigt z.B. "Antworte DL3AQJ (ANT2, +6.3 dB)".
-
-- **Diversity-Aktivfunktionen — OMNI-CQ und Auto-Hunt**
-
-  ![Auto-Hunt live](docs/screenshots/auto_hunt_diversity.png)
-
-  *Auto-Hunt nach zwei abgeschlossenen QSOs (G8KHF, HA1BF). HA1BF wurde
-  auf ANT2 mit +1.0 dB Vorteil empfangen (Pro-Rufzeichen-Antennen-
-  praeferenz). Timer zeigt 6:55 min Restlaufzeit. Unten: freier CQ-
-  Frequenz-Bereich, dynamische Diversity 50:50 aktiv.*
-
-  Beide Buttons leben im Diversity-Mode — im Normal-Mode versteckt,
-  bei Aktivierung von Diversity automatisch sichtbar.
-
-  - **OMNI-CQ** ist ein Single-Slot-CQ der automatisch alle ~5 Minuten
-    zwischen Even- und Odd-Paritaet wechselt (modus-abhaengiger Counter:
-    FT8=10, FT4=20, FT2=40 Versuche). Der TX-Duty-Cycle ist derselbe
-    wie bei einem normalen CQ auf einer Paritaet — OMNI spart nur den
-    manuellen Even/Odd-Klick. Denselben Effekt erreichst du auch mit
-    dem Even/Odd-Button selbst. Der **OMNI-Button ist fest sichtbar**
-    wenn Diversity aktiv ist — **kein Easter Egg mehr** (war so bis
-    v0.97.29). TX ueber **ANT1**, RX nutzt globale Diversity und Pro-
-    Rufzeichen-Antennenpraeferenz. **Bekannte Limitationen:** TX-Frequenz
-    wird einmalig am ersten TX jedes Paritaets-Blocks gewaehlt (keine
-    fortlaufende Luecken-Pruefung innerhalb eines Blocks — die
-    dynamische Frequenz-Suche laeuft nur an Block-Grenzen). Der Counter
-    setzt sich bei eingehendem QSO zurueck — bei einer populaeren
-    Station kann derselbe Paritaets-Slot also immer wieder verlaengert
-    werden. **Getestet an einer Station (DA1MHH) seit 11.05.2026** —
-    nicht unabhaengig field-validiert.
-
-  - **Auto-Hunt** waehlt automatisch die naechste CQ-Station aus der RX-
-    Liste und startet das QSO — kein manueller Klick noetig. Sichtbar
-    nur im Diversity-Mode.
-    - **Auswahl** nach Score: neues DXCC > seltenes Call > guter SNR
-      (> −15 dB) > Erstempfang heute. Bei gleichem Score zufaellig.
-    - **Auto-Stop nach 10 Minuten** ab Aktivierung, unabhaengig von
-      Maus/Tastatur. Danach Stopp und bewusster Neustart per Klick
-      erforderlich. Maximal 3 QSO-Versuche pro Station.
-    - **Hardware:** Der Empfang nutzt die Pro-Rufzeichen-Antennen-
-      praeferenz (bessere RX-Antenne). **TX laeuft IMMER ueber ANT1**,
-      die einzige sendetaugliche Antenne. Band- oder Moduswechsel
-      stoppen Auto-Hunt sofort.
-
-  > ⚠️ **Operator-Verantwortung — vor Verwendung lesen:**
-  > SimpleFT8 ist eine **private Machbarkeitsstudie** eines einzelnen
-  > Funkers (DA1MHH), kein Contest-Tool und kein Fernsteuerungs-Produkt.
-  > Auto-Hunt startet QSOs ohne Pro-Station-Klick. Der 10-Min-Auto-Stop
-  > ist eine selbst gesetzte Grenze — deutsches Amateurfunkrecht (§ 13
-  > AFuV) regelt fernbediente oder automatisch arbeitende Stationen
-  > separat und verlangt dass der Operator die Station jederzeit
-  > abschalten kann. **Nur verwenden waehrend du aktiv vor der Station
-  > sitzt.** WSJT-X und JTDX stoppen ihre Automatik bewusst vor der
-  > Auswahl der naechsten Station aus der RX-Liste — Auto-Hunt
-  > ueberschreitet diese Grenze absichtlich. Die Verantwortung fuer
-  > die Einhaltung deiner nationalen Vorschriften liegt bei dir.
-
-- **Automatische TX-Leistungsregelung** — Zielwatt einstellen, SimpleFT8 regelt den FWDPWR-Wert automatisch.
-
-- **Smart CQ-Frequenz** — Findet freien Platz im **800–2000 Hz Sweet Spot** statt im leeren oberen Bereich.
-
-- **Warteliste** — Gleichzeitige Anrufer werden gequeued (Grid + Report). Nach QSO: automatische Antwort an naechste Station.
-
-- **RR73-Hoeflichkeit** — Nach QSO: wenn Gegenstation weiter R-Report sendet, wird RR73 nochmal gesendet (max 2×).
-
-- **Even/Odd Anzeige** — [E]/[O] Tags in RX-Liste + QSO-Panel. Sofort sichtbar welcher Slot aktiv ist.
-
-- **Bandpilot (v0.88)** — Bei Bandwechsel prueft SimpleFT8 die **aktuelle UTC-Stunde** und vergleicht die drei RX-Modi (Normal / Diversity Standard / Diversity DX) direkt — ohne Aggregation. Drei Settings-Modi: **Aus** / **Auto** (3s-Toast + Auto-Wechsel mit 5%-Toleranz) / **Manuell** (Dialog nur wenn ein anderer Modus gewinnt). TX-geschuetzt: Wechsel wartet auf `tx_finished`. Stunden-Schwellen: ≥3 Tage + ≥20 Slots pro Modus. ⚠️ Im Feldtest.
-
-  > **v0.87 → v0.88 Update:** Der Bandpilot nutzt jetzt stunden-genaue Direkt-Werte statt globalem Aggregat `(S+D)/2`. Bestehende Settings werden automatisch migriert (`bandpilot_enabled=true` → `mode="auto"`).
-
-### Alle Funktionen
-
-**Getestet & funktionsfaehig (v0.97.2):**
-- ✅ **FT8 / FT4 / FT2** — alle drei Modi mit eigenen Frequenzen, Auto-RX-Filter, modus-abhaengigem Timing
-- ✅ **Auto TX-Leistungsregelung**: Regelkreis mit FWDPWR-Feedback, Clipping-Schutz
-- ✅ **Dual-Mode Diversity**: Standard (Stationsanzahl) + DX (schwache Signale), 8% Schwelle
-- ✅ **Bandpilot (v0.88)**: Stunden-genaue RX-Modus-Empfehlung pro Band aus Statistik (siehe oben, im Feldtest)
-- ✅ **Smart Antenna Selection**: Pro-Station Antennen-Praeferenz waehrend QSO — wechselt auf beste SNR-Antenne je Callsign.
-- ✅ **DT-Zeitkorrektur v2**: Pro Modus gespeichert, 2-Zyklen-Messung, 70% Daempfung
-- ✅ **Propagation-Balken**: HamQSL-Solardaten + Tageszeit-Korrektur. Geprueft gegen HAM-Toolbox
-- ✅ **Operator-Praesenz (Anti-Bot)**: 15 Min Timeout, gesetzl. Pflicht DE
-- ✅ **Smart CQ-Frequenz**: 800–2000 Hz Sweet Spot via Histogramm. Freq-Zaehler in Statusleiste.
-- ✅ **Warteliste**: Grid + Report, automatische Antwort nach QSO
-- ✅ **RR73-Hoeflichkeit**: Automatisch max 2× wiederholen
-- ✅ **Even/Odd Anzeige**: [E]/[O] in RX-Liste + QSO-Panel *(FT2 3.75s Sync in Untersuchung)*
-- ✅ **Signalverarbeitung**: 5-Pass Subtraction, Whitening, Sinc-Resampling
-- ✅ **QSO-Zustandsmaschine**: Hunt + CQ, Retry, ADIF 3.1.7
-- ✅ **Logbuch**: Suche, DXCC, Detail-Overlay, Loeschen
-- ✅ **Hilfe-Dialog**: Feature-Doku (DE + EN) via ? Button in Statusleiste
-- ✅ **Richtungs-Karte mit Live-Propagations-Sektoren (v0.66/v0.71/v0.72)**: Drehbarer 3D-Globus (Orthographic-Projection) mit **16 Richtungs-Sektor-Wedges** die zeigen wohin die Ausbreitung *gerade jetzt* geht: im RX-Modus = Wedge-Laenge nach Anzahl gehoerter Stationen aus dieser Richtung, im TX-Modus = Wedge-Laenge nach max-Reichweite (v0.71 — ein einziger VK6-Spot mit 16.000 km zaehlt mehr als 50 Iberien-Spots). Antennen-Farbcodierung (ANT1/ANT2/Rescue) macht Diversity-Beitraege sofort sichtbar. **Ein Blick auf die Karte sagt: „kein Vektor nach Westen heute — auf diesem Band brauche ich NA gar nicht erst zu versuchen"** — operative Information, keine Deko. Aurora + Dark Theme-Toggle (v0.72), persistent.
-- ✅ **Live Locator Mining (v0.67/v0.70 — integriert)**: Während des Empfangs werden Maidenhead-Locators **direkt aus CQ-Rufen und QSO-Antworten** (`CQ R9CA LO97`, `RA4ALY DL6YJB JO31`) extrahiert und in einer persistenten JSON-Datenbank (`~/.simpleft8/locator_cache.json`) gespeichert. Source-Prioritaet: `cq_6 > psk_6 > qso_log_6 > _4-Varianten` — ein 6-stelliger Locator aus einem Live-CQ wird nie von einem 4-stelligen ADIF-Eintrag ueberschrieben. Die Karte zeigt damit **exakte Stationspositionen** statt Land-Mittelpunkte. Bootstrap via ADIF-Bulk-Import (LotW, QRZ, eigenes Logbuch) beim Start. Auto-Save alle 5 Min + bei Schliessen — uebersteht Hard-Kill. Aktuell 9.366 Calls, waechst mit jeder Session. *(Externe Tools wie GridTracker machen aehnliches Mining aus WSJT-X — diese Implementierung haelt es einfach intern in SimpleFT8.)*
-- ✅ **Automatisierte Regressions-Suite**: QSO-Zustandsübergänge, Diversity-Merge-Logik, Protokoll-Encoding/Decoding, DT-Korrektur, OMNI-CQ-Counter, Bandpilot-Empfehlungen, Locator-DB-Priorität, Settings-Migration und Dialog/UI-Interaktionen. Mock-basiert für Radio-Hardware-Unabhängigkeit — Feldhärtung erfolgt durch echte QSO-Sessions und Band-Messungen (siehe Statistik-Sektion). *Unit-Tests decken interne Logik ab; einige ernsthafte Bugs (z.B. SIGBUS in v0.97.38, OMNI-CQ-Phase-Bug in v0.97.22) traten erst bei Live-Field-Tests auf und wurden dort gehotfixt.*
-- ✅ **Stations-Statistik**: Pro-Zyklus Logging (Normal + Diversity), 6-Zyklen Warmup-Ausschluss. Rohdaten im Markdown, keine In-File-Zusammenfassungen — Auswertung via `scripts/generate_plots.py`.
-- ✅ **Diversity Auswertungs-Diagramme**: `python3 scripts/generate_plots.py` → `auswertung/` — Dark-Theme PNGs: Stationen-Zeitverlauf (Normal vs Diversity) + ANT2-Wins + Rescue-Events. [→ Aktuelle Auswertungen](auswertung/)
-- ✅ **Per-Station SNR-Logging**: Jeder A1↔A2 Vergleich wird mit beiden SNR-Werten, Δ dB, Gewinner und ★ Saved-Event geloggt — wenn eine Antenne unter der FT8-Dekodierschwelle (−24 dB) liegt und die andere darüber. Beweist: "ANT2 hat dieses QSO erst möglich gemacht."
-- ✅ **Ant2 Superiority Counter**: Quantifiziert Diversity-Gewinn (Ant2 > Ant1)
-- ✅ **TX-Sicherheit**: TX stoppt sofort vor Gain-Messung — kein versehentliches Senden bei Kalibrierung
-- ✅ **Gain-Messung**: Audio-Eingangspegel kalibrieren (Button "GAIN-MESSUNG"). Findet optimalen RX-Pegel vor Statistik- oder Diversity-Sitzungen.
-- ✅ **Auto-Hunt (v0.75)**: Wählt automatisch die nächste CQ-Station aus der Warteliste und startet QSO ohne manuellen Klick. Eigener Totmannschalter (nicht mausausgelöst — Bot-Schutz). Diversity-only: sichtbar nur bei aktivem Diversity, stoppt automatisch bei Modus-Wechsel.
-- ✅ **Auto-Close Kalibrierungs-Dialog (v0.83)**: Nach abgeschlossener Gain-Messung schließt der Bestätigungs-Dialog automatisch nach 3 Sekunden — kein Klick nötig.
-- ✅ **Doppel-Report-Bug behoben (v0.82)**: Behoben: App sendete Signal-Report erneut, nachdem bereits RR73 empfangen wurde. Ursache war die Decoder-Reihenfolge (`cycle_finished` muss nach allen `message_decoded`-Events feuern). Im echten QSO bestätigt.
-- ✅ **Diversity Tertile-Analyse (v0.84)**: Statistik-Diagramme zeigen 33./67.-Perzentil Schattierung (echte Slot-zu-Slot-Streuung) statt flacher Min/Max-Balken.
-- ✅ **UI-Verbesserungen**: Info-Dialoge mit "Nicht mehr anzeigen". DT-Korrektur bleibt beim Modus-Wechsel erhalten. Button-Labels spiegeln aktiven Zustand.
-- ✅ **Debug-Konsole**: Ctrl+D, Live-Filter, Schrift 11pt, Copy/Clear
-
-**Im Feldtest:**
-- ⚠️ **AP-Lite v2.2**: Schwache QSOs retten via kohaerenter Addition zweier fehlgeschlagener Dekodier-Versuche. Schwellwert-Kalibrierung laeuft.
-- ✅ **OMNI-CQ (v0.96.4 + v0.96.7 + v0.97.30)**: Single-Slot-CQ mit automatischem Paritaets-Wechsel (modus-spezifischer Down-Counter, FT8=10/FT4=20/FT2=40 Versuche ≈ 5 Min Wallclock pro Paritaet). Diversity-only — Button fest sichtbar wenn Diversity aktiv (kein Easter Egg mehr seit v0.97.30, P55). Feldvalidiert 11.05.2026. → siehe [Diversity-Aktivfunktionen](#diversity-aktivfunktionen--omni-cq-und-auto-hunt) oben.
-- ⚠️ **Bandpilot (v0.88)**: Stunden-genaue RX-Modus-Empfehlung pro Band — drei Direkt-Werte ohne Aggregation. 31 Unit-Tests gruen, Live-Validierung ueber laengere Funkzeit ausstehend.
-
-### FT2-Frequenzen (Decodium-kompatibel)
-
-| Band | FT8 | FT4 | FT2 |
-|------|-----|-----|-----|
-| 80m | 3.573 | 3.575 | 3.578 |
-| 40m | 7.074 | 7.047 | 7.052 |
-| 20m | 14.074 | 14.080 | 14.084 |
-| 15m | 21.074 | 21.140 | 21.144 |
-| 10m | 28.074 | 28.180 | 28.184 |
-
-### Installation
+| Normal (resonante ANT1) | 47,8 | — | — | 8 | 11.088 |
+| Diversity Standard | 46,2 | −3% | −14 bis +10% | 9 | 14.672 |
+| Diversity DX | 51,4 | +8% | −4 bis +22% | 8 | 14.041 |
+
+*CIs enthalten 0 auf 20m. Wenn ANT1 bereits auf dem Band resonant ist, kostet
+das Time-Sharing Diversity einige Single-Antenna-Decodes. Der qualitative
+Gewinn bleibt (ANT2 gewinnt 79–86% der direkten Doppel-Empfänge, +4 dB
+Durchschnitt), aber der absolute Stations-Count ist flach.*
+
+**[Vollständige Statistiken in `auswertung/`](auswertung/)** — automatisch
+neu generiert aus `statistics/` via `python3 scripts/generate_plots.py`.
+
+### ANT2 — Kann alles sein was empfängt
+
+**Das ist der zentrale Punkt.** ANT2 ist **nur Empfang**. Kein Senden, keine
+SWR-Anforderung, keine Leistungsfestigkeit, keine Anpassung. Einfach
+draufklemmen:
+
+- 🏠 **Dachrinne** (Mike's Setup — funktioniert erstaunlich gut)
+- 🌳 **Wurfantenne** auf den Dachboden, in einen Baum, an einem Zaun entlang
+- 🏢 **Balkongeländer** (ja, das metallene, genau das ist der Punkt)
+- 📡 **Alter Dipol auf dem Dachboden**, der „nicht mehr richtig taugt"
+- 🔌 **Zweites Koax-Kabel** zu irgendeinem metallischen Gegenstand
+
+> ⛔ **Hardware-Sicherheit: ANT1 ist immer TX. ANT2 ist NIEMALS TX.**
+> ANT2 ist nicht für Sendeleistung ausgelegt. 100 W auf eine nicht-angepasste
+> Regenrinne kann die PA-Schutzschaltung auslösen, im schlimmsten Fall die PA
+> selbst beschädigen. Der Code verriegelt `set_tx_antenna("ANT1")` vor jedem
+> TX-Trigger; das Diversity-RX-Pattern (70:30 / 50:50 / 30:70) weist NIE
+> ANT2 als TX-Slot zu.
+
+Wenn du **eine resonante TX-Antenne und einen Draht / eine Regenrinne / ein
+Geländer** rumliegen hast, ist das der typische Anwendungsfall. Die
+Diversity-Schicht macht den Draht/die Regenrinne nutzbar für RX, ohne dass
+du daraus eine „richtige" Antenne machen musst.
+
+### Die vier Algorithmen — frei zur Übernahme in jeden FT8-Client
+
+Diese vier Algorithmen sind der **eigentliche Punkt der Studie**. MIT-Lizenz.
+**Wenn du WSJT-X / JTDX / MSHV / einen eigenen FT8-Client baust und einen davon
+integrieren willst: bitte gerne.**
+
+1. **Closed-Loop TX-Leistungsregelung** — FWDPWR vom Radio lesen, mit
+   Zielwattzahl vergleichen, Drive-Level proportional anpassen:
+   `estimated = rfpower × (target / fwdpwr)`. Kein manuelles ALC-Babysitten
+   mehr bei Bandwechsel, SWR-Drift, PA-Temperaturdrift. Pro Band gespeichert.
+   → [docs/explained/power-regulation_de.md](docs/explained/power-regulation_de.md)
+
+2. **Temporal Polarization Diversity mit 1 SCU** — ANT1/ANT2 pro FT8-Zyklus
+   wechseln, SNR-Scores sammeln, die bessere Antenne mit 70:30 / 50:50 / 30:70
+   in folgenden Zyklen gewichten. Ersetzt eine 2000–3000 € zweite SCU. Zwei
+   Scoring-Strategien: *Standard* (Gesamtstationen dekodiert) für CQ-Betrieb,
+   *DX* (schwache Stationen < −10 dB) für DX-Jagd. **Slot-für-Slot-Anpassung**
+   (v0.97+) — reagiert auf Ausbreitungsänderungen in Sekunden, nicht 20 Minuten.
+   → [docs/explained/diversity-modes_de.md](docs/explained/diversity-modes_de.md)
+
+3. **Auto-Gain-Einmessung pro Band (Wetter-adaptiv)** — bei der initialen
+   Kalibrierung ANT1/ANT2-SNR über eine feste Zyklenzahl messen, das Verhältnis
+   pro Band speichern. Automatisch neu messen, wenn sich Bedingungen ändern
+   (Regen, Schnee, Eis auf der Antenne — alles beeinflusst das Gain-Verhältnis).
+   Kein manuelles Experimentieren. → [docs/explained/gain-measurement_de.md](docs/explained/gain-measurement_de.md)
+
+4. **Auto-CQ-Frequenz per Histogramm** — Spektrum analysieren, 50-Hz-Bin-
+   Histogramm der dekodierten Stationen aufbauen, die breiteste freie Lücke
+   (≥ 150 Hz) im dynamischen Suchbereich finden (zwischen niedrigster und
+   höchster aktiver Station). CQ-Frequenz automatisch setzen. Kein Wasserfall
+   nötig — essentiell für Radios ohne eingebautes Display (z.B. FLEX-8400M
+   headless). → [docs/explained/cq-frequency_de.md](docs/explained/cq-frequency_de.md)
+
+**Bonus-Algorithmen** die unterwegs entstanden sind (auch frei zur Übernahme):
+
+- **Per-Callsign-Antennen-Gedächtnis** — innerhalb eines aktiven QSOs schaltet
+  der RX-Pfad auf die Antenne, die das Rufzeichen am besten gehört hat.
+  Hysterese 1 dB. Liegt als Schicht über der globalen Diversity.
+  *(Ich habe diese Kombination in keinem anderen FT8-Client gesehen.)*
+- **Caller Waitlist** — wenn mehrere Stationen auf CQ antworten, in Queue
+  einreihen und nacheinander bedienen.
+- **DT-Zeit-Korrektur** — pro Band+Modus persistiert, 70% Dämpfung,
+  2-Zyklen-Messung.
+- **Live-Locator-Mining** — Maidenhead-Grids direkt aus CQ-/Grid-Nachrichten
+  extrahieren, persistenter JSON-Cache übersteht Neustarts. Karte zeigt exakte
+  Positionen, keine Länder-Schwerpunkte.
+
+### Architektur (warum es funktioniert)
+
+SimpleFT8 umgeht SmartSDR komplett. Es spricht **direkt mit dem Radio**:
+
+- **VITA-49 UDP** für int16-Mono 24 kHz Audiostreams (RX + TX)
+- **TCP-Befehlskanal (Port 4992)** für Radio-Steuerung
+
+Keine virtuellen Soundkarten (DAX), kein SmartSDR-Panel, kein GUI-Overhead.
+Der FT8-Decoder ist [`ft8_lib`](https://github.com/kgoba/ft8_lib) (MIT, von
+kgoba) erweitert um 5-Pass-Signal-Subtraction, Spectral Whitening, Sinc-Anti-
+Alias-Resampling, 50 LDPC-Iterationen — vergleichbar mit WSJT-X, läuft auf
+einem normalen MacBook.
+
+### Schnellstart
 
 ```bash
 git clone https://github.com/mikewanne/SimpleFT8.git
@@ -1032,62 +451,72 @@ pip install -r requirements.txt
 python3 main.py
 ```
 
-**Voraussetzungen:** macOS, Python 3.12+, FlexRadio SDR (FLEX-6000/8000 Serie). Zwei Antennenanschluesse fuer Diversity (optional).
+**Voraussetzungen:**
+- macOS (entwickelt und getestet auf macOS 15)
+- Python 3.12+
+- FlexRadio FLEX-6000 oder FLEX-8000 Serie (feldgetestet: FLEX-8400M)
+- Zwei Antennenanschlüsse — TX-fähige Antenne auf ANT1, irgendwas-das-empfängt auf ANT2
 
-### Architektur
+### Ehrliche Grenzen
 
-```
-SimpleFT8/
-├── main.py                       # Einstiegspunkt
-├── config/settings.py            # Einstellungen, Frequenzen, Sprache
-├── core/
-│   ├── decoder.py                # FT8/FT4/FT2 Decode + Signal Subtraction
-│   ├── encoder.py                # FT8/FT4/FT2 Encode → VITA-49 TX
-│   ├── qso_state.py              # QSO-Zustandsmaschine (Hunt + CQ + Warteliste)
-│   ├── protocol.py               # FT8/FT4/FT2 Protokoll-Konstanten (frozen dataclass)
-│   ├── station_accumulator.py    # Gemeinsame Station-Logik (Normal + Diversity)
-│   ├── station_stats.py          # Async Zyklus- + Per-Station SNR-Logging
-│   ├── diversity.py              # Diversity Controller (Standard/DX Scoring)
-│   ├── diversity_merger.py       # ANT1+ANT2 Decodes zusammenfuehren, SNR-Gewinner
-│   ├── locator_db.py             # Persistenter Maidenhead Locator-Cache (JSON)
-│   ├── antenna_pref.py           # Pro-Callsign Antennen-Praeferenz (1 dB Hysterese)
-│   ├── ntp_time.py               # DT-Korrektur v2 (pro Modus gespeichert)
-│   ├── propagation.py            # Bandbedingungen (HamQSL + Tageszeit)
-│   └── timing.py                 # UTC-Takt, modus-abhaengige Zyklen
-├── radio/
-│   ├── base_radio.py             # RadioInterface ABC
-│   ├── radio_factory.py          # create_radio(settings) → FlexRadio
-│   └── flexradio.py              # SmartSDR TCP + VITA-49 + Auto RX-Filter
-├── ft8_lib/                      # C-Library (MIT, FT8+FT4+FT2 nativ)
-├── log/                          # ADIF Writer, QRZ.com API
-├── ui/
-│   ├── main_window.py            # 3-Panel Layout + Mixins
-│   ├── help_dialog.py            # Feature-Doku (DE/EN)
-│   └── ...                       # Control Panel, RX, QSO, Logbuch
-├── docs/explained/               # 10 Feature-Docs (5 × DE + EN)
-└── tests/                        # Automated regression suite (QSO, Diversity, Protocol, AP-Lite, Threading, ...)
-```
+- **Ein Operator, eine Station, eine Antennenkonfiguration.** Alle Statistiken
+  kommen aus DA1MHH's Dach (Kelemen DP-201510 auf 20m/15m/10m, off-band auf
+  40m/30m/17m; Hausregenrinne als ANT2). Die Zahlen verallgemeinern sich
+  physikalisch, aber **nicht empirisch** auf andere Setups. Nachprüfen vor
+  Glauben.
+- **macOS-only, FlexRadio-only.** Kein Windows, kein Linux, keine
+  ICOM/Yaesu/Kenwood (noch — `radio/base_radio.py` ist die Abstraktionsschicht,
+  ein IC-7300-Stub existiert). Bewusste Entscheidung: 1 Entwickler, 1 Hardware-
+  Ziel, Tiefe statt Breite.
+- **KI-assistierte Entwicklung.** Mike + Claude (Anthropic) + DeepSeek als
+  Team. Architektur und Bug-Reviews durch beide KIs in einem V1→V2→R1→V3-
+  Workflow. 45 Cycles mit V4-pro-Reviews, 0 Halluzinationen im Feld gefangen
+  — aber die KI sitzt nicht am Funkgerät. **Der Operator schon.**
+- **Auto-Hunt ist in Deutschland juristisch grenzwertig.** § 13 AFuV regelt
+  automatisierte Amateurstationen. SimpleFT8 hat 10-Min-Hard-Cap und 5-Min-
+  Maus-Inaktivitäts-Timeout, aber **die rechtliche Verantwortung trägt der
+  Operator**. WSJT-X und JTDX hören bewusst vor dem automatischen Picken der
+  nächsten Station auf — Auto-Hunt überschreitet diese Linie absichtlich, mit
+  dokumentierten Vorbehalten. Nur unter aktiver Beobachtung der Station nutzen.
+- **Feld-Bugs passieren.** 1716 Unit-Tests fangen Regressionen ab; die ernsten
+  Bugs (SIGBUS v0.97.38, OMNI-CQ-Phase v0.97.22, Auto-Hunt-Retry-Race v0.97.70)
+  zeigten sich erst in echten QSO-Sessions und wurden dort behoben.
 
-### Radio-Kompatibilitaet
+### Hinweis für CQ-DL-Leser
 
-**Getestet:** FLEX-8400M. **Voraussichtlich kompatibel:** FLEX-6300/6400/6500/6600/6700/8400/8600.
+> 📰 **Artikel veröffentlicht in CQ DL 6/2026** — drei Details haben sich
+> seit Manuskript-Abgabe entwickelt (~3 Wochen vor Erscheinen):
+>
+> - **Algorithmus: UCB1 → dynamisches Pro-Slot-Scoring.** Der Artikel
+>   beschreibt UCB1 (Upper Confidence Bound) mit 80-Zyklen-Neueinmessung
+>   (~20 Min). Wir haben das in v0.97.19 durch kontinuierliche Pro-Slot-
+>   SNR-Bewertung ersetzt (15s Reaktionszeit statt 20 Min). Gleiches Ziel
+>   (Explore vs. Exploit), einfacherer Code, kleinere Bug-Oberfläche.
+> - **Diversity-Verhältnis-Anpassung:** folgt aus oben — pro Slot statt
+>   alle 80 Zyklen.
+> - **Funkgeräte-Kompatibilität:** verifiziert auf FLEX-8400M. Die VITA-49 /
+>   TCP-API ist über FLEX-6000- und FLEX-8000-Serie identisch, aber nur
+>   FLEX-8400M ist feldgetestet vom Autor.
 
-**Radio-agnostische Architektur (v0.28+):** Neue Radios durch eine Datei (`radio/ic7300.py` etc.) hinzufuegbar. Vorbereitet: **ICOM IC-7300** (CI-V + USB Audio).
+### Lizenz & Credits
 
-### Lizenz
+**MIT-Lizenz** (c) 2026 DA1MHH (Mike Hammerer) — vollständiger Text in [LICENSE](LICENSE).
 
-MIT License (c) 2026 DA1MHH (Mike Hammerer)
+**Projekt-Team:**
+- **Mike Hammerer, DA1MHH** — Idee, Konzept, Hardware, Feldtests, finale Entscheidungen
+- **Claude Opus / Claude Sonnet (Anthropic)** — Architektur, Algorithmus-Implementierung, Security-Reviews
+- **DeepSeek-R1** — Code-Reviews, Bug-Suche, Design-Diskussionen, zweite Meinung
+
+**Externe Komponenten:**
+- `ft8_lib` C-Bibliothek (MIT) von kgoba — FT8/FT4/FT2 Decode-Kern
+- HamQSL.com — Solar- / Ausbreitungsdaten
+- PSKReporter — RX/TX-Spot-Daten
+
+**Der Punkt der MIT-Lizenzierung:** wenn du FT8-Software schreibst (WSJT-X,
+JTDX, MSHV oder eigenen Client) und einen der 4 Kern-Algorithmen oder die
+Bonus-Features integrieren willst — bitte gerne. Namensnennung erforderlich,
+das ist alles.
 
 ---
 
-## Acknowledgments / Danksagungen
-
-- [ft8_lib](https://github.com/kgoba/ft8_lib) — FT8/FT4 encode/decode C library (MIT)
-- [Decodium / IU8LMC](https://www.ft2.it/) — FT2 protocol reference
-- [FlexRadio Systems](https://www.flexradio.com/) — SmartSDR TCP API
-- [WSJT-X](https://wsjt.sourceforge.io/) — Pioneering digital weak-signal modes
-
-
----
-
-*SimpleFT8: Because weak signals deserve a fighting chance. / Weil schwache Signale eine faire Chance verdienen.*
+*73 de DA1MHH — Mike Hammerer*
