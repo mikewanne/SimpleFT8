@@ -218,13 +218,12 @@ class AdifWriter:
             _field("STATION_CALLSIGN", my_callsign.upper()),
             _field("MY_GRIDSQUARE", my_gridsquare.upper()),
             _field("TX_PWR", str(tx_power)),
-            # P105 (v0.97.82) — Mike-Field-Test 21.05.2026:
-            # QSL_SENT:N + QSL_RCVD:N + MY_DXCC/MY_COUNTRY/MY_CQ_ZONE/MY_ITU_ZONE
-            # (eingeführt in v0.24 am 17.04.) blockierten QRZ-Auto-Confirm.
-            # Timeline: vor 17.04. bestätigte QRZ ~30-50%, danach 0/40.
-            # Fix: zurück zum minimalen WSJT-X-Standard-ADIF — diese
-            # Felder schreibt WSJT-X auch nicht. TIME_OFF + OPERATOR
-            # bleiben (sind WSJT-X-Standard und schaden nicht).
+            _field("QSL_SENT", "N"),
+            _field("QSL_RCVD", "N"),
+            _field("MY_DXCC", "230"),
+            _field("MY_COUNTRY", "Germany"),
+            _field("MY_CQ_ZONE", "14"),
+            _field("MY_ITU_ZONE", "28"),
             _field("COMMENT", "SimpleFT8 v1.0"),
         ]
         # Optionale Felder nur wenn vorhanden
