@@ -67,17 +67,17 @@ def test_a_t2_radio_card_emits_tune_override_signal(app):
     assert received == [20]
 
 
-def test_a_t3_control_panel_reemits_tune_override(app):
+def test_a_t3_control_panel_on_tune_override_requested(app):
+    """P102 (v0.97.77): ControlPanel hat statt Signal-Hop einen Callback-
+    Helper `on_tune_override_requested(cb)` der direkt am _radio_card
+    connectet. DeepSeek-V4-pro-Diagnose: das ControlPanel-Zwischensignal
+    ging zur Laufzeit tot, KISS-Fix Variante A."""
     from ui.control_panel import ControlPanel
     panel = ControlPanel()
     received = []
-    panel.tune_override_requested.connect(lambda s: received.append(s))
-    # Über interne _RadioCard das Signal triggern
-    # (radio_card ist nicht-public, wir nutzen direkten Signal-Trigger)
-    # Da ControlPanel.tune_override_requested vom radio_card kommt:
-    # tatsächliche Connection-Wirkung testen — wir prüfen dass Signal-
-    # Verbindung gemacht wurde via tatsächlichem Emit aus dem RadioCard.
-    panel.tune_override_requested.emit(15)
+    panel.on_tune_override_requested(lambda s: received.append(s))
+    # _radio_card-Signal triggern → muss bei callback ankommen
+    panel._radio_card.tune_override_requested.emit(15)
     assert received == [15]
 
 

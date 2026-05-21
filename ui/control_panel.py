@@ -1278,9 +1278,11 @@ class ControlPanel(QWidget):
     cancel_clicked = Signal()
     cq_clicked = Signal()
     tune_clicked = Signal(bool)
-    # P95 (v0.97.67): Rechtsklick-Override für TUNE-Dauer (10/15/20s).
-    # Vom _RadioCard reemittet. Setting `tune_duration_s` unverändert.
-    tune_override_requested = Signal(int)
+    # P102 (v0.97.77): tune_override_requested-Signal hier entfernt —
+    # MainWindow connectet direkt an `_radio_card.tune_override_requested`
+    # via `on_tune_override_requested(callback)` Helper (siehe unten).
+    # Der frühere Bubble-Hop über dieses ControlPanel-Signal ging zur
+    # Laufzeit tot (Mike-Field-Test 21.05., DeepSeek-V4-pro-Diagnose H1).
     dx_preset_changed = Signal(str)
     tx_level_changed = Signal(int)
     preamp_changed = Signal(bool)           # Legacy, nicht mehr genutzt
@@ -1433,19 +1435,12 @@ class ControlPanel(QWidget):
         self.power_buttons[10].setChecked(True)
         self.btn_tune = radio_card.btn_tune
         self.btn_tune.clicked.connect(self._on_tune_clicked)
-        # P95 (v0.97.67): Rechtsklick-Override Signal vom _RadioCard
-        # bubblen → MainWindow connectet es zu mw_tx._on_tune_override.
-        # P101 v0.97.75: Bubble via Helper mit debug_log (Connection-
-        # Verifikation; bei reiner .emit-Bindung war zur Laufzeit nicht
-        # nachvollziehbar ob Signal hier ankommt).
-        def _bubble_tune_override(s: int):
-            from core.debug_log import debug_log
-            debug_log("P101",
-                      f"ControlPanel bubble: radio_card → control_panel emit s={s}")
-            self.tune_override_requested.emit(s)
-        radio_card.tune_override_requested.connect(_bubble_tune_override)
-        # Referenz halten damit Closure nicht GC'd wird
-        self._tune_override_bubble = _bubble_tune_override
+        # P102 (v0.97.77): Bubble-Hop entfernt — MainWindow connectet
+        # direkt an `_radio_card.tune_override_requested` (siehe
+        # `on_tune_override_requested` Helper unten). Der zweite Hop
+        # über `ControlPanel.tune_override_requested` ging zur Laufzeit
+        # tot — DeepSeek-V4-pro: H1, Doppel-Signal-Risiko. Variante A
+        # (KISS) entfernt das Zwischensignal vollständig.
         # P97 (v0.97.69): Status-Labels neben ANTENNE/RADIO referenzieren
         # damit Helper _refresh_antenna_status_label / _refresh_radio_status_label
         # sie aktualisieren können (auch bei eingeklappter Kachel sichtbar).
@@ -2061,6 +2056,18 @@ class ControlPanel(QWidget):
         """
         self._tuner_present = bool(value)
         self.btn_tune.setVisible(self._tuner_present)
+
+    def on_tune_override_requested(self, callback) -> None:
+        """P102 (v0.97.77): direkter Connect ans _radio_card-Signal.
+
+        Ersetzt das frühere Bubble-Hopping über ein ControlPanel-eigenes
+        Signal — DeepSeek-V4-pro-Diagnose 21.05.: das ControlPanel-Signal
+        ging zur Laufzeit tot zwischen `.emit()` und Slot. Direkter
+        Connect umgeht den Hop.
+
+        Mike-Spec: Rechtsklick TUNE → Sekunden → callback(int duration_s).
+        """
+        self._radio_card.tune_override_requested.connect(callback)
 
     def set_tx_active(self, active: bool):
         if active:

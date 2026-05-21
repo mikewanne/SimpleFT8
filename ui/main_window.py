@@ -759,9 +759,10 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self.control_panel.cancel_clicked.connect(self._on_cancel)
         self.control_panel.cq_clicked.connect(self._on_cq_clicked)
         self.control_panel.tune_clicked.connect(self._on_tune_clicked)
-        # P95 (v0.97.67): Rechtsklick-Override für TUNE-Dauer (10/15/20s)
-        self.control_panel.tune_override_requested.connect(
-            self._on_tune_override)
+        # P95 (v0.97.67) + P102 (v0.97.77): Rechtsklick-Override TUNE-Dauer.
+        # Direkter Connect am _radio_card-Signal (Variante A, DeepSeek-V4-pro
+        # 21.05.: ControlPanel-Zwischensignal ging zur Laufzeit tot).
+        self.control_panel.on_tune_override_requested(self._on_tune_override)
         self.control_panel.rx_mode_changed.connect(self._on_rx_mode_changed)
         # Bundle G (v0.97.24): 2. Div-Klick → Toggle Std↔DX
         self.control_panel.diversity_subtoggle_requested.connect(
