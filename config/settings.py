@@ -49,7 +49,9 @@ def get_tune_freq_mhz(band: str, mode: str) -> float | None:
 DEFAULTS = {
     "callsign": "DA1MHH",
     "locator": "JO31",
-    "power_watts": 50,
+    # P104 (v0.97.81): power_watts entfernt. ADIF-Log nutzt jetzt
+    # control_panel._current_power_watts (aktiver Power-Preset).
+    # Setting wird beim load() per pop migriert.
     "audio_input": "",
     "audio_output": "",
     "flexradio_ip": "",
@@ -109,6 +111,13 @@ class Settings:
         self._data.pop("max_decode_freq", None)
         # P52 (v0.97.41): stats_enabled-Toggle entfernt, Stats immer an.
         self._data.pop("stats_enabled", None)
+        # P104 (v0.97.81): power_watts + tx_level + tx_levels_per_band
+        # entfernt. ADIF nutzt aktuellen Power-Preset (ControlPanel),
+        # tx_level fest auf 75% (= bisheriger Cap). Final-R1-Catch:
+        # tx_levels_per_band hätte Bandwechsel-Override produziert.
+        self._data.pop("power_watts", None)
+        self._data.pop("tx_level", None)
+        self._data.pop("tx_levels_per_band", None)
         # P80 (v0.97.52): normal_presets nach unified PresetStore migriert.
         # Idempotent (Pop ist No-op bei fehlendem Key). Migration der Werte
         # selbst laeuft in PresetStore.__init__ (migrate_legacy_files).
@@ -220,9 +229,8 @@ class Settings:
     def locator(self):
         return self._data["locator"]
 
-    @property
-    def power_watts(self):
-        return self._data["power_watts"]
+    # P104 (v0.97.81): power_watts-Property entfernt — ADIF nutzt
+    # ControlPanel._current_power_watts (aktiver Power-Preset).
 
     @property
     def band(self):

@@ -1219,7 +1219,8 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
             # P58 (v0.97.31): Alle 3 Live-Setter unter gemeinsamem radio.ip-Guard
             # (Architektur-Konsistenz, R1-V4-pro-F1)
             if self.radio.ip:
-                self.radio.tx_audio_level = self.settings.get("tx_level", 100) / 100.0
+                # P104 (v0.97.81): tx_audio_level-Propagation entfernt
+                # (Setting tx_level raus, Wert ist fest 75% — siehe mw_radio).
                 self.radio.set_power(self.settings.get("power_preset", 15))
                 self.radio.set_swr_limit(self.settings.get("swr_limit", 3.0))
             # Debug-Konsole Toggle aus Settings

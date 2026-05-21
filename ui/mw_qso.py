@@ -577,7 +577,9 @@ class QSOMixin:
             gridsquare=qso_data.their_grid or "",
             my_gridsquare=self.settings.locator,
             my_callsign=self.settings.callsign,
-            tx_power=self.settings.power_watts,
+            # P104 (v0.97.81): ADIF nutzt aktiven Power-Preset statt
+            # Settings-Default. Spiegelt was tatsächlich gesendet wurde.
+            tx_power=getattr(self.control_panel, '_current_power_watts', 10) or 10,
             time_on=qso_data.start_time,
         )
         _dbg("QSO-DONE", f"adif.log_qso dt={_t.time()-_t_step:.3f}s")

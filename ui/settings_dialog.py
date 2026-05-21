@@ -46,8 +46,7 @@ _HINTS = {
     "callsign": "Dein Amateurfunk-Rufzeichen (z.B. DA1MHH).\nWird in allen FT8-Nachrichten verwendet.",
     "locator": "Maidenhead-Locator deines Standorts (4 oder 6 Zeichen).\nWird bei CQ und erstem Anruf mitgesendet.",
     "radio_ip": "IP-Adresse des FlexRadio. Leer = Auto-Discovery per Broadcast.\nNur aendern wenn mehrere Radios im Netzwerk.",
-    "power": "HF-Sendeleistung in Watt.\nFuer FT8 reichen 20-50W fuer weltweiten Betrieb.",
-    "tx_level": "Audio-Pegel zum Radio (100% = volles Signal).\nBei ALC-Ausschlag reduzieren.",
+    # P104 (v0.97.81): "power" + "tx_level" Hints entfernt (Felder raus).
     "max_calls": "Wie oft eine Station maximal angerufen wird bevor Timeout.\n5 = Standard (FT8-üblich), 3 = schnell weiter, 7 = hartnäckig, 99 = quasi-endlos.",
     "swr_limit": "Bei SWR ueber diesem Wert wird TX sofort gestoppt.\nSchuetzt Endstufe und Antenne.",
     "tune_power": "Leistung beim TUNE-Vorgang (Antennentuner einstellen).\nMax 20W — hoehere Werte brauchen Bestaetigung.",
@@ -216,25 +215,20 @@ class SettingsDialog(QDialog):
         layout = QVBoxLayout(tab)
         layout.setSpacing(10)
 
+        # P104 (v0.97.81): Sendeleistung + TX-Audio-Pegel-Felder entfernt.
+        # - Sendeleistung: Power-Preset im Hauptpanel ist Source-of-Truth,
+        #   ADIF nutzt aktiven Preset (mw_qso.py)
+        # - TX-Audio-Pegel: fest 75% (war eh gecappt), Closed-Loop justiert
         # TX-Schutz-Form (oben, ohne aeussere GroupBox)
         form = QFormLayout()
-        self.power = QSpinBox()
-        self.power.setRange(1, 100)
-        self.power.setSuffix(" W")
-        self.tx_level = QSpinBox()
-        self.tx_level.setRange(1, 100)
-        self.tx_level.setSuffix(" %")
         self.max_calls_combo = QComboBox()
         self.max_calls_combo.addItems(["3", "5", "7", "99"])
         # Bundle K (P57, v0.97.34): SWR-Limit als ComboBox mit festen
-        # 0.5-Schritten 1.5..5.0. Verhindert freie Tastatur-Eingabe wie
-        # 1.7 (Mike-Spec 15.05.2026).
+        # 0.5-Schritten 1.5..5.0.
         self.swr_limit = QComboBox()
         for v in _SWR_VALUES:
             self.swr_limit.addItem(f"{v:.1f}", v)
         self.swr_limit.setCurrentIndex(3)  # Default 3.0
-        form.addRow("Sendeleistung:", _row_with_hint(self.power, "power"))
-        form.addRow("TX Audio-Pegel:", _row_with_hint(self.tx_level, "tx_level"))
         form.addRow("Anrufversuche:", _row_with_hint(self.max_calls_combo, "max_calls"))
         form.addRow("SWR-Limit:", _row_with_hint(self.swr_limit, "swr_limit"))
         layout.addLayout(form)
@@ -304,49 +298,44 @@ class SettingsDialog(QDialog):
 
         layout.addWidget(tune_box)
 
-        # RF-Presets (interne GroupBox — visuelle Trennung von TX-Schutz)
-        rf_box = QGroupBox("RF-Presets pro Band+Watt")
+        # P104 (v0.97.81): RF-Presets als Band-Farb-Buttons statt Tabelle.
+        # Mike-Spec 21.05.: für Hobby-Funker ist es nur wichtig zu sehen
+        # welche Bänder Daten haben (grün) und welche nicht (rot). Klick
+        # auf grünes Band → Reset-Dialog. Detail-Werte (Watt/RF/Timestamp)
+        # interessieren nicht (Closed-Loop justiert eh).
+        rf_box = QGroupBox("RF-Presets pro Band")
         rf_layout = QVBoxLayout(rf_box)
         self._rf_info_label = QLabel("Aktives Radio: —")
         self._rf_info_label.setStyleSheet("color: #888; padding: 0 0 4px 0;")
         rf_layout.addWidget(self._rf_info_label)
 
-        self.rf_table = QTableWidget(0, 4)
-        self.rf_table.setHorizontalHeaderLabels(
-            ["Band", "Watt", "RF (0-100)", "Letzte Speicherung"]
-        )
-        self.rf_table.horizontalHeader().setSectionResizeMode(
-            QHeaderView.ResizeMode.Stretch
-        )
-        self.rf_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        self.rf_table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
-        self.rf_table.verticalHeader().setVisible(False)
-        self.rf_table.setStyleSheet(
-            "QTableWidget { background:#1a1a2e; color:#CCC; gridline-color:#333; }"
-            "QHeaderView::section { background:#222; color:#00AAFF; "
-            "padding:4px; border:1px solid #333; }"
-        )
-        self.rf_table.setMaximumHeight(140)
-        rf_layout.addWidget(self.rf_table)
+        # Band-Button-Grid: grün = hat Presets (klickbar), rot = leer (no-op).
+        # Reihenfolge wie BAND_FREQUENCIES (80m → 10m, aufsteigende Freq).
+        from config.settings import BAND_FREQUENCIES
+        self._rf_band_buttons: dict[str, QPushButton] = {}
+        rf_band_row = QHBoxLayout()
+        rf_band_row.setSpacing(4)
+        for band in BAND_FREQUENCIES.keys():
+            btn = QPushButton(band)
+            btn.setMinimumWidth(50)
+            btn.setMinimumHeight(32)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.clicked.connect(
+                lambda checked=False, b=band: self._on_rf_band_clicked(b))
+            self._rf_band_buttons[band] = btn
+            rf_band_row.addWidget(btn)
+        rf_layout.addLayout(rf_band_row)
 
-        # P103 (v0.97.80): Hint-Label für leere Tabelle (Mike KISS 21.05.).
-        # Bleibt versteckt sobald Presets existieren.
-        self._rf_hint_label = QLabel("")
-        self._rf_hint_label.setWordWrap(True)
-        self._rf_hint_label.setStyleSheet(
+        # Legende dezent
+        self._rf_legend_label = QLabel(
+            "Grün = RF-Werte vorhanden (Klick zum Löschen) · Rot = noch keine Werte")
+        self._rf_legend_label.setStyleSheet(
             "color: #888; font-size: 11px; padding: 4px 2px 0 2px;")
-        self._rf_hint_label.setVisible(False)
-        rf_layout.addWidget(self._rf_hint_label)
+        self._rf_legend_label.setWordWrap(True)
+        rf_layout.addWidget(self._rf_legend_label)
 
+        # Nur „Alle löschen" — Einzel-Band läuft über Klick auf grünen Button.
         rf_btn_row = QHBoxLayout()
-        rf_btn_row.addWidget(QLabel("Band:"))
-        self._rf_band_combo = QComboBox()
-        self._rf_band_combo.setMinimumWidth(80)
-        rf_btn_row.addWidget(self._rf_band_combo)
-        self.btn_rf_clear_band = QPushButton("Band löschen")
-        self.btn_rf_clear_band.setObjectName("reset")
-        self.btn_rf_clear_band.clicked.connect(self._on_rf_clear_band)
-        rf_btn_row.addWidget(self.btn_rf_clear_band)
         rf_btn_row.addStretch()
         self.btn_rf_clear_all = QPushButton("Alle löschen")
         self.btn_rf_clear_all.setObjectName("reset")
@@ -624,8 +613,7 @@ class SettingsDialog(QDialog):
         self.callsign.setText(self.settings.callsign)
         self.locator.setText(self.settings.locator)
         self.radio_ip.setText(self.settings.get("flexradio_ip", ""))
-        self.power.setValue(self.settings.power_watts)
-        self.tx_level.setValue(self.settings.get("tx_level", 100))
+        # P104 (v0.97.81): power + tx_level-Widgets entfernt
         mc = self.settings.get("max_calls", 5)  # P98: Default 3 → 5
         self.max_calls_combo.setCurrentIndex({3: 0, 5: 1, 7: 2, 99: 3}.get(mc, 1))
         # Bundle K (P57): Load mit Snap-Index auf naechst-hoeheren Wert
@@ -703,76 +691,87 @@ class SettingsDialog(QDialog):
             return False
         return bool(getattr(parent.encoder, "is_transmitting", False))
 
-    def _refresh_rf_table(self):
+    def _refresh_rf_status(self):
+        """P104 (v0.97.81): Band-Buttons farblich aktualisieren.
+
+        Grün = hat RF-Presets (klickbar zum Reset),
+        Rot = keine Daten (visuell rot, Klick ist no-op).
+        """
         store = self._get_rf_preset_store()
         radio_type = self._get_radio_type()
         self._rf_info_label.setText(f"Aktives Radio: {radio_type}")
-        self.rf_table.setRowCount(0)
-        self._rf_band_combo.clear()
-        if store is None:
-            self._rf_hint_label.setText(
-                "Kein Radio verbunden — RF-Presets werden pro Radio gespeichert.")
-            self._rf_hint_label.setVisible(True)
-            return
-        presets = store.get_all(radio_type)
-        if not presets:
-            # P103 (v0.97.80): Hint-Text bei leerer Tabelle (Mike-Wunsch
-            # 21.05. nach KISS-Brainstorm — User-Education statt Doku).
-            self._rf_hint_label.setText(
-                "Noch keine RF-Presets — sie werden automatisch beim ersten "
-                "TX pro Band+Watt gespeichert.\n"
-                "Schneller füllen: »Auto-TUNE bei Bandwechsel« anhaken oder "
-                "manuell TUNE drücken.")
-            self._rf_hint_label.setVisible(True)
-            return
-        self._rf_hint_label.setVisible(False)
-        self._rf_band_combo.addItems(sorted(presets.keys()))
-        rows = []
-        for band, watts_dict in presets.items():
-            for watt, entry in watts_dict.items():
-                ts = entry.get("ts", 0) or 0
-                ts_str = (
-                    time.strftime("%d.%m. %H:%M", time.localtime(ts)) if ts else "—"
+        if store is None or radio_type == "unknown":
+            # Alle Bänder grau (no-data + kein Radio)
+            for band, btn in self._rf_band_buttons.items():
+                btn.setProperty("rfState", "none")
+                btn.setStyleSheet(
+                    "QPushButton { background:#2a2a2a; color:#777; "
+                    "border:1px solid #444; border-radius:4px; padding:6px 12px; }"
                 )
-                rows.append((band, int(watt), int(entry["rf"]), ts_str))
-        rows.sort(key=lambda r: (r[0], r[1]))
-        self.rf_table.setRowCount(len(rows))
-        for i, (band, watt, rf, ts_str) in enumerate(rows):
-            self.rf_table.setItem(i, 0, QTableWidgetItem(band))
-            self.rf_table.setItem(i, 1, QTableWidgetItem(f"{watt} W"))
-            self.rf_table.setItem(i, 2, QTableWidgetItem(str(rf)))
-            self.rf_table.setItem(i, 3, QTableWidgetItem(ts_str))
+            return
+        presets = store.get_all(radio_type) or {}
+        for band, btn in self._rf_band_buttons.items():
+            has_data = bool(presets.get(band))
+            if has_data:
+                btn.setProperty("rfState", "green")
+                btn.setToolTip(f"RF-Werte für {band} vorhanden — Klick zum Löschen")
+                btn.setStyleSheet(
+                    "QPushButton { background:#226633; color:#FFFFFF; "
+                    "border:1px solid #44AA66; border-radius:4px; "
+                    "padding:6px 12px; font-weight:bold; }"
+                    "QPushButton:hover { background:#2A8844; }"
+                )
+            else:
+                btn.setProperty("rfState", "red")
+                btn.setToolTip(
+                    f"Keine RF-Werte für {band}. "
+                    "Closed-Loop misst automatisch beim nächsten TX.")
+                btn.setStyleSheet(
+                    "QPushButton { background:#663322; color:#DDDDDD; "
+                    "border:1px solid #AA4422; border-radius:4px; "
+                    "padding:6px 12px; }"
+                    "QPushButton:hover { background:#553322; }"
+                )
+
+    # Backwards-Compat-Alias falls anderer Code _refresh_rf_table erwartet
+    _refresh_rf_table = _refresh_rf_status
 
     def _update_rf_buttons_tx_state(self):
         tx_active = self._is_tx_active()
-        self.btn_rf_clear_band.setEnabled(not tx_active)
+        for btn in self._rf_band_buttons.values():
+            btn.setEnabled(not tx_active)
         self.btn_rf_clear_all.setEnabled(not tx_active)
         tip = "Während aktivem TX nicht verfügbar" if tx_active else ""
-        self.btn_rf_clear_band.setToolTip(tip)
+        for btn in self._rf_band_buttons.values():
+            btn.setToolTip(tip)
         self.btn_rf_clear_all.setToolTip(tip)
 
-    def _on_rf_clear_band(self):
-        band = self._rf_band_combo.currentText()
-        if not band:
+    def _on_rf_band_clicked(self, band: str):
+        """P104 (v0.97.81): Klick auf Band-Button — wenn grün, Reset-Dialog."""
+        store = self._get_rf_preset_store()
+        radio_type = self._get_radio_type()
+        if store is None or radio_type == "unknown":
             return
+        presets = store.get_all(radio_type) or {}
+        if not presets.get(band):
+            return  # rotes Band — kein Reset nötig
         msg = QMessageBox(self)
         msg.setWindowTitle("RF-Preset löschen")
         msg.setIcon(QMessageBox.Icon.Question)
         msg.setText(
-            f"RF-Presets für {band} wirklich löschen?\n\n"
-            "Closed-Loop muss bei nächster TX-Aktivierung neu von Null hochtasten."
+            f"RF-Werte für {band} zurücksetzen?\n\n"
+            "Closed-Loop muss bei nächster TX-Aktivierung "
+            "neu von Null hochtasten."
         )
         msg.setStyleSheet(MSGBOX_STYLE)
-        btn_yes = msg.addButton("Löschen", QMessageBox.ButtonRole.DestructiveRole)
+        btn_yes = msg.addButton("Zurücksetzen",
+                                QMessageBox.ButtonRole.DestructiveRole)
         msg.addButton("Abbrechen", QMessageBox.ButtonRole.RejectRole)
         msg.exec()
         if msg.clickedButton() != btn_yes:
             return
-        store = self._get_rf_preset_store()
-        radio_type = self._get_radio_type()
-        if store and radio_type and radio_type != "unknown":
-            store.clear_band(radio_type, band)
-            self._refresh_rf_table()
+        store.clear_band(radio_type, band)
+        self._refresh_rf_status()
 
     def _on_rf_clear_all(self):
         radio_type = self._get_radio_type()
@@ -798,8 +797,7 @@ class SettingsDialog(QDialog):
         self.settings.set("callsign", self.callsign.text().upper().strip())
         self.settings.set("locator", self.locator.text().upper().strip())
         self.settings.set("flexradio_ip", self.radio_ip.text().strip())
-        self.settings.set("power_watts", self.power.value())
-        self.settings.set("tx_level", self.tx_level.value())
+        # P104 (v0.97.81): power_watts + tx_level entfernt
         self.settings.set("max_calls", int(self.max_calls_combo.currentText()))
         # Bundle K (P57): currentData() liefert Float-Userdata aus addItem
         self.settings.set("swr_limit", self.swr_limit.currentData())
@@ -849,8 +847,7 @@ class SettingsDialog(QDialog):
         if msg.clickedButton() != btn_yes:
             return
         # Werte auf Defaults setzen (Rufzeichen/Locator behalten)
-        self.power.setValue(DEFAULTS.get("power_watts", 50))
-        self.tx_level.setValue(100)
+        # P104 (v0.97.81): power + tx_level-Widgets entfernt
         self.max_calls_combo.setCurrentIndex(1)  # P98 (v0.97.70): Default 5 (FT8-Standard) statt 99
         self.swr_limit.setCurrentIndex(3)  # Default 3.0 (Bundle K P57)
         # P47 (v0.97.11): audio_freq + max_decode_freq Reset entfernt — Widgets weg.

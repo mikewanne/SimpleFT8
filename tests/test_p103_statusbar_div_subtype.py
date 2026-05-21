@@ -47,14 +47,8 @@ def test_t2_subtoggle_updates_statusbar():
 
 
 def test_t3_settings_dialog_has_rf_hint_label():
+    # P104 (v0.97.81) Update: P103 Hint-Label wurde durch Band-Farb-Buttons
+    # ersetzt (siehe test_p104_*). Hier nur prüfen dass die neue Struktur da ist.
     src = _read("ui/settings_dialog.py")
-    assert "_rf_hint_label" in src, "P103: _rf_hint_label-Attribut existiert"
-    # Hint-Text bei leerer Tabelle
-    assert "Noch keine RF-Presets" in src, "P103: Hint-Text für leere Tabelle"
-    # _refresh_rf_table muss Hint setzen
-    m = re.search(r"def _refresh_rf_table\(self\):.*?(?=\n    def )",
-                  src, re.DOTALL)
-    assert m
-    body = m.group(0)
-    assert "_rf_hint_label" in body, (
-        "P103: _refresh_rf_table muss _rf_hint_label setzen")
+    assert "_rf_band_buttons" in src, "P104: _rf_band_buttons (P103-Hint abgelöst)"
+    assert "_refresh_rf_status" in src, "P104: _refresh_rf_status-Methode"

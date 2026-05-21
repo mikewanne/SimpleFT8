@@ -240,7 +240,8 @@ class RadioMixin:
         self.radio.set_power(self._rfpower_current)
         self.control_panel.set_power_preset(power_preset)
         # TX Audio-Drive (mic_level) setzen — steuert wieviel Leistung die PA tatsaechlich abgibt
-        tx_level = min(75, self.settings.get("tx_level", 75))  # max 75%
+        # P104 (v0.97.81): fest auf 75% (war Cap, Setting entfernt — Closed-Loop justiert nach Bedarf).
+        tx_level = 75
         self.radio.set_tx_level(tx_level / 100.0)
         self.control_panel.tx_level_bar.setValue(tx_level)
         self.control_panel.tx_level_label.setText(f"TX-Pegel: {tx_level}%")
@@ -575,9 +576,11 @@ class RadioMixin:
                     # konsistent aktualisiert (HTML-Format mit Verfall).
             elif self._rx_mode == "normal":
                 self._apply_normal_mode()
-        # Per-Band TX Level laden (Auto-Regelung speichert pro Band)
-        band_levels = self.settings.get("tx_levels_per_band", {})
-        saved_level = min(75, band_levels.get(band, 75))  # max 75% (Clipschutz-Anker)
+        # P104 (v0.97.81): TX-Level fest auf 75% bei Bandwechsel (vorher
+        # per-Band aus settings.tx_levels_per_band — Final-R1-Catch:
+        # bei Settings-Aufräumen wäre das ein stale Override gewesen).
+        # Closed-Loop justiert wenn nötig.
+        saved_level = 75
         self.radio.set_tx_level(saved_level / 100.0)
         self.control_panel.tx_level_bar.setValue(saved_level)
         self.control_panel.tx_level_label.setText(f"TX-Pegel: {saved_level}%")

@@ -24,8 +24,7 @@ class _FakeSettings:
             "callsign": "TEST",
             "locator": "JN58XB",
             "flexradio_ip": "",
-            "power_watts": 50,
-            "tx_level": 100,
+            # P104: power_watts + tx_level entfernt
             "max_calls": 3,
             "swr_limit": 3.0,
             "tune_power": 10,
@@ -58,9 +57,7 @@ class _FakeSettings:
     def locator(self):
         return self._d["locator"]
 
-    @property
-    def power_watts(self):
-        return self._d["power_watts"]
+    # P104: power_watts-Property entfernt
 
 
 @pytest.fixture(scope="module")
@@ -91,15 +88,19 @@ def test_dialog_has_tabs_attribute(dlg):
 
 
 def test_widget_attributes_accessible(dlg):
-    """Alle Widget-Attribute sind erreichbar (egal in welchem Tab)."""
+    """Alle Widget-Attribute sind erreichbar (egal in welchem Tab).
+
+    P104 (v0.97.81): power + tx_level entfernt, rf_table/combo durch
+    _rf_band_buttons ersetzt.
+    """
     expected_attrs = [
         "callsign", "locator", "radio_ip",
-        "power", "tx_level", "max_calls_combo", "swr_limit",
+        "max_calls_combo", "swr_limit",
         # P52 (v0.97.41): stats_cb entfernt — Toggle weg, Stats immer an
         "language_combo", "debug_console_cb",
         "_tune_btns", "_current_tune_power",
-        "rf_table", "_rf_band_combo",
-        "btn_rf_clear_band", "btn_rf_clear_all", "_rf_info_label",
+        # P104: rf_table/rf_band_combo/btn_rf_clear_band entfernt
+        "_rf_band_buttons", "btn_rf_clear_all", "_rf_info_label",
         "_tx_status_timer", "_export_csv_btn", "_map_open_btn",
         "tabs",
         # v0.88 Bandpilot Stunden-Logik
@@ -138,9 +139,11 @@ def test_dialog_height_within_limit(dlg, qapp):
 
 
 def test_save_round_trip(dlg):
-    """Werte aendern → _save_and_close() → in Settings persistiert."""
+    """Werte aendern → _save_and_close() → in Settings persistiert.
+
+    P104 (v0.97.81): power-Widget entfernt, Round-Trip nutzt callsign+language.
+    """
     dlg.callsign.setText("DA1MHH")
-    dlg.power.setValue(75)
     dlg.language_combo.setCurrentIndex(1)  # English
 
     # accept() per Monkey-Patch entschaerfen (sonst schliesst Dialog)
@@ -148,7 +151,6 @@ def test_save_round_trip(dlg):
     dlg._save_and_close()
 
     assert dlg.settings.get("callsign") == "DA1MHH"
-    assert dlg.settings.get("power_watts") == 75
     assert dlg.settings.get("language") == "en"
 
 
