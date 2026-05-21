@@ -535,12 +535,15 @@ class RXPanel(QWidget):
             (COL_LAND, "Land"), (COL_KM, "km"), (COL_ANT, "Ant"), (COL_SLOT, "Slot"),
         ]
         menu = QMenu(self)
+        # P101 (v0.97.73): Padding symmetrisch 20/20, Indicator explizit
+        # subcontrol-position links (Mike-Field-Test + R1).
         menu.setStyleSheet("""
             QMenu { background: #1a1a2e; color: #CCC; border: 1px solid #444; }
-            QMenu::item { padding: 4px 32px 4px 28px; }
+            QMenu::item { padding: 4px 20px 4px 20px; }
             QMenu::item:selected { background: #0066AA; }
             QMenu::item:checked { color: #00AAFF; }
-            QMenu::indicator { width: 14px; height: 14px; }
+            QMenu::indicator { width: 14px; height: 14px; margin-left: 0px;
+                subcontrol-position: left center; }
         """)
         for col, label in _TOGGLEABLE:
             action = menu.addAction(label)
@@ -682,12 +685,14 @@ class RXPanel(QWidget):
         if not all_countries:
             return
         menu = QMenu(self)
+        # P101 (v0.97.73): Padding symmetrisch 20/20, Indicator explizit links.
         menu.setStyleSheet("""
             QMenu { background: #1a1a2e; color: #CCC; border: 1px solid #444; }
-            QMenu::item { padding: 4px 32px 4px 28px; }
+            QMenu::item { padding: 4px 20px 4px 20px; }
             QMenu::item:selected { background: #0066AA; }
             QMenu::item:checked { color: #FF6622; }
-            QMenu::indicator { width: 14px; height: 14px; }
+            QMenu::indicator { width: 14px; height: 14px; margin-left: 0px;
+                subcontrol-position: left center; }
         """)
         for country in all_countries:
             action = menu.addAction(country)

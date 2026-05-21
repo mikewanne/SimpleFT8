@@ -104,25 +104,40 @@ class TXMixin:
             self._tune_stop(None)
 
     def _on_tune_override(self, duration_s: int):
-        """P95 (v0.97.67): Rechtsklick-Override für TUNE-Dauer.
+        """P95 (v0.97.67) + P101 (v0.97.73): Rechtsklick-Override TUNE-Dauer.
 
-        Mike-Spec: 10/15/20s aus Kontextmenü auf btn_tune. Setting
-        `tune_duration_s` bleibt unverändert. Wenn TUNE bereits läuft:
-        stoppen, kein Auto-Restart (User muss erneut wählen wenn neue
-        Dauer gewünscht).
+        Mike-Spec „in einem Rutsch": Rechtsklick + Sekunden-Auswahl startet
+        SOFORT einen TUNE mit dieser Dauer. Setting `tune_duration_s` bleibt
+        unverändert.
+
+        P101 nach Field-Test 21.05. (Bug A — vorher startete kein TUNE):
+        - Heutiges `if btn_tune.isChecked()` war buggy: nach unsauberem
+          Vorgänger-TUNE (Auto-Stop-Token-Race) blieb der Button-State auf
+          True → Override interpretierte das als „läuft → stop".
+        - Fix: Statt `isChecked()` direkt `_tune_active` prüfen. Bei
+          laufendem TUNE → synchron stoppen + sofort neu starten
+          (Dauer-Switch). Kein Stop-und-zurück mehr.
+        - Diagnose-Prints zur Verifikation der Signal-Kette (R1-Empfehlung).
         """
+        print(f"[P101] _on_tune_override called duration={duration_s}s "
+              f"_tune_active={getattr(self, '_tune_active', '?')} "
+              f"btn_checked={self.btn_tune.isChecked()}")
         if not self.radio.ip:
+            print("[P101] abort: radio.ip leer (kein Connect)")
             return
         if duration_s not in (10, 15, 20):
-            return  # KISS: ignorieren statt clampen
-        if self.btn_tune.isChecked():
-            # TUNE läuft → stoppen, kein Auto-Restart
-            self.btn_tune.setChecked(False)
-            self._tune_stop(None)
+            print(f"[P101] abort: duration {duration_s} nicht in (10,15,20)")
             return
-        # btn visuell checken + Pipeline mit Override-Dauer starten
+        # P101 Variante B: bei aktivem TUNE synchron stoppen + neu starten
+        # (Dauer-Switch). _tune_stop ist idempotent + token=None erzwingt.
+        if getattr(self, '_tune_active', False):
+            print("[P101] tune läuft → synchron stop, dann restart mit neuer Dauer")
+            self._tune_stop(None)
+        # btn visuell auf an + Pipeline mit Override-Dauer starten
         self.btn_tune.setChecked(True)
         self._tune_start(duration_s)
+        print(f"[P101] _tune_start({duration_s}) returned, "
+              f"_tune_active={self._tune_active}")
 
     def _tune_start(self, duration_s: int):
         """P95 (v0.97.67): Gemeinsamer TUNE-Start für regulär + Override.
@@ -140,6 +155,14 @@ class TXMixin:
         self._tune_in_progress = True
         # P54-FIX R1-F2: Cancel-Flag reset vor Phase A (sauberer State)
         self._tune_convergence_cancelled = False
+        # P101 Final-R1: latenten Post-Check-Token vom vorherigen TUNE
+        # ungültig machen (Override-Pfad Stop+Restart). Andernfalls würde
+        # 2s nach altem _tune_stop die Post-Check-Logik den Watchdog
+        # entfernen + alten SWR-Wert auswerten — mitten im neuen TUNE.
+        self._tune_post_check_token = None
+        # FWDPWR-Sample-Puffer vom vorherigen TUNE leeren (falls existent)
+        if hasattr(self, '_fwdpwr_samples'):
+            self._fwdpwr_samples.clear()
 
         # Tune-Frequenz aus TUNE_FREQS-Map (band+mode)
         tune_freq = get_tune_freq_mhz(self.settings.band, self.settings.mode)

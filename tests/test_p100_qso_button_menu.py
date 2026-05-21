@@ -129,25 +129,33 @@ def test_t7_qso_button_context_menu_uses_builder():
 # ── Padding-Fix ──────────────────────────────────────────────────────
 
 
-def test_t8_qso_panel_menu_padding_right_32():
-    """Builder-Stylesheet muss `padding: 4px 32px 4px 28px` enthalten."""
+def test_t8_qso_panel_menu_padding_symmetric_20():
+    """P101: Builder-Stylesheet muss `padding: 4px 20px 4px 20px` (symmetrisch)
+    + `subcontrol-position: left center` enthalten."""
     src = Path(__file__).resolve().parent.parent / "ui" / "qso_panel.py"
     text = src.read_text(encoding="utf-8")
     m = re.search(r"def _build_columns_menu\(self\):.*?(?=\n    def )",
                   text, re.DOTALL)
     assert m
-    assert "padding: 4px 32px 4px 28px" in m.group(0), (
-        "P100: padding rechts muss 32px sein (war 20px)")
+    body = m.group(0)
+    assert "padding: 4px 20px 4px 20px" in body, (
+        "P101: padding symmetrisch 20/20 (R1-Empfehlung)")
+    assert "subcontrol-position: left center" in body, (
+        "P101: Indicator explizit links (macOS Theme-Bug-Vermeidung)")
 
 
-def test_t9_rx_panel_menu_padding_right_32():
-    """RX-Panel beide QMenu-Stylesheets müssen 32px rechts haben."""
+def test_t9_rx_panel_menu_padding_symmetric_20():
+    """P101: RX-Panel beide QMenu-Stylesheets müssen 20/20 symmetrisch
+    + subcontrol-position: left center haben."""
     src = Path(__file__).resolve().parent.parent / "ui" / "rx_panel.py"
     text = src.read_text(encoding="utf-8")
-    count_new = text.count("padding: 4px 32px 4px 28px")
-    count_old = text.count("padding: 4px 20px 4px 28px")
-    assert count_new >= 2, (
-        f"P100: RX-Panel muss 2× `4px 32px 4px 28px` haben (Spalten + Länder), "
-        f"gefunden: {count_new}")
-    assert count_old == 0, (
-        f"P100: alte 20px-Variante darf nicht mehr existieren, gefunden: {count_old}")
+    new_pad = text.count("padding: 4px 20px 4px 20px")
+    left_pos = text.count("subcontrol-position: left center")
+    old_pad = text.count("padding: 4px 32px 4px 28px")
+    assert new_pad >= 2, (
+        f"P101: RX-Panel muss 2× `4px 20px 4px 20px` haben, gefunden: {new_pad}")
+    assert left_pos >= 2, (
+        f"P101: RX-Panel muss 2× `subcontrol-position: left center` haben, "
+        f"gefunden: {left_pos}")
+    assert old_pad == 0, (
+        f"P101: alte 32/28-Variante darf nicht mehr existieren, gefunden: {old_pad}")

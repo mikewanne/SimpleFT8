@@ -1007,15 +1007,23 @@ class _RadioCard(QFrame):
         if not self.btn_tune.isVisible():
             return
         menu = QMenu(self)
+        # P101: bewusst KEIN Indicator-Style (Actions sind nicht checkable,
+        # nur Auswahl-Items — symmetrisches 20/20 reicht).
         menu.setStyleSheet(
             "QMenu { background: #1a1a2e; color: #CCC; border: 1px solid #444; }"
             "QMenu::item { padding: 4px 20px 4px 20px; }"
             "QMenu::item:selected { background: #0066AA; }"
         )
+
+        def _emit_override(s: int):
+            """P101 Diagnose-Print für Signal-Verifikation."""
+            print(f"[P101] menu-action TUNE {s}s clicked → emit signal")
+            self.tune_override_requested.emit(s)
+
         for sec in (10, 15, 20):
             act = menu.addAction(f"TUNE {sec}s")
             act.triggered.connect(
-                lambda checked=False, s=sec: self.tune_override_requested.emit(s))
+                lambda checked=False, s=sec: _emit_override(s))
         menu.exec(self.btn_tune.mapToGlobal(pos))
 
 

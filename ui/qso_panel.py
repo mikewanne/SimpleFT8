@@ -389,18 +389,21 @@ class QSOPanel(QWidget):
             sb.setValue(min(saved, sb.maximum()))
 
     def _build_columns_menu(self):
-        """P100 (v0.97.71): Gemeinsamer Builder für Spalten-Toggle-Menü.
+        """P100 (v0.97.71) + P101 (v0.97.73): Spalten-Toggle-Menü Builder.
 
-        Beide Rechtsklick-Pfade (log_view + QSO-Tab-Button) nutzen denselben
-        Menü-Inhalt. Padding rechts erweitert auf 32px (Mike: Häkchen saß
-        zu dicht am Rand, RX-Panel ebenso korrigiert).
+        P101 nach Mike-Field-Test 21.05.: Padding symmetrisch 20/20 (zuvor
+        asymmetrisch 32/28). Indicator explizit `subcontrol-position:
+        left center` — verhindert dass macOS den Haken rechts rendert
+        (themen-abhängige Qt-Default-Position, R1-Empfehlung).
         """
         menu = QMenu(self)
         menu.setStyleSheet(
             "QMenu { background: #1a1a2e; color: #CCC; border: 1px solid #444; }"
-            "QMenu::item { padding: 4px 32px 4px 28px; }"
+            "QMenu::item { padding: 4px 20px 4px 20px; }"
             "QMenu::item:selected { background: #0066AA; }"
             "QMenu::item:checked { color: #00AAFF; }"
+            "QMenu::indicator { width: 14px; height: 14px; margin-left: 0px;"
+            " subcontrol-position: left center; }"
         )
         a_eo = menu.addAction("Even/Odd-Tag")
         a_eo.setCheckable(True)
