@@ -66,34 +66,33 @@ def test_t2_qso_button_signal_emits_calls_handler(panel, monkeypatch):
 # ── _build_columns_menu Builder ─────────────────────────────────────
 
 
-def test_t3_builder_returns_two_checkable_actions(panel):
+def test_t3_builder_returns_two_actions_not_checkable(panel):
+    """P102: Actions nicht checkable (Häkchen manuell im Text)."""
     menu = panel._build_columns_menu()
     actions = menu.actions()
     assert len(actions) == 2
-    assert all(a.isCheckable() for a in actions)
+    assert all(not a.isCheckable() for a in actions), (
+        "P102: setCheckable(False) — kein Qt-Default-Indikator")
 
 
-def test_t4_builder_action_labels_and_order(panel):
+def test_t4_builder_action_labels_contain_text(panel):
+    """P102: Labels mit Häkchen-Prefix oder Whitespace-Padding."""
     menu = panel._build_columns_menu()
     labels = [a.text() for a in menu.actions()]
-    assert labels == ["Even/Odd-Tag", "Antennen-Anzeige"]
+    assert "Even/Odd-Tag" in labels[0]
+    assert "Antennen-Anzeige" in labels[1]
 
 
-def test_t5_builder_action_toggle_emits_signal(panel):
-    """Toggle aus Builder-Menü muss eo_tag_visibility_changed feuern.
-
-    QAction.trigger() flippt bei checkable=True automatisch — Action wird
-    initial mit setChecked(self._show_eo_tag=True) gebaut, trigger() macht
-    daraus False und emittet triggered(False).
-    """
+def test_t5_builder_action_trigger_toggles_state(panel):
+    """P102: trigger() ruft _toggle_eo_tag(not current_state)."""
     received = []
     panel.eo_tag_visibility_changed.connect(received.append)
     panel._show_eo_tag = True  # Ausgangslage
     menu = panel._build_columns_menu()
     a_eo = menu.actions()[0]
-    assert a_eo.isChecked() is True
-    a_eo.trigger()  # flippt auf False + emit triggered(False)
-    assert received == [False]
+    a_eo.trigger()
+    assert received == [False]  # flippt von True auf False
+    assert panel._show_eo_tag is False
     assert panel._show_eo_tag is False
 
 
@@ -129,39 +128,34 @@ def test_t7_qso_button_context_menu_uses_builder():
 # ── Padding-Fix ──────────────────────────────────────────────────────
 
 
-def test_t8_qso_panel_menu_padding_and_indicator_margin():
-    """P101-Fix2 (Mike-Field-Test 21.05.): `margin-left: 0` lässt Haken am
-    Border kleben. Muss 8px Abstand sein. padding-left 32 = 8 (margin) +
-    14 (indicator) + 10 (Lücke zum Text). padding-right bleibt 20px."""
+def test_t8_qso_panel_menu_indicator_hidden_text_checkmark():
+    """P102 (v0.97.78 nach Mike-Field-Test): Indicator versteckt
+    (width:0), Häkchen über Action-Text-Prefix. Pixelgenaue Kontrolle."""
     src = Path(__file__).resolve().parent.parent / "ui" / "qso_panel.py"
     text = src.read_text(encoding="utf-8")
     m = re.search(r"def _build_columns_menu\(self\):.*?(?=\n    def )",
                   text, re.DOTALL)
     assert m
     body = m.group(0)
-    assert "padding: 4px 20px 4px 32px" in body, (
-        "P101-Fix2: padding-left auf 32 (Indicator + Lücke + Text)")
-    assert "margin-left: 8px" in body, (
-        "P101-Fix2: Indicator margin-left 8px (Luft zum Border)")
-    assert "subcontrol-position: left center" in body
+    assert "padding: 4px 20px 4px 8px" in body, "P102: padding-left 8px"
+    assert "QMenu::indicator { width: 0px" in body, (
+        "P102: Indicator versteckt")
+    assert '✓' in body, "P102: Häkchen-Symbol manuell im Action-Text"
+    assert "setCheckable(False)" in body, (
+        "P102: kein Qt-Default-Indikator (Text trägt Häkchen)")
 
 
-def test_t9_rx_panel_menu_padding_and_indicator_margin():
-    """P101-Fix2: RX-Panel beide QMenu-Stylesheets analog mit
-    margin-left: 8px + padding-left 32."""
+def test_t9_rx_panel_menu_indicator_hidden_text_checkmark():
+    """P102: RX-Panel beide Menüs analog mit verstecktem Indicator."""
     src = Path(__file__).resolve().parent.parent / "ui" / "rx_panel.py"
     text = src.read_text(encoding="utf-8")
-    new_pad = text.count("padding: 4px 20px 4px 32px")
-    margin_8 = text.count("margin-left: 8px")
-    left_pos = text.count("subcontrol-position: left center")
-    old_pad_a = text.count("padding: 4px 32px 4px 28px")
-    old_pad_b = text.count("padding: 4px 20px 4px 20px")
-    old_margin = text.count("margin-left: 0px")
+    new_pad = text.count("padding: 4px 20px 4px 8px")
+    hidden = text.count("QMenu::indicator { width: 0px")
+    old_pad = text.count("padding: 4px 20px 4px 32px")
+    old_margin = text.count("margin-left: 8px")
     assert new_pad >= 2, (
-        f"P101-Fix2: RX-Panel 2× `4px 20px 4px 32px`, gefunden: {new_pad}")
-    assert margin_8 >= 2, (
-        f"P101-Fix2: RX-Panel 2× `margin-left: 8px`, gefunden: {margin_8}")
-    assert left_pos >= 2
-    assert old_pad_a == 0, "alte 32/28-Variante muss raus"
-    assert old_pad_b == 0, "alte symmetrisch-20-Variante muss raus"
-    assert old_margin == 0, "alte margin-left:0px muss raus"
+        f"P102: RX-Panel 2× `4px 20px 4px 8px`, gefunden: {new_pad}")
+    assert hidden >= 2, (
+        f"P102: RX-Panel 2× versteckter Indicator, gefunden: {hidden}")
+    assert old_pad == 0, "P102: alte 32-Variante muss raus"
+    assert old_margin == 0, "P102: alte margin-left:8 muss raus"

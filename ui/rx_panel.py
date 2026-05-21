@@ -535,22 +535,22 @@ class RXPanel(QWidget):
             (COL_LAND, "Land"), (COL_KM, "km"), (COL_ANT, "Ant"), (COL_SLOT, "Slot"),
         ]
         menu = QMenu(self)
-        # P101 (v0.97.73): Padding symmetrisch 20/20, Indicator explizit
-        # subcontrol-position links (Mike-Field-Test + R1).
+        # P102 (v0.97.78): Indicator versteckt, Häkchen via Action-Text-Prefix
+        # — pixelgenaue Kontrolle (Mike-ASCII-Spec "I L text").
         menu.setStyleSheet("""
             QMenu { background: #1a1a2e; color: #CCC; border: 1px solid #444; }
-            QMenu::item { padding: 4px 20px 4px 32px; }
+            QMenu::item { padding: 4px 20px 4px 8px; }
             QMenu::item:selected { background: #0066AA; }
-            QMenu::item:checked { color: #00AAFF; }
-            QMenu::indicator { width: 14px; height: 14px; margin-left: 8px;
-                subcontrol-position: left center; }
+            QMenu::indicator { width: 0px; height: 0px; margin: 0px; }
         """)
+        def _label(checked: bool, text: str) -> str:
+            return f" ✓  {text}" if checked else f"    {text}"
         for col, label in _TOGGLEABLE:
-            action = menu.addAction(label)
-            action.setCheckable(True)
-            action.setChecked(col not in self._hidden_cols)
+            visible = col not in self._hidden_cols
+            action = menu.addAction(_label(visible, label))
+            action.setCheckable(False)
             action.triggered.connect(
-                lambda checked, c=col: self._toggle_column(c, not checked)
+                lambda _=False, c=col, v=visible: self._toggle_column(c, v)
             )
         menu.exec(self.table.horizontalHeader().mapToGlobal(pos))
 
@@ -685,21 +685,21 @@ class RXPanel(QWidget):
         if not all_countries:
             return
         menu = QMenu(self)
-        # P101 (v0.97.73): Padding symmetrisch 20/20, Indicator explizit links.
+        # P102 (v0.97.78): Indicator versteckt, Häkchen via Action-Text.
         menu.setStyleSheet("""
             QMenu { background: #1a1a2e; color: #CCC; border: 1px solid #444; }
-            QMenu::item { padding: 4px 20px 4px 32px; }
+            QMenu::item { padding: 4px 20px 4px 8px; }
             QMenu::item:selected { background: #0066AA; }
-            QMenu::item:checked { color: #FF6622; }
-            QMenu::indicator { width: 14px; height: 14px; margin-left: 8px;
-                subcontrol-position: left center; }
+            QMenu::indicator { width: 0px; height: 0px; margin: 0px; }
         """)
+        def _label(checked: bool, text: str) -> str:
+            return f" ✓  {text}" if checked else f"    {text}"
         for country in all_countries:
-            action = menu.addAction(country)
-            action.setCheckable(True)
-            action.setChecked(country in self._country_filter)
+            active = country in self._country_filter
+            action = menu.addAction(_label(active, country))
+            action.setCheckable(False)
             action.triggered.connect(
-                lambda checked, c=country: self._toggle_country(c, checked)
+                lambda _=False, c=country, a=active: self._toggle_country(c, not a)
             )
         if self._country_filter:
             menu.addSeparator()

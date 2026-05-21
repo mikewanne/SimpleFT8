@@ -776,6 +776,12 @@ class _RadioCard(QFrame):
         self.setObjectName("card")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setStyleSheet(_CARD_SS_TEAL)
+        # P102 (v0.97.78): Direkter Callback statt Signal-Hop. ControlPanel
+        # setzt diesen wenn MainWindow den Handler registriert.
+        # Mike-Field-Test 21.05. zeigte dass auch direkter Signal-Connect
+        # an `tune_override_requested` zur Laufzeit nichts auslöst — Callback
+        # umgeht Qt-Signal-System komplett.
+        self._tune_override_callback = None
 
         lay = QVBoxLayout(self)
         lay.setContentsMargins(10, 8, 10, 8)
@@ -1016,11 +1022,27 @@ class _RadioCard(QFrame):
         )
 
         def _emit_override(s: int):
-            """P101 Diagnose über debug_log (P102) — Signal-Verifikation."""
+            """P102 (v0.97.78): direkter Callback statt Signal-Hop.
+
+            Signal-Pfad ging mehrfach zur Laufzeit tot (Mike-Field-Test
+            21.05.). Wenn Callback registriert (via ControlPanel.
+            on_tune_override_requested): direkt aufrufen, kein Signal.
+            Sonst Signal-Fallback (für Tests + Backwards-Compat).
+            """
             from core.debug_log import debug_log
+            cb = self._tune_override_callback
             debug_log("P101",
-                      f"menu-action TUNE {s}s clicked → emit signal")
-            self.tune_override_requested.emit(s)
+                      f"menu-action TUNE {s}s clicked, callback="
+                      f"{'set' if cb else 'None'}")
+            if cb is not None:
+                try:
+                    debug_log("P101", f"direct callback({s}) call")
+                    cb(s)
+                except Exception as e:
+                    debug_log("P101", f"callback raised: {e}")
+            else:
+                debug_log("P101", "fallback to signal emit")
+                self.tune_override_requested.emit(s)
 
         for sec in (10, 15, 20):
             act = menu.addAction(f"TUNE {sec}s")
@@ -2058,16 +2080,30 @@ class ControlPanel(QWidget):
         self.btn_tune.setVisible(self._tuner_present)
 
     def on_tune_override_requested(self, callback) -> None:
-        """P102 (v0.97.77): direkter Connect ans _radio_card-Signal.
+        """P102 (v0.97.78): Callback + Signal-Connect (Hosenträger+Gürtel).
 
-        Ersetzt das frühere Bubble-Hopping über ein ControlPanel-eigenes
-        Signal — DeepSeek-V4-pro-Diagnose 21.05.: das ControlPanel-Signal
-        ging zur Laufzeit tot zwischen `.emit()` und Slot. Direkter
-        Connect umgeht den Hop.
+        Mike-Field-Test 21.05.: Sowohl Bubble-Hop als auch direkter
+        Signal-Connect an `_radio_card.tune_override_requested` gingen
+        zur Laufzeit tot (Slot lief nicht). DeepSeek-R1-Empfehlung:
+        Callback-Bypass als primärer Weg, Signal als Fallback.
 
-        Mike-Spec: Rechtsklick TUNE → Sekunden → callback(int duration_s).
+        Speichert Callback an der `_RadioCard`-Instanz damit
+        `_emit_override` (Closure mit `self=_RadioCard`) direkt darauf
+        zugreifen kann.
         """
+        from core.debug_log import debug_log
+        debug_log("P102",
+                  f"on_tune_override_requested: callback={callback}, "
+                  f"radio_card id={id(self._radio_card)}")
+        # Primärweg: direktes Callback-Attribut am _RadioCard
+        self._radio_card._tune_override_callback = callback
+        # Fallback-Weg: Signal-Connect (für Tests + falls Callback irgendwann
+        # mal nicht ankommt). Beide aktiv → _emit_override muss aufpassen
+        # nicht beides zu rufen (Logic: wenn callback gesetzt, nur callback).
         self._radio_card.tune_override_requested.connect(callback)
+        debug_log("P102",
+                  f"callback set on radio_card._tune_override_callback, "
+                  f"signal also connected")
 
     def set_tx_active(self, active: bool):
         if active:

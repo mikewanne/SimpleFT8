@@ -389,30 +389,39 @@ class QSOPanel(QWidget):
             sb.setValue(min(saved, sb.maximum()))
 
     def _build_columns_menu(self):
-        """P100 (v0.97.71) + P101 (v0.97.73): Spalten-Toggle-Menü Builder.
+        """P100 (v0.97.71) + P102 (v0.97.78): Spalten-Toggle-Menü Builder.
 
-        P101 nach Mike-Field-Test 21.05.: Padding symmetrisch 20/20 (zuvor
-        asymmetrisch 32/28). Indicator explizit `subcontrol-position:
-        left center` — verhindert dass macOS den Haken rechts rendert
-        (themen-abhängige Qt-Default-Position, R1-Empfehlung).
+        P102 nach Mike-Field-Test 21.05.: `QMenu::indicator margin-left`
+        wird auf macOS/PySide6 nicht zuverlässig respektiert (Häkchen
+        klebte am Border). Variante P4 (DeepSeek-R1-Empfehlung):
+        Indicator komplett verstecken, Häkchen-Symbol manuell in Action-
+        Text packen → pixelgenaue Kontrolle via String-Whitespace.
+
+        Mike-Spec „I L text": Border, 1 Leerzeichen, Häkchen, 1
+        Leerzeichen, Text. Padding-Left 8px = Mike's „I "-Lücke,
+        Action-Text " ✓  ..." gibt restliche Spaces.
         """
         menu = QMenu(self)
         menu.setStyleSheet(
             "QMenu { background: #1a1a2e; color: #CCC; border: 1px solid #444; }"
-            "QMenu::item { padding: 4px 20px 4px 32px; }"
+            "QMenu::item { padding: 4px 20px 4px 8px; }"
             "QMenu::item:selected { background: #0066AA; }"
             "QMenu::item:checked { color: #00AAFF; }"
-            "QMenu::indicator { width: 14px; height: 14px; margin-left: 8px;"
-            " subcontrol-position: left center; }"
+            "QMenu::indicator { width: 0px; height: 0px; margin: 0px; }"
         )
-        a_eo = menu.addAction("Even/Odd-Tag")
-        a_eo.setCheckable(True)
-        a_eo.setChecked(self._show_eo_tag)
-        a_eo.triggered.connect(self._toggle_eo_tag)
-        a_ant = menu.addAction("Antennen-Anzeige")
-        a_ant.setCheckable(True)
-        a_ant.setChecked(self._show_ant_label)
-        a_ant.triggered.connect(self._toggle_ant_label)
+
+        def _label(checked: bool, text: str) -> str:
+            # Layout: [padding-left 8px][" ✓ "][text]  vs  [padding-left 8px]["    "][text]
+            return f" ✓  {text}" if checked else f"    {text}"
+
+        a_eo = menu.addAction(_label(self._show_eo_tag, "Even/Odd-Tag"))
+        a_eo.setCheckable(False)  # P102: kein Qt-Default-Indikator (manuell)
+        a_eo.triggered.connect(
+            lambda: self._toggle_eo_tag(not self._show_eo_tag))
+        a_ant = menu.addAction(_label(self._show_ant_label, "Antennen-Anzeige"))
+        a_ant.setCheckable(False)
+        a_ant.triggered.connect(
+            lambda: self._toggle_ant_label(not self._show_ant_label))
         return menu
 
     def _on_log_context_menu(self, pos):
