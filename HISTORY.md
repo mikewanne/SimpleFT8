@@ -12690,3 +12690,31 @@ Tests 1710 → 1714 (+4):
 Alte ADIF-Records aus `adif/` und `archiv/_konsolidiert/` mit gespeichertem
 COMMENT bleiben unangetastet — Lese-Pfad zeigt sie nur nicht mehr an.
 Export-Pfad (P107) filtert COMMENT ohnehin via `_rewrite_minimal`.
+
+## 2026-05-21 v0.97.86 — P109 X-Button im Detail-Overlay schliesst auch Logbuch-Tab
+
+Mike-Beobachtung 21.05.: Klick auf X im QSO-Detail-Overlay schloss nur das
+Overlay, der Logbuch-Tab blieb offen. Spec: X soll wie QSO-Button-Klick
+wirken — Tab + Overlay beide zurück auf QSO-Live.
+
+**Fix:** 1-LOC in `ui/main_window.py:679-682`:
+- ALT: `btn_close.clicked → lambda: _right_stack.setCurrentIndex(0)` (nur Stack)
+- NEU: `btn_close.clicked → lambda: qso_panel.tabs.setCurrentIndex(0)`
+  → triggert `currentChanged` → bestehender `_on_qso_tab_changed(0)`-Handler
+  erledigt Stack-Switch automatisch (Single-Source-of-Truth).
+
+**Delete-Pfad unverändert** (R1: „Delete soll Logbuch offen lassen — User
+sieht Refresh"). Nur X-Button-Verhalten geändert.
+
+**Workflow:** V1 → V2 (3 Self-Findings) → R1-DeepSeek („1-LOC sauber,
+Delete nicht ändern, 2 Tests reichen") → V3 → Code → 2 Tests → Final-R1
+„Push-bereit (GRÜN)" 0 Blocker.
+
+**V4-pro 45-Cycle-Bilanz: 0 Halluzinationen.**
+
+Tests 1714 → 1716 (+2):
+- T1: btn_close-Click verbindet zu `tabs.setCurrentIndex(0)`
+- T2: alter `_right_stack`-only-Pfad nicht mehr im Source
+
+P66-Tests (`_on_qso_tab_changed`-Handler) unverändert grün — Handler-
+Logik bleibt, nur Trigger-Punkt verlagert.

@@ -1,10 +1,24 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-21 — P108 Kommentar-Feld raus aus QSO-Detail-Overlay
+## Stand 2026-05-21 — P109 X-Button schliesst auch Logbuch-Tab
 
-**Aktueller Code-Stand:** v0.97.85 (P108), Tests **1714 grün** (+4).
+**Aktueller Code-Stand:** v0.97.86 (P109), Tests **1716 grün** (+2).
 
-### 🟢 v0.97.85 P108 — Kommentar-Feld aus QSO-Detail-Overlay entfernt
+### 🟢 v0.97.86 P109 — X im Detail-Overlay schliesst auch Logbuch-Tab
+
+Mike-Beobachtung 21.05.: Klick auf X schloss nur Overlay, Logbuch blieb
+offen. Spec: X = QSO-Button-Verhalten (Tab + Overlay zurück auf QSO-Live).
+
+**Fix:** 1-LOC in `ui/main_window.py:679-682`:
+- ALT: `btn_close → lambda: _right_stack.setCurrentIndex(0)`
+- NEU: `btn_close → lambda: qso_panel.tabs.setCurrentIndex(0)`
+  → bestehender `_on_qso_tab_changed(0)`-Handler erledigt Stack automatisch.
+
+Delete-Pfad bewusst unverändert (User sieht Refresh).
+
+**V4-pro 45-Cycle-Bilanz: 0 Halluzinationen.**
+
+### Vorgänger v0.97.85 P108 — Kommentar-Feld aus QSO-Detail-Overlay entfernt
 
 Mike-Beobachtung nach P106 (WSJT-X-Minimal-ADIF): QRZ.com bestätigt wieder.
 Im QSO-Detail-Overlay stand aber noch das funktionslose Feld „Kommentar:"

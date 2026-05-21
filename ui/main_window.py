@@ -676,8 +676,10 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self._right_stack.addWidget(self._detail_overlay)   # Index 1: QSO Detail
         self._right_stack.setCurrentIndex(0)
         self._right_stack.setMinimumWidth(320)
+        # P109: X = QSO-Button-Verhalten — Tab-Switch triggert
+        # _on_qso_tab_changed(0) → schliesst Stack + wechselt Tab konsistent.
         self._detail_overlay.btn_close.clicked.connect(
-            lambda: self._right_stack.setCurrentIndex(0))
+            lambda: self.qso_panel.tabs.setCurrentIndex(0))
         # Delete-Signal: Logbuch loeschen + Overlay schliessen
         self._detail_overlay.delete_requested.connect(self._on_logbook_delete)
 
