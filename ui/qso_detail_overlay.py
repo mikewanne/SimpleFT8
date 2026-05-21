@@ -114,16 +114,6 @@ class QSODetailOverlay(QWidget):
             grid.addWidget(edit, row, col + 1)
             self._edits[key] = edit
 
-        # Kommentar (ganze Breite)
-        row_comment = len(fields) // 2 + 1
-        lbl_c = QLabel("Kommentar:")
-        lbl_c.setStyleSheet(_lbl_ss)
-        grid.addWidget(lbl_c, row_comment, 0)
-        self.comment_edit = QLineEdit()
-        self.comment_edit.setStyleSheet(_edit_ss)
-        self.comment_edit.setFixedHeight(22)
-        grid.addWidget(self.comment_edit, row_comment, 1, 1, 3)
-
         lay.addWidget(qso_frame)
 
         # ── Buttons ───────────────────────────────────────────
@@ -187,7 +177,6 @@ class QSODetailOverlay(QWidget):
         self._edits["rst_rcvd"].setText(record.get("RST_RCVD", ""))
         self._edits["grid"].setText(record.get("GRIDSQUARE", ""))
         self._edits["power"].setText(record.get("TX_PWR", ""))
-        self.comment_edit.setText(record.get("COMMENT", ""))
 
         call = record.get("CALL", "—")
         self.call_label.setText(call)

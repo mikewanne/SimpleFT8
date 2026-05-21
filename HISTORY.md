@@ -12659,3 +12659,34 @@ Bei laufender App ist der Doppel-Schreibvorgang aber inhaltsneutral
 
 Kein Code-Eingriff, nur Doku-Vermerk damit es später keinen
 „Warum doppelt?"-Verdacht gibt.
+
+## 2026-05-21 v0.97.85 — P108 Kommentar-Feld aus QSO-Detail-Overlay entfernt
+
+Mike-Beobachtung 21.05. nach P106 (WSJT-X-Minimal-ADIF): QRZ.com bestätigt
+wieder. Im QSO-Detail-Overlay (Klick auf Logbuch-Zeile) stand aber noch
+das „Kommentar"-Feld mit „SimpleFT8 v1.0" — funktionslos seit P106, weil
+COMMENT nicht mehr exportiert wird.
+
+**Code-Verifikation vor Fix:** `comment_edit` war bereits read-only —
+`_on_save` emittierte `self._qso_data` (Original-Record), las das Widget
+nie aus. Effektiv totes UI-Element.
+
+**Fix:** 10 LOC raus aus `ui/qso_detail_overlay.py`:
+- Z. 117-125: Label + QLineEdit + Grid-Add gelöscht
+- Z. 190: `setText(record.get("COMMENT", ""))` gelöscht
+
+**Workflow:** V1 → V2-Self-Review → R1-DeepSeek („grün durch und durch,
+nur GELB Test-Abdeckung") → V3 → Code → 4 Tests T1-T4 → Final-R1 V4-pro
+„Push-bereit, kein Rot/Orange-Blocker, Go".
+
+**V4-pro 44-Cycle-Bilanz: 0 Halluzinationen.**
+
+Tests 1710 → 1714 (+4):
+- T1: `comment_edit`-Attribut entfernt
+- T2: `load_qso()` Smoke mit + ohne COMMENT (kein AttributeError)
+- T3: `_on_save` emittiert `_qso_data` unverändert
+- T4: Label-Text „Kommentar:" nicht mehr im Source
+
+Alte ADIF-Records aus `adif/` und `archiv/_konsolidiert/` mit gespeichertem
+COMMENT bleiben unangetastet — Lese-Pfad zeigt sie nur nicht mehr an.
+Export-Pfad (P107) filtert COMMENT ohnehin via `_rewrite_minimal`.

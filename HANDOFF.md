@@ -1,10 +1,23 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-21 — P101 TUNE-Override-Fix + Padding-Korrektur
+## Stand 2026-05-21 — P108 Kommentar-Feld raus aus QSO-Detail-Overlay
 
-**Aktueller Code-Stand:** v0.97.73 (P101), Tests **1697 grün** (+14).
+**Aktueller Code-Stand:** v0.97.85 (P108), Tests **1714 grün** (+4).
 
-### 🟢 v0.97.73 P101 — TUNE-Override Variante B + Padding-Korrektur
+### 🟢 v0.97.85 P108 — Kommentar-Feld aus QSO-Detail-Overlay entfernt
+
+Mike-Beobachtung nach P106 (WSJT-X-Minimal-ADIF): QRZ.com bestätigt wieder.
+Im QSO-Detail-Overlay stand aber noch das funktionslose Feld „Kommentar:"
+mit altem „SimpleFT8 v1.0"-Inhalt — wurde seit P106 nicht mehr exportiert,
+war auch vorher schon read-only (Save-Pfad las das Widget nie aus).
+
+**Fix:** 10 LOC raus aus `ui/qso_detail_overlay.py` (Label + Widget + setText).
+
+**Workflow:** V1 → V2 → R1 (grün, nur GELB Tests) → V3 → Code → 4 Tests → Final-R1 „Go" 0 Blocker.
+
+**V4-pro 44-Cycle-Bilanz: 0 Halluzinationen.**
+
+### Vorgänger v0.97.73 P101 — TUNE-Override Variante B + Padding-Korrektur
 
 Mike-Field-Test 21.05. fand 2 Bugs in P100:
 
