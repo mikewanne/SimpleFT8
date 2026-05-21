@@ -1435,8 +1435,17 @@ class ControlPanel(QWidget):
         self.btn_tune.clicked.connect(self._on_tune_clicked)
         # P95 (v0.97.67): Rechtsklick-Override Signal vom _RadioCard
         # bubblen → MainWindow connectet es zu mw_tx._on_tune_override.
-        radio_card.tune_override_requested.connect(
-            self.tune_override_requested.emit)
+        # P101 v0.97.75: Bubble via Helper mit debug_log (Connection-
+        # Verifikation; bei reiner .emit-Bindung war zur Laufzeit nicht
+        # nachvollziehbar ob Signal hier ankommt).
+        def _bubble_tune_override(s: int):
+            from core.debug_log import debug_log
+            debug_log("P101",
+                      f"ControlPanel bubble: radio_card → control_panel emit s={s}")
+            self.tune_override_requested.emit(s)
+        radio_card.tune_override_requested.connect(_bubble_tune_override)
+        # Referenz halten damit Closure nicht GC'd wird
+        self._tune_override_bubble = _bubble_tune_override
         # P97 (v0.97.69): Status-Labels neben ANTENNE/RADIO referenzieren
         # damit Helper _refresh_antenna_status_label / _refresh_radio_status_label
         # sie aktualisieren können (auch bei eingeklappter Kachel sichtbar).
