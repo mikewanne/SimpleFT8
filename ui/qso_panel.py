@@ -402,8 +402,12 @@ class QSOPanel(QWidget):
         Action-Text " ✓  ..." gibt restliche Spaces.
         """
         menu = QMenu(self)
+        # P102 (v0.97.79): Menlo-Monospace damit ✓ und space gleich breit
+        # sind — sonst rutscht der Text bei unchecked nach links (Mike-
+        # Field-Test 21.05.).
         menu.setStyleSheet(
-            "QMenu { background: #1a1a2e; color: #CCC; border: 1px solid #444; }"
+            "QMenu { background: #1a1a2e; color: #CCC; border: 1px solid #444;"
+            " font-family: Menlo, Consolas, monospace; }"
             "QMenu::item { padding: 4px 20px 4px 8px; }"
             "QMenu::item:selected { background: #0066AA; }"
             "QMenu::item:checked { color: #00AAFF; }"
@@ -411,8 +415,9 @@ class QSOPanel(QWidget):
         )
 
         def _label(checked: bool, text: str) -> str:
-            # Layout: [padding-left 8px][" ✓ "][text]  vs  [padding-left 8px]["    "][text]
-            return f" ✓  {text}" if checked else f"    {text}"
+            # Mike-Spec: Häkchen ↔ Leerzeichen tauschen, Anzahl Zeichen
+            # vor Text bleibt gleich → mit Monospace-Font rechtsbündig.
+            return f"✓ {text}" if checked else f"  {text}"
 
         a_eo = menu.addAction(_label(self._show_eo_tag, "Even/Odd-Tag"))
         a_eo.setCheckable(False)  # P102: kein Qt-Default-Indikator (manuell)

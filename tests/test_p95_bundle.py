@@ -81,74 +81,50 @@ def test_a_t3_control_panel_on_tune_override_requested(app):
     assert received == [15]
 
 
-def test_a_t4_on_tune_override_without_active_tune_starts_pipeline(app):
-    """Mock mw_tx-Mixin: _on_tune_override(20) → btn_tune.setChecked(True)
-    + _tune_start(20). Setting unverändert.
-
-    P101 (v0.97.73): _tune_active als Guard (nicht btn.isChecked()), Variante B.
-    """
+def _mock_tx(tune_active=False, btn_checked=False):
+    """P102 (v0.97.79): Helper für Mock mit korrektem control_panel.btn_tune."""
     from ui.mw_tx import TXMixin
     obj = MagicMock(spec=TXMixin)
     obj._on_tune_override = TXMixin._on_tune_override.__get__(obj)
     obj.radio = MagicMock()
     obj.radio.ip = "192.168.1.100"
-    obj.btn_tune = MagicMock()
-    obj.btn_tune.isChecked = MagicMock(return_value=False)
-    obj._tune_active = False  # P101: kein laufender TUNE
+    obj.control_panel = MagicMock()
+    obj.control_panel.btn_tune = MagicMock()
+    obj.control_panel.btn_tune.isChecked = MagicMock(return_value=btn_checked)
+    obj._tune_active = tune_active
     obj._tune_start = MagicMock()
     obj._tune_stop = MagicMock()
+    return obj
 
+
+def test_a_t4_on_tune_override_without_active_tune_starts_pipeline(app):
+    """P102 (v0.97.79): _on_tune_override greift via self.control_panel.btn_tune
+    auf den Button zu (war vorher buggy self.btn_tune — siehe Mike-Log
+    'MainWindow object has no attribute btn_tune')."""
+    obj = _mock_tx(tune_active=False, btn_checked=False)
     obj._on_tune_override(20)
-
-    obj.btn_tune.setChecked.assert_called_once_with(True)
+    obj.control_panel.btn_tune.setChecked.assert_called_once_with(True)
     obj._tune_start.assert_called_once_with(20)
     obj._tune_stop.assert_not_called()
 
 
 def test_a_t5_on_tune_override_during_active_tune_switches_duration(app):
-    """P101 (v0.97.73) Variante B: bei laufender TUNE → _tune_stop + neuer
-    _tune_start mit neuer Dauer (Dauer-Switch „in einem Rutsch").
-
-    Ersetzt alte P95-Spec (Stop only) — Mike-Field-Test 21.05. zeigte dass
-    Stop-only buggy war (Auto-Stop-Token-Race ließ btn.isChecked() stale True).
-    """
-    from ui.mw_tx import TXMixin
-    obj = MagicMock(spec=TXMixin)
-    obj._on_tune_override = TXMixin._on_tune_override.__get__(obj)
-    obj.radio = MagicMock()
-    obj.radio.ip = "192.168.1.100"
-    obj.btn_tune = MagicMock()
-    obj.btn_tune.isChecked = MagicMock(return_value=True)
-    obj._tune_active = True  # P101: laufender TUNE
-    obj._tune_start = MagicMock()
-    obj._tune_stop = MagicMock()
-
+    """P101 Variante B: bei laufender TUNE → _tune_stop + neuer _tune_start."""
+    obj = _mock_tx(tune_active=True, btn_checked=True)
     obj._on_tune_override(20)
-
-    # Variante B: stop UND start (Dauer-Switch)
     obj._tune_stop.assert_called_once_with(None)
-    obj.btn_tune.setChecked.assert_called_once_with(True)
+    obj.control_panel.btn_tune.setChecked.assert_called_once_with(True)
     obj._tune_start.assert_called_once_with(20)
 
 
 def test_a_t6_on_tune_override_invalid_duration_noop(app):
     """duration_s nicht in (10,15,20) → no-op."""
-    from ui.mw_tx import TXMixin
-    obj = MagicMock(spec=TXMixin)
-    obj._on_tune_override = TXMixin._on_tune_override.__get__(obj)
-    obj.radio = MagicMock()
-    obj.radio.ip = "192.168.1.100"
-    obj.btn_tune = MagicMock()
-    obj.btn_tune.isChecked = MagicMock(return_value=False)
-    obj._tune_active = False  # P101
-    obj._tune_start = MagicMock()
-    obj._tune_stop = MagicMock()
-
+    obj = _mock_tx(tune_active=False, btn_checked=False)
     obj._on_tune_override(7)  # nicht in Whitelist
 
     obj._tune_start.assert_not_called()
     obj._tune_stop.assert_not_called()
-    obj.btn_tune.setChecked.assert_not_called()
+    obj.control_panel.btn_tune.setChecked.assert_not_called()
 
 
 def test_a_t7_tune_start_hardware_safety(app):

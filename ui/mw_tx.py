@@ -121,10 +121,18 @@ class TXMixin:
           Code, schaltbar via Settings → Debug-Log.
         """
         from core.debug_log import debug_log
+        # P102 (v0.97.79) Bugfix: `self.btn_tune` existiert nicht auf
+        # MainWindow — Button lebt am ControlPanel. Mike-Field-Test 21.05.
+        # zeigte „callback raised: 'MainWindow' object has no attribute
+        # 'btn_tune'" — Qt-Signal-System verschluckte Exception still,
+        # Callback-Bypass machte sie sichtbar. Linksklick lief weil
+        # `_on_tune_clicked` keinen Button-Zugriff hatte (User-Click hat
+        # btn schon visuell gesetzt).
+        btn = getattr(self.control_panel, 'btn_tune', None)
         debug_log("P101",
                   f"_on_tune_override called duration={duration_s}s "
                   f"_tune_active={getattr(self, '_tune_active', '?')} "
-                  f"btn_checked={self.btn_tune.isChecked()} "
+                  f"btn_checked={btn.isChecked() if btn else '?'} "
                   f"radio_ip={self.radio.ip}")
         if not self.radio.ip:
             debug_log("P101", "abort: radio.ip leer (kein Connect)")
@@ -140,7 +148,10 @@ class TXMixin:
                       "tune läuft → synchron stop, dann restart mit neuer Dauer")
             self._tune_stop(None)
         # btn visuell auf an + Pipeline mit Override-Dauer starten
-        self.btn_tune.setChecked(True)
+        if btn is not None:
+            btn.blockSignals(True)
+            btn.setChecked(True)
+            btn.blockSignals(False)
         debug_log("P101", f"calling _tune_start({duration_s})")
         self._tune_start(duration_s)
         debug_log("P101",

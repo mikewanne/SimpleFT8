@@ -538,13 +538,14 @@ class RXPanel(QWidget):
         # P102 (v0.97.78): Indicator versteckt, Häkchen via Action-Text-Prefix
         # — pixelgenaue Kontrolle (Mike-ASCII-Spec "I L text").
         menu.setStyleSheet("""
-            QMenu { background: #1a1a2e; color: #CCC; border: 1px solid #444; }
+            QMenu { background: #1a1a2e; color: #CCC; border: 1px solid #444;
+                font-family: Menlo, Consolas, monospace; }
             QMenu::item { padding: 4px 20px 4px 8px; }
             QMenu::item:selected { background: #0066AA; }
             QMenu::indicator { width: 0px; height: 0px; margin: 0px; }
         """)
         def _label(checked: bool, text: str) -> str:
-            return f" ✓  {text}" if checked else f"    {text}"
+            return f"✓ {text}" if checked else f"  {text}"
         for col, label in _TOGGLEABLE:
             visible = col not in self._hidden_cols
             action = menu.addAction(_label(visible, label))
@@ -687,13 +688,14 @@ class RXPanel(QWidget):
         menu = QMenu(self)
         # P102 (v0.97.78): Indicator versteckt, Häkchen via Action-Text.
         menu.setStyleSheet("""
-            QMenu { background: #1a1a2e; color: #CCC; border: 1px solid #444; }
+            QMenu { background: #1a1a2e; color: #CCC; border: 1px solid #444;
+                font-family: Menlo, Consolas, monospace; }
             QMenu::item { padding: 4px 20px 4px 8px; }
             QMenu::item:selected { background: #0066AA; }
             QMenu::indicator { width: 0px; height: 0px; margin: 0px; }
         """)
         def _label(checked: bool, text: str) -> str:
-            return f" ✓  {text}" if checked else f"    {text}"
+            return f"✓ {text}" if checked else f"  {text}"
         for country in all_countries:
             active = country in self._country_filter
             action = menu.addAction(_label(active, country))
