@@ -1016,8 +1016,10 @@ class _RadioCard(QFrame):
         )
 
         def _emit_override(s: int):
-            """P101 Diagnose-Print für Signal-Verifikation."""
-            print(f"[P101] menu-action TUNE {s}s clicked → emit signal")
+            """P101 Diagnose über debug_log (P102) — Signal-Verifikation."""
+            from core.debug_log import debug_log
+            debug_log("P101",
+                      f"menu-action TUNE {s}s clicked → emit signal")
             self.tune_override_requested.emit(s)
 
         for sec in (10, 15, 20):

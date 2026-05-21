@@ -117,27 +117,35 @@ class TXMixin:
         - Fix: Statt `isChecked()` direkt `_tune_active` prüfen. Bei
           laufendem TUNE → synchron stoppen + sofort neu starten
           (Dauer-Switch). Kein Stop-und-zurück mehr.
-        - Diagnose-Prints zur Verifikation der Signal-Kette (R1-Empfehlung).
+        - Diagnose über debug_log (P102 v0.97.75) — bleibt dauerhaft im
+          Code, schaltbar via Settings → Debug-Log.
         """
-        print(f"[P101] _on_tune_override called duration={duration_s}s "
-              f"_tune_active={getattr(self, '_tune_active', '?')} "
-              f"btn_checked={self.btn_tune.isChecked()}")
+        from core.debug_log import debug_log
+        debug_log("P101",
+                  f"_on_tune_override called duration={duration_s}s "
+                  f"_tune_active={getattr(self, '_tune_active', '?')} "
+                  f"btn_checked={self.btn_tune.isChecked()} "
+                  f"radio_ip={self.radio.ip}")
         if not self.radio.ip:
-            print("[P101] abort: radio.ip leer (kein Connect)")
+            debug_log("P101", "abort: radio.ip leer (kein Connect)")
             return
         if duration_s not in (10, 15, 20):
-            print(f"[P101] abort: duration {duration_s} nicht in (10,15,20)")
+            debug_log("P101",
+                      f"abort: duration {duration_s} nicht in (10,15,20)")
             return
         # P101 Variante B: bei aktivem TUNE synchron stoppen + neu starten
         # (Dauer-Switch). _tune_stop ist idempotent + token=None erzwingt.
         if getattr(self, '_tune_active', False):
-            print("[P101] tune läuft → synchron stop, dann restart mit neuer Dauer")
+            debug_log("P101",
+                      "tune läuft → synchron stop, dann restart mit neuer Dauer")
             self._tune_stop(None)
         # btn visuell auf an + Pipeline mit Override-Dauer starten
         self.btn_tune.setChecked(True)
+        debug_log("P101", f"calling _tune_start({duration_s})")
         self._tune_start(duration_s)
-        print(f"[P101] _tune_start({duration_s}) returned, "
-              f"_tune_active={self._tune_active}")
+        debug_log("P101",
+                  f"_tune_start({duration_s}) returned, "
+                  f"_tune_active={self._tune_active}")
 
     def _tune_start(self, duration_s: int):
         """P95 (v0.97.67): Gemeinsamer TUNE-Start für regulär + Override.

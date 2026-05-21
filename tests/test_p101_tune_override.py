@@ -21,17 +21,20 @@ def _read(rel: str) -> str:
         encoding="utf-8")
 
 
-def test_t1_override_has_diagnostic_prints():
+def test_t1_override_has_debug_log_calls():
+    """P101+P102: Diagnose über debug_log() — dauerhaft im Code,
+    schaltbar via Settings (Mike-Anweisung 21.05.: nicht jedes Mal
+    rausnehmen)."""
     src = _read("ui/mw_tx.py")
     m = re.search(r"def _on_tune_override\(self, duration_s: int\):.*?(?=\n    def )",
                   src, re.DOTALL)
     assert m, "_on_tune_override nicht gefunden"
     body = m.group(0)
-    # Mindestens 3 print-Statements zur Signal-Verifikation
-    assert body.count("print(") >= 3, (
-        f"P101 Diagnose-Prints: erwartet ≥3 in _on_tune_override, "
-        f"gefunden {body.count('print(')}")
-    assert "[P101]" in body, "P101 Marker in Print-Statements"
+    # Mindestens 3 debug_log-Aufrufe zur Signal-Verifikation
+    assert body.count("debug_log(") >= 3, (
+        f"P101 Diagnose: erwartet ≥3 debug_log() in _on_tune_override, "
+        f"gefunden {body.count('debug_log(')}")
+    assert '"P101"' in body, "P101-Tag in debug_log-Aufrufen"
 
 
 def test_t2_override_checks_tune_active_not_isChecked():
@@ -82,13 +85,14 @@ def test_t4_tune_start_clears_post_check_token_and_fwdpwr():
         "P101 Final-R1: _fwdpwr_samples vom alten TUNE muss geleert werden")
 
 
-def test_t5_menu_action_has_emit_helper_with_print():
-    """control_panel.py menu-action emit-Helper mit Diagnose-Print."""
+def test_t5_menu_action_has_emit_helper_with_debug_log():
+    """control_panel.py menu-action emit-Helper mit debug_log statt print."""
     src = _read("ui/control_panel.py")
-    # Helper-Funktion _emit_override mit Print
     assert "_emit_override" in src, (
         "P101: Helper-Funktion _emit_override im Menu-Action existiert")
     m = re.search(r"def _emit_override\(s: int\):.*?(?=\n        for )",
                   src, re.DOTALL)
     assert m, "_emit_override im Menu-Action gefunden"
-    assert "[P101]" in m.group(0), "P101: Diagnose-Print im Helper"
+    body = m.group(0)
+    assert "debug_log(" in body, "P102: debug_log statt print (dauerhaft)"
+    assert '"P101"' in body, "P101-Tag in debug_log"
