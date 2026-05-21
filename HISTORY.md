@@ -12636,3 +12636,26 @@ explizite Checks dass die 8 entfernten Felder nicht mehr im ADIF stehen).
 Workflow-Lesson: bei „statistischer Trend kaputt"-Beobachtungen niemals
 „kein Bug, normal" sagen ohne Timeline-Audit. Mike's Daten waren immer
 Referenz. DeepSeek-V4-Initial-Diagnose („kein Bug") war falsch.
+
+---
+
+## 2026-05-21 — Doku-Notiz Bandpilot-MD-Generierung (kein Code)
+
+Mike-Frage 21.05.: warum generiert `scripts/generate_plots.py` die
+`auswertung/Bandpilot-XXm-FT8.md`-Dateien, wenn die App das beim Start
+schon macht?
+
+**Antwort:** beide Pfade nutzen dieselbe Funktion `core.bandpilot_md.
+write_bandpilot_md`. Ergebnis identisch:
+- **App-Start** (`ui/main_window.py:413 _init_bandpilot_recommendations`)
+  schreibt Bandpilot-20m/40m-FT8.md bei jedem Start aus dem aktuellen
+  Statistics-Stand.
+- **`scripts/generate_plots.py`** schreibt dieselben Dateien zusätzlich.
+
+**Mike-Entscheidung 21.05.:** Redundanz bleibt drin — das Skript dient
+als Backup-Pfad für Headless-Lauf (z.B. PDFs aktualisieren ohne App-Start).
+Bei laufender App ist der Doppel-Schreibvorgang aber inhaltsneutral
+(idempotent, derselbe Generator).
+
+Kein Code-Eingriff, nur Doku-Vermerk damit es später keinen
+„Warum doppelt?"-Verdacht gibt.
