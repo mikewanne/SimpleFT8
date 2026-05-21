@@ -12892,3 +12892,72 @@ Tests 1723 → 1727 (+4 P111):
 - T2: Hint-Text enthält kein „quasi-endlos"
 - T3: Mapping ohne 99
 - T4: Legacy-Settings 99 → Default 5
+
+## 2026-05-21 — INFO: Rechtslage Auto-Hunt + Operator-Presence (§ 13 AFuV)
+
+Mike-Frage 21.05. zur juristischen Sicherheit: Auto-Hunt 10 Min +
+Operator-Presence 15 Min + private Machbarkeitsstudie — bin ich auf der
+sicheren Seite?
+
+### Rechtsgrundlage
+
+**§ 13 Abs. 1 AFuV** (fernbediente Stelle): erlaubt wenn jederzeit
+unverzüglich abschaltbar — erfüllt durch Maus-Klick (App stoppt sofort).
+
+**§ 13 Abs. 2 AFuV** (automatisch arbeitende Stelle): braucht besonderes
+Rufzeichen (DB0..., DK0...). Definition „automatisch arbeitend" ist im
+Gesetz nicht präzise.
+
+### SimpleFT8-Setup als Risiko-Bewertung
+
+**Pro Compliance:**
+- 10-Min-Auto-Stop für Auto-Hunt (Code-Konstante, in Tests verankert)
+- 5-Min-Maus-Inaktivitäts-Timeout (zweite Schicht)
+- 15-Min-Operator-Presence (Anti-Bot, separates Feature)
+- Operator sitzt vor Rechner (aktive Beobachtung)
+- Eigenes Rufzeichen DA1MHH (keine Anonymität)
+- Öffentliche Doku via CQ DL 6/2026 + GitHub README + Disclaimer in App
+- Industry-Vergleich: SDR Control hat 99 CQ-Rufe einstellbar, WSJT-X
+  macht Auto-Sequencing innerhalb QSOs ohne Klick → SimpleFT8 bewegt sich
+  im etablierten Graubereich
+
+**Grauzone:**
+- Auto-Hunt picked nächste Station ohne Klick — überschreitet die Linie,
+  bei der WSJT-X und JTDX bewusst aufhören
+- § 13 Abs. 2 „automatisch arbeitend" könnte streng ausgelegt darauf
+  zutreffen, aber: keine Präzedenzentscheidung in DE zu Auto-Hunt
+  speziell bei FT8
+
+**Praktisches Risiko (Stand 21.05.):**
+- BNetzA-Verfahren initiativ: nahe Null
+- Mitfunker-Beschwerde mit Substanz: sehr niedrig (kein 24h-Bot-Pattern)
+- Selbstanzeige durch eigene Aussagen („App lief 4 Std weiter"): vermeidbar
+- Bug in Auto-Stop führt zu Stunden-Dauerbetrieb: niedrig (1727 Tests,
+  aber nicht null)
+
+### Mike-Entscheidung
+
+Aktuelle Konfiguration bleibt:
+- Auto-Hunt: 10 Min Hard-Cap + 5 Min Maus-Inaktivität
+- Operator-Presence: 15 Min
+- „Machbarkeitsstudie + privates Hobby-Projekt"-Positionierung in README,
+  CQ-DL-Artikel und App-Disclaimer
+
+Diese Kombination wird als **~90-95% Sicherheit** eingeschätzt. Nicht
+100%, aber für ein Hobby-Projekt angemessen.
+
+**Verhaltensregeln für Mike (selbst auferlegt):**
+1. 10-Min/5-Min-Sicherungen niemals lockern
+2. Bei Funkamateur-Fragen am Band ehrlich antworten („halbautomatisch
+   unter Aufsicht")
+3. Keine eigenen Aussagen wie „App lief ohne mich"
+4. Bei neuen Features: erste Frage „greift der Auto-Stop noch?"
+
+### Beweislast
+
+Faktisch: BNetzA müsste unbeaufsichtigten Betrieb nachweisen.
+Standardpfad: Mitfunker-Beschwerde mit Aufzeichnung → BNetzA-Anfrage →
+Mike legt Code + Logs + Aufsicht dar. Bei aktiver Beobachtung +
+Auto-Stop-Mechanismen ist die Beweislage zugunsten Mike.
+
+Bei FT8-Auto-Sequencing in DE: kein einziger verfolgter Fall bekannt.

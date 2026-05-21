@@ -320,97 +320,31 @@ Anschluss was gemacht wurde.
 
 ---
 
-## Architektur & Module
+## Architektur & Module (Top-Level)
 
 ```
-core/
-  decoder.py          RMS AGC (-12 dBFS Ziel, ±3 dB Hysterese), 5-Pass Subtraktion
-                      DT_BUFFER_OFFSET: FT8=2.0, FT4=1.0, FT2=0.8 (WSJT-X 0.5s eingerechnet!)
-  encoder.py          FT8/FT4/FT2 encode → VITA-49 TX
-                      TARGET_TX_OFFSET=-0.8s (kompensiert FlexRadio TX-Buffer 1.3s)
-  qso_state.py        State Machine: Hunt, CQ, Waitlist, RR73 Courtesy (max 2×)
-                      _was_cq: in start_qso() UND _process_cq_reply() gesetzt (Bug-Fix!)
-  diversity.py        Controller: Standard(Stationsanzahl) / DX(SNR<-10dB)
-  diversity_merger.py Merged A1/A2 Dekodierungen
-  ntp_time.py         DT-Korrektur v3: pro Modus+Band (Key "FT8_20m"), set_band(),
-                      2-Zyklen-Messen, 70% Dämpfung, engere Grenzen pro Modus,
-                      gedämpfte Erstkorrektur bei ≤2 Stationen
-  station_accumulator.py Gemeinsame Logik Normal+Diversity
-                      Aging: 75s normal / 150s active_qso / 300s CQ-Rufer
-  station_stats.py    Async Queue+Daemon-Thread Logging → statistics/<Modus>/<Band>/<Proto>/
-                      + Entry-Typ antenna_qso → statistics/antenna_qso/YYYY-MM-DD.md
-  antenna_pref.py     AntennaPreferenceStore: {best_ant, delta_db} pro Callsign,
-                      1dB Hysterese, kein Timeout (jeder Zyklus überschreibt)
-  propagation.py      HamQSL + _apply_seasonal_correction(band, condition, utc_hour, month)
-                      60m fehlt in XML → Interpolation 40m/80m (day+night getrennt, implementiert)
-  ap_lite.py          ⛔ UNGETESTET — Feldtest ausstehend (SCORE_THRESHOLD=0.75)
-  omni_cq.py          OMNI-CQ signal-getriggert (v0.96.1+).
-                      on_cycle_start(@Slot int, bool) im GUI-Thread, von
-                      mw_cycle._on_cycle_start gerufen. 5-Slot Even/Odd
-                      Pattern (TX-TX-RX-RX-RX), Block-Auto-Rollover bei
-                      slot_index 4→0, Toggle-Start IMMER Block 1, Frequenz-
-                      Sticky 1× am ersten TX. Diversity-only, btn_omni_cq
-                      Easter-Egg (Klick auf Version). KEIN Worker-Thread,
-                      keine Sleep-Logik, keine Boundary-Berechnung mehr.
-                      → Spec: memory project_omni_cq_spec.md (verbindlich)
-  auto_hunt.py        Auto-Hunt Logik (v0.78: wird Diversity-only Feature
-                      analog OMNI — Mode-gekoppelt, btn_auto_hunt nur in
-                      Diversity sichtbar; Mode-Wechsel zu Normal stoppt
-                      Auto-Hunt automatisch via auto_hunt_stopped("mode_change")).
-  timing.py           UTC-Takt, modus-abh. Zyklen
-  protocol.py         FTX_PROTOCOL_FT8/FT4/FT2
-  ft8lib_decoder.py   C-Library Wrapper
-  geo.py              Maidenhead, Haversine, Großkreis-Bearing (atan2),
-                      Azimuthal-Equidistant-Projektion (Karten-Render),
-                      safe_locator_to_latlon (None-safe Wrapper)
-  direction_pattern.py Sektor-Aggregation (16x 22.5°), Mobile-Filter,
-                      StationPoint/SectorBucket Datenklassen,
-                      NaN/Inf-Schutz fuer korrupte externe Inputs
-  psk_reporter.py     PSKReporterClient: XML-Polling mit Cache + Backoff
-                      (1.5x bis 60min), Call-Normalisierung (.rsplit('/',1)),
-                      atomarer Cache-Write (.tmp + os.replace)
-  locator_db.py       LocatorDB: persistenter Locator-Cache (~/.simpleft8/
-                      locator_cache.json). Source-Priority (cq_6 > psk_6 >
-                      qso_log_6 > _4-Varianten). RLock-Threading, atomic-Write,
-                      Mobile-Suffixe (/MM/AM/QRP) prec_km x 1.5. get() returnt
-                      Kopie. Bulk-Import aus ADIF-Dateien. Save bei App-Close.
-
-radio/
-  base_radio.py       RadioInterface ABC
-  radio_factory.py    create_radio(settings)
-  flexradio.py        SmartSDR TCP + VITA-49 + Auto RX-Filter
-
-ui/
-  main_window.py      3-Panel + Statusbar; _tune_active/_tune_freq_mhz State-Vars
-  mw_cycle.py         Cycle Processing; _diversity_in_operate Flag (Transition Guard!)
-                      _log_stats Guard: btn_cq.isChecked() + cq_mode + state (3-fach robust)
-  mw_radio.py         Band/Modus/Diversity, _diversity_in_operate Reset bei _enable_diversity()
-                      set_band()/set_mode() bei Wechsel + Radio-Connect (DT-Korrektur!)
-  mw_tx.py            TX-Regelung: rfpower konvergiert → save_tx_power();
-                      _on_tune_clicked() setzt _tune_active/_tune_freq_mhz + _update_statusbar()
-  mw_qso.py           QSO Callbacks, CQ, Logbuch;
-                      _on_station_clicked: _cq_was_active VOR stop_cq() sichern → _was_cq fix
-                      _antenna_pref_label() → "(ANT1)" in Normal, "(ANT2, +6.3 dB)" in Diversity
-  control_panel.py    UI Controls (57 KB — größte UI-Datei); Frequenz in kHz
-  rx_panel.py         RX-Tabelle; Answer-Me-Highlighting; Spalten per Rechtsklick
-  dx_tune_dialog.py   18-Zyklus interleaved Messung; cache.save() HIER nach Messung!
-  direction_map_widget.py  Azimuthal-Karte mit RX/TX-Toggle (v0.66).
-                      MapCanvas (paintEvent + QPixmap-Background-Cache, Resize-
-                      Debounce 200ms) + DirectionMapDialog (non-modal QDialog,
-                      Toggle, Filter-Bar, Status). LocatorCache fuer FT8 (CQ
-                      ist die einzige Quelle fuer Locators). Aufruf via
-                      Settings-Dialog → "Karte oeffnen ..."-Button.
-
-scripts/
-  generate_plots.py   3-Modus Vergleich, pooled mean, Error Bars
-                      PDF-Bericht 7 Seiten (nur 40m FT8), cursor-basiertes Inch-Layout
-                      Helpers: _ctext/_chline/_csection (y in Zoll von oben, kein hardcoded fig-y)
-
-config/settings.py    Frequenzen, Band-Configs, mode-aware get/save_dx_preset()
-                      TUNE_FREQS (Band_Mode → Nebenfrequenz -2kHz) + get_tune_freq_mhz()
-log/adif.py           ADIF 3.1.7
-dt.md                 DT-Timing Analyse: Theorie, Änderungen, Validierungsergebnisse
+core/      Decoder/Encoder (ft8_lib), QSO-State-Machine, Diversity-Controller,
+           DT-Korrektur, Station-Stats, Antenna-Preference, Propagation,
+           OMNI-CQ, Auto-Hunt, Locator-DB
+radio/     RadioInterface ABC + flexradio.py (SmartSDR TCP + VITA-49)
+ft8_lib/   C-Bibliothek (MIT, kgoba)
+ui/        main_window.py + mw_*.py Mixins (cycle, qso, radio, tx) +
+           control_panel.py, rx_panel.py, qso_panel.py, dx_tune_dialog.py,
+           direction_map_widget.py
+scripts/   generate_plots.py (stats → auswertung/ PNG+PDF DE+EN)
+config/    settings.py (Frequenzen, Band-Configs, mode-aware get/save_dx_preset)
+log/       adif.py (ADIF 3.1.7 + QRZ-API)
+tests/     1727+ automatisierte Regressions-Tests
 ```
+
+**Wichtige Konstanten in core/ (für Bugfixes):**
+- `decoder.py:DT_BUFFER_OFFSET` — FT8=2.0, FT4=1.0, FT2=0.8 (WSJT-X 0.5s eingerechnet)
+- `encoder.py:TARGET_TX_OFFSET = -0.8s` (FlexRadio-spezifisch, kompensiert 1.3s TX-Buffer)
+- `qso_state.py:MAX_STATION_CALLS = 7` (Hard-Cap WAIT_REPORT) + `MAX_RR73_RETRIES = 5`
+- `diversity.py:THRESHOLD = 0.08` (8% → 70:30, sonst 50:50) + `MIN_MEASURE_STATIONS = 5`
+- `auto_hunt.py` 10-Min Hard-Cap + Maus-Inaktivitäts-Timeout (5 Min)
+
+**Bekannte UI-Bigfile:** `ui/control_panel.py` (~57 KB — größte UI-Datei).
 
 ---
 
@@ -485,28 +419,19 @@ Speicherung: ~/.simpleft8/dt_corrections.json → Key "FT8_20m" (pro Modus+Band)
 - Stats-Warmup: 60s nach Band/Modus-/App-Start
 
 ### CQ-Frequenz-Algorithmus (v0.59, dynamisch + slot-synchron)
-- **Suchbereich DYNAMISCH:** `min(occupied_bins)..max(occupied_bins)` + `SEARCH_MARGIN_BINS=0`.
-  TX landet immer ZWISCHEN niedrigster und höchster Station (= dort wo zugehört wird).
-  Kein fester Sweet-Spot mehr (war v0.58-Sackgasse, in v0.59 verworfen).
-- **Graduelle Lücken-Toleranz:** stufenweise `(max_count_per_bin, min_gap_bins)`:
-  `(0,3)` → `(0,2)` → `(0,1)` → `(1,3)` → `(1,2)`. Bei vollem Band findet der Algo IMMER
-  noch eine Position (notfalls in schwach-belegtem Bereich), nie mehr None außer leerem Histogramm.
-- **Score:** `gap_width − 100·n_self − 50·n_close − 25·n_near − 0.01·median_distance`
-  - `n_self` (Stationen IM TX-Bin) = höchste Strafe (100 Hz/Station) — für Notfall-Stufen
-  - `n_close` (±1 Bin) = 50 Hz/Station, `n_near` (±2 Bin) = 25 Hz/Station
-  - Median-Distance nur Tiebreaker (0.01)
-- **Sticky Gap:** bleibt bei aktueller Frequenz wenn im dynamischen Suchbereich, keine Kollisions-
-  Schwelle erreicht (`n_direct >= 2` ODER `n_in_band >= 3`) und neue Lücke nicht > +50 Hz breiter.
-  `_measure_gap_around()` refresht `_current_gap_width_hz` nach Sticky-Hit.
-- **Such-Trigger SLOT-SYNCHRON (v0.59 Punkt 3):** `_search_slots_remaining` Counter, modus-abhängig
-  initialisiert via `_SEARCH_INTERVAL_SLOTS = {FT8:4, FT4:8, FT2:16}` = ~60 s alle Modi.
-  `tick_slot()` dekrementiert pro Slot, bei 0 → Such-Trigger + auto-reset.
-  Anzeige `seconds_until_search` = `remaining_slots × cycle_s`. Wert friert bei App-Pause ein (gut).
-- **Pro-Slot-Aufruf:** `mw_cycle._refresh_diversity_freq_view()` läuft JEDEN Slot in
-  `_on_cycle_decoded`, UNABHÄNGIG vom messages-Inhalt. Hinter `if messages:` Guard darf NIE
-  was hin was UI/Such-Logik betrifft (P1-Bug aus v0.54-v0.58, fixed in v0.59).
-- **`reset()` muss `_current_gap_width_hz = 0` und `_search_slots_remaining` setzen** —
-  sonst Bandwechsel-Bug.
+- **Dynamischer Suchbereich** (`min..max(occupied_bins)`) + graduelle
+  Lücken-Toleranz `(0,3)→(0,2)→(0,1)→(1,3)→(1,2)`. Score-Formel:
+  `gap_width − 100·n_self − 50·n_close − 25·n_near − 0.01·median_distance`.
+- **Sticky Gap** bei n_direct<2 + n_in_band<3 + neue Lücke nicht >+50 Hz.
+- **Slot-synchroner Such-Trigger** alle ~60s (`_SEARCH_INTERVAL_SLOTS =
+  {FT8:4, FT4:8, FT2:16}`).
+- **Pro-Slot-Aufruf** `_refresh_diversity_freq_view()` läuft JEDEN Slot
+  UNABHÄNGIG von messages-Inhalt — kein `if messages:` Guard hier (P1-Bug
+  v0.54-v0.58, fixed in v0.59).
+- **`reset()` muss `_current_gap_width_hz=0` und `_search_slots_remaining`
+  setzen** — sonst Bandwechsel-Bug.
+
+Detail-Geschichte (v0.58-Sackgasse, Score-Tuning): siehe HISTORY.md.
 
 ---
 
@@ -520,79 +445,33 @@ Speicherung: ~/.simpleft8/dt_corrections.json → Key "FT8_20m" (pro Modus+Band)
 
 ---
 
-## ⛔ Statistik-Veröffentlichung — Regel
+## Statistik-Veröffentlichungs-Regel
 
-- **Minimum (Push erlaubt):** Normal + Diversity_Standard + Diversity_Dx je ≥ 2 Messtage,
-  Stunden über den ganzen Tag verteilt (mind. 06–22 UTC).
-- **Soll fuer solide Aussage (Mike+Claude+R1 2026-04-29):** **5 Tage flaechendeckend**
-  pro Stunde-Modi-Slot, Tage ueber 2-4 Wochen verteilt (Solar-Variation glaetten).
-  Lueckenfreie Slot-Abdeckung schlaegt mehr-Tage-mit-Luecken.
-- **7 Tage Goldstandard:** explizit verworfen — nur ~15% Standard-Error-Reduktion
-  gegenueber 5, ~5 Wochen Aufwand vs ~3 Wochen. Diminishing Returns klar erreicht.
-  Overengineering im Hobby-Kontext.
-- **Auswertungs-Methodik:** Pooled Mean über ALLE Messzyklen aller Messtage und Tageszeiten —
-  kein Stunden-Filter. Monatlich wachsende Datenbasis.
-- Ergebnis 40m FT8 (Pooled Mean, global, Stand 25.04.2026): Diversity Standard +88%, Diversity DX +123%.
+- **Push erlaubt:** je Modus ≥ 2 Messtage, Stunden 06–22 UTC verteilt
+- **Soll für solide Aussage:** 5 Tage flächendeckend (Solar-Variation glätten)
+- **Methodik:** Pooled Mean über alle Zyklen, kein Stunden-Filter
+- Aktuelle Zahlen: siehe README + `auswertung/`-PDFs
 
 ---
 
-## generate_plots.py — Berechnungsmethodik (Tagesdurchschnitt)
+## Datenlage & Auswertungs-Methodik
 
-**Wie der Ø Sta./15s-Zyklus berechnet wird:**
+**Aktuelle Statistik:** siehe `README.md` (Hero-Tabelle) + `auswertung/*.pdf`
+(7 Seiten DE + EN). Automatisch regeneriert via `scripts/generate_plots.py`.
 
-```
-statistics/<Modus>/<Band>/<Proto>/YYYY-MM-DD_HH.md
-  → jede Datei = 1 UTC-Stunde, 1 Modus, 1 Band
-  → jede Zeile = 1 FT8-Zyklus (15s) mit Spalte "stationen" (Anzahl dekodierter Stationen)
+**Statistik-Filter v0.63:** nur 20m + 40m FT8 werden protokolliert (Skalierungs-
+Entscheidung). 15m + 30m seit Mai 2026 manuell gesammelt — Filter könnte
+irgendwann fallen.
 
-Ø Sta./15s = Summe aller Stationswerte ÷ Anzahl aller Zyklen
-             (über ALLE Dateien = alle Tage × alle Stunden × alle Zyklen)
+**Berechnungsmethodik:**
+- `statistics/<Modus>/<Band>/<Proto>/YYYY-MM-DD_HH.md` — eine Datei pro
+  UTC-Stunde × Modus × Band, eine Zeile pro 15s-Zyklus
+- Ø Sta./15s = Pooled Mean über alle Zyklen aller Tage (kein Tageszeit-
+  Filter, keine Gewichtung)
+- 95%-CI via Block-Bootstrap (5000 Iter, seed=42, Block=(Datum, Stunde))
 
-Beispiel Normal: 6.744 Zyklen × ~18.5 Sta./Zyklus
-  → Das entspricht dem Tagesdurchschnitt wenn man morgens, mittags, abends misst
-  → KEIN Tageszeit-Filter, KEINE Gewichtung nach Stunde oder Tag
-  → Je mehr Messpunkte (Zyklen), desto stabiler der Wert
-```
-
-**Was der Wert NICHT ist:**
-- ❌ Nicht Stationen pro Stunde (wäre 18.5 × 240 = 4.440/h)
-- ❌ Nicht der Spitzenwert einer bestimmten Tageszeit
-- ✅ Der Durchschnitt über einen ganzen typischen Betriebstag
-
-**Weitere PDF-Layout-Details:**
-- **Inch-Koordinaten:** `_yf(y_in) = 1.0 - y_in / _PH` konvertiert Zoll→figure-coord
-- **Cursor-Helpers:** `_ctext(fig, y, text, fs)` → gibt neues y zurück; `_chline` → Linie; `_csection` → Titel+Linie+Body
-- **Seitenhöhe:** A4 landscape: `_PH=8.27`, `_PW=11.69`, `_CTOP=1.00`, `_CBOT=7.71`
-- **Body 11pt / Titel 13pt** — nie hardcoded figure-y, nie `_r_hline` (veraltet, gelöscht)
-- **Rescue-Kappen:** grün, nur Diversity-Modi, `load_rescue_by_hour(stats_dir, mode, band, proto)`
-- Statistics-Daten: `statistics/<Modus>/<Band>/<Proto>/YYYY-MM-DD_HH.md`
-
----
-
-## Datenlage (Stand 26.04.2026)
-
-**WICHTIG:** Statistik-Filter v0.63 — nur 20m + 40m FT8 werden noch protokolliert.
-Andere Baender werden empfangen aber nicht gespeichert (Skalierungs-Entscheidung).
-
-| Modus            | Band | Tage | Zyklen | Bemerkung |
-|------------------|------|------|--------|-----------|
-| Normal           | 40m  | 4    | 6.744  | 24h Abdeckung |
-| Diversity_Normal | 40m  | 4    | 6.827  | 24h Abdeckung |
-| Diversity_Dx     | 40m  | 4    | 9.125  | 24h Abdeckung |
-| Normal           | 20m  | 5    | 688    | 13 Stunden, waechst |
-| Diversity_Normal | 20m  | 2    | 364    | 5 Stunden, schwach |
-| Diversity_Dx     | 20m  | 4    | 2.469  | 18 Stunden |
-
-**40m FT8 Ergebnis (Pooled Mean global, 22.696 Zyklen):**
-- Diversity Standard: **+88% / +122%** (ohne/mit Rescue), Rescue allein +35%
-- Diversity DX:       **+124% / +158%** (ohne/mit Rescue), Rescue allein +34%
-
-**20m FT8 Ergebnis (Pooled Mean Stunden-Vergleich, Stand 26.04.):**
-- Diversity_Normal: +15-30% im Tageshoch (12-16 UTC) — KEIN Antennen-Mismatch
-  wie auf 40m, sondern echte Pol-/Pattern-Diversity (ANT1 ist resonant!)
-- Diversity_Dx: +59% beim Tag→Nacht-Uebergang (18 UTC) — DX-Modus glaenzt am Skip-Zonen-Rand
-- ANT2-Win-Rate Doppelempfaenge: 79% (Std), 86% (Dx) trotz resonantem Kelemen-Dipol auf ANT1
-- Datenbasis waechst noch — siehe `Auswertung-20m-FT8.pdf` mit eigenem Narrativ
+**PDF-Layout (für Anpassungen):** A4 landscape, Cursor-Helpers
+`_ctext`/`_chline`/`_csection` (Inch-Koordinaten), kein hardcoded fig-y.
 
 ---
 
