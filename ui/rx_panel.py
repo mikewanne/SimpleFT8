@@ -537,7 +537,7 @@ class RXPanel(QWidget):
         menu = QMenu(self)
         menu.setStyleSheet("""
             QMenu { background: #1a1a2e; color: #CCC; border: 1px solid #444; }
-            QMenu::item { padding: 4px 20px 4px 28px; }
+            QMenu::item { padding: 4px 32px 4px 28px; }
             QMenu::item:selected { background: #0066AA; }
             QMenu::item:checked { color: #00AAFF; }
             QMenu::indicator { width: 14px; height: 14px; }
@@ -684,7 +684,7 @@ class RXPanel(QWidget):
         menu = QMenu(self)
         menu.setStyleSheet("""
             QMenu { background: #1a1a2e; color: #CCC; border: 1px solid #444; }
-            QMenu::item { padding: 4px 20px 4px 28px; }
+            QMenu::item { padding: 4px 32px 4px 28px; }
             QMenu::item:selected { background: #0066AA; }
             QMenu::item:checked { color: #FF6622; }
             QMenu::indicator { width: 14px; height: 14px; }

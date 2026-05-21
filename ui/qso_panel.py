@@ -132,6 +132,11 @@ class QSOPanel(QWidget):
         self._apply_tab_button_style()
         self._btn_tab_qso.clicked.connect(lambda: self._set_tab_index(0))
         self._btn_tab_log.clicked.connect(lambda: self._set_tab_index(1))
+        # P100: Rechtsklick auf QSO-Tab-Button → gleiches Spalten-Menü
+        # wie im Log-Bereich (ohne Copy/SelectAll, da Button kein Text-Widget).
+        self._btn_tab_qso.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self._btn_tab_qso.customContextMenuRequested.connect(
+            self._on_qso_button_context_menu)
         tabs_row.addWidget(self._btn_tab_qso)
         tabs_row.addWidget(self._btn_tab_log)
 
@@ -383,17 +388,17 @@ class QSOPanel(QWidget):
         else:
             sb.setValue(min(saved, sb.maximum()))
 
-    def _on_log_context_menu(self, pos):
-        """P95 (v0.97.67): Rechtsklick auf log_view → Spalten-Toggle-Menü.
+    def _build_columns_menu(self):
+        """P100 (v0.97.71): Gemeinsamer Builder für Spalten-Toggle-Menü.
 
-        Toggle für Even/Odd-Tag und Antennen-Label. Plus Standard-
-        QTextEdit-Aktionen (Copy/SelectAll) via createStandardContextMenu.
-        R1-F1: Actions setParent(None) damit sie das std-Menü überleben.
+        Beide Rechtsklick-Pfade (log_view + QSO-Tab-Button) nutzen denselben
+        Menü-Inhalt. Padding rechts erweitert auf 32px (Mike: Häkchen saß
+        zu dicht am Rand, RX-Panel ebenso korrigiert).
         """
         menu = QMenu(self)
         menu.setStyleSheet(
             "QMenu { background: #1a1a2e; color: #CCC; border: 1px solid #444; }"
-            "QMenu::item { padding: 4px 20px 4px 28px; }"
+            "QMenu::item { padding: 4px 32px 4px 28px; }"
             "QMenu::item:selected { background: #0066AA; }"
             "QMenu::item:checked { color: #00AAFF; }"
         )
@@ -405,16 +410,25 @@ class QSOPanel(QWidget):
         a_ant.setCheckable(True)
         a_ant.setChecked(self._show_ant_label)
         a_ant.triggered.connect(self._toggle_ant_label)
-        # R1-F1: Standard-Aktionen (Copy/SelectAll) ownership-sicher anhängen
-        std = self.log_view.createStandardContextMenu()
-        std_actions = list(std.actions())
-        if std_actions:
-            menu.addSeparator()
-            for act in std_actions:
-                act.setParent(None)  # vom std-Menü loslösen
-                menu.addAction(act)
-        std.deleteLater()
+        return menu
+
+    def _on_log_context_menu(self, pos):
+        """P95 (v0.97.67): Rechtsklick auf log_view → Spalten-Toggle-Menü.
+
+        P100 (v0.97.71): Copy/SelectAll entfernt (Mike-Wunsch — Menü soll
+        nur Spalten-Toggles enthalten). Padding rechts 20→32px.
+        """
+        menu = self._build_columns_menu()
         menu.exec(self.log_view.mapToGlobal(pos))
+
+    def _on_qso_button_context_menu(self, pos):
+        """P100 (v0.97.71): Rechtsklick auf QSO-Tab-Button → Spalten-Menü.
+
+        Mike-Spec: konsistent zum log_view-Pfad. QSO-Button ist optisch
+        näher an „Spaltenkopf"-Erwartung als der Log-Bereich selber.
+        """
+        menu = self._build_columns_menu()
+        menu.exec(self._btn_tab_qso.mapToGlobal(pos))
 
     def _toggle_eo_tag(self, show: bool):
         """P95: Even/Odd-Tag ein/ausblenden + Re-Render + persistieren."""
