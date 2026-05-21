@@ -399,10 +399,10 @@ class QSOPanel(QWidget):
         menu = QMenu(self)
         menu.setStyleSheet(
             "QMenu { background: #1a1a2e; color: #CCC; border: 1px solid #444; }"
-            "QMenu::item { padding: 4px 20px 4px 20px; }"
+            "QMenu::item { padding: 4px 20px 4px 32px; }"
             "QMenu::item:selected { background: #0066AA; }"
             "QMenu::item:checked { color: #00AAFF; }"
-            "QMenu::indicator { width: 14px; height: 14px; margin-left: 0px;"
+            "QMenu::indicator { width: 14px; height: 14px; margin-left: 8px;"
             " subcontrol-position: left center; }"
         )
         a_eo = menu.addAction("Even/Odd-Tag")

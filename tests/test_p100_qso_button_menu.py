@@ -129,33 +129,39 @@ def test_t7_qso_button_context_menu_uses_builder():
 # ── Padding-Fix ──────────────────────────────────────────────────────
 
 
-def test_t8_qso_panel_menu_padding_symmetric_20():
-    """P101: Builder-Stylesheet muss `padding: 4px 20px 4px 20px` (symmetrisch)
-    + `subcontrol-position: left center` enthalten."""
+def test_t8_qso_panel_menu_padding_and_indicator_margin():
+    """P101-Fix2 (Mike-Field-Test 21.05.): `margin-left: 0` lässt Haken am
+    Border kleben. Muss 8px Abstand sein. padding-left 32 = 8 (margin) +
+    14 (indicator) + 10 (Lücke zum Text). padding-right bleibt 20px."""
     src = Path(__file__).resolve().parent.parent / "ui" / "qso_panel.py"
     text = src.read_text(encoding="utf-8")
     m = re.search(r"def _build_columns_menu\(self\):.*?(?=\n    def )",
                   text, re.DOTALL)
     assert m
     body = m.group(0)
-    assert "padding: 4px 20px 4px 20px" in body, (
-        "P101: padding symmetrisch 20/20 (R1-Empfehlung)")
-    assert "subcontrol-position: left center" in body, (
-        "P101: Indicator explizit links (macOS Theme-Bug-Vermeidung)")
+    assert "padding: 4px 20px 4px 32px" in body, (
+        "P101-Fix2: padding-left auf 32 (Indicator + Lücke + Text)")
+    assert "margin-left: 8px" in body, (
+        "P101-Fix2: Indicator margin-left 8px (Luft zum Border)")
+    assert "subcontrol-position: left center" in body
 
 
-def test_t9_rx_panel_menu_padding_symmetric_20():
-    """P101: RX-Panel beide QMenu-Stylesheets müssen 20/20 symmetrisch
-    + subcontrol-position: left center haben."""
+def test_t9_rx_panel_menu_padding_and_indicator_margin():
+    """P101-Fix2: RX-Panel beide QMenu-Stylesheets analog mit
+    margin-left: 8px + padding-left 32."""
     src = Path(__file__).resolve().parent.parent / "ui" / "rx_panel.py"
     text = src.read_text(encoding="utf-8")
-    new_pad = text.count("padding: 4px 20px 4px 20px")
+    new_pad = text.count("padding: 4px 20px 4px 32px")
+    margin_8 = text.count("margin-left: 8px")
     left_pos = text.count("subcontrol-position: left center")
-    old_pad = text.count("padding: 4px 32px 4px 28px")
+    old_pad_a = text.count("padding: 4px 32px 4px 28px")
+    old_pad_b = text.count("padding: 4px 20px 4px 20px")
+    old_margin = text.count("margin-left: 0px")
     assert new_pad >= 2, (
-        f"P101: RX-Panel muss 2× `4px 20px 4px 20px` haben, gefunden: {new_pad}")
-    assert left_pos >= 2, (
-        f"P101: RX-Panel muss 2× `subcontrol-position: left center` haben, "
-        f"gefunden: {left_pos}")
-    assert old_pad == 0, (
-        f"P101: alte 32/28-Variante darf nicht mehr existieren, gefunden: {old_pad}")
+        f"P101-Fix2: RX-Panel 2× `4px 20px 4px 32px`, gefunden: {new_pad}")
+    assert margin_8 >= 2, (
+        f"P101-Fix2: RX-Panel 2× `margin-left: 8px`, gefunden: {margin_8}")
+    assert left_pos >= 2
+    assert old_pad_a == 0, "alte 32/28-Variante muss raus"
+    assert old_pad_b == 0, "alte symmetrisch-20-Variante muss raus"
+    assert old_margin == 0, "alte margin-left:0px muss raus"

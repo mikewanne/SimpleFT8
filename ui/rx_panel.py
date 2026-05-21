@@ -539,10 +539,10 @@ class RXPanel(QWidget):
         # subcontrol-position links (Mike-Field-Test + R1).
         menu.setStyleSheet("""
             QMenu { background: #1a1a2e; color: #CCC; border: 1px solid #444; }
-            QMenu::item { padding: 4px 20px 4px 20px; }
+            QMenu::item { padding: 4px 20px 4px 32px; }
             QMenu::item:selected { background: #0066AA; }
             QMenu::item:checked { color: #00AAFF; }
-            QMenu::indicator { width: 14px; height: 14px; margin-left: 0px;
+            QMenu::indicator { width: 14px; height: 14px; margin-left: 8px;
                 subcontrol-position: left center; }
         """)
         for col, label in _TOGGLEABLE:
@@ -688,10 +688,10 @@ class RXPanel(QWidget):
         # P101 (v0.97.73): Padding symmetrisch 20/20, Indicator explizit links.
         menu.setStyleSheet("""
             QMenu { background: #1a1a2e; color: #CCC; border: 1px solid #444; }
-            QMenu::item { padding: 4px 20px 4px 20px; }
+            QMenu::item { padding: 4px 20px 4px 32px; }
             QMenu::item:selected { background: #0066AA; }
             QMenu::item:checked { color: #FF6622; }
-            QMenu::indicator { width: 14px; height: 14px; margin-left: 0px;
+            QMenu::indicator { width: 14px; height: 14px; margin-left: 8px;
                 subcontrol-position: left center; }
         """)
         for country in all_countries:
