@@ -1,8 +1,40 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-21 — P100 QSO-Button-Menü + Padding, P98+P97+P96+P95+P94 davor
+## Stand 2026-05-21 — P101 TUNE-Override-Fix + Padding-Korrektur
 
-**Aktueller Code-Stand:** v0.97.72 (P100), Tests **1692 grün** (+9).
+**Aktueller Code-Stand:** v0.97.73 (P101), Tests **1697 grün** (+14).
+
+### 🟢 v0.97.73 P101 — TUNE-Override Variante B + Padding-Korrektur
+
+Mike-Field-Test 21.05. fand 2 Bugs in P100:
+
+**Bug A — Rechtsklick-TUNE startet kein TUNE:**
+- Guard `btn_tune.isChecked()` stale True nach Auto-Stop-Race → Override
+  brach ab statt zu starten
+- Fix Variante B: Guard auf `_tune_active`, bei aktivem TUNE synchron
+  stop + sofort restart mit neuer Dauer (Dauer-Switch „in einem Rutsch")
+- 4 Diagnose-Prints `[P101]` für Mike's Verifikation
+- Final-R1-Catch: `_tune_start` cancelt latenten Post-Check-Token vom
+  Vorgänger + leert `_fwdpwr_samples` (Race-Schutz)
+
+**Bug B — QMenu Padding asymmetrisch:**
+- padding `4px 32px 4px 28px` → `4px 20px 4px 20px` (symmetrisch)
+- Indicator explizit `subcontrol-position: left center` (R1: macOS-
+  Theme kann Default-Position rechts rendern)
+- Gilt qso_panel + rx_panel (2× — Spalten + Länder)
+
+Tests 1683 → 1697. Workflow voll: V1→V2(8)→R1→V3+Code+Tests→Final-R1
+(1 ROT Race-Token gefangen) → Fix.
+
+Field-Test pending (mit Radio):
+- F1: Rechtsklick TUNE → 10s → tunt SOFORT 10s, Terminal-Output `[P101]`
+- F2: 2. Rechtsklick während laufendem TUNE → Dauer umschalten
+- F3: Padding visuell — Häkchen mit Abstand zum Rand
+- F4: RX-Panel Spaltenauswahl + Länder-Filter ebenso
+
+---
+
+### 🟢 v0.97.72 P100 — QSO-Button Kontextmenü + Padding-Fix (heute davor)
 
 ### 🟢 v0.97.72 P100 — QSO-Button Kontextmenü + Padding-Fix
 

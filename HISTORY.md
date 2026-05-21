@@ -12518,3 +12518,71 @@ Doppel-Code) → Code → Tests. Reines UI-Wiring + CSS-Padding. R1-DeepSeek
 - F4: RX-Panel Spaltenauswahl + Länder-Filter ebenso entspannt
 
 Tests 1692 grün.
+
+---
+
+## 2026-05-21 v0.97.73 — P101 TUNE-Override Variante B + QMenu Padding-Korrektur
+
+Mike-Field-Test 21.05.2026 nach P100 zeigte 2 Bugs. Voller Workflow.
+
+**Bug A — Rechtsklick auf TUNE startete kein TUNE:**
+
+Symptom: App + Radio AN, Rechtsklick → 15s wählen → Menü verschwindet, aber
+weder Button noch Hardware reagieren. Workaround Linksklick danach tunt aber
+mit dem Default-Setting (15s), nicht mit dem Rechtsklick-Wert. Mike will
+explizit „Single-Click-Override in einem Rutsch".
+
+Root Cause: Guard `if btn_tune.isChecked()` war nach unsauberem Vorgänger-TUNE
+(Auto-Stop-Token-Race) stale True. Override interpretierte das als „TUNE
+läuft → stoppen + return".
+
+Fix (Variante B — R1-empfohlen):
+- Guard von `btn_tune.isChecked()` auf `_tune_active` umgestellt.
+- Bei aktivem TUNE: synchron `_tune_stop(None)` + sofort `_tune_start(s)`
+  mit neuer Dauer („Dauer-Switch in einem Rutsch"). Kein early-return mehr.
+- 4 Diagnose-Prints `[P101]` für Mike's Field-Test-Verifikation:
+  - `[P101] menu-action TUNE Ns clicked → emit signal` (control_panel)
+  - `[P101] _on_tune_override called duration=N _tune_active=B btn_checked=B`
+  - `[P101] tune läuft → synchron stop, dann restart` (bei aktivem TUNE)
+  - `[P101] _tune_start(N) returned, _tune_active=B`
+
+Final-R1-Catch (1 ROT): bei Stop+Restart-Sequenz schlich der 2s-Post-Check-
+Timer vom alten `_tune_stop` mitten in den neuen TUNE rein — würde den
+Watchdog deaktivieren und alten SWR auswerten. Fix: `_tune_start` setzt
+`_tune_post_check_token = None` und leert `_fwdpwr_samples` (falls existent).
+
+**Bug B — QMenu Padding asymmetrisch:**
+
+Symptom: aus P100 (heute) `padding: 4px 32px 4px 28px` → Mike: „links zu viel
+Padding, rechts wo die OKAY-Haken sind gar kein Padding". Häkchen klebten
+optisch am Rand.
+
+Fix (R1-empfohlen):
+- Padding symmetrisch `4px 20px 4px 20px` (statt asymmetrisch 32/28).
+- Indicator explizit positioniert: `margin-left: 0px; subcontrol-position:
+  left center`. Default-Position auf macOS kann themen-abhängig rechts
+  rendern → explizite Regel macht's universal.
+- Betroffene Stellen: `ui/qso_panel.py:_build_columns_menu`, `ui/rx_panel.py`
+  2× (Spalten-Auswahl + Länder-Filter).
+- TUNE-Override-Menü `_on_tune_button_context_menu` unverändert (Items
+  nicht checkable, kein Indicator nötig).
+
+**Tests 1683 → 1697 (+14 netto):**
+- P95 t4/t5 angepasst auf Variante B (Switch statt Stop, _tune_active als
+  Guard, kein early-return)
+- P100 t8/t9 angepasst auf neue Padding-Werte (20/20 + subcontrol-position)
+- P101 neu (t1-t5): Diagnose-Prints, _tune_active-Guard, kein early-return
+  nach Stop, Post-Check-Token-Cleanup, Helper-Funktion mit Print im Menu
+
+**Workflow:** V1 (Bug-Analyse 7 Ursachen-Hypothesen) → V2 Self-Review
+(8 Findings, Variante B identifiziert) → R1-DeepSeek (Empfehlung
+Diagnose-Prints + Variante B + subcontrol-position) → V3 + Code + Tests
+→ Final-R1 V4-pro (1 ROT Post-Check-Token-Race gefangen) → Fix + Test.
+**V4-pro 44-Cycle: 0 Halluzinationen, 1 ROT-Race gefangen.**
+
+Tests 1697 grün. Field-Test pending mit Radio:
+- F1: Rechtsklick TUNE → Sekunden wählen → tunt SOFORT, Terminal zeigt
+  `[P101]`-Logs der Signal-Kette
+- F2: 2. Rechtsklick während laufendem TUNE → Dauer umschalten in einem Rutsch
+- F3: Padding visuell — Häkchen mit Abstand zum Rand
+- F4: RX-Panel Spaltenauswahl + Länder-Filter ebenso
