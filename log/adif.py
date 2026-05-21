@@ -200,6 +200,17 @@ class AdifWriter:
         # TIME_OFF = TIME_ON + 15 Sekunden (1 FT8-Zyklus)
         t_off = time.gmtime(time_on + 15)
 
+        # P106 (v0.97.83) — Mike-Field-Test 21.05.2026: QRZ-Confirmed-Quote
+        # fiel ab 29.03. von ~30% auf 0%. SmartSDR-Vergleich + Mike's
+        # Beobachtung „COMMENT-Feld in QRZ leer" → Verdacht: zu viele/falsche
+        # Felder lassen QRZ-Match-Logik fehlschlagen.
+        # Fix: WSJT-X-Minimal-Format (Industry-Standard FT8).
+        # Entfernt gegenüber v0.24:
+        #   COMMENT (Programmname statt User-Notiz),
+        #   OPERATOR (redundant zu STATION_CALLSIGN),
+        #   QSL_SENT, QSL_RCVD (verwirren QRZ-Auto-Confirm laut Verdacht),
+        #   MY_DXCC, MY_COUNTRY, MY_CQ_ZONE, MY_ITU_ZONE (User-Profil-Daten,
+        #   QRZ kennt diese aus dem Account).
         fields = [
             _field("CALL", call),
             _field("QSO_DATE", time.strftime("%Y%m%d", t)),
@@ -214,21 +225,14 @@ class AdifWriter:
         fields += [
             _field("RST_SENT", _strip_r_prefix(rst_sent)),
             _field("RST_RCVD", _strip_r_prefix(rst_rcvd)),
-            _field("OPERATOR", my_callsign.upper()),
-            _field("STATION_CALLSIGN", my_callsign.upper()),
-            _field("MY_GRIDSQUARE", my_gridsquare.upper()),
-            _field("TX_PWR", str(tx_power)),
-            _field("QSL_SENT", "N"),
-            _field("QSL_RCVD", "N"),
-            _field("MY_DXCC", "230"),
-            _field("MY_COUNTRY", "Germany"),
-            _field("MY_CQ_ZONE", "14"),
-            _field("MY_ITU_ZONE", "28"),
-            _field("COMMENT", "SimpleFT8 v1.0"),
         ]
-        # Optionale Felder nur wenn vorhanden
         if gridsquare:
-            fields.insert(8, _field("GRIDSQUARE", gridsquare.upper()))
+            fields.append(_field("GRIDSQUARE", gridsquare.upper()))
+        fields += [
+            _field("MY_GRIDSQUARE", my_gridsquare.upper()),
+            _field("STATION_CALLSIGN", my_callsign.upper()),
+            _field("TX_PWR", str(tx_power)),
+        ]
 
         record = " ".join(fields) + " <EOR>\n"
 

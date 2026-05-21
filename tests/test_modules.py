@@ -1758,7 +1758,11 @@ def test_adif_subdir_created():
 
 
 def test_adif_qrz_fields():
-    """ADIF: QRZ/LoTW Pflichtfelder vorhanden."""
+    """ADIF: QRZ/LoTW Pflichtfelder vorhanden.
+
+    P106 (v0.97.83, 21.05.2026): OPERATOR entfernt — WSJT-X-Minimal-Format
+    nach Mike-Field-Test (QRZ-Confirmed-Bug). STATION_CALLSIGN reicht.
+    """
     import tempfile
     from log.adif import AdifWriter
     with tempfile.TemporaryDirectory() as tmp:
@@ -1769,8 +1773,13 @@ def test_adif_qrz_fields():
             my_gridsquare="JO31OM", my_callsign="DA1MHH", tx_power=5)
         content = path.read_text()
         for field in ["CALL", "QSO_DATE", "TIME_ON", "BAND", "MODE",
-                       "STATION_CALLSIGN", "MY_GRIDSQUARE", "OPERATOR"]:
+                       "STATION_CALLSIGN", "MY_GRIDSQUARE"]:
             assert f"<{field}:" in content, f"Pflichtfeld {field} fehlt"
+        # P106: diese Felder sind RAUS — explizit prüfen
+        for removed in ["OPERATOR", "QSL_SENT", "QSL_RCVD", "MY_DXCC",
+                        "MY_COUNTRY", "MY_CQ_ZONE", "MY_ITU_ZONE", "COMMENT"]:
+            assert f"<{removed}:" not in content, (
+                f"P106: {removed} sollte NICHT mehr im ADIF stehen")
 
 
 # ── FT2 Slot-Berechnung (UTC-basiert) ───────────────────────────────────────
