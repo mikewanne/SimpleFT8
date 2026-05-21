@@ -60,6 +60,9 @@ def _make_radio_mixin(*, bp_mode: str = "off",
     obj._auto_hunt.active = hunt_active
     obj._auto_hunt.stop_auto_hunt = MagicMock()
     obj._activate_diversity_with_scoring = MagicMock()
+    # P103 (v0.97.80): subtoggle ruft jetzt _update_statusbar (Status-Suffix
+    # Standard/DX). Mock-Attribut nötig damit Tests nicht crashen.
+    obj._update_statusbar = MagicMock()
     return obj
 
 

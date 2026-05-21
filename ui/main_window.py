@@ -1297,6 +1297,12 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
             "diversity": "DIVERSITY",
         }
         mode_str = mode_labels.get(self._rx_mode, "Normal")
+        # P103 (v0.97.80): Diversity-Subtyp im Status — Mike-Field-Test 21.05.
+        # Analog Antennen-Kachel Suffix "Standard"/"DX". Source-of-Truth ist
+        # ControlPanel._current_scoring_mode (von update_diversity_ratio gesetzt).
+        if self._rx_mode == "diversity":
+            sm = getattr(self.control_panel, '_current_scoring_mode', 'normal')
+            mode_str = "DIVERSITY DX" if sm == 'dx' else "DIVERSITY STANDARD"
         if getattr(self, '_omni_cq', None) and self._omni_cq.is_active():
             # P7.OMNI-SIMPLIFY: 1 Counter mit aktueller Paritaet (E/O/?).
             # P31 (11.05.2026): Display-Wert (pre-decrement) statt cq_remaining

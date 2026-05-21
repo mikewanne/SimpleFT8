@@ -911,6 +911,10 @@ class RadioMixin:
         current = getattr(self._diversity_ctrl, 'scoring_mode', 'normal')
         new = "dx" if current == "normal" else "normal"
         self._activate_diversity_with_scoring(new)
+        # P103 (v0.97.80): Statusbar refresht damit „DIVERSITY STANDARD"
+        # ↔ „DIVERSITY DX" sofort sichtbar wird (war vorher hängen, weil
+        # subtoggle keinen _update_statusbar im direkten Pfad hatte).
+        self._update_statusbar()
 
     def _activate_diversity_with_scoring(self, scoring: str):
         """Diversity aktivieren mit explizitem scoring ('normal'|'dx').

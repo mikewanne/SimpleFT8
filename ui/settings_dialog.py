@@ -329,6 +329,15 @@ class SettingsDialog(QDialog):
         self.rf_table.setMaximumHeight(140)
         rf_layout.addWidget(self.rf_table)
 
+        # P103 (v0.97.80): Hint-Label für leere Tabelle (Mike KISS 21.05.).
+        # Bleibt versteckt sobald Presets existieren.
+        self._rf_hint_label = QLabel("")
+        self._rf_hint_label.setWordWrap(True)
+        self._rf_hint_label.setStyleSheet(
+            "color: #888; font-size: 11px; padding: 4px 2px 0 2px;")
+        self._rf_hint_label.setVisible(False)
+        rf_layout.addWidget(self._rf_hint_label)
+
         rf_btn_row = QHBoxLayout()
         rf_btn_row.addWidget(QLabel("Band:"))
         self._rf_band_combo = QComboBox()
@@ -701,10 +710,22 @@ class SettingsDialog(QDialog):
         self.rf_table.setRowCount(0)
         self._rf_band_combo.clear()
         if store is None:
+            self._rf_hint_label.setText(
+                "Kein Radio verbunden — RF-Presets werden pro Radio gespeichert.")
+            self._rf_hint_label.setVisible(True)
             return
         presets = store.get_all(radio_type)
         if not presets:
+            # P103 (v0.97.80): Hint-Text bei leerer Tabelle (Mike-Wunsch
+            # 21.05. nach KISS-Brainstorm — User-Education statt Doku).
+            self._rf_hint_label.setText(
+                "Noch keine RF-Presets — sie werden automatisch beim ersten "
+                "TX pro Band+Watt gespeichert.\n"
+                "Schneller füllen: »Auto-TUNE bei Bandwechsel« anhaken oder "
+                "manuell TUNE drücken.")
+            self._rf_hint_label.setVisible(True)
             return
+        self._rf_hint_label.setVisible(False)
         self._rf_band_combo.addItems(sorted(presets.keys()))
         rows = []
         for band, watts_dict in presets.items():
