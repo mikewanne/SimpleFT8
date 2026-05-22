@@ -28,27 +28,12 @@ Problem. Tag schließen.
 
 ---
 
-## 🆕 OFFEN — P107 ADIF-Export-Button
+## ✅ P107 ERLEDIGT — ADIF-Export-Button (v0.97.84, 21.05.2026)
 
-Mike-Wunsch 21.05. nach P106. Aktuell muss man `tools/adif_repair.py`
-manuell ausführen + Aggregator-Snippet. UI-Button wäre besser.
-
-**DeepSeek-R1-Konsens (KISS):**
-- **Wo:** Logbuch-Tab neben „QRZ"-Bulk-Upload-Button
-- **Reichweite:** alle Records, kein Datum-Range (Range später falls
-  konkret gewünscht)
-- **Output:** `adif/exports/SimpleFT8_ALL_YYYYMMDD.adi`
-- **Label:** „Logbuch exportieren"
-- **Rückmeldung:** Statusbar-Toast „N QSOs exportiert"
-- **Aufwand:** ~20 LOC
-
-**Code-Plan:**
-- Helper `log/adif.py::export_all_records(out_dir) -> Path` neu
-- `LogbookWidget`: Button + `_on_export_clicked` Slot
-- Statusbar-Update via Signal an MainWindow
-
-**Pending Mike-Freigabe** (für nächste Session) — oder Mike sagt
-„direkt umsetzen".
+Bulk-Export aller QSOs → `adif/exports/SimpleFT8_ALL_YYYYMMDD.adi`
+(WSJT-X-Minimal-Format). „Export"-Button in der Logbuch-Toolbar,
+Statusbar-Toast als Rückmeldung. Helper `log/adif.py::export_all_records`.
+**Mike-Field-Test 22.05.2026: funktioniert.** Detail: HISTORY.md v0.97.84.
 
 ---
 
@@ -895,52 +880,13 @@ weil 40m+20m+30m alle n ≥ 25 haben.
 
 ---
 
-### P70 — ALC-Pegel-Überwachung und -Korrektur (Mike-Idee 17.05.2026)
+### P70 — ALC-Pegel-Überwachung — VERWORFEN (22.05.2026, Mike)
 
-**Aktuell:** Closed-Loop regelt `rfpower` (Endstufen-Ausgangsleistung)
-gegen Ziel-Watt via FWDPWR-Feedback. `tx_audio_level` ist statisch auf
-maximal 0,75 begrenzt (CLIP_LIMIT in `mw_tx.py:648`), Software-Peak
-wird angezeigt („Clipschutz X%"). **Was fehlt:** der vom Radio
-gemeldete `HWALC`-Pegel (via VITA-49 Meter) wird empfangen, an
-`control_panel.update_alc()` weitergereicht — und die Methode ist
-`pass` (Z. 1769-1771). Wir wissen also nicht ob die Eingangsstufe
-des Flex in ALC-Kompression läuft.
-
-**Mike-Vergleich zum Icom-Setup:** Beim Icom hat Mike den USB-Audio-
-Pegel am Mac so eingestellt dass die ALC-Lampe gerade eben zuckt —
-maximale lineare Modulation ohne Übersteuerung. Das macht das Flex
-heute nicht, weil wir nur den End-Pegel (rfpower) regeln, nicht die
-Eingangs-Modulation.
-
-**Vorschlag (V0-Spec, nicht final):**
-- HWALC-Wert in der Statusleiste anzeigen (analog SWR/FWDPWR)
-- Schwellwert in Settings (z. B. „ALC max. 3 dB" als Default)
-- Closed-Loop erweitern: bei ALC > Schwelle → `tx_audio_level`
-  reduzieren BEVOR rfpower erhöht wird
-- Beim Stabilität-Pendel: ALC eben gerade messbar = optimal
-  (analog Mike's Icom-Justage)
-
-**Begründung:** Linearitäts-Spielraum sicherstellen. Aktuelle
-Software-Peak-Anzeige sagt nichts darüber ob das Radio intern
-komprimiert (= mehr IMD/Splatter ins Nachbarband).
-
-**Pro:** Sauberes Sendesignal über alle Bänder, ehrliches HF-
-Verhalten, kein „verstecktes Übersteuern". Lehrreich für Hobby-
-Funker die das vom Icom kennen.
-**Contra:** Komplexität — zwei verkoppelte Regler (audio-level
-+ rfpower) brauchen sauberes Anti-Windup. Konvergenz darf nicht
-oszillieren.
-
-**Aufwand:** ~2-3 Tage inkl. V1→V2→R1→V3-Workflow, neue
-HWALC-UI-Anzeige, Closed-Loop-Erweiterung, Tests + Field-Test
-F1-F5 (Hardware-pflichtig).
-
-**Offene Fragen für V1:**
-- HWALC-Skala beim Flex: was ist „0 dB" vs. „eben sichtbar"? Erst
-  empirisch messen.
-- Reihenfolge: erst audio runter, dann rfpower hoch? Oder
-  symmetrisch?
-- Pre-TX-Test (Tune-artig) oder echte Live-Regelung im QSO?
+Mike-Entscheidung nach Klärung: keine ALC-Regelung. Das FlexRadio ist
+linear, FT8 ist konstant-envelope (ALC-Kompression wirkt auf Amplituden-
+Dynamik, die FT8 nicht hat). Die zwei echten Risiken — Audio-Clipping und
+PA-Überdrive — sind bereits abgedeckt (CLIP_LIMIT 0,75 + rfpower-Closed-
+Loop). Eine ALC-Regelschleife brächte für FT8 keinen Signalgewinn.
 
 ---
 
@@ -5052,26 +4998,15 @@ F (Audio-Export)           ←  unabhängig, jederzeit
 
 ---
 
-### 2. AP-Lite v2.2 Test-Pipeline bauen (vor jeglichem Code-Fix!)
-**Betroffen:** `core/ap_lite.py`, `tests/test_modules.py` (neue Datei `tests/test_ap_lite_pipeline.py` denkbar)
+### 2. ✅ AP-Lite — ERLEDIGT (v0.97.90, Option D, 22.05.2026)
 
-**Problem:** AP-Lite ist live (`AP_LITE_ENABLED = True`) aber laut eigenem Docstring + CLAUDE.md komplett ungetestet. Im Code stehen drei explizite TODOs vom Autor:
-1. `_build_costas_reference`: „Aktuell: vereinfachte Näherung" — kein echtes 7×3-Costas-Pattern mit FSK-Tönen
-2. `align_buffers`: „Validieren! Insbesondere Phasenkorrektur für kohärente Addition" — Phase wird aktuell NICHT korrigiert; bei kohärenter Addition kritisch (sonst Auslöschung statt Verstärkung)
-3. `SCORE_THRESHOLD = 0.75` — geraten, nie kalibriert
-4. Zusatz-Verdacht: `encoder.generate_reference_wave()` muss echte FT8-Symbole produzieren — Stub-Verhalten würde Korrelation zu Müll machen
-
-**Reihenfolge unverhandelbar:**
-1. **ZUERST** synthetische End-to-End-Tests bauen — verrauschtes FT8-Signal generieren → 2 Slots erzeugen → durch `try_rescue` schicken → prüfen ob die richtige Nachricht rauskommt
-2. Dann zeigen die Tests welcher der 4 Verdachtspunkte tatsächlich Bugs sind
-3. Dann gezielt fixen mit Test als Schutznetz
-4. Erst dann Feldtest
-
-**Warum nicht direkt fixen:** Ohne Test ist jede „Verbesserung" Schuss ins Blaue — könnte einen funktionierenden Teil kaputt machen oder einen anderen Bug übersehen.
-
-**Aufwand Pipeline:** ~1-2 h. Brauchen FT8-Signal-Generator (vermutlich über vorhandenen `Encoder.generate_reference_wave`), AWGN-Rauschen-Helfer, Test-Cases mit unterschiedlichen SNR-Bereichen.
-
-**Aufgabe für nächste Session:** Test-Pipeline aufsetzen und als Baseline laufen lassen — dann sehen wir was wirklich kaputt ist.
+AP-Lite wurde komplett überarbeitet (voller Workflow V1→V2→R1→V3→Code→
+Final-R1). Die hier beschriebene „kohärente Addition" war ein konzeptioneller
+Irrweg (phasenabhängig → im Mittel 0 dB Gewinn). Option D baute AP-Lite auf
+das ursprüngliche A-Priori-Kandidaten-Matching zurück: nicht-kohärenter
+Korrelator + FFT-Frequenzsuche + relativer Margen-Test. Stapel-Mechanik
+(`align_buffers`, `_build_costas_reference`, `FailedDecodeBuffer`) gelöscht.
+Detail: HISTORY.md v0.97.90 + `prompts/ap_lite_v3b.md`.
 
 ---
 
@@ -5202,7 +5137,7 @@ F (Audio-Export)           ←  unabhängig, jederzeit
 ### Feldtest (NUR MIT RADIO)
 - [ ] **FT2 Feldtest:** Ein bestätigtes QSO gefahren (Decodium-kompatibel bestaetigt). Ausführliches Testen auf 40m (7.052 MHz) / 20m (14.084 MHz) steht noch aus — DT-Korrektur, Timing-Randfahlle, laengere Sessions.
 - [ ] **DT-Korrektur v2:** Konvergenz pruefen (soll jetzt 3-6 Min statt 12-18 Min dauern)
-- [ ] **AP-Lite Threshold:** 0.75 kalibrieren → dann `AP_LITE_ENABLED = True`
+- [ ] **AP-Lite Margen-Schwelle:** `MARGIN_MIN=0.05` im Feld fein-kalibrieren (synthetisch abgeleitet; AP-Lite ist beratend, daher unkritisch)
 - [ ] **OMNI-TX + Auto-Hunt:** Integriert (Easter Egg: Klick auf Versionsnummer). Feldtest ausstehend.
   GitHub: Darf als Feature "Optimierter CQ-Ruf (OMNI-TX)" erwaehnt werden, aber NICHT wie man es aktiviert.
   TODO: EN+DE README/Hilfe-Seite erstellen mit: Was ist OMNI-TX, wie funktioniert es (Even+Odd abwechselnd),

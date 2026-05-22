@@ -1,8 +1,27 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-22 — P112 Option E: Kein Auto-Mess, "Re-Mess nötig" einheitlich
+## Stand 2026-05-22 — v0.97.90 AP-Lite Option D (A-Priori-Rückbau)
 
-**Aktueller Code-Stand:** v0.97.89 (P112), Tests **1738 grün** (+11).
+**Aktueller Code-Stand:** v0.97.90, Tests **1734 grün**.
+
+> **Doku-Pflege 22.05. (kein Code):** CLAUDE.md verschlankt 31,8 k → 27,0 k
+> (−15 %). Statistik-Methodik nach `auswertung.md` Sektion 13 verschoben.
+> P70 (ALC-Regelung) als VERWORFEN dokumentiert. P107 (ADIF-Export) in
+> HISTORY+TODO als erledigt nachgetragen. Detail: HISTORY.md-Einträge.
+
+### 🟢 v0.97.90 — AP-Lite (P2-Lite) Option D
+
+AP-Lite vom Irrweg „kohärente Addition" auf A-Priori-Kandidaten-Matching
+zurückgebaut — voller Workflow V1→V2→R1→V2b→R1→V3b→Code→Final-R1, DeepSeek
+2×, 0 Halluzinationen. Nicht-kohärenter Korrelator + FFT-Frequenzsuche +
+relativer Margen-Test (`MARGIN_MIN=0.05`). Stapel-Mechanik gelöscht. Rein
+beratend (Info-Zeile, kein Auto-Log/TX) → `AP_LITE_ENABLED=True`.
+Statusleiste `AP = (x)` + persistenter Treffer-Zähler. Detail: HISTORY.md
+v0.97.90, Plan `prompts/ap_lite_v3b.md`.
+
+**Feld-Beobachtung (wenn Mike wieder am Radio):** Zähler `AP = (x)` unten
+in der App zeigt, ob AP-Lite real hilft — v.a. im Diversity-DX-Modus.
+`MARGIN_MIN=0.05` ist synthetisch abgeleitet, ggf. nachjustieren.
 
 ### 🟢 v0.97.89 P112 — Auto-Mess raus + Wording einheitlich
 

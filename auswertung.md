@@ -386,3 +386,26 @@ Normal = 100 %:
 - KEINE Diskussion über DX-Filter, Tageszeit-Verteilung, Resonanz, etc.
 - KEINE Empfehlungen
 - Nur Zahlen liefern. Mike zieht die Schlüsse selbst.
+
+---
+
+## 13. Diagramme & PDF-Generierung
+
+**Plot-/PDF-Erzeugung:** `./venv/bin/python3 scripts/generate_plots.py`
+- Generiert IMMER beide Sprachen: DE → `auswertung/`, EN → `auswertung/en/`
+- DE: `SimpleFT8_Bericht.pdf` (7 S.) · EN: `SimpleFT8_Report.pdf` (7 p.)
+- **Regel:** Statistiken und PDFs IMMER auf Deutsch UND Englisch erstellen.
+
+**Aktuelle Statistik-Zahlen:** siehe `README.md` (Hero-Tabelle) + `auswertung/*.pdf`
+(7 Seiten DE + EN). Automatisch regeneriert via `scripts/generate_plots.py`.
+
+**Berechnungsmethodik (Pooled Mean):**
+- `statistics/<Modus>/<Band>/<Proto>/YYYY-MM-DD_HH.md` — eine Datei pro
+  UTC-Stunde × Modus × Band, eine Zeile pro 15s-Zyklus.
+- Ø Sta./15s = Pooled Mean über alle Zyklen aller Tage (kein Tageszeit-Filter,
+  keine Gewichtung). Detail-Formel: Sektion 3.
+- 95%-CI via Block-Bootstrap (5000 Iter, seed=42, Block=(Datum, Stunde)).
+
+**PDF-Layout (für Anpassungen an `generate_plots.py`):** A4 landscape,
+Cursor-Helpers `_ctext`/`_chline`/`_csection` (Inch-Koordinaten), kein
+hardcoded fig-y. `_r_hline` existiert nicht mehr — nicht wieder einbauen.

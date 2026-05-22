@@ -4,32 +4,23 @@ Lies nach dieser Datei sofort auch HANDOFF.md **und HISTORY.md** und bestätige 
 
 # ⛔⛔⛔ DEEPSEEK-ZWEITMEINUNG PFLICHT BEI SCHWIERIGEN PROBLEMEN ⛔⛔⛔
 
-**Mike-Anweisung 11.05.2026 nach P34-Bug-Diagnose:**
-
-Bei jedem **schwierigen Problem** (Bug-Diagnose, Architektur-Frage,
-„warum greift mein Fix nicht?", Race-Condition, mehrere fehlgeschlagene
-Eigen-Fixes) → **IMMER DeepSeek einbinden als Zweit-Perspektive.**
-
-**Verwerfen kann man die Antwort hinterher** — aber Nicht-Einbinden ist
-die einzige Sache die nicht rueckgaengig zu machen ist.
-
-**Merksatz: „2 KIs sehen mehr als eine."**
+Bei jedem **schwierigen Problem** (Bug-Diagnose, Architektur-Frage, „warum
+greift mein Fix nicht?", Race-Condition, mehrere fehlgeschlagene Eigen-Fixes)
+→ **IMMER DeepSeek als Zweit-Perspektive einbinden.** Verwerfen kann man die
+Antwort hinterher — Nicht-Einbinden ist das Einzige, was nicht rückgängig zu
+machen ist. **Merksatz: „2 KIs sehen mehr als eine."**
 
 **Aufruf:** `cat prompt.md | ./venv/bin/python3 tools/deepseek_review.py file1.py file2.py`
 (Model `deepseek-reasoner` ist Default.)
 
-**Konkretes Beispiel 11.05.2026:** Mike-Symptom „Toggle Dynamic AN aber
-Statik-Mess laeuft trotzdem" — mein erster Fix hatte Smoke-Test gruen,
-aber Mike sah das Problem weiter. DeepSeek-Diagnose hat meine
-Aufmerksamkeit auf die UI-Update-Override-Schicht gelenkt (mw_cycle.py
-Z.732 ueberschreibt jeden Slot das Panel-Label). **Ohne diese
-Zweitmeinung haette ich noch lange im falschen Modul gesucht.**
+**Warum (Mike 11.05.2026):** Mein erster Fix hatte Smoke-Test grün, Mike sah
+das Problem trotzdem weiter. DeepSeek lenkte die Aufmerksamkeit sofort auf die
+richtige Schicht — ohne diese Zweitmeinung hätte ich lange im falschen Modul
+gesucht.
 
-**Trivial-Klausel:** Tippfehler, Umbenennung, <5 Zeilen, pure Refactor
-ohne Verhaltensaenderung → DeepSeek nicht noetig.
-
-Memory: `feedback_deepseek_always_second_opinion.md` (Pruef-Trigger-
-Liste, Prompt-Pflicht, Antwort-Umgang).
+**Trivial-Klausel:** Tippfehler, Umbenennung, <5 Zeilen, pure Refactor ohne
+Verhaltensänderung → DeepSeek nicht nötig.
+Memory: `feedback_deepseek_always_second_opinion.md`.
 
 ---
 
@@ -136,9 +127,8 @@ auf Display 2 (Position 1024,0) verschieben. Mike macht von dort
 Fernwartung — App MUSS auf dem mittleren Bildschirm landen.
 
 **Start:** `cd "/Users/mikehammerer/Documents/KI N8N Projekte/FT8/SimpleFT8" && ./venv/bin/python3 main.py`
-**Aktueller Stand:** **v0.97.89 Session 22.05.2026 — P112: Option E Auto-Mess raus + Wording einheitlich.** Mike-Bug-Report 22.05.: nach Statistik-Session über Nacht zeigte App "noch 3h" für 15m obwohl er nicht eingemessen hatte. Log-Diagnose: DXTuneDialog ist non-modal + auto-acceptiert sich (`QTimer.singleShot(0, self.accept)`) → bei jedem Reconnect/Mode-Wechsel automatische Re-Mess silent. Mike-Spec Option E: niemals Auto-Dialog, Stale/Missing → Anzeige "Re-Mess nötig" rot + Diversity läuft mit alten oder Standard 10/10 weiter. Opt-in Setting `auto_gain_on_band_change` (Default AUS, Auto-TUNE-GroupBox). Einheitliches Wording "Re-Mess nötig" (KISS, statt "fällig"/"nicht kalibriert"). Code: `_check_diversity_preset(auto_remess: bool = False)` neuer Parameter, `_on_band_changed` reicht Setting durch, `_enable_diversity` MISSING-Pfad 10/10 statt +10, `_format_gain_status` MISSING jetzt rot. V1 → V2 (5 Findings) → R1 V4-pro (GRÜN+2 GELB, T8 ergänzt) → V3 → Code → 10 Tests + 12 angepasst → Final-R1 „Push-bereit". **V4-pro 47-Cycle-Bilanz: 0 Halluzinationen.** Tests 1727→1738 (+11). **Vorgänger v0.97.88 P111** "99" aus max_calls raus (Hard-Cap ist 7), **v0.97.87 P110** Diversity↔Diversity Sub-Toggle skippt RX-Clear, **v0.97.86 P109** X-Button schliesst Logbuch-Tab. Detail in HISTORY.md.
-
-**Veralteter Stand:** **v0.97.87 Session 21.05.2026 — P110: Diversity↔Diversity Sub-Toggle skippt RX-Clear.** Mike-Spec 21.05.: Beim Wechsel Std↔DX innerhalb Diversity nutzen beide Modi DIESELBEN 2 Antennen mit derselben Gain-Config — Stationen sind weiter empfangbar, Werte adaptieren sich automatisch. Vorher wurde RX-Panel + log_view + Backend-Stations-Dicts unnötig geleert. Fix: `clear_panels: bool = True` Parameter durchgereicht durch `_on_diversity_subtoggle_requested → _activate_diversity_with_scoring → _check_diversity_preset → _enable_diversity`. Sub-Toggle ruft mit `clear_panels=False`, alle anderen Pfade (Bandwechsel, Modewechsel, Erstaktivierung) nutzen Default True. Workflow voll: V1 → V2-Self-Review (4 Findings) → R1-DeepSeek („KISS-konform, GRÜN, win_rate_history bei Sub-Toggle DOCH reseten — Std/DX-Scoring sind verschiedene Modelle") → V3 → Code → 7 Tests T1-T7 → Final-R1 V4-pro „Push-bereit, kein Rot/Orange-Blocker, kann gepushed werden". **V4-pro 46-Cycle-Bilanz: 0 Halluzinationen.** Tests 1716→1723 (+7 P110 neu + 12 bestehende Tests angepasst auf neue Signaturen). README massive Überarbeitung: 1093 → 522 Zeilen, Machbarkeitsstudie-Spirit aus CQ DL 6/2026-Artikel umgesetzt, ANT2-Was-auch-immer-Argument prominent, 4-Algorithmen-Einladung als Hero-Block. **Vorgänger v0.97.86 P109** X-Button schliesst Logbuch-Tab, **v0.97.85 P108** Kommentar-Feld raus, **v0.97.73 P101** TUNE-Override Variante B + Padding. Detaillierte Vorgänger-Blocks in HISTORY.md.
+**Aktueller Stand:** v0.97.90 (22.05.2026) — AP-Lite (P2-Lite) auf A-Priori-Kandidaten-Matching zurückgebaut (Option D): nicht-kohärenter Korrelator + FFT-Frequenzsuche + relativer Margen-Test, rein beratend (Statusleiste `AP = (x)`, persistenter Zähler). Tests: 1734.
+→ Vollständige Versionshistorie + Vorgänger-Details: **HISTORY.md** (grep nach Version).
 
 
 > **Aeltere Versionen sind in `HISTORY.md` archiviert** (nur anhaengen,
@@ -182,74 +172,55 @@ keine zentrale Lessons-Datei.
 
 ## ⛔ Projekt-Philosophie (PFLICHT bei Architektur-Entscheidungen!)
 
-**SimpleFT8 ist ein Hobby-Funker-Tool. KEIN Contest-Tool.** Diese Leitlinien
-gelten fuer Claude UND DeepSeek bei Feature-Vorschlaegen, Architektur-Beratung,
-Implementierungen:
+**SimpleFT8 ist ein Hobby-Funker-Tool. KEIN Contest-Tool.** Gilt fuer Claude
+UND DeepSeek bei jedem Feature-Vorschlag:
 
-- **Zielgruppe:** Hobby-Funker. Nicht Pileup-Jaeger, nicht Contest-Operatoren,
-  keine 1000-QSO-pro-Tag-Stationen.
-- **Use-Case:** App starten → ein bisschen FT8/FT4/FT2 funken → fertig.
-  Keine Stunden-langen Sessions mit komplexer Konfiguration.
+- **Zielgruppe:** Hobby-Funker — App starten, ein bisschen FT8/FT4/FT2 funken,
+  fertig. Keine Pileup-Jaeger, keine Contest-Operatoren, keine 1000-QSO-Tage,
+  keine Stunden-langen Sessions mit komplexer Konfiguration.
 - **UX-Prinzip:** Einfache Bedienung > Vollstaendigkeit. Lieber 3 gut funktio-
   nierende Features als 30 die Mike erst lernen muss.
-- **Visueller Stil:** Modern (dunkles Theme, Neon-Akzente, weiche Verlaeufe).
+- **Visueller Stil:** Modern — dunkles Theme, Neon-Akzente, weiche Verlaeufe,
+  3D-Globus, Live-Diversity-Visualisierung, Antennen-Farb-Coding, glow-Effekte.
   Nicht 90er-Jahre-Funktionalitaets-UI wie WSJT-X / JTDX.
 - **NICHT geplant:** Contest-Modi, Multi-Operator, RTTY/CW/SSB, Skimmer-
   Integration, Pileup-Tools, komplexe Filter-Macros, Cluster-Spotting fuer
-  DX-Hunting. Wenn ein DeepSeek-Vorschlag in diese Richtung geht: ablehnen.
-- **Was modern bedeutet:** 3D-Globus statt platter PSK-Reporter-Karte,
-  Live-Diversity-Visualisierung, Antennen-Farb-Coding, glow-Effekte —
-  Dinge die in 2026 selbstverstaendlich sind aber im Funker-Tool-Alltag fehlen.
+  DX-Hunting. DeepSeek-Vorschlaege in diese Richtung: ablehnen.
 
-**Wenn DeepSeek oder ich ein Feature vorschlagen, immer pruefen:** „Hilft das
-einem Hobby-Funker beim Hobby-Funken? Oder waere das nur fuer Power-User /
-Contester sinnvoll?" — bei letzterem: NICHT umsetzen, in eine optionale
-Erweiterung ausgliedern oder ganz verwerfen.
+**Prueffrage bei jedem Feature:** „Hilft das einem Hobby-Funker beim Hobby-
+Funken?" — wenn nur fuer Power-User / Contester sinnvoll: NICHT umsetzen,
+ausgliedern oder verwerfen.
 
 ---
 
 ## ⛔ Programmier-Leitsaetze (PFLICHT bei jedem Entwurf!)
 
-Diese Saetze gelten fuer Claude UND DeepSeek bei jedem Plan, jedem Prompt,
-jeder Code-Aenderung. Wenn ich (Claude) gegen sie verstosse: Mike soll mich
-darauf hinweisen, ich nehme die Korrektur an.
+Gelten fuer Claude UND DeepSeek bei jedem Plan, Prompt, Code. Bei Verstoss:
+Mike weist hin, Claude nimmt die Korrektur an.
 
-1. **Overengineering vermeiden — kritisch beurteilen.** Vor jedem neuen
-   Konzept (neue Klasse, neue Konfig-Datei, neue Abstraktionsebene) fragen:
-   *„Brauchen wir das wirklich, oder sind wir verliebt in unsere Idee?"*
-   Wenn es ohne geht — ohne. Drei aehnliche Zeilen sind besser als eine
+1. **Overengineering vermeiden.** Vor jeder neuen Klasse/Konfig/Abstraktion
+   fragen: „Brauchen wir das wirklich?" Drei aehnliche Zeilen schlagen eine
    verfruehte Abstraktion. KISS schlaegt Eleganz.
 
-2. **Sauber wie ein Chirurg.** Schlamperei oder Eile beim Entwurf raechen
-   sich spaeter doppelt — schlechtes Design generiert mehr Bugs, mehr
-   Re-Reviews, mehr Frust. Lieber 30 Min laenger im Plan-Mode als 3 Stunden
-   nachbessern. Schritt fuer Schritt, sauber, kein Drauflos-Schneiden.
+2. **Sauber wie ein Chirurg.** Lieber 30 Min laenger im Plan-Mode als 3 Stunden
+   nachbessern — schlechtes Design generiert mehr Bugs und Re-Reviews.
 
-3. **Code als Referenz, nicht Annahmen.** Bevor V2-Prompts an DeepSeek gehen
-   oder Plans entstehen: tatsaechlichen Code lesen, Dateipfade + Zeilen
-   verifizieren. Annahmen fuehren zu Halluzinationen die niemand mehr sauber
-   reviewen kann.
+3. **Code als Referenz, nicht Annahmen.** Vor V2-Prompts/Plans echten Code
+   lesen, Dateipfade + Zeilen verifizieren. Annahmen fuehren zu Halluzinationen.
 
-4. **Mike auf Overengineering hinweisen.** Wenn Mike ein Feature beschreibt
-   das mit weniger Aufwand sauberer geht: ansprechen, alternative skizzieren,
-   ihn entscheiden lassen. Nicht stillschweigend kompliziert umsetzen.
+4. **Mike auf Overengineering hinweisen.** Geht ein Feature einfacher:
+   ansprechen, Alternative skizzieren, ihn entscheiden lassen.
 
-5. **V1 → V2 (Self-Review) → DeepSeek → V3 → Plan-Mode → Code.** Diese
-   Reihenfolge bei nicht-trivialen Aenderungen. Kein Skip von Self-Review.
-   Kein Skip von Code-Verifikation. „Sauber am Anfang spart 10x Zeit am Ende"
-   (Mike, 2026-04-28).
+5. **V1 → V2 (Self-Review) → DeepSeek → V3 → Plan-Mode → Code** bei nicht-
+   trivialen Aenderungen. Kein Skip von Self-Review oder Code-Verifikation.
+   „Sauber am Anfang spart 10x Zeit am Ende" (Mike, 2026-04-28).
 
 ---
 
-**Diagramme:** `./venv/bin/python3 scripts/generate_plots.py`
-→ Generiert IMMER beide Sprachen: DE → `auswertung/` + EN → `auswertung/en/`
-→ DE: `SimpleFT8_Bericht.pdf` (7 S.) | EN: `SimpleFT8_Report.pdf` (7 p.)
-→ Regel: Statistiken und PDFs IMMER auf Deutsch UND Englisch erstellen!
-
-**⚠ Tages-/Pooled-Mean-Auswertungen:** ZUERST `auswertung.md` lesen!
-Format-Stolpersteine (3 vs 5 Tabellenspalten, Rescue extern in `stations/`,
-DX-Modus zählt nur SNR<-10) sind dort dokumentiert inkl. Code-Vorlage.
-Mike's „Tagestrend"-Anfragen → stundenweise Tabelle, nicht nur Pooled-Mean.
+**⚠ Statistik, Auswertung & Diagramme:** ZUERST `auswertung.md` lesen — dort
+stehen Methodik, Tabellen-Formate, Code-Vorlagen, der `generate_plots.py`-
+Aufruf und das PDF-Layout. Gilt bei jeder „auswerten / Tagestrend / Pooled-
+Mean"-Anfrage; Mike-Default ist die stundenweise Tabelle (nicht nur Pooled-Mean).
 **Git:** branch `main`, Repo aktiv, Statistics-Daten committed
 
 ---
@@ -453,27 +424,6 @@ Detail-Geschichte (v0.58-Sackgasse, Score-Tuning): siehe HISTORY.md.
 - **Soll für solide Aussage:** 5 Tage flächendeckend (Solar-Variation glätten)
 - **Methodik:** Pooled Mean über alle Zyklen, kein Stunden-Filter
 - Aktuelle Zahlen: siehe README + `auswertung/`-PDFs
-
----
-
-## Datenlage & Auswertungs-Methodik
-
-**Aktuelle Statistik:** siehe `README.md` (Hero-Tabelle) + `auswertung/*.pdf`
-(7 Seiten DE + EN). Automatisch regeneriert via `scripts/generate_plots.py`.
-
-**Statistik-Filter v0.63:** nur 20m + 40m FT8 werden protokolliert (Skalierungs-
-Entscheidung). 15m + 30m seit Mai 2026 manuell gesammelt — Filter könnte
-irgendwann fallen.
-
-**Berechnungsmethodik:**
-- `statistics/<Modus>/<Band>/<Proto>/YYYY-MM-DD_HH.md` — eine Datei pro
-  UTC-Stunde × Modus × Band, eine Zeile pro 15s-Zyklus
-- Ø Sta./15s = Pooled Mean über alle Zyklen aller Tage (kein Tageszeit-
-  Filter, keine Gewichtung)
-- 95%-CI via Block-Bootstrap (5000 Iter, seed=42, Block=(Datum, Stunde))
-
-**PDF-Layout (für Anpassungen):** A4 landscape, Cursor-Helpers
-`_ctext`/`_chline`/`_csection` (Inch-Koordinaten), kein hardcoded fig-y.
 
 ---
 

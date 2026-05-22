@@ -12639,6 +12639,25 @@ Referenz. DeepSeek-V4-Initial-Diagnose („kein Bug") war falsch.
 
 ---
 
+## 2026-05-21 v0.97.84 — P107 ADIF-Export-Button im Logbuch
+
+(Eintrag nachgetragen 22.05.2026 — beim ursprünglichen Commit 43a50e3
+übersehen, Code war seit 21.05. produktiv.)
+
+Mike-Wunsch 21.05. nach P106: Bulk-Export aller QSOs in eine ADIF-Datei,
+ohne `tools/adif_repair.py` von Hand auszuführen. DeepSeek-R1-KISS-Konsens
+umgesetzt.
+
+**Umgesetzt:**
+- `log/adif.py::export_all_records(out_dir) -> (Path, int)` neu — schreibt
+  alle Records nach `adif/exports/SimpleFT8_ALL_YYYYMMDD.adi` im WSJT-X-
+  Minimal-Format (COMMENT/MY_*-Felder via `_rewrite_minimal` gefiltert).
+- `LogbookWidget`: „Export"-Button in der Toolbar + `_on_export_clicked`,
+  Rückmeldung über das `export_status`-Signal.
+- `main_window`: Signal → Statusbar-Toast „N QSOs → Datei exportiert" (5 s).
+
+**Mike-Field-Test 22.05.2026:** Export getestet — funktioniert.
+
 ## 2026-05-21 — Doku-Notiz Bandpilot-MD-Generierung (kein Code)
 
 Mike-Frage 21.05.: warum generiert `scripts/generate_plots.py` die
@@ -13032,3 +13051,77 @@ Bug-Reproduktion 22.05. (15m Band): App lief 18 Uhr durch, 5:43 zeigte
 "noch 3h" → Mike: vor 3h keine Mess. 5:46 Mode-Wechsel Normal→Diversity
 triggerte 3. Re-Mess. Mit P112: dieser Pfad ruft nur `_enable_diversity`
 (kein Dialog), Anzeige hätte korrekt "Re-Mess nötig" rot gezeigt.
+
+## 2026-05-22 — Doku: CLAUDE.md verschlankt (kein Code)
+
+Mike-Wunsch: CLAUDE.md verkleinern (31,8 k Zeichen → Performance-Warnung der
+Claude-Code-Harness, >40 k kombiniert). Vorgehen mit DeepSeek-Zweitmeinung
+abgesichert (V4-pro bewertete 4-Punkte-Plan: P1+P4 grün, P2+P3 gelb mit
+Auflagen).
+
+**Umgesetzt:**
+1. Veralteter Versions-Detailblock "v0.97.87" gelöscht (stand wortgleich in
+   HISTORY.md). "Aktueller Stand" von 10-Zeilen-Essay auf 2 Zeilen gekürzt.
+2. DeepSeek-Zweitmeinungs-Block gestrafft (Beispiel kondensiert, Substanz
+   bleibt). Workflow-Pflicht-Blöcke bewusst NICHT angetastet (Recency-Bias-
+   Absicherung, DeepSeek-Auflage).
+3. Projekt-Philosophie + 5 Programmier-Leitsätze entrümpelt — Fließtext zu
+   knappen Bullets/Sätzen, alle Inhalte erhalten.
+4. Statistik-/Auswertungs-Methodik (Berechnungsmethodik, 95%-CI-Bootstrap,
+   PDF-Layout, generate_plots.py) nach auswertung.md verschoben (Sektion 13).
+   CLAUDE.md behält nur kurzen Verweis + Statistik-Veröffentlichungs-Regel
+   (Policy bleibt).
+
+**Ergebnis:** CLAUDE.md 31.814 → 26.970 Zeichen (−15 %). auswertung.md
+13.717 → 14.818. Keine Regeln verloren, keine Code-Änderung.
+
+## 2026-05-22 v0.97.90 — AP-Lite (P2-Lite) Option D: Rückbau auf A-Priori
+
+Mike-Korrektur 22.05.: AP-Lite („AP" = *a priori*) war nie als „kohärente
+Addition zweier Slots für SNR-Gewinn" gedacht, sondern als A-Priori-
+Kandidaten-Matching. Der Code war auf den falschen Mechanismus abgedriftet.
+
+**Diagnose (gemessen, ohne Radio):** AP-Lite hat seit Implementierung kein
+QSO gerettet. Gründe: (A1) `_build_costas_reference` war eine Sinus-Näherung
+→ `align_buffers` fand spurious dt/df; (A2) Frequenzkorrektur `real×cos`
+erzeugte Spiegelfrequenzen; (B1) kohärente Addition über 15-s-Slots ist
+phasenabhängig → Mittel 0 dB Gewinn; (B2) absolute Schwelle 0.75 war für
+reale Signale unerreichbar.
+
+**Workflow:** V1 → V2 → R1 (DeepSeek, Empfehlung „deaktivieren") → Mike-
+Korrektur des Konzepts → V2b → R1 (DeepSeek, „Option D tragfähig") → V3b →
+Code → Final-R1 (0 Bugs, 0 Risiken). DeepSeek 0 Halluzinationen.
+Plan-Files `prompts/ap_lite_v[1,2,2b,3,3b].md`.
+
+**Option D umgesetzt:**
+- `core/ap_lite.py` komplett umgebaut. Gelöscht: `align_buffers`,
+  `_build_costas_reference`, `FailedDecodeBuffer`, `_buffers`,
+  `on_decode_failed`, Costas-Konstanten, `SCORE_THRESHOLD`.
+- `correlate_candidate` neu: nicht-kohärenter Matched Filter (analytisches
+  Signal + Betrag der komplexen Korrelation → phasen-invariant) +
+  Frequenz-Offset-Suche via EINEM FFT (volle Auflösung ~0.08 Hz — ein
+  grobes Hz-Raster hätte den Korrelations-Peak verfehlt).
+- `try_rescue` neu: EIN Slot, relativer Margen-Test (`MARGIN_MIN=0.05`)
+  statt absoluter Schwelle. Guard `len(candidates) < 2 → None` (Final-R1).
+- `generate_candidates` State 1: Schritt 2→1 — die alte Schrittweite 2
+  verfehlte wegen Parität jeden zweiten realen Report (vom eigenen
+  E2E-Test entdeckt).
+- Persistenter Rescue-Zähler `~/.simpleft8/ap_lite_stats.json` (atomar,
+  `stats_path=None` deaktiviert Persistenz für Tests).
+- Statusleiste: `AP = (x)` — x = persistente Treffer-Zahl (Mike-Wunsch,
+  Feld-Beobachtung).
+- AP-Lite bleibt rein BERATEND (Info-Zeile, kein Auto-Log, kein TX) →
+  `AP_LITE_ENABLED=True` ohne Fehlalarm-Gefahr.
+- `ui/mw_cycle.py:_run_ap_lite_rescue` vereinfacht (Einmal-Match statt
+  Zwei-Slot-Tanz). `mw_qso.py` `_ap_lite.clear()`-Aufruf entfernt.
+
+**Verifiziert (synthetisches FT8):** phasen-invariant 0/90/180° → Score
+1.0; Frequenz-Offset ±5 Hz gefunden; `try_rescue` RR73 −12 dB → Treffer
+(Marge 0.096); reines Rauschen → kein Treffer (Marge 0.001).
+
+**Tests:** 39 alte AP-Lite-Tests (kohärente Addition) durch 38 neue ersetzt,
+3 obsolete Tests in `test_modules.py` entfernt. Suite 1738 → 1734 grün.
+
+**Doku:** `docs/explained/ap-lite_de.md` + `ap-lite.md` neu geschrieben
+(A-Priori-Konzept), `README_DE.md` korrigiert, `TODO.md` Stale-Sektion
+„AP-Lite Test-Pipeline bauen" geschlossen.
