@@ -2,6 +2,26 @@
 
 ---
 
+## 🆕 OFFEN — Re-Mess-Countdown-Anzeige hängt (Mike 22.05.2026)
+
+Die „noch X Stunden bis Re-Mess"-Anzeige rechnet sich nur bei Aktionen
+neu (Band-/Modus-Wechsel) — sitzt man in einem Modus, bleibt die Zahl
+stehen, auch wenn Stunden vergehen. Mike-Symptom: Diversity „3h" →
+Moduswechsel → „1h" → der Wechsel erzwingt erst die Neuberechnung.
+Fix-Richtung (mit Mike abgestimmt): `_update_gain_status_display()`
+einmal pro Slot im Zyklus-Handler aufrufen — kein neuer Timer, kein
+Zähler, Label-Refresh kostet nichts. Voller Workflow.
+
+## 🆕 OFFEN — AP-Lite QSO-Abschluss (Konzept dokumentiert)
+
+Erweiterung von AP-Lite (Option D = v0.97.90 erledigt). Vollständiges
+Vorgehen + gestaffelter Plan: HISTORY.md „Konzept: AP-Lite QSO-Abschluss"
+(22.05.2026). Reihenfolge: (1) breites Rapport-Kandidaten-Fenster, (2)
+Feld-Beobachtung mit `AP = (x)`-Zähler, (3) ERST danach Auto-Abschluss/
+Loggen. Schritt 3 nicht vorab bauen — die Beobachtung ist die Validierung.
+
+---
+
 ## 🔬 BEOBACHTUNG OFFEN — P106 QRZ-Confirmed-Bug
 
 **Stand 21.05.2026 nach P106-Push (v0.97.83):**

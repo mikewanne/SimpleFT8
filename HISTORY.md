@@ -13125,3 +13125,80 @@ Plan-Files `prompts/ap_lite_v[1,2,2b,3,3b].md`.
 **Doku:** `docs/explained/ap-lite_de.md` + `ap-lite.md` neu geschrieben
 (A-Priori-Konzept), `README_DE.md` korrigiert, `TODO.md` Stale-Sektion
 „AP-Lite Test-Pipeline bauen" geschlossen.
+
+## 2026-05-22 — Konzept: AP-Lite QSO-Abschluss (Vorgehen dokumentiert)
+
+Auf Mike-Wunsch festgehalten — das komplette Vorgehen für die geplante
+AP-Lite-Erweiterung, damit es bei Bedarf zur Hand ist. **Stand: Konzept.
+Option D (v0.97.90) ist implementiert; die hier beschriebene QSO-Abschluss-
+Erweiterung ist bewusst NOCH NICHT gebaut (gestaffelter Plan, siehe unten).**
+
+### Grundgedanke — warum „Lite"
+
+WSJT-X und JTDX haben „AP-Decoding" (a priori) nativ im Decoder: bekannte
+Bits werden in den LDPC-Fehlerkorrektur-Decoder (Belief-Propagation + OSD)
+eingespeist — bis zu 4 dB Gewinn, am größten am QSO-Ende. SimpleFT8
+dekodiert mit ft8_lib (kgoba), das diese AP-Maschinerie NICHT hat. AP-Lite
+ist der pragmatische externe Nachbau: statt Bit-Einspeisung in den Decoder
+erzeugt es Kandidaten-Wellenformen und korreliert sie phasen-invariant.
+Einfacher und schwächer als WSJT-X' Weg, aber Hobby-Tool-tauglich — „Lite".
+
+### Sicherheits-Anker (Pflicht)
+
+Die Existenz eines QSOs wird AUSSCHLIESSLICH durch echte Decodes verankert
+— der Rufzeichen-Austausch am QSO-Anfang muss real dekodiert sein. AP-Lite
+erfindet NIE ein QSO. Strukturell bereits gegeben: `_run_ap_lite_rescue`
+läuft nur, wenn ein QSO-Objekt existiert, und das existiert nur durch einen
+echten Start-Decode. Rufzeichen + Locator kommen also immer aus normalen
+Decodes, nie aus AP-Lite.
+
+### Was AP-Lite vervollständigt — nur den QSO-Schwanz
+
+Wenn das Signal nach dem echten Start schwächer wird: den Rapport
+(WAIT_REPORT) und das RR73/RRR/73 (WAIT_RR73). Beides ist Detail auf einem
+bereits real begonnenen Kontakt, nicht der Anker.
+
+**Rapport-Extraktion:**
+- Festes BREITES Kandidaten-Fenster über den ganzen realistischen Rapport-
+  Bereich (z.B. −30..+10 dB), NICHT nur ±5 dB um die eigene Schätzung —
+  sonst wird ein Rapport außerhalb des Fensters nie erkannt. Kostet fast
+  nichts (ein paar Korrelationen mehr).
+- Höchster Korrelations-Treffer gewinnt, MUSS den Zweitbesten per Marge
+  klar schlagen. KEIN absoluter Prozent-Schwellwert — der richtige
+  Kandidat scort bei realem FT8-SNR nur ~7–20 %, nie 75 %.
+- Ein um 1–2 dB falscher Rapport ist KOSMETIK: QRZ.com/LoTW matchen QSOs
+  über Rufzeichen + Datum + Uhrzeit (Toleranzfenster) + Band + Mode — der
+  Rapport ist KEIN Match-Kriterium.
+
+**RR73-Abschluss:** im WAIT_RR73-Zustand genau 3 Kandidaten (RR73/RRR/73),
+alle bedeuten „QSO komplett", garantiert vollständige Kandidatenliste —
+der sicherste Fall.
+
+### Ehrlichkeit / Legitimität
+
+Legitim, weil: (1) das QSO real begonnen hat (Start-Decode-Anker),
+(2) AP-Lite nur eine real empfangene Aussendung liest — mit klügerem
+Verfahren als der Standard-Decoder, aber auf echtem Signal-Beleg,
+(3) methodisch identisch zu WSJT-X' AP-Decoding (der FT8-Referenz-
+Implementierung). Der Margen-Test ist die Grenze zwischen „ehrlich
+gelesen" und „geraten".
+
+**Risiko:** Fehltreffer = QSO als abgeschlossen geloggt, das der Partner
+nicht abgeschlossen hat → Phantom-Eintrag. KEIN Falsch-Bestätigungs-Risiko
+(QRZ-Matching ist beidseitig — ein Phantom bleibt unbestätigt). Aber Kosten:
+Log-Integrität (aufgeblähte „gearbeitet"-Zähler, Dupe-Check überspringt
+einen echten Kontakt). „Unbestätigt" ≠ „falsch". WSJT-X' AP erhöht
+ebenfalls die Fehldecode-Rate — dort darum abschaltbar.
+
+### Gestaffelter Plan
+
+1. ✅ Option D Basis (v0.97.90) — AP-Lite beratend, `AP = (x)`-Zähler.
+2. ⬜ Breites Kandidaten-Fenster (vollen Rapport-Bereich abdecken).
+3. ⬜ Feld-Beobachtung: `AP = (x)`-Zähler mitlaufen lassen, prüfen wie
+   treffsicher die Erkennung real ist.
+4. ⬜ ERST DANACH: Auto-Abschluss/Loggen bei klarem Treffer — strengere
+   Marge fürs Loggen als für den bloßen Hinweis, WAIT_RR73 zuerst.
+
+Schritt 4 ist bewusst NICHT vorab gebaut: die Feld-Beobachtung (Schritt 3)
+IST die Validierung, ohne die Auto-Loggen blind wäre. Reihenfolge mit Mike
+abgestimmt 22.05.2026.
