@@ -82,14 +82,15 @@ def test_t3_subtoggle_calls_with_clear_panels_false():
 def test_t4_check_preset_passes_clear_panels_through():
     """_check_diversity_preset hat clear_panels-Parameter + reicht durch."""
     src = _read("ui/mw_radio.py")
-    # Signatur
+    # Signatur (P112: zusätzlich auto_remess: bool = False)
     m_sig = re.search(
         r"def _check_diversity_preset\(self,\s*band:\s*str,\s*scoring:\s*str,"
-        r"\s*clear_panels:\s*bool\s*=\s*True\s*\)",
+        r"\s*clear_panels:\s*bool\s*=\s*True\s*,\s*"
+        r"auto_remess:\s*bool\s*=\s*False\s*\)",
         src,
     )
     assert m_sig, ("P110: _check_diversity_preset muss clear_panels: "
-                   "bool = True als 3. Parameter haben")
+                   "bool = True und auto_remess: bool = False haben")
     # Aufruf von _enable_diversity reicht durch
     m_pass = re.search(
         r"self\._enable_diversity\(scoring_mode=scoring,\s*"

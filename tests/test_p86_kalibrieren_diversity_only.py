@@ -6,7 +6,7 @@ Vermeidet UX-Verwirrung (Mike-Beobachtung „normal kalibrieren ist kacke
 weil ich nur einen wert für ant1 bekomme").
 
 DeepSeek-Brainstorm-R1 (V4-pro) bestätigte Variante A 🟢 + Hinweis
-„→ DIVERSITY" im dx_info bei Re-Mess fällig im Normal.
+„→ DIVERSITY" im dx_info bei Re-Mess nötig im Normal.
 
 Tests T1-T6:
 - T1: rx_mode=normal → btn_einmessen.isHidden() == True
@@ -82,7 +82,7 @@ def test_t3_format_gain_status_stale_normal_zeigt_diversity_hinweis():
 
     html = mw_radio.RadioMixin._format_gain_status(obj, "20m", "normal")
 
-    assert "Re-Mess fällig" in html
+    assert "Re-Mess nötig" in html
     assert "→ DIVERSITY" in html, f"Expected '→ DIVERSITY' im Normal-Mode-Stale, got: {html}"
 
 
@@ -108,7 +108,7 @@ def test_t4_format_gain_status_stale_diversity_kein_pfeil():
 
     html = mw_radio.RadioMixin._format_gain_status(obj, "20m", "diversity")
 
-    assert "Re-Mess fällig" in html
+    assert "Re-Mess nötig" in html
     assert "→ DIVERSITY" not in html, \
         f"Diversity-Mode darf NICHT '→ DIVERSITY' enthalten, got: {html}"
 

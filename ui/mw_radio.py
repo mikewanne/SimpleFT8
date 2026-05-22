@@ -669,8 +669,14 @@ class RadioMixin:
         # Diversity: Preset-Check mit Dialog + ggf. Pipeline
         if not bandpilot_acted and self._rx_mode == "diversity":
             scoring = getattr(self._diversity_ctrl, 'scoring_mode', 'normal')
-            _dlog("BAND", f"_check_diversity_preset({band}, scoring={scoring})")
-            self._check_diversity_preset(band, scoring)
+            # P112 (v0.97.89): auto_remess nur wenn Setting aktiv UND
+            # Bandwechsel-Pfad. Sonst Diversity startet mit alten/Std-Werten.
+            auto_remess = bool(self.settings.get(
+                "auto_gain_on_band_change", False))
+            _dlog("BAND", f"_check_diversity_preset({band}, "
+                          f"scoring={scoring}, auto_remess={auto_remess})")
+            self._check_diversity_preset(band, scoring,
+                                          auto_remess=auto_remess)
             return  # _check_diversity_preset ruft _update_statusbar auf
         # P83 (v0.97.54): Gain-Status-Zeile aktualisieren (HTML-Format).
         self._update_gain_status_display()
@@ -1321,10 +1327,15 @@ class RadioMixin:
                 f"ANT2 G{self._diversity_ant2_gain} (gemessen {measured})"
             )
         else:
-            # Kein Preset: Standard-Gains + Hinweis
-            self._diversity_ant1_gain = PREAMP_PRESETS.get(band, 10)
-            self._diversity_ant2_gain = PREAMP_PRESETS.get(band, 10) + 10
-            print(f"[Diversity] AKTIV — Standard-Gains, kein Preset fuer {band}")
+            # P112 (v0.97.89, Mike-Spec Option E): Standard 10/10 statt
+            # ANT1=base, ANT2=base+10. Mike: "wir behandeln nicht-vorhanden
+            # wie abgelaufen mit standard 10/10". Sicherer (ANT2 bekommt
+            # keinen Boost ohne echte Messung), Anzeige sagt "Re-Mess nötig".
+            std_gain = PREAMP_PRESETS.get(band, 10)
+            self._diversity_ant1_gain = std_gain
+            self._diversity_ant2_gain = std_gain
+            print(f"[Diversity] AKTIV — Standard-Gains G{std_gain}/G{std_gain}, "
+                  f"kein Preset fuer {band} (Mike klickt KALIBRIEREN)")
 
         # P83 (v0.97.54): dx_info ueber zentralen Helper aktualisieren.
         self._update_gain_status_display()
@@ -1379,28 +1390,34 @@ class RadioMixin:
     def _format_gain_status(self, band: str, rx_mode: str) -> str:
         """P83 (v0.97.54): HTML-Text fuer dx_info-Label.
 
+        P112 (v0.97.89, Mike-Spec): einheitliches Wording "Re-Mess nötig"
+        für stale UND missing. Beides rot.
+
         Format:
           fresh: `ANT1(G10) + ANT2(G20) · noch 4h` (Suffix farbig)
-          stale: `ANT1(G10) + ANT2(G20) · Re-Mess faellig` (rot)
-          missing: `nicht kalibriert · G10 (Std)` (grau)
+          stale: `ANT1(G10) + ANT2(G20) · Re-Mess nötig` (rot)
+          missing: `Standard G10 · Re-Mess nötig` (rot)
 
         Werte-Teil immer dunkelgrau (#668877), Suffix farbcodiert nach
         verbleibender Zeit (gruen >2h, orange <=2h, rot <=1h).
         """
         entry = self._gain_store.get(band)
         default_g = PREAMP_PRESETS.get(band, 10)
-        if not entry:
+        # MISSING-Branch: kein Eintrag ODER Migration-Marker (ts=0.0)
+        is_missing = (
+            not entry
+            or not entry.get("gain_timestamp")
+            or entry.get("gain_timestamp", 0) <= 0
+        )
+        if is_missing:
+            suffix_text = "· Re-Mess nötig"
+            if rx_mode == "normal":
+                suffix_text += " → DIVERSITY"
             return (
-                f"<span style='color:#888;'>nicht kalibriert · "
-                f"G{default_g} (Std)</span>"
+                f"<span style='color:#668877;'>Standard G{default_g}</span> "
+                f"<span style='color:#FF3333;'>{suffix_text}</span>"
             )
         ts = entry.get("gain_timestamp", 0.0)
-        if not ts or ts <= 0:
-            # Migration-Marker (ts=0.0) → behandeln wie missing.
-            return (
-                f"<span style='color:#888;'>nicht kalibriert · "
-                f"G{default_g} (Std)</span>"
-            )
         ant1_g = entry.get("ant1_gain", default_g)
         ant2_g = entry.get("ant2_gain", 0)
         ant2_cal = entry.get("ant2_calibrated", False)
@@ -1413,7 +1430,8 @@ class RadioMixin:
         if remaining_s <= 0:
             # P86 (v0.97.56): KALIBRIEREN-Button ist Diversity-only.
             # Im Normal-Modus Hinweis ergänzen wo Mike kalibrieren kann.
-            suffix_text = "· Re-Mess fällig"
+            # P112 (v0.97.89): "fällig" → "nötig" für einheitliches Wording.
+            suffix_text = "· Re-Mess nötig"
             if rx_mode == "normal":
                 suffix_text += " → DIVERSITY"
             return (
@@ -1450,15 +1468,28 @@ class RadioMixin:
         )
 
     def _check_diversity_preset(self, band: str, scoring: str,
-                                 clear_panels: bool = True) -> None:
+                                 clear_panels: bool = True,
+                                 auto_remess: bool = False) -> None:
         """Preset-Check bei Band/Modus-Wechsel mit aktiver Diversity.
 
         P80 (v0.97.52): ft_mode raus — Gain ist band-spezifisch.
         scoring (standard/dx) bleibt fuer DynamicDiversityController.
 
+        P112 (v0.97.89, Mike-Spec Option E): kein Auto-DXTuneDialog mehr
+        bei stale/missing. Diversity startet IMMER direkt — bei missing
+        mit Standard-Gains 10/10, bei stale mit alten gespeicherten Werten.
+        Anzeige zeigt „Re-Mess nötig" rot, User klickt KALIBRIEREN.
+
+        Ausnahme: ``auto_remess=True`` (von ``_on_band_changed`` gesetzt
+        wenn Setting ``auto_gain_on_band_change=True``) → alter Pfad mit
+        Auto-DXTuneDialog. Default False für alle anderen Aufrufer.
+
         Logik:
         - Gain fresh + ant2_calibrated=True → ``_enable_diversity`` direkt
-        - Gain stale/missing/ant2_uncalibrated → DXTuneDialog
+        - Gain stale/missing/ant2_uncalibrated:
+          - auto_remess=True → DXTuneDialog (alter Pfad)
+          - auto_remess=False → ``_enable_diversity`` direkt (mit alten
+            oder Standard-Werten)
 
         P63 (v0.97.36): Marker-Pre-Check oben — bei rotem Marker werden
         Gain-Mess-Pipeline + Diversity-Start blockiert.
@@ -1503,26 +1534,32 @@ class RadioMixin:
             self._update_statusbar()
             return
 
-        # Gain stale / missing / ant2_uncalibrated → DXTuneDialog
-        self._pending_dx_diversity = True
-        self._pending_diversity_scoring = scoring
+        # P112 (v0.97.89): stale/missing/ant2_uncalibrated.
+        # Default-Pfad: KEIN Auto-Dialog — Diversity startet mit alten
+        # oder Standard-Werten. Anzeige zeigt "Re-Mess nötig" rot.
         _branch = ("ant2_uncalibrated" if gain_status == "fresh"
                    else f"gain_{gain_status}")
-        _dlog("DIV-CACHE", f"BRANCH={_branch} -> DXTuneDialog")
-        print(f"[Diversity] {band}: {_branch} → DXTuneDialog")
+        if not auto_remess:
+            _dlog("DIV-CACHE", f"BRANCH={_branch} -> _enable_diversity (no auto)")
+            print(f"[Diversity] {band}: {_branch} → Diversity startet "
+                  f"mit {'altem Preset' if entry else 'Standard 10/10'} "
+                  f"(KEIN Auto-Dialog, User klickt KALIBRIEREN)")
+            self._enable_diversity(scoring_mode=scoring,
+                                    clear_panels=clear_panels)
+            self._update_statusbar()
+            return
+
+        # auto_remess=True (Bandwechsel mit Setting "Auto-Gain bei
+        # Bandwechsel" AN) → DXTuneDialog wie früher.
+        self._pending_dx_diversity = True
+        self._pending_diversity_scoring = scoring
+        _dlog("DIV-CACHE", f"BRANCH={_branch} -> DXTuneDialog (auto_remess)")
+        print(f"[Diversity] {band}: {_branch} → DXTuneDialog (Auto-Gain AN)")
         # P62 (v0.97.35): 1s Pause zwischen TX-Stop und Gain-Mess-TUNE.
-        # Mike-Feedback Field-Test P60-F6: ohne Pause wirkt der Uebergang
-        # visuell wie „80W → 10W TUNE" statt sauberes „TX aus → neue
-        # Messung". Lock greift SOFORT (sperrt UI), Statusbar zeigt
-        # Hinweis, dann nach 1000ms eigentliche Tune-Pipeline. Race-Schutz
-        # via existierenden `_gain_measure_locked`-Check in
-        # `_on_band_changed`/`_on_mode_changed`/`_on_rx_mode_changed`.
         from PySide6.QtCore import QTimer
         self._set_gain_measure_lock(True)
         self.statusBar().showMessage(
             "TX gestoppt — Gain-Messung startet in 1s ...", 1500)
-        # P80: gain_scoring aus dem scoring-Parameter ableiten (snr fuer dx,
-        # stations fuer std/normal — analog _handle_dx_tuning).
         gain_scoring = "snr" if scoring == "dx" else "stations"
         QTimer.singleShot(
             1000,

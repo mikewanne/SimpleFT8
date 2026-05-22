@@ -117,8 +117,9 @@ def test_check_preset_dispatch_gain_fresh_calls_enable_diversity():
     fake_self._start_dx_tuning.assert_not_called()
 
 
-def test_check_preset_dispatch_gain_stale_opens_dialog(monkeypatch):
-    """P80: Gain stale → DXTuneDialog (P62 deferred via QTimer)."""
+def test_check_preset_dispatch_gain_stale_no_dialog_by_default(monkeypatch):
+    """P112: Gain stale → KEIN DXTuneDialog mehr (Default auto_remess=False).
+    Diversity startet direkt mit alten Werten, Anzeige "Re-Mess nötig" rot."""
     from ui.mw_radio import RadioMixin
 
     fake_self = _make_mw_self(store=_make_store_mock(
@@ -134,14 +135,38 @@ def test_check_preset_dispatch_gain_stale_opens_dialog(monkeypatch):
 
     RadioMixin._check_diversity_preset(fake_self, "40m", "normal")
 
+    # P112: stale → kein Auto-Dialog, sondern _enable_diversity direkt
+    fake_self._start_dx_tuning.assert_not_called()
+    fake_self._enable_diversity.assert_called_once_with(
+        scoring_mode="normal", clear_panels=True)
+
+
+def test_check_preset_dispatch_gain_stale_auto_remess_opens_dialog(monkeypatch):
+    """P112: Gain stale + auto_remess=True → DXTuneDialog (alter Pfad)."""
+    from ui.mw_radio import RadioMixin
+
+    fake_self = _make_mw_self(store=_make_store_mock(
+        gain_valid=False, has_gain_timestamp=True))
+    fake_self._enable_diversity = MagicMock()
+    fake_self._start_dx_tuning = MagicMock()
+    fake_self._update_statusbar = MagicMock()
+    fake_self._set_gain_measure_lock = MagicMock()
+
+    def fake_singleshot(msec, callback):
+        callback()
+    monkeypatch.setattr("PySide6.QtCore.QTimer.singleShot", fake_singleshot)
+
+    RadioMixin._check_diversity_preset(
+        fake_self, "40m", "normal", auto_remess=True)
+
     fake_self._start_dx_tuning.assert_called_once()
     fake_self._enable_diversity.assert_not_called()
     assert fake_self._pending_dx_diversity is True
     fake_self._set_gain_measure_lock.assert_called_with(True)
 
 
-def test_check_preset_dispatch_gain_missing_opens_dialog(monkeypatch):
-    """P80: Gain missing → DXTuneDialog."""
+def test_check_preset_dispatch_gain_missing_no_dialog_by_default(monkeypatch):
+    """P112: Gain missing → KEIN DXTuneDialog (Default), _enable_diversity."""
     from ui.mw_radio import RadioMixin
 
     fake_self = _make_mw_self(store=_make_store_mock(
@@ -157,8 +182,9 @@ def test_check_preset_dispatch_gain_missing_opens_dialog(monkeypatch):
 
     RadioMixin._check_diversity_preset(fake_self, "40m", "normal")
 
-    fake_self._start_dx_tuning.assert_called_once()
-    fake_self._enable_diversity.assert_not_called()
+    fake_self._start_dx_tuning.assert_not_called()
+    fake_self._enable_diversity.assert_called_once_with(
+        scoring_mode="normal", clear_panels=True)
 
 
 def test_check_preset_skip_when_no_radio():

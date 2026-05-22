@@ -79,10 +79,11 @@ def test_t3_statusbar_hinweis_in_check_diversity_preset():
 
 def test_t4_gain_fresh_branch_ohne_qtimer():
     """T4: Wenn Gain fresh ist (Cache-Hit), läuft `_enable_diversity`
-    direkt — KEINE Pause. Pause ist nur für stale/missing-Branch."""
+    direkt — KEINE Pause. Pause ist nur für stale/missing-Branch.
+    P112: Marker an stale-Kommentar angepasst."""
     src = _get_method_source("_check_diversity_preset")
-    # Den fresh-Branch isolieren (vor "Gain stale oder missing"-Kommentar)
-    stale_marker = "Gain stale / missing / ant2_uncalibrated"
+    # P112: stale/missing-Kommentar Marker
+    stale_marker = "stale/missing/ant2_uncalibrated"
     idx_stale = src.find(stale_marker)
     assert idx_stale > 0, "P62: stale/missing-Branch-Marker fehlt"
     fresh_part = src[:idx_stale]
@@ -153,8 +154,9 @@ def test_t6_qtimer_singleshot_aufruf_funktional(monkeypatch):
         "gain_timestamp": 0.0, "ant2_calibrated": True})
     obj._gain_store.is_valid_gain = MagicMock(return_value=False)  # stale
 
-    # P80: _check_diversity_preset hat nur noch (band, scoring)
-    mwr.RadioMixin._check_diversity_preset(obj, "20m", "normal")
+    # P112: auto_remess=True explizit setzen (Default ist False → kein Dialog)
+    mwr.RadioMixin._check_diversity_preset(obj, "20m", "normal",
+                                            auto_remess=True)
 
     assert len(calls) == 1, f"P62: erwartete genau 1 QTimer-Aufruf, got {len(calls)}"
     msec, cb = calls[0]

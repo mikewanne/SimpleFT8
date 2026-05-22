@@ -84,6 +84,11 @@ DEFAULTS = {
     # Triggert 10 W TUNE auf ANT1 nach jedem Band-Wechsel, speichert
     # zudem RFPreset-Stuetzpunkt fuer schnellere TX-Power-Konvergenz.
     "auto_tune_on_band_change": True,
+    # P112 (v0.97.89): Auto-Gain-Einmessung bei Bandwechsel.
+    # Default AUS — User-gesteuert via KALIBRIEREN-Button.
+    # AN = bei Bandwechsel mit stale/missing Gain wird DXTuneDialog
+    # automatisch gestartet (analog Auto-TUNE).
+    "auto_gain_on_band_change": False,
 }
 
 

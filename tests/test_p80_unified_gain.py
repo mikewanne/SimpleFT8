@@ -151,7 +151,9 @@ def test_no_ft_mode_in_check_diversity_preset_signature():
     params = list(sig.parameters.keys())
     # P110: clear_panels-Parameter hinzugefügt (Default True für Bandwechsel,
     # False nur für Sub-Toggle Std↔DX innerhalb Diversity)
-    assert params == ["self", "band", "scoring", "clear_panels"]
+    # P112: auto_remess-Parameter hinzugefügt (Default False, True nur bei
+    # Bandwechsel mit Setting auto_gain_on_band_change=True)
+    assert params == ["self", "band", "scoring", "clear_panels", "auto_remess"]
 
 
 def test_no_get_diversity_store_method():
@@ -164,8 +166,9 @@ def test_no_get_diversity_store_method():
 
 
 def test_check_diversity_preset_blocks_when_ant2_uncalibrated(monkeypatch):
-    """R1-F1 ROT: Diversity-Wechsel mit ant2_calibrated=False löst
-    Re-Mess aus (DXTuneDialog), NICHT direkten _enable_diversity-Call."""
+    """R1-F1 ROT: Diversity-Wechsel mit ant2_calibrated=False.
+    P112: standardmäßig KEIN Auto-DXTuneDialog mehr (nur mit auto_remess=True).
+    Test prüft jetzt auto_remess=True-Pfad (= Bandwechsel mit Setting AN)."""
     from ui.mw_radio import RadioMixin
 
     obj = MagicMock()
@@ -196,7 +199,9 @@ def test_check_diversity_preset_blocks_when_ant2_uncalibrated(monkeypatch):
         cb()
     monkeypatch.setattr("PySide6.QtCore.QTimer.singleShot", fake_ss)
 
-    RadioMixin._check_diversity_preset(obj, "30m", "normal")
+    # P112: auto_remess=True explizit (Default False = kein Dialog)
+    RadioMixin._check_diversity_preset(obj, "30m", "normal",
+                                        auto_remess=True)
 
     # KRITISCH: kein direkter Enable, sondern DXTuneDialog
     obj._enable_diversity.assert_not_called()

@@ -12961,3 +12961,74 @@ Mike legt Code + Logs + Aufsicht dar. Bei aktiver Beobachtung +
 Auto-Stop-Mechanismen ist die Beweislage zugunsten Mike.
 
 Bei FT8-Auto-Sequencing in DE: kein einziger verfolgter Fall bekannt.
+
+## 2026-05-22 v0.97.89 — P112 Option E: Kein Auto-Mess, einheitliches Wording
+
+Mike-Bug-Report 22.05.: nach Statistik-Session über Nacht zeigte App
+"noch 3h" für 15m obwohl er nicht eingemessen hatte. Diagnose im Log:
+DXTuneDialog ist non-modal + auto-accepted sich
+(`dx_tune_dialog.py:490 QTimer.singleShot(0, self.accept)`). Bei jedem
+Radio-Reconnect / Mode-Wechsel ruft `_check_diversity_preset` den Dialog
+bei stale/missing automatisch auf — Mess läuft, save_gain triggert,
+Mike sieht nichts.
+
+3× im 21.05.-Log: Z. 94, Z. 7238, Z. 23965 — alle Auto-Re-Mess.
+
+### Mike-Spec Option E (KISS)
+
+| Zustand | Anzeige | Diversity-Betrieb |
+|---|---|---|
+| Aktuell (≤6h) | grün "noch X h" | gespeicherte Werte |
+| Abgelaufen (>6h) | rot **"Re-Mess nötig"** | alte Werte weiter |
+| Nicht vorhanden | rot **"Re-Mess nötig"** | Standard 10/10 |
+
+**Niemals Auto-Dialog.** User klickt KALIBRIEREN selbst.
+
+**Einheitliches Wording "nötig"** für stale + missing (statt "fällig" +
+"nicht kalibriert" — Mike: KISS, "nötig sagt beides aus").
+
+### Opt-in Setting
+
+Neuer Key `auto_gain_on_band_change` (Default False), Checkbox in
+Auto-TUNE-GroupBox (Settings-Dialog). Wenn AN: Bandwechsel + stale/missing
+→ DXTuneDialog wie früher. Wenn AUS: nie Dialog (Default-Verhalten).
+
+### Code-Änderungen
+
+1. `_check_diversity_preset(band, scoring, clear_panels=True, auto_remess=False)`:
+   neuer Parameter, Default False → KEIN Dialog mehr bei stale/missing.
+2. `_on_band_changed`: liest Setting, reicht als `auto_remess` durch.
+3. `_enable_diversity` MISSING-Pfad: ANT1=ANT2=PREAMP_PRESETS (10/10
+   statt +10 — Mike: "sicher, keine ANT2-Boost ohne echte Messung").
+4. `_format_gain_status`: MISSING rot statt grau, beide Pfade "Re-Mess nötig".
+5. `config/settings.py`: `auto_gain_on_band_change: False`.
+6. `ui/settings_dialog.py`: `auto_gain_band_cb` Checkbox + Load/Save.
+
+### Workflow
+
+V1 → V2-Self-Review (5 Findings) → R1-DeepSeek V4-pro (GELB: T8 ergänzen,
+Checkbox-Position semantisch unglücklich — Mike-Spec überstimmt R1) →
+V3 + Code → 10 Tests T1-T10 + 12 angepasst → Final-R1 V4-pro
+„Push-bereit, keine ROT/ORANGE-Blocker".
+
+**V4-pro 47-Cycle-Bilanz: 0 Halluzinationen.**
+
+Tests 1727 → 1738 (+11):
+- T1 Settings-Default False
+- T2 Signatur erweitert
+- T3-T5 stale/missing kein Dialog default, Dialog nur bei auto_remess=True
+- T6 _on_band_changed reicht Setting durch
+- T7-T8 "Re-Mess nötig" einheitlich
+- T9 MISSING-Pfad 10/10
+- T10 Settings-Checkbox
+
+12 bestehende Tests angepasst:
+- test_p80 (Signatur + auto_remess), test_p86 (Wording),
+  test_bundle_m_p83_p85 (Wording + Farbe), test_p1_cache_simple
+  (umgekehrte Default-Erwartung + neuer auto_remess-Test), test_p62
+  (Marker-String + auto_remess=True), test_p110 (Signatur).
+
+Bug-Reproduktion 22.05. (15m Band): App lief 18 Uhr durch, 5:43 zeigte
+"noch 3h" → Mike: vor 3h keine Mess. 5:46 Mode-Wechsel Normal→Diversity
+triggerte 3. Re-Mess. Mit P112: dieser Pfad ruft nur `_enable_diversity`
+(kein Dialog), Anzeige hätte korrekt "Re-Mess nötig" rot gezeigt.

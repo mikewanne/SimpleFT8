@@ -6,7 +6,7 @@ P83 — Status-Zeile mit Verfalls-Counter:
 - T1: fresh (>2h) → grün
 - T2: fresh (1-2h) → orange
 - T3: fresh (≤1h) → rot
-- T4: stale → „Re-Mess fällig"
+- T4: stale → „Re-Mess nötig"
 - T5: missing → „nicht kalibriert"
 - T6: ant2_calibrated=False → kein ANT2 in Format (Normal-mode-Pattern)
 
@@ -88,7 +88,7 @@ def test_p83_t3_fresh_red_under_1h():
 
 
 def test_p83_t4_stale_re_mess_faellig():
-    """T4: ≥6h alt → „Re-Mess fällig" rot."""
+    """T4: ≥6h alt → „Re-Mess nötig" rot."""
     from ui import mw_radio
     entry = {
         "ant1_gain": 10,
@@ -98,18 +98,18 @@ def test_p83_t4_stale_re_mess_faellig():
     }
     obj = _make_mw_with_gain_entry(entry)
     html = mw_radio.RadioMixin._format_gain_status(obj, "20m", "diversity")
-    assert "Re-Mess fällig" in html
+    assert "Re-Mess nötig" in html
     assert "#FF3333" in html
 
 
-def test_p83_t5_missing_nicht_kalibriert():
-    """T5: kein Entry → „nicht kalibriert · G10 (Std)" grau."""
+def test_p83_t5_missing_re_mess_noetig():
+    """T5 (P112): kein Entry → „Standard G10 · Re-Mess nötig" rot."""
     from ui import mw_radio
     obj = _make_mw_with_gain_entry(None)
     html = mw_radio.RadioMixin._format_gain_status(obj, "20m", "diversity")
-    assert "nicht kalibriert" in html
+    assert "Re-Mess nötig" in html
     assert "G10" in html  # Default-Gain für 20m
-    assert "#888" in html
+    assert "#FF3333" in html  # P112: jetzt rot statt grau
 
 
 def test_p83_t6_normal_mode_no_ant2():
@@ -143,7 +143,8 @@ def test_p83_t6b_diversity_mode_ant2_not_calibrated():
 
 
 def test_p83_t6c_migration_marker_ts_zero():
-    """T6c: gain_timestamp=0.0 (Migration-Marker) → wie missing behandeln."""
+    """T6c (P112): gain_timestamp=0.0 (Migration-Marker) → wie missing
+    behandeln → „Re-Mess nötig"."""
     from ui import mw_radio
     entry = {
         "ant1_gain": 10,
@@ -153,7 +154,7 @@ def test_p83_t6c_migration_marker_ts_zero():
     }
     obj = _make_mw_with_gain_entry(entry)
     html = mw_radio.RadioMixin._format_gain_status(obj, "20m", "diversity")
-    assert "nicht kalibriert" in html
+    assert "Re-Mess nötig" in html
 
 
 # ──────────────────────────────────────────────────────────────────────

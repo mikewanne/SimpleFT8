@@ -291,6 +291,14 @@ class SettingsDialog(QDialog):
             "Speichert RF-Stuetzpunkt fuer schnellere TX-Power-Konvergenz.")
         tune_form.addRow("", self.auto_tune_band_cb)
 
+        # 5) P112 (v0.97.89): Auto-Gain bei Bandwechsel
+        self.auto_gain_band_cb = QCheckBox("Auto-Gain bei Bandwechsel")
+        self.auto_gain_band_cb.setToolTip(
+            "Bei Bandwechsel mit abgelaufenem oder fehlendem Gain-Preset\n"
+            "wird automatisch eine Gain-Einmessung gestartet.\n"
+            "Aus = manuell via KALIBRIEREN-Button (Default — kein Pop-up).")
+        tune_form.addRow("", self.auto_gain_band_cb)
+
         # Master-Switch-Logik: Tuner-Checkbox de/aktiviert abhängige
         # TUNE-Widgets (R1-F1 — UX-Hinweis dass sie ohne Tuner sinnlos
         # sind).
@@ -651,6 +659,9 @@ class SettingsDialog(QDialog):
         # P54 (v0.97.44): Auto-Tune bei Bandwechsel
         self.auto_tune_band_cb.setChecked(
             self.settings.get("auto_tune_on_band_change", True))
+        # P112 (v0.97.89): Auto-Gain bei Bandwechsel
+        self.auto_gain_band_cb.setChecked(
+            self.settings.get("auto_gain_on_band_change", False))
         # P3 v0.95.20: Audio-Dump
         self.audio_dump_cb.setChecked(self.settings.get("audio_dump_enabled", False))
         self.audio_dump_max_spin.setValue(self.settings.get("audio_dump_max_files", 200))
@@ -832,6 +843,9 @@ class SettingsDialog(QDialog):
         # P54 (v0.97.44): Auto-Tune bei Bandwechsel
         self.settings.set("auto_tune_on_band_change",
                           self.auto_tune_band_cb.isChecked())
+        # P112 (v0.97.89): Auto-Gain bei Bandwechsel
+        self.settings.set("auto_gain_on_band_change",
+                          self.auto_gain_band_cb.isChecked())
         self.settings.save()
         self.accept()
 

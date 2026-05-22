@@ -1,8 +1,33 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-21 — P110 Diversity↔Diversity Sub-Toggle skippt RX-Clear + README Überarbeitung
+## Stand 2026-05-22 — P112 Option E: Kein Auto-Mess, "Re-Mess nötig" einheitlich
 
-**Aktueller Code-Stand:** v0.97.87 (P110), Tests **1723 grün** (+7).
+**Aktueller Code-Stand:** v0.97.89 (P112), Tests **1738 grün** (+11).
+
+### 🟢 v0.97.89 P112 — Auto-Mess raus + Wording einheitlich
+
+Mike-Bug 22.05.: nach Statistik-Session über Nacht zeigte App "noch 3h"
+obwohl er nicht eingemessen hatte. Log-Diagnose: DXTuneDialog auto-acceptiert
+sich → bei jedem Reconnect/Mode-Wechsel automatische Re-Mess silent.
+
+**Fix Mike-Spec Option E:**
+- Niemals Auto-Dialog. Stale/Missing → Anzeige "Re-Mess nötig" rot,
+  Diversity läuft mit alten oder Standard 10/10 weiter.
+- Opt-in Setting "Auto-Gain bei Bandwechsel" (Default AUS) für Komfort.
+- Einheitliches Wording "Re-Mess nötig" (KISS, statt "fällig"/"nicht kalibriert").
+
+**V4-pro 47-Cycle-Bilanz: 0 Halluzinationen.**
+
+### Vorgänger v0.97.88 P111 — "99" raus aus max_calls-Dropdown
+### Vorgänger v0.97.87 P110 — Diversity↔Diversity Sub-Toggle skippt RX-Clear
+
+(Siehe HISTORY.md für ältere Einträge.)
+
+---
+
+## Originaler Stand 2026-05-21 — P110 Diversity↔Diversity Sub-Toggle skippt RX-Clear
+
+**Vorher-Code-Stand:** v0.97.87 (P110), Tests **1723 grün** (+7).
 
 **Auch heute:** README massive Überarbeitung für CQ DL 6/2026 Artikel-Release
 (1093 → 522 Zeilen), CLAUDE.md entrümpelt (52 KB → 37 KB), Statistiken +
