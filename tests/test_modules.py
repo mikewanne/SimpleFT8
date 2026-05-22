@@ -2313,55 +2313,9 @@ def test_dx_tune_pipeline_warmup_state():
 # Tests in test_diversity_helpers.py decken evaluate_ratio direkt ab).
 
 
-# ── AP-Lite v2.2 — kohärente Addition (Sanity-Checks) ────────────────────────
-
-def test_ap_lite_correlate_no_encoder_returns_zero():
-    """correlate_candidate ohne Encoder → 0.0 (kein Crash, sicherer Default)."""
-    import numpy as _np
-    from core.ap_lite import correlate_candidate, SAMPLE_RATE, SLOT_SECONDS
-    buf = _np.zeros(int(SAMPLE_RATE * SLOT_SECONDS), dtype=_np.float32)
-    score = correlate_candidate(buf, "DA1MHH DK5ON 73", 1500.0, encoder=None)
-    assert score == 0.0
-
-
-def test_ap_lite_align_identical_costas_buffers_zero_offset():
-    """Identische Costas-Referenz-Buffer → dt=0, df=0 (Self-Alignment).
-
-    Verwendet die echte Costas-Referenz statt eines reinen Sinus, damit der
-    Korrelations-Score auf Sync-Positionen ein eindeutiges Maximum hat.
-    """
-    from core.ap_lite import (
-        align_buffers, _build_costas_reference, N_SYMBOLS, SYMBOL_SAMPLES,
-    )
-    n = N_SYMBOLS * SYMBOL_SAMPLES
-    ref = _build_costas_reference(freq_hz=1500.0, n_samples=n)
-    aligned, dt_samples, df_hz = align_buffers(ref, ref.copy(), freq_hz=1500.0)
-    assert dt_samples == 0, f"Erwartet dt=0 bei Self-Alignment, got {dt_samples}"
-    assert abs(df_hz) < 0.2, f"Erwartet df≈0 Hz bei Self-Alignment, got {df_hz}"
-    assert aligned.shape == ref.shape
-
-
-def test_ap_lite_costas_reference_has_signal_at_costas_positions():
-    """_build_costas_reference erzeugt Energie bei Costas-Positionen, nicht dazwischen."""
-    import numpy as _np
-    from core.ap_lite import (
-        _build_costas_reference, COSTAS_POSITIONS, SYMBOL_SAMPLES, N_SYMBOLS,
-    )
-    n = N_SYMBOLS * SYMBOL_SAMPLES
-    ref = _build_costas_reference(freq_hz=1500.0, n_samples=n)
-    assert ref.shape == (n,)
-    # Energie an einer Costas-Position muss > 0 sein
-    pos_energy = float(_np.sum(ref[
-        COSTAS_POSITIONS[0] * SYMBOL_SAMPLES:
-        (COSTAS_POSITIONS[0] + 1) * SYMBOL_SAMPLES
-    ] ** 2))
-    assert pos_energy > 0, "Costas-Position muss Signal-Energie haben"
-    # Energie zwischen Costas-Bloecken muss 0 sein (Pos 7-35 sind Daten, kein Costas)
-    gap_energy = float(_np.sum(ref[
-        7 * SYMBOL_SAMPLES:
-        36 * SYMBOL_SAMPLES
-    ] ** 2))
-    assert gap_energy == 0.0, "Daten-Bloecke muessen 0 sein im Costas-Referenzsignal"
+# ── AP-Lite — Tests in test_ap_lite.py / test_ap_lite_e2e.py ─────────────────
+# (Die alten Costas-/align_buffers-Sanity-Checks entfielen mit v0.97.90
+#  Option D — die kohärente Addition wurde durch A-Priori-Matching ersetzt.)
 
 
 # ── v0.80 TX-DT-Drift Fix (Fix A1) ───────────────────────────────────────────

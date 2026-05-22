@@ -448,9 +448,11 @@ class CycleMixin:
         self.rx_panel.reapply_sort()
 
     def _run_ap_lite_rescue(self, messages):
-        """AP-Lite Rescue bei QSO-Decode-Fail (WAIT_REPORT / WAIT_RR73).
+        """AP-Lite: A-Priori-Kandidaten-Match bei QSO-Partner-Decode-Fail.
 
-        Läuft nur wenn AP_LITE_ENABLED = True (Feldtest-Flag).
+        Läuft bei WAIT_REPORT / WAIT_RR73, wenn die Gegenstation in diesem
+        Slot NICHT dekodiert wurde. Rein beratend — zeigt nur eine Info-Zeile,
+        loggt kein QSO und löst kein TX aus.
         """
         if not (self._ap_lite.enabled and self.qso_sm.qso):
             return
@@ -458,37 +460,27 @@ class CycleMixin:
         if _state not in (QSOState.WAIT_REPORT, QSOState.WAIT_RR73):
             return
         _their = self.qso_sm.qso.their_call
-        _freq = float(getattr(self.qso_sm.qso, 'freq_hz',
-                             self.encoder.audio_freq_hz) or self.encoder.audio_freq_hz)
-        _qso_state_int = 1 if _state == QSOState.WAIT_REPORT else 2
         _partner_found = any(
             getattr(m, 'caller', '') == _their for m in (messages or [])
         )
         if _partner_found or self.decoder.last_pcm_12k is None:
             return
-        _pcm = self.decoder.last_pcm_12k
-        _slot_time = float(int(time.time() / 15.0) * 15)
-        # Rescue-Versuch (zweiter Fehler)
+        _freq = float(getattr(self.qso_sm.qso, 'freq_hz',
+                              self.encoder.audio_freq_hz) or self.encoder.audio_freq_hz)
+        _qso_state_int = 1 if _state == QSOState.WAIT_REPORT else 2
         _result = self._ap_lite.try_rescue(
-            _pcm, _slot_time, _their, _freq, _qso_state_int,
+            self.decoder.last_pcm_12k, _freq, _their, _qso_state_int,
             own_callsign=self.settings.callsign,
             own_locator=self.settings.locator,
+            snr_estimate=float(getattr(self.qso_sm, '_last_snr', -10)),
         )
         if _result and _result.success:
             self.qso_panel.add_info(
-                f"[AP-Lite] Gerettet: {_result.recovered_message} "
-                f"(score={_result.score:.2f})"
+                f"[AP-Lite] Erkannt: {_result.recovered_message} "
+                f"(Marge {_result.margin:.2f})"
             )
-            print(f"[AP-Lite] RESCUE: '{_result.recovered_message}' "
-                  f"score={_result.score:.3f}")
-        else:
-            # Ersten Fehler merken für nächsten Rescue-Versuch
-            self._ap_lite.on_decode_failed(
-                _pcm, _slot_time, _their, _freq, _qso_state_int,
-                own_callsign=self.settings.callsign,
-                own_locator=self.settings.locator,
-                snr_estimate=float(getattr(self.qso_sm, '_last_snr', -10)),
-            )
+            print(f"[AP-Lite] MATCH: '{_result.recovered_message}' "
+                  f"score={_result.score:.3f} margin={_result.margin:.3f}")
 
     def _run_auto_hunt(self, messages):
         """Auto-Hunt: automatisch CQ-Stationen anrufen (verstecktes Feature)."""

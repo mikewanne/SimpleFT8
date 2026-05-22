@@ -1,93 +1,67 @@
-# AP-Lite v2.2 — Schwache QSOs retten
+# AP-Lite — A-Priori-Rettung schwacher QSOs
 
 ## Kurz gesagt
 
-Wenn das Signal des QSO-Partners zu schwach zum Dekodieren ist, kombiniert AP-Lite zwei aufeinanderfolgende gescheiterte Dekodierversuche und gewinnt dadurch ~4-5 dB effektiven SNR-Gewinn. Das reicht oft, um ein sterbendes QSO doch noch zu retten.
+Wenn der QSO-Partner zu schwach zum Dekodieren ist, rät AP-Lite die wenigen
+möglichen Nachrichten und prüft, welche davon zum Empfang passt. „AP" steht
+für *a priori* — im Voraus bekannt.
 
-## Das Problem
+## Die Idee
 
-- Du bist mitten im QSO, dein Partner hat seinen Report gesendet, aber der Decoder schafft es nicht.
-- Nach der maximalen Anzahl Wiederholungen laeuft das QSO in einen Timeout — frustrierend fuer beide Seiten.
-- Das Signal IST da (man sieht die Spur im Wasserfall), nur zu schwach fuer einen einzelnen Slot.
-- Standard-FT8-Decoder geben auf und machen weiter. Das QSO stirbt.
+Mitten in einem QSO ist fast alles schon bekannt: beide Rufzeichen und der
+Ablauf. Offen sind nur wenige Varianten:
 
-## Wie funktioniert es?
+- Du wartest auf den Rapport → eine Handvoll Zahlenwerte.
+- Du wartest auf die Bestätigung → genau drei: `RR73`, `RRR` oder `73`.
 
-AP-Lite nutzt eine Grundeigenschaft von FT8 aus: Wenn eine Nachricht nicht bestaetigt wird, wiederholt der Sender sie. Diese Wiederholung ist nicht verschwendet — sie traegt dieselbe Information, nur in anderem Rauschen. AP-Lite kombiniert beide Versuche.
+Schafft der Decoder den Partner-Slot nicht, erzeugt AP-Lite für jede dieser
+wenigen Varianten das FT8-Referenzsignal und vergleicht es mit dem Empfang.
+Passt eine Variante klar besser als alle anderen, gilt sie als erkannt.
 
-1. **Erster Dekodierversuch scheitert.** AP-Lite speichert den rohen PCM-Audiobuffer (das volle 12,64-Sekunden-Fenster).
-2. **Partner wiederholt** (FT8-Standard: wiederholen bis bestaetigt). Zweiter Dekodierversuch scheitert ebenfalls.
-3. **Ausrichtung.** AP-Lite richtet die beiden Buffer anhand der Costas-Synchronisationsarrays aus — das bekannte 7-Ton-Sync-Muster, das jede FT8-Nachricht enthaelt. Das Suchfenster ist +-8 Samples zeitlich und +-1,5 Hz frequenzmaessig, um kleine Takt- und Oszillatorunterschiede zwischen den Zyklen auszugleichen.
-4. **Kohaerente Addition.** Beide ausgerichteten Buffer werden Sample fuer Sample addiert. Das Signal addiert sich konstruktiv (gleiche Wellenform, deterministisch), waehrend das Rauschen inkohaerents addiert (zufaellig, unkorreliert zwischen den Zyklen).
-5. **Kandidaten-Korrelation.** Der kombinierte Buffer wird gegen eine Menge von Kandidaten-Nachrichten korreliert — Nachrichten, die AP-Lite aufgrund des aktuellen QSO-Zustands erwartet.
-6. **Entscheidung.** Wenn der beste Korrelationswert >= 0,75 ist, wird die Nachricht akzeptiert und das QSO geht weiter.
+## Wie der Vergleich funktioniert
 
-## Die Mathematik
+AP-Lite entschlüsselt nichts von Grund auf und kombiniert auch keine Slots.
+Es nutzt zwei Kniffe:
 
-Zwei unabhaengige Beobachtungen desselben Signals mit unabhaengigem Rauschen:
+1. **Phasen-unabhängiger Vergleich.** Empfang und Kandidat werden so
+   korreliert, dass es egal ist, wie die Trägerphase gerade liegt — der
+   Vergleich bleibt stabil.
+2. **Kleiner Frequenz-Suchlauf.** Reale Stationen liegen oft ein paar Hertz
+   neben der erwarteten Frequenz; AP-Lite sucht dieses Fenster ab.
 
-```
-x1 = s + n1
-x2 = s + n2
-```
+## Die Entscheidung — der Margen-Test
 
-Nach kohaerenter Addition:
+Statt einer festen Schwelle prüft AP-Lite den *Abstand*: Der beste Kandidat
+muss den zweitbesten deutlich schlagen.
 
-```
-x_kombiniert = x1 + x2 = 2s + (n1 + n2)
-```
+- echte Nachricht vorhanden → klarer Abstand
+- nur Rauschen oder ein fremdes Signal → praktisch kein Abstand
 
-Signalleistung skaliert quadratisch mit dem Amplitudenfaktor:
+Dieser relative Test ist robust — er funktioniert auch dann, wenn das Signal
+so schwach ist, dass der absolute Vergleichswert klein bleibt.
 
-```
-P_signal = (2)^2 * P_s = 4 * P_s    → +6 dB
-```
+## Was AP-Lite NICHT tut
 
-Rauschleistung addiert sich (unabhaengig, unkorreliert):
+AP-Lite ist rein **beratend**. Bei einem Treffer zeigt die App eine
+Info-Zeile im QSO-Fenster — mehr nicht. Es loggt kein QSO automatisch und
+löst kein Senden aus. Der Operator entscheidet. Darum kann AP-Lite kein QSO
+„erfinden", das es nie gab.
 
-```
-P_rauschen = P_n + P_n = 2 * P_n    → +3 dB
-```
+## Nutzen
 
-Netto-SNR-Gewinn:
+AP-Lite hilft in einem schmalen Bereich am unteren Rand: wenn das
+Partner-Signal *knapp* zu schwach für den normalen Decoder ist. Der Gewinn
+sind ein paar dB „Abschluss-Sicherheit" — marginale QSOs, die sonst in den
+Timeout laufen würden. Am meisten zahlt sich das im Diversity-DX-Modus aus,
+wo man bewusst schwache Stationen arbeitet.
 
-```
-SNR_gewinn = 6 dB - 3 dB = 3 dB (theoretisches Minimum aus Mittelung)
-```
+## Zähler in der Statusleiste
 
-In der Praxis erreicht AP-Lite ~4-5 dB, weil die Costas-gewichtete Korrelation den Sync-Ton-Positionen (wo der SNR am hoechsten ist) extra Gewicht gibt und so 1-2 dB ueber den reinen Mittelungsgewinn hinaus herausholt.
-
-Der 3 dB theoretische Gewinn ist dasselbe Prinzip wie bei gestackten Antennen oder Mittelung in der Radioastronomie — nichts Exotisches, einfach das Gesetz der grossen Zahlen angewandt auf Signalverarbeitung.
-
-## Kandidaten-Erzeugung
-
-AP-Lite ist kein blinder Decoder. Es weiss WAS es suchen muss, weil es den QSO-Stand kennt:
-
-- **WAIT_REPORT Zustand:** Die erwartete Nachricht ist ein Signal-Report. AP-Lite erzeugt Kandidaten ueber ein Fenster von +-5 dB um den erwarteten SNR, z.B.: `DA1MHH DK5ON -15`, `DA1MHH DK5ON -14`, ..., `DA1MHH DK5ON -10`. Das sind 11 Kandidaten (einer pro dB-Stufe von -20 bis -10).
-- **WAIT_RR73 Zustand:** Die erwarteten Nachrichten sind `DA1MHH DK5ON RR73`, `DA1MHH DK5ON RRR` oder `DA1MHH DK5ON 73`. Das sind genau 3 Kandidaten.
-
-Weniger Kandidaten bedeutet eine niedrigere Falsch-Positiv-Rate. Im WAIT_RR73-Zustand ist die Wahrscheinlichkeit, dass ein zufaelliges Rauschmuster eine von nur 3 spezifischen FT8-kodierten Nachrichten bei >= 0,75 Korrelation trifft, verschwindend gering.
-
-## Warum 0,75?
-
-Der Korrelationsschwellenwert ist ein Kompromiss:
-
-- **Zu niedrig (z.B. 0,5):** Falsch-Positive — Rauschen matcht einen Kandidaten zufaellig, das QSO loggt einen Kontakt der nie stattgefunden hat.
-- **Zu hoch (z.B. 0,95):** Das Feature feuert nie — man braucht 4-5 dB Gewinn, aber man verwirft alles unterhalb von nahezu perfekter Korrelation.
-- **0,75** ist ein konservativer Startwert, gewaehlt vor dem Feldtest. Er wird anhand realer Daten kalibriert: Korrelationswerte von bekannt-guten und bekannt-schlechten Dekodierungen aufzeichnen, dann den Schwellenwert am optimalen Trennpunkt setzen.
-
-## Vor- und Nachteile
-
-| Vorteil | Nachteil |
-|---------|----------|
-| +4-5 dB rettet marginale QSOs die sonst in den Timeout laufen | Funktioniert nur waehrend aktiver QSOs (braucht Zustandsinfo fuer Kandidaten) |
-| Null Fehlalarm-Risiko bei WAIT_RR73 (nur 3 moegliche Nachrichten) | Korrelationsschwelle 0,75 muss im Feld kalibriert werden |
-| Voll automatisch, kein Eingriff des Operators noetig | Fuegt ~5ms Verarbeitung pro gescheitertem Dekodierversuch hinzu |
-| Kandidaten-basiert: weiss WAS gesucht wird, keine Blindsuche | Kann bei CQ-Dekodierung nicht helfen (zu viele unbekannte Nachrichten) |
-| Nutzt Daten die sonst weggeworfen wuerden (gescheiterte Buffer) | Partner muss wiederholen (FT8-Standard, aber nicht garantiert) |
+Unten in der App steht `AP = (x)`. Das x ist die Zahl der QSOs, bei denen
+AP-Lite eine Nachricht erkannt hat. Der Zähler wird gespeichert und läuft
+über App-Neustarts hinweg weiter — gedacht zur Beobachtung im Feld.
 
 ## Status
 
-**UNGETESTET** — Code fertig (v0.22 Skeleton, v0.26 volle Implementierung), standardmaessig deaktiviert (`AP_LITE_ENABLED = False` in `core/ap_lite.py`).
-
-Aktivierung erst nach Feldtest-Kalibrierung des 0,75-Korrelationsschwellenwerts. Nach Aktivierung auf `[AP-Lite]` Log-Eintraege achten.
+Aktiv. AP-Lite ist ein beratendes Feature und greift nicht in den
+QSO-Ablauf ein.

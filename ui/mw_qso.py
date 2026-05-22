@@ -417,10 +417,6 @@ class QSOMixin:
         # (war Block-Counter-Reset). Pause/Resume erfolgt jetzt zentral
         # via _pause_omni_if_active in den 3 QSO-Entry-Pfaden.
 
-        # AP-Lite: Buffer löschen wenn QSO endet oder neu startet
-        if state in (QSOState.IDLE, QSOState.TIMEOUT, QSOState.TX_CALL):
-            self._ap_lite.clear()
-
         in_qso = state not in (
             QSOState.IDLE, QSOState.TIMEOUT,
             QSOState.CQ_CALLING, QSOState.CQ_WAIT,

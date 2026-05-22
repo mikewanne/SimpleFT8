@@ -392,7 +392,7 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         # Button-Klick: start/stop_auto_hunt
         self.control_panel.btn_auto_hunt.toggled.connect(self._on_btn_auto_hunt_toggled)
 
-        # AP-Lite: Initialisieren (deaktiviert, AP_LITE_ENABLED=False)
+        # AP-Lite: A-Priori-Kandidaten-Match (beratend, AP_LITE_ENABLED=True)
         from core import ap_lite as _ap
         self._ap_lite = _ap.get_instance(encoder=self.encoder)
 
@@ -1343,15 +1343,10 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
             )
         # P47 (v0.97.11): Filter-Anzeige entfernt — war irrefuehrend
         # (FT2 zeigte 100-4000 Hz, Decoder lief faktisch auf 3000 Hz).
-        # AP-Lite
+        # AP-Lite — persistenter Rescue-Zähler (AP = (Anzahl Treffer))
         ap_str = ""
         if hasattr(self, '_ap_lite') and self._ap_lite.enabled:
-            r = self._ap_lite.rescue_count
-            a = self._ap_lite.attempt_count
-            if a > 0:
-                ap_str = f"  |  AP: {r}/{a}"
-            else:
-                ap_str = "  |  AP: aktiv"
+            ap_str = f"  |  AP = ({self._ap_lite.rescue_count})"
         # CQ-Freq Status + Antenna Preference
         cq_hz = getattr(self._diversity_ctrl, 'cq_freq_hz', None)
         recalc = getattr(self._diversity_ctrl, '_recalc_count', 0)

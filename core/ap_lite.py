@@ -1,96 +1,77 @@
-"""AP-Lite v2.2 — Schwaches QSO retten via kohärenter Addition wiederholter Slots.
+"""AP-Lite — A-Priori-Kandidaten-Rettung für marginale QSO-Decodes.
 
-Strategie:
-  Decode schlägt fehl, aber Gegenstation wiederholt auf gleicher Frequenz.
-  Zwei unabhängige Rausch-Samples derselben Nachricht kohärent addieren
-  → ~4-5 dB SNR-Gewinn via Costas-basiertem Alignment.
+Konzept (a priori = „im Voraus bekannt"):
+  Während eines QSOs kennen wir aus dem QSO-Zustand fast die ganze
+  erwartete Nachricht der Gegenstation — beide Rufzeichen und die
+  Nachrichten-Struktur. Es bleiben nur wenige Restvarianten
+  (WAIT_RR73 → genau 3: RR73/RRR/73; WAIT_REPORT → wenige Report-Werte).
 
-Ablauf:
-  1. Decode-Fail → PCM-Buffer speichern (on_decode_failed)
-  2. Nächster Slot: gleiche Frequenz, gleicher State → AP-Lite triggert
-  3. Costas-Alignment: ±8 Samples Zeit + ±1.5 Hz Freq
-  4. Kohärente Addition → gewichtete Korrelation mit Kandidaten
-  5. Score ≥ 0.75 → annehmen und senden
-  6. Gegenstation antwortet → loggen. Sonst → tot.
+  Wenn der FT8-Decoder den Partner-Slot nicht schafft, erzeugt AP-Lite
+  für jede Restvariante das FT8-Referenzsignal und matcht es
+  phasen-invariant gegen den empfangenen Slot. Schlägt der beste
+  Kandidat den zweitbesten klar (Margen-Test), gilt die Nachricht als
+  erkannt.
 
-TODO: KOMPLETT UNGETESTET — scharfschalten nur nach Feldtest!
-      Insbesondere validieren:
-      - Korrelations-Threshold 0.75 korrekt?
-      - Costas-Alignment Suchbereich ausreichend?
-      - Kandidaten-Generierung vollständig?
-      - Buffer-Länge/Timing bei verschiedenen Slot-Typen?
+  Kein Signal-Decoding von Grund auf, kein Slot-Stapeln. Nur:
+  „wir wissen, was wahrscheinlich gesendet wurde — passt einer der
+  wenigen Kandidaten klar genug zum Empfang?"
+
+AP-Lite ist rein BERATEND: bei einem Treffer zeigt die App eine
+Info-Zeile. Es loggt kein QSO automatisch und löst kein TX aus —
+der Operator entscheidet. Darum besteht keine Falsch-Positiv-Gefahr
+für das Logbuch.
+
+Historie: bis v0.97.x implementierte dieses Modul „kohärente Addition"
+zweier Slots für SNR-Gewinn — ein konzeptioneller Irrweg (phasenabhängig,
+im Mittel 0 dB Gewinn). v0.97.90 (Option D) baut AP-Lite auf das
+ursprüngliche A-Priori-Konzept zurück.
 """
 
 from __future__ import annotations
 
+import json
 import logging
-import time
+import os
 from dataclasses import dataclass
-from typing import Optional, Dict, List, Tuple
+from typing import List, Optional
 
 import numpy as np
 
 # ─────────────────────────────────────────────────────────────────────────────
-# FEATURE FLAG — auf True setzen erst wenn Feldtest abgeschlossen!
-AP_LITE_ENABLED: bool = True   # Feldtest 13.04.2026 — Threshold 0.75
+# FEATURE FLAG — AP-Lite ist beratend (nur Info-Anzeige), daher gefahrlos an.
+AP_LITE_ENABLED: bool = True
 # ─────────────────────────────────────────────────────────────────────────────
 
-# FT8 Konstanten (12 kHz Sample-Rate, 15s Slots)
-SAMPLE_RATE   = 12000
-SLOT_SECONDS  = 15.0
-SLOT_SAMPLES  = int(SAMPLE_RATE * SLOT_SECONDS)  # 180000
+SAMPLE_RATE = 12000
 
-# FT8 Symbol-Timing
-SYMBOL_RATE   = 6.25        # Hz
-SYMBOL_SAMPLES = int(SAMPLE_RATE / SYMBOL_RATE)  # 1920 Samples/Symbol
-N_SYMBOLS     = 79
+# Detektion: der beste Kandidat muss den zweitbesten um mindestens MARGIN_MIN
+# schlagen. Synthetisch gemessen: echte Nachricht → Marge ~0.11, Rauschen/
+# Fremdsignal → Marge ≤ 0.023. 0.05 liegt sicher dazwischen.
+MARGIN_MIN: float = 0.05
 
-# Costas-Array Positionen (bekannte Sync-Symbole, Index in 0-78)
-COSTAS_POSITIONS = list(range(0, 7)) + list(range(36, 43)) + list(range(72, 79))
-# Costas-Array Werte (7-element Muster, wiederholt 3x)
-COSTAS_VALUES = [3, 1, 4, 0, 6, 5, 2]
+# Frequenz-Offset-Suche: reale Stationen liegen oft ±2-5 Hz neben der
+# erwarteten Frequenz. Der Korrelator sucht dieses Fenster ab (via FFT,
+# volle Auflösung — siehe correlate_candidate).
+FREQ_SEARCH_HZ: float = 5.0
 
-# Alignment-Suchbereich
-ALIGN_DT_SAMPLES = 8      # ±8 Samples ≈ ±0.67ms bei 12kHz
-ALIGN_DF_HZ      = 1.5    # ±1.5 Hz
-ALIGN_DF_STEPS   = 31     # Schrittweite ≈ 0.1 Hz
-
-# Korrelations-Schwellwert
-SCORE_THRESHOLD  = 0.75   # TODO: Im Feldtest kalibrieren!
+# Persistenter Rescue-Zähler — für Feld-Beobachtung („zu Testzwecken"):
+# zählt erfolgreiche AP-Lite-Treffer über App-Neustarts hinweg.
+_STATS_PATH = os.path.expanduser("~/.simpleft8/ap_lite_stats.json")
 
 logger = logging.getLogger(__name__)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Datenstrukturen
-# ─────────────────────────────────────────────────────────────────────────────
-
-@dataclass
-class FailedDecodeBuffer:
-    """PCM-Buffer eines fehlgeschlagenen Decode-Versuchs."""
-    pcm: np.ndarray          # float32, 12kHz, ~180k Samples
-    slot_time: float         # UTC-Timestamp des Slot-Starts
-    callsign: str            # Erwartetes Rufzeichen der Gegenstation
-    freq_hz: float           # Erwartete Frequenz ±30 Hz
-    qso_state: int           # QSO-State: 1=WAIT_REPORT, 2=WAIT_RR73, 3=CQ_WAIT
-    own_callsign: str        # Eigenes Rufzeichen (für Kandidaten)
-    own_locator: str         # Eigener Locator (für Kandidaten)
-    snr_estimate: float = -10.0  # Letzter bekannter SNR der Gegenstation
-
-
 @dataclass
 class APLiteResult:
-    """Ergebnis eines AP-Lite Rescue-Versuchs."""
+    """Ergebnis eines AP-Lite Match-Versuchs."""
     success: bool
     score: float
+    margin: float = 0.0
     recovered_message: Optional[str] = None
-    aligned_dt_samples: float = 0.0
-    aligned_df_hz: float = 0.0
-    candidate_used: Optional[str] = None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Kandidaten-Generierung
+# Kandidaten-Generierung (A-Priori-Kern — unverändert seit v0.95.10)
 # ─────────────────────────────────────────────────────────────────────────────
 
 def generate_candidates(
@@ -110,28 +91,23 @@ def generate_candidates(
         snr_estimate: Letzter bekannter SNR für Report-Generierung
 
     Returns:
-        Liste möglicher Nachrichten-Strings (werden danach encodiert)
+        Liste möglicher Nachrichten-Strings (3-Token-FT8-konform).
     """
-    # SNR auf FT8-Report mappen (-30 bis +29 dB)
     snr_clamped = max(-30, min(29, int(round(snr_estimate))))
-    report = f"{snr_clamped:+03d}"  # z.B. "+01" oder "-15"
 
-    candidates = []
+    candidates: List[str] = []
 
     if qso_state == 1:
-        # WAIT_REPORT: Gegenstation sendet Report ODER Grid (FT8: 3 Tokens
-        # pro Frame, niemals beides). Wir generieren nur Report-Kandidaten
-        # (haeufigster Fall, KISS). Grid nicht implementiert weil Locator
-        # der Gegenstation unbekannt waere.
-        # Format: "OWN_CALL THEIR_CALL +-NN" (z.B. "DA1MHH DK5ON +05")
-        for snr_delta in range(-5, 6, 2):  # SNR-Fenster ±4 dB
+        # WAIT_REPORT: Gegenstation sendet einen Signal-Report.
+        # Format: "OWN_CALL THEIR_CALL +-NN" (3 Tokens, FT8-konform).
+        # SNR-Fenster ±5 dB, JEDE dB-Stufe. Schrittweite 2 (alte Version)
+        # verfehlte wegen Parität jeden zweiten realen Report.
+        for snr_delta in range(-5, 6, 1):
             r = max(-30, min(29, snr_clamped + snr_delta))
             candidates.append(f"{own_callsign} {their_callsign} {r:+03d}")
-        # P1.AP-FIX (2026-05-06 v0.95.10): Locator entfernt — FT8-konform
-        # 3-Token. Vorher 4-Token, ft8lib-rc=5, Rescue scheiterte immer.
 
     elif qso_state == 2:
-        # WAIT_RR73: Wir warten auf RR73, 73 oder RRR
+        # WAIT_RR73: Wir warten auf RR73, 73 oder RRR — genau 3 Varianten.
         candidates = [
             f"{own_callsign} {their_callsign} RR73",
             f"{own_callsign} {their_callsign} 73",
@@ -139,122 +115,61 @@ def generate_candidates(
         ]
 
     elif qso_state == 3:
-        # CQ_WAIT: Wir haben CQ gerufen, warten auf Anruf
-        # Format: "<their_call> <our_call> <their_locator>" — Locator unbekannt!
-        # Deshalb nur generisch mit bekannten DXCC-Präfixen
-        # TODO: Locator-Kandidaten aus historischen Dekodierungen dieser Station?
-        candidates = []  # Zu viele Unbekannte für State 3
+        # CQ_WAIT: Locator der anrufenden Station unbekannt → zu viele
+        # Unbekannte für ein sinnvolles A-Priori-Matching.
+        candidates = []
 
     logger.debug(f"AP-Lite Kandidaten (State {qso_state}): {candidates}")
     return candidates
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Costas-basiertes Alignment
+# Phasen-invariante Korrelation (nicht-kohärenter Matched Filter)
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _build_costas_reference(freq_hz: float, n_samples: int) -> np.ndarray:
-    """Referenz-Signal NUR aus Costas-Sync-Symbolen generieren.
+def _analytic(x: np.ndarray) -> np.ndarray:
+    """Analytisches Signal via FFT (Hilbert-Transformation).
 
-    TODO: Echte FT8-Costas-Symbole generieren (korrekte Phase, FSK).
-          Aktuell: vereinfachte Näherung.
+    Liefert das komplexe Basisband-Äquivalent eines reellen Signals —
+    Grundlage für die phasen-invariante Korrelation.
     """
-    ref = np.zeros(n_samples, dtype=np.float32)
-    t = np.arange(n_samples) / SAMPLE_RATE
+    x = np.asarray(x, dtype=np.float64)
+    n = len(x)
+    if n == 0:
+        return np.zeros(0, dtype=np.complex128)
+    X = np.fft.fft(x)
+    h = np.zeros(n)
+    h[0] = 1.0
+    if n % 2 == 0:
+        h[n // 2] = 1.0
+        h[1:n // 2] = 2.0
+    else:
+        h[1:(n + 1) // 2] = 2.0
+    return np.fft.ifft(X * h)
 
-    for i, (pos, val) in enumerate(zip(COSTAS_POSITIONS, COSTAS_VALUES * 3)):
-        # Frequenz des Costas-Symbols: Basis + val * 6.25 Hz Spacing
-        sym_freq = freq_hz + val * SYMBOL_RATE
-        start = pos * SYMBOL_SAMPLES
-        end = min(start + SYMBOL_SAMPLES, n_samples)
-        if end > start:
-            ref[start:end] = np.sin(2 * np.pi * sym_freq * t[start:end]).astype(np.float32)
-
-    return ref
-
-
-def align_buffers(
-    buf1: np.ndarray,
-    buf2: np.ndarray,
-    freq_hz: float,
-) -> Tuple[np.ndarray, float, float]:
-    """Buf2 an Buf1 ausrichten via Costas-Sync-Suche.
-
-    Sucht den Zeit-Offset (±ALIGN_DT_SAMPLES Samples) und
-    Frequenz-Offset (±ALIGN_DF_HZ Hz) der buf2 maximiert die
-    Korrelationsenergie auf den Costas-Symbol-Positionen.
-
-    Args:
-        buf1: Erster fehlgeschlagener Slot (Referenz)
-        buf2: Zweiter fehlgeschlagener Slot (wird ausgerichtet)
-        freq_hz: Erwartete Signal-Frequenz
-
-    Returns:
-        (aligned_buf2, dt_samples, df_hz)
-
-    TODO: Validieren! Insbesondere Phasenkorrektur für kohärente Addition.
-    """
-    n = min(len(buf1), len(buf2))
-    buf1 = buf1[:n]
-    buf2 = buf2[:n]
-
-    ref = _build_costas_reference(freq_hz, n)
-
-    best_score = -1.0
-    best_dt = 0
-    best_df = 0.0
-    t = np.arange(n) / SAMPLE_RATE
-
-    df_values = np.linspace(-ALIGN_DF_HZ, ALIGN_DF_HZ, ALIGN_DF_STEPS)
-
-    for dt in range(-ALIGN_DT_SAMPLES, ALIGN_DT_SAMPLES + 1):
-        shifted = np.roll(buf2, dt)
-        for df in df_values:
-            # Frequenz-Korrektur (reales Signal via Multiplikation)
-            corrected = shifted * np.cos(2 * np.pi * df * t).astype(np.float32)
-            # Korrelation mit Costas-Referenz (nur auf Sync-Positionen)
-            # Energie-Berechnung: Punkt-Produkt auf Costas-Samples
-            costas_energy = 0.0
-            for pos in COSTAS_POSITIONS:
-                start = pos * SYMBOL_SAMPLES
-                end = min(start + SYMBOL_SAMPLES, n)
-                if end > start:
-                    costas_energy += float(np.dot(corrected[start:end], ref[start:end]))
-            if costas_energy > best_score:
-                best_score = costas_energy
-                best_dt = dt
-                best_df = df
-
-    # Optimales Alignment anwenden
-    aligned = np.roll(buf2, best_dt)
-    t_full = np.arange(len(aligned)) / SAMPLE_RATE
-    aligned = aligned * np.cos(2 * np.pi * best_df * t_full).astype(np.float32)
-
-    logger.debug(f"AP-Lite Alignment: dt={best_dt} samples, df={best_df:.2f} Hz, "
-                 f"score={best_score:.2f}")
-    return aligned, float(best_dt), best_df
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Korrelation
-# ─────────────────────────────────────────────────────────────────────────────
 
 def correlate_candidate(
-    combined_buf: np.ndarray,
+    buf: np.ndarray,
     candidate_msg: str,
     freq_hz: float,
     encoder=None,
 ) -> float:
-    """Einen Kandidaten gegen den kombinierten Buffer korrelieren.
+    """Einen Kandidaten phasen-invariant gegen den empfangenen Slot matchen.
+
+    Bildet das analytische Signal von Empfang und Kandidaten-Referenz und
+    berechnet den Betrag der normierten komplexen Kreuzkorrelation
+    (nicht-kohärenter Matched Filter → unabhängig von der Trägerphase).
+    Sucht zusätzlich ein kleines Frequenz-Fenster ab (±FREQ_SEARCH_HZ),
+    weil reale Stationen ein paar Hz neben der Sollfrequenz liegen können.
 
     Args:
-        combined_buf: Kohärent addierter Buffer (buf1 + aligned_buf2), float32 12kHz
-        candidate_msg: FT8-Nachricht als String (z.B. "DA1MHH DK5ON RR73")
-        freq_hz: Erwartete Frequenz des Signals
-        encoder: SimpleFT8 Encoder-Instanz (für Referenz-Signal-Generierung)
+        buf: Empfangener PCM-Slot (float, 12 kHz).
+        candidate_msg: FT8-Nachricht als String.
+        freq_hz: Erwartete Audio-Frequenz des Signals.
+        encoder: SimpleFT8 Encoder-Instanz (für Referenz-Signal).
 
     Returns:
-        Korrelations-Score 0.0-1.0
+        Korrelations-Score 0.0-1.0 (1.0 = perfekte Übereinstimmung).
     """
     if encoder is None:
         logger.warning("AP-Lite: Kein Encoder — Korrelation nicht möglich")
@@ -264,32 +179,32 @@ def correlate_candidate(
     if ref_wave is None:
         return 0.0
 
-    # Normalisierte Kreuzkorrelation (Cosinus-Ähnlichkeit)
-    n = min(len(combined_buf), len(ref_wave))
-    buf = combined_buf[:n]
-    ref = ref_wave[:n]
-    norm = np.linalg.norm(buf) * np.linalg.norm(ref)
-    overall_score = float(np.dot(buf, ref) / norm) if norm > 0 else 0.0
+    n = min(len(buf), len(ref_wave))
+    if n == 0:
+        return 0.0
 
-    # Costas-Symbol-Gewichtung: 21 bekannte Sync-Symbole einzeln normalisiert
-    # DeepSeek-Empfehlung: pro Symbol normalisieren um Spike-Dominanz zu vermeiden
-    costas_scores = []
-    for pos in COSTAS_POSITIONS:
-        start = pos * SYMBOL_SAMPLES
-        end = min(start + SYMBOL_SAMPLES, n)
-        if end - start < SYMBOL_SAMPLES // 2:
-            continue
-        seg_buf = buf[start:end]
-        seg_ref = ref[start:end]
-        seg_norm = np.linalg.norm(seg_buf) * np.linalg.norm(seg_ref)
-        if seg_norm > 0:
-            costas_scores.append(float(np.dot(seg_buf, seg_ref) / seg_norm))
+    ab = _analytic(np.asarray(buf[:n]))
+    ar = _analytic(np.asarray(ref_wave[:n]))
+    norm = np.linalg.norm(ab) * np.linalg.norm(ar)
+    if norm <= 0:
+        return 0.0
 
-    costas_score = float(np.mean(costas_scores)) if costas_scores else 0.0
-
-    # 50% Gesamt + 50% Costas-Gewichtung
-    weighted_score = 0.5 * overall_score + 0.5 * costas_score
-    return max(0.0, min(1.0, weighted_score))
+    # Frequenz-Offset-Suche: |Σ mixed·exp(-j2π·df·t)| ist die DFT von
+    # mixed[k] = conj(ar[k])·ab[k] an der Frequenz df. EIN FFT liefert alle
+    # df-Bins mit voller Auflösung fs/n (~0.08 Hz). Ein grobes Hz-Raster
+    # würde den schmalen Peak verfehlen — über ~12 s Integration dreht
+    # schon 0.5 Hz Versatz den Korrelations-Zeiger mehrfach durch.
+    mixed = np.conj(ar) * ab
+    spectrum = np.abs(np.fft.fft(mixed))
+    max_bin = min(int(FREQ_SEARCH_HZ * n / SAMPLE_RATE), n // 2 - 1)
+    best = spectrum[0]  # df = 0
+    if max_bin >= 1:
+        best = max(
+            best,
+            spectrum[1:max_bin + 1].max(),   # df > 0
+            spectrum[n - max_bin:].max(),    # df < 0
+        )
+    return float(max(0.0, min(1.0, best / norm)))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -297,160 +212,118 @@ def correlate_candidate(
 # ─────────────────────────────────────────────────────────────────────────────
 
 class APLite:
-    """AP-Lite Prozessor — schwache QSOs durch kohärente Addition retten.
+    """AP-Lite Prozessor — marginale QSO-Decodes via A-Priori-Matching erkennen.
 
     Verwendung:
         ap = APLite(encoder=self.encoder)
-        # Bei Decode-Fail (aus main_window.py):
-        ap.on_decode_failed(pcm, slot_time, callsign, freq, qso_state, ...)
-        # Im nächsten Slot nach Decode-Fail:
-        result = ap.try_rescue(pcm_new, slot_time_new, callsign, freq, qso_state, ...)
+        # Wenn der Partner-Decode in einem aktiven QSO fehlschlägt:
+        result = ap.try_rescue(pcm, freq_hz, their_call, qso_state, ...)
         if result and result.success:
-            # QSO retten!
+            # Info anzeigen — der Operator entscheidet.
     """
 
-    def __init__(self, encoder=None):
+    def __init__(self, encoder=None, stats_path: Optional[str] = _STATS_PATH):
         self.enabled = AP_LITE_ENABLED
         self.encoder = encoder
-        # Buffer: key = (callsign, qso_state)
-        self._buffers: Dict[Tuple[str, int], FailedDecodeBuffer] = {}
-        self._max_buffers = 3
-        # Statistik
-        self.rescue_count: int = 0       # Erfolgreiche Rescues
-        self.attempt_count: int = 0      # Rescue-Versuche gesamt
+        self._stats_path = stats_path
+        self.attempt_count: int = 0      # Match-Versuche (nur aktuelle Session)
+        self.rescue_count: int = self._load_rescue_count()  # persistent
 
-    def on_decode_failed(
-        self,
-        pcm: np.ndarray,
-        slot_time: float,
-        callsign: str,
-        freq_hz: float,
-        qso_state: int,
-        own_callsign: str = "",
-        own_locator: str = "",
-        snr_estimate: float = -10.0,
-    ) -> None:
-        """Aufruf wenn Decode fehlschlägt ABER eine Nachricht erwartet wurde.
+    def _load_rescue_count(self) -> int:
+        """Persistenten Rescue-Zähler laden (0 wenn keine/defekte Datei)."""
+        if not self._stats_path:
+            return 0
+        try:
+            with open(self._stats_path, "r", encoding="utf-8") as f:
+                return max(0, int(json.load(f).get("rescue_count", 0)))
+        except (OSError, ValueError, TypeError, json.JSONDecodeError):
+            return 0
 
-        Darf nur aufgerufen werden wenn ein aktives QSO läuft und
-        die Gegenstation gerade hätte senden sollen.
-
-        TODO: Hook-Punkt in main_window.py: _on_cycle_decoded wenn
-              qso_sm.state in (WAIT_REPORT, WAIT_RR73) und messages leer.
-        """
-        if not self.enabled:
+    def _save_rescue_count(self) -> None:
+        """Rescue-Zähler atomar speichern — für Feld-Beobachtung."""
+        if not self._stats_path:
             return
-        if callsign not in ("", None) and qso_state in (1, 2, 3):
-            key = (callsign, qso_state)
-            buf = FailedDecodeBuffer(
-                pcm=pcm.copy(),
-                slot_time=slot_time,
-                callsign=callsign,
-                freq_hz=freq_hz,
-                qso_state=qso_state,
-                own_callsign=own_callsign,
-                own_locator=own_locator,
-                snr_estimate=snr_estimate,
-            )
-            self._buffers[key] = buf
-            # Cache-Limit durchsetzen
-            if len(self._buffers) > self._max_buffers:
-                oldest = next(iter(self._buffers))
-                del self._buffers[oldest]
-            logger.info(f"[AP-Lite] Buffer gespeichert: {callsign} State={qso_state} "
-                        f"freq={freq_hz:.0f}Hz")
+        try:
+            os.makedirs(os.path.dirname(self._stats_path), exist_ok=True)
+            tmp = self._stats_path + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump({"rescue_count": self.rescue_count}, f)
+            os.replace(tmp, self._stats_path)
+        except OSError as e:
+            logger.warning(f"[AP-Lite] Zähler speichern fehlgeschlagen: {e}")
 
     def try_rescue(
         self,
-        pcm_new: np.ndarray,
-        slot_time_new: float,
-        callsign: str,
+        pcm: np.ndarray,
         freq_hz: float,
+        callsign: str,
         qso_state: int,
         own_callsign: str = "",
         own_locator: str = "",
         snr_estimate: float = -10.0,
     ) -> Optional[APLiteResult]:
-        """Rescue-Versuch mit neuem Buffer starten.
+        """A-Priori-Match auf EINEM fehlgeschlagenen Slot.
 
-        Aufruf: Wenn zweiter Slot fehlschlägt (gleicher State, gleiche Frequenz).
+        Args:
+            pcm: Empfangener PCM-Slot (float, 12 kHz).
+            freq_hz: Erwartete Audio-Frequenz der Gegenstation.
+            callsign: Rufzeichen der Gegenstation.
+            qso_state: 1=WAIT_REPORT, 2=WAIT_RR73, 3=CQ_WAIT.
+            own_callsign / own_locator: eigene Stationsdaten.
+            snr_estimate: letzter bekannter SNR (für Report-Kandidaten).
 
         Returns:
-            APLiteResult wenn Rescue möglich, None wenn kein Buffer vorhanden.
-
-        TODO: Hook-Punkt in main_window.py: zweiter Fehler im gleichen State.
+            APLiteResult, oder None wenn AP-Lite aus / keine Kandidaten /
+            kein verwertbarer Slot.
         """
         if not self.enabled:
             return None
-
-        key = (callsign, qso_state)
-        prev_buf = self._buffers.get(key)
-        if prev_buf is None:
+        if not callsign or qso_state not in (1, 2, 3):
+            return None
+        if pcm is None or len(pcm) == 0:
             return None
 
-        # Frequenz-Plausibilität prüfen (±30 Hz Toleranz)
-        if abs(prev_buf.freq_hz - freq_hz) > 30.0:
-            logger.debug(f"[AP-Lite] Freq-Abweichung zu gross: "
-                         f"{prev_buf.freq_hz:.0f} vs {freq_hz:.0f} Hz")
-            return None
-
-        # Zeitlicher Abstand prüfen (sollte ~15s sein)
-        dt_slots = slot_time_new - prev_buf.slot_time
-        if not (10.0 <= dt_slots <= 20.0):
-            logger.debug(f"[AP-Lite] Slot-Abstand unplausibel: {dt_slots:.1f}s")
-            return None
-
-        logger.info(f"[AP-Lite] Rescue-Versuch für {callsign} State={qso_state}")
-
-        # Kandidaten generieren
         candidates = generate_candidates(
-            qso_state=qso_state,
-            their_callsign=callsign,
-            own_callsign=own_callsign or prev_buf.own_callsign,
-            own_locator=own_locator or prev_buf.own_locator,
-            snr_estimate=prev_buf.snr_estimate,
+            qso_state, callsign, own_callsign, own_locator, snr_estimate
         )
-        if not candidates:
-            logger.debug("[AP-Lite] Keine Kandidaten verfügbar")
-            del self._buffers[key]
-            return APLiteResult(success=False, score=0.0)
-
-        # Alignment + kohärente Addition
-        aligned_new, dt_s, df_hz = align_buffers(prev_buf.pcm, pcm_new, prev_buf.freq_hz)
-        combined = prev_buf.pcm + aligned_new
-
-        # Kandidaten korrelieren
-        best_score = 0.0
-        best_candidate = None
-        for cand in candidates:
-            score = correlate_candidate(combined, cand, prev_buf.freq_hz + df_hz, self.encoder)
-            if score > best_score:
-                best_score = score
-                best_candidate = cand
-
-        # Buffer aufräumen — max 2 Versuche
-        del self._buffers[key]
+        if len(candidates) < 2:
+            # Der Margen-Test (bester − zweitbester) ist erst ab 2 Kandidaten
+            # definiert. State 3 liefert 0 Kandidaten.
+            return None
 
         self.attempt_count += 1
-        if best_score >= SCORE_THRESHOLD and best_candidate:
+
+        scored = sorted(
+            (
+                (correlate_candidate(pcm, cand, freq_hz, self.encoder), cand)
+                for cand in candidates
+            ),
+            key=lambda sc: sc[0],
+            reverse=True,
+        )
+        best_score, best_cand = scored[0]
+        runner_up = scored[1][0] if len(scored) > 1 else 0.0
+        margin = best_score - runner_up
+
+        if margin >= MARGIN_MIN:
             self.rescue_count += 1
-            logger.info(f"[AP-Lite] ERFOLG: '{best_candidate}' score={best_score:.3f}")
+            self._save_rescue_count()
+            logger.info(
+                f"[AP-Lite] MATCH: '{best_cand}' score={best_score:.3f} "
+                f"margin={margin:.3f}"
+            )
             return APLiteResult(
                 success=True,
                 score=best_score,
-                recovered_message=best_candidate,
-                aligned_dt_samples=dt_s,
-                aligned_df_hz=df_hz,
-                candidate_used=best_candidate,
+                margin=margin,
+                recovered_message=best_cand,
             )
-        else:
-            logger.info(f"[AP-Lite] Fehlgeschlagen: score={best_score:.3f} < {SCORE_THRESHOLD}")
-            return APLiteResult(success=False, score=best_score)
 
-    def clear(self) -> None:
-        """Alle Buffers löschen (bei QSO-Ende oder Band-Wechsel)."""
-        self._buffers.clear()
-        logger.debug("[AP-Lite] Buffers gelöscht")
+        logger.info(
+            f"[AP-Lite] kein klarer Treffer: best={best_score:.3f} "
+            f"margin={margin:.3f} < {MARGIN_MIN}"
+        )
+        return APLiteResult(success=False, score=best_score, margin=margin)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

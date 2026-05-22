@@ -300,7 +300,7 @@ Hard-Kill. Aktuell 9.366 Calls, waechst mit jeder Session.
 
 ### Implementiert — Feldtest laeuft
 
-- ⚠️ **AP-Lite v2.2** *(aktiviert seit 13.04.2026)*: Schwache QSOs retten via kohaerenter Addition. Threshold 0.75, Feldtest-Kalibrierung laeuft.
+- ✅ **AP-Lite** *(aktiv)*: A-Priori-Rettung schwacher QSOs — raet die wenigen im QSO erwarteten Nachrichten und matcht sie phasen-invariant gegen den Empfang. Rein beratend (Info-Anzeige, kein Auto-Log, kein TX).
 ### Operator Presence (Totmannschalter)
 - **Gesetzliche Pflicht (DE)**: Operator muss am Funkgeraet anwesend sein — kein Bot-Betrieb
 - Fest 15 Minuten Timeout, nicht konfigurierbar, nicht umgehbar
@@ -376,7 +376,7 @@ SimpleFT8/
 │   ├── qso_state.py      # QSO-Zustandsmaschine (Hunt + CQ)
 │   ├── diversity.py      # Diversity-Controller (Mess-/Betriebsphasen)
 │   ├── timing.py         # UTC-Takt, 15s/7.5s Zyklus-Timing
-│   ├── ap_lite.py        # ⚠️ UNGETESTET: AP-Lite v2.2 (kohärente Addition)
+│   ├── ap_lite.py        # AP-Lite: A-Priori-Kandidaten-Matching
 │   ├── ntp_time.py       # ⚠️ UNGETESTET: DT-Zeitkorrektur (Median-DT)
 │   └── propagation.py    # ⚠️ UNGETESTET: Propagation-Balken (HamQSL)
 ├── radio/

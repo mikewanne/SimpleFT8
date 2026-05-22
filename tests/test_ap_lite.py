@@ -1,264 +1,216 @@
-"""Tests fuer core/ap_lite.py — AP-Lite Kandidaten-Generierung + Buffer-Management.
+"""Unit-Tests für core/ap_lite.py — AP-Lite A-Priori-Kandidaten-Matching.
 
-Prueft (OHNE Encoder/DSP-Abhängigkeiten — Unit-Tests fuer pure Logik):
-- generate_candidates() fuer alle QSO-States (1/2/3)
-- SNR-Clamping (-30..+29 dB)
-- on_decode_failed() Buffer-Speicherung und Cache-Limit
-- on_decode_failed() ignoriert leere Callsigns + ungültige States
-- try_rescue() Guard: kein Buffer → None
-- try_rescue() Guard: Frequenz-Abweichung > 30 Hz → None
-- try_rescue() Guard: Slot-Timing ausserhalb 10-20s → None
-- try_rescue() State-3 → APLiteResult(success=False) wegen leere Kandidaten
-- correlate_candidate() ohne Encoder → 0.0
-- APLite.clear() loescht alle Buffers
-- get_instance() Singleton-Semantik
+Deckt ab (ohne DSP/Encoder — pure Logik):
+- generate_candidates() für alle QSO-States
+- correlate_candidate() Guards (kein Encoder, leerer Buffer)
+- APLite.try_rescue() Guards (aus, leeres Call, ungültiger State, kein PCM)
+- persistenter Rescue-Zähler (laden/speichern, stats_path=None)
+- get_instance() Singleton
+
+Algorithmus-Verhalten mit echtem FT8-Audio → test_ap_lite_e2e.py.
+
+Historie: AP-Lite v0.97.90 (Option D) ersetzte die „kohärente Addition"
+durch reines A-Priori-Matching auf EINEM Slot. Tests für align_buffers /
+FailedDecodeBuffer / SCORE_THRESHOLD entfielen mit dem Mechanismus.
 """
 
-import time
+import json
+import re
+
 import numpy as np
 import pytest
 
 from core.ap_lite import (
     APLite,
     APLiteResult,
-    FailedDecodeBuffer,
-    generate_candidates,
+    MARGIN_MIN,
     correlate_candidate,
+    generate_candidates,
     get_instance,
-    SCORE_THRESHOLD,
 )
 
 
-# ── generate_candidates() ─────────────────────────────────────────────────────
+# ── generate_candidates() ────────────────────────────────────────────────────
 
-def test_generate_state1_basic():
-    """State 1 (WAIT_REPORT): 3-Token-Kandidaten mit Report (FT8-konform).
-
-    Nach P1.AP-FIX (v0.95.10): Locator NICHT mehr im Kandidat —
-    FT8 erlaubt nur 3 Tokens pro Frame.
-    """
-    import re
-    cands = generate_candidates(
-        qso_state=1,
-        their_callsign="DK5ON",
-        own_callsign="DA1MHH",
-        own_locator="JO31",
-        snr_estimate=-10.0,
-    )
-    assert len(cands) > 0, "State 1 muss Kandidaten liefern"
-    # Alle Kandidaten 3-Token-Format: OWN_CALL THEIR_CALL [+-]NN
-    report_pattern = re.compile(r'^[+-]\d{2}$')
-    for c in cands:
-        tokens = c.split()
-        assert len(tokens) == 3, f"3 Tokens erwartet, habe {len(tokens)}: '{c}'"
-        assert tokens[0] == "DA1MHH"
-        assert tokens[1] == "DK5ON"
-        assert report_pattern.match(tokens[2]), f"Ungueltiger Report '{tokens[2]}'"
-        val = int(tokens[2])
-        assert -30 <= val <= 29, f"Report {val} ausserhalb -30..+29"
-
-
-def test_generate_state1_snr_range():
-    """State 1: SNR-Fenster deckt ±5 dB ab (6 Werte im 2er-Schritt)."""
+def test_generate_state1_candidate_count():
+    """State 1 (WAIT_REPORT): 11 Report-Kandidaten (±5 dB, jede dB-Stufe)."""
     cands = generate_candidates(1, "DK5ON", "DA1MHH", "JO31", snr_estimate=-10.0)
-    # range(-5, 6, 2) = 6 Werte: -5, -3, -1, +1, +3, +5
-    assert len(cands) == 6
+    assert len(cands) == 11
+
+
+def test_generate_state1_three_token_format():
+    """State 1: alle Kandidaten FT8-konform 3-Token OWN THEIR +-NN."""
+    cands = generate_candidates(1, "DK5ON", "DA1MHH", "JO31", snr_estimate=-10.0)
+    report_re = re.compile(r"^[+-]\d{2}$")
+    for c in cands:
+        tok = c.split()
+        assert len(tok) == 3, f"3 Tokens erwartet: '{c}'"
+        assert tok[0] == "DA1MHH"
+        assert tok[1] == "DK5ON"
+        assert report_re.match(tok[2]), f"Ungültiger Report '{tok[2]}'"
 
 
 def test_generate_state1_snr_clamping():
-    """SNR-Werte werden auf -30..+29 geclamppt."""
-    # snr_estimate=-28 → clamped range enthält keine Werte unter -30
+    """State 1: Report-Werte bleiben in -30..+29 (FT8-Bereich)."""
     cands = generate_candidates(1, "DK5ON", "DA1MHH", "JO31", snr_estimate=-28.0)
     for c in cands:
-        # Finde den SNR-Teil (letztes Wort)
-        snr_str = c.split()[-1]
-        val = int(snr_str)
-        assert -30 <= val <= 29, f"SNR {val} ausserhalb -30..+29"
+        val = int(c.split()[-1])
+        assert -30 <= val <= 29
 
 
-def test_generate_state2_rr73():
-    """State 2 (WAIT_RR73): RR73, 73, RRR werden generiert."""
+def test_generate_state2_rr73_variants():
+    """State 2 (WAIT_RR73): genau RR73, 73, RRR."""
     cands = generate_candidates(2, "DK5ON", "DA1MHH", "JO31")
-    raw = " ".join(cands)
-    assert "RR73" in raw
-    assert " 73" in raw or raw.endswith("73")
-    assert "RRR" in raw
     assert len(cands) == 3
+    raw = " ".join(cands)
+    assert "RR73" in raw and "RRR" in raw
+    assert any(c.split()[-1] == "73" for c in cands)
 
 
 def test_generate_state2_callsigns():
-    """State 2: Alle Kandidaten enthalten beide Rufzeichen."""
-    cands = generate_candidates(2, "DK5ON", "DA1MHH", "JO31")
-    for c in cands:
-        assert "DA1MHH" in c
-        assert "DK5ON" in c
+    """State 2: jeder Kandidat enthält beide Rufzeichen."""
+    for c in generate_candidates(2, "DK5ON", "DA1MHH", "JO31"):
+        assert "DA1MHH" in c and "DK5ON" in c
 
 
 def test_generate_state3_empty():
-    """State 3 (CQ_WAIT): Zu viele Unbekannte → leere Liste."""
-    cands = generate_candidates(3, "DK5ON", "DA1MHH", "JO31")
-    assert cands == [], "State 3 liefert keine Kandidaten (Locator unbekannt)"
+    """State 3 (CQ_WAIT): keine Kandidaten (Locator unbekannt)."""
+    assert generate_candidates(3, "DK5ON", "DA1MHH", "JO31") == []
 
 
-def test_generate_unknown_state():
-    """Unbekannter State → leere Liste (kein Crash)."""
-    cands = generate_candidates(99, "DK5ON", "DA1MHH", "JO31")
-    assert cands == []
+def test_generate_unknown_state_empty():
+    """Unbekannter State → leere Liste, kein Crash."""
+    assert generate_candidates(99, "DK5ON", "DA1MHH", "JO31") == []
 
 
-# ── correlate_candidate() — kein Encoder ─────────────────────────────────────
+# ── correlate_candidate() Guards ─────────────────────────────────────────────
 
-def test_correlate_without_encoder():
-    """correlate_candidate() ohne Encoder gibt 0.0 zurueck."""
+def test_correlate_without_encoder_zero():
+    """Ohne Encoder → 0.0."""
     buf = np.zeros(1000, dtype=np.float32)
-    score = correlate_candidate(buf, "DA1MHH DK5ON RR73", freq_hz=1500.0, encoder=None)
-    assert score == 0.0
+    assert correlate_candidate(buf, "DA1MHH DK5ON RR73", 1500.0, encoder=None) == 0.0
 
 
-# ── APLite.on_decode_failed() ─────────────────────────────────────────────────
+def test_correlate_empty_buffer_zero():
+    """Leerer Buffer → 0.0 (kein Crash)."""
+    buf = np.zeros(0, dtype=np.float32)
+    assert correlate_candidate(buf, "DA1MHH DK5ON RR73", 1500.0, encoder=None) == 0.0
+
+
+# ── APLite.try_rescue() Guards ───────────────────────────────────────────────
 
 def _pcm():
     return np.zeros(180000, dtype=np.float32)
 
 
-def test_on_decode_failed_stores_buffer():
-    """Gueltiger Aufruf → Buffer gespeichert."""
-    ap = APLite()
-    ap.on_decode_failed(_pcm(), time.time(), "DK5ON", 1500.0, 1, "DA1MHH", "JO31")
-    assert ("DK5ON", 1) in ap._buffers
-
-
-def test_on_decode_failed_empty_callsign_ignored():
-    """Leeres Rufzeichen → kein Buffer."""
-    ap = APLite()
-    ap.on_decode_failed(_pcm(), time.time(), "", 1500.0, 1, "DA1MHH", "JO31")
-    assert len(ap._buffers) == 0
-
-
-def test_on_decode_failed_none_callsign_ignored():
-    """None als Rufzeichen → kein Buffer."""
-    ap = APLite()
-    ap.on_decode_failed(_pcm(), time.time(), None, 1500.0, 1, "DA1MHH", "JO31")
-    assert len(ap._buffers) == 0
-
-
-def test_on_decode_failed_invalid_state_ignored():
-    """State ausserhalb 1/2/3 → kein Buffer."""
-    ap = APLite()
-    ap.on_decode_failed(_pcm(), time.time(), "DK5ON", 1500.0, 99, "DA1MHH", "JO31")
-    assert len(ap._buffers) == 0
-
-
-def test_on_decode_failed_cache_limit():
-    """Mehr als _max_buffers (3) Eintraege → aeltester wird verdraengt."""
-    ap = APLite()
-    t = time.time()
-    ap.on_decode_failed(_pcm(), t, "DK1", 1500.0, 1)
-    ap.on_decode_failed(_pcm(), t, "DK2", 1500.0, 1)
-    ap.on_decode_failed(_pcm(), t, "DK3", 1500.0, 1)
-    ap.on_decode_failed(_pcm(), t, "DK4", 1500.0, 1)
-    assert len(ap._buffers) == ap._max_buffers
-    assert ("DK1", 1) not in ap._buffers, "Aeltester Buffer muss verdraengt worden sein"
-    assert ("DK4", 1) in ap._buffers
-
-
-def test_on_decode_failed_disabled():
-    """enabled=False → kein Buffer."""
-    ap = APLite()
+def test_try_rescue_disabled_returns_none():
+    """enabled=False → None."""
+    ap = APLite(stats_path=None)
     ap.enabled = False
-    ap.on_decode_failed(_pcm(), time.time(), "DK5ON", 1500.0, 1, "DA1MHH", "JO31")
-    assert len(ap._buffers) == 0
+    assert ap.try_rescue(_pcm(), 1500.0, "DK5ON", 2) is None
 
 
-# ── APLite.try_rescue() Guard-Conditions ─────────────────────────────────────
-
-def test_try_rescue_no_buffer_returns_none():
-    """Kein vorheriger Buffer → try_rescue gibt None zurueck."""
-    ap = APLite()
-    result = ap.try_rescue(_pcm(), time.time(), "DK5ON", 1500.0, 1)
-    assert result is None
+def test_try_rescue_empty_callsign_returns_none():
+    """Leeres Rufzeichen → None."""
+    ap = APLite(stats_path=None)
+    assert ap.try_rescue(_pcm(), 1500.0, "", 2) is None
 
 
-def test_try_rescue_freq_deviation_too_large():
-    """Frequenz-Abweichung > 30 Hz → None."""
-    ap = APLite()
-    t = time.time()
-    ap.on_decode_failed(_pcm(), t, "DK5ON", 1500.0, 1, "DA1MHH", "JO31")
-    result = ap.try_rescue(_pcm(), t + 15.0, "DK5ON", 1500.0 + 35.0, 1)
-    assert result is None
+def test_try_rescue_invalid_state_returns_none():
+    """State außerhalb 1/2/3 → None."""
+    ap = APLite(stats_path=None)
+    assert ap.try_rescue(_pcm(), 1500.0, "DK5ON", 99) is None
 
 
-def test_try_rescue_slot_timing_too_short():
-    """Slot-Abstand < 10s → None."""
-    ap = APLite()
-    t = time.time()
-    ap.on_decode_failed(_pcm(), t, "DK5ON", 1500.0, 1, "DA1MHH", "JO31")
-    result = ap.try_rescue(_pcm(), t + 5.0, "DK5ON", 1500.0, 1)
-    assert result is None
+def test_try_rescue_state3_returns_none():
+    """State 3 erzeugt keine Kandidaten → None."""
+    ap = APLite(stats_path=None)
+    assert ap.try_rescue(_pcm(), 1500.0, "DK5ON", 3, "DA1MHH", "JO31") is None
 
 
-def test_try_rescue_slot_timing_too_long():
-    """Slot-Abstand > 20s → None."""
-    ap = APLite()
-    t = time.time()
-    ap.on_decode_failed(_pcm(), t, "DK5ON", 1500.0, 1, "DA1MHH", "JO31")
-    result = ap.try_rescue(_pcm(), t + 25.0, "DK5ON", 1500.0, 1)
-    assert result is None
+def test_try_rescue_none_pcm_returns_none():
+    """pcm=None → None (kein Crash)."""
+    ap = APLite(stats_path=None)
+    assert ap.try_rescue(None, 1500.0, "DK5ON", 2) is None
 
 
-def test_try_rescue_state3_no_candidates():
-    """State 3 generiert keine Kandidaten → APLiteResult(success=False)."""
-    ap = APLite()
-    t = time.time()
-    ap.on_decode_failed(_pcm(), t, "DK5ON", 1500.0, 3, "DA1MHH", "JO31")
-    result = ap.try_rescue(_pcm(), t + 15.0, "DK5ON", 1500.0, 3, "DA1MHH", "JO31")
-    assert result is not None
-    assert result.success is False
+def test_try_rescue_empty_pcm_returns_none():
+    """Leerer pcm → None."""
+    ap = APLite(stats_path=None)
+    assert ap.try_rescue(np.zeros(0, dtype=np.float32), 1500.0, "DK5ON", 2) is None
 
 
-def test_try_rescue_disabled():
-    """enabled=False → None ohne Buffer-Zugriff."""
-    ap = APLite()
-    ap.enabled = False
-    result = ap.try_rescue(_pcm(), time.time() + 15.0, "DK5ON", 1500.0, 1)
-    assert result is None
+# ── Persistenter Rescue-Zähler ───────────────────────────────────────────────
+
+def test_rescue_count_starts_zero_without_file(tmp_path):
+    """Ohne vorhandene Stats-Datei → Zähler 0."""
+    ap = APLite(stats_path=str(tmp_path / "fehlt.json"))
+    assert ap.rescue_count == 0
 
 
-def test_try_rescue_removes_buffer_after_attempt():
-    """Nach try_rescue (State 3) ist Buffer bereinigt."""
-    ap = APLite()
-    t = time.time()
-    ap.on_decode_failed(_pcm(), t, "DK5ON", 1500.0, 3, "DA1MHH", "JO31")
-    ap.try_rescue(_pcm(), t + 15.0, "DK5ON", 1500.0, 3, "DA1MHH", "JO31")
-    assert ("DK5ON", 3) not in ap._buffers, "Buffer muss nach Rescue-Versuch geloescht sein"
+def test_rescue_count_persists_round_trip(tmp_path):
+    """rescue_count wird gespeichert und von neuer Instanz geladen."""
+    path = str(tmp_path / "stats.json")
+    ap = APLite(stats_path=path)
+    ap.rescue_count = 7
+    ap._save_rescue_count()
+    ap2 = APLite(stats_path=path)
+    assert ap2.rescue_count == 7
 
 
-# ── APLite.clear() ────────────────────────────────────────────────────────────
-
-def test_clear_empties_buffers():
-    """clear() entfernt alle gespeicherten Buffers."""
-    ap = APLite()
-    t = time.time()
-    ap.on_decode_failed(_pcm(), t, "DK1", 1500.0, 1)
-    ap.on_decode_failed(_pcm(), t, "DK2", 1500.0, 2)
-    ap.clear()
-    assert len(ap._buffers) == 0
+def test_rescue_count_saved_file_is_json(tmp_path):
+    """Gespeicherte Datei ist valides JSON mit rescue_count."""
+    path = tmp_path / "stats.json"
+    ap = APLite(stats_path=str(path))
+    ap.rescue_count = 3
+    ap._save_rescue_count()
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert data["rescue_count"] == 3
 
 
-# ── get_instance() Singleton ──────────────────────────────────────────────────
+def test_no_persistence_when_path_none():
+    """stats_path=None → keine Persistenz, kein Crash beim Speichern."""
+    ap = APLite(stats_path=None)
+    assert ap.rescue_count == 0
+    ap.rescue_count = 5
+    ap._save_rescue_count()  # no-op
+    assert APLite(stats_path=None).rescue_count == 0
 
-def test_get_instance_returns_same_object():
-    """get_instance() gibt dasselbe Objekt zurueck (Singleton)."""
+
+def test_corrupt_stats_file_loads_zero(tmp_path):
+    """Defekte Stats-Datei → Zähler 0 statt Crash."""
+    path = tmp_path / "kaputt.json"
+    path.write_text("kein json {{{", encoding="utf-8")
+    assert APLite(stats_path=str(path)).rescue_count == 0
+
+
+# ── get_instance() Singleton ─────────────────────────────────────────────────
+
+def test_get_instance_singleton():
+    """get_instance() liefert immer dasselbe Objekt."""
     from core import ap_lite
-    ap_lite._instance = None  # Reset fuer sauberen Test
-    inst1 = get_instance()
-    inst2 = get_instance()
-    assert inst1 is inst2
+    ap_lite._instance = None
+    assert get_instance() is get_instance()
 
 
 def test_get_instance_is_aplite():
     """get_instance() liefert ein APLite-Objekt."""
     from core import ap_lite
     ap_lite._instance = None
-    inst = get_instance()
-    assert isinstance(inst, APLite)
+    assert isinstance(get_instance(), APLite)
+
+
+# ── APLiteResult ─────────────────────────────────────────────────────────────
+
+def test_apliteresult_fields():
+    """APLiteResult hält success/score/margin/recovered_message."""
+    r = APLiteResult(success=True, score=0.3, margin=0.1,
+                     recovered_message="DA1MHH DK5ON RR73")
+    assert r.success and r.score == 0.3 and r.margin == 0.1
+    assert r.recovered_message == "DA1MHH DK5ON RR73"
+
+
+def test_margin_min_sane():
+    """MARGIN_MIN liegt im sinnvollen Bereich (gemessen: Rausch-Ceiling
+    ~0.02, Echtsignal-Marge ~0.1)."""
+    assert 0.02 < MARGIN_MIN < 0.1
