@@ -1,8 +1,27 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-23 — v0.97.95 P99 WAIT_RR73 Message-Cap (DG8DBW-Loop-Fix)
+## Stand 2026-05-23 — v0.97.96 P100 Partial-Log bei R-Report (Datenrettung)
 
-**Aktueller Code-Stand:** v0.97.95, Tests **1761 grün** (+5 neue).
+**Aktueller Code-Stand:** v0.97.96, Tests **1766 grün** (+5 neue).
+
+### 🟢 v0.97.96 — P100 Partial-Log bei R-Report (autonom, Mike weg)
+
+Folge-Aufgabe zu P99. Mike-Erkenntnis 23.05.: wenn die Gegenstation
+den R-Report sendet, ist das QSO inhaltlich komplett (alle 4 Pflicht-
+Daten da) — wir sollen loggen, nicht verwerfen. Mein P99-Cap hat das
+in einem Edge-Case blockiert: wenn der Counter durch Decoder-Cap-
+Retries hochgetrieben wurde und dann der 1. R-Report kam → P99
+verwarf statt zu loggen.
+
+P100-Fix nur im `is_r_report`-Cap-Pfad: `qso_complete.emit` statt
+`qso_timeout.emit`. `their_snr` aus `msg.grid_or_report`. Plus
+R1-F1 (`cq_qso_count += 1`) und R1-F2 (`_dbg.log("COMPLETE", ...)`).
+`is_report`/`is_grid`-Caps unverändert (kein R-Report = keine
+Bestätigung = kein Log).
+
+Workflow voll durch: V1+V2 (3 Risiken, 0 Halluzinationen) → R1 V4-pro
+(alle 7 Fragen 🟢, 2🟡 eingebaut) → Code 1 atomarer Commit → Final-R1
+pending.
 
 ### 🟢 v0.97.95 — P99 WAIT_RR73 Message-Cap (autonom, Mike weg)
 

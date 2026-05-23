@@ -693,8 +693,10 @@ class QSOStateMachine(QObject):
                     self._dbg.log("COMPLETE",
                         f"P100: R-Report bei Cap ({MAX_RR73_RETRIES}) "
                         f"empfangen — QSO {call} geloggt (kein RR73-Send)")
-                    self.cq_qso_count += 1  # R1-F1: Konsistenz mit TX_RR73-Pfad
+                    # Final-R1 Stil-Note: Reihenfolge analog TX_RR73-Pfad
+                    # Z.528-529 (emit zuerst, dann count) für Konsistenz.
                     self.qso_complete.emit(self.qso)
+                    self.cq_qso_count += 1  # R1-F1: Konsistenz mit TX_RR73-Pfad
                     self._set_state(QSOState.TIMEOUT)
                     self._resume_cq_if_needed()
                     return

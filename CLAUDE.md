@@ -127,7 +127,7 @@ auf Display 2 (Position 1024,0) verschieben. Mike macht von dort
 Fernwartung — App MUSS auf dem mittleren Bildschirm landen.
 
 **Start:** `cd "/Users/mikehammerer/Documents/KI N8N Projekte/FT8/SimpleFT8" && ./venv/bin/python3 main.py`
-**Aktueller Stand:** v0.97.95 (23.05.2026) — P99 WAIT_RR73 Message-Cap: drei Schleifen-Vektoren im message-getriebenen WAIT_RR73-Pfad (R-Report/Plain-Report/Grid) gegen `rr73_retries` (gemeinsam mit Decoder-Pfad) gecappt. MAX_RR73_RETRIES=5 unverändert. Vorher unbegrenzte RR73-Schleifen — nur 3-Min-Gesamttimeout bremste. Tests: 1761.
+**Aktueller Stand:** v0.97.96 (23.05.2026) — P100 Partial-Log bei R-Report-Empfang: Edge-Case-Fix für P99-Cap. Wenn der `rr73_retries`-Counter durch Decoder-Pfad hochgetrieben wurde und dann der 1. R-Report eintrifft, loggt P100 das QSO via `qso_complete` (statt P99-Verwerfung via `qso_timeout`) — alle Pflicht-Daten sind da (R-Report = Bestätigung der Gegenstation). Nur is_r_report-Branch betroffen, is_report/is_grid-Caps unverändert (kein R-Report = kein Log). Tests: 1766.
 → Vollständige Versionshistorie + Vorgänger-Details: **HISTORY.md** (grep nach Version).
 
 

@@ -1,6 +1,24 @@
-# SimpleFT8 TODO — Stand 23.05.2026 (v0.97.95, P99 erledigt)
+# SimpleFT8 TODO — Stand 23.05.2026 (v0.97.96, P100 erledigt)
 
 ---
+
+## ✅ P100 Partial-Log bei R-Report-Empfang ERLEDIGT (v0.97.96, 23.05.2026 autonom)
+
+Mike-Folge-Aufgabe zu P99: wenn die Gegenstation den R-Report sendet,
+ist das QSO inhaltlich komplett (alle Pflicht-Daten da) — wir sollen
+loggen statt verwerfen. P99-Cap hatte das in Edge-Case (Counter durch
+Decoder-Pfad hochgetrieben + 1. R-Report kommt) blockiert.
+
+P100-Fix nur im `is_r_report`-Cap-Pfad (qso_state.py:679-708):
+`qso_complete.emit` statt `qso_timeout.emit`, `their_snr` aus
+`msg.grid_or_report`, `cq_qso_count += 1` (R1-F1), Log-Kategorie
+„COMPLETE" (R1-F2). `is_report`/`is_grid`-Caps unverändert.
+
+V1→V2→R1 (V4-pro, 0 ROT, 2 GELB eingebaut)→Code→Final-R1. Tests
+1761→1766 (+5). Details: HISTORY.md v0.97.96.
+
+Field-Test pending (Radio-pflichtig, schwer reproduzierbar — Counter
+muss durch Decoder-Cap-Pfad zwingen).
 
 ## ✅ P99 WAIT_RR73 Message-Cap ERLEDIGT (v0.97.95, 23.05.2026 autonom)
 

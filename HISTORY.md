@@ -13466,3 +13466,84 @@ Szenarios — Gegenstation muss wiederholt R-Report senden. Hard zu
 reproduzieren, in der Praxis erwartet bei nächster „halbem-QSO"-
 Situation. Counter-Log im Terminal („Cap N/5") bestätigt Eingreifen.
 Mike autonom durchgezogen während Mike weg — analog P82-Workflow.
+
+---
+
+## 2026-05-23 v0.97.96 — P100 Partial-Log bei R-Report-Empfang trotz P99-Cap
+
+Mike-Wunsch 23.05. nach P99-Abschluss: „Wenn wir den R-Report bekommen,
+speichern wir das QSO trotzdem als QSO zum hochschicken weil es a. ja
+stattgefunden hat und b. wir alle Daten ja schon haben." FT8-Argument:
+das verkürzte FT8-QSO ohne Locator zeigt dass weniger Daten reichen —
+R-Report ist das harte Kriterium für „QSO beidseitig erfolgreich".
+
+**Edge-Case ohne P100:** `rr73_retries` wird durch 4-5 Leerlauf-Zyklen
+im Decoder-Cap-Pfad (qso_state.py:429-444 P98) hochgetrieben. Dann
+kommt der **erste** R-Report endlich → P99-Cap (counter=6) greift im
+is_r_report-Branch → TIMEOUT statt advance() → kein RR73-Send → **kein
+qso_complete** (das normalerweise via on_message_sent TX_RR73-Pfad
+Z.528 läuft) → QSO geht verloren obwohl alle Pflicht-Daten da sind.
+
+**Architektur-Erkenntnis (R1-bestätigt):** im Normalfall wird das QSO
+beim 1. R-Report bereits geloggt (advance → TX_RR73 → on_message_sent
+→ qso_complete). P100 schließt nur die Lücke wenn der Sendeversuch
+durch den vorzeitigen Cap unterdrückt wird.
+
+**Code (`core/qso_state.py:679-708`):** im is_r_report-Cap-Pfad bei
+`rr73_retries > MAX_RR73_RETRIES`:
+- `their_snr = msg.grid_or_report` (Daten vollständig machen)
+- `cq_qso_count += 1` (R1-F1, Konsistenz mit TX_RR73-Pfad Z.529)
+- `_dbg.log("COMPLETE", ...)` statt „TIMEOUT" (R1-F2, klare Diagnose)
+- `qso_complete.emit(self.qso)` (ADIF-Log) statt `qso_timeout.emit`
+- State TIMEOUT (kein RR73 raus → WAIT_73 wäre falsch)
+- `_resume_cq_if_needed()` wie bisher
+
+**Bewusst NICHT geändert:**
+- `is_report`-Cap (Plain-Report wiederholt): kein R-Report empfangen
+  → keine Bestätigung → kein Log gerechtfertigt
+- `is_grid`-Cap (Grid wiederholt): dito
+- Decoder-Cap-Pfad (Z.429-444): nur bei leerem Slot, kein R-Report
+- 3-Min-Gesamttimeout: wenn R-Report vorher kam, sind wir in WAIT_73
+  (anderer State)
+- HALT/cancel: wenn TX_RR73 schon raus → schon geloggt; sonst keine Daten
+
+**Mike-Kriterium:** R-Report ist das harte Logging-Kriterium, Plain-
+Report/Grid sind keine Bestätigung der Gegenstation.
+
+**Workflow voll durch:**
+- V1+V2: 3 Risiken identifiziert, 0 Halluzinationen
+- R1 V4-pro: alle 7 Fragen 🟢 bestätigt, 2🟡 eingebaut
+  (cq_qso_count, Log-Kategorie)
+- Code: 1 atomarer Commit (qso_state.py + 2 Test-Files)
+- Final-R1 V4-pro: pending
+
+**Tests:** 1761 → 1766 (+5). Neue T1-T5 in
+`tests/test_p100_partial_log_r_report.py`:
+- T1 Edge-Case Cap=5 + R-Report → qso_complete + their_snr gefüllt
+- T2 cq_qso_count += 1
+- T3 their_snr aus 4 R-Report-Werten korrekt
+- T4 Plain-Report-Cap unverändert qso_timeout (kein P100)
+- T5 Grid-Cap unverändert qso_timeout (kein P100)
+
+Plus `test_p99_wait_rr73_message_cap::test_t1` angepasst: 6. R-Report
+prüft jetzt `qso_complete` statt `qso_timeout`. P99-T2/T3/T4/T5
+unverändert (Plain-Report/Grid/Mixed/RR73-Pfade).
+
+**Field-Test-Plan (Radio-pflichtig, schwer reproduzierbar):**
+
+F1: DG8DBW-Szenario provozieren — Gegenstation schickt nach 4-5
+Decoder-Cap-Retries den 1. R-Report. Im Terminal sollte
+`[COMPLETE] P100: R-Report bei Cap (5) empfangen — QSO DA1TST geloggt
+(kein RR73-Send)` erscheinen. QSO landet im ADIF + auf QRZ.com via
+Auto-Upload.
+
+F2: Verifikation dass im normalen Fall (1. R-Report ohne Decoder-
+Cap-Vorgeschichte) der Pfad unverändert läuft — qso_complete via
+TX_RR73-Send, KEIN P100-Eingriff.
+
+Autonom durchgezogen während Mike weg — analog P82/P99.
+
+**Lesson:** R1 fängt subtile Bugs den V2-Self-Review übersieht —
+cq_qso_count-Konsistenz und Log-Kategorie waren keine Architektur-
+Fehler, aber für Field-Test-Diagnose und Stats-Konsistenz wichtig.
+V4-pro 43-Cycle-Bilanz: 0 Halluzinationen.
