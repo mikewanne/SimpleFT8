@@ -1197,6 +1197,12 @@ class _QSOStatusCard(QFrame):
             "Nutze bei stuck-Gegenstation."
         )
         self.btn_advance.setEnabled(False)
+        # QSO-Finish versteckt 2026-05-23 (Mike: nie gebraucht, FT8-Timeout
+        # faengt stuck-Gegenstation eh ab) — Code/Handler/Signal intakt.
+        # HALT bleibt — verschiedene Rolle (Sicherheits-Notbremse).
+        # Reaktivierung: diese Zeile loeschen. HBox kollabiert hidden Widget
+        # automatisch, kein Layout-Shift noetig.
+        self.btn_advance.setVisible(False)
         self.btn_cancel = QPushButton("HALT")
         self.btn_cancel.setFixedHeight(22)
         self.btn_cancel.setStyleSheet(
