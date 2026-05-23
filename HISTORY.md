@@ -13331,3 +13331,75 @@ ebenfalls die Fehldecode-Rate — dort darum abschaltbar.
 Schritt 4 ist bewusst NICHT vorab gebaut: die Feld-Beobachtung (Schritt 3)
 IST die Validierung, ohne die Auto-Loggen blind wäre. Reihenfolge mit Mike
 abgestimmt 22.05.2026.
+
+---
+
+## 2026-05-23 v0.97.94 — P74-A Modal-Konsolidierung (TUNE+Gain in EINEM Fenster)
+
+Mike-Field-Test 18.05.: Bei Bandwechsel mit fehlendem Gain-Preset
+poppen 3 Fenster nacheinander (AutoTuneDialog 15 s modal →
+DXTuneDialog 2 min → bei SWR-bad QMessageBox.warning). Mike-Spec:
+„viele Fenster die aufploppen verwirren. Ein Fenster was erst die
+Aktion und das Beenden anzeigt ist übersichtlicher."
+
+**Workflow** voll durch: V1 → V2 (5 Findings, 2🔴 3🟡) → R1 (DeepSeek
+V4-pro, 2🟠 Race-Bugs + 2🟡) → V3 → Code → Tests.
+
+**Variante D-X (Hybrid)** statt reines D: AutoTuneDialog bleibt für
+Fall A (TUNE ohne Gain-Mess — unverändert). Nur Fall B (Bandwechsel
++ Diversity + Auto-Gain AN + missing/stale Preset) wird konsolidiert.
+
+**Code:**
+- `ui/dx_tune_dialog.py`: State-Machine `TUNE → GAIN_CYCLES → FINISHED`,
+  neues Klassen-Signal `auto_tune_done = Signal(bool, float, float)`
+  (API-kompatibel mit AutoTuneDialog → Duck-Typing über
+  `_auto_tune_dialog`-Referenz in `_tune_post_swr_check`), Tick-Timer +
+  Backup-Timer (`_TUNE_BACKUP_GRACE_S = 12 s` analog P71),
+  `_tune_phase_finished`-Flag verhindert Doppel-Trigger (R1-F4),
+  `_on_cancel` State-aware (R1-F1: rotiert `parent._tune_post_check_token`
+  vor `_tune_stop`).
+- `ui/mw_radio.py`: neuer Helper `_start_pipeline_for_band_change`
+  (try/except um Lock-Release sicherzustellen wenn Konstruktor scheitert
+  — R1-F3), neue Methode `_start_dialog_tune_sequence` (expliziter
+  `_tune_auto_stop_token` — R1-F2), `_on_band_changed` mit
+  vorgeschaltetem `is_case_b`-Check (8 Bedingungen), bei Fail
+  `_on_rx_mode_changed("normal")`.
+- `_start_dx_tuning(scoring_mode, with_tune_phase=False)`: neuer
+  Parameter — bei True wird die separate 3-s-TUNE-Sequenz übersprungen.
+- `_open_dx_tune_dialog(with_tune_phase=False)`: Parameter durchgereicht.
+- `_handle_dx_tuning` (KALIBRIEREN-Button) + `_check_diversity_preset`
+  auto_remess-Branch nutzen jetzt `with_tune_phase=tuner_present`.
+
+**Tests:** 1744 → 1756 (+12). T1-T10 DXTuneDialog State-Machine inkl.
+Cancel-Pfade + R1-F4-Doppel-Trigger-Schutz. T11-T12 `_on_band_changed`
+Fall-B-Branch (Whitebox-Mocking inkl. `_tune_active=False`/
+`_gain_measure_locked=False`-Guards). Plus 4 bestehende Tests
+angepasst (`_handle_dx_tuning` ruft jetzt mit `with_tune_phase`-Arg).
+
+**Backup vor Refactor:** `Appsicherungen/2026-05-23_v0.97.93_vor_p74a/`
+(dx_tune_dialog.py, mw_radio.py, mw_tx.py, main.py).
+
+**Out-of-Scope** (separate Followups): AutoTuneDialog komplett löschen,
+SWR-bad-QMessageBox in `_start_dx_tuning._after_tune` entfernen (jetzt
+toter Code wenn alle Aufrufer `with_tune_phase=True`), Phase-2-Backup-
+Timer (R1: out-of-scope für P74-A).
+
+**Field-Test pending** (alle Radio-pflichtig):
+- F1: Bandwechsel 20m → 30m bei Diversity AN + Auto-Gain AN, ohne
+  vorheriges 30m-Preset → EIN Dialog mit TUNE-Phase 15 s + Gain-Mess
+  2 min, kein doppeltes Fenster-Auf-Zu.
+- F2: SWR-bad-Case (Antenne abklemmen) → roter Banner im selben Dialog
+  statt separater QMessageBox.
+- F3: Cancel während TUNE-Phase → Token rotiert, _tune_stop sauber,
+  kein Signal-an-zerstörten-Dialog-Crash.
+- F4: KALIBRIEREN-Button im Diversity-Mode → erst TUNE 15 s sichtbar
+  im selben Dialog, dann Phase-2-UI-Wechsel.
+- F5: Bandwechsel mit Diversity AUS oder Auto-Gain AUS → AutoTuneDialog
+  bleibt sichtbar (Fall A unverändert).
+
+**Lesson:** R1 V4-pro Empirie weiter 39-Cycle ohne Halluzination —
+beide ORANGE-Findings (Signal-zu-zerstörten-Widget + fehlender Token)
+waren klassische Race-Bugs die V2-Self-Review übersehen hat. Bestätigt
+dass R1-Schritt bei UI-Workflows mit Qt-Signalen nicht überspringbar
+ist.
+

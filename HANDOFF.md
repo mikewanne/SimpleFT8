@@ -1,28 +1,47 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-23 — v0.97.93 Re-Mess-Countdown-Anzeige refresht pro Slot
+## Stand 2026-05-23 — v0.97.94 P74-A Modal-Konsolidierung (EIN Fenster statt drei)
 
-**Aktueller Code-Stand:** v0.97.93, Tests **1744 grün** (+3 neue).
+**Aktueller Code-Stand:** v0.97.94, Tests **1756 grün** (+12 neue).
 
-### 🟢 v0.97.93 — Re-Mess-Countdown-Bug-Fix
+### 🟢 v0.97.94 — P74-A Modal-Konsolidierung
 
-Mikes „3h hängende Anzeige"-Bug vom 22.05. ist gefixt. Das `dx_info`-
-Label updated sich jetzt **pro Slot** statt nur bei User-Aktionen.
-1-Zeilen-Fix im `_on_cycle_finished`-Hook (`ui/mw_cycle.py`), Pattern
-„State erst, dann Anzeige".
+Mikes „viele Fenster die aufploppen verwirren"-Beobachtung vom 18.05.
+ist gefixt. Bandwechsel mit Diversity-aktiv + Auto-Gain AN + missing
+Preset zeigt jetzt EIN Fenster (DXTuneDialog mit TUNE-Phase) statt drei
+(AutoTuneDialog → DXTuneDialog → ggf. SWR-bad-QMessageBox).
 
-Verifiziert: `_format_gain_status` cache-frei (Live-`time.time()`),
-Funktion leichtgewichtig (Format-String + setText, kein I/O). Hook
-`_on_cycle_finished` feuert immer, auch bei leerem Slot. Bestehende
-10 Action-Trigger unverändert — Pro-Slot-Aufruf ergänzt, ersetzt nicht.
+**Architektur:** Variante D-X (Hybrid). DXTuneDialog bekam State-Machine
+`TUNE → GAIN_CYCLES → FINISHED` + eigenes `auto_tune_done`-Signal (API-
+identisch mit AutoTuneDialog → Duck-Typing in `_tune_post_swr_check`
+funktioniert für beide Dialog-Typen). AutoTuneDialog bleibt unverändert
+für Fall A (TUNE ohne Gain-Mess).
 
-**Workflow:** V1→V2→R1 (DeepSeek V4-pro, „sauberster Weg, keine
-Einwände") →V3→C1-C3→Final-R1.
+**Workflow:** V1→V2 (5 Findings)→R1 (DeepSeek V4-pro, 2🟠 Race-Bugs
++ 2🟡 Lock/Backup)→V3→C1-C6 atomar→Final-R1 pending.
 
-**Nächste 1-2 Schritte:** Final-R1 abwarten. Sonst noch offen aus den
-echten Wishlist-Items: AP-Lite QSO-Abschluss (Konzept, wartet auf
-Feld-Beobachtung), P74 UX-Konsoli, Multiband-Umsetzung (Konzept fertig),
-P64 Sim-Modus, P65 Light-Mode. Sonst nichts dringend.
+**R1-Findings eingebaut:**
+- F1 ORANGE: Cancel rotiert `parent._tune_post_check_token` (verhindert
+  Signal-an-zerstörten-Dialog-Crash)
+- F2 ORANGE: `_start_dialog_tune_sequence` erzeugt expliziten Token für
+  Stop-QTimer (verhindert Race mit User-Cancel)
+- F3 GELB: try/except um `_set_gain_measure_lock` (Lock-Release auch bei
+  Konstruktor-Fehler)
+- F4 GELB: `_tune_phase_finished`-Flag blockt Backup-Timer wenn echtes
+  Signal schon kam
+
+**Field-Test pending** (alle Radio-pflichtig — F1-F5 in HISTORY.md
+v0.97.94-Eintrag):
+- F1: Bandwechsel 20m→30m mit Diversity+Auto-Gain AN, ohne Preset
+- F2: SWR-bad-Case → Banner im selben Dialog statt QMessageBox
+- F3: Cancel während TUNE-Phase → kein Crash
+- F4: KALIBRIEREN-Button → TUNE+Gain im selben Dialog
+- F5: Bandwechsel mit Diversity AUS → AutoTuneDialog bleibt (Fall A)
+
+**Nächste 1-2 Schritte:** Final-R1 (DeepSeek-Review der commits). Sonst
+offen: AP-Lite QSO-Abschluss (Feld-Beobachtung), P74-B Autogain (Phase 1
++ 2 spec'd), Multiband (Konzept fertig), P64 Sim-Modus, P65 Light-Mode,
+Slice-B Dead-Code-Removal.
 
 ## Stand 2026-05-23 — v0.97.92 QSO-Finish-Button versteckt + TODO-Pflege
 

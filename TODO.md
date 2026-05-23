@@ -1,6 +1,16 @@
-# SimpleFT8 TODO — Stand 21.05.2026 (v0.97.83, P106 QRZ-ADIF-Fix offen für Verifikation)
+# SimpleFT8 TODO — Stand 23.05.2026 (v0.97.94, P74-A erledigt)
 
 ---
+
+## ✅ P74-A Modal-Konsolidierung ERLEDIGT (v0.97.94, 23.05.2026)
+
+Mike-Field-Test 18.05. „viele Fenster die aufploppen verwirren"-Bug
+gefixt. Bandwechsel mit Diversity + Auto-Gain AN + missing Preset zeigt
+jetzt EIN Fenster (DXTuneDialog mit State-Machine `TUNE → GAIN_CYCLES
+→ FINISHED`) statt drei. Variante D-X (Hybrid) — AutoTuneDialog bleibt
+für Fall A (TUNE ohne Gain-Mess). Voller Workflow V1→V2→R1→V3→C1-C6
++ Final-R1. R1-V4-pro 2🟠 (Race-Bugs) + 2🟡 eingebaut. Tests
+1744→1756. Details: HISTORY.md v0.97.94.
 
 ## ✅ Re-Mess-Countdown-Anzeige ERLEDIGT (v0.97.93, 23.05.2026)
 

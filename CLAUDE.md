@@ -127,7 +127,7 @@ auf Display 2 (Position 1024,0) verschieben. Mike macht von dort
 Fernwartung — App MUSS auf dem mittleren Bildschirm landen.
 
 **Start:** `cd "/Users/mikehammerer/Documents/KI N8N Projekte/FT8/SimpleFT8" && ./venv/bin/python3 main.py`
-**Aktueller Stand:** v0.97.93 (23.05.2026) — Re-Mess-Countdown-Anzeige updated sich jetzt pro Slot (`_on_cycle_finished` ruft `_update_gain_status_display`). Vorher nur aktions-getriggert — Display blieb stale während Stunden vergingen. Tests: 1744.
+**Aktueller Stand:** v0.97.94 (23.05.2026) — P74-A Modal-Konsolidierung: TUNE+Gain-Pipeline bei Bandwechsel (Fall B) läuft jetzt in EINEM Fenster. DXTuneDialog hat State-Machine `TUNE → GAIN_CYCLES → FINISHED` mit eigenem `auto_tune_done`-Signal (Duck-typing-kompatibel mit AutoTuneDialog). Fall A (TUNE ohne Gain-Mess) unverändert. Tests: 1756.
 → Vollständige Versionshistorie + Vorgänger-Details: **HISTORY.md** (grep nach Version).
 
 
@@ -506,6 +506,7 @@ Bei Doku-Updates: nicht in CLAUDE.md duplizieren was in TODO.md steht.
 - **FT2-Button versteckt** (`btn_ft2.setVisible(False)` in `control_panel.py`, 2026-05-23) — Standards-Fragmentierung Decodium vs WSJT-X-Improved-FT2. **FT2-Code (decoder/encoder/cycle/protocol) ist intakt** — FT2 = Decodium-Standard (per `core/protocol.py:9`). Reaktivierung: setVisible-Zeile löschen + `freq_frame` zurück auf `grid.addWidget(freq_frame, 0, 4, 1, 3)`.
 - **Band/Modus werden nicht persistiert** (2026-05-23, Mike-Entscheidung) — App startet IMMER mit 20m+FT8 (`DEFAULTS` in `config/settings.py:49`). `load()` forciert die Werte beim Start, `save()` schliesst sie vom JSON-Dump aus. Runtime-Updates per `settings.set('band'/'mode', ...)` funktionieren weiter (`mw_radio.py:405/505`) — nur über App-Neustarts hinweg gibt es kein Merken mehr.
 - **QSO-Finish-Button (`btn_advance`) versteckt** (`control_panel.py:1199`, 2026-05-23) — Mike: nie gebraucht (FT8-Timeouts MAX_STATION_CALLS=5 + 3-Min-Gesamt fangen stuck-Gegenstationen ab). Code/Signal/Handler intakt; `setEnabled`/`setText`-Calls laufen weiter auf hidden Button ohne Wirkung. HALT bleibt — andere Rolle (Sicherheits-Notbremse). Reaktivierung: `setVisible(False)`-Zeile löschen. QHBoxLayout kollabiert hidden Widget automatisch, kein Layout-Shift nötig.
+- **DXTuneDialog State-Machine (P74-A v0.97.94):** Dialog kennt drei States `TUNE → GAIN_CYCLES → FINISHED`. State `TUNE` nur aktiv wenn `with_tune_phase=True` (Bandwechsel-Pipeline Fall B + KALIBRIEREN mit Tuner). Klassen-Signal `auto_tune_done = Signal(bool, float, float)` ist API-identisch mit AutoTuneDialog — `_tune_post_swr_check` (mw_tx.py:343/438/454) emittiert via Duck-Typing auf `_auto_tune_dialog` (kann jetzt beide Typen sein). Flag `_tune_phase_finished` ist Doppel-Trigger-Schutz zwischen Backup-Timer und echtem Signal — NICHT entfernen. Cancel im State 'TUNE' rotiert `parent._tune_post_check_token` VOR `_tune_stop` (sonst Signal-an-zerstörten-Dialog-Crash). AutoTuneDialog bleibt für Fall A (TUNE ohne Gain-Mess) — NICHT löschen.
 
 ---
 
