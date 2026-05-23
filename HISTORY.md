@@ -13403,3 +13403,66 @@ waren klassische Race-Bugs die V2-Self-Review übersehen hat. Bestätigt
 dass R1-Schritt bei UI-Workflows mit Qt-Signalen nicht überspringbar
 ist.
 
+
+---
+
+## 2026-05-23 v0.97.95 — P99 WAIT_RR73 Message-Cap (Folge-Ticket aus P98)
+
+P98-Final-R1-Hinweis war: der message-getriebene Pfad in WAIT_RR73
+hat keinen Retry-Counter, nur der decoder-getriebene Timeout-Pfad
+(P98 Z.429-444). Wenn die Gegenstation wiederholt R-Report sendet
+statt 73 zu schicken — DG8DBW-Field-Test 20.05. — antwortet die App
+unbegrenzt mit RR73, nur die 3-Min-Gesamtgrenze (MAX_QSO_DURATION)
+bremst.
+
+Mike-Spec: „Eigener Retry-Zähler analog `rr73_retries` mit demselben
+`MAX_RR73_RETRIES = 5`-Limit." DeepSeek R1 V4-pro empfahl gemeinsamen
+Counter (KISS), nicht separaten — semantisch alle „TX-Sends innerhalb
+WAIT_RR73 bevor QSO abgeschlossen". V3 übernommen.
+
+**Code (`core/qso_state.py:662-735`):**
+
+Drei Schleifen-Vektoren gegen den GEMEINSAMEN Counter `rr73_retries`
+gecappt (Pattern aus Z.429-444):
+
+- `is_r_report` (Z.679): DG8DBW-Pfad — Mike-Spec
+- `is_report` (Z.693): Plain-Report wiederholt — Hygiene
+- `is_grid` (Z.713): Grid wiederholt — Hygiene
+
+Bei `> MAX_RR73_RETRIES` (=5): TIMEOUT mit Standard-Cleanup
+(`_set_state(TIMEOUT)` + `qso_timeout.emit(call)` +
+`_resume_cq_if_needed()`). Konsistent mit Decoder-Pfad-Pattern.
+
+`is_rr73`/`is_73`-Branch (Z.663) UNVERÄNDERT — QSO erfolgreich,
+Counter explizit NICHT inkrementiert.
+
+**Akzeptiertes Risiko (R1-Hinweis 🟡):** Wenn Counter durch Decoder-
+Pfad bereits nahe 5 ist und eine valide Antwort kommt, kann sie den
+TIMEOUT triggern statt verarbeitet zu werden. Dokumentiert im Code-
+Kommentar. QSO ist in dem Zustand eh kurz vor Tot, harte Grenze ist
+gewollt.
+
+**Workflow voll durch:**
+- V1+V2: 0 Halluzinationen, 3 Vektoren statt nur DG8DBW (Mike-Spec
+  „nur R-Report" zu eng — Hygiene-Halber alle 3 cappen)
+- R1 V4-pro: 5 Findings, 0 Architektur-Änderungen, 1🔴 Cleanup-
+  Pflicht (eingebaut), 1🟡 Edge-Case (akzeptiert)
+- Code: 1 atomarer Commit (qso_state.py + tests + prompts)
+- Final-R1 V4-pro: pending
+
+**Tests:** 1756 → 1761 (+5). T1 R-Report-Cap, T2 Plain-Report-Cap,
+T3 Grid-Cap, T4 Mixed-Pfade addieren auf gemeinsamen Counter, T5
+RR73/73 inkrementiert NICHT. Echte FT8Message-Instanzen statt Mocks
+— Properties (is_r_report, is_report, is_grid) leiten sich aus
+field3 ab.
+
+**Pattern-Hinweis für künftige Reviews:** der Test-Pfad `_resume_cq_if_needed`
+schaltet im Solo-Mode (kein CQ aktiv) direkt TIMEOUT → IDLE weiter.
+Daher prüfen die Tests primär `qso_timeout.emit`-Signal-Liste, nicht
+`state == TIMEOUT`.
+
+**Field-Test pending (Radio-pflichtig):** Reproduktion des DG8DBW-
+Szenarios — Gegenstation muss wiederholt R-Report senden. Hard zu
+reproduzieren, in der Praxis erwartet bei nächster „halbem-QSO"-
+Situation. Counter-Log im Terminal („Cap N/5") bestätigt Eingreifen.
+Mike autonom durchgezogen während Mike weg — analog P82-Workflow.

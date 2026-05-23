@@ -1,8 +1,23 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-23 — v0.97.94 P74-A Modal-Konsolidierung (EIN Fenster statt drei)
+## Stand 2026-05-23 — v0.97.95 P99 WAIT_RR73 Message-Cap (DG8DBW-Loop-Fix)
 
-**Aktueller Code-Stand:** v0.97.94, Tests **1756 grün** (+12 neue).
+**Aktueller Code-Stand:** v0.97.95, Tests **1761 grün** (+5 neue).
+
+### 🟢 v0.97.95 — P99 WAIT_RR73 Message-Cap (autonom, Mike weg)
+
+P98-Folge-Ticket aus Final-R1. Der message-getriebene WAIT_RR73-Pfad
+hatte heute keinen Retry-Cap — Gegenstation konnte mit wiederholtem
+R-Report (DG8DBW-Field-Test 20.05.) unbegrenzte RR73-Schleife
+triggern. Jetzt cappen drei Vektoren (R-Report, Plain-Report, Grid)
+gegen den gemeinsamen Counter `rr73_retries` (Pattern aus Decoder-
+Pfad P98). Bei `> MAX_RR73_RETRIES=5` Standard-Timeout-Cleanup.
+
+RR73/73-Branch unverändert (QSO erfolgreich, kein Counter).
+
+Workflow voll durch: V1+V2 (0 Hallu) → R1 V4-pro (5 Findings, 0
+Architektur-Änderung, 1🔴 Cleanup eingebaut, 1🟡 Edge-Case
+akzeptiert) → Code → Final-R1 pending.
 
 ### 🟢 v0.97.94 — P74-A Modal-Konsolidierung
 

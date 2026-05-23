@@ -1,6 +1,15 @@
-# SimpleFT8 TODO — Stand 23.05.2026 (v0.97.94, P74-A erledigt)
+# SimpleFT8 TODO — Stand 23.05.2026 (v0.97.95, P99 erledigt)
 
 ---
+
+## ✅ P99 WAIT_RR73 Message-Cap ERLEDIGT (v0.97.95, 23.05.2026 autonom)
+
+DG8DBW-Loop-Lücke aus P98-Final-R1 gefixt. Drei message-getriebene
+Schleifen-Vektoren im WAIT_RR73-Branch (R-Report, Plain-Report, Grid)
+gegen gemeinsamen Counter `rr73_retries` gecappt (analog Decoder-Pfad
+P98). MAX_RR73_RETRIES=5 unverändert. Voller Workflow V1→V2→R1→Code
+→Final-R1. R1-V4-pro 5 Findings (alle 🟢 oder per Design akzeptiert).
+Tests 1756 → 1761 (+5). Details: HISTORY.md v0.97.95.
 
 ## ✅ P74-A Modal-Konsolidierung ERLEDIGT (v0.97.94, 23.05.2026)
 
@@ -87,17 +96,24 @@ Statusbar-Toast als Rückmeldung. Helper `log/adif.py::export_all_records`.
 
 ---
 
-## ⚠ OFFEN — P99 (Folge-Ticket aus P98 Final-R1)
+## ✅ P99 ERLEDIGT (v0.97.95, 23.05.2026 autonomer voller Workflow)
 
-**DG8DBW-Pfad Retry-Counter:** `on_message_received`-WAIT_RR73-Branch
-(qso_state.py ~Z.628-644) hat heute KEINEN Retry-Counter. Wenn die
-Gegenstation wiederholt R-Report sendet (statt 73 zu schicken), wird
-unsererseits unbegrenzt RR73 zurückgesendet — nur das 3-Min-Gesamt-
-Timeout (`MAX_QSO_DURATION`) begrenzt.
+DG8DBW-Pfad Retry-Counter: WAIT_RR73-Message-Branch hatte keinen Cap.
+P99 cappt drei Vektoren (R-Report, Plain-Report, Grid) gegen
+gemeinsamen `rr73_retries`-Counter (Pattern aus Decoder-Pfad P98).
+Bei `> MAX_RR73_RETRIES = 5` Standard-TIMEOUT-Cleanup. RR73/73-Branch
+unverändert (QSO erfolgreich → kein Counter).
 
-**P99-Spec:** Eigener Retry-Zähler analog `rr73_retries` in diesem
-Branch, mit demselben `MAX_RR73_RETRIES = 5`-Limit. Damit ist die
-Mike-Spec „bei halbem QSO 5 Versuche" vollständig.
+DeepSeek R1 V4-pro empfahl gemeinsamen Counter (vs Mike-Spec „eigener
+Counter analog") — KISS-konform, alle Pfade gleich behandelt.
+1🔴 Cleanup-Pflicht eingebaut, 1🟡 Edge-Case (Counter durch Decoder-
+Pfad schon nahe 5 + valide Antwort → TIMEOUT) per Design akzeptiert.
+
+Tests 1756 → 1761 (+5). T1 R-Report-Cap, T2 Plain-Cap, T3 Grid-Cap,
+T4 Mixed-Pfade addieren, T5 RR73/73 inkrementiert NICHT.
+
+Details: HISTORY.md v0.97.95. Field-Test pending (DG8DBW-Szenario
+muss reproduziert werden).
 
 ---
 

@@ -127,7 +127,7 @@ auf Display 2 (Position 1024,0) verschieben. Mike macht von dort
 Fernwartung — App MUSS auf dem mittleren Bildschirm landen.
 
 **Start:** `cd "/Users/mikehammerer/Documents/KI N8N Projekte/FT8/SimpleFT8" && ./venv/bin/python3 main.py`
-**Aktueller Stand:** v0.97.94 (23.05.2026) — P74-A Modal-Konsolidierung: TUNE+Gain-Pipeline bei Bandwechsel (Fall B) läuft jetzt in EINEM Fenster. DXTuneDialog hat State-Machine `TUNE → GAIN_CYCLES → FINISHED` mit eigenem `auto_tune_done`-Signal (Duck-typing-kompatibel mit AutoTuneDialog). Fall A (TUNE ohne Gain-Mess) unverändert. Tests: 1756.
+**Aktueller Stand:** v0.97.95 (23.05.2026) — P99 WAIT_RR73 Message-Cap: drei Schleifen-Vektoren im message-getriebenen WAIT_RR73-Pfad (R-Report/Plain-Report/Grid) gegen `rr73_retries` (gemeinsam mit Decoder-Pfad) gecappt. MAX_RR73_RETRIES=5 unverändert. Vorher unbegrenzte RR73-Schleifen — nur 3-Min-Gesamttimeout bremste. Tests: 1761.
 → Vollständige Versionshistorie + Vorgänger-Details: **HISTORY.md** (grep nach Version).
 
 
