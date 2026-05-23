@@ -1069,80 +1069,12 @@ Menü) = ~1 Tag. Stufe 2 (Fake-Radio) = +1-2 Tage.
 
 ---
 
-## 🆕 OFFEN — P65: Light-Mode (Settings-Toggle Dark↔Light) (Mike 16.05.2026)
+## ❌ P65 Light-Mode VERWORFEN (Mike-Entscheidung 23.05.2026)
 
-**Trigger:** Mike 16.05.: „mit deepseek besprechen wie kompliziert es ist
-in einstellungen den darkmodus umschaltbar machen in normalen modus
-(farben normale app grau , welche farben für anzeigen. darkmode ist so
-top, normaler modus grau windows standart app mäßig)".
-
-**Mike-Spec klargestellt:**
-- Default bleibt **Dark-Mode** (aktuell, „top")
-- Neuer Light-Mode: Windows-Standard-Stil, hellgrau, default-system-look
-- Settings-Toggle in Tab „Daten & Tools" oder „Allgemein"
-- App-Restart erforderlich oder live-switch? — Klären
-
-**Erste Aufwandseinschätzung Claude 16.05.:**
-
-Aktuell hat die App **inline Stylesheets** an vielen Stellen verstreut
-(grep zeigt ~50+ setStyleSheet-Aufrufe in `ui/main_window.py`,
-`control_panel.py`, `rx_panel.py`, `qso_panel.py`, `connect_status_dialog.py`,
-`bandpilot_dialogs.py`, `dx_tune_dialog.py` etc.). Plus Farb-Konstanten
-wie `#00CC44` (Cyan-Akzent), `#FF66CC`/`#FFAA00` (Slot-Bar), `#16192b`
-(Dialog-BG), `#7CC` (Title-Cyan).
-
-**Zwei Wege:**
-
-**Weg A — Theme-Konstanten + Mode-Switch:**
-- Modul `ui/theme.py` mit `THEME_DARK` und `THEME_LIGHT` Dicts
-- Alle inline-Hexcodes durch `theme.cyan_accent` etc. ersetzen
-- App-Restart-Pflicht (Qt-Stylesheet-Hot-Reload ist tricky)
-- **Aufwand:** mittel-hoch, ~2-3 Tage. ~50 Stylesheet-Stellen umstellen +
-  Theme-Modul + Settings-Hook + Tests
-
-**Weg B — Qt-Stil-Override (`QApplication.setStyle("Fusion")`)**:
-- Bei Light-Mode globaler `setStyle("windowsvista")` oder `"fusion"`
-- Bestehende Stylesheets aber bleiben (überschreiben den nativen Look)
-- Funktioniert nur teilweise — sieht hybrid aus
-- **Aufwand:** klein, 0.5 Tag — aber Ergebnis vermutlich nicht „windows-
-  standard" sondern „windows-mit-Cyan-Akzenten"
-
-### DeepSeek-V4-pro Brainstorm (16.05.2026)
-
-**Empfehlung: KEINEN sauberen Light-Mode bauen — KISS-Pragmatismus.**
-
-| Weg | Aufwand | Bewertung |
-|---|---|---|
-| **A — Theme-Modul + 259 Stellen umstellen** | 3-5 Tage | Overengineering für 5%-Use-Case |
-| **B — Globaler QStyle-Wechsel** | 1-2 h | Unbrauchbar — hybride Optik, Stylesheets dominieren weiter |
-| **C — Hybrid (nur äußere Widgets hell)** | 2-3 Tage | Halbfertig-Optik durch dunkle Inseln (FrequencyHistogram etc.) |
-| **D — „Hell-Taste" Notlösung** | **1 Tag** | Nur Haupt-BG + Card-BG + Text-Farbe wechseln, Rest dark belassen. Bewusst als Not-Theme akzeptieren |
-
-**Essenzielle Farben für minimalen Light-Mode:**
-- BG `#16192b` → `#F0F0F0`
-- Card-BG `#06060c` → `#FFFFFF` + Border
-- Text `#CCC` → `#333`/`#222`
-- Buttons `#2a2f4a` → `#E0E0E0` + dunkler Rand
-- Cyan `#7CC` → ggf. `#0066AA` (Kontrast auf Weiß)
-- Grün/Orange/Magenta-Akzente: meist OK
-
-**Live-Switch:** Restart-Pflicht — Qt-Stylesheet-Hot-Reload zur Laufzeit
-ist fehleranfällig (viele Widgets setzen Style im Konstruktor).
-
-**Fallen:** CustomPainted Widgets (`FrequencyHistogramWidget`) haben
-hardgecodete `QColor`s in `paintEvent()` → bleiben dunkle Inseln. Card-
-Konstanten in `control_panel.py` (`_CARD_SS_BLUE` etc.) müssten
-dynamisch werden — der Knackpunkt für Weg A.
-
-### Mike-Entscheidung pending
-
-Optionen:
-1. **Skip** — Light-Mode kommt nicht (DeepSeek-Empfehlung, KISS)
-2. **Not-Theme (1 Tag)** — Hell-Taste mit 4-5 Farb-Swaps, dunkle Inseln
-   bleiben, als bewusste Notlösung dokumentiert
-3. **Sauberes Theme-Modul (3-5 Tage)** — wenn Mike es wirklich will
-
-Default-Empfehlung: **Skip**. Zeit lieber in echte Features stecken.
+DeepSeek-Empfehlung 16.05. (Skip) + Claude-Empfehlung 23.05. (Skip) + Mike-OK 23.05.
+Gründe: Hobby-Funker-Setting ist abendlich/Shack (Dark passt), dunkles Theme +
+Neon-Akzente ist visuelle Marken-Identität, Aufwand 3-5 Tage Theme-Token-System
++ permanente Wartungs-Last für 5%-Use-Case. Wird nicht mehr aufgegriffen.
 
 ---
 
