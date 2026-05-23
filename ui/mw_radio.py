@@ -609,12 +609,41 @@ class RadioMixin:
                 self.radio.radio_type, band, watt=10)
         except (AttributeError, Exception):
             _has_anchor = False
-        if (self.settings.get("auto_tune_on_band_change", True)
+
+        # P74-A (v0.97.94) Fall B: konsolidierte TUNE+Gain-Pipeline in
+        # EINEM Fenster wenn Bandwechsel + Diversity aktiv + Auto-Gain
+        # AN + missing/stale Preset. Vermeidet das alte 3-Fenster-Flicker
+        # (AutoTuneDialog → DXTuneDialog → QMessageBox bei SWR-bad).
+        # AutoTuneDialog bleibt für Fall A (TUNE ohne Gain-Mess).
+        is_case_b = (
+            getattr(self, '_rx_mode', 'normal') == "diversity"
+            and self.settings.get("auto_tune_on_band_change", True)
+            and self.settings.get("auto_gain_on_band_change", False)
+            and self.radio.ip
+            and band.upper() not in self._swr_blocked_bands
+            and self.settings.get("tuner_present", True)
+            and not getattr(self, "_initial_band_set", False)
+            and self._assess_gain(band) != "fresh"
+        )
+        _case_b_handled = False
+        if is_case_b:
+            scoring = getattr(self._diversity_ctrl, 'scoring_mode', 'normal')
+            _dlog("BAND",
+                  f"P74-A Fall-B Pipeline für {band} (scoring={scoring})")
+            success = self._start_pipeline_for_band_change(band, scoring)
+            if not success:
+                self.qso_panel.add_info(
+                    f"⚠ Pipeline {band.upper()} abgebrochen — "
+                    "wechsle auf Normal")
+                self._on_rx_mode_changed("normal")
+            _case_b_handled = True
+        elif (self.settings.get("auto_tune_on_band_change", True)
                 and self.radio.ip
                 and band.upper() not in self._swr_blocked_bands
                 and self.settings.get("tuner_present", True)
                 and not getattr(self, "_initial_band_set", False)
                 and not _has_anchor):
+            # Fall A: nur TUNE, kein Gain-Mess (AutoTuneDialog wie bisher).
             _dlog("BAND", f"_start_auto_tune_for_band_change({band})")
             success = self._start_auto_tune_for_band_change(band)
             if not success:
@@ -666,8 +695,12 @@ class RadioMixin:
         else:
             bandpilot_acted = self._maybe_apply_bandpilot(band)
 
-        # Diversity: Preset-Check mit Dialog + ggf. Pipeline
-        if not bandpilot_acted and self._rx_mode == "diversity":
+        # Diversity: Preset-Check mit Dialog + ggf. Pipeline.
+        # P74-A: in Fall B hat `_start_pipeline_for_band_change` bereits
+        # Phase 2 + Phase 3 erledigt — wir würden hier den Dialog ein
+        # zweites Mal triggern. Skippen.
+        if (not bandpilot_acted and self._rx_mode == "diversity"
+                and not _case_b_handled):
             scoring = getattr(self._diversity_ctrl, 'scoring_mode', 'normal')
             # P112 (v0.97.89): auto_remess nur wenn Setting aktiv UND
             # Bandwechsel-Pfad. Sonst Diversity startet mit alten/Std-Werten.
