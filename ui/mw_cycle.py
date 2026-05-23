@@ -150,6 +150,11 @@ class CycleMixin:
         if not self.rx_panel._rx_active:
             return
         self.qso_sm.on_decoder_finished()
+        # P83 (2026-05-23): Re-Mess-Countdown-Anzeige pro Slot refreshen,
+        # damit "noch X Stunden bis Re-Mess" lebendig tickt — bisher nur
+        # aktions-getriggert. `_update_gain_status_display` ist
+        # leichtgewichtig (Format-String + setText, kein I/O).
+        self._update_gain_status_display()
 
     def _refresh_diversity_freq_view(self):
         """Pro Slot: Histogramm refreshen + ggf. Such-Trigger.
