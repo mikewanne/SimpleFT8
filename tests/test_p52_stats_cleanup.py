@@ -159,8 +159,10 @@ def test_t7_settings_migration_pops_stats_enabled(tmp_path, monkeypatch):
     s = settings_module.Settings()  # ruft load() im Konstruktor
     # stats_enabled muss gepoppt sein
     assert "stats_enabled" not in s._data
-    # andere Keys bleiben
-    assert s.get("band") == "40m"
+    # 2026-05-23: band/mode werden auf DEFAULTS gezwungen, egal was im
+    # Settings-File steht (Persistenz entfernt — immer 20m FT8 beim Start).
+    assert s.get("band") == settings_module.DEFAULTS["band"] == "20m"
+    assert s.get("mode") == settings_module.DEFAULTS["mode"] == "FT8"
 
 
 # ── T8 — Cleanup-Funktion ist idempotent ────────────────────────────────

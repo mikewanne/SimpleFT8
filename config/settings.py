@@ -9,7 +9,9 @@ CONFIG_FILE = CONFIG_DIR / "config.json"
 
 # Standard-FT8/FT4/FT2-Frequenzen pro Band
 # FT2: Community-Frequenzen (DXZone/Decodium), Stand April 2026
-# HINWEIS: FT2-Decoder noch NICHT Decodium-kompatibel (8-GFSK noetig, wir haben 4-GFSK)
+# HINWEIS: FT2 = Decodium-Standard (4-GFSK, 41.667 Baud, Costas) —
+# Profil in core/protocol.py:88. FT2-Button derzeit versteckt
+# (Standards-Fragmentierung Decodium vs WSJT-X-Improved, 2026-05-23).
 BAND_FREQUENCIES = {
     "80m": {"ft8": 3.573, "ft4": 3.575, "ft2": 3.578},
     "60m": {"ft8": 5.357, "ft4": 5.357, "ft2": 5.360},
@@ -132,6 +134,11 @@ class Settings:
         _td = self._data.get("tune_duration_s")
         if _td is not None and _td not in (5, 10, 15):
             self._data["tune_duration_s"] = 15
+        # 2026-05-23: Band/Modus nicht mehr persistieren — App startet
+        # immer mit DEFAULTS (20m FT8). Mike-Entscheidung: simpler Start,
+        # verhindert auch versehentliches Starten im versteckten FT2.
+        self._data["band"] = DEFAULTS["band"]
+        self._data["mode"] = DEFAULTS["mode"]
         self._migrate_bandpilot_settings_v088()
 
     def _migrate_bandpilot_settings_v088(self):
@@ -163,7 +170,9 @@ class Settings:
         CONFIG_DIR.mkdir(parents=True, exist_ok=True)
         tmp = CONFIG_FILE.with_suffix(".tmp")
         with open(tmp, "w") as f:
-            json.dump(self._data, f, indent=2)
+            # 2026-05-23: band/mode nicht persistieren (immer DEFAULTS beim Start).
+            _to_save = {k: v for k, v in self._data.items() if k not in ("band", "mode")}
+            json.dump(_to_save, f, indent=2)
         os.replace(tmp, CONFIG_FILE)
 
     def get(self, key, default=None):
