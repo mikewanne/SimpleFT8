@@ -1542,7 +1542,11 @@ funktioniert sauber). Nach P61+P59 angehen.
 
 ---
 
-## 🆕 OFFEN — P56: Gain-Messung kollabieren auf pro-Band (Mike 15.05.2026 morgens, DeepSeek-V4-pro bestätigt Option A)
+## ✅ P56 ERLEDIGT (via P80 Unified Gain Store, v0.97.52, 18.05.2026)
+
+→ P80 hat die Gain-Messung auf 1 Wert pro Band, modus-übergreifend
+zusammengefasst — genau die P56-Forderung. Details: HISTORY.md v0.97.52,
+Memory `project_p80_unified_gain_done.md`. Heading umgestellt 23.05.2026.
 
 **Trigger:** Mike-Beobachtung 15.05.: Wenn auf FT4/FT2 die Gain-Messung
 fällig wird (6h-Frist abgelaufen) und nicht genug Stationen empfangbar
@@ -1700,7 +1704,12 @@ Pre-TX-Filter eingreifen.
 
 ---
 
-## 🆕 OFFEN — P60: Alle 3 User-Stop-Pfade brechen laufenden TX-Slot nicht ab (Mike-Field-Test 15.05.2026 morgens)
+## ✅ P60 ERLEDIGT — User-Stop-Pfade Slot-Abbruch + Click-Puffer (v0.97.32, 15.05.2026 voller Workflow)
+
+→ Helper `_abort_active_tx` in mw_tx.py + Aufrufer in OMNI/Auto-Hunt/
+Normal-CQ-Stop. Details: HISTORY.md v0.97.32, Memory
+`project_p60_stop_paths.md`. 6 atomare Commits C1-C6. Heading umgestellt
+23.05.2026.
 
 **Trigger:** Mike-Test P55-F6: OMNI-CQ während aktivem TX-Slot per
 Toggle-Klick gestoppt — Button wird sofort rot, ABER der laufende
@@ -1905,7 +1914,10 @@ Settings-Migration = 3 Files = nicht trivial).
 
 ---
 
-## 🆕 OFFEN — P52: Statistik-Toggle raus + 90-Tage-Rolling-Window (Mike 14.05.2026 nachmittags)
+## ✅ P52 ERLEDIGT — Statistik-Toggle raus + 90-Tage-Cleanup (v0.97.41, 16.05.2026)
+
+→ Details: HISTORY.md, Memory `project_p52_stats_cleanup.md`. Heading
+nachträglich auf ERLEDIGT umgestellt 23.05.2026 (war stale „OFFEN").
 
 **Trigger:** Mike-Klärung 14.05.: Settings-Toggle „Statistik-Erfassung
 aktivieren" macht keinen Sinn weil **Bandpilot ohne Stats blind** ist
@@ -2228,7 +2240,11 @@ Dialog ist sensitive Strecke).
 
 ---
 
-## 🆕 OFFEN_HISTORICAL — Bundle H: Bandpilot-Aware Diversity-Klick (Mike 14.05.2026 mittags)
+## ✅ Bundle H ERLEDIGT — Bandpilot-Aware Diversity-Klick (v0.97.25, 14.05.2026)
+
+→ Details: HISTORY.md, Memory `project_bundle_h_bandpilot_aware_diversity.md`.
+Commit `ff6e240` (test_bundle_h.py + 10 weitere). Heading umgestellt
+23.05.2026 (war bereits OFFEN_HISTORICAL markiert).
 
 **Mike's Beobachtung:** Bandpilot=Auto + Klick auf DIVERSITY → Std/DX-
 Dialog erscheint trotzdem. Aber im Auto-Modus sollte Bandpilot SELBST
