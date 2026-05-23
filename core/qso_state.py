@@ -661,29 +661,76 @@ class QSOStateMachine(QObject):
 
         if self.state == QSOState.WAIT_RR73:
             if msg.is_rr73 or msg.is_73:
+                # QSO erfolgreich — KEIN Counter-Increment, bewusst.
                 self.advance()
                 return
+            # P99 (v0.97.95): alle 3 Message-Pfade unten cappen gegen
+            # `rr73_retries` (gemeinsamer Counter mit Decoder-Pfad
+            # Z.429-444 P98). Vorher unbegrenzt — nur 3-Min-Gesamt-
+            # Timeout bremste. DG8DBW-Field-Test 20.05.: Gegenstation
+            # sendete wiederholt R-Report statt 73, wir antworteten
+            # endlos mit RR73. Cap auf MAX_RR73_RETRIES = 5.
+            # Akzeptiertes Risiko (R1-Hinweis): wenn Counter durch
+            # Decoder-Timeouts schon nahe 5, kann auch eine valide
+            # Antwort den TIMEOUT-Pfad triggern. Ist gewollt — das
+            # QSO ist dann eh schon zerbrochen.
             if msg.is_r_report:
-                # R+Report (z.B. R+19, R-07) = Bestätigung + Report → wie RR73 behandeln
+                # R+Report (z.B. R+19, R-07) = Bestätigung + Report
+                # → wie RR73 behandeln (sendet RR73 via advance).
+                self.qso.rr73_retries += 1
+                if self.qso.rr73_retries > MAX_RR73_RETRIES:
+                    call = self.qso.their_call
+                    self._dbg.log("TIMEOUT",
+                        f"WAIT_RR73 R-Report Cap ({MAX_RR73_RETRIES}) "
+                        f"erreicht — Abbruch {call}")
+                    self._set_state(QSOState.TIMEOUT)
+                    self.qso_timeout.emit(call)
+                    self._resume_cq_if_needed()
+                    return
                 self.qso.their_snr = msg.grid_or_report
-                print(f"[QSO] R-Report empfangen: {msg.grid_or_report} → sende RR73")
+                print(f"[QSO] R-Report empfangen: {msg.grid_or_report} "
+                      f"→ sende RR73 (Cap {self.qso.rr73_retries}/{MAX_RR73_RETRIES})")
                 self.advance()
                 return
             if msg.is_report:
                 # Report OHNE R-Prefix → Gegenstation wiederholt, nochmal senden
+                self.qso.rr73_retries += 1
+                if self.qso.rr73_retries > MAX_RR73_RETRIES:
+                    call = self.qso.their_call
+                    self._dbg.log("TIMEOUT",
+                        f"WAIT_RR73 Report-Repeat Cap ({MAX_RR73_RETRIES}) "
+                        f"erreicht — Abbruch {call}")
+                    self._set_state(QSOState.TIMEOUT)
+                    self.qso_timeout.emit(call)
+                    self._resume_cq_if_needed()
+                    return
                 self.qso.timeout_cycles = 0
                 report = self.qso.our_snr or f"R{self._last_snr:+03d}"
                 tx_msg = f"{self.qso.their_call} {self.my_call} {report}"
-                print(f"[QSO] Retry Report: '{tx_msg}' (Gegenstation wiederholt)")
+                print(f"[QSO] Retry Report: '{tx_msg}' "
+                      f"(Gegenstation wiederholt, Cap "
+                      f"{self.qso.rr73_retries}/{MAX_RR73_RETRIES})")
                 self._set_state(QSOState.TX_REPORT)
                 self.send_message.emit(tx_msg)
                 return
             if msg.is_grid:
                 # Gegenstation hat unseren Report nicht empfangen → nochmal senden
+                self.qso.rr73_retries += 1
+                if self.qso.rr73_retries > MAX_RR73_RETRIES:
+                    call = self.qso.their_call
+                    self._dbg.log("TIMEOUT",
+                        f"WAIT_RR73 Grid-Repeat Cap ({MAX_RR73_RETRIES}) "
+                        f"erreicht — Abbruch {call}")
+                    self._set_state(QSOState.TIMEOUT)
+                    self.qso_timeout.emit(call)
+                    self._resume_cq_if_needed()
+                    return
                 self.qso.timeout_cycles = 0
                 report = self.qso.our_snr or f"{self._last_snr:+03d}"
                 tx_msg = f"{self.qso.their_call} {self.my_call} {report}"
-                print(f"[QSO] Grid in WAIT_RR73 (unser Report nicht angekommen) → sende erneut: '{tx_msg}'")
+                print(f"[QSO] Grid in WAIT_RR73 (unser Report nicht "
+                      f"angekommen) → sende erneut: '{tx_msg}' "
+                      f"(Cap {self.qso.rr73_retries}/{MAX_RR73_RETRIES})")
                 self._set_state(QSOState.TX_REPORT)
                 self.send_message.emit(tx_msg)
                 return
