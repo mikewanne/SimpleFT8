@@ -127,7 +127,7 @@ auf Display 2 (Position 1024,0) verschieben. Mike macht von dort
 Fernwartung — App MUSS auf dem mittleren Bildschirm landen.
 
 **Start:** `cd "/Users/mikehammerer/Documents/KI N8N Projekte/FT8/SimpleFT8" && ./venv/bin/python3 main.py`
-**Aktueller Stand:** v0.97.91 (23.05.2026) — FT2-Button versteckt (Standards-Fragmentierung Decodium vs WSJT-X-Improved-FT2), FT2-Code-Pfade intakt; gleichzeitig Band/Modus-Persistenz entfernt (App startet immer 20m+FT8, Mike-Entscheidung). FT2 = Decodium-Standard verifiziert per `core/protocol.py:9`. Tests: 1738.
+**Aktueller Stand:** v0.97.92 (23.05.2026) — QSO-Finish-Button (`btn_advance`) versteckt (Mike: nie gebraucht, FT8-Timeouts fangen stuck-Partner ab), Code/Handler/Signal intakt; HALT bleibt unangetastet. TODO-Pflege: 4 stale OFFEN-Einträge (P52, P56, P60, Bundle H) auf ERLEDIGT umgestellt. Tests: 1741.
 → Vollständige Versionshistorie + Vorgänger-Details: **HISTORY.md** (grep nach Version).
 
 
@@ -505,6 +505,7 @@ Bei Doku-Updates: nicht in CLAUDE.md duplizieren was in TODO.md steht.
 - **`on_cycle_end` vs `on_decoder_finished`:** `on_cycle_end` laeuft am Slot-START (Timer-Pfad, Decoder-unabhaengig) und behandelt: 3-Min-Gesamttimeout, WAIT_73-Tick, CQ_WAIT-Trigger, Counter-Inkrement, Max-Timeout-Check. `on_decoder_finished` laeuft am Slot-ENDE (Decoder-Pfad ueber `cycle_finished`-Signal) und triggert NUR den Retry-Pfad (WAIT_REPORT/WAIT_RR73 mit `timeout_cycles == 1`). Aufspaltung ist kritisch — wer sie zusammenfuehren will: CQ_WAIT bricht bei Decoder-Hang.
 - **FT2-Button versteckt** (`btn_ft2.setVisible(False)` in `control_panel.py`, 2026-05-23) — Standards-Fragmentierung Decodium vs WSJT-X-Improved-FT2. **FT2-Code (decoder/encoder/cycle/protocol) ist intakt** — FT2 = Decodium-Standard (per `core/protocol.py:9`). Reaktivierung: setVisible-Zeile löschen + `freq_frame` zurück auf `grid.addWidget(freq_frame, 0, 4, 1, 3)`.
 - **Band/Modus werden nicht persistiert** (2026-05-23, Mike-Entscheidung) — App startet IMMER mit 20m+FT8 (`DEFAULTS` in `config/settings.py:49`). `load()` forciert die Werte beim Start, `save()` schliesst sie vom JSON-Dump aus. Runtime-Updates per `settings.set('band'/'mode', ...)` funktionieren weiter (`mw_radio.py:405/505`) — nur über App-Neustarts hinweg gibt es kein Merken mehr.
+- **QSO-Finish-Button (`btn_advance`) versteckt** (`control_panel.py:1199`, 2026-05-23) — Mike: nie gebraucht (FT8-Timeouts MAX_STATION_CALLS=5 + 3-Min-Gesamt fangen stuck-Gegenstationen ab). Code/Signal/Handler intakt; `setEnabled`/`setText`-Calls laufen weiter auf hidden Button ohne Wirkung. HALT bleibt — andere Rolle (Sicherheits-Notbremse). Reaktivierung: `setVisible(False)`-Zeile löschen. QHBoxLayout kollabiert hidden Widget automatisch, kein Layout-Shift nötig.
 
 ---
 

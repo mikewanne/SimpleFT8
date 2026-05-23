@@ -1,5 +1,30 @@
 # HANDOFF — SimpleFT8
 
+## Stand 2026-05-23 — v0.97.92 QSO-Finish-Button versteckt + TODO-Pflege
+
+**Aktueller Code-Stand:** v0.97.92, Tests **1741 grün** (+3 neue).
+
+### 🟢 v0.97.92 — QSO-Finish-Button versteckt (analog FT2-Hide)
+
+`btn_advance` („QSO Finish") versteckt — Mike: nie gebraucht, FT8-
+Timeouts fangen stuck-Gegenstationen ohnehin ab. Code/Signal/Handler
+intakt, HALT bleibt unangetastet (andere Rolle = Sicherheits-Notbremse).
+Layout-Bonus: `QHBoxLayout` kollabiert hidden Widget automatisch, kein
+Shift nötig.
+
+**TODO-Pflege mitgemacht:** 4 stale „OFFEN"-Einträge auf ERLEDIGT
+umgestellt (P52, P56, P60, Bundle H — alle laut Memory/git längst
+fertig).
+
+**Workflow:** V1→V2→R1 (DeepSeek V4-pro)→V3→C1-C3, Final-R1 läuft.
+R1-Verdict: „sauber, kein Stolperdraht". Self-Review-Fang beim Test:
+`isHidden()` statt `isVisible()` (letzteres in isolierten Tests ohne
+shown Parent immer False).
+
+**Nächste 1-2 Schritte:** Final-R1 abwarten. Danach offen bleibt:
+Re-Mess-Countdown-Bug, AP-Lite QSO-Abschluss-Erweiterung, P74 UX-Konsoli,
+Multiband-Umsetzung (Konzept fertig). Sonst nichts dringend.
+
 ## Stand 2026-05-23 — v0.97.91 FT2-Button versteckt + Band/Modus-Persistenz raus
 
 **Aktueller Code-Stand:** v0.97.91, Tests **1738 grün** (+4 neue).

@@ -3,6 +3,53 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-23 v0.97.92 — QSO-Finish-Button versteckt + TODO-Pflege
+
+**Hintergrund:** Der „QSO Finish"-Button (`btn_advance`, P1.FORCESEND aus
+v0.95.12, 06.05.2026) war ursprünglich als Workaround für stuck-
+Gegenstationen gedacht — manueller Force-Send des nächsten QSO-Schritts
+(R+Report / RR73 / 73), wenn die FT8-Timeouts zu langsam wären. Mike
+hat ihn **nie gebraucht** — die regulären Timeouts (MAX_STATION_CALLS=5
++ 3-Min-Gesamt) fangen stuck-Partner ohnehin zuverlässig ab.
+
+**Entscheidung Mike 23.05.:** parken statt löschen (analog FT2-Hide
+v0.97.91). Code bleibt vollständig, nur die UI ist weg — Reaktivierung
+trivial, falls der Bedarf irgendwann doch auftaucht.
+
+**Änderungen:**
+- `ui/control_panel.py:1199`: `self.btn_advance.setVisible(False)` mit
+  Reaktivierungs-Kommentar nach `setEnabled(False)`.
+- Layout-Bonus: `adv_row` ist `QHBoxLayout`, Qt kollabiert hidden
+  Widgets automatisch → HALT nimmt die volle Zeile (wirkt sogar
+  prominenter, passt zur Notbrems-Rolle). Kein Layout-Shift nötig
+  (anders als beim FT2-Hide, wo `freq_frame` verschoben werden musste).
+- Code-Pfade unangetastet: Signal `advance_clicked`, Handler `_on_advance`
+  (`mw_qso.py:373`), `setEnabled`-Calls in `mw_radio.py:1224/1790`,
+  `setText`-Calls in `control_panel.py:2165` laufen weiter auf hidden
+  Button ohne Wirkung — R1 (DeepSeek V4-pro) bestätigt: wasserdicht.
+- Neuer Test `tests/test_qso_finish_hidden.py` (3 Tests):
+  `btn_advance.isHidden() is True`, `btn_cancel.isHidden() is False`,
+  Signal/click()-Methode existieren weiter.
+
+**TODO-Pflege (im selben Workflow-Lauf):** 4 stale „OFFEN"-Einträge
+in `TODO.md` auf ERLEDIGT umgestellt — waren laut Memory/git log/HISTORY
+längst fertig:
+- P52 Statistik-Toggle raus (v0.97.41)
+- P56 Gain-Messung pro Band kollabieren (via P80 Unified Gain Store, v0.97.52)
+- P60 User-Stop-Pfade Slot-Abbruch (v0.97.32)
+- Bundle H Bandpilot-Aware Diversity-Klick (v0.97.25)
+
+Body der Einträge bleibt (Kontext nicht verloren), nur Heading + kurzer
+Pointer auf HISTORY/Memory ergänzt.
+
+**Workflow:** V1→V2→R1 (DeepSeek V4-pro)→V3→C1-C3. R1-Verdict: „Sauber.
+Kein Stolperdraht. 1-Zeilen-Änderung unbedenklich." Self-Review-Fang
+beim Schreiben des Tests: `isVisible()` ist in isolierten Tests ohne
+shown Parent-Window IMMER False für alle Widgets — `isHidden()` ist
+das richtige Werkzeug (prüft den explizit gesetzten Hidden-Flag).
+
+**Tests:** 1738 → 1741 grün (+3 neue).
+
 ## 2026-05-23 v0.97.91 — FT2-Button versteckt + Band/Modus-Persistenz raus
 
 **Hintergrund:** FT2-Standards-Landschaft ist fragmentiert (Decodium vs
