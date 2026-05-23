@@ -1,5 +1,34 @@
 # HANDOFF — SimpleFT8
 
+## Stand 2026-05-23 — v0.97.91 FT2-Button versteckt + Band/Modus-Persistenz raus
+
+**Aktueller Code-Stand:** v0.97.91, Tests **1738 grün** (+4 neue).
+
+### 🟢 v0.97.91 — FT2-Button versteckt + Band/Modus-Persistenz entfernt
+
+**FT2 = Decodium-Standard verifiziert** (per `core/protocol.py:9` — 4-GFSK,
+41.667 Baud, Costas, 103 Symbole). Die alte `config/settings.py:12`-Notiz
+„nicht Decodium-kompatibel" war faktisch falsch und ist korrigiert. Mike
+hatte sogar schon ein FT2-QSO erfolgreich geloggt.
+
+**FT2-Button versteckt** (Standards-Fragmentierung Decodium vs WSJT-X-
+Improved-FT2, keine Zeit zum Pflegen). `btn_ft2.setVisible(False)` in
+`control_panel.py` + freq_frame eine Spalte nach links. FT2-Code-Pfade
+(decoder/encoder/cycle/protocol) **intakt** — Reaktivierung trivial.
+
+**Band/Modus-Persistenz entfernt** (Mike-Entscheidung 23.05.) — App
+startet ab sofort immer mit 20m+FT8. `load()` forciert DEFAULTS, `save()`
+schließt band/mode aus. Bewusste UX-Vereinfachung; bisheriges
+„Band-Merken" über Neustarts ist weg.
+
+**Workflow:** V1→V2→R1 (DeepSeek V4-pro)→V3→C1-C4 mit Tests nach jedem
+Commit. R1-Catch: V2-F2 falsch (Spalte 3 hat 15m in Z.1, kollabiert
+nicht) → R1s freq_frame-Shift ist die elegante Lösung. Detail: HISTORY.md.
+
+**Nächste 1-2 Schritte:** Final-R1 (DeepSeek-Review der tatsächlichen
+Commits) steht aus. Multiband.md (Konzept fertig, DeepSeek-empfohlen)
+wartet auf Mike-Entscheidung „Umsetzung jetzt oder später".
+
 ## Stand 2026-05-22 — v0.97.90 AP-Lite Option D (A-Priori-Rückbau)
 
 **Aktueller Code-Stand:** v0.97.90, Tests **1734 grün**.

@@ -127,7 +127,7 @@ auf Display 2 (Position 1024,0) verschieben. Mike macht von dort
 Fernwartung — App MUSS auf dem mittleren Bildschirm landen.
 
 **Start:** `cd "/Users/mikehammerer/Documents/KI N8N Projekte/FT8/SimpleFT8" && ./venv/bin/python3 main.py`
-**Aktueller Stand:** v0.97.90 (22.05.2026) — AP-Lite (P2-Lite) auf A-Priori-Kandidaten-Matching zurückgebaut (Option D): nicht-kohärenter Korrelator + FFT-Frequenzsuche + relativer Margen-Test, rein beratend (Statusleiste `AP = (x)`, persistenter Zähler). Tests: 1734.
+**Aktueller Stand:** v0.97.91 (23.05.2026) — FT2-Button versteckt (Standards-Fragmentierung Decodium vs WSJT-X-Improved-FT2), FT2-Code-Pfade intakt; gleichzeitig Band/Modus-Persistenz entfernt (App startet immer 20m+FT8, Mike-Entscheidung). FT2 = Decodium-Standard verifiziert per `core/protocol.py:9`. Tests: 1738.
 → Vollständige Versionshistorie + Vorgänger-Details: **HISTORY.md** (grep nach Version).
 
 
@@ -503,6 +503,8 @@ Bei Doku-Updates: nicht in CLAUDE.md duplizieren was in TODO.md steht.
 - **v0.75 Auto-Hunt:** `_auto_hunt_timer` ist UNABHAENGIG vom Totmannschalter — Maus/Tastatur reset ihn NICHT (Bot-Tarn-Schutz). Nach jedem Stop ist Pflicht-Restart (User-Klick), kein Auto-Resume in `_reset_presence`. Race-Doppel-Check in `select_next` ist ethische Belt-and-suspenders zur 10-Min-Hard-Cap — NICHT als "redundant" entfernen. `_MAX_ATTEMPTS=3` in `core/auto_hunt.py:45` ist Modul-Konstante OHNE Verwendung in der Klasse (3-Versuche-Logik liegt in `qso_state.py`). `btn_omni_cq` hat aktuell keinen eigenen `clicked`-Handler — OMNI-CQ laeuft weiter ueber bisherige Logik (Phase 2-TODO)
 - **v0.81/v0.82 Decoder-Signal-Reihenfolge (Fix D + Fix E):** Decoder emittet 3 Signale pro Slot in dieser Reihenfolge: `cycle_decoded` (Aggregation in `mw_cycle._on_cycle_decoded`) → pro msg `message_decoded` (state-Wechsel via `on_message_received`) → `cycle_finished` (Slot-Ende-Hook via `_on_cycle_finished` → `qso_sm.on_decoder_finished`). REIHENFOLGE NICHT AENDERN — `on_decoder_finished` MUSS nach allen State-Wechseln laufen (Doppel-Report-Bug v0.80/v0.81). `_assign_slot_parity` in `_on_cycle_decoded` setzt `msg._tx_even` BEVOR `on_message_received` es liest (mw_qso.py:85, :423) — `cycle_decoded` muss vor `message_decoded` bleiben.
 - **`on_cycle_end` vs `on_decoder_finished`:** `on_cycle_end` laeuft am Slot-START (Timer-Pfad, Decoder-unabhaengig) und behandelt: 3-Min-Gesamttimeout, WAIT_73-Tick, CQ_WAIT-Trigger, Counter-Inkrement, Max-Timeout-Check. `on_decoder_finished` laeuft am Slot-ENDE (Decoder-Pfad ueber `cycle_finished`-Signal) und triggert NUR den Retry-Pfad (WAIT_REPORT/WAIT_RR73 mit `timeout_cycles == 1`). Aufspaltung ist kritisch — wer sie zusammenfuehren will: CQ_WAIT bricht bei Decoder-Hang.
+- **FT2-Button versteckt** (`btn_ft2.setVisible(False)` in `control_panel.py`, 2026-05-23) — Standards-Fragmentierung Decodium vs WSJT-X-Improved-FT2. **FT2-Code (decoder/encoder/cycle/protocol) ist intakt** — FT2 = Decodium-Standard (per `core/protocol.py:9`). Reaktivierung: setVisible-Zeile löschen + `freq_frame` zurück auf `grid.addWidget(freq_frame, 0, 4, 1, 3)`.
+- **Band/Modus werden nicht persistiert** (2026-05-23, Mike-Entscheidung) — App startet IMMER mit 20m+FT8 (`DEFAULTS` in `config/settings.py:49`). `load()` forciert die Werte beim Start, `save()` schliesst sie vom JSON-Dump aus. Runtime-Updates per `settings.set('band'/'mode', ...)` funktionieren weiter (`mw_radio.py:405/505`) — nur über App-Neustarts hinweg gibt es kein Merken mehr.
 
 ---
 

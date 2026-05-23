@@ -3,6 +3,50 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-23 v0.97.91 — FT2-Button versteckt + Band/Modus-Persistenz raus
+
+**Hintergrund:** FT2-Standards-Landschaft ist fragmentiert (Decodium vs
+WSJT-X-Improved-FT2, mainstream WSJT-X hat FT2 nicht übernommen), keine
+Zeit zum Pflegen. Mike-Entscheidung 23.05.: FT2-Modus parken, ohne
+Code zu entfernen. Plus: App-Start immer mit 20m+FT8 vereinfacht den
+Lifecycle und verhindert versehentlichen Start im versteckten FT2.
+
+**Klarstellung (Code-Investigation):** SimpleFT8s FT2-Decoder IST
+Decodium-kompatibel (per `core/protocol.py:9` + Parameter-Vergleich:
+4-GFSK, 41.667 Baud, Costas, 103 Symbole = 87+16). Die alte Notiz
+„nicht Decodium-kompatibel, 8-GFSK nötig" in `config/settings.py:12`
+war faktisch falsch und hat Verwirrung gestiftet — Mike hatte sogar
+schon ein FT2-QSO erfolgreich geloggt.
+
+**Änderungen:**
+- `ui/control_panel.py`: `btn_ft2.setVisible(False)` + freq_frame von
+  Grid-Spalte 4 auf 3 verschoben (füllt die freie Spalte). FT2-Code-
+  Pfade (decoder/encoder/cycle/protocol) bleiben null Zeilen angefasst.
+- `config/settings.py`: `load()` forciert Band+Modus auf DEFAULTS
+  (immer 20m FT8), `save()` schließt beide aus dem JSON-Dump aus.
+  Z.12-Kommentar korrigiert (FT2 = Decodium-Standard).
+- 4 neue Tests `tests/test_band_mode_no_persist.py` decken FT2-
+  Spezialfall, Save-Exclude und Runtime-Aktualität ab.
+- CLAUDE.md „Bekannte Fallen" um FT2-Hide-Status + Band/Modus-No-Persist
+  erweitert.
+
+**Bewusste Verhaltensänderung (Mike 23.05.):** Bisher merkte die App
+sich Band+Modus über Neustarts. Ab v0.97.91 startet sie immer mit
+20m+FT8. UX-Regression für Nutzer die das Band-Memory mochten — Mike-
+explizit, ist seine App.
+
+**Reaktivierung FT2-Button:** Eine Zeile `setVisible(False)` in
+`control_panel.py` löschen + freq_frame zurück auf `(0, 4, 1, 3)`.
+FT2-Logik ist intakt geblieben.
+
+**Workflow:** V1→V2→R1 (DeepSeek V4-pro)→V3→C1-C4 mit Tests nach jedem
+Commit. R1-Hauptfund: mein V2-F2 (Spalte kollabiert automatisch) war
+falsch — Spalte 3 enthält in Zeile 1 noch 15m, kollabiert nicht. R1s
+freq_frame-Shift-Lösung ist eleganter (eine Zeile statt komplexer Re-
+Layout).
+
+**Tests:** 1734 → 1738 grün (+4 neue Tests).
+
 ## 2026-05-20 v0.97.71 — P97-Update: Status-Suffix nur bei collapsed
 
 Mike-Klärung 20.05. nach P97-Implementierung: Status-Labels sollen
