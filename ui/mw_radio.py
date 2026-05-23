@@ -1769,6 +1769,107 @@ class RadioMixin:
         dialog.rejected.connect(self._on_dx_tune_rejected)
         dialog.show()
 
+    # ── P74-A (v0.97.94) Pipeline-Helper ──────────────────────────
+
+    def _start_pipeline_for_band_change(self, band: str, scoring: str) -> bool:
+        """P74-A Fall B: konsolidierte TUNE+Gain-Pipeline in EINEM Fenster.
+
+        Ersetzt den 2-Fenster-Pfad (AutoTuneDialog → DXTuneDialog) bei
+        Bandwechsel mit fehlendem Preset + Auto-Gain AN. Wird nur aus
+        `_on_band_changed` gerufen wenn `is_case_b` zutrifft.
+
+        Setzt Pending-Flags wie sonst `_check_diversity_preset` (sonst
+        nimmt `_on_dx_tune_accepted` das falsche Scoring). Lock wird in
+        try/finally gehalten (R1-F3) — bei Konstruktor-Fehler kein
+        permanent gesperrtes UI.
+
+        Returns True bei accept, False bei reject/Fail/Cancel.
+        """
+        from ui.dx_tune_dialog import DXTuneDialog
+        from PySide6.QtWidgets import QDialog
+
+        self._pending_dx_diversity = True
+        self._pending_diversity_scoring = scoring
+        self._set_gain_measure_lock(True)
+
+        try:
+            # DXTuneDialog erwartet scoring_mode "snr" (DX) oder
+            # "stations" (Standard). Mapping wie in `_start_dx_tuning`.
+            gain_scoring = "snr" if scoring == "dx" else "stations"
+            tune_duration_s = self.settings.get("tune_duration_s", 15)
+            dialog = DXTuneDialog(
+                self.radio, band,
+                scoring_mode=gain_scoring,
+                rx_mode=self._rx_mode,
+                parent=self,
+                with_tune_phase=True,
+                tune_duration_s=tune_duration_s,
+                mode=self.settings.mode,
+            )
+            self._dx_tune_dialog = dialog
+            dialog.setWindowFlags(
+                dialog.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
+            dialog.accepted.connect(self._on_dx_tune_accepted)
+            dialog.rejected.connect(self._on_dx_tune_rejected)
+            # exec() blockt bis accept/reject — auf bestehende Slots
+            # passen weiter, der TUNE läuft via _start_dialog_tune_sequence.
+            result_code = dialog.exec()
+            return result_code == QDialog.DialogCode.Accepted
+        except Exception:
+            # R1-F3: Lock + Dialog-Referenz aufräumen wenn Construction
+            # vor dialog.exec() fehlschlägt — sonst hängt UI dauerhaft.
+            self._set_gain_measure_lock(False)
+            self._dx_tune_dialog = None
+            self._pending_dx_diversity = False
+            self._pending_diversity_scoring = None
+            raise
+
+    def _start_dialog_tune_sequence(self, dialog, band: str,
+                                     mode: str, duration_s: int) -> None:
+        """P74-A: Hardware-TUNE-Sequenz für DXTuneDialog im State 'TUNE'.
+
+        Pendant zu `_start_auto_tune_for_band_change` aus mw_tx.py,
+        aber ohne Dialog-Erstellung — der DXTuneDialog ist bereits
+        offen und ruft uns aus `_start_tune_phase()`. Wir setzen den
+        Dialog als `_auto_tune_dialog` (Duck-typing in `_tune_post_swr_check`),
+        starten TUNE-Hardware mit explizitem Token (R1-F2) für den
+        Auto-Stop-Timer.
+        """
+        from PySide6.QtCore import QTimer
+        from config.settings import get_tune_freq_mhz
+
+        if not self.radio.ip:
+            # Ohne Radio sofortiges Fail-Signal — Dialog macht Banner.
+            dialog.auto_tune_done.emit(False, 0.0, 0.0)
+            return
+
+        self._auto_tune_dialog = dialog
+        self._auto_tune_running = True
+        self._fwdpwr_samples.clear()
+        # P54-FIX R1-F2: Cancel-Flag vor Phase A zurücksetzen.
+        self._tune_convergence_cancelled = False
+
+        self._tune_in_progress = True
+        tune_freq = get_tune_freq_mhz(band, mode)
+        self._tune_active = True
+        if tune_freq is not None:
+            self._tune_freq_mhz = tune_freq
+            self.radio.set_frequency(tune_freq)
+        else:
+            self._tune_freq_mhz = self.settings.frequency_mhz
+
+        self.radio.set_tx_antenna("ANT1")  # Hardware-Pflicht (ANT1=TX)
+        self.radio.set_rfpower_direct(10)
+        self.radio.tune_on()
+        print(f"[P74-A] Dialog-TUNE {band} 10 W {duration_s}s "
+              f"(mode={mode})")
+
+        # R1-F2: expliziter Token für Auto-Stop. Ohne Token könnte ein
+        # späterer TUNE oder ein User-Cancel die Stop-Logik überschreiben.
+        self._tune_auto_stop_token = object()
+        _token = self._tune_auto_stop_token
+        QTimer.singleShot(duration_s * 1000, lambda: self._tune_stop(_token))
+
     def _set_gain_measure_lock(self, locked: bool):
         """GUI sperren/entsperren waehrend Diversity-Pipeline (Tune+Gain+Einmessen).
 
