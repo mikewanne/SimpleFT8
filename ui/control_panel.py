@@ -311,6 +311,10 @@ class _ModeBandCard(QFrame):
         grid.addWidget(self.btn_ft8, 0, 1)
         grid.addWidget(self.btn_ft4, 0, 2)
         grid.addWidget(self.btn_ft2, 0, 3)
+        # FT2 versteckt 2026-05-23 (Standards-Fragmentierung Decodium vs
+        # WSJT-X-Improved) — reaktivieren: diese Zeile loeschen + freq_frame
+        # in Zeile 330 zurueck auf (0, 4, 1, 3) setzen.
+        self.btn_ft2.setVisible(False)
 
         freq_frame = QFrame()
         freq_frame.setStyleSheet(
@@ -327,7 +331,10 @@ class _ModeBandCard(QFrame):
         )
         self.freq_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         freq_lay.addWidget(self.freq_label)
-        grid.addWidget(freq_frame, 0, 4, 1, 3)  # span 3 Spalten (= 15m + 17m + 20m)
+        # freq_frame deckt Spalten 3-5 ab (gleiche Breite wie 15m+17m+20m
+        # in Zeile 1). Vorher (0, 4, 1, 3) — verschoben 2026-05-23 nachdem
+        # FT2-Button versteckt wurde, fuellt die freie Spalte 3 in Zeile 0.
+        grid.addWidget(freq_frame, 0, 3, 1, 3)
 
         # Zeile 1: Band + 10m 12m 15m 17m 20m
         lbl_band = QLabel("Band")
