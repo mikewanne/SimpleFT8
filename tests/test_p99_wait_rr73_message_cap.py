@@ -49,15 +49,23 @@ def _make_sm() -> QSOStateMachine:
     return sm
 
 
-# ── T1 — 5× R-Report erlaubt, 6. → TIMEOUT ──────────────────────────
+# ── T1 — 5× R-Report erlaubt, 6. → qso_complete (P100, NICHT mehr Timeout) ──
 
-def test_t1_r_report_cap_5_then_timeout():
-    """DG8DBW-Pfad: Gegenstation sendet wiederholt R-Report."""
+def test_t1_r_report_cap_5_then_partial_log():
+    """DG8DBW-Pfad: Gegenstation sendet wiederholt R-Report.
+
+    P100 (v0.97.96) hat das Verhalten geändert: beim 6. R-Report wird
+    das QSO als COMPLETE geloggt (qso_complete.emit) statt verworfen
+    (qso_timeout.emit). Begründung: R-Report wurde empfangen → wir
+    haben alle Pflicht-Daten → loggen statt verlieren.
+    """
     sm = _make_sm()
     sent: list[str] = []
     timeouts: list[str] = []
+    completes: list = []
     sm.send_message.connect(lambda m: sent.append(m))
     sm.qso_timeout.connect(lambda c: timeouts.append(c))
+    sm.qso_complete.connect(lambda q: completes.append(q))
 
     # 5 R-Reports → 5 advance()-Calls = 5 RR73-Sends
     for i in range(MAX_RR73_RETRIES):
@@ -67,16 +75,19 @@ def test_t1_r_report_cap_5_then_timeout():
         assert sm.qso.rr73_retries == i + 1
     assert len(sent) == MAX_RR73_RETRIES, "5 RR73-Sends erlaubt"
     assert len(timeouts) == 0, "Noch kein Timeout"
+    assert len(completes) == 0, "Noch keine Logs (TX_RR73-Sends laufen "
+    "ohne on_message_sent in Tests — qso_complete wird im Live-Betrieb "
+    "via on_message_sent pro Send gefeuert)"
 
-    # 6. R-Report → Counter > MAX_RR73_RETRIES → TIMEOUT.
-    # `_resume_cq_if_needed` schaltet im Test-Setup (kein CQ-Mode) das
-    # State sofort TIMEOUT → IDLE weiter — wir prüfen primär das
-    # Signal + dass kein weiterer Send rausging.
+    # 6. R-Report → Counter > MAX_RR73_RETRIES → P100-Pfad:
+    # qso_complete statt qso_timeout. State geht TIMEOUT, ADIF loggt.
     sm.state = QSOState.WAIT_RR73
     sm.on_message_received(_make_msg("DA1MHH", "DA1TST", "R-12"))
-    assert len(timeouts) == 1
-    assert timeouts[0] == "DA1TST"
-    assert len(sent) == MAX_RR73_RETRIES, "Kein weiterer Send nach Timeout"
+    assert len(completes) == 1, "P100: qso_complete gefeuert"
+    assert completes[0].their_call == "DA1TST"
+    assert completes[0].their_snr == "R-12", "their_snr aus letztem R-Report"
+    assert len(timeouts) == 0, "P100: KEIN qso_timeout im R-Report-Cap-Pfad"
+    assert len(sent) == MAX_RR73_RETRIES, "Kein weiterer Send"
 
 
 # ── T2 — 5× Plain-Report erlaubt, 6. → TIMEOUT ──────────────────────

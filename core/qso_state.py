@@ -679,12 +679,23 @@ class QSOStateMachine(QObject):
                 # → wie RR73 behandeln (sendet RR73 via advance).
                 self.qso.rr73_retries += 1
                 if self.qso.rr73_retries > MAX_RR73_RETRIES:
+                    # P100 (v0.97.96): R-Report wurde GERADE empfangen
+                    # = QSO inhaltlich komplett (their_call, their_grid,
+                    # our_snr, their_snr alle vorhanden). Statt
+                    # `qso_timeout.emit` → `qso_complete.emit` damit
+                    # ADIF das QSO loggt. Beide Stationen loggen normal
+                    # → QRZ.com/LoTW-Match möglich. Trigger nur in
+                    # is_r_report-Branch (Mike-Kriterium): is_report/
+                    # is_grid haben keinen R-Report-Empfang → kein Log
+                    # gerechtfertigt.
                     call = self.qso.their_call
-                    self._dbg.log("TIMEOUT",
-                        f"WAIT_RR73 R-Report Cap ({MAX_RR73_RETRIES}) "
-                        f"erreicht — Abbruch {call}")
+                    self.qso.their_snr = msg.grid_or_report
+                    self._dbg.log("COMPLETE",
+                        f"P100: R-Report bei Cap ({MAX_RR73_RETRIES}) "
+                        f"empfangen — QSO {call} geloggt (kein RR73-Send)")
+                    self.cq_qso_count += 1  # R1-F1: Konsistenz mit TX_RR73-Pfad
+                    self.qso_complete.emit(self.qso)
                     self._set_state(QSOState.TIMEOUT)
-                    self.qso_timeout.emit(call)
                     self._resume_cq_if_needed()
                     return
                 self.qso.their_snr = msg.grid_or_report
