@@ -70,18 +70,52 @@ System sein, sondern könnte auf den vorhandenen Stores aufsetzen.
 
 ---
 
-## Bänderauswahl & Empfang (geklärt 2026-05-22)
+## Bänderauswahl & Empfang (geklärt 2026-05-22, verfeinert 2026-05-23)
 
 - **Empfang läuft auf beiden gewählten Bändern gleichzeitig** — Slice A
   z.B. dauerhaft 20m, Slice B dauerhaft 15m. Beide laufend dekodiert,
   beide Stationslisten zusammen im RX-Fenster.
-- **Band-Buttons sind Toggles, maximal 2 Bänder gleichzeitig aktiv**
-  (= die 2 Slices des 8400M).
-  - Klick 20m → 20m-Stationen erscheinen.
-  - Klick 15m → 15m-Stationen kommen **zusätzlich** dazu.
-  - Klick auf ein 3. Band (z.B. 30m) bei schon 2 aktiven → man muss
-    erst eines der beiden (20m **oder** 15m) durch **erneuten Klick
-    deaktivieren**, dann ist der Slice frei für 30m.
+
+- **Band-Buttons sind 3-stufige Cycle-Schalter**, maximal 2 Bänder
+  gleichzeitig aktiv (= die 2 Slices des 8400M):
+
+  | Stufe | Bedeutung | Visual |
+  |---|---|---|
+  | **OFF** | nicht empfangen, kein TX | grau/dunkel |
+  | **RX** | wird mitempfangen + dekodiert, kein TX | blau (normal) |
+  | **TX** | empfangen + dekodiert + **CQ/Hunt laufen hier** | blau, kräftig leuchtend |
+
+  **Klick-Zyklus:** OFF → RX → TX → OFF.
+
+- **Constraint: immer genau ein TX-Band.** Wird Band B auf TX gehoben,
+  wird das bisherige TX-Band (A) automatisch auf RX demotet — nicht
+  abgeschaltet, nur „nicht mehr TX". Die Frequenzanzeige springt mit.
+
+- **App-Start:** 20m steht direkt auf TX (= einzige aktive Band).
+
+- **Auto-Promote bei nur einem verbleibenden Band:** Wenn das TX-Band
+  auf OFF gecycled wird und es ist noch ein RX-Band aktiv → das
+  RX-Band promotet automatisch auf TX. Verhindert den unsinnigen
+  „nichts TX-aktiv"-Zustand.
+
+- **Klick auf ein 3. Band bei schon 2 aktiven → ablehnen.** Der User
+  muss erst eines der beiden bewusst auf OFF cyclen, dann ist der
+  Slice frei. **Begründung Mike 23.05.:** nicht riskieren das falsche
+  Band zu verdrängen — vielleicht steht da gerade die Nordkorea-Station,
+  besser explizit deaktivieren als automatisch ersetzen.
+
+- **Beispiel-Durchlauf:**
+  - Start → 20m=TX
+  - Klick 15m → 20m=TX, 15m=RX (beide dekodiert)
+  - Klick 15m → 20m=RX, 15m=TX (Freq-Anzeige hüpft auf 15m,
+    CQ/Hunt läuft jetzt dort)
+  - Klick 15m → 15m=OFF, 20m=TX (Auto-Promote)
+
+- **Warum 3 Stufen statt 2:** löst das Pain-Point „TX-Band wählen ohne
+  vorher eine Station anklicken müssen". CQ und Auto-Hunt können jetzt
+  explizit auf einem Band gestartet werden, indem man dieses auf
+  Stufe TX cycled — keine Krücke „Station klicken nur damit TX-Band
+  umspringt".
 
 ## RX-Fenster — Anzeige & Band-Filter (geklärt 2026-05-22)
 
@@ -382,14 +416,15 @@ parallele Dekodierung nötig.
 2026-05-23 — ursprüngliche Empfehlung „Diversity-vorbehalten" war zu
 restriktiv).
 
+- **OMNI-CQ** im Multiband: läuft auf dem **aktuellen TX-Band** (Band
+  auf Stufe TX im 3-Stufen-Cycle, siehe „Bänderauswahl & Empfang").
+  User wählt das TX-Band explizit per Klick. Alternierende Variante
+  (β: even-A, odd-B) verworfen — zu komplex für KISS.
 - **Auto-Hunt** im Multiband: der Such-Pool umfasst beide aktiven
-  Bänder, jeder Pick führt zum entsprechenden Band-TX (Fall A/B). Die
-  bestehende Cooldown- und Worked-Vermeidung sind band-bezogen — passt
-  ohne Anpassung.
-- **OMNI-CQ** im Multiband (Variante α): läuft auf dem **aktuellen
-  TX-Band**, nicht alternierend. Das TX-Band setzt sich durch die
-  letzte TX-Aktion (Station-Klick oder OMNI-/CQ-Start). Alternierende
-  Variante (β: even-A, odd-B) verworfen — zu komplex für KISS.
+  Bänder, jeder Pick führt zum entsprechenden Band-TX (Fall A/B, plus
+  implizite TX-Band-Promotion analog Station-Klick). Die bestehende
+  Cooldown- und Worked-Vermeidung sind band-bezogen — passt ohne
+  Anpassung.
 
 Es gilt weiter: ANT1 fix, keine Diversity, ein QSO zur Zeit.
 
@@ -408,13 +443,26 @@ State auch nicht persistiert.
 Zeigt das aktuelle TX-Band, aktualisiert sich beim Bandsprung
 (Farbcodierung wie bisher).
 
-**Das ist auch der TX-Band-Indikator in Multiband** — groß, prominent,
-nicht zu übersehen. Die Band-Buttons im RX-Fenster-Filter bleiben
-**reine RX-Toggle** (blau = aktiv, Klick = deaktivieren). Keine Doppel-
-Bedeutung „TX-Wahl" auf dem Band-Button → kein Konflikt mit dem
-Klick-zum-Deaktivieren. Das TX-Band setzt sich automatisch durch die
-letzte TX-Aktion (Station-Klick, CQ-Start, OMNI-Start) — eine separate
-„TX-Band wählen"-Aktion gibt es nicht.
+**Zwei sichtbare TX-Band-Indikatoren in Multiband:**
+- **Frequenzanzeige** — groß, prominent, nicht zu übersehen.
+- **Band-Selector-Button** — das TX-Band leuchtet kräftiger blau als
+  die anderen aktiven Bänder (Stufe TX vs Stufe RX im 3-Stufen-Cycle,
+  siehe „Bänderauswahl & Empfang").
+
+**TX-Band wird gesetzt durch:**
+- **Explizit** per Band-Selector-Cycle (Klick auf RX-Band → TX-Band).
+  Das ist der Hauptweg für CQ/OMNI/Auto-Hunt auf einem Band ohne
+  vorherige Station-Auswahl (verfeinert 23.05.).
+- **Implizit** durch Station-Klick (Klick auf 15m-Station → TX springt
+  auf 15m, bisheriges TX-Band demotet auf RX).
+- **Implizit** durch Auto-Hunt-Pick (analog Station-Klick).
+- **Implizit** durch Auto-Promote, wenn nur noch ein aktives Band
+  übrig ist.
+
+Die **Band-Filter-Buttons** im RX-Fenster-Header (oben neben Freq-
+Filter, siehe „RX-Fenster") sind davon getrennt — sie steuern nur die
+DISPLAY-Sichtbarkeit der Stationen in der Liste, nicht den RX/TX-State
+der Bänder selbst.
 
 ### Kalibrier-Dateien ✅
 Multiband nutzt **dieselben Gain- und Tune-Dateien wie der Normal-
