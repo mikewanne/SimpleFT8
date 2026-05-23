@@ -1,8 +1,38 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-23 — v0.97.97 P102 Antennen-Kachel-Status-Sync (Mike-Field-Bug live)
+## Stand 2026-05-23 — v0.97.98 P113 Stale-Gain-Warning bei Bandwechsel (autonom)
 
-**Aktueller Code-Stand:** v0.97.97, Tests **1770 grün** (+4 neue).
+**Aktueller Code-Stand:** v0.97.98, Tests **1779 grün** (+9 neue).
+
+### 🟢 v0.97.98 — P113 Stale-Gain-Warning bei Bandwechsel (autonom)
+
+Mike-Wunsch nach P102: P74-B Phase 1 (DeepSeek-Brainstorm 18.05.)
+autonom durchziehen. Bei Bandwechsel dezenter Statusbar-Toast wenn
+Gain-Kalibrierung > 14 Tage alt.
+
+**Warum zusätzlich zum bestehenden 6h-Label:** dx_info zeigt schon
+„Re-Mess nötig" ab 6h, aber ohne konkretes Alter. Wenn User wieder-
+holt „Vorhandene Daten verwenden" klickt, wird Preset Wochen alt —
+P113 macht das prominent („17 Tage alt") in der Statusbar.
+
+**Architektur (KISS):** neue Konstante `STALE_GAIN_WARNING_DAYS = 14`
+in `core/preset_store.py:45`, neue Methode `_check_stale_gain_warning`
+in `ui/mw_radio.py:1428`, 2 Aufrufe in `_on_band_changed` (Diversity-
+Pfad vor return + Normal-Pfad nach `_update_statusbar`).
+
+**Workflow voll durch:** V1→V2 (7 Findings, Integer-Division-Catch)
+→R1 V4-pro (9 Findings, 1 ROT R1-F2 „strikt >14 Tage" Korrektur
+eingebaut, sonst alles bestätigt) →V3 →Code (3 Files + 9 Tests)
+→Final-R1 ✅ „PUSH FREIGEGEBEN" 0 Nachbesserung.
+
+**V4-pro 45-Cycle-Bilanz:** 0 Halluzinationen.
+
+Tests 1770 → 1779. Field-Test ohne Radio testbar (presets.json
+manuell altern lassen).
+
+**Nächste 1-2 Schritte:** P74-B Phase 2 (Cross-Band-Gain-Interpolation)
+ist Folge-Ticket. Spec aus DeepSeek 18.05. fertig — kann autonom nach
+gleichem Muster durchgezogen werden.
 
 ### 🟢 v0.97.97 — P102 Antennen-Kachel-Status-Sync nach User-Klick
 

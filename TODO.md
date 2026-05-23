@@ -1,6 +1,29 @@
-# SimpleFT8 TODO — Stand 23.05.2026 (v0.97.97, P102 erledigt)
+# SimpleFT8 TODO — Stand 23.05.2026 (v0.97.98, P113 erledigt)
 
 ---
+
+## ✅ P113 Stale-Gain-Warning bei Bandwechsel ERLEDIGT (v0.97.98, 23.05.2026 autonom)
+
+Mike-Wunsch nach P102: P74-B Phase 1 aus DeepSeek-Brainstorm 18.05.
+Bei Bandwechsel dezenter Statusbar-Toast wenn Gain > 14 Tage alt.
+
+**Architektur:** Neue Konstante `STALE_GAIN_WARNING_DAYS = 14` in
+`core/preset_store.py:45`, neue Methode `_check_stale_gain_warning`
+in `ui/mw_radio.py:1428` direkt nach `_assess_gain`. 2 Aufrufe in
+`_on_band_changed`: Diversity-Pfad vor return + Normal-Pfad NACH
+`_update_statusbar()` (sonst Toast überschrieben).
+
+**Workflow voll durch:** V1→V2 (7 Findings)→R1 V4-pro (9 Findings,
+1 ROT R1-F2 „strikt >14 Tage" eingebaut: `days <= 14: return` →
+Toast ab Tag 15)→V3→Code→Final-R1 ✅. V4-pro 45-Cycle: 0
+Halluzinationen. Tests 1770→1779 (+9). Details: HISTORY.md v0.97.98.
+
+**Field-Test ohne Radio:** `~/.simpleft8/kalibrierung/presets.json`
+manuell altern (`gain_timestamp = time.time() - 16*86400`), App
+starten, Band wechseln → Toast 15s in Statusbar.
+
+**Folge:** P74-B Phase 2 (Cross-Band-Gain-Interpolation) offen,
+Spec aus DeepSeek 18.05. fertig — separate Session.
 
 ## ✅ P102 Antennen-Kachel-Status-Sync ERLEDIGT (v0.97.97, 23.05.2026)
 

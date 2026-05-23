@@ -13619,3 +13619,79 @@ Spec-Diskussion falls Mike es als störend empfindet.
 **Field-Test:** Mike kann sofort verifizieren — Kachel ein- und
 ausklappen während Normal-Mode, Suffix muss „— Normal" zeigen. Auch
 nach Diversity→Normal-Wechsel.
+
+## 2026-05-23 v0.97.98 — P113 Stale-Gain-Warning bei Bandwechsel
+
+Mike-Wunsch 23.05.: P74-B Phase 1 aus DeepSeek-Brainstorm 18.05.
+autonom durchziehen. Bei Bandwechsel prominenter Statusbar-Hinweis
+wenn Gain-Kalibrierung > 14 Tage alt.
+
+**Warum zusaetzlich zum bestehenden 6h-Label:**
+
+Es gibt schon das dx_info-Label (P83 v0.97.54) das „Re-Mess noetig"
+zeigt sobald Gain >6h alt ist. Wenn Mike im Diversity-Re-Mess-Dialog
+wiederholt „Vorhandene Daten verwenden" klickt, wird der Preset
+Wochen/Monate alt — das Label zeigt aber nur „Re-Mess noetig" ohne
+konkretes Alter. P113 macht das Alter prominent in der Statusbar
+(„17 Tage alt") fuer den User-Reminder.
+
+**Architektur (KISS, minimal):**
+
+- Neue Konstante `STALE_GAIN_WARNING_DAYS = 14` in
+  `core/preset_store.py:45` (neben `GAIN_VALIDITY_SECONDS`)
+- Neue Methode `_check_stale_gain_warning(band)` in
+  `ui/mw_radio.py:1428` (direkt nach `_assess_gain`)
+- 2 Aufrufe in `_on_band_changed`: Diversity-Pfad (vor `return`
+  Z. 713) + Normal-Pfad (nach `_update_statusbar()` Z. 718)
+- Toast via `self.statusBar().showMessage(msg, 15000)` mit try/except
+  (Fail-silent fuer Smoke-Tests)
+
+**Schwellen-Logik (R1-F2 Korrektur):**
+
+V1+V2 hatten `days >= 14` als Schwelle. R1 verwies auf Mike-Spec
+„strikt > 14 Tage" → Korrektur auf `days <= 14: return` was
+`days >= 15` impliziert (Toast greift ab Tag 15). T2 testet exakt
+diesen Edge-Case (14.5 Tage → days=14 // 1440 → kein Toast).
+
+**Bewusst NICHT umgesetzt:**
+
+- Dedup-Flag „pro Session nur einmal pro Band" (R1-F4 KISS: kann
+  spaeter ergaenzt werden wenn Mike es nervig findet, aber Spec
+  beschreibt Bandwechsel als Trigger ohne Einschraenkung)
+- Settings-Konfigurierbarkeit der Schwelle (R1-F5: Mike-Spec FEST)
+- Logik-Auslagerung in `PresetStore.get_stale_warning()` (R1-F7:
+  Statusbar-Call ist UI, KISS bleibt in mw_radio)
+
+**Workflow voll durch:**
+
+- V1: Bug-/Feature-Lokalisierung + 1-Methoden-Skizze
+- V2 Self-Review: 7 Findings (Ticket P113, Race-Check, KISS-Fragen,
+  F4 Integer-Division statt Banker's-Rounding)
+- R1 V4-pro: 9 Findings, 1 Korrektur ROT/ORANGE (F2 strikt >14)
+  eingebaut, sonst alles bestaetigt
+- V3 → Code: 3 Files + 9 Tests
+- Final-R1 V4-pro: ✅ „PUSH FREIGEGEBEN" 0 Nachbesserung
+
+**Tests:** 1770 → 1779 (+9). Neue in
+`tests/test_p113_stale_gain_warning.py`:
+
+- T1 15 Tage alt → Toast „⚠ Gain-Kalibrierung 20M 15 Tage alt..."
+- T2 14 Tage exakt → KEIN Toast (R1-F2 Schwellen-Verifikation)
+- T3 13 Tage → KEIN Toast
+- T4 30 Tage → Toast „30 Tage"
+- T5 missing Preset → KEIN Toast (age_min=None)
+- T6 ts=0.0 Migration-Marker → KEIN Toast
+- T7 frisch 1 Tag → KEIN Toast
+- T8 Statusbar-Timeout = 15000ms (15s auto-clear)
+- T9 Statusbar-Exception swallowed (Fail-silent fuer Smoke-Tests)
+
+**V4-pro 45-Cycle-Bilanz:** 0 Halluzinationen.
+
+**Field-Test:** ohne Radio testbar. Preset >14 Tage in
+`~/.simpleft8/kalibrierung/presets.json` manuell altern lassen
+(`gain_timestamp` auf time.time() - 16*86400 setzen), App starten,
+Band wechseln → Toast „⚠ Gain-Kalibrierung XXM 16 Tage alt —
+KALIBRIEREN empfohlen" 15s in Statusbar.
+
+**Folge-Ticket:** P74-B Phase 2 (Cross-Band-Gain-Interpolation)
+bleibt offen — separate Session.
