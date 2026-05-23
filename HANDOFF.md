@@ -1,5 +1,29 @@
 # HANDOFF — SimpleFT8
 
+## Stand 2026-05-23 — v0.97.93 Re-Mess-Countdown-Anzeige refresht pro Slot
+
+**Aktueller Code-Stand:** v0.97.93, Tests **1744 grün** (+3 neue).
+
+### 🟢 v0.97.93 — Re-Mess-Countdown-Bug-Fix
+
+Mikes „3h hängende Anzeige"-Bug vom 22.05. ist gefixt. Das `dx_info`-
+Label updated sich jetzt **pro Slot** statt nur bei User-Aktionen.
+1-Zeilen-Fix im `_on_cycle_finished`-Hook (`ui/mw_cycle.py`), Pattern
+„State erst, dann Anzeige".
+
+Verifiziert: `_format_gain_status` cache-frei (Live-`time.time()`),
+Funktion leichtgewichtig (Format-String + setText, kein I/O). Hook
+`_on_cycle_finished` feuert immer, auch bei leerem Slot. Bestehende
+10 Action-Trigger unverändert — Pro-Slot-Aufruf ergänzt, ersetzt nicht.
+
+**Workflow:** V1→V2→R1 (DeepSeek V4-pro, „sauberster Weg, keine
+Einwände") →V3→C1-C3→Final-R1.
+
+**Nächste 1-2 Schritte:** Final-R1 abwarten. Sonst noch offen aus den
+echten Wishlist-Items: AP-Lite QSO-Abschluss (Konzept, wartet auf
+Feld-Beobachtung), P74 UX-Konsoli, Multiband-Umsetzung (Konzept fertig),
+P64 Sim-Modus, P65 Light-Mode. Sonst nichts dringend.
+
 ## Stand 2026-05-23 — v0.97.92 QSO-Finish-Button versteckt + TODO-Pflege
 
 **Aktueller Code-Stand:** v0.97.92, Tests **1741 grün** (+3 neue).

@@ -3,6 +3,44 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-23 v0.97.93 — Re-Mess-Countdown-Anzeige refresht pro Slot
+
+**Bug (Mike 22.05.2026):** Das `dx_info`-Label „noch X Stunden bis
+Re-Mess" updated sich nur bei User-Aktionen (Band-/Modus-Wechsel,
+Diversity-Toggle, KALIBRIEREN-Klick). Wenn Mike in einem Modus sitzt,
+bleibt die Zahl stehen — Symptom: Diversity „3h" → Moduswechsel →
+„1h" (Wechsel erzwingt erst die Neuberechnung).
+
+**Root Cause:** `_update_gain_status_display()` in
+`ui/mw_radio.py:1454` hatte 10 Aufrufer — alle aktions-getriggert,
+kein Timer, kein Cycle-Hook.
+
+**Fix (1 Zeile + Kommentar):** In `ui/mw_cycle.py:_on_cycle_finished`
+nach `self.qso_sm.on_decoder_finished()` einen Aufruf
+`self._update_gain_status_display()` ergänzt. Pattern „State erst,
+dann Anzeige". Bestehende 10 Action-Trigger unverändert — sie liefern
+weiter sofortiges Feedback nach Klick (Pro-Slot-Aufruf ergänzt,
+ersetzt nicht).
+
+**Verifiziert:**
+- `_format_gain_status` (`mw_radio.py:1390`) ist cache-frei — Z.1428
+  `time.time()` live, keine Invalidierung nötig.
+- Funktion ist leichtgewichtig: Format-String + `setText`, kein I/O —
+  pro Slot (auch bei FT2 3.8 s) harmlos.
+- Hook-Wahl: `_on_cycle_finished` feuert immer (auch bei leerem Slot),
+  `_on_cycle_decoded` hat denselben `rx_active`-Guard. Beide würden
+  funktionieren, `_on_cycle_finished` ist semantisch sauberer (Slot-Ende).
+
+**Workflow:** V1→V2→R1 (DeepSeek V4-pro) →V3→C1-C3 →Final-R1. R1-Verdict:
+„1-Zeilen-Fix im Cycle-Hook ist der sauberste Weg, keine Einwände."
+
+**Neuer Test** `tests/test_remess_countdown_refresh.py` (3 Tests):
+- `rx_active=True` → `_update_gain_status_display` wird aufgerufen.
+- `rx_active=False` → Guard greift, kein Refresh + kein State-Update.
+- Call-Order: `on_decoder_finished` VOR `_update_gain_status_display`.
+
+**Tests:** 1741 → 1744 grün (+3).
+
 ## 2026-05-23 v0.97.92 — QSO-Finish-Button versteckt + TODO-Pflege
 
 **Hintergrund:** Der „QSO Finish"-Button (`btn_advance`, P1.FORCESEND aus

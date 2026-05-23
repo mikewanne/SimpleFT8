@@ -127,7 +127,7 @@ auf Display 2 (Position 1024,0) verschieben. Mike macht von dort
 Fernwartung — App MUSS auf dem mittleren Bildschirm landen.
 
 **Start:** `cd "/Users/mikehammerer/Documents/KI N8N Projekte/FT8/SimpleFT8" && ./venv/bin/python3 main.py`
-**Aktueller Stand:** v0.97.92 (23.05.2026) — QSO-Finish-Button (`btn_advance`) versteckt (Mike: nie gebraucht, FT8-Timeouts fangen stuck-Partner ab), Code/Handler/Signal intakt; HALT bleibt unangetastet. TODO-Pflege: 4 stale OFFEN-Einträge (P52, P56, P60, Bundle H) auf ERLEDIGT umgestellt. Tests: 1741.
+**Aktueller Stand:** v0.97.93 (23.05.2026) — Re-Mess-Countdown-Anzeige updated sich jetzt pro Slot (`_on_cycle_finished` ruft `_update_gain_status_display`). Vorher nur aktions-getriggert — Display blieb stale während Stunden vergingen. Tests: 1744.
 → Vollständige Versionshistorie + Vorgänger-Details: **HISTORY.md** (grep nach Version).
 
 
