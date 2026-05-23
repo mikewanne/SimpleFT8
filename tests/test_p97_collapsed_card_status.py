@@ -131,3 +131,46 @@ def test_t12_radio_status_visible_only_when_collapsed(panel):
     panel._radio_card.set_collapsed(True)
     assert not panel._radio_card_status_label.isHidden(), (
         "Eingeklappte Kachel: Radio-Status darf NICHT hidden sein")
+
+
+# ── P102 (23.05.2026, v0.97.97): User-Klick-Pfad-Sync ───────────────
+#
+# Mike-Field-Bug 23.05.2026: NORMAL aktiv, Kachel eingeklappt zeigt
+# faelschlich „— Diversity Standard". Ursache: `_on_rx_mode_clicked`
+# (User-Klick-Pfad) hat im Gegensatz zu `set_rx_mode` (programmatischer
+# Pfad, Z. 1725) keinen `_refresh_antenna_status_label()`-Aufruf — Label
+# blieb stale auf letztem `update_diversity_ratio`-Wert.
+
+
+def test_t0_click_normal_when_already_normal_no_crash(panel):
+    """P102: Early-Return-Pfad — Klick NORMAL bei _current_rx_mode='normal'
+    darf nicht crashen, Label bleibt 'Normal'."""
+    assert panel._current_rx_mode == "normal"
+    panel._on_rx_mode_clicked("normal")
+    assert panel._antenne_card_status_label.text() == "— Normal"
+
+
+def test_t13_click_diversity_updates_label_immediately(panel):
+    """P102: User-Klick DIVERSITY aktualisiert Label sofort
+    (vorher nur via naechsten Cycle ueber update_diversity_ratio)."""
+    panel._on_rx_mode_clicked("diversity")
+    assert panel._antenne_card_status_label.text() == "— Diversity Standard"
+
+
+def test_t14_click_back_to_normal_updates_label(panel):
+    """P102: Reproduktion Mike-Bug 23.05.2026 — Klick Diversity, dann
+    Klick Normal: Label muss 'Normal' zeigen (vorher blieb stale)."""
+    panel._on_rx_mode_clicked("diversity")
+    panel._on_rx_mode_clicked("normal")
+    assert panel._antenne_card_status_label.text() == "— Normal"
+
+
+def test_t15_click_back_to_normal_after_dx_scoring(panel):
+    """P102 Edge: nach Diversity DX scoring → Klick Normal muss Label
+    auf 'Normal' setzen (auch wenn _current_scoring_mode noch 'dx' ist).
+    Der Refresh-Helper liest bei rx_mode='normal' den scoring gar nicht."""
+    panel._on_rx_mode_clicked("diversity")
+    panel.update_diversity_ratio("70:30", scoring_mode="dx")
+    assert panel._antenne_card_status_label.text() == "— Diversity DX"
+    panel._on_rx_mode_clicked("normal")
+    assert panel._antenne_card_status_label.text() == "— Normal"

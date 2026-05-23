@@ -1695,6 +1695,7 @@ class ControlPanel(QWidget):
         if mode != "diversity":
             self.dx_info.setText("")
         self.rx_mode_changed.emit(mode)
+        self._refresh_antenna_status_label()  # P102: Sync fuer eingeklappte Kachel
 
     def _apply_rx_mode_visibility(self, is_div: bool):
         """UI-Elemente fuer den jeweiligen Modus ein-/ausblenden.
