@@ -52,7 +52,10 @@ def test_kalibrieren_diversity_standard_full_pipeline():
     RadioMixin._handle_dx_tuning(fake_self)
     assert fake_self._pending_dx_diversity is True
     assert fake_self._pending_diversity_scoring == "normal"
-    fake_self._start_dx_tuning.assert_called_once_with(scoring_mode="stations")
+    # P74-A: with_tune_phase aus settings.get('tuner_present') — MagicMock
+    # ist truthy, also True übergeben.
+    fake_self._start_dx_tuning.assert_called_once_with(
+        scoring_mode="stations", with_tune_phase=True)
 
 
 def test_kalibrieren_diversity_dx_full_pipeline():
@@ -62,7 +65,10 @@ def test_kalibrieren_diversity_dx_full_pipeline():
     RadioMixin._handle_dx_tuning(fake_self)
     assert fake_self._pending_dx_diversity is True
     assert fake_self._pending_diversity_scoring == "dx"
-    fake_self._start_dx_tuning.assert_called_once_with(scoring_mode="snr")
+    # P74-A: with_tune_phase aus settings.get('tuner_present') — MagicMock
+    # ist truthy, also True übergeben.
+    fake_self._start_dx_tuning.assert_called_once_with(
+        scoring_mode="snr", with_tune_phase=True)
 
 
 # ── Cancel-Pfad ─────────────────────────────────────────────────────────────

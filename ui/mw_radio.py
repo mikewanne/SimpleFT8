@@ -1594,9 +1594,14 @@ class RadioMixin:
         self.statusBar().showMessage(
             "TX gestoppt — Gain-Messung startet in 1s ...", 1500)
         gain_scoring = "snr" if scoring == "dx" else "stations"
+        # P74-A: TUNE-Phase wandert in DXTuneDialog wenn Tuner präsent.
+        # Sonst Fallback auf alten Pfad (Sub-Toggle, kein Hardware-TUNE).
+        with_tune_phase = bool(self.settings.get("tuner_present", True))
         QTimer.singleShot(
             1000,
-            lambda: self._start_dx_tuning(scoring_mode=gain_scoring))
+            lambda: self._start_dx_tuning(
+                scoring_mode=gain_scoring,
+                with_tune_phase=with_tune_phase))
         self._update_statusbar()
 
     def _handle_dx_tuning(self):
@@ -1628,7 +1633,10 @@ class RadioMixin:
         self._pending_diversity_scoring = scoring
         print(f"[Kalibrierung] Diversity-Pipeline ({scoring.upper()}): "
               f"Phase 2 Gain + Phase 3 Ratio")
-        self._start_dx_tuning(scoring_mode=gain_scoring)
+        # P74-A: TUNE-Phase in DXTuneDialog wenn Tuner vorhanden.
+        with_tune_phase = bool(self.settings.get("tuner_present", True))
+        self._start_dx_tuning(scoring_mode=gain_scoring,
+                              with_tune_phase=with_tune_phase)
 
     def _start_tune_only(self, after_tune_callback=None) -> None:
         """TUNE allein — fuer Bandwechsel mit Cache-"Weiter"-Pfad.
@@ -1673,7 +1681,8 @@ class RadioMixin:
 
         QTimer.singleShot(3000, _after_tune)
 
-    def _start_dx_tuning(self, scoring_mode: str = "snr"):
+    def _start_dx_tuning(self, scoring_mode: str = "snr",
+                          with_tune_phase: bool = False):
         """Diversity Pipeline: TUNE (automatisch) → Gain-Messung → Einmessen.
 
         P63 (v0.97.36):
@@ -1682,6 +1691,13 @@ class RadioMixin:
         - AC11: Auto-TUNE-Fehler-Pfad ruft `_set_gain_measure_lock(False)`
           + setzt Marker (R1-F2)
         - AC13: explizites `set_tx_antenna("ANT1")` vor Auto-TUNE (HW-Pflicht)
+
+        P74-A (v0.97.94): `with_tune_phase=True` verlagert die Hardware-
+        TUNE-Phase in den DXTuneDialog (State 'TUNE' im Dialog selbst).
+        Die separaten 3 s vorab + SWR-bad-QMessageBox entfallen — der
+        Dialog zeigt Status + Banner intern. RX-Cleanup-Zeilen (Stations-
+        Tabellen leeren) laufen weiter, nur die TUNE-Hardware-Aufrufe
+        werden in den Dialog verschoben.
         """
         import time as _time
         self._stats_warmup_cycles = 99999  # Blockiert bis nach Einmessen+Warmup
@@ -1714,6 +1730,16 @@ class RadioMixin:
         tune_power = self.settings.get("tune_power", 10)
         swr_limit  = self.settings.get("swr_limit", 3.0)
         tuner_present = self.settings.get("tuner_present", True)
+
+        # P74-A: TUNE-Phase übernimmt der DXTuneDialog selbst — RX-
+        # Cleanup hier vorab, dann direkt Dialog öffnen ohne separaten
+        # 3-s-TUNE-Block und ohne QMessageBox-Failpfad.
+        if with_tune_phase and self.radio.ip and tuner_present:
+            self._normal_stations = {}
+            self._diversity_stations = {}
+            self.rx_panel.table.setRowCount(0)
+            self._open_dx_tune_dialog(with_tune_phase=True)
+            return
 
         # P63 AC9/AC13: Auto-TUNE nur wenn Radio verbunden UND Tuner an
         if self.radio.ip and tuner_present:
@@ -1755,7 +1781,7 @@ class RadioMixin:
                 self.radio.set_power(self.settings.get("power_preset", 15))
             self._open_dx_tune_dialog()
 
-    def _open_dx_tune_dialog(self):
+    def _open_dx_tune_dialog(self, with_tune_phase: bool = False):
         """DX Tune Dialog oeffnen — NICHT-MODAL, immer im Vordergrund, GUI gesperrt.
 
         P75 (v0.97.48): Wenn der Auto-TUNE bei Bandwechsel gerade
@@ -1763,6 +1789,11 @@ class RadioMixin:
         DXTuneDialog zeigt Header-Banner als visueller Übergang
         Phase 1 (TUNE) → Phase 2 (Gain-Messung). Mike-Spec „ein Fenster
         was erst die aktion und das beenden anzeigt".
+
+        P74-A (v0.97.94): `with_tune_phase=True` aktiviert State 'TUNE'
+        im Dialog selbst (vor Phase 2). Banner würde duplizieren —
+        Dialog setzt `prev_tune_swr=None` intern. Dialog ruft
+        `_start_dialog_tune_sequence` aus seinem Constructor.
         """
         # Letzte Sicherheitspruefung: PTT definitiv AUS
         if self.radio.ip:
@@ -1789,6 +1820,9 @@ class RadioMixin:
             self.radio, band, scoring_mode=scoring,
             rx_mode=self._rx_mode, parent=self,
             prev_tune_swr=prev_swr,
+            with_tune_phase=with_tune_phase,
+            tune_duration_s=self.settings.get("tune_duration_s", 15),
+            mode=self.settings.mode,
         )
         self._dx_tune_dialog = dialog
 

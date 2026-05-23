@@ -171,7 +171,10 @@ def test_t6b_handle_dx_tuning_diversity_standard():
 
     RadioMixin._handle_dx_tuning(obj)
 
-    obj._start_dx_tuning.assert_called_once_with(scoring_mode="stations")
+    # P74-A: with_tune_phase aus settings.get('tuner_present') —
+    # MagicMock liefert truthy, also True übergeben.
+    obj._start_dx_tuning.assert_called_once_with(
+        scoring_mode="stations", with_tune_phase=True)
     assert obj._pending_dx_diversity is True
     assert obj._pending_diversity_scoring == "normal"
 
@@ -192,6 +195,9 @@ def test_t6c_handle_dx_tuning_diversity_dx():
 
     RadioMixin._handle_dx_tuning(obj)
 
-    obj._start_dx_tuning.assert_called_once_with(scoring_mode="snr")
+    # P74-A: with_tune_phase aus settings.get('tuner_present') —
+    # MagicMock liefert truthy, also True übergeben.
+    obj._start_dx_tuning.assert_called_once_with(
+        scoring_mode="snr", with_tune_phase=True)
     assert obj._pending_dx_diversity is True
     assert obj._pending_diversity_scoring == "dx"
