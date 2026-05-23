@@ -13547,3 +13547,75 @@ Autonom durchgezogen während Mike weg — analog P82/P99.
 cq_qso_count-Konsistenz und Log-Kategorie waren keine Architektur-
 Fehler, aber für Field-Test-Diagnose und Stats-Konsistenz wichtig.
 V4-pro 43-Cycle-Bilanz: 0 Halluzinationen.
+
+## 2026-05-23 v0.97.97 — P102 Antennen-Kachel-Status-Sync nach User-Klick
+
+Mike-Field-Bug 23.05.2026 (live während Session):
+
+> „Bin gerade auf 15 Meter Normal mit einer Antenne. Wenn ich die Kachel
+> einklappe um mehr Übersicht zu haben, zeigt er mir Diversity Standard.
+> Wenn ich Kachel aufmache aber Normal, sind auch nur ANT1 im
+> Empfangsfenster zu sehen, und auch keine 50:50-Anzeige, also ist Normal
+> auch in Betrieb."
+
+App lief tatsächlich Normal. Aufgeklappte Kachel zeigte das korrekt
+(NORMAL-Button aktiv, Diversity-Widget unsichtbar). Eingeklappte Kachel
+zeigte fälschlich „— Diversity Standard" im Header-Status-Suffix.
+
+**Root-Cause (`ui/control_panel.py`):** Zwei Pfade setzen den RX-Mode:
+- `set_rx_mode` (programmatisch, Z. 1711-1725) — ruft am Ende
+  `_refresh_antenna_status_label()` (Z. 1725) ✓
+- `_on_rx_mode_clicked` (User-Klick-Handler, Z. 1675-1697) — ruft den
+  Refresh **NICHT** auf → Label blieb auf dem letzten Wert den der
+  Cycle-Loop via `update_diversity_ratio` gesetzt hatte.
+
+Im Normal-Mode läuft `update_diversity_ratio` gar nicht, also wird das
+Label nach dem User-Klick „Diversity → Normal" nie aktualisiert — bleibt
+auf „— Diversity Standard" stehen.
+
+**Fix (`ui/control_panel.py:1697`):** Eine Zeile nach
+`self.rx_mode_changed.emit(mode)` einfügen:
+```python
+self._refresh_antenna_status_label()  # P102: Sync fuer eingeklappte Kachel
+```
+
+Damit ist Symmetrie zu `set_rx_mode` (Z. 1725) hergestellt.
+
+**Warum seit P97 (v0.97.69, 20.05.2026) unentdeckt:** Die 12 P97-Tests
+in `tests/test_p97_collapsed_card_status.py` nutzen **alle** den
+`set_rx_mode`-Pfad (programmatisch). Der User-Klick-Pfad
+`_on_rx_mode_clicked` war ungetestet. Test-Coverage-Lücke gefixt: 4
+neue Tests (T0/T13/T14/T15) decken den Klick-Pfad inkl. Mike-Bug-
+Reproduktion + DX-scoring-Edge-Case ab.
+
+**Bewusst NICHT geändert:** Sub-Toggle-Pfad
+(`mode == _current_rx_mode == "diversity"` → 2. Klick triggert
+`diversity_subtoggle_requested.emit()` für Std↔DX). Der Early-Return
+in Z. 1682-1685 greift davor. Die Sub-Toggle-Latenz (Label zeigt nach
+Klick noch alten scoring bis zum nächsten Cycle, max. 15s) ist eine
+andere Logik-Schicht (mw_radio) und nicht der gemeldete Bug. Separate
+Spec-Diskussion falls Mike es als störend empfindet.
+
+**Workflow voll durch:**
+- V1: Bug-Lokalisierung + 1-Zeilen-Fix-Vorschlag
+- V2 Self-Review: 4 Findings (P101 schon vergeben → P102, P97-Tests
+  decken Klick-Pfad nicht ab, 3 neue Tests, Sub-Toggle-Latenz scope-fern)
+- R1 V4-pro: ✅ Freigabe + Empfehlung T0 (Early-Return-Pfad absichern)
+- V3: T0 als 4. Test übernommen
+- Code: 1 Edit in control_panel.py + 4 Tests + Version-Bump
+- Final-R1 V4-pro: ✅ „PUSH FREIGEGEBEN", 0 Nachbesserung
+
+**Tests:** 1766 → 1770 (+4). Neue in
+`tests/test_p97_collapsed_card_status.py`:
+- T0 Early-Return: Klick NORMAL bei _current_rx_mode='normal' kein Crash
+- T13 Klick DIVERSITY → Label sofort „— Diversity Standard"
+- T14 Mike-Bug-Repro: DIVERSITY → NORMAL → Label „— Normal" (war vorher
+  stale)
+- T15 Edge: nach DX-scoring → NORMAL → Label „— Normal" (Refresh-Helper
+  liest scoring bei rx_mode='normal' gar nicht)
+
+**V4-pro 44-Cycle-Bilanz:** 0 Halluzinationen.
+
+**Field-Test:** Mike kann sofort verifizieren — Kachel ein- und
+ausklappen während Normal-Mode, Suffix muss „— Normal" zeigen. Auch
+nach Diversity→Normal-Wechsel.

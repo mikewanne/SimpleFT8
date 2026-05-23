@@ -1,6 +1,28 @@
-# SimpleFT8 TODO — Stand 23.05.2026 (v0.97.96, P100 erledigt)
+# SimpleFT8 TODO — Stand 23.05.2026 (v0.97.97, P102 erledigt)
 
 ---
+
+## ✅ P102 Antennen-Kachel-Status-Sync ERLEDIGT (v0.97.97, 23.05.2026)
+
+Mike-Field-Bug 23.05. (live): NORMAL aktiv, Kachel eingeklappt zeigt
+fälschlich „— Diversity Standard". Aufgeklappte Sicht war korrekt,
+nur das Header-Status-Suffix blieb stale.
+
+**Ursache:** `_on_rx_mode_clicked` (User-Klick-Pfad,
+`ui/control_panel.py:1675-1697`) rief im Gegensatz zu `set_rx_mode`
+(programmatischer Pfad, Z. 1725) `_refresh_antenna_status_label()`
+NICHT auf. Test-Coverage-Lücke seit P97 (v0.97.69, 20.05.2026) —
+alle 12 P97-Tests nutzten nur den programmatischen Pfad.
+
+**Fix:** 1 Zeile in `ui/control_panel.py:1697` nach
+`self.rx_mode_changed.emit(mode)`. 4 neue Tests (T0/T13/T14/T15)
+decken den Klick-Pfad ab inkl. Mike-Bug-Reproduktion + DX-scoring-Edge.
+
+Workflow voll durch V1→V2→R1 V4-pro ✅→V3→Code→Final-R1 ✅. Tests
+1766 → 1770. Details: HISTORY.md v0.97.97. **Sub-Toggle-Latenz**
+(Klick DIVERSITY 2x für Std↔DX zeigt Label kurzzeitig alten scoring)
+bewusst nicht in P102-Scope — separates Ticket falls Mike es als
+störend empfindet.
 
 ## ✅ P100 Partial-Log bei R-Report-Empfang ERLEDIGT (v0.97.96, 23.05.2026 autonom)
 

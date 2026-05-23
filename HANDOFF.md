@@ -1,8 +1,33 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-23 — v0.97.96 P100 Partial-Log bei R-Report (Datenrettung)
+## Stand 2026-05-23 — v0.97.97 P102 Antennen-Kachel-Status-Sync (Mike-Field-Bug live)
 
-**Aktueller Code-Stand:** v0.97.96, Tests **1766 grün** (+5 neue).
+**Aktueller Code-Stand:** v0.97.97, Tests **1770 grün** (+4 neue).
+
+### 🟢 v0.97.97 — P102 Antennen-Kachel-Status-Sync nach User-Klick
+
+Mike-Field-Bug 23.05. (live während Session): NORMAL aktiv, Kachel
+eingeklappt zeigt fälschlich „— Diversity Standard". Aufgeklappte
+Kachel war korrekt (NORMAL-Button aktiv, Diversity-Widget unsichtbar),
+nur das Header-Status-Suffix der eingeklappten Sicht blieb stale.
+
+**Ursache:** `_on_rx_mode_clicked` (User-Klick-Pfad in
+`ui/control_panel.py:1675-1697`) ruft im Gegensatz zu `set_rx_mode`
+(programmatischer Pfad, Z. 1725) `_refresh_antenna_status_label()`
+NICHT auf. Im Normal-Mode läuft auch der indirekte Refresh über
+`update_diversity_ratio` (Cycle-Loop) nicht → Label blieb hängen.
+
+**Fix:** 1 Zeile in `ui/control_panel.py:1697` nach
+`self.rx_mode_changed.emit(mode)`. Test-Coverage-Lücke geschlossen:
+4 neue Tests (T0/T13/T14/T15) decken jetzt den User-Klick-Pfad
+inkl. Bug-Reproduktion + DX-scoring-Edge-Case ab.
+
+**Workflow voll durch:** V1→V2 (4 Findings, P101 schon vergeben → P102)
+→R1 V4-pro ✅ + Empfehlung T0 →V3 (T0 als 4. Test) →Code →Final-R1
+✅ „PUSH FREIGEGEBEN" 0 Nachbesserung.
+
+Tests 1766 → 1770. Field-Test sofort von Mike verifizierbar
+(Kachel-Toggle in Normal-Mode).
 
 ### 🟢 v0.97.96 — P100 Partial-Log bei R-Report (autonom, Mike weg)
 
