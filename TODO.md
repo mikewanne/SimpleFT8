@@ -12,6 +12,29 @@ Fix-Richtung (mit Mike abgestimmt): `_update_gain_status_display()`
 einmal pro Slot im Zyklus-Handler aufrufen — kein neuer Timer, kein
 Zähler, Label-Refresh kostet nichts. Voller Workflow.
 
+## 🆕 OFFEN — Toter Code: Slice-B-Diversity in flexradio.py (Mike 22.05.2026)
+
+`radio/flexradio.py` enthält eine **zweite, unbenutzte** Diversity-
+Implementierung („beide Antennen gleichzeitig" via 2. Slice + 2. Panadapter
++ 2. Audio-Stream). Projektweit **kein einziger Aufrufer** — der echte
+Diversity-Empfang läuft über `_diversity_ctrl.choose()` → `set_rx_antenna()`
+(Antenne pro Zyklus umschalten, 1 Slice, 1 SCU). Auf dem 8400M (nur 1 SCU)
+würde der tote Pfad ohnehin nicht funktionieren.
+
+**Toter Code-Block (Zeilen-Anker Stand v0.97.90, Methodennamen stabil):**
+- Instanz-Variablen `__init__`: Z. 83–87 — `_diversity_mode`,
+  `_slice_idx_b`, `_rx_stream_id_b`, `_panafall_b`, `on_audio_callback_b`
+- `enable_diversity()`: Z. 775–882
+- `disable_diversity()`: Z. 884–920
+- `set_frequency()` toter Zweig: Z. 929–930 (`if self._diversity_mode …`)
+- `set_rfgain_secondary()`: Z. 959–965
+- `has_secondary_slice()`: Z. 967–969
+- VITA-49-Dispatch toter Zweig: Z. 1331–1332 (`elif … _rx_stream_id_b`)
+
+**To-do:** nochmal genau gegenprüfen dass wirklich kein Aufrufer existiert
+(auch dynamisch/getattr), dann bei Gelegenheit entfernen. Reine Lösch-
+Aktion, verhaltensneutral — voller Workflow, Tests müssen grün bleiben.
+
 ## 🆕 OFFEN — AP-Lite QSO-Abschluss (Konzept dokumentiert)
 
 Erweiterung von AP-Lite (Option D = v0.97.90 erledigt). Vollständiges
