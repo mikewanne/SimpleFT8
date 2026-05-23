@@ -42,6 +42,10 @@ SETTINGS_PATH = CONFIG_DIR / "settings.json"
 GAIN_VALIDITY_SECONDS = 6 * 3600  # 6 Stunden (Hardware-Verstaerker)
 # Backwards-Compat-Alias fuer externe Importe
 VALIDITY_SECONDS = GAIN_VALIDITY_SECONDS
+# P113 (v0.97.98): Schwelle fuer dezenten Statusbar-Hinweis bei Bandwechsel
+# wenn Preset langfristig vernachlaessigt wurde. Strikt „> 14 Tage" (Mike-Spec
+# DeepSeek 18.05.) → Toast ab Tag 15.
+STALE_GAIN_WARNING_DAYS = 14
 
 
 def _safe_load_json(path: Path) -> dict:

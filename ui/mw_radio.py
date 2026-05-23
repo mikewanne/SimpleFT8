@@ -710,12 +710,17 @@ class RadioMixin:
                           f"scoring={scoring}, auto_remess={auto_remess})")
             self._check_diversity_preset(band, scoring,
                                           auto_remess=auto_remess)
+            # P113 (v0.97.98): Stale-Gain-Hinweis fuer Diversity-Pfad.
+            self._check_stale_gain_warning(band)
             return  # _check_diversity_preset ruft _update_statusbar auf
         # P83 (v0.97.54): Gain-Status-Zeile aktualisieren (HTML-Format).
         self._update_gain_status_display()
         # P85 (v0.97.54): Win-Rate-Buffer leeren (frisches Band = frischer Trend).
         self.control_panel.reset_win_rate_history()
         self._update_statusbar()
+        # P113 (v0.97.98): Stale-Gain-Hinweis fuer Normal-Pfad (NACH
+        # _update_statusbar damit Toast nicht ueberschrieben wird).
+        self._check_stale_gain_warning(band)
 
     @Slot(str)
     def _on_rx_mode_changed(self, mode: str):
@@ -1419,6 +1424,33 @@ class RadioMixin:
         if entry and "gain_timestamp" in entry:
             return "stale"
         return "missing"
+
+    def _check_stale_gain_warning(self, band: str) -> None:
+        """P113 (v0.97.98): Statusbar-Toast wenn Gain-Kalibrierung > 14 Tage alt.
+
+        Dezenter Hinweis bei Bandwechsel, KEIN Auto-Start (Mike-Spec aus
+        DeepSeek-Brainstorm 18.05.). Ergaenzt das 6h-stale-Label in dx_info
+        um eine prominentere Schicht fuer langfristig vernachlaessigte
+        Presets — wenn User wiederholt „Vorhandene Daten verwenden" klickt,
+        kann der Preset Wochen alt werden, das dx_info-Label zeigt aber
+        nur „Re-Mess noetig" ohne konkretes Alter.
+
+        Schwelle strikt > 14 Tage (R1-F2): Toast greift ab Tag 15
+        (days = age_min // 1440, then days >= 15).
+        """
+        from core.preset_store import STALE_GAIN_WARNING_DAYS
+        age_min = self._gain_store.get_gain_age_minutes(band)
+        if age_min is None:
+            return  # missing oder ts=0.0 Migration-Marker
+        days = age_min // 1440
+        if days <= STALE_GAIN_WARNING_DAYS:
+            return  # 14 oder weniger Tage → KEIN Toast (Spec: strikt > 14)
+        msg = (f"⚠ Gain-Kalibrierung {band.upper()} {days} Tage alt — "
+               "KALIBRIEREN empfohlen")
+        try:
+            self.statusBar().showMessage(msg, 15000)
+        except Exception:
+            pass  # Statusbar evtl. nicht verfuegbar (Tests/Smoke)
 
     def _format_gain_status(self, band: str, rx_mode: str) -> str:
         """P83 (v0.97.54): HTML-Text fuer dx_info-Label.
