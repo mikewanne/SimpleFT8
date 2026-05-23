@@ -2,15 +2,12 @@
 
 ---
 
-## 🆕 OFFEN — Re-Mess-Countdown-Anzeige hängt (Mike 22.05.2026)
+## ✅ Re-Mess-Countdown-Anzeige ERLEDIGT (v0.97.93, 23.05.2026)
 
-Die „noch X Stunden bis Re-Mess"-Anzeige rechnet sich nur bei Aktionen
-neu (Band-/Modus-Wechsel) — sitzt man in einem Modus, bleibt die Zahl
-stehen, auch wenn Stunden vergehen. Mike-Symptom: Diversity „3h" →
-Moduswechsel → „1h" → der Wechsel erzwingt erst die Neuberechnung.
-Fix-Richtung (mit Mike abgestimmt): `_update_gain_status_display()`
-einmal pro Slot im Zyklus-Handler aufrufen — kein neuer Timer, kein
-Zähler, Label-Refresh kostet nichts. Voller Workflow.
+→ Fix in `ui/mw_cycle.py:_on_cycle_finished` — pro-Slot-Aufruf
+`_update_gain_status_display()` nach `qso_sm.on_decoder_finished()`.
+Voller Workflow V1→V2→R1→V3→C1-C3→Final-R1 durch. Details:
+HISTORY.md v0.97.93.
 
 ## 🆕 OFFEN — Toter Code: Slice-B-Diversity in flexradio.py (Mike 22.05.2026)
 
