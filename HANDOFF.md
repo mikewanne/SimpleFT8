@@ -1,8 +1,39 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-24 — v0.97.99 P114 MODUS+BAND Status-Suffix
+## Stand 2026-05-24 — v0.98.00 P115 Empfangsfenster bleibt bei RX-Mode/Kalibrierung
 
-**Aktueller Code-Stand:** v0.97.99, Tests **1785 grün** (+6 neue).
+**Aktueller Code-Stand:** v0.98.00, Tests **1787 grün** (+2 netto).
+
+### 🟢 v0.98.00 — P115 Empfangsfenster bleibt bei RX-Mode-Switch/Kalibrierung
+
+Mike-Bug 24.05.: Empfangsfenster wurde bei Kalibrierung-Ende, Normal↔
+Diversity-Switch und Sub-Toggle Std↔DX gelöscht — wirkte als „muss
+sich wieder füllen" obwohl gleiches Band. Mike-Spec: optische
+Kontinuität wie Fortschrittsbalken, Stationen bleiben sichtbar,
+Aging-Mechanismus räumt alte Einträge nach Minuten auf.
+
+**Architektur-Vereinfachung:** P110 (`clear_panels`-Parameter)
+komplett entfernt — alle 3 Funktionen (`_enable_diversity`,
+`_activate_diversity_with_scoring`, `_check_diversity_preset`)
+löschen nie mehr. Echte Lösch-Pfade reduziert auf 3: `_on_band_changed`,
+`_on_mode_changed`, `_on_rx_panel_toggled` (RX ON/OFF, Mike-Klärung).
+
+**R1-F4 Catch:** `qso_panel.log_view.clear()` BLEIBT in
+`_disable_diversity` — QSO-Log ist Chronik, nicht „Empfangsfenster"
+(Mike-Begriff bezieht sich nur auf Stationsliste).
+
+**Workflow voll durch:** V1→V2(7 Findings)→R1 V4-pro(8 Findings, F3
+clear_panels-Param entfernen + F4 qso_panel.log_view behalten)→V3→Code
+→Final-R1 ✅ „PUSH FREIGEGEBEN" 0 Nachbesserung.
+
+**V4-pro 47-Cycle-Bilanz:** 1 Halluzination (~2% Rate).
+
+Tests 1785 → 1787. Field-Test ohne Radio (Stationen empfangen, Modus
+wechseln, Tabelle muss voll bleiben). Versions-Bump 0.97.99 → 0.98.00
+(mathematisch + Verhaltensänderung rechtfertigt Minor-Bump).
+
+**Nächste 1-2 Schritte:** P74-B Phase 2 (Cross-Band-Gain-Interpolation)
+weiterhin offen — separate Session.
 
 ### 🟢 v0.97.99 — P114 MODUS+BAND Status-Suffix bei eingeklappter Kachel
 

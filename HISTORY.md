@@ -13763,3 +13763,88 @@ Band-Wechsel → Suffix updated live.
 
 **V4-pro 46-Cycle-Bilanz:** 1 Halluzination (F2 Zeilen-Zitat,
 empirisch ~2% Rate, nicht entscheidungs-kritisch).
+
+## 2026-05-24 v0.98.00 — P115 Empfangsfenster nicht löschen bei RX-Mode-Switch / Kalibrierung / Sub-Toggle
+
+Mike-Spec 24.05. (live während Session):
+
+> „Empfangsfenster wird nach Kalibrieren gelöscht, ist überflüssig
+> wenn wir auf dem Band bleiben — 20m kalibrieren → Empfangsfenster
+> füllt sich → Kalibrieren fertig → Empfangsfenster gelöscht → wir
+> warten bis es sich wieder füllt. Bei Bandwechsel oder Modus-Wechsel
+> (FT8-FT4) macht es Sinn, aber nicht wenn wir bleiben auf dem Band
+> und auch nicht wenn wir von Normal auf Diversity wechseln."
+
+Mike-Klärung Sub-Toggle Std↔DX:
+
+> „auch nicht löschen. Beim nächsten Slot wird eh alles aktualisiert.
+> Es ist optisch anders wenn alles erstmal leer ist und sich wieder
+> füllen muss als wenn schon was steht — das ist wie ein Fortschritts-
+> balken beim Kopieren."
+
+Mike-Klärung RX ON/OFF: WEITER löschen (bewusster Neustart-Akt).
+
+**Architektur-Vereinfachung:** P110 (v0.97.87) hatte
+`clear_panels: bool = True` an `_enable_diversity` /
+`_activate_diversity_with_scoring` / `_check_diversity_preset`
+hinzugefügt, um Sub-Toggle Std↔DX als Spezialfall (clear_panels=False)
+zu behandeln. Mit P115 wird die Mechanik umgekehrt: ALLE Aufrufer
+sollen Stationen behalten. → `clear_panels`-Parameter komplett aus
+allen 3 Signaturen entfernt + alle Aufrufer-Sites bereinigt + 5
+Lösch-Code-Blöcke entfernt.
+
+**Was BLEIBT (3 echte Lösch-Pfade, Mike-erlaubt):**
+
+- `_on_band_changed:539-542` — Bandwechsel = anderer Kontext
+- `_on_mode_changed:425-429` — FT8↔FT4↔FT2 = Slot-Dauer + Decoder anders
+- `_on_rx_panel_toggled:349-353` — RX ON/OFF = bewusster Neustart
+
+**Was RAUS ist (5 Stellen, gleiches Band = Stationen bleiben):**
+
+- `_on_rx_mode_changed:771-773` setRowCount(0) + log_view.clear() +
+  update_decode_count(0)
+- `_on_rx_mode_changed:791` `_normal_stations = {}`
+- `_disable_diversity:1397-1401` setRowCount(0) + Stations-Dicts +
+  update_decode_count(0) — ABER `qso_panel.log_view.clear()` BLEIBT
+  (R1-F4: QSO-Log ist Chronik, nicht „Empfangsfenster")
+- `_enable_diversity:1300-1305` `if clear_panels:`-Block komplett
+- `_activate_diversity_with_scoring:992-993` `if clear_panels:`-Block
+
+**Workflow voll durch:**
+
+- V1: KISS 3-Stellen-Fix-Skizze
+- V2 Self-Review: 7 Findings (`_diversity_ctrl.reset()` bleibt,
+  qso_panel-Frage offen, update_decode_count automatisch, P110-Param
+  redundant, Aging-Garantie, Test-Plan, Version 0.98.00)
+- R1 V4-pro: 8 Findings, 1 wichtige Korrektur (F4:
+  `qso_panel.log_view.clear()` BEHALTEN — Mike's „Empfangsfenster"
+  ist die RX-Stationsliste, nicht das QSO-Log; F3 clear_panels-Param
+  entfernen + Lösch-Blöcke löschen empfohlen)
+- V3 → Code: 1 Code-File (mw_radio.py -75/+38), 5 Test-Files
+  angepasst, 1 Test-File gelöscht (test_p110), 1 Test-File neu
+  (test_p115, 9 Tests T1-T9), main.py 0.97.99 → 0.98.00
+- Final-R1 V4-pro: ✅ „PUSH FREIGEGEBEN" 0 Nachbesserung
+
+**Aging-Mechanismus garantiert Mike's „Fortschrittsbalken":**
+`accumulate_stations` (`core/station_accumulator.py:24`) ruft
+`remove_stale` mit `AGING_SLOTS_*` × `slot_duration_s` — alte
+Stationen fallen nach Minuten automatisch raus, neue kommen rein.
+Daher braucht es keinen explizten Reset bei RX-Mode-Switch.
+
+**V4-pro 47-Cycle-Bilanz:** 1 Halluzination (P114-F2 Zeilen-Zitat
+24.05., empirisch ~2% Rate).
+
+**Tests:** 1785 → 1787 (+2 netto: -6 P110 entfernt + 9 P115 neu +
+~5 Asserts in 4 bestehenden Tests angepasst, 0 echte Regressions).
+
+**Neue tests/test_p115_no_clear_on_rx_mode_switch.py:**
+
+- T1-T3 Signatur-Tests (clear_panels nicht mehr in 3 Funktionen)
+- T4-T6 Body-Tests (Lösch-Statements aus 3 Funktionen raus)
+- T7-T9 Regression (3 erlaubte Lösch-Pfade laufen weiter)
+
+**Field-Test:** ohne Radio testbar. App starten, Stationen empfangen,
+Normal↔Diversity wechseln → Tabelle bleibt voll. Kalibrieren →
+Tabelle bleibt voll (statt leer-und-wieder-füllen-müssen).
+
+**Folge-Ticket:** keins direkt — P115 schließt einen UX-Bug vollständig.

@@ -1,6 +1,27 @@
-# SimpleFT8 TODO — Stand 24.05.2026 (v0.97.99, P114 erledigt)
+# SimpleFT8 TODO — Stand 24.05.2026 (v0.98.00, P115 erledigt)
 
 ---
+
+## ✅ P115 Empfangsfenster bleibt bei RX-Mode-Switch/Kalibrierung ERLEDIGT (v0.98.00, 24.05.2026)
+
+Mike-Bug 24.05.: Empfangsfenster wurde nach Kalibrierung, bei
+Normal↔Diversity-Wechsel und Sub-Toggle Std↔DX gelöscht — obwohl
+gleiches Band. Mike-Spec: optische Kontinuität wie Fortschrittsbalken
+beim Kopieren, Aging räumt alte Einträge automatisch auf.
+
+**Architektur-Vereinfachung:** P110 `clear_panels`-Parameter aus
+3 Funktionen entfernt (`_enable_diversity`,
+`_activate_diversity_with_scoring`, `_check_diversity_preset`).
+5 Lösch-Code-Blöcke entfernt. Echte Lösch-Pfade reduziert auf 3:
+`_on_band_changed`, `_on_mode_changed`, `_on_rx_panel_toggled`.
+
+R1-F4 Catch: `qso_panel.log_view.clear()` in `_disable_diversity`
+BLEIBT (QSO-Log ist Chronik, nicht „Empfangsfenster").
+
+Workflow V1→V2(7 Findings)→R1 V4-pro(8 Findings, F3+F4 eingebaut)
+→V3→Code→Final-R1 ✅. V4-pro 47-Cycle: 1 Halluzination (~2% Rate,
+P114-Halluzination 24.05.). Tests 1785→1787 (+9 P115 neu, -6 P110
+entfernt). Details: HISTORY.md v0.98.00.
 
 ## ✅ P114 MODUS+BAND Status-Suffix ERLEDIGT (v0.97.99, 24.05.2026)
 
