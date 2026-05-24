@@ -13942,3 +13942,88 @@ automatisch invalidiert wenn was gelöscht wurde.
 
 **Folge-Ticket:** keins. P116 schließt 90-Tage-Pause-Problem +
 saisonale Anpassung in einem Schritt.
+
+## 2026-05-24 v0.98.02 — P117 Band-Aktivitäts-Übersicht-Script (Standalone)
+
+Mike-Use-Case: „Wenn ich im Park bin und andere Software habe, will
+ich auf einen Blick sehen wann welches Band typisch aktiv ist —
+20m mittags, 40m abends, etc. Eine PNG als Quick-Reference."
+
+**Lösung:** Standalone-Script `scripts/band_activity_summary.py` +
+Shell-Wrapper `banduebersicht.sh` im Root (analog App-Start-Pattern).
+KEIN Hook in main.py oder generate_plots.py — Mike-Spec „kein
+Rumfummeln im Quellcode, weniger Fehlermöglichkeiten, schnellerer
+App-Start, leichter zu warten".
+
+**Aggregation pro `(Band, Stunde)`:**
+- Für jeden RX-Modus (Normal, Diversity_Normal, Diversity_Dx)
+  Pooled-Mean Stationen pro Stunde über alle Tage.
+- Pro Stunde: arithmetisches Mittel der Modus-Mittelwerte (durch
+  ANZAHL vorhandener Modi, nicht stur durch 3 — Mike-Spec
+  „bei fehlendem Modus durch 2").
+- Filter: Modi mit < MIN_CYCLES_PER_BUCKET=12 Zyklen für die Stunde
+  werden ausgeschlossen (R1-Empfehlung — 30 zu hoch für junge
+  Bänder wie 15m mit nur 5-9 Tagen Datenbasis).
+
+DX-Modus zieht den Mittelwert leicht nach unten (filtert SNR<-10),
+aber das stört nicht — Mike will RELATIVE Band-Aktivität-Trend, keine
+absoluten Zahlen. Wenn ein Band um 14h voll ist, sehen ALLE Modi viele
+Stationen.
+
+**Output:**
+- `auswertung/bandaktivitaet.png` (DE)
+- `auswertung/en/band_activity.png` (EN)
+
+**Diagramm:** Liniendiagramm 12×6 inch, X=UTC-Stunde 0-23, Y=Ø
+Stationen, eine Linie pro Band, Dark-Theme passend zur App. Bänder
+in BAND_ORDER (160m→6m), unbekannte am Ende. Pro-Band-Farbe distinct
+für Dark-Theme-Hintergrund.
+
+**Workflow voll durch:**
+
+- V1 + V2 Self-Review: 7 Findings ✓
+- R1 V4-pro: 0 Blocker + 1 wichtiger Catch (MIN_CYCLES 30→12 für
+  junge Bänder) eingebaut
+- V3 → Code
+- Final-R1 V4-pro: ✅ „PUSH FREIGEGEBEN" 0 Mängel
+
+**V4-pro 49-Cycle-Bilanz:** 1 Halluzination (~2% Rate, P114-F2).
+
+**Tests:** 1794 → 1804 (+10, 0 Regressions). Neue
+`tests/test_p117_band_activity.py`:
+
+- T1 Leerer stats_dir → 0 Bänder
+- T2 1 Modus, 12 Cycles (Threshold exakt) → Wert
+- T3 1 Modus, 11 Cycles (unter Threshold) → None
+- T4 3 Modi je 12 Cycles → arithmetisches Mittel
+- T5 2 Modi qualifiziert + 1 zu wenig Cycles → Mittel aus 2
+- T6 BAND_ORDER respektiert (tief → hoch)
+- T7 Verzeichnisse ohne FT8/-Subdir ignoriert
+- T8 generate_plot returnt 0 bei leerem Stats-Dir
+- T9 PNG-File mit korrektem Header erstellt
+- T10 Stunden ohne Daten → None (Plot-Lücke)
+
+**Live-Smoke-Test mit Mike's echten Daten:** 4 Bänder geplottet
+(20m, 30m, 40m, 15m), Output visuell verifiziert. Plausible Peaks:
+- 20m: 15-17 UTC (~63 Stationen)
+- 40m: 19 UTC (~71)
+- 30m: 18 UTC (~52)
+- 15m: 14 UTC (~41)
+
+**Standalone-Architektur bewusst gewählt (Mike-Spec):**
+
+- Keine Imports aus `generate_plots.py` oder App-Modulen (Code-
+  Duplikation akzeptabel)
+- Kein Hook in `main.py` (App-Start bleibt schnell)
+- Kein Hook in `generate_plots.py` (separate Lifecycles)
+- Shell-Wrapper im Root analog App-Start-Pattern
+
+**n8n-Tauglichkeit (Mike-Folge-Idee):** Script ist idempotent,
+deterministischer Output-Pfad, sauberes Logging, Exit-Code. Mike
+kann später separat einen n8n-Workflow bauen der das Script via
+Cron-Trigger aufruft und das PNG per Telegram sendet (analog
+Solar-Trigger). Cockpit-Endpoint und n8n-Workflow sind außerhalb
+SimpleFT8-Scope.
+
+**Folge-Ticket:** keins direkt. P117 schließt den Quick-Reference-
+Use-Case vollständig.

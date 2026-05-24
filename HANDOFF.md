@@ -1,8 +1,38 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-24 — v0.98.01 P116 FIFO-Sliding-Window Stats-Cleanup
+## Stand 2026-05-24 — v0.98.02 P117 Band-Aktivitäts-Übersicht-Script
 
-**Aktueller Code-Stand:** v0.98.01, Tests **1794 grün** (+7 netto).
+**Aktueller Code-Stand:** v0.98.02, Tests **1804 grün** (+10 neue).
+
+### 🟢 v0.98.02 — P117 Band-Aktivitäts-Übersicht-Script (Standalone)
+
+Mike-Use-Case: PNG-Quick-Reference für den Park — auf einen Blick
+sehen wann welches Band aktiv ist.
+
+**Lösung:** Standalone-Script `scripts/band_activity_summary.py` +
+Shell-Wrapper `banduebersicht.sh` im Root. Liniendiagramm alle Bänder
+× 24 UTC-Stunden mit Pooled-Mean-Mittelung über vorhandene RX-Modi.
+KEIN App-Eingriff, kein generate_plots.py-Hook (Mike-Spec).
+
+**Output:** `auswertung/bandaktivitaet.png` (DE) +
+`auswertung/en/band_activity.png` (EN). Aufruf via `./banduebersicht.sh`.
+
+**Workflow voll durch:** V1→V2(7 Findings)→R1 V4-pro (0 Blocker,
+1 wichtiger Catch MIN_CYCLES 30→12 für junge Bänder eingebaut)→V3
+→Code→Final-R1 ✅ „PUSH FREIGEGEBEN" 0 Mängel.
+
+**V4-pro 49-Cycle-Bilanz:** 1 Halluzination (~2% Rate).
+
+Tests 1794 → 1804. Live-Smoke-Test mit Mike-Daten: 4 Bänder
+geplottet, visuell verifiziert.
+
+**n8n-Tauglichkeit:** Script ist idempotent + sauberes Logging +
+deterministischer Output-Pfad — Mike kann später separat n8n-
+Workflow bauen (Cron + Cockpit-Endpoint + Telegram-Send), das ist
+außerhalb SimpleFT8-Scope.
+
+**Nächste 1-2 Schritte:** P74-B Phase 2 (Cross-Band-Gain-
+Interpolation) weiterhin offen — separate Session.
 
 ### 🟢 v0.98.01 — P116 FIFO-Sliding-Window Stats-Cleanup (löst 90-Tage-Cleanup ab)
 

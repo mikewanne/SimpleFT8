@@ -1,6 +1,31 @@
-# SimpleFT8 TODO — Stand 24.05.2026 (v0.98.01, P116 erledigt)
+# SimpleFT8 TODO — Stand 24.05.2026 (v0.98.02, P117 erledigt)
 
 ---
+
+## ✅ P117 Band-Aktivitäts-Übersicht-Script ERLEDIGT (v0.98.02, 24.05.2026)
+
+Mike-Use-Case: PNG-Quick-Reference für den Park („wann ist welches
+Band typisch aktiv"). Standalone-Script `scripts/band_activity_summary.py`
++ Shell-Wrapper `banduebersicht.sh` im Root. KEIN App-Eingriff,
+kein Hook in generate_plots.py (Mike-Spec).
+
+Liniendiagramm alle Bänder × 24 UTC-Stunden, Pooled-Mean über
+vorhandene RX-Modi (Normal + Diversity_Normal + Diversity_Dx).
+Mittelung durch ANZAHL vorhandener Modi (nicht stur durch 3).
+Filter `MIN_CYCLES_PER_BUCKET=12` (R1-Catch — junge Bänder mit
+5-9 Tagen wären sonst nicht plottbar).
+
+Output: `auswertung/bandaktivitaet.png` (DE) +
+`auswertung/en/band_activity.png` (EN).
+
+Workflow voll durch V1→V2(7 Findings)→R1 V4-pro(1 wichtiger Catch
+MIN_CYCLES 30→12)→V3→Code→Final-R1 ✅. V4-pro 49-Cycle: 1
+Halluzination (~2% Rate). Tests 1794→1804 (+10). Details: HISTORY.md
+v0.98.02. Live-Smoke-Test: 4 Bänder geplottet, visuell verifiziert.
+
+**n8n-Folge optional:** Mike kann separat n8n-Workflow + Cockpit-
+Endpoint bauen für tägliche Telegram-Zustellung (Solar-Trigger als
+Vorlage). Außerhalb SimpleFT8-Scope.
 
 ## ✅ P116 FIFO-Sliding-Window Stats-Cleanup ERLEDIGT (v0.98.01, 24.05.2026)
 
