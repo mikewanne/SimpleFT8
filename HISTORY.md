@@ -13695,3 +13695,71 @@ KALIBRIEREN empfohlen" 15s in Statusbar.
 
 **Folge-Ticket:** P74-B Phase 2 (Cross-Band-Gain-Interpolation)
 bleibt offen — separate Session.
+
+## 2026-05-24 v0.97.99 — P114 MODUS+BAND Status-Suffix bei eingeklappter Kachel
+
+Mike-Wunsch 24.05.: „wenn kachel modus - band eingeklappt ist dor
+auch anzeigen in der einen zeilen modus - band - FT8 - 20 Meter,
+praktisch selbe system wenn Antenne eingeklappt ist Antenne -
+Normal oder Antenne - Diversity".
+
+Direkter Symmetrie-Wunsch zu P97 (Antenne/Radio, v0.97.69) — die
+MODUS+BAND-Kachel hatte den Header-Slot bisher nicht.
+
+**Architektur (3-Schritt, KISS, P97-konform):**
+
+1. `_ModeBandCard.__init__` (Z. 280): `self.lbl_mb_status = QLabel("")`
+   nach dem „MODUS+BAND"-Label einfuegen. Farbe #7799FF (Header-Farbe),
+   nicht-bold (dezent).
+2. `_ModeBandCard.set_collapsed`: `self.lbl_mb_status.setVisible(collapsed)`
+   analog AntenneCard Z. 754 (nur sichtbar bei eingeklappt).
+3. `ControlPanel`: neue Methode `_refresh_modeband_status_label` analog
+   `_refresh_antenna_status_label`. Format „— {mode} · {band}" mit
+   `_current_mode` (FT8/FT4/FT2) + `_current_band` (20m/40m/...).
+   2 Aufrufe in `_set_mode` und `_set_band` jeweils NACH `emit`.
+
+**Format-Entscheidung (Mike-Choice 24.05.):** „— FT8 · 20m" mit
+Mittel-Punkt U+00B7 als Separator. Knapp, matches bestehende
+P97/P102-Pattern („— Normal", „— 70 W"). Mike's „FT8 - 20 Meter"-
+Wortlaut wurde durch AskUserQuestion in Variante A („— FT8 · 20m")
+geklaert — KISS-Default.
+
+**Workflow voll durch:**
+
+- V1: 5-Punkte-Skizze (Label-Einbau, Visibility-Toggle, Methode,
+  2 Setter-Aufrufe)
+- V2 Self-Review: 7 Findings ✓ (Schreibstellen-Audit, Initial-Refresh,
+  set_visible_bands ignoriert, Visibility-Mechanismus, Test-Set 6,
+  Version, Ticket-Name)
+- R1 V4-pro: 8 Findings, F2 als HALLUZINATION verworfen (siehe unten),
+  F3-F8 alle ✓ eingebaut/bestaetigt
+- V3 → Code: 3 Files (control_panel.py +30 LOC, test_p97_*.py +53 LOC,
+  main.py 0.97.98 → 0.97.99)
+- Final-R1 V4-pro: ✅ „PUSH FREIGEGEBEN" 0 Nachbesserung
+
+**V4-pro Halluzinations-Note (P114 R1-F2):** DeepSeek behauptete
+„Refresh VOR emit, P102 macht das in Z. 1491 vor :1492". Code-
+Verifikation (control_panel.py:1697-1698): `rx_mode_changed.emit(mode)`
+ist Z. 1697, `_refresh_antenna_status_label()` ist Z. 1698 — also
+NACH emit. R1-F2-Zitat war falsch (Zeilen 1491/1492 enthalten in der
+Datei anderen Code). Erste verifizierbare V4-pro-Halluzination in
+46 Cycles (bisher 45/45 = 0). Nicht entscheidungs-relevant — Pattern
+NACH emit ist projekt-konsistent und Slot-Handler aendern
+`_current_mode/_band` nicht.
+
+**Tests:** 1779 → 1785 (+6). Neue T16-T21 in
+`tests/test_p97_collapsed_card_status.py`:
+
+- T16 Initial → „— FT8 · 20m"
+- T17 _set_mode("FT4") → „— FT4 · 20m"
+- T18 _set_band("40m") → „— FT8 · 40m"
+- T19 Kombi (FT4 + 17m) → „— FT4 · 17m"
+- T20 FT2 (Button hidden, programmatisch callable) → „— FT2 · 20m"
+- T21 Visible_only_when_collapsed (analog P97 T11/T12)
+
+**Field-Test:** ohne Radio. App starten, MODUS+BAND-Kachel einklappen
+via Toggle → Suffix „— FT8 · 20m" sichtbar. Klick FT4-Button +
+Band-Wechsel → Suffix updated live.
+
+**V4-pro 46-Cycle-Bilanz:** 1 Halluzination (F2 Zeilen-Zitat,
+empirisch ~2% Rate, nicht entscheidungs-kritisch).

@@ -1,6 +1,20 @@
-# SimpleFT8 TODO — Stand 23.05.2026 (v0.97.98, P113 erledigt)
+# SimpleFT8 TODO — Stand 24.05.2026 (v0.97.99, P114 erledigt)
 
 ---
+
+## ✅ P114 MODUS+BAND Status-Suffix ERLEDIGT (v0.97.99, 24.05.2026)
+
+Mike-Wunsch: analog P97 Antenne/Radio auch MODUS+BAND-Kachel mit
+dezentem Header-Suffix wenn eingeklappt. Format „— FT8 · 20m" (Mike-
+Choice via AskUserQuestion). `lbl_mb_status` in `_ModeBandCard`,
+Visibility-Toggle in `set_collapsed`, neue Methode
+`_refresh_modeband_status_label` in `ControlPanel:1779`, 2 Aufrufe
+in `_set_mode`/`_set_band` NACH `emit`.
+
+Workflow V1→V2(7 Findings)→R1 V4-pro(8 Findings, F2 HALLUZINATION
+verworfen — Zeilen-Zitat falsch)→V3→Code→Final-R1 ✅. V4-pro
+46-Cycle: 1 Halluzination (~2% Rate, nicht entscheidungs-kritisch).
+Tests 1779→1785 (+6). Details: HISTORY.md v0.97.99.
 
 ## ✅ P113 Stale-Gain-Warning bei Bandwechsel ERLEDIGT (v0.97.98, 23.05.2026 autonom)
 

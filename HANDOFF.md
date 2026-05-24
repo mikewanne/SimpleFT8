@@ -1,8 +1,31 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-23 — v0.97.98 P113 Stale-Gain-Warning bei Bandwechsel (autonom)
+## Stand 2026-05-24 — v0.97.99 P114 MODUS+BAND Status-Suffix
 
-**Aktueller Code-Stand:** v0.97.98, Tests **1779 grün** (+9 neue).
+**Aktueller Code-Stand:** v0.97.99, Tests **1785 grün** (+6 neue).
+
+### 🟢 v0.97.99 — P114 MODUS+BAND Status-Suffix bei eingeklappter Kachel
+
+Mike-Wunsch 24.05.: analog P97 Antenne/Radio jetzt auch MODUS+BAND-
+Kachel einen Status-Suffix im Header. Default „— FT8 · 20m" (Mike-
+Choice Format A via AskUserQuestion).
+
+**Architektur (P97-konform):** `lbl_mb_status` in `_ModeBandCard`,
+Visibility-Toggle in `set_collapsed`, neue Methode
+`_refresh_modeband_status_label` in `ControlPanel`, 2 Setter-Aufrufe
+in `_set_mode`/`_set_band` (NACH `emit`, P102-konsistent).
+
+**Workflow voll durch:** V1→V2(7 Findings)→R1 V4-pro(8 Findings, F2
+HALLUZINATION verworfen — Zeilen-Zitat falsch, sonst alles bestätigt)
+→V3→Code→Final-R1 ✅ „PUSH FREIGEGEBEN" 0 Nachbesserung.
+
+**V4-pro 46-Cycle-Bilanz:** 1 Halluzination (P114-R1-F2, ~2% Rate).
+
+Tests 1779 → 1785. Field-Test ohne Radio (App starten, Kachel
+einklappen).
+
+**Nächste 1-2 Schritte:** Mike-Folge-Anfrage „Empfangsfenster nicht
+löschen bei Kalibrierung + Normal↔Diversity-Wechsel" (kein Bandwechsel).
 
 ### 🟢 v0.97.98 — P113 Stale-Gain-Warning bei Bandwechsel (autonom)
 
