@@ -14027,3 +14027,70 @@ SimpleFT8-Scope.
 
 **Folge-Ticket:** keins direkt. P117 schließt den Quick-Reference-
 Use-Case vollständig.
+
+## 2026-05-24 v0.98.03 — P118 Band-Aktivitäts-Script Berliner Zeit (DST-aware)
+
+Mike-Folge-Wunsch 24.05. nach P117-Sichtung: „Können wir berliner zeit
+machen aber bitte sommer zeit und winterzeit umstellung im script
+berücksichtigen?"
+
+**Lösung:** `_utc_file_to_local_hour(date_str, utc_hour)` via
+`zoneinfo.ZoneInfo("Europe/Berlin")` — pro File-Datum DST-korrekt
+umgerechnet. Mai-Datum → UTC+2, Dezember-Datum → UTC+1, Wechsel-
+Tage automatisch (zoneinfo kennt komplette IANA-Datenbank).
+
+**Architektur-Änderungen (`scripts/band_activity_summary.py` +62 LOC):**
+
+- Imports: `from zoneinfo import ZoneInfo`, `from datetime import
+  datetime, timezone`
+- Konstante: `LOCAL_TZ = ZoneInfo("Europe/Berlin")`
+- Helper: `_utc_file_to_local_hour(date_str, utc_hour) -> int`
+- Aggregation: pro File `date_str` + `utc_hour` → `local_hour`,
+  aggregiert auf lokales Bucket
+- Labels: „Stunde (UTC)" → „Stunde (Berlin)" (DE), „Hour (UTC)" →
+  „Hour (Berlin)" (EN)
+
+**Edge-Case DST-Wechsel-Tag (Frühjahr/Herbst):**
+
+Pro File 1 lokale Stunde (Stunden-Start als Repräsentations-Zeit).
+Statistisch irrelevant: 2/365 = 0.5% Daten am Wechsel-Tag betroffen.
+Tests T12 verifiziert mit echten Wechsel-Daten (2024, 2025, 2026):
+
+```
+2026-03-29 (Frühjahr) 01 UTC → 03 Berlin (Wechsel aktiv)
+2026-10-25 (Herbst)   02 UTC → 03 Berlin (Winter aktiv)
+```
+
+**Workflow voll durch:**
+
+- V1 + V2: 5 Findings ✓
+- R1 V4-pro: 0 Blocker, klare Freigabe
+- V3 → Code: 4 Files (Script, Tests, main.py, Doku)
+- Final-R1 V4-pro: ✅ „PUSH FREIGEGEBEN" 0 Mängel
+- Live-Smoke + visuelle Verifikation: PNG zeigt Berliner Zeit,
+  Peaks korrekt verschoben (+2h Sommer)
+
+**V4-pro 50-Cycle-Bilanz:** 1 Halluzination (~2% Rate, P114-F2).
+
+**Tests:** 1804 → 1806 (+2 neue DST-Tests T11+T12, 10 bestehende
+auf fixes Sommer-Datum angepasst):
+
+- T2-T5, T10 nutzen "2026-05-24" + erwarten Berlin-Stunde UTC+2
+- T11 NEU: Winter-Datum "2026-12-15" → UTC+1
+- T12 NEU: Helper-Funktion direkt mit Sommer/Winter + Wechsel-Tag
+
+**Mike-Beruhigungs-Demo (Folge-Frage „hast du auch datum
+berücksichtigt"):** Live-Demo aller Wechsel-Tage 2024-2026 zeigte
+korrekte Umschaltung. zoneinfo handhabt komplette IANA-Historie
+ohne manuelle Kalender-Pflege.
+
+**Smoke-Test-Ergebnis mit Mike-Daten (24.05.2026, Sommerzeit):**
+
+Peaks korrekt +2h verschoben gegenüber P117-UTC-Version:
+- 20m: 17-19 Berlin (was vorher 15-17 UTC war)
+- 40m: 21 Berlin (was vorher 19 UTC war)
+- 30m: 20 Berlin (was vorher 18 UTC war)
+- 15m: 16 Berlin (was vorher 14 UTC war)
+
+**Folge-Ticket:** keins. P118 schließt den Berliner-Zeit-Wunsch
+vollständig + DST-future-proof.

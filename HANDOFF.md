@@ -1,8 +1,34 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-24 — v0.98.02 P117 Band-Aktivitäts-Übersicht-Script
+## Stand 2026-05-24 — v0.98.03 P118 Band-Aktivität Berliner Zeit (DST-aware)
 
-**Aktueller Code-Stand:** v0.98.02, Tests **1804 grün** (+10 neue).
+**Aktueller Code-Stand:** v0.98.03, Tests **1806 grün** (+2 neue).
+
+### 🟢 v0.98.03 — P118 Berliner Zeit + DST-Awareness im Band-Activity-Script
+
+Mike-Folge-Wunsch nach P117-Sichtung: Berliner Zeit statt UTC,
+Sommer/Winter automatisch.
+
+**Lösung:** `_utc_file_to_local_hour(date_str, utc_hour)` via
+`zoneinfo.ZoneInfo("Europe/Berlin")`. Pro File-Datum DST-korrekt:
+Mai → UTC+2, Dezember → UTC+1, Wechsel-Tage automatisch (zoneinfo
+kennt komplette IANA-Datenbank). Labels: „Stunde (Berlin)" / „Hour
+(Berlin)".
+
+**Workflow voll durch:** V1→V2(5 Findings)→R1 V4-pro(0 Blocker)→V3
+→Code→Final-R1 ✅ „PUSH FREIGEGEBEN" 0 Mängel.
+
+**V4-pro 50-Cycle-Bilanz:** 1 Halluzination (~2% Rate).
+
+Tests 1804 → 1806 (+2 neue DST-Tests T11+T12, 10 bestehende auf
+fixes Sommer-Datum 2026-05-24 angepasst). Live-Smoke zeigt PNG mit
+korrekten Berliner Peaks: 20m 17-19h, 40m 21h, 30m 20h, 15m 16h.
+
+**Mike-Demo (Folge-Frage):** zoneinfo erkennt alle Wechsel-Tage
+2024-2026 korrekt — keine manuelle Kalender-Pflege im Code.
+
+**Nächste 1-2 Schritte:** P74-B Phase 2 (Cross-Band-Gain-Interpolation)
+weiterhin offen — separate Session.
 
 ### 🟢 v0.98.02 — P117 Band-Aktivitäts-Übersicht-Script (Standalone)
 

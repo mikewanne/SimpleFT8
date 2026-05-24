@@ -1,6 +1,21 @@
-# SimpleFT8 TODO — Stand 24.05.2026 (v0.98.02, P117 erledigt)
+# SimpleFT8 TODO — Stand 24.05.2026 (v0.98.03, P118 erledigt)
 
 ---
+
+## ✅ P118 Band-Activity Berliner Zeit (DST-aware) ERLEDIGT (v0.98.03, 24.05.2026)
+
+Mike-Folge-Wunsch nach P117-Sichtung: Berliner Zeit statt UTC,
+Sommer/Winter automatisch berücksichtigen.
+
+**Lösung:** `_utc_file_to_local_hour(date_str, utc_hour)` via
+`zoneinfo.ZoneInfo("Europe/Berlin")`. Pro File-Datum DST-korrekt
+(Mai→UTC+2, Dezember→UTC+1, Wechsel-Tage automatisch). Labels
+„Stunde (Berlin)" / „Hour (Berlin)".
+
+Workflow voll durch V1→V2(5)→R1 V4-pro(0 Blocker)→V3→Code→Final-R1 ✅.
+Tests 1804→1806 (+2 DST-Tests). V4-pro 50-Cycle: 1 Halluzination.
+Details: HISTORY.md v0.98.03. Mike-Demo zeigte korrekte Erkennung
+aller Wechsel-Tage 2024-2026.
 
 ## ✅ P117 Band-Aktivitäts-Übersicht-Script ERLEDIGT (v0.98.02, 24.05.2026)
 
