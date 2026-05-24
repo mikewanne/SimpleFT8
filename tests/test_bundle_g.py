@@ -72,7 +72,7 @@ def test_toggle_standard_to_dx_when_bandpilot_off(app):
     """T1: Klick Div während Std + bp=off → activate('dx')."""
     obj = _make_radio_mixin(bp_mode="off", current_scoring="normal")
     obj._on_diversity_subtoggle_requested()
-    obj._activate_diversity_with_scoring.assert_called_once_with("dx", clear_panels=False)
+    obj._activate_diversity_with_scoring.assert_called_once_with("dx")
 
 
 # ── T2: Toggle DX → Std ────────────────────────────────────────────
@@ -82,7 +82,7 @@ def test_toggle_dx_to_standard_when_bandpilot_off(app):
     """T2: Klick Div während DX + bp=off → activate('normal')."""
     obj = _make_radio_mixin(bp_mode="off", current_scoring="dx")
     obj._on_diversity_subtoggle_requested()
-    obj._activate_diversity_with_scoring.assert_called_once_with("normal", clear_panels=False)
+    obj._activate_diversity_with_scoring.assert_called_once_with("normal")
 
 
 # ── T3: bp=auto → P92 Toggle Std → DX ──────────────────────────────
@@ -97,7 +97,7 @@ def test_toggle_standard_to_dx_when_bandpilot_auto(app):
     """
     obj = _make_radio_mixin(bp_mode="auto", current_scoring="normal")
     obj._on_diversity_subtoggle_requested()
-    obj._activate_diversity_with_scoring.assert_called_once_with("dx", clear_panels=False)
+    obj._activate_diversity_with_scoring.assert_called_once_with("dx")
 
 
 # ── T4: bp=manual → P92 Toggle DX → Std ────────────────────────────
@@ -107,7 +107,7 @@ def test_toggle_dx_to_standard_when_bandpilot_manual(app):
     """T4 (P92, v0.97.62): bp=manual + DX → Toggle nach Standard."""
     obj = _make_radio_mixin(bp_mode="manual", current_scoring="dx")
     obj._on_diversity_subtoggle_requested()
-    obj._activate_diversity_with_scoring.assert_called_once_with("normal", clear_panels=False)
+    obj._activate_diversity_with_scoring.assert_called_once_with("normal")
 
 
 # ── T5: Gain-Lock → no-op ──────────────────────────────────────────

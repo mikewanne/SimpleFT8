@@ -57,7 +57,7 @@ def test_t2_check_preset_signature():
     src = _read("ui/mw_radio.py")
     m = re.search(
         r"def _check_diversity_preset\(self,\s*band:\s*str,\s*"
-        r"scoring:\s*str,\s*clear_panels:\s*bool\s*=\s*True\s*,\s*"
+        r"scoring:\s*str,\s*"
         r"auto_remess:\s*bool\s*=\s*False\s*\)",
         src,
     )

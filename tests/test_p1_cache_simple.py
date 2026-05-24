@@ -113,7 +113,7 @@ def test_check_preset_dispatch_gain_fresh_calls_enable_diversity():
 
     RadioMixin._check_diversity_preset(fake_self, "40m", "normal")
 
-    fake_self._enable_diversity.assert_called_once_with(scoring_mode="normal", clear_panels=True)
+    fake_self._enable_diversity.assert_called_once_with(scoring_mode="normal")
     fake_self._start_dx_tuning.assert_not_called()
 
 
@@ -138,7 +138,7 @@ def test_check_preset_dispatch_gain_stale_no_dialog_by_default(monkeypatch):
     # P112: stale → kein Auto-Dialog, sondern _enable_diversity direkt
     fake_self._start_dx_tuning.assert_not_called()
     fake_self._enable_diversity.assert_called_once_with(
-        scoring_mode="normal", clear_panels=True)
+        scoring_mode="normal")
 
 
 def test_check_preset_dispatch_gain_stale_auto_remess_opens_dialog(monkeypatch):
@@ -184,7 +184,7 @@ def test_check_preset_dispatch_gain_missing_no_dialog_by_default(monkeypatch):
 
     fake_self._start_dx_tuning.assert_not_called()
     fake_self._enable_diversity.assert_called_once_with(
-        scoring_mode="normal", clear_panels=True)
+        scoring_mode="normal")
 
 
 def test_check_preset_skip_when_no_radio():
@@ -211,4 +211,4 @@ def test_check_preset_dispatch_dx_scoring():
 
     RadioMixin._check_diversity_preset(fake_self, "40m", "dx")
 
-    fake_self._enable_diversity.assert_called_once_with(scoring_mode="dx", clear_panels=True)
+    fake_self._enable_diversity.assert_called_once_with(scoring_mode="dx")

@@ -765,12 +765,12 @@ class RadioMixin:
         import time as _time
         self._stats_warmup_cycles = 6
 
-        # Alten Modus sauber beenden + Liste immer leeren bei Wechsel
+        # P115 (v0.98.00): Mike-Spec — RX-Stationsliste NICHT leeren bei
+        # Normal↔Diversity-Wechsel (gleiches Band → Stationen sind noch
+        # gueltig, Aging laeuft eh weiter, optische Kontinuitaet wie
+        # Fortschrittsbalken). QSO-Log-Chronik bleibt unberuehrt.
         if old_mode == "diversity":
             self._disable_diversity()
-        self.rx_panel.table.setRowCount(0)
-        self.qso_panel.log_view.clear()
-        self.control_panel.update_decode_count(0)
 
         # Decode-Qualitaet automatisch: normal=schnell, diversity=tief
         self.decoder.set_quality(mode)
@@ -788,7 +788,7 @@ class RadioMixin:
         # Neuen Modus aktivieren
         if mode == "normal":
             self._rx_mode = "normal"
-            self._normal_stations = {}
+            # P115: _normal_stations NICHT leeren (Mike-Spec, Stationen bleiben)
             self._apply_normal_mode()
             self.control_panel._freq_hist.setVisible(False)
             self.control_panel.btn_diversity.setText("DIVERSITY")  # Reset Button-Text
@@ -957,16 +957,15 @@ class RadioMixin:
             self._auto_hunt.stop_auto_hunt("scoring_toggle")
         current = getattr(self._diversity_ctrl, 'scoring_mode', 'normal')
         new = "dx" if current == "normal" else "normal"
-        # P110 (v0.97.87): clear_panels=False — Stationen bleiben sichtbar,
-        # adaptieren sich automatisch (gleiche Antennen, nur Scoring wechselt).
-        self._activate_diversity_with_scoring(new, clear_panels=False)
+        # P115 (v0.98.00): _activate_diversity_with_scoring leert nie mehr —
+        # Stationen bleiben sichtbar, adaptieren sich ueber Cycle-Rebuild.
+        self._activate_diversity_with_scoring(new)
         # P103 (v0.97.80): Statusbar refresht damit „DIVERSITY STANDARD"
         # ↔ „DIVERSITY DX" sofort sichtbar wird (war vorher hängen, weil
         # subtoggle keinen _update_statusbar im direkten Pfad hatte).
         self._update_statusbar()
 
-    def _activate_diversity_with_scoring(self, scoring: str,
-                                          clear_panels: bool = True):
+    def _activate_diversity_with_scoring(self, scoring: str):
         """Diversity aktivieren mit explizitem scoring ('normal'|'dx').
 
         Wird sowohl aus dem Standard/DX-Dialog (User-Klick auf btn_diversity)
@@ -984,13 +983,10 @@ class RadioMixin:
         activate() respektiert dabei Cache-Ratio (AK5 — kein 50:50-Reset
         wenn Cache 70:30 etc. geladen wurde).
 
-        P110 (v0.97.87): ``clear_panels=False`` für Sub-Toggle Std↔DX
-        innerhalb Diversity (Stationen bleiben sichtbar). Default True
-        für echte Modus-Wechsel.
+        P115 (v0.98.00): ``clear_panels``-Parameter entfernt — Stations-
+        Liste wird hier NIE geleert (Mike-Spec, gleiches Band → bleibt).
         """
         self._rx_mode = "diversity"
-        if clear_panels:
-            self._diversity_stations = {}
         label = "DIVERSITY DX" if scoring == "dx" else "DIVERSITY"
         self.control_panel.btn_diversity.setText(label)
 
@@ -1000,8 +996,8 @@ class RadioMixin:
         # DXTuneDialog). _check_diversity_preset ruft am Ende
         # _enable_diversity → activate() der Dynamic-Pipeline.
         # P80: ft_mode-Parameter entfaellt (modus-unabhaengiger Gain).
-        # P110: clear_panels durchreichen für Sub-Toggle-Pfad.
-        self._check_diversity_preset(band, scoring, clear_panels=clear_panels)
+        # P115: clear_panels-Parameter entfaellt (Stations bleiben sichtbar).
+        self._check_diversity_preset(band, scoring)
 
         # P34-Stufe2 (AK6): scoring_mode-Wechsel-Reset explicit. Buffer
         # leeren falls Dynamic schon laief (zB Modus-Wechsel
@@ -1274,8 +1270,7 @@ class RadioMixin:
             self.control_panel.btn_cq.setText("CQ RUFEN")
             self.rx_panel.table.setEnabled(True)
 
-    def _enable_diversity(self, scoring_mode: str = "normal",
-                          clear_panels: bool = True) -> None:
+    def _enable_diversity(self, scoring_mode: str = "normal") -> None:
         """Diversity aktivieren: Antennenwechsel-Pattern + Dynamic-Pipeline.
 
         P34-Stufe2 (v0.97.19): einziger Pfad. Phase=operate sofort,
@@ -1287,22 +1282,13 @@ class RadioMixin:
         ``activate()``. Resume via ``_on_radio_connected`` →
         ``_check_diversity_preset`` triggert dann erneut.
 
-        P110 (v0.97.87): ``clear_panels=False`` NUR für Sub-Toggle
-        Std↔DX innerhalb Diversity verwenden (gleiche Antennen-Config,
-        nur Scoring wechselt — Stationen bleiben sichtbar, adaptieren
-        sich automatisch). Bei echtem Modus-Wechsel (Normal→Diversity,
-        Bandwechsel, Modewechsel FT8/FT4/FT2): Default True belassen.
+        P115 (v0.98.00): ``clear_panels``-Parameter entfernt (Mike-Spec).
+        Stations-Liste/dicts werden NIE in dieser Methode geleert —
+        echte Lösch-Pfade sind `_on_band_changed`, `_on_mode_changed`
+        und `_on_rx_panel_toggled`. Auch bei Normal→Diversity-Wechsel
+        bleibt die Liste sichtbar (optische Kontinuität).
         """
         self._diversity_in_operate = True  # P34-Stufe2: Phase ab sofort operate
-        # P110: RX-Liste + QSO-Panel nur leeren wenn echter Modus-Wechsel
-        # (nicht bei Sub-Toggle Std↔DX — beide Modi nutzen dieselben
-        # Antennen mit derselben Gain-Config).
-        if clear_panels:
-            self.rx_panel.table.setRowCount(0)
-            self._diversity_stations = {}
-            self._normal_stations = {}
-            self.qso_panel.log_view.clear()
-            self.control_panel.update_decode_count(0)
         # P35 Final-R1: Queue + current_ant unter Lock (Decoder-Thread popped
         # parallel in mw_cycle._on_cycle_decoded mit _diversity_lock).
         with self._diversity_lock:
@@ -1393,12 +1379,10 @@ class RadioMixin:
         band = self.settings.band
         if hasattr(self._gain_store, 'discard_staged'):
             self._gain_store.discard_staged(band)
-        # RX-Liste + QSO-Panel leeren bei Antennen-Modus-Wechsel
-        self.rx_panel.table.setRowCount(0)
-        self._diversity_stations = {}
-        self._normal_stations = {}
-        self.qso_panel.log_view.clear()
-        self.control_panel.update_decode_count(0)
+        # P115 (v0.98.00): RX-Liste + Stations-Dicts NICHT leeren
+        # (Mike-Spec: gleiches Band → Stationen bleiben sichtbar,
+        # Cycle-Aging raeumt veraltete Eintraege auf). QSO-Log-Chronik
+        # bleibt sowieso unberuehrt.
         self._diversity_ctrl.reset()
         self._rx_mode = "normal"
         self._apply_normal_mode()
@@ -1533,7 +1517,6 @@ class RadioMixin:
         )
 
     def _check_diversity_preset(self, band: str, scoring: str,
-                                 clear_panels: bool = True,
                                  auto_remess: bool = False) -> None:
         """Preset-Check bei Band/Modus-Wechsel mit aktiver Diversity.
 
@@ -1562,9 +1545,8 @@ class RadioMixin:
         P80 R1-F1 ROT: ``ant2_calibrated``-Check verhindert dass Diversity
         mit Normal-only-Migration-Werten (ant2_gain=0) startet.
 
-        P110 (v0.97.87): ``clear_panels`` Parameter wird an
-        ``_enable_diversity`` durchgereicht — False NUR für Sub-Toggle
-        Std↔DX innerhalb Diversity (RX-Panel nicht leeren).
+        P115 (v0.98.00): ``clear_panels``-Parameter entfernt —
+        Stations-Liste wird nie mehr von ``_enable_diversity`` geleert.
         """
         if not getattr(self, 'radio', None) or not self.radio.ip:
             return
@@ -1593,9 +1575,7 @@ class RadioMixin:
         if gain_fresh_for_div:
             _dlog("DIV-CACHE", "BRANCH=gain_fresh_diversity -> direkt")
             print(f"[Diversity] {band}: Gain fresh + ant2_cal → Dynamic startet")
-            # P110: clear_panels durchreichen für Sub-Toggle-Pfad
-            self._enable_diversity(scoring_mode=scoring,
-                                    clear_panels=clear_panels)
+            self._enable_diversity(scoring_mode=scoring)
             self._update_statusbar()
             return
 
@@ -1609,8 +1589,7 @@ class RadioMixin:
             print(f"[Diversity] {band}: {_branch} → Diversity startet "
                   f"mit {'altem Preset' if entry else 'Standard 10/10'} "
                   f"(KEIN Auto-Dialog, User klickt KALIBRIEREN)")
-            self._enable_diversity(scoring_mode=scoring,
-                                    clear_panels=clear_panels)
+            self._enable_diversity(scoring_mode=scoring)
             self._update_statusbar()
             return
 

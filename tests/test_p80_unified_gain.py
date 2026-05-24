@@ -149,11 +149,10 @@ def test_no_ft_mode_in_check_diversity_preset_signature():
     from ui.mw_radio import RadioMixin
     sig = inspect.signature(RadioMixin._check_diversity_preset)
     params = list(sig.parameters.keys())
-    # P110: clear_panels-Parameter hinzugefügt (Default True für Bandwechsel,
-    # False nur für Sub-Toggle Std↔DX innerhalb Diversity)
     # P112: auto_remess-Parameter hinzugefügt (Default False, True nur bei
     # Bandwechsel mit Setting auto_gain_on_band_change=True)
-    assert params == ["self", "band", "scoring", "clear_panels", "auto_remess"]
+    # P115 (v0.98.00): clear_panels-Parameter entfernt — Stations bleiben.
+    assert params == ["self", "band", "scoring", "auto_remess"]
 
 
 def test_no_get_diversity_store_method():
@@ -230,7 +229,7 @@ def test_check_diversity_preset_proceeds_when_ant2_calibrated_true(monkeypatch):
 
     RadioMixin._check_diversity_preset(obj, "30m", "normal")
 
-    obj._enable_diversity.assert_called_once_with(scoring_mode="normal", clear_panels=True)
+    obj._enable_diversity.assert_called_once_with(scoring_mode="normal")
     obj._start_dx_tuning.assert_not_called()
 
 
