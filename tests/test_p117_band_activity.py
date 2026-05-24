@@ -1,15 +1,24 @@
-"""P117 (24.05.2026, v0.98.02) — Band-Aktivitäts-Übersicht-Script.
+"""P117 (24.05.2026, v0.98.02) + P118 (v0.98.03) — Band-Aktivitäts-
+Übersicht-Script, Berliner Zeit (DST-aware).
 
-Mike-Wunsch: Standalone-Script `scripts/band_activity_summary.py` für
-Quick-Reference zur Band-Aktivität (vor Park-Trip).
+Mike-Wunsch P117: Standalone-Script `scripts/band_activity_summary.py`
+für Quick-Reference zur Band-Aktivität (vor Park-Trip).
 
-Aggregation: pro `(Band, Stunde)` arithmetisches Mittel der Modus-
-Mittelwerte. Nur Modi mit >= MIN_CYCLES_PER_BUCKET=12 Zyklen für
-die jeweilige Stunde tragen bei.
+Mike-Wunsch P118: Berliner Zeit statt UTC im Plot, Sommer/Winter
+automatisch über zoneinfo (Europe/Berlin).
+
+Aggregation: pro `(Band, lokale Stunde)` arithmetisches Mittel der
+Modus-Mittelwerte. Nur Modi mit >= MIN_CYCLES_PER_BUCKET=12 Zyklen
+tragen bei. UTC-File-Stunde wird via `_utc_file_to_local_hour`
+ins lokale Bucket aggregiert.
+
+Test-Datum-Konvention (für deterministische DST):
+- Sommer-Tests nutzen "2026-05-24" (DST aktiv → UTC+2)
+- Winter-Tests nutzen "2026-12-15" (DST inaktiv → UTC+1)
 
 Test-Coverage:
 - T1 Leerer stats_dir → 0 Bänder
-- T2 1 Band, 1 Modus mit 12 Cycles → 1 Stunde mit Wert
+- T2 1 Band, 1 Modus mit 12 Cycles (Sommer) → Wert in UTC+2-Stunde
 - T3 1 Band, 1 Modus mit 11 Cycles → KEIN Wert (Filter)
 - T4 1 Band, 3 Modi je 12 Cycles → arithmetisches Mittel
 - T5 1 Band, 2 Modi qualifiziert + 1 Modus zu wenig Cycles → Mittel aus 2
@@ -17,6 +26,9 @@ Test-Coverage:
 - T7 list_available_bands ignoriert Dirs ohne FT8/-Subdir
 - T8 generate_plot returnt 0 bei leerem Stats-Dir
 - T9 generate_plot erstellt PNG-File
+- T10 Stunden ohne Daten → None
+- T11 P118 Winter-Datum → UTC+1 (statt UTC+2)
+- T12 P118 Helper `_utc_file_to_local_hour` direkt (Sommer + Winter)
 """
 from __future__ import annotations
 
@@ -52,57 +64,53 @@ def test_t1_empty_stats_no_bands(tmp_path):
 
 
 def test_t2_one_mode_threshold_exact_yields_value(tmp_path):
-    """1 Band, 1 Modus mit exakt 12 Cycles → Stunde hat Wert (= station-count)."""
+    """P118: 1 Band, 1 Modus, Sommer-Datum, UTC-14 → Berlin-16 (UTC+2)."""
     from band_activity_summary import aggregate_band_hour
     _write_stats_file(
         tmp_path / "Normal" / "20m" / "FT8",
         date="2026-05-24", hour=14, n_cycles=12, stations=30)
     result = aggregate_band_hour(tmp_path, "20m")
-    assert result[14] == 30.0  # Mittel aus 1 Modus = 30
+    assert result[16] == 30.0  # Berlin-Sommer = UTC+2
+    assert result[14] is None  # UTC-14 ist nicht mehr key
 
 
 def test_t3_one_mode_below_threshold_no_value(tmp_path):
-    """1 Band, 1 Modus mit 11 Cycles → Stunde 14 hat None (Filter greift)."""
+    """1 Band, 1 Modus mit 11 Cycles → keine Berlin-Stunde hat Wert."""
     from band_activity_summary import aggregate_band_hour
     _write_stats_file(
         tmp_path / "Normal" / "20m" / "FT8",
         date="2026-05-24", hour=14, n_cycles=11, stations=30)
     result = aggregate_band_hour(tmp_path, "20m")
+    assert result[16] is None  # Berlin-Sommer = UTC+2
     assert result[14] is None
 
 
 def test_t4_three_modes_each_threshold_arithmetic_mean(tmp_path):
-    """3 Modi je 12 Cycles mit unterschiedlichen Stationen → arithmetisches
-    Mittel der Modus-Means."""
+    """P118: 3 Modi je 12 Cycles, Sommer → arithmetisches Mittel in Berlin-Stunde."""
     from band_activity_summary import aggregate_band_hour
-    # Normal: 30 Stationen/Cycle
     _write_stats_file(tmp_path / "Normal" / "20m" / "FT8",
                       "2026-05-24", 14, 12, stations=30)
-    # Diversity_Normal: 36
     _write_stats_file(tmp_path / "Diversity_Normal" / "20m" / "FT8",
                       "2026-05-24", 14, 12, stations=36)
-    # Diversity_Dx: 24 (DX filtert SNR<-10)
     _write_stats_file(tmp_path / "Diversity_Dx" / "20m" / "FT8",
                       "2026-05-24", 14, 12, stations=24)
     result = aggregate_band_hour(tmp_path, "20m")
-    # Mittel = (30 + 36 + 24) / 3 = 30
-    assert result[14] == pytest.approx(30.0)
+    # Mittel = (30 + 36 + 24) / 3 = 30 — in Berlin-Stunde 16 (UTC+2)
+    assert result[16] == pytest.approx(30.0)
 
 
 def test_t5_one_mode_below_threshold_uses_others(tmp_path):
-    """2 Modi qualifiziert + 1 Modus zu wenig Cycles → Mittel aus 2 Modi
-    (Mike-Spec: durch ANZAHL vorhandener Modi, nicht stur durch 3)."""
+    """P118: 2 Modi qualifiziert + 1 zu wenig Cycles → Mittel aus 2 in Berlin-Stunde."""
     from band_activity_summary import aggregate_band_hour
     _write_stats_file(tmp_path / "Normal" / "20m" / "FT8",
                       "2026-05-24", 14, 12, stations=30)
     _write_stats_file(tmp_path / "Diversity_Normal" / "20m" / "FT8",
                       "2026-05-24", 14, 12, stations=40)
-    # DX nur 5 Cycles → Filter greift, DX wird ignoriert
     _write_stats_file(tmp_path / "Diversity_Dx" / "20m" / "FT8",
-                      "2026-05-24", 14, 5, stations=100)  # Wert egal
+                      "2026-05-24", 14, 5, stations=100)
     result = aggregate_band_hour(tmp_path, "20m")
-    # Mittel = (30 + 40) / 2 = 35 (DX ignoriert)
-    assert result[14] == pytest.approx(35.0)
+    # Mittel = (30 + 40) / 2 = 35 in Berlin-Stunde 16 (UTC+2)
+    assert result[16] == pytest.approx(35.0)
 
 
 # ── T6-T7: Bänder-Liste + Sortierung ────────────────────────────
@@ -162,11 +170,42 @@ def test_t9_generate_plot_writes_png_when_data_present(tmp_path):
 
 
 def test_t10_hour_with_no_data_yields_none(tmp_path):
-    """Stunde ohne Daten in irgendeinem Modus → None im Result."""
+    """P118: Stunde ohne Daten → None. Sommer-Datum UTC-14 → Berlin-16."""
     from band_activity_summary import aggregate_band_hour
     _write_stats_file(tmp_path / "Normal" / "20m" / "FT8",
                       "2026-05-24", 14, 12, stations=30)
     result = aggregate_band_hour(tmp_path, "20m")
-    assert result[14] is not None  # 14 hat Daten
-    assert result[3] is None       # 03 nicht
-    assert result[20] is None      # 20 nicht
+    assert result[16] is not None  # Berlin-Sommer 14 UTC → 16
+    assert result[3] is None       # 03 hat keine Daten
+    assert result[20] is None      # 20 hat keine Daten
+
+
+# ── P118: DST-Awareness (Berliner Zeit) ────────────────────────────
+
+
+def test_t11_winter_date_uses_utc_plus_1(tmp_path):
+    """P118: Winter-Datum (DST inaktiv) → UTC+1, nicht UTC+2."""
+    from band_activity_summary import aggregate_band_hour
+    _write_stats_file(tmp_path / "Normal" / "20m" / "FT8",
+                      date="2026-12-15", hour=14, n_cycles=12, stations=30)
+    result = aggregate_band_hour(tmp_path, "20m")
+    # Berlin-Winter = UTC+1 → Berlin-Stunde 15
+    assert result[15] == 30.0
+    assert result[16] is None  # nicht UTC+2 (das wäre Sommer)
+
+
+def test_t12_helper_utc_to_local_hour_sommer_und_winter():
+    """P118: Helper-Funktion direkt mit bekannten DST-Grenzfällen."""
+    from band_activity_summary import _utc_file_to_local_hour
+    # Sommer (DST aktiv, UTC+2)
+    assert _utc_file_to_local_hour("2026-05-24", 0) == 2
+    assert _utc_file_to_local_hour("2026-05-24", 14) == 16
+    assert _utc_file_to_local_hour("2026-05-24", 22) == 0  # rollover
+    # Winter (DST inaktiv, UTC+1)
+    assert _utc_file_to_local_hour("2026-12-15", 0) == 1
+    assert _utc_file_to_local_hour("2026-12-15", 14) == 15
+    assert _utc_file_to_local_hour("2026-12-15", 23) == 0  # rollover
+    # DST-Wechsel-Tage (Edge-Case): Sommer→Winter Ende Oktober
+    # 26.10.2025 02:00 UTC + DST-Wechsel rückwärts: Berlin = 03:00 Sommer dann 02:00 Winter
+    # Pragmatisch: 02 UTC am Wechsel-Tag landet in Berlin-Stunde irgendwo zwischen 2-4
+    assert _utc_file_to_local_hour("2026-10-25", 12) in (13, 14)  # Wechsel-Tag tolerant

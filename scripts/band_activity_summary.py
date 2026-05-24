@@ -30,7 +30,9 @@ from __future__ import annotations
 
 import re
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import matplotlib
 matplotlib.use("Agg")  # headless, kein Display-Server nötig
@@ -45,6 +47,12 @@ OUTPUT_DE = BASE_DIR / "auswertung" / "bandaktivitaet.png"
 OUTPUT_EN = BASE_DIR / "auswertung" / "en" / "band_activity.png"
 
 RX_MODES = ["Normal", "Diversity_Normal", "Diversity_Dx"]
+
+# P118 (v0.98.03): Lokale Zeitzone für X-Achse. Stats werden in UTC
+# gespeichert, Plot zeigt Berliner Zeit (Sommer UTC+2, Winter UTC+1).
+# DST-Wechsel automatisch über zoneinfo (tzdata aus /usr/share/zoneinfo
+# auf macOS nativ verfügbar).
+LOCAL_TZ = ZoneInfo("Europe/Berlin")
 
 # R1-Feinjustierung (Mike-Field-Datenbasis): 12 Zyklen = ~3 Min Empfang.
 # Höher (30) würde junge Bänder wie 15m mit nur 5-9 Tagen Datenbasis
@@ -88,12 +96,39 @@ FILE_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})_(\d{2})\.md$")
 # ── Aggregation ─────────────────────────────────────────────────────
 
 
+def _utc_file_to_local_hour(date_str: str, utc_hour: int) -> int:
+    """P118 (v0.98.03): UTC-Stunde aus Dateiname → lokale Berliner Stunde.
+
+    DST-aware via zoneinfo. Stats-Files heißen `YYYY-MM-DD_HH.md` wo
+    HH die UTC-Stunde ist. Berliner Stunde hängt vom Datum ab (Sommer
+    UTC+2, Winter UTC+1).
+
+    Edge-Case DST-Wechsel-Tag (2/Jahr): Cycles innerhalb einer File
+    landen alle in derselben lokalen Stunde (Stunden-Start als
+    Repräsentation). Statistisch irrelevant (0.5% Daten).
+
+    Args:
+        date_str: "YYYY-MM-DD" aus Dateiname.
+        utc_hour: UTC-Stunde 0-23 aus Dateiname.
+
+    Returns:
+        Lokale Berliner Stunde 0-23.
+    """
+    year, month, day = map(int, date_str.split("-"))
+    dt_utc = datetime(year, month, day, utc_hour, tzinfo=timezone.utc)
+    return dt_utc.astimezone(LOCAL_TZ).hour
+
+
 def aggregate_band_hour(stats_dir: Path, band: str) -> dict[int, float | None]:
     """Pro Band: dict[hour] → mittlere Stationen über vorhandene Modi.
 
+    Stunden in BERLINER ZEIT (P118 v0.98.03, DST-aware). UTC-File-
+    Stunden werden via `_utc_file_to_local_hour` ins lokale Bucket
+    aggregiert.
+
     Mittelung-Strategie:
-        Pro Modus → Pooled-Mean Stationen über alle Tage je Stunde.
-        Pro Stunde → arithmetisches Mittel der Modi-Mittelwerte
+        Pro Modus → Pooled-Mean Stationen über alle Tage je lokale Stunde.
+        Pro lokale Stunde → arithmetisches Mittel der Modi-Mittelwerte
         (nur Modi mit >= MIN_CYCLES_PER_BUCKET Zyklen für diese Stunde).
         Wenn 0 Modi qualifizieren → None (Lücke im Plot).
 
@@ -102,9 +137,9 @@ def aggregate_band_hour(stats_dir: Path, band: str) -> dict[int, float | None]:
         band: Band-Name wie "20m", "40m", etc.
 
     Returns:
-        dict[hour_int] → float | None
+        dict[local_hour_int] → float | None
     """
-    # mode -> hour -> (sum_stations, n_cycles)
+    # mode -> local_hour -> (sum_stations, n_cycles)
     per_mode_hour: dict[str, dict[int, tuple[int, int]]] = {}
     for mode in RX_MODES:
         mode_dir = stats_dir / mode / band / "FT8"
@@ -115,7 +150,12 @@ def aggregate_band_hour(stats_dir: Path, band: str) -> dict[int, float | None]:
             fm = FILE_RE.match(f.name)
             if not fm:
                 continue
-            hour = int(fm.group(2))
+            date_str = fm.group(1)
+            utc_hour = int(fm.group(2))
+            try:
+                local_hour = _utc_file_to_local_hour(date_str, utc_hour)
+            except (ValueError, OverflowError):
+                continue  # defekter Dateiname, überspringen
             try:
                 content = f.read_text(encoding="utf-8")
             except OSError:
@@ -123,8 +163,8 @@ def aggregate_band_hour(stats_dir: Path, band: str) -> dict[int, float | None]:
             for line in content.splitlines():
                 rm = ROW_RE.match(line)
                 if rm:
-                    sum_st, n_cyc = per_mode_hour[mode].get(hour, (0, 0))
-                    per_mode_hour[mode][hour] = (
+                    sum_st, n_cyc = per_mode_hour[mode].get(local_hour, (0, 0))
+                    per_mode_hour[mode][local_hour] = (
                         sum_st + int(rm.group(2)), n_cyc + 1)
 
     result: dict[int, float | None] = {}
@@ -177,14 +217,14 @@ def generate_plot(stats_dir: Path, output: Path, lang: str = "de") -> int:
         return 0
 
     if lang == "de":
-        title = ("Band-Aktivität nach UTC-Stunde "
+        title = ("Band-Aktivität nach Berliner Stunde "
                  "(Ø Stationen, alle RX-Modi)")
-        xlabel = "Stunde (UTC)"
+        xlabel = "Stunde (Berlin)"
         ylabel = "Ø Stationen / 15s-Zyklus"
     else:
-        title = ("Band activity by UTC hour "
+        title = ("Band activity by Berlin hour "
                  "(avg stations, all RX modes)")
-        xlabel = "Hour (UTC)"
+        xlabel = "Hour (Berlin)"
         ylabel = "Avg stations / 15s cycle"
 
     fig, ax = plt.subplots(figsize=(12, 6), facecolor=DARK_BG)
