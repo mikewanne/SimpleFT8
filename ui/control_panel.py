@@ -277,6 +277,13 @@ class _ModeBandCard(QFrame):
             f"color: #7799FF; font-size: 10px; font-family: {_FONT}; font-weight: bold;"
         )
         header_row.addWidget(lbl_mb)
+        # P114 (v0.97.99): Status-Suffix neben MODUS+BAND — zeigt aktuellen
+        # Modus + Band auch wenn Kachel eingeklappt (analog P97 Antenne/Radio).
+        # Dezente Schrift (gleiche Farbe wie MODUS+BAND, nicht-bold).
+        self.lbl_mb_status = QLabel("")
+        self.lbl_mb_status.setStyleSheet(
+            f"color: #7799FF; font-size: 10px; font-family: {_FONT};")
+        header_row.addWidget(self.lbl_mb_status)
         header_row.addStretch()
         lay.addLayout(header_row)
 
@@ -389,9 +396,14 @@ class _ModeBandCard(QFrame):
 
         Programm-API — emitiert KEIN collapse_changed-Signal (Init-Loop-
         Schutz). User-Klick geht ueber _toggle_collapsed.
+
+        P114 (v0.97.99): Status-Suffix-Label NUR sichtbar bei collapsed —
+        bei aufgeklappter Kachel zeigen die Mode/Band-Buttons im Body
+        die Info, sonst doppelt.
         """
         self._body_widget.setVisible(not collapsed)
         self.toggle_btn.setText("▶" if collapsed else "▼")
+        self.lbl_mb_status.setVisible(collapsed)
         if collapsed:
             self.setMaximumHeight(36)
         else:
@@ -1481,9 +1493,12 @@ class ControlPanel(QWidget):
         # sie aktualisieren können (auch bei eingeklappter Kachel sichtbar).
         self._antenne_card_status_label = ant_card.lbl_ant_status
         self._radio_card_status_label = radio_card.lbl_radio_status
+        # P114 (v0.97.99): MODUS+BAND-Status-Label fuer eingeklappte Kachel.
+        self._mode_band_card_status_label = mb_card.lbl_mb_status
         # Initial-Befüllung
         self._refresh_antenna_status_label()
         self._refresh_radio_status_label()
+        self._refresh_modeband_status_label()
         # P63 (v0.97.36): TUNE-Button-Sichtbarkeit via tuner_present-Setting.
         # MainWindow ruft `set_tuner_present` nach __init__ und nach jedem
         # Settings-Save (Live-Apply).
@@ -1627,6 +1642,7 @@ class ControlPanel(QWidget):
         self.btn_ft2.setChecked(mode == "FT2")
         self._update_frequency()
         self.mode_changed.emit(mode)
+        self._refresh_modeband_status_label()  # P114: Sync fuer eingeklappte Kachel
 
     def _set_band(self, band: str):
         self._current_band = band
@@ -1642,6 +1658,7 @@ class ControlPanel(QWidget):
                 btn.setVisible(True)
         self._update_frequency()
         self.band_changed.emit(band)
+        self._refresh_modeband_status_label()  # P114: Sync fuer eingeklappte Kachel
 
     def set_visible_bands(self, bands: list) -> None:
         """P50 (v0.97.20): Public-API für sichtbare Band-Buttons.
@@ -1758,6 +1775,19 @@ class ControlPanel(QWidget):
             text = f"— {self._current_power_watts} W"
         if hasattr(self, '_radio_card_status_label'):
             self._radio_card_status_label.setText(text)
+
+    def _refresh_modeband_status_label(self):
+        """P114 (v0.97.99): Header-Status der MODUS+BAND-Kachel.
+
+        Zeigt aktuellen Modus + Band als dezenten Suffix neben „MODUS+BAND"
+        damit Mike auch bei eingeklappter Kachel sieht was laeuft.
+        Format: „— FT8 · 20m" (analog P97 Antenne/Radio-Suffixe).
+        """
+        mode = self._current_mode  # "FT8" / "FT4" / "FT2"
+        band = self._current_band  # "20m", "40m", ...
+        text = f"— {mode} · {band}" if mode and band else ""
+        if hasattr(self, '_mode_band_card_status_label'):
+            self._mode_band_card_status_label.setText(text)
 
     # =====================================================================
     # Diversity Ratio Display

@@ -174,3 +174,56 @@ def test_t15_click_back_to_normal_after_dx_scoring(panel):
     assert panel._antenne_card_status_label.text() == "— Diversity DX"
     panel._on_rx_mode_clicked("normal")
     assert panel._antenne_card_status_label.text() == "— Normal"
+
+
+# ── P114 (24.05.2026, v0.97.99): MODUS+BAND Status-Suffix ─────────
+#
+# Mike-Wunsch 24.05.: analog P97 Antenne/Radio auch die Modus+Band-Kachel
+# im Header einen Status-Suffix zeigen. Default: „— FT8 · 20m".
+
+
+def test_t16_modeband_status_default(panel):
+    """Initial: Default-Mode FT8 + Default-Band 20m → Label „— FT8 · 20m"."""
+    assert panel._mode_band_card_status_label.text() == "— FT8 · 20m"
+
+
+def test_t17_modeband_status_mode_change(panel):
+    """_set_mode('FT4') updated Label sofort auf „— FT4 · 20m"."""
+    panel._set_mode("FT4")
+    assert panel._mode_band_card_status_label.text() == "— FT4 · 20m"
+
+
+def test_t18_modeband_status_band_change(panel):
+    """_set_band('40m') updated Label sofort auf „— FT8 · 40m"."""
+    panel._set_band("40m")
+    assert panel._mode_band_card_status_label.text() == "— FT8 · 40m"
+
+
+def test_t19_modeband_status_combined_changes(panel):
+    """Kombi: _set_mode + _set_band beide reflektiert."""
+    panel._set_mode("FT4")
+    panel._set_band("17m")
+    assert panel._mode_band_card_status_label.text() == "— FT4 · 17m"
+
+
+def test_t20_modeband_status_ft2_honors_actual_mode(panel):
+    """FT2-Button ist hidden, aber _set_mode('FT2') ist programmatic
+    callable. Label zeigt ehrlich den aktiven Mode (Mike-Intent KISS:
+    Anzeige ist nicht-luegend, FT2 zeigen wenn aktiv)."""
+    panel._set_mode("FT2")
+    assert panel._mode_band_card_status_label.text() == "— FT2 · 20m"
+
+
+def test_t21_modeband_status_visible_only_when_collapsed(panel):
+    """Analog P97 T11/T12: bei aufgeklappter Kachel sieht man die Mode/
+    Band-Buttons im Body — Status-Suffix waere doppelt. Daher nur bei
+    collapsed zeigen.
+
+    Offscreen-Test nutzt `isHidden()` statt `isVisible()` (Widget ist
+    nicht in einem geshow'ten Parent → isVisible() waere immer False)."""
+    panel._mode_band_card.set_collapsed(False)
+    assert panel._mode_band_card_status_label.isHidden(), (
+        "Aufgeklappte Kachel: MODUS+BAND-Status-Label muss versteckt sein")
+    panel._mode_band_card.set_collapsed(True)
+    assert not panel._mode_band_card_status_label.isHidden(), (
+        "Eingeklappte Kachel: MODUS+BAND-Status-Label darf NICHT hidden sein")
