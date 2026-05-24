@@ -13,7 +13,7 @@ import atexit
 import signal
 from pathlib import Path
 
-APP_VERSION = "0.98.00"
+APP_VERSION = "0.98.01"
 
 # ── P43: Activity Monitor zeigt Prozess-Namen statt nur "Python" ──
 # Bei der P30-Memory-Leak-Diagnose 12.05. konnte Mike SimpleFT8 nicht
@@ -45,15 +45,26 @@ _log_path, _log_file = setup_main_log(_LOG_DIR)
 
 # ── P52 (v0.97.41): 90-Tage-Rolling-Window fuer statistics/ ──────────
 # Stats-Toggle wurde entfernt — Stats sind immer an. Damit Disk-
-# Footprint nicht unbegrenzt waechst (~1 MB/Tag): Files aelter als
-# 90 Tage beim App-Start automatisch loeschen (Cutoff aus Dateiname,
-# NICHT mtime — Backup-robust). Fail-silent.
-from core.stats_cleanup import cleanup_stats_older_than_days
+# P116 (v0.98.01): FIFO-Sliding-Window pro (Modus, Band, Proto, Stunde)-
+# Bucket loest 90-Tage-Datum-Cleanup (P52) ab. Saisonale Anpassung +
+# Pause-Robustheit (Mike-Anforderung 24.05.). Default N=30. Antenna_QSO
+# bleibt 90-Tage-Datum-basiert (Tages-Format). Bandpilot-Cache wird
+# invalidiert wenn Files geloescht wurden. Fail-silent.
+from core.stats_cleanup import (
+    prune_stats_to_max_per_bucket,
+    cleanup_antenna_qso_older_than_days,
+    invalidate_bandpilot_cache_if_needed,
+)
 try:
     _STATS_DIR = Path(__file__).parent / "statistics"
-    _deleted = cleanup_stats_older_than_days(_STATS_DIR, days=90)
-    if _deleted:
-        print(f"[Stats-Cleanup] {_deleted} Dateien >90 Tage geloescht")
+    _deleted_buckets = prune_stats_to_max_per_bucket(
+        _STATS_DIR, max_per_bucket=30)
+    _deleted_qso = cleanup_antenna_qso_older_than_days(
+        _STATS_DIR, days=90)
+    if _deleted_buckets or _deleted_qso:
+        print(f"[Stats-Cleanup] {_deleted_buckets} Files via FIFO gekuerzt, "
+              f"{_deleted_qso} antenna_qso Files >90d geloescht")
+    invalidate_bandpilot_cache_if_needed(_deleted_buckets)
 except Exception as _e:
     print(f"[Stats-Cleanup] Fehler ignoriert: {_e}")
 
