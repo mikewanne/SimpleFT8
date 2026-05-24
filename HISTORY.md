@@ -13848,3 +13848,97 @@ Normal↔Diversity wechseln → Tabelle bleibt voll. Kalibrieren →
 Tabelle bleibt voll (statt leer-und-wieder-füllen-müssen).
 
 **Folge-Ticket:** keins direkt — P115 schließt einen UX-Bug vollständig.
+
+## 2026-05-24 v0.98.01 — P116 FIFO-Sliding-Window Stats-Cleanup (loest P52-90-Tage-Cleanup ab)
+
+Mike-Anforderung 24.05.: 90-Tage-Datum-Cleanup ist fragil — wer 90+
+Tage nicht funkt verliert ALLE Stats, Bandpilot startet blind.
+Plus saisonales Problem: ANT2 = Regenrinne, Performance variiert
+Sommer (trocken) vs. Winter (nass/Schnee) — alte Sommer-Daten würden
+Bandpilot-Empfehlung im Winter verfälschen.
+
+**Mike-Spec:** FIFO-Schiebe-Register pro `(Modus, Band, Stunde)`-
+Bucket. Neue Daten oben rein, älteste raus, fester Pool. Pause-robust
+(Daten bleiben) UND saisonal selbst-adaptiv (alte Daten werden
+durch frische verdrängt).
+
+**DeepSeek-Brainstorm-Konsens: N=30 pro Bucket** (saisonal aktuell
+~1 Monat, statistisch ausreichend n>=25 für Bootstrap-CI,
+Pause-robust bis monatelange Auszeiten).
+
+**Architektur (`core/stats_cleanup.py` -71/+145 LOC):** 3 neue
+Funktionen statt 1 alte:
+
+1. `prune_stats_to_max_per_bucket(stats_dir, max_per_bucket=30)`
+   — FIFO pro `(Modus, Band, Proto, Stunde)`-Bucket. Bucket-Key:
+   `(str(relative_parent), hour_str)`. Stations/-Files sind eigene
+   Buckets (parallel geschrieben → identische Datums → identisches
+   Pruning-Ergebnis).
+2. `cleanup_antenna_qso_older_than_days(stats_dir, days=90)`
+   — Antenna_QSO bleibt 90-Tage-Datum-basiert (Tages-Format,
+   passt nicht zu Stunden-Bucket).
+3. `invalidate_bandpilot_cache_if_needed(deleted_count)`
+   — Bandpilot-Cache invalidieren wenn Files gelöscht wurden
+   (sonst zeigt UI veraltete Aggregate aus ~/.simpleft8/
+   bandpilot_hourly.json). KISS: Cache-File direkt löschen.
+
+**`main.py` Aufruf umgestellt** auf 3-Funktionen-Sequenz.
+
+**Backup-Strategie (Mike-Wunsch „nichts kaputt machen"):**
+
+- `git push origin main` 10 Commits ahead → 2d26b49..0115db1
+- `Appsicherungen/2026-05-24_v0.98.00_vor_p116/` 4 MB (Code + Doku)
+- Falls Eingriff in der Praxis Probleme macht: `git revert 0.98.01-
+  Commits` ODER Backup wieder einspielen
+
+**Workflow voll durch:**
+
+- Brainstorm-R1 V4-pro: Pool-Größe N — N=10 zu klein (1 Ausreißer
+  kippt Empfehlung), N=60 zu träge (wochenlang alte Daten nach
+  Wetterumschwung), **N=30 Sweet Spot**
+- V1 → V2 Self-Review: 7 Findings ✓
+- R1 V4-pro Code-Review: 0 Blocker, 2 kleine Verbesserungen
+  (T3a Sortier-Test, Typo „geprunt" → „gekuerzt") eingebaut
+- V3 → Code
+- **Final-R1 V4-pro STRENG (Mike-Sorge):** explizite Validierung
+  10 Punkte einzeln — Datenverlust-Risiko, Cache-Race, Antenna_QSO-
+  Isolation, Fail-Silent, Race-Conditions, Migration, Konsistenz,
+  Test-Coverage, Code-Stil. **Ergebnis: 0 Mängel.**
+  Zitat R1: „Mike-Sorge ist unbegründet — der Code macht NUR was er
+  soll und fällt im Fehlerfall weich. PUSH FREIGEGEBEN."
+
+**V4-pro 48-Cycle-Bilanz:** 1 Halluzination (P114-F2, ~2% Rate).
+
+**Tests:** 1787 → 1794 (+7 netto, 0 Regressions). 13 neue P116-Tests
+in `tests/test_p116_fifo_cleanup.py`:
+
+- T1-T2 Bucket unter/auf Limit → keine Aktion
+- T3 Bucket über Limit → älteste N gelöscht
+- T3a (R1-Empfehlung) jüngste 30 explizit erhalten
+- T4 Mehrere Buckets unabhängig
+- T5-T6 Stations/-Subdir separater Bucket + parallel-konsistent
+- T7-T8 Antenna_QSO 90-Tage-Cleanup + Isolation
+- T9 Idempotenz
+- T10-T11 Cache-Invalidierung bedingt
+- T12-T13 Robustheit
+
+Alter `tests/test_p52_stats_cleanup.py` reduziert auf 1 Settings-
+Migration-Test (T7 — nichts mit Cleanup zu tun).
+
+**Migrations-Verhalten beim ersten Start nach Update:**
+
+Pro Bucket werden alle bis auf jüngste 30 behalten. Bei aktueller
+Datenbasis (~Hunderte Files, vermutlich keine Stunde-Buckets mit >30
+verschiedenen Tagen) erwartet 0 Lösch-Aktionen. Loggt:
+`[Stats-Cleanup] X Files via FIFO gekuerzt, Y antenna_qso Files >90d
+geloescht`. Cache-File `~/.simpleft8/bandpilot_hourly.json` wird
+automatisch invalidiert wenn was gelöscht wurde.
+
+**Field-Test:** ohne Radio testbar.
+- App starten → Log-Zeile beobachten
+- Bandpilot funktioniert wie gewohnt (Aggregation re-läuft)
+- Über Monate: nach 30+ Funktagen je `(Modus, Band, Stunde)` greift
+  FIFO automatisch
+
+**Folge-Ticket:** keins. P116 schließt 90-Tage-Pause-Problem +
+saisonale Anpassung in einem Schritt.

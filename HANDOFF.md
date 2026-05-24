@@ -1,8 +1,38 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-24 — v0.98.00 P115 Empfangsfenster bleibt bei RX-Mode/Kalibrierung
+## Stand 2026-05-24 — v0.98.01 P116 FIFO-Sliding-Window Stats-Cleanup
 
-**Aktueller Code-Stand:** v0.98.00, Tests **1787 grün** (+2 netto).
+**Aktueller Code-Stand:** v0.98.01, Tests **1794 grün** (+7 netto).
+
+### 🟢 v0.98.01 — P116 FIFO-Sliding-Window Stats-Cleanup (löst 90-Tage-Cleanup ab)
+
+Mike-Anforderung 24.05.: 90-Tage-Datum-Cleanup ist fragil — wer 90+
+Tage nicht funkt verliert ALLE Stats, Bandpilot startet blind. Plus
+saisonale Anpassung der Regenrinne-Antenne (Sommer trocken vs. Winter
+nass).
+
+**Lösung:** FIFO-Schiebe-Register pro `(Modus, Band, Stunde)`-Bucket
+mit Default N=30 (DeepSeek-Konsens — saisonal aktuell, statistisch
+n>=25 für Bootstrap-CI, Pause-robust). Antenna_QSO bleibt 90-Tage-
+Datum-Cleanup (Tages-Format). Bandpilot-Cache wird invalidiert wenn
+Files gelöscht wurden.
+
+**Backup-Strategie (Mike-Wunsch „nichts kaputt machen"):**
+- `git push origin main` — alles vor Eingriff auf GitHub
+- `Appsicherungen/2026-05-24_v0.98.00_vor_p116/` — lokales 4-MB-Backup
+
+**Workflow voll durch:** Brainstorm-R1 (N=30 Konsens) → V1→V2(7 Findings)
+→R1 V4-pro (0 Blocker, 2 kleine Verbesserungen eingebaut) →V3→Code
+→Final-R1 STRENG (10-Punkte-Validierung wegen Mike-Sorge): **0 Mängel**,
+„Code macht NUR was er soll und fällt im Fehlerfall weich".
+
+**V4-pro 48-Cycle-Bilanz:** 1 Halluzination (~2% Rate).
+
+Tests 1787 → 1794 (+7 netto, 0 Regressions). 13 neue P116-Tests.
+APP_VERSION 0.98.00 → 0.98.01. Field-Test ohne Radio.
+
+**Nächste 1-2 Schritte:** P74-B Phase 2 (Cross-Band-Gain-Interpolation)
+weiterhin offen — kann separater Session sein.
 
 ### 🟢 v0.98.00 — P115 Empfangsfenster bleibt bei RX-Mode-Switch/Kalibrierung
 

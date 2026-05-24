@@ -1,6 +1,25 @@
-# SimpleFT8 TODO — Stand 24.05.2026 (v0.98.00, P115 erledigt)
+# SimpleFT8 TODO — Stand 24.05.2026 (v0.98.01, P116 erledigt)
 
 ---
+
+## ✅ P116 FIFO-Sliding-Window Stats-Cleanup ERLEDIGT (v0.98.01, 24.05.2026)
+
+Mike-Anforderung 24.05.: 90-Tage-Datum-Cleanup ersetzen — fragil bei
+langer Funk-Pause (alle Daten weg) und saisonaler Antennen-Variation
+(Sommer/Winter-Wechsel der Regenrinne).
+
+**Lösung:** FIFO pro `(Modus, Band, Proto, Stunde)`-Bucket mit N=30
+(DeepSeek-Brainstorm-Konsens). Antenna_QSO bleibt 90-Tage-Datum.
+Bandpilot-Cache wird invalidiert bei Lösch-Aktion.
+
+**Backup vor Eingriff:** GitHub-Push + lokales 4-MB-Backup in
+`Appsicherungen/2026-05-24_v0.98.00_vor_p116/`.
+
+**Workflow voll durch:** Brainstorm-R1 (N=30) → V1→V2(7 Findings)
+→R1 V4-pro (0 Blocker, 2 Verbesserungen eingebaut) →V3→Code
+→Final-R1 STRENG-validiert (10-Punkte, 0 Mängel). V4-pro 48-Cycle:
+1 Halluzination (~2% Rate). Tests 1787→1794 (+7 netto). Details:
+HISTORY.md v0.98.01.
 
 ## ✅ P115 Empfangsfenster bleibt bei RX-Mode-Switch/Kalibrierung ERLEDIGT (v0.98.00, 24.05.2026)
 
