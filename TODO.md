@@ -1,4 +1,33 @@
-# SimpleFT8 TODO — Stand 24.05.2026 (v0.98.03, P118 erledigt)
+# SimpleFT8 TODO — Stand 25.05.2026 (v0.98.04, P121 erledigt)
+
+---
+
+## ✅ P121 Multi-Radio-Refactor Variante A ERLEDIGT (v0.98.04, 25.05.2026)
+
+Mike-Ziel: IC-7300 + IC-7100 als spätere Forks vorbereiten. **Plumbing
+Variante A** umgesetzt — Hardware-Konstanten ans Radio, IC-Stubs angelegt,
+radio_factory erweitert.
+
+**Architektur-Klarstellung (R1-Catch):** FlexRadio erbt `QObject`, NICHT
+`RadioInterface` → ABC-Class-Variables werden nicht vererbt. Pattern ist
+Duck-Typing: jede Radio-Klasse setzt eigene Class-Variables explizit.
+
+**Workflow voll durch:** V1 → V2 (mit A1-A9 Self-Review) → R1 V4-pro
+(9 Findings, 3 ROT alle adressiert, 1 ORANGE bewusst abgelehnt) → V3 →
+Code in 7 atomaren Edits → Final-R1 (1 ROT-Catch — 3 weitere TUNE-Pfade
+in mw_radio.py, behoben) → Re-Check „PUSH FREIGEGEBEN".
+
+**Geänderte Files:** 8 Source (radio/base_radio, flexradio, ic7300 NEU,
+ic7100 NEU, radio_factory, config/settings, ui/main_window, mw_tx,
+mw_radio, connect_status_dialog) + 6 neue Test-Files + 5 alte angepasst.
+
+**V4-pro 49-Cycle:** 0 Halluzinationen in P121. Tests 1806 → 1838 (+32).
+
+**Was bleibt für echten IC-Fork:** CI-V-Protokoll-Impl (Modell-IDs 0x94/
+0x88), USB-Audio-Backend (sounddevice), Hardware-Konstanten der IC-Stubs
+(0.5/0.10 Schätzungen) per echter Messung validieren, P122 UI-Conditional
+bei !supports_diversity, IC-Tuner-Logik. Variante B + C nicht jetzt
+(premature).
 
 ---
 
@@ -185,7 +214,184 @@ für Fall A (TUNE ohne Gain-Mess). Voller Workflow V1→V2→R1→V3→C1-C6
 Voller Workflow V1→V2→R1→V3→C1-C3→Final-R1 durch. Details:
 HISTORY.md v0.97.93.
 
+## 🆕 OFFEN — Diagramm-Legende Tage-Coverage ehrlicher (Mike 24.05.2026)
+
+**Problem (Mike-Beobachtung 24.05.):** 15m FT8 Diagramm zeigt in der
+Legende „5 Tage" für Normal/DivStd, obwohl Mike an 9 unique Tagen
+gemessen hat. DX zeigt „3 Tage", echt sind 5 unique Tage.
+
+**Ursache:** `scripts/generate_plots.py:898` nimmt `max(n_days)` über
+alle Stunden — also die Stunde mit der BESTEN Coverage. Das ist
+konservativ („mindestens so viele Tage hast du je Stunde maximal")
+aber irreführend wenn Mike kurz-aber-häufig auf verschiedenen Stunden
+misst (sein neuer empfohlener Mess-Stil).
+
+**Beispiel echte 15m-Datenbasis:**
+- Normal: 9 unique Tage gesamt, max 5 Tage in Stunde 11 UTC
+- DivStd: 9 unique Tage gesamt, max 5 Tage in Stunde 12 UTC
+- DivDx:  5 unique Tage gesamt, max 3 Tage in Stunde 12 UTC
+
+**Lösung Option B (Vorschlag Claude):** Legende ergänzen um Gesamt-
+Tage. Format: „9 Tage gesamt (max 5/Stunde) · 7522 Messpunkte"
+statt nur „5 Tage · 7522 Messpunkte".
+
+**Aufwand:** ~10 LOC in `_n_days_label` (Z. 894-901) — `unique_days`
+über alle Stunden via Set sammeln, beides ausgeben. Plus
+`load_hourly_stats` müsste daily-Set ggf. exposen. Plus DE+EN-
+Format-Strings anpassen (`T['basis_entry']`). Plus Tests.
+
+Voller Workflow Pflicht. ~1h Aufwand.
+
+**Priorität:** niedrig — kosmetisch, kein Bug. Aktuelle Legende ist
+nicht falsch, nur konservativ. Wenn Mike viel kurz-aber-häufig
+misst (P116-Mess-Strategie), wird die Diskrepanz größer und sollte
+gefixt werden.
+
+## 🆕 OFFEN — P120 Sterne-Schwellen FT8-realistisch (Mike 25.05.2026)
+
+**Mike-Beobachtung 25.05.2026:** „Lokale Empfangsqualität: ★★★☆☆" auf
+15m FT8 mit Median-SNR −17 dB der Top-Hälfte. Aber −17 dB ist in FT8
+ein normal-guter Pegel (Decoder läuft bis ~−24 dB, Stationen über
+−10 dB sind außergewöhnlich stark). Heutige Schwellen sind aus
+SSB/CW-Denke übernommen — 5 ★ (> −10 dB Median) ist praktisch
+unerreichbar.
+
+**Code-Stelle:** `compute_local_conditions` in `ui/mw_cycle.py:26-58`
+(5 Schwellen-Zeilen) + `tests/test_local_conditions.py`.
+
+**Heutige Schwellen → Vorschlag:**
+
+| Sterne | Heute | Vorschlag |
+|---|---|---|
+| 5 ★ | > −10 dB | > **−13** dB |
+| 4 ★ | > −14 dB | > **−16** dB |
+| 3 ★ | > −18 dB | > **−19** dB |
+| 2 ★ | > −22 dB | > −22 dB (unverändert) |
+| 1 ★ | drunter | drunter (unverändert) |
+
+Test-Screenshot 25.05. (Median −17) würde damit von 3 ★ auf **4 ★**
+springen — realistischere Verteilung über alle 5 Sterne.
+
+**Workflow-Pflicht:** ja, auch wenn nur 5 Zeilen (CLAUDE.md
+Label-Fix-Falle 01.05.2026). Volle V1→V2→R1→V3→Code-Runde. Kein
+Hardware-Risiko, kein TUNE-Pfad → **kann auch Remote umgesetzt
+werden**, anders als P119/Multiband.
+
+**Aufwand:** ~30 Min inkl. Workflow + Test-Anpassung
+(`test_local_conditions.py` hat fixe SNR-Werte die zu den Schwellen
+passen — müssen mit nachgezogen werden).
+
+## 🆕 OFFEN — P119 RFPreset/Krücke entfernen, Live-Loop reicht (Mike 25.05.2026)
+
+> ⛔ **Nur vor Ort am Radio anpacken** — TUNE-Pfad ist sicherheitskritisch
+> (ANT1-Pflicht, SWR-Watchdog). Falls TUNE-Verhalten kippt: Power-Cycle
+> nötig, Remote nicht heilbar.
+
+**Mike-Erkenntnis 25.05.2026 (KISS-Vereinfachung):** Die Live-Regelung
+`_auto_adjust_tx_level` (mw_tx.py:780) lernt den richtigen Slider-Wert
+pro `(Band, Watt)`-Kombi **sowieso** beim ersten FT8-TX und speichert ihn
+in `rf_preset_store`. Slider ist Maximum-Begrenzer der PA — kann nie mehr
+senden als der Wert erlaubt. Beim Erst-TX einfach `Slider = Watt-Zahl`
+zu setzen kostet 1-2 Slot Anpassung beim allerersten Mal — danach
+identisch zu heute. FT8 lebt von -20 dB SNR, die Lücke ist praktisch null.
+
+**Damit wird obsolet:**
+- `_tune_converge_to_target` (`mw_tx.py:489-561`, ~75 LOC) — die heute
+  ohnehin nicht greifende Phase-B-Convergenz (FWDPWR bleibt bei 11.6 W
+  obwohl Soll 10 W, Mike-Beobachtung 25.05. mit Screenshot — siehe
+  Diagnose unten)
+- `_kruecken_skalierung` (`mw_tx.py:563-…`, ~50 LOC) — Interpolation
+  10-W-Stützpunkt × 0.9 ist Premature Optimization
+- Phase-B-Block in `_tune_stop` (mw_tx.py:250-264) — Aufruf entfällt
+- P76-B Phase-2-Label „Leistung wird auf 10 W eingeregelt …" — muss
+  weg oder zu „SWR-Settle …" umformuliert
+- Re-Entry-Sperren `_tune_stop_active` / `_tune_convergence_cancelled`
+  größtenteils (nur noch trivialer Doppelklick-Schutz nötig)
+
+**Was bleibt:**
+- TUNE-Button = reiner ATU-Match-Vorgang (10 W Träger, konfigurierte
+  Dauer, dann tune_off + 2 s Post-SWR-Check)
+- P54a Auto-TUNE bei Bandwechsel: nur ATU-Match, kein FWDPWR-Sampling
+- P74-A DXTuneDialog-States `TUNE → GAIN_CYCLES → FINISHED` bleiben,
+  nur Phase-B-Anzeige in TUNE-State entfällt
+- P76-A SWR-Freeze (`_tune_last_valid_swr`) bleibt — Hardware-Safety
+- P63 SWR-Watchdog bleibt — Hardware-Safety
+- Per-(Band, Watt) Slider-Speichern beim Live-FT8-TX bleibt — der ganze
+  Lern-Mechanismus läuft bereits
+
+**Diagnose Phase-B-Bug (zur Erinnerung beim Umsetzen):** Mike sah am
+25.05. bei 15m-Kalibrierung: Phase-A TUNE → SWR 2.3 / 11.5 W, Phase-B
+„Leistung wird auf 10 W eingeregelt · 13 s · FWDPWR 11.6 W" — Slider
+geht NICHT runter. Wahrscheinlich `_fwdpwr_samples` nicht befüllt
+(`MIN_SAMPLES=2` nicht erreicht) → 5 Leerlauf-Iter → Z. 559 best-effort
+`return rf=10`. Egal — entfernt sich mit dem Refactor sowieso komplett.
+
+**Caveat beim Code:** Auto-TUNE-Dialog (P54a) und DXTuneDialog (P74-A)
+müssen sauber von der Phase-B-Anzeige entkoppelt werden — sonst hängt
+ein Dialog auf einem Schritt der nicht mehr existiert. R1-Pflichtcheck.
+
+**Aufwand-Schätzung:** ~200 LOC netto Lösch + Test-Anpassung. Voller
+Workflow V1→V2→R1→V3→Code→Final-R1 pflicht (TUNE-Pfad =
+sicherheitskritisch). Tests: müssen weiter grün bleiben, vermutlich
+einige P54/P54-FIX/P76-B-Tests obsolet.
+
+**Folge-Vorteile:** Code wird massiv einfacher (P54+P54-FIX+P76-A
++P76-B+P74-A waren alle Reaktionen auf die zusätzliche Komplexität die
+mit der Phase-B-Convergenz kam). Weniger Code = weniger Bug-Fläche.
+
+## 🆕 OFFEN — Multiband-Integration (Mike 24.05.2026)
+
+> ⛔ **NUR vor Ort am Radio anpacken** — niemals aus der Ferne.
+
+**Grund (Mike 24.05.2026):** Slice-B aktivieren / 2. RX-Stream starten
+kann den FlexRadio in einen Zustand bringen der nur per Power-Cycle / SSDR-
+Neustart heilbar ist. Wenn das während der Kur (oder generell Remote)
+passiert → Mike kommt nicht ran, App ist tot, und das einzige RX am
+Ferienhaus ist offline. Lieber warten bis Mike physisch vor Ort ist und im
+Notfall den Radio-Knopf drücken kann.
+
+**Status Konzept:** vollständig + DeepSeek-V4-pro-geprüft („Umsetzung
+empfohlen, kein Overengineering"). Spec liegt in `multiband.md` —
+Bänder-Auswahl-Modell (3-Stufen-Cycle OFF/RX/TX), Antennen-Modell (ANT1
+fix, keine Diversity), Senden Fall A/B mit Slot-Timing, QSO-Puffer-
+Verhalten, TUNE-Auslösung beim Band-Hinzufügen, 6h-Cache, F1–F7 Design-
+Entscheidungen, OF1–OF4 Review-Klärungen, 5 DeepSeek-Pflicht-Findings.
+
+**Umsetzung (wenn vor Ort):** voller Workflow, aber NICHT in einem
+Schwung — das Feature ist zu groß. Vorgeschlagener Phasen-Schnitt
+(jede Phase eigener V1→V2→R1→V3→Code-Zyklus + Tests):
+
+1. **Phase A — Slice-B-Plumbing reaktivieren** (RX-only, kein UI-Switch):
+   `enable_diversity()`/`disable_diversity()` in `flexradio.py` adaptieren
+   (Naming → `enable_second_slice()`), Audio-Callback-B-Dispatch testen,
+   Slice-Cleanup bei App-Ende + Crash. Smoke-Test: 2. Slice auf 15m läuft,
+   ft8_lib dekodiert sauber, kein VITA-49-Stream-Leak.
+2. **Phase B — Band-Cycle-UI** (3-Stufen OFF/RX/TX, Auto-Promote,
+   Reject-bei-3.-Band, Frequenzanzeige + Band-Selector-Highlight).
+3. **Phase C — Gemeinsame RX-Liste mit Band-Spalte + Band-Filter-Buttons**
+   (3-Stufen-Toggle, nie beide rot, getrennt von Band-Aktivierung).
+4. **Phase D — Sende-Serialisierung** (TX-Flag-Swap, ATU-Recall, Fall A
+   Cutoff/„Restzeit deterministisch", Fall B übersprungener even-Slot mit
+   TUNE-Träger).
+5. **Phase E — QSO-Puffer + Station-Klick-Verhalten** (laufendes QSO
+   gepuffert, CQ/unbeantworteter Anruf sofort wechseln, Puffer-Statusbar,
+   verschwundene-Station-Info).
+6. **Phase F — TUNE-Auslösung beim Band-Hinzufügen** + 6h-Cache-Anbindung
+   an bestehenden RFPresetStore (P54), Multiband-Toggle (Normal-Button →
+   „Multiband"), Cleanup-Pfad bei Multiband-Aus.
+
+**Vor Phase A:** Tag setzen (`v0.98.03-pre-multiband`), Push auf GitHub,
+lokales Appsicherungen-Backup. Rollback-Anker steht damit fix.
+
+**Berührt:** ⬇️ Slice-B-Cleanup-TODO unten (Lösch-Aktion wird damit zu
+Adaptieren-Aktion — bitte NICHT vorher löschen).
+
 ## 🆕 OFFEN — Toter Code: Slice-B-Diversity in flexradio.py (Mike 22.05.2026)
+
+> ⛔ **NICHT löschen** solange Multiband-Entscheidung offen ist (siehe
+> Multiband-TODO oben + `multiband.md`). Bei Multiband-Umsetzung wird
+> dieser Code **adaptiert statt entfernt** — er ist genau die Plumbing
+> für den 2. Slice. Erst löschen wenn klar ist dass Multiband NICHT kommt.
 
 `radio/flexradio.py` enthält eine **zweite, unbenutzte** Diversity-
 Implementierung („beide Antennen gleichzeitig" via 2. Slice + 2. Panadapter
@@ -205,8 +411,9 @@ würde der tote Pfad ohnehin nicht funktionieren.
 - VITA-49-Dispatch toter Zweig: Z. 1331–1332 (`elif … _rx_stream_id_b`)
 
 **To-do:** nochmal genau gegenprüfen dass wirklich kein Aufrufer existiert
-(auch dynamisch/getattr), dann bei Gelegenheit entfernen. Reine Lösch-
-Aktion, verhaltensneutral — voller Workflow, Tests müssen grün bleiben.
+(auch dynamisch/getattr), dann bei Gelegenheit entfernen — **aber erst
+nach Multiband-Entscheidung** (siehe oben). Reine Lösch-Aktion,
+verhaltensneutral — voller Workflow, Tests müssen grün bleiben.
 
 ## 🆕 OFFEN — AP-Lite QSO-Abschluss (Konzept dokumentiert)
 

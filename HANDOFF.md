@@ -1,10 +1,64 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-24 — v0.98.03 P118 Band-Aktivität Berliner Zeit (DST-aware)
+## Stand 2026-05-25 — v0.98.04 P121 Multi-Radio-Refactor (Variante A)
 
-**Aktueller Code-Stand:** v0.98.03, Tests **1806 grün** (+2 neue).
+**Aktueller Code-Stand:** v0.98.04, Tests **1838 grün** (+32 netto).
 
-### 🟢 v0.98.03 — P118 Berliner Zeit + DST-Awareness im Band-Activity-Script
+### 🟢 v0.98.04 — P121 Hardware-Konstanten ans Radio + IC-7300/IC-7100 Stubs
+
+Mike-Ziel (25.05.): „definitiv ziel ist es nicht nur icom 7300
+sondern auch icom 7100 zu integrieren". Voll-autonomer Workflow.
+
+**Lösung:** Class-Variables `tx_buffer_s`, `rx_hardware_offset_default_s`,
+`tune_power_w` in jeder konkreten Radio-Klasse (Duck-Typing — FlexRadio
+erbt `QObject`, nicht ABC, daher keine echte Vererbung). IC7300 +
+IC7100 als Stub-Klassen mit allen Methoden `NotImplementedError`,
+Class-Variables gesetzt damit UI ohne Hardware-Connect arbeiten kann.
+
+**Architektur-Änderungen:**
+
+1. **Init-Reihenfolge** `_init_radio_state` VOR `_init_core_components`
+   (R1-Bug 2 — sonst AttributeError weil Encoder `self.radio.tx_buffer_s`
+   lesen muss bevor es gebaut wird)
+2. **Settings `radio_timing`** ist jetzt User-Override-Slot. Defaults
+   kommen aus Radio-Klasse. Legacy-P48-Werte (1.3 / 0.26) werden in
+   `load()` silent gepopt damit spätere Default-Änderungen greifen.
+3. **TUNE-Power** läuft konsistent über `self.radio.tune_power_w` in
+   ALLEN 5 Pfaden (Final-R1-Catch: 3 weitere Pfade in mw_radio.py)
+4. **ConnectStatusDialog** parametrisiert mit `radio_name` →
+   „IC-7300 wird verbunden" wenn Mike später radio_type wechselt
+
+**R1-Findings-Bilanz (V2-Review V4-pro):** 9 Findings — 3 ROT
+adressiert (FlexRadio-Vererbung-Klarstellung, Init-Reihenfolge,
+Migration-Spec), 2 ORANGE adressiert (Settings-Kapselung, Helper-
+Position), 1 ORANGE abgelehnt (TUNE-Power Settings-Override —
+Hardware-Safety > Komfort), 2 GELB übernommen, 2 GRAU verifiziert/
+akzeptiert. **Final-R1 nach Fix: PUSH FREIGEGEBEN.**
+
+**V4-pro 49-Cycle-Bilanz:** 0 Halluzinationen in P121 (kumuliert ~2%
+Rate seit P115).
+
+**Tests 1806 → 1838 (+32 netto):**
+- 32 neue P121-Tests in 6 neuen Files (`test_radio_interface_defaults`,
+  `test_flexradio_constants`, `test_ic7300_stub`, `test_ic7100_stub`,
+  `test_radio_factory`, `test_settings_radio_timing_migration`)
+- 5 alte Tests an P121 angepasst (P26, P63, P95, P48, modules)
+
+**Geänderte Files (8 Source):** `radio/base_radio.py`, `radio/flexradio.py`,
+`radio/ic7300.py` NEU, `radio/ic7100.py` NEU, `radio/radio_factory.py`,
+`config/settings.py`, `ui/main_window.py`, `ui/mw_tx.py`, `ui/mw_radio.py`,
+`ui/connect_status_dialog.py`.
+
+**Was NICHT in P121:** CI-V-Protokoll-Impl., USB-Audio-Backend,
+UI-Conditional bei !supports_diversity (P122-Folge), flexradio.py
+aufsplitten, IC-Tuner-Logik, VHF/UHF-Bänder. Beim echten IC-Fork:
+Hardware-Konstanten (Schätzungen 0.5 / 0.10) per Messung validieren.
+
+**Nächste 1-2 Schritte:** P74-B Phase 2 (Cross-Band-Gain-
+Interpolation) weiterhin offen — separate Session. P120 Sterne-
+Schwellen (Remote-tauglich) wartet auf Mike-Freigabe.
+
+### 🟢 v0.98.03 — P118 Berliner Zeit + DST-Awareness im Band-Activity-Script (24.05.2026)
 
 Mike-Folge-Wunsch nach P117-Sichtung: Berliner Zeit statt UTC,
 Sommer/Winter automatisch.

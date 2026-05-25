@@ -14094,3 +14094,118 @@ Peaks korrekt +2h verschoben gegenüber P117-UTC-Version:
 
 **Folge-Ticket:** keins. P118 schließt den Berliner-Zeit-Wunsch
 vollständig + DST-future-proof.
+
+## 2026-05-25 v0.98.04 — P121 Multi-Radio-Refactor (Variante A)
+
+Vorbereitung für IC-7300 + IC-7100 Forks: Hardware-Konstanten aus
+Settings/hartcodiert in jede konkrete Radio-Klasse verschoben. Stub-
+Klassen für IC-7300 und IC-7100 angelegt damit späterer echter Fork
+nur noch die CI-V-Methoden füllen muss, kein Eingriff in `core/`, `ui/`
+oder `config/`.
+
+**Mike-Ziel (25.05.):** „definitiv ziel ist es nicht nur icom 7300
+sondern auch icom 7100 zu integrieren". Voll-autonomer Workflow.
+
+**Architektur-Klarstellung (R1-Bug 1):** `radio/flexradio.py:27` ist
+`class FlexRadio(QObject)` — kein RadioInterface-Erbe. Class-Variables
+auf ABC werden nicht vererbt. Konsequenz: Pattern ist Duck-Typing.
+JEDE konkrete Radio-Klasse setzt eigene Class-Variables explizit
+(FlexRadio, IC7300Interface, IC7100Interface redundant). ABC liefert
+nur Notfall-Fallback-Defaults. **Kein Multi-Inheritance-Refactor**
+(QObject+ABC Metaclass-Hell, eigenes Ticket bei Bedarf).
+
+**Geänderte Files (8 Source + 7 Tests):**
+
+| Datei | Änderung |
+|---|---|
+| `radio/base_radio.py` | +3 Class-Variables `tx_buffer_s`, `rx_hardware_offset_default_s`, `tune_power_w` als ABC-Defaults |
+| `radio/flexradio.py` | +3 Class-Variables mit heutigen Werten (1.3 / 0.26 / 10) als Regression-Anker |
+| `radio/ic7300.py` | NEU — Stub-Klasse `IC7300Interface(QObject)`, Hardware-Konstanten als Schätzungen (0.5 / 0.10 / 10), alle Methoden raisen `NotImplementedError` mit P121-Verweis |
+| `radio/ic7100.py` | NEU — analog `IC7100Interface` |
+| `radio/radio_factory.py` | IC-Stubs einreihen statt NotImplementedError-Raise; `flex` und `flexradio` beide akzeptiert |
+| `config/settings.py` | `radio_timing`-Block auf `{}` reduziert (Radio liefert Defaults). Legacy-P48-Werte (1.3 / 0.26) werden in `load()` silent gepopt. Properties `tx_buffer_s` + `rx_hardware_offset_default_s` durch `get_user_tx_buffer_override()` + `get_user_rx_hardware_offset_override()` ersetzt — `_data`-Kapselung (R1-Risiko 4) |
+| `ui/main_window.py` | **Init-Reihenfolge** `_init_radio_state` VOR `_init_core_components` (R1-Bug 2 — sonst AttributeError weil Encoder Radio braucht); Encoder + ntp_time lesen jetzt aus Radio mit Settings-Override |
+| `ui/mw_tx.py` | `TUNE_POWER_W=10` hartcodiert ersetzt durch `self.radio.tune_power_w` (4 Stellen in `_tune_start` + `_start_auto_tune_for_band_change`) |
+| `ui/mw_radio.py` | `_start_tune_only`, `_start_dx_tuning`, `_start_dialog_tune_sequence` alle auf `self.radio.tune_power_w` — Final-R1-Catch (3 weitere Pfade die im V3 nicht abgedeckt waren) |
+| `ui/connect_status_dialog.py` | Konstruktor +`radio_name`-Parameter, Window-Titel + Header parametrisiert |
+| `ui/mw_radio.py:87` | Dialog-Aufruf mit `radio_name=self.radio.radio_name` |
+
+**Settings-Migration (R1-Bug 3 — präzise Bedingung):**
+
+```python
+rt = self._data.get("radio_timing", {})
+_legacy_p48 = {"tx_buffer_s": 1.3, "rx_hardware_offset_default_s": 0.26}
+if rt == _legacy_p48:
+    self._data["radio_timing"] = {}
+```
+
+Exakte Dict-Gleichheit — wenn ein Wert abweicht ODER ein zusätzlicher
+Key drin ist, bleibt der Block als User-Override erhalten.
+
+**Workflow voll durch:**
+
+- Schritt 0: Code-Audit (FlexRadio-Vererbung, Init-Reihenfolge, Aufrufer-Trace)
+- Schritt 1: V1 + V2 mit Self-Review-Block A1-A9
+- Schritt 2: DeepSeek R1 → 9 Findings (3 ROT, 2 ORANGE, 2 GELB, 2 GRAU)
+- Schritt 2.5: Findings-Verifikation — alle 9 valid, keine Halluzination
+- Schritt 3: V3 mit Findings-Bilanz, Risiko 6 (TUNE-Power Settings-Override) bewusst abgelehnt wegen Hardware-Safety
+- Schritt 5: Code in 7 atomaren Edit-Schritten
+- Schritt 5b: Final-R1-Codereview → **1 ROT-Catch** (3 weitere TUNE-Pfade übersehen), behoben, Re-Check „PUSH FREIGEGEBEN"
+
+**R1-Findings-Bilanz V2-Review:**
+
+| # | Severity | Status |
+|---|---|---|
+| 1 | 🔴 FlexRadio-Vererbung-Inkonsistenz | Adressiert via Architektur-Klarstellung |
+| 2 | 🔴 Init-Reihenfolge AttributeError | Adressiert via Reihenfolge-Wechsel |
+| 3 | 🔴 Migration-Spec vage | Adressiert via exakte Dict-Equality |
+| 4 | 🟠 Helper greift auf `_data` | Adressiert via Settings-Methoden |
+| 5 | 🟡 Override-Logik vereinfachen | Übernommen |
+| 6 | 🟠 TUNE Settings-Override | **Abgelehnt** — Hardware-Safety > Komfort |
+| 7 | ⚪ Zeilenangabe | Verifiziert |
+| 8 | ⚪ supports_diversity-Redundanz | Akzeptiert für Stub-Klarheit |
+| 9 | 🟡 Helper-Position | Adressiert via Settings-Kapselung |
+
+**V4-pro Final-R1-Catch:** 1 ROT in `mw_radio.py` (3 zusätzliche
+TUNE-Pfade) + 1 GELB (`set_rfpower_direct(10)` Hardcode in
+`_start_dialog_tune_sequence`). Beide behoben. **V4-pro 49-Cycle:
+0 Halluzinationen seit P115 (~2% Rate insgesamt).**
+
+**Tests: 1806 → 1838** (+32 netto):
+- T1-T4: `test_radio_interface_defaults.py` (ABC + Subclass-Override)
+- T5-T8: `test_flexradio_constants.py` (Regression-Anker)
+- T9-T15: `test_ic7300_stub.py` (Instanziation, Properties, NotImplementedError)
+- T16-T22: `test_ic7100_stub.py` (analog)
+- T23-T27: `test_radio_factory.py` (alle 3 Typen + unknown)
+- T28-T32: `test_settings_radio_timing_migration.py` (Migration-Edge-Cases)
+- 4 alte Tests an P121 angepasst (`test_modules.py`, `test_p26_connect_modal.py`,
+  `test_p63_swr_block_marker.py`, `test_p95_bundle.py`, `test_p48_dt_optimization.py`)
+
+**Was bleibt für späteren echten IC-Fork:**
+
+- CI-V-Protokoll-Implementierung (Modell-IDs 0x94 für 7300, 0x88 für 7100)
+- USB-Audio-Backend (sounddevice/PortAudio)
+- UI-Anpassungen für „Diversity-Kacheln ausblenden wenn !supports_diversity"
+  (Variante B, separates Ticket bei Bedarf)
+- `flexradio.py` (1528 LOC) aufsplitten (Variante C, premature)
+- IC-Tuner-Logik (AH-tune / AT-180)
+- VHF/UHF-Bänder für IC-7100
+- Hardware-Konstanten der IC-Stubs (0.5 / 0.10) per echter Messung validieren
+
+**Lesson:**
+
+- DeepSeek R1 fängt Architektur-Bugs die nur durch Code-Lesen sichtbar
+  werden (FlexRadio erbt nicht von ABC — Class-Variable-Vererbung wäre
+  Illusion gewesen). Self-Review hat das übersehen.
+- Final-R1-Pflicht ist nicht optional: V3 deckte nur 2 TUNE-Pfade ab,
+  3 weitere lebten in `mw_radio.py` versteckt. Ohne Final-R1 wäre die
+  Hardware-Safety-Inkonsistenz im Commit gelandet.
+- `_init_radio_state` VOR `_init_core_components` ist robuster Pattern
+  für jeden zukünftigen Hardware-Konstanten-Bezug — Reihenfolge
+  dokumentieren.
+
+**Folge-Tickets (zukünftig):**
+
+- IC-7300-CI-V-Implementierung (eigenes Ticket nach Hardware-Beschaffung)
+- IC-7100-CI-V-Implementierung
+- P122 UI-Conditional bei !supports_diversity (wenn echter IC-Fork läuft)
