@@ -1,8 +1,57 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-25 — v0.98.06 P124 Hash-Call Resolution
+## Stand 2026-05-25 — v0.98.07 P128 Empf.-Eintrag 60s blocken nach ✓
 
-**Aktueller Code-Stand:** v0.98.06, Tests **1867 grün** (+16).
+**Aktueller Code-Stand:** v0.98.07, Tests **1881 grün** (+14).
+
+### 🟢 v0.98.07 — P128 Empf.-Eintrag 60s blocken nach ✓ QSO
+
+Mike-Field-Bug 25.05.: nach „✓ QSO mit EA1FLB komplett" (2x RR73)
+sendet EA1FLB nochmal R-23 → erscheint trotzdem als ← Empf. im
+QSO-Log. Mike: „beendet ist beendet".
+
+**Mike-Spec Variante A:** 60s harter Block nach `qso_complete`,
+RX-Tabelle/Wasserfall unberührt (Wasserfall zeigt Station weiter,
+nur QSO-Log bleibt sauber).
+
+**Architektur:** `_recently_completed_qsos: dict[str, float]` in
+`main_window.py:287` (neben `_active_qso_targets`). Set-Pfad in
+`_on_qso_complete` (mw_qso.py:540). Filter-Pfad in `on_message_decoded`
+(mw_cycle.py:777) VOR `add_rx` via `_p128_recently_completed_block`
+mit Lazy-Aging. Reset-Pfade: `_on_band_changed` + `_on_mode_changed`
++ `_on_station_clicked` (Re-Klick pop). Timeout (✗) setzt KEINEN
+Cooldown (Mike-Spec).
+
+**R1-F5 ROT-Catch (echter Bug-Fund):** V1 hatte `return` — würde
+`on_message_received` blockieren. V3 korrigiert auf `if/else`
+nur um add_rx-Block. Quick73, OMNI-Listener und State-Machine
+laufen weiter unverändert.
+
+**Workflow voll durch:** V1 → V2 → R1 V4-pro (8 Findings, 1 ROT
+eingebaut) → V3 → Code in 6 Edits → 14 Tests → Final-R1
+„PUSH FREIGEGEBEN 0 Mängel".
+
+**V4-pro 52-Cycle:** 0 Halluzinationen in P128. Kumulativ seit P115
+~2% Rate.
+
+**Tests 1867 → 1881 (+14):** Helper-Logik (6), Set-Pfad (2),
+R1-F5-Verifikation per Source-Inspektion (1), Reset-Pfade (2),
+Re-Klick (1), Timeout-No-Cooldown (1), P124-Reihenfolge (1).
+
+**Pattern-Familie P81/P122/P127/P128 etabliert:** 4. Iteration
+Lifecycle-Filter im QSO-Slot. Bei jeder neuen Defer/Block-Mechanik
+die 3 Fragen stellen: Wann setzen? Wann ausspielen/blocken? Was
+bei Anlass-Wegfall?
+
+**Lesson:** Pseudo-Code-Kommentare in V1 müssen gegen tatsächliche
+Methoden-Struktur verifiziert werden. R1-F5 fing `return`-Bug bevor
+Code geschrieben — Schadens-Verhinderung pre-Implementation.
+
+**Nächste 1-2 Schritte:**
+- **Mike Field-Test P124+P128 mit Radio AN:** Hash-Resolution + 60s-Block
+  am Live-Pile-up testen
+- Lokale Commits warten auf Push-Freigabe (9 Commits: P121 + P122 +
+  Stats + P124 + P128 + Doku-Updates)
 
 ### 🟢 v0.98.06 — P124 Hash-Call `<...>` kontextuell auflösen (Mike-KISS-Idee)
 

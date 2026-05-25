@@ -499,7 +499,15 @@ verworfen werden. P127 ist die 3. Iteration desselben Patterns.
 
 ---
 
-## 🐛 OFFEN BUG — P128 Empf.-Einträge nach QSO-Ende 60s blocken (Mike 25.05.2026 11:00)
+## ✅ ERLEDIGT — P128 Empf.-Einträge 60s blocken nach ✓ QSO (v0.98.07, 25.05.2026)
+
+**Status:** ERLEDIGT v0.98.07 (voll-autonomer Workflow). R1-F5 ROT-Catch
+verhinderte Bug (return → if/else). Final-R1: PUSH FREIGEGEBEN 0 Mängel.
+14 Tests, 1881 Total grün. Details in HISTORY.md.
+
+---
+
+## ✅ ERLEDIGT (ALT-Spec) — P128 Empf.-Einträge 60s blocken nach ✓ QSO (Mike 25.05.2026 11:00)
 
 **Mike-Field-Beobachtung 25.05.2026 (Screenshot EA1FLB-QSO):**
 

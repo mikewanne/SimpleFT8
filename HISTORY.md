@@ -3,6 +3,147 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-25 v0.98.07 — P128 Empf.-Eintrag 60s blocken nach ✓ QSO
+
+**Mike-Field-Bug 25.05.2026 (Screenshot EA1FLB-QSO):** Nach „✓ QSO mit
+EA1FLB komplett" (2x RR73 gesendet) sendet EA1FLB im nächsten Slot
+nochmal R-23 → erscheint trotzdem als „← Empf."-Eintrag im QSO-Log.
+
+**Mike-Worte:** „wir haben 2 mal 73 gesendet noch höflicher geht es
+nicht, wenn er nicht kann oder will ist es ja sein problem ... wenn
+beendet ist beendet". Mike-Choice via AskUserQuestion: **Variante A —
+60s harter Block**, RX-Tabelle/Wasserfall unberührt (Mike sieht
+Station weiter im Wasserfall, nur QSO-Log bleibt sauber).
+
+**Wichtig — KEIN Defer-Bug:** Der 08:57:15-Eintrag ist eine echte
+neue Decodierung im Slot. Anders als P127 — hier ist die Meldung NICHT
+gespeichert/deferred. Fehlt nur Post-QSO-Filter.
+
+**Architektur:**
+
+`ui/main_window.py:287`: neuer Runtime-State
+```python
+self._recently_completed_qsos: dict[str, float] = {}
+```
+
+`ui/mw_cycle.py` Modul-Top: Konstante `_RECENTLY_COMPLETED_BLOCK_S = 60.0`
+
+`ui/mw_cycle.py:on_message_decoded` Z. 776 — Block-Branch umschließt
+NUR den add_rx-Aufruf (R1-F5 ROT-Catch: `return` hätte
+`on_message_received` blockiert):
+```python
+if msg.target == self.settings.callsign:
+    if not self._p128_recently_completed_block(msg.caller):
+        # ... add_rx unverändert
+```
+
+`ui/mw_cycle.py:_p128_recently_completed_block` (NEU) — Bracket-Test
+mit Lazy-Aging im Filter selbst (`del store[caller]` wenn > 60s).
+
+`ui/mw_qso.py:_on_qso_complete` (Set-Pfad) — `time.monotonic()`
+gesetzt direkt nach `_active_qso_targets.discard`.
+
+`ui/mw_qso.py:_on_station_clicked` (Re-Klick-Reset) — `.pop(caller, None)`
+nach `_active_qso_targets.add`.
+
+`ui/mw_radio.py:_on_band_changed` + `_on_mode_changed` — `.clear()`
+direkt nach den `_normal_stations = {}`-Zeilen (analog Stations-Dict-Reset).
+
+**Bewusst NICHT geändert:**
+- `_on_qso_timeout` setzt KEINEN Cooldown — Mike-Spec war nur ✓.
+  Timeout = QSO gescheitert, weitere Decodings sind „doch noch was
+  gehört" und potentiell wichtig.
+- Quick73 (`_p94_quick73_filter`) wird im 60s-Fenster trotzdem laufen
+  (kann 1x 73 senden, dann via `_quick73_sent` ignoriert). KISS:
+  P128 ist NUR Display-Filter, P94-Logik bleibt eigenständig.
+
+**R1-F5 ROT-Catch:** V1 hatte `return` statt `if/else` — würde
+`on_message_received` (Z. 825) und damit die State-Machine blockieren.
+V3 korrigiert auf `if not block: add_rx()` — bestehender Methodenrumpf
+läuft unverändert weiter.
+
+**Workflow voll durch:**
+
+- Schritt 0: Code-Audit (mw_qso `_on_qso_complete`, mw_cycle
+  `on_message_decoded`, mw_radio Reset-Pfade)
+- Schritt 1: V1 — Helper-Architektur, 10 ACs, 8 R-Punkte
+- Schritt 2: V2 Self-Review — 0 V1-Halluzinationen, 2 GELBE Fragen
+  für R1 (Timeout-Block + Quick73-Interaktion)
+- Schritt 3: R1 V4-pro → 8 Findings:
+  - **F5 🔴 ROT:** `return` würde State-Machine blockieren — KISS-Fix `if/else`
+  - F1 🟡 Timeout nicht blocken (Mike-Spec ✓) — übernommen
+  - F2 🟢 Quick73 läuft weiter (mit if/else-Fix) — akzeptiert
+  - F3/F4/F6 🟢 OK
+  - F7 🟢 KISS-Konstante OK
+  - F8 🟡 6 Tests-Erweiterungen — T7/T11/T12 priorisiert
+- Schritt 4: V3 mit R1-Korrekturen
+- Schritt 5: Code in 6 Edits (mw_cycle Konstante, mw_cycle Filter,
+  mw_cycle Helper, main_window Init, mw_qso Set, mw_qso Re-Klick,
+  mw_radio 2x Reset)
+- Schritt 5a: 14 Tests
+- Schritt 5b: Full-Regression 1881 grün
+- Schritt 6: Final-R1
+
+**V4-pro 52-Cycle:** 0 Halluzinationen in P128. R1-F5 war echter
+ROT-Catch (mein V1 hatte einen Bug — hätte State-Machine blockiert
+für gerade-abgeschlossene QSO-Partner = unerwünscht weil die Station
+nochmal CQ rufen könnte und ins Warteliste-Pattern fallen sollte).
+
+**Tests 1867 → 1881 (+14):**
+
+`tests/test_p128_recently_completed_block.py`:
+- T1-T4c: Helper-Logik (6 Cases inkl. defensive getattr + Konstante-Check)
+- T5-T6: Set-Pfad-Simulation (2 Cases)
+- T7: **R1-F5-Verifikation per Source-Inspektion** — `if not` Pattern,
+  nicht `return`. `on_message_received` muss weiter im Source stehen.
+- T8/T9: Reset-Pfade Band/Mode (2 Cases)
+- T10: Re-Klick-Reset (1 Case)
+- T11: Timeout setzt KEINEN Cooldown (Source-Inspektion)
+- T12: P124+P128 Reihenfolge (Source-Inspektion: P124 vor P128)
+
+**Pattern-Erkenntnis P81/P122/P127/P128:**
+
+| Ticket | Was wird deferiert/gefiltert | Bei Anlass-Wegfall |
+|---|---|---|
+| P81 (v0.97.53) | Auto-Hunt-Stop-**Meldung** bei aktivem QSO | Flush am QSO-Ende |
+| P122 (v0.98.05) | Auto-Hunt-Stop-**Aktion** bei aktivem QSO | Flush am QSO-Ende |
+| P127 (offen) | Sende-Log-**Eintrag** bei SWR-Abbruch | Verwerfen |
+| **P128 (NEU)** | Empf.-Log-**Eintrag** nach ✓ QSO | Lazy-Aging nach 60s |
+
+Vier Iterationen desselben Lifecycle-Filter-Patterns — die Familie ist
+jetzt etabliert.
+
+**Lessons:**
+
+1. **R1-F5 ROT war echter Bug-Catch.** V1-Spec-Skizze sagte „return  #
+   State-Machine läuft trotzdem" — aber `return` aus `on_message_decoded`
+   würde ALLES überspringen. R1 fing das in der Architektur-Frage 5,
+   bevor Code geschrieben wurde. **Lesson:** Pseudo-Code-Kommentare in
+   V1 müssen gegen tatsächliche Methoden-Struktur verifiziert werden,
+   nicht nur die Intention beschreiben.
+
+2. **Source-Inspektion als Test-Strategie.** T7, T11, T12 verifizieren
+   Code-Struktur per `inspect.getsource` + String-Match. Pragmatisch
+   für Mixin-Methoden ohne kompletten Setup-Aufwand. Funktioniert
+   solange die String-Pattern stabil bleiben (bei Refactoring brechen
+   sie — aber das ist genau das was wir wollen: Test fängt Regression).
+
+3. **Pattern-Familie etabliert.** P81 → P122 → P127 → P128 ist die
+   4. Iteration. Bei jeder neuen Defer/Block-Mechanik im QSO-Lifecycle
+   die 3 Fragen stellen: Wann setzen? Wann ausspielen/blocken? Was
+   bei Anlass-Wegfall?
+
+**Related:**
+
+- [[project_p124_done]] (Hash-Resolution, läuft VOR P128-Filter)
+- [[project_p122_done]] (Auto-Hunt-Stop-Defer Pattern-Vorgänger)
+- [[project_p124_p126_backlog]] (P128-Spec aus heutigem Backlog)
+
+**Folge-Tickets:**
+
+- **P126** Send-nach-Timeout (TX-Pipeline-Race) — 2× belegt
+- **P127** Sende-Log bei SWR-Abbruch verwerfen (P93-Defer-Bug)
+
 ## 2026-05-25 v0.98.06 — P124 Hash-Call `<...>` kontextuell auflösen (Mike-KISS-Idee)
 
 **Mike-Field-Bug 25.05.2026 (Auto-Hunt-Screenshot):** Bei aktivem QSO mit
