@@ -738,6 +738,19 @@ class TXMixin:
         # (verhindert ungewünschtes QSO nach SWR-Abbruch)
         if hasattr(self, "_pending_station_click"):
             self._pending_station_click = None
+        # P127 (25.05.2026): pending deferred TX-Log-Eintrag verwerfen.
+        # P93 (v0.97.65) deferiert „→ Sende ..."-Eintrag von tx_started
+        # auf tx_finished. Bei SWR-Stop mitten im Slot würde
+        # _on_tx_finished (mw_qso.py:454) den pending-Eintrag NACH der
+        # SWR-Sperre-Meldung ins QSO-Log schreiben mit Slot-Start-
+        # Timestamp → wirkt wie „Send NACH der Sperre" (Mike-Verwirrung
+        # 25.05. 10:52: „wurde wirklich gesendet?"). Hardware ist sauber
+        # gestoppt (abort + ptt_off oben), nur Log-Anzeige war
+        # missverständlich. Symmetrie zu P60-F3 (pending-Cleanup nach
+        # SWR-Stop). User-HALT-Pfad bleibt bewusst unberührt — Mike will
+        # dort den Sende-Eintrag sehen.
+        if hasattr(self, "_pending_tx_log"):
+            self._pending_tx_log = None
         if self.qso_sm.cq_mode or self.qso_sm.state != QSOState.IDLE:
             self.qso_sm.stop_cq()
             self.qso_sm.cancel()
