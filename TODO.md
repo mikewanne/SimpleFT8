@@ -53,6 +53,18 @@ Timeout). Remote-tauglich, pure State-Machine + Encoder-Sequenz.
 
 ---
 
+## ✅ P130 GAIN_VALUES = [0, 10, 20] zurück ERLEDIGT (v0.98.11, 25.05.2026, Mike-Frage Feierabend)
+
+Mike-Feierabend-Frage „was wenn 0 gain das beste ist?". Berechtigt:
+Low-Band-Defaults (160/80/60m = 0 dB in PREAMP_PRESETS) wurden seit
+v0.89 nicht mehr gemessen. KISS Variante A: GAIN_VALUES = [0, 10, 20]
+zurück. Folge-Bug `_step != 4` (hartkodiert) gefixt → dynamisch
+`2 * len(GAIN_VALUES)`. Tests 1906→1911 (+5 + 3 angepasste).
+CLAUDE.md: neue Sektion „Empfehlung geben (PFLICHT)" — Mike-Wunsch
+„du bist so gut du hast einfach meistens recht is so".
+
+---
+
 ## ✅ P129 P128-Whitelist 73/RR73 ERLEDIGT (v0.98.10, 25.05.2026, Mike-Field-Bug live)
 
 Mike-Live-Field-Bug während P128-Test: 3 QSOs ohne 73-Empfang. P128

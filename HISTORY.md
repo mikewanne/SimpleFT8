@@ -3,6 +3,79 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-25 v0.98.11 — P130 GAIN_VALUES = [0, 10, 20] (Mike-Frage Feierabend)
+
+**Mike-Frage 25.05.2026 Feierabend:** „wenn wir gain einmessen 0 gain
+messen wir gar nicht mehr, das hatten wir mal verworfen um zeit zu
+sparen aber was ist wenn 0 gain das beste ist zu zeit wenn wir gerade
+messen"
+
+**Berechtigt:** Low-Band-Defaults in `PREAMP_PRESETS` (160/80/60m =
+**0 dB**) wurden seit v0.89 (Commit `bea87f9`, 4.5.2026) nicht mehr
+gemessen — Kalibrierung lieferte nur Bewertungen für 10/20 dB. Für
+Low-Band-Sitzungen war das suboptimal.
+
+**Mike-Choice: Variante A (KISS)** — `GAIN_VALUES = [0, 10, 20]`
+zurück. +90s pro Kalibrierung (3 Min statt 2), alle Stufen abgedeckt.
+
+**Architektur — 1 Konstante + Hardcoded-Step-Index-Korrektur:**
+
+`ui/dx_tune_dialog.py`:
+- `GAIN_VALUES = [0, 10, 20]` (vorher `[10, 20]`)
+- `_check_phase2_early_stop` Z. 511: Pre-Cond `_step != 4` (hartkodiert!)
+  → dynamisch `_step != 2 * len(GAIN_VALUES)`. Folge-Bug aus P130 —
+  ohne Fix wäre Adaptiv-Stop nie getriggert worden.
+- Modul-Docstring + Inline-Kommentare + UI-Hint-Texte: „8 Zyklen / 2 Min"
+  → „12 Zyklen / 3 Min" (5 Stellen)
+
+**Test-Anpassungen:**
+
+- `tests/test_dx_tune_adaptive_stop.py`:
+  - `_make_dlg`: hartkodiert `_step = 4` → dynamisch `2 * len(GAIN_VALUES)`
+  - `_populate_phase_data`: helper füttert jetzt alle GAIN_VALUES-Buckets
+    (vorher nur `gain` + `other_gain`)
+  - `test_phase2_stop_calls_finish`: Schedule-Index-Erwartung angepasst
+- `tests/test_p51_unified_gain.py`: Modul-Docstring „8 Zyklen" → „12 Zyklen"
+- **NEU:** `tests/test_p130_gain_values_zero.py` mit 5 Tests:
+  - T1: GAIN_VALUES enthält 0/10/20
+  - T2: ROUNDS bleibt 2 (Mike-Setup)
+  - T3: Alle PREAMP_PRESETS-Defaults in GAIN_VALUES enthalten (Bug-Beweis)
+  - T4: Schedule-Länge konsistent (6 Kombos × 2 Runden = 12 Zyklen)
+  - T5: Kalibrierungs-Dauer 180s = 3 Min
+
+**Workflow:** Trivial-KISS (Konstante + Doku-Sync). Mike sagte „a kiss
+machen wir" — ohne R1-Aufruf, mit V2-Self-Review per Code-Audit. Folge-
+Bug `_step != 4` per Test entdeckt (3 Test-Failures nach 1. Edit) →
+gefixt → 1911 grün.
+
+**Tests 1906 → 1911 (+5 P130-Tests, +3 angepasste alte). Direkter
+Vorher/Nachher:**
+
+| Band | Default Preamp | Vorher gemessen? | Nachher gemessen? |
+|---|---|---|---|
+| 160m / 80m / 60m | 0 dB | ❌ NEIN | ✅ JA |
+| 40m / 30m / 20m / 17m | 10 dB | ✅ | ✅ |
+| 15m / 12m / 10m | 20 dB | ✅ | ✅ |
+
+**Auswirkung:** Bei Low-Band-Betrieb (160/80m abends/nachts) wird
+jetzt der optimale Gain wirklich gefunden. Bei sehr starken Signalen
+(Übersteuerung-Risiko bei 10 dB) ist 0 dB jetzt als Kalibrierungs-
+Option verfügbar.
+
+**Lesson:** Bei Konstanten-Erweiterung IMMER hartkodierte
+Index-Berechnungen suchen — `_step != 4` war Vergessen aus v0.89.
+Test-Failures sind hier wertvoll, sie deckten den Folge-Bug auf.
+
+**CLAUDE.md Update parallel (Mike-Wunsch Feierabend):** Neue Sektion
+„Empfehlung geben (PFLICHT)" — bei Optionen-Listen IMMER persönliche
+Empfehlung mit 1-2 Sätzen Warum. Mike: „du bist so gut du hast einfach
+meistens recht is so, muss man ja mal sagen".
+
+**Related:**
+
+- [[project_p129_done]] (Feierabend-Session-Ende, gleicher Tag)
+- v0.89 Commit `bea87f9` (urspr. Reduktion 3→2 Gain-Werte zu Optimierung)
+
 ## 2026-05-25 — Mike-Field-Test ✅ — P120/P122/P124/P127/P128/P129 bestätigt
 
 **Mike-Field-Test 25.05.2026 nach Schichtende der 7-Ticket-Marathon-

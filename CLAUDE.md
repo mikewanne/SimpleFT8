@@ -127,7 +127,7 @@ auf Display 2 (Position 1024,0) verschieben. Mike macht von dort
 Fernwartung — App MUSS auf dem mittleren Bildschirm landen.
 
 **Start:** `cd "/Users/mikehammerer/Documents/KI N8N Projekte/FT8/SimpleFT8" && ./venv/bin/python3 main.py`
-**Aktueller Stand:** v0.98.10 (25.05.2026) — P129 P128-Whitelist 73/RR73. Mike-Field-Bug live: 3 QSOs hintereinander (M1DBW/5B4AMX/G0CLT) ohne 73-Empfang im Log. Mike-Live-Hypothese „blocken wir die meldung?" — JA, P128 (gleiche Session, vor 3h) blockierte alle Empf.-Einträge im 60s-Fenster inkl. positiver 73-Bestätigungen. Mike-Original-Spec war „Spam blocken, nicht Bestätigungen". 1 atomare Änderung in `_p128_recently_completed_block` (mw_cycle.py:864): +Optional `msg`-Param + Whitelist `if msg.is_73 or msg.is_rr73: return False`. R-Reports/Grids bleiben geblockt (Spam-Schutz erhalten). Backward-Compat über `msg=None`-Default. R1 V4-pro GO direkt 6×🟢 „exzellent KISS, keine Findings". Final-R1: PUSH FREIGEGEBEN. 12 Tests + 1 String-Match-Anpassung im alten P128-Test. V4-pro 55-Cycle: 0 Halluzinationen. **Pattern-Familie 6. Iteration** als Korrektur von P128 — KISS-Iteration > KISS-Perfektion. Tests: 1906. Mike-Field-Bug: 15m FT8 Median -17 dB zeigte 3★, soll 4★ sein. Alte Schwellen aus SSB/CW-Denke (5★ > -10 unerreichbar). Mike-Vorschlag (5★>-13, 4★>-16, 3★>-19) hatte Spec-Inkonsistenz — `-17 > -16` ist False, würde 3★ ergeben statt 4★. **R1-V4-pro Catch:** Option B löst's: 4★-Schwelle auf > -18 verschoben (Mike-Outcome erfüllt), 3★-Schwelle auf > -21 für saubere 3-dB-Abstände. R1 lieferte FT8-realistische Median-SNR-Bereiche pro Bandöffnung. `compute_local_conditions` (mw_cycle.py:33-77) — 3 Schwellen + Docstring. 13 Tests (9 angepasst, 4 NEU inkl. Mike-Field-Test + 4 Grenzfall-Tests). Final-R1: PUSH FREIGEGEBEN. V4-pro 54-Cycle: 0 Halluzinationen. **Lesson:** Spec-Inkonsistenzen per Python-Verifikation in V2 fangen, R1 als FT8-Domain-Expertise einsetzen. Tests: 1894. Mike-Field-Bug 10:52: nach „⚠ Band 15M gesperrt — SWR 31.3" erschien noch „08:51:15 [0] → Sende Z62NS DA1MHH -15" — wirkte wie „Send NACH Sperre". Hardware war OK (PTT abgeschaltet). P93-Defer-Bug: tx_finished spielte pending-Log nach abort aus. Mike-Spec Variante C (KISS): im SWR-Watchdog direkt `_pending_tx_log = None` analog P60-F3-Pattern. 1 atomare Änderung in `ui/mw_tx.py:_on_swr_alarm` nach `_pending_station_click`-Block. HALT-Pfad (`_abort_active_tx`) bleibt unberührt — Mike will dort Eintrag sehen. R1 V4-pro: 7 Findings alle 🟢 GO direkt. Final-R1: PUSH FREIGEGEBEN. 8 Tests inkl. T4 Hardware-Sicherheit + T5 HALT-Pfad-unberührt. V4-pro 53-Cycle: 0 Halluzinationen. **Pattern-Familie P81/P122/P124/P128/P127 jetzt 5. Iteration.** Tests: 1889. Mike-Field-Bug + Mike-Spec Variante A: nach „✓ QSO mit EA1FLB komplett" (2x RR73 gesendet) sendet EA1FLB nochmal R-23 → erscheint trotzdem im QSO-Log. Mike: „beendet ist beendet". Lösung: `_recently_completed_qsos: dict[call, ts]` in main_window.py, gesetzt in `_on_qso_complete` (60s Cooldown), gefiltert in `on_message_decoded` VOR add_rx via `_p128_recently_completed_block`. RX-Tabelle/Wasserfall unberührt (Mike sieht Station weiter im Wasserfall, nur QSO-Log bleibt sauber). Reset bei Band/Mode-Wechsel + Re-Klick. Timeout (✗) setzt KEINEN Cooldown (Mike-Spec). **R1-F5 ROT-Catch:** V1 hatte `return` → würde State-Machine blockieren. V3 `if/else` umschließt nur add_rx-Block, on_message_received läuft weiter. 14 neue Tests inkl. T7 Source-Inspektion (Pattern verifiziert), T12 P124-Reihenfolge (Hash erst resolved). Final-R1: PUSH FREIGEGEBEN 0 Mängel. V4-pro 52-Cycle: 0 Halluzinationen. **Pattern-Familie P81/P122/P127/P128 etabliert** — 4. Iteration Lifecycle-Filter. Tests: 1881.
+**Aktueller Stand:** v0.98.11 (25.05.2026) — P130 GAIN_VALUES = [0, 10, 20] zurück. Mike-Feierabend-Frage: „was wenn 0 gain das beste ist?". Berechtigt: PREAMP_PRESETS-Defaults für 160/80/60m sind 0 dB, wurden seit v0.89 (4.5.) nicht mehr gemessen. KISS Variante A: [0,10,20] statt [10,20]. +90s Kalibrierungszeit (3 Min statt 2). Plus Folge-Bug gefixt: hartkodierter `_step != 4` in `_check_phase2_early_stop` (Adaptiv-Stop) → dynamisch `_step != 2 * len(GAIN_VALUES)`. CLAUDE.md neu: „Empfehlung geben (PFLICHT)"-Sektion (Mike-Wunsch). Tests 1906→1911 (+5 P130 + 3 angepasste alte). Push raus. Mike-Field-Bug live: 3 QSOs hintereinander (M1DBW/5B4AMX/G0CLT) ohne 73-Empfang im Log. Mike-Live-Hypothese „blocken wir die meldung?" — JA, P128 (gleiche Session, vor 3h) blockierte alle Empf.-Einträge im 60s-Fenster inkl. positiver 73-Bestätigungen. Mike-Original-Spec war „Spam blocken, nicht Bestätigungen". 1 atomare Änderung in `_p128_recently_completed_block` (mw_cycle.py:864): +Optional `msg`-Param + Whitelist `if msg.is_73 or msg.is_rr73: return False`. R-Reports/Grids bleiben geblockt (Spam-Schutz erhalten). Backward-Compat über `msg=None`-Default. R1 V4-pro GO direkt 6×🟢 „exzellent KISS, keine Findings". Final-R1: PUSH FREIGEGEBEN. 12 Tests + 1 String-Match-Anpassung im alten P128-Test. V4-pro 55-Cycle: 0 Halluzinationen. **Pattern-Familie 6. Iteration** als Korrektur von P128 — KISS-Iteration > KISS-Perfektion. Tests: 1906. Mike-Field-Bug: 15m FT8 Median -17 dB zeigte 3★, soll 4★ sein. Alte Schwellen aus SSB/CW-Denke (5★ > -10 unerreichbar). Mike-Vorschlag (5★>-13, 4★>-16, 3★>-19) hatte Spec-Inkonsistenz — `-17 > -16` ist False, würde 3★ ergeben statt 4★. **R1-V4-pro Catch:** Option B löst's: 4★-Schwelle auf > -18 verschoben (Mike-Outcome erfüllt), 3★-Schwelle auf > -21 für saubere 3-dB-Abstände. R1 lieferte FT8-realistische Median-SNR-Bereiche pro Bandöffnung. `compute_local_conditions` (mw_cycle.py:33-77) — 3 Schwellen + Docstring. 13 Tests (9 angepasst, 4 NEU inkl. Mike-Field-Test + 4 Grenzfall-Tests). Final-R1: PUSH FREIGEGEBEN. V4-pro 54-Cycle: 0 Halluzinationen. **Lesson:** Spec-Inkonsistenzen per Python-Verifikation in V2 fangen, R1 als FT8-Domain-Expertise einsetzen. Tests: 1894. Mike-Field-Bug 10:52: nach „⚠ Band 15M gesperrt — SWR 31.3" erschien noch „08:51:15 [0] → Sende Z62NS DA1MHH -15" — wirkte wie „Send NACH Sperre". Hardware war OK (PTT abgeschaltet). P93-Defer-Bug: tx_finished spielte pending-Log nach abort aus. Mike-Spec Variante C (KISS): im SWR-Watchdog direkt `_pending_tx_log = None` analog P60-F3-Pattern. 1 atomare Änderung in `ui/mw_tx.py:_on_swr_alarm` nach `_pending_station_click`-Block. HALT-Pfad (`_abort_active_tx`) bleibt unberührt — Mike will dort Eintrag sehen. R1 V4-pro: 7 Findings alle 🟢 GO direkt. Final-R1: PUSH FREIGEGEBEN. 8 Tests inkl. T4 Hardware-Sicherheit + T5 HALT-Pfad-unberührt. V4-pro 53-Cycle: 0 Halluzinationen. **Pattern-Familie P81/P122/P124/P128/P127 jetzt 5. Iteration.** Tests: 1889. Mike-Field-Bug + Mike-Spec Variante A: nach „✓ QSO mit EA1FLB komplett" (2x RR73 gesendet) sendet EA1FLB nochmal R-23 → erscheint trotzdem im QSO-Log. Mike: „beendet ist beendet". Lösung: `_recently_completed_qsos: dict[call, ts]` in main_window.py, gesetzt in `_on_qso_complete` (60s Cooldown), gefiltert in `on_message_decoded` VOR add_rx via `_p128_recently_completed_block`. RX-Tabelle/Wasserfall unberührt (Mike sieht Station weiter im Wasserfall, nur QSO-Log bleibt sauber). Reset bei Band/Mode-Wechsel + Re-Klick. Timeout (✗) setzt KEINEN Cooldown (Mike-Spec). **R1-F5 ROT-Catch:** V1 hatte `return` → würde State-Machine blockieren. V3 `if/else` umschließt nur add_rx-Block, on_message_received läuft weiter. 14 neue Tests inkl. T7 Source-Inspektion (Pattern verifiziert), T12 P124-Reihenfolge (Hash erst resolved). Final-R1: PUSH FREIGEGEBEN 0 Mängel. V4-pro 52-Cycle: 0 Halluzinationen. **Pattern-Familie P81/P122/P127/P128 etabliert** — 4. Iteration Lifecycle-Filter. Tests: 1881.
 → Vollständige Versionshistorie + Vorgänger-Details: **HISTORY.md** (grep nach Version).
 
 
@@ -247,6 +247,38 @@ gesetzt, Phase 3 hängt bei DX wegen P17 (Antennen-Switch greift nicht → MESSE
 **Gutes Beispiel:** „Die App hängt beim Antennen-Vergleich weil sie ANT1 und ANT2
 nicht umschaltet. Deswegen wird kein Messergebnis gespeichert, und beim
 Neustart fängt sie wieder von vorne an. Ich fixe jetzt den Antennen-Switch."
+
+---
+
+## Empfehlung geben (PFLICHT, Mike-Wunsch 25.05.2026)
+
+Bei JEDER Antwort wo Mike eine Entscheidung treffen muss (Optionen
+vorlegen, Trade-offs erklären, „was sollen wir tun?"):
+
+**IMMER eine persönliche Empfehlung dazuschreiben** — mit 1-2 Sätzen
+Begründung. Mike möchte nicht nur die Optionen sehen sondern auch
+wissen was Claude für richtig hält und WARUM.
+
+**Format:**
+```
+## Optionen
+- A: ...
+- B: ...
+- C: ...
+
+## Meine Empfehlung
+**B** — weil [Grund 1] und [Grund 2]. Bei deinem Setup mit X spricht
+das besonders dafür.
+```
+
+**Warum diese Regel?** Mike-Worte 25.05.: „du bist so gut du hast
+einfach meistens recht is so, muss man ja mal sagen". Mike will keine
+neutrale Optionen-Liste, er will Claude's Urteil mit Erklärung.
+Verantwortung übernehmen, nicht nur Fakten servieren. Mike bleibt
+final-Entscheider — aber Claude soll Position beziehen.
+
+**Wann NICHT empfehlen:** reine Wissens-Fragen („wie funktioniert X?"),
+Erklärungen ohne Entscheidungs-Bedarf, eindeutige Faktenchecks.
 
 ---
 
