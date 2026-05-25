@@ -271,6 +271,335 @@ nicht falsch, nur konservativ. Wenn Mike viel kurz-aber-häufig
 misst (P116-Mess-Strategie), wird die Diskrepanz größer und sollte
 gefixt werden.
 
+## ✅ ERLEDIGT — P124 Hash-Call `<...>` kontextuell auflösen (v0.98.06, 25.05.2026)
+
+**Status:** ERLEDIGT in v0.98.06 (25.05.2026, voll-autonomer Workflow).
+PUSH FREIGEGEBEN von Final-R1 V4-pro. 16 neue Tests, 1867 Total grün.
+**R1-F4 Catch:** `<CALL>` Brackets-Pfad (Hashtable-resolved) zusätzlich
+abgedeckt — V2 hatte nur `<...>` im Blick. Detail siehe HISTORY.md.
+**Followup (R1 🟠 Race):** Wenn Fremd-Station Hash `<...>` an uns
+sendet während wir mit RA9LL im QSO sind, würde Resolution falsch auf
+RA9LL setzen. Mike-Heuristik nimmt das billigend in Kauf. Bei erstem
+Field-Beleg eines Falsch-Match: Frequency-Match-Sicherung
+(`abs(msg.freq_hz - qso.freq_hz) < 50`) nachrüsten.
+
+**P125 (Höflichkeits-73) wahrscheinlich überflüssig** durch P124 —
+vor Backlog-Cleanup Field-Validation abwarten.
+
+---
+
+## ✅ ERLEDIGT (ALT-Spec) — P124 Hash-Call `<...>` kontextuell auflösen (Mike-Idee 25.05.2026)
+
+**Mike-Beobachtung 25.05.2026 (Screenshot Auto-Hunt):** Bei QSO mit
+RA9LL kommt von der Gegenstation `DA1MHH <...> R+10` — FT8-i3-Frame
+mit unserem Call als 22-Bit-Hash. Unsere State-Machine erkennt den
+Hash nicht als „zu uns" → bleibt in WAIT_REPORT → retried `-17` →
+RA9LL antwortet wieder R+10 → Endlosschleife bis Timeout.
+
+**Mike's KISS-Idee:** Wir sind im aktiven QSO mit RA9LL
+(`qso.their_call = "RA9LL"`). Wenn `DA1MHH <...> [report/grid]` kommt
+während wir im aktiven QSO-State sind UND der Empfänger = mein Call →
+**heuristisch ist `<...>` = `qso.their_call`** (sonst niemand). Im
+Code ersetzen für State-Match + UI plain als „RA9LL" anzeigen
+(Mike-Entscheidung 25.05.: kein „RA9LL?"-Suffix, kein Farbcode —
+User weiß im QSO-Kontext eh mit wem).
+
+**Code-Stelle (vor Workflow zu verifizieren):**
+- `core/qso_state.py:on_message_received` — Resolution vor State-Match
+- `ui/mw_qso.py` — Display-Pfad für QSO-Panel-Eintrag
+- vielleicht `ui/mw_cycle.py:_on_cycle_decoded` falls Parity-Assignment
+  betroffen
+
+**Heuristik-Regeln (KISS):**
+1. NUR aktivieren wenn `qso_sm.state` im aktiven Ruf-State
+   (`WAIT_REPORT`, `WAIT_RR73`, `WAIT_73`, `TX_*`)
+2. NUR wenn Empfänger des decodierten Messages = `settings.callsign`
+3. NUR wenn 2. Token = `"<...>"` (Hash-Marker)
+4. Resolution: `msg.their_call = qso.their_call`
+5. Display: plain Call
+
+**Edge-Cases:**
+- Andere Station ruft uns gleichzeitig mit echtem Call → eindeutig
+  adressiert, keine Hash-Auflösung nötig, kein Konflikt
+- Hash-Collision: theoretisch ~1 in 4M, praktisch vernachlässigbar
+- CQ_WAIT/IDLE-State: KEINE Auflösung — `<...>` bleibt `<...>`
+  (kein QSO-Kontext zum Zuordnen)
+
+**Auswirkung (warum das Wirkung hat):**
+- Endlosschleife `-17` → `<...> R+10` fixiert (state-machine wechselt
+  korrekt auf RR73-Send)
+- Macht P125 (Höflichkeits-73 nach N Retries) **überflüssig** — wenn
+  Hash-Bug weg, gibt's die Marathon-Retries gar nicht mehr
+- QSO-Erfolgsrate steigt für Stationen die i3-Frames mit Hash senden
+  (Special-Event-Calls, manche Contest-Stationen)
+
+**Severity:** 🔴 echter Bug — verschlechtert QSO-Erfolg systematisch.
+**Workflow-Pflicht:** ja, voller V1→V2→R1→V3→Code→Final-R1.
+**Remote-tauglich:** ja, keine TUNE/PA-Berührung, pure State-Machine.
+
+---
+
+## 🐛 OFFEN BUG — P126 Send-nach-Timeout (TX-Pipeline-Race, Mike 25.05.2026)
+
+**Mike-Beobachtung 25.05.2026 (Screenshot Auto-Hunt + EC3A-QSO):**
+EC3A wurde 6× gerufen (07:27:30 bis 07:30:00). Direkt unter dem
+07:30:00-Send steht `✗ EC3A — Timeout`. Aber dann um **07:30:30 ein
+weiterer Send `EC3A DA1MHH -17`** — ein ganzer FT8-Slot NACH dem
+Timeout. Erst um 07:31:00 wechselt App auf DO1DP.
+
+**Diagnose-Vermutung (Code-Verifikation Pflicht vor V1):**
+
+Sequenz im Slot 07:30:00:
+1. Slot-Start 07:30:00 → Encoder armed mit EC3A
+2. add_tx: „07:30:00 → Sende EC3A DA1MHH -17"
+3. TX läuft 12.64s (bis 07:30:12)
+4. Slot-Ende 07:30:13 → Decoder fertig → `on_decoder_finished`
+5. `calls_made` ≥ `station_limit` → `TIMEOUT`-State, `qso_timeout.emit`
+6. `qso_panel.add_timeout("EC3A")` → ✗ Display
+
+Aber im nächsten Slot 07:30:30: WIEDER EC3A — wie kann das sein?
+
+**Mögliche Ursachen:**
+- `on_decoder_finished` läuft NICHT in jedem Slot (nur wenn Decoder
+  Messages liefert?) → Counter nicht hochgezählt → Retry läuft weiter
+- Auto-Hunt-Cooldown-Setzung kommt aus `on_qso_timeout` zu spät —
+  Encoder hat schon nächsten Slot armed
+- `MAX_STATION_CALLS=7` (P98) erlaubt 7. Send vor Timeout (Mike sah 6
+  + 1 Nachschlag = 7 total)
+
+**Code-Stellen zu verifizieren:**
+- `core/qso_state.py:398-426` `on_decoder_finished` Retry-Logik
+- `core/qso_state.py:106` `MAX_STATION_CALLS = 7`
+- `ui/mw_qso.py:_on_qso_timeout` Trigger-Pfad
+- Encoder-Pipeline: wann wird nächster Slot „armed"?
+
+**Hinweis:** P122 hat das NICHT gefixt. P122 deferiert nur die
+Auto-Hunt-Stop-Aktion. Der TIMEOUT-Pfad selbst läuft unverändert.
+
+**2. Beleg (Mike-Screenshot 25.05. 11:00 — F1IBU-QSO):**
+
+```
+08:57:30 → Sende F1IBU DA1MHH -18
+08:58:00 → Sende F1IBU DA1MHH -18
+08:58:30 → Sende F1IBU DA1MHH -18
+08:59:00 → Sende F1IBU DA1MHH -18
+08:59:30 → Sende F1IBU DA1MHH -18
+× F1IBU — Timeout
+09:00:30 → Sende F1IBU DA1MHH -18   ← Nachschlag-Send
+```
+
+Identisches Muster wie EC3A oben. Mike-Worte: „wir bekommen egal
+was ist immer nach abschluss eine meldung noch rein". 2x beobachtet
+in einer Session → **systematisch, nicht Einzelfall**. P126 ist real.
+
+**Workflow-Pflicht:** ja, voller V1→V2→R1→V3→Code→Final-R1.
+**Severity:** 🟠 Bug aber nicht kritisch (1 zusätzlicher Send pro
+Timeout, kein Hardware-Risiko, lediglich Etiquette-Verstoß).
+**Remote-tauglich:** ja, State-Machine + Encoder-Sequenz.
+
+**Folgewirkung:** Wenn P124 (Hash-Resolution) viele Marathon-Sequenzen
+verhindert, sieht Mike den P126-Bug seltener — aber er bleibt
+trotzdem ein Bug der auch bei normalen QSO-Timeouts greift.
+
+---
+
+## 🐛 OFFEN BUG — P127 Sende-Log-Eintrag bei SWR-Abbruch verwerfen (Mike 25.05.2026 10:52)
+
+**Mike-Field-Beobachtung 25.05.2026 (Screenshot 15M-SWR-Sperre, 08:51:15):**
+
+```
+⚠ Band 15M gesperrt — SWR 31.3
+08:51:15 [0] → Sende Z62NS DA1MHH -15
+```
+
+Der Sende-Eintrag erscheint UNTER der SWR-Sperre-Meldung mit
+ursprünglichem Slot-Start-Timestamp — sieht aus wie „App hat noch
+nach der Sperre gesendet". Mike-Frage: „wurde wirklich gesendet
+oder nur Meldung?"
+
+**Antwort:** Hardware OK (PTT abgeschaltet, Bruchteil vor 2. SWR-
+Spike ging raus, danach Stop). Aber Log-Eintrag ist
+**missverständlich** — wirkt wie kompletter Send NACH der Sperre.
+
+**Root Cause (P93-Defer-Mechanik):**
+
+P93 (v0.97.65, 20.05.2026) deferiert den Sende-Log-Eintrag von
+`tx_started` auf `tx_finished`, damit „→ Sende" und „← Empf." am
+Slot-Ende zeitlich beieinander stehen. Sequenz heute:
+
+1. Slot-Start 08:51:15 → `tx_started` feuert → `_pending_tx_log`
+   gesetzt mit Message + Timestamp
+2. PTT an, Audio läuft an
+3. SWR 31.3 → 2 Spikes in 500ms → `_on_swr_alarm` (mw_tx.py:689):
+   - `encoder.abort()` → `_is_transmitting=False` + `_abort_event.set()`
+   - `radio.ptt_off()`
+   - `_swr_blocked_bands.add("15M")`
+   - `_auto_hunt.stop_auto_hunt("swr_block")` (sofort, kein Defer)
+   - `qso_panel.add_info("⚠ Band 15M gesperrt — SWR 31.3")`
+4. Encoder-Worker wacht aus `_abort_event` auf → emittet
+   `tx_finished` (encoder.py:307 oder :417)
+5. `_on_tx_finished` (mw_qso.py:454) liest `_pending_tx_log` UND
+   ruft `qso_panel.add_tx("Z62NS DA1MHH -15", ..., slot_start_ts=08:51:15)`
+   → **Eintrag landet trotz Abbruch im Log** mit ursprünglichem
+   Slot-Timestamp
+
+**Fix-Optionen (KISS):**
+
+**Option A — Verwerfen bei SWR-Sperre:**
+```python
+def _on_tx_finished(self):
+    pending = getattr(self, "_pending_tx_log", None)
+    if pending is not None:
+        # P127: kein Log wenn Band während Slot gesperrt wurde
+        if self.settings.band.upper() in self._swr_blocked_bands:
+            self._pending_tx_log = None
+        else:
+            self.qso_panel.add_tx(...)
+            self._pending_tx_log = None
+    ...
+```
+
+**Option B — Als „abgebrochen" markieren:**
+Statt `add_tx` ein `add_info("✗ Sende {message} abgebrochen — SWR-Sperre")`
+am Slot-Ende.
+
+**Option C — `_pending_tx_log` direkt im SWR-Watchdog clearen:**
+In `_on_swr_alarm` nach `encoder.abort()`:
+```python
+self._pending_tx_log = None
+```
+KISS, ein Eingriff, am Ursprung des Problems.
+
+**Mike-Spec offen** — vermutlich Option C (am sauberstem) oder
+Option B (informativer). Vor Workflow zu entscheiden.
+
+**Code-Stellen:**
+- `ui/mw_qso.py:114` `_on_tx_started` setzt `_pending_tx_log`
+- `ui/mw_qso.py:454` `_on_tx_finished` spielt es aus
+- `ui/mw_tx.py:689-782` `_on_swr_alarm` (SWR-Watchdog)
+- `core/encoder.py:116` `abort()`
+
+**Edge-Cases zu prüfen:**
+- Manueller HALT mitten im Slot — gleicher Pfad? `encoder.abort()`
+  + tx_finished → könnte gleicher Bug sein, sollte abgedeckt werden
+- Bandwechsel mitten im Slot
+- AutoHunt-Stop mitten im Slot (P122-Defer macht das selten, aber
+  bei `manual_halt`/`scoring_toggle` möglich)
+
+**Severity:** 🟠 Bug — kein Hardware-Risiko, aber User-Verwirrung
+(Mike-Frage „wurde wirklich gesendet?" beweist das Problem).
+**Workflow-Pflicht:** ja, voller V1→V2→R1→V3→Code→Final-R1.
+**Remote-tauglich:** ja, pure UI/Log-Logik, kein TUNE/PA.
+
+**Related:** P93 (Sende-Defer-Mechanik), P53/P63 (SWR-Watchdog), P81
+(Auto-Hunt-Stop-Meldung-Defer), P122 (Auto-Hunt-Stop-Aktion-Defer).
+Alle drei Defer-Mechaniken haben das gleiche Muster — wenn der
+ursprüngliche Anlass entfällt, muss das deferred Ergebnis konsistent
+verworfen werden. P127 ist die 3. Iteration desselben Patterns.
+
+---
+
+## 🐛 OFFEN BUG — P128 Empf.-Einträge nach QSO-Ende 60s blocken (Mike 25.05.2026 11:00)
+
+**Mike-Field-Beobachtung 25.05.2026 (Screenshot EA1FLB-QSO):**
+
+```
+08:56:30 [E] → Sende EA1FLB DA1MHH RR73
+08:56:45 [O] ← Empf. DA1MHH EA1FLB R-23      ← er hat RR73 nicht mitgekriegt
+08:57:00 [E] → Sende EA1FLB DA1MHH RR73       ← wir senden nochmal
+✓ QSO mit EA1FLB komplett
+08:57:15 [O] ← Empf. DA1MHH EA1FLB R-23      ← NACH ✓ — Mike irritiert
+```
+
+Mike-Worte: „wir haben 2 mal 73 gesendet noch höflicher geht es
+nicht, wenn er nicht kann oder will ist es ja sein problem ... wenn
+beendet ist beendet".
+
+**Wichtig — KEIN Defer-Bug:** Der 08:57:15-Eintrag ist eine echte
+neue Decodierung im Slot. Die Gegenstation hat tatsächlich nochmal
+R-23 in die Luft gesendet (sie hatte unser RR73 nicht abgehört oder
+hatte selbst noch einen Slot in der Pipeline). Anders als P127 — hier
+ist die Meldung NICHT gespeichert/deferred.
+
+**Root Cause — fehlender Post-QSO-Filter:**
+
+`on_message_decoded` (`mw_cycle.py:763`) prüft nur ob `msg.target ==
+settings.callsign` → wenn ja `qso_panel.add_rx(msg.raw, ...)`. Es
+gibt **keinen Check** ob das QSO mit `msg.caller` gerade als ✓
+abgeschlossen wurde. `_active_qso_targets.discard(qso_data.their_call)`
+in `_on_qso_complete` (mw_qso.py:538) räumt sofort auf — keine
+„Aging"-Schutzphase.
+
+**Mike-Spec (25.05.2026):** **Variante A — Hart blocken 60s.**
+Nach `qso_complete` für die Station 60 Sekunden lang keine
+Empf.-Einträge im QSO-Log. RX-Tabelle/Wasserfall bleiben unberührt
+(Station wird dort weiter angezeigt — Mike sieht dass sie noch sendet,
+aber QSO-Log bleibt sauber).
+
+**Architektur (KISS, vor V1 zu verfeinern):**
+
+```python
+# mw_qso.py oder mw_cycle.py — neuer Runtime-State
+self._recently_completed_qsos: dict[str, float] = {}  # call → completion_ts
+_RECENTLY_COMPLETED_BLOCK_S = 60.0  # Mike-Spec 25.05.
+
+# in _on_qso_complete (mw_qso.py:519+):
+self._recently_completed_qsos[qso_data.their_call] = time.monotonic()
+
+# in on_message_decoded (mw_cycle.py:763) VOR add_rx:
+caller = msg.caller
+completion_ts = self._recently_completed_qsos.get(caller)
+if completion_ts is not None:
+    if time.monotonic() - completion_ts < _RECENTLY_COMPLETED_BLOCK_S:
+        return  # skip QSO-Panel-Eintrag (RX-Tabelle läuft separat)
+    else:
+        # Aging — Eintrag älter als 60s, raus
+        del self._recently_completed_qsos[caller]
+```
+
+**Pflicht-Reset-Pfade (alle Lebenszyklus-Events):**
+- Bandwechsel (`_on_band_changed`) → dict.clear()
+- Moduswechsel (`_on_mode_changed`) → dict.clear()
+- App-Restart → automatisch (Runtime-State)
+- Manueller Klick auf gleiche Station → discard (User will
+  bewusst neues QSO mit ihr starten)
+- CQ-Start → discard? (offen, vor V1 klären)
+
+**Edge-Cases:**
+- Gleiche Station antwortet 65s später mit neuem `-23` (nicht R-) —
+  kein Empf.-Eintrag im QSO-Log mehr? Falsch — wenn 60s vorbei,
+  sollte sie wieder normal angezeigt werden. Cooldown muss auslaufen.
+- Gleiche Station mit ANDEREM Empfänger („XYZ EA1FLB R-23") —
+  filtern NUR wenn `msg.target == settings.callsign` (so läuft
+  add_rx eh schon, also kein zusätzlicher Check nötig).
+- QSO-Timeout (✗) statt qso_complete (✓) — soll auch blocken?
+  Vermutlich NEIN (Timeout = gescheitert, weitere Decodings
+  sind informativ „doch noch was gehört"). Mike-Spec vor V1
+  klären.
+
+**Code-Stellen zu verifizieren:**
+- `core/qso_state.py:_RECENTLY_COMPLETED_BLOCK_S = ?` (neue Konstante?
+  oder als Modul-Konst in mw_qso.py reicht)
+- `ui/mw_qso.py:519+` `_on_qso_complete` (Trigger-Setup)
+- `ui/mw_cycle.py:763+` `on_message_decoded` (Filter-Pfad)
+- `ui/mw_radio.py:_on_band_changed` (Reset)
+- `ui/mw_qso.py:_on_station_clicked` (manueller Re-Klick-Reset)
+
+**Severity:** 🟠 — kein Hardware-Risiko, kein QSO-Erfolg-Risiko,
+nur UX-Sauberkeit. Aber wichtig: Mike-Vertrauen ins Log
+(„beendet ist beendet").
+**Workflow-Pflicht:** ja, voller V1→V2→R1→V3→Code→Final-R1.
+**Remote-tauglich:** ja, pure UI-Filter, kein TUNE/PA.
+
+**Test-Pflicht (mind. 5):**
+- T1: Empf.-Eintrag innerhalb 60s NACH ✓ → blockiert
+- T2: Empf.-Eintrag NACH 61s → erscheint wieder
+- T3: Bandwechsel resettet Block
+- T4: Manueller Re-Klick auf Station resettet Block
+- T5: Andere Station nicht betroffen (parallel-Decoding)
+
+---
+
 ## 🎨 OFFEN UX — P123 Status-Text „Sende" Tempora + QSO-Start-Anzeige (Mike 25.05.2026)
 
 > ⚠️ **Kein Bug, sondern UX-Verbesserung.** Mike-Wunsch: erst mit

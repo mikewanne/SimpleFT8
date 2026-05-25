@@ -1,8 +1,60 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-25 — v0.98.05 P122 Auto-Hunt-Stop-Defer
+## Stand 2026-05-25 — v0.98.06 P124 Hash-Call Resolution
 
-**Aktueller Code-Stand:** v0.98.05, Tests **1851 grün** (+13).
+**Aktueller Code-Stand:** v0.98.06, Tests **1867 grün** (+16).
+
+### 🟢 v0.98.06 — P124 Hash-Call `<...>` kontextuell auflösen (Mike-KISS-Idee)
+
+Mike-Field-Bug 25.05.: bei aktivem QSO mit RA9LL sendet Gegenstation
+`DA1MHH <...> R+10` (FT8 i3-Frame Hash-Marker), State-Machine
+verwirft den R-Report wegen caller-mismatch → Retry-Loop bis Timeout.
+
+**Mike's Insight:** „die 3 ... — das ist doch das call der anderen
+station ... warum können wir die ... nicht einfach mit dem call
+ersetzen" — im aktiven QSO ist einziger sinnvoller Hash-Kandidat
+die Gegenstation. KISS-Resolution aus QSO-Kontext, kein Hash-Cache.
+
+**Architektur:** `core/qso_state.py` Modul-Ende — Konstanten
+`HASH_MARKER`/`HASH_RESOLVE_STATES`, Helper `is_hash_marker(call)`
+(Bracket-Test + len>=3) und `resolve_hash_in_msg(msg, expected_call)`
+(mutiert field2+raw in-place).
+`ui/mw_cycle.py:on_message_decoded` Z. 763 — Aufruf von neuem
+`_p124_resolve_hash_if_active_qso` (3 Guards: target==my_call,
+state in HASH_RESOLVE_STATES, qso.their_call gesetzt) als allererstes
+vor `add_rx` und `on_message_received`.
+
+**R1-F4 Catch (echter Bug-Fund):** ft8_lib/message.c:709 liefert
+ZWEI Marker-Formen — `<...>` (Hash nicht in Hashtable) UND `<CALL>`
+mit Brackets (Hashtable-Hit via `add_brackets`). V2 hatte nur erstere
+im Blick — V3 erweitert `is_hash_marker` via Bracket-Test, deckt
+beide ab. Verifiziert durch Read von `ft8_lib/ft8/message.c`.
+
+**Workflow voll durch:** V1 → V2 (0 Halluzinationen) → R1 V4-pro
+(7 Findings, 1 ROT + 1 ORANGE eingebaut) → V3 → Code in 3 Edits →
+16 Tests → Full-Regression 1867 grün → Final-R1 „PUSH FREIGEGEBEN"
+mit 1 🟠 Followup-Note (Frequency-Match-Sicherung gegen Fremd-Hash,
+Mike-Heuristik nimmt das billigend in Kauf).
+
+**V4-pro 51-Cycle:** 0 Halluzinationen in P124.
+
+**Tests 1851 → 1867 (+16):** is_hash_marker (5), resolve_hash_in_msg
+(4), Mixin-State-Gates (6), End-to-End T12 (1) — alle in
+`test_p124_hash_resolution.py`.
+
+**Lesson:** Bei externen Library-Annahmen den C-Source-Code lesen —
+ft8_lib hatte 2 Marker-Formen, ich hatte aus dem Gedächtnis nur eine.
+Mike's „das call haben wir doch schon" war die echte Lösung.
+
+**P125 (Höflichkeits-73) wahrscheinlich überflüssig** — wenn Hash-Bug
+weg, treten Marathon-Retries gar nicht mehr auf. Vor Backlog-Cleanup
+Mike-Field-Validation abwarten.
+
+**Nächste 1-2 Schritte:**
+- **Mike Field-Test P124 mit Radio AN:** Hash-Frame `DA1MHH <...> [Report]`
+  bei aktivem QSO → wird er jetzt korrekt verarbeitet? Plain-Anzeige?
+- Lokale Commits warten auf Push-Freigabe (6 Commits: P121 + P122 +
+  Stats + P124 + Doku).
 
 ### 🟢 v0.98.05 — P122 Auto-Hunt-Stop deferiert bei aktivem QSO
 

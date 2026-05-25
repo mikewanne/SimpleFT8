@@ -3,6 +3,134 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-25 v0.98.06 — P124 Hash-Call `<...>` kontextuell auflösen (Mike-KISS-Idee)
+
+**Mike-Field-Bug 25.05.2026 (Auto-Hunt-Screenshot):** Bei aktivem QSO mit
+RA9LL sendet Gegenstation `DA1MHH <...> R+10` (FT8 i3-Frame mit
+22-Bit-Hash unseres Calls). State-Machine `core/qso_state.py:604`
+(`if msg.caller != self.qso.their_call: return`) verwirft den R-Report
+→ WAIT_REPORT bleibt → Retry-Loop bis Timeout (MAX_STATION_CALLS=7).
+
+**Mike's KISS-Idee (Quote 25.05.2026):**
+> „ich verstehe nicht die 3 ... — das ist doch das call der anderen
+> station, das haben wir doch schon gehabt als wir sie gerufen haben.
+> das ist doch die antwort warum können wir die ... nicht einfach mit
+> dem call ersetzen"
+
+Im aktiven QSO ist der einzig sinnvolle Hash-Kandidat die Gegenstation
+(`qso.their_call`) — heuristisch ersetzen, Display plain, State-Machine
+matcht. **Mike's eigene Idee, mit seinem Namen.**
+
+**ft8_lib-Verifikation (R1-F4 🟠):** `ft8_lib/ft8/message.c:709`
+`lookup_callsign()` schreibt `"<...>"` wenn Hash nicht in Hashtable, ODER
+`"<CALL>"` mit Brackets (Z.713 `add_brackets`) wenn Hashtable-Hit.
+**Beide Marker-Formen** stören State-Machine-Match. V3 deckt beide ab
+via Bracket-Test `startswith("<") and endswith(">")`.
+
+**Architektur:**
+
+`core/qso_state.py` (Modul-Ende, NEU):
+- `HASH_MARKER = "<...>"` (Spezial-Konstante für Tests/Doku)
+- `HASH_RESOLVE_STATES = frozenset({TX_CALL, WAIT_REPORT, TX_REPORT,
+  WAIT_RR73, TX_RR73, WAIT_73, TX_73_COURTESY})` — alle aktiven QSO-States
+- `is_hash_marker(call) -> bool` — Bracket-Test + len >= 3
+- `resolve_hash_in_msg(msg, expected_call) -> bool` — mutiert `msg.field2`
+  und `msg.raw` in-place
+
+`ui/mw_cycle.py`:
+- `on_message_decoded` Z. 763 — Aufruf von `_p124_resolve_hash_if_active_qso`
+  als allererstes nach rx_panel-Guard, VOR `add_rx` (Display zeigt
+  Plain-Call) und VOR `on_message_received` (State-Machine matcht)
+- `_p124_resolve_hash_if_active_qso` (NEU, nach on_message_decoded):
+  3 Guards (target == my_call, state in HASH_RESOLVE_STATES, qso.their_call
+  gesetzt) → ruft `resolve_hash_in_msg`
+
+**Bewusst NICHT geändert:**
+- RX-Tabelle bleibt `<...>` bei Hash-Frames — Mike-Spec war nur QSO-Log,
+  R1-F1 bestätigt KISS. Aging-Mechanismus räumt eh auf.
+- AP-Lite + Auto-Hunt sehen Original-msg (laufen in Schritt 1
+  `_on_cycle_decoded`) — Auto-Hunt filtert nur `is_cq=True`, Hash kommt
+  nie als CQ → kein Konflikt.
+
+**Workflow voll durch:**
+
+- Schritt 0: Code-Audit (qso_state.py, message.py, mw_cycle.py,
+  auto_hunt.py, station_accumulator.py, **ft8_lib/ft8/message.c**)
+- Schritt 1: V1 — Helper-Architektur, 10 ACs, 7 R-Punkte
+- Schritt 2: V2 Self-Review — 0 V1-Halluzinationen, 1 Architektur-Frage
+  für R1 (RX-Tabelle-Konsistenz)
+- Schritt 3: R1 V4-pro → 7 Findings:
+  - **F1 🔴 (Frage 7):** 1-Liner verworfen → V1-Helper KISS-OK
+  - **F2 🟡 (Frage 2):** Konstanten public statt Underscore → V3
+  - **F3 🟡 (Frage 5):** End-to-End-Test ergänzen → T12
+  - **F4 🟠 (Frage 6):** `<...>` Annahme verifizieren → VERIFIZIERT
+    plus erweitert auf `<CALL>` Bracket-Pfad → V3 `is_hash_marker`
+    via Bracket-Test
+  - **F5 🟢:** Resolution-Stelle KISS-konform
+  - **F6 🟢:** State-Liste vollständig
+  - **F7 🟢:** Edge-Cases robust
+- Schritt 4: V3 mit Findings-Bilanz + Mike-Wahl „voll-autonom"
+- Schritt 5: Code in 3 atomaren Edits (qso_state.py, mw_cycle.py:763
+  Aufruf, mw_cycle.py Helper-Methode)
+- Schritt 5a: Tests `tests/test_p124_hash_resolution.py` 16 Tests
+- Schritt 5b: Final-R1
+
+**V4-pro Halluzinations-Bilanz P124:** R1-F4 war **echter Catch** —
+ft8_lib hat ZWEI Marker-Formen (`<...>` UND `<CALL>`), V2 hatte nur
+eine im Blick. Ohne F4 hätte ich Hashtable-resolved Pfad übersehen.
+0 Halluzinationen in P124. Kumulative Rate seit P115 stabil bei ~2%
+(1 in ~50 Cycles).
+
+**Tests 1851 → 1867 (+16):**
+
+`tests/test_p124_hash_resolution.py`:
+- T1-T5: `is_hash_marker` (5 Cases: unresolved/resolved/plain/too-short/missing-bracket)
+- T6-T9: `resolve_hash_in_msg` (4 Cases: unresolved/bracketed/no-hash-noop/empty-noop)
+- T10-T11e: `_p124_resolve_hash_if_active_qso` (6 State-Gate-Tests inkl. T11e
+  „alle 7 HASH_RESOLVE_STATES triggern Resolution")
+- T12 (R1-F3): End-to-end Mock — WAIT_REPORT mit `qso.their_call="RA9LL"`
+  + `DA1MHH <...> R+10` → State wechselt zu TX_RR73 + sendet
+  „RA9LL DA1MHH RR73"
+
+**Folgewirkung — P125 wahrscheinlich überflüssig:**
+
+P125 (Höflichkeits-73 nach N Retries) war als Auffang-Mechanik für
+genau diese Endlosschleifen geplant. Wenn P124 den Hash-Bug fixt,
+treten die Marathon-Retries gar nicht mehr auf. **Bei Mike-
+Field-Validation prüfen: tritt das Endlos-Retry-Muster nach P124
+noch auf?** Wenn nein → P125 streichen aus Backlog.
+
+**Lessons:**
+
+1. **R1 fängt meine V2-Annahmen über externe Bibliotheken.**
+   `<...>` als einzige Hash-Form war meine Annahme — R1-F4 ORANGE
+   zwang mich, in ft8_lib/message.c zu lesen. Dort fand ich den
+   Hashtable-resolved Bracket-Pfad. **Lesson:** bei jeder externen
+   Library-Annahme den C/Source-Code lesen, nicht aus dem Gedächtnis
+   zitieren.
+2. **Pattern-Wiederverwendung — Mike's Insight ist die echte Lösung.**
+   Mike sagte „das call haben wir doch schon" — die heuristische
+   Auflösung aus QSO-Kontext ist genau das KISS-Pattern. Kein Hash-
+   Cache, keine Bibliotheks-Integration nötig. Mike's Field-Erfahrung
+   schlägt jede Architektur-Theorie.
+3. **Test T12 (End-to-End) ist Gold.** Ohne T12 würde ich nur die
+   Helper-Funktionen testen, nicht den echten Bug-Fix-Beweis. R1-F3
+   GELB-Hinweis war wichtig.
+
+**Related:**
+
+- [[project_p122_done]] (Auto-Hunt-Stop-Defer, gleiche Session)
+- [[project_p124_p126_backlog]] (Spec-Dokumentation)
+- [[feedback_diversity_dynamic_works]] (Mike-Field-Validation Pattern)
+
+**Folge-Tickets:**
+
+- P126 Send-nach-Timeout (TX-Pipeline-Race) — 2× belegt, separater Bug
+- P127 Sende-Log bei SWR-Abbruch verwerfen (P93-Defer-Bug)
+- P128 Empf.-Eintrag 60s blocken nach ✓ QSO (Display-Filter)
+- P125 Höflichkeits-73 — möglicherweise überflüssig durch P124, vor
+  Backlog-Cleanup Field-Validation abwarten
+
 ## 2026-05-23 v0.97.93 — Re-Mess-Countdown-Anzeige refresht pro Slot
 
 **Bug (Mike 22.05.2026):** Das `dx_info`-Label „noch X Stunden bis
@@ -14314,3 +14442,60 @@ Drift zwischen P81-Meldung und P122-Aktion ist unmöglich.
 
 - P123 Status-Text-UX („Sende" Tempora + QSO-Start-Anzeige) —
   Mike-Brainstorm mit DeepSeek pending
+
+## 2026-05-25 — Doku: P124 + P126 Backlog (Mike-Idee Hash-Resolution)
+
+Kein Code, nur TODO.md-Erweiterung — kein Versions-Bump.
+
+Mike-Beobachtung nach P122-Push (Screenshot Auto-Hunt-Bild):
+
+**P124 (Mike-KISS-Idee, 🔴 echter Bug):** Bei `DA1MHH <...> R+10` (FT8
+i3-Frame mit Hash) während aktivem QSO erkennt die State-Machine den
+Hash nicht als „zu uns adressiert" → Endlosschleife `-17` → R+10 bis
+Timeout. Mike's Lösung: Wir sind im aktiven QSO mit RA9LL → der
+einzig sinnvolle Kandidat für `<...>` IST RA9LL → kontextuell ersetzen
++ plain anzeigen. KISS, kein Hash-Cache nötig. Macht P125 (Höflichkeits-
+73 nach N Retries) potentiell überflüssig — wenn Hash-Bug weg, gibt's
+die Marathon-Retries gar nicht mehr. **Mike's Idee, dokumentiert mit
+seinem Namen.**
+
+**P126 (🟠 Folge-Beobachtung):** Screenshot EC3A — 6× gerufen, dann
+„✗ Timeout"-Display, ABER 1 Slot später nochmal `EC3A DA1MHH -17`
+gesendet. P122 deferiert nur die Auto-Hunt-Stop-Aktion — der TIMEOUT-
+Pfad selbst läuft unverändert. Vermutung: `on_decoder_finished` läuft
+nicht in jedem Slot, oder Encoder hat nächsten Slot armed bevor
+`on_qso_timeout` den Cooldown setzt. Diagnose vor Workflow Pflicht.
+
+**P127 (🟠 Mike-Field 10:52, Screenshot 15M-SWR-Sperre):** Bei
+SWR-Watchdog mitten im Slot wird der P93-deferierte Sende-Log-Eintrag
+trotzdem am Slot-Ende ausgespielt — sieht aus wie „App hat nach
+SWR-Sperre noch gesendet". Hardware-Sicherheit OK (PTT abgeschaltet,
+Band gesperrt, Auto-Hunt gestoppt), nur Log-Eintrag ist
+missverständlich. Mike-Frage „wurde wirklich gesendet?" beweist das
+Problem. Fix-Optionen: A) `_pending_tx_log` bei SWR-Sperre verwerfen,
+B) als „✗ abgebrochen" markieren, C) im SWR-Watchdog `_pending_tx_log
+= None` setzen. Mike-Spec offen. Edge-Cases: HALT/Bandwechsel mitten
+im Slot — gleicher Pfad, gleicher Bug.
+
+**Pattern-Erkenntnis P81/P122/P127:** Alle drei sind Defer-Mechaniken
+(Stop-Meldung, Stop-Aktion, Sende-Log). Bei jeder: wenn der Anlass
+zwischenzeitlich entfällt oder durch anderen Pfad invalidiert wird,
+muss das deferred Ergebnis konsistent verworfen werden. P127 ist die
+3. Iteration desselben Patterns — sollte vor Workflow als allgemeines
+Pattern dokumentiert werden.
+
+**P128 (🟠 Mike-Field 11:00, Screenshot EA1FLB-QSO):** Nach „✓ QSO
+mit EA1FLB komplett" (2x RR73 gesendet) sendet EA1FLB im nächsten
+Slot 08:57:15 nochmal R-23 → erscheint trotzdem als „← Empf."-Eintrag
+im QSO-Log. Mike: „wenn beendet ist beendet". KEIN Defer-Bug —
+echte neue Decodierung, fehlt nur Post-QSO-Filter. `on_message_decoded`
+(mw_cycle.py:763) hat keinen Aging-Check gegen kürzlich abgeschlossene
+QSOs. Mike-Spec: Variante A — 60s harter Block nach `qso_complete`,
+RX-Tabelle bleibt unberührt. `_recently_completed_qsos: dict[call,
+ts]` mit Aging + Reset bei Bandwechsel/Re-Klick. Edge-Case
+QSO-Timeout (✗) vor V1 klären (vermutlich kein Block).
+
+**Status:** P122-Code deployed (5 lokale Commits warten auf Push-
+Freigabe), Field-Validation am Radio steht noch aus. P124/P126 sind
+beide remote-tauglich (pure State-Machine, kein TUNE/PA-Pfad) —
+können vom Schreibtisch oder vor Ort angegangen werden.
