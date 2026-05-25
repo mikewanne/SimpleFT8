@@ -394,6 +394,11 @@ class QSOMixin:
         # V2-L3: Slot-Tracking sauber resetten beim HALT.
         self._last_qso_tx_even = None
         self.qso_panel.add_info("HALT — alles gestoppt")
+        # P122 (2026-05-25): Stop-AKTION VOR Stop-MELDUNG (P81). Reihenfolge
+        # garantiert dass im QSO-Log erst der QSO-Ende-Eintrag steht und dann
+        # erst der „Auto-Hunt gestoppt"-Hinweis.
+        if hasattr(self, "_auto_hunt"):
+            self._auto_hunt.flush_pending_stop()
         # P81 (v0.97.53) R1-F1: HALT-Pfad emittiert weder qso_timeout noch
         # qso_confirmed_visual — ohne Flush wuerde eine deferred Stop-Meldung
         # dauerhaft verloren gehen.
@@ -620,6 +625,9 @@ class QSOMixin:
         Auto-Hunt-Stop-Meldung ausgegeben (Mike-Wunsch: erst ✓, dann Stop-Msg).
         """
         self.qso_panel.add_qso_complete(qso_data.their_call)
+        # P122 (2026-05-25): Stop-AKTION VOR Stop-MELDUNG.
+        if hasattr(self, "_auto_hunt"):
+            self._auto_hunt.flush_pending_stop()
         self._flush_auto_hunt_stop_msg()
 
     @Slot(object)
@@ -924,6 +932,12 @@ class QSOMixin:
         self._active_qso_targets.discard(their_call)
         self.rx_panel.set_active_call("")
         self.qso_panel.add_timeout(their_call)
+        # P122 (2026-05-25): Stop-AKTION VOR Stop-MELDUNG. flush_pending_stop
+        # vor on_qso_timeout damit ein während Timeout-Slot eingelaufener
+        # Defer-Reason sauber den Stop ausführt, statt im nächsten Slot zu
+        # picken.
+        if hasattr(self, "_auto_hunt"):
+            self._auto_hunt.flush_pending_stop()
         # P81 (v0.97.53): deferred Auto-Hunt-Stop-Meldung nach ✗ Timeout
         # ausgeben — Safety-Net fuer Hard-Timeout-Pfad (qso_state.py:354/392).
         self._flush_auto_hunt_stop_msg()

@@ -382,8 +382,11 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self.control_panel.btn_omni_cq.toggled.connect(self._on_btn_omni_cq_toggled)
 
         # Auto-Hunt: Initialisieren (deaktiviert, zusammen mit OMNI-TX)
+        # P122 (2026-05-25): is_qso_active_callback nutzt das gleiche
+        # Kriterium wie P81-Meldungspfad → 3 Stop-Reasons (timer_expired,
+        # mouse_inactive_5min, totmann_expired) werden deferiert bis QSO-Ende.
         from core.auto_hunt import AutoHunt
-        self._auto_hunt = AutoHunt()
+        self._auto_hunt = AutoHunt(is_qso_active_callback=self._qso_active_for_msg_defer)
         self._auto_hunt.set_qso_log(self.qso_log)
         self._auto_hunt.set_band(self.settings.band)
         # P61 (v0.97.33): Initialer Mode fuer AutoHunt Cooldown-Key

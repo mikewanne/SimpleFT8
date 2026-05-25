@@ -70,6 +70,17 @@ class _HuntCandidate:
     tx_even: Optional[bool] = None  # Slot-Parity der Station
 
 
+# P122 (2026-05-25): Reasons die bei aktivem QSO bis QSO-Ende deferiert
+# werden. Alle anderen Reasons (manual_halt, swr_block, band_change,
+# ft_mode_change, rx_mode_change, scoring_toggle, superseded) greifen
+# sofort — Hardware-Safety oder Kontext-Wechsel.
+_DEFER_REASONS = frozenset({
+    "timer_expired",        # 10-Min-Hard-Cap
+    "mouse_inactive_5min",  # 5-Min-Maus-Inaktivität (P67)
+    "totmann_expired",      # 15-Min Operator-Presence
+})
+
+
 class AutoHunt(QObject):
     """Auto-Hunt Controller — waehlt und ruft CQ-Stationen automatisch an.
 
@@ -91,9 +102,20 @@ class AutoHunt(QObject):
     # ─────────────────────────────────────────────────────────────────────────
     auto_hunt_stopped = Signal(str)
 
-    def __init__(self):
+    def __init__(self, is_qso_active_callback=None):
+        """
+        Args:
+            is_qso_active_callback: Optionaler Callback `() -> bool` der True
+                liefert wenn QSO im aktiven Ruf-State (WAIT_REPORT, TX_CALL etc.)
+                ist. P122: bei aktivem QSO werden 3 Stop-Reasons deferiert bis
+                QSO-Ende. Default None → Fallback `lambda: False` (= nie
+                deferieren, Backward-Compat für Tests/Legacy-Konstruktion).
+        """
         super().__init__()
         self.active: bool = False
+        # P122: Defer-Mechanik
+        self._is_qso_active_callback = is_qso_active_callback or (lambda: False)
+        self._pending_stop_reason: Optional[str] = None
         self._qso_log: Optional[QSOLog] = None
         self._band: str = "20m"
         self._mode: str = "FT8"     # P61: Mode-Awareness fuer Cooldown-Key
@@ -180,15 +202,22 @@ class AutoHunt(QObject):
         """Auto-Hunt-Session beenden. Emittiert auto_hunt_stopped(reason).
 
         Reasons:
-            timer_expired      — 10-Min-Hard-Stop abgelaufen
-            manual_halt        — User klickte HALT-Button
-            band_change        — Band wurde gewechselt
-            mode_change        — FT8/FT4/FT2 wurde gewechselt
-            rx_mode_change     — Normal↔Diversity wurde gewechselt
-            totmann_expired    — Operator-Presence (15 Min) abgelaufen
-            superseded         — anderer Power-Modus (z.B. OMNI) gestartet
-            mouse_inactive_5min — 5 Min ohne Mausbewegung (P67, zweite
-                                 Schicht ueber 10-Min-Hard-Cap)
+            timer_expired      — 10-Min-Hard-Stop abgelaufen  [DEFER]
+            mouse_inactive_5min — 5 Min ohne Mausbewegung      [DEFER]
+            totmann_expired    — Operator-Presence (15 Min)    [DEFER]
+            manual_halt        — User klickte HALT-Button       [SOFORT]
+            band_change        — Band wurde gewechselt          [SOFORT]
+            mode_change/ft_mode_change — Modus gewechselt       [SOFORT]
+            rx_mode_change     — Normal↔Diversity gewechselt    [SOFORT]
+            scoring_toggle     — Std↔DX gewechselt              [SOFORT]
+            superseded         — anderer Modus (z.B. OMNI)      [SOFORT]
+            swr_block          — SWR-Watchdog (Hardware-Safety) [SOFORT]
+
+        P122 (2026-05-25) Defer-Mechanik:
+            Bei DEFER-Reasons UND aktivem QSO (is_qso_active_callback()=True)
+            wird _pending_stop_reason gesetzt, KEIN active=False, KEIN Signal.
+            main_window ruft flush_pending_stop() bei QSO-Ende auf → echter
+            Stop läuft dann durch (Defer-Check schlägt fehl da QSO idle).
 
         Cleanup-Logik (reason-basiert):
             timer_expired/manual_halt/band_change/mode_change/rx_mode_change/
@@ -197,6 +226,29 @@ class AutoHunt(QObject):
             totmann_expired:
                 _cooldown UND _last_tx_even bleiben (User soll fortsetzen)
         """
+        # P122 R1-F3: Defensive Idempotenz — wenn bereits inaktiv UND kein
+        # Pending, ist nichts zu tun (verhindert doppelte Signal-Emission).
+        if not self.active and self._pending_stop_reason is None:
+            return
+
+        # P122: Defer für 3 Stop-Reasons wenn QSO aktiv.
+        if reason in _DEFER_REASONS and self._is_qso_active_callback():
+            if self._pending_stop_reason is None:
+                self._pending_stop_reason = reason
+                logger.info(f"[Auto-Hunt] Stop deferiert (reason={reason}, "
+                            "QSO läuft — wird bei QSO-Ende ausgeführt)")
+                print(f"[Auto-Hunt] Stop deferiert ({reason}) — QSO läuft")
+            else:
+                # FIFO: erster Defer-Reason gewinnt (chronologisch)
+                logger.info(f"[Auto-Hunt] Stop {reason} verworfen — "
+                            f"{self._pending_stop_reason} ist schon pending")
+            return  # KEIN active=False, KEIN Signal-Emit
+
+        # Sofortiger Stop (alle anderen Reasons ODER QSO idle).
+        # P122: Pending-Reset bei sofortigem Stop — HALT/Band/SWR überschreibt
+        # einen evtl. gesetzten Defer-Reason.
+        self._pending_stop_reason = None
+
         self.active = False
         self._current_target = None
         self._auto_hunt_timer.stop()
@@ -208,6 +260,25 @@ class AutoHunt(QObject):
         logger.info(f"[Auto-Hunt] Stop (reason={reason})")
         print(f"[Auto-Hunt] Gestoppt — {reason}")
         self.auto_hunt_stopped.emit(reason)
+
+    def flush_pending_stop(self):
+        """P122 (2026-05-25): Wird von main_window bei QSO-Ende gerufen.
+
+        Wenn ein Defer-Reason pending ist, jetzt echten Stop durchführen
+        (Defer-Check schlägt fehl da Callback nun False liefert / QSO idle).
+        No-op wenn nichts pending.
+
+        Aufrufer:
+            _on_qso_confirmed_visual — QSO ✓ komplett
+            _on_qso_timeout          — QSO ✗ Timeout
+            _on_cancel               — HALT-Pfad
+        """
+        if self._pending_stop_reason is None:
+            return
+        reason = self._pending_stop_reason
+        self._pending_stop_reason = None
+        # Rekursiver Aufruf → Defer-Check fällt durch (QSO idle), echter Stop.
+        self.stop_auto_hunt(reason)
 
     def _on_timer_expired(self):
         """Wird vom QTimer aufgerufen wenn die 10 Min abgelaufen sind."""
