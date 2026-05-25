@@ -3,6 +3,124 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-25 v0.98.09 — P120 Sterne-Schwellen FT8-realistisch (R1-Option B)
+
+**Mike-Field-Bug 25.05.2026 (Screenshot 15m FT8):** „Lokale Empfangsqualität:
+★★★☆☆" bei Median-SNR **-17 dB**. Mike: „-17 dB ist in FT8 ein
+normal-guter Pegel (Decoder läuft bis ~-24 dB, Stationen über -10 dB
+sind außergewöhnlich stark)". Heutige Schwellen sind aus SSB/CW-Denke
+übernommen — 5★ (> -10 dB) praktisch unerreichbar.
+
+**Mike's Vorschlag (TODO):** 5★ > -13, 4★ > -16, 3★ > -19. Outcome
+„-17 → 4★".
+
+**R1-V4-pro Catch (Spec-Inkonsistenz):** Mit Mike-Schwelle 4★ > -16 wäre
+-17 weiter 3★ (denn `-17 > -16` ist False). Mike's Outcome-Behauptung
+stimmte nicht mit seinen Schwellen. R1 empfahl **Option B** (Outcome-treu):
+
+| Sterne | Alt (SSB-Denke) | Mike-Vorschlag | **R1-Option B (V3)** |
+|---|---|---|---|
+| 5 ★ | > -10 dB | > -13 dB | **> -13** ✅ |
+| 4 ★ | > -14 dB | > -16 ❌ | **> -18** (Mike-Outcome -17→4★ erfüllt) |
+| 3 ★ | > -18 dB | > -19 | **> -21** (sauberer 3-dB-Abstand) |
+| 2 ★ | > -22 dB | unverändert | **> -22** ✅ |
+| 1 ★ | drunter | unverändert | unverändert |
+
+**R1's FT8-Expertenrating typischer Median-SNR-Werte:**
+- Sehr gut (20m tags, EU/NA): -10...-14 dB
+- Gut-normal (15m mittags): -14...-18 dB (Mike's -17 fällt hier rein)
+- Mäßig: -18...-22 dB
+- Schlecht: -22...-24 dB
+- Funkstille: ≤ -24 dB
+
+**Architektur (1 Datei + 1 Test-File):**
+
+`ui/mw_cycle.py:compute_local_conditions` Z. 33-77 — 3 Schwellen-Zeilen
+geändert (-10→-13, -14→-18, -18→-21), Docstring aktualisiert mit P120-
+Erklärung und Mike-Field-Test-Bezug.
+
+`tests/test_local_conditions.py` — komplett umgeschrieben:
+- 2 bestehende Tests SNR-Werte angepasst: `test_4_stars` von -12 auf
+  **-14**, `test_3_stars` von -16 auf **-19**, `test_2_stars_weak` von
+  -20 auf **-21.5**
+- 4 neue P120-Tests: Mike-Field-Test (-17 → 4★), 4 Grenzfall-Tests
+  (5/4, 4/3, 3/2, 2/1) — verifizieren `>` (nicht `>=`) bei allen Schwellen
+
+**Workflow voll durch:**
+- Schritt 0: Code-Audit `compute_local_conditions` + bestehende Tests
+- Schritt 1: V1 Mike-Schwellen-Übernahme
+- Schritt 2: V2 — **Spec-Inkonsistenz erkannt!** `-17 > -16` ist False,
+  Mike's Outcome-Behauptung nicht mit Schwellen vereinbar. 3 Optionen
+  identifiziert (A: Mike exakt, B: Outcome-treu, C: `>=` statt `>`)
+- Schritt 3: R1 V4-pro → klare Empfehlung **Option B** mit FT8-
+  Expertenrating realistischer SNR-Verteilungen
+- Schritt 4: V3 = R1-Option-B
+- Schritt 5: 1 atomare Code-Änderung + Test-File-Umschreibung
+- Schritt 5a: 13 Tests grün (5 neue P120-Tests)
+- Schritt 5b: Full-Regression — 1894 grün (+5 netto: 9 alte angepasst
+  + 4 neue, 0 Regression)
+- Schritt 6: Final-R1
+
+**V4-pro 54-Cycle:** 0 Halluzinationen in P120. R1-Option-B war
+echter Catch (V2 hatte die Inkonsistenz schon erkannt, R1 hat die
+FT8-realistische Auflösung geliefert).
+
+**Tests 1889 → 1894 (+5 netto):**
+
+`tests/test_local_conditions.py` — 13 Tests (9 angepasste alte + 4 neue):
+- T1-T9 (alt, neu angepasste SNR-Werte für neue Schwellen)
+- **T10 P120-NEU:** Mike-Field-Test -17 dB → 4★ (Beweis dass Bug-Fix
+  greift)
+- **T11-T14 P120-NEU:** Grenzfall-Tests an allen 4 Schwellen-Übergängen
+  (verifizieren strikte `>`-Semantik)
+
+**Auswirkung im Field:**
+
+| SNR-Bereich | Alt-Score | Neu-Score | Beispiel-Band |
+|---|---|---|---|
+| > -10 dB | 5★ (selten) | 5★ | 20m sehr starke EU |
+| -10 bis -13 dB | 4★ | **5★** ↑ | sehr gutes 20m |
+| -13 bis -14 dB | 4★ | **4★** | gutes 20m |
+| -14 bis -17 dB | 3★ | **4★** ↑ | gutes 15m/40m |
+| -17 bis -18 dB | 3★ | **4★** ↑ | normales 15m (Mike-Field!) |
+| -18 bis -19 dB | 3★ | **3★** | mäßiges Band |
+| -19 bis -21 dB | 2★ | **3★** ↑ | schwache Öffnung |
+| -21 bis -22 dB | 2★ | **2★** | schlecht |
+| ≤ -22 dB | 1★ | 1★ | Decoder-Grenze |
+
+Mike's typische 15m-Sitzung wird realistischer als „gut" (4★) statt
+„mäßig" (3★) bewertet.
+
+**Lessons:**
+
+1. **V2-Self-Review fängt Spec-Inkonsistenzen.** Mike's Outcome
+   „-17 → 4★" passte mathematisch nicht zu seinen eigenen Schwellen.
+   V2 hat das per Python-Verifikation aufgedeckt VOR R1-Aufruf.
+   **Lesson:** Bei jeder numerischen Spec immer durchrechnen (auch
+   wenn Mike sie liefert).
+2. **R1 als FT8-Domain-Expertise.** R1 lieferte typische Median-SNR-
+   Bereiche pro Bandöffnung — Information die nicht im Code steht.
+   Bei Domain-Fragen (FT8/Funktechnik) R1 explizit als Experte
+   adressieren.
+3. **Grenzfall-Tests verhindern `>` vs `>=` Bugs.** P120-Tests T11-T14
+   verifizieren dass `-13`, `-18`, `-21`, `-22` jeweils auf die
+   NÄCHSTNIEDRIGERE Stufe fallen (strikt `>`). Bei späterem
+   Refactoring (z.B. zu `>=`) würden alle 4 brechen.
+
+**Related:**
+
+- [[project_p127_done]] (Pattern-Familie 5. Iteration, gleiche Session)
+- [[project_p128_done]] (Pattern-Familie 4. Iteration)
+- [[project_p124_done]] (Pattern-Familie 3. Iteration)
+- [[project_p122_done]] (Pattern-Familie 2. Iteration)
+- [[project_p124_p126_backlog]] (P120 NICHT in Pattern-Familie —
+  separates UI-Konstanten-Ticket aus heutigem Backlog)
+
+**Folge-Tickets:**
+
+- **P126** Send-nach-Timeout (TX-Pipeline-Race) — letzter offener
+  Bug aus heutiger Field-Test-Serie. 2× belegt (EC3A + F1IBU).
+
 ## 2026-05-25 v0.98.08 — P127 Sende-Log bei SWR-Abbruch verwerfen (KISS-Variante C)
 
 **Mike-Field-Bug 25.05.2026 10:52 (Screenshot 15M SWR 31.3):**

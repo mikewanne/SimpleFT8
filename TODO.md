@@ -655,7 +655,17 @@ damit der Benutzer sieht dass QSO gleich anfängt.
 
 ---
 
-## 🆕 OFFEN — P120 Sterne-Schwellen FT8-realistisch (Mike 25.05.2026)
+## ✅ ERLEDIGT — P120 Sterne-Schwellen FT8-realistisch (v0.98.09, 25.05.2026)
+
+**Status:** ERLEDIGT v0.98.09 (voll-autonomer Workflow, R1-Option B).
+V2 fand Spec-Inkonsistenz (Mike-Outcome ≠ Mike-Schwellen). R1-V4-pro
+empfahl Option B: 4★ > -18 statt -16, 3★ > -21 statt -19. Final-R1:
+PUSH FREIGEGEBEN. 13 Tests (9 angepasst, 4 NEU inkl. Mike-Field-Test
++ Grenzfall-Tests). Details in HISTORY.md.
+
+---
+
+## ✅ ERLEDIGT (ALT-Spec) — P120 Sterne-Schwellen FT8-realistisch (Mike 25.05.2026)
 
 **Mike-Beobachtung 25.05.2026:** „Lokale Empfangsqualität: ★★★☆☆" auf
 15m FT8 mit Median-SNR −17 dB der Top-Hälfte. Aber −17 dB ist in FT8

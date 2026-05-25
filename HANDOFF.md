@@ -1,8 +1,61 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-25 — v0.98.08 P127 Sende-Log bei SWR-Abbruch verwerfen
+## Stand 2026-05-25 — v0.98.09 P120 Sterne-Schwellen FT8-realistisch
 
-**Aktueller Code-Stand:** v0.98.08, Tests **1889 grün** (+8).
+**Aktueller Code-Stand:** v0.98.09, Tests **1894 grün** (+5).
+
+### 🟢 v0.98.09 — P120 Sterne-Schwellen FT8-realistisch (R1-Option B)
+
+Mike-Field-Bug 25.05.: 15m FT8 Median -17 dB → App zeigt 3★. Mike:
+„-17 dB ist normal-gut, Decoder läuft bis -24 dB". Alte Schwellen
+SSB-Denke (5★ > -10 praktisch unerreichbar).
+
+**Mike-Spec hatte Spec-Inkonsistenz:** Vorschlag 5★ > -13, 4★ > -16,
+3★ > -19, Outcome „-17 → 4★". Aber `-17 > -16` ist False → wäre noch
+3★. V2 Self-Review hat das per Python-Verifikation aufgedeckt.
+
+**R1-V4-pro Option B (FT8-Domain-Expertise + Outcome-treu):**
+- 5★ > -13 dB (Mike-Wert)
+- 4★ > **-18** dB (statt -16, damit -17 wirklich 4★)
+- 3★ > **-21** dB (statt -19, sauberer 3-dB-Abstand)
+- 2★ > -22 dB (unverändert)
+- 1★ drunter
+
+R1 lieferte typische Median-SNR-Bereiche pro Bandöffnung:
+sehr gut -10..-14, gut-normal -14..-18 (Mike's -17 hier rein), mäßig
+-18..-22, schlecht -22..-24, Funkstille ≤ -24.
+
+**Architektur:** 1 atomare Code-Änderung in `compute_local_conditions`
+(mw_cycle.py:33-77) — 3 Schwellen + Docstring. Test-File komplett
+umgeschrieben.
+
+**Workflow voll durch:** V1 → V2 (Spec-Inkonsistenz aufgedeckt!) → R1
+V4-pro (klare Option-B-Empfehlung mit FT8-Expertenrating) → V3 = R1-
+Option-B → Code (1 Edit) → 13 Tests → Final-R1 „PUSH FREIGEGEBEN".
+
+**V4-pro 54-Cycle:** 0 Halluzinationen in P120. R1 als
+FT8-Domain-Expertise war Gold (typische SNR-Bereiche pro Bandöffnung
+stehen nicht im Code).
+
+**Tests 1889 → 1894 (+5 netto):**
+- 9 alte Tests mit angepassten SNR-Werten
+- 4 neue P120-Tests: Mike-Field-Test -17 → 4★ (Bug-Fix-Beweis) +
+  4 Grenzfall-Tests an allen Schwellen-Übergängen (verifizieren
+  strikte `>`-Semantik)
+
+**Auswirkung:** Mike's typische 15m-Sitzung (-17 dB) wird jetzt
+realistischer als „gut" (4★) bewertet statt „mäßig" (3★).
+
+**Lessons:**
+1. V2-Self-Review fängt Spec-Inkonsistenzen per Math-Check
+2. R1 als FT8-Domain-Expertise einsetzen wenn Konstanten kalibriert werden
+3. Grenzfall-Tests verhindern künftige `>` vs `>=` Refactoring-Bugs
+
+**Nächste 1-2 Schritte:**
+- **Mike Field-Test P120 mit Radio:** Sterne-Anzeige bei realistischen
+  Bedingungen prüfen
+- P126 letzter offener Bug aus heutiger Field-Serie (Send-nach-Timeout)
+- 14 lokale Commits warten auf Push-Freigabe
 
 ### 🟢 v0.98.08 — P127 Sende-Log bei SWR-Abbruch verwerfen (KISS-Variante C)
 
