@@ -1,4 +1,55 @@
-# SimpleFT8 TODO — Stand 25.05.2026 (v0.98.05, P121+P122 erledigt)
+# SimpleFT8 TODO — Stand 25.05.2026 (v0.98.10, 7 Tickets erledigt + Field-Test ✅)
+
+---
+
+## 📌 Heutige Session-Bilanz (25.05.2026)
+
+**7 Tickets ERLEDIGT** in einer Marathon-Session:
+- P121 (v0.98.04) Multi-Radio-Refactor
+- P122 (v0.98.05) Auto-Hunt-Stop-Defer
+- P124 (v0.98.06) Hash-Resolution (Mike-KISS-Idee)
+- P128 (v0.98.07) Empf.-Eintrag 60s blocken
+- P127 (v0.98.08) Sende-Log bei SWR-Abbruch
+- P120 (v0.98.09) Sterne-Schwellen FT8-realistisch
+- P129 (v0.98.10) P128-Whitelist 73/RR73 (Field-Bug live gefixt)
+
+**Field-Test ✅ bestätigt:** P120 (4★ realistisch), P122 (sauberer
+Auto-Hunt), P124 (keine Endlosschleifen), P128 (kein Empf.-Spam).
+P129 Field-Test offen (Mike: „später noch test vlt oder morgen").
+
+**Tests 1806 → 1906** (+100). 18 lokale Commits gepusht zu GitHub.
+
+---
+
+## 🐛 OFFEN — Einziger Bug aus heutiger Field-Serie
+
+### P126 Send-nach-Timeout (TX-Pipeline-Race) — 3× belegt heute
+
+EC3A (08:59-09:00), F1IBU (~11:00), LA1YKA (13:22-13:23) — alle
+zeigen das gleiche Muster: 5-6 Sends → ✗ Timeout → **1 zusätzlicher
+Send 1 Slot nach Timeout** → erst dann nächste Station.
+
+Diagnose-intensiver (Encoder-Pipeline vs State-Machine-Counter).
+Vermutung: Encoder hat nächsten Slot „armed" bevor on_qso_timeout
+den Cooldown setzt.
+
+Mike-Spec offen — vor V1 Code-Audit nötig.
+
+**Severity:** 🟠 (kein Hardware-Risiko, nur 1 Etiquette-Verstoß pro
+Timeout). Remote-tauglich, pure State-Machine + Encoder-Sequenz.
+
+---
+
+## 📋 Weitere offene Tickets (Kontext heute)
+
+- **P125** Höflichkeits-73 — **vermutlich überflüssig durch P124**.
+  Bei nächstem Field-Test prüfen ob Marathon-Retries noch auftreten.
+- **P123** Status-Text-UX („Sende" Tempora + QSO-Start) — braucht
+  Mike-Brainstorm mit DeepSeek erst
+- **P119** RFPreset/Krücke entfernen — **NUR vor Ort am Radio**
+- **Multiband-Integration** — **NUR vor Ort am Radio**
+- **P124-Followup** 🟠 R1-Race: Fremd-Hash-Falsch-Match —
+  Frequency-Match-Sicherung nur bei Field-Evidenz nachrüsten
 
 ---
 

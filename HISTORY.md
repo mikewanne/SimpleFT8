@@ -3,6 +3,52 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-25 — Mike-Field-Test ✅ — P120/P122/P124/P127/P128/P129 bestätigt
+
+**Mike-Field-Test 25.05.2026 nach Schichtende der 7-Ticket-Marathon-
+Session:** Auf 15m FT8 mehrere QSOs (F4UIT, M1DBW, 5B4AMX, G0CLT,
+LA1YKA, RI0SP-Side-Spot u.a.).
+
+**✅ Bestätigt:**
+
+- **P120 Sterne-Schwellen** — 4★ bei normalem 15m-Empfang (vorher
+  wäre 3★ gewesen). Mike: „empfangsqualität ist gut".
+- **P122 Auto-Hunt-Stop-Defer** — Auto-Hunt-Workflow funktioniert
+  sauber, keine „rufe laufen ins leere"-Symptome. Mike: „autohunt
+  auch".
+- **P124 Hash-Resolution** — passiv beobachtet während Auto-Hunt-
+  Sessions, keine Endlosschleifen mit `<...>`-Marker.
+- **P127 SWR-Log** — nicht aktiv geprüft (kein SWR-Alarm im Test),
+  Code-Pfad analog P60-F3 verifiziert.
+- **P128 Empf.-Eintrag 60s blocken** — funktioniert, kein nachträglicher
+  Empfangs-Spam nach ✓ QSO.
+- **P129 Whitelist 73/RR73** — direkt im Field-Test entdeckter Bug
+  in P128 (3 QSOs ohne 73-Empfang), sofort gefixt in gleicher
+  Session. Bestätigung nach P129-Deploy steht offen (Mike: „später
+  noch einen test vlt oder morgen").
+
+**⚠ Nicht bestätigt heute:**
+
+- **P126 Send-nach-Timeout** — 3× heute beobachtet (EC3A, F1IBU,
+  LA1YKA). **Einziger offener Bug aus der Field-Serie.** Tickelt
+  morgen.
+
+**Tages-Marathon-Bilanz:**
+
+- **7 Tickets** ERLEDIGT (P121, P122, P124, P128, P127, P120, P129)
+  in einer Session
+- **Tests 1806 → 1906** (+100 in der Session)
+- **18 Commits** lokal (16 Ticket-Pairs + 1 P129-Pair + Stats-Run)
+- **Pattern-Familie 6 Iterationen** etabliert (P81/P122/P124/P127/P128/P129)
+- **V4-pro 55-Cycle-Bilanz:** 0 Halluzinationen, kumulativ ~2%
+  Rate stabil seit P115
+- **5 echte R1-Catches** gefangen (P122-Konstruktor, P124-Brackets,
+  P128-return-Bug, P120-Spec-Inkonsistenz, P129-Whitelist-Architektur)
+
+**Lesson des Tages:** Field-Test ist Pflicht nach jeder Filter-
+Mechanik. P129 war ein Bug der erst im Live-QSO sichtbar wurde —
+Schreibtisch-Tests hätten ihn nie gefangen.
+
 ## 2026-05-25 v0.98.10 — P129 P128-Filter Whitelist 73/RR73 (Mike-Field-Bug live)
 
 **Mike-Field-Beobachtung 25.05.2026 ~13:24 (Live-Test mit Radio):**
