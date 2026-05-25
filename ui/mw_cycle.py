@@ -31,16 +31,23 @@ _QUICK73_WINDOW_S = 1800  # 30 Min
 _RECENTLY_COMPLETED_BLOCK_S = 60.0
 
 def compute_local_conditions(stations: dict) -> tuple[int, int, float]:
-    """P1.19/P1.21: 5-Sterne-Empfang-Score aus Stations-Dict.
+    """P1.19/P1.21/P120: 5-Sterne-Empfang-Score aus Stations-Dict.
 
     Returnt (score 1-5, n_stations, median_snr_top_half).
     Score nur SNR-basiert (Mike's Funker-Logik: Anzahl ohne dB-Werte ist
-    irrelevant — 50 Stationen bei -25 dB sind kein guter Empfang):
-      5 ★: Median-SNR > -10 dB (sehr gut)
-      4 ★: Median-SNR > -14 dB (gut)
-      3 ★: Median-SNR > -18 dB (maessig)
-      2 ★: Median-SNR > -22 dB (schlecht)
+    irrelevant — 50 Stationen bei -25 dB sind kein guter Empfang).
+
+    P120 (25.05.2026) Schwellen FT8-realistisch (Decoder-Grenze ~-24 dB,
+    Stationen >-10 dB außergewöhnlich stark, typischer Empfang -14...-20):
+      5 ★: Median-SNR > -13 dB (sehr gut, selten erreicht)
+      4 ★: Median-SNR > -18 dB (gut, typischer FT8-Empfang)
+      3 ★: Median-SNR > -21 dB (maessig, schwache Bandöffnung)
+      2 ★: Median-SNR > -22 dB (schlecht, an Decoder-Grenze)
       1 ★: alles darunter (sehr schlecht / kein Signal)
+
+    Mike-Field-Test 25.05.: 15m FT8 Median -17 dB → jetzt 4★ (vorher 3★).
+    Alte Schwellen (-10/-14/-18/-22) waren aus SSB/CW-Denke — 5★ praktisch
+    unerreichbar. R1-Option-B optimiert.
     """
     if not stations:
         return 1, 0, -99.0
@@ -54,11 +61,11 @@ def compute_local_conditions(stations: dict) -> tuple[int, int, float]:
         return 1, 0, -99.0
     top_half = snrs[:max(1, n // 2)]
     median = top_half[len(top_half) // 2] if top_half else -99.0
-    if median > -10:
+    if median > -13:
         return 5, n, median
-    if median > -14:
-        return 4, n, median
     if median > -18:
+        return 4, n, median
+    if median > -21:
         return 3, n, median
     if median > -22:
         return 2, n, median
