@@ -285,6 +285,10 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         # P35 Bug A: Flag fuer aufgeschobene Diversity-Init (radio.ip=None).
         self._pending_diversity_init = None
         self._active_qso_targets: set = set()  # Stationen im aktiven QSO → 150s Aging
+        # P128 (25.05.2026): {call → completion_monotonic_ts} — 60s
+        # Cooldown nach ✓ QSO complete, Empf.-Einträge im QSO-Log werden
+        # für die Dauer unterdrückt. RX-Tabelle/Wasserfall unberührt.
+        self._recently_completed_qsos: dict[str, float] = {}
         self._pending_station_click = None  # P1.24: Klick waehrend TX → Buffer fuer naechsten Slot
         self._recent_logged_calls: dict[tuple[str, str], float] = {}  # P1.7 (v0.95.19): ADIF-Dedup (call, band) → ts
         self._quick73_sent: set[str] = set()  # P94 (v0.97.66): Calls denen Quick-73 schon ging

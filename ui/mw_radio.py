@@ -430,6 +430,10 @@ class RadioMixin:
         self.rx_panel.table.setRowCount(0)
         self._diversity_stations = {}
         self._normal_stations = {}
+        # P128 (25.05.2026): Cooldown-Dict bei Mode-Wechsel leeren
+        # (analog Bandwechsel — neuer Modus = neuer Kontext).
+        if hasattr(self, '_recently_completed_qsos'):
+            self._recently_completed_qsos.clear()
         self.control_panel.update_decode_count(0)
         self.qso_panel.log_view.clear()
         # P1.22: `Modus: FT8` Label entfernt — redundant zur Statusbar unten.
@@ -544,6 +548,10 @@ class RadioMixin:
         self.rx_panel.table.setRowCount(0)
         self._diversity_stations = {}
         self._normal_stations = {}
+        # P128 (25.05.2026): Cooldown-Dict bei Bandwechsel leeren —
+        # neues Band = frischer Kontext, alte Cooldowns nicht relevant.
+        if hasattr(self, '_recently_completed_qsos'):
+            self._recently_completed_qsos.clear()
         self.control_panel.update_decode_count(0)
         # P34-Stufe2: DiversityController nur noch Histogramm + Pattern-
         # Counter + CQ-Frequenz-Such. Reset bei Bandwechsel räumt alles

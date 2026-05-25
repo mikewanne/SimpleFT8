@@ -236,6 +236,9 @@ class QSOMixin:
         if old_call:
             self._active_qso_targets.discard(old_call)
         self._active_qso_targets.add(msg.caller)  # 150s Aging fuer angerufene Station
+        # P128 (25.05.2026): Manueller Re-Klick auf gerade abgeschlossene
+        # Station hebt deren Cooldown auf — User will bewusst neues QSO.
+        self._recently_completed_qsos.pop(msg.caller, None)
         self.rx_panel.set_active_call(msg.caller)  # Zeile im RX-Panel hervorheben
         # P1.14 KP2: wenn Station bereits in Caller-Queue gewartet hat, aus
         # Queue entfernen damit sie nicht doppelt kontaktiert wird (sonst
@@ -536,6 +539,12 @@ class QSOMixin:
 
         # UI-Cleanup IMMER (vor Duplikat-Check) — R1-KRITISCH:
         self._active_qso_targets.discard(qso_data.their_call)
+        # P128 (25.05.2026): 60s-Cooldown setzen — Empf.-Einträge dieser
+        # Station werden im QSO-Log unterdrückt (Mike: „beendet ist
+        # beendet"). RX-Tabelle/Wasserfall unberührt. Aging passiert
+        # lazy im Filter _p128_recently_completed_block.
+        import time as _t128
+        self._recently_completed_qsos[qso_data.their_call] = _t128.monotonic()
         self.rx_panel.set_active_call("")
         # Auto-Hunt: QSO erfolgreich → Pause, dann naechste Station
         if self._auto_hunt.active:

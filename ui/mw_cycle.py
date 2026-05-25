@@ -23,6 +23,13 @@ from radio.presets import PREAMP_PRESETS
 # Höflichkeit, danach komplett ignorieren. State-Machine bleibt unangetastet.
 _QUICK73_WINDOW_S = 1800  # 30 Min
 
+# P128 (25.05.2026): nach erfolgreich abgeschlossenem QSO (`qso_complete`-
+# Signal → `_on_qso_complete` Pfad in mw_qso.py) für 60s keine Empf.-Einträge
+# mehr von dieser Station im QSO-Log. Mike-Spec: „beendet ist beendet".
+# RX-Tabelle + Wasserfall bleiben unberührt (separater Pfad in
+# accumulate_stations). Lazy-Aging im Filter — kein extra Timer.
+_RECENTLY_COMPLETED_BLOCK_S = 60.0
+
 def compute_local_conditions(stations: dict) -> tuple[int, int, float]:
     """P1.19/P1.21: 5-Sterne-Empfang-Score aus Stations-Dict.
 
@@ -774,19 +781,26 @@ class CycleMixin:
 
         # RX zuerst anzeigen, dann verarbeiten (sonst erscheint TX-Antwort vor RX im Log)
         if msg.target == self.settings.callsign:
-            # P15 (10.05.2026 Mike-Field-Test): ANT-Label hinter RX-Eintrag,
-            # NICHT hinter Sende. TX laeuft IMMER ueber ANT1 (verriegelt),
-            # Label gehoert NUR zum Empfangs-Eintrag (zeigt welche Antenne
-            # besser empfing).
-            ant_label = ""
-            if hasattr(self, '_antenna_pref_label') and msg.caller:
-                ant_label = self._antenna_pref_label(msg.caller).lstrip()
-            self.qso_panel.add_rx(
-                msg.raw,
-                tx_even=getattr(msg, '_tx_even', None),
-                slot_start_ts=getattr(msg, '_slot_start_ts', None),
-                ant_label=ant_label,
-            )
+            # P128 (25.05.2026): wenn QSO mit dieser Station gerade ✓ komplett
+            # (innerhalb _RECENTLY_COMPLETED_BLOCK_S=60s), KEIN add_rx-Eintrag
+            # mehr ins QSO-Log. RX-Tabelle/Wasserfall unberührt (separater
+            # Pfad accumulate_stations in _on_cycle_decoded). Mike-Spec
+            # „beendet ist beendet". R1-F5: NUR add_rx skippen, NICHT return
+            # — sonst würde on_message_received unten nicht laufen.
+            if not self._p128_recently_completed_block(msg.caller):
+                # P15 (10.05.2026 Mike-Field-Test): ANT-Label hinter RX-Eintrag,
+                # NICHT hinter Sende. TX laeuft IMMER ueber ANT1 (verriegelt),
+                # Label gehoert NUR zum Empfangs-Eintrag (zeigt welche Antenne
+                # besser empfing).
+                ant_label = ""
+                if hasattr(self, '_antenna_pref_label') and msg.caller:
+                    ant_label = self._antenna_pref_label(msg.caller).lstrip()
+                self.qso_panel.add_rx(
+                    msg.raw,
+                    tx_even=getattr(msg, '_tx_even', None),
+                    slot_start_ts=getattr(msg, '_slot_start_ts', None),
+                    ant_label=ant_label,
+                )
 
         # P94 (v0.97.66): Quick-73-Filter VOR OMNI/State-Machine — wenn die
         # anrufende Station innerhalb 30 Min schon gearbeitet wurde, 1x 73
@@ -839,6 +853,26 @@ class CycleMixin:
         if not self.qso_sm.qso or not self.qso_sm.qso.their_call:
             return False
         return resolve_hash_in_msg(msg, self.qso_sm.qso.their_call)
+
+    def _p128_recently_completed_block(self, caller: str) -> bool:
+        """P128 (25.05.2026): True wenn `caller` in 60s-Cooldown nach
+        erfolgreich abgeschlossenem QSO (`_on_qso_complete`).
+
+        Lazy-Aging: Eintrag > _RECENTLY_COMPLETED_BLOCK_S wird hier
+        direkt gelöscht — kein extra Timer nötig.
+
+        Defensive `getattr` für Test-Fakes ohne `_recently_completed_qsos`.
+        """
+        store = getattr(self, '_recently_completed_qsos', None)
+        if not store:
+            return False
+        completion_ts = store.get(caller)
+        if completion_ts is None:
+            return False
+        if time.monotonic() - completion_ts < _RECENTLY_COMPLETED_BLOCK_S:
+            return True
+        del store[caller]
+        return False
 
     def _p94_quick73_filter(self, msg: FT8Message) -> bool:
         """P94 (v0.97.66): Quick-73-Ignore für kürzlich gearbeitete Stationen.
