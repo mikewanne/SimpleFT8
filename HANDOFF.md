@@ -1,8 +1,58 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-25 — v0.98.09 P120 Sterne-Schwellen FT8-realistisch
+## Stand 2026-05-25 — v0.98.10 P129 P128-Whitelist 73/RR73 (Mike-Live-Fund)
 
-**Aktueller Code-Stand:** v0.98.09, Tests **1894 grün** (+5).
+**Aktueller Code-Stand:** v0.98.10, Tests **1906 grün** (+12).
+
+### 🟢 v0.98.10 — P129 P128-Whitelist 73/RR73 (Mike-Field-Bug live, gleiche Session)
+
+Mike-Field-Test 25.05. ~13:24: 3 QSOs hintereinander (M1DBW, 5B4AMX,
+G0CLT) ohne 73-Empfang im Log. Mike-Live-Hypothese: „blocken wir die
+meldung?" — JA! P128 (vor 3 Stunden in selber Session deployt) blockte
+ALLE Empf.-Einträge im 60s-Cooldown nach ✓, auch positive
+73-Bestätigungen.
+
+**Root Cause:** P128 war zu breit gefasst. Mike-Original-Spec war
+„Spam blocken (wiederholte R-Reports), nicht Bestätigungen".
+
+**Fix (KISS):** 1 atomare Änderung in `_p128_recently_completed_block`
+mit Optional `msg`-Param und Whitelist:
+```python
+if msg is not None and (msg.is_73 or msg.is_rr73):
+    return False  # Bestätigungen IMMER durchlassen
+```
+Call-Site (`on_message_decoded` Z. 797) übergibt msg als 2. Param.
+
+**Bewusst NICHT in Whitelist:**
+- `is_r_report` (R+SNR) — R1: würde P128-Spam-Schutz aushebeln
+- `is_grid`, `is_report` (plain) — weiter geblockt
+
+**Workflow voll durch:** V1 → V2 (0 Halluzinationen) → R1 V4-pro
+(6 Findings alle 🟢 + FT8-Semantik-Begründung warum is_r_report
+NICHT whitelisten) → V3 = V1 → Code (2 Edits) → 12 Tests → Final-R1
+„PUSH FREIGEGEBEN, keine Findings".
+
+**V4-pro 55-Cycle:** 0 Halluzinationen.
+
+**Tests 1894 → 1906 (+12 netto, +1 alter P128-Test String-Match angepasst):**
+T1-T2 Whitelist, T3-T4b Spam weiter geblockt, T5 Backward-Compat
+msg=None, T6-T6b andere Stationen, T7 Aging, T7b Short-Circuit-Doku,
+T8 Source-Inspektion Call-Site, T9 Signatur-Optional-Param.
+
+**Direkter Field-Effekt:** beim nächsten QSO sieht Mike wieder
+73-Bestätigungen von Gegenstationen — die heutige Field-Beobachtung
+„3 QSOs ohne 73" wird nicht mehr auftreten (oder zumindest deutlich
+seltener — Stationen die einfach kein 73 senden gibt's auch).
+
+**Pattern-Familie 6. Iteration** als Korrektur des heutigen P128.
+Lesson: KISS-Iteration > KISS-Perfektion. Filter-Mechaniken sofort
+field-testen.
+
+**Nächste 1-2 Schritte:**
+- **Mike Field-Test P129 mit Radio:** nächstes QSO — kommt 73 von
+  Gegenstation jetzt durch?
+- P126 letzter offener Bug (Send-nach-Timeout) — 3× belegt
+- 16 lokale Commits warten auf Push-Freigabe
 
 ### 🟢 v0.98.09 — P120 Sterne-Schwellen FT8-realistisch (R1-Option B)
 

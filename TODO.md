@@ -2,6 +2,17 @@
 
 ---
 
+## ✅ P129 P128-Whitelist 73/RR73 ERLEDIGT (v0.98.10, 25.05.2026, Mike-Field-Bug live)
+
+Mike-Live-Field-Bug während P128-Test: 3 QSOs ohne 73-Empfang. P128
+blockte auch Bestätigungen. Fix KISS: Optional `msg`-Param +
+Whitelist `is_73`/`is_rr73`. R-Reports/Grids bleiben geblockt
+(P128-Spam-Schutz erhalten). R1-V4-pro GO direkt 6×🟢. Final-R1
+PUSH FREIGEGEBEN. 12 Tests + 1 String-Match-Anpassung. Details
+HISTORY.md.
+
+---
+
 ## ✅ P122 Auto-Hunt-Stop-Defer bei aktivem QSO ERLEDIGT (v0.98.05, 25.05.2026)
 
 Mike-Field-Bug 25.05. (Screenshot): 10-Min-Hard-Cap / 5-Min-Maus-

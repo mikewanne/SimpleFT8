@@ -3,6 +3,147 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-25 v0.98.10 — P129 P128-Filter Whitelist 73/RR73 (Mike-Field-Bug live)
+
+**Mike-Field-Beobachtung 25.05.2026 ~13:24 (Live-Test mit Radio):**
+3 QSOs hintereinander (M1DBW, 5B4AMX, G0CLT) — **alle ohne 73-Empfang
+im Log**. Statistisch ungewöhnlich (FT8: viele Stationen senden 73
+als Bestätigung).
+
+**Mike-Hypothese live während Field-Test:** „kann das sein das wir
+die meldung blocken? wenn die kommt"
+
+**Root Cause:** P128 (v0.98.07, gleiche Session) setzt 60s-Cooldown
+nach `qso_complete.emit` → blockt ALLE weiteren Empf.-Einträge inkl.
+positive 73-Bestätigungen.
+
+**Timing-Beispiel M1DBW:**
+- 13:24:15: Mike sendet RR73 → `qso_complete.emit` → Cooldown gesetzt
+- 13:24:30 (Even-Slot): M1DBW könnte 73 senden
+- 13:24:42 (Decoder fertig): 27s nach Cooldown-Start → BLOCKIERT ❌
+
+**Mike-Original-Spec war:** „beendet ist beendet" — gegen WIEDERHOLTE
+R-Reports/Grids (Endlos-Spam-Vektor), NICHT gegen Bestätigungen.
+P128 war zu breit gefasst.
+
+**Architektur — 1 atomare Änderung (KISS):**
+
+`ui/mw_cycle.py:_p128_recently_completed_block` (+Optional msg-Param):
+```python
+def _p128_recently_completed_block(self, caller: str,
+                                   msg: FT8Message | None = None) -> bool:
+    # P129: Bestätigungen IMMER durchlassen (auch im Cooldown-Fenster)
+    if msg is not None and (msg.is_73 or msg.is_rr73):
+        return False
+    # ... Rest unverändert (P128-Logik)
+```
+
+Call-Site `on_message_decoded` Z. 797:
+```python
+if not self._p128_recently_completed_block(msg.caller, msg):  # +msg
+```
+
+**Whitelist-Scope (R1-bewertet):**
+- ✅ `is_73` durchgelassen — universelles „QSO beendet"-Ack
+- ✅ `is_rr73` durchgelassen — auch positive Bestätigung
+- ❌ `is_r_report` NICHT in Whitelist — R-Report ist Wiederholungs-
+  Rapport, kein finales Ack. Würde sonst P128-Spam-Schutz aushebeln.
+
+**Backward-Compat:** Optional-Param mit `None`-Default → alte
+Test-Aufrufer ohne msg funktionieren weiter. 1 alter P128-Test
+String-Match angepasst (von `(msg.caller)` strikt auf `(msg.caller`
+ohne Klammer-Ende).
+
+**R1 V4-pro Verdict (Pre-Code):** **GO direkt** — „exzellent KISS,
+keine Findings, sofort integrierbar". 6 Fragen alle 🟢. R1 lieferte
+auch die FT8-semantische Begründung warum `is_r_report` NICHT
+geWhitelistet werden darf.
+
+**Workflow voll durch:**
+
+- Schritt 0: Code-Audit `_p128_recently_completed_block` + Call-Site
+- Schritt 1: V1 — Optional-Param + Whitelist 73/RR73
+- Schritt 2: V2 — 0 V1-Halluzinationen, Mike-Timing-Hypothese verifiziert
+- Schritt 3: R1 V4-pro → 6 Findings 🟢, GO direkt
+- Schritt 4: V3 = V1 (keine R1-Korrekturen)
+- Schritt 5: Code in 2 Edits (Mixin-Methode + Call-Site)
+- Schritt 5a: 12 Tests + 1 alter P128-Test-Anpassung
+- Schritt 5b: Full-Regression 1906 grün
+- Schritt 6: Final-R1
+
+**V4-pro 55-Cycle:** 0 Halluzinationen in P129. Kumulativ ~2% Rate
+stabil seit P115.
+
+**Tests 1894 → 1906 (+12 netto):**
+
+`tests/test_p129_whitelist_73.py`:
+- **T1-T2:** Whitelist greift — 73 + RR73 durchgelassen
+- **T3:** R-Report weiter geblockt (kein Whitelist-Bypass)
+- **T4-T4b:** Plain Report + Grid weiter geblockt
+- **T5:** msg=None Backward-Compat
+- **T6-T6b:** Andere Stationen ohne Cooldown — Whitelist neutral
+- **T7:** Aging-Pfad unverändert
+- **T7b:** Whitelist short-circuit dokumentiert (kein Memory-Leak,
+  dict bleibt klein, Band/Mode-Reset räumt eh auf)
+- **T8:** Source-Inspektion Call-Site übergibt msg
+- **T9:** Funktion-Signatur Optional-Param mit None-Default
+
+**Direkter Field-Effekt für Mike:**
+
+| Szenario | Vorher (P128) | Nachher (P129) |
+|---|---|---|
+| Gegenstation sendet 73 im 60s-Fenster | ❌ geblockt | ✅ wird angezeigt |
+| Gegenstation sendet R-Report (Spam) | ❌ geblockt | ❌ weiter geblockt |
+| Plain-Report wiederholt | ❌ geblockt | ❌ weiter geblockt |
+| Grid-Repeat | ❌ geblockt | ❌ weiter geblockt |
+
+**Pattern-Familie 6. Iteration:**
+
+P129 ist eine **Korrektur** der vorherigen Pattern-Iteration P128
+(die heute morgen entstanden war). Lehre: Whitelist-Mechanik bei
+Filter-Mustern proaktiv mitdenken — was soll DURCH den Filter
+auch im „blockierten" Zustand?
+
+| Ticket | Was wird deferiert/gefiltert | Bei Anlass-Wegfall |
+|---|---|---|
+| P81 | Auto-Hunt-Stop-Meldung | Flush am QSO-Ende |
+| P122 | Auto-Hunt-Stop-Aktion | Flush am QSO-Ende |
+| P124 | Hash-Marker im Display | Kontextuell auflösen |
+| P128 | Empf.-Log-Eintrag nach ✓ | Lazy-Aging nach 60s |
+| P127 | Sende-Log bei SWR-Stop | Verwerfen am Ursprung |
+| **P129** | **P128-Whitelist 73/RR73** | **Korrektur P128: Bestätigungen NIE blocken** |
+
+**Lessons:**
+
+1. **Field-Test deckt unvermutete Bugs auf — sofort fixen.** Mike's
+   Hypothese im Live-Funkbetrieb „blocken wir die 73-Meldung?" war
+   3 Stunden nach P128-Deployment. Field-Test ist Pflicht nach
+   jeder Filter-Mechanik.
+
+2. **R1 als FT8-Semantik-Experte.** R1 erklärte warum `is_r_report`
+   NICHT in Whitelist gehört (würde P128-Spam-Schutz aushebeln).
+   Domain-Wissen über FT8-Message-Semantik.
+
+3. **Optional-Param mit None-Default ist KISS-Backward-Compat.**
+   12 neue Tests + nur 1 String-Match-Anpassung in alten Tests.
+   Pattern für künftige Signatur-Erweiterungen.
+
+4. **Pattern-Iteration darf korrigiert werden.** P128 war
+   „beendet ist beendet" — zu breit. P129 verfeinert: „Spam ist
+   beendet, Bestätigungen nicht". KISS-Iteration > KISS-Perfektion.
+
+**Related:**
+
+- [[project_p128_done]] (P128 ist das gefixte Ticket — gleiche Session)
+- [[project_p120_done]] (P120 ist im gleichen Field-Test bestätigt)
+- [[project_p124_done]] (Pattern-Familie 3. Iteration)
+
+**Folge-Tickets:**
+
+- **P126** Send-nach-Timeout (TX-Pipeline-Race) — JETZT 3× belegt
+  in heutiger Field-Serie (EC3A, F1IBU, LA1YKA). Letzter offener
+  Bug.
+
 ## 2026-05-25 v0.98.09 — P120 Sterne-Schwellen FT8-realistisch (R1-Option B)
 
 **Mike-Field-Bug 25.05.2026 (Screenshot 15m FT8):** „Lokale Empfangsqualität:
