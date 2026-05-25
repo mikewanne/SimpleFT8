@@ -1,8 +1,8 @@
 """SimpleFT8 DX Tune Dialog — Interleaved Antennen + Preamp Optimierung.
 
-Neues Verfahren (v3, Block 2):
-- 8 Zyklen interleaved: ANT1@10 → ANT2@10 → ANT1@20 → ANT2@20
-  × 2 Runden = 2 Minuten
+Neues Verfahren (v3, Block 2 + P130):
+- 12 Zyklen interleaved: ANT1@0 → ANT2@0 → ANT1@10 → ANT2@10 → ANT1@20 → ANT2@20
+  × 2 Runden = 3 Minuten
 - Jede Kombination bekommt 2 Zyklen (30s) verteilt ueber die Messzeit
 - ANT1 und ANT2 werden bei gleichen Bandoeffnungen verglichen
 - Ergebnis: optimaler Gain fuer ANT1 UND ANT2 separat
@@ -29,8 +29,11 @@ from PySide6.QtGui import QFont
 _FONT_MONO = QFont("Menlo", 12)
 _FONT_MONO_SM = QFont("Menlo", 10)
 
-GAIN_VALUES = [10, 20]
-ROUNDS = 2  # 2 Runden × 4 Kombos = 8 Zyklen × 15s = 2 Min (v0.91 Block 2 #6)
+GAIN_VALUES = [0, 10, 20]  # P130 (25.05.2026): 0 dB wieder dazu —
+# Mike-Frage „was wenn 0 gain das beste ist?". Low-Band-Defaults
+# (160/80/60m) sind 0 dB, vorher nie gemessen. +90s Kalibrierungszeit
+# akzeptiert für Vollständigkeit.
+ROUNDS = 2  # 2 Runden × 6 Kombos = 12 Zyklen × 15s = 3 Min (P130-Update)
 
 # P74-A: Backup-Grace für TUNE-Phase analog AutoTuneDialog P71.
 # Phase B max 6.5 s + Post-Check 2 s + Safety 3.5 s.
@@ -149,7 +152,7 @@ class DXTuneDialog(QDialog):
         if self._prev_tune_swr is not None:
             banner = QLabel(
                 f"✓ TUNE OK — SWR {self._prev_tune_swr:.1f} · "
-                f"jetzt 2 Min Gain-Messung läuft"
+                f"jetzt 3 Min Gain-Messung läuft"
             )
             banner.setStyleSheet(
                 "background: rgba(0,150,0,0.25); color: #88FFAA; "
@@ -189,8 +192,8 @@ class DXTuneDialog(QDialog):
         layout.addWidget(title)
 
         hint = QLabel(
-            "8 Zyklen interleaved • ANT1 & ANT2 bei gleichem Gain verglichen\n"
-            "Dauert ca. 2 Minuten  •  TX bleibt immer auf ANT1"
+            "12 Zyklen interleaved • ANT1 & ANT2 bei gleichem Gain verglichen\n"
+            "Dauert ca. 3 Minuten  •  TX bleibt immer auf ANT1"
         )
         hint.setStyleSheet("color: #FFD700; font-size: 11px;")
         hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -489,23 +492,30 @@ class DXTuneDialog(QDialog):
         self._start_step()
 
     def _check_phase2_early_stop(self) -> bool:
-        """Adaptiv-Stop nach Runde 1 (Schritt 4) wenn ANT-Differenz klar.
+        """Adaptiv-Stop nach Runde 1 wenn ANT-Differenz klar.
 
         Stop-Bedingung (mind. eine erfuellt):
         - Δ_SNR (Top5-Avg) ≥ 4 dB
         - Δ_STAT (Stations-Anzahl, rel.) ≥ 50 %
 
         Pre-Conditions (alle muessen gelten, sonst kein Stop):
-        - _step == 4 (genau Runde 1 Ende)
+        - _step == 2 * len(GAIN_VALUES) (Runde 1 GERADE abgeschlossen,
+          _step wurde in feed_cycle.Z485 schon inkrementiert)
+          P130 (25.05.2026): vorher hartkodiert `_step == 4` (bei
+          GAIN_VALUES=[10,20], 4 Buckets/Runde). Mit GAIN_VALUES=[0,10,20]
+          sind es 6 Buckets/Runde → Check bei _step == 6.
         - kein Cancel
-        - alle 4 Buckets non-empty + non-overload
+        - alle Buckets der ersten Runde non-empty + non-overload
         - mind. 5 Stationen pro Bucket (Phase-2-eigene Schwelle, unabhaengig
           von Phase-3-Score-Logik in DiversityController seit v0.93)
 
         Konservativ tuned (R1-bestaetigt): lieber kein Stop als falscher Stop.
         Spart bei Trigger ~60 s Pipeline.
         """
-        if self._step != 4:
+        # P130: dynamisch auf GAIN_VALUES-Länge — Step NACH Runde-1-Ende
+        # (feed_cycle inkrementiert _step VOR diesem Check)
+        end_of_round1 = 2 * len(GAIN_VALUES)
+        if self._step != end_of_round1:
             return False
         if self._cancelled:
             return False
@@ -648,7 +658,7 @@ class DXTuneDialog(QDialog):
         }
 
     def _finish(self):
-        """Alle 8 Zyklen fertig — P51: BEIDE Auswertungen parallel rechnen.
+        """Alle 12 Zyklen fertig — P51: BEIDE Auswertungen parallel rechnen.
 
         P51 (v0.97.28): Aus identischen _phase_data werden beide Optima
         bestimmt — Standard (meiste Stationen) UND DX (bester SNR). Beide

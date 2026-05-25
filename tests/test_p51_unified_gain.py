@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Tests fuer P51 (v0.97.28) — Gain-Messung vereinheitlichen.
 
-1 Messung (8 Zyklen Rohdaten) → 2 Auswertungen (Standard zaehlt Stationen,
+1 Messung (12 Zyklen Rohdaten nach P130) → 2 Auswertungen (Standard zaehlt Stationen,
 DX zaehlt SNR) → beide Stores atomar gespeichert.
 
 T1   _finish produziert beide Sub-Saetze (standard + dx)

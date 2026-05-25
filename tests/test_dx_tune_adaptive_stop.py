@@ -29,24 +29,38 @@ class _MockRadio:
 
 
 def _make_dlg(scoring_mode="snr"):
-    """DXTuneDialog mit Mock-Radio + _step bei 4 (Runde 1 fertig)."""
+    """DXTuneDialog mit Mock-Radio + _step direkt NACH Runde 1.
+
+    P130 (25.05.2026): GAIN_VALUES erweitert auf [0,10,20] → 6 Buckets
+    pro Runde statt 4. Step-Index dynamisch aus GAIN_VALUES-Länge.
+    _step == 2 * len(GAIN_VALUES) entspricht „Runde 1 fertig" — Pre-Cond
+    in `_check_phase2_early_stop`.
+    """
+    from ui.dx_tune_dialog import GAIN_VALUES
     _ensure_app()
     dlg = DXTuneDialog(_MockRadio(), "40m", scoring_mode=scoring_mode, rx_mode="diversity")
-    dlg._step = 4  # Runde 1 abgeschlossen
+    dlg._step = 2 * len(GAIN_VALUES)  # Runde 1 abgeschlossen
     return dlg
 
 
 def _populate_phase_data(dlg, ant1_snrs, ant2_snrs, gain=20):
     """Setzt _phase_data fuer Tests. Es werden die Werte fuer den
-    'besseren' Gain (default 20) gefuettert; fuer den anderen Gain
+    'besseren' Gain (default 20) gefuettert; fuer alle anderen Gains
     werden 5 schlechte Werte gesetzt um Pre-Conditions (>=5 St.) zu
     erfuellen.
+
+    P130 (25.05.2026): GAIN_VALUES wurde um 0 dB erweitert — Helper
+    füttert jetzt alle GAIN_VALUES-Einträge ausser dem Test-Gain mit
+    -15 dB-Defaults.
     """
-    other_gain = 10 if gain == 20 else 20
+    from ui.dx_tune_dialog import GAIN_VALUES
     dlg._phase_data[("ANT1", gain)] = list(ant1_snrs)
     dlg._phase_data[("ANT2", gain)] = list(ant2_snrs)
-    dlg._phase_data[("ANT1", other_gain)] = [-15.0] * 5
-    dlg._phase_data[("ANT2", other_gain)] = [-15.0] * 5
+    for other_gain in GAIN_VALUES:
+        if other_gain == gain:
+            continue
+        dlg._phase_data[("ANT1", other_gain)] = [-15.0] * 5
+        dlg._phase_data[("ANT2", other_gain)] = [-15.0] * 5
 
 
 # ───── Stop-Cases ────────────────────────────────────────────────────
@@ -120,18 +134,32 @@ def test_phase2_stop_calls_finish():
     """Bei Stop: _finished=True und _results befuellt nach feed_cycle().
 
     Integration-Test: feed_cycle()-Pfad verifiziert dass _finish() aufgerufen wird.
-    """
-    dlg = _make_dlg(scoring_mode="snr")
-    # 3 Buckets bereits befuellt, 4. Bucket bei feed_cycle drangepackt
-    dlg._step = 3
-    dlg._phase_data[("ANT1", 10)] = [-5.0] * 10
-    dlg._phase_data[("ANT2", 10)] = [-5.0] * 10
-    dlg._phase_data[("ANT1", 20)] = [0.0] * 10  # ANT1 deutlich besser
-    # 4. Bucket = ANT2@20, wird im feed_cycle befuellt
 
-    # Schedule: schedule[3] sollte (ANT2, 20) sein in Round 0
-    expected_key = dlg._schedule[3]
-    assert expected_key == ("ANT2", 20), f"Schedule[3]={expected_key}, expected (ANT2, 20)"
+    P130 (25.05.2026): Schedule erweitert auf 6 Kombos/Runde (GAIN [0,10,20]).
+    Step 5 = (ANT2, 20) als letzter Bucket der ersten Runde — analog
+    zum vorherigen Step 3 = (ANT2, 20) bei GAIN [10,20].
+    """
+    from ui.dx_tune_dialog import GAIN_VALUES
+    dlg = _make_dlg(scoring_mode="snr")
+    # 5 Buckets bereits befuellt, 6. Bucket bei feed_cycle drangepackt
+    # (feed_cycle inkrementiert _step → nach 6. Bucket steht _step bei 6,
+    # was zur Pre-Cond `_step == 2 * len(GAIN_VALUES)` passt)
+    last_step_of_round = 2 * len(GAIN_VALUES) - 1
+    dlg._step = last_step_of_round  # Vor feed_cycle → wird inkrementiert
+    # Alle Buckets ausser ANT2@20 befuellt — ANT1 deutlich besser
+    for gain in GAIN_VALUES:
+        if gain == 20:
+            dlg._phase_data[("ANT1", gain)] = [0.0] * 10  # ANT1 sehr stark
+            # ANT2@20 wird im feed_cycle befuellt (letzter Bucket)
+        else:
+            dlg._phase_data[("ANT1", gain)] = [-5.0] * 10
+            dlg._phase_data[("ANT2", gain)] = [-5.0] * 10
+
+    # Schedule: letzter Step der Round 0 = (ANT2, 20)
+    expected_key = dlg._schedule[last_step_of_round]
+    assert expected_key == ("ANT2", 20), (
+        f"Schedule[{last_step_of_round}]={expected_key}, "
+        f"expected (ANT2, 20)")
 
     # Mock messages mit ANT2@20 schwach
     class _Msg:
