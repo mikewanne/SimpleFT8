@@ -1,4 +1,28 @@
-# SimpleFT8 TODO — Stand 25.05.2026 (v0.98.04, P121 erledigt)
+# SimpleFT8 TODO — Stand 25.05.2026 (v0.98.05, P121+P122 erledigt)
+
+---
+
+## ✅ P122 Auto-Hunt-Stop-Defer bei aktivem QSO ERLEDIGT (v0.98.05, 25.05.2026)
+
+Mike-Field-Bug 25.05. (Screenshot): 10-Min-Hard-Cap / 5-Min-Maus-
+Inaktivität / 15-Min-Totmann brachen mitten in laufendem Stations-Ruf
+ab → „rufe laufen ins leere".
+
+**Lösung:** 3 Defer-Reasons (`timer_expired`, `mouse_inactive_5min`,
+`totmann_expired`) werden bei aktivem QSO bis QSO-Ende deferiert.
+`manual_halt`/`swr_block`/`band_change`/etc. greifen weiterhin sofort
+(Hardware-Safety/Kontext-Wechsel).
+
+`core/auto_hunt.py` + Callback-Param + `_pending_stop_reason` +
+`flush_pending_stop()`. R1-F3 Defensive Idempotenz-Check. FIFO-First-
+Wins. `ui/mw_qso.py` 3 QSO-Ende-Handler: flush_pending_stop VOR
+flush_auto_hunt_stop_msg.
+
+Workflow V1→V2(A1-A7)→R1(5 Findings, 3 ROT alle V2-Falschannahme,
+korrigiert)→V3→Code→Final-R1 ✅. **V4-pro 50-Cycle: 0 Halluzinationen.**
+Tests 1838→1851 (+13).
+
+Pattern reused `_qso_active_for_msg_defer()` aus P81 — keine Drift.
 
 ---
 
@@ -246,6 +270,43 @@ Voller Workflow Pflicht. ~1h Aufwand.
 nicht falsch, nur konservativ. Wenn Mike viel kurz-aber-häufig
 misst (P116-Mess-Strategie), wird die Diskrepanz größer und sollte
 gefixt werden.
+
+## 🎨 OFFEN UX — P123 Status-Text „Sende" Tempora + QSO-Start-Anzeige (Mike 25.05.2026)
+
+> ⚠️ **Kein Bug, sondern UX-Verbesserung.** Mike-Wunsch: erst mit
+> DeepSeek brainstormen, Mike-Decision auf 2-3 Varianten, DANN
+> Workflow + Code.
+
+**Mike-Beobachtung 25.05.2026:** Heute steht in der QSO-Liste
+„→ Sende SX20RCK DA1MHH -15" — aber der Text erscheint NACHDEM
+gesendet wurde. „Sende" = Präsens = jetzt geschieht es. Richtig
+wäre Vergangenheit „Gesendet" weil zum Anzeige-Zeitpunkt der TX
+schon durch ist.
+
+**Zusätzlicher Mike-Wunsch:** beim QSO-START vor dem ersten TX
+eine Status-Meldung anzeigen die signalisiert „wir senden jetzt",
+damit der Benutzer sieht dass QSO gleich anfängt.
+
+**Brainstorm-Themen mit DeepSeek (Variante-Auswahl für Mike):**
+
+1. Tempora-Korrektur „Sende" → „Gesendet" — wo überall in der
+   App? `qso_panel.add_tx`, `ControlPanel`, Statusbar?
+2. Soll der TX-Start (Pre-TX-Meldung) ein eigener Log-Eintrag in
+   QSO-Liste sein, oder Statusbar-Toast?
+3. Format-Vorschläge:
+   - A: „07:32:00 [O] ⏳ Bereit: Sende SX20RCK DA1MHH -15 in 0.3s"
+     (Pre-TX) + „07:32:00 [O] ✓ Gesendet: SX20RCK DA1MHH -15"
+     (Post-TX)
+   - B: nur Tempora-Fix „Gesendet" ohne Pre-TX-Meldung
+   - C: Symbol-Auto (P79-Pattern) → ⏳ während TX, ✓ nach TX
+4. Sprach-Stil: Funker-typisch oder Logbuch-Stil?
+
+**Workflow-Pflicht:** ja wenn Code, aber **erstmal nur Brainstorm**
+— Mike entscheidet auf Brainstorm-Output dann ob umgesetzt wird.
+
+**Severity:** ⚪ UX-Polish, kein Bug.
+
+---
 
 ## 🆕 OFFEN — P120 Sterne-Schwellen FT8-realistisch (Mike 25.05.2026)
 

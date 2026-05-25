@@ -14209,3 +14209,108 @@ TUNE-Pfade) + 1 GELB (`set_rfpower_direct(10)` Hardcode in
 - IC-7300-CI-V-Implementierung (eigenes Ticket nach Hardware-Beschaffung)
 - IC-7100-CI-V-Implementierung
 - P122 UI-Conditional bei !supports_diversity (wenn echter IC-Fork läuft)
+
+## 2026-05-25 v0.98.05 — P122 Auto-Hunt-Stop-Defer bei aktivem QSO
+
+Mike-Field-Beobachtung (Screenshot Auto-Hunt-Bug, 25.05.): Während ein
+Stations-Ruf läuft (z.B. `Sende RA9LL DA1MHH -17`) feuert der
+10-Min-Hard-Cap-Timer oder der 5-Min-Maus-Inaktivität-Watchdog. Der
+sofortige `stop_auto_hunt()` setzt `active=False` + cleart Cooldown
+mitten im laufenden Ruf — die noch laufenden Slot-Calls laufen ins
+Leere, keine Antwort wird verarbeitet, Loop endet mit Timeout.
+
+**Mike-Spec:** „alles muss sauber durchlaufen, nicht mittendrin
+beenden wenn autohunt oder totman läuft".
+
+**Lösung:** Stop-AKTION analog zur P81-Stop-MELDUNG deferieren — für
+3 zeitbasierte Reasons (`timer_expired`, `mouse_inactive_5min`,
+`totmann_expired`). Alle 7+ anderen Reasons (`manual_halt`,
+`swr_block`, `band_change`, `ft_mode_change`, `rx_mode_change`,
+`scoring_toggle`, `superseded`) greifen weiterhin sofort —
+Hardware-Safety bzw. Kontext-Wechsel.
+
+**Architektur:**
+
+`core/auto_hunt.py:AutoHunt`:
+- Modul-Konstante `_DEFER_REASONS = {"timer_expired", "mouse_inactive_5min", "totmann_expired"}`
+- Konstruktor +1 optionaler Param `is_qso_active_callback=None` (KISS,
+  Default-Fallback `lambda: False` → Backward-Compat für Legacy-Tests)
+- Neue Instanz-Var `_pending_stop_reason: Optional[str]`
+- `stop_auto_hunt(reason)` mit Defer-Branch + R1-F3 Defensive
+  Idempotenz-Check (`if not self.active and pending is None: return`)
+- Neue Methode `flush_pending_stop()` für QSO-Ende-Pfade
+- Defer-Logik: First-Wins-FIFO bei multiple Defers
+- Sofortiger Stop resettet `_pending_stop_reason` (HALT/Band überschreibt
+  alten Defer-Reason)
+
+`ui/main_window.py:386`:
+- `AutoHunt(is_qso_active_callback=self._qso_active_for_msg_defer)` —
+  nutzt das gleiche Kriterium wie P81-Meldungspfad (keine Logik-Drift)
+
+`ui/mw_qso.py` 3 QSO-Ende-Handler:
+- `_on_cancel` (HALT)
+- `_on_qso_confirmed_visual` (✓ QSO komplett)
+- `_on_qso_timeout` (✗ Timeout)
+
+Reihenfolge in jedem Handler: bestehende QSO-Ende-Logik → `flush_pending_stop()`
+(P122 AKTION) → `_flush_auto_hunt_stop_msg()` (P81 MELDUNG).
+
+**Workflow voll durch:**
+
+- Schritt 0: Code-Audit aller 9 Stop-Reasons + Aufrufer-Trace
+- Schritt 1: V1+V2 mit A1-A7 Self-Review
+- Schritt 2: R1-Review V4-pro → 5 Findings (4 ORANGE, 1 GELB,
+  0 Halluzinationen)
+- Schritt 2.5: alle 5 Findings verifiziert — F1 war **mein V2-Fehler**
+  (`AutoHunt.__init__(self)` hat keine bestehenden Params, V2 hat
+  fälschlich `qso_sm`/`stations_provider` behauptet → V3 korrigiert
+  auf KISS-1-Param)
+- Schritt 3: V3 mit Findings-Bilanz
+- Schritt 5: Code in 4 atomaren Edits
+- Schritt 5b: Final-R1 „PUSH FREIGEGEBEN" 0 Mängel
+
+**R1-Findings-Bilanz V2-Review:**
+
+| # | Severity | Status |
+|---|---|---|
+| 1 | 🟠 V2-Falschannahme `__init__`-Params | Korrigiert (1 KISS-Param) |
+| 2 | 🟠 §2.D vs §2.E Widerspruch | Korrigiert (Flush nur in 3 Handlern) |
+| 3 | 🟠 Kein Defensive-Check | Adressiert (Idempotenz vor Defer-Check) |
+| 4 | 🟡 Overengineering | Korrigiert mit F1 |
+| 5 | 🟠 Backward-compat-Risiko | Adressiert (Default `None`) |
+
+**V4-pro 50-Cycle:** 0 Halluzinationen in P122. **Kumulativ seit P115:
+~2% Halluzinations-Rate (1 in 50 Cycles).**
+
+**Tests 1838 → 1851 (+13):**
+
+T1-T13 in `tests/test_p122_auto_hunt_defer.py`:
+- 3 Tests Defer-Pfad (timer_expired, mouse_inactive, totmann_expired)
+- 3 Tests Sofort-Pfad (manual_halt, swr_block, band_change)
+- 2 Tests Flush-Pfad (deferred-stop completes, no-op without pending)
+- 4 Tests Edge-Cases (FIFO First-Wins, immediate-stop resets pending,
+  legacy constructor backward-compat, defensive idempotency double-stop)
+- 1 Test Idempotenz (Doppel-Stop kein zweites Signal)
+
+**Pattern-Wiederverwendung:** `_qso_active_for_msg_defer()` aus P81
+(v0.97.53) liefert das exakte Defer-Kriterium (`qso_sm.state not in
+{IDLE, TIMEOUT, CQ_CALLING, CQ_WAIT}`). P122 reused den Callback —
+Drift zwischen P81-Meldung und P122-Aktion ist unmöglich.
+
+**Lesson:**
+
+- DeepSeek R1 hat **meinen** V2-Fehler erkannt (Konstruktor-Params
+  erfunden). Ohne R1 hätte ich Code geschrieben der nicht kompiliert
+  oder Legacy-Instanziation gebrochen hätte. **Code-Verifikation in
+  Schritt 0 muss konkrete Signaturen prüfen, nicht annehmen.**
+- Defer-Mechanik kostet ~30 LOC + 13 Tests, ändert User-Experience
+  fundamental: Mike's Erfahrung „rufe laufen ins leere" ist gefixt
+  ohne den 10-Min-Bot-Tarn-Schutz aufzuweichen (Timer läuft weiter,
+  nur die SICHTBARE Stop-Aktion verzögert sich max 1-2 Slots).
+- Pattern-Wiederverwendung (P81-Callback) verhindert Code-Drift —
+  immer prüfen ob ähnliche Logik schon existiert.
+
+**Folge-Tickets (zukünftig):**
+
+- P123 Status-Text-UX („Sende" Tempora + QSO-Start-Anzeige) —
+  Mike-Brainstorm mit DeepSeek pending

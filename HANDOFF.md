@@ -1,8 +1,53 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-25 — v0.98.04 P121 Multi-Radio-Refactor (Variante A)
+## Stand 2026-05-25 — v0.98.05 P122 Auto-Hunt-Stop-Defer
 
-**Aktueller Code-Stand:** v0.98.04, Tests **1838 grün** (+32 netto).
+**Aktueller Code-Stand:** v0.98.05, Tests **1851 grün** (+13).
+
+### 🟢 v0.98.05 — P122 Auto-Hunt-Stop deferiert bei aktivem QSO
+
+Mike-Field-Bug 25.05.: 10-Min-Hard-Cap / 5-Min-Maus-Inaktivität / 15-Min-
+Totmann brachen mitten in laufendem Stations-Ruf ab → Rufe liefen
+ins Leere, Loop endete mit Timeout, kein Antwort-Empfang mehr.
+
+**Lösung:** 3 zeitbasierte Stop-Reasons werden bei aktivem QSO
+deferiert bis QSO-Ende (✓ komplett, ✗ Timeout, HALT). Andere Reasons
+(manual_halt, swr_block, band_change, etc.) greifen weiterhin sofort —
+Hardware-Safety bzw. Kontext-Wechsel.
+
+**Architektur:** `core/auto_hunt.py` + `_DEFER_REASONS` Konstante +
+1 optionaler Konstruktor-Callback `is_qso_active_callback` (Default
+`lambda: False` für Backward-Compat) + `_pending_stop_reason` +
+`flush_pending_stop()`. R1-F3 Defensive Idempotenz-Check vor Defer-
+Logik. FIFO-First-Wins bei multiple Defers. Sofort-Stop resettet
+Pending.
+
+`ui/main_window.py`: AutoHunt-Konstruktor +Callback aus P81-Pattern
+(`_qso_active_for_msg_defer` — gleiches Kriterium = keine Drift).
+
+`ui/mw_qso.py`: 3 QSO-Ende-Handler ergänzt um `flush_pending_stop()`
+VOR `_flush_auto_hunt_stop_msg()` (Reihenfolge: Aktion vor Meldung).
+
+**Workflow voll durch:** V1 → V2(A1-A7 Self-Review) → R1 V4-pro
+(5 Findings, 3 ROT alle aus V2-Falschannahme — `AutoHunt.__init__`
+hat keine Params; alle korrigiert) → V3 → Code in 4 Edits → 13 neue
+Tests → Full-Regression 1851 grün → Final-R1 „PUSH FREIGEGEBEN".
+
+**V4-pro 50-Cycle:** 0 Halluzinationen in P122.
+
+**Tests 1838 → 1851 (+13):** Defer-Pfad (3), Sofort-Pfad (3),
+Flush-Pfad (2), Edge-Cases (4), Idempotenz (1). Alle in
+`test_p122_auto_hunt_defer.py`.
+
+**Lesson:** Pattern-Wiederverwendung ist Gold — P81-Callback liefert
+exakt das Kriterium für P122, keine Drift möglich. R1 fängt eigene
+V2-Falschannahmen über bestehende Schnittstellen — Code-Verifikation
+muss konkrete Signaturen prüfen.
+
+**Nächste 1-2 Schritte:** P123 Status-Text-UX („Sende" Tempora +
+QSO-Start-Anzeige) wartet auf Mike-Brainstorm-Auftrag.
+
+### 🟢 v0.98.04 — P121 Hardware-Konstanten ans Radio + IC-7300/IC-7100 Stubs
 
 ### 🟢 v0.98.04 — P121 Hardware-Konstanten ans Radio + IC-7300/IC-7100 Stubs
 
