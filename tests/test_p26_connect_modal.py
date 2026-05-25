@@ -30,9 +30,14 @@ def qapp():
 
 
 def test_t1_layout_smoke(qapp):
-    """T1: Dialog-Layout — Title, Size, Style."""
+    """T1: Dialog-Layout — Title, Size, Style.
+
+    P121 (2026-05-25): Dialog-Titel ist jetzt parametrisiert per
+    radio_name (Default "Radio" wenn nicht übergeben). Aufrufer in
+    mw_radio.py setzt radio_name=self.radio.radio_name.
+    """
     from ui.connect_status_dialog import ConnectStatusDialog
-    dlg = ConnectStatusDialog()
+    dlg = ConnectStatusDialog(radio_name="FlexRadio")
     try:
         assert dlg.windowTitle() == "FlexRadio wird verbunden"
         # 11.05.2026: 20% kleiner; Bundle J (14.05.): 176→196 fuer Footer-Zeile.

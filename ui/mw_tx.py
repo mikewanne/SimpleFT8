@@ -163,12 +163,14 @@ class TXMixin:
 
         Hardware-Sicherheit (P63 AC5, Mike-Anweisung): 10W FEST,
         ANT1 verriegelt — unabhängig von tune_power-Setting oder
-        Override-Pfad.
+        Override-Pfad. P121: TUNE-Power kommt jetzt aus radio.tune_power_w
+        (FlexRadio: 10W, IC-7300/IC-7100 Stubs: 10W). Kein
+        Settings-Override — Hardware-Sicherheit.
         """
         from PySide6.QtCore import QTimer
         from config.settings import get_tune_freq_mhz
 
-        TUNE_POWER_W = 10
+        tune_power_w = self.radio.tune_power_w
 
         # P63 AC4: Watchdog-Bypass VOR tune_on
         self._tune_in_progress = True
@@ -198,14 +200,14 @@ class TXMixin:
                   f"— tune auf Arbeitsfrequenz")
 
         self.radio.set_tx_antenna("ANT1")
-        self.radio.set_rfpower_direct(TUNE_POWER_W)
+        self.radio.set_rfpower_direct(tune_power_w)
         self.radio.tune_on()
         self._update_statusbar()
         self.statusBar().showMessage(
-            f"TUNEN — {TUNE_POWER_W}W auf ANT1 für {duration_s}s ...", 0)
+            f"TUNEN — {tune_power_w}W auf ANT1 für {duration_s}s ...", 0)
         display_freq = tune_freq if tune_freq is not None else self.settings.frequency_mhz
         self.control_panel.set_freq_display(display_freq, tune_active=True)
-        print(f"[P63] Manueller TUNE — {TUNE_POWER_W}W {duration_s}s")
+        print(f"[P63] Manueller TUNE — {tune_power_w}W {duration_s}s")
 
         # Auto-Stop nach Dauer mit Token-Re-Entry-Schutz
         self._tune_auto_stop_token = object()
@@ -640,9 +642,11 @@ class TXMixin:
         else:
             self._tune_freq_mhz = self.settings.frequency_mhz
         self.radio.set_tx_antenna("ANT1")  # AC11 Hardware-Pflicht
-        self.radio.set_rfpower_direct(10)
+        # P121 (2026-05-25): TUNE-Power aus Radio-Klasse statt hartcodiert.
+        tune_power_w = self.radio.tune_power_w
+        self.radio.set_rfpower_direct(tune_power_w)
         self.radio.tune_on()
-        print(f"[P54a] Auto-TUNE {band} 10 W {duration_s}s")
+        print(f"[P54a] Auto-TUNE {band} {tune_power_w} W {duration_s}s")
 
         self._tune_auto_stop_token = object()
         _token = self._tune_auto_stop_token

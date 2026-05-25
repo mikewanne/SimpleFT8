@@ -5,8 +5,9 @@ Verwendung in main_window.py:
     self.radio = create_radio(settings)
 
 Unterstützte Typen (settings["radio_type"]):
-    "flex"   → FlexRadioInterface (SmartSDR TCP + VITA-49) [Standard]
-    "ic7300" → IC7300Interface (CI-V Serial + USB Audio)   [ZUKÜNFTIG]
+    "flex" / "flexradio" → FlexRadio (SmartSDR TCP + VITA-49)
+    "ic7300"             → IC7300Interface (Stub, P121 — CI-V + USB Audio folgt)
+    "ic7100"             → IC7100Interface (Stub, P121 — CI-V + USB Audio folgt)
 """
 
 from __future__ import annotations
@@ -24,14 +25,14 @@ def create_radio(settings: "Settings"):
         settings: Settings-Objekt mit flexradio_ip, flexradio_port, radio_type.
 
     Returns:
-        FlexRadio-Instanz (oder künftig IC7300Interface).
+        FlexRadio, IC7300Interface oder IC7100Interface.
 
     Raises:
         ValueError: Wenn radio_type unbekannt.
     """
     radio_type = settings.get("radio_type", "flex")
 
-    if radio_type == "flex":
+    if radio_type in ("flex", "flexradio"):
         from radio.flexradio import FlexRadio
         return FlexRadio(
             ip=settings.get("flexradio_ip", ""),
@@ -39,13 +40,14 @@ def create_radio(settings: "Settings"):
         )
 
     if radio_type == "ic7300":
-        # Zukünftig: CI-V Serial + sounddevice USB Audio
-        # from radio.ic7300 import IC7300Interface
-        # return IC7300Interface(settings)
-        raise NotImplementedError(
-            "IC-7300 Interface noch nicht implementiert. "
-            "Siehe radio/base_radio.py für die RadioInterface-Spezifikation."
-        )
+        # P121: Stub. CI-V-Implementierung folgt in eigenem Ticket.
+        from radio.ic7300 import IC7300Interface
+        return IC7300Interface()
+
+    if radio_type == "ic7100":
+        # P121: Stub. CI-V-Implementierung folgt in eigenem Ticket.
+        from radio.ic7100 import IC7100Interface
+        return IC7100Interface()
 
     raise ValueError(f"Unbekannter radio_type: {radio_type!r}. "
-                     f"Gültige Typen: 'flex', 'ic7300'")
+                     f"Gültige Typen: 'flex'/'flexradio', 'ic7300', 'ic7100'")

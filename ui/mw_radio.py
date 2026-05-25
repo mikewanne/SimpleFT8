@@ -84,7 +84,12 @@ class RadioMixin:
         # Bundle J (v0.97.27): app_version mitgeben fuer Footer-Zeile.
         # Lazy-Import vermeidet Circular (mw_radio wird von main.py geladen).
         from main import APP_VERSION
-        self._connect_dialog = ConnectStatusDialog(self, app_version=APP_VERSION)
+        # P121 (2026-05-25): radio_name mitgeben damit Dialog "IC-7300 wird verbunden"
+        # zeigt wenn radio_type=ic7300 statt FlexRadio.
+        self._connect_dialog = ConnectStatusDialog(
+            self, app_version=APP_VERSION,
+            radio_name=getattr(self.radio, "radio_name", "Radio"),
+        )
         self.radio.connected.connect(
             self._connect_dialog.accept,
             Qt.ConnectionType.QueuedConnection,
@@ -1673,7 +1678,9 @@ class RadioMixin:
 
         self._tune_token = object()
         _token = self._tune_token
-        tune_power = self.settings.get("tune_power", 10)
+        # P121 (2026-05-25): TUNE-Power aus Radio-Klasse (Hardware-Safety,
+        # kein settings.tune_power-Override mehr). Final-R1-Catch von DeepSeek.
+        tune_power = self.radio.tune_power_w
 
         self.statusBar().showMessage(
             f"TUNEN — {tune_power}W auf ANT1 fuer 3s ...", 0)
@@ -1738,7 +1745,9 @@ class RadioMixin:
             if self.radio.ip:
                 self.radio.ptt_off()
 
-        tune_power = self.settings.get("tune_power", 10)
+        # P121 (2026-05-25): TUNE-Power aus Radio-Klasse (Hardware-Safety,
+        # kein settings.tune_power-Override mehr). Final-R1-Catch.
+        tune_power = self.radio.tune_power_w
         swr_limit  = self.settings.get("swr_limit", 3.0)
         tuner_present = self.settings.get("tuner_present", True)
 
@@ -1937,9 +1946,11 @@ class RadioMixin:
             self._tune_freq_mhz = self.settings.frequency_mhz
 
         self.radio.set_tx_antenna("ANT1")  # Hardware-Pflicht (ANT1=TX)
-        self.radio.set_rfpower_direct(10)
+        # P121 (2026-05-25): TUNE-Power aus Radio-Klasse statt hartcodiert.
+        tune_power_w = self.radio.tune_power_w
+        self.radio.set_rfpower_direct(tune_power_w)
         self.radio.tune_on()
-        print(f"[P74-A] Dialog-TUNE {band} 10 W {duration_s}s "
+        print(f"[P74-A] Dialog-TUNE {band} {tune_power_w} W {duration_s}s "
               f"(mode={mode})")
 
         # R1-F2: expliziter Token für Auto-Stop. Ohne Token könnte ein

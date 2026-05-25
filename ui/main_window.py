@@ -80,9 +80,13 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         # _rx_mode = "normal" wird ohnehin in _init_radio_state (Z.235) gesetzt.
 
         # Initialisierung in fester Reihenfolge — siehe Helper-Docstrings.
+        # P121 (2026-05-25): _init_radio_state ZUERST damit self.radio
+        # existiert wenn _init_core_components den Encoder mit
+        # self.radio.tx_buffer_s baut. Code-Audit: _init_radio_state
+        # braucht nur self.settings, keine Encoder/Decoder-Abhängigkeit.
+        self._init_radio_state()
         self._init_core_components()
         self._init_qso_log()
-        self._init_radio_state()
         self._init_diversity_state()
         self._init_power_state()
 
@@ -161,15 +165,23 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         settings = self.settings
         self.timer = FT8Timer(settings.mode)
         self.qso_sm = QSOStateMachine(settings.callsign, settings.locator)
-        # P48 (v0.97.13): Hardware-Default fuer DT-Kaltstart aus Settings.
-        # Greift wenn weder eigener Wert noch Cross-Modus-Fallback existieren.
+        # P48 (v0.97.13) / P121 (2026-05-25): Hardware-Default kommt vom
+        # Radio (z.B. FlexRadio.rx_hardware_offset_default_s = 0.26).
+        # User-Override aus radio_timing-Block in config.json gewinnt
+        # (für Power-User die experimentieren wollen).
         from core import ntp_time as _ntp
-        _ntp.set_hardware_default(settings.rx_hardware_offset_default_s)
+        rx_offset = settings.get_user_rx_hardware_offset_override()
+        if rx_offset is None:
+            rx_offset = self.radio.rx_hardware_offset_default_s
+        _ntp.set_hardware_default(rx_offset)
         # P47 (v0.97.11): audio_freq_hz + max_decode_freq aus Settings entfernt
         # (waren tot). Encoder-Start auf 1500 Hz (CQ-Such-Algo ueberschreibt
         # ohnehin pro Slot); Decoder-Obergrenze konstant 3000 Hz.
-        # P48 (v0.97.13): tx_buffer_s aus Settings (FlexRadio 1.3 default).
-        self.encoder = Encoder(1500, tx_buffer_s=settings.tx_buffer_s)
+        # P48/P121: tx_buffer_s analog — Radio-Default mit Settings-Override.
+        tx_buffer = settings.get_user_tx_buffer_override()
+        if tx_buffer is None:
+            tx_buffer = self.radio.tx_buffer_s
+        self.encoder = Encoder(1500, tx_buffer_s=tx_buffer)
         self.decoder = Decoder(max_freq=3000)
         self.decoder._my_call = settings.callsign
         # P3 v0.95.20: initiales Band setzen (sonst Default "20m" bei

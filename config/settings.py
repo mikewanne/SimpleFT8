@@ -3,6 +3,7 @@
 import json
 import os
 from pathlib import Path
+from typing import Optional
 
 CONFIG_DIR = Path.home() / ".simpleft8"
 CONFIG_FILE = CONFIG_DIR / "config.json"
@@ -64,18 +65,19 @@ DEFAULTS = {
     "max_calls": 5,    # P98 (v0.97.70): 99 → 5 (FT8-Standard, Mike-Field-Test)
     "tune_power": 10,
     "diversity_operate_cycles": 80,  # 80/160/240 — Betriebszyklen bis Neueinmessung
-    "radio_type": "flex",            # "flex" = FlexRadio SmartSDR, "ic7300" = CI-V (zukünftig)
+    "radio_type": "flex",            # "flex"/"flexradio" = FlexRadio SmartSDR,
+                                     # "ic7300"/"ic7100" = CI-V Stubs (P121 — Impl. folgt)
     "language": "de",                # "de" = Deutsch, "en" = English (Hilfe-Texte + Docs)
     # P52 (v0.97.41): stats_enabled entfernt — Stats sind immer an
     # (Bandpilot + Auswertungen brauchen sie). Migration in load().
     "debug_console_visible": False,  # Debug-Konsole ein/ausblenden
     "bandpilot_mode": "off",         # v0.88 — "off" | "auto" | "manual"
-    # P48 (v0.97.13): Radio-Timing-Hardware-Werte aus dem Code in Settings.
-    # FlexRadio-Defaults. Bei IC-7300-Fork hier andere Werte eintragen.
-    "radio_timing": {
-        "tx_buffer_s": 1.3,                    # FlexRadio VITA-49 TX-Buffer-Latenz
-        "rx_hardware_offset_default_s": 0.26,  # FlexRadio RX-Latenz empirisch (10.212 Messungen)
-    },
+    # P48 (v0.97.13) / P121 (2026-05-25): Radio-Hardware-Konstanten kommen
+    # jetzt aus der jeweiligen Radio-Klasse (siehe FlexRadio.tx_buffer_s
+    # etc.). `radio_timing` ist nur noch User-Override-Slot: wer in
+    # config.json explizit einen Wert schreibt, übersteuert den
+    # Radio-Default. Default-Block ist leer.
+    "radio_timing": {},
     # P63 (v0.97.36): Tuner-Setting + manuelle TUNE-Dauer.
     # Tuner=False (Monoband-Operator) skipt Auto-TUNE-Phase in
     # Gain-Mess-Pipeline und blendet TUNE-Button aus.
@@ -139,6 +141,17 @@ class Settings:
         # verhindert auch versehentliches Starten im versteckten FT2.
         self._data["band"] = DEFAULTS["band"]
         self._data["mode"] = DEFAULTS["mode"]
+        # P121 (2026-05-25): radio_timing-Block Default-Migration.
+        # Wenn der Block exakt den alten FlexRadio-Defaults entspricht
+        # (1.3 / 0.26 und KEINE anderen Keys), wird er auf {} reduziert
+        # damit die Werte als "Radio-Default" gelten und spätere
+        # Default-Änderungen am Radio greifen. Sobald ein Wert abweicht
+        # ODER ein zusätzlicher Key drin ist → Block bleibt als
+        # User-Override erhalten.
+        rt = self._data.get("radio_timing", {})
+        _legacy_p48 = {"tx_buffer_s": 1.3, "rx_hardware_offset_default_s": 0.26}
+        if rt == _legacy_p48:
+            self._data["radio_timing"] = {}
         self._migrate_bandpilot_settings_v088()
 
     def _migrate_bandpilot_settings_v088(self):
@@ -254,17 +267,24 @@ class Settings:
     def mode(self):
         return self._data["mode"]
 
-    # P48: Radio-Hardware-Timing-Werte (FlexRadio-Defaults).
-    @property
-    def tx_buffer_s(self) -> float:
-        """FlexRadio VITA-49 TX-Buffer-Latenz in Sekunden."""
-        return float(self._data.get("radio_timing", {}).get("tx_buffer_s", 1.3))
+    # P48 (v0.97.13) → P121 (2026-05-25): Radio-Hardware-Konstanten
+    # liefert jetzt die Radio-Klasse (z.B. FlexRadio.tx_buffer_s = 1.3).
+    # Diese Methoden geben NUR den User-Override zurück (None wenn nicht
+    # explizit gesetzt). Aufrufer fallen bei None auf radio.tx_buffer_s /
+    # radio.rx_hardware_offset_default_s zurück.
+    def get_user_tx_buffer_override(self) -> Optional[float]:
+        """User-Override für tx_buffer_s aus dem radio_timing-Block.
 
-    @property
-    def rx_hardware_offset_default_s(self) -> float:
-        """FlexRadio RX-Hardware-Latenz Default fuer DT-Kaltstart."""
-        return float(self._data.get("radio_timing", {})
-                     .get("rx_hardware_offset_default_s", 0.26))
+        Returns None wenn nicht explizit gesetzt → Default vom Radio.
+        Returns float wenn User in config.json manuell einen Wert pflegt.
+        """
+        val = self._data.get("radio_timing", {}).get("tx_buffer_s")
+        return float(val) if val is not None else None
+
+    def get_user_rx_hardware_offset_override(self) -> Optional[float]:
+        """Analog für rx_hardware_offset_default_s. None = Radio-Default."""
+        val = self._data.get("radio_timing", {}).get("rx_hardware_offset_default_s")
+        return float(val) if val is not None else None
 
     @property
     def frequency_mhz(self):

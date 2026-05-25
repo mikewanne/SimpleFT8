@@ -128,13 +128,18 @@ def test_a_t6_on_tune_override_invalid_duration_noop(app):
 
 
 def test_a_t7_tune_start_hardware_safety(app):
-    """_tune_start enthält 10W FEST + ANT1-Verriegelung."""
+    """_tune_start nutzt radio.tune_power_w + ANT1-Verriegelung.
+
+    P121 (2026-05-25): Power aus Radio-Class-Variable
+    (FlexRadio.tune_power_w=10) statt hartcodiert TUNE_POWER_W=10.
+    Hardware-Safety unverändert: ANT1-Pflicht, kein Settings-Override.
+    """
     import inspect
     from ui.mw_tx import TXMixin
     src = inspect.getsource(TXMixin._tune_start)
-    assert "TUNE_POWER_W = 10" in src, "10W FEST muss in _tune_start sein"
+    assert "self.radio.tune_power_w" in src, "P121: Power muss aus radio.tune_power_w kommen"
     assert 'set_tx_antenna("ANT1")' in src, "ANT1-Verriegelung muss in _tune_start sein"
-    assert "set_rfpower_direct(TUNE_POWER_W)" in src
+    assert "set_rfpower_direct(tune_power_w)" in src
 
 
 def test_a_t8_on_tune_clicked_uses_setting(app):

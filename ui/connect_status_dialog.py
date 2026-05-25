@@ -57,7 +57,8 @@ class ConnectStatusDialog(QDialog):
     attempt_changed = Signal(int, int)
     failed_signal = Signal()
 
-    def __init__(self, parent=None, app_version: str = ""):
+    def __init__(self, parent=None, app_version: str = "",
+                 radio_name: str = "Radio"):
         super().__init__(parent)
         self._dots_state = 0
         self._failed = False
@@ -67,8 +68,10 @@ class ConnectStatusDialog(QDialog):
         # nach exec() um zwischen User-Klick (Demo-Pflicht) und
         # Radio-Accept (Connect erfolgreich) zu unterscheiden.
         self._user_cancelled = False
+        # P121 (2026-05-25): Radio-Name parametrisiert für IC-7300/IC-7100 Fork.
+        self._radio_name = radio_name
 
-        self.setWindowTitle("FlexRadio wird verbunden")
+        self.setWindowTitle(f"{radio_name} wird verbunden")
         # 11.05.2026: 20% kleiner (Mike-Field-Test).
         # Bundle J: 176→196 fuer Footer-Zeile.
         self.setFixedSize(352, 196)
@@ -131,7 +134,7 @@ class ConnectStatusDialog(QDialog):
 
         text_col = QVBoxLayout()
         text_col.setSpacing(6)
-        title = QLabel("FlexRadio wird verbunden")
+        title = QLabel(f"{self._radio_name} wird verbunden")
         title.setFont(QFont("", 13, QFont.Weight.Bold))
         title.setStyleSheet("color: #7CC; background-color: transparent;")
         text_col.addWidget(title)

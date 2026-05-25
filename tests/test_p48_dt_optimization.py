@@ -20,19 +20,30 @@ import pytest
 # ── P48-A Settings ───────────────────────────────────────────────────────
 
 
-def test_settings_has_radio_timing_defaults(tmp_path, monkeypatch):
-    """Frische Settings hat tx_buffer_s=1.3 und rx_hardware_offset_default_s=0.26."""
+def test_settings_radio_timing_empty_by_default(tmp_path, monkeypatch):
+    """P121 (2026-05-25): Defaults kommen vom Radio, nicht aus Settings.
+
+    radio_timing-Block ist standardmäßig leer. Settings liefert None für
+    User-Overrides (Aufrufer fällt auf radio.tx_buffer_s zurück).
+    Hardware-Konstanten 1.3/0.26 sind jetzt in FlexRadio.tx_buffer_s
+    bzw. FlexRadio.rx_hardware_offset_default_s.
+    """
     import config.settings as cs
     monkeypatch.setattr(cs, "CONFIG_FILE", tmp_path / "config.json")
     monkeypatch.setattr(cs, "CONFIG_DIR", tmp_path)
 
     s = cs.Settings()
-    assert s.tx_buffer_s == 1.3
-    assert s.rx_hardware_offset_default_s == 0.26
+    assert s.get_user_tx_buffer_override() is None
+    assert s.get_user_rx_hardware_offset_override() is None
+
+    # FlexRadio-Klasse liefert die ehemaligen Settings-Defaults:
+    from radio.flexradio import FlexRadio
+    assert FlexRadio.tx_buffer_s == 1.3
+    assert FlexRadio.rx_hardware_offset_default_s == 0.26
 
 
 def test_settings_backward_compat_no_radio_timing_block(tmp_path, monkeypatch):
-    """Alte config.json ohne radio_timing-Block laedt mit Property-Defaults."""
+    """Alte config.json ohne radio_timing-Block: keine User-Overrides aktiv."""
     cfg = tmp_path / "config.json"
     cfg.write_text(json.dumps({"callsign": "DA1MHH"}))
     import config.settings as cs
@@ -40,9 +51,9 @@ def test_settings_backward_compat_no_radio_timing_block(tmp_path, monkeypatch):
     monkeypatch.setattr(cs, "CONFIG_DIR", tmp_path)
 
     s = cs.Settings()
-    # Properties greifen auf Defaults zurueck, kein KeyError
-    assert s.tx_buffer_s == 1.3
-    assert s.rx_hardware_offset_default_s == 0.26
+    # Kein User-Override → None → Aufrufer nutzt Radio-Default
+    assert s.get_user_tx_buffer_override() is None
+    assert s.get_user_rx_hardware_offset_override() is None
 
 
 # ── Fixture fuer ntp_time-State ──────────────────────────────────────────

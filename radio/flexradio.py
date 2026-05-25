@@ -37,6 +37,12 @@ class FlexRadio(QObject):
 
     radio_type: str = "flexradio"
 
+    # P121: Hardware-Konstanten explizit pro Radio-Klasse (Duck-Typing,
+    # da FlexRadio von QObject erbt, nicht von RadioInterface).
+    tx_buffer_s: float = 1.3                  # VITA-49 TX-Buffer-Latenz [s]
+    rx_hardware_offset_default_s: float = 0.26  # FlexRadio-empirisch [s]
+    tune_power_w: int = 10                    # SmartSDR TUNE-Leistung [W]
+
     connected = Signal()
     disconnected = Signal()
     frequency_changed = Signal(float)

@@ -140,19 +140,22 @@ def test_t8_manual_tune_allowed_on_red_band():
 # ── T9 — Manueller TUNE 10W FEST (unabhängig von tune_power) ───────────
 
 
-def test_t9_tune_uses_10w_fixed():
-    """AC5: TUNE-Pipeline ruft `set_rfpower_direct(TUNE_POWER_W)` mit
-    TUNE_POWER_W=10 — UNABHÄNGIG von settings.tune_power.
+def test_t9_tune_uses_radio_tune_power():
+    """AC5: TUNE-Pipeline ruft `set_rfpower_direct(tune_power_w)` mit Wert
+    aus `self.radio.tune_power_w` — UNABHÄNGIG von settings.tune_power.
 
     P95 (v0.97.67): Pipeline aus `_on_tune_clicked` in `_tune_start`
-    extrahiert (gemeinsam für regulär + Override). Test prüft jetzt
-    den Helper.
+    extrahiert (gemeinsam für regulär + Override).
+    P121 (2026-05-25): TUNE-Power kommt jetzt aus Radio-Class-Variable
+    (FlexRadio.tune_power_w=10, IC-Stubs auch 10W). Kein hartcodiertes
+    TUNE_POWER_W mehr, kein Settings-Override (Hardware-Sicherheit).
     """
     src = _method_src("ui/mw_tx.py", "_tune_start")
-    assert "TUNE_POWER_W = 10" in src, "P63 AC5: 10W FEST fehlt"
-    assert "set_rfpower_direct(TUNE_POWER_W)" in src, (
-        "P63 AC5: 10W an Radio fehlt")
-    # tune_power-Setting wird NICHT mehr im manuellen Pfad gelesen
+    assert "self.radio.tune_power_w" in src, (
+        "P121: TUNE-Power muss aus radio.tune_power_w kommen")
+    assert "set_rfpower_direct(tune_power_w)" in src, (
+        "P63 AC5: Radio-Power-Setter mit tune_power_w fehlt")
+    # tune_power-Setting wird NICHT im manuellen Pfad gelesen
     on_src = _method_src("ui/mw_tx.py", "_on_tune_clicked")
     full_src = src + on_src
     assert "settings.get(\"tune_power\"" not in full_src, (

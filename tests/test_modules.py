@@ -112,19 +112,23 @@ def test_preamp_presets():
     assert PREAMP_PRESETS["15m"] == 20
 
 
-def test_factory_ic7300_not_implemented():
-    """IC-7300 Typ → NotImplementedError."""
+def test_factory_ic7300_returns_stub():
+    """P121 (2026-05-25): IC-7300 Typ liefert jetzt IC7300Interface-Stub.
+
+    Vorher (P26-Faktor-Original): NotImplementedError direkt.
+    Jetzt: Factory instanziiert die Stub-Klasse, NotImplementedError
+    wird erst beim Hardware-Method-Call ausgelöst.
+    Siehe tests/test_radio_factory.py + tests/test_ic7300_stub.py.
+    """
     from radio.radio_factory import create_radio
+    from radio.ic7300 import IC7300Interface
 
     class FakeSettings:
         def get(self, k, d=None):
             return {"radio_type": "ic7300"}.get(k, d)
 
-    try:
-        create_radio(FakeSettings())
-        assert False, "Haette NotImplementedError werfen sollen"
-    except NotImplementedError:
-        pass
+    radio = create_radio(FakeSettings())
+    assert isinstance(radio, IC7300Interface)
 
 
 def test_factory_unknown_type():

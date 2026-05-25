@@ -26,6 +26,13 @@ class RadioInterface(ABC):
     # Wird vom RFPresetStore als Top-Level-Key in rf_presets.json verwendet.
     radio_type: str = "unknown"
 
+    # P121: Hardware-Konstanten — JEDE konkrete Subclass MUSS eigene Werte setzen
+    # (Class-Variables werden NICHT vererbt da FlexRadio QObject erbt, nicht ABC).
+    # Diese ABC-Defaults sind reine Notfall-Fallback wenn ein Subclass es vergisst.
+    tx_buffer_s: float = 1.3                 # TX-Pre-Buffer Hardware-Latenz [s]
+    rx_hardware_offset_default_s: float = 0.26  # RX-Hardware-Latenz Default [s]
+    tune_power_w: int = 10                   # Typische TUNE-Leistung [W]
+
     # ── Verbindung ─────────────────────────────────────────────────
 
     @abstractmethod
