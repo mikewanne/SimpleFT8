@@ -794,7 +794,7 @@ class CycleMixin:
             # Pfad accumulate_stations in _on_cycle_decoded). Mike-Spec
             # „beendet ist beendet". R1-F5: NUR add_rx skippen, NICHT return
             # — sonst würde on_message_received unten nicht laufen.
-            if not self._p128_recently_completed_block(msg.caller):
+            if not self._p128_recently_completed_block(msg.caller, msg):
                 # P15 (10.05.2026 Mike-Field-Test): ANT-Label hinter RX-Eintrag,
                 # NICHT hinter Sende. TX laeuft IMMER ueber ANT1 (verriegelt),
                 # Label gehoert NUR zum Empfangs-Eintrag (zeigt welche Antenne
@@ -861,15 +861,27 @@ class CycleMixin:
             return False
         return resolve_hash_in_msg(msg, self.qso_sm.qso.their_call)
 
-    def _p128_recently_completed_block(self, caller: str) -> bool:
+    def _p128_recently_completed_block(self, caller: str,
+                                       msg: FT8Message | None = None) -> bool:
         """P128 (25.05.2026): True wenn `caller` in 60s-Cooldown nach
         erfolgreich abgeschlossenem QSO (`_on_qso_complete`).
+
+        P129 (25.05.2026, gleiche Session, Mike-Field-Bug): positive
+        Bestätigungen (`is_73`/`is_rr73`) werden auch im Cooldown-Fenster
+        DURCHGELASSEN. Mike beobachtete 3 QSOs hintereinander (M1DBW,
+        5B4AMX, G0CLT) ohne 73-Empfang im Log — Ursache war P128 das
+        ALLE Empf.-Einträge inkl. 73-Bestätigung blockierte. Mike-
+        Original-Spec war „Spam blocken, nicht Bestätigungen".
 
         Lazy-Aging: Eintrag > _RECENTLY_COMPLETED_BLOCK_S wird hier
         direkt gelöscht — kein extra Timer nötig.
 
         Defensive `getattr` für Test-Fakes ohne `_recently_completed_qsos`.
+        `msg=None`-Default behält Backward-Compat für alte Test-Aufrufer.
         """
+        # P129: Bestätigungen IMMER durchlassen (auch im Cooldown-Fenster)
+        if msg is not None and (msg.is_73 or msg.is_rr73):
+            return False
         store = getattr(self, '_recently_completed_qsos', None)
         if not store:
             return False

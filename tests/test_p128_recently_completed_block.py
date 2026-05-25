@@ -137,7 +137,9 @@ def test_t7_filter_is_only_for_add_rx_not_return():
     source = inspect.getsource(CycleMixin.on_message_decoded)
     # P128-Filter darf NICHT direkt vor on_message_received `return` aufrufen
     # — er soll nur add_rx skippen
-    assert "if not self._p128_recently_completed_block(msg.caller)" in source
+    # P129 (25.05.2026): Signatur erweitert um msg-Param für Whitelist.
+    # Sowohl alter (caller-only) als auch neuer (caller, msg) Pattern OK.
+    assert "if not self._p128_recently_completed_block(msg.caller" in source
     # Die echte on_message_received-Zeile muss noch da sein
     assert "self.qso_sm.on_message_received(msg)" in source
 
