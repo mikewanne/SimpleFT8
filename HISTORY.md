@@ -3,6 +3,123 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-25 v0.98.08 — P127 Sende-Log bei SWR-Abbruch verwerfen (KISS-Variante C)
+
+**Mike-Field-Bug 25.05.2026 10:52 (Screenshot 15M SWR 31.3):**
+```
+⚠ Band 15M gesperrt — SWR 31.3
+08:51:15 [0] → Sende Z62NS DA1MHH -15   ← NACH der Sperre-Meldung
+```
+
+Mike-Frage: „wurde wirklich gesendet oder ob nur die meldung erschienen
+ist". Hardware ist sicher (PTT abgeschaltet, Bruchteil vor 2. Spike
+rausgegangen), aber Log-Anzeige suggeriert „Send NACH Sperre".
+
+**Root Cause (P93-Defer-Mechanik):** P93 (v0.97.65) deferiert
+„→ Sende ..."-Log-Eintrag von `tx_started` auf `tx_finished`. Bei
+SWR-Stop mitten im Slot:
+1. tx_started feuert → `_pending_tx_log` gesetzt
+2. SWR-Spike → `encoder.abort()` + `radio.ptt_off()`
+3. Worker wacht aus abort_event auf → emittet `tx_finished`
+4. `_on_tx_finished` liest pending → ruft `add_tx` → Eintrag landet
+   trotz Abbruch im Log mit Slot-Start-Timestamp
+
+**Mike-Spec Variante C (KISS):** im SWR-Watchdog direkt
+`_pending_tx_log = None` setzen. Am Ursprung des Problems, analog
+zum bestehenden P60-F3-Pattern (`_pending_station_click = None`).
+
+**Architektur (1 atomare Änderung):**
+
+`ui/mw_tx.py:_on_swr_alarm` nach P60-F3-Block:
+```python
+if hasattr(self, "_pending_station_click"):
+    self._pending_station_click = None
+# P127 NEU:
+if hasattr(self, "_pending_tx_log"):
+    self._pending_tx_log = None
+```
+
+**Bewusst NICHT geändert (Mike-Spec):**
+- `_abort_active_tx` (User-HALT-Pfad) bleibt unberührt — Mike will
+  bei HALT den Sende-Eintrag sehen (was er gerade abgebrochen hat)
+- `_on_band_changed` ohne SWR — separater Pfad, kein Eingriff
+- 1-Spike/Pre-TX-Pfade (early return) — kein pending zum Clearen
+
+**R1 V4-pro Findings (Pre-Code):** 7 Findings, alle 🟢. Verdict
+„GO direkt — sauberste denkbare Lösung". Symmetrie zu P60-F3
+ausdrücklich bestätigt.
+
+**Workflow voll durch:**
+- Schritt 0: Code-Audit `_on_swr_alarm`, `_on_tx_finished`,
+  `_abort_active_tx`, alle `_pending_`-States im UI-Tree
+- Schritt 1: V1 — 6 ACs, 4 R-Punkte
+- Schritt 2: V2 — 0 Halluzinationen, V1-Plan überlebt
+- Schritt 3: R1 V4-pro → 7 Findings 🟢, GO direkt
+- Schritt 4: V3 = V1 (keine Korrekturen nötig)
+- Schritt 5: 1 atomare Code-Änderung (12-Zeilen-Block inkl. Kommentar)
+- Schritt 5a: 8 Tests
+- Schritt 5b: Full-Regression — 1 Regression in P60-Test (Source-Inspektion
+  prüfte Kommentar-Token `_abort_active_tx`) → Kommentar zu „User-HALT-Pfad"
+  umformuliert → grün
+- Schritt 6: Final-R1
+
+**V4-pro 53-Cycle:** 0 Halluzinationen in P127. Kumulativ ~2% Rate
+stabil.
+
+**Tests 1881 → 1889 (+8):**
+
+`tests/test_p127_swr_pending_tx_log.py`:
+- **T1:** Source-Inspektion fix ist drin
+- **T2:** Position nach P60-F3-Block (Pattern-Symmetrie)
+- **T3:** Defensive `hasattr`-Guard
+- **T4:** Hardware-Sicherheit (abort + ptt_off bleibt + Reihenfolge)
+- **T5:** HALT-Pfad `_abort_active_tx` clearet `_pending_tx_log` NICHT
+- **T6:** Pre-TX-Guard läuft vor P127-Block (early return Pfade)
+- **T7:** `_on_tx_finished` hat schon Branch für `pending=None`
+- **T8:** Doku-Marker P127 + 25.05.2026 im Source
+
+**Pattern-Familie etabliert (5. Iteration):**
+
+| Ticket | Was wird deferiert/gefiltert | Bei Anlass-Wegfall |
+|---|---|---|
+| P81 (v0.97.53) | Auto-Hunt-Stop-Meldung | Flush am QSO-Ende |
+| P122 (v0.98.05) | Auto-Hunt-Stop-Aktion | Flush am QSO-Ende |
+| P124 (v0.98.06) | Hash-Marker im Display | Kontextuell auflösen |
+| P128 (v0.98.07) | Empf.-Log-Eintrag nach ✓ | Lazy-Aging nach 60s |
+| **P127 (v0.98.08)** | Sende-Log bei SWR-Stop | **Verwerfen am Ursprung** |
+
+5 Iterationen desselben QSO-Lifecycle-Filter-Patterns. Die Familie
+ist solide — bei jeder neuen Defer/Block-Mechanik die 3 Fragen
+stellen: Wann setzen? Wann ausspielen/blocken? Was bei Anlass-Wegfall?
+
+**Lessons:**
+
+1. **Pattern-Symmetrie zahlt sich aus.** P60-F3 hatte schon das
+   Pattern „pending-Cleanup nach SWR-Stop". P127 nutzt das exakt
+   gleiche Pattern für `_pending_tx_log`. KISS, lehrbuchmässig.
+2. **Source-Inspektion-Tests müssen Kommentar-Tokens beachten.**
+   `_abort_active_tx` im V3-Kommentar brach den P60-Regressionstest
+   (der den ganzen Method-Body inkl. Kommentaren prüft). Lesson:
+   Bei Kommentaren keine Method-Namen zitieren die woanders als
+   „NICHT-Aufruf" geprüft werden — beschreibende Worte nutzen
+   („User-HALT-Pfad" statt `_abort_active_tx`).
+3. **R1 GO direkt auch bei trivialen Fixes.** Selbst bei 1
+   atomaren Änderung hat R1 die Pattern-Symmetrie bestätigt und
+   alle Edge-Cases (HALT-Pfad, Pre-TX-Guard, Bandwechsel) explizit
+   abgesegnet — schneller Sanity-Check der sich bezahlt macht.
+
+**Related:**
+
+- [[project_p128_done]] (Pattern-Familie 4. Iteration, gleiche Session)
+- [[project_p124_done]] (Pattern-Familie 3. Iteration)
+- [[project_p122_done]] (Pattern-Familie 2. Iteration)
+- [[project_p124_p126_backlog]] (P127-Spec aus heutigem Backlog)
+
+**Folge-Tickets:**
+
+- **P126** Send-nach-Timeout (TX-Pipeline-Race) — 2× belegt, einziger
+  offener Bug aus der heutigen Field-Test-Serie
+
 ## 2026-05-25 v0.98.07 — P128 Empf.-Eintrag 60s blocken nach ✓ QSO
 
 **Mike-Field-Bug 25.05.2026 (Screenshot EA1FLB-QSO):** Nach „✓ QSO mit

@@ -403,7 +403,17 @@ trotzdem ein Bug der auch bei normalen QSO-Timeouts greift.
 
 ---
 
-## 🐛 OFFEN BUG — P127 Sende-Log-Eintrag bei SWR-Abbruch verwerfen (Mike 25.05.2026 10:52)
+## ✅ ERLEDIGT — P127 Sende-Log-Eintrag bei SWR-Abbruch verwerfen (v0.98.08, 25.05.2026)
+
+**Status:** ERLEDIGT v0.98.08 (voll-autonomer Workflow, KISS-Variante C).
+1 atomare Änderung in `_on_swr_alarm` analog P60-F3-Pattern. R1-V4-pro
+GO direkt (7 Findings alle 🟢). Final-R1: PUSH FREIGEGEBEN. 8 Tests.
+Pattern-Familie P81/P122/P124/P128/P127 — 5. Iteration. Details
+in HISTORY.md.
+
+---
+
+## ✅ ERLEDIGT (ALT-Spec) — P127 Sende-Log-Eintrag bei SWR-Abbruch verwerfen (Mike 25.05.2026 10:52)
 
 **Mike-Field-Beobachtung 25.05.2026 (Screenshot 15M-SWR-Sperre, 08:51:15):**
 

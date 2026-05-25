@@ -1,8 +1,65 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-25 — v0.98.07 P128 Empf.-Eintrag 60s blocken nach ✓
+## Stand 2026-05-25 — v0.98.08 P127 Sende-Log bei SWR-Abbruch verwerfen
 
-**Aktueller Code-Stand:** v0.98.07, Tests **1881 grün** (+14).
+**Aktueller Code-Stand:** v0.98.08, Tests **1889 grün** (+8).
+
+### 🟢 v0.98.08 — P127 Sende-Log bei SWR-Abbruch verwerfen (KISS-Variante C)
+
+Mike-Field-Bug 25.05. 10:52: nach „⚠ Band 15M gesperrt — SWR 31.3"
+erschien noch „08:51:15 [0] → Sende Z62NS DA1MHH -15" — wirkte wie
+„Send NACH Sperre". Mike: „wurde wirklich gesendet?"
+
+**Root Cause:** P93 (v0.97.65) deferiert Sende-Log-Eintrag von
+tx_started auf tx_finished. Bei SWR-Abort mitten im Slot würde
+`_on_tx_finished` (mw_qso.py:454) den pending-Eintrag mit Slot-Start-
+Timestamp NACH der Sperre-Meldung ins QSO-Log schreiben.
+
+**Hardware sicher:** PTT abgeschaltet, Bruchteil vor 2. Spike
+rausgegangen. Nur Log-Anzeige war missverständlich.
+
+**Mike-Spec Variante C (KISS):** im SWR-Watchdog direkt
+`_pending_tx_log = None` setzen, analog zum bestehenden P60-F3-Pattern
+(`_pending_station_click = None`). 1 atomare Änderung in
+`ui/mw_tx.py:_on_swr_alarm`.
+
+**Bewusst NICHT geändert:**
+- `_abort_active_tx` (User-HALT-Pfad) — Mike will dort Eintrag sehen
+- `_on_band_changed` ohne SWR — separater Pfad
+- Pre-TX-Guard / 1-Spike-Pfade (early return) — kein pending zum Clearen
+
+**Workflow voll durch:** V1 → V2 (0 Halluzinationen) → R1 V4-pro
+(7 Findings alle 🟢, „GO direkt — sauberste denkbare Lösung")
+→ V3 = V1 → Code (1 Edit) → 8 Tests → Final-R1 „PUSH FREIGEGEBEN".
+
+**V4-pro 53-Cycle:** 0 Halluzinationen in P127. Kumulativ ~2%
+stabil seit P115.
+
+**Tests 1881 → 1889 (+8):** Source-Inspektion (fix sitzt, Position
+nach P60-F3, hasattr-Guard, Hardware-Sicherheit, HALT-unberührt,
+Pre-TX-Guards, _on_tx_finished-None-Branch, Doku-Marker).
+
+**Mini-Lesson:** Source-Inspektion-Tests müssen Kommentar-Tokens
+beachten. Mein V3-Kommentar zitierte `_abort_active_tx` → brach
+P60-Regressionstest (prüft Method-Body inkl. Kommentaren auf
+NICHT-Aufruf). Fix: beschreibendes „User-HALT-Pfad" im Kommentar.
+
+**Pattern-Familie etabliert (5. Iteration):**
+
+| Ticket | Was wird deferiert/gefiltert | Bei Anlass-Wegfall |
+|---|---|---|
+| P81 | Auto-Hunt-Stop-Meldung | Flush am QSO-Ende |
+| P122 | Auto-Hunt-Stop-Aktion | Flush am QSO-Ende |
+| P124 | Hash-Marker im Display | Kontextuell auflösen |
+| P128 | Empf.-Log nach ✓ | Lazy-Aging nach 60s |
+| **P127 (NEU)** | Sende-Log bei SWR-Stop | **Verwerfen am Ursprung** |
+
+**Nächste 1-2 Schritte:**
+- **Mike Field-Test P127 mit Radio:** SWR-Alarm provozieren →
+  Log-Eintrag sollte ausbleiben
+- P126 letzter offener Bug aus heutiger Field-Serie (Send-nach-Timeout,
+  Diagnose-intensiver)
+- 11 lokale Commits warten auf Push-Freigabe
 
 ### 🟢 v0.98.07 — P128 Empf.-Eintrag 60s blocken nach ✓ QSO
 
