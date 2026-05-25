@@ -764,6 +764,11 @@ class CycleMixin:
         """Vom Decoder — NUR fuer QSO-Logik, NICHT fuer Tabelle!"""
         if not self.rx_panel._rx_active:
             return
+        # P124 (25.05.2026): Hash-Marker '<...>' bzw. '<CALL>' aus aktivem
+        # QSO-Kontext kontextuell auflösen — VOR add_rx (Display zeigt Plain-
+        # Call) und VOR on_message_received (State-Machine matcht erfolgreich).
+        # Mutiert msg.field2 + msg.raw in-place.
+        self._p124_resolve_hash_if_active_qso(msg)
         self.control_panel.update_snr(msg.snr)
         self.qso_sm.set_last_snr(msg.snr)
 
@@ -813,6 +818,27 @@ class CycleMixin:
             return
 
         self.qso_sm.on_message_received(msg)
+
+    def _p124_resolve_hash_if_active_qso(self, msg: FT8Message) -> bool:
+        """P124 (25.05.2026): Hash-Marker im 2. Feld aus aktivem QSO-Kontext
+        auflösen. Mike-KISS-Idee — einzig sinnvoller Hash-Kandidat im
+        aktiven QSO ist die Gegenstation (qso.their_call).
+
+        Bedingungen (alle MÜSSEN gelten):
+        - msg an uns adressiert (msg.target == settings.callsign)
+        - qso_sm in aktivem QSO-State (HASH_RESOLVE_STATES)
+        - qso_sm.qso != None und qso.their_call gesetzt
+
+        Returns True wenn aufgelöst (msg mutiert), sonst False.
+        """
+        from core.qso_state import resolve_hash_in_msg, HASH_RESOLVE_STATES
+        if msg.target != self.settings.callsign:
+            return False
+        if self.qso_sm.state not in HASH_RESOLVE_STATES:
+            return False
+        if not self.qso_sm.qso or not self.qso_sm.qso.their_call:
+            return False
+        return resolve_hash_in_msg(msg, self.qso_sm.qso.their_call)
 
     def _p94_quick73_filter(self, msg: FT8Message) -> bool:
         """P94 (v0.97.66): Quick-73-Ignore für kürzlich gearbeitete Stationen.

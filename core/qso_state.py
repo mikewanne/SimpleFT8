@@ -846,3 +846,52 @@ class QSOStateMachine(QObject):
         self._pending_rr73 = None
         self._caller_queue.clear()
         self.queue_changed.emit([])
+
+
+# P124 (25.05.2026) — Hash-Call Resolution
+# ft8_lib (libft8simple.c:709 lookup_callsign) liefert 2 Marker-Formen:
+# - "<...>" wenn Hash nicht in Hashtable lookup-bar (häufiger Fall bei Calls
+#           die wir nicht selbst über encode_message gespeichert haben)
+# - "<CALL>" wenn Hash zur Hashtable-Eintrag aufgelöst werden konnte (Brackets
+#            via add_brackets, Z.713)
+# Beide Marker brechen State-Machine-Match (qso_state.py:604) und Display.
+# Mike's KISS-Idee 25.05.: im aktiven QSO ist der einzig sinnvolle Hash-
+# Kandidat die Gegenstation (qso.their_call) — heuristisch ersetzen.
+HASH_MARKER = "<...>"
+
+HASH_RESOLVE_STATES = frozenset({
+    QSOState.TX_CALL,
+    QSOState.WAIT_REPORT,
+    QSOState.TX_REPORT,
+    QSOState.WAIT_RR73,
+    QSOState.TX_RR73,
+    QSOState.WAIT_73,
+    QSOState.TX_73_COURTESY,
+})
+
+
+def is_hash_marker(call: str) -> bool:
+    """Ist `call` ein FT8 i3-Frame Hash-Marker im 2. Feld?
+
+    Echte Calls dürfen keine '<>'-Zeichen enthalten (FT8-Spec). Bracket-
+    Test erkennt beide ft8_lib-Varianten: "<...>" und "<CALL>".
+    """
+    return len(call) >= 3 and call.startswith("<") and call.endswith(">")
+
+
+def resolve_hash_in_msg(msg, expected_call: str) -> bool:
+    """Wenn msg.field2 ein Hash-Marker ist und expected_call gesetzt,
+    ersetze field2 + raw in-place. Returns True wenn resolved.
+
+    Sucht das ORIGINAL field2 (inklusive Brackets) im raw und ersetzt
+    durch expected_call (ohne Brackets) — funktioniert für beide
+    Marker-Formen weil parse_ft8_message field2 exakt aus dem raw splittet.
+    """
+    if not is_hash_marker(msg.field2):
+        return False
+    if not expected_call:
+        return False
+    original_marker = msg.field2
+    msg.field2 = expected_call
+    msg.raw = msg.raw.replace(original_marker, expected_call)
+    return True
