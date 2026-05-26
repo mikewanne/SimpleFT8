@@ -1,29 +1,46 @@
-# SimpleFT8 TODO — Stand 25.05.2026 (v0.98.10, 7 Tickets erledigt + Field-Test ✅)
+# SimpleFT8 TODO — Stand 26.05.2026 (v0.98.12, 9 Tickets erledigt, autonom)
 
 ---
 
-## 📌 Heutige Session-Bilanz (25.05.2026)
+## ✅ ERLEDIGT 26.05.2026 — P126 Send-nach-Timeout TX-Race-Fix (v0.98.12)
 
-**7 Tickets ERLEDIGT** in einer Marathon-Session:
-- P121 (v0.98.04) Multi-Radio-Refactor
-- P122 (v0.98.05) Auto-Hunt-Stop-Defer
-- P124 (v0.98.06) Hash-Resolution (Mike-KISS-Idee)
-- P128 (v0.98.07) Empf.-Eintrag 60s blocken
-- P127 (v0.98.08) Sende-Log bei SWR-Abbruch
-- P120 (v0.98.09) Sterne-Schwellen FT8-realistisch
-- P129 (v0.98.10) P128-Whitelist 73/RR73 (Field-Bug live gefixt)
+**Status:** ERLEDIGT v0.98.12 (autonomer Workflow während Mike weg).
+KISS-Fix: defensive `encoder.abort()` + `_pending_tx_log = None`
+(P127-Pattern) am Anfang von `_on_qso_timeout`. Deckt ALLE Race-
+Quellen ab (is_grid, _pending_hunt_reply, Encoder-Sleep) ohne
+state-machine-Eingriff. DeepSeek-R1 V4-pro Final-R1 PUSH FREIGEGEBEN
+„minimalinvasiv". Tests 1911→1921 (+10). Pattern-Familie 7. Iteration.
+**Field-Test pending** (Mike erreicht morgen wieder).
+
+---
+
+## 📌 Session-Bilanz (25.-26.05.2026)
+
+**8 Tickets ERLEDIGT** über 2 Tage:
+- P121 (v0.98.04) Multi-Radio-Refactor (25.05.)
+- P122 (v0.98.05) Auto-Hunt-Stop-Defer (25.05.)
+- P124 (v0.98.06) Hash-Resolution (Mike-KISS-Idee, 25.05.)
+- P128 (v0.98.07) Empf.-Eintrag 60s blocken (25.05.)
+- P127 (v0.98.08) Sende-Log bei SWR-Abbruch (25.05.)
+- P120 (v0.98.09) Sterne-Schwellen FT8-realistisch (25.05.)
+- P129 (v0.98.10) P128-Whitelist 73/RR73 (Field-Bug live, 25.05.)
+- P130 (v0.98.11) GAIN_VALUES = [0, 10, 20] zurück (25.05.)
+- **P126 (v0.98.12) Send-nach-Timeout TX-Race-Fix (26.05. autonom)**
 
 **Field-Test ✅ bestätigt:** P120 (4★ realistisch), P122 (sauberer
 Auto-Hunt), P124 (keine Endlosschleifen), P128 (kein Empf.-Spam).
-P129 Field-Test offen (Mike: „später noch test vlt oder morgen").
+P129 + P126 Field-Test pending.
 
-**Tests 1806 → 1906** (+100). 18 lokale Commits gepusht zu GitHub.
+**Doku:** FEATURES.md neu als funktionale Detail-Doku (Mike-Wunsch
+26.05.) + Anker in CLAUDE.md.
+
+**Tests 1806 → 1921** (+115). 20+ lokale Commits gepusht.
 
 ---
 
-## 🐛 OFFEN — Einziger Bug aus heutiger Field-Serie
+## 🔴 GEKLÄRT — P126 ERLEDIGT (siehe oben)
 
-### P126 Send-nach-Timeout (TX-Pipeline-Race) — 3× belegt heute
+### ALT-Spec: P126 Send-nach-Timeout (TX-Pipeline-Race) — 3× belegt heute
 
 EC3A (08:59-09:00), F1IBU (~11:00), LA1YKA (13:22-13:23) — alle
 zeigen das gleiche Muster: 5-6 Sends → ✗ Timeout → **1 zusätzlicher

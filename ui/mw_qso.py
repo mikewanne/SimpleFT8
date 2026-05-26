@@ -938,6 +938,18 @@ class QSOMixin:
 
     @Slot(str)
     def _on_qso_timeout(self, their_call: str):
+        # P126 (2026-05-26 Mike-Field-Bug, 3x belegt EC3A/F1IBU/LA1YKA):
+        # Bei timeout sofort jeden noch armierten TX abbrechen.
+        # Mike-Spec: "bei Timeout sofort STOP, kein Nachschlag".
+        # Race-Quellen sind multipel (is_grid in WAIT_REPORT/TX_CALL,
+        # _pending_hunt_reply, Encoder-Sleep-Race) - Defensive abort
+        # deckt alle ab ohne state-machine-Eingriff (KISS).
+        if self.encoder.is_transmitting:
+            self.encoder.abort()
+            # P127-Pattern: deferred TX-Log verwerfen damit kein
+            # "Sende..."-Eintrag fuer den abgebrochenen Send erscheint.
+            if hasattr(self, "_pending_tx_log"):
+                self._pending_tx_log = None
         self._active_qso_targets.discard(their_call)
         self.rx_panel.set_active_call("")
         self.qso_panel.add_timeout(their_call)

@@ -3,6 +3,56 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-26 v0.98.12 — P126 Send-nach-Timeout TX-Pipeline-Race-Fix (autonom)
+
+**Mike-Field-Bug 25.05.2026 (3× belegt: EC3A 07:30, F1IBU 08:59,
+LA1YKA 13:23):** Nach calls_made-Limit-Timeout erschien 1 zusätzlicher
+Send 1 EVEN-Slot NACH dem Timeout-Display:
+
+```
+07:30:00 → Sende EC3A DA1MHH -17    (regulärer 6. Send)
+✗ EC3A — Timeout                    (in RX-Slot 07:30:15)
+07:30:30 → Sende EC3A DA1MHH -17    ← NACHSCHLAG (Etiquette-Verstoß)
+```
+
+**Diagnose:** Race-Quellen multipel — is_grid-Branch in WAIT_REPORT/
+TX_CALL setzt `timeout_cycles=0` zurück und emittet send_message ohne
+calls_made-Check, `_pending_hunt_reply`-Pfade, Encoder-Sleep-Race.
+DeepSeek V4-pro (R1) lieferte plausible is_grid-Theorie aber V2-Code-
+Audit zeigte: `target == my_call` für EC3A's Grid unwahrscheinlich
+(EC3A sendet entweder CQ-Frame mit target=CQ oder antwortet uns nicht).
+
+**Fix (KISS, 1 atomare Änderung):** In `ui/mw_qso.py:_on_qso_timeout`
+defensive `encoder.abort()` + `_pending_tx_log = None` (P127-Pattern)
+am Anfang der Methode. Deckt ALLE Race-Quellen ab ohne state-machine-
+Eingriff. Hardware-Safety (PTT off) durch encoder.abort garantiert.
+
+**Mike-Spec:** „bei Timeout sofort STOP, kein Nachschlag" — erfüllt.
+
+**Workflow:**
+- V1: 3 Hypothesen + 4 Fix-Optionen
+- R1 V4-pro: 1 Theorie verfeinert (is_grid-Verschiebung), Fix Option 5
+  kombiniert empfohlen
+- V2 Self-Review: DeepSeek's Defer-Pfad semantisch problematisch
+  (advance() führt zu falscher TX_REPORT bei is_grid-pending), is_grid-
+  Bedingung im Mike-Szenario unwahrscheinlich → KISS Option 3 only
+- V3 Final-R1: PUSH FREIGEGEBEN, 0 Mängel, Inline-Code empfohlen
+- Code: 5 LOC + Doku-Kommentar in mw_qso.py:_on_qso_timeout
+- Tests 1911 → 1921 (+10 P126 Source-Inspektion + Reihenfolge-Checks)
+
+**Pattern-Familie:** Defensive-Abort bei kontextuellem Stop (analog
+P127 SWR-Watchdog, P63 HALT). HALT-Pfad (`_abort_active_tx`) bleibt
+bewusst unberührt — Mike will dort weiterhin Sende-Eintrag sehen.
+
+**V4-pro 56-Cycle:** 0 Halluzinationen. is_grid-Theorie war plausibel
+aber von V2 als unwahrscheinlich für Mike-Szenario eingestuft —
+Final-R1 stimmte zu und empfahl KISS-Variante.
+
+**Field-Test pending** (Mike erreicht morgen wieder, dann live
+verifizieren ob Nachschlag-Pattern verschwunden ist).
+
+---
+
 ## 2026-05-25 v0.98.11 — P130 GAIN_VALUES = [0, 10, 20] (Mike-Frage Feierabend)
 
 **Mike-Frage 25.05.2026 Feierabend:** „wenn wir gain einmessen 0 gain

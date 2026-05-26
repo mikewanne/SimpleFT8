@@ -1,8 +1,39 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-25 — v0.98.10 P129 P128-Whitelist 73/RR73 (Mike-Live-Fund)
+## Stand 2026-05-26 — v0.98.12 P126 Send-nach-Timeout TX-Race-Fix (autonom)
 
-**Aktueller Code-Stand:** v0.98.10, Tests **1906 grün** (+12).
+**Aktueller Code-Stand:** v0.98.12, Tests **1921 grün** (+10 P126).
+
+### 🟢 v0.98.12 — P126 Send-nach-Timeout TX-Pipeline-Race (autonomer Workflow)
+
+Mike-Field-Bug 25.05. (3× belegt EC3A/F1IBU/LA1YKA): nach
+calls_made-Limit-Timeout erschien 1 zusätzlicher Send 1 EVEN-Slot
+NACH ✗-Timeout-Display. Race-Quellen multipel (is_grid in
+WAIT_REPORT/TX_CALL, _pending_hunt_reply, Encoder-Sleep).
+
+**Fix (KISS):** 1 atomare Änderung in `_on_qso_timeout` — defensive
+`encoder.abort()` + `_pending_tx_log = None` (P127-Pattern) am Anfang
+der Methode. Deckt ALLE Race-Quellen ab ohne state-machine-Eingriff.
+
+DeepSeek-R1 lieferte plausible is_grid-Theorie (timeout_cycles=0-
+Reset verschiebt Timeout) aber V2-Self-Review zeigte: Defer-Pfad
+semantisch problematisch (advance() falsch für is_grid), und
+target==my_call-Bedingung im Mike-Szenario unwahrscheinlich. KISS-
+Variante deckt alle Quellen defensiv ab.
+
+**Final-R1 V4-pro:** PUSH FREIGEGEBEN 0 Mängel, Inline-Code empfohlen.
+
+**V4-pro 56-Cycle:** 0 Halluzinationen.
+
+**Tests 1911 → 1921 (+10):** Source-Inspektion + Reihenfolge-Checks
++ Hardware-Safety + HALT-Pfad-Schutz.
+
+**Pattern-Familie 7. Iteration:** P81/P122/P124/P127/P128/P129/P126 —
+KISS-Defensive-Stop wenn Kontext wechselt.
+
+**Field-Test pending** (Mike erreicht morgen wieder).
+
+### 🟢 v0.98.11 — P130 GAIN_VALUES = [0, 10, 20] (Mike-Frage Feierabend)
 
 ### 🟢 v0.98.10 — P129 P128-Whitelist 73/RR73 (Mike-Field-Bug live, gleiche Session)
 
