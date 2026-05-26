@@ -3,6 +3,62 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-26 v0.98.14 — P134 Python-Sweep entfernt (Folge-Fix zu P132+P133)
+
+**Mike-Field-Bug 26.05.2026 nach P132:** „starter.command wird beendet,
+app wird nicht gestartet — fehler immer noch."
+
+**Root Cause (verifiziert via Live-Trace):** `acquire_single_instance_lock`
+in `main.py` Z.282-291 hatte einen „SCHRITT 3 Backup-Scan via lsof" —
+identische Pattern-Killing-Logik wie im Bash-Starter (vor P133 entfernt).
+`_find_simpleft8_processes_by_cwd` scannte ALLE Python-Prozesse mit cwd
+im App-Verzeichnis und killte sie. Trifft fremde Procs:
+- pytest-Worker
+- IDE Python-Extensions
+- Parent-Bash der den Starter aufgerufen hat (Process-Group SIGTERM
+  Forwarding → Exit 144)
+
+**Selber Fehlerklassen-Bug wie pgrep vor P132.** P133 hatte den Sweep
+aus Bash entfernt, Python-Zwilling übersehen.
+
+**Fix (voller Workflow V1→V2→R1→V3→Code→Final-R1):**
+- `_find_simpleft8_processes_by_cwd` KOMPLETT entfernt
+- „SCHRITT 3 Backup-Scan" Block entfernt
+- **Neuer Helper `_kill_stale_lockfile_owner(app_dir, my_pid) -> bool`**
+  — zielgerichtete 1-PID-Prüfung (kein Sweep)
+- Helper wird in **beiden Pfaden** gerufen:
+  a) Nach erfolgreichem flock-Erwerb (R1-ROT-Catch: fängt alte App-
+     Versionen ab, die kein flock hielten)
+  b) Nach BlockingIOError (ersetzt vorherige inline-Logik)
+
+**R1-ROT-Catch (V4-pro Pre-Code):** „flock allein reicht nicht — alte
+Versionen vor v0.98.13 hielten kein flock → wir holen flock erfolgreich
+→ 2 Instanzen koexistieren." Lösung: Helper auch bei flock-Erfolg
+rufen. Eingebaut.
+
+**Final-R1 PUSH FREIGEGEBEN** (V4-pro 59-Cycle: 0 Halluzinationen).
+1 GELB-Hinweis (PID-Reuse-Edge-Case) im Docstring dokumentiert.
+1 GELB-Auflage (dynamische Mock-Tests) eingebaut.
+
+**APP_VERSION:** 0.98.13 → 0.98.14
+
+**Tests 1960 → 1980** (+20):
+- `tests/test_p134_lockfile_owner_helper.py` NEU (20 Tests):
+  T1-T4 Sweep-Removal-Regression, T5-T10 Helper-Struktur, T11-T13
+  Integration, T14-T15 Doku+Version, T16-T19 dynamische Mock-Tests,
+  T20 PID-Reuse-Doc
+- `tests/test_p132_single_instance.py`: 4 Tests an P134 angepasst
+  (T5/T6/T10/T14)
+
+**Mike-Vertrauen-Restore (zweite Iteration):** „okay welche punkte
+haben wir noch die du mit deepseek vollen workflow erledigen könntest"
+— direkt nach Bug-Acknowledgement Workflow-Pflicht eingehalten.
+
+**Pattern-Familie 8. Iteration des Tech-Schuld-Abbaus:**
+P132 (Architektur-Refactor) → P133 (Bash-Sweep-Entfernung) → P134
+(Python-Sweep-Entfernung). Mit P134 ist die Pattern-Killing-Bug-
+Klasse vollständig aus der App entfernt.
+
 ## 2026-05-26 — P133 starter.command lsof-CWD-Vorschicht (Mike-Wunsch nach P132)
 
 **Mike-Wunsch 26.05.2026 nach P132:** „können wir nicht in der

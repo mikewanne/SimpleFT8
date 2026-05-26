@@ -1,28 +1,35 @@
-"""P132 (26.05.2026) — Single-Instance Architektur-Refactor.
+"""P132 + P134 (26.05.2026) — Single-Instance Architektur-Refactor.
 
-Mike-Field-Bug 26.05.2026: 4 Zombie-Instanzen seit Mittwoch trotz
+P132 Mike-Field-Bug: 4 Zombie-Instanzen seit Mittwoch trotz
 acquire_single_instance_lock. Root Cause: pgrep-Pattern-Matching auf
 cmdline-Text war fundamental falsch — setproctitle (P43) ueberschreibt
 cmdline, false-positives bei anderen main.py-Apps (Websdr/JimBob).
 
 Mike-Wort: "so identifiziert man das doch nicht"
 
-V3 Architektur (KISS, atomar):
+P134 Mike-Field-Bug („starter wird beendet, App nicht gestartet"):
+lsof-CWD-Backup-Sweep (P132 SCHRITT 3) killte fremde Python-Prozesse
+(pytest, IDE, Parent-Bash). Selber Fehlerklassen-Bug wie pgrep —
+zu breite Erkennung. ENTFERNT. Stattdessen: nach flock-Erfolg
+zielgerichtete 1-PID-Pruefung via Helper `_kill_stale_lockfile_owner`
+(R1-Catch: faengt alte App-Versionen ab die kein flock hielten).
+
+Architektur (KISS, atomar):
 - fcntl.flock atomar holen (verhindert Race)
+- Bei flock-Erfolg: 1-PID-Check des Lockfile-Inhabers (P134)
 - Falls Lock blockiert: Inhaber-PID lesen, cwd-Check, killen
-- lsof-CWD-Backup-Scan fuer Zombies ohne Lock
-- Port-Cleanup integriert in acquire_single_instance_lock
 - Pattern-basiertes pgrep KOMPLETT entfernt
+- lsof-CWD-Sweep KOMPLETT entfernt (P134)
 
 ACs:
-- AC1: alte Funktionen (_get_simpleft8_window_pids,
-       _kill_all_simpleft8_instances, kill_old_instances) sind WEG
+- AC1: alte Funktionen (pgrep-basiert) sind WEG
 - AC2: neue Funktionen vorhanden
 - AC3: cwd-basierte Identifikation deterministisch + setproctitle-immun
 - AC4: kill_old_instances-Aufruf aus main() entfernt
-- AC5: _find_simpleft8_processes_by_cwd parsing korrekt (lsof -Fpn)
+- AC5: KEIN lsof-Sweep mehr (P134 Regression-Schutz)
 - AC6: _kill_pid_with_grace idempotent + SIGTERM-vor-SIGKILL
 - AC7: _read_pid_from_lock handhabt leere/ungueltige Inputs
+- AC8: _kill_stale_lockfile_owner Helper deckt beide Pfade ab (P134)
 """
 
 from __future__ import annotations
@@ -97,29 +104,37 @@ def test_t4_main_does_not_call_kill_old_instances():
 def test_t5_new_functions_exist():
     """T5: Alle neuen Funktionen sind in main.py definiert.
 
-    `_free_radio_ports` ist NICHT mehr drin (R1-Final-Catch 26.05.):
-    Port-basierter Kill koennte fremde Prozesse killen. cwd-Sweep
-    deckt alle SimpleFT8-Zombies ab — Ports werden automatisch frei.
+    P132+P134: `_free_radio_ports` UND `_find_simpleft8_processes_by_cwd`
+    sind NICHT mehr drin (Pattern-Killing-Bug). Stattdessen
+    `_kill_stale_lockfile_owner` Helper fuer zielgerichtete 1-PID-Pruefung.
     """
     src = MAIN_PY.read_text()
     required = [
         "def _get_app_dir",
         "def _kill_pid_with_grace",
         "def _pid_has_cwd_in_app_dir",
-        "def _find_simpleft8_processes_by_cwd",
         "def _read_pid_from_lock",
+        "def _kill_stale_lockfile_owner",  # P134 Helper
         "def acquire_single_instance_lock",
     ]
     missing = [r for r in required if r not in src]
-    assert not missing, f"P132 fehlende Funktionen: {missing}"
-    # _free_radio_ports MUSS WEG sein (R1-Final-Catch)
+    assert not missing, f"P132+P134 fehlende Funktionen: {missing}"
+    # _free_radio_ports MUSS WEG sein (P132 R1-Final-Catch)
     assert "def _free_radio_ports" not in src, (
         "P132 R1-Final-Catch: _free_radio_ports entfernt — Port-Kill "
-        "koennte fremde Prozesse killen (genau der Pattern-Killing-Bug)")
+        "koennte fremde Prozesse killen")
+    # _find_simpleft8_processes_by_cwd MUSS WEG sein (P134 Sweep-Bug)
+    assert "def _find_simpleft8_processes_by_cwd" not in src, (
+        "P134: lsof-CWD-Sweep entfernt — killte fremde Python-Prozesse "
+        "(pytest/IDE/Parent-Bash). Selber Fehlerklassen-Bug wie pgrep.")
 
 
 def test_t6_acquire_lock_uses_fcntl_first():
-    """T6: acquire_single_instance_lock holt fcntl.flock ZUERST."""
+    """T6: acquire_single_instance_lock holt fcntl.flock ZUERST.
+
+    P134: cwd-basierte Identifikation laeuft jetzt ueber Helper
+    `_kill_stale_lockfile_owner` (zielgerichtet 1 PID, kein Sweep).
+    """
     src = MAIN_PY.read_text()
     tree = ast.parse(src)
     for node in ast.walk(tree):
@@ -129,12 +144,15 @@ def test_t6_acquire_lock_uses_fcntl_first():
             assert "fcntl.flock" in func_src
             assert "LOCK_EX" in func_src
             assert "LOCK_NB" in func_src
-            # cwd-basierte Identifikation muss benutzt werden
-            assert "_find_simpleft8_processes_by_cwd" in func_src
-            # R1-Final-Catch: _free_radio_ports darf NICHT mehr gerufen
+            # P134: Helper-Aufruf statt direkter Sweep
+            assert "_kill_stale_lockfile_owner" in func_src
+            # P134 Regression-Schutz: kein Sweep mehr
+            assert "_find_simpleft8_processes_by_cwd" not in func_src, (
+                "P134: lsof-Sweep darf nicht zurueck — killt fremde Procs")
+            # _free_radio_ports darf NICHT mehr gerufen werden (P132)
             assert "_free_radio_ports" not in func_src, (
-                "R1-Final-Catch: Port-basierter Kill koennte fremde "
-                "Prozesse killen — cwd-Sweep reicht")
+                "P132 R1-Final-Catch: Port-basierter Kill koennte fremde "
+                "Prozesse killen")
             return
     pytest.fail("acquire_single_instance_lock nicht gefunden")
 
@@ -184,25 +202,22 @@ def test_t9_get_app_dir_returns_resolved_path():
         "sonst kollidiert Test-Import mit echter App")
 
 
-def test_t10_lsof_parsing_format_fpn():
-    """T10: _find_simpleft8_processes_by_cwd nutzt -Fpn Format.
+def test_t10_no_lsof_sweep_anywhere():
+    """T10 (P134 Regression-Schutz): KEIN lsof-Command-Filter-Sweep mehr.
 
-    -Fpn liefert newline-getrennte Felder: 'pPID\\nnPATH\\np...'.
-    Pfad-Leerzeichen-immun (anders als space-separated Output).
+    Sweep-Form: `lsof -c Python -c python` (listet alle Treffer).
+    Gezielter Pfad: `lsof -p <pid>` (1 PID) — ist OK und bleibt.
     """
     src = MAIN_PY.read_text()
-    tree = ast.parse(src)
-    for node in ast.walk(tree):
-        if (isinstance(node, ast.FunctionDef)
-                and node.name == "_find_simpleft8_processes_by_cwd"):
-            func_src = ast.unparse(node)
-            assert '-Fpn' in func_src or 'Fpn' in func_src
-            # Parser muss 'p' und 'n' Linien handhaben (ast.unparse
-            # nutzt single-quotes statt double-quotes)
-            assert "startswith('p')" in func_src or 'startswith("p")' in func_src
-            assert "startswith('n')" in func_src or 'startswith("n")' in func_src
-            return
-    pytest.fail("_find_simpleft8_processes_by_cwd nicht gefunden")
+    assert "_find_simpleft8_processes_by_cwd" not in src
+    forbidden_command_filter = [
+        '"-c", "Python", "-c", "python"',
+        "'-c', 'Python', '-c', 'python'",
+    ]
+    for pat in forbidden_command_filter:
+        assert pat not in src, (
+            f"P134: lsof Command-Filter-Sweep {pat!r} entfernt — "
+            "killte fremde Python-Prozesse")
 
 
 def test_t11_kill_pid_with_grace_sigterm_then_sigkill():
@@ -273,10 +288,11 @@ def test_t13_read_pid_from_lock_valid(tmp_path):
 
 
 def test_t14_app_version_bumped():
-    """T14: APP_VERSION ist auf 0.98.13 gebumpt fuer P132."""
+    """T14: APP_VERSION ist >= 0.98.14 fuer P132+P134."""
     src = MAIN_PY.read_text()
-    assert 'APP_VERSION = "0.98.13"' in src, (
-        "P132: APP_VERSION muss 0.98.13 sein")
+    # P132 war 0.98.13, P134 hat auf 0.98.14 erhoeht
+    assert 'APP_VERSION = "0.98.14"' in src, (
+        "P134: APP_VERSION muss 0.98.14 sein")
 
 
 # ---------------------------------------------------------------------------

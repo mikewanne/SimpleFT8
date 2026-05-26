@@ -13,7 +13,7 @@ import atexit
 import signal
 from pathlib import Path
 
-APP_VERSION = "0.98.13"
+APP_VERSION = "0.98.14"
 
 # ── P43: Activity Monitor zeigt Prozess-Namen statt nur "Python" ──
 # Bei der P30-Memory-Leak-Diagnose 12.05. konnte Mike SimpleFT8 nicht
@@ -168,40 +168,6 @@ def _pid_has_cwd_in_app_dir(pid: int, app_dir: str) -> bool:
 _is_simpleft8_pid = lambda pid: _pid_has_cwd_in_app_dir(pid, _get_app_dir())
 
 
-def _find_simpleft8_processes_by_cwd(app_dir: str) -> list[int]:
-    """Alle Python-Prozesse mit cwd im App-Verzeichnis finden.
-
-    P132 (26.05.2026): ersetzt pgrep-Pattern-basierten Killer.
-    cwd-basierte Identifikation ist:
-    - setproctitle-immun (P43-Bug der P132 ausgeloest hat)
-    - Editor/IDE-immun (deren cwd liegt nicht im App-Dir)
-    - Pfad-Leerzeichen-immun (lsof -Fpn newline-getrennt)
-    - false-positive-frei fuer andere main.py-Apps (Websdr/JimBob)
-    """
-    try:
-        result = subprocess.run(
-            ["lsof", "-c", "Python", "-c", "python", "-d", "cwd", "-Fpn"],
-            capture_output=True, text=True, timeout=5,
-        )
-    except Exception as e:
-        print(f"[SingleInstance] lsof-Scan fehlgeschlagen: {e}")
-        return []
-    pids: list[int] = []
-    current_pid: int | None = None
-    for line in result.stdout.splitlines():
-        if line.startswith("p"):
-            try:
-                current_pid = int(line[1:])
-            except ValueError:
-                current_pid = None
-        elif line.startswith("n") and current_pid is not None:
-            cwd = line[1:]
-            if cwd == app_dir or cwd.startswith(app_dir + "/"):
-                pids.append(current_pid)
-            current_pid = None  # reset bis naechster 'p'-Block
-    return pids
-
-
 def _read_pid_from_lock(lock_path: Path) -> int | None:
     """PID aus Lock-Datei lesen. None bei leerem/unguetigem Inhalt."""
     try:
@@ -209,6 +175,41 @@ def _read_pid_from_lock(lock_path: Path) -> int | None:
         return int(content) if content else None
     except (FileNotFoundError, ValueError, OSError):
         return None
+
+
+def _kill_stale_lockfile_owner(app_dir: str, my_pid: int) -> bool:
+    """Lockfile-PID lesen, pruefen ob legitime SimpleFT8-Instanz, killen.
+
+    Genau 1 PID (kein Sweep). Wird in zwei Pfaden gerufen:
+    a) Nach erfolgreichem flock-Erwerb: faengt alte App-Versionen ab
+       die kein flock hielten (P134 R1-Catch 26.05.2026).
+    b) Nach flock-Blockade: killt den aktuellen Lock-Inhaber.
+
+    Returns True wenn eine alte Instanz gekillt wurde, False sonst.
+
+    Rest-Risiko (P134 Final-R1 26.05., GELB-Hinweis):
+    PID-Reuse-Edge-Case — eine tote SimpleFT8-PID koennte vom OS
+    wiederverwendet werden fuer einen fremden Prozess der zufaellig
+    cwd im App-Dir hat. Dann wuerde der cwd-Check ihn als legitim
+    erkennen und killen. Praktisch extrem unwahrscheinlich (PID-Reuse
+    selten + CWD-Koinzidenz) und in Kauf genommen gegen die viel
+    groessere Gefahr eines Sweeps der ALLE Fremd-Procs killt.
+    """
+    old_pid = _read_pid_from_lock(_LOCK_FILE)
+    if not old_pid or old_pid == my_pid:
+        return False
+    try:
+        os.kill(old_pid, 0)  # lebt?
+    except ProcessLookupError:
+        return False  # PID tot, Lockfile-Inhalt stale
+    if not _pid_has_cwd_in_app_dir(old_pid, app_dir):
+        # Fremder Prozess — NICHT killen, das waere der pgrep-Klassen-Bug
+        print(f"[SingleInstance] PID {old_pid} lebt aber cwd nicht im "
+              f"App-Dir — fremder Prozess, lasse in Ruhe")
+        return False
+    print(f"[SingleInstance] Alt-Instanz PID {old_pid} (cwd-match) → killen")
+    _kill_pid_with_grace(old_pid)
+    return True
 
 
 def acquire_single_instance_lock():
@@ -220,19 +221,26 @@ def acquire_single_instance_lock():
     Apps anderer Projekte (Websdr/JimBob), brach durch P43-setproctitle
     der cmdline ueberschreibt.
 
-    Neue Strategie (KISS, atomar):
+    P134 (26.05.2026, Mike-Field-Bug „starter wird beendet"):
+    lsof-CWD-Backup-Sweep entfernt — killte fremde Python-Prozesse
+    (pytest, IDE, Parent-Bash). Selber Fehlerklassen-Bug wie pgrep.
+    Stattdessen: nach flock-Erfolg zielgerichtete 1-PID-Pruefung des
+    Lockfile-Inhabers (R1-Catch: faengt alte App-Versionen ab, die
+    kein flock hielten).
+
+    Strategie (KISS, atomar):
     1. fcntl.flock LOCK_EX|LOCK_NB ATOMAR holen
        (verhindert Doppel-Start-Race zwischen 2 gleichzeitigen Apps)
+       Bei Erfolg: Lockfile-PID pruefen — wenn andere SimpleFT8-PID
+       lebt + cwd-match → killen (P134 R1-Catch alte Version ohne flock)
     2. Falls Lock blockiert: alte PID lesen, pruefen ob lebt + cwd
        im App-Dir → SimpleFT8-Zombie → killen, Lock uebernehmen
-    3. lsof-Backup-Scan: alle Python-Prozesse mit cwd im App-Dir
-       killen (ausser uns) — faengt Zombies OHNE Lock-File ab
-    4. Ports 4991/4992 defensive freiraeumen
-    5. Eigene PID in Lock-Datei schreiben
-    6. atexit + signal-Handler fuer sauberen Lock-Release
+    3. Eigene PID in Lock-Datei schreiben
+    4. atexit + signal-Handler fuer sauberen Lock-Release
 
     Garantie: nach Rueckkehr ist diese die einzige SimpleFT8-Instanz.
-    Identifikation: ausschliesslich via cwd-Match (setproctitle-immun).
+    Identifikation: ausschliesslich via cwd-Match (setproctitle-immun)
+    und IMMER auf zielgerichtete PIDs aus dem Lockfile — niemals Sweep.
     """
     global _lock_fd
 
@@ -244,26 +252,17 @@ def acquire_single_instance_lock():
     _lock_fd = open(_LOCK_FILE, "a+")
     try:
         fcntl.flock(_lock_fd.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        # P134 R1-Catch: flock frei heisst nicht dass keine andere
+        # SimpleFT8-Instanz laeuft — alte Versionen vor v0.98.13 hielten
+        # kein flock. Zielgerichtete 1-PID-Pruefung des Lockfile-Inhalts.
+        _kill_stale_lockfile_owner(app_dir, my_pid)
     except BlockingIOError:
-        # SCHRITT 2: Lock blockiert — pruefen wer der Inhaber ist
+        # SCHRITT 2: Lock blockiert — Inhaber killen, Lock uebernehmen
         _lock_fd.close()
         _lock_fd = None
-        old_pid = _read_pid_from_lock(_LOCK_FILE)
-        if old_pid and old_pid != my_pid:
-            try:
-                os.kill(old_pid, 0)  # lebt?
-                if _pid_has_cwd_in_app_dir(old_pid, app_dir):
-                    print(f"[SingleInstance] Lebende Instanz PID {old_pid} → killen")
-                    _kill_pid_with_grace(old_pid)
-                    time.sleep(0.5)
-                    _LOCK_FILE.unlink(missing_ok=True)
-                else:
-                    print(f"[SingleInstance] FATAL: PID {old_pid} laeuft "
-                          f"aber cwd nicht in {app_dir} — kein SimpleFT8")
-                    sys.exit(1)
-            except ProcessLookupError:
-                # Stale Lock-File, alte PID tot
-                _LOCK_FILE.unlink(missing_ok=True)
+        if _kill_stale_lockfile_owner(app_dir, my_pid):
+            time.sleep(0.5)
+        _LOCK_FILE.unlink(missing_ok=True)
 
         # Lock erneut versuchen (3x mit 0.5s Pause)
         for attempt in range(3):
@@ -279,18 +278,7 @@ def acquire_single_instance_lock():
             print("[SingleInstance] FATAL: Lock nach 3 Retries nicht erhaeltlich")
             sys.exit(1)
 
-    # SCHRITT 3: Backup-Scan via lsof — Zombies OHNE Lock-File
-    # (Final-R1 V4-pro 26.05.: cwd-Sweep deckt alle SimpleFT8-Zombies ab.
-    # Ports 4991/4992 werden automatisch frei wenn Zombies sterben.
-    # KEIN Port-basierter Kill — wuerde fremde Prozesse killen, genau der
-    # Fehler den wir mit pgrep-Entfernung gerade behoben haben.)
-    zombies = [p for p in _find_simpleft8_processes_by_cwd(app_dir)
-               if p != my_pid]
-    for pid in zombies:
-        print(f"[SingleInstance] Zombie PID {pid} (cwd-match) → killen")
-        _kill_pid_with_grace(pid)
-
-    # SCHRITT 4: Eigene PID in Lock-Datei schreiben
+    # SCHRITT 3: Eigene PID in Lock-Datei schreiben
     _lock_fd.seek(0)
     _lock_fd.truncate()
     _lock_fd.write(str(my_pid))
@@ -299,7 +287,7 @@ def acquire_single_instance_lock():
     print(f"[SingleInstance] Lock geholt — PID {my_pid}, app_dir={app_dir}")
 
 
-# SCHRITT 6: Cleanup bei Exit + Signal-Handler fuer SIGTERM/SIGINT
+# SCHRITT 4: Cleanup bei Exit + Signal-Handler fuer SIGTERM/SIGINT
 atexit.register(_release_lock_on_exit)
 signal.signal(signal.SIGTERM, _signal_release_and_exit)
 signal.signal(signal.SIGINT, _signal_release_and_exit)

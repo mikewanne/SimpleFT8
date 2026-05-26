@@ -1,8 +1,30 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-26 — v0.98.13 P132 Single-Instance Architektur-Refactor
+## Stand 2026-05-26 — v0.98.14 P134 Python-Sweep entfernt (Pattern-Killing-Bug-Klasse beseitigt)
 
-**Aktueller Code-Stand:** v0.98.13, Tests **1949 grün** (+15 P132).
+**Aktueller Code-Stand:** v0.98.14, Tests **1980 grün** (+20 P134).
+
+**Naechste 1-2 Schritte:**
+- Mike: Field-Test nach App-Restart (Doppelklick `starter.command` →
+  App muss starten, Terminal nicht mehr abbrechen)
+- P126 Field-Test ✅ schon bestanden (Auto-Hunt Test 26.05. 10:22 —
+  EA5KB-Timeout sauber, kein Nachschlag-Send)
+- Folgeaufgabe: P131 Bandwechsel-Pending-Log (Task #78, autonom mit
+  DeepSeek-Workflow)
+
+### 🟢 26.05.2026 — P134 Python-Sweep entfernt (v0.98.14, voller Workflow autonom)
+
+**Mike-Field-Bug nach P132:** „starter beendet, App startet nicht."
+Diagnose via Live-Trace: `acquire_single_instance_lock` SCHRITT 3
+„Backup-Scan via lsof" killte fremde Python-Prozesse (pytest/IDE/
+Parent-Bash, Exit 144 SIGTERM). Selber Bug wie pgrep — P133 hatte
+nur Bash-Sweep entfernt, Python-Zwilling übersehen.
+
+**Fix:** Sweep komplett raus + Helper `_kill_stale_lockfile_owner`
+für 1-PID-Prüfung in beiden Pfaden (R1-Catch deckt alte App-Versionen
+ohne flock ab). Final-R1 PUSH FREIGEGEBEN.
+
+Tests: 1960→1980 (+15 statisch Regression + 5 dynamisch Mock).
 
 ### 🟢 26.05.2026 — P133 starter.command lsof-CWD-Vorschicht (Mike-Wunsch nach P132)
 
