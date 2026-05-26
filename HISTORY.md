@@ -3,6 +3,50 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-26 v0.98.19 — P138 P129-Whitelist entfernt („beendet ist beendet")
+
+**Mike-Field-Bug 26.05.2026 (Screenshot):** Nach „✓ QSO mit EA5KB
+komplett" erschien 15s später ein „← Empf. DA1MHH EA5KB RR73" der ins
+neue QSO „hereinrutschte". Mike-Spec heute: „beendet ist beendet —
+auch 73/RR73 nach ✓ blockieren."
+
+**Spec-Umkehr von gestern P129:** Mike's Bilder zeigen klar dass die
+Whitelist-Lösung von gestern für „vor ✓" überflüssig (kein Cooldown,
+kein Filter) und für „nach ✓" falsch war (Mike's heutiger Bug).
+
+**Mechanik-Sanity:** Der Cooldown-Stempel wird in `_on_qso_complete`
+(mw_qso.py:557) gesetzt — also exakt zum ✓-Zeitpunkt:
+- **VOR ✓:** kein Cooldown-Eintrag → Filter inaktiv → 73 kommt durch
+- **NACH ✓:** Cooldown 60s aktiv → alles geblockt inkl. 73
+
+**Fix (voller Workflow V1→V2→R1→V3→Code→Final-R1, R1 5×GRÜN 1×GELB):**
+1. `_p128_recently_completed_block` (mw_cycle.py:877): Whitelist-Block
+   `if msg.is_73 or msg.is_rr73: return False` ENTFERNT.
+2. `msg`-Parameter aus Helper-Signatur ENTFERNT (R1-KISS-Empfehlung,
+   nicht mehr genutzt).
+3. Call-Site `on_message_decoded` (mw_cycle.py:810): `(msg.caller, msg)`
+   → `(msg.caller)`.
+4. Doku-Block aktualisiert: P129-Begründung raus, P138-Spec-Umkehr rein.
+
+**R1-V4-pro PUSH FREIGEGEBEN.** Alle 5 Risiko-Aspekte GRÜN, 1 GELB
+(KISS-Hinweis zu msg-Parameter — eingebaut).
+
+**APP_VERSION:** 0.98.18 → 0.98.19
+
+**Tests 2040 → 2042** (+2 netto):
+- `tests/test_p129_whitelist_73.py` umbenannt zu
+  `tests/test_p138_block_73_after_complete.py`
+- Inhalt komplett überarbeitet: 14 Tests (vorher 12)
+  - T1-T2: 73/RR73 nach ✓ BLOCKIERT (Spec-Umkehr, vorher durchgelassen)
+  - T3-T4b: Spam-Schutz unverändert (Report/Grid blockiert)
+  - **T5-T5c: NEU — VOR ✓ kommen 73/RR73/Report durch** (Schlüssel-Tests
+    für Mike-Spec)
+  - T6: andere Station passiert
+  - T7: Aging-Pfad unverändert
+  - T8-T9: Source-Inspektion (Call-Site + Signatur ohne msg)
+  - T10: P138-Marker
+  - T11: Regression-Schutz — keine Whitelist-Pattern mehr
+
 ## 2026-05-26 v0.98.18 — P137 „Sende" → „Gesendet" Tempora-Fix (Variante B)
 
 **Mike-Field-Bug 26.05.2026:** Log zeigte „→ Sende EA5KB DA1MHH RR73"

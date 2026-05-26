@@ -1,12 +1,20 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-26 — v0.98.18 P137 Tempora-Fix „Gesendet"
+## Stand 2026-05-26 — v0.98.19 P138 73 nach ✓ blockiert („beendet ist beendet")
 
-**Aktueller Code-Stand:** v0.98.18, Tests **2040 grün** (+7 P137).
+**Aktueller Code-Stand:** v0.98.19, Tests **2042 grün** (+2 netto P138).
 
 **Nächste Schritte:**
-- P138 P129-Whitelist entfernen (Mike: „beendet ist beendet")
-- FEATURES.md: Auto-Hunt-Filter + QSO-Ende-Blocker Sektionen
+- FEATURES.md ergänzen: Auto-Hunt-Filter + QSO-Ende-Blocker Sektionen
+- Mike-Field-Test auf v0.98.19 (mehrere Fixes: P134/P135/P136/P137/P138)
+
+### 🟢 26.05.2026 — P138 P129-Whitelist entfernt (v0.98.19)
+
+Mike-Screenshot: 73 erschien NACH ✓ QSO komplett → ins neue QSO
+hereinrutschend. Mike-Spec: „beendet ist beendet". P129-Whitelist
+zurückgerollt. Cooldown-Trigger ist ✓ → vor ✓ kein Filter (73 durch),
+nach ✓ aktiv (alles geblockt). msg-Param raus (KISS).
+Tests 2040→2042 (+2 netto, Test-Datei umbenannt + invertiert).
 
 ### 🟢 26.05.2026 — P137 „Sende" → „Gesendet" (v0.98.18)
 
