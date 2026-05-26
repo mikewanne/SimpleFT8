@@ -1,4 +1,162 @@
-# SimpleFT8 TODO — Stand 26.05.2026 (v0.98.12, 9 Tickets erledigt, autonom)
+# SimpleFT8 TODO — Stand 26.05.2026 (v0.98.20, autonom mit DeepSeek)
+
+---
+
+## 🔴 OFFEN BUG — P140 P138-Cooldown-Trigger falsch verdrahtet (Mike Field 26.05. 14:32+)
+
+**Mike-Field-Bug 26.05. (mehrfach belegt: 5P1KZX, IQ5VK, OE4AHG):**
+Das 73 der Gegenstation erscheint NICHT mehr im Log, obwohl es VOR
+dem optischen „✓ QSO komplett" empfangen wurde. Mike-Spec war klar
+(siehe auch FEATURES.md §8): vor ✓ durchlassen, nach ✓ blockieren.
+
+**Mike-Beobachtung im Screenshot:**
+```
+14:32:15 → Gesendet 5P1KZX DA1MHH -18
+14:32:30 ← Empf. DA1MHH 5P1KZX R-12
+14:32:45 → Gesendet 5P1KZX DA1MHH RR73     ← HIER falsch: schon Cooldown
+14:33:15 → Gesendet 5P1KZX DA1MHH 73       ← Gegenstation-73 zwischendrin
+                                              wurde geblockt!
+         ✓ QSO mit 5P1KZX komplett          ← optisches ✓ erst hier
+```
+
+**Root Cause:** Bei P138 (heute Vormittag) habe ich den Cooldown-Stempel
+in `_on_qso_complete` (mw_qso.py:566) gehängt. Das ist aber der
+**interne State-Machine-Trigger** (sofort beim eigenen RR73-Send),
+NICHT der **optische ✓-Zeitpunkt**. Die beiden Trigger sind absichtlich
+getrennt seit längerem in `core/qso_state.py`:
+
+| Signal | Wann | Was es macht |
+|---|---|---|
+| `qso_complete` | sofort beim eigenen RR73-Send | Hardware/State-Cleanup (Auto-Hunt-Pause, RX-active-clear, ADIF) |
+| `qso_confirmed_visual` | nach Mike's 73-Send ODER Timeout | rendert optisches „✓ QSO komplett" |
+
+R1 (DeepSeek) und ich nahmen in P138 falsch an: `qso_complete` =
+✓-Zeitpunkt. Falsch — der optische ✓-Zeitpunkt ist `qso_confirmed_visual`.
+
+**Fix-Plan (voller Workflow erforderlich):**
+1. `_on_qso_complete` (mw_qso.py:541): `_recently_completed_qsos[...]`
+   Zeile RAUS.
+2. `_on_qso_confirmed_visual` (mw_qso.py:644): Cooldown-Stempel-Set REIN.
+3. `_on_qso_timeout` (mw_qso.py:940): Cooldown-Stempel auch hier setzen
+   (Mike-Spec „beendet ist beendet" — auch nach ✗ blocken).
+   Mike-Antwort 26.05.: „ist egal" → defensiv mit reinnehmen für
+   Konsistenz, kein Funktional-Risiko.
+
+**Test-Anpassung:** P138-Tests in `test_p138_block_73_after_complete.py`
+nutzen `_recently_completed_qsos`-Stempel direkt — bleiben grün weil
+Filter-Logik unverändert, nur Trigger-Zeitpunkt anders. Neue Tests:
+„vor `qso_confirmed_visual` durchgelassen, nach durchgelassen-Trigger
+geblockt".
+
+**Severity:** 🔴 — P138 ist effektiv kaputt, ohne diesen Fix sieht Mike
+nie mehr 73-Empfänge im Log.
+
+**Autonom + voller Workflow tauglich:** ja.
+
+---
+
+## 🟡 OFFEN BUG — P141 Sterne-Empfangsqualität bleibt in Diversity bei 1★ (Mike 26.05. 17:15)
+
+**Mike-Field-Beobachtung 26.05. 17:15** (Diversity Standard, 15m, 29
+Decodes sichtbar in RX-Liste mit SNR-Bereich -16 bis -24, Median im
+Top-Half ~-18 bis -19): Anzeige „Lokale Empfangsqualität: ★☆☆☆☆"
+(1 Sternchen) obwohl rechnerisch 3★ oder 4★ angemessen wäre.
+
+**Root Cause:** `compute_local_conditions(stations)` (mw_cycle.py:33)
+wird NUR in `_handle_normal_mode` aufgerufen (Z.451-456). Im
+Diversity-Mode (`_handle_diversity_operate` Z.329) fehlt der Aufruf.
+→ Anzeige bleibt auf dem zuletzt im Normal-Mode berechneten Wert
+hängen, ODER auf 1★ (Default wenn nie gerufen).
+
+**Pattern-Klassen-Bug (identisch zu P135):** mode-aware Symmetrie-
+Fehler — eine Funktion wird in einem rx_mode-Pfad gerufen, im
+anderen vergessen. P135 hat das gleiche Muster bei
+`update_decode_count` gehabt. Das deutet darauf hin, dass es noch
+mehr solche Stellen geben könnte.
+
+**Fix-Plan (KISS, ~3 Zeilen):**
+Aufruf von `compute_local_conditions` + `update_local_conditions`
+in `_handle_diversity_operate` ergänzen — analog zur Normal-Mode-
+Stelle:
+```python
+score, n_st, median = compute_local_conditions(self._diversity_stations)
+self.control_panel.update_local_conditions(score, n_st, median)
+```
+
+**Schwellen sind OK** (P120 vom 25.05. ist field-validated):
+5★>-13, 4★>-18, 3★>-21, 2★>-22, sonst 1★. Mike-Spec.
+Die Logik mit Top-Half-Median ist FT8-realistisch.
+
+**Severity:** 🟡 — kein funktionaler Bug, nur falsche Anzeige.
+Wird nur auffällig wenn man genau hinsieht (Mike: „nur aufgefallen
+weil so viele Stationen waren").
+
+**Empfehlung für nächsten Workflow:** Bei P141 gleich nach **weiteren
+mode-aware Symmetrie-Fehlern** grep'en — z.B. update_diversity_*-
+Funktionen die spiegelbildlich in Normal-Mode fehlen oder umgekehrt.
+Pattern-Familie „Mode-Mismatch" könnte größer sein.
+
+**Autonom + voller Workflow tauglich:** ja.
+
+---
+
+## ✅ ERLEDIGT 26.05.2026 — P139 Auto-Hunt Event-Logging (v0.98.20)
+
+Diagnose-Tool für 60s-Auto-Hunt-Delay-Bug. Nutzt existierendes
+debug_log-Framework (P21 10.05.). 7 Hook-Stellen in auto_hunt.py +
+mw_cycle.py + mw_qso.py. R1-ORANGE-Fix STOP-Log vor Defer-Check.
+R1-GELB-Fixes pre/post-Affinity + NO_CANDIDATE-Reason-Differenzierung.
+FEATURES.md Sektion 8a NEU. Tests 2042→2057 (+15).
+
+---
+
+## ✅ ERLEDIGT 26.05.2026 — P138 P129-Whitelist entfernt (v0.98.19) [⚠ FOLGEFEHLER P140 OFFEN]
+
+**Status:** ERLEDIGT v0.98.19, aber **Folgefehler P140 offen** —
+Cooldown-Stempel an falschen Trigger gehängt (siehe oben).
+
+Mike-Spec war richtig, Code-Verdrahtung falsch: `qso_complete`
+(intern, RR73-Send) statt `qso_confirmed_visual` (optisches ✓).
+Tests 2040→2042.
+
+---
+
+## ✅ ERLEDIGT 26.05.2026 — P137 „Sende" → „Gesendet" Tempora (v0.98.18)
+
+Variante B (nur Log-Tempora). 1-Zeilen-Fix in qso_panel.py:326.
+P93-Defer-Mechanik = TX vorbei zum Anzeige-Zeitpunkt. Tests 2033→2040.
+
+---
+
+## ✅ ERLEDIGT 26.05.2026 — P136 Call-Validation Auto-Hunt + Parser-Fix (v0.98.17)
+
+„JA"-Bug aus `CQ JA HG60IPA`. 2-Schichten-Fix:
+1. Parser `core/message.py:114` Bedingung `>=3` statt `==4`
+2. Auto-Hunt `looks_like_callsign` Defense-in-Depth, slash-tolerant
+Tests 1999→2033.
+
+---
+
+## ✅ ERLEDIGT 26.05.2026 — P135 Decode-Statusbar akkumuliert (v0.98.16)
+
+Mode-aware in `_on_cycle_decoded`: diversity → `_diversity_stations`,
+normal → `_normal_stations`, else (dx_tune) → per-Slot.
+Tests 1993→1999.
+
+---
+
+## ✅ ERLEDIGT 26.05.2026 — P134 Python-Sweep entfernt (v0.98.14)
+
+Folge-Fix zu P132+P133. Pattern-Killing-Bug-Klasse vollständig
+beseitigt (Bash + Python Sweep raus, Helper `_kill_stale_lockfile_owner`
+für zielgerichtete 1-PID-Prüfung). Tests 1960→1980.
+
+---
+
+## ✅ ERLEDIGT 26.05.2026 — P133 starter.command lsof-CWD-Vorschicht (v0.98.13)
+
+Defense-in-Depth in Bash-Starter. Race-Catch (Lockfile zuerst) +
+Hotfix (Schicht 3 raus weil zu aggressiv). Tests +11.
 
 ---
 
