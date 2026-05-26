@@ -514,6 +514,29 @@ Bei Doku-Updates: nicht in CLAUDE.md duplizieren was in TODO.md steht.
 
 ---
 
+## 📖 Funktionsweisen-Referenz: FEATURES.md (Mike-Wunsch 26.05.2026)
+
+**Wenn die Frage kommt „wie funktioniert X in dieser App?"** → ZUERST
+`FEATURES.md` lesen, bevor Code-Archäologie betrieben wird.
+
+- **Datei:** `SimpleFT8/FEATURES.md`
+- **Zweck:** funktionale Detail-Doku (wie/warum), nicht Changelog
+- **Abgrenzung:**
+  - HISTORY.md = WANN was geändert wurde
+  - CLAUDE.md (diese Datei) = Architektur-Überblick + Regeln
+  - FEATURES.md = funktionale Tiefe (DX-Filter, Defer-Familie, Hash-
+    Resolution, etc.)
+
+**Pflege:** Neue Sektion anlegen wenn die Erklärung später nochmal
+nützlich sein wird. Trivial-Klausel: 1-2-Zeilen-Features dürfen im
+Code bleiben — FEATURES.md ist für nicht-trivialen Kontext.
+
+Mike-Anlass 26.05.: DX-Filter-Erklärung wurde nachgefragt obwohl die
+Antwort komplex aus dem Code zusammengesucht werden musste. FEATURES.md
+ist jetzt der Anker für solche Fragen.
+
+---
+
 ## Bekannte Fallen & Bugs
 
 - **cache.save() nie im Cycle-Loop** — refresht Timestamp → 2h Gültigkeit wird sinnlos
