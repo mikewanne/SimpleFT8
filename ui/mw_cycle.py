@@ -85,7 +85,20 @@ class CycleMixin:
             return
 
         self._assign_slot_parity(messages)
-        self.control_panel.update_decode_count(len(messages) if messages else 0)
+        # P135 (26.05.2026 Mike-Field-Bug): Decode-Count zeigt akkumulierte
+        # Stations-Anzahl statt per-Slot rohe Decodes. Bei leerem Slot blieb
+        # sonst "0/—" stehen obwohl _diversity_stations / _normal_stations
+        # Treffer hatten — Anzeige sprang zwischen "39 Stationen" und "—".
+        # DX-Tune behaelt rohe per-Slot-Anzahl (kein Akkumulator-Dict).
+        if self._rx_mode == "diversity":
+            self.control_panel.update_decode_count(
+                len(self._diversity_stations))
+        elif self._rx_mode == "normal":
+            self.control_panel.update_decode_count(
+                len(self._normal_stations))
+        else:
+            self.control_panel.update_decode_count(
+                len(messages) if messages else 0)
         self._update_dt_correction(messages)
 
         ant = "A1"

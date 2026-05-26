@@ -3,6 +3,31 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-26 v0.98.16 — P135 Decode-Statusbar zeigt akkumulierte Anzahl
+
+**Mike-Field-Bug 26.05.2026 (Screenshots):** Decode-Statusbar sprang
+zwischen „39 Stationen" und „—" je nach Slot-Parität. Reproduzierbar
+bei 15m DX-Mode mit ANT2.
+
+**Root Cause:** `ui/mw_cycle.py:88` setzte per-Slot rohe Decode-Anzahl.
+Akkumulator-Update in `_handle_diversity_operate` lief nur `if messages`
+→ bei leerem Slot blieb 0 stehen.
+
+**Fix (voller Workflow V1→V2→R1→V3→Code→Final-R1):**
+Mode-aware akkumulierte Anzeige in `_on_cycle_decoded`:
+- diversity → `len(self._diversity_stations)`
+- normal → `len(self._normal_stations)`
+- else (dx_tune) → `len(messages) if messages else 0` (R1-Auflage:
+  DX-Tune behält per-Slot da kein Akkumulator-Dict)
+
+**R1-V4-pro GELB-Auflage:** DX-Tune-Pfad else-Branch ergänzt — sonst
+wäre Counter stumm beim Modus-Wechsel. Eingebaut.
+
+**APP_VERSION:** 0.98.15 → 0.98.16
+
+**Tests 1993 → 1999** (+6): `tests/test_p135_decode_count_accumulated.py`
+NEU (6 Tests, Source-Inspection für diversity/normal/else-Branch).
+
 ## 2026-05-26 v0.98.15 — P131 Sende-Log bei Bandwechsel verwerfen (Pattern-Familie 8. Iteration)
 
 **Mike-Field-Bug 26.05.2026 (15m→20m Wechsel):** „bei wechsel auf 20

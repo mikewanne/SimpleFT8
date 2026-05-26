@@ -1,8 +1,8 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-26 — v0.98.15 P131 Sende-Log bei Bandwechsel verwerfen (Pattern-Familie 8.)
+## Stand 2026-05-26 — v0.98.16 P135 Decode-Statusbar akkumuliert
 
-**Aktueller Code-Stand:** v0.98.15, Tests **1993 grün** (+13 P131).
+**Aktueller Code-Stand:** v0.98.16, Tests **1999 grün** (+6 P135).
 
 **Naechste 1-2 Schritte:**
 - Mike: Field-Test nach App-Restart (P131 Bandwechsel-Test + P134
