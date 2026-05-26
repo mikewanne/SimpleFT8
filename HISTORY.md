@@ -3,6 +3,46 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-26 v0.98.17 — P136 Call-Validation Auto-Hunt + Parser-Fix CQ-mit-Richtung
+
+**Mike-Field-Bug 26.05.2026 (Screenshots):** Auto-Hunt picked „JA" aus
+`CQ JA HG60IPA` → 5x „Sende JA DA1MHH -17" → Timeout. Etikette-Verletzung.
+
+**Root Cause (2 Schichten):**
+1. Parser `core/message.py:114` erkannte Richtungs-Anrufe nur bei
+   `len(parts) == 4`. „CQ JA HG60IPA" hat 3 Parts (ohne Grid) → fiel
+   durch → field2="JA" → `caller`="JA".
+2. Auto-Hunt `core/auto_hunt.py` nahm `msg.caller` ohne Validation.
+
+**Fix (voller Workflow V1→V2→R1→V3→Code→Final-R1, R1 6× GRÜN):**
+
+1. **Parser:** Bedingung Z.114 erweitert auf `len(parts) >= 3`, f3
+   defensiv via `parts[3] if len(parts) >= 4 else ""`.
+2. **`_looks_like_call` → `looks_like_callsign` (public)** mit erweiterten
+   Docstring (3 Regeln + Slash-Hinweis). Backward-Compat-Alias bleibt.
+3. **Auto-Hunt Defense-in-Depth:** `select_next` checkt nach `msg.caller`
+   slash-tolerant via `max(call.split("/"), key=len)` ob es wie Call
+   aussieht — sonst `continue`.
+
+**3 Regeln der KISS-Heuristik:**
+- Länge 3-10 Zeichen
+- mindestens 1 Ziffer
+- mindestens 1 Buchstabe
+
+Filtert: JA, EU, NA, DX, CQ, TEST, QSO, STATION. Lässt durch: 1A0KM
+(Order of Malta), 4U1UN (UN Geneva), R1A0KM (Antarktis-hypothetisch).
+
+**R1-V4-pro 6× GRÜN PUSH FREIGEGEBEN.** Final-R1: keine Auflagen.
+
+**APP_VERSION:** 0.98.16 → 0.98.17
+
+**Tests 1999 → 2033** (+34):
+- 8 parametrisierte Parser-Tests (incl. R1-Catch `CQ TEST DA1ABC`)
+- 16 parametrisierte `looks_like_callsign`-Tests
+- 4 Auto-Hunt-Tests (Mock-basiert: Skip invalid, return None, slash-OK,
+  direction-block)
+- Backward-Compat + Doku-Marker + Regression-Schutz
+
 ## 2026-05-26 v0.98.16 — P135 Decode-Statusbar zeigt akkumulierte Anzahl
 
 **Mike-Field-Bug 26.05.2026 (Screenshots):** Decode-Statusbar sprang

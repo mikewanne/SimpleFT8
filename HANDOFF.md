@@ -1,8 +1,30 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-26 — v0.98.16 P135 Decode-Statusbar akkumuliert
+## Stand 2026-05-26 — v0.98.17 P136 Call-Validation („JA"-Bug behoben)
 
-**Aktueller Code-Stand:** v0.98.16, Tests **1999 grün** (+6 P135).
+**Aktueller Code-Stand:** v0.98.17, Tests **2033 grün** (+34 P136).
+
+**Naechste 1-2 Schritte:**
+- Mike: Field-Test nach App-Restart auf v0.98.17 für 4 frische Fixes:
+  - P134: starter.command darf nicht mehr abbrechen
+  - P131: Bandwechsel kein Sende-Nachschlag mehr
+  - P135: Decode-Statusbar springt nicht mehr auf „—"
+  - P136: kein „Sende JA"-Bug mehr aus `CQ JA HG60IPA`
+- Offene autonome Aufgabe: #76 Auto-Hunt Event-Logging (Diagnose-Tool
+  für 60s-Delay-Beobachtung)
+
+### 🟢 26.05.2026 — P136 Call-Validation Auto-Hunt + Parser-Fix CQ-mit-Richtung
+
+Mike-Field-Bug: Auto-Hunt picked „JA" aus `CQ JA HG60IPA`. Parser-Fix
+in `core/message.py:114` (Bedingung `>=3` statt `==4`) + Defense-in-Depth
+in `core/auto_hunt.py` via `looks_like_callsign` (slash-tolerant).
+3-Regel-Heuristik: 3-10 Zeichen + 1 Ziffer + 1 Buchstabe. Tests
+1999→2033 (+34).
+
+### 🟢 26.05.2026 — P135 Decode-Statusbar akkumuliert (v0.98.16)
+
+Mode-aware Anzeige: diversity → `_diversity_stations`, normal → `_normal_stations`,
+else (dx_tune) → per-Slot. R1-Auflage else-Branch eingebaut.
 
 **Naechste 1-2 Schritte:**
 - Mike: Field-Test nach App-Restart (P131 Bandwechsel-Test + P134

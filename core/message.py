@@ -110,11 +110,15 @@ def parse_ft8_message(msg_str: str, snr: int = -30,
     if len(parts) >= 3:
         f3 = " ".join(parts[2:])
 
-    # CQ mit Richtung (z.B. "CQ DX DA1MHH JO31")
-    if f1 == "CQ" and len(parts) == 4 and not _looks_like_call(f2):
+    # CQ mit Richtung (z.B. "CQ DX DA1MHH JO31", "CQ JA HG60IPA")
+    # P136 (26.05.2026 Mike-Field-Bug): vorher nur len==4, dadurch wurde
+    # "CQ JA HG60IPA" (3 parts, kein Grid) als f1=CQ/f2=JA/f3=HG60IPA
+    # geparst → caller=JA → Auto-Hunt rief "JA" an. Mit len>=3 greift
+    # Richtungs-Erkennung auch ohne Grid.
+    if f1 == "CQ" and len(parts) >= 3 and not looks_like_callsign(f2):
         f1 = f"CQ {f2}"
         f2 = parts[2]
-        f3 = parts[3]
+        f3 = parts[3] if len(parts) >= 4 else ""
 
     return FT8Message(
         raw=msg_str.strip(),
@@ -123,10 +127,26 @@ def parse_ft8_message(msg_str: str, snr: int = -30,
     )
 
 
-def _looks_like_call(s: str) -> bool:
-    """Prüft ob ein String wie ein Rufzeichen aussieht."""
+def looks_like_callsign(s: str) -> bool:
+    """Prueft ob ein String wie ein Rufzeichen aussieht.
+
+    Drei Regeln (KISS-Heuristik, alle muessen erfuellt sein):
+    - Laenge 3-10 Zeichen
+    - mindestens 1 Ziffer
+    - mindestens 1 Buchstabe
+
+    Filtert Direction-Marker (JA, EU, NA, DX), Keywords (CQ, TEST,
+    QSO, RR73). Laesst Sonderformate wie 1A0KM/4U1UN/R1A0KM durch.
+
+    Slash-Suffixe (DA1MHH/P) müssen vom Aufrufer abgespalten werden —
+    diese Funktion erwartet einen reinen Token ohne `/`.
+    """
     if len(s) < 3 or len(s) > 10:
         return False
     has_digit = any(c.isdigit() for c in s)
     has_alpha = any(c.isalpha() for c in s)
     return has_digit and has_alpha
+
+
+# Backward-Compat-Alias fuer interne Caller (kann spaeter entfernt werden).
+_looks_like_call = looks_like_callsign

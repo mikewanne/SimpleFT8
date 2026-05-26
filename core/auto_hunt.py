@@ -28,6 +28,8 @@ from typing import Optional, List, TYPE_CHECKING
 
 from PySide6.QtCore import QObject, QTimer, Signal
 
+from .message import looks_like_callsign
+
 if TYPE_CHECKING:
     from core.message import FT8Message
     from log.qso_log import QSOLog
@@ -331,6 +333,15 @@ class AutoHunt(QObject):
                 continue
             call = msg.caller
             if not call:
+                continue
+
+            # P136 (26.05.2026 Mike-Field-Bug "JA"): Call-Validation als
+            # Defense-in-Depth. Parser-Fix in message.py greift normalerweise
+            # ab, aber falls eine fehlgeparste Pseudo-Call durchrutscht
+            # (Direction-Marker, Keyword), nicht anrufen.
+            # Slash-tolerant: laengstes Segment pruefen (DA1MHH/P → DA1MHH).
+            base = max(call.split("/"), key=len) if "/" in call else call
+            if not looks_like_callsign(base):
                 continue
 
             # P61 (v0.97.33): Recent-QSO-Cooldown (Pick + Abschluss).
