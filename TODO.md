@@ -2,6 +2,37 @@
 
 ---
 
+## 🔬 BEOBACHTUNG OFFEN — Auto-Hunt-Start-Delay (Mike Field 26.05.2026)
+
+**Mike-Field-Beobachtung 26.05.2026** (nach P130-Kalibrierung 15m
+mit ANT2 0 dB DX-Sieger): Auto-Hunt aktiviert → **sprang erst nach
+~60s (4 Slots) an**. Irgendwas hat blockiert.
+
+**Hypothesen (keine Log-Daten verfügbar, alle gleich wahrscheinlich):**
+- Keine `is_cq`-Stationen mit SNR ≥ MIN_SNR in den ersten Slots
+  (15m kann lückenhaft sein)
+- Decoder-Buffer-Aufbau in den ersten 2 Slots nach Kalibrierungs-Ende
+- `_recent_qso` 5-Min-Cooldown auf gerade dekodierte Stationen
+- `_dx_tune_dialog`-Close-Race zwischen Dialog-Animation und
+  Auto-Hunt-Start
+- Stats-Warmup 6 Zyklen (blockt zwar nur Stats, könnte aber
+  Decoder-Pipeline beeinflussen)
+
+**Bei Wiederauftreten bitte beobachten:**
+- Erscheint der Log-Eintrag `[Auto-Hunt] Ausgewählt: ...` in den
+  ersten 60s? (Tail Log oder Terminal)
+- Sind in den ersten Slots CQ-Stationen im RX-Panel sichtbar?
+- Wie viele Slots seit Auto-Hunt-Klick bis erste Aktivität?
+
+**Severity:** 🟡 — kein Bug, möglicherweise erwartetes Verhalten.
+Nur dokumentieren, bis Reproduktion mit Logs vorliegt.
+
+**Remote-tauglich für Diagnose:** ja, wenn Mike Log-Snippets liefert.
+
+---
+
+---
+
 ## ✅ ERLEDIGT 26.05.2026 — P126 Send-nach-Timeout TX-Race-Fix (v0.98.12)
 
 **Status:** ERLEDIGT v0.98.12 (autonomer Workflow während Mike weg).
