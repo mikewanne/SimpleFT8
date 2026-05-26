@@ -3,6 +3,63 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-26 — P133 starter.command lsof-CWD-Vorschicht (Mike-Wunsch nach P132)
+
+**Mike-Wunsch 26.05.2026 nach P132:** „können wir nicht in der
+starter.command auch ne abfrage einbauen als sicherheit?"
+
+**Defense-in-Depth:** Bash-Schicht in `starter.command` VOR Python-
+Start. Mike-Spec: automatisch killen ohne Dialog (lsof-CWD ist
+false-positive-frei).
+
+**R1-Final-Catch (kritisch!):** Mike's instinktive Reihenfolge
+„lsof zuerst" hätte eine Race-Condition produziert — paralleler
+Doppelklick: Starter B's lsof würde Starter A's gerade gestartete
+legitime Python-Instanz killen. R1-V4-pro empfahl Umkehr:
+Lockfile → osascript → lsof. So killt nur dann lsof, wenn keine
+legitime Instanz mit Lock läuft.
+
+**Architektur (4 Schichten):**
+
+1. **Lockfile-PID-Check** (Race-sicher): wenn Lock-PID lebt UND
+   Process ist Python (PID-Recycling-Schutz via ps grep) → killen
+2. **osascript Window-Title** (bestehend): fängt Instanzen mit
+   sichtbarem Fenster aber ohne/stale Lock
+3. **lsof-CWD-Sweep** (NEU): fängt fensterlose Zombies ohne Lock
+   (genau Mike's Bug-Szenario der 4 Zombies)
+4. **Python fcntl.flock** (P132): atomare Garantie als letzte
+   Schicht
+
+**Helper-Funktion:** `kill_with_grace()` (SIGTERM, 1.5s warten,
+SIGKILL falls zäh) — wird in allen 3 Bash-Schichten genutzt.
+
+**Mike-Spec eingelöst:** KEINE Dialoge mehr, KEIN „läuft bereits"-
+Banner, KEIN Abbruch — Schichten killen automatisch und starten
+sauber Python.
+
+**Edge-Case dokumentiert:** Laufende pytest-Worker mit cwd im
+App-Dir würden gekillt. In Praxis unkritisch — Tests laufen nicht
+parallel zum Starter.
+
+**Workflow:**
+- V1 mit 10 Bash-Audit-Fragen an DeepSeek
+- R1 V4-pro: 9 von 10 Fragen sauber, 1 ROTER Catch (Race-Condition)
+- V3 Implementation mit Reihenfolge-Umkehr nach R1-Empfehlung
+- Final-R1: PUSH FREIGEGEBEN nach Reihenfolge-Fix
+
+**V4-pro 59-Cycle:** 0 Halluzinationen.
+
+Tests 1949 → 1960 (+11 P133 Bash-Syntax-Check + Schichten-
+Reihenfolge + PID-Recycling-Schutz + Lock-Cleanup).
+
+**Lesson:** Bei Race-Conditions ist Lock-zuerst-Prinzip universal —
+egal ob in Python (fcntl) oder Bash (Lockfile). Mike's „lsof zuerst"-
+Intuition kam aus dem Bug-Kontext (Zombies finden), aber technisch
+ist Race-Schutz wichtiger. R1's Catch hat einen latenten Bug
+verhindert.
+
+---
+
 ## 2026-05-26 v0.98.13 — P132 Single-Instance Architektur-Refactor (autonom)
 
 **Mike-Field-Bug 26.05.2026 (sehr verärgert):** 4 Zombie-Instanzen

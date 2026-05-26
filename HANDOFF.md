@@ -4,6 +4,14 @@
 
 **Aktueller Code-Stand:** v0.98.13, Tests **1949 grün** (+15 P132).
 
+### 🟢 26.05.2026 — P133 starter.command lsof-CWD-Vorschicht (Mike-Wunsch nach P132)
+
+Defense-in-Depth: Bash-Schicht VOR Python-Start. 4-Schichten-
+Architektur: Lockfile → osascript → lsof-CWD → Python-fcntl.
+**R1-Final-Catch:** Race-Condition bei parallelem Doppelklick
+→ Lockfile-Check ZUERST (statt Mike's „lsof zuerst"-Intuition).
+Mike-Spec: automatisch killen ohne Dialog. Tests 1949→1960 (+11).
+
 ### 🔴 26.05.2026 — P132 Single-Instance Architektur-Refactor (Mike-Wut + voller Workflow)
 
 **Mike-Field-Bug:** 4 Zombie-Instanzen seit Mittwoch trotz Single-

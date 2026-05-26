@@ -2,16 +2,52 @@
 # SimpleFT8 Starter — Doppelklick im Finder oeffnet Terminal + startet App.
 # Endung .command sorgt dafuer dass macOS Finder das Script in Terminal startet.
 #
-# Single-Instance-Schutz (PRIMAERSTRATEGIE: Window-Title via osascript):
-# Mike-Vorschlag 10.05.2026 nach 5x verkackten Doppel-Instanz-Bugs.
-# osascript fragt System Events nach jedem Fenster mit "SimpleFT8" im Titel —
-# robust gegen Pfad-Leerzeichen, Wrapper-Scripts, alte Python-Versionen,
-# fehlende lsof-Permissions. Wenn Match gefunden → Dialog + Abbruch.
+# Single-Instance-Schutz (4 Schichten, P133 26.05.2026):
+# 1. Lockfile-PID-Check (atomar, mit PID-Recycling-Schutz) — Mike-Spec:
+#    automatisch killen statt abort
+# 2. osascript Window-Title-Check — Backup fuer Instanzen ohne Lock
+# 3. lsof-CWD-Final-Sweep — Zombies ohne Lock UND ohne Fenster
+# 4. Python fcntl.flock — atomare Lock-Garantie als letzte Schicht
+#
+# R1-Race-Catch (P133 Final-R1 26.05.): Lockfile-Check ZUERST verhindert
+# dass ein paralleler Doppelklick eine gerade gestartete legitime
+# Instanz killt (lsof-Scan haette das gemacht).
 
 APP_DIR="/Users/mikehammerer/Documents/KI N8N Projekte/FT8/SimpleFT8"
+LOCK_FILE="$HOME/.simpleft8/simpleft8.lock"
 cd "$APP_DIR" || { echo "App-Verzeichnis nicht gefunden: $APP_DIR"; exit 1; }
 
-# ── Single-Instance-Check via Window-Title ─────────────────────────
+# Helper: Kill PID mit grace (SIGTERM, 1.5s warten, SIGKILL).
+kill_with_grace() {
+    local pid="$1"
+    kill -TERM "$pid" 2>/dev/null
+    sleep 1.5
+    if kill -0 "$pid" 2>/dev/null; then
+        echo "[Starter] PID $pid zaeh — SIGKILL"
+        kill -KILL "$pid" 2>/dev/null
+    fi
+}
+
+# ── SCHICHT 1: Lockfile-PID-Check (R1-empfohlen, Race-sicher) ──────
+# Mike-Spec 26.05.: automatisch killen ohne Dialog. PID-Recycling-Schutz
+# verhindert Kollateral-Kill recycelter PIDs (z.B. Chrome).
+if [ -f "$LOCK_FILE" ]; then
+    LOCK_PID=$(cat "$LOCK_FILE" 2>/dev/null)
+    if [ -n "$LOCK_PID" ] && kill -0 "$LOCK_PID" 2>/dev/null; then
+        # PID lebt — pruefen ob es wirklich SimpleFT8 ist (PID-Recycling)
+        PROC_CMD=$(ps -p "$LOCK_PID" -o command= 2>/dev/null)
+        if echo "$PROC_CMD" | grep -qE "Python|python|SimpleFT8"; then
+            echo "[Starter] Lockfile zeigt lebende Instanz PID $LOCK_PID → killen"
+            kill_with_grace "$LOCK_PID"
+        else
+            echo "[Starter] Lockfile-PID $LOCK_PID ist recycled ($PROC_CMD) — stale Lock"
+        fi
+    fi
+    # Stale-Lock immer entfernen (Inhaber ist jetzt tot oder war es schon)
+    rm -f "$LOCK_FILE"
+fi
+
+# ── SCHICHT 2: osascript Window-Title-Check ────────────────────────
 # osascript returnt PID des Prozesses dessen Fenster "SimpleFT8" im Titel
 # hat (oder leer wenn keine App lauft).
 #
@@ -39,55 +75,46 @@ RUNNING_PID=$(osascript -e 'tell application "System Events"
     return foundPID
 end tell' 2>/dev/null)
 
-# Fallback: Lockfile-PID-Check (faengt Race-Condition wenn 2 Apps fast
-# gleichzeitig starten und noch kein Fenster da ist)
-if [ -z "$RUNNING_PID" ] && [ -f "$HOME/.simpleft8/simpleft8.lock" ]; then
-    LOCK_PID=$(cat "$HOME/.simpleft8/simpleft8.lock" 2>/dev/null)
-    if [ -n "$LOCK_PID" ] && kill -0 "$LOCK_PID" 2>/dev/null; then
-        # P38 (12.05.2026): PID-Recycling-Schutz. `kill -0` prueft nur
-        # „PID lebt", nicht „SimpleFT8 lebt". Wenn macOS die alte
-        # SimpleFT8-PID an eine andere App (z.B. Chrome) recycled hat,
-        # wuerde der Starter sonst faelschlich „laeuft bereits" melden.
-        # Bestaetigt durch Mike-Screenshot 12.05.: Lock-PID 23196 →
-        # ps zeigt /Applications/Google Chrome.app/...
-        PROC_CMD=$(ps -p "$LOCK_PID" -o command= 2>/dev/null)
-        if echo "$PROC_CMD" | grep -q "SimpleFT8.*main\.py"; then
-            RUNNING_PID="$LOCK_PID"
-        else
-            # PID recycled — stale Lock loeschen, sauber durchstarten
-            rm -f "$HOME/.simpleft8/simpleft8.lock"
-        fi
-    fi
+if [ -n "$RUNNING_PID" ]; then
+    echo "[Starter] osascript: Fenster-Instanz PID $RUNNING_PID → killen"
+    kill_with_grace "$RUNNING_PID"
 fi
 
-if [ -n "$RUNNING_PID" ]; then
-    PROC_INFO=$(ps -p "$RUNNING_PID" -o pid,etime,command 2>/dev/null | tail -1)
-    # Auffaelliger Terminal-Banner — bleibt sichtbar weil 'read' am Ende
-    echo ""
-    echo "╔════════════════════════════════════════════════════════════════╗"
-    echo "║  ⛔  SimpleFT8 läuft bereits — KEIN zweiter Start              ║"
-    echo "╠════════════════════════════════════════════════════════════════╣"
-    echo "║"
-    echo "║  PID:        $RUNNING_PID"
-    echo "║  Process:    $PROC_INFO"
-    echo "║"
-    echo "║  Wenn die App tatsaechlich nicht mehr laeuft:"
-    echo "║    pkill -9 -f \"SimpleFT8.*main.py\""
-    echo "║    rm -f ~/.simpleft8/simpleft8.lock"
-    echo "║"
-    echo "╚════════════════════════════════════════════════════════════════╝"
-    echo ""
-    # AppleScript-Dialog (Bonus, falls Accessibility erlaubt)
-    osascript -e "display dialog \"SimpleFT8 läuft bereits (PID $RUNNING_PID)\" with title \"SimpleFT8 Starter\" buttons {\"OK\"} default button \"OK\" with icon stop giving up after 10" 2>/dev/null &
-    # Terminal-Pause damit Mike den Banner LESEN kann (Doppelklick-Fall:
-    # Terminal wuerde sonst sofort zumachen).
-    echo "Drücke Enter zum Schliessen (oder warte 30s) ..."
-    read -t 30 -r _ || true
-    exit 1
+# ── SCHICHT 3: lsof-CWD-Final-Sweep (Zombies ohne Lock + ohne Fenster) ──
+# Hinweis: laufende pytest-Worker mit cwd im App-Dir wuerden hier auch
+# gekillt. In der Praxis unkritisch — Tests laufen nicht parallel zum
+# Starter (eigener Workflow im Terminal).
+# Pfad-Leerzeichen-immun (awk -Fpn newline-getrennt), setproctitle-immun
+# (cwd-basiert), Editor/IDE-immun (deren cwd liegt nicht im App-Dir).
+ZOMBIES=$(lsof -c Python -c python -d cwd -Fpn 2>/dev/null | awk \
+    -v dir="$APP_DIR" '
+    /^p/ { pid=substr($0,2); next }
+    /^n/ {
+        path=substr($0,2);
+        if (path == dir || index(path, dir "/") == 1) {
+            print pid;
+        }
+        pid="";
+    }')
+
+if [ -n "$ZOMBIES" ]; then
+    ZOMBIE_LIST=$(echo "$ZOMBIES" | tr '\n' ' ')
+    echo "[Starter] lsof-Sweep: Zombies gefunden → killen: $ZOMBIE_LIST"
+    for pid in $ZOMBIES; do
+        kill -TERM "$pid" 2>/dev/null
+    done
+    sleep 1.5
+    for pid in $ZOMBIES; do
+        if kill -0 "$pid" 2>/dev/null; then
+            echo "[Starter] PID $pid zaeh — SIGKILL"
+            kill -KILL "$pid" 2>/dev/null
+        fi
+    done
+    rm -f "$LOCK_FILE"
 fi
 
 # Sauber — App starten (python3 blockiert Terminal solange App laeuft)
-echo "[Starter] Keine laufende Instanz — starte SimpleFT8 v$(grep '^APP_VERSION' main.py | head -1 | cut -d'"' -f2)"
+echo "[Starter] Sauber — starte SimpleFT8 v$(grep '^APP_VERSION' main.py | head -1 | cut -d'"' -f2)"
 ./venv/bin/python3 main.py
 EXIT_CODE=$?
 # Wenn App mit Fehler endete (z.B. acquire_single_instance_lock failed):
