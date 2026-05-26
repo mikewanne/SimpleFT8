@@ -144,11 +144,15 @@ class QSOMixin:
             # P31: Display-Wert (pre-decrement) statt cq_remaining (post).
             omni_remaining = omni.cq_remaining_display
         # P93: Log-Args für tx_finished merken — KEIN add_tx hier
+        # P131 (26.05.2026): band-Tag mitsichern damit ein verspätetes
+        # tx_finished nach Bandwechsel keinen Eintrag im falschen Band
+        # schreibt (QueuedConnection-Race). _on_tx_finished prüft Band-Match.
         self._pending_tx_log = {
             "message": message,
             "tx_even": tx_even,
             "slot_start_ts": slot_start_ts,
             "omni_remaining": omni_remaining,
+            "band": self.settings.band,
         }
 
     @Slot(object)
@@ -462,14 +466,20 @@ class QSOMixin:
         belegt. Falls leer (z.B. Abort vor erstem Sample), kein Log.
         """
         # P93: Defer'ter Log-Eintrag aus tx_started
+        # P131 (26.05.2026): Band-Match-Check — wenn pending einen
+        # anderen Band-Stempel hat, wurde mitten im Slot gewechselt
+        # → Eintrag verwerfen statt im falschen Band-Kontext loggen.
         pending = getattr(self, "_pending_tx_log", None)
         if pending is not None:
-            self.qso_panel.add_tx(
-                pending["message"], "",
-                tx_even=pending["tx_even"],
-                slot_start_ts=pending["slot_start_ts"],
-                omni_remaining=pending["omni_remaining"],
-            )
+            pending_band = pending.get("band")
+            current_band = self.settings.band
+            if pending_band is None or pending_band == current_band:
+                self.qso_panel.add_tx(
+                    pending["message"], "",
+                    tx_even=pending["tx_even"],
+                    slot_start_ts=pending["slot_start_ts"],
+                    omni_remaining=pending["omni_remaining"],
+                )
             self._pending_tx_log = None
         self.control_panel.set_tx_active(False)
         self.qso_sm.on_message_sent()

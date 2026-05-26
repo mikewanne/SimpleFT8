@@ -3,6 +3,57 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-26 v0.98.15 — P131 Sende-Log bei Bandwechsel verwerfen (Pattern-Familie 8. Iteration)
+
+**Mike-Field-Bug 26.05.2026 (15m→20m Wechsel):** „bei wechsel auf 20
+meter, geht noch ein ruf raus oder wird angezeigt vom 15 meter band
+vorher. irgendwie geht immer nochmal ne meldung raus als wenn ein
+buffer geleert wird."
+
+**Root Cause:** P93-Defer-Mechanik (`_pending_tx_log` von `tx_started`
+gesetzt, in `tx_finished` als „→ Sende ..."-Eintrag geschrieben).
+Bei Bandwechsel mit `encoder.abort()` blieb das Pending bestehen →
+verspätetes `tx_finished` schrieb alten Slot-Eintrag im neuen Band-
+Kontext.
+
+**R1-V4-pro ORANGE-Catch (kritisch!):** Simples Pending-Reset reicht
+NICHT — `tx_started`-Slot wird per `Qt.QueuedConnection` zugestellt
+und kann NACH `_on_band_changed` verarbeitet werden. Lösung:
+**Defense-in-Depth** mit zwei Schichten.
+
+**Fix (voller Workflow V1→V2→R1→V3→Code→Final-R1):**
+
+1. **`ui/mw_qso.py` `_on_tx_started`** (Z.147):
+   `_pending_tx_log` Dict erweitert um `"band": self.settings.band`.
+
+2. **`ui/mw_qso.py` `_on_tx_finished`** (Z.466):
+   Band-Match-Check VOR `add_tx`. Bei Mismatch wird verworfen,
+   sonst geloggt. `_pending_tx_log = None` läuft IMMER.
+   Backward-Compat: `pending_band is None` → loggen.
+
+3. **`ui/mw_radio.py` `_on_band_changed`** (Z.539):
+   `_pending_tx_log = None` Reset NACH `encoder.abort()` Block,
+   UNABHÄNGIG von `is_transmitting` (P127-Pattern).
+
+**Pattern-Familie 8. Iteration:** P81/P122/P124/P127/P128/P129/P126/
+P131 — KISS-Defensive-Stop wenn Kontext wechselt. P127 hatte SWR-
+Pfad, P126 Timeout-Pfad, P131 fügt Bandwechsel-Pfad mit zusätzlichem
+Band-Tag-Check (deckt QueuedConnection-Race ab).
+
+**Final-R1 PUSH FREIGEGEBEN.** Akzeptierte Rest-Unschärfe: wenn
+`tx_started` NACH Bandwechsel verarbeitet wird, würde es das NEUE
+Band in pending speichern → kosmetischer Eintrag im neuen Band für
+einen abgebrochenen TX. R1: „nicht sicherheitskritisch, kosmetisch,
+niedrige Priorität".
+
+**Tests 1980 → 1993** (+13):
+- `tests/test_p131_band_change_pending_tx_log.py` NEU (13 Tests):
+  T1-T3 Reset-Position in mw_radio, T4-T5 band-Tag in pending,
+  T6-T9 Band-Match-Logik in tx_finished, T10-T12 Doku-Marker,
+  T13 Race-Logik-Simulation (4 Kombinationen)
+
+**APP_VERSION:** 0.98.14 → 0.98.15.
+
 ## 2026-05-26 v0.98.14 — P134 Python-Sweep entfernt (Folge-Fix zu P132+P133)
 
 **Mike-Field-Bug 26.05.2026 nach P132:** „starter.command wird beendet,

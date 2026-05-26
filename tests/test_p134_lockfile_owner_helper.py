@@ -214,9 +214,13 @@ def test_t14_p134_marker_in_doc():
 
 
 def test_t15_app_version_bumped_to_0_98_14():
-    """T15: APP_VERSION ist auf 0.98.14 gebumpt fuer P134."""
+    """T15: APP_VERSION ist >= 0.98.14 fuer P134."""
     src = MAIN_PY.read_text()
-    assert 'APP_VERSION = "0.98.14"' in src
+    import re
+    m = re.search(r'APP_VERSION = "0\.98\.(\d+)"', src)
+    assert m is not None
+    assert int(m.group(1)) >= 14, (
+        f"P134: mindestens 0.98.14, gefunden 0.98.{m.group(1)}")
 
 
 # ---------------------------------------------------------------------------

@@ -1,16 +1,23 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-26 — v0.98.14 P134 Python-Sweep entfernt (Pattern-Killing-Bug-Klasse beseitigt)
+## Stand 2026-05-26 — v0.98.15 P131 Sende-Log bei Bandwechsel verwerfen (Pattern-Familie 8.)
 
-**Aktueller Code-Stand:** v0.98.14, Tests **1980 grün** (+20 P134).
+**Aktueller Code-Stand:** v0.98.15, Tests **1993 grün** (+13 P131).
 
 **Naechste 1-2 Schritte:**
-- Mike: Field-Test nach App-Restart (Doppelklick `starter.command` →
-  App muss starten, Terminal nicht mehr abbrechen)
-- P126 Field-Test ✅ schon bestanden (Auto-Hunt Test 26.05. 10:22 —
-  EA5KB-Timeout sauber, kein Nachschlag-Send)
-- Folgeaufgabe: P131 Bandwechsel-Pending-Log (Task #78, autonom mit
-  DeepSeek-Workflow)
+- Mike: Field-Test nach App-Restart (P131 Bandwechsel-Test + P134
+  starter-funktioniert-Test in einem Restart)
+- P126 Field-Test ✅ bestanden (26.05. 10:22)
+- Offene autonome Aufgaben: #75 Call-Validation Auto-Hunt („JA"-Bug),
+  #76 Auto-Hunt Event-Logging
+
+### 🟢 26.05.2026 — P131 Sende-Log bei Bandwechsel verwerfen (v0.98.15)
+
+Mike-Field-Bug 15m→20m: „geht noch ein Ruf raus vom alten Band".
+Defense-in-Depth-Fix: (1) `band`-Tag in `_pending_tx_log` (R1-Catch
+gegen QueuedConnection-Race), (2) Band-Match-Check in
+`_on_tx_finished`, (3) Reset in `_on_band_changed` außerhalb
+is_transmitting (P127-Pattern). Tests 1980→1993 (+13).
 
 ### 🟢 26.05.2026 — P134 Python-Sweep entfernt (v0.98.14, voller Workflow autonom)
 

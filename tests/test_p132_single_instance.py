@@ -288,11 +288,14 @@ def test_t13_read_pid_from_lock_valid(tmp_path):
 
 
 def test_t14_app_version_bumped():
-    """T14: APP_VERSION ist >= 0.98.14 fuer P132+P134."""
+    """T14: APP_VERSION ist >= 0.98.14 fuer P132+P134+P131."""
     src = MAIN_PY.read_text()
-    # P132 war 0.98.13, P134 hat auf 0.98.14 erhoeht
-    assert 'APP_VERSION = "0.98.14"' in src, (
-        "P134: APP_VERSION muss 0.98.14 sein")
+    # P132 war 0.98.13, P134 0.98.14, P131 0.98.15
+    import re
+    m = re.search(r'APP_VERSION = "0\.98\.(\d+)"', src)
+    assert m is not None, "APP_VERSION-Format unerwartet"
+    assert int(m.group(1)) >= 14, (
+        f"P132+P134: APP_VERSION mindestens 0.98.14, gefunden 0.98.{m.group(1)}")
 
 
 # ---------------------------------------------------------------------------

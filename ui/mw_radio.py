@@ -536,6 +536,13 @@ class RadioMixin:
             self.encoder.abort()
             if self.radio.ip:
                 self.radio.ptt_off()
+        # P131 (26.05.2026 Mike-Field-Bug, 15m→20m Wechsel): pending TX-Log
+        # verwerfen UNABHÄNGIG von is_transmitting (P127-Pattern).
+        # tx_started wird per Qt.QueuedConnection zugestellt — kann noch in
+        # der Event-Queue liegen waehrend wir hier sind. Defense-in-Depth
+        # zusammen mit dem band-Tag-Match in _on_tx_finished (mw_qso.py).
+        if hasattr(self, "_pending_tx_log"):
+            self._pending_tx_log = None
         # QSO-Panel (Live Log) leeren — neues Band = neuer Kontext
         self.qso_panel.log_view.clear()
         self.qso_panel.status_label.setText("Bandwechsel")
