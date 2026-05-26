@@ -545,6 +545,14 @@ class CycleMixin:
             self.encoder.tx_even = not _candidate.tx_even
         else:
             self.encoder.tx_even = None
+        # P139 (26.05.2026): Event-Log fuer Auto-Hunt-Delay-Diagnose
+        try:
+            from core.debug_log import debug_log as _hlog
+            _hlog("HUNT", f"START_QSO target={_candidate.call} "
+                          f"freq={_candidate.freq_hz}Hz "
+                          f"tx_even={self.encoder.tx_even}")
+        except Exception:
+            pass
         self.qso_sm.start_qso(
             their_call=_candidate.call,
             their_grid=_candidate.grid,

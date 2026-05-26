@@ -167,6 +167,12 @@ class AutoHunt(QObject):
         """
         if not call:
             return
+        # P139 (26.05.2026): MARK_PICK loggen fuer Diagnose
+        try:
+            from .debug_log import debug_log
+            debug_log("HUNT", f"MARK_PICK call={call}")
+        except Exception:
+            pass
         base = call.strip().upper().split("/")[0]
         key = (base, self._band.upper(), self._mode.upper())
         self._recent_qso[key] = time.time()
@@ -199,6 +205,13 @@ class AutoHunt(QObject):
         self._auto_hunt_timer.start()
         logger.info(f"[Auto-Hunt] Start (duration={duration_sec}s)")
         print(f"[Auto-Hunt] Aktiviert — laeuft {duration_sec // 60} Min")
+        # P139 (26.05.2026): Event-Log fuer Auto-Hunt-Delay-Diagnose
+        try:
+            from .debug_log import debug_log
+            debug_log("HUNT", f"START band={self._band} mode={self._mode} "
+                              f"duration={duration_sec}s")
+        except Exception:
+            pass  # debug_log darf NIE crashen
 
     def stop_auto_hunt(self, reason: str):
         """Auto-Hunt-Session beenden. Emittiert auto_hunt_stopped(reason).
@@ -232,6 +245,17 @@ class AutoHunt(QObject):
         # Pending, ist nichts zu tun (verhindert doppelte Signal-Emission).
         if not self.active and self._pending_stop_reason is None:
             return
+
+        # P139 R1-F1 ORANGE: STOP-Reason VOR Defer-Check loggen damit
+        # deferierte Stops nicht unsichtbar bleiben.
+        try:
+            from .debug_log import debug_log
+            will_defer = (reason in _DEFER_REASONS
+                          and self._is_qso_active_callback())
+            suffix = " [DEFERRED]" if will_defer else ""
+            debug_log("HUNT", f"STOP reason={reason}{suffix}")
+        except Exception:
+            pass
 
         # P122: Defer für 3 Stop-Reasons wenn QSO aktiv.
         if reason in _DEFER_REASONS and self._is_qso_active_callback():
@@ -315,13 +339,27 @@ class AutoHunt(QObject):
         Returns:
             HuntCandidate oder None wenn nichts zu tun.
         """
+        # P139 (26.05.2026): Auto-Hunt Event-Logging fuer Delay-Diagnose
+        try:
+            from .debug_log import debug_log as _hlog
+        except Exception:
+            _hlog = lambda *a, **kw: None  # noqa: E731
+
+        _hlog("HUNT", f"SELECT_NEXT msgs={len(messages or [])} "
+                     f"qso_idle={qso_idle} presence={presence_ok} "
+                     f"active={self.active} override={self._manual_override}")
+
         if not self.active:
+            _hlog("HUNT", "EARLY_RETURN reason=not_active")
             return None
         if not presence_ok:
+            _hlog("HUNT", "EARLY_RETURN reason=not_presence")
             return None
         if not qso_idle:
+            _hlog("HUNT", "EARLY_RETURN reason=not_qso_idle")
             return None
         if self._manual_override:
+            _hlog("HUNT", "EARLY_RETURN reason=manual_override")
             return None
 
         # CQ-Stationen filtern
@@ -333,6 +371,7 @@ class AutoHunt(QObject):
                 continue
             call = msg.caller
             if not call:
+                _hlog("HUNT", "SKIP reason=empty_call")
                 continue
 
             # P136 (26.05.2026 Mike-Field-Bug "JA"): Call-Validation als
@@ -342,6 +381,7 @@ class AutoHunt(QObject):
             # Slash-tolerant: laengstes Segment pruefen (DA1MHH/P → DA1MHH).
             base = max(call.split("/"), key=len) if "/" in call else call
             if not looks_like_callsign(base):
+                _hlog("HUNT", f"SKIP call={call} reason=not_callsign")
                 continue
 
             # P61 (v0.97.33): Recent-QSO-Cooldown (Pick + Abschluss).
@@ -351,6 +391,8 @@ class AutoHunt(QObject):
             key = (base, self._band.upper(), self._mode.upper())
             last_qso = self._recent_qso.get(key, 0)
             if now - last_qso < _RECENT_QSO_COOLDOWN_S:
+                _hlog("HUNT", f"SKIP call={call} reason=recent_qso_cooldown "
+                              f"age={int(now - last_qso)}s")
                 continue
             elif last_qso > 0:
                 # Lazy-Cleanup: abgelaufener Eintrag (R1-F4)
@@ -359,11 +401,14 @@ class AutoHunt(QObject):
             # Cooldown: kuerzlich fehlgeschlagen → ueberspringen
             last_fail = self._cooldown.get(call, 0)
             if now - last_fail < _COOLDOWN_SECS:
+                _hlog("HUNT", f"SKIP call={call} reason=fail_cooldown "
+                              f"age={int(now - last_fail)}s")
                 continue
 
             # SNR-Minimum
             snr = msg.snr if msg.snr is not None else -30
             if snr < _MIN_SNR:
+                _hlog("HUNT", f"SKIP call={call} reason=low_snr snr={snr}")
                 continue
 
             grid = msg.grid_or_report if getattr(msg, 'is_grid', False) else ""
@@ -378,7 +423,9 @@ class AutoHunt(QObject):
                 tx_even=tx_even,
             ))
 
+        _hlog("HUNT", f"CANDIDATES pre_affinity n={len(candidates)}")
         if not candidates:
+            _hlog("HUNT", "NO_CANDIDATE reason=empty_list")
             return None
 
         # Slot-Affinitaet: bei laufender Session bevorzugt gleiches tx_even,
@@ -387,6 +434,8 @@ class AutoHunt(QObject):
             same_slot = [c for c in candidates if c.tx_even == self._last_tx_even]
             if same_slot:
                 candidates = same_slot
+        _hlog("HUNT", f"CANDIDATES post_affinity n={len(candidates)} "
+                     f"last_tx_even={self._last_tx_even}")
 
         # Scoring
         for c in candidates:
@@ -397,18 +446,22 @@ class AutoHunt(QObject):
         best = candidates[0]
 
         if best.score <= 0:
+            _hlog("HUNT", f"NO_CANDIDATE reason=score_zero best_call={best.call}")
             return None
 
         # Race-Condition-Sicherung: zwischen Anfangs-Check und Return koennte
         # _auto_hunt_timer abgelaufen sein. Mike's 10-Min-Hard-Cap ist ethisch
         # gesetzt — kein "letztes QSO" nach Ablauf.
         if not self.active:
+            _hlog("HUNT", "NO_CANDIDATE reason=race_inactive_before_return")
             return None
 
         self._current_target = best.call
         self._last_tx_even = best.tx_even  # Slot-Affinitaet fuer naechsten Zyklus
         print(f"[Auto-Hunt] Ausgewaehlt: {best.call} "
               f"(SNR={best.snr}, Score={best.score:.1f}, slot={best.tx_even})")
+        _hlog("HUNT", f"PICKED call={best.call} score={best.score:.1f} "
+                      f"snr={best.snr} tx_even={best.tx_even} freq={best.freq_hz}")
         return best
 
     def _score(self, c: _HuntCandidate) -> float:

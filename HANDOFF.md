@@ -1,12 +1,22 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-26 — v0.98.19 P138 73 nach ✓ blockiert („beendet ist beendet")
+## Stand 2026-05-26 — v0.98.20 P139 Auto-Hunt Event-Logging (Delay-Diagnose)
 
-**Aktueller Code-Stand:** v0.98.19, Tests **2042 grün** (+2 netto P138).
+**Aktueller Code-Stand:** v0.98.20, Tests **2057 grün** (+15 P139).
 
 **Nächste Schritte:**
-- FEATURES.md ergänzen: Auto-Hunt-Filter + QSO-Ende-Blocker Sektionen
-- Mike-Field-Test auf v0.98.19 (mehrere Fixes: P134/P135/P136/P137/P138)
+- **Mike-Field-Test:** Settings → „Debug-Log schreiben" AN, Auto-Hunt
+  klicken, ~5 Min beobachten, App schließen, `debug_*.log` auswerten
+  → exakte Ursache für 60s-Delay
+- Optional: Folge-Fix basierend auf Log-Daten
+
+### 🟢 26.05.2026 — P139 Auto-Hunt Event-Logging (v0.98.20)
+
+Diagnose-Tool für 60s-Delay-Bug. Nutzt existierendes debug_log-
+Framework (P21). HUNT-Events an 7 Stellen: start/stop/select_next/
+skip-reasons/picked/mark_pick/start_qso/tx_started. R1-ORANGE-Fix:
+STOP-Log vor Defer-Check. Tests 2042→2057 (+15). FEATURES.md
+Sektion 8a NEU dokumentiert.
 
 ### 🟢 26.05.2026 — P138 P129-Whitelist entfernt (v0.98.19)
 

@@ -3,6 +3,65 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-26 v0.98.20 — P139 Auto-Hunt Event-Logging via debug_log
+
+**Mike-Field-Bug (mehrfach):** Auto-Hunt springt mit unvorhersehbarer
+Verzögerung an (~30-60s, einmal 8 Min nach SWR-Sperre-Freigabe). Bisher
+keine Diagnose-Daten — wir wussten nicht WO die Sekunden verloren gingen.
+
+**Lösung:** Komplettes Auto-Hunt-Event-Logging über das **existierende**
+`core/debug_log.py`-Framework (P21 v0.96.8, Mike 10.05.). Kein neues
+Logging-System, nur Hooks in die Auto-Hunt-Pfade. Mike-Erinnerung war
+korrekt: „grundgerüst für log debbuging müsste noch vorhanden sein".
+
+**Hooks (voller Workflow V1→V2→R1→V3→Code→Final-R1):**
+
+`core/auto_hunt.py`:
+- `start_auto_hunt`: `HUNT START band/mode/duration`
+- `stop_auto_hunt`: `HUNT STOP reason=... [DEFERRED]` **VOR Defer-Check**
+  (R1-ORANGE-Catch: sonst sind deferierte Stops unsichtbar bis QSO-Ende)
+- `select_next`: Eingangsparameter (msgs/qso_idle/presence/active/override),
+  alle 4 Early-Return-Reasons, alle 5 Skip-Reasons in Filter-Schleife
+  (empty_call/not_callsign/recent_qso_cooldown/fail_cooldown/low_snr),
+  **pre/post-Affinity-Counts** (R1-GELB-F3 Catch), **NO_CANDIDATE mit
+  reason-Differenzierung** (empty_list vs score_zero, R1-GELB-F2 Catch),
+  PICKED-Event mit allen Diagnose-Feldern
+- `mark_pick`: `HUNT MARK_PICK call=...`
+
+`ui/mw_cycle.py:_run_auto_hunt`:
+- `HUNT START_QSO target/freq/tx_even` nach select_next
+
+`ui/mw_qso.py:_on_tx_started`:
+- `HUNT TX_STARTED msg/tx_even` **nur wenn Auto-Hunt aktiv**
+  (kein Spam bei manuellem TX / OMNI)
+
+**Alle Hooks try/except-gewrappt** — `debug_log` darf NIE App crashen
+(P21-Anforderung).
+
+**R1-V4-pro PUSH FREIGEGEBEN.** 3 Findings übernommen:
+- F1 ORANGE: STOP-Log vor Defer-Check (kritisch)
+- F2 GELB: NO_CANDIDATE-Reason differenziert (empty_list/score_zero)
+- F3 GELB: pre/post-Affinity-Counts
+
+**APP_VERSION:** 0.98.19 → 0.98.20
+
+**Tests 2042 → 2057** (+15):
+- `tests/test_p139_auto_hunt_event_logging.py` NEU (15 Tests):
+  T1-T12 Source-Inspektion (alle Hooks + Reihenfolge + Reasons),
+  T13-T15 Mock-basierte Verifikation dass debug_log mit Category
+  „HUNT" gerufen wird
+
+**FEATURES.md:** Sektion 8a NEU „Debug-Log-Datei für Bug-Diagnose"
+mit Aktivierungs-Anleitung, allen Kategorien-Tabelle (ANT/BAND/DIV/
+OMNI/QSO-DONE/HUNT), Cleanup-Hinweis, typischen Workflows, Auto-Hunt-
+Diagnose-Beispiel.
+
+**Was Mike jetzt tun kann:**
+1. Settings → „Debug-Log schreiben" AN
+2. Auto-Hunt-Klick → 60s warten → App schließen
+3. `~/.simpleft8/debug_2026-05-26.log` durchgehen → exakte Diagnose
+   wo die Sekunden verloren gehen
+
 ## 2026-05-26 v0.98.19 — P138 P129-Whitelist entfernt („beendet ist beendet")
 
 **Mike-Field-Bug 26.05.2026 (Screenshot):** Nach „✓ QSO mit EA5KB

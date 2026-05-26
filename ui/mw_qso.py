@@ -154,6 +154,15 @@ class QSOMixin:
             "omni_remaining": omni_remaining,
             "band": self.settings.band,
         }
+        # P139 (26.05.2026): TX_STARTED-Event nur bei aktivem Auto-Hunt
+        # (sonst Log-Spam bei manuellem TX / OMNI).
+        ah = getattr(self, '_auto_hunt', None)
+        if ah is not None and getattr(ah, 'active', False):
+            try:
+                from core.debug_log import debug_log as _hlog
+                _hlog("HUNT", f"TX_STARTED msg={message!r} tx_even={tx_even}")
+            except Exception:
+                pass
 
     @Slot(object)
     def _on_station_clicked(self, msg: FT8Message):

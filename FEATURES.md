@@ -400,6 +400,76 @@ Slash-tolerant via `max(split("/"), key=len)` — fängt `DA1MHH/P`,
 
 ---
 
+## 8a. Debug-Log-Datei (für Bug-Diagnose nach dem Lauf)
+
+**Kurzantwort:** Es gibt ein File-Logging-Framework (`core/debug_log.py`,
+P21 10.05.2026) das **eine Datei pro Tag** schreibt mit zeitstempelten
+Events. Ergänzend zur Live-Konsole (Sektion 4) — Konsole zeigt während
+des Laufs, Datei kann man nach einem Bug retrospektiv durchgehen.
+
+### Aktivieren
+
+**Einstellungen → „Debug-Log schreiben"** (Häkchen). Wird persistiert.
+- **Aus (Default):** No-op, **0 Performance-Kosten** (kein Disk-Write,
+  kein File-Open).
+- **An:** Eintrag in `~/.simpleft8/debug_YYYY-MM-DD.log` für jeden
+  strategischen Code-Punkt.
+
+### Format
+
+```
+HH:MM:SS.mmm [KATEGORIE] message
+14:21:30.456 [HUNT] START band=20m mode=FT8 duration=600s
+14:21:45.123 [HUNT] SELECT_NEXT msgs=8 qso_idle=True presence=True
+14:21:45.124 [HUNT] SKIP call=K1ABC reason=recent_qso_cooldown age=42s
+14:21:45.125 [HUNT] CANDIDATES pre_affinity n=3
+14:21:45.126 [HUNT] PICKED call=DA1MHH score=75.0 snr=-12 tx_even=True
+```
+
+### Vorhandene Kategorien
+
+| Kategorie | Was loggt sie | Eingeführt |
+|---|---|---|
+| `ANT` | Antennen-Switching (ANT1/ANT2-Kommandos) | P21 v0.96.8 |
+| `BAND` | Bandwechsel-Pipeline-Schritte | P21 |
+| `DIV` | Diversity-Phase-Übergänge, Pattern-Wechsel | P21 |
+| `OMNI` | OMNI-CQ Lifecycle | P21 |
+| `QSO-DONE` | Bisection-Debug bei „App hängt nach QSO" | P28 v0.96.x |
+| **`HUNT`** | **Auto-Hunt: START, STOP, SELECT_NEXT, SKIP, PICKED, MARK_PICK, START_QSO, TX_STARTED** | **P139 v0.98.20** |
+
+### Cleanup
+
+Beim App-Start werden `debug_*.log`-Dateien älter als der Vortag
+automatisch gelöscht (`cleanup_old_files(keep_days=1)`). Mike kann
+also bedenkenlos an lassen — kein Disk-Spam.
+
+### Typische Workflows
+
+**Bug-Reproduktion gewünscht:**
+1. Settings → „Debug-Log schreiben" AN
+2. Bug provozieren (z.B. Auto-Hunt klicken, 60s warten)
+3. App schließen
+4. `~/.simpleft8/debug_2026-05-26.log` durchgehen (`grep HUNT` etc.)
+
+**Code-Stelle hinzufügen:**
+```python
+from core.debug_log import debug_log
+debug_log("KATEGORIE", f"event=... param={value}")
+```
+Try/except wrappen falls die Stelle kritisch ist (Crash-Schutz war
+schon P21-Anforderung: „Debug darf NIE App crashen").
+
+### Auto-Hunt-Diagnose-Beispiel (P139)
+
+Bei „Auto-Hunt springt erst nach 60s an" → Log lesen:
+- `SELECT_NEXT msgs=0` mehrfach → Decoder lieferte noch keine CQs
+- `presence=False` → Totmannschalter blockt
+- `SKIP reason=recent_qso_cooldown` → vorheriges QSO innerhalb 5min
+- `CANDIDATES pre_affinity n=2 post_affinity n=0` → Slot-Affinität
+  filtert alle weg (`last_tx_even` aus vorheriger Session noch gesetzt)
+
+---
+
 ## 8. QSO-Ende-Blocker (warum verschwindet das 73 nach ✓?)
 
 **Kurzantwort:** Nach „✓ QSO komplett" wird der Call 60 Sekunden lang
