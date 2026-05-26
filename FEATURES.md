@@ -206,6 +206,129 @@ kein Farbcode — User weiß im QSO-Kontext eh mit wem).
 
 ---
 
+## 4. Debug-Konsole (Ctrl+D)
+
+**Aktivierung:** `Ctrl+D` (Toggle) ODER Einstellungen →
+„Debug-Konsole anzeigen". Einstellung wird persistiert.
+
+**Funktionen:**
+
+| Button | Funktion |
+|--------|----------|
+| Filter | Live grep-artige Filterung der Ausgabe (case-insensitive) |
+| Copy | Sichtbaren Text in Zwischenablage |
+| Clear | Konsole leeren |
+
+**Typische Filter:**
+- `diversity` — Diversity-Score-Entscheidungen
+- `cq-freq` — CQ-Frequenz-Berechnungen
+- `antenna` — Smart Antenna Selection
+- `omni` — OMNI-TX Status
+- `qso` — QSO State Machine
+- `stats` — Statistik-Logger
+
+**Technisch:** Menlo 11pt, max 500 Zeilen Ringpuffer, stdout+stderr
+werden umgeleitet (Original-Konsole bleibt parallel aktiv).
+
+---
+
+## 5. Statistik-Format (`statistics/` Verzeichnis)
+
+**Zweck:** SimpleFT8 loggt pro FT8/FT4-Zyklus die Anzahl empfangener
+Stationen + Durchschnitts-SNR. Daten als Markdown-Dateien pro Stunde
+für Langzeitanalysen + Bandpilot-Empfehlungen.
+
+**Verzeichnisstruktur:**
+```
+statistics/
+├── Normal/<band>/<FTmode>/YYYY-MM-DD_HH.md
+├── Diversity_Normal/<band>/<FTmode>/YYYY-MM-DD_HH.md
+└── Diversity_Dx/<band>/<FTmode>/YYYY-MM-DD_HH.md
+```
+
+**Datei-Format (pro Stunde):**
+```markdown
+# Statistik YYYY-MM-DD HH:00-HH:59 UTC | FT8 | 20m | Normal
+
+| Zeit | Stationen | Ø SNR |
+|------|-----------|-------|
+| HH:00:15 | 12 | -8 |
+```
+
+Im Diversity-Modus zusätzliche Spalte `Ant2 Wins`.
+
+**Pause-Bedingungen (Warmup + Tuning):**
+
+| Zustand | Grund | Dauer |
+|---------|-------|-------|
+| Radio-Suche | HW nicht verbunden | bis Verbindung |
+| Gain/Tuning aktiv | Messdaten verfälscht | bis Ende + 60s |
+| Bandwechsel | Accumulator leer | 60s Settling |
+| Moduswechsel | Normal ↔ Diversity | 60s Settling |
+| App-Start | Erste Zyklen unzuverlässig | 60s Settling |
+
+Stats-Cleanup: FIFO-Sliding-Window N=30 pro `(Modus, Band, Proto,
+Stunde)`-Bucket (P116 v0.98.01) — saisonale Variation berücksichtigt.
+
+Antenna-QSO bleibt bei 90-Tage-Datum-Cleanup (separate Logik).
+Bandpilot-Cache wird bei Bucket-Pruning invalidiert.
+
+Nur FT8 + FT4. FT2 nicht unterstützt (zu wenige Stationen).
+
+---
+
+## 6. DT-Timing (RX + TX Konvergenz)
+
+**Stand 23.04.2026 — validiert.**
+
+### RX-Korrektur
+
+Decoder wacht 1.5s vor Slot-Ende auf. Audio-Buffer enthält Audio ab
+1.5s VOR aktuellem Slot-Start. **WSJT-X Protokoll-Konvention:**
+TX startet bei `t=0.5s` im Slot (nicht bei `t=0`).
+
+**`DT_BUFFER_OFFSET` (`core/decoder.py`):**
+
+| Modus | Wert | Formel |
+|-------|------|--------|
+| FT8 | 2.0 | 1.5 (Buffer) + 0.5 (WSJT-X Protokoll) |
+| FT4 | 1.0 | 0.5 + 0.5 |
+| FT2 | 0.8 | 0.3 + 0.5 |
+
+**Konvergenz (nur FlexRadio):** ~0.24s VITA-49 RX-Hardware-Latenz.
+Stationen zeigen DT ≈ 0.0-0.2 nach wenigen Zyklen.
+
+### TX-Offset
+
+**`TARGET_TX_OFFSET = -0.8s` (`core/encoder.py`):**
+```
+0.5 (WSJT-X Protokoll) - 1.3 (FlexRadio TX-VITA-49-Buffer) = -0.8
+```
+
+FlexRadio puffert TX-Samples konstant 1.3s vor RF-Ausgabe. Audio
+1.3s früher senden kompensiert das.
+
+**Validiert:** 8 FT8-Zyklen 0.0s DT am Icom-Empfänger gemessen
+(20m + 40m getestet).
+
+### Persistierung
+
+`~/.simpleft8/dt_corrections.json` mit Key-Format `"FT8_20m"`
+(Modus_Band). Migration von altem Format `"FT8"` → `"FT8_20m"`
+in `_load_for_current_key()` automatisch.
+
+`set_band()` / `set_mode(mode, band)` lädt gespeicherten Wert
+sofort beim Wechsel.
+
+### Multi-Radio (P121 v0.98.04)
+
+`TARGET_TX_OFFSET` ist FlexRadio-spezifisch. IC-7300/IC-7100-Forks
+brauchen eigene `tx_buffer_s`-Klasse-Variable. Duck-Typing über
+Radio-Klassen, **keine Vererbung** (FlexRadio erbt QObject nicht
+RadioInterface).
+
+---
+
 ## Pflege dieser Datei
 
 **Neue Sektionen** anhängen wenn:
