@@ -2,16 +2,18 @@
 # SimpleFT8 Starter — Doppelklick im Finder oeffnet Terminal + startet App.
 # Endung .command sorgt dafuer dass macOS Finder das Script in Terminal startet.
 #
-# Single-Instance-Schutz (4 Schichten, P133 26.05.2026):
+# Single-Instance-Schutz (3 Schichten, P133+Hotfix 26.05.2026):
 # 1. Lockfile-PID-Check (atomar, mit PID-Recycling-Schutz) — Mike-Spec:
 #    automatisch killen statt abort
 # 2. osascript Window-Title-Check — Backup fuer Instanzen ohne Lock
-# 3. lsof-CWD-Final-Sweep — Zombies ohne Lock UND ohne Fenster
-# 4. Python fcntl.flock — atomare Lock-Garantie als letzte Schicht
+# 3. Python fcntl.flock — atomare Lock-Garantie als letzte Schicht
 #
-# R1-Race-Catch (P133 Final-R1 26.05.): Lockfile-Check ZUERST verhindert
-# dass ein paralleler Doppelklick eine gerade gestartete legitime
-# Instanz killt (lsof-Scan haette das gemacht).
+# Hotfix 26.05.: Schicht „lsof-CWD-Final-Sweep" entfernt — sie killte
+# fremde Python-Prozesse (pytest, IDE-Tools) mit cwd im App-Dir und ueber
+# die Eltern-Kette sogar den Starter selbst (Exit 144). Selber
+# Fehlerklassen-Bug wie pgrep vor P132. lsof-Identifikation gehoert in
+# Python (siehe acquire_single_instance_lock in main.py) wo Logik
+# praeziser ist (nur PIDs aus Lockfile).
 
 APP_DIR="/Users/mikehammerer/Documents/KI N8N Projekte/FT8/SimpleFT8"
 LOCK_FILE="$HOME/.simpleft8/simpleft8.lock"
@@ -80,40 +82,8 @@ if [ -n "$RUNNING_PID" ]; then
     kill_with_grace "$RUNNING_PID"
 fi
 
-# ── SCHICHT 3: lsof-CWD-Final-Sweep (Zombies ohne Lock + ohne Fenster) ──
-# Hinweis: laufende pytest-Worker mit cwd im App-Dir wuerden hier auch
-# gekillt. In der Praxis unkritisch — Tests laufen nicht parallel zum
-# Starter (eigener Workflow im Terminal).
-# Pfad-Leerzeichen-immun (awk -Fpn newline-getrennt), setproctitle-immun
-# (cwd-basiert), Editor/IDE-immun (deren cwd liegt nicht im App-Dir).
-ZOMBIES=$(lsof -c Python -c python -d cwd -Fpn 2>/dev/null | awk \
-    -v dir="$APP_DIR" '
-    /^p/ { pid=substr($0,2); next }
-    /^n/ {
-        path=substr($0,2);
-        if (path == dir || index(path, dir "/") == 1) {
-            print pid;
-        }
-        pid="";
-    }')
-
-if [ -n "$ZOMBIES" ]; then
-    ZOMBIE_LIST=$(echo "$ZOMBIES" | tr '\n' ' ')
-    echo "[Starter] lsof-Sweep: Zombies gefunden → killen: $ZOMBIE_LIST"
-    for pid in $ZOMBIES; do
-        kill -TERM "$pid" 2>/dev/null
-    done
-    sleep 1.5
-    for pid in $ZOMBIES; do
-        if kill -0 "$pid" 2>/dev/null; then
-            echo "[Starter] PID $pid zaeh — SIGKILL"
-            kill -KILL "$pid" 2>/dev/null
-        fi
-    done
-    rm -f "$LOCK_FILE"
-fi
-
 # Sauber — App starten (python3 blockiert Terminal solange App laeuft)
+# Letzte Schicht ist Python fcntl.flock in main.py (P132).
 echo "[Starter] Sauber — starte SimpleFT8 v$(grep '^APP_VERSION' main.py | head -1 | cut -d'"' -f2)"
 ./venv/bin/python3 main.py
 EXIT_CODE=$?
