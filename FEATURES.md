@@ -329,6 +329,157 @@ RadioInterface).
 
 ---
 
+## 7. Auto-Hunt Call-Validation (warum kommt „JA" nicht mehr als Call durch?)
+
+**Kurzantwort:** Zwei Schichten — Parser-Fix erkennt CQ-mit-Richtung
+auch ohne Grid, Auto-Hunt validiert Calls als Defense-in-Depth.
+
+### Das Problem (P136 26.05.2026)
+
+Mike's Field-Bug: Auto-Hunt rief „JA" aus `CQ JA HG60IPA` an → 5×
+„Sende JA DA1MHH -17" → Timeout. Etikette-Verletzung.
+
+Root Cause war ein **Parser-Bug** in `core/message.py:114`:
+
+```python
+# Alt: nur 4 Parts wurden als CQ-mit-Richtung erkannt
+if f1 == "CQ" and len(parts) == 4 and not _looks_like_call(f2):
+```
+
+„CQ JA HG60IPA" hat **3 Parts** (kein Grid) → fiel durch → field2="JA"
+→ `caller`="JA" → Auto-Hunt griff zu.
+
+### Der Fix
+
+**Schicht 1 — Parser** (`core/message.py:114`):
+```python
+if f1 == "CQ" and len(parts) >= 3 and not looks_like_callsign(f2):
+    f1 = f"CQ {f2}"
+    f2 = parts[2]
+    f3 = parts[3] if len(parts) >= 4 else ""
+```
+
+Damit werden alle 3 typischen CQ-mit-Richtung-Formate korrekt
+geparst:
+- `CQ JA HG60IPA` → `caller`=HG60IPA, `field1`="CQ JA"
+- `CQ DX DA1MHH` → `caller`=DA1MHH, `field1`="CQ DX"
+- `CQ DX DA1MHH JN58` → `caller`=DA1MHH, `field3`="JN58"
+
+**Schicht 2 — Auto-Hunt** (`core/auto_hunt.py` in `select_next`):
+
+```python
+base = max(call.split("/"), key=len) if "/" in call else call
+if not looks_like_callsign(base):
+    continue
+```
+
+Slash-tolerant via `max(split("/"), key=len)` — fängt `DA1MHH/P`,
+`DA1MHH/QRP`, `DA1MHH/MM`.
+
+### Die 3-Regel-Heuristik `looks_like_callsign`
+
+`core/message.py:126` — Public-Funktion (P136 umbenannt aus
+`_looks_like_call`).
+
+| Regel | Beispiele die durchfallen | Beispiele die durchkommen |
+|---|---|---|
+| Länge 3-10 Zeichen | „JA", „EU", „NA", „DX" (zu kurz) | DA1MHH (6), HG60IPA (7) |
+| ≥1 Ziffer | „CQ", „TEST", „QSO", „STATION" | 1A0KM, 4U1UN, R1A0KM |
+| ≥1 Buchstabe | „123", „4567" | alle echten Calls |
+
+**Sonderformate die korrekt durchkommen:**
+- 1A0KM — Order of Malta
+- 4U1UN — UN Geneva
+- R1A0KM — Antarktis (hypothetisch)
+- DA1MHH/P — Portabel (slash-tolerant)
+
+**Was nicht abgefangen wird:**
+- Synthetische Pseudo-Calls wie „RR73" (hat Ziffer + Buchstabe, formal
+  valide). Praktisch irrelevant — `_recently_completed_qsos`-Cooldown
+  oder `is_directed_to`-Filter fängt das ab.
+
+---
+
+## 8. QSO-Ende-Blocker (warum verschwindet das 73 nach ✓?)
+
+**Kurzantwort:** Nach „✓ QSO komplett" wird der Call 60 Sekunden lang
+für ALLE Empf.-Einträge im QSO-Log blockiert — inklusive 73/RR73.
+RX-Tabelle, Wasserfall und State-Machine bleiben unberührt.
+
+### Mike-Spec-Historie (3 Iterationen an einem Tag)
+
+| Datum | Bug/Spec | Code-Fix |
+|---|---|---|
+| 25.05.2026 P128 | Späte Reports/Grids tauchten nach ✓ noch im Log auf → Spam | 60s-Cooldown → alles blocken |
+| 25.05.2026 P129 | 3 QSOs hintereinander ohne 73-Eintrag → P128 zu aggressiv | Whitelist: 73/RR73 trotz Cooldown durchlassen |
+| 26.05.2026 P138 | 73 erschien NACH ✓ ins neue QSO hereinrutschend | Whitelist wieder raus — „beendet ist beendet" |
+
+### Mechanik — wann wird geblockt?
+
+Der Cooldown-Stempel wird **ausschließlich** in `_on_qso_complete`
+(mw_qso.py:557) gesetzt — das ist exakt der ✓-Trigger-Zeitpunkt:
+
+```python
+self._recently_completed_qsos[qso_data.their_call] = time.monotonic()
+```
+
+Daraus ergibt sich automatisch das gewünschte 2-Zeitfenster-Verhalten:
+
+| Zeitfenster | Cooldown-Eintrag? | 73/RR73 |
+|---|---|---|
+| **Vor ✓** (QSO läuft noch) | leer | kommt durch ✓ |
+| **Nach ✓** (60s Fenster) | aktiv | wird geblockt ✗ |
+| Nach 60s | gelöscht (lazy aging) | kommt wieder durch |
+
+### Was wird geblockt, was nicht?
+
+Filter sitzt **nur** in `on_message_decoded` direkt vor dem
+`qso_panel.add_rx`-Aufruf (mw_cycle.py:810):
+
+```python
+if not self._p128_recently_completed_block(msg.caller):
+    self.qso_panel.add_rx(...)  # nur geblockt, sonst alles wie immer
+```
+
+**Geblockt** (nach ✓):
+- QSO-Log-Eintrag „← Empf. ..." (alle Message-Typen)
+
+**Nicht geblockt:**
+- `rx_panel.table` (RX-Liste links) — separater Pfad via
+  `accumulate_stations` in `_handle_diversity_operate` /
+  `_handle_normal_mode`
+- Wasserfall / Frequency-Histogram
+- State-Machine `on_message_received` — verarbeitet die Message ganz
+  normal (z.B. CQ-Tracking, Locator-DB)
+- PSK-Reporter / Karten-Snapshot — separater Datenpfad
+
+### Konstanten
+
+`core/timing.py` und `ui/mw_cycle.py`:
+- `_RECENTLY_COMPLETED_BLOCK_S = 60.0` — Cooldown-Dauer
+- Lazy-Aging: Eintrag > 60s wird beim nächsten Filter-Aufruf gelöscht
+  (kein extra Timer)
+
+### Field-Beispiel (Mike's Bilder 26.05.)
+
+**Bild 2 (sauber):** Mike sendet RR73 → Gegenstation antwortet im
+**selben Slot** mit 73 → `add_rx` rendert 73 (Cooldown noch leer) →
+State-Machine triggert ✓ → Cooldown-Eintrag gesetzt → folgende
+Empfänge geblockt.
+
+**Bild 1 (Bug heute):** Mike sendet RR73 → State-Machine triggert ✓
+sofort → Cooldown gesetzt → Gegenstation-RR73 kommt 1 Slot später →
+**wird geblockt** (gewünschtes Verhalten).
+
+### Reset-Pfade (Cooldown leeren)
+
+- **Bandwechsel** (`_on_band_changed`): `_recently_completed_qsos.clear()`
+- **Mode-Wechsel**: ebenso
+- **Lazy-Aging** nach 60s pro Eintrag
+- KEIN Reset bei HALT (Mike-Spec: HALT ist Notbremse, nicht QSO-Ende)
+
+---
+
 ## Pflege dieser Datei
 
 **Neue Sektionen** anhängen wenn:
