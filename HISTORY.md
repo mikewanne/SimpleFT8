@@ -3,6 +3,53 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-26 — Diagramm-Legende Tage-Coverage ehrlicher (Mike 24.05.)
+
+**Mike-Beobachtung 24.05.2026:** 15m FT8 Diagramm zeigt in der Legende
+„5 Tage" obwohl Mike an 9 unique Tagen gemessen hat. Ursache:
+`generate_plots.py:_n_days_label` nahm `max(n_days)` über alle Stunden —
+also die Stunde mit der BESTEN Coverage. Bei Mike's kurz-aber-häufig-
+Messstil (P116-Strategie auf verschiedenen Stunden) ist die Diskrepanz
+groß und irreführend.
+
+**Fix (KISS, autonomer Workflow während Mike weg):**
+
+- Neuer Helper `_count_unique_days_total(hour_stats)` — Union der
+  daily-Keys über alle Stunden (Z. 894-908)
+- Neuer Helper `_format_basis_entry(T, label, n_d_max, n_c_fmt, n_d_total)`
+  mit conditional Format (Z. 911-928):
+  - `n_d_total == n_d_max` → alte Kompakt-Form
+    („5 Tage · 7522 Messpunkte")
+  - `n_d_total > n_d_max` → erweiterte Form
+    („9 Tage gesamt (max 5/Std) · 7522 Messpunkte")
+- Neuer Template `basis_entry_split` in TEXTS["de"] + TEXTS["en"]
+- Aufrufer in `create_stations_diagram` (Z. 1019) und
+  `create_diversity_diagram` (Z. 1140) umgestellt
+- Aufrufer 2 nutzt neuen `hour_vals_all`-dict um `hv` pro mode
+  aufzuheben (nötig weil `_aggregate` daily-Keys verwirft)
+- Toter Code `_n_days_label` entfernt (hatte KeyError-Bug
+  `n_c=` statt `n_c_fmt=`, wurde nirgends aufgerufen)
+
+**Workflow:**
+- V1: Helper + Template + Aufrufer + Tests + Dead-Code-Removal
+- R1 V4-pro (Pre-Code): Option B (conditional) bestätigt, Standalone-
+  Helper richtig, Edge-Cases durchdacht, „V1 ist sinnvoll ohne
+  konzeptionelle Schwächen"
+- Code-Implementation
+- Live-Smoke: alle PNGs + PDFs (5 Bänder × 2 Plot-Typen × 2 Sprachen)
+  erfolgreich generiert
+- Final-R1 V4-pro: **PUSH FREIGEGEBEN** „kein Nachbesserungsbedarf"
+
+**V4-pro 57-Cycle: 0 Halluzinationen.**
+
+Tests 1921 → 1934 (+13 Legend Helper + Template + Aufrufer-Source-
+Inspektion + Dead-Code-Check).
+
+Mike-Verifikation: 15m FT8 zeigt jetzt korrekt „9 Tage gesamt (max
+5/Std) · ... Messpunkte" in der Legende.
+
+---
+
 ## 2026-05-26 v0.98.12 — P126 Send-nach-Timeout TX-Pipeline-Race-Fix (autonom)
 
 **Mike-Field-Bug 25.05.2026 (3× belegt: EC3A 07:30, F1IBU 08:59,

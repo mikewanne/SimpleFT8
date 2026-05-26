@@ -1,8 +1,21 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-26 — v0.98.12 P126 Send-nach-Timeout TX-Race-Fix (autonom)
+## Stand 2026-05-26 — v0.98.12 P126 + Legend Tage-Coverage (autonom)
 
-**Aktueller Code-Stand:** v0.98.12, Tests **1921 grün** (+10 P126).
+**Aktueller Code-Stand:** v0.98.12, Tests **1934 grün** (+13 Legend).
+
+### 🟢 26.05.2026 — Diagramm-Legende Tage-Coverage ehrlicher (Mike-Wunsch 24.05.)
+
+Mike: 15m FT8 zeigte „5 Tage" obwohl 9 unique Messtage. Fix:
+- `_count_unique_days_total()` Union der daily-Keys
+- `_format_basis_entry()` conditional Format:
+  - gleiche Coverage → alte Kompakt-Form
+  - ungleich → „9 Tage gesamt (max 5/Std) · N Messpunkte"
+- DE + EN Templates erweitert
+- Toter Code `_n_days_label` entfernt (KeyError-Bug)
+
+R1 + Final-R1 V4-pro PUSH FREIGEGEBEN. Live-Smoke: alle PNGs + PDFs
+erfolgreich generiert. Tests 1921→1934 (+13).
 
 ### 🟢 v0.98.12 — P126 Send-nach-Timeout TX-Pipeline-Race (autonomer Workflow)
 

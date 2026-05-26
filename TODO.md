@@ -329,7 +329,18 @@ für Fall A (TUNE ohne Gain-Mess). Voller Workflow V1→V2→R1→V3→C1-C6
 Voller Workflow V1→V2→R1→V3→C1-C3→Final-R1 durch. Details:
 HISTORY.md v0.97.93.
 
-## 🆕 OFFEN — Diagramm-Legende Tage-Coverage ehrlicher (Mike 24.05.2026)
+## ✅ ERLEDIGT 26.05.2026 — Diagramm-Legende Tage-Coverage ehrlicher
+
+**Status:** ERLEDIGT (autonomer Workflow). KISS-Lösung mit
+`_count_unique_days_total()` Helper + `_format_basis_entry()`
+conditional Format. „9 Tage gesamt (max 5/Std)"-Format wenn unique-
+Tage > max-Tage-pro-Stunde. Sonst alte Kompakt-Form. Templates DE+EN
+erweitert. Toter Code `_n_days_label` entfernt. V4-pro 57-Cycle 0
+Halluzinationen. Tests 1921→1934 (+13). Live-Smoke alle Plots OK.
+
+---
+
+## ALT-Spec (vor Erledigung) — Diagramm-Legende Tage-Coverage ehrlicher (Mike 24.05.2026)
 
 **Problem (Mike-Beobachtung 24.05.):** 15m FT8 Diagramm zeigt in der
 Legende „5 Tage" für Normal/DivStd, obwohl Mike an 9 unique Tagen

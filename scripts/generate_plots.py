@@ -83,6 +83,10 @@ TEXTS = {
 
         # Basis-Label (Legende) / Basis label (legend)
         "basis_entry":      "{label}\n{n_d} Tag{pl} · {n_c_fmt} Messpunkte",
+        # Tage-Coverage-Doku (Mike 24.05.2026): wenn unique-Tage gesamt
+        # > Tage in der besten Stunde, zeigt die Legende beide Werte:
+        # "9 Tage gesamt (max 5/Std)" statt nur konservativ "5 Tage".
+        "basis_entry_split": "{label}\n{n_d_total} Tage gesamt (max {n_d_max}/Std) · {n_c_fmt} Messpunkte",
         "day_plural_1":     "",       # Singular-Suffix: "1 Tag" (kein Suffix)
         "day_plural_n":     "e",      # Plural-Suffix:   "2 Tage"
         "thousands_sep":    ".",      # Tausender-Trennzeichen DE: 6.585
@@ -305,6 +309,10 @@ TEXTS = {
 
         # Basis-Label (Legende) / Basis label (legend)
         "basis_entry":      "{label}\n{n_d} day{pl} · {n_c_fmt} data points",
+        # Day-coverage doc (Mike 24.05.2026): if unique-days-total >
+        # days in best-hour bucket, legend shows both: "9 days total
+        # (max 5/hour)" instead of conservative "5 days".
+        "basis_entry_split": "{label}\n{n_d_total} days total (max {n_d_max}/hour) · {n_c_fmt} data points",
         "day_plural_1":     "",    # singular suffix: "1 day" (no suffix)
         "day_plural_n":     "s",   # plural suffix:   "2 days"
         "thousands_sep":    ",",   # thousands separator EN: 6,585
@@ -891,14 +899,42 @@ def _hours_x(agg: dict[int, dict]):
     return xs, means, mins, maxs
 
 
-def _n_days_label(agg: dict[int, dict], T: dict, label: str = "") -> str:
-    """Returns a formatted basis entry using T['basis_entry'] template."""
-    if not agg:
-        return ""
-    n_days = max(v["n_days"] for v in agg.values())
-    n_cyc  = sum(v["n_cycles"] for v in agg.values())
-    pl = T["day_plural_1"] if n_days == 1 else T["day_plural_n"]
-    return T["basis_entry"].format(label=label, n_d=n_days, pl=pl, n_c=n_cyc)
+def _count_unique_days_total(hour_stats: dict[int, dict]) -> int:
+    """Anzahl unique Tage gesamt ueber alle Stunden (Mike 24.05.2026).
+
+    hour_stats ist der Output von load_hourly_stats() — pro Stunde mit
+    daily-Keys. Union der daily-Keys ergibt die Gesamt-Tage-Coverage,
+    anders als `max(n_days)` (das nur die beste Stunde anzeigt).
+
+    Mike-Beispiel: 15m FT8 hat 9 unique Tage gesamt aber max 5 pro
+    Stunde — alte Legende zeigte 5, war konservativ aber irreführend
+    bei seinem kurz-aber-häufig-Messstil (P116-Strategie).
+    """
+    days = set()
+    for data in hour_stats.values():
+        days.update(data.get("daily", {}).keys())
+    return len(days)
+
+
+def _format_basis_entry(T: dict, label: str, n_d_max: int, n_c_fmt: str,
+                        n_d_total: int) -> str:
+    """Legenden-Eintrag mit conditional Format (Mike 24.05.2026).
+
+    Wenn unique-Tage-gesamt == max-Tage-pro-Stunde: alte Kompakt-Format
+    (`5 Tage · 7522 Messpunkte`). Wenn gesamt > max: erweiterte Form
+    (`9 Tage gesamt (max 5/Std) · 7522 Messpunkte`).
+
+    Bei gleicher Coverage in allen Stunden ist der Klammerwert
+    redundant — KISS-conditional spart Legenden-Platz und vermeidet
+    Verwirrung.
+    """
+    if n_d_total == n_d_max:
+        pl = T["day_plural_1"] if n_d_max == 1 else T["day_plural_n"]
+        return T["basis_entry"].format(
+            label=label, n_d=n_d_max, pl=pl, n_c_fmt=n_c_fmt)
+    return T["basis_entry_split"].format(
+        label=label, n_d_total=n_d_total, n_d_max=n_d_max,
+        n_c_fmt=n_c_fmt)
 
 
 # ── Gradient-Balken ───────────────────────────────────────────────────────────
@@ -1010,11 +1046,12 @@ def create_stations_diagram(band: str, protocol: str, output_dir: Path,
         all_xs.extend(xs)
         n_d = max(v["n_days"] for v in agg.values())
         n_c = sum(v["n_cycles"] for v in agg.values())
-        pl = T["day_plural_1"] if n_d == 1 else T["day_plural_n"]
         sep = T["thousands_sep"]
         n_c_fmt = f"{n_c:,}".replace(",", sep)
         base_label = mode_labels.get(rx_mode, rx_mode.replace("_", " "))
-        label = T["basis_entry"].format(label=base_label, n_d=n_d, pl=pl, n_c_fmt=n_c_fmt)
+        # Mike 24.05.2026: ehrliche Tage-Coverage (gesamt vs max/Std)
+        n_d_total = _count_unique_days_total(hour_vals)
+        label = _format_basis_entry(T, base_label, n_d, n_c_fmt, n_d_total)
 
         color = COLORS[rx_mode]
         ax.plot(xs, means, color=color, label=label, linewidth=2.5, zorder=3)
@@ -1077,11 +1114,15 @@ def create_diversity_diagram(band: str, protocol: str, output_dir: Path,
     bar_w = 0.22
 
     agg_all: dict[str, dict] = {}
+    # Mike 24.05.2026: hour_vals pro mode aufheben fuer ehrliche
+    # Tage-Coverage-Anzeige in der Legende (unique-days-total).
+    hour_vals_all: dict[str, dict] = {}
     rescue_all: dict[str, dict] = {}
     for mode in _MODE_ORDER:
         hv = load_hourly_stats(STATS_DIR, mode, band, protocol)
         if hv:
             agg_all[mode] = _aggregate(hv)
+            hour_vals_all[mode] = hv
         if mode != "Normal":
             r = load_rescue_by_hour(STATS_DIR, mode, band, protocol)
             if r:
@@ -1127,11 +1168,12 @@ def create_diversity_diagram(band: str, protocol: str, output_dir: Path,
         heights = [agg[h]["mean"] if h in agg else 0.0 for h in all_hours]
         n_d = max(v["n_days"] for v in agg.values())
         n_c = sum(v["n_cycles"] for v in agg.values())
-        pl = T["day_plural_1"] if n_d == 1 else T["day_plural_n"]
         sep = T["thousands_sep"]
         n_c_fmt = f"{n_c:,}".replace(",", sep)
         base_label = mode_labels.get(mode, mode.replace("_", " "))
-        label = T["basis_entry"].format(label=base_label, n_d=n_d, pl=pl, n_c_fmt=n_c_fmt)
+        # Mike 24.05.2026: ehrliche Tage-Coverage (gesamt vs max/Std)
+        n_d_total = _count_unique_days_total(hour_vals_all[mode])
+        label = _format_basis_entry(T, base_label, n_d, n_c_fmt, n_d_total)
         patch = _gradient_bars(ax, x_pos, heights, bar_w,
                                COLORS[mode], label=label, zorder=2)
         if patch:
