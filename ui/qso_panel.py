@@ -323,7 +323,12 @@ class QSOPanel(QWidget):
         kind = e["kind"]
         if kind == "tx":
             tag_str = f"{e['tag']} " if self._show_eo_tag else ""
-            line = f"{e['utc']} {tag_str}→ Sende {e['message']}"
+            # P137 (26.05.2026): Vergangenheit „Gesendet" statt Präsens
+            # „Sende". P93-Defer-Mechanik laesst den Log-Eintrag in
+            # _on_tx_finished erscheinen — TX ist zum Anzeige-Zeitpunkt
+            # schon vorbei (Watt-Anzeige bereits 0 W). Mike-Spec:
+            # „Meldung ist nur Reden ueber die Aktion, nicht die Aktion".
+            line = f"{e['utc']} {tag_str}→ Gesendet {e['message']}"
             omni_rem = e.get("omni_remaining")
             if omni_rem is not None:
                 line = f"{line} ↻{omni_rem}"

@@ -1,8 +1,21 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-26 — v0.98.17 P136 Call-Validation („JA"-Bug behoben)
+## Stand 2026-05-26 — v0.98.18 P137 Tempora-Fix „Gesendet"
 
-**Aktueller Code-Stand:** v0.98.17, Tests **2033 grün** (+34 P136).
+**Aktueller Code-Stand:** v0.98.18, Tests **2040 grün** (+7 P137).
+
+**Nächste Schritte:**
+- P138 P129-Whitelist entfernen (Mike: „beendet ist beendet")
+- FEATURES.md: Auto-Hunt-Filter + QSO-Ende-Blocker Sektionen
+
+### 🟢 26.05.2026 — P137 „Sende" → „Gesendet" (v0.98.18)
+
+Mike-Field-Bug: Log zeigte „Sende ..." NACH TX (Watt = 0 W). P93-
+Defer-Mechanik fügt Eintrag in _on_tx_finished ein → Past-Tense
+„Gesendet" korrekt. 1-Zeilen-Fix in qso_panel.py:326. Variante B
+(nur Log-Tempora, keine Statusbar).
+
+### 🟢 26.05.2026 — P136 Call-Validation („JA"-Bug behoben, v0.98.17)
 
 **Naechste 1-2 Schritte:**
 - Mike: Field-Test nach App-Restart auf v0.98.17 für 4 frische Fixes:

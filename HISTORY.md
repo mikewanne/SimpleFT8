@@ -3,6 +3,42 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-26 v0.98.18 — P137 „Sende" → „Gesendet" Tempora-Fix (Variante B)
+
+**Mike-Field-Bug 26.05.2026:** Log zeigte „→ Sende EA5KB DA1MHH RR73"
+NACH dem TX (Watt-Anzeige bereits 0 W). Verb-Form falsch — P93-Defer-
+Mechanik fügt den Eintrag erst in `_on_tx_finished` ein, TX ist da
+schon vorbei.
+
+**Mike-Begründung:** „Sende = Gegenwart (jetzt mache ich) = falsch.
+Gesendet = Vergangenheit (schon passiert) = richtig. Die Meldung
+ist nur Reden über die Aktion, nicht die Aktion selbst."
+
+**Mike-Spec heute (Variante B):** nur Tempora-Fix im Log. KEINE
+Statusbar-Pre-TX-Anzeige (Mike: „ich sagte nicht mach das in die
+statusbar"). Brainstorm-Optionen A (2 Log-Zeilen) und C (Statusbar +
+Log) verworfen.
+
+**Fix (voller Workflow V1→V2→R1→V3→Code→Final-R1):**
+Eine Code-Änderung in `ui/qso_panel.py:326`:
+```
+-line = f"{e['utc']} {tag_str}→ Sende {e['message']}"
++line = f"{e['utc']} {tag_str}→ Gesendet {e['message']}"
+```
+
+**R1-V4-pro PUSH mit GELB-Auflage:** Regression-Test ergänzt der
+prüft dass `→ Sende {` nicht mehr im _render_entry-Pfad steht.
+
+**R1-Finding F1 (GRÜN):** `mw_cycle.py:984` „→ Sende 73 (bereits
+gearbeitet ... min)" bleibt Präsens — ist Pre-TX-Info via add_info,
+TX läuft dort noch nicht.
+
+**APP_VERSION:** 0.98.17 → 0.98.18
+
+**Tests 2033 → 2040** (+7):
+- `tests/test_p137_tx_log_gesendet.py` NEU (7 Tests)
+- `tests/test_slot_display.py`: 1 Assertion angepasst auf „Gesendet"
+
 ## 2026-05-26 v0.98.17 — P136 Call-Validation Auto-Hunt + Parser-Fix CQ-mit-Richtung
 
 **Mike-Field-Bug 26.05.2026 (Screenshots):** Auto-Hunt picked „JA" aus

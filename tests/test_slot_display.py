@@ -81,7 +81,8 @@ def test_add_tx_uses_provided_slot():
     line = _last_line(panel)
     assert "[E]" in line
     assert "03:35:00" in line
-    assert "Sende" in line and "CQ DA1MHH J031" in line
+    # P137 (26.05.2026): Tempora-Fix "Sende" → "Gesendet"
+    assert "Gesendet" in line and "CQ DA1MHH J031" in line
 
 
 # ── _assign_slot_parity ──────────────────────────────────────────────────────
