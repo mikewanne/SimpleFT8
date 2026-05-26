@@ -13,7 +13,7 @@ import atexit
 import signal
 from pathlib import Path
 
-APP_VERSION = "0.98.12"
+APP_VERSION = "0.98.13"
 
 # ── P43: Activity Monitor zeigt Prozess-Namen statt nur "Python" ──
 # Bei der P30-Memory-Leak-Diagnose 12.05. konnte Mike SimpleFT8 nicht
@@ -113,314 +113,196 @@ def _signal_release_and_exit(signum, frame):
     sys.exit(0)
 
 
-_simpleft8_window_pids_cache: set[int] | None = None
+def _get_app_dir() -> str:
+    """App-Verzeichnis (resolved, Bundle-aware).
 
-
-def _get_simpleft8_window_pids() -> set[int]:
-    """Cached osascript-Query: PIDs aller Prozesse mit "SimpleFT8" im Window-Title.
-
-    Mike-Vorschlag 10.05.2026 (Primaer-Strategie nach 5x verkackten
-    Doppel-Instanz-Bugs): macOS System Events fragt direkt nach Fenstern.
-    Robust gegen Pfad-Leerzeichen, Wrapper-Scripts, lsof-Permission-Fails.
-
-    Cache wird in _kill_all_simpleft8_instances einmal pro Lauf gesetzt
-    und in _is_simpleft8_pid genutzt — verhindert 100x osascript-Aufruf
-    beim Filter ueber alle pgrep-Kandidaten.
+    Bei PyInstaller/py2app-Bundles wird `sys.executable` statt
+    `__file__` genutzt. Aktuell laeuft SimpleFT8 nicht als Bundle,
+    aber Vorbereitung fuer spaeteren Fork.
     """
-    global _simpleft8_window_pids_cache
-    if _simpleft8_window_pids_cache is not None:
-        return _simpleft8_window_pids_cache
-    pids: set[int] = set()
+    if getattr(sys, 'frozen', False):
+        return str(Path(sys.executable).parent.resolve())
+    return str(Path(__file__).parent.resolve())
+
+
+def _kill_pid_with_grace(pid: int, grace_s: float = 1.5):
+    """SIGTERM, warten, dann SIGKILL falls noch da. Idempotent."""
     try:
-        result = subprocess.run(
-            ["osascript", "-e",
-             '''tell application "System Events"
-                set foundPIDs to {}
-                repeat with proc in (every process whose visible is true)
-                    try
-                        repeat with w in (every window of proc)
-                            set wTitle to name of w as string
-                            if wTitle contains "SimpleFT8" then
-                                set end of foundPIDs to (unix id of proc as string)
-                                exit repeat
-                            end if
-                        end repeat
-                    end try
-                end repeat
-                set AppleScript's text item delimiters to ","
-                return foundPIDs as string
-            end tell'''],
-            capture_output=True, text=True, timeout=5,
-        )
-        for token in result.stdout.strip().split(","):
-            token = token.strip()
-            if token.isdigit():
-                pids.add(int(token))
-    except Exception:
-        pass
-    _simpleft8_window_pids_cache = pids
-    return pids
-
-
-def _is_simpleft8_pid(pid: int) -> bool:
-    """Prueft ob PID eine SimpleFT8-Instanz ist — 4-Wege-Check.
-
-    Wichtig: pgrep auf 'python.*main\\.py' findet ALLE main.py-Apps im System
-    (z.B. Websdr-Cockpit). Nur Prozesse die wirklich SimpleFT8 sind duerfen
-    gekillt werden!
-
-    Bug 10.05.2026: 13079 lief 4 Tage parallel zu neuer v0.96.2 — Wurzel:
-    - ps -o command zeigt nur 'python main.py' (kein "SimpleFT8" im argv)
-    - lsof CWD truncated bei Leerzeichen ("KI N8N Projekte" → "n/.../KI")
-    → beide Wege failen, alte Instanz unter dem Radar.
-
-    Fix: 4 Wege parallel — EIN Treffer reicht:
-    1. PRIMAER: osascript Window-Title-Check (Mike-Vorschlag, robustest)
-    2. ps -o command — argv enthaelt 'SimpleFT8' (greift bei abs. Pfaden)
-    3. lsof CWD — kann bei Leerzeichen brechen, bleibt als Defense-in-Depth
-    4. Lockfile-PID-Match
-    """
-    # Weg 1: Window-Title-Check (cached osascript-Query)
-    if pid in _get_simpleft8_window_pids():
-        return True
-
-    # Weg 2: ps -o command (voller argv inkl. python-pfad + script-pfad)
+        os.kill(pid, signal.SIGTERM)
+        print(f"[SingleInstance] SIGTERM PID {pid}")
+    except ProcessLookupError:
+        return
+    time.sleep(grace_s)
     try:
-        result = subprocess.run(
-            ["ps", "-p", str(pid), "-o", "command="],
-            capture_output=True, text=True, timeout=2,
-        )
-        if "SimpleFT8" in result.stdout:
-            return True
-    except Exception:
+        os.kill(pid, 0)  # lebt noch?
+        os.kill(pid, signal.SIGKILL)
+        print(f"[SingleInstance] SIGKILL PID {pid} (zaeh)")
+    except ProcessLookupError:
         pass
 
-    # Weg 3: lsof CWD-Check (legacy, kann bei Leerzeichen brechen)
+
+def _pid_has_cwd_in_app_dir(pid: int, app_dir: str) -> bool:
+    """Prueft via lsof ob PID cwd im (oder unter dem) App-Verzeichnis hat.
+
+    P132 (26.05.2026): ersetzt 4-Wege-Check der osascript+ps+lsof+lock
+    kombinierte. CWD-Vergleich ist deterministisch, setproctitle-immun,
+    Pfad-Leerzeichen-immun (lsof -Fn ist newline-getrennt).
+    """
     try:
         result = subprocess.run(
             ["lsof", "-a", "-p", str(pid), "-d", "cwd", "-Fn"],
             capture_output=True, text=True, timeout=2,
         )
-        for line in result.stdout.split("\n"):
-            if line.startswith("n") and "SimpleFT8" in line:
-                return True
     except Exception:
-        pass
-
-    # Weg 4: Lockfile-PID-Match
-    try:
-        if _LOCK_FILE.exists():
-            content = _LOCK_FILE.read_text().strip()
-            if content == str(pid):
-                return True
-    except Exception:
-        pass
-
+        return False
+    for line in result.stdout.splitlines():
+        if not line.startswith("n"):
+            continue
+        cwd = line[1:]
+        if cwd == app_dir or cwd.startswith(app_dir + "/"):
+            return True
     return False
 
 
-def _kill_all_simpleft8_instances():
-    """ALLE laufenden SimpleFT8-Instanzen finden und killen.
+# Backward-Compat-Alias fuer Tests + externe Aufrufer
+_is_simpleft8_pid = lambda pid: _pid_has_cwd_in_app_dir(pid, _get_app_dir())
 
-    Strategie:
-    1. pgrep mit breitem Pattern (main.py + start_simpleft8) — findet Kandidaten
-    2. CWD-Filter via lsof: nur Prozesse mit CWD in /SimpleFT8/ killen
-       → schuetzt andere main.py-Apps (Websdr, JimBob etc.) vor Kollateral-Kill
+
+def _find_simpleft8_processes_by_cwd(app_dir: str) -> list[int]:
+    """Alle Python-Prozesse mit cwd im App-Verzeichnis finden.
+
+    P132 (26.05.2026): ersetzt pgrep-Pattern-basierten Killer.
+    cwd-basierte Identifikation ist:
+    - setproctitle-immun (P43-Bug der P132 ausgeloest hat)
+    - Editor/IDE-immun (deren cwd liegt nicht im App-Dir)
+    - Pfad-Leerzeichen-immun (lsof -Fpn newline-getrennt)
+    - false-positive-frei fuer andere main.py-Apps (Websdr/JimBob)
     """
-    my_pid = os.getpid()
-    found_any = False
-    patterns = [
-        r"python.*main\.py",
-        r"python.*start_simpleft8",
-    ]
-    # Sammle alle eindeutigen Kandidaten-PIDs aus allen Patterns
-    candidate_pids = set()
-    for pattern in patterns:
-        try:
-            result = subprocess.run(
-                ["pgrep", "-f", pattern],
-                capture_output=True, text=True,
-            )
-            for line in result.stdout.strip().split("\n"):
-                if not line:
-                    continue
-                try:
-                    pid = int(line)
-                except ValueError:
-                    continue
-                if pid == my_pid:
-                    continue
-                candidate_pids.add(pid)
-        except Exception as e:
-            print(f"[SingleInstance] pgrep-Fehler fuer '{pattern}': {e}")
-
-    # Filtere: nur PIDs mit CWD in SimpleFT8 sind echte Geschwister
-    simpleft8_pids = []
-    for pid in candidate_pids:
-        try:
-            os.kill(pid, 0)  # alive?
-        except ProcessLookupError:
-            continue
-        if _is_simpleft8_pid(pid):
-            simpleft8_pids.append(pid)
-        else:
-            # Andere main.py-App (Websdr o.ae.) — NICHT killen
-            pass
-
-    for pid in simpleft8_pids:
-        print(f"[SingleInstance] Killing SimpleFT8 PID {pid}")
-        try:
-            os.kill(pid, signal.SIGTERM)
-            found_any = True
-        except ProcessLookupError:
-            pass
-
-    if found_any:
-        time.sleep(1.5)  # SIGTERM-Pause
-        # Hartes SIGKILL fuer Zaehe
-        for pid in simpleft8_pids:
+    try:
+        result = subprocess.run(
+            ["lsof", "-c", "Python", "-c", "python", "-d", "cwd", "-Fpn"],
+            capture_output=True, text=True, timeout=5,
+        )
+    except Exception as e:
+        print(f"[SingleInstance] lsof-Scan fehlgeschlagen: {e}")
+        return []
+    pids: list[int] = []
+    current_pid: int | None = None
+    for line in result.stdout.splitlines():
+        if line.startswith("p"):
             try:
-                os.kill(pid, 0)
-            except ProcessLookupError:
-                continue
-            print(f"[SingleInstance] Hard-kill PID {pid}")
-            try:
-                os.kill(pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
-        time.sleep(1.0)
+                current_pid = int(line[1:])
+            except ValueError:
+                current_pid = None
+        elif line.startswith("n") and current_pid is not None:
+            cwd = line[1:]
+            if cwd == app_dir or cwd.startswith(app_dir + "/"):
+                pids.append(current_pid)
+            current_pid = None  # reset bis naechster 'p'-Block
+    return pids
+
+
+def _read_pid_from_lock(lock_path: Path) -> int | None:
+    """PID aus Lock-Datei lesen. None bei leerem/unguetigem Inhalt."""
+    try:
+        content = lock_path.read_text().strip()
+        return int(content) if content else None
+    except (FileNotFoundError, ValueError, OSError):
+        return None
 
 
 def acquire_single_instance_lock():
-    """⛔ Single-Instance-Lock — robust gegen jede Race-Bedingung.
+    """Single-Instance-Lock — robust gegen Race + setproctitle + Zombies.
 
-    Strategie (Mike-Anweisung 2026-05-05, mehrfach!):
-    1. pgrep auf ALLE laufenden SimpleFT8-Instanzen (main.py + Wrapper)
-    2. SIGTERM auf alle, warten, dann SIGKILL fuer Zaehe
-    3. Lock-Datei loeschen (war von toten Instanzen)
-    4. fcntl.flock() atomar holen — verhindert dass zwei gleichzeitig
-       startende Apps beide nach dem Kill rein-rennen
+    P132 (26.05.2026, Mike-Field-Bug 4 Zombies seit 6 Tagen):
+    Komplette Neukonzeption nach Tech-Schuld-Erkennung. Alte pgrep-
+    basierte Identifikation war fundamental falsch — matched main.py-
+    Apps anderer Projekte (Websdr/JimBob), brach durch P43-setproctitle
+    der cmdline ueberschreibt.
+
+    Neue Strategie (KISS, atomar):
+    1. fcntl.flock LOCK_EX|LOCK_NB ATOMAR holen
+       (verhindert Doppel-Start-Race zwischen 2 gleichzeitigen Apps)
+    2. Falls Lock blockiert: alte PID lesen, pruefen ob lebt + cwd
+       im App-Dir → SimpleFT8-Zombie → killen, Lock uebernehmen
+    3. lsof-Backup-Scan: alle Python-Prozesse mit cwd im App-Dir
+       killen (ausser uns) — faengt Zombies OHNE Lock-File ab
+    4. Ports 4991/4992 defensive freiraeumen
     5. Eigene PID in Lock-Datei schreiben
+    6. atexit + signal-Handler fuer sauberen Lock-Release
 
-    Garantie nach Rueckkehr: GENAU EINE Instanz von SimpleFT8 am Laufen
-    — diese. Egal ob alte Instanzen Lock-Datei hatten oder nicht.
+    Garantie: nach Rueckkehr ist diese die einzige SimpleFT8-Instanz.
+    Identifikation: ausschliesslich via cwd-Match (setproctitle-immun).
     """
     global _lock_fd
 
     _LOCK_FILE.parent.mkdir(parents=True, exist_ok=True)
+    app_dir = _get_app_dir()
+    my_pid = os.getpid()
 
-    # SCHRITT 1: ALLE laufenden Instanzen via pgrep killen — nicht nur die
-    # in der Lock-Datei. Belt-and-suspenders gegen Crashes / Wrapper-Mix.
-    _kill_all_simpleft8_instances()
-
-    # SCHRITT 2: stale Lock-Datei entfernen (alle Inhaber sind jetzt tot)
+    # SCHRITT 1: Lock-File oeffnen + fcntl atomar holen
+    _lock_fd = open(_LOCK_FILE, "a+")
     try:
-        _LOCK_FILE.unlink(missing_ok=True)
-    except Exception:
-        pass
+        fcntl.flock(_lock_fd.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        # SCHRITT 2: Lock blockiert — pruefen wer der Inhaber ist
+        _lock_fd.close()
+        _lock_fd = None
+        old_pid = _read_pid_from_lock(_LOCK_FILE)
+        if old_pid and old_pid != my_pid:
+            try:
+                os.kill(old_pid, 0)  # lebt?
+                if _pid_has_cwd_in_app_dir(old_pid, app_dir):
+                    print(f"[SingleInstance] Lebende Instanz PID {old_pid} → killen")
+                    _kill_pid_with_grace(old_pid)
+                    time.sleep(0.5)
+                    _LOCK_FILE.unlink(missing_ok=True)
+                else:
+                    print(f"[SingleInstance] FATAL: PID {old_pid} laeuft "
+                          f"aber cwd nicht in {app_dir} — kein SimpleFT8")
+                    sys.exit(1)
+            except ProcessLookupError:
+                # Stale Lock-File, alte PID tot
+                _LOCK_FILE.unlink(missing_ok=True)
 
-    # SCHRITT 3: atomar Lock holen (5 Versuche fuer Race-Sicherheit zwischen
-    # zwei gleichzeitig startenden Apps)
-    for attempt in range(5):
-        _lock_fd = open(_LOCK_FILE, "a+")
-        try:
-            fcntl.flock(_lock_fd.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-            _lock_fd.seek(0)
-            _lock_fd.truncate()
-            _lock_fd.write(str(os.getpid()))
-            _lock_fd.flush()
-            os.fsync(_lock_fd.fileno())
-            print(f"[SingleInstance] Lock geholt — PID {os.getpid()} (Versuch {attempt + 1})")
-            return
-        except BlockingIOError:
-            _lock_fd.close()
-            _lock_fd = None
-            print(f"[SingleInstance] Lock-Race Versuch {attempt + 1} — warte 0.5s")
-            time.sleep(0.5)
-            # Erneut killen falls eine zweite App genau jetzt rein-gerannt ist
-            _kill_all_simpleft8_instances()
+        # Lock erneut versuchen (3x mit 0.5s Pause)
+        for attempt in range(3):
+            _lock_fd = open(_LOCK_FILE, "a+")
+            try:
+                fcntl.flock(_lock_fd.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                _lock_fd.close()
+                _lock_fd = None
+                time.sleep(0.5)
+        if _lock_fd is None:
+            print("[SingleInstance] FATAL: Lock nach 3 Retries nicht erhaeltlich")
+            sys.exit(1)
 
-    print("[SingleInstance] FATAL: konnte Lock nach 5 Versuchen nicht holen — Abbruch")
-    sys.exit(1)
+    # SCHRITT 3: Backup-Scan via lsof — Zombies OHNE Lock-File
+    # (Final-R1 V4-pro 26.05.: cwd-Sweep deckt alle SimpleFT8-Zombies ab.
+    # Ports 4991/4992 werden automatisch frei wenn Zombies sterben.
+    # KEIN Port-basierter Kill — wuerde fremde Prozesse killen, genau der
+    # Fehler den wir mit pgrep-Entfernung gerade behoben haben.)
+    zombies = [p for p in _find_simpleft8_processes_by_cwd(app_dir)
+               if p != my_pid]
+    for pid in zombies:
+        print(f"[SingleInstance] Zombie PID {pid} (cwd-match) → killen")
+        _kill_pid_with_grace(pid)
+
+    # SCHRITT 4: Eigene PID in Lock-Datei schreiben
+    _lock_fd.seek(0)
+    _lock_fd.truncate()
+    _lock_fd.write(str(my_pid))
+    _lock_fd.flush()
+    os.fsync(_lock_fd.fileno())
+    print(f"[SingleInstance] Lock geholt — PID {my_pid}, app_dir={app_dir}")
 
 
-# Cleanup bei Exit + Signal-Handler fuer SIGTERM/SIGINT
+# SCHRITT 6: Cleanup bei Exit + Signal-Handler fuer SIGTERM/SIGINT
 atexit.register(_release_lock_on_exit)
 signal.signal(signal.SIGTERM, _signal_release_and_exit)
 signal.signal(signal.SIGINT, _signal_release_and_exit)
-
-
-def kill_old_instances():
-    """ALLE alten SimpleFT8-Instanzen sauber beenden inkl. macOS Fenster/Dock.
-
-    1. macOS 'quit app' — schliesst Fenster + Dock-Icon sauber
-    2. SIGKILL auf alle SimpleFT8 Python-Prozesse
-    3. Ports 4991/4992 freigeben
-    4. Warten + verifizieren dass alles weg ist
-    """
-    import time
-    my_pid = os.getpid()
-
-    # 1. macOS: Python-App sauber beenden (schliesst Dock-Icon!)
-    subprocess.run(
-        ["osascript", "-e", 'quit app "Python"'],
-        capture_output=True, timeout=5,
-    )
-    time.sleep(1)
-
-    # 2. Alle SimpleFT8-Prozesse per SIGKILL beenden
-    for attempt in range(3):
-        found = False
-        for pattern in ["SimpleFT8/main.py", "SimpleFT8/tests/"]:
-            try:
-                result = subprocess.run(
-                    ["pgrep", "-f", pattern],
-                    capture_output=True, text=True,
-                )
-                for line in result.stdout.strip().split("\n"):
-                    if not line:
-                        continue
-                    pid = int(line)
-                    if pid != my_pid:
-                        os.kill(pid, 9)
-                        found = True
-            except (ProcessLookupError, Exception):
-                pass
-
-        # 3. Prozesse auf Radio-Ports killen
-        for port in ["UDP:4991", "TCP:4992"]:
-            try:
-                result = subprocess.run(
-                    ["lsof", "-ti", port],
-                    capture_output=True, text=True,
-                )
-                for line in result.stdout.strip().split("\n"):
-                    if not line:
-                        continue
-                    pid = int(line)
-                    if pid != my_pid:
-                        os.kill(pid, 9)
-                        found = True
-            except (ProcessLookupError, Exception):
-                pass
-
-        if not found:
-            break
-        time.sleep(1)
-
-    # 4. Verifizieren
-    time.sleep(1)
-    try:
-        result = subprocess.run(
-            ["lsof", "-ti", "UDP:4991"],
-            capture_output=True, text=True,
-        )
-        if result.stdout.strip():
-            print("[SimpleFT8] WARNUNG: Port 4991 noch belegt!")
-        else:
-            print("[SimpleFT8] Alte Instanzen beendet — Ports frei")
-    except Exception:
-        print("[SimpleFT8] Cleanup fertig")
 
 
 def _show_hardware_warning(app) -> bool:
@@ -523,12 +405,12 @@ def _show_hardware_warning(app) -> bool:
 
 
 def main():
-    # ⛔ Single-Instance-Lock ZUERST (atomar, killt alte Instanzen).
-    # Mike-Anweisung 2026-05-05: nur EINE Instanz darf laufen.
+    # ⛔ Single-Instance-Lock ZUERST (P132 v0.98.13 KISS-Refactor):
+    # fcntl.flock atomar + lsof-CWD-Backup + Port-Cleanup in einer
+    # Funktion. Mike-Anweisung 2026-05-05: nur EINE Instanz darf laufen.
+    # Garantie: setproctitle-immun, cwd-basierte Identifikation,
+    # false-positive-frei fuer andere main.py-Apps.
     acquire_single_instance_lock()
-    # Belt-and-suspenders: kill_old_instances raeumt zusaetzlich Ports
-    # (UDP:4991/TCP:4992) und macOS Dock-Icons auf.
-    kill_old_instances()
 
     from PySide6.QtWidgets import QApplication
     from config.settings import Settings

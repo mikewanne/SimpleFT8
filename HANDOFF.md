@@ -1,8 +1,29 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-26 — v0.98.12 P126 + Legend Tage-Coverage (autonom)
+## Stand 2026-05-26 — v0.98.13 P132 Single-Instance Architektur-Refactor
 
-**Aktueller Code-Stand:** v0.98.12, Tests **1934 grün** (+13 Legend).
+**Aktueller Code-Stand:** v0.98.13, Tests **1949 grün** (+15 P132).
+
+### 🔴 26.05.2026 — P132 Single-Instance Architektur-Refactor (Mike-Wut + voller Workflow)
+
+**Mike-Field-Bug:** 4 Zombie-Instanzen seit Mittwoch trotz Single-
+Instance-Lock. Pattern-basiertes pgrep war fundamental falsch +
+mein P43-setproctitle hat es kaputt gemacht.
+
+**V3-Architektur:** fcntl.flock atomar + lsof-CWD-basierte
+Identifikation (setproctitle-immun, Editor/IDE-immun).
+
+**ENTFERNT:** alle pgrep-Patterns, osascript-Cache,
+`kill_old_instances`, `_kill_all_simpleft8_instances`,
+4-Wege-Check.
+
+**R1-Final-Catch:** `_free_radio_ports` hätte fremde Prozesse
+killen können → komplett entfernt.
+
+**Tests 1934→1949 (+15).** Mike-Verifikation nach Restart auf
+v0.98.13 ausstehend.
+
+### 🟢 26.05.2026 — Diagramm-Legende Tage-Coverage ehrlicher (Mike-Wunsch 24.05.)
 
 ### 🟢 26.05.2026 — Diagramm-Legende Tage-Coverage ehrlicher (Mike-Wunsch 24.05.)
 

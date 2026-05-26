@@ -3,6 +3,79 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-26 v0.98.13 — P132 Single-Instance Architektur-Refactor (autonom)
+
+**Mike-Field-Bug 26.05.2026 (sehr verärgert):** 4 Zombie-Instanzen
+seit Mittwoch trotz `acquire_single_instance_lock`. Mike-Wort:
+„so identifiziert man das doch nicht. das ist scheisse so können
+wir nicht arbeiten."
+
+**Root Cause:** Pattern-basiertes pgrep auf cmdline-Text war
+fundamental falsch:
+- `python.*main\.py` matched JEDE Python-App mit main.py
+  (Websdr/JimBob/etc.) → False-Positive-Risiko
+- Mein eigener P43-`setproctitle("SimpleFT8 v...")` (13.05.) hat
+  cmdline überschrieben → pgrep findet Zombies nicht mehr
+- 5x in vorigen Sessions versucht zu fixen mit immer mehr Patterns —
+  jeder Fix hat False-Positives nur verlagert
+
+**Mike-Spec:** „voller Workflow mit DeepSeek um das endlich zu beseitigen".
+
+**V3-Architektur (KISS, DeepSeek-R1-validiert):**
+
+1. fcntl.flock LOCK_EX|LOCK_NB ATOMAR ZUERST holen
+   (verhindert Doppel-Start-Race, R1-Punkt „Lock first")
+2. Falls Lock blockiert: Inhaber-PID lesen → cwd-Check → ggf. killen
+   + retry (3x mit 0.5s)
+3. lsof-Backup-Scan: alle Python-Prozesse mit cwd im App-Dir killen
+   (setproctitle-immun, Editor/IDE-immun, Pfad-Leerzeichen-immun via `-Fpn`)
+4. Eigene PID schreiben
+
+**Was ENTFERNT wurde (Tech-Schuld-Abbau):**
+- `_kill_all_simpleft8_instances` (pgrep-basiert)
+- `kill_old_instances` (Port-Cleanup + pgrep, redundant)
+- `_get_simpleft8_window_pids` + Cache (osascript-Wahnsinn)
+- `_is_simpleft8_pid` 4-Wege-Check → reduziert auf cwd-Vergleich
+- ALLE pgrep-Patterns
+
+**Was BLEIBT:**
+- `setproctitle` (P43, Activity-Monitor-Schönheit)
+- starter.command osascript Window-Title-Check (1. Schicht)
+- fcntl-Lock + atexit/signal-Handler
+
+**R1-Final-Catch (kritisch!):**
+DeepSeek fand in der V3-Implementation einen ROTEN Bug:
+`_free_radio_ports` hätte fremde Prozesse killen können
+(genau der Pattern-Killing-Fehler den wir gerade entfernen!).
+Lösung: `_free_radio_ports` komplett entfernt. Cwd-Sweep deckt
+alle SimpleFT8-Zombies ab — Ports werden automatisch frei.
+
+**Workflow:**
+- V1: Architektur-Neukonzept mit 10 DeepSeek-Fragen
+- R1 V4-pro: Architektur bestätigt, 4 Edge-Cases-Hinweise (Bundle,
+  lsof-Performance, lock-Reihenfolge, Tests)
+- V3: Implementation mit R1-Empfehlungen
+- Final-R1: 1 ROTER Catch (_free_radio_ports) — Patch eingebaut
+- Push freigegeben
+
+**V4-pro 58-Cycle:** 0 Halluzinationen.
+
+Tests 1934 → 1949 (+15 P132 Source-Inspektion + AST-Analyse +
+Funktions-Body-Check). Manual Smoke-Test der lsof-Scanner:
+findet alle Python-Prozesse mit cwd im App-Dir korrekt
+(Pfad mit Leerzeichen „KI N8N Projekte" funktioniert).
+
+**Lesson:** Verschönerungs-Tricks (setproctitle) haben Nebenwirkungen
+auf Identifikations-Logik. Bei Infrastruktur-Code (Process-Mgmt,
+Locks) müssen Identifikations-Methoden DETERMINISTISCH sein
+(cwd-Match), nicht heuristisch (Text-Pattern).
+
+**Mike-Vertrauen wiederherstellen:** Pattern-basierte Logik komplett
+ENTFERNT, nicht erweitert. Single-Instance-Versprechen wird jetzt
+hart gehalten.
+
+---
+
 ## 2026-05-26 — Diagramm-Legende Tage-Coverage ehrlicher (Mike 24.05.)
 
 **Mike-Beobachtung 24.05.2026:** 15m FT8 Diagramm zeigt in der Legende

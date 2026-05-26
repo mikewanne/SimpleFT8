@@ -2,6 +2,18 @@
 
 ---
 
+## ✅ ERLEDIGT 26.05.2026 — P132 Single-Instance Architektur-Refactor (v0.98.13)
+
+**Status:** ERLEDIGT v0.98.13 (autonomer Workflow nach Mike-Wut).
+Pattern-basiertes pgrep war fundamental falsch + P43-setproctitle
+hat es kaputt gemacht. V3 (DeepSeek-validiert): fcntl.flock atomar
++ lsof-CWD-basierte Identifikation. 3 alte Funktionen ENTFERNT,
+1 R1-Final-Catch (Port-Kill-Risiko). Tests 1934→1949 (+15).
+
+Field-Verifikation pending (Mike-Restart auf v0.98.13 nötig).
+
+---
+
 ## 🔬 BEOBACHTUNG OFFEN — Auto-Hunt-Start-Delay (Mike Field 26.05.2026)
 
 **Mike-Field-Beobachtung 26.05.2026** (nach P130-Kalibrierung 15m
