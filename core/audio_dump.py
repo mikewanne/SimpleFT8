@@ -1,7 +1,7 @@
 """core/audio_dump.py — Roh-Audio-Slot-Dump fuer Debug/Forschung (P3, v0.95.20).
 
 Use-Cases:
-- AP-Lite-Decode-Replay (Bug-Diagnose ohne Live-Funkbetrieb)
+- Decode-Replay (Bug-Diagnose ohne Live-Funkbetrieb)
 - ANT1/ANT2-Spektrum-Vergleich offline (Inspectrum/Audacity)
 - Decoder-Verbesserungen gegen reale Aufnahmen
 

@@ -2317,11 +2317,6 @@ def test_dx_tune_pipeline_warmup_state():
 # Tests in test_diversity_helpers.py decken evaluate_ratio direkt ab).
 
 
-# ── AP-Lite — Tests in test_ap_lite.py / test_ap_lite_e2e.py ─────────────────
-# (Die alten Costas-/align_buffers-Sanity-Checks entfielen mit v0.97.90
-#  Option D — die kohärente Addition wurde durch A-Priori-Matching ersetzt.)
-
-
 # ── v0.80 TX-DT-Drift Fix (Fix A1) ───────────────────────────────────────────
 
 def test_wait_report_retry_at_cycle_one():

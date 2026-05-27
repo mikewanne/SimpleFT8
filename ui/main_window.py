@@ -99,7 +99,7 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         # Optionale Features (NACH _setup_ui, weil Signal-Connects gemacht werden)
         self._init_optional_features()
 
-        # Timer + Radio starten (NACH OMNI-TX/Auto-Hunt/AP-Lite Init!)
+        # Timer + Radio starten (NACH OMNI-TX/Auto-Hunt Init!)
         self.timer.start()
         # P26 (10.05.2026): _start_radio deferred via singleShot, damit
         # __init__ erst durchlaeuft + window.show() das Hauptfenster
@@ -357,7 +357,7 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         )
 
     def _init_optional_features(self):
-        """OMNI-TX, Auto-Hunt, AP-Lite — alle deaktiviert by default.
+        """OMNI-TX, Auto-Hunt — alle deaktiviert by default.
 
         Sichtbarkeit von btn_omni_cq/btn_auto_hunt ist mode-gekoppelt:
         nur im Diversity-Modus sichtbar (siehe _update_button_visibility).
@@ -410,14 +410,6 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self._auto_hunt.auto_hunt_stopped.connect(self._on_auto_hunt_stopped)
         # Button-Klick: start/stop_auto_hunt
         self.control_panel.btn_auto_hunt.toggled.connect(self._on_btn_auto_hunt_toggled)
-
-        # AP-Lite: A-Priori-Kandidaten-Match (beratend, AP_LITE_ENABLED=True)
-        # P149 (27.05.2026): Settings-getrieben (apply_settings statt
-        # hartcodiertem AP_LITE_ENABLED). Erneuter Aufruf nach Settings-
-        # Dialog-Save folgt im jeweiligen Save-Pfad.
-        from core import ap_lite as _ap
-        self._ap_lite = _ap.get_instance(encoder=self.encoder)
-        self._ap_lite.apply_settings(self.settings)
 
         # v0.88: Bandpilot — Stunden-genaue Empfehlung (Replacement v0.87)
         from core.mode_recommender import HourlyBandpilot
@@ -1266,10 +1258,6 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
             # P63 (v0.97.36): Tuner-Setting → TUNE-Button-Sichtbarkeit
             self.control_panel.set_tuner_present(
                 self.settings.get("tuner_present", True))
-            # P149 (27.05.2026): AP-Lite Settings live nachladen.
-            # Greift ab naechstem Slot (kein Lock — KISS, Diagnose-Funktion).
-            self._ap_lite.apply_settings(self.settings)
-
     def _on_tx_slot_lock_changed(self, lock: str) -> None:
         """Bundle E (v0.97.22): TX-Slot-Lock-Änderung persistieren.
 
@@ -1369,10 +1357,6 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
             )
         # P47 (v0.97.11): Filter-Anzeige entfernt — war irrefuehrend
         # (FT2 zeigte 100-4000 Hz, Decoder lief faktisch auf 3000 Hz).
-        # AP-Lite — persistenter Rescue-Zähler (AP = (Anzahl Treffer))
-        ap_str = ""
-        if hasattr(self, '_ap_lite') and self._ap_lite.enabled:
-            ap_str = f"  |  AP = ({self._ap_lite.rescue_count})"
         # CQ-Freq Status + Antenna Preference
         cq_hz = getattr(self._diversity_ctrl, 'cq_freq_hz', None)
         recalc = getattr(self._diversity_ctrl, '_recalc_count', 0)
@@ -1403,7 +1387,7 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         msg = (f"{self.settings.callsign}  |  {self.settings.locator}  |  "
                f"{self.settings.mode} {self.settings.band}  |  "
                f"{freq_display}  |  "
-               f"{mode_str}{omni_str}{freq_str}{ap_str}")
+               f"{mode_str}{omni_str}{freq_str}")
         self.statusBar().showMessage(msg)
 
         # Live-QSO-Status oben im QSO-Panel — waehrend aktivem QSO sichtbar

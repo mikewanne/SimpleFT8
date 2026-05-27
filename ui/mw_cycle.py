@@ -157,7 +157,6 @@ class CycleMixin:
         if self._dx_tune_dialog is not None:
             self._dx_tune_dialog.feed_cycle(messages)
 
-        self._run_ap_lite_rescue(messages)
         self._run_auto_hunt(messages)
 
     @Slot()
@@ -227,8 +226,7 @@ class CycleMixin:
         Werte sind robust gegen Sleep-Drift, Audio-Buffer-Lag und
         Qt-Signal-Queue-Latenz.
 
-        Fallback nur fuer Test-Mocks ohne echten Decoder oder fuer
-        Messages aus alternativen Quellen (z.B. AP-Lite-Rescue).
+        Fallback nur fuer Test-Mocks ohne echten Decoder.
         """
         if not messages:
             return
@@ -489,93 +487,6 @@ class CycleMixin:
             msg.antenna = current_ant
             self.rx_panel.add_message(msg)
         self.rx_panel.reapply_sort()
-
-    def _run_ap_lite_rescue(self, messages):
-        """AP-Lite: A-Priori-Kandidaten-Match bei QSO-Partner-Decode-Fail.
-
-        Laeuft bei WAIT_REPORT / WAIT_RR73, wenn die Gegenstation in diesem
-        Slot NICHT dekodiert wurde. Rein beratend — zeigt nur eine Info-Zeile,
-        loggt kein QSO und loest kein TX aus.
-
-        P149 (27.05.2026): Test-Modus + Partner-SNR-Filter + Multi-Partner-
-        Edge-Case + Debug-Logging. R1-V4-pro Findings (F3 Partner-SNR-Cache,
-        F7 count_rescue-Schalter, F10 multi-partner) eingebaut.
-        """
-        from core.debug_log import debug_log as _dbg
-        if not (self._ap_lite.enabled and self.qso_sm.qso):
-            _dbg("AP-LITE", "GUARD_SKIP reason=no_qso_or_disabled")
-            return
-        _state = self.qso_sm.state
-        if _state not in (QSOState.WAIT_REPORT, QSOState.WAIT_RR73):
-            _dbg("AP-LITE", f"GUARD_SKIP reason=wrong_state state={_state.name}")
-            return
-        _their = self.qso_sm.qso.their_call
-        # P149 R1-F10: Multi-Partner-Edge-Case — defensive Listing.
-        _partner_msgs = [m for m in (messages or [])
-                          if getattr(m, 'caller', '') == _their]
-        _partner_msg = _partner_msgs[0] if _partner_msgs else None
-        _partner_found = bool(_partner_msgs)
-        if _partner_found and not self._ap_lite.test_mode:
-            _dbg("AP-LITE",
-                f"GUARD_SKIP reason=partner_decoded call={_their}")
-            return
-        if self.decoder.last_pcm_12k is None:
-            _dbg("AP-LITE", "GUARD_SKIP reason=no_pcm")
-            return
-        # P149 R1-F3: SNR-Filter via partner_last_snr (Cache pro Partner).
-        # Globaler `_last_snr` ist hierfuer untauglich (von beliebiger
-        # Station ueberschrieben). Im Test-Modus SNR-Filter ignoriert.
-        if not self._ap_lite.test_mode:
-            _psnr = self.qso_sm.qso.partner_last_snr  # Optional[float]
-            if _psnr is not None and _psnr > self._ap_lite.min_snr_db:
-                _dbg("AP-LITE",
-                    f"GUARD_SKIP reason=partner_snr_too_strong "
-                    f"partner_snr={_psnr:.0f} "
-                    f"threshold={self._ap_lite.min_snr_db}")
-                return
-        # P149 R1-F2: Im Test-Modus praezisere Partner-Msg-Frequenz nutzen.
-        if self._ap_lite.test_mode and _partner_msg is not None:
-            _freq = float(getattr(_partner_msg, 'audio_freq_hz', 0))
-        else:
-            _freq = float(getattr(self.qso_sm.qso, 'freq_hz',
-                                  self.encoder.audio_freq_hz)
-                          or self.encoder.audio_freq_hz)
-        _qso_state_int = 1 if _state == QSOState.WAIT_REPORT else 2
-        # SNR-Estimate: bevorzugt Partner-Cache, sonst globaler Fallback.
-        _snr_est = (self.qso_sm.qso.partner_last_snr
-                    if self.qso_sm.qso.partner_last_snr is not None
-                    else float(getattr(self.qso_sm, '_last_snr', -10)))
-        _result = self._ap_lite.try_rescue(
-            self.decoder.last_pcm_12k, _freq, _their, _qso_state_int,
-            own_callsign=self.settings.callsign,
-            own_locator=self.settings.locator,
-            snr_estimate=float(_snr_est),
-            count_rescue=not self._ap_lite.test_mode,  # R1-F7-Catch
-        )
-        # P149: Im Test-Modus TEST_COMPARE-Log statt qso_panel.add_info.
-        if self._ap_lite.test_mode:
-            _decoder_said = (getattr(_partner_msg, 'text', None)
-                              if _partner_msg is not None else None)
-            _aplite_said = (_result.recovered_message
-                             if _result and _result.success else None)
-            _agreement = (_decoder_said is not None
-                           and _aplite_said is not None
-                           and _aplite_said == _decoder_said)
-            _margin = _result.margin if _result else 0.0
-            _dbg("AP-LITE",
-                f"TEST_COMPARE decoder='{_decoder_said}' "
-                f"aplite='{_aplite_said}' "
-                f"agreement={'Y' if _agreement else 'N'} "
-                f"margin={_margin:.3f} "
-                f"note='decoder=reference, not ground-truth'")
-        elif _result and _result.success:
-            # Produktiv-Modus: Info-Zeile bei Match (wie bisher).
-            self.qso_panel.add_info(
-                f"[AP-Lite] Erkannt: {_result.recovered_message} "
-                f"(Marge {_result.margin:.2f})"
-            )
-            print(f"[AP-Lite] MATCH: '{_result.recovered_message}' "
-                  f"score={_result.score:.3f} margin={_result.margin:.3f}")
 
     def _run_auto_hunt(self, messages):
         """Auto-Hunt: automatisch CQ-Stationen anrufen (verstecktes Feature)."""

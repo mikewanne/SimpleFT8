@@ -1,5 +1,58 @@
 # HANDOFF — SimpleFT8
 
+## Stand 2026-05-27 spätabends — v0.98.33 P150 + P151 (Chef-KI-autonomer-Workflow)
+
+**Aktueller Code-Stand:** v0.98.33, Tests **2110 grün** (-61 ggü v0.98.31 wegen 3 AP-Lite-Test-Files-Entfernung).
+
+**Mike hat geschlafen, Chef-KI durchgezogen.** Zwei Workflows abgeschlossen:
+
+### P150 (v0.98.32) — Decoder-Empfindlichkeit
+
+`ft8_lib/libft8simple.c` Z. 114 FT8-Pfad: `kMin_score = 10 → 4`. Erlaubt
+schwächere Sync-Patterns als Kandidaten → tieferes SNR-Limit. WSJT-X
+„Deep"-Niveau. FT4/FT2 bleiben bei 10 (R1-V4-pro O1-Catch — Costas-
+Pattern-Längen unterschiedlich, Score-Skala nicht 1:1).
+
+Build via `cc -O3 -DHAVE_STPCPY -I. -dynamiclib`. dylib MD5 verifiziert
+geändert. Smoke-Test 15 WAVs: 127 vs 127 Decodes identisch (Test-WAVs
+sind alle „leicht", Heap mit Score≥10 schon voll). Effekt sichtbar
+auf Mike's realen Slots mit schwachen DX-Signalen.
+
+### P151 (v0.98.33) — AP-Lite ausgebaut
+
+DeepSeek-Konsens: Konzept trägt nicht. 6 Files gelöscht, 8 Files
+geändert. Code-Reduktion ~600 LOC. R1-ORANGE eingebaut (`ap_str`
+komplett raus aus Statusbar). 5 GELB-Kommentar-Cleanups.
+
+Settings-Migration nicht nötig — alte Keys in config.json werden
+einfach ignoriert.
+
+### Backup-Strategie
+
+`Appsicherungen/2026-05-27_v0.98.31_vor_p150_p151/`:
+- `libft8simple.dylib` (alte, kMin_score=10)
+- `ap_lite.py` (gesamtes Modul)
+- `libft8simple.c` (alte C-Source)
+
+Rollback in 10 Sek: `cp Appsicherungen/.../libft8simple.dylib .`
+
+### Mike-Nächste-Schritte (Field-Test P150)
+
+1. App-Neustart auf v0.98.33
+2. Logbuch beobachten ob mehr -22/-24 dB QSOs auftauchen
+3. Wenn Junk-Decodes auftauchen (fremde Calls in unpassenden Mustern):
+   `kMin_score` auf 5 oder 6 anheben (in libft8simple.c, recompile)
+4. Wenn zufrieden: kMin_score so lassen, ggf. später FT4/FT2 auch tunen
+
+### Was ich NICHT gemacht habe
+
+- `git push` zum GitHub — Mike-Spec: nur nach expliziter Anfrage
+- ft8_lib innerer Repo committed — Mike's Setup, ich greife nicht ein
+- FT4/FT2 `kMin_score` geändert — R1-V4-pro-Empfehlung, separate Iteration
+- AP-Lite-Stats-File `~/.simpleft8/ap_lite_stats.json` gelöscht — Mike-Sache
+
+---
+
 ## Stand 2026-05-27 abend — v0.98.31 Settings-Tab in ScrollArea (P149-Folge)
 
 **Aktueller Code-Stand:** v0.98.31, Tests **2171 grün** (keine neuen, keine Regressions).

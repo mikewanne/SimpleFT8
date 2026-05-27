@@ -81,7 +81,6 @@ class Decoder(QObject):
         self.recent_calls: deque = deque(maxlen=200)
         self.occupied_freqs = []
         self.priority_call: str = ""   # QSO-Partner fuer Prioritaets-Logging
-        self.last_pcm_12k: np.ndarray | None = None  # AP-Lite: letzter 12kHz float32 Buffer
         self._startup_samples: int = 0                 # Startup-Purge: erste 2s verwerfen
         self._startup_done: bool = False
         # P3 v0.95.20: Roh-Audio-Slot-Buffer fuer optionalen WAV-Dump.
@@ -327,9 +326,6 @@ class Decoder(QObject):
             t_decode = time.time()
             peak_12k = np.max(np.abs(audio_12k))
             print(f"[Decoder] Preprocessing: {t_decode - t_pre:.2f}s, Peak={peak_12k}")
-
-            # AP-Lite: verarbeiteten Buffer merken (float32, normalisiert)
-            self.last_pcm_12k = audio_12k.astype(np.float32) / 32767.0
 
             messages = self._decode_with_subtraction(audio_12k)
             t_done = time.time()

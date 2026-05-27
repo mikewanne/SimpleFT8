@@ -14,7 +14,6 @@ from PySide6.QtCore import Qt, QSettings
 _FEATURES = [
     ("Anrufer-Warteliste", "Caller Waitlist", "waitlist"),
     ("Antennen-Praeferenz pro Station", "Per-Station Antenna Preference", "antenna-preference"),
-    ("AP-Lite Rettung", "AP-Lite Rescue", "ap-lite"),
     ("Auto-Hunt", "Auto-Hunt", "auto-hunt"),
     ("Bandpilot", "Bandpilot", "bandpilot"),
     ("CQ-Frequenz (Histogramm)", "CQ Frequency (Histogram)", "cq-frequency"),

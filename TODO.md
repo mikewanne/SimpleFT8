@@ -1,4 +1,4 @@
-# SimpleFT8 TODO — Stand 27.05.2026 (v0.98.30)
+# SimpleFT8 TODO — Stand 28.05.2026 (v0.98.33)
 
 > **Diese Datei = Backlog (aktiv-offen + frisch erledigt).**
 > Vollständige Historie aller Änderungen: **HISTORY.md** (nur anhängen).
@@ -9,34 +9,41 @@
 
 # 🟢 LAUFEND — Field-Test pending
 
-## P149 — AP-Lite Diagnose-Modus (v0.98.30, 27.05.2026)
+## P150 — Decoder-Empfindlichkeit kMin_score 10 → 4 (v0.98.32, 27.05.2026)
 
-**Was:** 4 neue Settings in Tab „Daten & Tools" (Master-Toggle, Test-Modus,
-dB-Schwelle, Strenge). Test-Modus: AP-Lite läuft AUCH bei dekodiertem
-Partner → Algo gegen Decoder-Wahrheit messbar. R1-Catches F3 Partner-SNR-
-Cache (echter Bug: globaler `_last_snr` blockiert AP-Lite fälschlich) + F7
-count_rescue-Schalter (Counter-Inflation im Test-Modus verhindern).
+**Was:** `ft8_lib/libft8simple.c` Z. 114 (FT8-Pfad) Sync-Pattern-Schwelle
+von 10 auf 4 gesenkt → Decoder versucht auch sehr schwache Sync-Patterns
+zu retten (WSJT-X „Deep"-Niveau). FT4/FT2 bleiben bei 10 (Costas-Pattern-
+Längen unterschiedlich, Score-Skala nicht 1:1).
 
-**Mike-Field-Test (in dieser Reihenfolge):**
-1. App-Neustart auf v0.98.30
-2. Settings → „Daten & Tools" → AP-Lite-GroupBox
-3. Aktivieren: „Debug-Log schreiben" + „AP-Lite aktivieren" + „Test-Modus"
-4. dB-Schwelle vorerst auf **-20** lassen (Default, wird im Test-Modus
-   eh ignoriert)
-5. Strenge vorerst **„locker"** = 0.04 (mehr Treffer → mehr Daten)
-6. 1-2 FT8-Sessions normal funken
-7. Log lesen: `~/.simpleft8/debug_YYYY-MM-DD.log`
-   - `GUARD_SKIP`-Verteilung → welcher Guard greift wie oft
-   - `SCORED`-Margen → wie nah am Threshold ist der Algo
-   - `TEST_COMPARE`-Agreement → Algo gegen Decoder
+**Mike-Field-Test:**
+1. App-Neustart auf v0.98.32+
+2. 1-2 FT8-Sessions auf schwierigen Bändern (40m abends, 15m flau)
+3. Logbuch beobachten:
+   - **Best Case:** mehr -22/-24 dB QSOs, vielleicht erstmals -25/-26 dB
+   - **Worst Case:** zu viele Junk-Decodes (fremde Calls in unpassenden
+     Mustern) → Schwelle auf 5 oder 6 anheben
 
-**Erwartetes Outcome:**
-- Wenn `TEST_COMPARE agreement=Y` > 50% → Algo taugt prinzipiell, wir
-  können dB-Schwelle ins Negative schieben und produktiv lassen
-- Wenn `agreement=N` dominiert → Algo hat fundamentales Problem, AP-Lite
-  ehrlich verwerfen
-- Wenn nur `GUARD_SKIP partner_decoded` → Decoder fängt schon alles ab,
-  AP-Lite hat keinen Use-Case
+**Rollback:** Backup unter `Appsicherungen/2026-05-27_v0.98.31_vor_p150_p151/libft8simple.dylib` —
+einfach zurückkopieren, App-Restart.
+
+**Folge-Schraube falls P150 zu wenig bringt:** `SUBTRACT_MIN_SNR=-18 → -22`
+in `core/decoder.py` (schwächere Signale subtrahieren → noch tiefere darunter
+freilegen).
+
+## P151 — AP-Lite vollständig ausgebaut (v0.98.33, 27.05.2026)
+
+**Was:** AP-Lite-Feature komplett aus dem Code entfernt. DeepSeek-V4-pro-
+Konsens: Matched Filter über LDPC-Decoder hat keine Nische, Konzept
+trägt nicht. Mike-Felddaten 27.05.: 0/16 MATCH bestätigte das.
+
+**Entfernt:** `core/ap_lite.py`, 3 Test-Files, 2 Doc-Files,
+`generate_reference_wave` in Encoder, `last_pcm_12k`-Buffer im Decoder,
+`partner_last_snr`-Field in QSOData, 4 Settings-Keys, GroupBox + Help-Eintrag,
+Statusbar-Counter, alle Aufrufer.
+
+**Backup:** `Appsicherungen/2026-05-27_v0.98.31_vor_p150_p151/ap_lite.py` —
+falls je wiederbelebt werden soll.
 
 ---
 
@@ -253,19 +260,6 @@ in heutiger Codebase.
 - `set_rfgain_secondary()`: Z. 959–965
 - `has_secondary_slice()`: Z. 967–969
 - VITA-49-Dispatch toter Zweig: Z. 1331–1332
-
----
-
-## 🆕 AP-Lite QSO-Abschluss (Konzept dokumentiert)
-
-Erweiterung von AP-Lite (Option D = v0.97.90 erledigt). Vollständiges
-Vorgehen + gestaffelter Plan in HISTORY.md „Konzept: AP-Lite QSO-Abschluss"
-(22.05.2026). Reihenfolge:
-1. Breites Rapport-Kandidaten-Fenster
-2. Feld-Beobachtung mit `AP = (x)`-Zähler
-3. ERST danach Auto-Abschluss/Loggen
-
-Schritt 3 nicht vorab bauen — die Beobachtung ist die Validierung.
 
 ---
 

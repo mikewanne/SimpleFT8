@@ -37,7 +37,7 @@ def test_features_are_alphabetically_sorted():
     """_FEATURES ist alphabetisch nach Anzeige-Name DE sortiert (KISS).
 
     Case-insensitive Sortierung — wie der Leser im Help-Dialog erwartet
-    ("Anrufer-Warteliste" vor "AP-Lite Rettung", weil 'n' < 'p').
+    ("Auto-Hunt" vor "Bandpilot", weil 'a' < 'b').
     """
     de_names = [f[0] for f in _FEATURES]
     expected = sorted(de_names, key=str.lower)

@@ -3,6 +3,70 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-27 v0.98.33 — P151 AP-Lite vollständig ausgebaut
+
+**Trigger:** P150 hat den richtigen Pfad gewählt (`kMin_score=4`).
+DeepSeek-V4-pro-Konsens 27.05.: AP-Lite-Konzept trägt nicht — Matched
+Filter über LDPC-Decoder hat keine mathematische Nische. Mike's Feld-Daten
+0/16 MATCH bestätigte das. Jetzt sauber ausbauen.
+
+**Entfernt (6 Files):**
+- `core/ap_lite.py` (407 LOC Hauptmodul)
+- `tests/test_ap_lite.py`
+- `tests/test_ap_lite_e2e.py`
+- `tests/test_p149_ap_lite_diagnose.py`
+- `docs/explained/ap-lite.md`
+- `docs/explained/ap-lite_de.md`
+
+**Code-Änderungen (8 Files):**
+- `core/encoder.py`: Methode `generate_reference_wave` raus
+- `core/decoder.py`: `last_pcm_12k`-Buffer-Init + Update raus
+- `core/qso_state.py`: `QSOData.partner_last_snr` Field + Update raus
+- `ui/main_window.py`: Init + `apply_settings` + Statusbar-Counter raus
+  (R1-ORANGE-Catch: `ap_str` komplett entfernt, nicht nur Variable)
+- `ui/mw_cycle.py`: Aufruf + `_run_ap_lite_rescue`-Methode raus (~85 LOC)
+- `ui/settings_dialog.py`: GroupBox „AP-Lite Diagnose" + 4 widgets +
+  load/save 4 keys raus
+- `config/settings.py`: 4 DEFAULTS-Keys + Kommentar-Block raus
+- `ui/help_dialog.py`: Tupel „AP-Lite Rettung" raus
+
+**Kommentar-Cleanup (R1-GELB):**
+- `core/audio_dump.py` Z. 4: „AP-Lite-Decode-Replay" → „Decode-Replay"
+- `ui/mw_cycle.py` Z. 230: „...AP-Lite-Rescue" raus
+- `tests/test_slot_display.py` Z. 9: idem
+- `tests/test_help_dialog_features.py` Z. 40: Sort-Beispiel
+  „Auto-Hunt vor Bandpilot" statt „Anrufer-Warteliste vor AP-Lite Rettung"
+- `tests/test_modules.py` Z. 2320: AP-Lite-Block-Header raus
+- `ui/main_window.py` Z. 102 + 360: Kommentare angepasst
+
+**Doku:**
+- `README.md` Z. 231: Zeile „AP-Lite Rescue" aus Feature-Tabelle raus
+- `README_DE.md` Z. 303, 379, 468: 3 Stellen raus
+- `TODO.md`: P149-Sektion ersetzt durch P151-Eintrag, alte AP-Lite-
+  Backlog-Erweiterung „QSO-Abschluss" raus
+
+**R1-V4-pro Findings eingebaut:**
+- O1 ORANGE → `ap_str` komplett entfernt (nicht nur Block, auch Format-Zeile)
+- G1-G5 GELB → alle Kommentar-Cleanups durchgeführt
+
+**Was BLEIBT:**
+- HISTORY.md-Einträge zu P149/v0.98.30 (HISTORY-Regel: nur anhängen)
+- Backup `Appsicherungen/2026-05-27_v0.98.31_vor_p150_p151/ap_lite.py`
+- `~/.simpleft8/ap_lite_stats.json` (Mike-Datei, kann manuell gelöscht werden)
+- Settings-Migration nicht nötig — alte Keys in config.json werden einfach
+  ignoriert (kein Code liest sie mehr)
+
+**Tests 2171 → 2110 grün** (-61: 3 AP-Lite-Test-Files entfernt, alle anderen
+laufen weiter ohne Regression). App-Smoke-Test: alle Imports OK, 19 Help-
+Features (vorher 20), Settings ohne ap_lite-Keys.
+
+**Code-Reduktion:** ~600 LOC entfernt (Modul + Tests + UI + Settings + Docs).
+Code-Pflege spart Zeit, weckt keine falschen Hoffnungen mehr, CPU-Last
+spart (~85 LOC `_run_ap_lite_rescue` pro Slot lief mit). Stand 0.98.33
+ist sauber und schlank.
+
+---
+
 ## 2026-05-27 v0.98.32 — P150 Decoder-Empfindlichkeit kMin_score 10 → 4 (FT8) + AP-Lite-Diagnose-Auswertung
 
 **Trigger:** Mike-Feld-Auswertung 27.05. abend: 3 QSOs mit AP-Lite-Test-Modus

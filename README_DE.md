@@ -300,7 +300,6 @@ Hard-Kill. Aktuell 9.366 Calls, waechst mit jeder Session.
 
 ### Implementiert — Feldtest laeuft
 
-- ✅ **AP-Lite** *(aktiv)*: A-Priori-Rettung schwacher QSOs — raet die wenigen im QSO erwarteten Nachrichten und matcht sie phasen-invariant gegen den Empfang. Rein beratend (Info-Anzeige, kein Auto-Log, kein TX).
 ### Operator Presence (Totmannschalter)
 - **Gesetzliche Pflicht (DE)**: Operator muss am Funkgeraet anwesend sein — kein Bot-Betrieb
 - Fest 15 Minuten Timeout, nicht konfigurierbar, nicht umgehbar
@@ -376,7 +375,6 @@ SimpleFT8/
 │   ├── qso_state.py      # QSO-Zustandsmaschine (Hunt + CQ)
 │   ├── diversity.py      # Diversity-Controller (Mess-/Betriebsphasen)
 │   ├── timing.py         # UTC-Takt, 15s/7.5s Zyklus-Timing
-│   ├── ap_lite.py        # AP-Lite: A-Priori-Kandidaten-Matching
 │   ├── ntp_time.py       # ⚠️ UNGETESTET: DT-Zeitkorrektur (Median-DT)
 │   └── propagation.py    # ⚠️ UNGETESTET: Propagation-Balken (HamQSL)
 ├── radio/
@@ -465,7 +463,6 @@ Fuer jedes Feature gibt es eine eigene Erklaerung in Deutsch und Englisch — mi
 | Feature | Deutsch | English |
 |---------|---------|---------|
 | Signalverarbeitung | [signal-processing_de.md](docs/explained/signal-processing_de.md) | [signal-processing.md](docs/explained/signal-processing.md) |
-| AP-Lite (QSO Rescue) | [ap-lite_de.md](docs/explained/ap-lite_de.md) | [ap-lite.md](docs/explained/ap-lite.md) |
 | DT-Zeitkorrektur | [dt-correction_de.md](docs/explained/dt-correction_de.md) | [dt-correction.md](docs/explained/dt-correction.md) |
 | Propagation-Anzeige | [propagation-indicators_de.md](docs/explained/propagation-indicators_de.md) | [propagation-indicators.md](docs/explained/propagation-indicators.md) |
 | Operator Presence | [operator-presence_de.md](docs/explained/operator-presence_de.md) | [operator-presence.md](docs/explained/operator-presence.md) |

@@ -6,7 +6,7 @@ auf time.time() weiterhin fuer Tests/Mocks funktioniert.
 
 Plus _assign_slot_parity:
 - respektiert vom Decoder gesetzte Felder (kein Ueberschreiben)
-- ergaenzt fehlende Felder per Fallback (Test-Mocks/AP-Lite-Rescue)
+- ergaenzt fehlende Felder per Fallback (Test-Mocks)
 """
 import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")

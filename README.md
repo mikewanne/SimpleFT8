@@ -228,7 +228,6 @@ languages = 40 documents.**
 |---------|---------|---------|
 | Caller Waitlist | [waitlist_de.md](docs/explained/waitlist_de.md) | [waitlist.md](docs/explained/waitlist.md) |
 | Per-Station Antenna Preference | [antenna-preference_de.md](docs/explained/antenna-preference_de.md) | [antenna-preference.md](docs/explained/antenna-preference.md) |
-| AP-Lite Rescue | [ap-lite_de.md](docs/explained/ap-lite_de.md) | [ap-lite.md](docs/explained/ap-lite.md) |
 | Auto-Hunt | [auto-hunt_de.md](docs/explained/auto-hunt_de.md) | [auto-hunt.md](docs/explained/auto-hunt.md) |
 | Bandpilot | [bandpilot_de.md](docs/explained/bandpilot_de.md) | [bandpilot.md](docs/explained/bandpilot.md) |
 | CQ Frequency (Histogram) | [cq-frequency_de.md](docs/explained/cq-frequency_de.md) | [cq-frequency.md](docs/explained/cq-frequency.md) |
