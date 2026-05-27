@@ -64,11 +64,17 @@ def test_t2_band_changed_reset_outside_is_transmitting_block():
     # Markierung muss VOR dem QSO-Panel-Clear stehen und NACH encoder.abort
     pos_abort = body.find("encoder.abort()")
     pos_reset = body.find("_pending_tx_log = None")
-    pos_clear = body.find("qso_panel.log_view.clear()")
+    # P143 (26.05.2026): log_view.clear() wurde ersetzt durch
+    # clear_log_completely() (Mike-Bug Bandwechsel ohne _entries-Clear).
+    # Anker bleibt funktional gleich -- Reset davor.
+    pos_clear = body.find("qso_panel.clear_log_completely()")
+    if pos_clear < 0:
+        pos_clear = body.find("qso_panel.log_view.clear()")
     assert pos_abort > 0
     assert pos_reset > 0
     assert pos_abort < pos_reset, "Reset muss NACH abort() kommen"
-    assert pos_reset < pos_clear, "Reset muss VOR log_view.clear() kommen"
+    assert pos_reset < pos_clear, (
+        "Reset muss VOR clear_log_completely() kommen")
 
 
 def test_t3_band_changed_uses_hasattr_pattern():

@@ -528,6 +528,35 @@ class QSOPanel(QWidget):
         self._btn_even.blockSignals(False)
         self._btn_odd.blockSignals(False)
 
+    def clear_log_completely(self):
+        """P143 (26.05.2026): Komplett-Reset für QSO-Log (3 States).
+
+        Leert die Master-Liste `_entries` **UND** das sichtbare Widget
+        **UND** den OMNI-Parity-Tracker `_last_omni_tx_even`. Nur
+        `log_view.clear()` reicht NICHT — der Auto-Trim-Timer
+        (`_cleanup_timer`, 30s-Intervall) ruft `_rerender_all()` auf
+        und zeichnet aus `_entries` neu → alte Einträge tauchen wieder
+        auf (Mike-Field-Bug 26.05.: 30m-Sende-Einträge erschienen nach
+        Bandwechsel auf 20m wieder).
+
+        **Aufrufen bei** (Mike-Spec 26.05.2026):
+        - Bandwechsel (`_on_band_changed`)
+        - FT-Mode-Wechsel (`_on_mode_changed`, FT8↔FT4) — Stationen
+          haben keine Bedeutung mehr in anderem Übertragungsmodus
+        - RX-On/Off-Toggle (`set_rx_active`) — Neustart-Charakter
+
+        **NICHT aufrufen bei**:
+        - RX-Mode-Switch (Normal↔Diversity) — P115-Spec optische
+          Kontinuität, Chronik bleibt sichtbar
+
+        Reihenfolge ist Daten → View → State (R1-F1 26.05.). Thread-
+        safe ohne Lock weil alle Aufrufer + Cleanup-Timer im GUI-
+        Thread laufen (Qt single-threaded queue, R1-F2).
+        """
+        self._entries.clear()
+        self.log_view.clear()
+        self._last_omni_tx_even = None
+
     def _append_colored(self, text: str, color: str):
         """Single-Block Append in einer Farbe.
 

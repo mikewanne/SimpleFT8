@@ -354,7 +354,9 @@ class RadioMixin:
         self.rx_panel.table.setRowCount(0)
         self._diversity_stations = {}
         self._normal_stations = {}
-        self.qso_panel.log_view.clear()
+        # P143 (26.05.2026): _entries muss auch geleert werden, sonst
+        # holt der 30s-Auto-Trim-Timer alte Einträge zurück.
+        self.qso_panel.clear_log_completely()
         self.control_panel.update_decode_count(0)
         self.control_panel.set_rx_active(active)
         # Rotes Banner im Fenster wenn RX deaktiviert
@@ -435,7 +437,10 @@ class RadioMixin:
         if hasattr(self, '_recently_completed_qsos'):
             self._recently_completed_qsos.clear()
         self.control_panel.update_decode_count(0)
-        self.qso_panel.log_view.clear()
+        # P143 (26.05.2026): Mike-Spec FT8↔FT4 auch leeren — Stationen
+        # haben keine Bedeutung mehr in anderem Übertragungsmodus.
+        # Komplett-Reset inkl. _entries (sonst Auto-Trim-Re-Render).
+        self.qso_panel.clear_log_completely()
         # P1.22: `Modus: FT8` Label entfernt — redundant zur Statusbar unten.
         # status_label-Widget bleibt fuer QSO-Counter / CQ-Anzeige verfuegbar.
         self.qso_panel.status_label.setText("")
@@ -544,7 +549,10 @@ class RadioMixin:
         if hasattr(self, "_pending_tx_log"):
             self._pending_tx_log = None
         # QSO-Panel (Live Log) leeren — neues Band = neuer Kontext
-        self.qso_panel.log_view.clear()
+        # P143 (26.05.2026): clear_log_completely() leert _entries
+        # mit, sonst holt der 30s-Auto-Trim-Timer 30m-Sende-Einträge
+        # zurück nachdem User auf 20m gewechselt hat (Mike-Field-Bug).
+        self.qso_panel.clear_log_completely()
         self.qso_panel.status_label.setText("Bandwechsel")
 
         # Warmup: 60s keine Stats nach Bandwechsel
