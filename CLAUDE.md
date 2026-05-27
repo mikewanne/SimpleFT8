@@ -546,6 +546,7 @@ Feature-Plan: **ZUERST FEATURES.md grep'en**, dann Code lesen.
 | **Bandsperre, SWR-Watchdog, TUNE-Pipeline, Phase A/B, `_swr_blocked_bands`** | **§9** | **3-Phasen-Pipeline + Marker-Lifecycle + Stolperfallen** |
 | **QSO-Log Zwei-Speicher (`_entries` + `log_view`), Resurrection, Auto-Trim, `clear_log_completely`** | **§10** | **P95+P143 Architektur, wann leeren / wann nicht (Mike-Spec-Tabelle)** |
 | **Mode-aware Symmetrie-Pattern** (P102/P114/P135/P141 — Anzeige hängt im falschen rx_mode) | **§11** | **Pattern-Klasse 4 Iterationen + Risiko-Tabelle für andere Funktionen** |
+| **Hardware-Sicherheit Pattern** (P53 Watchdog / P76-A Freeze vor tune_off / P142 Freeze vor Phase B), Clamp-1.0-Bug, `_swr_blocked_bands` | **§12** | **Pattern-Klasse 3 Schichten, Marker-Lifecycle, 3 Stolperfallen (Träger-Aus / Phase-B / Cancel-während-Phase-B)** |
 
 ### Abgrenzung der 5 Doku-Dateien
 

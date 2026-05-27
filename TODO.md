@@ -271,34 +271,38 @@ abgedeckt sein.
 
 ---
 
-## 🆕 DeepSeek-Code-Vorschläge sichten (GitHub-Review 16.05.2026)
+## 🆕 DeepSeek-Code-Vorschläge GitHub-Review 16.05.2026 — Sichtung 27.05.2026
 
-DeepSeek hat bei einem GitHub-Code-Review mehrere kleine Vorschläge
-gemacht. Liste ist ungesichtet. Pro Vorschlag prüfen:
-- Noch relevant nach P121 Multi-Radio + P116 FIFO-Cleanup + P132-134
-  Single-Instance-Refactor?
-- KISS-konform?
-- Hardware-Sicherheit OK?
+Bei der README-Überarbeitung (v0.97.42 GitHub-Push) hat DeepSeek-V4-pro
+in 6 Brainstorm-Runden **3 Code-Vorschläge** abgesetzt. Sichtung
+27.05.2026 (autonom, Git-Diff `f19d748` und HISTORY Z. 14486-14492
+verifiziert):
 
-Erwartet: viele kleine Wins, einige obsolet, ein paar wertvoll.
+| Vorschlag | Status |
+|---|---|
+| **P67** — Auto-Hunt-Cap an Operator-Presence binden | ✅ **ERLEDIGT 16.05.2026** v0.97.43 als „P67 Auto-Hunt Mouse-Inactivity-Schicht (Variante C)". 5-Min-Mouse-Inactivity zusätzlich zur 10-Min-Hard-Cap. HISTORY Z. 4012. |
+| **P69** — Konfidenz-Intervalle für Diversity-Tabellen (Bootstrap) | ✅ **ERLEDIGT 17.05.2026** v0.97.46 als „P69 Block-Bootstrap-Konfidenz-Intervalle". README + PDF mit 95%-CI. HISTORY Z. 3733. |
+| **P68** — OMNI-CQ continuous gap re-evaluation innerhalb Paritäts-Block | ⏸ **NICHT UMGESETZT** — bewusste KISS-Entscheidung. Aktuell: `omni_cq.py:240` ruft `_init_audio_freq()` nur EINMAL pro Session (Sticky). DeepSeek-Argument („Worst-Case 10 OMNI-Nutzer gleiche Frequenz") ist hypothetisch — OMNI ist deaktiviert + Mike hat keine Field-Symptome gemeldet. Komplexitäts-Increase ohne Bug-Druck. |
+
+**Resultat:** 2 von 3 erledigt, 1 bewusst verworfen. Liste komplett
+abgearbeitet — Ticket kann zu.
 
 ---
 
-# ⚠️ ALTE OFFENE TICKETS — Status unklar, Sichtung nötig
+# ⚠️ ALTE OFFENE TICKETS — Sichtung 27.05.2026
 
-> Diese Tickets stammen vom 10.-11.05.2026 und stehen unverändert in der
-> alten TODO. Status muss geprüft werden — manches könnte durch spätere
-> Refactoring-Workflows obsolet geworden sein.
+> Stand 27.05.2026 (autonome Sichtung): Code-Verifikation aller 4 Tickets
+> durchgeführt. Ergebnisse unten — alle alten Tickets sind erledigt oder
+> obsolet, keine offenen Architektur-Lücken mehr.
 
-| ID | Was | Vermutlicher Status |
+| ID | Was | Status (verifiziert 27.05.2026) |
 |---|---|---|
-| ~~P30~~ | MEMORY-LEAK 124 GB | ✅ **ERLEDIGT 13.05.** — Wurzel war TTS, nicht SimpleFT8 (HISTORY.md) |
-| P12 | QSO-POSTPROCESSING-ASYNC (logbook.refresh-Hang) | **PARTIAL-FIX 11.05.** Logbuch nur letzte 500. Sauberer Async-Refresh noch offen — Status mit Mike klären |
-| P27 | MESS-GUARD — vor Antennen/Diversity/Gain-Mess prüfen ob Radio verbunden | Unklar — könnte durch P82 (Connect-Worker-Abort) oder Multi-Radio-Refactor abgedeckt sein |
-| P25 | RADIO-IP-LATE-SETTING | Wahrscheinlich obsolet — Mike 10.05.: „radio ist nicht spät, wird normal gesucht und gefunden" |
+| ~~P30~~ | MEMORY-LEAK 124 GB | ✅ **ERLEDIGT 13.05.** — Wurzel war TTS, nicht SimpleFT8 |
+| ~~P12~~ | QSO-POSTPROCESSING-ASYNC (logbook.refresh-Hang) | ✅ **ERLEDIGT durch P12-Fix 11.05.** — `_LOGBOOK_MAX_ROWS=500` (`ui/logbook_widget.py:23`). 500 Zeilen sind synchron unkritisch (~10-50ms). Kein Hang mehr seit Fix; "Sauberer Async-Refresh" wäre Architektur-Verbesserung ohne Bug-Druck → **verworfen als KISS-Verletzung**. |
+| ~~P27~~ | MESS-GUARD — vor Antennen/Diversity/Gain-Mess prüfen ob Radio verbunden | ✅ **ERLEDIGT durch P63 (AC9/AC13) + P82** — `_start_dx_tuning` hat 3-fach-Guard (`band in _swr_blocked_bands`, `radio.ip`, `tuner_present`). `_start_tune_only` returnt früh ohne `radio.ip` (`mw_radio.py:1700`). Re-Check vor `tune_off` (Z. 1721) deckt Offline-Race ab. Multi-Radio-Refactor P121 hat Architektur sauberer gemacht. |
+| ~~P25~~ | RADIO-IP-LATE-SETTING | ✅ **OBSOLET** — `auto_connect()` läuft als Worker mit max_retries=10. P82 (Late-Connect-Override), P90 (Worker-Abort), P91 (Dialog-Lifecycle) decken alle Race-Fenster ab. Mike-Statement 10.05.: „wird normal gesucht und gefunden" weiterhin gültig. |
 
-**Empfehlung:** bei nächster Doku-Session diese 4 mit Mike durchgehen
-und entscheiden: bleiben / erledigt / verworfen.
+**Resultat:** alle 4 Alt-Tickets können aus dem aktiven Backlog raus.
 
 ---
 

@@ -723,8 +723,12 @@ PHASE A (Tuner-Match)
   ├─ radio.tune_on()                             ← FlexRadio-Tuner-Match
   └─ tune_duration_s warten (default 15 s)
                 ↓
+SWR-FREEZE (P142 27.05.2026)                       ← NACH Phase A, VOR Phase B
+  └─ swr_after_match = radio.last_swr
+     _tune_last_valid_swr = swr_after_match       ← echter Match-Wert bei voller Power
+                ↓
 PHASE B (Closed-Loop Power-Konvergenz)            ← OPTIONAL
-  ├─ Vor-Check: radio.last_swr ≤ swr_limit ?
+  ├─ Vor-Check: swr_after_match ≤ swr_limit ?
   │     NEIN → Phase B SKIP, _tune_converged_rf = None
   │     JA  → weiter
   ├─ 5 Iterationen á 1 s:
@@ -732,9 +736,6 @@ PHASE B (Closed-Loop Power-Konvergenz)            ← OPTIONAL
   │     – Proportional rfpower-Slider anpassen
   │     – Ziel: FWDPWR ≈ 10 W (±1 W Toleranz)
   └─ Konvergenz-Ergebnis: rf-Wert (Stützpunkt für späteren rf_preset)
-                ↓
-SWR-FREEZE
-  └─ _tune_last_valid_swr = self.radio.last_swr   ← VOR tune_off()
                 ↓
 TUNE-OFF
   ├─ radio.tune_off()
@@ -744,7 +745,7 @@ TUNE-OFF
                 ↓
 POST-CHECK (2 s später)
   ├─ token-validation (Re-Tune-Race-Schutz)
-  ├─ swr_now = _tune_last_valid_swr (eingefroren)
+  ├─ swr_now = _tune_last_valid_swr (eingefroren VOR Phase B)
   ├─ if swr_now ≤ swr_limit:
   │     ✓ Marker discard + Diversity-Resume (wenn aktiv)
   │     ✓ rf_preset_store.save bei plausiblem rf-Wert
@@ -763,39 +764,38 @@ Meter-Updates durch sind. 2 s ist empirisch genug für saubere Werte.
 Token-Pattern (`_tune_post_check_token`) schützt vor Race bei
 schnellem Re-Tune (User klickt TUNE 2×).
 
-### Bekannte Stolperfalle 1: Clamp-Bug ohne Träger
+### Bekannte Stolperfalle 1: Clamp-Bug ohne Träger / während Phase-B
 
 Nach `tune_off()` liefert FlexRadio weiterhin Meter-Updates **ohne TX-
 Träger** — Werte < 1.0 die in `_handle_meter` auf 1.0 geclamped werden
-und `radio._last_swr` überschreiben. Deshalb wird der echte
-Match-SWR **vor** `tune_off()` eingefroren (`_tune_last_valid_swr` Z. 275).
-Sonst würde der Post-Check 2 s später fälschlich 1.0 lesen → false-OK.
+und `radio._last_swr` überschreiben. **Zusätzlich** clampt der Sensor
+**während Phase B**, wenn die rfpower-Regelung den Träger
+runterdrückt → SWR scheint auf 1.0 zu fallen obwohl die echte
+Match-Last unverändert ist.
+
+Deshalb wird der Match-SWR **direkt nach Phase A** (vor Phase B und
+vor `tune_off()`) als `swr_after_match` eingefroren — das ist der
+einzige Zeitpunkt mit verlässlich vollem 10-W-Träger an der Antenne.
+Vorher (vor P142, 27.05.2026) wurde der Freeze nach Phase B genommen
+→ false-OK 1.0 bei defekter Antenne.
 
 ### Bekannte Stolperfalle 2: Disconnect-Pfad
 
-`mw_tx.py:340-350` — wenn das Radio während Post-Check disconnected
-ist, wird `_tune_last_valid_swr = None` reset (Stale-Schutz) und
-Auto-TUNE-Dialog erhält `auto_tune_done.emit(False, 0.0, 0.0)`.
+`mw_tx.py` — wenn das Radio während Post-Check disconnected ist, wird
+`_tune_last_valid_swr = None` reset (Stale-Schutz) und Auto-TUNE-
+Dialog erhält `auto_tune_done.emit(False, 0.0, 0.0)`.
 
-### Offene Schwäche (P142 26.05.2026)
+### Bekannte Stolperfalle 3: User-Cancel während Phase B
 
-Mike's Field-Beobachtung 26.05. 17:24: Nach SWR-Sperre 15m manueller
-TUNE → echtes Match-SWR live 2.5 → Meldung „Band 15M freigegeben — SWR
-**1.0**". Zweiter TUNE: korrekt 2.5.
+Wenn der User TUNE erneut drückt **während** die Phase-B-Konvergenz
+läuft, greift die Re-Entry-Sperre `_tune_stop_active=True`. Sie setzt
+nur `_tune_convergence_cancelled = True` und return — würde aber den
+bereits gesetzten Phase-A-Freeze durchreichen → Post-Check sieht
+einen "gültigen" Wert → fälschliche Band-Freigabe trotz Abbruch.
 
-**Vermutete Ursache:** Phase B regelt rfpower beim Konvergieren
-runter; während dieses Power-Downs misst der SWR-Sensor evtl. zu
-wenig Träger und liefert clamp-1.0. Der `_tune_last_valid_swr`-Freeze
-(Z. 275) passiert DANACH und friert den falschen 1.0er-Wert ein
-statt des echten Match-Wertes nach Phase A.
-
-**Bei swr_limit=3.0 harmlos** (2.5 wäre eh durchgewunken). **Bei
-echtem 4.5 + clamp-1.0 wäre das ein Sicherheits-Bug** → Band
-fälschlich freigegeben → nächster TX mit defekter Antenne.
-
-Fix-Optionen siehe TODO.md P142. Architektur-Empfehlung: SWR-
-Freeze **vor** Phase B nehmen (relevant ist der Match-Wert bei voller
-Sende-Power, nicht der Wert bei runtergeregelten 10 W).
+**Fix (P142 R1-Catch):** Re-Entry-Sperre invalidiert den Freeze
+explizit: `_tune_last_valid_swr = None`. Damit fällt der Post-Check
+hart aus → Band bleibt gesperrt → Hardware sicher.
 
 ### Konstanten + Settings
 
@@ -1038,6 +1038,113 @@ Mike mit „komische Anzeige" zurück und es wird P14X.
   Symmetrie-Test (beide Handler MÜSSEN `compute_local_conditions`
   rufen)
 - `tests/test_p135_*` — Decode-Count-Symmetrie
+
+---
+
+## 12. Pattern-Klasse Hardware-Sicherheit (P53/P76-A/P142)
+
+**Pattern-Frage:** Wie schützt SimpleFT8 die FlexRadio-Hardware (PA,
+Antennen-Pfad) vor TX an defekter Last?
+
+**Antwort:** Drei aufeinander aufbauende Schichten — jede neue
+Iteration verstärkt die vorigen ohne sie zu brechen. SWR-Werte werden
+an **drei zeitlich gestaffelten** Punkten geprüft, jeder Punkt setzt
+einen anderen Marker bzw. greift einen anderen Race ab.
+
+### Die 3 Schichten (chronologisch)
+
+| Schicht | Wo | Wann eingebaut | Was sie tut |
+|---|---|---|---|
+| **P53 SWR-Live-Watchdog** | `mw_tx._on_meter_update` | v0.97.29 (14.05.2026) | Liest `radio._last_swr` aus VITA-49-Meter-Stream. Setzt `_swr_blocked_bands`-Marker live wenn SWR > limit während TX. **Schutz bei plötzlicher Antennen-Defekt mitten in QSO** (Steckverbinder lose, Wetter-Einfluss). |
+| **P76-A SWR-Freeze vor tune_off** | `mw_tx._tune_stop` | v0.97.49 (19.05.2026) | Friert `_tune_last_valid_swr` VOR `tune_off()` ein. **Schutz vor Clamp-1.0 nach Träger-Aus** (Stolperfalle 1, ohne-Träger-Branch). |
+| **P142 SWR-Freeze vor Phase B** | `mw_tx._tune_stop` | v0.98.29 (27.05.2026) | Friert `_tune_last_valid_swr` schon VOR Phase B mit `swr_after_match`. **Schutz vor Clamp-1.0 während Power-Down** (Stolperfalle 1, Phase-B-Branch). |
+
+### Warum kumulativ statt ersetzend?
+
+Jede Schicht deckt ein anderes Zeit-Fenster ab:
+
+```
+TUNE-Start ───── Phase A (15s, voller Träger) ───── Phase B (5s, Power-Drop) ───── tune_off ───── Post-Check (2s) ───── QSO-TX
+                                                                                                                          │
+                       ↑ P142 Freeze hier (echter Match-SWR)                                                              │
+                                                                                                                          │
+                                                                  ↑ P76-A Freeze hier (last Match vor tune_off)            │
+                                                                                                                          │
+                                                                                                                          ↑ P53 Watchdog läuft DAUERHAFT
+```
+
+- **P53** läuft die ganze Zeit (jeder Meter-Push) — auch im QSO-TX
+  nach erfolgreichem TUNE-Cycle.
+- **P76-A** und **P142** schützen den TUNE-Cycle selbst. P76-A war
+  notwendig weil ohne Träger 1.0 geclamped wird. P142 war notwendig
+  weil Phase B den Träger runterregelt → gleicher Clamp-Effekt
+  während gewollter Power-Reduktion.
+
+**Wenn man P142 ohne P76-A bauen würde:** Funktion theoretisch identisch
+(Freeze ist eh früher), aber 2 Code-Pfade je nach `_tune_converged_rf`
++ Auto-TUNE-Dialog-Branch → P76-A-Code bleibt als bewährter
+Backup-Pfad.
+
+### Mike-Funker-Intuition als Diagnose-Tool
+
+Bei P142 hat Mike die richtige Hypothese live im Feld geliefert
+(„übernimmt er wohl den 1.0 wert aus der gui"), nur die technische
+Ursache (Phase-B-Power-Drop-Clamp) war anders als seine erste
+Theorie („2 Programmpfade"). **Lesson:** Mike's Symptom-Beschreibung
+ist meist 100% präzise; die Funker-Hypothese zur Ursache muss
+manchmal verschoben werden. Symptom + 2-TUNE-Vergleichs-Beobachtung
+(„beim 2. TUNE stimmt es") ist Gold wert — das ist der direkte Hinweis
+auf den Power-Drop-Mechanismus.
+
+### Marker `_swr_blocked_bands` — die zentrale Hardware-Bremse
+
+Alle drei Schichten benutzen denselben Marker. Wer den Marker
+respektieren MUSS:
+
+- jeder TX-Trigger in `mw_qso.py`, `mw_tx.py`, `mw_cycle.py` —
+  vor jedem `encoder.start_tx` / `radio.ptt_on` Check
+- Auto-Hunt-Pick in `mw_cycle.py:on_message_decoded`
+- OMNI-CQ-Trigger
+- TUNE-Button selbst (sonst Endlosschleife: blocked → tune → blocked → tune)
+
+Wer den Marker löschen darf:
+- Erfolgreicher Post-Check (Marker discard + `qso_panel.add_info` Meldung)
+- Bandwechsel (`_swr_blocked_bands` ist pro-Band, anderes Band ist
+  per Definition nicht gesperrt)
+
+### Hardware-Konsequenz für neue TX-Features
+
+**Erste Frage bei jedem neuen TX-Trigger (CLAUDE.md HW-Warnung):**
+
+1. Läuft TX garantiert über ANT1? (`radio.set_tx_antenna("ANT1")`)
+2. Wird `_swr_blocked_bands` für aktuelles Band geprüft VOR `start_tx`?
+3. Gibt es einen Pfad an dem `_tune_last_valid_swr` als alter Wert
+   stehen bleibt? (z.B. Cancel-Pfade, Disconnect-Pfade)
+
+Bei P142 war Punkt 3 der Killer — Cancel-während-Phase-B hätte den
+Freeze durchgereicht. R1-V4-pro fing das im Pre-Code-Review (siehe
+Stolperfalle 3 oben).
+
+### Verwandte Tests
+
+- `tests/test_p53_swr_live_watchdog.py` — P53 Schicht 1
+- `tests/test_p76_swr_freeze.py` — P76-A Schicht 2
+- `tests/test_p142_swr_freeze_before_phase_b.py` — P142 Schicht 3
+  (inkl. T4 ORANGE-Catch Cancel-während-Phase-B)
+
+### Verwandte HISTORY-Einträge
+
+- v0.97.29 P53 SWR-Live-Watchdog
+- v0.97.49 P76-A SWR-Freeze vor tune_off
+- v0.98.29 P142 SWR-Freeze vor Phase B
+
+### Trigger für 4. Iteration
+
+Wenn jemals eine neue Power-Modulation in der TUNE-Pipeline auftaucht
+(z.B. AGC-Tests, Schutz-Trip-Tests, Tuner-Re-Match-Loops): erste
+Frage — wo bleibt `_tune_last_valid_swr` im neuen Pfad? Wenn der
+Freeze gegenüber dem neuen Power-Event timing-falsch sitzt → P14X
+ist vorprogrammiert.
 
 ---
 
