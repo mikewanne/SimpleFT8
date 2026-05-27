@@ -902,6 +902,19 @@ class TXMixin:
                 # TX inaktiv → Anzeige zuruecksetzen
                 self.control_panel.update_tx_peak(0.0)
         elif name == "SWR":
-            self.control_panel.update_swr(value)
+            # P148 (27.05.2026, Mike-Field-Bug 06:44): SWR-Anzeige NUR
+            # während TX/TUNE updaten. FlexRadio pusht das SWR-Meter
+            # kontinuierlich via VITA-49 — im RX ist der Sensor-Default
+            # ~1.0 weil keine HF läuft, was „super SWR" suggeriert
+            # obwohl gar keine echte Messung stattfindet.
+            # Mike sah „SWR 1.0" im RX-Modus auf 15m direkt nach TUNE
+            # OK mit SWR 2.4 — irreführend. Mike-Wahl Option A: letzten
+            # echten TX/TUNE-Wert halten, statt mit Sensor-Default
+            # überschreiben. Bei Bandwechsel wird die Anzeige separat
+            # zurückgesetzt (mw_radio._on_band_changed).
+            # P53 SWR-Watchdog ist UNBETROFFEN — liest direkt
+            # `radio._last_swr` (flexradio.py), nicht die UI.
+            if self.encoder.is_transmitting or self._tune_active:
+                self.control_panel.update_swr(value)
         elif name == "ALC":
             self.control_panel.update_alc(value)

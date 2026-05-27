@@ -520,6 +520,11 @@ class RadioMixin:
         freq = self.settings.frequency_mhz
         self._has_sent_cq = False
 
+        # P148 (27.05.2026): SWR-Anzeige zurücksetzen — Werte vom Vorband
+        # sind nicht mehr gültig (andere Antennen-Charakteristik). Bleibt
+        # grau „SWR —" bis zum nächsten echten TX/TUNE auf neuem Band.
+        self.control_panel.reset_swr_display()
+
         # P10 (v0.97.15): bei Bandwechsel sofortiger PSK-Re-Fetch
         # (Statusbar-Pfad) + Backoff-Reset im Karten-Pfad falls offen.
         # Statt bis zu 5 Min auf naechsten _psk_timer-Tick zu warten,

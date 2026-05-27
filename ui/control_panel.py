@@ -2049,6 +2049,18 @@ class ControlPanel(QWidget):
             f"color: {color}; font-family: {_FONT}; font-size: 14px; font-weight: bold;"
         )
 
+    def reset_swr_display(self):
+        """P148 (27.05.2026): SWR-Anzeige auf „SWR —" zurücksetzen.
+
+        Genutzt bei Bandwechsel — Werte vom Vorband sind ungültig
+        (andere Antennen-Charakteristik). Anzeige bleibt grau bis
+        zum nächsten echten TX/TUNE-Update.
+        """
+        self.swr_label.setText("SWR —")
+        self.swr_label.setStyleSheet(
+            f"color: #888888; font-family: {_FONT}; font-size: 14px; font-weight: bold;"
+        )
+
     def update_alc(self, alc: float):
         """ALC-Meter aktualisieren (nur intern, nicht mehr angezeigt)."""
         pass
