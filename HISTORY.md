@@ -3,6 +3,69 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-27 v0.98.28 — P148 SWR-Anzeige nur während TX/TUNE updaten
+
+**Mike-Field-Bug 27.05. 06:44** (Screenshot 15m FT8):
+- QSO-Log zeigte „✓ TUNE OK — SWR 2.4" + Kalibrierung-Eintrag
+- SWR-Anzeige im Radio-Panel: **„SWR 1.0" grün** (TX=0W, RX-IDLE)
+- Mike: „1.0 suggeriert super swr zur zeit auf den band"
+
+**Root Cause:** FlexRadio pusht das SWR-Meter via VITA-49 kontinuierlich
+— auch im RX wo die PA inaktiv ist. Der Sensor liefert dann Default-Werte
+~1.0 (keine reflektierte Leistung → SWR≈1). Die UI hat das jedes Mal
+unfilterend übernommen → letzter echter TUNE-Wert (2.4) wurde durch
+Sensor-Default (1.0) überschrieben.
+
+**Mike-Wahl Option A (R1-empfohlen):** letzten echten TX/TUNE-Wert
+halten, nicht mit Sensor-Default überschreiben. Bei Bandwechsel Reset
+auf „—". Alternativen B (— im RX) und C (Hybrid Tooltip) verworfen
+(R1: B braucht TX-Ende-Reset, C ist Overengineering).
+
+**Fix (voller Workflow autonom, 3 Änderungen):**
+
+1. **`ui/mw_tx.py:_on_meter_update`** — Filter im SWR-Branch:
+   ```python
+   elif name == "SWR":
+       if self.encoder.is_transmitting or self._tune_active:
+           self.control_panel.update_swr(value)
+       # sonst: letzter echter Messwert bleibt sichtbar
+   ```
+
+2. **`ui/control_panel.py`** — neue Methode `reset_swr_display()`:
+   ```python
+   def reset_swr_display(self):
+       self.swr_label.setText("SWR —")
+       self.swr_label.setStyleSheet("color: #888888; ...")
+   ```
+
+3. **`ui/mw_radio.py:_on_band_changed`** — Reset-Aufruf NACH
+   `settings.set("band", band)`.
+
+**Hardware-Sicherheit (P53 SWR-Watchdog) UNBEEINFLUSST:**
+- P53 liest direkt `radio._last_swr` aus FlexRadio (flexradio.py)
+- UI-Setter `update_swr` modifiziert `_last_swr` NICHT (T9b verifiziert)
+- `swr_alarm` feuert mit Hardware-Wert, nicht UI-Wert
+- Keine Rückkopplung UI → Hardware
+
+**Final-R1 V4-pro: PUSH FREIGEBEN** — KISS „sehr klein" (1 if + 4 LOC
+Helper + 1 Aufruf), Mike-Bug gelöst, alle Edge-Cases abgedeckt.
+
+**Field-Verhalten danach:**
+- TUNE auf 15m: SWR 2.4 (echt gemessen)
+- RX nach TUNE: SWR 2.4 bleibt (kein Überschreiben durch 1.0)
+- QSO sendet: SWR 1.4 (live während TX)
+- RX nach QSO: SWR 1.4 bleibt
+- Bandwechsel 15m → 20m: SWR — (grauer Reset)
+- TUNE auf 20m: SWR 1.2 (neuer echter Wert)
+
+**Tests 2124→2138 (+14 P148):** T1-T4 Filter-Verhalten (4 Permutationen
+TX/TUNE), T5/T5b/T6 reset_swr_display Existenz+Style, T7/T7b Filter
+Source-Inspektion + P148-Doku, T8/T8b Bandwechsel-Pfad mit
+Reihenfolge-Check, T9/T9b P53-Watchdog-Hardware-Sicherheit, T10 Mike-
+Field-Szenario komplett.
+
+---
+
 ## 2026-05-27 v0.98.27 — P145 Pattern-Check-Skript mode-aware Symmetrie (Vorbeugung)
 
 **R1-Empfehlung aus P141-Review** (F6 ORANGE, 27.05.): statisches AST-

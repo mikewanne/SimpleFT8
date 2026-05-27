@@ -1,4 +1,31 @@
-# SimpleFT8 TODO — Stand 27.05.2026 (v0.98.25, autonom mit DeepSeek)
+# SimpleFT8 TODO — Stand 27.05.2026 (v0.98.28, autonom mit DeepSeek)
+
+---
+
+## ✅ ERLEDIGT 27.05.2026 — P148 SWR-Anzeige nur während TX/TUNE updaten (v0.98.28)
+
+Mike-Field-Bug 06:44 (Screenshot 15m FT8): nach „TUNE OK — SWR 2.4"
+zeigte Anzeige „SWR 1.0" grün im RX-Modus → suggerierte „super SWR
+zur Zeit auf dem Band" obwohl gar nicht gesendet wurde.
+
+**Root Cause:** FlexRadio pusht SWR-Meter via VITA-49 kontinuierlich,
+im RX ist Sensor-Default ~1.0 → überschreibt letzten echten TUNE-Wert.
+
+**Mike-Wahl Option A** (R1-empfohlen): letzten echten TX/TUNE-Wert
+halten, bei Bandwechsel Reset auf „—".
+
+**Fix (3 Änderungen, KISS):**
+- `mw_tx.py:_on_meter_update` SWR-Branch: Filter
+  `if is_transmitting or _tune_active`
+- `control_panel.py`: neue Methode `reset_swr_display()`
+- `mw_radio.py:_on_band_changed`: Reset-Aufruf nach `settings.set`
+
+**Hardware-Sicherheit:** P53 SWR-Watchdog UNBEEINFLUSST — liest direkt
+`radio._last_swr` aus FlexRadio, nicht UI-Anzeige (T9/T9b verifiziert).
+
+**Final-R1 PUSH FREIGEBEN** — KISS „sehr klein", alle Edge-Cases ok.
+
+Tests 2124→2138 (+14 P148). Field-Test pending.
 
 ---
 
@@ -270,6 +297,17 @@ Pattern-Familie „Mode-Mismatch" könnte größer sein.
 ---
 
 ## ✅ ERLEDIGT 27.05.2026 — P144 Auto-Hunt busy-station Filter (v0.98.26)
+
+**🟢 FIELD-VALIDIERT 27.05. 08:50** (Mike-Screenshot):
+```
+08:50:15 → Gesendet EA8UP DA1MHH -15
+08:50:45 → Gesendet EA8UP DA1MHH -15
+         ⏭ EA8UP belegt (sendet an OK1JP) — überspringe ohne Sperre
+08:51:45 → Gesendet RA0SCZ DA1MHH -19      ← Auto-Hunt picked nächste Station
+08:52:15 → Gesendet RA0SCZ DA1MHH -19
+```
+Filter greift, Skip-Meldung erscheint, nächster Pick funktioniert.
+Mike: „belegt fix ist okay und bestätigt funktioniert super".
 
 Mike-Field-Bug RA5AD 26.05. 17:38: Auto-Hunt picked Station 1:45 Min
 NACH dessen RR73 an R2BRD → 5 Versuche ins Leere (2:30 Min Band-QRM)

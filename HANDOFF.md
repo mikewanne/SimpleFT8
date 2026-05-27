@@ -1,8 +1,23 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-27 — v0.98.27 P144 + P145 autonom durchgezogen (Mike-Anfrage „2 Punkte")
+## Stand 2026-05-27 — v0.98.28 P148 SWR-Anzeige Field-Bug-Fix + P144 field-validiert
 
-**Aktueller Code-Stand:** v0.98.27, Tests **2124 grün** (+33 heute: P144 +22, P145 +11).
+**Aktueller Code-Stand:** v0.98.28, Tests **2138 grün** (+47 heute: P144 +22, P145 +11, P148 +14).
+
+**Letzte Session-Updates:**
+- **P144 FIELD-VALIDIERT 27.05. 08:50** (Mike-Screenshot): EA8UP
+  picked → erkannt „belegt (sendet an OK1JP)" → übersprungen ohne
+  Sperre → RA0SCZ als nächste Station. Mike: „belegt fix ist okay
+  und bestätigt funktioniert super". P144 nicht mehr pending.
+- **P148** (v0.98.28): SWR-Anzeige nur während TX/TUNE updaten.
+  Mike-Field-Bug 06:44 (Screenshot): „SWR 1.0" im RX nach TUNE OK
+  mit SWR 2.4 → irreführend. R1-empfohlen Option A (letzten echten
+  Wert halten). Filter in mw_tx + reset_swr_display in
+  control_panel + Reset-Aufruf in _on_band_changed. P53
+  SWR-Watchdog unbeeinflusst (liest radio._last_swr direkt).
+  Tests +14. **Field-Test pending.**
+
+**Heute Vormittag (vor P148):**
 
 **Mike-Anfrage 07:32:** „suche dir 2 offene punkte aus der todo die du
 vollständig autonom mit vollen deepseek workflow bis zum ende
