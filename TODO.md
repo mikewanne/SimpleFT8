@@ -48,9 +48,25 @@ dann gezielt fixen.
 
 ---
 
-# ⏸ AUFGESCHOBEN — Hardware-Repro nötig (Mike vor Ort)
+# ✅ ERLEDIGT 27.05.2026 — P142 SWR-Freeze VOR Phase B (v0.98.29)
 
-## P142 — Bandsperre-Freigabe meldet falschen SWR-Wert (Mike Field 26.05. 17:24)
+Mike-Field-Reproduktion 12:08-12:10: Bandsperre triggered → manueller
+TUNE → Log meldete „freigegeben — SWR 1.0" obwohl Live-Widget 2.5
+zeigte. Fix Variante C (R1-empfohlen): Freeze VOR Phase B nehmen
+(`swr_after_match` als `_tune_last_valid_swr`). R1-ORANGE-Catch:
+Cancel-während-Phase-B Edge-Case behoben (Hardware-Sicherheit).
+
+Final-R1 PUSH FREIGEBEN „sehr KISS-konform". Tests 2138→2149 (+11
+P142, 3 alte P76-A-Tests angepasst). Pattern-Klasse Hardware-
+Sicherheit 3. Iteration (P53/P76-A/P142).
+
+**Field-Test pending.**
+
+---
+
+## (alte AUFGESCHOBEN-Sektion war hier, jetzt erledigt)
+
+## P142 — Bandsperre-Freigabe meldet falschen SWR-Wert (Mike Field 26.05. 17:24) — JETZT ERLEDIGT
 
 **Mike-Anweisung 27.05.:** „radio ist zwar an ich bin aber nicht vor
 ort wir müssen das aus eis legen bis ich einmal schlechtes swr

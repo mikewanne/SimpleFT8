@@ -1,6 +1,24 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-27 — v0.98.28 P148 SWR-Anzeige Field-Bug-Fix + P144 field-validiert
+## Stand 2026-05-27 — v0.98.29 P142 SWR-Freeze VOR Phase B (Mike-Field-Reproduktion gelöst)
+
+**Aktueller Code-Stand:** v0.98.29, Tests **2149 grün** (+11 P142).
+
+**Mike-Field-Reproduktion 12:08-12:10 → P142 GEFIXT:**
+- Mike hat Bandsperre-Freigabe-Bug REPRODUZIERT (war seit 26.05.
+  als AUFGESCHOBEN markiert wegen Hardware-Repro-Bedarf)
+- Diagnose bestätigt: 1 Pfad, 1 Quelle, aber Phase-B-Power-Drop
+  clampt Sensor auf 1.0 → falscher Freeze
+- Fix Variante C umgesetzt (R1-empfohlen): Freeze VOR Phase B
+- R1-ORANGE-Catch: Cancel-während-Phase-B Edge-Case behoben
+- Final-R1 PUSH FREIGEBEN ✓
+
+**Mike-Nächste-Schritte:** App-Restart auf v0.98.29 → P142 + P148
+beide aktiv → Bandsperre triggern → manueller TUNE → Log MUSS
+„freigegeben — SWR 2.5" zeigen (statt 1.0). + SWR-Widget bleibt
+nach TUNE bei 2.5 stehen (P148).
+
+
 
 **Aktueller Code-Stand:** v0.98.28, Tests **2138 grün** (+47 heute: P144 +22, P145 +11, P148 +14).
 

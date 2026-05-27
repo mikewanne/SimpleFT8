@@ -244,35 +244,48 @@ class TXMixin:
         if getattr(self, '_tune_stop_active', False):
             # Cancel waehrend laufendem _tune_stop → nur Convergenz abbrechen
             self._tune_convergence_cancelled = True
+            # P142 R1-F (27.05.2026): bei Cancel WÄHREND Phase B den Freeze
+            # invalidieren — sonst würde der schon gesetzte Phase-A-Wert
+            # den Post-Check zu „freigegeben" verleiten, obwohl der User
+            # abgebrochen hat (Hardware-Sicherheit: Band bleibt gesperrt).
+            self._tune_last_valid_swr = None
             return
         self._tune_stop_active = True
 
         from PySide6.QtCore import QTimer
 
-        # P54-FIX AC3: Phase B (Closed-Loop-Convergenz) VOR tune_off.
-        # Nur wenn token nicht None (kein User-Cancel) UND SWR OK.
+        # P142 (27.05.2026, Mike-Field-Reproduktion 12:08-12:10):
+        # SWR-Freeze VOR Phase B nehmen, NICHT nach. Phase B regelt
+        # rfpower runter (5s Konvergenz) — während Power-Drop clampt
+        # der FlexRadio-Sensor auf 1.0, was den nachträglichen Freeze
+        # mit falschem Wert kontaminiert. Mike-Field-Bug: TUNE matched
+        # zu 2.5, Log meldete „freigegeben — SWR 1.0". 2. TUNE (rfpower
+        # schon klein) traf zufällig den echten Wert.
+        # Variante C (R1-empfohlen): Phase-A-SWR ist der ehrliche
+        # Match-Wert. Phase B beeinflusst nur noch RF-Stützpunkt-
+        # Speicherung, NICHT den Freeze.
         if token is not None and self.radio.ip:
             swr_after_match = self.radio.last_swr
+            # NEU: Freeze HIER setzen (vor Phase B), nicht in Z. 275.
+            self._tune_last_valid_swr = swr_after_match
             swr_limit = self.settings.get("swr_limit", 3.0)
             if swr_after_match <= swr_limit:
-                # Phase B: bis FWDPWR ≈ 10W konvergieren
+                # Phase B: bis FWDPWR ≈ 10W konvergieren (nur für
+                # RF-Stützpunkt, nicht mehr für SWR-Bewertung).
                 self._tune_converged_rf = self._tune_converge_to_target(target_w=10)
             else:
                 print(f"[P54-FIX] Phase B SKIP — SWR {swr_after_match:.1f} "
                       f"> Limit {swr_limit:.1f}")
                 self._tune_converged_rf = None
         else:
-            # User-Cancel: keine Convergenz, _tune_converged_rf bleibt None
+            # User-Cancel oder Disconnect: kein gültiger TUNE-Wert.
             self._tune_converged_rf = None
+            self._tune_last_valid_swr = None
 
-        # P76-A SAFETY (v0.97.49): SWR einfrieren BEVOR tune_off().
-        # Nach tune_off() liefert FlexRadio Meter-Updates ohne TX-Traeger
-        # Werte <1.0 die in _handle_meter auf 1.0 geclamped werden →
-        # ueberschreibt radio._last_swr → Post-Check 2s spaeter liest 1.0
-        # → false-OK-Bug (Phase-B-Skip-Pfad: echter SWR 2.7 verloren).
-        # Freeze unconditional (kein radio.ip-Guard — last_swr ist
-        # lokale Property, kein Hardware-Zugriff).
-        self._tune_last_valid_swr = self.radio.last_swr
+        # P76-A SAFETY-Doku-Anker (v0.97.49, jetzt durch P142 obsolet):
+        # Früher wurde hier `_tune_last_valid_swr = self.radio.last_swr`
+        # NACH Phase B gesetzt. Das führte zu Mike's Field-Bug 27.05.2026.
+        # Freeze ist jetzt VOR Phase B (siehe oben) — Z. 275 entfällt.
 
         # tune_off + VFO+Power zurück
         self.radio.tune_off()

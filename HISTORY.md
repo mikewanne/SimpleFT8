@@ -3,6 +3,103 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-27 v0.98.29 — P142 SWR-Freeze VOR Phase B nehmen (Bandsperre-Freigabe-Fix)
+
+**Mike-Field-Reproduktion 27.05.2026 12:08-12:10** (Bandwechsel auf
+defekte Antenne):
+```
+1. Bandwechsel → Auto-TUNE → SWR > 3 → Bandsperre
+   "⚠ Band 15M gesperrt — SWR 17.9"
+2. "⚠ Auto-Hunt blockiert — Band 15M SWR-Sperre"
+3. Manueller TUNE → Live-Widget zeigt SWR 2.5 (Phase A korrekt)
+4. Nach TUNE: "✓ Band 15M freigegeben — SWR 1.0"  ← FALSCH!
+5. 2. TUNE: "✓ TUNE OK — SWR 2.5"  ← KORREKT (rfpower vom 1. Lauf
+   schon klein → Phase B konvergiert sofort → kein Power-Drop)
+```
+
+**Mike-Diagnose:** „der setzt die 1,0 nachdem ich von hand getunt habe
+bei tunen zeigt er 2,5 swr ... 2 verschiedene Programmpfade???"
+
+**Antwort:** Es ist **1 Pfad, 1 Quelle** (`_tune_last_valid_swr`),
+aber 2 verschiedene Anzeigetexte je nach `was_blocked`. Der echte
+Bug ist das **Timing der Freeze-Lesung** (nach Phase B statt vor).
+
+**Root Cause:** In `ui/mw_tx.py:_tune_stop` wurde der SWR-Freeze NACH
+Phase B gelesen (Z. 275 alt). Phase B (`_tune_converge_to_target`)
+regelt rfpower 5s lang runter — während Power-Drop clampt der
+FlexRadio-Sensor auf 1.0 (kein Träger → kein reflektierter Wert).
+Der echte Phase-A-Match-Wert (`swr_after_match` aus Z. 255) wurde
+nur als Schwellenwert-Check verwendet und danach verworfen.
+
+**Fix Variante C (R1-empfohlen):** Freeze VOR Phase B nehmen — der
+Phase-A-Wert wird als `_tune_last_valid_swr` gesetzt, BEVOR Phase B
+läuft. Phase B beeinflusst nur noch die RF-Stützpunkt-Speicherung
+(`_tune_converged_rf`), NICHT mehr den SWR-Freeze.
+
+**R1-V4-pro Pre-Code ORANGE-Catch (kritisch):**
+Cancel WÄHREND Phase B trifft die Re-Entry-Sperre
+(`_tune_stop_active=True`). Dort wurde nur `_tune_convergence_cancelled
+= True` gesetzt — der schon gesetzte Phase-A-Freeze wäre durchgereicht
+worden → Band fälschlich freigegeben trotz User-Abbruch. **Fix
+eingebaut:** `_tune_last_valid_swr = None` in Re-Entry-Sperre-Block
+(Hardware-Sicherheit).
+
+**Code-Änderungen in `ui/mw_tx.py:_tune_stop`:**
+
+```python
+# Re-Entry-Sperre (Cancel während Phase B)
+if getattr(self, '_tune_stop_active', False):
+    self._tune_convergence_cancelled = True
+    self._tune_last_valid_swr = None  # R1-Catch
+    return
+
+# Phase A + Freeze + Phase B
+if token is not None and self.radio.ip:
+    swr_after_match = self.radio.last_swr
+    self._tune_last_valid_swr = swr_after_match  # NEU: vor Phase B
+    swr_limit = self.settings.get("swr_limit", 3.0)
+    if swr_after_match <= swr_limit:
+        self._tune_converged_rf = self._tune_converge_to_target(target_w=10)
+    else:
+        self._tune_converged_rf = None
+else:
+    # User-Cancel / Disconnect
+    self._tune_converged_rf = None
+    self._tune_last_valid_swr = None  # garantiert sauberer Stop
+
+# Alte Zeile NACH Phase B entfernt:
+# self._tune_last_valid_swr = self.radio.last_swr  # ENTFERNT (P142)
+```
+
+**Hardware-Sicherheit gestärkt:**
+- Bei knapp-zu-hohem SWR (z.B. 4.5) hätte alte Logik 1.0 eingefroren
+  → Band fälschlich freigegeben → TX auf defekter Antenne
+- Mit P142: Phase-A-Wert 4.5 bleibt im Freeze → Band bleibt gesperrt ✓
+- Cancel-Schutz: User-Abbruch während Phase B → Freeze invalidiert
+
+**Final-R1: PUSH FREIGEBEN ✓** — „sehr KISS-konform" (2 neue Zeilen +
+Verschiebung), Mike-Bug 100% gelöst, alle Edge-Cases abgedeckt,
+P76-A-Logik im Post-Check unverändert.
+
+**Tests 2138→2149 (+11 P142):** T1 Freeze VOR Phase B, T1b
+swr_after_match einmal gelesen, T2 alter Post-Phase-B-Freeze entfernt,
+T3 User-Cancel-Pfad None, **T4 Cancel-während-Phase-B (R1-ORANGE-Catch),**
+T4b P142-Kommentar im Cancel-Block, T5 SWR > Limit Freeze-Wert bleibt
+(Hardware-Safety), T6 Disconnect None, T7 P142-Kommentar mit
+27.05.2026 + Phase-B-Doku, T8 Mike-Field-Szenario Phase A bleibt,
+T9 Cancel-Pfad-Reihenfolge. 3 alte P76-A-Tests angepasst (Pattern
+`swr_after_match` statt `radio.last_swr`).
+
+**Pattern-Klasse:** Hardware-Sicherheits-Fix Familie 3. Iteration
+(P53 SWR-Watchdog → P76-A SWR-Freeze → P142 Phase-A-Freeze). Jede
+Iteration hat die SWR-Hardware-Sicherheits-Schicht verstärkt.
+
+**Field-Test pending** — Mike hat den Repro frisch, App-Restart auf
+v0.98.29 → Bandsperre triggern → manueller TUNE → Log muss „freigegeben
+— SWR 2.5" zeigen statt „1.0".
+
+---
+
 ## 2026-05-27 v0.98.28 — P148 SWR-Anzeige nur während TX/TUNE updaten
 
 **Mike-Field-Bug 27.05. 06:44** (Screenshot 15m FT8):

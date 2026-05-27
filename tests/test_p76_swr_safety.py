@@ -58,10 +58,14 @@ def test_t1_init_state_variable():
 
 
 def test_t2_freeze_in_tune_stop():
-    """AC: `_tune_last_valid_swr = radio.last_swr` in `_tune_stop`."""
+    """AC: Freeze für `_tune_last_valid_swr` in `_tune_stop`.
+
+    P142 (27.05.2026) Update: Freeze ist jetzt VOR Phase B mit
+    `swr_after_match` als Quelle (statt nach Phase B mit `radio.last_swr`).
+    """
     src = _method_src("ui/mw_tx.py", "_tune_stop")
-    assert "self._tune_last_valid_swr = self.radio.last_swr" in src, (
-        "P76-A AC: Freeze-Zeile fehlt in _tune_stop")
+    assert "self._tune_last_valid_swr = swr_after_match" in src, (
+        "P142: Freeze-Zeile auf swr_after_match (Phase-A-Wert) fehlt.")
 
 
 # ── T3 — Freeze MUSS VOR tune_off() stehen (kritische Reihenfolge) ─────
@@ -70,16 +74,17 @@ def test_t2_freeze_in_tune_stop():
 def test_t3_freeze_before_tune_off():
     """AC kritisch: Freeze MUSS VOR tune_off() stehen.
 
-    Sonst ist `last_swr` schon durch Meter-Loop-Clamp ueberschrieben
-    bevor wir ihn einfrieren → Bug bleibt.
+    P142 (27.05.2026) Update: Freeze ist jetzt VOR Phase B (war früher
+    nach Phase B aber vor tune_off). Kritisch bleibt: VOR tune_off,
+    sonst hat Meter-Loop-Clamp schon last_swr verändert.
     """
     src = _method_src("ui/mw_tx.py", "_tune_stop")
-    freeze_pos = src.find("self._tune_last_valid_swr = self.radio.last_swr")
+    freeze_pos = src.find("self._tune_last_valid_swr = swr_after_match")
     tune_off_pos = src.find("self.radio.tune_off()")
-    assert freeze_pos >= 0, "P76-A: Freeze-Zeile fehlt"
+    assert freeze_pos >= 0, "P142: Freeze-Zeile auf swr_after_match fehlt"
     assert tune_off_pos >= 0, "P76-A: tune_off() fehlt"
     assert freeze_pos < tune_off_pos, (
-        f"P76-A KRITISCH: Freeze (pos {freeze_pos}) MUSS VOR "
+        f"P76-A/P142 KRITISCH: Freeze (pos {freeze_pos}) MUSS VOR "
         f"tune_off() (pos {tune_off_pos}) stehen")
 
 
@@ -180,17 +185,16 @@ def test_t9_no_antenna_change_in_freeze_or_read():
     """
     stop_src = _method_src("ui/mw_tx.py", "_tune_stop")
     post_src = _method_src("ui/mw_tx.py", "_tune_post_swr_check")
-    # Nur die NEU eingefuegten P76-A-Bloecke pruefen — set_tx_antenna kann
-    # in anderen Teilen von _tune_stop vorkommen (z.B. P63 Auto-TUNE).
-    # Extrahiere die 2 P76-A-Bloecke per Marker-Kommentar.
-    p76a_stop = re.search(
-        r"# P76-A.*?self\._tune_last_valid_swr = self\.radio\.last_swr",
+    # P142 (27.05.2026): Freeze-Block jetzt unter P142-Marker (VOR Phase B).
+    # Anker: P142-Kommentar bis Freeze-Zeile.
+    freeze_stop = re.search(
+        r"# P142.*?self\._tune_last_valid_swr = swr_after_match",
         stop_src, flags=re.DOTALL)
-    assert p76a_stop, "P76-A: Marker-Block in _tune_stop nicht gefunden"
-    assert "set_tx_antenna" not in p76a_stop.group(0), (
-        "P76-A AC6 ANT1-Pflicht: kein set_tx_antenna im Freeze-Block")
+    assert freeze_stop, "P142: Marker-Block in _tune_stop nicht gefunden"
+    assert "set_tx_antenna" not in freeze_stop.group(0), (
+        "ANT1-Pflicht: kein set_tx_antenna im Freeze-Block")
 
-    # Im Post-Check: P76-A-Block bis Ende
+    # Im Post-Check: P76-A-Block bis Ende (unverändert von P142)
     p76a_post = re.search(
         r"# P76-A SAFETY \(v0\.97\.49\):.*?swr_now = swr_frozen",
         post_src, flags=re.DOTALL)
