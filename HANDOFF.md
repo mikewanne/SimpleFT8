@@ -1,5 +1,28 @@
 # HANDOFF — SimpleFT8
 
+## Stand 2026-05-27 abend — v0.98.31 Settings-Tab in ScrollArea (P149-Folge)
+
+**Aktueller Code-Stand:** v0.98.31, Tests **2171 grün** (keine neuen, keine Regressions).
+
+**Trigger:** Mike-Field-Screenshot 18:21: AP-Lite-GroupBox (P149) passte
+unten nicht in den Tab „Daten & Tools" — SNR-Spinbox + Strenge-Combo
+abgeschnitten, nicht bedienbar.
+
+**Fix (Mike-Wahl Variante A, Trivial-Klausel):** Tab in `QScrollArea`
+wrappen. 3 Zeilen in `ui/settings_dialog.py:_build_tab_data` + Import
+`QScrollArea`. Reines Layout-Wrap, keine Verhaltensänderung. Andere
+4 Tabs unverändert.
+
+**Smoke-Test:** Tab-Index 3 ist jetzt `QScrollArea`. Volle Test-Suite
+2171/2171 grün.
+
+**Mike-Nächste-Schritte:** App-Neustart auf v0.98.31 → Settings öffnen
+→ Tab „Daten & Tools" → AP-Lite-GroupBox jetzt komplett sichtbar +
+scrollbar → P149 Field-Test starten („Debug-Log" + „AP-Lite aktivieren"
++ „Test-Modus" AN, Strenge „locker", 1-2 FT8-Sessions, dann Log analysieren).
+
+---
+
 ## Stand 2026-05-27 — v0.98.29 P142 SWR-Freeze VOR Phase B (Mike-Field-Reproduktion gelöst)
 
 **Aktueller Code-Stand:** v0.98.29, Tests **2149 grün** (+11 P142).

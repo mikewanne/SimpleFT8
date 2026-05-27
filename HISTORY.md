@@ -3,6 +3,84 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-27 v0.98.32 — P150 Decoder-Empfindlichkeit kMin_score 10 → 4 (FT8) + AP-Lite-Diagnose-Auswertung
+
+**Trigger:** Mike-Feld-Auswertung 27.05. abend: 3 QSOs mit AP-Lite-Test-Modus
+gefunkt. Debug-Log zeigte 0/16 MATCH — AP-Lite-Algo findet nichts (Margen
+~0). Mike's Logbuch-Analyse: 33 QSOs Verteilung, niedrigster SNR -24 dB
+(1×) — Mike will diese „Perlen" (Falklands, DXpeditionen) HÄUFIGER sehen.
+
+**Entscheidung (Chef-KI mit DeepSeek-V4-pro-Konsens):** AP-Lite-Konzept
+trägt nicht — Matched Filter hat keine Nische gegenüber LDPC-Decoder.
+Stattdessen direkte Decoder-Bremse lösen: `kMin_score` Sync-Pattern-Schwelle.
+
+**Code-Änderung:** `ft8_lib/libft8simple.c` Z. 114 (FT8-Pfad):
+
+```c
+- const int kMin_score = 10;   // ~ -21 dB SNR-Limit
++ const int kMin_score = 4;    // ~ -24 dB Empfindlichkeit (WSJT-X Deep ≈ 2.5)
+```
+
+**R1-V4-pro O1-Catch (kritisch):** Nicht alle 3 Pfade ändern! FT4 (Z. 369)
+und FT2 (Z. 513) bleiben bei 10 — Costas-Pattern-Längen unterschiedlich,
+Score-Skala nicht 1:1. FT8 zuerst, FT4/FT2 nach Mike's Erfahrung
+separat justieren.
+
+**Was unverändert:** `kLDPC_iterations=50`, `kMax_candidates=140`,
+Python-Subtract-Schichten (`MAX_SUBTRACT_PASSES=5`, `SUBTRACT_MIN_SNR=-18`).
+Eine Schraube nach der anderen.
+
+**Build:** `libft8simple.dylib` neu kompiliert mit `cc -O3 -DHAVE_STPCPY
+-I. -dynamiclib`. MD5 alt: 514a1980… / neu: b897fdcb… verifiziert.
+Build-Pipeline: kiss_fft+kiss_fftr Objekte, dann dylib linken aus
+`.build/ft8/*.o + .build/common/*.o + .build/fft/*.o`.
+
+**Smoke-Test:** 15 Test-WAVs aus `ft8_lib/test/wav/` (websdr-Samples)
+durch alte + neue dylib geschickt → 127 Decodes vs 127 Decodes, alle
+identisch. Keine Regression, kein Junk-Decode entstanden. Wirkungstest
+kommt mit Mike's Feld-Slots (Test-WAVs haben Score >> 10).
+
+**R1-V4-pro Findings eingearbeitet:**
+- O1 ROT → FT8-Only-Änderung (FT4/FT2 unangetastet)
+- G1 GELB → Backlog (Plausibilitätsprüfung)
+- G2 GELB → Mike kann P30-Diagnose im Auge behalten falls Lag
+- G3 GELB → Backlog (Env-Var statt hartkodiert)
+
+**Risiko-Mitigation:** Backup `Appsicherungen/2026-05-27_v0.98.31_vor_p150_p151/`
+mit alter dylib + ap_lite.py + libft8simple.c. Rollback in 10 Sekunden.
+
+**Tests 2171/2171 grün.** Field-Test pending — Mike soll morgen schauen
+ob -22/-24 dB Decode-Quote spürbar steigt.
+
+**Folge-Ticket:** P151 — AP-Lite-Feature komplett ausbauen (siehe nächster
+Eintrag, separater Commit).
+
+---
+
+## 2026-05-27 v0.98.31 — Settings-Tab „Daten & Tools" in ScrollArea (P149-Folge)
+
+**Trigger:** Mike-Field-Screenshot 27.05. 18:21: AP-Lite-GroupBox (P149)
+passt unten nicht mehr in den Tab — SNR-Spinbox und Strenge-Combo sind
+abgeschnitten, nicht bedienbar. Tab hat jetzt 6 Blöcke (CSV-Export /
+Karte / Debug-Konsole / Audio-Dump / Debug-Log / AP-Lite Diagnose).
+
+**Fix:** Reines Layout-Wrap — Tab in `QScrollArea` einpacken. 3 Zeilen
+in `ui/settings_dialog.py:_build_tab_data` (`setWidget` + `setWidgetResizable=True` +
+`setFrameShape=NoFrame` für nahtloses Aussehen) + Import `QScrollArea`.
+
+**Was unverändert:** Settings-Logik, Default-Werte, alle 4 anderen Tabs,
+QGroupBox-Layout, AP-Lite-Spec. Keine Verhaltensänderung — nur Tab
+bekommt Scrollbar wenn Inhalt > Dialog-Höhe.
+
+**Smoke-Test:** `tab_widget.widget(3)` ist jetzt `QScrollArea` mit innerem
+`QWidget` als Inhalt. Tests 2171/2171 grün (keine Regressions).
+
+**Trivial-Klausel:** Pure Layout-Änderung ohne Verhaltensänderung → V1 →
+Code (kein DeepSeek-R1 nötig, fällt unter „pure Refactor ohne
+Verhaltensänderung" laut CLAUDE.md DeepSeek-Block).
+
+---
+
 ## 2026-05-27 v0.98.30 — P149 AP-Lite Diagnose-Modus (Settings-justierbar + Test-Modus + Logging)
 
 **Trigger:** Mike-Field-Beobachtung 27.05. nachmittag: AP-Lite-Counter

@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (
     QLineEdit, QSpinBox, QDoubleSpinBox, QPushButton, QGroupBox,
     QComboBox, QMessageBox, QToolButton, QFileDialog,
     QTableWidget, QTableWidgetItem, QHeaderView,
-    QTabWidget, QWidget, QFrame, QCheckBox,
+    QTabWidget, QWidget, QFrame, QCheckBox, QScrollArea,
 )
 from PySide6.QtCore import Qt, QTimer
 
@@ -630,7 +630,15 @@ class SettingsDialog(QDialog):
         layout.addWidget(ap_box)
 
         layout.addStretch()
-        return tab
+
+        # P149-Folge (v0.98.31, 27.05.2026): Tab in ScrollArea wrappen — mit
+        # 6 Bloecken (CSV, Karte, Debug-Konsole, Audio-Dump, Debug-Log,
+        # AP-Lite Diagnose) wird der Inhalt fuer den Dialog zu hoch.
+        scroll = QScrollArea()
+        scroll.setWidget(tab)
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        return scroll
 
     # ── Event-Handler & Logik (unveraendert) ─────────────────────────
 
