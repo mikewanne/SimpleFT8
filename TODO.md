@@ -1,8 +1,177 @@
-# SimpleFT8 TODO — Stand 26.05.2026 (v0.98.20, autonom mit DeepSeek)
+# SimpleFT8 TODO — Stand 27.05.2026 (v0.98.25, autonom mit DeepSeek)
 
 ---
 
-## 🔴 OFFEN BUG — P140 P138-Cooldown-Trigger falsch verdrahtet (Mike Field 26.05. 14:32+)
+## ✅ ERLEDIGT 27.05.2026 — P147 HALT stoppt Auto-Hunt SOFORT (v0.98.25, Hardware-Sicherheits-Fix)
+
+Mike-Field-Bug 04:42: trotz 3× HALT lief Auto-Hunt weiter (picked
+YO4NT/TA3ZZ/R9MW). Root Cause: `on_manual_qso_end()` statt
+`stop_auto_hunt("manual_halt")`. 1-Zeilen-Tausch in mw_qso.py.
+Final-R1 PUSH FREIGEBEN 0 Mängel. Tests 2084→2091 (+7).
+**Hardware-Sicherheits-relevant** — Mike's HALT-Vertrauen-Restore.
+
+---
+
+## ✅ ERLEDIGT 27.05.2026 — P106 QRZ-Confirmed-Bug field-validated
+
+Mike-Bestätigung 27.05.: „qrz.com kontrolliert wurde in den letzten
+Tagen QSOs von qrz.com bestätigt und verifiziert also auch okay".
+P106-Fix (v0.97.83 21.05.: ADIF auf WSJT-X-Minimal-Format) hat das
+QSOs-werden-nicht-bestätigt-Problem gelöst. Fix-Hypothese bestätigt:
+COMMENT/MY_*-Felder waren das Problem. Ticket geschlossen.
+
+---
+
+## 🟢 P140-FIELD-VALIDIERT 27.05. 07:03 — 73 erscheint VOR ✓ QSO komplett
+
+Mike-Screenshot mit KF0MSJ: 73 wird im Log gerendert (05:01:30)
+VOR optischem ✓ (05:01:45). P140-Fix funktioniert wie spezifiziert.
+
+---
+
+## ✅ ERLEDIGT 27.05.2026 — P146 Kalibrierungstext mode-agnostisch (v0.98.24)
+
+**🟢 FIELD-VALIDIERT 27.05. 08:50** (Mike): „bei kalibrieren kommt
+jetzt text Standard und Diversity weil es ja für beide ist also
+punkt okay" — Dialog zeigt einheitlichen Titel, P80 unified
+Gain-Store-Architektur jetzt auch in UI sichtbar.
+
+Mike-Field-Bug 06:34: Antennen-Kachel DX, Dialog-Titel „Standard".
+Architektur (P80 unified): eine Kalibrierung gilt für beide
+Diversity-Modi. Fix: `_get_mode_label()` returnt einheitlich
+„Diversity (Standard + DX)". `scoring_mode`-Parameter bleibt
+funktional in Z. 534+680 unangetastet. Final-R1: PUSH FREIGEBEN
+0 Mängel. Tests 2082→2084.
+
+---
+
+## 🟡 P141-FIELD-VALIDIERT 27.05. 06:30 — Sterne-Anzeige Diversity 4★ korrekt
+
+Mike-Screenshot zeigt 4 Sterne im DX-Modus mit Diversity DX —
+P141-Fix (v0.98.23) bestätigt im Feld.
+
+---
+
+## ✅ ERLEDIGT 27.05.2026 — P141 Sterne-Anzeige Diversity (v0.98.23)
+
+Mike-Field-Bug 26.05. 17:15: Diversity 14 Stationen Median ~-18
+zeigten 1★ statt 4★. Root Cause: `compute_local_conditions`
+nicht im Diversity-Pfad gerufen — Pattern-Klasse mode-aware
+Symmetrie (4. Iteration nach P102/P114/P135). 2-Zeilen-Fix in
+`_handle_diversity_operate` (Variante A KISS, R1-V4-pro F2
+bestätigt). Final-R1: PUSH FREIGEBEN 0 Mängel. Tests 2075→2082.
+FEATURES.md §11 NEU dokumentiert Pattern-Klasse + Risiko-Tabelle.
+
+---
+
+## ✅ ERLEDIGT 27.05.2026 — P145 Pattern-Check-Skript mode-aware Symmetrie (v0.98.27)
+
+R1-Empfehlung aus P141-Review (F6 ORANGE) umgesetzt: statisches
+AST-Tool `scripts/check_mode_symmetry.py` (~230 LOC, Python stdlib).
+
+**2 Checks:**
+- Check 1: UI-Update-Symmetrie über `_rx_mode == "..."`-Branches
+  (nur `update_*/_refresh_*/show_*`-Prefixe — R1-F1)
+- Check 2: Mode-Handler-Methoden-Familien hardcoded `cycle_handlers`
+  (P141-Fall: `_handle_normal_mode` ⇄ `_handle_diversity_operate`)
+
+**Real-Codebase 0 echte Asymmetrien** (alle bekannten Bugs gefixt).
+2 legitime auf Whitelist: `update_from_stations` (Diversity-only,
+Antennen-Prefs), `update_snr` (Normal=avg vs Diversity=per-Message).
+
+**R1-V4-pro Pre-Code: 2 ROT + 3 ORANGE (alle umgesetzt):**
+- F1 🔴 UI-Update-Prefixe beschränken (sonst Whitelist-Monster)
+- F3 🔴 Rekursive elif/else-Auflösung
+- F2 🟠 DX-Tune bewusst NICHT in cycle_handlers (Mess-Phase + Dialog)
+- F4 🟡 Standalone + Pytest-Test (beides)
+- F5 🟡 0 Asymmetrien-Erwartung erfüllt
+
+**Final-R1: PUSH FREIGEBEN ✓** — „produktionsreif". P141-Bug wäre
+exakt gefangen worden (Z. 437 `_handle_diversity_operate` ohne
+`update_local_conditions`).
+
+**Aufruf:** `./venv/bin/python3 scripts/check_mode_symmetry.py`
+
+**Pytest-Integration:** `test_t2_real_codebase_no_asymmetries` →
+CI-Schutz für ganze Bug-Klasse. Bei neuem Empfangsmodus
+`MODE_HANDLER_FAMILIES` ergänzen.
+
+Tests 2113→2124 (+11 P145). FEATURES.md keine neue Sektion (Tool,
+nicht Funktionsweise — Doku im Skript-Header).
+
+---
+
+## ⛓ ABGELEGTE BUG-DOKU — P145 (umgesetzt, hier nur Historie)
+
+## 🟡 ~~OFFEN~~ ERLEDIGT — P145 Pattern-Check-Skript für mode-aware Symmetrie (R1-Empfehlung 27.05.)
+
+**Anlass:** P141-Review hat DeepSeek-R1 vorgeschlagen ein **statisches
+Analyse-Skript** zu bauen das mode-aware Symmetrie-Bugs (Pattern-
+Klasse P102/P114/P135/P141) **automatisch findet** bevor sie ins
+Feld kommen.
+
+**Was das Skript machen soll:**
+1. AST-Walk durch `ui/mw_cycle.py` (+ ggf. andere Mixins)
+2. Alle Stellen finden die `_rx_mode` abfragen
+3. Pro Branch alle Control-Panel-Update-Aufrufe extrahieren
+   (`update_*`, `_refresh_*`, etc.)
+4. Asymmetrien melden:
+   - „Methode X in Branch `if _rx_mode == 'diversity'`, fehlt in
+     Branch `else`"
+5. Als Pre-Commit-Hook oder pytest-Test laufen lassen
+6. False-Positive-Whitelist für berechtigte Asymmetrien
+   (`update_diversity_counts` läuft per Definition nur in Diversity)
+
+**Implementierungs-Hinweise:**
+- Python `ast`-Modul reicht (kein externes Tool nötig)
+- ~100-200 LOC für simple Variante
+- Whitelist als JSON oder im Skript hartcodiert
+- Output: Liste der Asymmetrien mit Datei/Zeile
+
+**Severity:** 🟡 — Kein Bug, sondern Vorbeugung. Würde diese
+ganze Bug-Klasse abhaken bevor Mike im Feld leidet.
+
+**Empfehlung:** als Tool unter `scripts/check_mode_symmetry.py`
++ ein pytest-Test der das Skript ausführt und Asymmetrien als
+Failure meldet.
+
+**Autonom + voller Workflow tauglich:** ja. KEIN Hardware,
+KEIN Field-Test.
+
+---
+
+## ✅ ERLEDIGT 26.05.2026 — P143 QSO-Log-Resurrection-Fix (v0.98.22)
+
+Mike-Field-Bug 30m → 20m: 30m-Einträge tauchten nach Bandwechsel
+wieder auf weil `qso_panel._entries` (P95 Master-SOT) nicht
+mitgeleert wurde. Auto-Trim-Timer (30s) rief `_rerender_all` aus
+`_entries`. Fix: Helper `clear_log_completely()` leert alle 3
+States (`_entries + log_view + _last_omni_tx_even`). 3 Aufrufer
+in mw_radio.py ersetzt (Band/FT-Mode/RX-On-Off). rx_mode-Switch
+respektiert P115-Spec (NICHT leeren). FEATURES.md §10 NEU mit
+Architektur-Doku. Final-R1: PUSH FREIGEBEN 0 Mängel.
+Tests 2066→2075 (+9 P143 + 1 P131-T2 Anker-Update).
+
+---
+
+## ✅ ERLEDIGT 26.05.2026 — P140 Cooldown-Trigger umgehängt (v0.98.21)
+
+Mike-Field-Bug 5P1KZX/IQ5VK/OE4AHG: 73 verschwand VOR optischem ✓.
+Root Cause: P138 setzte Cooldown in `_on_qso_complete` (interner
+RR73-Send-Trigger) statt `_on_qso_confirmed_visual` (optisches ✓).
+Fix: Set umgehängt + symmetrisch in `_on_qso_timeout` defensiv
+(Mike-Spec "beendet ist beendet" auch nach ✗). Defensive Guards.
+R1-V4-pro F1 ROT war false-positive (Auto-Hunt hat eigenen
+`_recent_qso`-Cooldown). Final-R1: PUSH FREIGEBEN 0 Mängel.
+Tests 2057→2066 (+9 P140 + 1 invertiert P128-T11).
+FEATURES.md §8 geupdatet (2-Set-Stellen-Mechanik + Auto-Hunt-
+Trennung + Field-Beispiel Vorher/Nachher).
+
+---
+
+## ⛓ ABGELEGTE BUG-DOKU — P140 (umgesetzt, hier nur Historie)
+
+## 🔴 ~~OFFEN~~ ERLEDIGT — P140 P138-Cooldown-Trigger falsch verdrahtet (Mike Field 26.05. 14:32+)
 
 **Mike-Field-Bug 26.05. (mehrfach belegt: 5P1KZX, IQ5VK, OE4AHG):**
 Das 73 der Gegenstation erscheint NICHT mehr im Log, obwohl es VOR
@@ -55,7 +224,7 @@ nie mehr 73-Empfänge im Log.
 
 ---
 
-## 🟡 OFFEN BUG — P141 Sterne-Empfangsqualität bleibt in Diversity bei 1★ (Mike 26.05. 17:15)
+## 🟡 ~~OFFEN~~ ERLEDIGT — P141 Sterne-Empfangsqualität bleibt in Diversity bei 1★ (Mike 26.05. 17:15)
 
 **Mike-Field-Beobachtung 26.05. 17:15** (Diversity Standard, 15m, 29
 Decodes sichtbar in RX-Liste mit SNR-Bereich -16 bis -24, Median im
@@ -97,6 +266,393 @@ Funktionen die spiegelbildlich in Normal-Mode fehlen oder umgekehrt.
 Pattern-Familie „Mode-Mismatch" könnte größer sein.
 
 **Autonom + voller Workflow tauglich:** ja.
+
+---
+
+## ✅ ERLEDIGT 27.05.2026 — P144 Auto-Hunt busy-station Filter (v0.98.26)
+
+Mike-Field-Bug RA5AD 26.05. 17:38: Auto-Hunt picked Station 1:45 Min
+NACH dessen RR73 an R2BRD → 5 Versuche ins Leere (2:30 Min Band-QRM)
+→ QSO verloren (späte Antwort 15s nach Timeout). Mike-Wahl Option 1:
+Abort+Skip ohne Cooldown.
+
+**Fix (voller Workflow autonom):** Filter in `ui/mw_cycle.py:on_message_
+decoded` zwischen P124-Hash-Resolve und P94/OMNI/SM. Neue API
+`core/auto_hunt.py:clear_current_target()` (setzt nur `_current_target=
+None`, KEIN Cooldown). Pattern-Familie 11. Iteration der Defer-Familie
+(P81/P122/P124/P127/P128/P129/P126/P131/P138/P140/P144).
+
+**R1-V4-pro Pre-Code Findings (alle eingebaut):**
+- F1 🟠 `_manual_override`-Check ergänzt (bei User-Klick entscheidet User)
+- F2 🟠 `clear_current_target()` API statt direkter Privat-Zugriff
+- F5 🟡 debug_log("HUNT", "P144_SKIP ...") für Field-Diagnose
+
+**Final-R1: PUSH FREIGEBEN ✓** — KISS „genau richtig", keine Race-Bugs,
+Reihenfolge korrekt. Hinweis Edge-Case Dauer-busy-Endlos-Abort-Schleife
+funktional korrekt (kein TX) — Field-Beobachtung pending.
+
+Tests 2091→2113 (+22 P144). FEATURES.md §2 auf 11 Iterationen erweitert.
+
+**Field-Test pending** (Mike beobachtet ob „⏭ belegt"-Meldungen
+auftauchen + ob Dauer-busy-Edge-Case relevant ist).
+
+---
+
+## ⛓ ABGELEGTE BUG-DOKU — P144 (umgesetzt, hier nur Historie)
+
+## 🟠 ~~OFFEN~~ ERLEDIGT — P144 Auto-Hunt picked Station die gerade anderes QSO abschließt (Mike Field 26.05. 17:38)
+
+**Mike-Field-Beobachtung 26.05. 17:38** (Auto-Hunt 20m FT8):
+
+```
+Empfangsfenster Z. 15:34:00:  R2BRD RA5AD RR73   ← RA5AD beendet QSO
+                                                    mit R2BRD
+QSO-Log:
+  15:35:45 → Gesendet RA5AD DA1MHH -19   ← Auto-Hunt picked RA5AD
+  15:36:15 → Gesendet RA5AD DA1MHH -19      1:45 Min NACH dessen RR73
+  15:36:45 → Gesendet RA5AD DA1MHH -19
+  15:37:15 → Gesendet RA5AD DA1MHH -19
+  15:37:45 → Gesendet RA5AD DA1MHH -19
+  ✗ RA5AD — Timeout                        ← 15:38:15
+  15:38:30 ← Empf. DA1MHH RA5AD R-15      ← echte Antwort 2:45 Min
+                                              später, ABER zu spät
+```
+
+**Folge:** 5 Sende-Versuche á 30 s = 2:30 Min ins Leere; RA5AD's späte
+Antwort (`R-15`) kam 15 s NACH Mike's Timeout → **QSO verloren**.
+
+**Mike-Diagnose:** Auto-Hunt picked Stationen die gerade ein QSO mit
+jemand anderem abschließen → Etikette-Verstoss (Band-QRM) +
+Zeitverschwendung.
+
+**Root Cause:** `core/auto_hunt.py` `select_next` validiert nur:
+- `looks_like_callsign(call)` (P136 — Format-Plausibilität)
+- `_recently_completed_qsos`-Cooldown (P128/P138/P140)
+
+**KEINE Prüfung:** „ist der Call gerade mit jemand anderem belegt?"
+
+**Mike's 3 vorgelegte Optionen:**
+
+| Option | Beschreibung | KISS |
+|---|---|---|
+| 1 | Abort+Skip ohne Cooldown, später Retry möglich | ✅ |
+| 2 | Standby + Warten bis Fremd-QSO vorbei | ❌ zu komplex |
+| 3 | Limit 5→8 Calls | ❌ band-müllt (Mike-O-Ton) |
+
+**Mike-Wahl: Option 1.** Begründung Claude+Mike-Konsens 17:42:
+- **KISS:** 1 Filter-Check + 2 existierende Aktionen (`encoder.abort()`,
+  `qso_sm.cancel()`)
+- **Pattern reuse:** 9. Iteration der Defer-Familie (P81/P122/P124/
+  P127/P128/P129/P126/P131/P138)
+- **Realismus:** späte Antworten > 2 Slots sind FT8-untypisch (RA5AD's
+  2:45 Min ist Edge-Case)
+- **Kein Cooldown** → Target bleibt für späteren Pick verfügbar
+
+**Fix-Plan (voller Workflow erforderlich, DeepSeek-Catch-Pflicht):**
+
+1. **Filter-Stelle:** `ui/mw_cycle.py:on_message_decoded` — nach
+   P124-Resolution + nach P128-Block + VOR State-Machine-Übergabe:
+
+   ```python
+   # P144 (26.05.2026): Auto-Hunt-Target springt in fremdes QSO?
+   if self._p144_target_busy_with_other(msg):
+       self._abort_and_skip_to_next_hunt_target()
+       return  # nicht in state machine geben
+   ```
+
+2. **Helper `_p144_target_busy_with_other(msg)`:**
+   - True wenn: `our_target = qso.their_call` ist gesetzt AND
+     `msg.caller == our_target` AND
+     `msg.field1 != my_call` AND
+     `msg.field1 != "CQ"` (RA5AD darf neu CQ-en, das ist nicht
+     „belegt mit anderem")
+   - **Hash-Awareness:** P124-Resolution greift VOR diesem Check
+     → bei i3-Frames mit Hash an Fremd-Call läuft der Filter
+     korrekt (Hash wird NICHT zu my_call resolved weil
+     `target != my_call`)
+
+3. **Helper `_abort_and_skip_to_next_hunt_target()`:**
+   ```python
+   self.encoder.abort()
+   if self.radio.ip:
+       self.radio.ptt_off()
+   self._pending_tx_log = None      # P127/P131-Pattern
+   self.qso_sm.cancel()              # state → IDLE
+   self.qso_panel.add_info(
+       f"⏭ {target} belegt — überspringe ohne Sperre")
+   # Auto-Hunt-Flush triggert select_next automatisch
+   ```
+
+4. **KEIN Cooldown-Eintrag in `_recently_completed_qsos`** — Target
+   bleibt für späteren Pick verfügbar.
+
+**Edge-Cases die DeepSeek-R1 sehen muss:**
+
+- 🟡 **Hash-Marker:** P124 resolved Hash an UNS zu unserem Call →
+  `field1 == my_call` → Filter greift NICHT → korrekt (Antwort an
+  uns ist QSO-Weiterführung, kein „belegt")
+- 🟡 **Reihenfolge im `on_message_decoded`:** Hash-Resolve (P124) →
+  P128-Block (cooldown) → **P144 hier** → State-Machine. Vorher: state
+  würde übergehen → CALL_*-States gewechselt vor Abort → Race.
+- 🟡 **Grid/Report-Frame an Fremd:** `RA5AD ICOM JN58` (Grid) oder
+  `RA5AD ICOM -15` (Report) — beide bedeuten „RA5AD ist im QSO".
+  Filter `field1 != my_call AND field1 != "CQ"` deckt das ab.
+- 🟠 **2-Step-Defer:** während wir TX laufen (`tx_started` schon
+  emittiert, `tx_finished` noch nicht), Cancel jetzt → encoder.abort
+  → `tx_finished` kommt mit P93-Defer → `_pending_tx_log = None`
+  Pattern muss VOR `tx_finished`-Slot greifen (P127/P131-Symmetrie).
+
+**Tests-Pflicht (mind. 8 Tests):**
+
+1. T1: Target sendet RR73 an Fremd → Filter true → Abort
+2. T2: Target sendet R-Report an Fremd → Filter true → Abort
+3. T3: Target sendet Grid an Fremd → Filter true → Abort
+4. T4: Target sendet CQ neu → Filter false → kein Abort
+5. T5: Target sendet RR73 an uns → Filter false → QSO läuft weiter
+6. T6: Anderer Call (nicht Target) sendet RR73 → Filter false (kein
+   Eingriff in unsere Sicht)
+7. T7: Filter triggert KEINEN Cooldown-Eintrag
+8. T8: Filter-Reihenfolge: P124-Hash → P128-Block → P144 → SM
+   (Source-Inspektion)
+
+**Severity:** 🟠 — Etikette + Effizienz. Kein Hardware-Risiko.
+
+**Komplexität:** mittel. ~30-50 Zeilen Code + Tests. Workflow-
+Pflicht weil:
+- Reihenfolge im `on_message_decoded` kritisch
+- Defer-Familie 9. Iteration → Pattern-Treue prüfen
+- Race mit `tx_started` / `tx_finished` (siehe Edge-Case 4)
+- DeepSeek soll Filter-Edge-Cases sauber durcharbeiten
+
+**Verweis:** FEATURES.md §2 (Defer-Familie) + §7 (Call-Validation).
+Bei Fix-Workflow zuerst dort lesen.
+
+**Autonom + voller Workflow tauglich:** ja. Remote-tauglich (pure
+State-Machine + Decoder-Filter, kein TUNE/PA).
+
+---
+
+## 🟠 ~~OFFEN~~ ERLEDIGT — P143 QSO-Log kehrt nach Bandwechsel zurück (Mike Field 26.05. 17:34)
+
+**Mike-Field-Beobachtung 26.05. 17:34** (Auto-Hunt auf 30m, dann
+Bandwechsel auf 20m):
+
+```
+Screenshot 1 (30m):  QSO-Log voll mit "Gesendet BG4UCZ/R9AL/MW0DNF"
+Screenshot 2 (20m, kurz nach Wechsel): QSO-Log zeigt PLÖTZLICH wieder
+  die 30m-Einträge "Gesendet R9AL DA1MHH" + "Gesendet MW0DNF DA1MHH"
+  — obwohl 20m gewählt und Empfangsfenster korrekt mit 20m-Decodes
+  gefüllt ist
+```
+
+Mike's Wahrnehmung: „bei Auto-Hunt-Aktivierung auf neuem Band
+werden alte Meldungen wiederhergestellt". Tatsächlich passiert es
+zeitlich auch ohne Auto-Hunt — siehe Root-Cause unten.
+
+**Root Cause (Architektur-Bug):**
+
+`ui/qso_panel.py` hat 2 Speicher:
+1. **`log_view`** — sichtbares Widget (was Mike sieht)
+2. **`_entries: list[dict]`** — Master-Liste, SOT für Re-Render
+   (eingeführt mit P95 v0.97.67 für Visibility-Toggle Antennen-Label
+   + Even/Odd-Tag)
+
+`ui/mw_radio.py` 3 Stellen rufen NUR `qso_panel.log_view.clear()`,
+vergessen `_entries.clear()`:
+
+| Zeile | Pfad | Aktion |
+|---|---|---|
+| 547 | `_on_band_changed` | nur log_view.clear() ← Mike's Bug |
+| 438 | `_on_mode_changed` (FT8↔FT4) | nur log_view.clear() |
+| 357 | `set_rx_active` (RX-On/Off) | nur log_view.clear() |
+
+**Der Trigger:** `_cleanup_timer` in `qso_panel.py:54` läuft alle
+**30 Sekunden** und ruft `_auto_trim_by_age(max_age_s=300.0)` auf.
+Wenn dort Einträge getrimmt werden, ruft `_auto_trim_by_age`
+`_rerender_all()` auf → zeichnet log_view komplett neu aus
+`_entries` → alte 30m-Einträge kommen zurück.
+
+Mike's „bei Auto-Hunt kommt's zurück"-Wahrnehmung ist zeitlicher
+Zufall — der Timer wäre auch ohne Auto-Hunt nach ≤30s gefeuert.
+
+**RX-Mode-Wechsel (Normal↔Diversity)** ist NICHT betroffen — P115-
+Spec sagt explizit „optische Kontinuität bei rx_mode-Switch", da
+wird gar nicht gelöscht. Korrekt so.
+
+**Mike-Spec für Fix:**
+
+| Aktion | QSO-Log + RX-Liste leer? |
+|---|---|
+| Bandwechsel (30m→20m) | **JA** |
+| FT-Mode-Wechsel (FT8↔FT4) | **JA** — Mike-Spec 26.05.: „stationen haben keine bedeutung mehr wenn sie in anderem übertragungsmodus senden" |
+| RX-Mode-Wechsel (Normal↔Diversity) | NEIN (P115-Spec, Chronik) |
+| RX-On/Off-Toggle | JA (Neustart-Charakter) |
+
+**Fix-Plan (Option B, Mike-Wahl):**
+
+1. **Neue Helper-Methode in `qso_panel.py`:**
+   ```python
+   def clear_log_completely(self):
+       """Komplett-Reset: _entries + log_view + Parity-State.
+       Aufzurufen bei Bandwechsel / FT-Mode-Wechsel / RX-Toggle.
+       NICHT aufrufen bei RX-Mode-Switch (Normal↔Diversity) — dort
+       gilt P115-Spec optische Kontinuität.
+       """
+       self._entries.clear()
+       self.log_view.clear()
+       self._last_omni_tx_even = None
+   ```
+2. **3 Aufruf-Stellen** in `mw_radio.py` (Z. 547, 438, 357) ersetzen:
+   `self.qso_panel.log_view.clear()` → `self.qso_panel.clear_log_completely()`
+3. **FEATURES.md §9 (oder neue §)** Helper-Existenz dokumentieren —
+   sonst kennt zukünftige Claude-Instanz den Helper nicht und macht
+   wieder direkt `log_view.clear()`.
+
+**Begründung Option B (vs nur Inline `_entries.clear()`):**
+
+1. **Keine Vergessen-Falle:** zukünftige 4./5. Clear-Stelle ruft
+   automatisch alles richtig
+2. **`_last_omni_tx_even`** wird auch reset — sonst bleibt OMNI-TX-
+   Parity-State vom alten Band hängen → Leerzeilen-Trennung beim
+   nächsten OMNI-TX falsch
+3. **Pattern-Familie** — wir haben schon Single-Source-Helper
+   (`_qso_active_for_msg_defer`, `_p128_recently_completed_block`) —
+   konsistent
+
+**Severity:** 🟠 — kosmetisch (kein Hardware-/State-Machine-Risiko),
+aber **verwirrt User** und „macht App komisch" (Mike-O-Ton).
+
+**Komplexität:** klein. 1 neue Methode + 3 Aufruf-Ersetzungen. Trotz
+KISS voller Workflow weil:
+- Symmetrie-Pflicht (P102/P114/P135/P141 Pattern-Klasse Mode-Mismatch
+  — wenn man die 3 Pfade fasst muss man sicher sein dass keine 4.
+  übersehen wurde)
+- Re-Render-Reihenfolge mit P50-Trim und Visibility-Toggle nicht
+  brechen
+- Test-Anpassungen für P95/P50-Tests (falls vorhanden) prüfen
+
+**Autonom + voller Workflow tauglich:** ja. Remote-tauglich (pure
+UI-State, kein Hardware-TUNE).
+
+---
+
+## 🟠 OFFEN BUG — P142 Bandsperre-Freigabe meldet falschen SWR-Wert (Mike Field 26.05. 17:24)
+
+**⏸ AUFGESCHOBEN 27.05.2026 — Mike-Anweisung:**
+Mike kann den Bug aus der Remote-Session nicht reproduzieren. Hardware-
+Test braucht physischen Zugriff am Radio:
+
+**Repro-Schritte (wenn Mike wieder vor Ort am Radio ist):**
+1. Antennen-Stecker am Radio abziehen (= SWR künstlich verschlechtern)
+2. TX provozieren → Bandsperre triggern (SWR-Watchdog feuert)
+3. Stecker wieder dran (= Match jetzt OK, SWR ~1.3 würde echt sein)
+4. TUNE-Button drücken → beobachten:
+   - **Live im Radio-Widget:** SWR-Wert während TUNE (z.B. 2.5)
+   - **Im QSO-Log nach 2 s:** „Band freigegeben — SWR X.X"
+   - **Bug-Symptom:** Log meldet 1.0 statt Live-Wert (Phase-B-Clamp)
+5. Wenn Bug auftritt: Fix laut Plan unten umsetzen (Variante C)
+
+**Stand 27.05.:** Code-Stelle identifiziert (ui/mw_tx.py:255-275),
+Fix-Plan Variante C steht (SWR-Freeze NUR aus Phase A), Mike's
+Hypothese im Field bestätigt („springt optisch auf 1.0"). Fehlt nur
+noch zuverlässige Hardware-Repro für Field-Test des Fixes.
+
+**Severity bleibt 🟠** — Hardware-Risiko-Potenzial wenn SWR knapp
+über Limit + Clamp-Bug greift, Band würde fälschlich freigegeben.
+Bei Mike's typischem swr_limit=3.0 noch harmlos.
+
+---
+
+### Original-Doku P142 (vom 26.05.):
+
+**Mike-Field-Beobachtung 26.05. 17:24** (15m, Antenne nach
+Bandsperrung manuell durch TUNE freischalten wollen):
+
+```
+QSO-Log nach 1. TUNE:
+  ⚠ Band 15M gesperrt — SWR 28.5
+  ✓ Band 15M freigegeben — SWR 1.0   ← falsch (live war 2.5)
+
+Radio-Widget zur Zeit der Meldung:
+  11 W / SWR 2.5   ← echter Live-Wert
+
+2. TUNE (Band schon frei):
+  ✓ TUNE OK — SWR 2.5                ← korrekt diesmal
+```
+
+Mike's Frage: „ist es ein Anzeigefehler oder nimmt er nach der
+sperrung nicht die echten 2,5?"
+
+**Antwort: weder noch — es ist ein Mess-Zeitpunkt-Fehler.** Die App
+nimmt einen **echten, aber falschen** Wert (1.0 aus dem Phase-B-
+Power-Down-Moment) statt des echten Match-Wertes (2.5 nach Phase A).
+
+**Root Cause (vollständige Analyse in FEATURES.md §9):**
+
+TUNE-Pipeline hat 3 Stufen:
+1. **Phase A** — Tuner-Match bei voller Power (hier wird SWR von 28.5
+   auf 2.5 gebracht)
+2. **Phase B** — Closed-Loop-Power-Konvergenz auf 10 W (hier regelt
+   die App `rfpower` 5× á 1 s runter)
+3. **SWR-Freeze** (`mw_tx.py:275`) — `_tune_last_valid_swr = radio.last_swr`
+4. **Post-Check** 2 s später — liest den Freeze-Wert, meldet Freigabe
+
+**Vermutete Ursache:** Während Phase B wird `rfpower` so weit
+runtergeregelt, dass der SWR-Sensor zu wenig Träger sieht und auf
+1.0 clamped (`_handle_meter`-Clamp gegen kein-Träger-Werte). Der
+SWR-Freeze passiert NACH Phase B → friert die falsche 1.0 ein
+statt des echten 2.5 nach Phase A.
+
+**Beim 2. TUNE** hat das Timing zufällig anders gepasst (vermutlich
+weil `rfpower` vom letzten Lauf schon klein war → Phase B konvergiert
+schneller mit weniger Power-Verlauf → Freeze trifft echte 2.5).
+
+**Warum kritisch:** Bei Mike's `swr_limit=3.0` war 2.5 eh
+durchgewunken — alles harmlos. **ABER:** wenn echtes SWR z.B. 4.5
+wäre und Phase B fälschlich 1.0 einfriert → Band wird **fälschlich
+freigegeben** → nächster TX mit defekter Antenne läuft auf voller
+Sende-Power = **Hardware-Risiko** (PA-Schutzschaltung des FlexRadio
+müsste greifen, aber da verlassen wir uns nicht drauf).
+
+**Fix-Optionen:**
+
+- **A:** SWR-Freeze **vor** Phase B nehmen (also direkt nach Phase A
+  / Tuner-Match) statt nach Phase B. Phase B verändert ja nur die
+  Leistung, nicht den Match.
+- **B:** Phase-A-SWR UND Phase-B-SWR messen → **max()** als Freigabe-
+  Kriterium nehmen. Defensiv = sicherer.
+- **C:** Phase B nur für RF-Stützpunkt-Speicherung nutzen, der SWR-
+  Wert für Freigabe-Bewertung kommt **ausschließlich aus Phase A**.
+
+**Empfehlung: Option C** — Phase B ist konzeptionell für **Power-
+Kalibrierung** da, nicht für SWR-Bewertung. Der für die Antenne
+relevante SWR-Wert ist der **nach Tuner-Match bei voller Sende-
+Power** — nicht der bei runtergeregelten 10 W. Hardware-konservativ:
+wir bewerten bei dem SWR den wir tatsächlich beim normalen TX sehen
+würden. Variante B (max) wäre noch defensiver — Unterschied zu C
+nur in einem Edge-Case (Match wird beim Runterregeln schlechter,
+physikalisch sehr selten).
+
+**Komplexität / Workflow-Pflicht:** voller Workflow erforderlich
+weil:
+- 2 Phase-B-Pfade existieren (manuell + Auto-TUNE bei Bandwechsel)
+- mehrere Stellen wo `_tune_last_valid_swr` gesetzt/gelesen wird
+- Disconnect-Pfad und Token-Race müssen beachtet werden
+- P54b RFPreset-Stützpunkt-Speicherung darf nicht kaputt gehen
+- Race zwischen Phase B Convergenz-Cancel und Freeze beachten
+
+**Severity:** 🟠 — Mittel-kritisch. Bei Mike's Setup harmlos
+(SWR-Limit 3.0, Phase-A-Match meist gut), aber **Hardware-Risiko-
+Potenzial** wenn echte SWR knapp über Limit und Clamp-Bug greift.
+
+**Verweis:** FEATURES.md §9 enthält die vollständige Pipeline-Doku
+inkl. ASCII-Diagramm und Konstanten-Tabelle. Bei Fix-Workflow zuerst
+dort lesen.
+
+**Autonom + voller Workflow tauglich:** ja, aber nicht remote — Mike
+muss Hardware-Tests am Radio machen (Tuner-Match auf defekter
+Antenne provozieren, beobachten ob Phase-A-Freeze zuverlässig den
+echten Wert behält).
 
 ---
 
@@ -1146,7 +1702,7 @@ Loggen. Schritt 3 nicht vorab bauen — die Beobachtung ist die Validierung.
 
 ---
 
-## 🔬 BEOBACHTUNG OFFEN — P106 QRZ-Confirmed-Bug
+## ✅ ~~BEOBACHTUNG OFFEN~~ ERLEDIGT 27.05.2026 — P106 QRZ-Confirmed-Bug
 
 **Stand 21.05.2026 nach P106-Push (v0.97.83):**
 - Mike hat 147 reparierte QSOs zu QRZ.com hochgeladen

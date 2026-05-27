@@ -82,13 +82,14 @@ auf beiden Antennen.
 
 ---
 
-## 2. Auto-Hunt Defer-Familie (P81/P122/P124/P127/P128/P129)
+## 2. Auto-Hunt Defer-Familie (P81/P122/P124/P127/P128/P129/P126/P131/P138/P140/P144)
 
 **Kurzantwort:** Wenn ein Hintergrund-Mechanismus etwas tun will
 (Auto-Hunt stoppen, Log-Eintrag schreiben, Empfang blocken), aber das
 gerade einen laufenden QSO stört, **wird die Aktion bis zum QSO-Ende
-deferiert** statt sofort ausgeführt. Pattern-Familie mit aktuell 6
-Iterationen.
+deferiert** statt sofort ausgeführt. Pattern-Familie mit aktuell 11
+Iterationen. Variante: KISS-Defensive bei Kontextwechsel
+(P127/P131/P126/P144 — encoder.abort + _pending_tx_log=None + cancel).
 
 ### Gemeinsames Pattern
 
@@ -105,7 +106,7 @@ QSO-Ende-Handler (3 Pfade: complete/timeout/HALT):
 - `_on_qso_timeout` — QSO ✗ Timeout
 - `_on_cancel` — HALT-Button (Sicherheits-Notbremse)
 
-### Die 6 Iterationen
+### Die 11 Iterationen
 
 | # | Ticket | Was wird deferiert? | Wer triggert? |
 |---|--------|---------------------|---------------|
@@ -114,7 +115,36 @@ QSO-Ende-Handler (3 Pfade: complete/timeout/HALT):
 | 3 | P124 (v0.98.06) | Hash-Call-**Resolution** (`<...>` → call) | Decoder im aktiven QSO-State |
 | 4 | P127 (v0.98.08) | TX-Log-Eintrag bei SWR-Abbruch verwerfen | `_on_swr_alarm` |
 | 5 | P128 (v0.98.07) | Empf.-Eintrag 60s nach QSO blocken | `on_message_decoded` Filter |
-| 6 | P129 (v0.98.10) | P128-**Whitelist** für 73/RR73 | Korrektur an P128 |
+| 6 | P129 (v0.98.10) | P128-**Whitelist** für 73/RR73 (später wieder entfernt durch P138) | Korrektur an P128 |
+| 7 | P126 (v0.98.12) | Send-nach-Timeout TX-Pipeline-Race-Fix | `_on_qso_timeout` (encoder.abort + _pending_tx_log=None) |
+| 8 | P131 (v0.98.15) | Sende-Log bei Bandwechsel verwerfen | `_on_band_changed` |
+| 9 | P138 (v0.98.19) | P129-Whitelist entfernt (Spec-Umkehr „beendet ist beendet") | Korrektur an P129 |
+| 10 | P140 (v0.98.21) | Cooldown-Trigger umhängen (qso_complete → qso_confirmed_visual) | Korrektur an P138 |
+| 11 | **P144 (v0.98.26)** | **Auto-Hunt-Target sendet an Fremd → Abort+Skip ohne Cooldown** | **`on_message_decoded` Filter (NEU)** |
+
+**P144 Besonderheit:** Erstmals ein Filter der **VOR der State-Machine**
+greift und das laufende QSO **abbricht** statt nur Hintergrund-Aktion zu
+deferieren. Wenn Auto-Hunt-Target an Fremd-Call sendet (z.B. RR73 an
+anderen QSO-Partner), brechen wir unsere TX-Versuche ab und überspringen
+ohne Cooldown. Target bleibt für späteren Pick verfügbar.
+
+```python
+# ui/mw_cycle.py:on_message_decoded — zwischen P124 und P94/OMNI/SM
+if self._p144_target_busy_with_other(msg):
+    self._p144_abort_and_skip(target=..., busy_with=msg.target)
+    return
+
+# Filter-Bedingungen (alle MÜSSEN gelten):
+# - Auto-Hunt aktiv UND nicht manual_override
+# - State-Machine in aktivem QSO (qso.their_call gesetzt)
+# - msg.caller == qso.their_call (unser Target sendet)
+# - msg.target != my_call (nicht Antwort an uns)
+# - not msg.is_cq (neuer CQ wäre OK, Target ist wieder frei)
+```
+
+**Neue API `core/auto_hunt.py:clear_current_target()`** — setzt nur
+`_current_target = None` ohne Cooldown (Pattern-Unterschied zu
+`on_qso_complete`/`on_qso_timeout` die jeweils 5-Min-Cooldown setzen).
 
 **Helper-Funktion `_qso_active_for_msg_defer()`** in `ui/mw_qso.py`
 ist die Single-Source-of-Truth — keine Logik-Drift möglich.
@@ -476,30 +506,69 @@ Bei „Auto-Hunt springt erst nach 60s an" → Log lesen:
 für ALLE Empf.-Einträge im QSO-Log blockiert — inklusive 73/RR73.
 RX-Tabelle, Wasserfall und State-Machine bleiben unberührt.
 
-### Mike-Spec-Historie (3 Iterationen an einem Tag)
+### Mike-Spec-Historie (4 Iterationen an einem Tag)
 
 | Datum | Bug/Spec | Code-Fix |
 |---|---|---|
 | 25.05.2026 P128 | Späte Reports/Grids tauchten nach ✓ noch im Log auf → Spam | 60s-Cooldown → alles blocken |
 | 25.05.2026 P129 | 3 QSOs hintereinander ohne 73-Eintrag → P128 zu aggressiv | Whitelist: 73/RR73 trotz Cooldown durchlassen |
 | 26.05.2026 P138 | 73 erschien NACH ✓ ins neue QSO hereinrutschend | Whitelist wieder raus — „beendet ist beendet" |
+| 26.05.2026 P140 | P138 setzte Cooldown an `qso_complete` (interner RR73-Send) statt `qso_confirmed_visual` (optisches ✓) — 73 vor ✓ wurde fälschlich geblockt | Cooldown umgehängt + symmetrisch in Timeout-Pfad |
 
-### Mechanik — wann wird geblockt?
+### ⚠ Zwei getrennte QSO-Ende-Trigger (P140 26.05.2026)
 
-Der Cooldown-Stempel wird **ausschließlich** in `_on_qso_complete`
-(mw_qso.py:557) gesetzt — das ist exakt der ✓-Trigger-Zeitpunkt:
+Die State-Machine emittiert **zwei verschiedene** Signale beim QSO-Ende:
+
+| Signal | Wann es feuert | Was es triggert |
+|---|---|---|
+| `qso_complete` | **sofort** beim eigenen RR73-Send | interner Cleanup: ADIF-Schreiben, Auto-Hunt-Pause, `_active_qso_targets.discard` |
+| `qso_confirmed_visual` | nach Empfang des 73 (oder Courtesy-73-fertig) | **optisches** ✓: `qso_panel.add_qso_complete` rendert „✓ QSO komplett" |
+
+Zwischen den beiden Signalen können **mehrere Slots** liegen (Mike-
+Field-Bug 26.05.: ~30-45 s typisch). In dieser Zeit kommt das 73
+der Gegenstation an.
+
+### Mechanik — wann wird geblockt? (P140-Update)
+
+Der Cooldown-Stempel wird in **zwei** Stellen gesetzt:
+
+1. **`_on_qso_confirmed_visual`** (mw_qso.py:660+) — optisches ✓-Zeitpunkt
+2. **`_on_qso_timeout`** (mw_qso.py:980+) — defensiv nach ✗ (Mike-Spec
+   „beendet ist beendet" auch nach scheiterndem QSO)
 
 ```python
-self._recently_completed_qsos[qso_data.their_call] = time.monotonic()
+# _on_qso_confirmed_visual:
+self.qso_panel.add_qso_complete(qso_data.their_call)  # ✓ zuerst
+import time as _t
+if qso_data.their_call:
+    self._recently_completed_qsos[qso_data.their_call] = _t.monotonic()
 ```
 
-Daraus ergibt sich automatisch das gewünschte 2-Zeitfenster-Verhalten:
+**Was wichtig ist:** Cooldown wird **NACH** `add_qso_complete` gesetzt
+— sonst Spec-Verstoss (gleicher Bug wie P138 wieder).
 
-| Zeitfenster | Cooldown-Eintrag? | 73/RR73 |
+`_on_qso_complete` (interner Trigger) setzt **KEINEN** Cooldown mehr —
+nur State-Cleanup. Falls jemand denkt „das war doch früher anders":
+ja, P138 → P140 hat das umgehängt.
+
+Daraus ergibt sich das gewünschte 2-Zeitfenster-Verhalten:
+
+| Zeitfenster | Cooldown-Eintrag? | 73 der Gegenstation |
 |---|---|---|
-| **Vor ✓** (QSO läuft noch) | leer | kommt durch ✓ |
-| **Nach ✓** (60s Fenster) | aktiv | wird geblockt ✗ |
-| Nach 60s | gelöscht (lazy aging) | kommt wieder durch |
+| RR73-Send (= `qso_complete`) | leer | wird gerendert ✓ |
+| Optisches ✓ (= `qso_confirmed_visual`) | wird gesetzt | — |
+| **Nach ✓** (60 s Fenster) | aktiv | wird geblockt ✗ |
+| Nach 60 s | gelöscht (lazy aging) | kommt wieder durch |
+| Nach ✗ Timeout (= `qso_timeout`) | wird gesetzt | gleiche Block-Regel |
+
+### Auto-Hunt-Cooldown ist UNABHÄNGIG (R1-F1-Klärung P140)
+
+`core/auto_hunt.py` hat einen **eigenen** Cooldown-Mechanismus
+`_recent_qso` (P61, gesetzt via `mark_pick()`) der **unabhängig** von
+`_recently_completed_qsos` ist. Auto-Hunt wird also dieselbe Station
+NICHT erneut picken, auch wenn der Log-Filter-Cooldown nicht greift
+(P140 nutzt diese Trennung aus). Test T6 in
+`test_p140_cooldown_trigger.py` verifiziert die Unabhängigkeit.
 
 ### Was wird geblockt, was nicht?
 
@@ -545,8 +614,430 @@ sofort → Cooldown gesetzt → Gegenstation-RR73 kommt 1 Slot später →
 
 - **Bandwechsel** (`_on_band_changed`): `_recently_completed_qsos.clear()`
 - **Mode-Wechsel**: ebenso
-- **Lazy-Aging** nach 60s pro Eintrag
+- **Lazy-Aging** nach 60 s pro Eintrag
 - KEIN Reset bei HALT (Mike-Spec: HALT ist Notbremse, nicht QSO-Ende)
+
+### Field-Beispiel (Mike 26.05. P140-Fix verifiziert)
+
+```
+14:32:15 → Gesendet 5P1KZX DA1MHH -18       ← Mike-TX
+14:32:30 ← Empf. DA1MHH 5P1KZX R-12         ← Gegenstation-R-Report
+14:32:45 → Gesendet 5P1KZX DA1MHH RR73      ← qso_complete (intern)
+                                              VOR P140: Cooldown HIER → 73 weg
+                                              NACH P140: kein Cooldown
+14:33:15 ← Empf. DA1MHH 5P1KZX 73            ← Gegenstation-73
+                                              VOR P140: GEBLOCKT
+                                              NACH P140: durchgelassen ✓
+         ✓ QSO mit 5P1KZX komplett          ← qso_confirmed_visual
+                                              NACH P140: Cooldown HIER
+14:33:30 → Gesendet CQ DA1MHH JN58           ← nächster CQ
+14:33:45 ← Empf. DA1MHH 5P1KZX 73           ← später-73 von 5P1KZX
+                                              wird geblockt ✗ (60 s)
+```
+
+---
+
+## 9. Bandsperre + TUNE-Pipeline (P53/P63/P54/P76-A)
+
+**Kurzantwort:** Bei zu hohem SWR während TX wird das aktuelle Band
+**markiert** (in-Memory `set`). Solange der Marker gesetzt ist, ist
+TX auf diesem Band gesperrt — Auto-Hunt, OMNI-CQ, CQ, Hunt-Reply,
+sogar Bandwechsel zum gesperrten Band führen TX nicht aus. Nur ein
+manueller TUNE-Vorgang mit SWR ≤ Limit kann den Marker entfernen.
+
+### Wer/wann setzt den Marker?
+
+`ui/mw_tx.py:_on_swr_alarm` (Z. 689 ff) — der Live-SWR-Watchdog.
+
+| Trigger | Bedingung | Code-Pfad |
+|---|---|---|
+| Live-Alarm während TX | **2 Alarms innerhalb 500 ms** + `encoder.is_transmitting=True` + `tuner_present=True` | `mw_tx.py:771-772` |
+| Pre-TX-Alarm aus `ptt_on()` | wird ignoriert (Spike-Schutz) | `mw_tx.py:716-718` |
+| Während manuellem TUNE | komplett bypassed (kein Marker) | `mw_tx.py:712-713` |
+| Auto-TUNE nach Bandwechsel scheitert | Marker proaktiv gesetzt | `mw_tx.py:447-449` |
+
+**SWR-Limit:** `settings.get("swr_limit", 3.0)` — User-konfigurierbar in
+Einstellungen → „TX & Schutz" → „SWR-Limit". Mike's typischer Wert: 3.0.
+
+**Wenn `tuner_present=False`:** kein Marker gesetzt → klassisches
+„Antenne prüfen"-Modal ohne Sperre. Use-Case: Mobil-Betrieb ohne
+Tuner.
+
+### Die Daten-Struktur
+
+```python
+self._swr_blocked_bands: set[str]  # in MainWindow.__init__
+```
+
+In-Memory **set von Band-Strings in Upper-Case** (`"15M"`, `"20M"`...).
+**Nicht persistiert** — App-Neustart räumt den Marker automatisch ab
+(Mike-Logik: nach Neustart kommt eh der erste TX-Versuch mit Watchdog,
+falls Antenne immer noch defekt rastet die Sperre sofort wieder ein).
+
+### Wer respektiert den Marker (TX-Blocker)?
+
+Alle TX-auslösenden Pfade prüfen `band in self._swr_blocked_bands`
+**bevor** Hardware angesprochen wird:
+
+| Datei:Zeile | Pfad | Aktion bei Sperre |
+|---|---|---|
+| `mw_radio.py:643` | Bandwechsel-Hint (Antennen-Auswahl) | Hint übersprungen |
+| `mw_radio.py:662` | Bandwechsel-Diversity-Apply | übersprungen |
+| `mw_radio.py:1575` | Bandwechsel-Pipeline (Auto-TUNE-Trigger) | Auto-TUNE ausgelöst |
+| `mw_radio.py:1742` | RX-Mode-Switch | TX-Aktionen geblockt |
+| `mw_radio.py:1798` | Reverse-Sync von Settings | Marker re-add |
+| `mw_qso.py:177` | `_on_tx_started` Pre-Check | TX abgebrochen |
+| `mw_qso.py:338` | Hunt-Reply | Reply unterdrückt |
+| `mw_qso.py:507` | `start_qso`-Aufruf | QSO verhindert |
+
+**Was wird NICHT geblockt:**
+- RX-Decoder, Wasserfall, Karte, Stats — kein TX, kein Risiko
+- Manueller TUNE-Klick — ist der einzige Weg zur Freigabe
+- HALT (Notbremse) — Stop ist sowieso kein TX-Trigger
+
+### Wer/wann entfernt den Marker (Freigabe)?
+
+**Ausschließlich** `_tune_post_swr_check` (`mw_tx.py:310`) bei SWR ≤
+Limit nach manuellem TUNE-Vorgang:
+
+```python
+if swr_now <= swr_limit:
+    was_blocked = band in self._swr_blocked_bands
+    self._swr_blocked_bands.discard(band)
+    ...
+    if was_blocked:
+        self.qso_panel.add_info(f"✓ Band {band} freigegeben — SWR {swr_now:.1f}")
+```
+
+**Es gibt KEINEN anderen Discard-Pfad.** Bandwechsel weg/hin entfernt
+den Marker NICHT (Mike-Spec: Antenne ist immer noch defekt).
+
+### Die TUNE-Pipeline (3 Phasen + Post-Check)
+
+Wenn der User TUNE drückt (oder Auto-TUNE bei Bandwechsel startet):
+
+```
+PHASE A (Tuner-Match)
+  ├─ radio.set_tx_antenna("ANT1")                ← Hardware-Safety
+  ├─ radio.set_rfpower_direct(10)                ← 10 W Träger
+  ├─ radio.tune_on()                             ← FlexRadio-Tuner-Match
+  └─ tune_duration_s warten (default 15 s)
+                ↓
+PHASE B (Closed-Loop Power-Konvergenz)            ← OPTIONAL
+  ├─ Vor-Check: radio.last_swr ≤ swr_limit ?
+  │     NEIN → Phase B SKIP, _tune_converged_rf = None
+  │     JA  → weiter
+  ├─ 5 Iterationen á 1 s:
+  │     – FWDPWR-Samples sammeln
+  │     – Proportional rfpower-Slider anpassen
+  │     – Ziel: FWDPWR ≈ 10 W (±1 W Toleranz)
+  └─ Konvergenz-Ergebnis: rf-Wert (Stützpunkt für späteren rf_preset)
+                ↓
+SWR-FREEZE
+  └─ _tune_last_valid_swr = self.radio.last_swr   ← VOR tune_off()
+                ↓
+TUNE-OFF
+  ├─ radio.tune_off()
+  ├─ VFO zurück auf Work-Frequency
+  ├─ power_preset wiederherstellen
+  └─ TUNE-Button visuell zurücksetzen
+                ↓
+POST-CHECK (2 s später)
+  ├─ token-validation (Re-Tune-Race-Schutz)
+  ├─ swr_now = _tune_last_valid_swr (eingefroren)
+  ├─ if swr_now ≤ swr_limit:
+  │     ✓ Marker discard + Diversity-Resume (wenn aktiv)
+  │     ✓ rf_preset_store.save bei plausiblem rf-Wert
+  │     ✓ qso_panel.add_info("✓ Band X freigegeben — SWR Y.Z")
+  └─ if swr_now > swr_limit:
+        ✗ Marker setzen (Phase-B-Schicht reicht)
+        ✗ Modal „Tuner konnte nicht matchen"
+```
+
+### Warum die 2-Sekunden-Verzögerung im Post-Check?
+
+`mw_tx.py:294`: `QTimer.singleShot(2000, lambda: self._tune_post_swr_check(...))`
+
+Nach `tune_off()` braucht FlexRadio kurz, bis die letzten VITA-49
+Meter-Updates durch sind. 2 s ist empirisch genug für saubere Werte.
+Token-Pattern (`_tune_post_check_token`) schützt vor Race bei
+schnellem Re-Tune (User klickt TUNE 2×).
+
+### Bekannte Stolperfalle 1: Clamp-Bug ohne Träger
+
+Nach `tune_off()` liefert FlexRadio weiterhin Meter-Updates **ohne TX-
+Träger** — Werte < 1.0 die in `_handle_meter` auf 1.0 geclamped werden
+und `radio._last_swr` überschreiben. Deshalb wird der echte
+Match-SWR **vor** `tune_off()` eingefroren (`_tune_last_valid_swr` Z. 275).
+Sonst würde der Post-Check 2 s später fälschlich 1.0 lesen → false-OK.
+
+### Bekannte Stolperfalle 2: Disconnect-Pfad
+
+`mw_tx.py:340-350` — wenn das Radio während Post-Check disconnected
+ist, wird `_tune_last_valid_swr = None` reset (Stale-Schutz) und
+Auto-TUNE-Dialog erhält `auto_tune_done.emit(False, 0.0, 0.0)`.
+
+### Offene Schwäche (P142 26.05.2026)
+
+Mike's Field-Beobachtung 26.05. 17:24: Nach SWR-Sperre 15m manueller
+TUNE → echtes Match-SWR live 2.5 → Meldung „Band 15M freigegeben — SWR
+**1.0**". Zweiter TUNE: korrekt 2.5.
+
+**Vermutete Ursache:** Phase B regelt rfpower beim Konvergieren
+runter; während dieses Power-Downs misst der SWR-Sensor evtl. zu
+wenig Träger und liefert clamp-1.0. Der `_tune_last_valid_swr`-Freeze
+(Z. 275) passiert DANACH und friert den falschen 1.0er-Wert ein
+statt des echten Match-Wertes nach Phase A.
+
+**Bei swr_limit=3.0 harmlos** (2.5 wäre eh durchgewunken). **Bei
+echtem 4.5 + clamp-1.0 wäre das ein Sicherheits-Bug** → Band
+fälschlich freigegeben → nächster TX mit defekter Antenne.
+
+Fix-Optionen siehe TODO.md P142. Architektur-Empfehlung: SWR-
+Freeze **vor** Phase B nehmen (relevant ist der Match-Wert bei voller
+Sende-Power, nicht der Wert bei runtergeregelten 10 W).
+
+### Konstanten + Settings
+
+| Wert | Wo | Default |
+|---|---|---|
+| `swr_limit` | `settings.swr_limit` | 3.0 |
+| `tune_duration_s` | `settings.tune_duration_s` | 15 s |
+| `tune_power_w` | `radio.tune_power_w` Class-Var | 10 W (hartcodiert, kein Settings-Override aus Hardware-Safety) |
+| `tuner_present` | `settings.tuner_present` | True |
+| Phase-B Iterationen | `_tune_converge_to_target` Param | 5 × 1 s |
+| Phase-B Toleranz | `TOLERANCE_W` | ±1 W |
+| Phase-B Min-Samples | `MIN_SAMPLES` | 2 |
+| Post-Check Verzögerung | `QTimer.singleShot` Param | 2000 ms |
+| SWR-Spike-Fenster | `_swr_first_alarm_t` ± | 500 ms |
+| `rf_preset_store` plausibel-Bereich | `mw_tx.py:393` | rf ∈ [3, 50] |
+
+### Field-Beispiel (Mike 26.05. 17:24)
+
+```
+QSO-Log:
+  ⚠ Band 15M gesperrt — SWR 28.5      ← P63 Sperre (Antenne defekt)
+  ✓ Band 15M freigegeben — SWR 1.0    ← Meldung mit falschem SWR
+  ✓ TUNE OK — SWR 2.5                  ← 2. TUNE im freigegebenen Band
+
+Radio-Widget:
+  Erster TUNE:  11 W / SWR 2.5         ← echter Live-Wert
+  Zweiter TUNE: 0 W / SWR 1.0          ← idle, kein TX
+```
+
+→ Die App nimmt einen echten, aber falschen Wert (1.0 aus Phase-B-
+Power-Down). Behebung in P142.
+
+### Verwandte Dateien
+
+- `ui/mw_tx.py` — Hauptlogik (TUNE-Pipeline + SWR-Alarm + Post-Check)
+- `ui/mw_radio.py` — Bandwechsel-Hooks, Auto-TUNE-Trigger
+- `ui/mw_qso.py` — TX-Pre-Checks
+- `core/preset_store.py` — RFPreset-Stützpunkt-Speicher (Phase-B-Output)
+- `radio/flexradio.py:1388` — SWR-Watchdog-Signal-Emitter
+
+### Verwandte HISTORY-Einträge
+
+- P53 (v0.97.x) — Live-SWR-Watchdog während TX
+- P54 (v0.97.44) — Closed-Loop Power-Konvergenz Phase B
+- P63 (v0.97.36) — Marker + Modal + Diversity-Resume
+- P76-A/B/C (v0.97.49+50) — Freeze-vor-Tune-Off + Auto-TUNE-Dauer-UX
+- P127 (v0.98.08) — `_pending_tx_log` Reset bei SWR-Stop
+
+---
+
+## 10. QSO-Log Zwei-Speicher-Architektur + Clear-Pfade (P95/P143)
+
+**Kurzantwort:** Das QSO-Log hat **zwei** Speicher die synchron
+gehalten werden müssen. Wer nur einen leert holt sich Resurrection-
+Bugs ein. Helper `qso_panel.clear_log_completely()` macht's richtig.
+
+### Die zwei Speicher
+
+| Speicher | Wofür | Eingeführt |
+|---|---|---|
+| `log_view` (QPlainTextEdit) | sichtbares Widget | seit immer |
+| `_entries: list[dict]` | Master-SOT für Re-Render | P95 v0.97.67 |
+
+`_entries` wurde mit P95 eingeführt um **Visibility-Toggles** zu
+unterstützen (Even/Odd-Tag ein/ausblenden, Antennen-Label
+ein/ausblenden) ohne Re-Decode aus Audio. `_rerender_all()` zeichnet
+log_view komplett neu aus `_entries`.
+
+### Der Trigger der Bugs verursacht
+
+`_cleanup_timer` (Z. 54 in qso_panel.py) läuft alle **30 Sekunden**
+und ruft `_auto_trim_by_age(max_age_s=300.0)`:
+- entfernt Einträge älter als 5 Min aus `_entries`
+- ruft `_rerender_all()` wenn was getrimmt wurde (≥ 5 alte Einträge)
+- → zeichnet log_view aus aktuellem `_entries` neu
+
+**Wenn jemand nur `log_view.clear()` aufruft**, aber `_entries`
+bleibt voll: nach maximal 30 s zeichnet der Auto-Trim-Timer alle
+„geleerten" Einträge wieder ins log_view. Mike-Field-Bug 26.05.
+17:34 (30m → 20m Bandwechsel).
+
+### Der Helper
+
+`qso_panel.clear_log_completely()` (vor `_append_colored`):
+
+```python
+self._entries.clear()
+self.log_view.clear()
+self._last_omni_tx_even = None
+```
+
+**Reihenfolge: Daten → View → State** (R1-F1 26.05.).
+**Thread-safe ohne Lock** (alle Aufrufer + Cleanup-Timer im
+GUI-Thread, Qt single-threaded queue, R1-F2).
+
+### Wo der Helper AUFGERUFEN wird (Mike-Spec 26.05.)
+
+| Pfad | Wann | Warum leer |
+|---|---|---|
+| `mw_radio._on_band_changed` | Bandwechsel | neuer Band-Kontext |
+| `mw_radio._on_mode_changed` | FT8↔FT4-Wechsel | Stationen senden in anderem Modus, kein Bezug mehr |
+| `mw_radio._on_rx_panel_toggled` | RX-On/Off-Toggle | Neustart-Charakter |
+
+### Wo der Helper NICHT aufgerufen wird (P115-Spec)
+
+| Pfad | Wann | Warum NICHT leer |
+|---|---|---|
+| `set_rx_mode` / `_on_rx_mode_clicked` | Normal↔Diversity-Switch | P115-Spec: optische Kontinuität, Chronik bleibt sichtbar |
+
+### Die OMNI-Parity-Falle
+
+`_last_omni_tx_even` (qso_panel.py:61) trackt die Even/Odd-Parity
+des letzten OMNI-TX-Eintrags um Leerzeilen-Trennung bei Parity-
+Wechsel zu setzen. **Wer log_view ohne diesen Reset leert** bekommt
+nach Bandwechsel eine falsche Trennung (Parity-Wert vom alten Band).
+Helper resettet das mit (R1-F3).
+
+### Field-Beispiel (Mike 26.05. 17:34, vor P143-Fix)
+
+```
+30m: Auto-Hunt sendet
+  → Gesendet BG4UCZ DA1MHH -15      (_entries[0])
+  → Gesendet R9AL DA1MHH -15        (_entries[1])
+  → Gesendet MW0DNF DA1MHH -17      (_entries[2])
+
+User klickt 20m:
+  _on_band_changed → log_view.clear()   # _entries BLEIBT [0,1,2]
+  → Mike sieht: leer
+
+~30 s später Auto-Trim-Timer:
+  _auto_trim_by_age → _rerender_all()
+  → for entry in _entries: render(entry)
+  → log_view zeigt BG4UCZ/R9AL/MW0DNF wieder
+  → Mike sieht: 30m-Einträge auf 20m wieder da
+```
+
+Nach P143-Fix ruft `_on_band_changed` `clear_log_completely()`
+das `_entries.clear()` mit aufruft → kein Resurrection.
+
+### Verwandte Konstanten
+
+- `_cleanup_timer` Intervall: **30 Sekunden** (qso_panel.py:55)
+- `_auto_trim_by_age` Max-Age: **300 Sekunden** = 5 Min
+  (qso_panel.py:562)
+- Min-Trim-Schwelle: ≥ 5 alte Einträge nötig damit Re-Render läuft
+  (R1-F5 Early-Exit-Schutz)
+
+### Tests die das absichern
+
+`tests/test_p143_clear_log_completely.py`:
+- T1: Helper leert alle 3 States (echter Lifecycle-Test)
+- T2a/b/c: 3 Aufrufer rufen Helper (Source-Inspektion)
+- T3: rx_mode-Switch-Pfade rufen Helper NICHT (P115-Schutz)
+- T4: Mike-Field-Bug-Reproduktion (Resurrection-Schutz)
+- T5: Reihenfolge Daten→View→State
+- T6: Docstring P115-Hinweis vorhanden
+- T7: Idempotenz
+
+`tests/test_p131_band_change_pending_tx_log.py::test_t2` verwendet
+`clear_log_completely()` als Anker (P143-Migration-fest).
+
+---
+
+## 11. Mode-aware Symmetrie-Pattern (P102/P114/P135/P141)
+
+**Kurzantwort:** Wenn die App zwei oder mehr parallele Pfade hat
+(Normal vs Diversity, FT8 vs FT4, ...), MÜSSEN alle Control-Panel-
+Updates symmetrisch in jedem Pfad gerufen werden. Vergessen in einem
+Pfad → stale-Anzeige-Bug. Bisher 4 Iterationen gefunden — wahrscheinlich
+gibt's noch mehr.
+
+### Bekannte Iterationen
+
+| # | Ticket | Was wurde vergessen | Pfad wo es fehlte |
+|---|---|---|---|
+| 1 | P102 (v0.97.97) | `_refresh_antenna_status_label()` | User-Klick-Pfad `_on_rx_mode_clicked` (vs programmatischer `set_rx_mode`) |
+| 2 | P114 (v0.97.99) | `_refresh_modeband_status_label()` | nur in einer der set-Methoden |
+| 3 | P135 (v0.98.16) | mode-aware Decode-Count | `_on_cycle_decoded` Slot-Parity |
+| 4 | **P141** (v0.98.23) | `compute_local_conditions` + `update_local_conditions` | `_handle_diversity_operate` (vs `_handle_normal_mode`) |
+
+### Anatomie des Bugs
+
+```python
+def _handle_normal_mode(self, messages):
+    ...
+    # Sterne-Anzeige
+    score, n_st, median = compute_local_conditions(self._normal_stations)
+    self.control_panel.update_local_conditions(score, n_st, median)
+    self._emit_map_snapshot_if_open()
+
+def _handle_diversity_operate(self, messages, ant):
+    ...
+    # ← HIER FEHLTE der Sterne-Update bis P141 (27.05.2026)
+    self._emit_map_snapshot_if_open()
+```
+
+User schaltet auf Diversity-Mode → Sterne-Anzeige hängt auf
+1★ (Init-Default) oder dem letzten Normal-Mode-Wert. Kein Crash,
+kein Log-Fehler, einfach „komische Anzeige".
+
+### Wie der Bug entdeckt wird
+
+Mike sieht im Feld einen Wert der nicht zu den Daten im
+Empfangsfenster passt (z.B. „14 Stationen mit -18 dB Median →
+zeigt nur 1★?"). Mike fragt nach. Wir finden den fehlenden Aufruf.
+
+### Wo sonst noch Risiko besteht (zu prüfende Stellen)
+
+| rx_mode-aware Funktion | Bereits in beiden Pfaden? |
+|---|---|
+| `update_decode_count` | ✅ P135 |
+| `update_snr` | ⚠ nur in Normal-Mode (Diversity berechnet `_avg_snr` lokal aber ruft `update_snr` nicht — TODO prüfen) |
+| `update_diversity_counts` | ✅ nur Diversity (Per-Definition) |
+| `update_local_conditions` | ✅ P141 |
+| `_refresh_antenna_status_label` | ✅ P102 |
+| `_refresh_modeband_status_label` | ✅ P114 |
+| `_emit_map_snapshot_if_open` | ✅ beide Pfade |
+
+### Empfehlung für die Zukunft
+
+DeepSeek-R1 hat 27.05.2026 vorgeschlagen ein **Pattern-Check-Skript**
+zu bauen (siehe TODO P145 falls eingetragen) das:
+1. Alle Stellen findet die `_rx_mode` abfragen
+2. Pro Branch alle Control-Panel-Update-Aufrufe extrahiert
+3. Asymmetrien meldet (Methode X in Branch A, fehlt in Branch B)
+4. Als Pre-Commit-Hook läuft
+
+Aufwand klein, Nutzen hoch — würde diese Bug-Klasse abhaken.
+
+### Trigger für neue Iteration
+
+Sobald jemand einen neuen `_handle_*_mode`-Pfad einbaut (z.B. für
+einen neuen rx_mode oder Sondermodus), MUSS er die Symmetrie-Tabelle
+oben aktualisieren und alle bekannten Updates spiegeln. Sonst kommt
+Mike mit „komische Anzeige" zurück und es wird P14X.
+
+### Verwandte Tests
+
+- `tests/test_p141_diversity_local_conditions.py::test_t2` —
+  Symmetrie-Test (beide Handler MÜSSEN `compute_local_conditions`
+  rufen)
+- `tests/test_p135_*` — Decode-Count-Symmetrie
 
 ---
 

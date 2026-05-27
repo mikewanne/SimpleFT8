@@ -3,6 +3,456 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-27 v0.98.27 — P145 Pattern-Check-Skript mode-aware Symmetrie (Vorbeugung)
+
+**R1-Empfehlung aus P141-Review** (F6 ORANGE, 27.05.): statisches AST-
+Analyse-Skript das die Bug-Klasse P102/P114/P135/P141 (mode-aware
+Symmetrie-Bugs) AUTOMATISCH findet bevor sie ins Feld kommen.
+
+**Datei `scripts/check_mode_symmetry.py`** (~230 LOC, Python stdlib only).
+
+**Zwei Check-Arten:**
+
+**Check 1: UI-Update-Symmetrie über `_rx_mode == "..."`-Branches.**
+Vergleicht NUR Methoden mit Prefix `update_*`, `_refresh_*`, `show_*`
+über if/elif/else-Branches innerhalb derselben Methode (R1-F1: ohne
+diese Einschränkung Whitelist-Monster).
+
+**Check 2: Mode-Handler-Methoden-Familien.**
+Vergleicht hardcoded `MODE_HANDLER_FAMILIES = {"cycle_handlers":
+[_handle_normal_mode, _handle_diversity_operate]}`. Wenn UI-Update-
+Methode in einem Mitglied vorkommt, im anderen fehlt → ASYMMETRIE.
+**P141-Fall würde hier exakt erkannt werden** (R1-Final-R1 bestätigt).
+
+**R1-V4-pro Pre-Code Findings (alle umgesetzt):**
+- F1 🔴 Check 1 auf UI-Patterns beschränkt (`UI_UPDATE_PREFIXES`)
+- F3 🔴 Geschachtelte elif/else rekursiv via `_collect_branches()`
+- F2 🟠 DX-Tune-Familie bewusst NICHT in cycle_handlers (Mess-Phase
+  mit Dialog, eigene Logik)
+- F4 🟡 Beides: Standalone-Script (Exit-Code für CI/n8n) + Pytest-Test
+- F5 🟡 0 Asymmetrien-Erwartung erfüllt
+
+**Real-Codebase-Funde:** 2 Asymmetrien, beide legitim:
+- `update_from_stations` = Diversity-only (Antennen-Prefs für Karten)
+- `update_snr` = Normal-Mode avg vs Diversity-Mode per-Message (Z. 818)
+→ Beide auf `WHITELIST_UI_METHODS` mit Begründung dokumentiert.
+
+**Final-R1: PUSH FREIGEBEN ✓** — „produktionsreif". R1-Bestätigung:
+P141-Bug wäre exakt gefangen worden (`update_local_conditions` matcht
+`update_*`-Prefix, fehlt in `_handle_diversity_operate` → Asymmetrie).
+
+**Aufruf:** `./venv/bin/python3 scripts/check_mode_symmetry.py`
+Output: `✓ Keine mode-aware Symmetrie-Asymmetrien gefunden.` (aktueller
+Stand). Exit-Code 0 OK, 1 bei Asymmetrie.
+
+**Pytest-Integration:** `test_t2_real_codebase_no_asymmetries` schlägt
+fehl wenn neuer mode-aware Bug eingeführt wird → CI-Schutz für die
+ganze Bug-Klasse.
+
+**Pattern-Klasse 5. Iteration** (P102/P114/P135/P141/**P145**) — erstes
+Tool das die Klasse vorbeugend abdeckt statt jeweils einzeln zu fixen.
+
+**Tests 2113→2124 (+11 P145):** T1 Smoke, T2 Real-Codebase 0 Asymm.,
+T3 synthetisch if/elif-Asym., T4 synthetisch Handler-Familie (P141-Fall),
+T5 Whitelist-Schutz, T6 3-Wege-elif (R1-F3), T7a/T7b Exit-Codes,
+T8 Pattern-Klasse-Doku, T9/T9b API-Stabilität.
+
+---
+
+## 2026-05-27 v0.98.26 — P144 Auto-Hunt busy-station Filter (Etikette + Band-QRM-Schutz)
+
+**Mike-Field-Bug 26.05. 17:38** (Auto-Hunt 20m FT8):
+```
+Empfangsfenster 15:34:00:  R2BRD RA5AD RR73   ← RA5AD beendet QSO mit R2BRD
+QSO-Log:
+  15:35:45 → Gesendet RA5AD DA1MHH -19   ← Auto-Hunt picked RA5AD trotzdem
+  15:36:15 → Gesendet RA5AD DA1MHH -19      5x in Folge
+  15:36:45 → ...
+  15:37:15 → ...
+  15:37:45 → ...
+  ✗ RA5AD — Timeout                        ← 15:38:15
+  15:38:30 ← Empf. DA1MHH RA5AD R-15      ← echte Antwort zu spät → QSO verloren
+```
+
+5 Sende-Versuche á 30s = 2:30 Min ins Leere. Etikette-Verstoß (Band-QRM) +
+Zeitverschwendung. RA5AD's späte Antwort kam 15s NACH Mike's Timeout.
+
+**Mike-Wahl Option 1:** Abort+Skip ohne Cooldown, später Retry möglich.
+„Späte Antwort > 2 Slots ist FT8-untypisch" + KEIN Cooldown lässt Target
+für späteren Pick verfügbar.
+
+**Root Cause:** `core/auto_hunt.py:select_next` validierte nur
+`looks_like_callsign` (P136) und `_recently_completed_qsos`-Cooldown
+(P128/P138/P140) — KEINE „ist Target gerade mit anderem QSO belegt?"-Prüfung.
+
+**Fix (voller Workflow autonom):** Filter in `ui/mw_cycle.py:on_message_decoded`
+zwischen P124-Hash-Resolve und P94/OMNI/State-Machine:
+
+```python
+if self._p144_target_busy_with_other(msg):
+    self._p144_abort_and_skip(
+        target=self.qso_sm.qso.their_call,
+        busy_with=msg.target,
+    )
+    return  # nicht in State-Machine geben
+```
+
+`_p144_target_busy_with_other`: True wenn Auto-Hunt aktiv + nicht
+manual_override + QSO mit Target + msg.caller == target + msg.target !=
+my_call + not is_cq.
+
+`_p144_abort_and_skip`: encoder.abort + _pending_tx_log=None (P127/P131-
+Pattern) + qso_sm.cancel + auto_hunt.clear_current_target (neue API,
+KEIN mark_pick, KEIN Cooldown) + qso_panel.add_info(„⏭ {target} belegt
+(sendet an {busy_with}) — überspringe ohne Sperre") + debug_log("HUNT",
+"P144_SKIP ...") für Field-Diagnose.
+
+**Neue API in `core/auto_hunt.py`:** `clear_current_target()` setzt nur
+`_current_target = None` ohne Cooldown — Mike-Spec „Target bleibt pickbar".
+
+**R1-V4-pro Pre-Code Findings (alle eingebaut):**
+- F1 🟠 `_manual_override`-Check ergänzt (bei User-Klick entscheidet User)
+- F2 🟠 `clear_current_target()` API statt direkter Privat-Zugriff
+- F5 🟡 debug_log("HUNT", "P144_SKIP ...") für Field-Diagnose
+- F6 🟡 Test-Erweiterung um clear_current_target + Mock-Funktional
+
+**Final-R1: PUSH FREIGEBEN ✓** — KISS-Bewertung „genau richtig", keine
+Race-Bugs, Reihenfolge korrekt. Hinweis: Edge-Case Dauer-busy-Station =
+Endlos-Abort-Schleife möglich aber funktional korrekt (kein TX, keine
+Verlust) — Mike-Field-Beobachtung pending.
+
+**Pattern-Familie 9. Iteration** (P81/P122/P124/P127/P128/P129/P126/
+P131/P138/P140/P144) — KISS-Defensive bei Kontextwechsel.
+
+**Tests 2091→2113 (+22 P144):** T1-T3 RR73/R/Grid an Fremd, T4-T4b CQ,
+T5 Antwort an uns, T6 anderer Caller, T7 Auto-Hunt inaktiv, T8 manual_
+override (R1-F1), T8b kein QSO, T9a-g Source-Inspektion (encoder.abort/
+_pending_tx_log/cancel/clear_current_target/no-mark_pick/add_info/
+debug_log), T10 Reihenfolge, T11/T11b clear_current_target Code-only,
+T12/T12b Funktional via Mocks (TX läuft / TX läuft nicht).
+
+**FEATURES.md §2** wird durch P144 erweitert (9. Iteration der Defer-Familie).
+
+**Field-Test pending** — Mike beobachtet ob „⏭ belegt"-Meldungen im
+Log auftauchen + ob Dauer-busy-Edge-Case relevant wird.
+
+---
+
+## 2026-05-27 v0.98.25 — P147 HALT-Button stoppt Auto-Hunt SOFORT (Hardware-Sicherheits-Fix)
+
+**Mike-Field-Bug 27.05. 04:42-04:43** (3× HALT, lief trotzdem weiter):
+```
+04:42:15 → Gesendet SV7BAY DA1MHH -13
+HALT — alles gestoppt           ← User Klick 1
+HALT — alles gestoppt           ← User Klick 2
+04:42:45 → Gesendet YO4NT DA1MHH -15   ← Auto-Hunt picked weiter!
+HALT — alles gestoppt           ← User Klick 3
+04:43:15 → Gesendet TA3ZZ DA1MHH -20   ← weiter
+04:43:30 → Gesendet R9MW DA1MHH -17    ← weiter
+```
+Statusbar zeigte „AUTO HUNT — 8:07" → Session lief tatsächlich noch.
+
+**Mike-Spec:** „halt ist aber notknopf und müsste wie der name sagt
+alles anhalten" — HALT ist die letzte Hardware-Sicherheits-
+Verteidigung. **MUSS** zuverlässig stoppen.
+
+**Root Cause:** `_on_cancel` (HALT-Button) rief `on_manual_qso_end()`
+statt `stop_auto_hunt("manual_halt")`. `on_manual_qso_end()` setzt
+nur `_manual_override=False`, `_active` bleibt True → Auto-Hunt
+picked weiter Stationen.
+
+`on_manual_qso_end` ist für den Pfad „User klickte manuell Station
+während Auto-Hunt lief, QSO fertig, Auto-Hunt darf wieder picken".
+HALT ist das **Gegenteil** — falscher Aufruf.
+
+**Fix (autonomer Workflow V1→V2→R1→V3→Code→Tests→Final-R1):**
+
+`ui/mw_qso.py:403-415` 1-Zeilen-Tausch:
+```python
+if self._auto_hunt.active:
+    self._auto_hunt.stop_auto_hunt("manual_halt")
+```
+
+`manual_halt` ist seit P122 (v0.98.05) als SOFORT-Stop-Reason
+definiert (kein Defer), cleart `_cooldown` + `_last_tx_even`.
+`start_auto_hunt` resettet `_manual_override` automatisch (Z. 199)
+beim Re-Start — darum kein on_manual_qso_end mehr nötig.
+
+**R1-V4-pro Pre-Code (7 Findings):**
+- F1 🟡 flush_pending_stop bleibt (KISS, no-op nach Stop)
+- F2 🟢 Symmetrie OMNI/Auto-Hunt OK
+- F3 🟢 on_manual_qso_end bleibt für Confirmed/Timeout-Pfade
+- F4 🟢 Tests T1-T3 + 1 Zusatztest empfohlen
+- F5 🟢 Kein Race (Single-Thread + Defensiv-Check in select_next)
+- F6 🟢 Hardware-Sicherheit OK (TX-Abort vor Stop in Z. 398)
+- F7 🟡 alten P1.14 W6-Kommentar ersetzen → umgesetzt
+- Final-R1: PUSH FREIGEBEN, 0 Mängel.
+
+**Tests 2084→2091 (+7 P147):**
+- T1 Source-Inspektion (kein on_manual_qso_end()-Call mehr)
+- T2 Funktional (HALT → active=False)
+- T3 Regression (Re-Start nach HALT funktioniert)
+- T4 on_manual_qso_end bleibt für andere Pfade
+- T5 manual_halt cleart _cooldown + _last_tx_even
+- T6 Defensive Idempotenz (3× HALT safe)
+- T7 P147-Kommentar-Doku
+
+V4-pro Cycle 64: 0 Halluzinationen.
+
+**Mike-Vertrauen-Restore:** HALT-Notbremse funktioniert wieder
+zuverlässig. Field-Test pending (Mike kann jederzeit HALT klicken
+bei laufendem Auto-Hunt).
+
+---
+
+## 2026-05-27 v0.98.24 — P146 Kalibrierungs-Dialog-Titel mode-agnostisch
+
+**Mike-Field-Bug 27.05. 06:34:** Antennen-Kachel aktiv „DIVERSITY DX",
+aber Dialog-Titel zeigt „Diversity Standard — Kalibrierung 20m".
+Mike-Spec: „muss der text auch so sein, also das es für beide ist,
+ich weiss aber das wir einen text für beide hatten".
+
+**Architektur-Klärung:** P80 (v0.97.52) hat den Gain-Store unified —
+Hardware-Gain (ANT1+ANT2) wird einmal pro Band gespeichert, gilt für
+Normal + Diversity Standard + Diversity DX. `_on_dx_tune_accepted`
+(mw_radio.py:2042-2051) bestätigt das im Code: „Hardware-Gain ist
+identisch — wir nehmen die standard-Auswertung". Der bestehende
+Untertext „Misst gleichzeitig für Standard- und DX-Modus" (Z. 215
+im Dialog) sagt das auch — nur der **große Titel** widersprach.
+
+**Mike's Erinnerung war richtig:** der Text *war* schon mal für
+beide gemeint — der `mode_label`-Untertext existiert seit P51.
+Nur der Haupt-Titel wurde nie konsistent gemacht.
+
+**Fix (autonomer Workflow V1→V2→R1→V3→Code→Tests→Final-R1):**
+
+`_get_mode_label()` (dx_tune_dialog.py:133-149) vereinfacht:
+```python
+def _get_mode_label(self) -> str:
+    if self.rx_mode == "normal":
+        return "Gain-Messung"
+    return "Diversity (Standard + DX)"  # P146 mode-agnostisch
+```
+
+Der `scoring_mode == "snr"`-Branch im Titel-Code entfernt.
+**WICHTIG:** `scoring_mode` bleibt funktional aktiv in Z. 534 (
+`use_snr` für `best_for(ant)`) + Z. 680 (`active` Variante) —
+dort steuert es die interne Score-Algorithmus-Wahl. Nur die UI-
+Titel-Differenzierung entfällt (1-Zeilen-Cleanup).
+
+**R1-V4-pro Pre-Code (6 Findings):**
+- F1 🟢 Architektur-Konsistenz mit P80
+- F2 🟢 `scoring_mode`-Parameter zu Recht erhalten
+- F3 🟡 String-Match-Tests angepasst
+- F4 🟡 Mike's „DX zeigt Standard" wird durch generischen Text obsolet
+- F5 🟢 Keine anderen UI-Texte zu ändern
+- F6 🟢 Backwards-Compat unkritisch
+- Final-R1: PUSH FREIGEBEN, 0 Mängel.
+
+**Mike-Erinnerungs-Bestätigung:** R1 hat den vorhandenen
+`mode_label`-Untertext „Misst gleichzeitig für Standard- und
+DX-Modus" gefunden — DAS ist der Text den Mike sich erinnerte.
+Jetzt konsistent zum großen Titel.
+
+**Lesson (für mich):** Initial dachte ich „toter Code seit v0.87.1"
+weil ich `scoring_mode == "snr"` auf `DiversityController.scoring_mode`
+gemappt habe (`"normal"`/`"dx"`). **Korrektur via Code-Recherche:**
+Caller-Mapping in `_start_dx_tuning` (mw_radio.py:1670) übersetzt
+`"normal"/"dx"` → `"stations"/"snr"` für den Dialog. Lehre: bei
+„toter Code"-Verdacht immer Caller-Mapping prüfen.
+
+**Tests 2082→2084 (+2 P146, +1 modifiziert):**
+- Bestehender Test invertiert (beide scoring_modes erwarten
+  identischen Text)
+- T NEU: Regression-Schutz alter Strings darf nicht zurückkommen
+- T NEU: bestehender Untertext bleibt konsistent
+
+V4-pro Cycle 63: 0 Halluzinationen, 1 Selbst-Korrektur „toter Code".
+
+---
+
+## 2026-05-27 v0.98.23 — P141 Sterne-Anzeige im Diversity-Pfad
+
+**Mike-Field-Bug 26.05. 17:15:** Diversity Standard 15m FT8, 14
+Stationen sichtbar (SNR -16..-22, Median Top-Half ~-18/-19) zeigten
+„Lokale Empfangsqualität: ★☆☆☆☆" (1 Sternchen) statt rechnerisch
+4★ nach P120-Schwellen.
+
+**Root Cause:** `compute_local_conditions` + `update_local_conditions`
+wurden nur in `_handle_normal_mode` (mw_cycle.py:451-456) gerufen,
+nicht in `_handle_diversity_operate`. Anzeige hing auf Init-Default
+1★ oder letztem Normal-Mode-Wert.
+
+**Pattern-Klasse: mode-aware Symmetrie-Fehler** (gleicher Bug-Typ wie
+P135 v0.98.16 Decode-Count). Wenn ein neuer rx_mode-Pfad eingeführt
+wird müssen ALLE Control-Panel-Updates symmetrisch übernommen werden.
+
+**Fix (autonomer Workflow V1→V2→R1→V3→Code→Tests→Final-R1):**
+
+2-Zeilen-Einfügung in `_handle_diversity_operate` vor
+`_emit_map_snapshot_if_open()`:
+
+```python
+score, n_st, median = compute_local_conditions(self._diversity_stations)
+self.control_panel.update_local_conditions(score, n_st, median)
+```
+
+Variante A (hartcodiert `_diversity_stations`) statt B (defensiv
+if/else) — Handler läuft nur bei `_rx_mode=="diversity"`, KISS.
+
+**R1-V4-pro Pre-Code (6 Findings):**
+- F1 🟢 Fix minimal-invasiv
+- F2 🟡 Variante A bevorzugt (umgesetzt)
+- F3 🟢 Performance unproblematisch
+- F4 🟢 Kein Mode-Wechsel-Race (Qt single-threaded)
+- F5 🟢 Platzierung semantisch korrekt
+- F6 🟠 **Pattern-Check-Skript für später** — P145-Followup
+  (statische Analyse: alle `_rx_mode`-Abfragen + Symmetrie-Check
+  der Control-Panel-Calls)
+
+**Final-R1: PUSH FREIGEBEN, 0 Mängel.**
+
+**Tests 2075→2082 (+7 P141):**
+- T1 Source-Inspektion Diversity-Handler
+- T2 Symmetrie-Test beider Handler
+- T3 Reihenfolge vor Map-Snapshot
+- T4 Mike-Field-Szenario (14 Stationen → 4★)
+- T4b Empty-Dict → 1★
+- T5 P141-Kommentar
+- T6 Variante A hartcodiert verifiziert
+
+V4-pro Cycle 62: 0 Halluzinationen.
+
+---
+
+## 2026-05-26 v0.98.22 — P143 QSO-Log-Resurrection nach Bandwechsel verhindern
+
+**Mike-Field-Bug 26.05. 17:34** (Auto-Hunt 30m → Bandwechsel 20m):
+30m-Sende-Einträge tauchten nach ~30 s wieder im QSO-Log auf
+obwohl 20m gewählt war und das Log direkt nach Bandwechsel sauber
+leer schien. Mike-O-Ton: „macht App komisch".
+
+**Root Cause (Architektur-Bug):** `ui/qso_panel.py` hat seit P95
+(v0.97.67) zwei Speicher:
+1. `log_view` (sichtbares Widget)
+2. `_entries: list[dict]` (Master-SOT für Re-Render)
+
+`ui/mw_radio.py` 3 Stellen riefen nur `log_view.clear()`,
+vergaßen `_entries.clear()`:
+- Z. 547 `_on_band_changed` (Bandwechsel)
+- Z. 438 `_on_mode_changed` (FT-Mode FT8↔FT4)
+- Z. 357 `_on_rx_panel_toggled` (RX-On/Off)
+
+Trigger: `_cleanup_timer` (30s-Intervall) ruft
+`_auto_trim_by_age` → `_rerender_all()` → zeichnet log_view aus
+`_entries` neu. Alte 30m-Einträge tauchten zurück.
+
+**Fix (autonomer Workflow V1→V2→R1→V3→Code→Final-R1):**
+
+Option B (Mike-Wahl): Helper-Methode statt Inline-Fixes.
+
+1. Neue Methode `qso_panel.clear_log_completely()` (vor
+   `_append_colored`):
+   ```python
+   self._entries.clear()
+   self.log_view.clear()
+   self._last_omni_tx_even = None
+   ```
+   Reihenfolge Daten → View → State (R1-F1).
+
+2. 3 Aufruf-Stellen in `mw_radio.py` ersetzen
+   `log_view.clear()` → `clear_log_completely()`.
+
+3. Docstring dokumentiert: NICHT bei rx_mode-Switch
+   (Normal↔Diversity) aufrufen (P115-Spec optische Kontinuität).
+
+**Mike-Spec für Pfade (klar verbalisiert 26.05.):**
+
+| Aktion | leer? |
+|---|---|
+| Bandwechsel | JA |
+| FT-Mode-Wechsel (FT8↔FT4) | JA ("stationen haben keine bedeutung mehr") |
+| RX-Mode-Wechsel (Normal↔Diversity) | NEIN (P115) |
+| RX-On/Off-Toggle | JA |
+
+**R1-Findings (Pre-Code):**
+- F1 🟡 Reihenfolge Daten→View→State (umgesetzt + T5 verifiziert)
+- F2 🟢 Thread-Safety ohne Lock (Qt single-threaded)
+- F3 🟠 `_last_omni_tx_even`-Reset zwingend (T1 verifiziert)
+- F4 🟢 _rerender_all nach Helper harmlos
+- F5 🟡 Cleanup-Timer-Race harmlos (Early-Exit)
+- F6 🟢 Mike-Spec perfekt umgesetzt
+- Final-R1: PUSH FREIGEBEN, 0 Mängel.
+
+**Tests 2066→2075 (+9 P143 + 1 P131-T2 angepasst weil Anker
+`log_view.clear()` ersetzt durch `clear_log_completely()`).**
+
+V4-pro Cycle 61: 0 Halluzinationen.
+
+FEATURES.md sollte neue Sektion bekommen die das Helper-Pattern
++ die QSO-Log-Zwei-Speicher-Architektur dokumentiert — folgt
+in einem Aufräum-Update.
+
+---
+
+## 2026-05-26 v0.98.21 — P140 Cooldown-Trigger an optischen ✓-Zeitpunkt umhängen
+
+**Mike-Field-Bug 26.05. (5P1KZX, IQ5VK, OE4AHG belegt):** Bei 3 QSOs
+hintereinander wurde das 73 der Gegenstation NICHT mehr im QSO-Log
+gezeigt obwohl es VOR dem optischen „✓ QSO komplett" ankam.
+
+**Root Cause:** P138 (gleicher Tag) setzte den `_recently_completed_qsos`-
+Cooldown in `_on_qso_complete` — das ist aber der **interne** State-
+Machine-Trigger der sofort beim eigenen RR73-Send feuert, NICHT der
+**optische ✓-Zeitpunkt** (`qso_confirmed_visual` Signal). Die zwei
+Trigger sind absichtlich getrennt seit längerem:
+
+| Signal | Wann | Was es macht |
+|---|---|---|
+| `qso_complete` | sofort beim eigenen RR73-Send | Hardware/State-Cleanup (Auto-Hunt-Pause, ADIF) |
+| `qso_confirmed_visual` | nach Empfang von 73 oder Courtesy-73-fertig | rendert optisches „✓ QSO komplett" |
+
+Cooldown an `qso_complete` setzte zu früh → blockte das 73 der
+Gegenstation das zwischen RR73 und optischem ✓ ankam.
+
+**Fix (autonomer Workflow V1→V2→R1→V3→Code→Final-R1):**
+
+1. Cooldown-Set ENTFERNT aus `_on_qso_complete` (mw_qso.py:559+).
+   P140-Kommentar erklärt warum + verweist auf neuen Set-Ort.
+2. Cooldown-Set EINGEFÜGT in `_on_qso_confirmed_visual` (Z. 654+)
+   nach `add_qso_complete` — semantisch korrekt: erst optisches ✓
+   anzeigen, dann Block-Filter aktivieren.
+3. Cooldown-Set EINGEFÜGT in `_on_qso_timeout` (Z. 974+) nach
+   `add_timeout` — Mike-Spec defensiv „beendet ist beendet" auch
+   nach ✗ (Symmetrie zum Visual-Pfad).
+4. Defensive `if their_call:` Guards in beiden neuen Set-Stellen.
+
+**R1-Findings:**
+- F1 🔴 (false positive aber wichtig dokumentiert): Auto-Hunt hat
+  EIGENEN Cooldown `_recent_qso` (P61), unabhängig von dieser
+  Liste. T6 verifiziert die Trennung.
+- F2 🟠 (akzeptiert): R-Report-Lücke vor ✓ — State-Machine ignoriert
+  R-Report in WAIT_RR73 sowieso. Visuelle Anzeige als KISS-Trade-off.
+- F3 🟡 (KISS): Kein Helper für duplizierten Set-Code in Visual+Timeout.
+- F4-F6 🟢: Reihenfolge, Defensive-Check und Timeout-Pfad bestätigt.
+- Final-R1: PUSH FREIGEBEN, 0 Mängel.
+
+**Pattern-Familie 10. Iteration** (P81/P122/P124/P127/P128/P129/P126/
+P131/P138/P140) — KISS-Korrektur einer KISS-Spec.
+
+**Tests 2057→2066 (+9 P140 + 1 invertiert P128-T11).**
+
+V4-pro Cycle 60: 1 false-positive Finding (F1 Auto-Hunt-Cooldown
+Sorge), 0 echte Halluzinationen — Pattern-Bilanz bleibt 1 falsch-
+positiv ~2%.
+
+FEATURES.md §8 wurde GEUPDATET — neue Tabelle mit 2 Set-Stellen,
+Auto-Hunt-Cooldown-Trennung dokumentiert, Field-Beispiel mit
+P140-Vorher/Nachher hinzugefügt (Mike-Anweisung 26.05.: nach
+nicht-trivialem Fix FEATURES.md ergänzen, sonst tote Datei).
+
+---
+
 ## 2026-05-26 v0.98.20 — P139 Auto-Hunt Event-Logging via debug_log
 
 **Mike-Field-Bug (mehrfach):** Auto-Hunt springt mit unvorhersehbarer

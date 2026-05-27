@@ -1,14 +1,143 @@
 # HANDOFF — SimpleFT8
 
-## Stand 2026-05-26 — v0.98.20 P139 Auto-Hunt Event-Logging (Delay-Diagnose)
+## Stand 2026-05-27 — v0.98.27 P144 + P145 autonom durchgezogen (Mike-Anfrage „2 Punkte")
 
-**Aktueller Code-Stand:** v0.98.20, Tests **2057 grün** (+15 P139).
+**Aktueller Code-Stand:** v0.98.27, Tests **2124 grün** (+33 heute: P144 +22, P145 +11).
 
-**Nächste Schritte:**
-- **Mike-Field-Test:** Settings → „Debug-Log schreiben" AN, Auto-Hunt
-  klicken, ~5 Min beobachten, App schließen, `debug_*.log` auswerten
-  → exakte Ursache für 60s-Delay
-- Optional: Folge-Fix basierend auf Log-Daten
+**Mike-Anfrage 07:32:** „suche dir 2 offene punkte aus der todo die du
+vollständig autonom mit vollen deepseek workflow bis zum ende
+einschlisslich debbuging und fixen beenden kannst" — DeepSeek-Guthaben
+geprüft: **$40.79 USD** (~8000 R1-Reviews verfügbar).
+
+**Mike-Aufgabe 1 (autonom, voller Workflow durchgezogen):**
+- **P145** (v0.98.27): Pattern-Check-Skript für mode-aware Symmetrie.
+  R1-Empfehlung aus P141 (F6 ORANGE) umgesetzt. Statisches AST-Tool
+  `scripts/check_mode_symmetry.py` (~230 LOC, Python stdlib only).
+  2 Checks: (1) UI-Update-Symmetrie über `_rx_mode`-Branches, (2)
+  Mode-Handler-Familien. Whitelist mit 2 legitimen Asymmetrien
+  (`update_from_stations`, `update_snr`). Pytest-Test
+  `test_t2_real_codebase_no_asymmetries` schlägt fehl wenn neuer
+  mode-aware Bug eingeführt wird → CI-Schutz für ganze Bug-Klasse.
+  R1-V4-pro 2 ROT + 3 ORANGE alle eingebaut. Final-R1 PUSH FREIGEBEN ✓
+  „produktionsreif". **Pattern-Klasse 5. Iteration** (P102/P114/P135/
+  P141/P145) — erstes Tool das vorbeugend abdeckt.
+
+**Mike-Aufgabe 2 (autonom, voller Workflow durchgezogen):**
+- **P144** (v0.98.26): Auto-Hunt-Target sendet an Fremd-Call → Abort+
+  Skip ohne Cooldown. Mike-Field-Bug RA5AD 26.05. 17:38 (5 Versuche
+  ins Leere, 2:30 Min Band-QRM, QSO verloren). Filter in
+  `mw_cycle.py:on_message_decoded` zwischen P124 und P94/OMNI/SM. Neue
+  API `auto_hunt.clear_current_target()` (KEIN Cooldown). R1-V4-pro
+  Pre-Code 2 ORANGE + 1 GELB (alle eingebaut: manual_override-Check,
+  clear_current_target-API, P139-Debug-Logging). Final-R1 PUSH
+  FREIGEBEN ✓ — KISS „genau richtig". Pattern-Familie 11. Iteration
+  (P81/P122/P124/P127/P128/P129/P126/P131/P138/P140/P144). FEATURES.md
+  §2 erweitert. **Field-Test pending** (Mike beobachtet ob
+  „⏭ belegt"-Meldungen sinnvoll erscheinen + ob R1-Edge-Case
+  Dauer-busy-Endlos-Abort-Schleife auftritt).
+
+**Heute Morgen (autonom, voller Workflow):**
+- Statistiken/Diagramme aktualisiert (PDFs DE+EN, Bandpilot,
+  Bandaktivität)
+- **P141** (v0.98.23) field-validated: Diversity zeigt 4★ korrekt
+- **P146** (v0.98.24): Kalibrierungs-Dialog-Titel einheitlich
+  „Diversity (Standard + DX)" (P80 unified Gain-Store sichtbar)
+- **P147** (v0.98.25): HALT-Button stoppt Auto-Hunt SOFORT
+  (Hardware-Sicherheits-Fix, kritisch — Mike-Vertrauen-Restore)
+- **P140** field-validated 07:03 (Screenshot KF0MSJ: 73 vor ✓)
+- **P106** QRZ-Bug field-validated (Mike: QSOs werden bestätigt)
+
+**Backlog (offen, aufgeschoben):**
+- **P142** SWR-Freeze vor Phase B (Variante C):
+  ⏸ **AUFGESCHOBEN** — Mike kann Repro nicht remote machen, braucht
+  physischen Zugriff am Radio (Stecker ab → Sperre → Stecker dran
+  → TUNE). Plan steht (siehe TODO P142), wird beim nächsten
+  Vor-Ort-Besuch getestet.
+- **P139** Auto-Hunt-60s-Delay-Diagnose: Mike beobachtet 2-3 weitere
+  Auto-Hunt-Starts ob Delay wirklich weg ist (heute 1× nach 15 s
+  gesehen, könnte intermittierend gewesen sein).
+- (P145 inzwischen erledigt, siehe oben.)
+
+**Heute Morgen (autonom, voller Workflow):**
+- **Statistiken/Diagramme** aktualisiert (PDFs DE+EN + Bandpilot
+  + Bandaktivität)
+- **P141** (v0.98.23): Sterne-Anzeige im Diversity-Pfad gefixt.
+  Pattern-Klasse mode-aware Symmetrie 4. Iteration. Variante A KISS.
+  FEATURES.md §11 NEU dokumentiert die Pattern-Klasse + Risiko-
+  Tabelle.
+
+**Gestern Abend (autonom):**
+- **P140** (v0.98.21): Cooldown-Trigger umgehängt von `qso_complete`
+  (intern) zu `qso_confirmed_visual` (optisch ✓).
+- **P143** (v0.98.22): Helper `clear_log_completely()` gegen
+  QSO-Log-Resurrection nach Bandwechsel.
+- **CLAUDE.md-Anker** für FEATURES.md verstärkt.
+- **FEATURES.md §9 + §10 NEU**: Bandsperre + QSO-Log-Architektur.
+
+**Offen (3 Bugs + 1 Refactor im TODO):**
+- 🟠 **P142** Bandsperre-Freigabe meldet falschen SWR-Wert
+  (Phase-B-Clamp-1.0 statt Phase-A-Match — **NICHT remote-tauglich**,
+  Mike muss Hardware-Tests machen)
+- 🟠 **P144** Auto-Hunt picked Station die gerade anderes QSO
+  abschließt (Mike-Spec Option 1: Abort + Skip ohne Cooldown,
+  ~30 LOC + 8 Tests, autonom-tauglich, nächstes natürliches Ticket)
+- 🟡 **P145** Pattern-Check-Skript für mode-aware Symmetrie
+  (R1-Empfehlung 27.05., statische Analyse + Pre-Commit-Hook,
+  autonom-tauglich, Vorbeugung gegen P102/P114/P135/P141-Klasse)
+
+**Field-Tests pending (Mike):**
+- P139 Debug-Log-Datei Auto-Hunt-Delay-Diagnose
+- P140 73-vor-✓-Verifizierung
+- P143 Bandwechsel-Resurrection-Verifizierung
+
+### 🟢 27.05.2026 — P147 HALT stoppt Auto-Hunt SOFORT (v0.98.25)
+
+Mike-Field-Bug 04:42: 3× HALT, lief weiter (YO4NT/TA3ZZ/R9MW
+gepicked). Root Cause: `_on_cancel` rief `on_manual_qso_end()`
+(setzt nur `_manual_override=False`) statt `stop_auto_hunt("manual_halt")`
+(SOFORT-Stop seit P122). 1-Zeilen-Tausch + Bug-Geschichte-Kommentar.
+Tests 2084→2091. Hardware-Sicherheits-Fix.
+
+### 🟢 27.05.2026 — P146 Kalibrierungs-Dialog-Titel mode-agnostisch (v0.98.24)
+
+Mike-Bug 06:34: Antennen-Kachel DX, Dialog-Titel „Standard". P80
+unified Gain-Store: eine Kalibrierung gilt für beide Modi.
+`_get_mode_label()` returnt einheitlich „Diversity (Standard + DX)".
+Tests 2082→2084.
+
+### 🟢 27.05.2026 — P141 Sterne-Anzeige im Diversity-Pfad (v0.98.23)
+
+Mike-Field-Bug 26.05. 17:15: 14 Stationen Median -18 zeigten 1★
+statt 4★. 2-Zeilen-Fix in `_handle_diversity_operate` —
+`compute_local_conditions(self._diversity_stations)` +
+`update_local_conditions(...)` analog zu Normal-Mode-Stelle.
+Pattern-Klasse mode-aware Symmetrie 4. Iteration. R1: 6 Findings
+alle non-blocker, F6 🟠 Pattern-Check-Skript-Empfehlung → P145.
+Final-R1 PUSH 0 Mängel. FEATURES.md §11 NEU. Tests 2075→2082.
+
+### 🟢 26.05.2026 — P143 QSO-Log-Resurrection-Fix (v0.98.22)
+
+Mike-Field-Bug 17:34: 30m-Einträge auf 20m nach 30s zurück. Helper
+`clear_log_completely()` + 3 Aufrufer in mw_radio.py. R1: 6 Findings
+(1 ORANGE bestätigt, 5 GRÜN/GELB). Final-R1 PUSH 0 Mängel.
+FEATURES.md §10 NEU dokumentiert Zwei-Speicher-Architektur.
+Tests 2066→2075.
+
+### 🟢 26.05.2026 — P140 Cooldown-Trigger an optischen ✓ umhängen (v0.98.21)
+
+
+
+Mike-Field-Bug 5P1KZX/IQ5VK/OE4AHG: 73 der Gegenstation verschwand
+VOR optischem ✓. Root Cause: P138 (gleicher Tag) setzte Cooldown
+in `_on_qso_complete` (= interner RR73-Send-Trigger) statt
+`_on_qso_confirmed_visual` (= optisches ✓-Trigger). Zwei Signale,
+30-45 s Abstand. Fix: Set raus aus `_on_qso_complete`, rein in
+`_on_qso_confirmed_visual` (NACH `add_qso_complete`) + symmetrisch
+in `_on_qso_timeout` (Mike-Spec defensiv). Defensive `if call:`
+Guards. R1-V4-pro Pre-Code: F1 ROT war false-positive (Auto-Hunt
+hat EIGENEN Cooldown `_recent_qso` P61). Final-R1: PUSH FREIGEBEN
+0 Mängel. Pattern-Familie 10. Iteration. Tests 2057→2066.
+FEATURES.md §8 geupdatet.
 
 ### 🟢 26.05.2026 — P139 Auto-Hunt Event-Logging (v0.98.20)
 
