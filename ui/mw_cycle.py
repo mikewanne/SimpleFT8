@@ -420,6 +420,17 @@ class CycleMixin:
             self._stats_logger.log_station_comparisons(
                 self.settings.band, self.settings.mode, scoring, comparisons)
 
+        # P141 (27.05.2026): Sterne-Anzeige im Diversity-Pfad —
+        # symmetrisch zu _handle_normal_mode (Z. 451-456). Mike-Field-
+        # Bug 26.05. 17:15: 14 Stationen bei SNR -16..-22 (Median ~-18)
+        # zeigten 1★ weil compute_local_conditions im Diversity-Pfad
+        # nie gerufen wurde — Anzeige hing auf Init-Default oder
+        # letztem Normal-Mode-Wert. Variante A (hartcodiert) gewählt
+        # weil _handle_diversity_operate nur bei _rx_mode=="diversity"
+        # läuft (KISS, R1-V4-pro 27.05. F2 GELB bestätigt).
+        score, n_st, median = compute_local_conditions(self._diversity_stations)
+        self.control_panel.update_local_conditions(score, n_st, median)
+
         # Richtungs-Karten-Hook: Snapshot via Qt.QueuedConnection in GUI-Thread
         self._emit_map_snapshot_if_open()
 
@@ -830,6 +841,20 @@ class CycleMixin:
                     ant_label=ant_label,
                 )
 
+        # P144 (27.05.2026): Auto-Hunt-Target sendet an Fremd-Call?
+        # Mike-Field-Bug RA5AD 26.05. 17:38 — RA5AD beendete QSO mit R2BRD
+        # (Empfangsfenster: "R2BRD RA5AD RR73"), Auto-Hunt picked ihn 1:45 Min
+        # später und rief 5x ins Leere. Mike-Wahl Option 1: Abort+Skip ohne
+        # Cooldown, später Retry möglich. Defer-Familie 9. Iteration.
+        # VOR P94/OMNI (anderes Szenario: msg.target != my_call vs
+        # msg.target == my_call — sich gegenseitig ausschließend).
+        if self._p144_target_busy_with_other(msg):
+            self._p144_abort_and_skip(
+                target=self.qso_sm.qso.their_call,
+                busy_with=msg.target,
+            )
+            return  # nicht in State-Machine geben
+
         # P94 (v0.97.66): Quick-73-Filter VOR OMNI/State-Machine — wenn die
         # anrufende Station innerhalb 30 Min schon gearbeitet wurde, 1x 73
         # senden + komplett ignorieren statt neues QSO zu starten.
@@ -910,6 +935,68 @@ class CycleMixin:
             return True
         del store[caller]
         return False
+
+    def _p144_target_busy_with_other(self, msg: FT8Message) -> bool:
+        """P144 (27.05.2026): True wenn Auto-Hunt-Target gerade an Fremd-Call
+        sendet — Mike-Field-Bug RA5AD 26.05. 17:38 (Auto-Hunt picked Station
+        1:45 Min nach deren RR73-an-Fremd, 5 Versuche ins Leere).
+
+        Bedingungen (alle MÜSSEN gelten):
+        - Auto-Hunt-Session aktiv UND nicht im manual_override (R1-F1:
+          bei User-Klick entscheidet User selbst, nicht Filter)
+        - State-Machine in aktivem QSO (qso.their_call gesetzt)
+        - msg von unserem Target (msg.caller == qso.their_call)
+        - msg.target != my_call (nicht an uns — sonst echte Antwort)
+        - msg.is_cq False (neuer CQ wäre OK, Target ist wieder frei)
+
+        Pattern-Familie 9. Iteration der Defer-Familie (P81/P122/P124/
+        P127/P128/P129/P126/P131/P144).
+        """
+        ah = getattr(self, '_auto_hunt', None)
+        if ah is None or not ah.active:
+            return False
+        if ah._manual_override:
+            return False  # R1-F1: User-Klick → User entscheidet
+        qso = self.qso_sm.qso
+        if qso is None or not qso.their_call:
+            return False
+        if msg.caller != qso.their_call:
+            return False
+        if msg.target == self.settings.callsign:
+            return False  # Antwort an uns — keine Belegung
+        if msg.is_cq:
+            return False  # neuer CQ — Target wieder frei
+        return True
+
+    def _p144_abort_and_skip(self, target: str, busy_with: str):
+        """P144 (27.05.2026): Abort & Skip ohne Cooldown (Mike-Wahl Option 1).
+
+        Pattern reuse: encoder.abort + _pending_tx_log=None (P127/P131),
+        qso_sm.cancel (Defer-Familie).
+
+        R1-F2: clear_current_target() in auto_hunt — sonst inkonsistenter
+        State (alter Pick bleibt sichtbar bis nächster select_next).
+
+        KEIN mark_pick + KEIN Cooldown — Target bleibt für späteren
+        Pick verfügbar (Mike-Spec: späte Antwort > 2 Slots ist FT8-
+        untypisch, aber wenn doch: eigener Slot).
+        """
+        if self.encoder.is_transmitting:
+            self.encoder.abort()
+        if hasattr(self, "_pending_tx_log"):
+            self._pending_tx_log = None
+        self.qso_sm.cancel()
+        if hasattr(self, "_auto_hunt"):
+            self._auto_hunt.clear_current_target()
+        self.qso_panel.add_info(
+            f"⏭ {target} belegt (sendet an {busy_with}) — überspringe ohne Sperre"
+        )
+        # R1-F5: P139 Debug-Logging für Field-Diagnose
+        try:
+            from core.debug_log import debug_log
+            debug_log("HUNT", f"P144_SKIP target={target} busy_with={busy_with}")
+        except Exception:
+            pass  # debug_log darf NIE crashen
 
     def _p94_quick73_filter(self, msg: FT8Message) -> bool:
         """P94 (v0.97.66): Quick-73-Ignore für kürzlich gearbeitete Stationen.

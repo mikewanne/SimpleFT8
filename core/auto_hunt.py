@@ -525,6 +525,19 @@ class AutoHunt(QObject):
         self._manual_override = False
         print("[Auto-Hunt] Manuelles QSO beendet — Auto-Hunt wird fortgesetzt")
 
+    def clear_current_target(self):
+        """P144 (27.05.2026): _current_target zurücksetzen OHNE Cooldown.
+
+        Genutzt vom P144-Busy-Station-Filter (ui/mw_cycle.py): wenn das
+        Auto-Hunt-Target gerade an Fremd-Call sendet, brechen wir ab und
+        überspringen — Target soll für späteren Pick verfügbar bleiben,
+        deshalb kein `mark_pick` und kein `_cooldown`-Eintrag.
+
+        Unterschied zu `on_qso_complete` (setzt P61-Recent-Cooldown 5 Min)
+        und `on_qso_timeout` (setzt 5-Min-Cooldown). Hier nur State-Reset.
+        """
+        self._current_target = None
+
     def on_band_change(self):
         """Bandwechsel → Auto-Hunt-Session beenden + Cooldowns loeschen.
 
