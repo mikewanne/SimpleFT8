@@ -131,9 +131,19 @@ class DXTuneDialog(QDialog):
             self._start_step()
 
     def _get_mode_label(self) -> str:
+        # P146 (27.05.2026): Diversity-Modus-Trennung im Titel obsolet.
+        # P80 (v0.97.52) hat den Gain-Store unified — Hardware-Gain
+        # (ANT1+ANT2) wird einmal pro Band gespeichert, gilt für
+        # Normal + Diversity Standard + Diversity DX gleichermassen
+        # (_on_dx_tune_accepted speichert nur std_data, mw_radio.py:2051).
+        # Mike-Spec 27.05.: "einmal gemessen, beide profitieren". Der
+        # vorhandene Untertext "Misst gleichzeitig fuer Standard- und
+        # DX-Modus" (Z. 215) wird damit konsistent zum Titel.
+        # scoring_mode bleibt in Z. 534+680 funktional aktiv (Score-
+        # Algorithmus-Wahl), nur die UI-Titel-Differenzierung entfaellt.
         if self.rx_mode == "normal":
             return "Gain-Messung"
-        return "Diversity DX" if self.scoring_mode == "snr" else "Diversity Standard"
+        return "Diversity (Standard + DX)"
 
     # ── UI ──────────────────────────────────────────────────────
 

@@ -72,7 +72,18 @@ def test_dxtune_mode_label_normal_modus():
 
 
 def test_dxtune_mode_label_diversity_modus():
-    """Fix G: DXTuneDialog mit rx_mode='diversity' → 'Diversity Standard' oder 'Diversity DX'."""
+    """P146 (27.05.2026): DXTuneDialog mit rx_mode='diversity' zeigt
+    EINHEITLICH 'Diversity (Standard + DX)' — egal ob scoring_mode
+    'stations' oder 'snr'. Begruendung: P80 (v0.97.52) unified Gain-
+    Store, eine Kalibrierung gilt fuer beide Modi.
+
+    Vor P146 hingen die Titel an scoring_mode:
+    - scoring='stations' -> 'Diversity Standard'
+    - scoring='snr'      -> 'Diversity DX'
+
+    Mike-Field-Bug 27.05.: Dialog zeigte 'Standard' obwohl DX-Modus
+    aktiv (Asymmetrie zur Antennen-Kachel). Fix: einheitlicher Text.
+    """
     _ensure_app()
 
     from ui.dx_tune_dialog import DXTuneDialog
@@ -84,12 +95,52 @@ def test_dxtune_mode_label_diversity_modus():
         def set_tx_antenna(self, ant): pass
         def ptt_off(self): pass
 
+    EXPECTED = "Diversity (Standard + DX)"
+
     dlg_std = DXTuneDialog(_FakeRadio(), "40m", scoring_mode="stations", rx_mode="diversity")
-    assert dlg_std._get_mode_label() == "Diversity Standard"
-    assert "Diversity Standard" in dlg_std.windowTitle()
+    assert dlg_std._get_mode_label() == EXPECTED, (
+        f"P146: stations-Scoring muss '{EXPECTED}' liefern")
+    assert EXPECTED in dlg_std.windowTitle()
     dlg_std.deleteLater()
 
     dlg_dx = DXTuneDialog(_FakeRadio(), "40m", scoring_mode="snr", rx_mode="diversity")
-    assert dlg_dx._get_mode_label() == "Diversity DX"
-    assert "Diversity DX" in dlg_dx.windowTitle()
+    assert dlg_dx._get_mode_label() == EXPECTED, (
+        f"P146: snr-Scoring muss IDENTISCH '{EXPECTED}' liefern "
+        "(keine Mode-Unterscheidung mehr im UI-Titel)")
+    assert EXPECTED in dlg_dx.windowTitle()
     dlg_dx.deleteLater()
+
+
+def test_p146_no_separate_diversity_modus_in_title():
+    """P146: Der alte mode-spezifische Titel-Text darf NICHT mehr
+    vorkommen (Regression-Schutz). Suchen wir in der Quelldatei
+    nach den alten Strings."""
+    from pathlib import Path
+    src = (Path(__file__).resolve().parent.parent
+           / "ui" / "dx_tune_dialog.py").read_text()
+    # _get_mode_label darf nur noch generisch sein
+    import re
+    m = re.search(
+        r"def _get_mode_label\(self\).*?(?=\n    def )",
+        src, re.S)
+    body = m.group(0)
+    assert '"Diversity DX"' not in body, (
+        "P146: 'Diversity DX'-Returnwert in _get_mode_label wurde "
+        "entfernt (Hardware-Gain ist identisch P80).")
+    assert '"Diversity Standard"' not in body, (
+        "P146: 'Diversity Standard'-Returnwert wurde entfernt.")
+    assert '"Diversity (Standard + DX)"' in body, (
+        "P146: neuer einheitlicher Text 'Diversity (Standard + DX)' "
+        "muss in _get_mode_label sein.")
+
+
+def test_p146_subtitle_mode_label_still_present():
+    """P146: Der bestehende Untertext 'Misst gleichzeitig fuer
+    Standard- und DX-Modus' (Z. 215) bleibt — er passt jetzt
+    konsistent zum neuen Titel."""
+    from pathlib import Path
+    src = (Path(__file__).resolve().parent.parent
+           / "ui" / "dx_tune_dialog.py").read_text()
+    assert "Misst gleichzeitig für Standard- und DX-Modus" in src, (
+        "Der mode_label-Untertext bleibt nach P146 erhalten - "
+        "konsistent zum neuen Titel 'Diversity (Standard + DX)'.")
