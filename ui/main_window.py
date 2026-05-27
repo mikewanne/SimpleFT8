@@ -412,8 +412,12 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self.control_panel.btn_auto_hunt.toggled.connect(self._on_btn_auto_hunt_toggled)
 
         # AP-Lite: A-Priori-Kandidaten-Match (beratend, AP_LITE_ENABLED=True)
+        # P149 (27.05.2026): Settings-getrieben (apply_settings statt
+        # hartcodiertem AP_LITE_ENABLED). Erneuter Aufruf nach Settings-
+        # Dialog-Save folgt im jeweiligen Save-Pfad.
         from core import ap_lite as _ap
         self._ap_lite = _ap.get_instance(encoder=self.encoder)
+        self._ap_lite.apply_settings(self.settings)
 
         # v0.88: Bandpilot — Stunden-genaue Empfehlung (Replacement v0.87)
         from core.mode_recommender import HourlyBandpilot
@@ -1262,6 +1266,9 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
             # P63 (v0.97.36): Tuner-Setting → TUNE-Button-Sichtbarkeit
             self.control_panel.set_tuner_present(
                 self.settings.get("tuner_present", True))
+            # P149 (27.05.2026): AP-Lite Settings live nachladen.
+            # Greift ab naechstem Slot (kein Lock — KISS, Diagnose-Funktion).
+            self._ap_lite.apply_settings(self.settings)
 
     def _on_tx_slot_lock_changed(self, lock: str) -> None:
         """Bundle E (v0.97.22): TX-Slot-Lock-Änderung persistieren.

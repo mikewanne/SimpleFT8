@@ -125,6 +125,12 @@ class QSOData:
     rr73_retries: int = 0  # Retries speziell fuer WAIT_RR73
     wait_73_retries: int = 0  # P1.11 (v0.95.19): Retries fuer WAIT_73-Hoeflichkeit (R-Report-Wiederholung), entkoppelt von rr73_retries
     courtesy_73_sent: bool = False  # P1.10 Fix (v0.95.4): max 1x pro QSO
+    # P149 (v0.98.30, 27.05.2026): Partner-SNR fuer AP-Lite SNR-Filter.
+    # Aktualisiert nur wenn msg.caller == their_call. Bei verpasstem Slot
+    # bleibt der zuletzt bekannte Wert erhalten. None = noch nie gehoert.
+    # Globaler `_last_snr` ist hierfuer untauglich (wird von beliebiger
+    # Station ueberschrieben, R1-F3-Catch DeepSeek-V4-pro 27.05.).
+    partner_last_snr: float | None = None
 
 
 class QSOStateMachine(QObject):
@@ -547,6 +553,13 @@ class QSOStateMachine(QObject):
     # ── Nachricht empfangen ─────────────────────────────────────
 
     def on_message_received(self, msg: FT8Message):
+        # P149 (27.05.2026): Partner-SNR-Cache fuer AP-Lite SNR-Filter.
+        # Nur Partner-Decodes cachen — globaler _last_snr ist hierfuer
+        # untauglich. Greift erst wenn QSO laeuft und Partner bekannt ist.
+        if (self.qso and msg.caller
+                and msg.caller == self.qso.their_call):
+            self.qso.partner_last_snr = float(msg.snr)
+
         # Alle Nachrichten an uns loggen (fuer Debugging)
         if msg.target == self.my_call:
             self._dbg.log("RX", f"Von {msg.caller}: '{msg.raw}' | State={self.state.name} "

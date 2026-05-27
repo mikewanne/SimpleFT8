@@ -1,4 +1,4 @@
-# SimpleFT8 TODO — Stand 27.05.2026 (v0.98.28)
+# SimpleFT8 TODO — Stand 27.05.2026 (v0.98.30)
 
 > **Diese Datei = Backlog (aktiv-offen + frisch erledigt).**
 > Vollständige Historie aller Änderungen: **HISTORY.md** (nur anhängen).
@@ -8,6 +8,37 @@
 ---
 
 # 🟢 LAUFEND — Field-Test pending
+
+## P149 — AP-Lite Diagnose-Modus (v0.98.30, 27.05.2026)
+
+**Was:** 4 neue Settings in Tab „Daten & Tools" (Master-Toggle, Test-Modus,
+dB-Schwelle, Strenge). Test-Modus: AP-Lite läuft AUCH bei dekodiertem
+Partner → Algo gegen Decoder-Wahrheit messbar. R1-Catches F3 Partner-SNR-
+Cache (echter Bug: globaler `_last_snr` blockiert AP-Lite fälschlich) + F7
+count_rescue-Schalter (Counter-Inflation im Test-Modus verhindern).
+
+**Mike-Field-Test (in dieser Reihenfolge):**
+1. App-Neustart auf v0.98.30
+2. Settings → „Daten & Tools" → AP-Lite-GroupBox
+3. Aktivieren: „Debug-Log schreiben" + „AP-Lite aktivieren" + „Test-Modus"
+4. dB-Schwelle vorerst auf **-20** lassen (Default, wird im Test-Modus
+   eh ignoriert)
+5. Strenge vorerst **„locker"** = 0.04 (mehr Treffer → mehr Daten)
+6. 1-2 FT8-Sessions normal funken
+7. Log lesen: `~/.simpleft8/debug_YYYY-MM-DD.log`
+   - `GUARD_SKIP`-Verteilung → welcher Guard greift wie oft
+   - `SCORED`-Margen → wie nah am Threshold ist der Algo
+   - `TEST_COMPARE`-Agreement → Algo gegen Decoder
+
+**Erwartetes Outcome:**
+- Wenn `TEST_COMPARE agreement=Y` > 50% → Algo taugt prinzipiell, wir
+  können dB-Schwelle ins Negative schieben und produktiv lassen
+- Wenn `agreement=N` dominiert → Algo hat fundamentales Problem, AP-Lite
+  ehrlich verwerfen
+- Wenn nur `GUARD_SKIP partner_decoded` → Decoder fängt schon alles ab,
+  AP-Lite hat keinen Use-Case
+
+---
 
 ## P148 — SWR-Anzeige nur während TX/TUNE (v0.98.28, 27.05.2026)
 

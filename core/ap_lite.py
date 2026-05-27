@@ -39,6 +39,8 @@ import numpy as np
 
 # ─────────────────────────────────────────────────────────────────────────────
 # FEATURE FLAG — AP-Lite ist beratend (nur Info-Anzeige), daher gefahrlos an.
+# P149 (27.05.2026): nur Fallback, Laufzeit-Wert kommt aus Settings via
+# `APLite.apply_settings()`. Erlaubt Standalone-Tests ohne Settings-Objekt.
 AP_LITE_ENABLED: bool = True
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -47,7 +49,23 @@ SAMPLE_RATE = 12000
 # Detektion: der beste Kandidat muss den zweitbesten um mindestens MARGIN_MIN
 # schlagen. Synthetisch gemessen: echte Nachricht → Marge ~0.11, Rauschen/
 # Fremdsignal → Marge ≤ 0.023. 0.05 liegt sicher dazwischen.
+# P149 (27.05.2026): nur Fallback, Laufzeit-Wert kommt aus
+# `APLite.margin_min` (via Settings `ap_lite_strictness`).
 MARGIN_MIN: float = 0.05
+
+# P149 (27.05.2026): Strenge-Stufen fuer Mike's UX-Slider.
+# Werte basieren auf synthetischen Messungen v0.97.90 — nach 1-2 Field-
+# Sessions mit Test-Modus AN ggf. neu kalibrieren.
+STRICTNESS_MARGIN_MAP: dict[str, float] = {
+    "locker": 0.04,   # Sicherheitsabstand zum Rauschen (0.023)
+    "normal": 0.05,   # heutiger MARGIN_MIN — Verhalten unveraendert bei Default
+    "streng": 0.10,   # konservativ fuer klare Treffer
+}
+
+
+def _resolve_margin(strictness: str) -> float:
+    """Strenge-String -> Margen-Wert. Unbekannt -> 'normal'."""
+    return STRICTNESS_MARGIN_MAP.get(strictness, STRICTNESS_MARGIN_MAP["normal"])
 
 # Frequenz-Offset-Suche: reale Stationen liegen oft ±2-5 Hz neben der
 # erwarteten Frequenz. Der Korrelator sucht dieses Fenster ab (via FFT,
@@ -223,11 +241,32 @@ class APLite:
     """
 
     def __init__(self, encoder=None, stats_path: Optional[str] = _STATS_PATH):
+        # P149 (27.05.2026): Settings-getriebene Defaults. Laufzeit-Werte
+        # kommen aus `apply_settings()`. Konstanten sind nur Fallback.
         self.enabled = AP_LITE_ENABLED
+        self.test_mode: bool = False
+        self.min_snr_db: int = -20
+        self.margin_min: float = MARGIN_MIN
         self.encoder = encoder
         self._stats_path = stats_path
         self.attempt_count: int = 0      # Match-Versuche (nur aktuelle Session)
         self.rescue_count: int = self._load_rescue_count()  # persistent
+
+    def apply_settings(self, settings) -> None:
+        """P149: Settings-Werte uebernehmen — idempotent.
+
+        Aufruf-Punkte:
+        1. `main_window.__init__` nach `get_instance()`.
+        2. Nach Settings-Dialog-Save (Live-Update — naechster Slot greift).
+
+        Live-Aenderungen mitten in `try_rescue` greifen erst beim
+        naechsten Slot (kein Lock — KISS, Diagnose-Funktion).
+        """
+        self.enabled = bool(settings.get("ap_lite_enabled", True))
+        self.test_mode = bool(settings.get("ap_lite_test_mode", False))
+        self.min_snr_db = int(settings.get("ap_lite_min_snr_db", -20))
+        strict = str(settings.get("ap_lite_strictness", "normal"))
+        self.margin_min = _resolve_margin(strict)
 
     def _load_rescue_count(self) -> int:
         """Persistenten Rescue-Zähler laden (0 wenn keine/defekte Datei)."""
@@ -261,6 +300,7 @@ class APLite:
         own_callsign: str = "",
         own_locator: str = "",
         snr_estimate: float = -10.0,
+        count_rescue: bool = True,
     ) -> Optional[APLiteResult]:
         """A-Priori-Match auf EINEM fehlgeschlagenen Slot.
 
@@ -271,16 +311,27 @@ class APLite:
             qso_state: 1=WAIT_REPORT, 2=WAIT_RR73, 3=CQ_WAIT.
             own_callsign / own_locator: eigene Stationsdaten.
             snr_estimate: letzter bekannter SNR (für Report-Kandidaten).
+            count_rescue: P149 (R1-F7-Catch) — wenn False, wird der
+                persistente `rescue_count` NICHT inkrementiert.
+                Im Test-Modus auf False setzen damit die Metrik nicht
+                durch Decoder-bestaetigte Treffer verfaelscht wird.
 
         Returns:
             APLiteResult, oder None wenn AP-Lite aus / keine Kandidaten /
             kein verwertbarer Slot.
         """
+        from core.debug_log import debug_log as _dbg
+        _dbg("AP-LITE",
+            f"CALL call={callsign} state={qso_state} freq_hz={freq_hz:.0f} "
+            f"snr_est={snr_estimate:.0f} test_mode={not count_rescue}")
         if not self.enabled:
+            _dbg("AP-LITE", "SKIP reason=disabled")
             return None
         if not callsign or qso_state not in (1, 2, 3):
+            _dbg("AP-LITE", f"SKIP reason=bad_args call='{callsign}' state={qso_state}")
             return None
         if pcm is None or len(pcm) == 0:
+            _dbg("AP-LITE", "SKIP reason=no_pcm")
             return None
 
         candidates = generate_candidates(
@@ -289,6 +340,8 @@ class APLite:
         if len(candidates) < 2:
             # Der Margen-Test (bester − zweitbester) ist erst ab 2 Kandidaten
             # definiert. State 3 liefert 0 Kandidaten.
+            _dbg("AP-LITE",
+                f"SKIP reason=few_cands n={len(candidates)} state={qso_state}")
             return None
 
         self.attempt_count += 1
@@ -305,9 +358,19 @@ class APLite:
         runner_up = scored[1][0] if len(scored) > 1 else 0.0
         margin = best_score - runner_up
 
-        if margin >= MARGIN_MIN:
-            self.rescue_count += 1
-            self._save_rescue_count()
+        _dbg("AP-LITE",
+            f"SCORED n_cands={len(candidates)} best={best_score:.3f} "
+            f"runner={runner_up:.3f} margin={margin:.3f} "
+            f"threshold={self.margin_min:.3f} best_cand='{best_cand}'")
+
+        if margin >= self.margin_min:
+            if count_rescue:
+                self.rescue_count += 1
+                self._save_rescue_count()
+            _dbg("AP-LITE",
+                f"MATCH cand='{best_cand}' score={best_score:.3f} "
+                f"margin={margin:.3f} total_rescues={self.rescue_count} "
+                f"counted={count_rescue}")
             logger.info(
                 f"[AP-Lite] MATCH: '{best_cand}' score={best_score:.3f} "
                 f"margin={margin:.3f}"
@@ -319,9 +382,12 @@ class APLite:
                 recovered_message=best_cand,
             )
 
+        _dbg("AP-LITE",
+            f"NO_MATCH best={best_score:.3f} margin={margin:.3f} "
+            f"threshold={self.margin_min:.3f}")
         logger.info(
             f"[AP-Lite] kein klarer Treffer: best={best_score:.3f} "
-            f"margin={margin:.3f} < {MARGIN_MIN}"
+            f"margin={margin:.3f} < {self.margin_min:.3f}"
         )
         return APLiteResult(success=False, score=best_score, margin=margin)
 

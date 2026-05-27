@@ -3,6 +3,91 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-27 v0.98.30 — P149 AP-Lite Diagnose-Modus (Settings-justierbar + Test-Modus + Logging)
+
+**Trigger:** Mike-Field-Beobachtung 27.05. nachmittag: AP-Lite-Counter
+(`~/.simpleft8/ap_lite_stats.json`) steht seit v0.97.90 (5 Tage) auf 0.
+Mike: „ich habe keine idee" + „die log datei sehen das ist viel wichtiger" +
+„können wir das auf db ummünzen das ich sagen kann ab -20dB soll es greifen
+oder so?" → 4 neue Settings + Test-Modus + Debug-Logging.
+
+**Mike-Spec (im Dialog erarbeitet):**
+- 4 Knöpfe in Settings (Tab „Daten & Tools"): Master-Toggle / Test-Modus /
+  dB-Schwelle (-25 bis -5, Default -20) / Strenge-Combo (locker/normal/streng)
+- Test-Modus: AP-Lite läuft AUCH bei dekodiertem Partner — Algo gegen
+  Decoder-Wahrheit messbar. KEINE Info-Zeile (nur Debug-Log).
+- Mike-Worte „mich juckt erstmal gar nicht was ich sehen kann, die log
+  datei sehen das ist viel wichtiger" → UI minimal, Log umfangreich.
+
+**Workflow autonom V1→V2(13 Findings)→R1-V4-pro(2× 🔴 + 2× 🟠)→V3→Code→Final-R1.**
+
+**R1-Findings (alle eingebaut in V3):**
+- **🔴 F3 SNR-Filter war kaputt** — `_last_snr` ist global (letzter dekodierter
+  SNR irgendeiner Station). In typischem AP-Lite-Use-Case (verpasster
+  Partner-Slot) blockiert ein starker Fremd-Decode AP-Lite fälschlich. **Könnte
+  sogar Mike's `rescue_count: 0` erklären.** Fix: neuer Cache
+  `QSOData.partner_last_snr` in `core/qso_state.py:114` — wird NUR bei
+  `msg.caller == their_call` aktualisiert. Bei erster Begegnung (None) →
+  SNR-Filter blockiert nicht.
+- **🔴 F7 `rescue_count` Inflation im Test-Modus** — heute persistenter
+  Counter zählte JEDEN margin-Treffer. Im Test-Modus mit Decoder-bestätigten
+  Treffern würde Counter explodieren ohne Aussage. Fix: neuer Param
+  `count_rescue: bool = True` in `try_rescue` — im Test-Modus auf False
+  gesetzt.
+- **🟠 F4 Strenge-Mapping konservativ** — DeepSeek-Empfehlung locker=0.04
+  (Sicherheitsabstand zum Rauschen 0.023), normal=0.05 (heutiger MARGIN_MIN
+  — Verhalten unverändert bei Default!), streng=0.10.
+- **🟡 F1 TEST_COMPARE-Log mit Note** „decoder=reference, not ground-truth".
+- **🟠 F10 Multi-Partner-Edge-Case** — `_partner_msgs = [m for m in msgs if
+  caller==their]`, defensives Listing statt `any()`.
+
+**Code (5 atomare Commits):**
+
+- **C1:** `config/settings.py` DEFAULTS — 4 neue Keys (`ap_lite_enabled`,
+  `ap_lite_test_mode`, `ap_lite_min_snr_db`, `ap_lite_strictness`).
+  `core/qso_state.py` — `QSOData.partner_last_snr: float | None = None`,
+  Update-Stelle in `on_message_received` am Anfang.
+- **C2:** `core/ap_lite.py` — `STRICTNESS_MARGIN_MAP` + `_resolve_margin`,
+  `APLite.__init__` mit Instanz-Vars, neue `apply_settings(settings)`,
+  `try_rescue(count_rescue=True)` Param, Debug-Log-Calls an 8 Punkten
+  (CALL/SKIP×4/SCORED/MATCH/NO_MATCH).
+- **C3:** `ui/mw_cycle.py:_run_ap_lite_rescue` komplett überarbeitet —
+  Test-Modus + Partner-SNR-Filter + Multi-Partner-Edge + TEST_COMPARE-Log +
+  Frequenz-Quelle Test-Modus (Partner-Msg `audio_freq_hz`).
+- **C4:** `ui/settings_dialog.py` — GroupBox „AP-Lite Diagnose" in Tab
+  „Daten & Tools" (4 Widgets), `_load_values` + `_save_and_close` ergänzt.
+  `ui/main_window.py:417` — `apply_settings(settings)` nach
+  `get_instance()`, in `_on_settings_clicked` nach Dialog-OK.
+- **C5:** `main.py` APP_VERSION 0.98.29 → 0.98.30, HISTORY +
+  HANDOFF + CLAUDE.md Header + Memory.
+
+**Final-R1 Verdikt:** PUSH FREIGEBEN ✓ 0 Mängel. „der Code setzt alle
+R1-Findings korrekt um, alle 4 Settings fließen lückenlos in die Laufzeit
+ein, apply_settings ist an beiden Punkten vorhanden, das Test-Modus-Routing
+ist sauber".
+
+**Tests 2149 → 2171 (+22, Datei `tests/test_p149_ap_lite_diagnose.py`):**
+- T1-T4 Settings-Defaults + apply_settings + Strenge-Mapping
+- T5-T11 Debug-Log (Skip-Reasons + SCORED-Fields)
+- T12-T15 Test-Modus + count_rescue + source-level Pattern-Verifikation
+- T16-T19 Partner-SNR-Cache (R1-F3 Kern-Fix)
+- T20 Multi-Partner-Edge-Case (R1-F10)
+- T21 TEST_COMPARE-Ground-Truth-Note (R1-F1)
+- T22 Backward-Compat Modul-Konstanten
+
+**V4-pro 69-Cycle: 0 Halluzinationen.** 4 echte Findings (2× 🔴 + 1× 🟠 +
+1× 🟡) — V4-pro empirische Bilanz weiterhin stabil.
+
+**Next Step — Mike-Field-Test:**
+1. App neu starten (v0.98.30)
+2. Settings → „Daten & Tools" → AP-Lite-GroupBox
+3. „Debug-Log schreiben" UND „Test-Modus" UND „AP-Lite aktivieren" → AN
+4. 1-2 Sessions FT8 normal funken
+5. Log lesen in `~/.simpleft8/debug_YYYY-MM-DD.log`:
+   - GUARD_SKIP-Verteilung → welcher Guard greift wann
+   - SCORED-Margen → wie nah dran ist der Algo am Threshold
+   - TEST_COMPARE-Agreement → Algo-Qualität gegen Decoder
+
 ## 2026-05-27 v0.98.29 — P142 SWR-Freeze VOR Phase B nehmen (Bandsperre-Freigabe-Fix)
 
 **Mike-Field-Reproduktion 27.05.2026 12:08-12:10** (Bandwechsel auf

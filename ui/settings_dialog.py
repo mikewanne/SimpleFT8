@@ -580,6 +580,55 @@ class SettingsDialog(QDialog):
         )
         layout.addWidget(self.debug_log_cb)
 
+        layout.addWidget(_hline())
+
+        # Block 6: AP-Lite Diagnose (P149 v0.98.30, 27.05.2026)
+        ap_box = QGroupBox("AP-Lite Diagnose")
+        ap_box.setToolTip(
+            "AP-Lite ist eine experimentelle A-Priori-Schicht oberhalb "
+            "des FT8-Decoders fuer marginale Signale. Diese 4 Knoepfe "
+            "steuern die Diagnose-Phase — Daten landen im Debug-Log."
+        )
+        ap_form = QFormLayout(ap_box)
+
+        self.ap_lite_enabled_cb = QCheckBox("AP-Lite aktivieren")
+        self.ap_lite_enabled_cb.setToolTip(
+            "Master-Toggle. Wenn AUS, wird AP-Lite weder im Normal- noch "
+            "im Test-Modus aufgerufen — komplett still."
+        )
+        ap_form.addRow(self.ap_lite_enabled_cb)
+
+        self.ap_lite_test_cb = QCheckBox(
+            "Test-Modus (auch bei dekodiertem Partner)")
+        self.ap_lite_test_cb.setToolTip(
+            "Nur fuer Diagnose. AP-Lite laeuft AUCH wenn der Decoder den "
+            "Partner schon erkannt hat — wir vergleichen Algo gegen "
+            "Decoder-Wahrheit. KEINE Info-Zeile im QSO-Panel im Test-Modus."
+        )
+        ap_form.addRow(self.ap_lite_test_cb)
+
+        self.ap_lite_snr_spin = QSpinBox()
+        self.ap_lite_snr_spin.setRange(-25, -5)
+        self.ap_lite_snr_spin.setSuffix(" dB")
+        self.ap_lite_snr_spin.setToolTip(
+            "AP-Lite versucht eine Rettung nur wenn der letzte bekannte "
+            "Partner-SNR unter dieser Schwelle lag. Im Test-Modus "
+            "ignoriert (Test-Modus laeuft bei jedem Signal)."
+        )
+        ap_form.addRow("AP-Lite ab Partner-SNR ≤:", self.ap_lite_snr_spin)
+
+        self.ap_lite_strict_combo = QComboBox()
+        self.ap_lite_strict_combo.addItems(["locker", "normal", "streng"])
+        self.ap_lite_strict_combo.setToolTip(
+            "Margen-Schwelle (Differenz bester/zweitbester Kandidat).\n"
+            "locker  = 0.04 (mehr Treffer, mehr Falsch-Positive)\n"
+            "normal  = 0.05 (heutiger Default)\n"
+            "streng  = 0.10 (nur klare Treffer)"
+        )
+        ap_form.addRow("Strenge:", self.ap_lite_strict_combo)
+
+        layout.addWidget(ap_box)
+
         layout.addStretch()
         return tab
 
@@ -668,6 +717,16 @@ class SettingsDialog(QDialog):
         self.audio_dump_max_spin.setEnabled(self.audio_dump_cb.isChecked())
         # P21 v0.96.8: Debug-Log
         self.debug_log_cb.setChecked(self.settings.get("debug_log_enabled", False))
+        # P149 (27.05.2026): AP-Lite Diagnose
+        self.ap_lite_enabled_cb.setChecked(
+            self.settings.get("ap_lite_enabled", True))
+        self.ap_lite_test_cb.setChecked(
+            self.settings.get("ap_lite_test_mode", False))
+        self.ap_lite_snr_spin.setValue(
+            int(self.settings.get("ap_lite_min_snr_db", -20)))
+        _strict = str(self.settings.get("ap_lite_strictness", "normal"))
+        _idx = {"locker": 0, "normal": 1, "streng": 2}.get(_strict, 1)
+        self.ap_lite_strict_combo.setCurrentIndex(_idx)
         # v0.88 Bandpilot Stunden-Logik
         mode = self.settings.get("bandpilot_mode", "off")
         self.bandpilot_mode_combo.setCurrentIndex(
@@ -846,6 +905,15 @@ class SettingsDialog(QDialog):
         # P112 (v0.97.89): Auto-Gain bei Bandwechsel
         self.settings.set("auto_gain_on_band_change",
                           self.auto_gain_band_cb.isChecked())
+        # P149 (27.05.2026): AP-Lite Diagnose
+        self.settings.set("ap_lite_enabled",
+                          self.ap_lite_enabled_cb.isChecked())
+        self.settings.set("ap_lite_test_mode",
+                          self.ap_lite_test_cb.isChecked())
+        self.settings.set("ap_lite_min_snr_db",
+                          int(self.ap_lite_snr_spin.value()))
+        self.settings.set("ap_lite_strictness",
+                          str(self.ap_lite_strict_combo.currentText()))
         self.settings.save()
         self.accept()
 

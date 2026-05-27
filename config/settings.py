@@ -93,6 +93,18 @@ DEFAULTS = {
     # AN = bei Bandwechsel mit stale/missing Gain wird DXTuneDialog
     # automatisch gestartet (analog Auto-TUNE).
     "auto_gain_on_band_change": False,
+    # P149 (v0.98.30, 27.05.2026): AP-Lite Diagnose-Modus.
+    # `ap_lite_enabled` Master-Toggle (Default AN, war bisher hartcodiert).
+    # `ap_lite_test_mode` AP-Lite läuft AUCH bei dekodiertem Partner →
+    # Algo-Test gegen Decoder-Wahrheit, NUR Debug-Log, KEINE Panel-Info.
+    # `ap_lite_min_snr_db` Trigger-Schwelle (Range -25 bis -5): AP-Lite
+    # nur wenn letzter Partner-SNR ≤ Schwelle (im Test-Modus ignoriert).
+    # `ap_lite_strictness` Margen-Schwelle: locker=0.04 / normal=0.05
+    # (heutiger Default) / streng=0.10.
+    "ap_lite_enabled": True,
+    "ap_lite_test_mode": False,
+    "ap_lite_min_snr_db": -20,
+    "ap_lite_strictness": "normal",
 }
 
 
