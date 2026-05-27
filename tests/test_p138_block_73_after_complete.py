@@ -7,10 +7,17 @@ inklusive 73/RR73.
 
 Mechanik (warum 'vor ✓ durchlassen, nach ✓ blocken' automatisch
 funktioniert):
-- Cooldown-Stempel wird in _on_qso_complete gesetzt (mw_qso.py:557),
-  also exakt zum ✓-Zeitpunkt.
+- Cooldown-Stempel wird in _on_qso_confirmed_visual gesetzt
+  (mw_qso.py, P140 26.05.2026 -- vorher faelschlich in
+  _on_qso_complete = interner RR73-Send-Trigger, zu frueh)
+  + symmetrisch in _on_qso_timeout (defensiv).
 - VOR ✓: kein Cooldown-Eintrag -> Filter inaktiv -> 73 kommt durch
 - NACH ✓: Cooldown 60s aktiv -> Filter blockt alles inkl. 73
+
+Filter-Logik selbst ist unveraendert -- diese Tests pruefen den
+Filter direkt durch manuelles Setzen von _recently_completed_qsos.
+Die Set-Trigger-Stellen werden in test_p140_cooldown_trigger.py
+geprueft.
 
 Was sich aendert:
 - P129-Whitelist 'msg.is_73 or msg.is_rr73 -> return False' ENTFERNT

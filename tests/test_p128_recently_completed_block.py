@@ -180,21 +180,28 @@ def test_t10_station_click_pops_cooldown():
 
 
 # ---------------------------------------------------------------------------
-# T11: Timeout setzt KEINEN Cooldown (Mike-Spec)
+# T11: Timeout setzt Cooldown — P140 26.05.2026 Spec-Aenderung
 # ---------------------------------------------------------------------------
 
 
-def test_t11_timeout_does_not_set_cooldown():
-    """T11: Timeout (✗) setzt KEINEN Cooldown — Mike-Spec war nur ✓.
+def test_t11_timeout_sets_cooldown_p140():
+    """T11: Timeout (✗) setzt Cooldown — P140 Mike-Spec Aenderung.
+
+    Vor P140: Cooldown nur bei ✓ (P128-Original).
+    Nach P140: Cooldown auch bei ✗ (Mike-Spec "beendet ist beendet"
+    auch nach scheiterndem QSO -- Symmetrie zum Visual-Pfad).
 
     Verifiziert durch Code-Inspektion: _on_qso_timeout in mw_qso.py
-    ruft KEIN _recently_completed_qsos.update auf.
+    enthaelt jetzt den Set-Pfad fuer _recently_completed_qsos.
     """
     import inspect
     from ui.mw_qso import QSOMixin
     timeout_source = inspect.getsource(QSOMixin._on_qso_timeout)
-    assert "_recently_completed_qsos" not in timeout_source, (
-        "_on_qso_timeout darf NICHT in _recently_completed_qsos schreiben")
+    assert "_recently_completed_qsos[their_call]" in timeout_source, (
+        "P140: _on_qso_timeout MUSS Cooldown setzen "
+        "(Mike-Spec 'beendet ist beendet' auch nach ✗).")
+    assert "P140" in timeout_source, (
+        "P140-Kommentar muss im Timeout-Pfad sein (Doku-Pflicht).")
 
 
 # ---------------------------------------------------------------------------

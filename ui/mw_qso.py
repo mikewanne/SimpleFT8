@@ -400,9 +400,18 @@ class QSOMixin:
         self.qso_sm.stop_cq()
         self.qso_sm.cancel()
         self.control_panel.set_cq_active(False)
-        # P1.14 W6: Auto-Hunt freigeben (sonst dauerhaft pausiert nach HALT)
+        # P147 (27.05.2026): HALT muss Auto-Hunt-Session SOFORT beenden,
+        # nicht nur Manual-Override freigeben. Vorher (P1.14 W6) rief
+        # _on_cancel auf on_manual_qso_end() — das setzt nur
+        # _manual_override=False, _active bleibt True -> Auto-Hunt picked
+        # weiter. Mike-Field-Bug 27.05. 04:42: trotz 3x HALT lief
+        # Auto-Hunt weiter und picked YO4NT/TA3ZZ/R9MW.
+        # stop_auto_hunt("manual_halt") ist SOFORT-Stop seit P122 +
+        # cleart _cooldown + _last_tx_even. Re-Start via Button-Klick
+        # setzt _manual_override automatisch zurück (start_auto_hunt
+        # auto_hunt.py:199), darum kein on_manual_qso_end mehr nötig.
         if self._auto_hunt.active:
-            self._auto_hunt.on_manual_qso_end()
+            self._auto_hunt.stop_auto_hunt("manual_halt")
         # OMNI ebenfalls stoppen — ohne diesen Branch bleibt OMNI aktiv
         # nach HALT, Inkonsistenz mit Button-State.
         if self._omni_cq.is_active():
@@ -558,12 +567,13 @@ class QSOMixin:
 
         # UI-Cleanup IMMER (vor Duplikat-Check) — R1-KRITISCH:
         self._active_qso_targets.discard(qso_data.their_call)
-        # P128 (25.05.2026): 60s-Cooldown setzen — Empf.-Einträge dieser
-        # Station werden im QSO-Log unterdrückt (Mike: „beendet ist
-        # beendet"). RX-Tabelle/Wasserfall unberührt. Aging passiert
-        # lazy im Filter _p128_recently_completed_block.
-        import time as _t128
-        self._recently_completed_qsos[qso_data.their_call] = _t128.monotonic()
+        # P140 (2026-05-26): _recently_completed_qsos-Cooldown wurde aus
+        # diesem Pfad ENTFERNT — gehört in _on_qso_confirmed_visual (✓-
+        # Zeitpunkt) und _on_qso_timeout (✗-Zeitpunkt). qso_complete ist
+        # ein INTERNER State-Cleanup-Trigger der sofort beim RR73-Send
+        # feuert — wenn wir hier den Cooldown setzen blockiert P128 das
+        # 73 der Gegenstation das ZWISCHEN RR73 und optischem ✓ ankommt
+        # (Mike-Field-Bug 26.05. 5P1KZX/IQ5VK/OE4AHG).
         self.rx_panel.set_active_call("")
         # Auto-Hunt: QSO erfolgreich → Pause, dann naechste Station
         if self._auto_hunt.active:
@@ -651,8 +661,21 @@ class QSOMixin:
 
         P81 (v0.97.53): nach add_qso_complete wird eine ggf. deferred
         Auto-Hunt-Stop-Meldung ausgegeben (Mike-Wunsch: erst ✓, dann Stop-Msg).
+
+        P140 (2026-05-26): hier wird der _recently_completed_qsos-
+        Cooldown gesetzt — das ist der OPTISCHE ✓-Zeitpunkt. Vorher
+        in v0.98.19 (P138) wurde das fälschlich in _on_qso_complete
+        gemacht (interner RR73-Send-Trigger) → 73 der Gegenstation
+        verschwand vor ✓. Auto-Hunt hat einen EIGENEN Cooldown
+        (_recent_qso aus P61 in core/auto_hunt.py), unabhängig von
+        dieser Liste — Trennung ist Absicht (R1-F1-Klärung 26.05.).
         """
         self.qso_panel.add_qso_complete(qso_data.their_call)
+        # P140: Cooldown NACH optischem ✓ — 73 vor ✓ kommt durch,
+        # alles nach ✓ wird 60s lang im QSO-Log unterdrückt.
+        import time as _t
+        if qso_data.their_call:
+            self._recently_completed_qsos[qso_data.their_call] = _t.monotonic()
         # P122 (2026-05-25): Stop-AKTION VOR Stop-MELDUNG.
         if hasattr(self, "_auto_hunt"):
             self._auto_hunt.flush_pending_stop()
@@ -972,6 +995,12 @@ class QSOMixin:
         self._active_qso_targets.discard(their_call)
         self.rx_panel.set_active_call("")
         self.qso_panel.add_timeout(their_call)
+        # P140 (2026-05-26): Cooldown auch nach ✗ — Mike-Spec
+        # „beendet ist beendet" (auch nach scheiterndem QSO blocken).
+        # Symmetrisch zu _on_qso_confirmed_visual (P140-Set).
+        import time as _t140
+        if their_call:
+            self._recently_completed_qsos[their_call] = _t140.monotonic()
         # P122 (2026-05-25): Stop-AKTION VOR Stop-MELDUNG. flush_pending_stop
         # vor on_qso_timeout damit ein während Timeout-Slot eingelaufener
         # Defer-Reason sauber den Stop ausführt, statt im nächsten Slot zu
