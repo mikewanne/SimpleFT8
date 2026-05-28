@@ -269,8 +269,9 @@ def test_t9f_adds_info_to_qso_panel():
     body = _abort_skip_body()
     assert "qso_panel.add_info(" in body, (
         "P144: User soll im QSO-Log sehen warum gespringen wurde.")
-    assert "belegt" in body, (
-        "P144: Info-Text soll 'belegt' enthalten (Mike-Stil).")
+    assert "im QSO" in body, (
+        "P144: Info-Text soll 'ist im QSO' enthalten (Mike-Stil, kurz "
+        "— gekürzt 28.05.2026, busy_with nur noch im Debug-Log).")
 
 
 def test_t9g_debug_log_called():
@@ -393,8 +394,10 @@ def test_t12_abort_skip_resets_state_via_mocks():
     qso_panel.add_info.assert_called_once()
     info_text = qso_panel.add_info.call_args[0][0]
     assert "RA5AD" in info_text
-    assert "R2BRD" in info_text
-    assert "belegt" in info_text
+    assert "im QSO" in info_text
+    # busy_with (R2BRD) ist seit 28.05.2026 NICHT mehr in der Kurz-Meldung
+    # (Mike-Wunsch: kurze Nachricht reicht) — nur noch im Debug-Log.
+    assert "R2BRD" not in info_text
 
 
 def test_t12b_abort_skip_no_tx_running():

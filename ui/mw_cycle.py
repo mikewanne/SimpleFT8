@@ -545,6 +545,14 @@ class CycleMixin:
                           f"tx_even={self.encoder.tx_even}")
         except Exception:
             pass
+        # P123 (28.05.2026): Start-Marker im QSO-Log. Auto-Hunt war der
+        # einzige QSO-Start-Pfad ohne sichtbaren Eintrag (nur debug_log) —
+        # manueller Klick (mw_qso.py:266) + CQ-Antwort zeigen schon
+        # "Rufe/Antworte X". Mike-Wahl Variante A (kurzer Marker, kein
+        # neues Format, keine persistente Anzeige). VOR start_qso wie der
+        # manuelle Klick (Reihenfolge unkritisch, kein Race).
+        self.qso_panel.add_info(
+            f"Rufe {_candidate.call}...{self._antenna_pref_label(_candidate.call)}")
         self.qso_sm.start_qso(
             their_call=_candidate.call,
             their_grid=_candidate.grid,
@@ -970,7 +978,7 @@ class CycleMixin:
         if hasattr(self, "_auto_hunt"):
             self._auto_hunt.clear_current_target()
         self.qso_panel.add_info(
-            f"⏭ {target} belegt (sendet an {busy_with}) — überspringe ohne Sperre"
+            f"⏭ {target} ist im QSO"
         )
         # R1-F5: P139 Debug-Logging für Field-Diagnose
         try:
