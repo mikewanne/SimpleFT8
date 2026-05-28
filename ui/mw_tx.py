@@ -138,9 +138,9 @@ class TXMixin:
         if not self.radio.ip:
             debug_log("P101", "abort: radio.ip leer (kein Connect)")
             return
-        if duration_s not in (10, 15, 20):
+        if duration_s not in (5, 10, 15, 20):
             debug_log("P101",
-                      f"abort: duration {duration_s} nicht in (10,15,20)")
+                      f"abort: duration {duration_s} nicht in (5,10,15,20)")
             return
         # P101 Variante B: bei aktivem TUNE synchron stoppen + neu starten
         # (Dauer-Switch). _tune_stop ist idempotent + token=None erzwingt.

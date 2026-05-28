@@ -803,7 +803,7 @@ class _RadioCard(QFrame):
     """
 
     collapse_changed = Signal(bool)
-    # P95 (v0.97.67): Rechtsklick-Override für TUNE-Dauer (10/15/20s)
+    # P95 (v0.97.67): Rechtsklick-Override für TUNE-Dauer (P160: 5/10/15/20s)
     tune_override_requested = Signal(int)
 
     def __init__(self, parent=None):
@@ -1054,9 +1054,12 @@ class _RadioCard(QFrame):
     def _on_tune_button_context_menu(self, pos) -> None:
         """P95 (v0.97.67): Rechtsklick-Override für TUNE-Dauer.
 
-        Zeigt Menü mit 10s / 15s / 20s. Auswahl emittet
+        Zeigt Menü mit 5s / 10s / 15s / 20s. Auswahl emittet
         `tune_override_requested(duration_s)`. Setting `tune_duration_s`
         bleibt unverändert. Pipeline-Handling im MainWindow (mw_tx).
+        P160 (28.05.2026): 5s ergänzt — Mike-Wunsch Schnell-TUNE für
+        empfindliche Lasten (20-W-Dummyload), kurz schauen ohne neu
+        einzumessen. 5s ist im Linksklick-Pfad bereits erlaubt.
         """
         if not self.btn_tune.isVisible():
             return
@@ -1092,7 +1095,7 @@ class _RadioCard(QFrame):
                 debug_log("P101", "fallback to signal emit")
                 self.tune_override_requested.emit(s)
 
-        for sec in (10, 15, 20):
+        for sec in (5, 10, 15, 20):
             act = menu.addAction(f"TUNE {sec}s")
             act.triggered.connect(
                 lambda checked=False, s=sec: _emit_override(s))
