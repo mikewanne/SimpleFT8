@@ -1,5 +1,35 @@
 # HANDOFF — SimpleFT8
 
+## Stand 2026-05-28 — v0.98.40 P157 RX-Liste Aging-Bug (drei Ursachen)
+
+**Aktueller Code-Stand:** v0.98.40, Tests **2174 grün** (+12 P157).
+
+**Was:** Drei Ursachen warum „uralte" Stationen in der Empfangsliste klebten
+(Mike-Field-Bug, man rief tote Stationen an):
+- **Bug 1:** Aufräumen lief nur bei Decodes — bei stillem Band wurde nie
+  gealtert. Jetzt altert ein zentraler Schritt auch leere Slots.
+- **Bug 2:** Beim Wiederhören wurde die angezeigte Uhrzeit (`_slot_start_ts`)
+  nicht aktualisiert → Erst-Sichtung statt „zuletzt gehört". Jetzt aktualisiert.
+- **Bug 3 (DeepSeek):** Eine aktiv sendende Station mit stabilem SNR alterte
+  fälschlich raus, weil „zuletzt gehört" nur bei Inhalts-Änderung gesetzt wurde.
+  Jetzt bei jedem Wiederhören.
+
+**Umsetzung KISS (Variante b, bewusst gegen DeepSeeks Variante c):** kein
+API-Bruch, kein neuer Zustand. DeepSeek Design-R1 + Final-R1 beide PUSH
+FREIGEBEN. FEATURES.md §15 NEU dokumentiert RX-Liste/Aging.
+
+**⚠ Field-Test pending (Mike):** Beim nächsten stillen Band beobachten ob die
+Liste sich jetzt leert (statt tote Stationen zu halten) und ob aktive
+CQ-Rufer eine aktuelle Uhrzeit zeigen.
+
+**Strategie unverändert:** alle Baustellen inkl. Multiband fertig, dann
+Icom-Fork. Offene ⛔ Am-Radio-Tasks: P119, P155, Multiband. P156-Optik
+(Farbe/Größe/Position der Netto-Zahl) noch visuell zu prüfen.
+
+**Noch nicht gepusht** (P156 + P157).
+
+---
+
 ## Stand 2026-05-28 — v0.98.39 P156 Netto-Leistung dezent anzeigen
 
 **Aktueller Code-Stand:** v0.98.39, Tests **2162 grün** (+8 P156).

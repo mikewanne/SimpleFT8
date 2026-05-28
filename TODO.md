@@ -1,4 +1,4 @@
-# SimpleFT8 TODO — Stand 28.05.2026 (v0.98.39)
+# SimpleFT8 TODO — Stand 28.05.2026 (v0.98.40)
 
 > **Strategie (Mike 28.05.):** ALLE Baustellen inkl. Multiband fertigstellen,
 > DANN für Icom forken (nicht parallel). Icom-Abstraktion ist durch P121
@@ -12,44 +12,18 @@
 
 ---
 
-# 🔴 OFFENER BUG — RX-Liste zeigt veraltete Stationen (Mike-Field 28.05.2026)
+# ✅ P157 ERLEDIGT (v0.98.40, 28.05.2026) — RX-Liste Aging-Bug (drei Ursachen)
 
-**Symptom:** Im Empfangsfenster stehen Stationen die **weit älter als 2 Min**
-sind — Mike sah Einträge bis **~17 Min alt** (12:33 bei Jetzt-Zeit 12:50),
-auf 20m UND nach Bandwechsel auf 30m (~6 Min alte CQ-Einträge). Zeitstempel
-aktualisieren sich nicht.
-
-**Impact (Mike, ⚠ funktional nicht kosmetisch):** „Wenn man nicht auf die
-Uhrzeit achtet ruft man eine Station die nicht mehr da ist." Betrifft auch
-**Auto-Hunt** (picked evtl. tote CQ-Stationen) → verschwendete Rufe, verlorene
-QSO-Chancen. → **Severity 🔴.**
-
-**Erwartete Regel (Mike):** Stationen älter als ~2 Min verwerfen, AUSSER sie
-senden noch aktiv CQ / sind im QSO (dann Zeitstempel aktualisieren → bleiben
-sichtbar + zeigen frische Zeit).
-
-**Code-Funde (Stand vor Analyse):**
-- Aging-Konstanten in `core/station_accumulator.py`:
-  `AGING_SLOTS_NORMAL=7` (~1.75 Min), `AGING_SLOTS_ACTIVE=14` (~3.5 Min),
-  `AGING_SLOTS_CQ_CALLER=20` (~5 Min). FT8-Slot=15s. → CQ-Rufer werden
-  bewusst 5 Min gehalten (nicht 2). ABER 17-Min-Leichen sprengen auch das.
-- `ui/rx_panel.py`: `add_message` (Z.305), `setRowCount(0)` an 3 Stellen.
-
-**2 Hypothesen (im Code zu klären):**
-- **(A) Anzeige-Bug:** Station sendet noch aktiv CQ → Aging behält sie zu
-  Recht, ABER die UTC-Spalte zeigt die **Erst-Sichtung** statt der letzten
-  → Zeitstempel wird beim Re-Decode nicht aktualisiert. (Mike-Hypothese,
-  Hauptverdacht.)
-- **(B) Aging-Bug:** Station ist still, müsste raus, wird aber nicht
-  entfernt (Aging läuft nicht / falscher Zeitbezug).
-
-**Wo schauen:** `core/station_accumulator.py` (Aging-Logik + ob Timestamp
-bei Re-Decode aktualisiert wird), `ui/rx_panel.py` (was als UTC angezeigt
-wird — Erst- vs. Last-Seen), `ui/mw_cycle.py` (wie Accumulator gepflegt +
-RX-Liste gerendert wird, Slot-Pruning).
-
-**Workflow-Pflicht:** ja (nicht-trivial) + DeepSeek. FEATURES.md §… (RX-
-Liste/Aging) nach Fix updaten.
+Beide Mike-Hypothesen bestätigt + ein dritter Bug (DeepSeek). **Bug 1
+(Hauptursache, Hypothese B):** `remove_stale()` lief nur bei Decodes → bei
+stillem Band keine Alterung → tote Stationen klebten. **Bug 2 (Hypothese A):**
+`_slot_start_ts` (UTC-Spalte + Sortierung) wurde beim Wiederhören nicht
+aktualisiert → Erst-Sichtung angezeigt. **Bug 3:** `_last_heard` nur bei
+Inhalts-Änderung gesetzt → aktive Station altert raus. Fix KISS (Variante b):
+`station_accumulator` setzt Zeitstempel im „bekannt"-Zweig IMMER; `mw_cycle`
+neuer Aging-Block für leere Slots + DRY-Helper `_rebuild_rx_table`. DeepSeek
+Design-R1 + Final-R1 PUSH FREIGEBEN. Tests +12 (2174). **Details → HISTORY.md
+v0.98.40, Funktionsweise → FEATURES.md §15.** Field-Test pending.
 
 ---
 

@@ -1289,6 +1289,87 @@ unter der Bandsperre) — genau wo Netto-Verlust sichtbar wird.
 
 ---
 
+## 15. RX-Liste / Stations-Akkumulator + Aging (P157)
+
+**Kurzantwort:** Die sichtbare Empfangsliste (`rx_panel.table`) ist eine reine
+**Projektion** des Stations-Dicts (`_diversity_stations` bzw. `_normal_stations`
+in `mw_cycle`). Sie wird nicht inkrementell gepflegt, sondern bei Änderung
+komplett neu gezeichnet (`_rebuild_rx_table` → `setRowCount(0)` + `add_message`
+je `dict.values()` + `reapply_sort`). Das Dict ist die einzige Wahrheit; die
+Tabelle bildet es ab.
+
+### Akkumulation + Aging (`core/station_accumulator.py`)
+
+`accumulate_stations(stations, messages, active_qso_targets, antenna, slot_duration_s)`:
+- **Neue Station:** Eintrag anlegen, `_last_heard`/`_slot_start_ts`/`_utc_display`
+  setzen.
+- **Bekannte Station (Wiederhören):** seit P157 werden `_last_heard`,
+  `_utc_display` und (defensiv) `_slot_start_ts` **IMMER** aktualisiert —
+  VOR der change-Prüfung. Danach steuert die change-Prüfung
+  (snr/ant/content) nur noch SNR/raw-Update + ob ein Rebuild nötig ist
+  (`changed`).
+- **Aging:** `remove_stale()` am Ende entfernt Stationen deren
+  `now - _last_heard` die Schwelle übersteigt.
+
+**Aging-Schwellen** (in SLOTS, mode-aware via `slot_duration_s`):
+`AGING_SLOTS_NORMAL=7`, `AGING_SLOTS_ACTIVE=14` (aktiv angerufen),
+`AGING_SLOTS_CQ_CALLER=20` (CQ-Rufer bleiben länger). Bei FT8 (15s/Slot):
+105s / 210s / 300s. CQ-Rufer werden also bewusst bis 5 Min gehalten.
+
+### Zwei Aging-Trigger (P157 — die Lücke)
+
+`remove_stale` hat zwei Aufruf-Pfade:
+1. **In `accumulate_stations`** — läuft bei jedem Slot **mit** Decodes
+   (egal welche Station neu ist; remove_stale läuft immer am Ende).
+2. **Zentraler Block in `_on_cycle_decoded`** (P157) — läuft bei **leeren**
+   Slots (`if not messages and self._rx_mode in ("diversity", "normal")`),
+   altert das aktive Dict und zeichnet bei Entfernung Tabelle + Decode-Count
+   neu.
+
+**Warum zwei Pfade?** Vor P157 lief `remove_stale` NUR über
+`accumulate_stations`, und das nur bei vorhandenen Decodes. Wird das Band
+still (leere Slots), wurde nie gealtert → tote Stationen klebten unbegrenzt
+fest. Der zentrale Block schließt genau diese Lücke (Variante b, KISS — kein
+API-Bruch, kein neuer Zustand).
+
+### UTC-Spalte + Zeit-Sortierung
+
+`rx_panel._populate_row` + `_time_key` bevorzugen `_slot_start_ts`
+(Slot-Boundary vom Decoder, gesetzt in `decoder.py` + Fallback
+`mw_cycle._assign_slot_parity`), Fallback `_utc_display`. Seit P157 wird
+`_slot_start_ts` beim Wiederhören mit-aktualisiert → die Spalte zeigt
+„zuletzt gehört", nicht mehr die Erst-Sichtung. `_slot_start_ts` ist die
+Slot-Grenze (nicht „now"), bei Diversity also der letzte Slot wo gehört —
+kein künstliches „immer jetzt".
+
+### P157 Bug-Historie (Mike-Field 28.05.2026)
+
+„Uralte" Stationen (bis ~17 Min) klebten in der Liste, man rief tote
+Stationen an. Drei Ursachen:
+- **Bug 1 (Hauptursache):** Aging lief nur bei Decodes → stilles Band =
+  keine Alterung. → zentraler Block für leere Slots.
+- **Bug 2:** `_slot_start_ts` beim Wiederhören nicht aktualisiert → UTC zeigte
+  Erst-Sichtung. → immer aktualisieren.
+- **Bug 3 (DeepSeek):** `_last_heard` nur bei Inhalts-Änderung gesetzt →
+  aktive Station mit stabilem SNR + identischem Text altert raus. → immer
+  aktualisieren.
+
+### Stolperfallen
+
+- **`_rebuild_rx_table` ist der einzige dict-basierte Render-Pfad** — beide
+  Handler (`_handle_diversity_operate`, `_handle_normal_mode`) + der leere-Slot-
+  Block nutzen ihn. Der DX-Tune-Pfad rendert separat (`messages` direkt, kein
+  Akkumulator-Dict) — NICHT auf den Helper umstellen.
+- **Aging-Block muss NACH der Modus-Verzweigung stehen** (sonst altern
+  frisch akkumulierte Stationen sofort raus). Er greift nur bei `not messages`,
+  daher kein Doppel-Render mit den Handlern.
+- **`remove_stale` testet man direkt** — alle Aging-Tests setzen `_last_heard`
+  manuell + rufen `remove_stale` separat (nicht über `accumulate_stations`).
+  → Variante-c-Refactor (remove_stale ganz rausziehen) wäre test-sicher
+  gewesen, wurde aber als Overengineering verworfen.
+
+---
+
 ## Pflege dieser Datei
 
 **Neue Sektionen** anhängen wenn:

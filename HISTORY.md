@@ -3,6 +3,48 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-28 v0.98.40 — P157 RX-Liste Aging-Bug (drei Ursachen, voller Workflow)
+
+**Mike-Field-Bug:** In der Empfangsliste stehen „uralte" Stationen (bis ~17 Min),
+man ruft eine an, die nicht mehr aktiv ist. Mike-Hypothese: „vielleicht senden
+die noch CQ und wir aktualisieren nur die Uhrzeit nicht."
+
+**Diagnose (V1) — drei unabhängige Ursachen, DeepSeek-R1 bestätigt + Bug 3 mitgefunden:**
+- **Bug 1 (Hauptursache):** `remove_stale()` hat genau EINEN Aufrufer
+  (`accumulate_stations`), der nur bei vorhandenen Decodes läuft. Wird das Band
+  still (leere Slots), wird NIE gealtert → tote Stationen kleben unbegrenzt fest,
+  bis der nächste Decode kommt. `_on_cycle_start` (Slot-Start) altert auch nicht.
+- **Bug 2 (Mike-Hypothese bestätigt):** `_slot_start_ts` (Quelle der UTC-Spalte
+  in `_populate_row` + Zeit-Sortierung `_time_key`) wurde beim Wiederhören einer
+  bekannten Station NICHT aktualisiert (`accumulate_stations` setzte nur
+  snr/raw/field*/_last_heard/_utc_display). → Anzeige zeigte Erst-Sichtung.
+- **Bug 3 (DeepSeek):** `_last_heard` (Aging-relevant) wurde nur bei
+  Inhalts-Änderung gesetzt → eine aktiv sendende Station mit stabilem SNR +
+  identischem Text altert raus, obwohl sie aktiv ist.
+
+**Fix (KISS, Variante b — bewusste Abweichung von DeepSeeks Variante c):**
+1. `core/station_accumulator.py`: im „Station bekannt"-Zweig `_last_heard`,
+   `_utc_display` und (defensiv) `_slot_start_ts` IMMER setzen — VOR der
+   change-Prüfung (fixt Bug 2 + Bug 3). Redundante Altzeilen entfernt.
+2. `ui/mw_cycle.py`: (a) `remove_stale` zum Import ergänzt; (b) neuer Helper
+   `_rebuild_rx_table(stations)` zentralisiert den Tabellen-Neuaufbau (vorher in
+   beiden Handlern dupliziert); (c) neuer Aging-Block in `_on_cycle_decoded` NACH
+   der Modus-Verzweigung, der bei `not messages` (leerer Slot) das aktive Dict
+   altert + bei Entfernung Tabelle/Decode-Count aktualisiert (fixt Bug 1).
+3. `ui/rx_panel.py`: veralteten Kommentar an neues Verhalten angepasst (Doku).
+
+**Warum Variante b statt c:** DeepSeek wollte `remove_stale` ganz aus
+`accumulate_stations` rausziehen + ein `_rx_table_dirty`-Flag. Verworfen: mehr
+Umbau + neuer Zustand für ein Doppel-Render-Problem, das real unsichtbar ist.
+Variante b ist minimal-invasiv, kein API-Bruch (alle Aging-Tests rufen
+`remove_stale` eh direkt auf), kein Doppel-Render (neuer Block greift NUR bei
+leeren Slots; messages-Slots altern via `accumulate_stations` wie bisher).
+DeepSeek Design-R1 + Final-R1 beide PUSH FREIGEBEN, 0 Blocker.
+
+**Tests:** `tests/test_p157_rx_aging.py` (12 — Bug 2/3 funktional, None-Defensive,
+Regression messages-Slot altert weiter, Bug 1 Source-Inspektion, DRY-Helper).
+Tests 2162 → 2174 (+12). FEATURES.md §15 NEU.
+
 ## 2026-05-28 v0.98.39 — P156 Netto-Leistung dezent anzeigen (FWD minus Reflexion)
 
 **Mike-Wunsch (erfahrener Funker):** Die angezeigten Watt sind FWDPWR
