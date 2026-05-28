@@ -265,7 +265,16 @@ class TXMixin:
         samples = getattr(self, '_tune_swr_samples', [])
         win_start = max(0.0, dur - 3.0)
         win_end = dur - 1.0
-        window = [swr for el, swr in samples if win_start <= el <= win_end]
+        # P159 (28.05.2026): exakt-1.0-Werte sind der FlexRadio-Clamp bei
+        # fehlendem Träger (FWDPWR≈0; flexradio.py: `if swr < 1.0: swr = 1.0`),
+        # KEINE echte Messung. Field-Bug 28.05. 14:52: Fenster hatte 14 echte
+        # (2.5-2.6) + 19 Clamp (1.0) → Median 1.0 → Band fälschlich freigegeben.
+        # Echte KW-SWR sind nie exakt 1.0 (nur Dummy-Load; Funker-Praxis bester
+        # realer Wert ~1.2). Filter `> 1.0` verschiebt den Median nach oben =
+        # immer in die SICHERE Richtung (DeepSeek-R1 GO 28.05.). Bleiben < 3
+        # echte Werte (nur Clamps = kein echter Träger) → None → Band gesperrt.
+        window = [swr for el, swr in samples
+                  if win_start <= el <= win_end and swr > 1.0]
         if len(window) >= 3:
             return statistics.median(window)
         return None
@@ -330,8 +339,11 @@ class TXMixin:
             _ws, _we = max(0.0, _dur - 3.0), _dur - 1.0
             _win = [s for e, s in getattr(self, '_tune_swr_samples', [])
                     if _ws <= e <= _we]
+            # P159: exakt-1.0-Clamp-Werte werden aus dem Median gefiltert.
+            _clamps = sum(1 for s in _win if s <= 1.0)
             debug_log("TUNE",
                 f"SWR-Fenster [{_ws:.0f}-{_we:.0f}s] n={len(_win)} "
+                f"clamps_gefiltert={_clamps} "
                 f"median={swr_after_match if swr_after_match is None else f'{swr_after_match:.2f}'} "
                 f"snapshot={self.radio.last_swr:.2f} "
                 f"samples={[f'{s:.1f}' for s in _win]}")
