@@ -1,4 +1,4 @@
-# SimpleFT8 TODO — Stand 28.05.2026 (v0.98.37)
+# SimpleFT8 TODO — Stand 28.05.2026 (v0.98.38)
 
 > **Strategie (Mike 28.05.):** ALLE Baustellen inkl. Multiband fertigstellen,
 > DANN für Icom forken (nicht parallel). Icom-Abstraktion ist durch P121
@@ -317,29 +317,25 @@ in heutiger Codebase.
 
 ---
 
-## 🆕 P64 — Simulations-Modus für Tests ohne Radio (Mike 16.05.2026) — 🔵 PRIO SEHR NIEDRIG (Mike 28.05.2026)
+## ✅ P64 — Sim-Modus (FakeRadio + SimInjector) — ERLEDIGT v0.98.38 (28.05.2026)
 
-> 🔵 **Priorität sehr niedrig** (Mike 28.05.2026) — nice-to-have, kein
-> Druck. Erst anpacken wenn nichts Wichtigeres ansteht.
+Variante B (Scripted + Fake-Werte). App startet ohne FlexRadio:
+```
+SIMPLEFT8_FAKE_RADIO=1 ./venv/bin/python3 main.py
+```
+`radio/fake_radio.py` + `core/sim_injector.py` + `core/sim_mode.py`. Safety:
+Sim-Decodes schreiben NICHT in weak_decode_log/station_stats. Voller Workflow,
+DeepSeek Design-R1 + Final-R1. Tests +9.
 
-**Use-Case (Mike):** ohne Radio-Zugriff trotzdem UI-Tests / Bug-Fixes /
-neue Features visuell prüfen können. Künstliche Werte einspeisen.
+### 🆕 P64-B — Sim-Ausbau (optional, falls Field-Test es einfordert)
 
-**KISS-Vorschlag (V0 nicht spezifiziert):**
-
-| Was | Komplexität | Aufwand |
-|---|---|---|
-| SWR-Wert simulieren via Env-Var | einfach | 1-2h |
-| Einzelne fake Decoder-Messages | mittel | 0.5 Tag |
-| Komplette QSO-Simulation | mittel-hoch | 1-2 Tage |
-| Fake-Radio als RadioInterface-Subclass | hoch (Architektur) | 2-3 Tage |
-
-Mike-Frage 16.05.: „können wir später zustände auch simulieren wie
-imaginäre swr werte oder empfangende stationen oder zu komplex?"
-
-**Aktuelle Lage 27.05.:** Multi-Radio-Refactor P121 hat die
-RadioInterface-Architektur sauberer gemacht — Subclass-Variante wäre
-jetzt einfacher umsetzbar.
+Offene Grenzen aus P64 V1 (kein Druck, nur wenn nützlich):
+- **Interaktiver QSO-Responder:** angerufene Station antwortet im Sim
+  (grid→report→RR73), damit ein QSO komplett durchläuft. Braucht qso_sm-
+  Kopplung im SimInjector (read-only State lesen) + ADIF-Guard (dann wird
+  QSO-complete erreichbar). Eigener Workflow + R1.
+- **Diversity-Messung simulieren:** dual-stream Fake-Audio/SNR pro Antenne
+  (= Variante C). Aufwändig. Nur wenn Diversity-Logik remote getestet werden muss.
 
 ---
 

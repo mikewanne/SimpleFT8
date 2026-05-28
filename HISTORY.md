@@ -3,6 +3,47 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-28 v0.98.38 — P64 FakeRadio + SimInjector (Sim-Modus ohne Hardware)
+
+**Mike-Wunsch:** SimpleFT8 ohne echtes FlexRadio starten + Fake-Decodes/SWR
+einspeisen → UI/QSO-Flow/Auto-Hunt remote testen. Variante B (von 3, via
+AskUserQuestion): „Scripted + Fake-Werte". Strategischer Nebennutzen:
+validiert die RadioInterface-Abstraktion vor dem Icom-Fork.
+
+**Aktivierung:** Env-Var `SIMPLEFT8_FAKE_RADIO=1` (kein UI, kein Setting):
+```
+SIMPLEFT8_FAKE_RADIO=1 ./venv/bin/python3 main.py
+```
+
+**Neu:**
+- `radio/fake_radio.py` — `FakeRadio(QObject)`, duck-typing-kompatibel zur
+  FlexRadio-Oberfläche (8 Signals + ~34 genutzte Member). `ip="SIM"` →
+  App-Gates `if self.radio.ip:` = connected. Liefert KEIN Audio.
+  `set_frequency` normalisiert MHz→Hz (Final-R1).
+- `core/sim_injector.py` — `SimInjector` feuert pro Slot Fake-FT8Messages
+  (CQ + Fremd-Wechsel, SNR variiert inkl. ≤ -24 dB) über die DECODER-Signals
+  in exakter Reihenfolge `cycle_decoded → message_decoded → cycle_finished`.
+- `core/sim_mode.py` — `is_sim_mode()`.
+- `radio_factory`: Env-Var-Override → FakeRadio.
+- `main_window._init_sim()`: SimInjector an `radio.connected` koppeln.
+- `mw_radio`: `decoder.start()` im Sim gegated (kein Audio → kein Thread).
+
+**Safety-Guards** (Sim-Daten dürfen echte Daten/Netze NICHT kontaminieren):
+`weak_decode_log` (Mikes P150-Evidenz) + `station_stats` (Diagramme)
+schreiben im Sim NICHT. PSK-Reporter ist read-only (fetch) → kein Guard.
+Kein allgemeines Decode-Log (ALL.txt) vorhanden (verifiziert).
+
+**DeepSeek-V4-pro:** Design-R1 GO; Final-R1 NACHBESSERN → 2 Findings behoben
+(Freq-Normalisierung; ALL.txt verifiziert nicht-existent) → PUSH FREIGEBEN.
+Konformität + Smoke verifiziert (MainWindow konstruiert im Sim 0.4s; 8
+Fake-Decodes → 8 RX-Zeilen via echtem `_on_cycle_decoded`, Normal-Modus).
+
+**GRENZEN V1 (→ TODO P64-B):** kein interaktiver QSO-Responder (angerufene
+Station antwortet nicht); Diversity-MESSUNG nicht simuliert (braucht dual-
+stream = Variante C); Slot-Intervall bei start() fixiert.
+
+Tests 2145 → **2154 grün** (+9 P64).
+
 ## 2026-05-28 v0.98.37 — P123 Pre-TX-Anzeige beim QSO-Start (Auto-Hunt-Marker)
 
 **Mike-Wunsch (UX):** Beim QSO-Start kurz signalisieren dass ein QSO

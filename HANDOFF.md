@@ -1,5 +1,38 @@
 # HANDOFF — SimpleFT8
 
+## Stand 2026-05-28 — v0.98.38 P64 FakeRadio / Sim-Modus
+
+**Aktueller Code-Stand:** v0.98.38, Tests **2154 grün** (+9 P64).
+
+**Sim-Modus fertig (autonom, voller Workflow, DeepSeek Design-R1 + Final-R1):**
+SimpleFT8 startet jetzt ohne FlexRadio:
+```
+SIMPLEFT8_FAKE_RADIO=1 ./venv/bin/python3 main.py
+```
+→ FakeRadio + SimInjector speisen Fake-CQ-Stationen (inkl. schwache ≤ -24 dB)
+in die RX-Liste. UI/QSO-Flow/Auto-Hunt remote testbar. Validiert nebenbei
+die RadioInterface-Abstraktion für den Icom-Fork.
+
+**Mike-Field-Test (am Mac, kein Radio nötig):** mit der Env-Var starten →
+RX-Liste füllt sich mit Fake-Stationen, Auto-Hunt kann picken, Stationen
+anklickbar. **Safety:** Sim-Decodes landen NICHT in der echten Weak-Decode-
+Liste/Statistik (geguarded).
+
+**GRENZEN (→ TODO P64-B, falls gewünscht):**
+- Angerufene Station antwortet (noch) nicht interaktiv → kein vollständiges
+  QSO im Sim (Auto-Hunt-Pick + Anruf aber testbar).
+- Diversity-MESSUNG nicht simuliert; wenn Diversity im Sim auto-startet
+  (frische Kalibrierung), öffnet sich der Kalibrier-Dialog → wegklicken
+  oder vorher auf Normal-Modus stellen.
+
+**Strategie (Mike 28.05.):** ALLE Baustellen inkl. Multiband fertig, DANN
+Icom-Fork. Remote-Backlog ist jetzt abgearbeitet (P123, P74 geschlossen,
+P64 fertig). Es bleiben die ⛔ Am-Radio-Tasks: P119, P155, Multiband.
+
+**Noch nicht gepusht** — alle heutigen Commits liegen lokal.
+
+---
+
 ## Stand 2026-05-28 — v0.98.37 P123 Pre-TX-Anzeige beim QSO-Start
 
 **Aktueller Code-Stand:** v0.98.37, Tests **2145 grün** (+3 P123).

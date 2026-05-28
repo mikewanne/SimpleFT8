@@ -1214,6 +1214,55 @@ sofort verdächtig wenn er ihn vergisst.
 
 ---
 
+## 13. Sim-Modus (P64 — FakeRadio + SimInjector, ohne Hardware)
+
+**Pattern-Frage:** Wie testet man SimpleFT8 (UI, QSO-Flow, Auto-Hunt) OHNE
+echtes FlexRadio — und ohne echte Daten/Netze zu kontaminieren?
+
+**Aktivierung:** Env-Var `SIMPLEFT8_FAKE_RADIO=1` (kein UI, kein Setting):
+```
+SIMPLEFT8_FAKE_RADIO=1 ./venv/bin/python3 main.py
+```
+
+**Architektur (3 Bausteine):**
+1. `core/sim_mode.py` → `is_sim_mode()` (liest die Env-Var). Zentrale Wahrheit.
+2. `radio/fake_radio.py` → `FakeRadio(QObject)`: duck-typing-kompatibel zur
+   FlexRadio-Oberfläche (8 Signals + ~34 vom App-Code genutzte Member).
+   `ip="SIM"` (non-empty) → die ~45 App-Gates `if self.radio.ip:` behandeln
+   den Sim als verbunden. Liefert KEIN Audio → der echte Decoder-Thread wird
+   im Sim gar nicht gestartet (`mw_radio` gated `decoder.start()`).
+   `radio_factory.create_radio()` gibt bei gesetzter Env-Var FakeRadio zurück.
+3. `core/sim_injector.py` → `SimInjector`: QTimer (Slot-aligned, GUI-Thread)
+   baut pro Slot Fake-FT8Messages (CQ + Fremd-Wechsel, SNR variiert inkl.
+   ≤ -24 dB) und feuert sie über die **Decoder-Signals** in EXAKTER
+   Reihenfolge `cycle_decoded → message_decoded(je msg) → cycle_finished`.
+   Verdrahtet in `main_window._init_sim()`, Start an `radio.connected` gekoppelt.
+
+**Warum Decoder-Signals direkt emittieren?** KISS — kein Wiring-Umbau. Die
+App connected ohnehin an `decoder.cycle_decoded` etc.; der Injector ist nur
+eine zweite Quelle. Da der Decoder ohne Audio nichts emittiert, kein Doppel-
+Emit. (DeepSeek-R1-bestätigt für ein Test-Tool.)
+
+**⚠ Safety-Guards (Sim darf echte Daten/Netze NICHT kontaminieren):**
+- `core/weak_decode_log.py` → schreibt im Sim NICHT (Mikes P150-Evidenz).
+- `core/station_stats.py` (alle 3 log_*-Methoden) → schreiben im Sim NICHT.
+- PSK-Reporter → KEIN Guard nötig (read-only: lädt Spots, lädt nichts hoch).
+- ADIF/QRZ → nur bei QSO-complete (in V1 nicht erreichbar, kein Responder).
+- **Wenn ein neuer always-on Schreib-/Netz-Pfad gebaut wird: `is_sim_mode()`-
+  Guard prüfen!** (Es gibt aktuell KEIN allgemeines „ALL.txt"-Decode-Log.)
+
+**Grenzen V1 (→ TODO P64-B):** kein interaktiver QSO-Responder (angerufene
+Station antwortet nicht → kein vollständiges QSO); Diversity-MESSUNG nicht
+simuliert (braucht dual-stream); Slot-Intervall bei `start()` fixiert.
+Wenn Diversity im Sim auto-startet (frische Kalibrierung gelesen), öffnet
+sich der Kalibrier-Dialog — wegklicken oder vorher Normal-Modus.
+
+**Nebennutzen:** FakeRadio ist ein **Konformitäts-Check für die
+RadioInterface-Abstraktion** vor dem Icom-Fork — fehlt ein vom App-Code
+genutzter Member, crasht der Sim-Start und legt das FlexRadio-Leck offen.
+
+---
+
 ## Pflege dieser Datei
 
 **Neue Sektionen** anhängen wenn:
