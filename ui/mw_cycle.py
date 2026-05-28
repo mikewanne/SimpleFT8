@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 from core.qso_state import QSOState
 from core.message import FT8Message
 from core import ntp_time
-from core.station_accumulator import accumulate_stations
+from core.station_accumulator import accumulate_stations, remove_stale
 from radio.presets import PREAMP_PRESETS
 
 # P94 (v0.97.66): Quick-73-Fenster für kürzlich gearbeitete Stationen.
@@ -147,6 +147,21 @@ class CycleMixin:
             self._handle_normal_mode(messages)
         elif messages:
             self._handle_dx_tune_mode(messages)
+
+        # P157 (28.05.2026): Aging fuer LEERE Slots. accumulate_stations()
+        # (und damit remove_stale) laeuft nur bei vorhandenen Decodes — wird
+        # das Band still, blieben tote Stationen sonst unbegrenzt in der Liste
+        # stehen (Mike-Field-Bug: Stationen bis ~17 Min alt, man ruft eine die
+        # nicht mehr da ist). Bei nicht-leeren Slots hat accumulate_stations
+        # bereits gealtert; hier nur die Luecke fuer leere Slots schliessen.
+        if not messages and self._rx_mode in ("diversity", "normal"):
+            _stations = (self._diversity_stations if self._rx_mode == "diversity"
+                         else self._normal_stations)
+            _stale = remove_stale(_stations, self._active_qso_targets,
+                                  slot_duration_s=self.timer.cycle_duration)
+            if _stale:
+                self._rebuild_rx_table(_stations)
+                self.control_panel.update_decode_count(len(_stations))
 
         # P34-Stufe2: Dynamic-Diversity Slot-Datenerfassung. Gate:
         # Diversity + Messages vorhanden + Dynamic aktiv (Defensive-Check
@@ -353,6 +368,18 @@ class CycleMixin:
                 continue
             store.add_entry(band, mode, entry)
 
+    def _rebuild_rx_table(self, stations):
+        """RX-Tabelle komplett aus dem Stations-Dict neu aufbauen.
+
+        Zentraler Render-Pfad fuer Normal + Diversity (P157, 28.05.2026):
+        vorher in beiden Handlern dupliziert. reapply_sort haelt die aktive
+        Sortierung nach dem Rebuild.
+        """
+        self.rx_panel.table.setRowCount(0)
+        for m in stations.values():
+            self.rx_panel.add_message(m)
+        self.rx_panel.reapply_sort()
+
     def _handle_diversity_operate(self, messages, ant):
         """Diversity-Operate-Phase: Stationen akkumulieren + Stats-Logging."""
         self._feed_locator_db(messages)
@@ -389,10 +416,7 @@ class CycleMixin:
 
         # Tabelle neu aufbauen wenn sich was geaendert hat
         if changed:
-            self.rx_panel.table.setRowCount(0)
-            for m in self._diversity_stations.values():
-                self.rx_panel.add_message(m)
-            self.rx_panel.reapply_sort()
+            self._rebuild_rx_table(self._diversity_stations)
             only_a1 = sum(1 for m in self._diversity_stations.values()
                           if getattr(m, 'antenna', '') == 'A1')
             only_a2 = sum(1 for m in self._diversity_stations.values()
@@ -461,10 +485,7 @@ class CycleMixin:
                 self._active_qso_targets, antenna="A1",
                 slot_duration_s=self.timer.cycle_duration)
             if changed:
-                self.rx_panel.table.setRowCount(0)
-                for m in self._normal_stations.values():
-                    self.rx_panel.add_message(m)
-                self.rx_panel.reapply_sort()
+                self._rebuild_rx_table(self._normal_stations)
             self._update_histogram(messages)
         self.control_panel.update_decode_count(len(self._normal_stations))
         avg_snr = -30

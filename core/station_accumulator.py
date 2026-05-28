@@ -60,7 +60,18 @@ def accumulate_stations(stations: dict, messages: list, active_qso_targets: set,
             stations[key] = msg
             changed = True
         else:
-            # Station bekannt — hat sich was geaendert?
+            # P157 (28.05.2026): Station bekannt → Anwesenheit IMMER mit der
+            # aktuellen Slot-Zeit markieren, unabhaengig von Inhalts-Aenderung.
+            # Sonst (a) altert eine aktiv sendende Station mit stabilem SNR +
+            # identischem Text faelschlich raus (remove_stale liest _last_heard),
+            # und (b) zeigt die RX-Liste die Erst-Sichtung statt "zuletzt gehoert"
+            # (rx_panel._populate_row / _time_key bevorzugen _slot_start_ts).
+            existing._last_heard = now
+            existing._utc_display = utc_str
+            if getattr(msg, '_slot_start_ts', None) is not None:
+                existing._slot_start_ts = msg._slot_start_ts
+
+            # Hat sich der Inhalt geaendert? (steuert SNR/raw-Update + Rebuild)
             snr_changed = msg.snr != existing.snr
             content_changed = (
                 msg.field1 != existing.field1 or
@@ -70,9 +81,6 @@ def accumulate_stations(stations: dict, messages: list, active_qso_targets: set,
             ant_changed = antenna and antenna != getattr(existing, 'antenna', '')
 
             if snr_changed or ant_changed or content_changed:
-                existing._last_heard = now
-                existing._utc_display = utc_str
-
                 # Diversity: Antennen-Vergleich
                 if ant_changed and getattr(existing, 'antenna', '') in ("A1", "A2"):
                     old_ant = existing.antenna

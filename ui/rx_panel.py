@@ -408,10 +408,11 @@ class RXPanel(QWidget):
         else:
             color = _COLOR_NORMAL
 
-        # UTC: _utc_display zeigt wann sich der Inhalt zuletzt geaendert hat
-        # (nicht wann zuletzt dekodiert — das waere bei Diversity immer "jetzt")
-        # P13 (v0.97.15): bevorzugt _slot_start_ts vom Decoder fuer
-        # Slot-Boundary statt Wall-Time-Fallback.
+        # UTC-Spalte: bevorzugt _slot_start_ts (Slot-Boundary vom Decoder,
+        # P13 v0.97.15), Fallback _utc_display. Seit P157 (28.05.2026) werden
+        # beide beim Wiederhoeren einer bekannten Station in
+        # accumulate_stations aktualisiert → die Spalte zeigt "zuletzt
+        # gehoert", nicht mehr die Erst-Sichtung.
         slot_ts = getattr(msg, '_slot_start_ts', None)
         if slot_ts is not None:
             utc = time.strftime("%H%M%S", time.gmtime(int(slot_ts)))
