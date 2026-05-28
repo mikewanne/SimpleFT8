@@ -49,6 +49,11 @@ def log_weak_decodes(entries, band: str, mode: str) -> None:
     """
     if not entries:
         return
+    # P64: im Sim-Modus NICHT schreiben — Fake-Decodes wuerden Mikes echte
+    # P150-Beweis-Evidenz kontaminieren.
+    from core.sim_mode import is_sim_mode
+    if is_sim_mode():
+        return
     try:
         ts = datetime.utcnow().strftime("%H:%M:%S")
         lines = []

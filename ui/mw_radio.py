@@ -257,7 +257,12 @@ class RadioMixin:
         _ntp.set_mode(mode, band)
         # CQ-Freq Dwell/Recalc-Intervall fuer aktuellen Modus
         self._diversity_ctrl.set_mode(mode)
-        self.decoder.start()
+        # P64: im Sim-Modus den Decoder-Thread NICHT starten — er bekommt eh
+        # kein Audio (FakeRadio liefert keins) und wuerde nur "kein Audio"
+        # spammen. Die Fake-Decodes kommen vom SimInjector der die Decoder-
+        # Signals direkt feuert.
+        if not getattr(self, "_sim_mode", False):
+            self.decoder.start()
         self.radio.create_tx_stream()
         # Meter an GUI koppeln
         self.radio.meter_update.connect(self._on_meter_update)

@@ -131,6 +131,11 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self._init_locator_db_autosave()
         self._init_cq_countdown_timer()
 
+        # P64: Sim-Modus — SimInjector verdrahten (Fake-Decodes in die
+        # Decoder-Signal-Kette). Start erst wenn FakeRadio "connected"
+        # feuert (App ist dann vollstaendig eingerichtet).
+        self._init_sim()
+
         # Statusbar + Geometry
         self._init_statusbar()
         from PySide6.QtCore import QTimer as _QTimer
@@ -261,6 +266,9 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
 
     def _init_radio_state(self):
         """Radio via Factory + Reconnect-Counter + DX-Tune-Dialog Slot."""
+        from core.sim_mode import is_sim_mode
+        self._sim_mode = is_sim_mode()  # P64: FakeRadio statt Hardware
+        self._sim_injector = None
         self.radio = create_radio(self.settings)
         self._reconnect_attempts = 0
         self._reconnect_countdown = 0
@@ -269,6 +277,22 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         # Normal-Preset-Alterungs-Hinweis: pro Band einmal pro Session zeigen
         self._normal_preset_warned_bands = set()
         self._has_sent_cq = False    # PSKReporter nur nach CQ anzeigen
+
+    def _init_sim(self):
+        """P64: SimInjector erstellen + an FakeRadio-connected koppeln.
+
+        No-op im Normal-Betrieb (kein FakeRadio). Im Sim-Modus startet der
+        Injector seine Fake-Decodes erst wenn `connected` feuert — dann ist
+        die App vollstaendig eingerichtet (RX-Panel, QSO-State-Machine etc.).
+        """
+        if not self._sim_mode:
+            return
+        from core.sim_injector import SimInjector
+        self._sim_injector = SimInjector(
+            self.decoder, self.radio, self.settings.callsign)
+        # start ist idempotent — connected kann (theoretisch) mehrfach feuern.
+        self.radio.connected.connect(self._sim_injector.start)
+        print("[SIM] SimInjector verdrahtet — Fake-Decodes ab connected.")
 
     def _init_diversity_state(self):
         """Diversity-Variablen + Stations-Dicts + Tune-Anzeige-State."""

@@ -30,6 +30,15 @@ def create_radio(settings: "Settings"):
     Raises:
         ValueError: Wenn radio_type unbekannt.
     """
+    # P64: Sim-Modus (Env-Var SIMPLEFT8_FAKE_RADIO=1) hat Vorrang vor dem
+    # Settings-radio_type → App startet ohne echte Hardware (FakeRadio +
+    # SimInjector, siehe radio/fake_radio.py).
+    from core.sim_mode import is_sim_mode
+    if is_sim_mode():
+        from radio.fake_radio import FakeRadio
+        print("[SIM] FakeRadio aktiv (SIMPLEFT8_FAKE_RADIO=1) — keine Hardware.")
+        return FakeRadio()
+
     radio_type = settings.get("radio_type", "flex")
 
     if radio_type in ("flex", "flexradio"):

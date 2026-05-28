@@ -106,6 +106,9 @@ class StationStatsLogger:
             rx_mode: "Normal", "Diversity_Normal", "Diversity_Dx"
             ant2_wins: Wie oft Ant2 strikt besser als Ant1 (nur Diversity)
         """
+        from core.sim_mode import is_sim_mode
+        if is_sim_mode():
+            return  # P64: Sim-Decodes nicht in echte Statistik schreiben
         if ft_mode not in self.LOGGED_FT_MODES:
             return  # Mode-Filter (siehe Klassen-Docstring)
         if band not in self.LOGGED_BANDS:
@@ -140,6 +143,9 @@ class StationStatsLogger:
             scoring_mode: "normal" oder "dx"
             comparisons: Liste von Dicts aus accumulate_stations()
         """
+        from core.sim_mode import is_sim_mode
+        if is_sim_mode():
+            return  # P64: Sim-Decodes nicht in echte Statistik schreiben
         if not comparisons:
             return
         if mode not in self.LOGGED_FT_MODES:
@@ -202,6 +208,9 @@ class StationStatsLogger:
             best_ant: "A1" / "A2" / None (keine Pref-Daten vorhanden)
             delta_db: SNR-Differenz A2-A1 in dB, None wenn unbekannt
         """
+        from core.sim_mode import is_sim_mode
+        if is_sim_mode():
+            return  # P64: Sim-Decodes nicht in echte Statistik schreiben
         if ft_mode not in self.LOGGED_FT_MODES:
             return  # Mode-Filter (siehe Klassen-Docstring)
         if band not in self.LOGGED_BANDS:
