@@ -1,5 +1,28 @@
 # HANDOFF — SimpleFT8
 
+## Stand 2026-05-28 — v0.98.35 P152 Weak-Decode-Log
+
+**Aktueller Code-Stand:** v0.98.35, Tests **2132 grün** (+9 P152).
+
+**Mike sah live -25 dB-Station auf ANT2** → P150 (kMin_score=4) wirkt!
+Jetzt sammelt die App jeden Decode ≤ -21 dB automatisch in
+`~/.simpleft8/weak_decodes_YYYY-MM-DD.log` (always-on, kein Setting).
+
+**Mike-Field:** Einfach funken. Liste füllt sich. Nach 1-2 Sessions
+schicken → ich werte aus (wie viele -22/-24/-25/-26 dB, welche Bänder/
+Antennen). Das ist der empirische Beweis dass kMin_score=4 tiefe Decodes
+bringt.
+
+**Backlog jetzt leer von dringenden Items.** Offene Field-Tests:
+- P150 kMin_score=4 (läuft, erste -25 dB schon gesehen)
+- P153 SWR-Median-Fenster (Debug-Log AN bei nächstem TUNE-Hänger)
+- P152 weak_decodes-Liste (sammelt automatisch)
+
+**Noch nicht gepusht** auf GitHub (warte auf Mike-OK) — 5 lokale Commits
+voraus: P150, P151, P153, Stats, P152.
+
+---
+
 ## Stand 2026-05-28 — v0.98.34 P153 SWR-Freeze Median-Fenster (voller Workflow)
 
 **Aktueller Code-Stand:** v0.98.34, Tests **2123 grün** (+13 P153, 3 P142 angepasst).

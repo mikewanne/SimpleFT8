@@ -85,6 +85,22 @@ class CycleMixin:
             return
 
         self._assign_slot_parity(messages)
+
+        # P152 (v0.98.35, 28.05.2026): schwache Decodes (SNR <= -21 dB) in
+        # eigene Tagesliste schreiben. Empirischer Beweis ob P150
+        # (kMin_score=4) tiefe Decodes bringt — keine Vorher-Werte. Batched
+        # (1 File-Append pro Slot, R1-Empfehlung). snr-None-Defensive.
+        if messages:
+            from core import weak_decode_log as _wdl
+            _weak = [
+                (_m.snr, getattr(_m, 'raw', ''), getattr(_m, 'freq_hz', 0))
+                for _m in messages
+                if getattr(_m, 'snr', None) is not None
+                and _m.snr <= _wdl.WEAK_SNR_THRESHOLD
+            ]
+            if _weak:
+                _wdl.log_weak_decodes(_weak, self.settings.band, self.settings.mode)
+
         # P135 (26.05.2026 Mike-Field-Bug): Decode-Count zeigt akkumulierte
         # Stations-Anzahl statt per-Slot rohe Decodes. Bei leerem Slot blieb
         # sonst "0/—" stehen obwohl _diversity_stations / _normal_stations

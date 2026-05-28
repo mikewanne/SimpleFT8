@@ -13,7 +13,7 @@ import atexit
 import signal
 from pathlib import Path
 
-APP_VERSION = "0.98.34"
+APP_VERSION = "0.98.35"
 
 # ── P43: Activity Monitor zeigt Prozess-Namen statt nur "Python" ──
 # Bei der P30-Memory-Leak-Diagnose 12.05. konnte Mike SimpleFT8 nicht
@@ -420,6 +420,12 @@ def main():
     if n_deleted:
         print(f"[Debug-Log] {n_deleted} alte Datei(en) geloescht")
     _dbg.set_enabled(settings.get("debug_log_enabled", False))
+
+    # P152 (v0.98.35, 28.05.2026): Weak-Decode-Log Cleanup (always-on, 7 Tage).
+    from core import weak_decode_log as _wdl
+    _n_weak = _wdl.cleanup_old_files(keep_days=7)
+    if _n_weak:
+        print(f"[Weak-Decode-Log] {_n_weak} alte Datei(en) geloescht")
 
     window = MainWindow(settings)
     window.show()

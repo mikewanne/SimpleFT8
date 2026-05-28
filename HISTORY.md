@@ -3,6 +3,45 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-28 v0.98.35 — P152 Weak-Decode-Log (schwache Decodes ≤ -21 dB sammeln)
+
+**Mike-Wunsch 28.05.:** Nach P150 (kMin_score 10→4) sieht Mike live mehr
+tiefe Decodes („gerade eine -25 dB Antenne-2-Station in der Liste"). Es
+gibt KEINE Vorher-Werte zum Vergleich. Mike-Idee: ab jetzt jeden schwachen
+Decode in eine eigene Liste schreiben → empirischer Beweis ob der
+Decoder-Fix tiefe Stationen bringt (Falkland-Klasse, DXpeditionen).
+
+**Mike-Wahl (AskUserQuestion):** eigene Datei, IMMER an (kein Setting),
+Schwelle SNR ≤ -21 dB (= alte Decoder-Grenze, alles darunter ist die
+„neue" Zone die kMin_score=4 erschließt).
+
+**Neues Modul `core/weak_decode_log.py`** (always-on, analog debug_log
+aber ohne Toggle):
+- `WEAK_SNR_THRESHOLD = -21` (Modul-Konstante, kein Setting)
+- `log_weak_decodes(entries, band, mode)` — **batched** (1 File-Append pro
+  Slot, R1-Empfehlung) statt pro-Decode
+- `cleanup_old_files(keep_days=7)` — Trend über mehrere Tage
+- Eigene Tagesdatei `~/.simpleft8/weak_decodes_YYYY-MM-DD.log` (UTC)
+- silent-fail, thread-safe (Lock)
+
+**Format:** `HH:MM:SS | +/-NN dB | <raw> | NNNN Hz | band mode`
+Beispiel: `04:35:02 | -25 dB | CO8LY DA1MHH -18 | 1293 Hz | 15m FT8`
+
+**Hook** in `ui/mw_cycle.py:_on_cycle_decoded` (nach `_assign_slot_parity`,
+vor mode-Branches → deckt alle RX-Modi ab). Filtert `snr ≤ -21` mit
+snr-None-Defensive (R1). Cleanup in `main.py` neben debug_log.
+
+**R1-V4-pro Findings eingebaut (V1+R1 27.05. durch):**
+- Batching (1 open/Slot statt pro-Decode) — konstante I/O auch bei Pile-up
+- snr-None-Check (`getattr(_m, 'snr', None) is not None`) — Parser-Fail-Schutz
+- UTC (FT8-Konsistenz mit debug_log), keep_days=7, Modul-Konstante kein Setting
+
+Tests 2123→2132 (+9 P152). Live-Smoke: Format exakt wie Mike-Preview.
+**Mike-Field:** Liste füllt sich automatisch → nach 1-2 Sessions schauen
+ob -22/-24/-25/-26 dB Einträge auftauchen = P150 wirkt.
+
+---
+
 ## 2026-05-28 v0.98.34 — P153 SWR-Freeze: Median über stabiles Fenster statt Snapshot
 
 **Mike-Field-Bug 28.05.2026:** Bandwechsel 15m → gesperrt. Manueller TUNE:
