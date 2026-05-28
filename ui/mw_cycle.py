@@ -381,7 +381,9 @@ class CycleMixin:
         ant1_wins = sum(1 for m in self._diversity_stations.values()
                         if getattr(m, 'antenna', '').startswith('A1>'))
         compared = ant1_wins + ant2_wins
-        # DX: schwache Signale (-20 < SNR < -10) pro Antenne
+        # DX: schwache Signale (SNR < -10, KEINE Untergrenze) pro Antenne.
+        # Seit P150 (kMin_score=4) kommen auch -21..-27 dB durch — die
+        # fließen bewusst voll mit ein (DX jagt genau diese schwachen).
         a1_weak = [m for m in a1_msgs if m.snr is not None and m.snr < -10]
         a2_weak = [m for m in a2_msgs if m.snr is not None and m.snr < -10]
 

@@ -28,9 +28,9 @@ im QSO-Log, im Wasserfall sichtbar und voll anrufbar.
 
 ### Wo der Filter im Code sitzt
 
-`ui/mw_cycle.py:357-359`:
+`ui/mw_cycle.py`:
 ```python
-# DX: schwache Signale (-20 < SNR < -10) pro Antenne
+# DX: schwache Signale (SNR < -10, KEINE Untergrenze) pro Antenne
 a1_weak = [m for m in a1_msgs if m.snr is not None and m.snr < -10]
 a2_weak = [m for m in a2_msgs if m.snr is not None and m.snr < -10]
 ```
@@ -38,6 +38,19 @@ a2_weak = [m for m in a2_msgs if m.snr is not None and m.snr < -10]
 `a1_msgs`/`a2_msgs` enthalten **alle** decodierten Stationen pro Antenne
 — da wird nichts entfernt. Nur die `a1_weak`/`a2_weak`-Untermenge
 (SNR < -10 dB) fließt in die Antennen-Bewertung im Dx-Modus.
+
+**Wichtig (P150-Synergie, 28.05.2026):** Der Filter hat **KEINE
+Untergrenze** — nur `< -10`. Vor P150 (kMin_score=10) war das egal, weil
+der Decoder kaum unter -20 dB lieferte. Seit P150 (kMin_score=4) kommen
+auch -21..-27 dB Decodes durch, und die fließen **voll** in die DX-
+Antennen-Bewertung ein. Das ist gewollt: DX jagt genau die schwachen
+Signale, und eine -27 dB Station die nur auf EINER Antenne durchkommt ist
+ein glasklarer „diese Antenne zieht das DX"-Datenpunkt. (Früherer Kommentar
+sagte fälschlich „-20 < SNR < -10" — es gibt keinen -20-Boden.)
+
+Im Gegensatz dazu: Diversity **Standard** (`core/diversity.py:compute_slot_score`)
+filtert `> -20` — dort zählen die ganz tiefen NICHT (zu verrauschte
+Antennen-Differenz bei Stärke-basierter Bewertung).
 
 ### Was der Dx-Filter beeinflusst
 
