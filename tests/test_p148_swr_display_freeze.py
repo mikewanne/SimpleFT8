@@ -237,8 +237,14 @@ def test_t9b_update_swr_does_not_modify_radio_last_swr():
     )
     assert m is not None
     body = m.group(0)
-    assert "_last_swr" not in body, (
+    # Präzise: update_swr darf die HARDWARE-Telemetrie radio._last_swr /
+    # radio.last_swr NICHT schreiben. (P156: `self._last_swr_for_netto` ist
+    # UI-Netto-State, KEINE Radio-Manipulation — daher kein blanker
+    # `_last_swr`-Substring-Check mehr.)
+    assert "radio._last_swr" not in body, (
         "update_swr darf radio._last_swr NICHT manipulieren!")
+    assert "radio.last_swr" not in body, (
+        "update_swr darf radio.last_swr NICHT manipulieren!")
 
 
 # ---------------------------------------------------------------------------

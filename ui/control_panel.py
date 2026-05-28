@@ -34,6 +34,22 @@ from ui.styles import (
 )
 
 
+def compute_net_power(fwd_w: float, swr: float) -> int:
+    """P156: Netto-Leistung in die Leitung = FWD * (1 - Gamma^2).
+
+    Gamma = (SWR-1)/(SWR+1) ist der Reflexionsfaktor, Gamma^2 der zurueck-
+    laufende Leistungsanteil. SWR <= 1 → keine Reflexion → netto = FWD.
+    Ganzzahlig (keine Schein-Praezision). Das ist die Leistung die den
+    Richtkoppler Richtung Antenne/Tuner verlaesst — NICHT die abgestrahlte
+    Leistung (Tuner re-reflektiert das meiste, Leitungs-/Antennen-Verluste
+    unbekannt). Siehe Tooltip + FEATURES.md.
+    """
+    if swr <= 1.0:
+        return int(round(fwd_w))
+    gamma = (swr - 1.0) / (swr + 1.0)
+    return int(round(fwd_w * (1.0 - gamma * gamma)))
+
+
 class FrequencyHistogramWidget(QWidget):
     """50-Hz-Bin Frequenz-Histogramm: belegte Frequenzen + freie Lücke + CQ-Marker.
 
@@ -977,6 +993,17 @@ class _RadioCard(QFrame):
         self.watt_label.setFixedHeight(28)
         self.watt_label.setStyleSheet(
             f"color: #FFD700; font-family: {_FONT}; font-size: 14px; font-weight: bold; border: none;")
+        # P156: Netto-Leistung (dezent, dunkelgrau, statisch) zwischen W und SWR.
+        # Nur sichtbar wenn Leistung anliegt (W > 0) — gesetzt in
+        # ControlPanel._refresh_netto. Kein Farbwechsel (Warn-Farbe gehoert zum SWR).
+        self.netto_label = QLabel("")
+        self.netto_label.setStyleSheet(
+            f"color: #666; font-family: {_FONT}; font-size: 10px; border: none;")
+        self.netto_label.setToolTip(
+            "Netto in die Leitung — Vorlaufleistung minus Reflexion.\n"
+            "Das verlaesst den Sender Richtung Tuner/Antenne; der Tuner\n"
+            "strahlt das meiste doch ab (echte abgestrahlte Leistung ist\n"
+            "wegen Leitungs-/Antennen-Verlusten nicht messbar).")
         self.swr_label = QLabel("SWR —")
         self.swr_label.setFixedWidth(75)
         self.swr_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -986,6 +1013,8 @@ class _RadioCard(QFrame):
         output_row.addWidget(self.btn_tune)
         output_row.addStretch()          # Abstand zwischen TUNE und Anzeigen
         output_row.addWidget(self.watt_label)
+        output_row.addSpacing(3)
+        output_row.addWidget(self.netto_label)
         output_row.addSpacing(8)
         output_row.addWidget(self.swr_label)
         tx_lay.addLayout(output_row)
@@ -1505,6 +1534,10 @@ class ControlPanel(QWidget):
         self._tuner_present = True
         self.watt_label = radio_card.watt_label
         self.swr_label = radio_card.swr_label
+        # P156: Netto-Leistungs-Anzeige (FWD minus Reflexion) + State.
+        self.netto_label = radio_card.netto_label
+        self._last_watt = 0.0
+        self._last_swr_for_netto = 1.0
         self.peak_label = radio_card.peak_label
         self.tx_level_bar = radio_card.tx_level_bar
         self.tx_level_label = radio_card.tx_level_label
@@ -2036,6 +2069,8 @@ class ControlPanel(QWidget):
 
     def update_watt(self, watts: float):
         self.watt_label.setText(f"{watts:.0f} W")
+        self._last_watt = watts
+        self._refresh_netto()
 
     def update_swr(self, swr: float):
         if swr < 1.5:
@@ -2048,6 +2083,17 @@ class ControlPanel(QWidget):
         self.swr_label.setStyleSheet(
             f"color: {color}; font-family: {_FONT}; font-size: 14px; font-weight: bold;"
         )
+        self._last_swr_for_netto = swr
+        self._refresh_netto()
+
+    def _refresh_netto(self):
+        """P156: Netto-Leistung (FWD minus Reflexion) dezent anzeigen — NUR
+        wenn Leistung anliegt (W > 0). Im RX/0 W bleibt die Klammer leer."""
+        if self._last_watt > 0:
+            netto = compute_net_power(self._last_watt, self._last_swr_for_netto)
+            self.netto_label.setText(f"({netto})")
+        else:
+            self.netto_label.setText("")
 
     def reset_swr_display(self):
         """P148 (27.05.2026): SWR-Anzeige auf „SWR —" zurücksetzen.
@@ -2060,6 +2106,10 @@ class ControlPanel(QWidget):
         self.swr_label.setStyleSheet(
             f"color: #888888; font-family: {_FONT}; font-size: 14px; font-weight: bold;"
         )
+        # P156: Netto-State mit zuruecksetzen (Vorband-SWR ungueltig) + Anzeige leeren.
+        self._last_swr_for_netto = 1.0
+        self._last_watt = 0.0
+        self.netto_label.setText("")
 
     def update_alc(self, alc: float):
         """ALC-Meter aktualisieren (nur intern, nicht mehr angezeigt)."""
