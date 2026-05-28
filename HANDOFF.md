@@ -1,5 +1,65 @@
 # HANDOFF — SimpleFT8
 
+## Stand 2026-05-28 — v0.98.37 P123 Pre-TX-Anzeige beim QSO-Start
+
+**Aktueller Code-Stand:** v0.98.37, Tests **2145 grün** (+3 P123).
+
+**Strategie-Entscheidung Mike 28.05.:** ALLE Baustellen inkl. Multiband
+fertigstellen, DANN für Icom forken (nicht parallel). Icom-Abstraktion ist
+durch P121 schon sauber (Stubs `ic7300.py`/`ic7100.py` da, Diversity/VITA-49
+hinter `supports_diversity` gated). Der echte Icom-Aufwand (CI-V CAT +
+Soundkarten-Audio + PTT) braucht aber die Hardware.
+
+**P123 erledigt (autonom, voller Workflow):** Auto-Hunt zeigt jetzt „Rufe
+X..." im QSO-Log beim Start (war vorher der einzige stille Start-Pfad).
+Variante A (Mike-Wahl). DeepSeek PUSH FREIGEBEN.
+
+**⛔ Während Mike weg NICHT angefasst (Hardware-Safety, vor-Ort-Pflicht):**
+Multiband, P119 (RFPreset-Krücke), P155 (Gain-Mess-Median). Multiband kann
+die FlexRadio bricken → nur mit Mike vor Ort.
+
+**Offen / nächste Schritte:**
+- Vor Ort am Radio: P119 (vereinfacht TUNE-Pipeline, gut für Fork), P155,
+  dann Multiband (Phasen A-F, Tag setzen vor Phase A).
+- Brauchen Mike-Scope: P64 (Sim-Modus, welche Variante?), P74-Rest (UX/Autogain).
+- Field-Test pending: P150/P152/P153/P154/P148.
+
+**Noch nicht gepusht** auf GitHub (warte auf Mike-OK) — Stand 28.05. mehrere
+lokale Commits voraus.
+
+---
+
+## Stand 2026-05-28 — v0.98.36 P154 Auto-TUNE SWR-Median-Fix
+
+**Aktueller Code-Stand:** v0.98.36, Tests **2142 grün** (+10 P154).
+
+**Mike-Field-Bug:** „Band 20M gesperrt — SWR 8.7" obwohl real 1.4. Der
+AUTOMATISCHE TUNE (Bandwechsel) fror einen Ausreißer ein, der manuelle
+TUNE-Knopf funktionierte. **Ursache:** mein P153-Fix (Median statt
+Snapshot) saß nur im manuellen TUNE-Pfad. Die zwei Auto-TUNE-Pfade hatten
+eigenes Setup ohne die Sample-Sammlung → arbeiteten mit veralteter Startzeit
+→ Median-Fenster griff ins Leere. Zwillings-Bug wie P133/P134.
+
+**Fix:** zentraler Helper `_init_tune_swr_sampling`, von allen 3 TUNE-Pfaden
+gerufen + Post-Check-Token-Reset in den Auto-Pfaden (R1-F1). DeepSeek
+Design-R1 + Final-R1 beide PUSH FREIGEBEN.
+
+**Mike-Field-Test pending:** Bandwechsel + automatischer TUNE → Band sollte
+jetzt mit dem echten (stabilen) SWR-Wert bewertet werden, nicht mit einem
+Ausreißer. Bei nächstem Hänger Debug-Log AN → Diagnose-Zeile „SWR-Fenster".
+
+**Separates Ticket (im TODO):** Gain-Mess-TUNE nutzt noch Snapshot
+(gleiche Bug-Klasse, eigene Struktur).
+
+**Außerdem heute:** P144-Meldung gekürzt auf „⏭ X ist im QSO", TODO-Header
+auf v0.98.36, P64 runtergestuft. **P123 (Pre-TX-Anzeige) pausiert** — Mike
+hatte Variante A (kurzer Start-Marker für Auto-Hunt) gewählt, Umsetzung
+wartet (durch P154 unterbrochen).
+
+**Noch nicht gepusht** auf GitHub (warte auf Mike-OK).
+
+---
+
 ## Stand 2026-05-28 — v0.98.35 P152 Weak-Decode-Log
 
 **Aktueller Code-Stand:** v0.98.35, Tests **2132 grün** (+9 P152).

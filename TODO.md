@@ -1,4 +1,9 @@
-# SimpleFT8 TODO — Stand 28.05.2026 (v0.98.33)
+# SimpleFT8 TODO — Stand 28.05.2026 (v0.98.37)
+
+> **Strategie (Mike 28.05.):** ALLE Baustellen inkl. Multiband fertigstellen,
+> DANN für Icom forken (nicht parallel). Icom-Abstraktion ist durch P121
+> bereits sauber (Stubs da, Diversity/VITA-49 gated) — der echte Icom-Aufwand
+> (CI-V CAT + Soundkarten-Audio + PTT) braucht aber die Hardware vor Ort.
 
 > **Diese Datei = Backlog (aktiv-offen + frisch erledigt).**
 > Vollständige Historie aller Änderungen: **HISTORY.md** (nur anhängen).
@@ -8,6 +13,58 @@
 ---
 
 # 🟢 LAUFEND — Field-Test pending
+
+## P123 — Pre-TX-Anzeige beim QSO-Start (v0.98.37, 28.05.2026)
+
+**Was:** Auto-Hunt zeigt jetzt „Rufe X..." im QSO-Log beim Start (war
+vorher der einzige stille Start-Pfad — nur debug_log). Variante A (Mike-
+Wahl): kurzer Marker, kein neues Format. DeepSeek PUSH FREIGEBEN.
+
+**Mike-Field-Test:** Auto-Hunt aktivieren → beim Picken einer Station
+sollte sofort „Rufe X... (ANT1)" im QSO-Log erscheinen (nicht erst der
+„Gesendet"-Eintrag ~30s später).
+
+## P154 — Auto-TUNE SWR-Median-Fix (v0.98.36, 28.05.2026)
+
+**Was:** Mein P153-Fix (Median statt Snapshot) saß nur im manuellen TUNE-
+Pfad. Die zwei AUTO-TUNE-Pfade (`_start_auto_tune_for_band_change`,
+`_start_dialog_tune_sequence`) hatten eigenes Setup ohne die Sample-
+Sammlung → arbeiteten mit veralteter Startzeit → falsche Band-Sperre
+(Mike-Field-Bug: „Band 20M gesperrt — SWR 8.7" obwohl real 1.4, nur
+manueller TUNE funktionierte). Zwillings-Bug wie P133/P134. Fix: zentraler
+Helper `_init_tune_swr_sampling` von allen 3 Pfaden + Token-Reset (R1-F1).
+
+**Mike-Field-Test:** Bandwechsel mit automatischem TUNE → Band sollte jetzt
+mit dem echten stabilen SWR bewertet werden, nicht mit einem Ausreißer.
+Bei Hänger Debug-Log AN → Diagnose-Zeile „SWR-Fenster".
+
+## P152 — Weak-Decode-Log ≤ -21 dB (v0.98.35, 28.05.2026)
+
+**Was:** Always-on-Liste `~/.simpleft8/weak_decodes_YYYY-MM-DD.log` — jeder
+Decode mit SNR ≤ -21 dB landet automatisch drin (kein Setting). Mess-
+Instrument das empirisch belegt was P150 (kMin_score=4) liefert. Neues
+Modul `core/weak_decode_log.py` (batched 1 File-Append/Slot, UTC, keep_days=7).
+Hook in `mw_cycle._on_cycle_decoded`.
+
+**Mike-Field-Test:** 1-2 FT8-Sessions funken → Datei schicken → ich werte
+aus (Anzahl -22 bis -26 dB pro Band/Antenne). Mike sah live schon -25/-27 dB
+→ P150 wirkt sichtbar.
+
+**Format:** `HH:MM:SS | -25 dB | CALL ME -18 | 1293 Hz | 15m FT8`
+
+## P153 — SWR-Freeze Median über stabiles Fenster (v0.98.34, 28.05.2026)
+
+**Was:** Bandsperre-Freigabe nahm einen EINZIGEN SWR-Snapshot
+(`radio.last_swr`) → erwischte Ausreißer (Tuner matchte sichtbar 2,5,
+System fror >4,0 ein → Band fälschlich gesperrt). Fix: **Median über
+Fenster [Dauer-3s, Dauer-1s]** (neuer Helper `_compute_match_swr()`).
+<3 Samples → None → Post-Check FAIL → Band gesperrt (Hardware-Safety,
+KEIN Snapshot-Fallback). Auslöser P142 (Freeze in instabile Post-Match-
+Phase gezogen), P148 machte es sichtbar. Pattern-Klasse Hardware-
+Sicherheit 4. Iteration (P53/P76-A/P142/P153).
+
+**Mike-Field-Test:** beim nächsten TUNE-Hänger Debug-Log aktivieren →
+Diagnose-Zeile „SWR-Fenster …" zeigt Median vs. alter Snapshot.
 
 ## P150 — Decoder-Empfindlichkeit kMin_score 10 → 4 (v0.98.32, 27.05.2026)
 
@@ -147,27 +204,24 @@ für vollständige Pipeline-Doku.
 
 # 🆕 BACKLOG — anpackbar
 
-## 🎨 P123 — Status-Text Tempora + QSO-Start-Anzeige (UX, Mike 25.05.2026)
+## 🔧 P155 — Gain-Mess-TUNE SWR-Median statt Snapshot (DeepSeek-R1-F2 aus P154)
 
-> ⚠️ Kein Bug, sondern UX-Verbesserung. Mike-Wunsch: erst mit DeepSeek
-> brainstormen (2-3 Varianten), Mike-Decision, DANN Workflow + Code.
+> ⛔ **Nur vor Ort am Radio** — TUNE-Pfad, Hardware-Safety.
 
-**Hinweis 27.05.:** P137 hat den Tempora-Fix „Sende"→„Gesendet" bereits
-umgesetzt für das QSO-Log. Was bleibt: **Pre-TX-Anzeige beim QSO-START**.
+**Was:** Der Gain-Mess-TUNE (`_start_dx_tuning._after_tune`, mw_radio.py)
+nutzt noch `swr = self.radio.last_swr` (Einzel-Snapshot) und sperrt das
+Band bei `swr > swr_limit`. Gleiche Snapshot-Fragilität wie P153/P154 (ein
+Ausreißer-Tick kann fälschlich sperren oder freigeben). Bei P154 bewusst
+ausgegliedert (eigene 3s-Struktur, kein `_tune_stop` → kein gemeinsamer
+Pfad). DeepSeek-R1-F2: separates Ticket, Scope-Creep vermeiden.
 
-**Mike-Wunsch:** beim QSO-START vor dem ersten TX eine Status-Meldung
-anzeigen die signalisiert „wir senden jetzt", damit Benutzer sieht
-dass QSO gleich anfängt.
+**Aufwand:** Sampling im 3s-Tune-Fenster aufsetzen
+(`_init_tune_swr_sampling(3)` vor `tune_on`) + `_after_tune` auf
+`_compute_match_swr()` umstellen statt `radio.last_swr`. Fenster bei 3s
+Dauer ist [0, 2] (Test T7 in P153 deckt das ab). Voller Workflow Pflicht.
 
-**Brainstorm-Themen für DeepSeek:**
-1. Pre-TX-Meldung als eigener Log-Eintrag oder Statusbar-Toast?
-2. Format A: „⏳ Bereit: Sende SX20RCK DA1MHH -15 in 0.3s" (Pre) +
-   „✓ Gesendet: SX20RCK DA1MHH -15" (Post)
-3. Format C: Symbol-Auto (P79-Pattern) → ⏳ während TX, ✓ nach TX
-
-**Severity:** ⚪ UX-Polish, kein Bug. Autonom-tauglich + Remote.
-
----
+**Severity:** 🟠 — selteneres Szenario (KALIBRIEREN, User vor Ort), aber
+gleiche Hardware-Risiko-Klasse. Konsistenz-Gewinn.
 
 ## 🆕 P119 — RFPreset/Krücke entfernen, Live-Loop reicht (Mike 25.05.2026)
 
@@ -263,7 +317,10 @@ in heutiger Codebase.
 
 ---
 
-## 🆕 P64 — Simulations-Modus für Tests ohne Radio (Mike 16.05.2026)
+## 🆕 P64 — Simulations-Modus für Tests ohne Radio (Mike 16.05.2026) — 🔵 PRIO SEHR NIEDRIG (Mike 28.05.2026)
+
+> 🔵 **Priorität sehr niedrig** (Mike 28.05.2026) — nice-to-have, kein
+> Druck. Erst anpacken wenn nichts Wichtigeres ansteht.
 
 **Use-Case (Mike):** ohne Radio-Zugriff trotzdem UI-Tests / Bug-Fixes /
 neue Features visuell prüfen können. Künstliche Werte einspeisen.

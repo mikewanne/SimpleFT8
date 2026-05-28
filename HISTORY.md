@@ -3,6 +3,70 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-28 v0.98.37 — P123 Pre-TX-Anzeige beim QSO-Start (Auto-Hunt-Marker)
+
+**Mike-Wunsch (UX):** Beim QSO-Start kurz signalisieren dass ein QSO
+anfängt. Befund: Von den QSO-Start-Pfaden zeigte nur der **Auto-Hunt-Pfad
+NICHTS** im QSO-Log (nur debug_log) — manueller Klick (`mw_qso.py:266`) und
+CQ-Antwort zeigen schon „Rufe/Antworte X".
+
+**Mike-Wahl (Variante A von 3 vorgelegten, via AskUserQuestion):** kurzer
+Start-Marker, kein neues Format, keine persistente Anzeige (Mike mag keine
+persistenten Header — P1.15).
+
+**Fix:** `_run_auto_hunt` (mw_cycle.py) fügt VOR `start_qso` einen
+`qso_panel.add_info(f"Rufe {call}...{antenna_label}")`-Eintrag ein — 1:1 wie
+der manuelle Klick-Pfad. Feuert genau 1× pro QSO (nach start_qso ist state
+nicht mehr idle → kein Re-Pick).
+
+**DeepSeek-R1 (V4-pro):** PUSH FREIGEBEN, 0 Blocker. Scope bestätigt: nur
+Auto-Hunt — OMNI-Listener (deaktiviertes Privat-Feature) + CQ-Edge-Fall
+(Diversity-ohne-Pref) NICHT anfassen (KISS, kein Umbau bestehender Pfade).
+
+Tests 2142 → **2145 grün** (+3 P123).
+
+## 2026-05-28 v0.98.36 — P154 Auto-TUNE SWR-Median-Fix (Zwilling zu P153)
+
+**Mike-Field-Bug 28.05.:** Screenshot „⚠ Band 20M gesperrt — SWR 8.7" obwohl
+Radio-Widget live SWR 1.4 zeigt. Mike: „autohunt tune bekommt auch nicht den
+richtigen wert. nur manuell tune das rafft er."
+
+**Root Cause:** P153 (heute früher) baute die SWR-Sample-Sammlung für das
+Median-Fenster (`_compute_match_swr`) NUR in `_tune_start` ein (manueller
+TUNE-Knopf). Die beiden AUTO-TUNE-Pfade haben eigenes Setup und rufen
+`_tune_start` NICHT auf:
+- `_start_auto_tune_for_band_change` (mw_tx.py) — Bandwechsel-Auto-TUNE
+- `_start_dialog_tune_sequence` (mw_radio.py) — DXTuneDialog-TUNE
+
+→ `_tune_start_time` blieb STALE (vom letzten manuellen TUNE, evtl. anderes
+Band) → `_on_meter_update` sammelte mit riesigem `_elapsed` → die neuen
+Samples fielen aus dem Median-Fenster [Dauer-3s, Dauer-1s] → `_compute_match_swr`
+lieferte None oder den Median ALTER Samples → falsche Band-Bewertung.
+Pattern-Klasse wie P133/P134 (ein Pfad gefixt, dupliziertes Setup im
+Zwilling übersehen).
+
+**Fix:**
+- Zentraler Helper `_init_tune_swr_sampling(duration_s)` (mw_tx.py) hält die
+  3 Init-Zeilen — KISS gegen erneute Drift.
+- `_tune_start` + beide Auto-TUNE-Pfade rufen ihn, jeweils VOR `_tune_active=True`
+  (sonst Mini-Race im `_on_meter_update`-Guard).
+- **R1-F1:** beide Auto-Pfade resetten zusätzlich `_tune_post_check_token = None`
+  (P101-Symmetrie — ein latenter Post-Check vom letzten manuellen TUNE dürfte
+  sonst mitten im Auto-TUNE feuern → Watchdog vorzeitig scharf + stale Eval).
+
+**Abgegrenzt (R1-F2, separates Ticket):** Gain-Mess-TUNE
+(`_start_dx_tuning._after_tune`, mw_radio.py) nutzt weiter `radio.last_swr`-
+Snapshot (eigene 3s-Struktur, kein `_tune_stop`) — gleiche Bug-Klasse, aber
+Scope-Creep vermieden.
+
+**DeepSeek-V4-pro:** Design-R1 + Final-R1 beide PUSH FREIGEBEN, 0 Blocker.
+**Pattern-Klasse Hardware-Sicherheit 5. Iteration** (P53/P76-A/P142/P153/P154).
+Tests 2132 → **2142 grün** (+10 P154, 1 P153-T11 angepasst auf Helper).
+
+Außerdem (Trivial, gleiche Session): **P144-Meldung gekürzt** — „⏭ X belegt
+(sendet an Y) — überspringe ohne Sperre" → „⏭ X ist im QSO" (Mike-Wunsch
+„kurze nachricht reicht", busy_with nur noch im Debug-Log).
+
 ## 2026-05-28 v0.98.35 — P152 Weak-Decode-Log (schwache Decodes ≤ -21 dB sammeln)
 
 **Mike-Wunsch 28.05.:** Nach P150 (kMin_score 10→4) sieht Mike live mehr

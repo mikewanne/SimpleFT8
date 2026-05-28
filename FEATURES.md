@@ -1082,17 +1082,17 @@ Mike mit „komische Anzeige" zurück und es wird P14X.
 
 ---
 
-## 12. Pattern-Klasse Hardware-Sicherheit (P53/P76-A/P142/P153)
+## 12. Pattern-Klasse Hardware-Sicherheit (P53/P76-A/P142/P153/P154)
 
 **Pattern-Frage:** Wie schützt SimpleFT8 die FlexRadio-Hardware (PA,
 Antennen-Pfad) vor TX an defekter Last?
 
-**Antwort:** Vier aufeinander aufbauende Schichten — jede neue
+**Antwort:** Fünf aufeinander aufbauende Schichten — jede neue
 Iteration verstärkt die vorigen ohne sie zu brechen. SWR-Werte werden
 an zeitlich gestaffelten Punkten geprüft, jeder Punkt setzt
 einen anderen Marker bzw. greift einen anderen Race ab.
 
-### Die 4 Schichten (chronologisch)
+### Die 5 Schichten (chronologisch)
 
 | Schicht | Wo | Wann eingebaut | Was sie tut |
 |---|---|---|---|
@@ -1100,6 +1100,23 @@ einen anderen Marker bzw. greift einen anderen Race ab.
 | **P76-A SWR-Freeze vor tune_off** | `mw_tx._tune_stop` | v0.97.49 (19.05.2026) | Friert `_tune_last_valid_swr` VOR `tune_off()` ein. **Schutz vor Clamp-1.0 nach Träger-Aus** (Stolperfalle 1, ohne-Träger-Branch). |
 | **P142 SWR-Freeze vor Phase B** | `mw_tx._tune_stop` | v0.98.29 (27.05.2026) | Friert `_tune_last_valid_swr` schon VOR Phase B. **Schutz vor Clamp-1.0 während Power-Down** (Stolperfalle 1, Phase-B-Branch). |
 | **P153 Median statt Snapshot** | `mw_tx._compute_match_swr` | v0.98.34 (28.05.2026) | Der Freeze nimmt nicht mehr EINEN Snapshot, sondern den **Median über [Dauer-3s, Dauer-1s]**. **Schutz vor Snapshot-Ausreißer** (Stolperfalle 4) — P142 zog den Freeze-Zeitpunkt in die instabile Post-Match-Phase, ein Einzel-Tick erwischte dort leicht einen Spike (Mike-Bug: 2,5 stabil, 4,0 eingefroren). <3 Samples → None → Band gesperrt. |
+| **P154 Median-Init in ALLEN TUNE-Pfaden** | `mw_tx._init_tune_swr_sampling` (von `_tune_start` + beiden Auto-TUNE-Pfaden gerufen) | v0.98.36 (28.05.2026) | P153 baute die Sample-Sammlung NUR in `_tune_start` (manueller TUNE) ein. Die zwei Auto-TUNE-Pfade (`_start_auto_tune_for_band_change`, `_start_dialog_tune_sequence`) haben eigenes Setup ohne `_tune_start` → `_tune_start_time` STALE → Median-Fenster griff ins Leere (Mike-Bug: „8.7 gesperrt", real 1.4, nur manueller TUNE OK). **Schutz: zentraler Helper, von ALLEN TUNE-Pfaden gerufen** — Zwillings-Bug-Klasse wie P133/P134. |
+
+### ⚠ Stolperfalle (P154): Auto-TUNE-Pfade dürfen NICHT `_tune_start` umgehen ohne den Median-Helper
+
+Es gibt **drei** Pfade die TUNE-Hardware starten und später `_tune_stop`
+→ `_compute_match_swr` (Median-Fenster) nutzen:
+1. `_tune_start` (mw_tx) — manueller TUNE-Knopf
+2. `_start_auto_tune_for_band_change` (mw_tx) — Bandwechsel-Auto-TUNE
+3. `_start_dialog_tune_sequence` (mw_radio) — DXTuneDialog-TUNE
+
+**JEDER** dieser Pfade MUSS `self._init_tune_swr_sampling(duration_s)` rufen
+(VOR `_tune_active = True`, sonst Mini-Race im `_on_meter_update`-Guard).
+Sonst sammelt `_on_meter_update` mit veralteter `_tune_start_time` →
+`_compute_match_swr` liefert Müll. **Wenn ein 4. TUNE-Start-Pfad gebaut
+wird: Helper-Aufruf nicht vergessen.** (Der Gain-Mess-TUNE
+`_start_dx_tuning._after_tune` ist KEIN solcher Pfad — er nutzt noch
+`radio.last_swr`-Snapshot direkt, siehe TODO P155.)
 
 ### Warum kumulativ statt ersetzend?
 
@@ -1179,14 +1196,21 @@ Stolperfalle 3 oben).
 - v0.97.29 P53 SWR-Live-Watchdog
 - v0.97.49 P76-A SWR-Freeze vor tune_off
 - v0.98.29 P142 SWR-Freeze vor Phase B
+- v0.98.34 P153 Median statt Snapshot
+- v0.98.36 P154 Median-Init in ALLEN TUNE-Pfaden (Zwilling)
 
-### Trigger für 4. Iteration
+### Trigger für 6. Iteration
 
 Wenn jemals eine neue Power-Modulation in der TUNE-Pipeline auftaucht
 (z.B. AGC-Tests, Schutz-Trip-Tests, Tuner-Re-Match-Loops): erste
 Frage — wo bleibt `_tune_last_valid_swr` im neuen Pfad? Wenn der
 Freeze gegenüber dem neuen Power-Event timing-falsch sitzt → P14X
 ist vorprogrammiert.
+
+**P154-Lehre:** Wenn ein NEUER TUNE-Start-Pfad gebaut wird, MUSS er
+`_init_tune_swr_sampling(duration_s)` rufen (sonst Median-Fenster mit
+stale Startzeit). Drei Pfade nutzen den Helper heute — ein vierter ist
+sofort verdächtig wenn er ihn vergisst.
 
 ---
 
