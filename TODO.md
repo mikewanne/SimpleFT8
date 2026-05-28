@@ -1,4 +1,4 @@
-# SimpleFT8 TODO — Stand 28.05.2026 (v0.98.38)
+# SimpleFT8 TODO — Stand 28.05.2026 (v0.98.39)
 
 > **Strategie (Mike 28.05.):** ALLE Baustellen inkl. Multiband fertigstellen,
 > DANN für Icom forken (nicht parallel). Icom-Abstraktion ist durch P121
@@ -12,7 +12,77 @@
 
 ---
 
+# 🔴 OFFENER BUG — RX-Liste zeigt veraltete Stationen (Mike-Field 28.05.2026)
+
+**Symptom:** Im Empfangsfenster stehen Stationen die **weit älter als 2 Min**
+sind — Mike sah Einträge bis **~17 Min alt** (12:33 bei Jetzt-Zeit 12:50),
+auf 20m UND nach Bandwechsel auf 30m (~6 Min alte CQ-Einträge). Zeitstempel
+aktualisieren sich nicht.
+
+**Impact (Mike, ⚠ funktional nicht kosmetisch):** „Wenn man nicht auf die
+Uhrzeit achtet ruft man eine Station die nicht mehr da ist." Betrifft auch
+**Auto-Hunt** (picked evtl. tote CQ-Stationen) → verschwendete Rufe, verlorene
+QSO-Chancen. → **Severity 🔴.**
+
+**Erwartete Regel (Mike):** Stationen älter als ~2 Min verwerfen, AUSSER sie
+senden noch aktiv CQ / sind im QSO (dann Zeitstempel aktualisieren → bleiben
+sichtbar + zeigen frische Zeit).
+
+**Code-Funde (Stand vor Analyse):**
+- Aging-Konstanten in `core/station_accumulator.py`:
+  `AGING_SLOTS_NORMAL=7` (~1.75 Min), `AGING_SLOTS_ACTIVE=14` (~3.5 Min),
+  `AGING_SLOTS_CQ_CALLER=20` (~5 Min). FT8-Slot=15s. → CQ-Rufer werden
+  bewusst 5 Min gehalten (nicht 2). ABER 17-Min-Leichen sprengen auch das.
+- `ui/rx_panel.py`: `add_message` (Z.305), `setRowCount(0)` an 3 Stellen.
+
+**2 Hypothesen (im Code zu klären):**
+- **(A) Anzeige-Bug:** Station sendet noch aktiv CQ → Aging behält sie zu
+  Recht, ABER die UTC-Spalte zeigt die **Erst-Sichtung** statt der letzten
+  → Zeitstempel wird beim Re-Decode nicht aktualisiert. (Mike-Hypothese,
+  Hauptverdacht.)
+- **(B) Aging-Bug:** Station ist still, müsste raus, wird aber nicht
+  entfernt (Aging läuft nicht / falscher Zeitbezug).
+
+**Wo schauen:** `core/station_accumulator.py` (Aging-Logik + ob Timestamp
+bei Re-Decode aktualisiert wird), `ui/rx_panel.py` (was als UTC angezeigt
+wird — Erst- vs. Last-Seen), `ui/mw_cycle.py` (wie Accumulator gepflegt +
+RX-Liste gerendert wird, Slot-Pruning).
+
+**Workflow-Pflicht:** ja (nicht-trivial) + DeepSeek. FEATURES.md §… (RX-
+Liste/Aging) nach Fix updaten.
+
+---
+
+# 🆕 P158 — Verspätete QSO-Antwort nutzbar machen (Mike-Idee 28.05.2026)
+
+**Kontext:** Wenn eine Station uns nach unserem Timeout verspätet antwortet
+(z.B. „DA1MHH EC3A R-22" nach `✗ EC3A Timeout`), behandelt die State-Machine
+das als neues QSO und sendet einen Rapport statt RR73 — das QSO ist verloren
+(„Pech gehabt", Mike akzeptiert das als Ist-Zustand).
+
+**Mike-Wunsch (Feature, kein Bug):** die verspätete Antwort NUTZBAR machen:
+- **Variante A:** die Empfangs-Meldung manuell anklickbar → Auto-Hunt wird
+  abgebrochen, wir antworten der Station aus Höflichkeit.
+- **Variante B:** die Station direkt als ERSTE Station in Auto-Hunt
+  aufnehmen → im nächsten Zyklus an sie senden.
+- **Vorteil:** hohe QSO-Chance, weil wir WISSEN dass sie aktiv lauscht
+  (sie hat uns ja gerufen).
+
+Severity ⚪ Feature. Erst nach dem RX-Aging-Bug.
+
+---
+
 # 🟢 LAUFEND — Field-Test pending
+
+## P156 — Netto-Leistung dezent anzeigen (v0.98.39, 28.05.2026)
+
+**Was:** Kleine dunkelgraue Netto-Watt-Zahl in () zwischen W und SWR während
+TX (`70 W (56) SWR 2.6`). FWD minus Reflexion (Γ²). Tooltip „netto in die
+Leitung". Nur W>0. DeepSeek-validiert, Logik getestet.
+
+**Mike-Visuell-Check (am Radio):** beim nächsten TX/TUNE schauen ob Farbe
+(#666 dunkelgrau), Größe (10px), Position (zwischen W und SWR) passt. Falls
+nicht → 1-Zeilen-Tweak in `control_panel.py` (netto_label StyleSheet).
 
 ## P123 — Pre-TX-Anzeige beim QSO-Start (v0.98.37, 28.05.2026)
 

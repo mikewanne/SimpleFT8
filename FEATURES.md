@@ -1263,6 +1263,32 @@ genutzter Member, crasht der Sim-Start und legt das FlexRadio-Leck offen.
 
 ---
 
+## 14. Netto-Leistungs-Anzeige (P156 — die graue Zahl in Klammern)
+
+**„Was ist die kleine graue `(56)` zwischen W und SWR?"**
+
+Die große Watt-Zahl ist **FWDPWR** (vorlaufende Leistung Richtung Antenne).
+Bei SWR > 1 läuft ein Teil zurück → die graue `(56)` ist die **Netto-
+Leistung in die Leitung** = `FWD · (1 − Γ²)`, mit Γ = (SWR−1)/(SWR+1).
+
+- `ui/control_panel.py:compute_net_power(fwd, swr)` — pure Funktion (testbar).
+- `netto_label` (#666, 10px, statisch, kein Farbwechsel) zwischen
+  watt_label/swr_label. `_refresh_netto()` läuft auf `update_watt` +
+  `update_swr`, zeigt NUR wenn W > 0 (im RX/0 W leer). Reset bei Bandwechsel.
+
+**⚠ Ehrlichkeits-Subtilität (Tooltip!):** „netto in die Leitung" ist NICHT
+„abgestrahlte Leistung". Mit Tuner wird die reflektierte Leistung
+größtenteils re-reflektiert und strahlt doch ab; Leitungs-/Antennen-Verluste
+sind nicht messbar. Daher das neutrale Label, KEIN „effektiv abgestrahlt".
+Beispiel SWR 2.6: Γ=0.44 → Γ²≈0.20 → ~80% durch → 70 W → ~56 W.
+
+**Warum statisch grau (kein Farbwechsel)?** Mike-Spec: W + SWR sind schon
+farbig; eine dritte farbwechselnde Zahl wäre zu unruhig. Die Warn-Farbe
+gehört zum SWR. Das interessante Fenster ist SWR 1,5–3,0 (über gutem Match,
+unter der Bandsperre) — genau wo Netto-Verlust sichtbar wird.
+
+---
+
 ## Pflege dieser Datei
 
 **Neue Sektionen** anhängen wenn:

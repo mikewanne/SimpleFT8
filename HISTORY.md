@@ -3,6 +3,34 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-28 v0.98.39 — P156 Netto-Leistung dezent anzeigen (FWD minus Reflexion)
+
+**Mike-Wunsch (erfahrener Funker):** Die angezeigten Watt sind FWDPWR
+(vorlaufende Leistung Richtung Antenne), nicht was bei schlechtem SWR
+effektiv durchgeht. Zusätzlich als Info eine kleine Netto-Zahl.
+
+**Mike-Spec (nach Diskussion mit Claude + DeepSeek):** kleine, **dunkelgraue,
+statische** Zahl in Klammern ZWISCHEN W und SWR (`70 W (56)  SWR 2.6`).
+Kein Farbwechsel (sonst 3 farbwechselnde Werte = zu unruhig). **Nur sichtbar
+wenn Leistung anliegt (W > 0).** Tooltip erklärt ehrlich.
+
+**Physik (DeepSeek-validiert):** Γ=(SWR−1)/(SWR+1), netto = FWD·(1−Γ²).
+SWR 2.6 → ~80% durch → 70 W → ~56 W. **Ehrliches Label „netto in die
+Leitung", NICHT „abgestrahlt"** — der Tuner re-reflektiert das meiste und
+strahlt es doch ab; Leitungs-/Antennen-Verluste sind nicht messbar
+(steht im Tooltip).
+
+**Umsetzung:** pure Funktion `compute_net_power(fwd, swr)` (modul-level
+`ui/control_panel.py`), graues Sub-Label `netto_label` (#666, 10px,
+statisch) zwischen watt_label/swr_label, `_refresh_netto()` auf
+update_watt/update_swr (nur W>0), reset bei Bandwechsel.
+
+**DeepSeek:** Konzept-R1 + Implementierungs-R1 beide FREIGEGEBEN (Physik
+korrekt; Farbe #666 + reset-State R1-Hinweise eingebaut). Logik getestet
+(8 Tests); optische Darstellung am Radio zu prüfen.
+
+Tests 2154 → **2162 grün** (+8 P156, 1 P148-T9b präzisiert).
+
 ## 2026-05-28 v0.98.38 — P64 FakeRadio + SimInjector (Sim-Modus ohne Hardware)
 
 **Mike-Wunsch:** SimpleFT8 ohne echtes FlexRadio starten + Fake-Decodes/SWR

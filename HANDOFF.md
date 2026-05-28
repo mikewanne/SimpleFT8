@@ -1,5 +1,28 @@
 # HANDOFF — SimpleFT8
 
+## Stand 2026-05-28 — v0.98.39 P156 Netto-Leistung dezent anzeigen
+
+**Aktueller Code-Stand:** v0.98.39, Tests **2162 grün** (+8 P156).
+
+**Was:** Radio-Panel zeigt jetzt während TX eine kleine dunkelgraue Netto-
+Watt-Zahl in Klammern zwischen W und SWR — `70 W (56)  SWR 2.6`. Das ist
+FWD minus Reflexion (Γ²), also was netto in die Leitung geht. Nur sichtbar
+bei W > 0, Tooltip erklärt „netto, nicht abgestrahlt". Mike-Spec nach
+Diskussion mit DeepSeek; Physik validiert.
+
+**⚠ Visuell noch zu prüfen (Mike am Radio):** Logik ist getestet (Netto=
+„(56)" bei 70W/SWR2.6, leer bei 0W), aber Farbe (#666) / Größe (10px) /
+Position konnte ich headless nicht rendern. Beim nächsten TX/TUNE prüfen —
+falls zu hell/dunkel/eng: 1-Zeilen-Tweak in `control_panel.py` (netto_label
+StyleSheet / addSpacing).
+
+**Strategie unverändert:** alle Baustellen inkl. Multiband fertig, dann
+Icom-Fork. Remote-Backlog leer. Offene ⛔ Am-Radio-Tasks: P119, P155, Multiband.
+
+**Noch nicht gepusht** (P156 + ggf. visueller Tweak).
+
+---
+
 ## Stand 2026-05-28 — v0.98.38 P64 FakeRadio / Sim-Modus
 
 **Aktueller Code-Stand:** v0.98.38, Tests **2154 grün** (+9 P64).
