@@ -1,4 +1,4 @@
-# SimpleFT8 TODO — Stand 28.05.2026 (v0.98.40)
+# SimpleFT8 TODO — Stand 28.05.2026 (v0.98.41)
 
 > **Strategie (Mike 28.05.):** ALLE Baustellen inkl. Multiband fertigstellen,
 > DANN für Icom forken (nicht parallel). Icom-Abstraktion ist durch P121
@@ -9,6 +9,22 @@
 > Vollständige Historie aller Änderungen: **HISTORY.md** (nur anhängen).
 > Funktions-Doku: **FEATURES.md** (Pattern-Familien, Architektur).
 > Aktueller Session-Stand: **HANDOFF.md**.
+
+---
+
+# ✅ P159 ERLEDIGT (v0.98.41, 28.05.2026) — SWR-Clamp-1.0 aus Median filtern
+
+Mike-Field-Bug: Bandsperre nach TUNE bewertete falsche SWR (mal „1.0"
+freigegeben, mal „28.5" gesperrt — echt 2.4). Root Cause field-belegt: der
+FlexRadio-Sensor liefert bei fehlendem Träger (FWDPWR≈0) exakt 1.0 (Clamp,
+keine Messung); diese 1.0-Werte verfälschten den Median in
+`_compute_match_swr` (14 echte 2.5-2.6 + 19 Clamp 1.0 → Median 1.0). Echte
+KW-SWR sind nie exakt 1.0 (Mike-Praxis + Web). Fix KISS: `swr > 1.0`-Filter
+im Median-Fenster (Median nach oben = sichere Richtung). DeepSeek-R1 GO.
+**Hardware-Sicherheit 6. Iteration** (P53/P76-A/P142/P153/P154/P159). Tests
++9 (2183). **Details → HISTORY.md v0.98.41, Funktionsweise → FEATURES.md §12.**
+Field-Test pending. **Offener Folge-Verdacht:** falls nach diesem Fix noch
+„zu hoch gesperrt" (Tuner nicht fertig in TUNE-Zeit) → TUNE-Dauer prüfen.
 
 ---
 

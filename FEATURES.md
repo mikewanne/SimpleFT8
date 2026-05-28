@@ -1082,12 +1082,12 @@ Mike mit „komische Anzeige" zurück und es wird P14X.
 
 ---
 
-## 12. Pattern-Klasse Hardware-Sicherheit (P53/P76-A/P142/P153/P154)
+## 12. Pattern-Klasse Hardware-Sicherheit (P53/P76-A/P142/P153/P154/P159)
 
 **Pattern-Frage:** Wie schützt SimpleFT8 die FlexRadio-Hardware (PA,
 Antennen-Pfad) vor TX an defekter Last?
 
-**Antwort:** Fünf aufeinander aufbauende Schichten — jede neue
+**Antwort:** Sechs aufeinander aufbauende Schichten — jede neue
 Iteration verstärkt die vorigen ohne sie zu brechen. SWR-Werte werden
 an zeitlich gestaffelten Punkten geprüft, jeder Punkt setzt
 einen anderen Marker bzw. greift einen anderen Race ab.
@@ -1101,6 +1101,7 @@ einen anderen Marker bzw. greift einen anderen Race ab.
 | **P142 SWR-Freeze vor Phase B** | `mw_tx._tune_stop` | v0.98.29 (27.05.2026) | Friert `_tune_last_valid_swr` schon VOR Phase B. **Schutz vor Clamp-1.0 während Power-Down** (Stolperfalle 1, Phase-B-Branch). |
 | **P153 Median statt Snapshot** | `mw_tx._compute_match_swr` | v0.98.34 (28.05.2026) | Der Freeze nimmt nicht mehr EINEN Snapshot, sondern den **Median über [Dauer-3s, Dauer-1s]**. **Schutz vor Snapshot-Ausreißer** (Stolperfalle 4) — P142 zog den Freeze-Zeitpunkt in die instabile Post-Match-Phase, ein Einzel-Tick erwischte dort leicht einen Spike (Mike-Bug: 2,5 stabil, 4,0 eingefroren). <3 Samples → None → Band gesperrt. |
 | **P154 Median-Init in ALLEN TUNE-Pfaden** | `mw_tx._init_tune_swr_sampling` (von `_tune_start` + beiden Auto-TUNE-Pfaden gerufen) | v0.98.36 (28.05.2026) | P153 baute die Sample-Sammlung NUR in `_tune_start` (manueller TUNE) ein. Die zwei Auto-TUNE-Pfade (`_start_auto_tune_for_band_change`, `_start_dialog_tune_sequence`) haben eigenes Setup ohne `_tune_start` → `_tune_start_time` STALE → Median-Fenster griff ins Leere (Mike-Bug: „8.7 gesperrt", real 1.4, nur manueller TUNE OK). **Schutz: zentraler Helper, von ALLEN TUNE-Pfaden gerufen** — Zwillings-Bug-Klasse wie P133/P134. |
+| **P159 Clamp-1.0-Werte aus Median filtern** | `mw_tx._compute_match_swr` | v0.98.41 (28.05.2026) | Der FlexRadio-Sensor clampt bei fehlendem Träger (FWDPWR≈0) HART auf **exakt 1.0** (`flexradio.py: if swr<1.0: swr=1.0`). Diese künstlichen 1.0-Werte landeten im Median-Fenster und zogen den Median runter → Band fälschlich freigegeben (Mike-Bug field-belegt 14:52: 14 echte 2.5-2.6 + 19 Clamp 1.0 → median=1.00). **Schutz: `swr > 1.0`-Filter im Fenster** — verschiebt Median nach oben (sichere Richtung); nur-Clamp-Fenster → <3 echte → None → gesperrt. Echte KW-SWR sind nie exakt 1.0 (nur Dummy-Load; bester realer Wert ~1.2). Erkennungsmerkmal: echte Werte streuen, Clamp ist immer glatt 1.0. |
 
 ### ⚠ Stolperfalle (P154): Auto-TUNE-Pfade dürfen NICHT `_tune_start` umgehen ohne den Median-Helper
 
@@ -1190,6 +1191,8 @@ Stolperfalle 3 oben).
 - `tests/test_p76_swr_freeze.py` — P76-A Schicht 2
 - `tests/test_p142_swr_freeze_before_phase_b.py` — P142 Schicht 3
   (inkl. T4 ORANGE-Catch Cancel-während-Phase-B)
+- `tests/test_p153_swr_median_window.py` — P153 Median-Fenster
+- `tests/test_p159_swr_clamp_filter.py` — P159 Clamp-1.0-Filter
 
 ### Verwandte HISTORY-Einträge
 
@@ -1198,14 +1201,30 @@ Stolperfalle 3 oben).
 - v0.98.29 P142 SWR-Freeze vor Phase B
 - v0.98.34 P153 Median statt Snapshot
 - v0.98.36 P154 Median-Init in ALLEN TUNE-Pfaden (Zwilling)
+- v0.98.41 P159 Clamp-1.0-Werte aus Median filtern
 
-### Trigger für 6. Iteration
+### ⚠ Der Clamp-1.0-Wert (P159 — wichtige Sensor-Eigenheit)
+
+Der FlexRadio meldet **SWR = exakt 1.0**, wenn keine/zu wenig
+Vorwärtsleistung anliegt (kein Träger). Das ist KEINE Messung, sondern
+ein hartcodierter Ersatzwert (`flexradio.py: if swr < 1.0: swr = 1.0`).
+**Erkennungsmerkmal:** echte SWR-Messungen streuen (1.3 / 2.5 / 2.6),
+der Clamp ist immer glatt 1.0. Auf einer echten KW-Antenne ist 1.0
+praktisch unmöglich (nur Dummy-Load gibt 1.0; resonanter Dipol ~73 Ω →
+~1.5:1). **Wer SWR-Werte aggregiert (Median/Mittelwert/Min) MUSS die
+exakt-1.0-Werte ausschließen** — sonst verfälschen die „kein-Träger"-
+Stempel das Ergebnis nach unten. Gilt auch für den noch offenen
+Gain-Mess-Pfad (`_start_dx_tuning._after_tune`, TODO P155) falls der je
+auf Aggregation umgestellt wird.
+
+### Trigger für 7. Iteration
 
 Wenn jemals eine neue Power-Modulation in der TUNE-Pipeline auftaucht
 (z.B. AGC-Tests, Schutz-Trip-Tests, Tuner-Re-Match-Loops): erste
 Frage — wo bleibt `_tune_last_valid_swr` im neuen Pfad? Wenn der
 Freeze gegenüber dem neuen Power-Event timing-falsch sitzt → P14X
-ist vorprogrammiert.
+ist vorprogrammiert. Und: kommen dort Clamp-1.0-Werte in eine
+Aggregation? (P159-Filter mitdenken.)
 
 **P154-Lehre:** Wenn ein NEUER TUNE-Start-Pfad gebaut wird, MUSS er
 `_init_tune_swr_sampling(duration_s)` rufen (sonst Median-Fenster mit

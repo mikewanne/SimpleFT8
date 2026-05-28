@@ -3,6 +3,42 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-28 v0.98.41 — P159 SWR-Clamp-1.0-Werte aus Median filtern (Hardware-Sicherheit, 6. Iteration)
+
+**Mike-Field-Bug:** Band 15M mal mit „SWR 1.0" freigegeben, mal mit „SWR 28.5"
+gesperrt — echter Match war 2.4. Mike-Diagnose aus Funker-Praxis: ein SWR von
+exakt 1.0 ist auf einer echten KW-Antenne praktisch unmöglich (nur Dummy-Load
+gibt 1.0; resonanter Dipol ist ~73 Ω → ~1.5:1), sein bester realer Wert je: 1.2.
+
+**Root Cause (field-belegt via Debug-Log):** Der FlexRadio-SWR-Sensor clampt bei
+fehlender Vorwärtsleistung (FWDPWR≈0, kein Träger) HART auf exakt 1.0
+(`radio/flexradio.py`: `if swr < 1.0: swr = 1.0`). Diese künstlichen 1.0-Werte
+landeten in `_tune_swr_samples` und verfälschten den Median in
+`_compute_match_swr`. Debug-Log 14:52:29, Fenster [7-9s], n=33:
+```
+samples = 14× [2.5-2.6 ECHT] + 19× [1.0 CLAMP]  → median=1.00
+→ Band fälschlich freigegeben (echter Match 2.5-2.6)
+```
+Echte SWR-Werte streuen (2.5/2.6); der Clamp ist immer EXAKT 1.0 — das ist das
+eindeutige Erkennungsmerkmal (Mike's Beobachtung: „echte Werte sind nie genau 1").
+
+**Fix (KISS):** `_compute_match_swr` filtert `swr > 1.0` aus dem Median-Fenster.
+Verschiebt den Median nach OBEN = immer in die SICHERE Richtung (nie fälschlich
+freigeben). Bleiben < 3 echte Werte (nur Clamps = kein echter Träger) → None →
+Band bleibt gesperrt. Diagnose-Log um `clamps_gefiltert`-Zähler erweitert
+(Rohdaten bleiben vollständig im Log — Filter nur bei der Median-Berechnung).
+
+**Verifikation:** Mike-Theorie per Web bestätigt (echte KW-Antenne erreicht
+praktisch nie 1.0; nur Dummy-Load/verlustbehaftete Leitung täuscht 1.0 vor).
+DeepSeek-R1 GO 0 Blocker: Filter hardware-sicher, Edge-Cases (alle-Clamp → None
+→ gesperrt) korrekt, Schwelle `> 1.0` (nicht `>= 1.1`, sonst fielen echte gute
+Matches wie 1.2 weg), keine Nebenwirkungen (P53 liest `radio._last_swr` direkt;
+P142/P76-A Freeze; P148 GUI alle unberührt).
+
+**Pattern-Klasse Hardware-Sicherheit 6. Iteration** (P53/P76-A/P142/P153/P154/P159).
+Tests `tests/test_p159_swr_clamp_filter.py` (9). Tests 2174→2183 (+9).
+FEATURES.md §12 als 6. Iteration ergänzt.
+
 ## 2026-05-28 v0.98.40 — P157 RX-Liste Aging-Bug (drei Ursachen, voller Workflow)
 
 **Mike-Field-Bug:** In der Empfangsliste stehen „uralte" Stationen (bis ~17 Min),

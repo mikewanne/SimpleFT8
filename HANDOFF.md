@@ -1,5 +1,39 @@
 # HANDOFF — SimpleFT8
 
+## Stand 2026-05-28 — v0.98.41 P159 SWR-Clamp-1.0 aus Median filtern
+
+**Aktueller Code-Stand:** v0.98.41, Tests **2183 grün** (+9 P159).
+
+**Was:** Die Bandsperre nach TUNE bewertete teils falsche SWR-Werte (mal „1.0"
+freigegeben, mal „28.5" gesperrt — echt war 2.4). **Ursache:** Das Funkgerät
+liefert bei fehlendem Träger (keine Sendeleistung) einen künstlichen Ersatzwert
+von **exakt 1,0** — keine echte Messung. Diese 1,0-Werte verfälschten den
+Median. Field-belegt: Fenster hatte 14 echte (2,5-2,6) + 19 künstliche (1,0) →
+Median kippte auf 1,0 → Band fälschlich freigegeben.
+
+**Fix:** Bei der SWR-Mittelung alle exakt-1,0-Werte rauswerfen (echte KW-SWR
+sind nie genau 1,0 — Mike-Funker-Praxis + Web bestätigt). Verschiebt das
+Ergebnis immer in die sichere Richtung. Nur-Clamp-Fenster → ungültig → Band
+bleibt gesperrt. DeepSeek-R1 GO. **Pattern-Klasse Hardware-Sicherheit 6.
+Iteration** (P53/P76-A/P142/P153/P154/P159). FEATURES.md §12 erweitert.
+
+**⚠ Field-Test pending (Mike):** Beim nächsten Bandwechsel/TUNE prüfen, ob die
+Bandsperre jetzt den echten Match-SWR nimmt (kein „1.0 freigegeben" mehr, kein
+„28.5 gesperrt" wenn der Tuner real auf 2,x matcht). Debug-Log zeigt jetzt
+`clamps_gefiltert=N`.
+
+**Noch zu klären (separat):** Der 28.5-Fall (Tuner evtl. nicht fertig
+eingeregelt in der TUNE-Zeit) ist ein möglicher ZWEITER Aspekt — falls nach
+diesem Fix noch „zu hoch gesperrt" auftritt, könnte die TUNE-Dauer zu kurz
+sein. Erst Field-Test des Clamp-Fixes abwarten.
+
+**Strategie unverändert:** alle Baustellen inkl. Multiband fertig, dann
+Icom-Fork. Offene ⛔ Am-Radio-Tasks: P119, P155, Multiband. P156-Optik visuell.
+
+**Noch nicht gepusht** (P156 + P157 + P159).
+
+---
+
 ## Stand 2026-05-28 — v0.98.40 P157 RX-Liste Aging-Bug (drei Ursachen)
 
 **Aktueller Code-Stand:** v0.98.40, Tests **2174 grün** (+12 P157).
