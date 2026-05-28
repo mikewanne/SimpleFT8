@@ -23,8 +23,12 @@ KW-SWR sind nie exakt 1.0 (Mike-Praxis + Web). Fix KISS: `swr > 1.0`-Filter
 im Median-Fenster (Median nach oben = sichere Richtung). DeepSeek-R1 GO.
 **Hardware-Sicherheit 6. Iteration** (P53/P76-A/P142/P153/P154/P159). Tests
 +9 (2183). **Details → HISTORY.md v0.98.41, Funktionsweise → FEATURES.md §12.**
-Field-Test pending. **Offener Folge-Verdacht:** falls nach diesem Fix noch
-„zu hoch gesperrt" (Tuner nicht fertig in TUNE-Zeit) → TUNE-Dauer prüfen.
+Field-Test pending. **28.5-Fall GEKLÄRT (kein Code-Bug):** kam aus dem
+Live-SWR-Watchdog während TX (mw_tx.py:882), NICHT aus dem TUNE-Median —
+Mike hatte `auto_tune_on_band_change` DEAKTIVIERT → Band nie getunt → Auto-Hunt
+ging roh auf TX → 28.5 → Watchdog sperrt. Lösung: Setting aktivieren (kein
+Code). Alle 3 TUNE-Pfade nehmen `tune_duration_s` aus den Settings (kein
+hartcodierter Wert) — Dropdown max. 15s; bei Bedarf später um 20s erweitern.
 
 ---
 

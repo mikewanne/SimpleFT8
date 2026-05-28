@@ -1389,6 +1389,65 @@ Stationen an. Drei Ursachen:
 
 ---
 
+## 16. TUNE-Dauer & die vier TUNE-Pfade (wer nimmt welche Dauer?)
+
+**Kurzantwort:** Es gibt **vier** Wege, einen TUNE-Vorgang zu starten. Drei
+nehmen die Dauer aus dem Setting `tune_duration_s`, einer (Rechtsklick) nutzt
+bewusst eine eigene Ad-hoc-Dauer. ALLE laufen über denselben Mess-/Stop-Pfad
+(`_init_tune_swr_sampling` → `_tune_stop` → `_compute_match_swr`, siehe §12).
+
+### Die vier TUNE-Start-Pfade
+
+| Pfad | Methode | Dauer-Quelle | Whitelist | Zweck |
+|---|---|---|---|---|
+| **Linksklick TUNE-Button** | `mw_tx._on_tune_clicked` | `tune_duration_s`-Setting | 5/10/15 (sonst→15) | Normaler manueller TUNE |
+| **Rechtsklick-Menü** | `mw_tx._on_tune_override` (P95/P101) | **Ad-hoc-Auswahl**, Setting UNBERÜHRT | **10/15/20** | Schnell-TUNE ohne Settings-Änderung (nasse Antenne, Dummyload-Test, „wie verhält sich der Wert gerade") |
+| **Auto-TUNE bei Bandwechsel** | `mw_tx._start_auto_tune_for_band_change` | `tune_duration_s`-Setting | 5/10/15 (sonst→15) | Automatisch nach Bandwechsel (nur wenn Setting an + kein Anker) |
+| **Dialog-TUNE / Kalibrierung** | `mw_radio._start_dialog_tune_sequence` | `tune_duration_s`-Setting | — | DXTuneDialog (TUNE + Gain-Mess in einem Fenster, P74-A) |
+
+**Mike-Spec (28.05.2026):** Der Rechtsklick-Override ist bewusst NICHT an das
+Setting gekoppelt — er soll genau die gewählte Zeit tunen, unabhängig von den
+eingestellten 15 s. Anwendungsfall: zwischendurch kurz tunen um zu sehen wie
+sich der SWR gerade verhält, ohne komplett neu einzumessen und ohne ins
+Settings-Menü zu gehen (z.B. empfindlicher 20-W-Dummyload schnell zerschossen).
+Die anderen drei Pfade nehmen konsistent das Setting. **Rechtsklick-Menü bietet
+aktuell 10/15/20 s — kein 5 s** (falls für Dummyload-Schutz gewünscht: Whitelist
+in `_on_tune_override` + Menü-Einträge in `control_panel` erweitern).
+
+### `auto_tune_on_band_change`-Setting (Default True)
+
+`config/settings.py:90`. Steuert, ob beim Bandwechsel automatisch getunt wird
+(`mw_radio._on_band_changed` Z. 678). **Bedingungen für Auto-TUNE bei Bandwechsel:**
+Setting an + `radio.ip` + Band nicht schon gesperrt + `tuner_present` + nicht
+initialer Band-Set + **kein RFPreset-Anker** (`_has_anchor`).
+
+- **RFPreset-Anker** = Mike's „Marker"-Idee: wurde ein Band schon erfolgreich
+  getunt (10W-Stützpunkt gespeichert), wird beim erneuten Eintreten NICHT nochmal
+  getunt. Einmal pro Band tunen, danach nur Watchdog-Überwachung.
+- **Wenn Setting AUS:** kein Auto-TUNE → Band bleibt roh-fehlangepasst → erster
+  TX (Auto-Hunt/CQ) läuft auf hohe Last → SWR-Watchdog sperrt (siehe unten).
+
+### ⚠ Zwei verschiedene „Band gesperrt — SWR"-Meldungen (Diagnose-Schlüssel)
+
+An der **Meldungs-Länge** erkennt man, WELCHER Pfad gesperrt hat:
+
+| Meldung | Pfad | Bedeutung |
+|---|---|---|
+| „⚠ Band X gesperrt — SWR Y **> Limit Z. Antenne prüfen ODER...**" (lang) | `_tune_post_swr_check` (mw_tx.py:560) | Ein TUNE lief, aber Match-SWR (Median) > Limit |
+| „⚠ Band X gesperrt — SWR Y" (**kurz**) | `_on_swr_alarm` Live-Watchdog (mw_tx.py:882) | TX lief auf fehlangepasste Antenne (oft: Band nie getunt) → Watchdog (2 Alarms < 500ms) |
+
+**Mike-Field-Bug 28.05. (28.5 auf 15M):** Die KURZE Meldung → Watchdog während
+TX → Ursache war `auto_tune_on_band_change` DEAKTIVIERT → 15M nie getunt →
+Auto-Hunt ging roh auf TX. KEIN Code-Bug, Lösung: Setting aktivieren. (Abzugrenzen
+vom P159-Clamp-Bug, der den TUNE-MEDIAN betraf — andere Baustelle.)
+
+### Verwandte
+
+- §12 Hardware-Sicherheit (SWR-Mess-Schichten P53/.../P159, `_compute_match_swr`)
+- §9 Bandsperre + TUNE-Pipeline (Phase A/B, `_swr_blocked_bands`)
+
+---
+
 ## Pflege dieser Datei
 
 **Neue Sektionen** anhängen wenn:

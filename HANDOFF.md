@@ -22,10 +22,18 @@ Bandsperre jetzt den echten Match-SWR nimmt (kein „1.0 freigegeben" mehr, kein
 „28.5 gesperrt" wenn der Tuner real auf 2,x matcht). Debug-Log zeigt jetzt
 `clamps_gefiltert=N`.
 
-**Noch zu klären (separat):** Der 28.5-Fall (Tuner evtl. nicht fertig
-eingeregelt in der TUNE-Zeit) ist ein möglicher ZWEITER Aspekt — falls nach
-diesem Fix noch „zu hoch gesperrt" auftritt, könnte die TUNE-Dauer zu kurz
-sein. Erst Field-Test des Clamp-Fixes abwarten.
+**28.5-Fall GEKLÄRT (kein Code-Bug):** Die „Band 15M gesperrt — SWR 28.5"-
+Meldung kam aus dem Live-SWR-Watchdog während TX (mw_tx.py:882, `_on_swr_alarm`),
+NICHT aus dem TUNE-Median. Ursache: Mike hatte `auto_tune_on_band_change`
+(Setting, Default True) DEAKTIVIERT → 15M wurde beim Bandwechsel nie getunt →
+Auto-Hunt/CQ ging auf roh-fehlangepasste Antenne → erster Träger 28.5 →
+Watchdog sperrt. **Lösung: Setting aktivieren** (mw_radio.py:678 ruft dann
+`_start_auto_tune_for_band_change`; RFPreset-Anker `_has_anchor` verhindert
+erneutes Tunen auf schon-getuntem Band — Mike's „Marker"-Idee ist genau das).
+Empfehlung an Mike: Setting AN + `tune_duration_s`=15 (nicht 5, sonst Tuner bei
+hohem Start-SWR evtl. nicht fertig). Manueller TUNE hat zusätzlich Menü-Dauer
+bis 20s — daher „nur manuell raffte er". P159-Clamp-Fix bleibt komplementär
+(korrekte Bewertung des Auto-TUNE-Ergebnisses).
 
 **Strategie unverändert:** alle Baustellen inkl. Multiband fertig, dann
 Icom-Fork. Offene ⛔ Am-Radio-Tasks: P119, P155, Multiband. P156-Optik visuell.

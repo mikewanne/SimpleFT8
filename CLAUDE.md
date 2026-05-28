@@ -550,6 +550,7 @@ Feature-Plan: **ZUERST FEATURES.md grep'en**, dann Code lesen.
 | Sim-Modus, FakeRadio, SimInjector, `SIMPLEFT8_FAKE_RADIO`, App ohne Hardware testen | §13 | P64 FakeRadio + SimInjector + Safety-Guards |
 | Netto-Leistung, graue Zahl in (), FWD·(1−Γ²), „abgestrahlt vs netto" | §14 | P156 Netto-Watt-Anzeige zwischen W und SWR |
 | **RX-Liste, Empfangsfenster, Aging, „alte Stationen kleben", `_slot_start_ts`/`_last_heard`, `remove_stale`, `_rebuild_rx_table`, leere Slots** | **§15** | **P157 Stations-Akkumulator + Aging — dict-Projektion, 2 Aging-Trigger, UTC=zuletzt-gehört** |
+| **TUNE-Dauer, `tune_duration_s`, Rechtsklick-Override, Auto-TUNE bei Bandwechsel, `auto_tune_on_band_change`, „Band gesperrt — SWR" welcher Pfad, RFPreset-Anker** | **§16** | **4 TUNE-Pfade + Dauer-Quellen, Rechtsklick=Ad-hoc (gewollt), 2 verschiedene gesperrt-Meldungen (TUNE-Median vs Live-Watchdog)** |
 
 ### Abgrenzung der 5 Doku-Dateien
 
