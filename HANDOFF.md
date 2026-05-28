@@ -1,5 +1,34 @@
 # HANDOFF — SimpleFT8
 
+## Stand 2026-05-28 — v0.98.34 P153 SWR-Freeze Median-Fenster (voller Workflow)
+
+**Aktueller Code-Stand:** v0.98.34, Tests **2123 grün** (+13 P153, 3 P142 angepasst).
+
+**Mike-Field-Bug 28.05.:** TUNE matchte sichtbar 2,5, System fror >4,0 ein →
+Band fälschlich gesperrt. Mike-Diagnose (richtig): einzelner Snapshot
+erwischte Ausreißer. Auslöser P142 (Freeze-Zeitpunkt nach vorne), P148
+machte sichtbar.
+
+**Fix:** Median über Fenster [Dauer-3s, Dauer-1s] (Mike-Spec Sek. 7-9)
+statt Einzel-Snapshot. Neuer Helper `_compute_match_swr()` in mw_tx.py.
+R1-Nachschärfung: <3 Samples ODER kein Fallback → None → Band gesperrt
+(Sicherheit). DeepSeek-Fehler abgefangen (`None<=float` ist TypeError).
+
+**Pattern-Klasse Hardware-Sicherheit 4. Iteration** (P53/P76-A/P142/P153).
+
+**Mike-Field-Test pending:** App-Neustart v0.98.34 → Debug-Log AN →
+Bandsperre triggern → TUNE → Log zeigt „SWR-Fenster [7-9s] n=X median=Y
+snapshot=Z" → bestätigt ob Median den Ausreißer filtert.
+
+**Offene Backlog-Items (pausiert während P153):**
+- **P152 Weak-Decode-Logging** — V1+R1 fertig (prompts/p152_*), DeepSeek
+  empfahl Batching + snr-None-Check + UTC. Code noch NICHT geschrieben.
+  Nächster Schritt wenn Mike will: V3 + Code (schwache Decodes ≤ -21 dB
+  in `~/.simpleft8/weak_decodes_*.log`).
+- **P150 Field-Test** — kMin_score=4, sieht Mike mehr -22/-24 dB Decodes?
+
+---
+
 ## Stand 2026-05-27 spätabends — v0.98.33 P150 + P151 (Chef-KI-autonomer-Workflow)
 
 **Aktueller Code-Stand:** v0.98.33, Tests **2110 grün** (-61 ggü v0.98.31 wegen 3 AP-Lite-Test-Files-Entfernung).

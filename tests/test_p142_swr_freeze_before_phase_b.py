@@ -78,18 +78,23 @@ def test_t1_freeze_set_before_phase_b():
 
 
 def test_t1b_swr_after_match_read_once():
-    """T1b: swr_after_match wird einmal gelesen und sowohl als Freeze
-    als auch für Schwellenwert-Check genutzt (KISS, eine Quelle)."""
+    """T1b: swr_after_match wird einmal ermittelt und sowohl als Freeze
+    als auch für Schwellenwert-Check genutzt (KISS, eine Quelle).
+
+    P153 (28.05.): Quelle ist jetzt _compute_match_swr() (Median-Fenster)
+    statt direkter radio.last_swr-Snapshot. Die P142-Kernaussage (eine
+    Quelle, Freeze VOR Phase B) bleibt — nur die Lesung ist robuster.
+    """
     body = _tune_stop_body()
-    # swr_after_match-Lesung
-    assert "swr_after_match = self.radio.last_swr" in body, (
-        "P142: Phase-A-Lesung swr_after_match = radio.last_swr fehlt.")
-    # Im SWR-Limit-Check
+    # swr_after_match-Ermittlung (P153: über Median-Helper)
+    assert "swr_after_match = self._compute_match_swr()" in body, (
+        "P153: Phase-A-Wert kommt jetzt aus _compute_match_swr (Median).")
+    # Im SWR-Limit-Check (P153: mit is-None-Guard)
     assert "swr_after_match <= swr_limit" in body, (
         "Schwellenwert-Check muss swr_after_match verwenden.")
     # Als Freeze
     assert "self._tune_last_valid_swr = swr_after_match" in body, (
-        "P142: Freeze muss swr_after_match (nicht radio.last_swr) nutzen.")
+        "P142: Freeze muss swr_after_match nutzen (eine Quelle).")
 
 
 # ---------------------------------------------------------------------------
@@ -193,10 +198,10 @@ def test_t5_high_swr_freeze_preserved():
     """
     body = _tune_stop_body()
     # Freeze ist VOR Phase B → wird in keinem Pfad überschrieben.
-    # Phase-B-Skip-Branch (else nach swr_after_match <= swr_limit) darf
-    # _tune_last_valid_swr nicht setzen.
+    # Phase-B-Skip-Branch (else nach Limit-Check) darf _tune_last_valid_swr
+    # nicht setzen. P153: Limit-Check hat jetzt is-None-Guard.
     pos_freeze = body.find("self._tune_last_valid_swr = swr_after_match")
-    pos_limit_check = body.find("if swr_after_match <= swr_limit:")
+    pos_limit_check = body.find("swr_after_match is not None and swr_after_match <= swr_limit")
     assert 0 < pos_freeze < pos_limit_check, (
         "P142: Freeze MUSS VOR der Phase-B-Limit-Verzweigung kommen.")
 
@@ -258,18 +263,18 @@ def test_t8_mike_field_scenario_freeze_keeps_phase_a():
     der `radio.last_swr` für den Freeze stattfindet.
     """
     body = _tune_stop_body()
-    # Anzahl der `swr_after_match`-Zuweisungen muss genau 1 sein
+    # P153 (28.05.): swr_after_match kommt aus _compute_match_swr() (Median),
+    # genau EINE Ermittlung, sowohl Freeze als auch Limit-Check.
     assignments = [
         l for l in body.split("\n")
-        if l.strip().startswith("swr_after_match = self.radio.last_swr")
+        if l.strip().startswith("swr_after_match = self._compute_match_swr()")
     ]
     assert len(assignments) == 1, (
-        f"P142: swr_after_match darf nur EINMAL gelesen werden, "
+        f"P153: swr_after_match darf nur EINMAL ermittelt werden, "
         f"gefunden: {len(assignments)} ({assignments})")
     # Und _tune_last_valid_swr wird mit dieser Variable gesetzt
     assert "self._tune_last_valid_swr = swr_after_match" in body, (
-        "P142: Freeze muss swr_after_match-Variable verwenden (nicht "
-        "zweite radio.last_swr-Lesung — sonst Phase-B-Drift-Risiko).")
+        "P142: Freeze muss swr_after_match-Variable verwenden (eine Quelle).")
 
 
 # ---------------------------------------------------------------------------

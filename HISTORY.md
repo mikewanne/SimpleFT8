@@ -3,6 +3,75 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-28 v0.98.34 — P153 SWR-Freeze: Median über stabiles Fenster statt Snapshot
+
+**Mike-Field-Bug 28.05.2026:** Bandwechsel 15m → gesperrt. Manueller TUNE:
+Tuner matchte sichtbar auf SWR 2,5 (Anzeige zeigte es), ABER System fror
+>4,0 ein → Band blieb gesperrt („SWR 4.0 > Limit 3.0"). 2. TUNE: zufällig
+2,3 → frei.
+
+**Mike-Diagnose (bestätigt durch Code):** Der Freeze nahm einen EINZIGEN
+Momentan-Snapshot (`radio.last_swr`, `mw_tx.py:268`). Wenn der genau einen
+Mess-/Regel-Ausreißer (4,0) erwischt obwohl der Tuner stabil bei 2,5 ist →
+falscher Wert eingefroren. Mike-Worte: „er hat 2,5 gefunden aber über 4
+abgespeichert, als wenn er zu früh abgespeichert oder nicht den niedrigsten
+gefundenen wert".
+
+**Auslöser-Verkettung (Mike's scharfe Beobachtung „seit P148?"):**
+- Eigentlich **P142** (27.05.): zog den Freeze von „nach Phase B" (5s
+  Stabilisierung) auf „nach Phase A" (direkt nach Match) → SWR-Stream
+  noch am Schwanken → Snapshot fragiler.
+- **P148** (27.05.) machte es nur SICHTBAR (Anzeige hält letzten echten
+  Wert statt auf 1,0 zu springen — vorher sah Mike nie dass 2,5 erreicht
+  wurde). Derselbe Snapshot-Mechanismus erklärt auch frühere false-1,0.
+
+**Fix (Mike-Spec):** Statt EINEN Snapshot → **Median über Fenster
+[Dauer-3s, Dauer-1s]** (= Sek. 7-9 bei 10s Tune). Fenster schließt die
+Match-Suchphase (SWR fällt von hoch) UND die Übergangs-Sekunde vor
+tune_off aus. Median (Mike-Entscheidung nach Min/Median-Abwägung): ein
+einzelner Ausreißer kippt ihn nicht, bei echter Oszillation bleibt er
+ehrlich.
+
+**5 Code-Änderungen (alle `ui/mw_tx.py`):**
+1. `import statistics`
+2. `_tune_start`: `_tune_swr_samples` + `_tune_duration_s` + `_tune_start_time`
+3. `_on_meter_update` SWR-Branch: `(elapsed, swr)` während `_tune_active` sammeln
+4. neuer Helper `_compute_match_swr()`: Median über Fenster
+5. `_tune_stop`: Helper statt Snapshot + expliziter `is None`-Check + Diagnose-Log
+
+**R1-V4-pro 2 Hardware-Sicherheits-Nachschärfungen (zwingend):**
+- **F3:** < 3 Samples im Fenster → Median nicht aussagekräftig → `None`
+- **F6:** KEIN Fallback auf `radio.last_swr` (= Snapshot-Bug zurück) → `None`
+  → Post-Check (`mw_tx.py:372`) behandelt None als FAIL → **Band bleibt
+  gesperrt**. „Lieber nochmal TUNEN als ein falsch freigegebenes Band."
+
+**DeepSeek-Detail-Fehler abgefangen:** R1 behauptete `None <= 3.0 == False`
+— ist aber Python-`TypeError` (Absturz). Code nutzt expliziten
+`swr_after_match is not None and swr_after_match <= swr_limit`. (CLAUDE.md-
+Regel „DeepSeek immer kritisch prüfen" bestätigt — V4-pro halluziniert
+gelegentlich Detail-Fakten.)
+
+**Verhalten (Smoke-Test + 13 Tests verifiziert):**
+- Tuner stabil 2,5 + ein 4,0-Spike → Median 2,5 → **Band frei** (Mike-Bug behoben)
+- Echt schlecht 4,x durchweg → Median 4,1 → gesperrt
+- Fenster < 3 Samples → None → gesperrt
+- 15s Tune → Fenster 12-14; kurze 3s Tune → Fenster [0,2]
+
+**Diagnose-Log:** `debug_log("TUNE", "SWR-Fenster [7-9s] n=5 median=2.50
+snapshot=4.00 samples=[...]")` — bei aktivem Debug-Log sieht Mike Fenster-
+Inhalt, gewählten Median UND was der alte Snapshot genommen hätte.
+
+**Pattern-Klasse Hardware-Sicherheit 4. Iteration** (P53/P76-A/P142/P153).
+
+**Cancel-Fall (Mike-Bonus-Beobachtung „stabile 2,3 + abbrechen → nimmt sie
+nicht"):** by-design — Cancel während Phase B setzt `_tune_last_valid_swr =
+None` (P142-Schutz). Im Scope dokumentiert, nicht geändert.
+
+Final-R1 V4-pro PUSH FREIGEBEN ✓ 0 Mängel. 3 P142-Tests angepasst
+(Quelle radio.last_swr → _compute_match_swr). Tests 2110 → 2123 (+13 P153).
+
+---
+
 ## 2026-05-27 v0.98.33 — P151 AP-Lite vollständig ausgebaut
 
 **Trigger:** P150 hat den richtigen Pfad gewählt (`kMin_score=4`).

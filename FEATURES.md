@@ -721,11 +721,13 @@ PHASE A (Tuner-Match)
   ├─ radio.set_tx_antenna("ANT1")                ← Hardware-Safety
   ├─ radio.set_rfpower_direct(10)                ← 10 W Träger
   ├─ radio.tune_on()                             ← FlexRadio-Tuner-Match
+  ├─ SWR-Ticks sammeln (P153) → _tune_swr_samples[(elapsed, swr)]
   └─ tune_duration_s warten (default 15 s)
                 ↓
-SWR-FREEZE (P142 27.05.2026)                       ← NACH Phase A, VOR Phase B
-  └─ swr_after_match = radio.last_swr
-     _tune_last_valid_swr = swr_after_match       ← echter Match-Wert bei voller Power
+SWR-FREEZE (P142 27.05. + P153 28.05.2026)         ← NACH Phase A, VOR Phase B
+  └─ swr_after_match = _compute_match_swr()       ← MEDIAN über [Dauer-3s, Dauer-1s]
+     _tune_last_valid_swr = swr_after_match       ← robust gegen Snapshot-Ausreißer
+     (< 3 Samples ODER kein Wert → None → Band bleibt gesperrt)
                 ↓
 PHASE B (Closed-Loop Power-Konvergenz)            ← OPTIONAL
   ├─ Vor-Check: swr_after_match ≤ swr_limit ?
@@ -774,10 +776,36 @@ runterdrückt → SWR scheint auf 1.0 zu fallen obwohl die echte
 Match-Last unverändert ist.
 
 Deshalb wird der Match-SWR **direkt nach Phase A** (vor Phase B und
-vor `tune_off()`) als `swr_after_match` eingefroren — das ist der
+vor `tune_off()`) eingefroren — das ist der
 einzige Zeitpunkt mit verlässlich vollem 10-W-Träger an der Antenne.
 Vorher (vor P142, 27.05.2026) wurde der Freeze nach Phase B genommen
 → false-OK 1.0 bei defekter Antenne.
+
+### Bekannte Stolperfalle 4: Snapshot-Ausreißer (P153, 28.05.2026)
+
+P142 zog den Freeze auf „direkt nach Phase A" — aber genau dort
+**schwankt der SWR-Stream am stärksten** (ATU gerade fertig, Sensor
+rauscht, periodische Nachregelung). Ein **einzelner** Snapshot
+(`radio.last_swr`) erwischt dann leicht einen Ausreißer-Tick.
+
+**Mike-Field-Bug 28.05.:** Tuner stabil bei 2,5, aber der Snapshot
+fror einen 4,0-Spike ein → Band fälschlich gesperrt. 2. TUNE traf
+zufällig einen guten Moment (2,3). P148 machte es sichtbar (Anzeige
+hält letzten echten Wert statt auf 1,0 zu springen).
+
+**Fix (P153):** Statt Snapshot → **Median über Fenster [Dauer-3s,
+Dauer-1s]** (`_compute_match_swr()`). Das Fenster schließt die Match-
+Suchphase (SWR fällt von hoch) UND die Übergangs-Sekunde vor tune_off
+aus. Median filtert einen einzelnen Spike in beide Richtungen.
+
+**Hardware-Sicherheit (R1-V4-pro):** < 3 Samples im Fenster → `None`
+(nicht aussagekräftig). KEIN Fallback auf `radio.last_swr` (= Snapshot-
+Bug zurück). `None` → Post-Check FAIL → Band bleibt gesperrt. Lieber
+nochmal TUNEN als falsche Freigabe.
+
+`_tune_stop` nutzt `if swr_after_match is not None and swr_after_match
+<= swr_limit` — expliziter None-Check (NICHT `None <= limit`, das ist
+Python-`TypeError`).
 
 ### Bekannte Stolperfalle 2: Disconnect-Pfad
 
@@ -1041,23 +1069,24 @@ Mike mit „komische Anzeige" zurück und es wird P14X.
 
 ---
 
-## 12. Pattern-Klasse Hardware-Sicherheit (P53/P76-A/P142)
+## 12. Pattern-Klasse Hardware-Sicherheit (P53/P76-A/P142/P153)
 
 **Pattern-Frage:** Wie schützt SimpleFT8 die FlexRadio-Hardware (PA,
 Antennen-Pfad) vor TX an defekter Last?
 
-**Antwort:** Drei aufeinander aufbauende Schichten — jede neue
+**Antwort:** Vier aufeinander aufbauende Schichten — jede neue
 Iteration verstärkt die vorigen ohne sie zu brechen. SWR-Werte werden
-an **drei zeitlich gestaffelten** Punkten geprüft, jeder Punkt setzt
+an zeitlich gestaffelten Punkten geprüft, jeder Punkt setzt
 einen anderen Marker bzw. greift einen anderen Race ab.
 
-### Die 3 Schichten (chronologisch)
+### Die 4 Schichten (chronologisch)
 
 | Schicht | Wo | Wann eingebaut | Was sie tut |
 |---|---|---|---|
 | **P53 SWR-Live-Watchdog** | `mw_tx._on_meter_update` | v0.97.29 (14.05.2026) | Liest `radio._last_swr` aus VITA-49-Meter-Stream. Setzt `_swr_blocked_bands`-Marker live wenn SWR > limit während TX. **Schutz bei plötzlicher Antennen-Defekt mitten in QSO** (Steckverbinder lose, Wetter-Einfluss). |
 | **P76-A SWR-Freeze vor tune_off** | `mw_tx._tune_stop` | v0.97.49 (19.05.2026) | Friert `_tune_last_valid_swr` VOR `tune_off()` ein. **Schutz vor Clamp-1.0 nach Träger-Aus** (Stolperfalle 1, ohne-Träger-Branch). |
-| **P142 SWR-Freeze vor Phase B** | `mw_tx._tune_stop` | v0.98.29 (27.05.2026) | Friert `_tune_last_valid_swr` schon VOR Phase B mit `swr_after_match`. **Schutz vor Clamp-1.0 während Power-Down** (Stolperfalle 1, Phase-B-Branch). |
+| **P142 SWR-Freeze vor Phase B** | `mw_tx._tune_stop` | v0.98.29 (27.05.2026) | Friert `_tune_last_valid_swr` schon VOR Phase B. **Schutz vor Clamp-1.0 während Power-Down** (Stolperfalle 1, Phase-B-Branch). |
+| **P153 Median statt Snapshot** | `mw_tx._compute_match_swr` | v0.98.34 (28.05.2026) | Der Freeze nimmt nicht mehr EINEN Snapshot, sondern den **Median über [Dauer-3s, Dauer-1s]**. **Schutz vor Snapshot-Ausreißer** (Stolperfalle 4) — P142 zog den Freeze-Zeitpunkt in die instabile Post-Match-Phase, ein Einzel-Tick erwischte dort leicht einen Spike (Mike-Bug: 2,5 stabil, 4,0 eingefroren). <3 Samples → None → Band gesperrt. |
 
 ### Warum kumulativ statt ersetzend?
 

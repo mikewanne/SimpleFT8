@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import statistics
 import time
 from typing import TYPE_CHECKING
 
@@ -185,6 +186,14 @@ class TXMixin:
         if hasattr(self, '_fwdpwr_samples'):
             self._fwdpwr_samples.clear()
 
+        # P153 (v0.98.34, 28.05.2026): SWR-Werte mit Zeitstempel sammeln,
+        # um am Ende den Median über das stabile Fenster [Dauer-3s, Dauer-1s]
+        # zu nehmen statt eines einzelnen Snapshots (der Mike-Field-Bug:
+        # Tuner stabil bei 2,5, aber ein Ausreißer-Tick 4,0 wurde eingefroren).
+        self._tune_swr_samples: list[tuple[float, float]] = []  # (elapsed_s, swr)
+        self._tune_duration_s = duration_s
+        self._tune_start_time = time.time()
+
         # Tune-Frequenz aus TUNE_FREQS-Map (band+mode)
         tune_freq = get_tune_freq_mhz(self.settings.band, self.settings.mode)
         # _tune_active VOR set_frequency (verhindert Race mit Radio-Callback)
@@ -215,6 +224,32 @@ class TXMixin:
         QTimer.singleShot(
             duration_s * 1000,
             lambda: self._tune_stop(_token))
+
+    def _compute_match_swr(self) -> float | None:
+        """P153 (v0.98.34, 28.05.2026): SWR-Match-Wert robust ermitteln.
+
+        Statt eines einzelnen Snapshots (`radio.last_swr`, der Mike-Field-Bug
+        28.05.: Tuner stabil 2,5 aber Ausreißer-Tick 4,0 eingefroren) wird der
+        MEDIAN über das stabile Fenster [Dauer-3s, Dauer-1s] genommen.
+
+        - Fenster schließt die Match-Suchphase (SWR fällt von hoch) UND die
+          Übergangs-Sekunde vor tune_off aus (Mike-Spec: Sek. 7-9 bei 10s).
+        - Median (statt Min): ein einzelner Ausreißer kippt ihn nicht, bei
+          echter Oszillation bleibt er ehrlich.
+        - Hardware-Sicherheit (R1-V4-pro F3+F6): < 3 Samples im Fenster →
+          `None` (Freeze ungültig → Band bleibt gesperrt). KEIN Fallback
+          auf `radio.last_swr` — das wäre genau der Snapshot-Bug zurück.
+
+        Returns: Median-SWR oder None wenn Fenster nicht auswertbar.
+        """
+        dur = getattr(self, '_tune_duration_s', 0)
+        samples = getattr(self, '_tune_swr_samples', [])
+        win_start = max(0.0, dur - 3.0)
+        win_end = dur - 1.0
+        window = [swr for el, swr in samples if win_start <= el <= win_end]
+        if len(window) >= 3:
+            return statistics.median(window)
+        return None
 
     def _tune_stop(self, token):
         """TUNE beenden + 2s-Post-Check-Timer für SWR-Auswertung.
@@ -265,17 +300,34 @@ class TXMixin:
         # Match-Wert. Phase B beeinflusst nur noch RF-Stützpunkt-
         # Speicherung, NICHT den Freeze.
         if token is not None and self.radio.ip:
-            swr_after_match = self.radio.last_swr
-            # NEU: Freeze HIER setzen (vor Phase B), nicht in Z. 275.
+            # P153 (v0.98.34): Median über stabiles Fenster statt Snapshot.
+            # Kann None sein (Fenster < 3 Samples) → Freeze ungültig.
+            swr_after_match = self._compute_match_swr()
             self._tune_last_valid_swr = swr_after_match
             swr_limit = self.settings.get("swr_limit", 3.0)
-            if swr_after_match <= swr_limit:
+            # P153 Diagnose-Log: Fenster-Inhalt + Median vs alter Snapshot.
+            from core.debug_log import debug_log
+            _dur = getattr(self, '_tune_duration_s', 0)
+            _ws, _we = max(0.0, _dur - 3.0), _dur - 1.0
+            _win = [s for e, s in getattr(self, '_tune_swr_samples', [])
+                    if _ws <= e <= _we]
+            debug_log("TUNE",
+                f"SWR-Fenster [{_ws:.0f}-{_we:.0f}s] n={len(_win)} "
+                f"median={swr_after_match if swr_after_match is None else f'{swr_after_match:.2f}'} "
+                f"snapshot={self.radio.last_swr:.2f} "
+                f"samples={[f'{s:.1f}' for s in _win]}")
+            # P153 R1-F6: expliziter is-None-Check. NICHT `None <= limit`
+            # (Python-TypeError, kein False — DeepSeek-Detail-Fehler abgefangen).
+            if swr_after_match is not None and swr_after_match <= swr_limit:
                 # Phase B: bis FWDPWR ≈ 10W konvergieren (nur für
                 # RF-Stützpunkt, nicht mehr für SWR-Bewertung).
                 self._tune_converged_rf = self._tune_converge_to_target(target_w=10)
             else:
-                print(f"[P54-FIX] Phase B SKIP — SWR {swr_after_match:.1f} "
-                      f"> Limit {swr_limit:.1f}")
+                # None (Fenster zu dünn) ODER SWR > Limit → kein Phase B.
+                # Post-Check sieht None/hohen Wert → Band bleibt gesperrt.
+                _reason = ("Fenster<3 Samples" if swr_after_match is None
+                           else f"SWR {swr_after_match:.1f} > Limit {swr_limit:.1f}")
+                print(f"[P54-FIX] Phase B SKIP — {_reason}")
                 self._tune_converged_rf = None
         else:
             # User-Cancel oder Disconnect: kein gültiger TUNE-Wert.
@@ -929,5 +981,10 @@ class TXMixin:
             # `radio._last_swr` (flexradio.py), nicht die UI.
             if self.encoder.is_transmitting or self._tune_active:
                 self.control_panel.update_swr(value)
+            # P153 (v0.98.34): während TUNE jeden SWR-Tick mit Zeitstempel
+            # sammeln — Basis für Median-Fenster in _compute_match_swr.
+            if self._tune_active and hasattr(self, '_tune_start_time'):
+                _elapsed = time.time() - self._tune_start_time
+                self._tune_swr_samples.append((_elapsed, value))
         elif name == "ALC":
             self.control_panel.update_alc(value)
