@@ -343,13 +343,28 @@ jetzt einfacher umsetzbar.
 
 ---
 
-## 🆕 P74-Rest — UX-Konsolidierung + Autogain-Konzept (Mike 18.05.2026)
+## ✅/❌ P74 — UX-Konsolidierung + Autogain-Konzept — KOMPLETT ABGESCHLOSSEN (28.05.2026)
 
-P74-A (Modal-Konsolidierung) ist erledigt v0.97.94. Rest des P74-Bundles
-(UX-Konsolidierung + Autogain) noch offen — Spec aus DeepSeek-Diskussion
-18.05. in `prompts/p74_discussion.md`. Vor Workflow erneut Mike-Wunsch
-schärfen — viel davon könnte durch P80 (Unified Gain Store) bereits
-abgedeckt sein.
+Spec: `prompts/p74_discussion.md` (18.05.). Bilanz aller Teile:
+
+- **P74-A Fenster-Konsolidierung** → ✅ ERLEDIGT v0.97.94 (DXTuneDialog-State-Machine).
+- **P74-B(a) Auto-Re-Kalibrierungs-Warnung** → ✅ ERLEDIGT als P113 v0.97.98
+  (14-Tage-Stale-Gain-Toast beim Bandwechsel).
+- **P74-B(b) Live-Gain-Nachregeln** → ❌ VERWORFEN (hoch-Risiko, stört
+  Funkverkehr, gegen Hobby-Philosophie).
+- **P74-B(c) Cross-Band-Gain/Ratio-Interpolation** → ❌ **VERWORFEN
+  28.05.2026 (Mike + Claude + DeepSeek einstimmig).** Begründung: ANT2 ist
+  eine Regenrinne (random wire) — Wirkungsgrad/Impedanz UND das ANT1/ANT2-
+  **ratio** (der sicherheitskritische Diversity-Wert) springen über die
+  Bänder erratisch, NICHT interpolierbar. Ein geratenes ratio degradiert
+  Diversity unbemerkt + ruiniert die ersten Minuten Empfang bevor gemessen
+  wird → „trügerische Sicherheit", verlorene QSOs. Die transparente
+  „muss gemessen werden"-Meldung ist ehrlicher und bleibt. **Nicht wieder
+  vorschlagen.** (Memory `feedback_no_crossband_gain_interpolation`.)
+- **P74-B(d) SNR-Live-Feinjustierung** → ❌ VERWORFEN (marginal, Komplexität
+  hoch / Nutzen mittel).
+
+→ P74 ist damit vollständig erledigt — kein offener Rest mehr.
 
 ---
 
