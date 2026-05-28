@@ -1,5 +1,26 @@
 # HANDOFF — SimpleFT8
 
+## Stand 2026-05-28 — v0.98.42 P160 5s-Schnell-TUNE (Rechtsklick-Override)
+
+**Aktueller Code-Stand:** v0.98.42, Tests **2188 grün** (+5 P160).
+
+**Was:** Das Rechtsklick-Menü auf dem TUNE-Button bietet jetzt **5/10/15/20 s**
+(vorher 10/15/20). Mike-Wunsch: kurzer 5-s-TUNE für empfindliche Lasten
+(20-W-Dummyload) ohne neu einzumessen / ohne Settings-Menü. 3-Zeilen-Änderung
+(Menü + Whitelist), DeepSeek-R1 GO. NUR der Ad-hoc-Override-Pfad; der
+Setting-basierte Linksklick-TUNE bleibt unberührt.
+
+**⚠ Field-Hinweis:** Ein 5-s-TUNE durchläuft den normalen Post-Check — wenn der
+Tuner in 5 s nicht fertig wird, kann das Band gesperrt werden (kein Bug,
+identisch zum Linksklick-5s). Für echtes Matching weiter 10/15 s nutzen.
+
+**Settings-Erinnerung (vom 28.5-Fall):** „Auto-TUNE bei Bandwechsel" war bei
+Mike AUS → erst aktivieren, dann ist die 28.5-Sperre weg.
+
+**Noch nicht gepusht** (P156 + P157 + P159 + P160 + Doku).
+
+---
+
 ## Stand 2026-05-28 — v0.98.41 P159 SWR-Clamp-1.0 aus Median filtern
 
 **Aktueller Code-Stand:** v0.98.41, Tests **2183 grün** (+9 P159).

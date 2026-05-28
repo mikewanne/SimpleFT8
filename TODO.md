@@ -1,4 +1,8 @@
-# SimpleFT8 TODO — Stand 28.05.2026 (v0.98.41)
+# SimpleFT8 TODO — Stand 28.05.2026 (v0.98.42)
+
+> **✅ P160 (v0.98.42):** Rechtsklick-TUNE-Override bietet jetzt 5/10/15/20s
+> (5s ergänzt für Dummyload-Schutz, Mike-Wunsch). DeepSeek-R1 GO. Details →
+> HISTORY v0.98.42, FEATURES §16.
 
 > **Strategie (Mike 28.05.):** ALLE Baustellen inkl. Multiband fertigstellen,
 > DANN für Icom forken (nicht parallel). Icom-Abstraktion ist durch P121

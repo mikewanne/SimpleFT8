@@ -3,6 +3,28 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-28 v0.98.42 — P160 5s zur Rechtsklick-TUNE-Override-Auswahl ergänzen
+
+**Mike-Wunsch:** Schnell-TUNE für empfindliche Lasten (20-W-Dummyload schnell
+zerschossen) — kurz Träger raus um zu sehen wie sich der SWR gerade verhält,
+ohne neu einzumessen und ohne ins Settings-Menü zu gehen. Der Rechtsklick-
+Override bot bisher nur 10/15/20s.
+
+**Änderung (3 Zeilen):** `control_panel.py` Menü-Schleife `(10,15,20)` →
+`(5,10,15,20)` + Docstrings; `mw_tx.py:_on_tune_override` Whitelist `(10,15,20)`
+→ `(5,10,15,20)`.
+
+**Sicherheit:** 5s ist kürzer als bestehende Werte (weniger TX-Zeit), 5W/ANT1
+wie alle TUNE, und im Linksklick-Pfad (`_on_tune_clicked`, Whitelist 5/10/15)
+bereits erlaubt. DeepSeek-R1 GO (Option a): kein neues Risiko, keine
+Sonderbehandlung — der 5s-Override durchläuft denselben Post-Check wie der
+bestehende Linksklick-5s (Median-Fenster [2s,4s]; falls Tuner in 5s nicht
+eingeregelt → Band gesperrt, identisch zum vorhandenen Verhalten).
+
+**Abgrenzung:** NUR der Override-Pfad geändert; der Setting-basierte Linksklick-
+Pfad (5/10/15) bleibt unberührt. FEATURES.md §16 (TUNE-Pfade) aktualisiert.
+Tests `tests/test_p160_tune_override_5s.py` (5). Tests 2183→2188 (+5).
+
 ## 2026-05-28 v0.98.41 — P159 SWR-Clamp-1.0-Werte aus Median filtern (Hardware-Sicherheit, 6. Iteration)
 
 **Mike-Field-Bug:** Band 15M mal mit „SWR 1.0" freigegeben, mal mit „SWR 28.5"

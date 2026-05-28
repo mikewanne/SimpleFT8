@@ -1401,7 +1401,7 @@ bewusst eine eigene Ad-hoc-Dauer. ALLE laufen über denselben Mess-/Stop-Pfad
 | Pfad | Methode | Dauer-Quelle | Whitelist | Zweck |
 |---|---|---|---|---|
 | **Linksklick TUNE-Button** | `mw_tx._on_tune_clicked` | `tune_duration_s`-Setting | 5/10/15 (sonst→15) | Normaler manueller TUNE |
-| **Rechtsklick-Menü** | `mw_tx._on_tune_override` (P95/P101) | **Ad-hoc-Auswahl**, Setting UNBERÜHRT | **10/15/20** | Schnell-TUNE ohne Settings-Änderung (nasse Antenne, Dummyload-Test, „wie verhält sich der Wert gerade") |
+| **Rechtsklick-Menü** | `mw_tx._on_tune_override` (P95/P101/P160) | **Ad-hoc-Auswahl**, Setting UNBERÜHRT | **5/10/15/20** | Schnell-TUNE ohne Settings-Änderung (nasse Antenne, Dummyload-Test, „wie verhält sich der Wert gerade") |
 | **Auto-TUNE bei Bandwechsel** | `mw_tx._start_auto_tune_for_band_change` | `tune_duration_s`-Setting | 5/10/15 (sonst→15) | Automatisch nach Bandwechsel (nur wenn Setting an + kein Anker) |
 | **Dialog-TUNE / Kalibrierung** | `mw_radio._start_dialog_tune_sequence` | `tune_duration_s`-Setting | — | DXTuneDialog (TUNE + Gain-Mess in einem Fenster, P74-A) |
 
@@ -1411,8 +1411,11 @@ eingestellten 15 s. Anwendungsfall: zwischendurch kurz tunen um zu sehen wie
 sich der SWR gerade verhält, ohne komplett neu einzumessen und ohne ins
 Settings-Menü zu gehen (z.B. empfindlicher 20-W-Dummyload schnell zerschossen).
 Die anderen drei Pfade nehmen konsistent das Setting. **Rechtsklick-Menü bietet
-aktuell 10/15/20 s — kein 5 s** (falls für Dummyload-Schutz gewünscht: Whitelist
-in `_on_tune_override` + Menü-Einträge in `control_panel` erweitern).
+5/10/15/20 s** (P160, 28.05.2026: 5 s ergänzt für empfindliche Lasten wie
+20-W-Dummyload — kurzer Träger ohne neu einzumessen). Hinweis: auch ein
+5-s-Override durchläuft den normalen Post-Check (Median-Fenster [2 s, 4 s]) →
+wenn der Tuner in 5 s nicht eingeregelt ist, kann das Band gesperrt werden
+(identisch zum bestehenden Linksklick-5-s-Verhalten, kein Sonderfall).
 
 ### `auto_tune_on_band_change`-Setting (Default True)
 
