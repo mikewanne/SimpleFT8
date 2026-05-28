@@ -186,13 +186,11 @@ class TXMixin:
         if hasattr(self, '_fwdpwr_samples'):
             self._fwdpwr_samples.clear()
 
-        # P153 (v0.98.34, 28.05.2026): SWR-Werte mit Zeitstempel sammeln,
-        # um am Ende den Median über das stabile Fenster [Dauer-3s, Dauer-1s]
-        # zu nehmen statt eines einzelnen Snapshots (der Mike-Field-Bug:
-        # Tuner stabil bei 2,5, aber ein Ausreißer-Tick 4,0 wurde eingefroren).
-        self._tune_swr_samples: list[tuple[float, float]] = []  # (elapsed_s, swr)
-        self._tune_duration_s = duration_s
-        self._tune_start_time = time.time()
+        # P153/P154 (v0.98.34/36, 28.05.2026): SWR-Werte mit Zeitstempel
+        # sammeln, um am Ende den Median über das stabile Fenster
+        # [Dauer-3s, Dauer-1s] zu nehmen statt eines einzelnen Snapshots.
+        # Zentraler Helper (P154) — auch von den Auto-TUNE-Pfaden gerufen.
+        self._init_tune_swr_sampling(duration_s)
 
         # Tune-Frequenz aus TUNE_FREQS-Map (band+mode)
         tune_freq = get_tune_freq_mhz(self.settings.band, self.settings.mode)
@@ -224,6 +222,27 @@ class TXMixin:
         QTimer.singleShot(
             duration_s * 1000,
             lambda: self._tune_stop(_token))
+
+    def _init_tune_swr_sampling(self, duration_s: int):
+        """P154 (v0.98.36, 28.05.2026): SWR-Sample-Sammlung für
+        `_compute_match_swr` initialisieren.
+
+        MUSS von JEDEM TUNE-Pfad gerufen werden, der später
+        `_tune_stop` → `_compute_match_swr` (Median-Fenster) nutzt.
+        P153 hatte diese Init NUR in `_tune_start` (manueller TUNE-Knopf).
+        Die Auto-TUNE-Pfade (`_start_auto_tune_for_band_change` in mw_tx,
+        `_start_dialog_tune_sequence` in mw_radio) haben eigenes Setup ohne
+        `_tune_start`-Aufruf → `_tune_start_time` blieb STALE (vom letzten
+        manuellen TUNE, evtl. anderes Band) → `_on_meter_update` sammelte
+        mit riesigem `_elapsed` → Median-Fenster griff auf alte/leere
+        Samples → falsche Band-Sperre (Mike-Field-Bug 28.05.: „Band 20M
+        gesperrt — SWR 8.7" obwohl real 1.4; manueller TUNE matchte korrekt).
+        Zwillings-Bug-Klasse wie P133/P134 (ein Pfad gefixt, Setup-Zwilling
+        übersehen). KISS: zentraler Helper gegen erneute Drift.
+        """
+        self._tune_swr_samples: list[tuple[float, float]] = []  # (elapsed_s, swr)
+        self._tune_duration_s = duration_s
+        self._tune_start_time = time.time()
 
     def _compute_match_swr(self) -> float | None:
         """P153 (v0.98.34, 28.05.2026): SWR-Match-Wert robust ermitteln.
@@ -699,6 +718,14 @@ class TXMixin:
 
         # Auto-Tune-Sequence (analog _on_tune_clicked(True))
         self._tune_in_progress = True
+        # P101 (R1-F1): latenten Post-Check-Token vom vorherigen (manuellen)
+        # TUNE invalidieren — sonst könnte ein noch in der QTimer-Queue
+        # hängender _tune_post_swr_check mitten in diesem Auto-TUNE feuern
+        # (Watchdog vorzeitig scharf + stale SWR-Eval). Symmetrie zu _tune_start.
+        self._tune_post_check_token = None
+        # P154 (28.05.2026): SWR-Sample-Sammlung initialisieren (Median-Fenster).
+        # VOR _tune_active=True — sonst Mini-Race im _on_meter_update-Guard.
+        self._init_tune_swr_sampling(duration_s)
         tune_freq = get_tune_freq_mhz(band, self.settings.mode)
         self._tune_active = True
         if tune_freq is not None:

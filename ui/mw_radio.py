@@ -1965,6 +1965,12 @@ class RadioMixin:
         self._tune_convergence_cancelled = False
 
         self._tune_in_progress = True
+        # P101 (R1-F1): latenten Post-Check-Token vom vorherigen (manuellen)
+        # TUNE invalidieren (Symmetrie zu _tune_start / Auto-Tune-Pfad).
+        self._tune_post_check_token = None
+        # P154 (28.05.2026): SWR-Sample-Sammlung initialisieren (Median-Fenster).
+        # VOR _tune_active=True — sonst Mini-Race im _on_meter_update-Guard.
+        self._init_tune_swr_sampling(duration_s)
         tune_freq = get_tune_freq_mhz(band, mode)
         self._tune_active = True
         if tune_freq is not None:

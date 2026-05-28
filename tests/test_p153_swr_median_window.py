@@ -185,13 +185,20 @@ def test_t10_meter_update_collects_swr_during_tune():
 
 
 def test_t11_tune_start_inits_collection():
-    """T11: _tune_start initialisiert Sammelliste + Startzeit + Dauer."""
+    """T11: _tune_start initialisiert die Sammlung — seit P154 über den
+    zentralen Helper `_init_tune_swr_sampling`, der die 3 Zeilen hält."""
     m = re.search(r"def _tune_start\(self, duration_s.*?(?=\n    def )", MW_TX_SRC, re.S)
     assert m is not None
     body = m.group(0)
-    assert "self._tune_swr_samples" in body
-    assert "self._tune_duration_s = duration_s" in body
-    assert "self._tune_start_time = time.time()" in body
+    assert "self._init_tune_swr_sampling(duration_s)" in body, (
+        "P154: _tune_start nutzt jetzt den zentralen Helper für die Init")
+    # Helper selbst hält die 3 Init-Zeilen
+    hm = re.search(r"def _init_tune_swr_sampling.*?(?=\n    def )", MW_TX_SRC, re.S)
+    assert hm is not None, "_init_tune_swr_sampling-Helper nicht gefunden"
+    hbody = hm.group(0)
+    assert "self._tune_swr_samples" in hbody
+    assert "self._tune_duration_s = duration_s" in hbody
+    assert "self._tune_start_time = time.time()" in hbody
 
 
 def test_t12_compute_helper_window_and_min_samples():
