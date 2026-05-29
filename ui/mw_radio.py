@@ -637,14 +637,17 @@ class RadioMixin:
         # App-Start-Trigger:
         # - `_initial_band_set` Flag (gesetzt in MainWindow.__init__,
         #   geclearted am Ende von __init__).
-        # - RFPresetStore-Anker-Check: wenn 10W-Eintrag bereits existiert,
-        #   ist Auto-Tune nicht nötig — Belt-and-suspenders gegen mögliche
-        #   Bandpilot-Re-Trigger-Pfade die das Flag umgehen.
+        # - RFPresetStore-Preset-Check: wenn fuer das Band schon IRGENDEIN
+        #   Preset existiert (egal welche Watt-Zahl), ist Auto-Tune nicht
+        #   noetig — Belt-and-suspenders gegen Bandpilot-Re-Trigger-Pfade.
+        # P119 (29.05.2026): von has_anchor(watt=10) auf has_any_preset
+        #   umgestellt — der 10W-Anker (Phase B) entfaellt, der echte
+        #   Ziel-Watt-Wert wird via _auto_adjust_tx_level gespeichert.
         _has_anchor = False
         try:
             mw = self._main_window if hasattr(self, "_main_window") else self
-            _has_anchor = self.rf_preset_store.has_anchor(
-                self.radio.radio_type, band, watt=10)
+            _has_anchor = self.rf_preset_store.has_any_preset(
+                self.radio.radio_type, band)
         except (AttributeError, Exception):
             _has_anchor = False
 

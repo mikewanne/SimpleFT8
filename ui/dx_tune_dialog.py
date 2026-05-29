@@ -347,7 +347,8 @@ class DXTuneDialog(QDialog):
         """P74-A: 1s-Tick während TUNE-Phase.
 
         P76-B 2-Phasen-Label: Phase 1 (Tuner-Match) zeigt Soll-Countdown,
-        Phase 2 (Closed-Loop) zeigt „Leistung wird auf 10 W eingeregelt".
+        Phase 2 (nach P119) zeigt „prüfe SWR ..." (2s-SWR-Post-Check; das
+        10W-Einpendeln entfiel).
         Liest live SWR + FWDPWR aus Parent.
         """
         if self._state != 'TUNE' or self._tune_phase_finished:
@@ -372,12 +373,13 @@ class DXTuneDialog(QDialog):
                 f"SWR {swr:.1f} · FWDPWR {fwdpwr:.1f}W"
             )
         else:
+            # P119 (29.05.2026): Phase B (10W-Einpendeln) entfällt — nach Ablauf
+            # der TUNE-Dauer läuft nur noch der 2s-SWR-Post-Check.
             self._tune_status_label.setStyleSheet(
                 "color: #DDA; font-size: 12px; font-weight: bold;")
             self._tune_status_label.setText(
-                f"🔧 Leistung wird auf 10 W eingeregelt · "
-                f"{self._tune_elapsed_s} s · SWR {swr:.1f} · "
-                f"FWDPWR {fwdpwr:.1f}W"
+                f"🔧 Kontroll-TUNE {self.band.lower()} {self.mode} — "
+                f"prüfe SWR ... · SWR {swr:.1f}"
             )
 
     def _on_tune_backup_timeout(self):

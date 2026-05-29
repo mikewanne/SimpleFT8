@@ -182,6 +182,19 @@ class RFPresetStore:
             band_data = self._data.get(radio, {}).get(band, {})
             return str(int(watt)) in band_data
 
+    def has_any_preset(self, radio: str, band: str) -> bool:
+        """P119 (29.05.2026): True wenn IRGENDEIN Stützpunkt (beliebige
+        Watt-Zahl) für (radio, band) existiert.
+
+        Ersetzt den 10W-Anker-Check (`has_anchor(watt=10)`) für den
+        Auto-TUNE-Skip bei Bandwechsel. Nötig seit Wegfall von Phase B
+        (10W-Einpendeln) — der 10W-Anker wird nicht mehr gespeichert,
+        wohl aber der echte Ziel-Watt-Wert via `_auto_adjust_tx_level`.
+        Damit skippt Auto-TUNE auf jedem schon einmal gefunkten Band.
+        """
+        with self._lock:
+            return bool(self._data.get(radio, {}).get(band))
+
     def get_all(self, radio: str) -> dict:
         """Snapshot aller Einträge für aktuelles Radio (für UI-Tabelle)."""
         with self._lock:

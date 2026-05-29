@@ -146,9 +146,9 @@ class AutoTuneDialog(QDialog):
         Dauer-Erwartung aufbaut.
           - Phase 1 (_elapsed_s <= duration_s): Soll-Anzeige
             "X / N s" — User sieht sein Setting runterlaufen.
-          - Phase 2 (_elapsed_s > duration_s): "Leistung wird auf 10 W
-            eingeregelt · X s" — Closed-Loop-Convergenz, unbestimmte
-            Restzeit. Heller Akzent-Ton (#DDA) als visueller Hinweis.
+          - Phase 2 (_elapsed_s > duration_s): "prüfe SWR ..." — P119
+            (29.05.2026): das 10W-Einpendeln entfiel, danach läuft nur der
+            2s-SWR-Post-Check. Heller Akzent-Ton (#DDA) als visueller Hinweis.
         Edge-Case duration_s<=0 defensiv via max(1, ·) — Settings
         clamped real auf 5/10/15 s.
         """
@@ -170,12 +170,11 @@ class AutoTuneDialog(QDialog):
                 f"{effective_duration} s · SWR {swr:.1f} · FWDPWR {fwdpwr:.1f}W"
             )
         else:
-            # Phase 2 — Closed-Loop-Convergenz, kein Soll mehr
+            # P119 (29.05.2026): Phase B (10W-Einpendeln) entfällt — nach Ablauf
+            # der TUNE-Dauer läuft nur noch der 2s-SWR-Post-Check.
             self._status_label.setStyleSheet("color: #DDA; font-size: 11px;")
             self._status_label.setText(
-                f"ANT1, 10W → {self._mode} — Leistung wird auf 10 W "
-                f"eingeregelt · {self._elapsed_s} s · SWR {swr:.1f} · "
-                f"FWDPWR {fwdpwr:.1f}W"
+                f"ANT1, 10W → {self._mode} — prüfe SWR ... · SWR {swr:.1f}"
             )
 
     def _on_auto_tune_done(self, success: bool, swr: float, avg_fwdpwr: float):

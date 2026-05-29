@@ -345,12 +345,10 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         # (Signal-Routing zum Dialog) und unterdrueckt Diversity-Resume.
         self._auto_tune_running: bool = False
         self._auto_tune_dialog = None  # AutoTuneDialog | None
-        # P54-FIX (v0.97.45): Closed-Loop-Convergenz beim TUNE.
-        # _tune_converged_rf: Ergebnis aus _tune_converge_to_target,
-        # wird in _tune_post_swr_check ausgelesen für Save.
-        # _tune_convergence_cancelled: Cancel-Flag von AutoTuneDialog
-        # (gesetzt in _on_cancel_clicked/_on_backup_timeout).
-        self._tune_converged_rf: int | None = None
+        # P119 (29.05.2026): _tune_converged_rf entfernt (Phase B / 10W-
+        # Einpendeln raus). _tune_convergence_cancelled bleibt — wird von den
+        # Dialog-Cancel-Handlern noch gesetzt, nach Wegfall der Phase-B-Schleife
+        # aber nicht mehr ausgewertet (harmloser No-op, kein Risiko).
         self._tune_convergence_cancelled: bool = False
         # P54-FIX Final-R1-ROT: Re-Entry-Sperre fuer _tune_stop.
         # Phase B oeffnet Qt-Sub-Event-Loop → User-Cancel-Click kann
