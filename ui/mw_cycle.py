@@ -837,19 +837,35 @@ class CycleMixin:
             # „beendet ist beendet". R1-F5: NUR add_rx skippen, NICHT return
             # — sonst würde on_message_received unten nicht laufen.
             if not self._p128_recently_completed_block(msg.caller):
-                # P15 (10.05.2026 Mike-Field-Test): ANT-Label hinter RX-Eintrag,
-                # NICHT hinter Sende. TX laeuft IMMER ueber ANT1 (verriegelt),
-                # Label gehoert NUR zum Empfangs-Eintrag (zeigt welche Antenne
-                # besser empfing).
-                ant_label = ""
-                if hasattr(self, '_antenna_pref_label') and msg.caller:
-                    ant_label = self._antenna_pref_label(msg.caller).lstrip()
-                self.qso_panel.add_rx(
-                    msg.raw,
-                    tx_even=getattr(msg, '_tx_even', None),
-                    slot_start_ts=getattr(msg, '_slot_start_ts', None),
-                    ant_label=ant_label,
-                )
+                # P158 (29.05.2026): ruft uns ein fremder Call während
+                # Auto-Hunt ein ANDERES QSO fährt? → Zeile klickbar machen +
+                # letzten Decode merken (für Einschub nach QSO-Ende).
+                insert_call = ""
+                if self._p158_is_insertable_caller(msg):
+                    insert_call = msg.caller
+                    self._p158_insertable[msg.caller] = msg
+                if insert_call:
+                    # P158: Einschub-Zeile ohne ant_label (KISS, qso_panel-Spec).
+                    self.qso_panel.add_rx(
+                        msg.raw,
+                        tx_even=getattr(msg, '_tx_even', None),
+                        slot_start_ts=getattr(msg, '_slot_start_ts', None),
+                        insert_call=insert_call,
+                    )
+                else:
+                    # P15 (10.05.2026 Mike-Field-Test): ANT-Label hinter RX-
+                    # Eintrag, NICHT hinter Sende. TX laeuft IMMER ueber ANT1
+                    # (verriegelt), Label gehoert NUR zum Empfangs-Eintrag
+                    # (zeigt welche Antenne besser empfing).
+                    ant_label = ""
+                    if hasattr(self, '_antenna_pref_label') and msg.caller:
+                        ant_label = self._antenna_pref_label(msg.caller).lstrip()
+                    self.qso_panel.add_rx(
+                        msg.raw,
+                        tx_even=getattr(msg, '_tx_even', None),
+                        slot_start_ts=getattr(msg, '_slot_start_ts', None),
+                        ant_label=ant_label,
+                    )
 
         # P144 (27.05.2026): Auto-Hunt-Target sendet an Fremd-Call?
         # Mike-Field-Bug RA5AD 26.05. 17:38 — RA5AD beendete QSO mit R2BRD
@@ -1007,6 +1023,65 @@ class CycleMixin:
             debug_log("HUNT", f"P144_SKIP target={target} busy_with={busy_with}")
         except Exception:
             pass  # debug_log darf NIE crashen
+
+    def _p158_is_insertable_caller(self, msg: FT8Message) -> bool:
+        """P158 (29.05.2026): True wenn `msg` eine fremde Station ist, die UNS
+        ruft, während Auto-Hunt gerade ein ANDERES QSO fährt — genau der Fall,
+        den die State-Machine heute ignoriert (qso_state.py:604, caller !=
+        their_call → return). Solche Zeilen werden im QSO-Log klickbar.
+
+        Mike-Philosophie: QSO-Fenster = passiv höflich antworten. Klickbar nur
+        wo es Sinn ergibt — fremder aktiver Anrufer während laufendem Auto-QSO.
+
+        Bedingungen (alle MÜSSEN gelten):
+        - Auto-Hunt aktiv UND nicht im manual_override (bei manuellem Klick
+          entscheidet der User selbst, kein Einschub-Angebot)
+        - State-Machine in aktivem QSO mit gesetztem their_call (R1-🟠2:
+          expliziter Null/Leer-Check, sonst Klick im IDLE durchrutschen)
+        - msg.caller != qso.their_call (B ist NICHT der aktuelle Partner)
+        - msg.caller != my_call (Defensive)
+        - not 73/rr73 (B will Kontakt, nicht bestätigen)
+
+        Hinweis: msg.target == my_call ist durch den Aufruf-Kontext in
+        on_message_decoded bereits garantiert.
+        """
+        ah = getattr(self, '_auto_hunt', None)
+        if ah is None or not ah.active or ah._manual_override:
+            return False
+        qso = self.qso_sm.qso
+        if qso is None or not qso.their_call:
+            return False
+        if not msg.caller or msg.caller == qso.their_call:
+            return False
+        if msg.caller == self.settings.callsign:
+            return False
+        if msg.is_73 or msg.is_rr73:
+            return False
+        return True
+
+    def _on_hunt_insert_clicked(self, call: str):
+        """P158 (29.05.2026): Klick auf eine klickbare Einschub-Zeile im
+        QSO-Log. Merkt die fremde Station für den Einschub NACH dem aktuellen
+        QSO vor (kein Abbruch — A wird zu Ende gefunkt).
+
+        Guards (decken „Klick auf veraltete Zeile" + „Klick während B-QSO" ab):
+        - Auto-Hunt muss aktiv sein
+        - Wir müssen aktuell in einem QSO mit einer ANDEREN Station sein
+          (sonst ergibt ein Einschub keinen Sinn → ignorieren)
+        - Der letzte Decode von `call` muss noch im Merk-Dict liegen
+        """
+        ah = getattr(self, '_auto_hunt', None)
+        if ah is None or not ah.active:
+            return
+        qso = self.qso_sm.qso
+        if qso is None or not qso.their_call or qso.their_call == call:
+            return
+        msg = self._p158_insertable.get(call)
+        if msg is None:
+            return
+        ah.set_pending_insert(msg)
+        self.qso_panel.add_info(
+            f"⏳ {call} vorgemerkt — wird nach diesem QSO gerufen")
 
     def _p94_quick73_filter(self, msg: FT8Message) -> bool:
         """P94 (v0.97.66): Quick-73-Ignore für kürzlich gearbeitete Stationen.

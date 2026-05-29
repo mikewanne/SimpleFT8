@@ -314,6 +314,11 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         # für die Dauer unterdrückt. RX-Tabelle/Wasserfall unberührt.
         self._recently_completed_qsos: dict[str, float] = {}
         self._pending_station_click = None  # P1.24: Klick waehrend TX → Buffer fuer naechsten Slot
+        # P158 (29.05.2026): letzter Decode pro fremdem Call, der uns während
+        # eines Auto-Hunt-QSO ruft (klickbare Einschub-Zeile). Klick liest hier
+        # die FT8Message für den späteren B-Start. Geleert nach Konsum +
+        # bei jedem Auto-Hunt-Stop (_on_auto_hunt_stopped).
+        self._p158_insertable: dict[str, "FT8Message"] = {}
         self._recent_logged_calls: dict[tuple[str, str], float] = {}  # P1.7 (v0.95.19): ADIF-Dedup (call, band) → ts
         self._quick73_sent: set[str] = set()  # P94 (v0.97.66): Calls denen Quick-73 schon ging
         # P2.OMNI-REDESIGN v4.0 (v0.95.23): True wenn OMNI VOR aktuellem QSO
@@ -658,6 +663,8 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self.qso_panel.logbook.qso_clicked.connect(self._on_logbook_qso_clicked)
         # Bundle E (v0.97.22): TX-Slot-Lock Signal — persistiert in Settings.
         self.qso_panel.tx_slot_lock_changed.connect(self._on_tx_slot_lock_changed)
+        # P158 (29.05.2026): Klick auf klickbare Einschub-Zeile im QSO-Log.
+        self.qso_panel.hunt_insert_clicked.connect(self._on_hunt_insert_clicked)
         # Initial-Buttons aus Settings setzen (nur Normal-Modus relevant)
         self.qso_panel.set_tx_slot_lock_buttons(self.settings.get_tx_slot_lock())
         # P95 (v0.97.67): Spalten-Visibility laden + Signals an Save-Hooks.
@@ -1017,6 +1024,11 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         dann zurueck zu Idle.
         """
         self._auto_hunt_polling_timer.stop()
+        # P158 (29.05.2026): Merk-Dict für klickbare Einschub-Zeilen leeren —
+        # eine beendete Auto-Hunt-Session soll keine vorgemerkte Station mehr
+        # halten (Puffer in auto_hunt wird in stop_auto_hunt geleert, hier das
+        # mw-seitige Dict).
+        self._p158_insertable.clear()
         btn = self.control_panel.btn_auto_hunt
         # Wenn Button im checked-State (manual_halt-Klick), zurueck setzen ohne
         # erneuten toggled-Trigger

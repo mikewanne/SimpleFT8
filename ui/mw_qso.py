@@ -706,6 +706,9 @@ class QSOMixin:
         # P1.14 W6: Auto-Hunt nach erfolgreichem manuellem QSO freigeben
         if self._auto_hunt.active:
             self._auto_hunt.on_manual_qso_end()
+        # P158 (29.05.2026): vorgemerkte fremde Station jetzt einschieben
+        # (A ist komplett fertig, TX frei, Auto-Hunt wieder freigegeben).
+        self._p158_maybe_start_inserted_call()
         # CQ-Modus läuft weiter — visuell bestätigen
         if self.qso_sm.cq_mode:
             self.control_panel.set_cq_active(True)
@@ -1016,12 +1019,42 @@ class QSOMixin:
             # P1.14 W6: _manual_override zuruecksetzen (sonst pausiert
             # Auto-Hunt nach Klick → Timeout dauerhaft)
             self._auto_hunt.on_manual_qso_end()
+        # P158 (29.05.2026): vorgemerkte fremde Station jetzt einschieben
+        # (A-QSO beendet, TX abgebrochen oben, Auto-Hunt wieder freigegeben).
+        self._p158_maybe_start_inserted_call()
         # CQ-Button aktiv halten wenn CQ-Modus laeuft
         if self.qso_sm.cq_mode:
             self.control_panel.set_cq_active(True)
         # P2.OMNI-REDESIGN v4.0 (v0.95.23): OMNI nach Hunt/QSO-Timeout
         # resumen (Exit-Pfad 3 von 3).
         self._maybe_resume_omni()
+
+    def _p158_maybe_start_inserted_call(self):
+        """P158 (29.05.2026): Falls eine fremde Station während des gerade
+        beendeten QSO per Klick vorgemerkt wurde, jetzt einschieben.
+
+        Wird am Ende von `_on_qso_confirmed` (Erfolg) UND `_on_qso_timeout`
+        (Timeout) gerufen — NACH `flush_pending_stop()` + `on_manual_qso_end()`.
+        Dadurch:
+        - Wenn Auto-Hunt zwischenzeitlich gestoppt wurde (deferred Timer/
+          Totmann via flush_pending_stop, HALT, Band): `active` ist False UND
+          `stop_auto_hunt` hat den Puffer schon geleert → take liefert None →
+          B wird verworfen (Mike-Spec Edge-Case).
+        - Sonst läuft B durch den bestehenden manuellen Klick-Pfad
+          (`_on_station_clicked`): OMNI-Pause, on_manual_qso_start (pausiert
+          Auto-Hunt), „Rufe B...", start_qso. Auto-Resume nach B kommt
+          automatisch über `_on_qso_confirmed`/`_on_qso_timeout` (on_manual_
+          qso_end). SWR-Sperre/TX-Race werden von _on_station_clicked
+          abgefangen.
+        """
+        ah = getattr(self, "_auto_hunt", None)
+        if ah is None or not ah.active:
+            return
+        msg = ah.take_pending_insert()
+        if msg is None:
+            return
+        self._p158_insertable.clear()
+        self._on_station_clicked(msg)
 
     @Slot(list)
     def _on_caller_queue_changed(self, queue: list):

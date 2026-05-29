@@ -1,9 +1,10 @@
 """SimpleFT8 QSO Panel — Fenster 2: QSO-Verlauf + Logbuch mit Tabs."""
 
+import html
 import time
 from pathlib import Path
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QTextEdit,
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QTextEdit, QTextBrowser,
     QPushButton, QStackedWidget, QSizePolicy, QMenu,
 )
 from PySide6.QtCore import Qt, Signal, QTimer
@@ -39,6 +40,10 @@ class QSOPanel(QWidget):
     # P95 (v0.97.67): Spalten-Config Rechtsklick → persistiert via MainWindow.
     eo_tag_visibility_changed = Signal(bool)
     ant_label_visibility_changed = Signal(bool)
+    # P158 (29.05.2026): Klick auf eine klickbare „← Empf."-Einschub-Zeile
+    # (fremde Station ruft uns während Auto-Hunt ein anderes QSO fährt).
+    # Trägt den Call. MainWindow leitet an mw_cycle._on_hunt_insert_clicked.
+    hunt_insert_clicked = Signal(str)
 
     def __init__(self):
         super().__init__()
@@ -164,11 +169,19 @@ class QSOPanel(QWidget):
         live_layout = QVBoxLayout(live_tab)
         live_layout.setContentsMargins(0, 4, 0, 0)
 
-        self.log_view = QTextEdit()
+        # P158 (29.05.2026): QTextBrowser statt QTextEdit — API-identische
+        # Unterklasse, liefert Link-Klicks nativ via anchorClicked (QTextEdit
+        # hat das NICHT). setOpenLinks(False) verhindert Auto-Navigation, das
+        # Signal feuert trotzdem. Alle bestehenden Methoden (append,
+        # setTextColor, verticalScrollBar, Kontext-Menü) bleiben unverändert.
+        self.log_view = QTextBrowser()
         self.log_view.setReadOnly(True)
+        self.log_view.setOpenLinks(False)
+        self.log_view.setOpenExternalLinks(False)
+        self.log_view.anchorClicked.connect(self._on_anchor_clicked)
         self.log_view.setFont(QFont("Menlo", 12))
         self.log_view.setStyleSheet("""
-            QTextEdit {
+            QTextBrowser {
                 background-color: #0d0d1a;
                 color: #CCCCCC;
                 border: none;
@@ -255,11 +268,18 @@ class QSOPanel(QWidget):
     def add_rx(self, message: str,
                tx_even: bool | None = None,
                slot_start_ts: float | None = None,
-               ant_label: str = ""):
+               ant_label: str = "",
+               insert_call: str = ""):
         """Empfangene Antwort anzeigen.
 
         ant_label: P15 — '(ANT2 ↑X.X dB)' zeigt welche Antenne RX gewann.
         P95: Eintrag in `_entries` + `_render_entry`.
+
+        insert_call: P158 (29.05.2026) — wenn gesetzt, ist diese Zeile
+        ein klickbarer Einschub-Link (fremde Station `insert_call` ruft uns
+        während Auto-Hunt ein anderes QSO fährt). Klick → hunt_insert_clicked.
+        Re-render-fest (im Entry-dict gespeichert). KEIN ant_label auf
+        Einschub-Zeilen (KISS — die Zeile ist die Aktion, nicht die Mess-Info).
         """
         if slot_start_ts is None or tx_even is None:
             now = time.time()
@@ -271,6 +291,7 @@ class QSOPanel(QWidget):
         entry = {
             "kind": "rx", "ts": time.time(), "utc": utc, "tag": tag,
             "message": message, "ant_label": ant_label,
+            "insert_call": insert_call,
         }
         self._entries.append(entry)
         self._render_entry(entry)
@@ -348,12 +369,19 @@ class QSOPanel(QWidget):
         elif kind == "rx":
             tag_str = f"{e['tag']} " if self._show_eo_tag else ""
             line = f"{e['utc']} {tag_str}← Empf. {e['message']}"
-            ant = e.get("ant_label", "")
-            if ant and self._show_ant_label:
-                self._append_two_color(line, "#44BBFF",
-                                       f" {ant}", "#888888")
+            insert_call = e.get("insert_call", "")
+            if insert_call:
+                # P158: klickbarer Einschub-Link. Dezent (Mike-Wahl 29.05.):
+                # hellerer Cyan #7FE0FF + Unterstrich, Hover-Pointer via
+                # QTextBrowser. Kein ant_label (KISS).
+                self._append_anchor_line(line, insert_call, "#7FE0FF")
             else:
-                self._append_colored(line, "#44BBFF")
+                ant = e.get("ant_label", "")
+                if ant and self._show_ant_label:
+                    self._append_two_color(line, "#44BBFF",
+                                           f" {ant}", "#888888")
+                else:
+                    self._append_colored(line, "#44BBFF")
         elif kind == "listening":
             tag_str = f"{e['tag']} " if self._show_eo_tag else ""
             self._append_colored(
@@ -571,6 +599,37 @@ class QSOPanel(QWidget):
         # Auto-Scroll nach unten
         scrollbar = self.log_view.verticalScrollBar()
         scrollbar.setValue(scrollbar.maximum())
+
+    def _append_anchor_line(self, text: str, call: str, color: str):
+        """P158 (29.05.2026): Zeile als klickbaren HTML-Anchor anhängen.
+
+        Genutzt nur für Einschub-Zeilen (fremde Station ruft uns während
+        Auto-Hunt-QSO). href trägt den Call: `huntinsert:<call>`. Klick →
+        QTextBrowser.anchorClicked → _on_anchor_clicked → hunt_insert_clicked.
+        Sichtbarer Text wird HTML-escaped; der Call im href ebenso.
+        """
+        safe_text = html.escape(text)
+        safe_href = html.escape(f"huntinsert:{call}", quote=True)
+        cursor = self.log_view.textCursor()
+        cursor.movePosition(QTextCursor.MoveOperation.End)
+        self.log_view.setTextCursor(cursor)
+        self.log_view.append(
+            f'<a href="{safe_href}" '
+            f'style="color:{color}; text-decoration:underline;">'
+            f'{safe_text}</a>'
+        )
+        scrollbar = self.log_view.verticalScrollBar()
+        scrollbar.setValue(scrollbar.maximum())
+
+    def _on_anchor_clicked(self, url):
+        """P158 (29.05.2026): QTextBrowser-Link geklickt. Nur unsere eigenen
+        `huntinsert:<call>`-Links auswerten, Rest ignorieren."""
+        href = url.toString()
+        prefix = "huntinsert:"
+        if href.startswith(prefix):
+            call = href[len(prefix):]
+            if call:
+                self.hunt_insert_clicked.emit(call)
 
     def _append_two_color(self, text1: str, color1: str, text2: str, color2: str):
         """Single-Block Append in zwei Farben (Haupttext + Akzent)."""
