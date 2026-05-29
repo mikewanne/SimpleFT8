@@ -1473,12 +1473,11 @@ vom P159-Clamp-Bug, der den TUNE-MEDIAN betraf — andere Baustelle.)
 
 ---
 
-## 17. Aktiv vs. Passiv: RX-Liste jagen, QSO-Fenster antworten (P158 — GEPLANT)
+## 17. Aktiv vs. Passiv: RX-Liste jagen, QSO-Fenster antworten (P158 — v0.98.44)
 
-> **Status: KONZEPT (29.05.2026), noch NICHT gebaut.** DeepSeek-v4-pro
-> Konzept-Review: GO/BAUEN. Spec in TODO.md (P158), Memory
-> `project_p158_concept`. Hier dokumentiert weil es eine **Design-Philosophie**
-> festschreibt, die auch über P158 hinaus gilt.
+> **Status: IMPLEMENTIERT (29.05.2026, v0.98.44).** Voller Workflow,
+> DeepSeek-v4-pro Design-R1 + Final-R1. Hier dokumentiert weil es eine
+> **Design-Philosophie** festschreibt, die auch über P158 hinaus gilt.
 
 ### Die zwei Fenster, zwei Haltungen
 
@@ -1490,11 +1489,11 @@ vom P159-Clamp-Bug, der den TUNE-MEDIAN betraf — andere Baustelle.)
 **Mike-Wortlaut (29.05.):** „im empfangsfenster suche ich aktiv die station,
 im qso fenster antworte ich jeder station, bin also passiv."
 
-### Was P158 daraus baut (Konzept)
+### Was P158 baut
 
 Wenn Auto-Hunt ein QSO mit A fährt und B *Mike* dazwischen ruft, erscheint im
 QSO-Log eine Zeile `← Empf. DA1MHH B <grid>`. Diese **eine Zeile** wird
-anklickbar (HTML-Anchor, da `log_view` read-only QTextEdit ist). Klick →
+anklickbar (heller Cyan #7FE0FF + Unterstrich, Hover-Pointer). Klick →
 Auto-Hunt-eigener Puffer `_insert_pending_call` → **A wird zu Ende gefunkt**
 (nicht abgebrochen!) → Auto-Hunt pausiert → B gerufen → danach **Auto-Hunt
 läuft automatisch weiter** (wie nach manuellem QSO, `on_manual_qso_end`).
@@ -1503,13 +1502,44 @@ läuft automatisch weiter** (wie nach manuellem QSO, `on_manual_qso_end`).
 UND Auto-Hunt anderes QSO fährt. CQs / fremde QSOs bleiben toter Text — die
 gehören in die aktive RX-Liste, nicht ins passive QSO-Fenster.
 
+### Datenfluss (Code-Pfade)
+
+1. **Klickbarkeit bestimmen** — `mw_cycle.on_message_decoded` ruft im
+   `msg.target == my_call`-Zweig `_p158_is_insertable_caller(msg)` (Auto-Hunt
+   aktiv, nicht manual_override, aktives QSO mit *anderem* their_call, kein
+   73/rr73). Trifft genau den Fall, den die State-Machine ignoriert
+   (`qso_state.py` Z. 604, `caller != their_call → return`). Wenn klickbar:
+   `add_rx(..., insert_call=msg.caller)` + `_p158_insertable[caller] = msg`
+   (Merk-Dict, hält letzten Decode für Freq/Slot).
+2. **Render** — `qso_panel.add_rx(insert_call=…)` → `_render_entry` rx-Zweig →
+   `_append_anchor_line(line, call, "#7FE0FF")` baut `<a href="huntinsert:CALL">`.
+   `log_view` ist seit P158 ein **QTextBrowser** (statt QTextEdit) mit
+   `setOpenLinks(False)` → `anchorClicked` → `_on_anchor_clicked` →
+   `hunt_insert_clicked(call)`.
+3. **Klick** — `mw_cycle._on_hunt_insert_clicked(call)`: Guards (Auto-Hunt
+   aktiv, aktives QSO mit *anderem* Call, Call im Merk-Dict) → `auto_hunt.
+   set_pending_insert(msg)` + „⏳ B vorgemerkt".
+4. **Einschub am QSO-Ende** — `mw_qso._p158_maybe_start_inserted_call()` am
+   Ende von `_on_qso_confirmed` (Erfolg) UND `_on_qso_timeout`: wenn Auto-Hunt
+   noch aktiv → `take_pending_insert()` → `_on_station_clicked(msg)`. Reused
+   den kompletten manuellen Start-Pfad (OMNI-Pause, `on_manual_qso_start` =
+   Auto-Hunt-Pause, „Rufe B…", `start_qso`). **Auto-Resume nach B** kommt
+   gratis über `on_manual_qso_end` in den QSO-Ende-Handlern.
+5. **Aufräumen** — `auto_hunt.stop_auto_hunt` cleart `_insert_pending_call`;
+   `main_window._on_auto_hunt_stopped` cleart das Merk-Dict. → jede beendete
+   Session (Timer/HALT/Band/Totmann) verwirft einen vorgemerkten Einschub.
+
+**Bewusst akzeptiert:** Klickt Mike eine alte Zeile und B funkt längst nicht
+mehr, startet B auf veralteten Slot-Infos → evtl. erfolgloses QSO (kein
+Schaden). Hobby-Tool-pragmatisch, KISS.
+
 ### Abgrenzung zu bestehenden Mechanismen (NICHT vermischen)
 
 | Mechanismus | Was | Verhalten |
 |---|---|---|
 | `_pending_station_click` (P1.24) | RX-Listen-Klick während TX | bricht laufendes QSO **ab** |
-| CQ-Caller-Queue (`qso_sm.queue_changed`) | Warteliste bei normalem CQ-QSO | eigener Modus |
-| **P158 `_insert_pending_call` (geplant)** | **QSO-Fenster-Klick auf Anrufer** | **laufendes QSO zu Ende, dann B** |
+| CQ-Caller-Queue (`qso_sm.queue_changed`) | Warteliste bei normalem CQ-QSO | eigener Modus (nur cq_mode) |
+| **P158 `_insert_pending_call`** | **QSO-Fenster-Klick auf Anrufer** | **laufendes QSO zu Ende, dann B, dann Auto-Resume** |
 
 ---
 

@@ -3,6 +3,58 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-29 v0.98.44 — P158 Wartende Station ins Auto-Hunt-QSO einschieben
+
+Voller Workflow (V1→V2→R1→V3→Code→Final-R1), DeepSeek-v4-pro Design-R1 (0
+Blocker) + Final-R1 (PUSH FREIGEBEN, 0 Regression). Mike-Field-Wunsch +
+Highlight-Frage von Mike beantwortet (dezent).
+
+**Was:** Fährt Auto-Hunt ein QSO mit A und eine fremde Station B ruft Mike
+dazwischen (`← Empf. DA1MHH F5MYK IN97` im QSO-Log), ist diese Zeile jetzt
+**anklickbar** (heller Cyan #7FE0FF + Unterstrich, Hover-Pointer). Klick →
+B wird vorgemerkt → A wird ZU ENDE gefunkt (kein Abbruch) → B wird gerufen →
+Auto-Hunt läuft danach **automatisch weiter**. Mike-Philosophie: RX-Liste =
+aktiv jagen, QSO-Fenster = passiv höflich antworten.
+
+**Architektur (schlank):** Der Einschub läuft am QSO-Ende über den BESTEHENDEN
+manuellen Klick-Pfad `_on_station_clicked` — dadurch sind Auto-Hunt-Pause +
+„Rufe B…" + **Auto-Resume nach B** alles schon vorhandene Mechanik. Kein neuer
+QSO-Start- oder Resume-Code.
+
+**5 Bausteine:**
+1. `ui/qso_panel.py`: `log_view` von `QTextEdit` → **`QTextBrowser`** (API-
+   identisch, liefert Link-Klicks nativ via `anchorClicked`; `setOpenLinks(False)`).
+   Neues Signal `hunt_insert_clicked(str)`, `add_rx(insert_call=…)`, Helper
+   `_append_anchor_line` (HTML-Anchor `huntinsert:<call>`, HTML-escaped) +
+   `_on_anchor_clicked`. Korrektur eines Konzept-Fehlers: das ursprünglich
+   geplante „anchorClicked" ist ein QTextBrowser-Signal (QTextEdit hat es nicht).
+2. `ui/mw_cycle.py`: `_p158_is_insertable_caller(msg)` (Auto-Hunt aktiv, nicht
+   manual_override, aktives QSO mit *anderem* their_call, kein 73/rr73 — genau
+   der Fall den `qso_state.py:604` ignoriert) + Hook in `on_message_decoded`
+   (insert_call an add_rx + Merk-Dict `_p158_insertable`) + Klick-Handler
+   `_on_hunt_insert_clicked` (Guards gegen veraltete Zeile / Klick-während-B).
+3. `core/auto_hunt.py`: `_insert_pending_call` + `set_pending_insert` /
+   `take_pending_insert`; in `stop_auto_hunt` geleert (Session-Ende verwirft
+   Puffer).
+4. `ui/mw_qso.py`: `_p158_maybe_start_inserted_call()` am Ende von
+   `_on_qso_confirmed` UND `_on_qso_timeout` → bei noch aktivem Auto-Hunt
+   `take_pending_insert` → `_on_station_clicked(msg)`.
+5. `ui/main_window.py`: `_p158_insertable`-Dict-Init, Signal-Verdrahtung,
+   Dict-Cleanup in `_on_auto_hunt_stopped` (R1-🟠1).
+
+**DeepSeek-Findings eingebaut:** 🟠1 Dict-Cleanup bei jedem Stop, 🟠2
+expliziter `their_call`-Null-Check, F1 QTextBrowser statt QTextEdit-Subklasse,
+F2 Hook-Timing am QSO-Ende. **Bewusst akzeptiert:** Klick auf alte Zeile +
+B-funkt-nicht-mehr → evtl. erfolgloses QSO (kein Schaden, KISS).
+
+**Eigen-Fehler während Code (gefangen):** Edit spaltete `_p144_abort_and_skip`
+(Methode hatte nach `cancel()` noch clear_current_target/⏭-Meldung/debug_log) →
+sofort via test_p144 (4 rote Tests) erkannt + repariert.
+
+**FEATURES.md §17** von „GEPLANT" auf „v0.98.44 implementiert" + Datenfluss-
+Sektion. **Tests 2169 → 2196** (+27 P158: Logik via Source-Extraktion + echte
+QTextBrowser-Render-Tests + Signal-Roundtrip). **FlexRadio Field-Test pending.**
+
 ## 2026-05-29 — Doku: P158 Konzept geschärft (DeepSeek-Review, kein Code)
 
 Kein Versions-Bump (reine Konzept-/Doku-Arbeit, Umsetzung folgt nach Compact).

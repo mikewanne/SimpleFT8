@@ -1,5 +1,33 @@
 # HANDOFF — SimpleFT8
 
+## Stand 2026-05-29 — v0.98.44 P158: Wartende Station ins Auto-Hunt-QSO einschieben
+
+**Code-Stand:** v0.98.44, Tests **2196 grün** (+27 P158). Voller Workflow,
+DeepSeek-v4-pro Design-R1 (0 Blocker) + Final-R1 (PUSH FREIGEBEN, 0 Regression).
+**Noch nicht gepusht** (6 P119-/Doku-Commits + die neuen P158-Commits lokal).
+
+**Was (verständlich):** Wenn der Auto-Hunt gerade ein QSO mit einer Station
+fährt und eine ANDERE Station dich dazwischen ruft, siehst du sie im QSO-Log
+(„← Empf. DA1MHH F5MYK IN97"). Diese Zeile kannst du jetzt **anklicken** (sie
+ist heller und unterstrichen, der Mauszeiger wird zur Hand). Dann passiert:
+das laufende QSO wird **ganz normal zu Ende gefunkt** (kein Abbruch!), danach
+ruft die App automatisch die angeklickte Station, und **danach macht der
+Auto-Hunt von selbst weiter**. Du musst nichts neu starten.
+
+**Deine Philosophie umgesetzt:** Empfangsliste = aktiv jagen (dort suchst du
+gezielt). QSO-Fenster = passiv höflich (wer dich ruft, dem antwortest du per
+Klick). Deshalb sitzt der Klick im QSO-Fenster, nicht in der RX-Liste.
+
+**⚠ Field-Test am Radio pending:** Auto-Hunt starten → während ein QSO läuft,
+ruft dich eine fremde Station → die „← Empf."-Zeile sollte heller/klickbar
+sein → Klick → „⏳ B vorgemerkt" → aktuelles QSO läuft zu Ende → B wird
+gerufen → Auto-Hunt läuft weiter. Bei Bandwechsel/HALT während der Wartezeit
+wird die Vormerkung verworfen (kein Anruf).
+
+**Push:** Sag Bescheid, wenn die Commits raus sollen (P119 + P158).
+
+---
+
 ## Stand 2026-05-29 — v0.98.43 P119: 10-W-Einpendeln raus + Kontroll-TUNE
 
 **Code-Stand:** v0.98.43, Tests **2169 grün**. Voller Workflow, Final-R1 PUSH

@@ -51,10 +51,12 @@ v0.98.40, Funktionsweise → FEATURES.md §15.** Field-Test pending.
 
 ---
 
-# 🆕 P158 — Wartende Station ins Auto-Hunt-QSO einschieben (geschärft 29.05.2026)
+# ✅ P158 — Wartende Station ins Auto-Hunt-QSO einschieben (ERLEDIGT v0.98.44, 29.05.2026)
 
-> **Konzept-Review mit DeepSeek-v4-pro abgeschlossen (29.05.2026): GO/BAUEN.**
-> Voller Workflow Pflicht. Memory `project_p158_concept`, FEATURES §17.
+> **ERLEDIGT v0.98.44** — voller Workflow, DeepSeek-v4-pro Design-R1 (0 Blocker)
+> + Final-R1 (PUSH FREIGEBEN). Umsetzung: HISTORY.md 2026-05-29 v0.98.44,
+> FEATURES.md §17 (Datenfluss), Memory `project_p158_done`. Tests 2169→2196.
+> **FlexRadio Field-Test pending.** Spec unten archiviert.
 
 **Szenario (Mike-Field, Screenshot 06:28):** Auto-Hunt fährt ein QSO mit
 Station A (EB3JT). Mitten drin ruft eine FREMDE Station B (F5MYK) UNS an →
