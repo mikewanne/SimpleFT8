@@ -11,7 +11,10 @@ Antwort hinterher — Nicht-Einbinden ist das Einzige, was nicht rückgängig zu
 machen ist. **Merksatz: „2 KIs sehen mehr als eine."**
 
 **Aufruf:** `cat prompt.md | ./venv/bin/python3 tools/deepseek_review.py file1.py file2.py`
-(Model `deepseek-reasoner` ist Default.)
+(Model `deepseek-v4-pro` ist Default — DeepSeeks bestes Modell. Verifiziert
+29.05.2026: API bietet nur noch v4-pro + v4-flash, alte Namen `deepseek-reasoner`/
+`deepseek-chat` existieren nicht mehr. Tool nutzt v4-pro, MCP-Aliase mappen alle
+auf v4-pro. Siehe Memory `reference_deepseek_model_verified`.)
 
 **Warum (Mike 11.05.2026):** Mein erster Fix hatte Smoke-Test grün, Mike sah
 das Problem trotzdem weiter. DeepSeek lenkte die Aufmerksamkeit sofort auf die
@@ -146,13 +149,18 @@ Fernwartung — App MUSS auf dem mittleren Bildschirm landen.
 - Aufruf: `cat prompt.md | ./venv/bin/python3 tools/deepseek_review.py file1.py file2.py`
 - Key in `~/.deepseek_key` (chmod 600, ausserhalb Repo)
 
-**Default-Modell: `deepseek-reasoner` (R1)** — Mike-Entscheidung 28.04.:
-„Quality > Speed, ~$3/Monat-Differenz egal gegen Bug der Stunden frisst."
+**Default-Modell: `deepseek-v4-pro`** (DeepSeeks STÄRKSTES Modell) — Mike-Regel
+(28.04. + bekräftigt 29.05.2026): „IMMER das beste Modell, Kosten egal — nie
+mal das schnellere." **Verifiziert 29.05.2026** (Memory
+`reference_deepseek_model_verified`): DeepSeek-API bietet nur noch v4-pro +
+v4-flash; das alte `deepseek-reasoner`/`deepseek-chat` (R1/V3-Namen) gibt es
+nicht mehr. v4-pro IST das Reasoning-Modell. Tool-Default + alle MCP-Aliase →
+v4-pro.
 
 | Modell | Wann | Antwort-Zeit | Kosten |
 |---|---|---|---|
-| **R1 (Default)** | Code-Review, Architektur, Race-Conditions, Trade-offs, KISS-Bewertung | 6-30s | ~$0.005 |
-| V4 via `--chat` | Trivial-Fragen ("Ist X im Code?"), Tippfehler, Pure Verifikation | 2-5s | ~$0.001 |
+| **`deepseek-v4-pro` (Default, IMMER)** | Alles: Code-Review, Architektur, Race-Conditions, Trade-offs, KISS, auch „triviale" Verifikation | 6-30s | ~$0.005 |
+| `deepseek-v4-flash` via `--flash` | NUR explizit für Bulk wo Pro overthinkt — niemals automatisch | 2-5s | ~$0.001 |
 
 **DeepSeek-Antworten IMMER kritisch pruefen** — auch R1 halluziniert
 gelegentlich. Bei Widerspruch: Code ist Referenz. V0.74 Bilanz mit V4: 5
