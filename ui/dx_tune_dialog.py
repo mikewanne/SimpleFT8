@@ -187,7 +187,7 @@ class DXTuneDialog(QDialog):
         layout.addWidget(self._tune_spinner)
 
         self._tune_status_label = QLabel(
-            f"🔧 Auto-TUNE läuft — {self.band.lower()} {self.mode}"
+            f"🔧 Kontroll-TUNE läuft — {self.band.lower()} {self.mode}"
         )
         self._tune_status_label.setStyleSheet(
             "color: #7CC; font-size: 12px; font-weight: bold;"
@@ -367,7 +367,7 @@ class DXTuneDialog(QDialog):
             self._tune_status_label.setStyleSheet(
                 "color: #7CC; font-size: 12px; font-weight: bold;")
             self._tune_status_label.setText(
-                f"🔧 Auto-TUNE {self.band.lower()} {self.mode} — "
+                f"🔧 Kontroll-TUNE {self.band.lower()} {self.mode} — "
                 f"{self._tune_elapsed_s} / {effective_duration} s · "
                 f"SWR {swr:.1f} · FWDPWR {fwdpwr:.1f}W"
             )
