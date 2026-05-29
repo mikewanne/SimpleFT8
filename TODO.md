@@ -291,11 +291,20 @@ Dauer ist [0, 2] (Test T7 in P153 deckt das ab). Voller Workflow Pflicht.
 **Severity:** 🟠 — selteneres Szenario (KALIBRIEREN, User vor Ort), aber
 gleiche Hardware-Risiko-Klasse. Konsistenz-Gewinn.
 
-## 🆕 P119 — RFPreset/Krücke entfernen, Live-Loop reicht (Mike 25.05.2026)
+## ✅ P119 — RFPreset/Krücke entfernen ERLEDIGT (v0.98.43, 29.05.2026)
 
-> ⛔ **Nur vor Ort am Radio anpacken** — TUNE-Pfad ist sicherheitskritisch
-> (ANT1-Pflicht, SWR-Watchdog). Falls TUNE-Verhalten kippt: Power-Cycle
-> nötig, Remote nicht heilbar.
+> ✅ **ERLEDIGT 29.05.2026** — Mike-Freigabe „voll autonom", voller Workflow
+> (V1→V2→R1 GO→V3→Code→Final-R1 PUSH FREIGEBEN, DeepSeek-v4-pro). Entfernt:
+> `_tune_converge_to_target` (Phase B), `_wait_with_event_loop`,
+> `_kruecken_skalierung`, 10W-Stützpunkt-Save, `_tune_converged_rf`. Anzeige
+> „auf 10 W eingeregelt"→„prüfe SWR". **SWR-Sicherheit isoliert** (Freeze läuft
+> VOR Phase B — DeepSeek bestätigt). Begleitfix: Auto-TUNE-Bandwechsel-Skip
+> nutzt `has_any_preset(band)` statt `has_anchor(watt=10)`. Vorab: Umbenennung
+> „Auto-TUNE"→„Kontroll-TUNE" im Kalibrier-Dialog. Tests 2188→2169. Details:
+> HISTORY v0.98.43 + Memory `project_p119_done`.
+> **⚠ FlexRadio Field-Test am Radio pending** — die ursprüngliche „nur vor
+> Ort"-Warnung gilt jetzt für die VERIFIKATION: TUNE-Verhalten + Bandsperre am
+> Radio prüfen (Phase A/Match unberührt, Risiko gering). Plan unten historisch.
 
 **Mike-Erkenntnis:** Die Live-Regelung `_auto_adjust_tx_level`
 (`mw_tx.py:780`) lernt sowieso den richtigen Slider-Wert pro `(Band, Watt)`
