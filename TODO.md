@@ -51,22 +51,53 @@ v0.98.40, Funktionsweise → FEATURES.md §15.** Field-Test pending.
 
 ---
 
-# 🆕 P158 — Verspätete QSO-Antwort nutzbar machen (Mike-Idee 28.05.2026)
+# 🆕 P158 — Wartende Station ins Auto-Hunt-QSO einschieben (geschärft 29.05.2026)
 
-**Kontext:** Wenn eine Station uns nach unserem Timeout verspätet antwortet
-(z.B. „DA1MHH EC3A R-22" nach `✗ EC3A Timeout`), behandelt die State-Machine
-das als neues QSO und sendet einen Rapport statt RR73 — das QSO ist verloren
-(„Pech gehabt", Mike akzeptiert das als Ist-Zustand).
+> **Konzept-Review mit DeepSeek-v4-pro abgeschlossen (29.05.2026): GO/BAUEN.**
+> Voller Workflow Pflicht. Memory `project_p158_concept`, FEATURES §17.
 
-**Mike-Wunsch (Feature, kein Bug):** die verspätete Antwort NUTZBAR machen:
-- **Variante A:** die Empfangs-Meldung manuell anklickbar → Auto-Hunt wird
-  abgebrochen, wir antworten der Station aus Höflichkeit.
-- **Variante B:** die Station direkt als ERSTE Station in Auto-Hunt
-  aufnehmen → im nächsten Zyklus an sie senden.
-- **Vorteil:** hohe QSO-Chance, weil wir WISSEN dass sie aktiv lauscht
-  (sie hat uns ja gerufen).
+**Szenario (Mike-Field, Screenshot 06:28):** Auto-Hunt fährt ein QSO mit
+Station A (EB3JT). Mitten drin ruft eine FREMDE Station B (F5MYK) UNS an →
+im QSO-Log-Fenster springt eine Zeile dazwischen: „← Empf. DA1MHH F5MYK IN97".
+Heute geht B verloren (Auto-Hunt fixiert auf A).
 
-Severity ⚪ Feature. Erst nach dem RX-Aging-Bug.
+**Mike-Design-Philosophie (Schlüssel):**
+- **RX-Liste = AKTIV** → da jagt/filtert Mike gezielt Stationen.
+- **QSO-Fenster = PASSIV/höflich** → da antwortet Mike wer *ihn* ruft.
+→ Deshalb gehört der Klick ins **QSO-Log-Fenster**, NICHT in die RX-Liste.
+
+**Mechanik (complete-then-call, NICHT cancel):**
+1. Die „← Empf."-Zeile im QSO-Log wird anklickbar — ABER nur die, in denen
+   ein FREMDER Call UNS ruft (`<call> DA1MHH <grid>`) UND Auto-Hunt gerade ein
+   anderes QSO fährt. CQs / fremde QSOs bleiben toter Text (kein Fehlklick).
+2. Klick → B in einen **Auto-Hunt-eigenen Puffer** (`_insert_pending_call`).
+   NICHT der RX-Klick-Puffer `_pending_station_click` (P1.24, der bricht ab),
+   NICHT die CQ-Caller-Queue.
+3. Das laufende A-QSO läuft **ZU ENDE** (kein Abbruch).
+4. Nach A-Ende (Erfolg ODER Timeout): Auto-Hunt pausiert (`_manual_override`),
+   B wird gerufen wie ein manuell gestartetes QSO.
+5. **Nach B-QSO: Auto-Hunt läuft AUTOMATISCH weiter** (Auto-Resume — DeepSeek+
+   Claude einig; entspricht bestehendem `on_manual_qso_end`-Muster; Klick=
+   frischer Präsenzbeweis, 10-Min-Cap läuft weiter, Bot-Tarn-Schutz gewahrt).
+
+**Technik (DeepSeek):** QSO-Log `log_view` ist read-only QTextEdit → klickbar
+via **HTML-Anchor** `<a href="hunt_insert">…</a>` + `anchorClicked(QUrl)` (KEIN
+Cursor-Position-Parsing). Einschub-Zeile dezent blau/unterstrichen. Signal
+`hunt_insert_station(call, grid)` von qso_panel → mw_cycle setzt Puffer.
+
+**Edge-Cases (DeepSeek, alle via P122-Defer-Mechanik):** A→Timeout (Puffer
+triggert trotzdem); B gibt auf (Pech, kein Schaden); mehrere Anrufer (letzter
+Klick gewinnt, keine Liste); HALT/SWR-Sperre während Wartezeit (Puffer
+verworfen, kein TX); deferred Auto-Hunt-Stop vor B-Start (Stop vollzogen,
+Puffer weg).
+
+**Aufwand:** schlank — 1 Datenstruktur `_insert_pending_call` in auto_hunt +
+Signal + klickbare Log-Zeile + Trigger in QSO-Ende-Pfaden (Success+Timeout).
+Severity ⚪ Feature, **Schreibtisch-tauglich** (pure State-Machine + UI, kein
+TUNE/PA). **NÄCHSTER PUNKT nach dem Compact — voller Workflow.**
+
+**Optional offen (Mike-Frage):** Einschub-Zeile zusätzlich optisch
+hervorheben/blinken, damit im Eifer nicht übersehen? → in V1 mitentscheiden.
 
 ---
 

@@ -3,6 +3,29 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-29 — Doku: P158 Konzept geschärft (DeepSeek-Review, kein Code)
+
+Kein Versions-Bump (reine Konzept-/Doku-Arbeit, Umsetzung folgt nach Compact).
+
+**P158 — Wartende Station ins Auto-Hunt-QSO einschieben.** Mike-Field-Szenario:
+Auto-Hunt fährt QSO mit A, fremde Station B ruft Mike dazwischen (erscheint als
+`← Empf. DA1MHH B grid` im QSO-Log). Soll nicht verloren gehen.
+
+**Mike-Design-Philosophie (Schlüssel, neu festgehalten):** RX-Liste = AKTIV
+(jagen/filtern), QSO-Fenster = PASSIV/höflich (wer mich ruft, dem antworte
+ich). → Klick gehört ins QSO-Log-Fenster, nicht in die RX-Liste.
+
+**Konzept (DeepSeek-v4-pro Review: GO/BAUEN, KISS-konform):** Die „← Empf."-
+Zeile im QSO-Log wird anklickbar (nur wenn fremder Call UNS ruft + Auto-Hunt
+anderes QSO fährt), via HTML-Anchor (`log_view` ist read-only QTextEdit). Klick
+→ Auto-Hunt-Puffer `_insert_pending_call` → laufendes A-QSO ZU ENDE (kein
+Abbruch) → Auto-Hunt pausiert → B gerufen → danach Auto-Hunt **Auto-Resume**
+(Claude+DeepSeek einig: wie `on_manual_qso_end`, Klick=Präsenzbeweis, 10-Min-Cap
+läuft weiter). Abgegrenzt von `_pending_station_click` (P1.24, bricht ab) +
+CQ-Caller-Queue. Edge-Cases über P122-Defer-Mechanik. Spec: TODO.md P158,
+FEATURES.md §17 NEU, Memory `project_p158_concept`. **Umsetzung: nächster Punkt,
+voller Workflow.**
+
 ## 2026-05-29 v0.98.43 — P119 Phase B (10W-Einpendeln) + Krücke entfernt
 
 **Mike-Wunsch (am Radio, Gain-Messung-Screenshots):** Das „Leistung wird auf

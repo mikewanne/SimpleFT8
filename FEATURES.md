@@ -1473,6 +1473,46 @@ vom P159-Clamp-Bug, der den TUNE-MEDIAN betraf — andere Baustelle.)
 
 ---
 
+## 17. Aktiv vs. Passiv: RX-Liste jagen, QSO-Fenster antworten (P158 — GEPLANT)
+
+> **Status: KONZEPT (29.05.2026), noch NICHT gebaut.** DeepSeek-v4-pro
+> Konzept-Review: GO/BAUEN. Spec in TODO.md (P158), Memory
+> `project_p158_concept`. Hier dokumentiert weil es eine **Design-Philosophie**
+> festschreibt, die auch über P158 hinaus gilt.
+
+### Die zwei Fenster, zwei Haltungen
+
+| Fenster | Haltung | Was Mike dort tut |
+|---|---|---|
+| **Empfangsliste (`rx_panel`)** | **AKTIV** | Stationen gezielt raussuchen, filtern, anklicken = DX-Jagen. Klick startet/überschreibt aktiv ein QSO (`_pending_station_click`, P1.24 — bricht laufendes QSO ab). |
+| **QSO-Log-Fenster (`qso_panel.log_view`)** | **PASSIV / höflich** | Wer *Mike* ruft, dem antwortet er aus Freundlichkeit. Er muss nichts suchen — die Station steht ja schon im Log. |
+
+**Mike-Wortlaut (29.05.):** „im empfangsfenster suche ich aktiv die station,
+im qso fenster antworte ich jeder station, bin also passiv."
+
+### Was P158 daraus baut (Konzept)
+
+Wenn Auto-Hunt ein QSO mit A fährt und B *Mike* dazwischen ruft, erscheint im
+QSO-Log eine Zeile `← Empf. DA1MHH B <grid>`. Diese **eine Zeile** wird
+anklickbar (HTML-Anchor, da `log_view` read-only QTextEdit ist). Klick →
+Auto-Hunt-eigener Puffer `_insert_pending_call` → **A wird zu Ende gefunkt**
+(nicht abgebrochen!) → Auto-Hunt pausiert → B gerufen → danach **Auto-Hunt
+läuft automatisch weiter** (wie nach manuellem QSO, `on_manual_qso_end`).
+
+**Klickbar-Regel (gegen Fehlklicks):** NUR Zeilen wo ein fremder Call UNS ruft
+UND Auto-Hunt anderes QSO fährt. CQs / fremde QSOs bleiben toter Text — die
+gehören in die aktive RX-Liste, nicht ins passive QSO-Fenster.
+
+### Abgrenzung zu bestehenden Mechanismen (NICHT vermischen)
+
+| Mechanismus | Was | Verhalten |
+|---|---|---|
+| `_pending_station_click` (P1.24) | RX-Listen-Klick während TX | bricht laufendes QSO **ab** |
+| CQ-Caller-Queue (`qso_sm.queue_changed`) | Warteliste bei normalem CQ-QSO | eigener Modus |
+| **P158 `_insert_pending_call` (geplant)** | **QSO-Fenster-Klick auf Anrufer** | **laufendes QSO zu Ende, dann B** |
+
+---
+
 ## Pflege dieser Datei
 
 **Neue Sektionen** anhängen wenn:
