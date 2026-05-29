@@ -1,5 +1,29 @@
 # HANDOFF — SimpleFT8
 
+## Stand 2026-05-29 — ft8_lib gesichert + alles gepusht
+
+**GitHub ist auf vollem Stand.** Mike-Freigabe „alles pushen": die 11 lokalen
+Commits (P64/P156/P157/P159/P160 + Stats/Diagramme) gepusht — und das **Versehen
+behoben**, dass `ft8_lib` (mit P150 + FT2) nie in GitHub gesichert war.
+
+**Was war kaputt (nur Sicherung, nichts am Code):** `ft8_lib` war ein
+eingebettetes Repo, das aufs fremde kgoba-Original zeigte → unsere Patches
+(P150 `kMin_score=4`, FT2-Support) lagen nur lokal. Jetzt aufgelöst (Vendoring),
+181 Dateien sind normale Projektdateien → frischer Clone hat alles. Commit
+`f3887a5`. Backup: `Appsicherungen/2026-05-29_vor_ft8lib_vendoring/`.
+
+**⚠ Für künftige Sessions:** ft8_lib ist KEIN Submodul mehr — kein
+`git submodule update`. Details: HISTORY.md 2026-05-29.
+
+**Arbeitsstand:** sauber, `main` = `origin/main`. App unverändert v0.98.42,
+Tests 2188 (lib-Vendoring ist reine Git-Umstellung, kein App-Verhalten).
+
+**Mike's offene Tasks am Radio (unverändert):** `auto_tune_on_band_change`
+aktivieren (28.5-Fall weg), Field-Tests P157/P159/P160 + P150/P152/P153/P154/
+P148/P156-Optik. ⛔ Am-Radio: P119, P155, Multiband. Backlog: P158, P64-B.
+
+---
+
 ## Stand 2026-05-28 — v0.98.42 P160 5s-Schnell-TUNE (Rechtsklick-Override)
 
 **Aktueller Code-Stand:** v0.98.42, Tests **2188 grün** (+5 P160).

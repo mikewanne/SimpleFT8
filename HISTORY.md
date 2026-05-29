@@ -3,6 +3,34 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-29 — ft8_lib gesichert: Submodul-Verweis aufgelöst (Vendoring)
+
+**Kein App-Code, kein Versions-Bump** (Verhalten unverändert). Repo-Wartung.
+
+**Problem (Versehen):** `ft8_lib/` war ein eingebettetes Repo (Gitlink im Index,
+Modus 160000, KEIN `.gitmodules`) und zeigte auf das fremde Original
+`github.com/kgoba/ft8_lib`. Dadurch waren unsere lokalen Patches NIE in
+SimpleFT8/GitHub gesichert — sie existierten nur im Working-Tree auf Mike's Mac:
+- **P150** (`libft8simple.c`): `kMin_score 10→4` im FT8-Pfad — war **untracked**.
+- **FT2-Protokoll-Support** (`ft8/constants.h`, `common/monitor.c`, `ft8/decode.c`)
+  — im Submodul-Working-Tree modifiziert, nie committed.
+
+**Lösung (Vendoring):** `git rm --cached ft8_lib` (Gitlink raus) + `rm -rf
+ft8_lib/.git` (eingebettetes Repo entfernt) + `git add ft8_lib` → 181 Dateien
+jetzt normale Projektdateien im SimpleFT8-Repo. Frischer Clone enthält P150+FT2.
+Build-Artefakte (`gen_ft8`, `libft8.a`, `decode_ft8`) bleiben via
+`ft8_lib/.gitignore` ausgeschlossen. Inhalt verifiziert (kMin_score=4 FT8 / 10
+FT4+FT2, `FTX_PROTOCOL_FT2` vorhanden).
+
+**Backup vor Umstellung:** `Appsicherungen/2026-05-29_vor_ft8lib_vendoring/
+ft8_lib_komplett.tar.gz` (43 MB, inkl. alter Git-Historie der lib).
+
+**Commit:** `f3887a5`, gepusht auf `origin/main` (Mike-Freigabe „alles pushen").
+Zuvor: 11 Python/Doku-Commits (P64/P156/P157/P159/P160 + Stats) gepusht.
+
+**Konsequenz für künftige Sessions:** ft8_lib ist KEIN Submodul mehr.
+NICHT `git submodule update` o.ä. ausführen — es sind normale Dateien.
+
 ## 2026-05-28 v0.98.42 — P160 5s zur Rechtsklick-TUNE-Override-Auswahl ergänzen
 
 **Mike-Wunsch:** Schnell-TUNE für empfindliche Lasten (20-W-Dummyload schnell

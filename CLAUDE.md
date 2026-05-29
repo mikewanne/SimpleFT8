@@ -333,7 +333,11 @@ core/      Decoder/Encoder (ft8_lib), QSO-State-Machine, Diversity-Controller,
            DT-Korrektur, Station-Stats, Antenna-Preference, Propagation,
            OMNI-CQ, Auto-Hunt, Locator-DB
 radio/     RadioInterface ABC + flexradio.py (SmartSDR TCP + VITA-49)
-ft8_lib/   C-Bibliothek (MIT, kgoba)
+ft8_lib/   C-Bibliothek (MIT, kgoba) — seit 29.05.2026 VENDORED (kein
+           Submodul mehr!). Enthaelt lokale Patches: P150 kMin_score=4 (FT8)
+           + FT2-Protokoll. NICHT `git submodule update`. Build: cc -O3
+           -dynamiclib → libft8simple.dylib. Backup der alten Submodul-
+           Historie: Appsicherungen/2026-05-29_vor_ft8lib_vendoring/
 ui/        main_window.py + mw_*.py Mixins (cycle, qso, radio, tx) +
            control_panel.py, rx_panel.py, qso_panel.py, dx_tune_dialog.py,
            direction_map_widget.py
