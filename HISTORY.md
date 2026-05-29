@@ -3,6 +3,42 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-29 v0.98.43 — P119 Phase B (10W-Einpendeln) + Krücke entfernt
+
+**Mike-Wunsch (am Radio, Gain-Messung-Screenshots):** Das „Leistung wird auf
+10 W eingeregelt" nach dem TUNE in der Gain-Messung + die 10W→Ziel-Watt-
+Hochrechnung sind überflüssig. Begründung (im Code verifiziert): Der normale
+Betrieb (`_auto_adjust_tx_level`) speichert beim Einpendeln auf die echte
+Ziel-Wattzahl bereits `{band}_{watts}` direkt im RF-Preset-Store. Die
+10W-Krücke war nur ein grober Startwert-Schätzer für den allerersten
+Bandbesuch — und traf die 10 W eh oft nicht sauber („bleibt bei 11 W").
+
+**Vorausgegangen (gleiche Session): Umbenennung** „Auto-TUNE" → „Kontroll-TUNE"
+im Kalibrier-Dialog (dx_tune_dialog.py), um Verwechslung mit dem separaten
+„Auto-TUNE bei Bandwechsel" (Setting) zu vermeiden (Trivial, eigener Commit).
+
+**Entfernt** (`mw_tx.py`): `_tune_converge_to_target` (Phase B),
+`_wait_with_event_loop` (Phase-B-Helper), `_kruecken_skalierung`
+(10W-Anker-Hochrechnung), 10W-Stützpunkt-Save + `_tune_converged_rf` in
+`_tune_post_swr_check`. Anzeige „auf 10 W eingeregelt" → „prüfe SWR" in
+beiden TUNE-Dialogen.
+
+**Bleibt (Hardware-Sicherheit unberührt):** SWR-Freeze
+(`_tune_last_valid_swr = _compute_match_swr()`, P142/P153/P159), Band-Sperre,
+Post-Check, Diversity-Resume. DeepSeek-v4-pro hat bestätigt, dass der Freeze
+VOR der entfernten Phase B läuft — die Band-Sperren-Bewertung ist isoliert.
+
+**Begleitfix (DeepSeek-v4-pro 🔴 Blocker):** Auto-TUNE-Skip bei Bandwechsel
+nutzt jetzt `rf_preset_store.has_any_preset(radio, band)` statt
+`has_anchor(watt=10)` — sonst liefe Auto-TUNE bei jedem Bandwechsel, weil der
+10W-Anker entfällt. Skippt nun auf jedem schon einmal gefunkten Band (besser).
+
+**Workflow:** voll — V1→V2→R1(GO)→V3→Code→Final-R1 (PUSH FREIGEBEN, 🟡
+`_fwdpwr_samples.clear()` verifiziert erhalten). `_tune_convergence_cancelled`
+bleibt als harmloses No-op-Flag (Dialog-Cancel-Handler setzen es noch).
+Tests 2188→2169 (−20 test_p54_fix obsolet, +10 test_p119, −9 Save-Tests).
+**FlexRadio-spezifisch — Field-Test am Radio pending.**
+
 ## 2026-05-29 — ft8_lib gesichert: Submodul-Verweis aufgelöst (Vendoring)
 
 **Kein App-Code, kein Versions-Bump** (Verhalten unverändert). Repo-Wartung.

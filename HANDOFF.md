@@ -1,5 +1,36 @@
 # HANDOFF — SimpleFT8
 
+## Stand 2026-05-29 — v0.98.43 P119: 10-W-Einpendeln raus + Kontroll-TUNE
+
+**Code-Stand:** v0.98.43, Tests **2169 grün**. Voller Workflow, Final-R1 PUSH
+FREIGEBEN. **Noch nicht gepusht** (3 P119-Commits lokal: Umbenennung + Code +
+Tests; Doku folgt).
+
+**Was (2 zusammenhängende Sachen, nacheinander):**
+1. **Umbenannt** „Auto-TUNE" → **„Kontroll-TUNE"** im Kalibrier-Dialog (war
+   verwirrend, weil „Auto-TUNE" schon der Name fürs Bandwechsel-Feature ist).
+2. **10-W-Einpendeln entfernt:** Nach dem Kontroll-TUNE in der Gain-Messung
+   kam „Leistung wird auf 10 W eingeregelt" — das ist raus. Ebenso die
+   10W→70W-Hochrechnung. Der echte Sendeleistungs-Wert wird wie gehabt im
+   normalen Betrieb pro Band gespeichert (du stellst auf 70, pendelst ein,
+   fertig). Der TUNE/Tuner-Match selbst **bleibt** (ohne Match keine Messung).
+
+**Hardware-Sicherheit unberührt:** Die SWR-Bewertung/Band-Sperre (P142/P153/
+P159) hängt NICHT an der entfernten Phase — DeepSeek bestätigt.
+
+**⚠ Eine Verhaltensänderung beim Field-Test sichtbar:** „Auto-TUNE bei
+Bandwechsel" skippt jetzt auf **jedem schon einmal gefunkten Band** (vorher
+nur wenn ein 10W-Anker da war). Das ist gewollt + besser. Wenn du auf einem
+Band noch nie warst, tunt er einmal — danach nicht mehr.
+
+**⚠ Field-Test am Radio pending:** Gain-Messung starten → „Kontroll-TUNE"
+statt „Auto-TUNE", danach KEIN „auf 10 W eingeregelt" mehr (nur kurz „prüfe
+SWR"). Bandsperre/SWR muss sich exakt wie vorher verhalten.
+
+**Push:** Sag Bescheid, wenn die P119-Commits raus sollen.
+
+---
+
 ## Stand 2026-05-29 — ft8_lib gesichert + alles gepusht
 
 **GitHub ist auf vollem Stand.** Mike-Freigabe „alles pushen": die 11 lokalen

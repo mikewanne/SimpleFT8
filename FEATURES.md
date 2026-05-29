@@ -652,6 +652,13 @@ sofort → Cooldown gesetzt → Gegenstation-RR73 kommt 1 Slot später →
 
 ## 9. Bandsperre + TUNE-Pipeline (P53/P63/P54/P76-A)
 
+> **⚠ P119-Update (29.05.2026):** Die unten beschriebene **Phase B
+> (10W-Einpendeln)** ist ENTFERNT. Die Pipeline ist jetzt: Phase A
+> (Tuner-Match) → SWR-Freeze (`_compute_match_swr`) → tune_off → 2s-Post-Check
+> → Band-Freigabe/-Sperre. **Die SWR-Sicherheit ist unverändert** (der Freeze
+> lief schon immer VOR Phase B). Phase-B-Erwähnungen unten = historischer
+> Kontext. Details: §16.
+
 **Kurzantwort:** Bei zu hohem SWR während TX wird das aktuelle Band
 **markiert** (in-Memory `set`). Solange der Marker gesetzt ist, ist
 TX auf diesem Band gesperrt — Auto-Hunt, OMNI-CQ, CQ, Hunt-Reply,
@@ -1390,6 +1397,21 @@ Stationen an. Drei Ursachen:
 ---
 
 ## 16. TUNE-Dauer & die vier TUNE-Pfade (wer nimmt welche Dauer?)
+
+> **⚠ P119-Update (29.05.2026): Phase B (10W-Einpendeln) ist ENTFERNT.** Ein
+> TUNE besteht jetzt nur noch aus **Phase A (Tuner-Match, voller Träger über
+> `tune_duration_s`)** + **2s-SWR-Post-Check**. Das frühere „Leistung wird auf
+> 10 W eingeregelt" nach Phase A gibt es nicht mehr (Anzeige zeigt stattdessen
+> kurz „prüfe SWR"). Auch die 10W→Ziel-Watt-Hochrechnung (`_kruecken_skalierung`)
+> + der 10W-Stützpunkt-Save sind weg — der echte rfpower pro (Band,Watt) kommt
+> aus dem Normalbetrieb (`_auto_adjust_tx_level`→`rf_preset_store.save`). Die
+> SWR-Freeze-/Band-Sperren-Logik (§12, P142/P153/P159) ist **unberührt** (Freeze
+> lief schon immer VOR der jetzt entfernten Phase B). **Folge für Auto-TUNE bei
+> Bandwechsel:** Skip-Bedingung ist jetzt `has_any_preset(band)` (irgendein
+> gespeicherter Watt-Wert) statt `has_anchor(watt=10)`. **Der TUNE in der
+> Gain-Messung heißt jetzt „Kontroll-TUNE"** (war „Auto-TUNE" — Verwechslung mit
+> dem Bandwechsel-Feature). Die Phase-A/B-Detailbeschreibung in §9 + §12 unten
+> beschreibt teils den Vor-P119-Stand (Phase-B-Erwähnungen = historisch).
 
 **Kurzantwort:** Es gibt **vier** Wege, einen TUNE-Vorgang zu starten. Drei
 nehmen die Dauer aus dem Setting `tune_duration_s`, einer (Rechtsklick) nutzt
