@@ -6,7 +6,7 @@
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![Platform: macOS](https://img.shields.io/badge/platform-macOS-lightgrey.svg)](https://www.apple.com/macos/)
 [![Ham Radio](https://img.shields.io/badge/ham--radio-FT8%2FFT4%2FFT2-orange.svg)](https://www.physics.princeton.edu/pulsar/k1jt/wsjtx.html)
-[![Tests](https://img.shields.io/badge/tests-1716%20passed-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-2196%20passed-brightgreen.svg)]()
 
 ---
 
@@ -66,6 +66,21 @@ on the off-band 40m setup: statistically distinguishable from "no effect".*
 *CIs include 0 on 20m. When ANT1 is already resonant on the band, time-shared
 Diversity costs some single-antenna decodes. The qualitative gain remains
 (ANT2 wins 79–86% of direct dual-receives, +4 dB avg), but raw count is flat.*
+
+**The twist — on 15m (also resonant), the gain comes back, and it's significant:**
+
+| Mode | Stations/15s | vs Normal | 95% CI | Days | Cycles |
+|------|:---:|:---:|:---:|:---:|:---:|
+| Normal (resonant ANT1) | 26.8 | — | — | 5 | 10,895 |
+| Diversity Standard | 35.1 | **+31%** | +2 to +67% | 7 | 11,496 |
+| Diversity DX | 29.5 | +10% | −11 to +40% | 7 | 16,334 |
+
+*On 15m the Standard CI is **entirely above 0** — statistically real, unlike flat 20m.
+15m is the higher resonant band, and Faraday rotation scales with f²: shorter
+wavelength → stronger polarization diversity. **The takeaway: even with ANT1 already
+resonant, a plain house gutter as ANT2 still pulls in measurably more — on a resonant
+band.** (When ANT2 wins a dual-receive it does so by +4.3 dB avg; DX's +10% still
+includes 0 — not yet distinguishable.)*
 
 **[See full statistics in `auswertung/`](auswertung/)** — automatically regenerated
 from `statistics/` via `python3 scripts/generate_plots.py`.
@@ -351,6 +366,21 @@ Setup: statistisch von „kein Effekt" unterscheidbar.*
 das Time-Sharing Diversity einige Single-Antenna-Decodes. Der qualitative
 Gewinn bleibt (ANT2 gewinnt 79–86% der direkten Doppel-Empfänge, +4 dB
 Durchschnitt), aber der absolute Stations-Count ist flach.*
+
+**Der Clou — auf 15m (ebenfalls resonant) kommt der Gewinn zurück, und zwar signifikant:**
+
+| Modus | Stationen/15s | vs Normal | 95% CI | Tage | Zyklen |
+|-------|:---:|:---:|:---:|:---:|:---:|
+| Normal (resonante ANT1) | 26,8 | — | — | 5 | 10.895 |
+| Diversity Standard | 35,1 | **+31%** | +2 bis +67% | 7 | 11.496 |
+| Diversity DX | 29,5 | +10% | −11 bis +40% | 7 | 16.334 |
+
+*Auf 15m liegt das Standard-CI **komplett über 0** — statistisch echt, anders als auf
+dem flachen 20m. 15m ist das höhere resonante Band, und die Faraday-Rotation skaliert
+mit f²: kürzere Wellenlänge → stärkere Polarisations-Diversity. **Die Kernaussage: selbst
+wenn ANT1 schon resonant ist, holt eine simple Regenrinne als ANT2 noch messbar mehr
+heraus — auf einem Auslegungsband.** (Gewinnt ANT2 einen Doppel-Empfang, dann im Schnitt
+mit +4,3 dB; DX's +10% schließt 0 noch ein — noch nicht unterscheidbar.)*
 
 **[Vollständige Statistiken in `auswertung/`](auswertung/)** — automatisch
 neu generiert aus `statistics/` via `python3 scripts/generate_plots.py`.
