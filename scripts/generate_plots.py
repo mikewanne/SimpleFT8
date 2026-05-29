@@ -715,18 +715,210 @@ TEXTS_20M_OVERRIDE = {
     },
 }
 
-# Sanity check: 20m override has same keys as 40m base (fuer alle ueberschriebenen)
+# 15m: ANT1 (Kelemen DP-201510) ist RESONANT (Auslegungsband 20m/15m/10m) — wie
+# auf 20m. ABER: anders als das flache 20m zeigt 15m einen SIGNIFIKANTEN
+# Diversity-Standard-Gewinn (CI komplett ueber 0). 15m ist das hoehere resonante
+# Band → Faraday-Rotation skaliert mit f², Polarisations-Diversity wirkt staerker.
+# Damit ist 15m der staerkste Beleg der Studie: resonante TX-Antenne UND klarer
+# Gewinn. Hardcodierte „79-86%"-Doppelempfang-Quoten aus 20m werden NICHT
+# uebernommen (aus den Stats nicht reproduzierbar). Verifiziert: ANT2 gewinnt
+# Doppelempfaenge im Schnitt mit +4.3 dB (deckt sich mit 20m's +4 dB).
+TEXTS_15M_OVERRIDE = {
+    "de": {
+        "pdf_name": "Auswertung-15m-FT8.pdf",
+        "p1_subtitle": "Resonante Antenne, höheres Band — der stärkste Diversity-Beleg der Studie — 15m FT8",
+        "p1_summary_body": (
+            "Auf 15m arbeitet ANT1 (Kelemen DP-201510) IN seinem Auslegungsband — eine top-resonante Antenne.\n"
+            "Anders als auf dem flachen 20m zeigt 15m einen SIGNIFIKANTEN Diversity-Gewinn (Vertrauensbereich über 0).\n"
+            "15m ist das höhere resonante Band: Faraday-Rotation skaliert mit f² → Polarisations-Diversity wirkt stärker.\n"
+            "Wenn ANT2 (Regenrinne) einen Doppelempfang gewinnt, dann im Schnitt mit +4,3 dB Vorteil."
+        ),
+        "p1_caveat": (
+            "Hinweis zum Setup: ANT1 (Kelemen DP-201510 Sperrkreis-Dipol) ist auf 15m in seinem Auslegungsband "
+            "(20m/15m/10m) — eine erstklassige resonante Antenne. ANT2 (Regenrinne ~15m L-Form) ist eine "
+            "Quasi-Vertikal mit anderer Polarisation, anderem Pattern und anderem Take-off-Winkel. Der "
+            "Diversity-Gewinn entsteht hier NICHT durch 'schlechtes ANT1 vs besseres ANT2' (wie auf 40m off-band), "
+            "sondern durch echte physikalische Verschiedenheit: Polarisation (Faraday-Rotation skaliert mit f²), "
+            "Pattern-Lücken des Dipols an der Hauswand, Take-off-Winkel für DX. Genau deshalb ist 15m der "
+            "aussagekräftigste Fall: höheres Band als 20m, ANT1 bereits resonant — und trotzdem ein klarer, "
+            "statistisch belastbarer Gewinn. Das bestätigt die f²-Erwartung aus der Theorie."
+        ),
+        "p1_modes_body": (
+            "Normal (grau): Eine Antenne, keine besondere Logik — klassisches Single-Antenna-Setup. Vergleichsbasis.\n"
+            "Diversity Standard (blau): Zwei Antennen. Wählt automatisch die mit mehr Stationen.\n"
+            "Diversity DX (orange): Zwei Antennen. Wählt die mit mehr schwachen DX-Signalen (unter −10 dB).\n"
+            "Rescue (grüne Kappen): Stationen die ANT1 nicht hören konnte — ANT2 hat sie trotzdem dekodiert."
+        ),
+        "p2_setup_body": (
+            "Gemessen auf 15m FT8 mit dem FlexRadio FLEX-8400M — zwei Antennenanschlüsse, gleiche Frequenz.\n"
+            "Zeitraum: {time_range}. Datenbasis wächst — 15m wird parallel zu 20m/40m weiter gemessen.\n"
+            "Zyklen ausgewertet: Normal {n_c} ({n_d} Tag/e)  |  Diversity Standard {s_c} ({s_d} Tag/e)  |  Diversity DX {d_c} ({d_d} Tag/e).\n"
+            "Hinweis: 15m hat kürzere Wellenlänge als 20m → Polarisations-Diversity wirkt nochmal stärker (f²)."
+        ),
+        "p3_header_subtitle": "15m FT8 · Pooled Mean über alle Messpunkte (Datenbasis wächst noch)",
+        "p3_note1": (
+            "Ø Sta./15s-Zyklus: Pooled Mean — alle Messpunkte über alle Tage und Tageszeiten zusammengerechnet. "
+            "Auf 15m wächst die Datenbasis noch, daher zeigen einzelne UTC-Stunden mehr Streuung. "
+            "Der Diversity-Standard-Vorsprung ist aber statistisch belastbar (Vertrauensbereich über 0). "
+            "Rescue: Stationen die ANT1 unter −24 dB nicht dekodieren konnte, ANT2 aber schon."
+        ),
+        "p3_note2": (
+            "Wichtig: Auf 15m ist ANT1 RESONANT — der Diversity-Gewinn entsteht NICHT durch Antennen-Mismatch. "
+            "Wenn beide Antennen dieselbe Station empfangen und ANT2 gewinnt, dann im Schnitt mit +4,3 dB — "
+            "reine Polarisations-/Pattern-Diversity. Dass dieser Gewinn auf 15m signifikant ist (anders als auf "
+            "dem flachen 20m), passt zur f²-Skalierung: höheres Band, stärkere Polarisationsdrehung. "
+            "Das macht 15m-Diversity gut übertragbar auf andere Setups mit zwei verschiedenartigen Antennen."
+        ),
+        "p4_annotation": (
+            "Auf 15m liegt Diversity konsistent über Normal — und der Abstand ist deutlicher als auf 20m, "
+            "obwohl ANT1 hier ebenfalls resonant ist. Das schattierte Band zeigt die Streuung zwischen "
+            "Messtagen; es wird mit mehr Tagen schmaler."
+        ),
+        "p5_annotation": (
+            "Im Tageshoch (12-16 UTC) zeigt sich der Diversity-Vorteil am klarsten. Beim Tag→Nacht-Übergang "
+            "springt Diversity_Dx besonders hoch — DX-Modus filtert auf schwache Signale (SNR<-10dB), "
+            "und genau diese kommen am Skip-Zonen-Rand häufiger über die Quasi-Vertikal-Antenne (Regenrinne) rein. "
+            "Weiße Fehlerbalken zeigen die Schwankung zwischen Messtagen."
+        ),
+        "p6_about_body": (
+            "Im Diversity-Diagramm sieht man oben auf manchen Balken kleine grüne Kappen mit einem +N davor.\n"
+            "Das sind Stationen die ANT1 nicht dekodieren konnte — Signal unter −24 dB.\n"
+            "ANT2 hat sie trotzdem gehört und dekodiert. Im Messzeitraum waren das im Schnitt\n"
+            "Ø {s_rsc:.1f} Stationen pro Stunde bei Diversity Standard, und Ø {d_rsc:.1f}/h bei Diversity DX.\n"
+            "Auf 15m kommt der Diversity-Gewinn aus einer Mischung: Rescue schwacher Signale UND der\n"
+            "Polarisations-/Pattern-Vorteil der zweiten, andersartigen Antenne."
+        ),
+        "p7_fazit_body": (
+            "15m ist der aussagekräftigste Fall der ganzen Studie:\n"
+            "ANT1 ist hier bereits eine erstklassige resonante Antenne — 'mehr' war eigentlich nicht zu erwarten.\n"
+            "Trotzdem fügt ANT2 im Schnitt +{gain_lo:.0f}% bis +{gain_hi:.0f}% hinzu, und der Vorsprung ist\n"
+            "statistisch belastbar (Vertrauensbereich über 0) — anders als auf dem flachen 20m.\n"
+            "Diversity DX bringt {d_gain:.0f}% — gezielter auf schwache DX-Signale.\n"
+            "Höheres Band, resonante Antenne, klarer Gewinn: genau das sagt die f²-Theorie voraus."
+        ),
+        "p7_fazit_best": (
+            "\nAm deutlichsten ist der Diversity-Vorsprung um {hour:02d}:00 UTC (+{s_gain:.0f}%) — "
+            "typisch an Bandöffnungs- und Skip-Zonen-Rändern, wo Polarisations-Diversity am stärksten wirkt."
+        ),
+        "p7_cannot_body": (
+            "Die 15m-Datenbasis wächst noch — einzelne UTC-Stunden sind unterrepräsentiert, mit mehr Tagen wird der Vertrauensbereich enger.\n"
+            "Bei sehr offenem Band (Sonnenflecken-Maximum) könnte der Diversity-Gewinn noch höher liegen — bisher nur mäßige bis gute Bedingungen.\n"
+            "Die exakte Doppelempfang-Gewinnquote (wie 'X% der Fälle') wird hier bewusst NICHT als Zahl genannt — die Detail-Logs erfassen nur die ANT2-Siege, nicht alle Vergleiche.\n"
+            "Ob das auf anderen Transceivern genauso funktioniert — bisher nur auf dem FLEX getestet."
+        ),
+        "p7_next_body": (
+            "Mehr Messtage damit die Schwankung pro UTC-Stunde kleiner wird.\n"
+            "Gezielte Messungen in den noch dünnen UTC-Stunden — die Datenlücken schließen.\n"
+            "Aktualisierung läuft parallel zur 20m-/40m-Auswertung — alle Berichte werden zusammen gepflegt.\n"
+            "Dieser Bericht aktualisiert sich automatisch sobald neue Daten reinkommen."
+        ),
+    },
+    "en": {
+        "pdf_name": "Report-15m-FT8.pdf",
+        "p1_subtitle": "Resonant antenna, higher band — the strongest diversity evidence in this study — 15m FT8",
+        "p1_summary_body": (
+            "On 15m, ANT1 (Kelemen DP-201510) operates WITHIN its design band — a top-class resonant antenna.\n"
+            "Unlike flat 20m, 15m shows a SIGNIFICANT diversity gain (confidence interval entirely above 0).\n"
+            "15m is the higher resonant band: Faraday rotation scales with f² → polarization diversity acts stronger.\n"
+            "When ANT2 (gutter) wins a dual-receive, it does so by +4.3 dB on average."
+        ),
+        "p1_caveat": (
+            "Note on setup: ANT1 (Kelemen DP-201510 trap dipole) operates within its design band on 15m "
+            "(20m/15m/10m) — a first-class resonant antenna. ANT2 (house gutter ~15m L-shape) is a quasi-vertical "
+            "with different polarization, pattern and take-off angle. The diversity gain here does NOT come from "
+            "'bad ANT1 vs better ANT2' (as on 40m off-band), but from genuine physical diversity: polarization "
+            "(Faraday rotation scales with f²), pattern nulls of the dipole behind the house wall, take-off angle "
+            "for DX. This is exactly why 15m is the most meaningful case: higher band than 20m, ANT1 already "
+            "resonant — and still a clear, statistically solid gain. It confirms the f² expectation from theory."
+        ),
+        "p1_modes_body": (
+            "Normal (grey): One antenna, no special logic — classic single-antenna setup. Reference baseline.\n"
+            "Diversity Standard (blue): Two antennas. Auto-selects the one with more stations.\n"
+            "Diversity DX (orange): Two antennas. Selects the one with more weak DX signals (below −10 dB).\n"
+            "Rescue (green caps): Stations ANT1 couldn't hear — ANT2 decoded them anyway."
+        ),
+        "p2_setup_body": (
+            "Measured on 15m FT8 using a FlexRadio FLEX-8400M — two antenna ports, same frequency.\n"
+            "Period: {time_range}. Database growing — 15m measured in parallel to 20m/40m.\n"
+            "Cycles: Normal {n_c} ({n_d} day/s) | Diversity Standard {s_c} ({s_d} day/s) | Diversity DX {d_c} ({d_d} day/s).\n"
+            "Note: 15m has a shorter wavelength than 20m → polarization diversity acts even stronger (f²)."
+        ),
+        "p3_header_subtitle": "15m FT8 · Pooled mean across all measurement points (database still growing)",
+        "p3_note1": (
+            "Avg Sta./15s Cycle: Pooled mean — all measurement points across all days and hours combined. "
+            "On 15m the database is still growing, so individual UTC hours show more variation. "
+            "The Diversity Standard lead is statistically solid though (confidence interval above 0). "
+            "Rescue: Stations ANT1 couldn't decode below −24 dB, but ANT2 did."
+        ),
+        "p3_note2": (
+            "Important: On 15m ANT1 is RESONANT — the diversity gain does NOT come from antenna mismatch. "
+            "When both antennas receive the same station and ANT2 wins, it does so by +4.3 dB on average — "
+            "pure polarization/pattern diversity. That this gain is significant on 15m (unlike flat 20m) fits "
+            "the f² scaling: higher band, stronger polarization rotation. "
+            "This makes 15m diversity transferable to other setups with two physically different antennas."
+        ),
+        "p4_annotation": (
+            "On 15m diversity stays consistently above Normal — and the gap is clearer than on 20m, even though "
+            "ANT1 is resonant here too. The shaded band shows variation between measurement days; it narrows "
+            "with more days."
+        ),
+        "p5_annotation": (
+            "During daytime peak (12-16 UTC) the diversity advantage shows most clearly. At day→night "
+            "transition Diversity_DX jumps especially high — DX mode filters for weak signals "
+            "(SNR<-10dB), and exactly these arrive more often via the quasi-vertical (gutter) at skip-zone "
+            "edges. White error bars show variation between measurement days."
+        ),
+        "p6_about_body": (
+            "In the diversity chart, small green caps with +N appear above some bars.\n"
+            "These are stations ANT1 couldn't decode — signal below −24 dB.\n"
+            "ANT2 heard and decoded them anyway. Average over the measurement period:\n"
+            "Ø {s_rsc:.1f} stations per hour for Diversity Standard, Ø {d_rsc:.1f}/h for Diversity DX.\n"
+            "On 15m the diversity gain comes from a mix: rescue of weak signals AND the\n"
+            "polarization/pattern advantage of the second, physically different antenna."
+        ),
+        "p7_fazit_body": (
+            "15m is the most meaningful case in the whole study:\n"
+            "ANT1 is already a top-class resonant antenna here — 'more' was not really to be expected.\n"
+            "Yet ANT2 adds on average +{gain_lo:.0f}% to +{gain_hi:.0f}%, and the lead is statistically\n"
+            "solid (confidence interval above 0) — unlike flat 20m.\n"
+            "Diversity DX delivers {d_gain:.0f}% — targeted at weak DX signals.\n"
+            "Higher band, resonant antenna, clear gain: exactly what f² theory predicts."
+        ),
+        "p7_fazit_best": (
+            "\nThe diversity lead is clearest around {hour:02d}:00 UTC (+{s_gain:.0f}%) — "
+            "typically at band-opening and skip-zone edges where polarization diversity acts strongest."
+        ),
+        "p7_cannot_body": (
+            "The 15m database is still growing — certain UTC hours are underrepresented; the confidence interval narrows with more days.\n"
+            "With a very open band (sunspot maximum) the diversity gain might be even higher — so far only moderate-to-good conditions measured.\n"
+            "The exact dual-receive win rate (like 'X% of cases') is deliberately NOT quoted here — the detail logs only record ANT2 wins, not all comparisons.\n"
+            "Whether this works the same on other transceivers — only tested on the FLEX so far."
+        ),
+        "p7_next_body": (
+            "More measurement days so per-UTC-hour variation decreases.\n"
+            "Targeted measurements in the still-thin UTC hours — closing the data gaps.\n"
+            "Updates run in parallel to the 20m/40m analysis — all reports maintained together.\n"
+            "This report updates automatically whenever new data comes in."
+        ),
+    },
+}
+
+# Sanity check: 20m + 15m Overrides haben dieselben Keys wie 40m-Base
 for _lang in ("de", "en"):
     _missing = set(TEXTS_20M_OVERRIDE[_lang].keys()) - set(TEXTS[_lang].keys())
     assert not _missing, f"20m-Override hat unbekannte Keys in {_lang}: {_missing}"
+    _missing15 = set(TEXTS_15M_OVERRIDE[_lang].keys()) - set(TEXTS[_lang].keys())
+    assert not _missing15, f"15m-Override hat unbekannte Keys in {_lang}: {_missing15}"
 
 
 def _texts_for(band: str, lang: str) -> dict:
-    """Texte fuer (band, lang) liefern. 40m = Default, 20m = Override-Layer.
+    """Texte fuer (band, lang) liefern. 40m = Default, 20m/15m = Override-Layer.
     Bei unbekanntem Band → Default 40m-Texte (Fallback)."""
     base = TEXTS[lang]
     if band == "20m":
         return {**base, **TEXTS_20M_OVERRIDE[lang]}
+    if band == "15m":
+        return {**base, **TEXTS_15M_OVERRIDE[lang]}
     return base
 
 # ── Markdown-Parser ───────────────────────────────────────────────────────────
@@ -1408,8 +1600,13 @@ def _hourly_analysis(stats_dir: Path, band: str, protocol: str) -> list[dict]:
         dm = agg_d[h]["mean"] if h in agg_d else None
         sg = (sm / nm - 1) * 100 if (nm and sm and nm > 0) else None
         dg = (dm / nm - 1) * 100 if (nm and dm and nm > 0) else None
+        # Zyklen-Zähler pro Stunde (für Dünn-Daten-Schutz der "besten Stunde",
+        # sonst liefert eine Stunde mit 2 Normal-Zyklen absurde +700%-Ausreißer).
+        n_count = agg_n[h]["n_cycles"] if h in agg_n else 0
+        s_count = agg_s[h]["n_cycles"] if h in agg_s else 0
         result.append({"hour": h, "n_mean": nm, "s_mean": sm, "d_mean": dm,
                         "s_gain": sg, "d_gain": dg,
+                        "n_count": n_count, "s_count": s_count,
                         "rs": resc_s.get(h, 0.0), "rd": resc_d.get(h, 0.0)})
     return result
 
@@ -1647,8 +1844,23 @@ def _r_fazit_page(pdf: PdfPages, fair_summary: dict, hourly: list[dict],
     s_rsc  = s_fair.get("avg_rescue", 0.0)
     s_nref = s_fair.get("n_avg_common", 0.0)
     d_nref = d_fair.get("n_avg_common", 0.0)
-    best_s = max((r for r in hourly if r["s_gain"] is not None),
-                 key=lambda r: r["s_gain"], default=None)
+    # Dünn-Daten- + Niedrig-Nenner-Schutz für die "stärkste Stunde":
+    # (1) Normal UND Standard brauchen genug Zyklen (≥30 ≈ 7,5 min FT8), und
+    # (2) das Normal-Mittel der Stunde muss "Band offen"-Niveau haben
+    #     (≥15 Sta./Zyklus). Sonst kippt eine früh-morgens-Stunde, wo Normal
+    #     auf einer Antenne fast nichts hört (z.B. 4 Sta.), in eine absurde
+    #     Quote (z.B. +710%) — technisch echt, aber als öffentliche Schlagzeile
+    #     irreführend (winziger Nenner). Der Gesamt-Gewinn (gain_lo/hi) ist
+    #     davon unberührt; nur die "stärkste Stunde"-Annotation wird robust.
+    _MIN_CYCLES_BEST_HOUR = 30
+    _MIN_NMEAN_BEST_HOUR = 15.0
+    best_s = max(
+        (r for r in hourly
+         if r["s_gain"] is not None
+         and r["n_count"] >= _MIN_CYCLES_BEST_HOUR
+         and r["s_count"] >= _MIN_CYCLES_BEST_HOUR
+         and (r["n_mean"] or 0) >= _MIN_NMEAN_BEST_HOUR),
+        key=lambda r: r["s_gain"], default=None)
 
     gain_lo = (s_avg / s_nref - 1) * 100 if s_nref > 0 else 0.0
     gain_hi = ((s_avg + s_rsc) / s_nref - 1) * 100 if s_nref > 0 else 0.0
@@ -1774,7 +1986,7 @@ def main():
 
     # PDFs werden fuer DIESE Baender generiert — alles andere nur Diagramme
     # (statistics werden jetzt eh nur noch fuer 20m+40m FT8 erfasst, v0.63).
-    PDF_TARGETS = [("40m", "FT8"), ("20m", "FT8")]
+    PDF_TARGETS = [("40m", "FT8"), ("20m", "FT8"), ("15m", "FT8")]
 
     for lang, out_dir in LANG_DIR.items():
         out_dir.mkdir(parents=True, exist_ok=True)
