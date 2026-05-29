@@ -63,35 +63,30 @@ def _tune_stop_body():
 # ---------------------------------------------------------------------------
 
 
-def test_t1_freeze_set_before_phase_b():
-    """T1 (P142 Kern-Fix): _tune_last_valid_swr wird VOR
-    _tune_converge_to_target gesetzt, nicht danach."""
+def test_t1_freeze_set_from_phase_a_match():
+    """T1 (P142-Kern, nach P119): _tune_last_valid_swr wird aus dem Phase-A-
+    Match-Wert (swr_after_match) gesetzt. Phase B (_tune_converge_to_target)
+    existiert nach P119 nicht mehr — der Freeze ist die einzige SWR-Quelle,
+    daher kann ihn auch nichts mehr (Power-Drop-Clamp) kontaminieren."""
     body = _tune_stop_body()
-    pos_freeze = body.find("self._tune_last_valid_swr = swr_after_match")
-    pos_converge = body.find("_tune_converge_to_target")
-    assert pos_freeze > 0, (
+    assert "self._tune_last_valid_swr = swr_after_match" in body, (
         "P142: Freeze auf swr_after_match (Phase-A-Wert) muss existieren.")
-    assert pos_converge > 0, (
-        "Phase B (_tune_converge_to_target) muss noch im Code sein.")
-    assert pos_freeze < pos_converge, (
-        "P142: Freeze MUSS VOR Phase B kommen — sonst Sensor-Clamp-Bug.")
+    assert "_tune_converge_to_target" not in body, (
+        "P119: Phase B (_tune_converge_to_target) muss entfernt sein.")
 
 
 def test_t1b_swr_after_match_read_once():
-    """T1b: swr_after_match wird einmal ermittelt und sowohl als Freeze
-    als auch für Schwellenwert-Check genutzt (KISS, eine Quelle).
+    """T1b (nach P119): swr_after_match wird EINMAL aus _compute_match_swr
+    (Median-Fenster, P153) ermittelt und als Freeze genutzt.
 
-    P153 (28.05.): Quelle ist jetzt _compute_match_swr() (Median-Fenster)
-    statt direkter radio.last_swr-Snapshot. Die P142-Kernaussage (eine
-    Quelle, Freeze VOR Phase B) bleibt — nur die Lesung ist robuster.
+    Der SWR-Limit-Check selbst ist nach P119 (Wegfall Phase B) nicht mehr in
+    _tune_stop, sondern im Post-Check (_tune_post_swr_check). _tune_stop friert
+    nur noch den ehrlichen Phase-A-Wert ein.
     """
     body = _tune_stop_body()
     # swr_after_match-Ermittlung (P153: über Median-Helper)
     assert "swr_after_match = self._compute_match_swr()" in body, (
-        "P153: Phase-A-Wert kommt jetzt aus _compute_match_swr (Median).")
-    # Im SWR-Limit-Check (P153: mit is-None-Guard)
-    assert "swr_after_match <= swr_limit" in body, (
-        "Schwellenwert-Check muss swr_after_match verwenden.")
+        "P153: Phase-A-Wert kommt aus _compute_match_swr (Median).")
     # Als Freeze
     assert "self._tune_last_valid_swr = swr_after_match" in body, (
         "P142: Freeze muss swr_after_match nutzen (eine Quelle).")
@@ -189,21 +184,21 @@ def test_t4b_cancel_pflicht_kommentar():
 
 
 def test_t5_high_swr_freeze_preserved():
-    """T5: Wenn swr_after_match > swr_limit (z.B. 4.5), wird Phase B
-    geskippt — der hohe Freeze-Wert bleibt erhalten, NICHT überschrieben.
+    """T5 (nach P119): Hoher Phase-A-SWR (z.B. 4.5) bleibt im Freeze — er wird
+    in _tune_stop nirgends überschrieben (Phase B / Power-Drop-Clamp sind weg).
+    Der Post-Check (_tune_post_swr_check) bewertet den Freeze gegen das Limit
+    → Band bleibt gesperrt.
 
-    Mike-Hardware-Sicherheits-Szenario: defekte Antenne, Phase A misst
-    4.5, Limit ist 3.0 → Band bleibt gesperrt. Mit Phase-B-Bug hätte
-    der alte Code 1.0 eingefroren → falsche Freigabe.
+    Mike-Hardware-Sicherheits-Szenario: defekte Antenne, Phase A misst 4.5,
+    Limit 3.0 → keine falsche Freigabe.
     """
     body = _tune_stop_body()
-    # Freeze ist VOR Phase B → wird in keinem Pfad überschrieben.
-    # Phase-B-Skip-Branch (else nach Limit-Check) darf _tune_last_valid_swr
-    # nicht setzen. P153: Limit-Check hat jetzt is-None-Guard.
     pos_freeze = body.find("self._tune_last_valid_swr = swr_after_match")
-    pos_limit_check = body.find("swr_after_match is not None and swr_after_match <= swr_limit")
-    assert 0 < pos_freeze < pos_limit_check, (
-        "P142: Freeze MUSS VOR der Phase-B-Limit-Verzweigung kommen.")
+    assert pos_freeze > 0, "P142: Freeze (Phase-A-Wert) muss existieren."
+    # Kein Phase-B-Gate mehr, das den Freeze überschreiben könnte.
+    assert "_tune_converge_to_target" not in body, (
+        "P119: Phase B muss weg sein — sonst könnte Power-Drop den Freeze "
+        "kontaminieren (Mike-Field-Bug P142).")
 
 
 # ---------------------------------------------------------------------------

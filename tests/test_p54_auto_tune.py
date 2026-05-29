@@ -83,51 +83,11 @@ def test_t7_all_conditions_met_helper_called():
     obj._start_auto_tune_for_band_change.assert_called_once_with("40m")
 
 
-# ── T8 — Plausibler FWDPWR → save mit watt=10 (R1-F1) ────────────────
-
-
-def test_t8_save_with_watt_10_not_fwdpwr():
-    """KRITISCH (R1-F1): save mit watt=10 (nominal), NICHT round(avg)."""
-    obj = _make_mw_tx_mock(swr=1.5, fwdpwr_samples=[9.5, 9.7, 9.6])
-    from ui import mw_tx
-    mw_tx.TXMixin._tune_post_swr_check(obj, obj._tune_post_check_token)
-    # Save mit watt=10 (R1-F1) — NICHT round(9.6)=10 zufaellig identisch,
-    # darum auch mit avg=11.2 testen unten
-    obj.rf_preset_store.save.assert_called_once_with(
-        "flexradio", "40m", 10, 10
-    )
-
-
-def test_t8b_save_watt_10_when_avg_is_11():
-    """Auch wenn avg=11.2W (nicht 10): save unter watt=10 (R1-F1)."""
-    obj = _make_mw_tx_mock(swr=1.5, fwdpwr_samples=[11.0, 11.5, 11.0])
-    from ui import mw_tx
-    mw_tx.TXMixin._tune_post_swr_check(obj, obj._tune_post_check_token)
-    obj.rf_preset_store.save.assert_called_once_with(
-        "flexradio", "40m", 10, 10  # watt=10 (NICHT 11)
-    )
-
-
-# ── T9/T10 — Plausibilitäts-Grenzen ───────────────────────────────────
-
-
-def test_t9_fwdpwr_too_low_obsolet_p54fix():
-    """P54-FIX (v0.97.45): FWDPWR-Plausibilität obsolet — Save haengt jetzt
-    von rf-Plausibilität ab (3..50). Mit _tune_converged_rf=None gibt
-    Fallback rf=10 → save trotzdem (Backward-Compat)."""
-    obj = _make_mw_tx_mock(swr=1.5, fwdpwr_samples=[1.5, 1.5])
-    from ui import mw_tx
-    mw_tx.TXMixin._tune_post_swr_check(obj, obj._tune_post_check_token)
-    # Save wird AUFGERUFEN weil rf=10 (Fallback) plausibel ist
-    obj.rf_preset_store.save.assert_called_once_with("flexradio", "40m", 10, 10)
-
-
-def test_t10_fwdpwr_too_high_obsolet_p54fix():
-    """P54-FIX: FWDPWR-Plausibilität obsolet — analog T9, save mit Fallback."""
-    obj = _make_mw_tx_mock(swr=1.5, fwdpwr_samples=[85.0, 90.0])
-    from ui import mw_tx
-    mw_tx.TXMixin._tune_post_swr_check(obj, obj._tune_post_check_token)
-    obj.rf_preset_store.save.assert_called_once_with("flexradio", "40m", 10, 10)
+# ── P119 (29.05.2026): T8/T8b/T9/T10 ENTFERNT ───────────────────────
+# Diese Tests prüften den 10W-Stützpunkt-Save in _tune_post_swr_check
+# (Phase B). Phase B + Save wurden in P119 entfernt — der echte rfpower
+# wird im normalen Betrieb via _auto_adjust_tx_level gespeichert. Das neue
+# Verhalten ("kein 10W-Save mehr") deckt test_p119_phaseb_removal.py (T5) ab.
 
 
 def test_t11_swr_bad_no_save():
@@ -139,15 +99,7 @@ def test_t11_swr_bad_no_save():
     obj.rf_preset_store.save.assert_not_called()
 
 
-# ── T12 — Manueller TUNE speichert auch ───────────────────────────────
-
-
-def test_t12_manual_tune_saves_too():
-    """Auch manueller TUNE (auto_running=False) speichert Stuetzpunkt."""
-    obj = _make_mw_tx_mock(swr=1.5, fwdpwr_samples=[9.5], auto_running=False)
-    from ui import mw_tx
-    mw_tx.TXMixin._tune_post_swr_check(obj, obj._tune_post_check_token)
-    obj.rf_preset_store.save.assert_called_once_with("flexradio", "40m", 10, 10)
+# ── P119: T12 (manueller TUNE speichert) ENTFERNT — kein 10W-Save mehr. ──
 
 
 # ── T13 — FWDPWR-Sampling auch während _tune_active ───────────────────
@@ -213,13 +165,8 @@ def test_t16_auto_tune_skip_diversity_resume():
 # ── T17 — _apply_rf_preset nach Save erneut gerufen (V2-F1) ──────────
 
 
-def test_t17_apply_rf_preset_called_after_save():
-    """Nach erfolgreichem Save wird _apply_rf_preset nochmal aufgerufen,
-    damit aktualisierter Stuetzpunkt sofort fuer Convergenz greift."""
-    obj = _make_mw_tx_mock(swr=1.5, fwdpwr_samples=[9.5])
-    from ui import mw_tx
-    mw_tx.TXMixin._tune_post_swr_check(obj, obj._tune_post_check_token)
-    obj._apply_rf_preset.assert_called_once()
+# P119: test_t17_apply_rf_preset_called_after_save ENTFERNT — kein Save
+# mehr im Post-Check, daher auch kein _apply_rf_preset-Aufruf dort.
 
 
 def test_t17b_apply_rf_preset_not_called_when_no_save():
@@ -230,25 +177,7 @@ def test_t17b_apply_rf_preset_not_called_when_no_save():
     obj._apply_rf_preset.assert_not_called()
 
 
-# ── T18 — Plausibilitäts-Grenze exakt 2.0 → kein save ────────────────
-
-
-def test_t18_obsolet_p54fix():
-    """P54-FIX: FWDPWR-Grenze 2.0 obsolet — Fallback-rf=10 plausibel,
-    save wird aufgerufen."""
-    obj = _make_mw_tx_mock(swr=1.5, fwdpwr_samples=[2.0])
-    from ui import mw_tx
-    mw_tx.TXMixin._tune_post_swr_check(obj, obj._tune_post_check_token)
-    obj.rf_preset_store.save.assert_called_once_with("flexradio", "40m", 10, 10)
-
-
-def test_t19_obsolet_p54fix():
-    """P54-FIX: FWDPWR-Grenze 80.0 obsolet — Fallback-rf=10 plausibel,
-    save wird aufgerufen."""
-    obj = _make_mw_tx_mock(swr=1.5, fwdpwr_samples=[80.0])
-    from ui import mw_tx
-    mw_tx.TXMixin._tune_post_swr_check(obj, obj._tune_post_check_token)
-    obj.rf_preset_store.save.assert_called_once_with("flexradio", "40m", 10, 10)
+# ── P119: T18/T19 (FWDPWR-Grenzen → save) ENTFERNT — kein 10W-Save mehr. ──
 
 
 # ── T20 — Verbindungsverlust während Auto-Tune ────────────────────────
@@ -300,18 +229,8 @@ def test_t22_tune_in_progress_cleared():
 # ── T24 — Final-R1-ROT-Fix: set_power nach _apply_rf_preset ──────────
 
 
-def test_t24_set_power_after_apply_rf_preset():
-    """Final-R1 ROT: nach _apply_rf_preset muss radio.set_power
-    aufgerufen werden, sonst divergiert _rfpower_current und Hardware
-    (Power-Spike beim naechsten _auto_adjust_tx_level)."""
-    obj = _make_mw_tx_mock(swr=1.5, fwdpwr_samples=[9.5])
-    obj._rfpower_current = 10  # nach _apply_rf_preset
-    # Mock _apply_rf_preset damit _rfpower_current nicht geaendert wird
-    obj._apply_rf_preset = MagicMock()
-    from ui import mw_tx
-    mw_tx.TXMixin._tune_post_swr_check(obj, obj._tune_post_check_token)
-    # set_power muss mit _rfpower_current aufgerufen werden
-    obj.radio.set_power.assert_called_with(10)
+# P119: test_t24_set_power_after_apply_rf_preset ENTFERNT — kein Save /
+# _apply_rf_preset-Sync im Post-Check mehr (Phase B raus).
 
 
 def test_t24b_no_set_power_when_no_save():

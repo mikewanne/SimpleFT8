@@ -74,18 +74,21 @@ def test_phase1_label_shows_soll_anzeige_within_duration(app):
 
 
 def test_phase2_label_drops_soll_anzeige_after_duration(app):
-    """T2: _elapsed_s=6, duration_s=5 → Tick → "Leistung wird auf 10 W"."""
+    """T2 (nach P119): _elapsed_s=6 > duration_s=5 → Tick → "prüfe SWR".
+    Phase B (10W-Einregeln) entfiel — nach Ablauf der Dauer läuft nur noch
+    der SWR-Post-Check, daher neutrale "prüfe SWR"-Anzeige."""
     obj = _make_dialog_mock(duration_s=5, elapsed_s=6)
     obj._on_tick()
     assert obj._elapsed_s == 7
     text = obj._status_label.setText.call_args[0][0]
-    assert "Leistung wird auf 10 W eingeregelt" in text, (
-        f"Phase-2-Wording fehlt: {text!r}")
-    assert "7 s" in text
+    assert "prüfe SWR" in text, (
+        f"Post-Duration-Wording fehlt: {text!r}")
     assert "/ 5" not in text, f"Phase 2 zeigt fälschlich Soll: {text!r}"
-    # SWR + FWDPWR bleiben sichtbar
+    # SWR bleibt sichtbar
     assert "SWR 1.3" in text
-    assert "FWDPWR 9.5W" in text
+    # P119: 10W-Einregel-Wording ist raus
+    assert "auf 10 W eingeregelt" not in text, (
+        f"P119: 10W-Einregel-Wording darf nicht mehr erscheinen: {text!r}")
     # Phase 2 Style: #DDA heller Akzent
     style = obj._status_label.setStyleSheet.call_args[0][0]
     assert "#DDA" in style, f"Phase-2-Style falsch: {style!r}"
@@ -103,12 +106,12 @@ def test_phase_transition_at_duration_boundary(app):
     text1 = obj1._status_label.setText.call_args[0][0]
     assert "5 / 5 s" in text1, f"Grenze (elapsed=duration) sollte Phase 1 sein: {text1!r}"
 
-    # _elapsed_s=5 → Tick → _elapsed_s=6 > duration_s → Phase 2
+    # _elapsed_s=5 → Tick → _elapsed_s=6 > duration_s → Phase 2 (prüfe SWR)
     obj2 = _make_dialog_mock(duration_s=5, elapsed_s=5)
     obj2._on_tick()
     text2 = obj2._status_label.setText.call_args[0][0]
-    assert "Leistung wird auf 10 W eingeregelt" in text2, (
-        f"Übergang elapsed=duration+1 sollte Phase 2 sein: {text2!r}")
+    assert "prüfe SWR" in text2, (
+        f"Übergang elapsed=duration+1 sollte Phase 2 (prüfe SWR) sein: {text2!r}")
 
 
 # ── T4: duration_s<=0 defensive ───────────────────────────────────

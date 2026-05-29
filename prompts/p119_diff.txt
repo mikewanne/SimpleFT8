@@ -1,0 +1,339 @@
+diff --git a/core/rf_preset_store.py b/core/rf_preset_store.py
+index cb9c383..93c7c9e 100644
+--- a/core/rf_preset_store.py
++++ b/core/rf_preset_store.py
+@@ -182,6 +182,19 @@ class RFPresetStore:
+             band_data = self._data.get(radio, {}).get(band, {})
+             return str(int(watt)) in band_data
+ 
++    def has_any_preset(self, radio: str, band: str) -> bool:
++        """P119 (29.05.2026): True wenn IRGENDEIN Stützpunkt (beliebige
++        Watt-Zahl) für (radio, band) existiert.
++
++        Ersetzt den 10W-Anker-Check (`has_anchor(watt=10)`) für den
++        Auto-TUNE-Skip bei Bandwechsel. Nötig seit Wegfall von Phase B
++        (10W-Einpendeln) — der 10W-Anker wird nicht mehr gespeichert,
++        wohl aber der echte Ziel-Watt-Wert via `_auto_adjust_tx_level`.
++        Damit skippt Auto-TUNE auf jedem schon einmal gefunkten Band.
++        """
++        with self._lock:
++            return bool(self._data.get(radio, {}).get(band))
++
+     def get_all(self, radio: str) -> dict:
+         """Snapshot aller Einträge für aktuelles Radio (für UI-Tabelle)."""
+         with self._lock:
+diff --git a/ui/main_window.py b/ui/main_window.py
+index cd6d78d..4c28052 100755
+--- a/ui/main_window.py
++++ b/ui/main_window.py
+@@ -345,12 +345,10 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
+         # (Signal-Routing zum Dialog) und unterdrueckt Diversity-Resume.
+         self._auto_tune_running: bool = False
+         self._auto_tune_dialog = None  # AutoTuneDialog | None
+-        # P54-FIX (v0.97.45): Closed-Loop-Convergenz beim TUNE.
+-        # _tune_converged_rf: Ergebnis aus _tune_converge_to_target,
+-        # wird in _tune_post_swr_check ausgelesen für Save.
+-        # _tune_convergence_cancelled: Cancel-Flag von AutoTuneDialog
+-        # (gesetzt in _on_cancel_clicked/_on_backup_timeout).
+-        self._tune_converged_rf: int | None = None
++        # P119 (29.05.2026): _tune_converged_rf entfernt (Phase B / 10W-
++        # Einpendeln raus). _tune_convergence_cancelled bleibt — wird von den
++        # Dialog-Cancel-Handlern noch gesetzt, nach Wegfall der Phase-B-Schleife
++        # aber nicht mehr ausgewertet (harmloser No-op, kein Risiko).
+         self._tune_convergence_cancelled: bool = False
+         # P54-FIX Final-R1-ROT: Re-Entry-Sperre fuer _tune_stop.
+         # Phase B oeffnet Qt-Sub-Event-Loop → User-Cancel-Click kann
+diff --git a/ui/mw_radio.py b/ui/mw_radio.py
+index 293bb7b..0bd339f 100644
+--- a/ui/mw_radio.py
++++ b/ui/mw_radio.py
+@@ -637,14 +637,17 @@ class RadioMixin:
+         # App-Start-Trigger:
+         # - `_initial_band_set` Flag (gesetzt in MainWindow.__init__,
+         #   geclearted am Ende von __init__).
+-        # - RFPresetStore-Anker-Check: wenn 10W-Eintrag bereits existiert,
+-        #   ist Auto-Tune nicht nötig — Belt-and-suspenders gegen mögliche
+-        #   Bandpilot-Re-Trigger-Pfade die das Flag umgehen.
++        # - RFPresetStore-Preset-Check: wenn fuer das Band schon IRGENDEIN
++        #   Preset existiert (egal welche Watt-Zahl), ist Auto-Tune nicht
++        #   noetig — Belt-and-suspenders gegen Bandpilot-Re-Trigger-Pfade.
++        # P119 (29.05.2026): von has_anchor(watt=10) auf has_any_preset
++        #   umgestellt — der 10W-Anker (Phase B) entfaellt, der echte
++        #   Ziel-Watt-Wert wird via _auto_adjust_tx_level gespeichert.
+         _has_anchor = False
+         try:
+             mw = self._main_window if hasattr(self, "_main_window") else self
+-            _has_anchor = self.rf_preset_store.has_anchor(
+-                self.radio.radio_type, band, watt=10)
++            _has_anchor = self.rf_preset_store.has_any_preset(
++                self.radio.radio_type, band)
+         except (AttributeError, Exception):
+             _has_anchor = False
+ 
+diff --git a/ui/mw_tx.py b/ui/mw_tx.py
+index e7efb17..e2a1614 100644
+--- a/ui/mw_tx.py
++++ b/ui/mw_tx.py
+@@ -44,10 +44,10 @@ class TXMixin:
+         """Lädt RF-Preset für aktuelle (radio, band, watts) — None → Settings-Default.
+         Setzt _rfpower_converged + _was_converged zurück (neuer Konvergenz-Zyklus).
+ 
+-        P54-FIX (v0.97.45): wenn rf_preset_store.load None returnt (kein
+-        exakter Treffer und nicht interpolierbar), versuche
+-        _kruecken_skalierung (linear vom 10W-Anker mit -10% Sicherheit).
+-        Erst wenn Krücke auch None gibt, fällt auf Settings-Default zurück.
++        P119 (29.05.2026): wenn rf_preset_store.load None returnt (kein
++        exakter Treffer und nicht interpolierbar), direkt Settings-Default
++        (get_tx_power). Die frühere 10W-Anker-Hochrechnung (_kruecken_skalierung)
++        ist entfallen — der Closed-Loop pendelt von hier auf die Ziel-Watt ein.
+         """
+         if self.radio is None:
+             self._rfpower_current = 50
+@@ -64,14 +64,13 @@ class TXMixin:
+             self._rfpower_current = saved
+             print(f"[RF-Preset] geladen: {band}_{watts}W → rf={saved}")
+         else:
+-            # P54-FIX AC5: Krücken-Skalierung wenn genau 1 Stützpunkt vorhanden
+-            krucke = self._kruecken_skalierung(band, watts)
+-            if krucke is not None:
+-                self._rfpower_current = krucke
+-            else:
+-                self._rfpower_current = self.settings.get_tx_power(band, default=50)
+-                print(f"[RF-Preset] Default: {band}_{watts}W → "
+-                      f"rf={self._rfpower_current}")
++            # P119 (29.05.2026): Krücken-Skalierung (10W-Anker → hochrechnen)
++            # entfernt. Kein exakter/interpolierbarer Treffer → Settings-Default;
++            # der Closed-Loop (`_auto_adjust_tx_level`) pendelt von hier auf die
++            # Ziel-Wattzahl ein und speichert den echten Stützpunkt.
++            self._rfpower_current = self.settings.get_tx_power(band, default=50)
++            print(f"[RF-Preset] Default: {band}_{watts}W → "
++                  f"rf={self._rfpower_current}")
+         self._rfpower_converged = False
+         self._was_converged = False
+ 
+@@ -332,7 +331,6 @@ class TXMixin:
+             # Kann None sein (Fenster < 3 Samples) → Freeze ungültig.
+             swr_after_match = self._compute_match_swr()
+             self._tune_last_valid_swr = swr_after_match
+-            swr_limit = self.settings.get("swr_limit", 3.0)
+             # P153 Diagnose-Log: Fenster-Inhalt + Median vs alter Snapshot.
+             from core.debug_log import debug_log
+             _dur = getattr(self, '_tune_duration_s', 0)
+@@ -347,22 +345,13 @@ class TXMixin:
+                 f"median={swr_after_match if swr_after_match is None else f'{swr_after_match:.2f}'} "
+                 f"snapshot={self.radio.last_swr:.2f} "
+                 f"samples={[f'{s:.1f}' for s in _win]}")
+-            # P153 R1-F6: expliziter is-None-Check. NICHT `None <= limit`
+-            # (Python-TypeError, kein False — DeepSeek-Detail-Fehler abgefangen).
+-            if swr_after_match is not None and swr_after_match <= swr_limit:
+-                # Phase B: bis FWDPWR ≈ 10W konvergieren (nur für
+-                # RF-Stützpunkt, nicht mehr für SWR-Bewertung).
+-                self._tune_converged_rf = self._tune_converge_to_target(target_w=10)
+-            else:
+-                # None (Fenster zu dünn) ODER SWR > Limit → kein Phase B.
+-                # Post-Check sieht None/hohen Wert → Band bleibt gesperrt.
+-                _reason = ("Fenster<3 Samples" if swr_after_match is None
+-                           else f"SWR {swr_after_match:.1f} > Limit {swr_limit:.1f}")
+-                print(f"[P54-FIX] Phase B SKIP — {_reason}")
+-                self._tune_converged_rf = None
++            # P119 (29.05.2026): Phase B (10W-Einpendeln) ENTFERNT. Der Freeze
++            # `swr_after_match` oben ist der ehrliche Match-Wert (P142/P153/P159)
++            # und genügt für den Post-Check. Der echte Ziel-Watt-rfpower wird im
++            # normalen Betrieb via `_auto_adjust_tx_level` gespeichert — der
++            # 10W-Anker + die Hochrechnungs-Krücke werden nicht mehr gebraucht.
+         else:
+             # User-Cancel oder Disconnect: kein gültiger TUNE-Wert.
+-            self._tune_converged_rf = None
+             self._tune_last_valid_swr = None
+ 
+         # P76-A SAFETY-Doku-Anker (v0.97.49, jetzt durch P142 obsolet):
+@@ -473,42 +462,11 @@ class TXMixin:
+             was_blocked = band in self._swr_blocked_bands
+             self._swr_blocked_bands.discard(band)
+ 
+-            # P54b (R1-F1): RFPreset-Stuetzpunkt unter nominaler Last (10 W,
+-            # rf=10) speichern wenn Messwert plausibel. Schluessel ist die
+-            # **nominale TUNE-Leistung** (10), nicht round(avg_fwdpwr) —
+-            # sonst landet der Stuetzpunkt unter willkuerlichen Watt-Zahlen.
+-            # P54-FIX (v0.97.45): konvergierter Wert statt hart rf=10.
+-            # _tune_converged_rf wird in _tune_converge_to_target gesetzt
+-            # (None bei Fail/Cancel/kein Signal/Phase-B-Skip).
+-            rf_to_save = (self._tune_converged_rf
+-                          if self._tune_converged_rf is not None else 10)
+-
+-            # R1-F5 ORANGE: Plausibilitäts-Check rf ∈ [3, 50] für 10W-Ziel.
+-            # Werte ausserhalb dieses Bereichs sind physikalisch unrealistisch
+-            # (Hardware-Anomalie oder Mess-Fehler) — KEIN Save dann.
+-            if 3 <= rf_to_save <= 50:
+-                self.rf_preset_store.save(
+-                    self.radio.radio_type, self.settings.band, 10, rf_to_save
+-                )
+-                print(f"[P54-FIX] RFPreset gespeichert: "
+-                      f"{self.settings.band}_10W → rf={rf_to_save} "
+-                      f"(SWR {swr_now:.1f}, FWDPWR avg {avg_fwdpwr:.1f}W)")
+-                # V2-F1: aktualisierten Stuetzpunkt sofort fuer Convergenz
+-                # nutzen — _apply_rf_preset laedt aus Store.
+-                self._apply_rf_preset()
+-                # Final-R1 ROT-Fix (P54): Hardware-State mit _rfpower_current
+-                # synchronisieren. Sonst divergieren intern (10) und
+-                # Radio (power_preset aus _tune_stop) → naechster
+-                # _auto_adjust_tx_level-Zyklus regelt falsch → Power-Spike.
+-                if self.radio.ip:
+-                    self.radio.set_power(self._rfpower_current)
+-            else:
+-                print(f"[P54-FIX] Stuetzpunkt verworfen: rf={rf_to_save} "
+-                      f"out of [3..50] — Hardware-Anomalie (FWDPWR avg "
+-                      f"{avg_fwdpwr:.1f}W)")
+-
+-            # Reset Convergenz-State fuer naechsten TUNE
+-            self._tune_converged_rf = None
++            # P119 (29.05.2026): 10W-Stützpunkt-Save ENTFERNT (Phase B raus).
++            # TUNE bewertet nur noch den SWR + gibt das Band frei. Der echte
++            # rfpower pro (Band, Ziel-Watt) wird im normalen Betrieb via
++            # `_auto_adjust_tx_level` → rf_preset_store.save gepflegt — der
++            # 10W-Anker + Hochrechnungs-Krücke werden nicht mehr gebraucht.
+ 
+             if was_blocked:
+                 self.qso_panel.add_info(
+@@ -526,8 +484,8 @@ class TXMixin:
+ 
+             # R1-F2: Auto-Tune-Pfad — Signal an Dialog statt QMessageBox.
+             if is_auto and dlg is not None:
+-                # P71: DONE OK-Log mit Mode + Antenne + rf-Wert
+-                rf_logged = rf_to_save if 3 <= rf_to_save <= 50 else "rejected"
++                # P71: DONE OK-Log mit Mode + Antenne (P119: kein rf-Save mehr)
++                rf_logged = "n/a"
+                 _dur = self.settings.get("tune_duration_s", 15)
+                 print(f"[P54a] DONE OK band={self.settings.band} "
+                       f"mode={self.settings.mode} ant=ANT1 "
+@@ -572,125 +530,11 @@ class TXMixin:
+ 
+     # ── P54-FIX (v0.97.45) Closed-Loop-Convergenz ─────────────────
+ 
+-    def _wait_with_event_loop(self, ms: int) -> None:
+-        """Synchrones Warten mit aktivem Qt-Event-Loop.
+-
+-        Wichtig: Meter-Updates (FWDPWR-Sampling) kommen während des
+-        Wartens an, weil der Sub-Event-Loop laeuft. Cancel-Button im
+-        AutoTuneDialog wird auch verarbeitet.
+-        """
+-        from PySide6.QtCore import QEventLoop, QTimer
+-        loop = QEventLoop()
+-        QTimer.singleShot(ms, loop.quit)
+-        loop.exec()
+-
+-    def _tune_converge_to_target(self, target_w: int = 10,
+-                                  max_iterations: int = 5,
+-                                  iter_ms: int = 1000) -> int | None:
+-        """P54-FIX AC1: Closed-Loop bis FWDPWR ≈ target_w.
+-
+-        Voraussetzung: TUNE laeuft (radio.tune_on() + _tune_active=True),
+-        Phase A (Tuner-Match) ist fertig, SWR stabil.
+-
+-        Args:
+-            target_w: Ziel-Watt-Zahl fuer Convergenz (typisch 10).
+-            max_iterations: Max Closed-Loop-Iterationen.
+-            iter_ms: Wartezeit pro Iteration (ms) fuer Sample-Sammlung.
+-
+-        Returns:
+-            Konvergierter rfpower-Slider-Wert (1-100) oder None bei
+-            Fail/Cancel/Kein-Signal.
+-        """
+-        if not self.radio.ip:
+-            return None
+-
+-        TOLERANCE_W = 1.0
+-        MIN_SAMPLES = 2
+-        # P54-FIX R1-F2: Cancel-Flag wird NICHT hier zurueckgesetzt —
+-        # Reset macht der Caller (_start_auto_tune_for_band_change /
+-        # _on_tune_clicked) vor Phase A. Damit kann ein User-Cancel
+-        # bereits VOR Convergenz das Flag setzen und greift sofort.
+-
+-        rf_current = 10  # Startwert (gleicher Slider wie Phase A)
+-        self.radio.set_rfpower_direct(rf_current)
+-        self._fwdpwr_samples.clear()
+-
+-        # Initial-Sample-Phase: 1.5s sammeln vor erstem Adjust (V2-F8)
+-        self._wait_with_event_loop(1500)
+-
+-        for iteration in range(max_iterations):
+-            # R1-F2 ROT: Cancel-Flag pruefen
+-            if self._tune_convergence_cancelled:
+-                print("[P54-FIX] Convergenz abgebrochen (Cancel)")
+-                return None
+-
+-            if len(self._fwdpwr_samples) < MIN_SAMPLES:
+-                # Zu wenig Daten — weiter sammeln
+-                self._wait_with_event_loop(iter_ms)
+-                continue
+-
+-            samples = list(self._fwdpwr_samples)
+-            self._fwdpwr_samples.clear()
+-            fwdpwr = sum(samples) / len(samples)
+-
+-            if abs(fwdpwr - target_w) <= TOLERANCE_W:
+-                print(f"[P54-FIX] Convergenz: rf={rf_current} → "
+-                      f"FWDPWR≈{fwdpwr:.1f}W (Iter {iteration+1}/{max_iterations})")
+-                return rf_current
+-
+-            # Proportionale Anpassung (analog _auto_adjust_tx_level)
+-            if fwdpwr > 0.5:
+-                estimated = int(rf_current * (target_w / fwdpwr))
+-                step = max(1, min(15, abs(estimated - rf_current)))
+-                if fwdpwr < target_w:
+-                    rf_current = min(100, rf_current + step)
+-                else:
+-                    rf_current = max(1, rf_current - step)
+-                self.radio.set_rfpower_direct(rf_current)
+-                print(f"[P54-FIX] Iter {iteration+1}: FWDPWR={fwdpwr:.1f}W "
+-                      f"target={target_w}W → rf={rf_current}")
+-                self._wait_with_event_loop(iter_ms)
+-            else:
+-                print(f"[P54-FIX] Iter {iteration+1}: FWDPWR≈0 — kein Signal")
+-                return None
+-
+-        # Max-Iterations: best-effort letzten Wert
+-        print(f"[P54-FIX] Max-Iter erreicht — best-effort rf={rf_current}")
+-        return rf_current
+-
+-    def _kruecken_skalierung(self, band: str, target_w: int) -> int | None:
+-        """P54-FIX AC5: linear vom einzigen Stuetzpunkt × 0,9 Sicherheit.
+-
+-        Wird in _apply_rf_preset gerufen wenn rf_preset_store.load None
+-        returnt (keine direkte/interpolierbare Stuetzpunkt-Match).
+-
+-        Args:
+-            band: Aktuelles Band (z.B. "40m").
+-            target_w: Gewuenschte Ziel-Watt-Zahl.
+-
+-        Returns:
+-            Hochgerechneter rfpower (1-100) oder None wenn keine Kruecke
+-            moeglich (0 oder ≥2 Stuetzpunkte).
+-        """
+-        if not hasattr(self, 'rf_preset_store') or self.radio is None:
+-            return None
+-        radio_type = self.radio.radio_type
+-        all_presets = self.rf_preset_store.get_all(radio_type)
+-        band_data = all_presets.get(band, {})
+-
+-        if len(band_data) != 1:
+-            return None
+-
+-        anchor_watt, anchor = next(iter(band_data.items()))
+-        anchor_rf = anchor.get("rf", 0)
+-        if anchor_watt <= 0 or anchor_rf <= 0:
+-            return None
+-
+-        estimated = anchor_rf * (target_w / anchor_watt) * 0.9
+-        krucke = max(1, min(100, int(round(estimated))))
+-        print(f"[RF-Preset] Kruecke: {band}_{target_w}W → rf={krucke} "
+-              f"(Anker {anchor_watt}W=rf{anchor_rf}, linear×0.9)")
+-        return krucke
++    # P119 (29.05.2026): `_wait_with_event_loop`, `_tune_converge_to_target`
++    # (Phase B = 10W-Einpendeln) und `_kruecken_skalierung` (10W→Ziel-Watt-
++    # Hochrechnung) ENTFERNT. Der echte rfpower pro (Band, Ziel-Watt) wird im
++    # normalen Betrieb via `_auto_adjust_tx_level` → rf_preset_store.save
++    # gepflegt; der 10W-Anker-Umweg ist damit überflüssig.
+ 
+     # ── P54 (v0.97.44) ─────────────────────────────────────────────
+ 

@@ -154,7 +154,9 @@ def test_t8_swr_bad_manual_uses_panel_info():
     """
     src = Path("ui/mw_tx.py").read_text()
     idx_start = src.find("def _tune_post_swr_check")
-    idx_end = src.find("def _wait_with_event_loop", idx_start)
+    # P119 (29.05.2026): _wait_with_event_loop entfernt — End-Marker auf die
+    # nächste existierende Methode setzen.
+    idx_end = src.find("def _start_auto_tune_for_band_change", idx_start)
     if idx_end < 0:
         idx_end = idx_start + 6000
     block = src[idx_start:idx_end]

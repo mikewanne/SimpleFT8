@@ -164,13 +164,15 @@ def test_t8_tune_stop_uses_compute_helper():
         "P153: alter Snapshot-Freeze (radio.last_swr) muss ersetzt sein")
 
 
-def test_t9_tune_stop_explicit_none_check():
-    """T9: expliziter `is not None`-Check (NICHT None<=limit → TypeError).
-    Fängt DeepSeek-Detail-Fehler ab."""
-    body = _tune_stop_body()
-    assert "swr_after_match is not None and swr_after_match <= swr_limit" in body, (
-        "P153: muss expliziten is-None-Check haben (None<=float ist "
-        "Python-TypeError, kein False)")
+def test_t9_post_check_explicit_none_check():
+    """T9 (nach P119): expliziter is-None-Check für den eingefrorenen
+    Median-SWR. Nach Wegfall von Phase B lebt der Check NICHT mehr in
+    _tune_stop (das friert nur ein), sondern im Post-Check
+    (_tune_post_swr_check): swr_frozen kann None sein (Fenster < 3 Samples)
+    → muss explizit abgefangen werden (None<float ist Python-TypeError)."""
+    assert "swr_frozen is None or swr_frozen < 1.0" in MW_TX_SRC, (
+        "P153/P119: Post-Check muss expliziten is-None-Check für den "
+        "eingefrorenen SWR haben (None<float ist TypeError, kein False).")
 
 
 def test_t10_meter_update_collects_swr_during_tune():
