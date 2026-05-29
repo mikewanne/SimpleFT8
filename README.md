@@ -65,7 +65,7 @@ on the off-band 40m setup: statistically distinguishable from "no effect".*
 
 *CIs include 0 on 20m. When ANT1 is already resonant on the band, time-shared
 Diversity costs some single-antenna decodes. The qualitative gain remains
-(ANT2 wins 79–86% of direct dual-receives, +4 dB avg), but raw count is flat.*
+(when ANT2 wins a direct dual-receive, it does so by +4 dB avg), but raw count is flat.*
 
 **The twist — on 15m (also resonant), the gain comes back, and it's significant:**
 
@@ -364,8 +364,8 @@ Setup: statistisch von „kein Effekt" unterscheidbar.*
 
 *CIs enthalten 0 auf 20m. Wenn ANT1 bereits auf dem Band resonant ist, kostet
 das Time-Sharing Diversity einige Single-Antenna-Decodes. Der qualitative
-Gewinn bleibt (ANT2 gewinnt 79–86% der direkten Doppel-Empfänge, +4 dB
-Durchschnitt), aber der absolute Stations-Count ist flach.*
+Gewinn bleibt (gewinnt ANT2 einen direkten Doppel-Empfang, dann im Schnitt
+mit +4 dB), aber der absolute Stations-Count ist flach.*
 
 **Der Clou — auf 15m (ebenfalls resonant) kommt der Gewinn zurück, und zwar signifikant:**
 

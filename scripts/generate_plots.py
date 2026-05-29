@@ -533,8 +533,8 @@ assert TEXTS["de"].keys() == TEXTS["en"].keys(), (
 # ──────────────────────────────────────────────────────────────────────────────
 # Auf 40m ist ANT1 off-band → Diversity gleicht Antennen-Mismatch aus.
 # Auf 20m ist ANT1 RESONANT (Auslegungsband) → eigentlich keine Diversity-
-# Krücke noetig. Trotzdem gewinnt ANT2 (Regenrinne) in 79-86% der Doppelempfaenge
-# mit Ø +4 dB Vorteil — durch reine Polarisations- und Pattern-Diversity.
+# Krücke noetig. Trotzdem: wenn ANT2 (Regenrinne) einen Doppelempfang gewinnt,
+# dann mit Ø +4 dB Vorteil — durch reine Polarisations- und Pattern-Diversity.
 # Der „asymmetrische Vorteil" ist hier: TX resonant (Stationen hoeren mich)
 # + RX besser (ich hoere sie zurueck) = QSOs die mit 1 Antenne nie entstuenden.
 TEXTS_20M_OVERRIDE = {
@@ -543,7 +543,7 @@ TEXTS_20M_OVERRIDE = {
         "p1_subtitle": "Resonante Sende-Antenne + Diversity-Empfang — der eigentliche Killer-Vorteil — 20m FT8",
         "p1_summary_body": (
             "Auf 20m arbeitet ANT1 (Kelemen DP-201510) IN seinem Auslegungsband — also als top-resonante Antenne.\n"
-            "Trotzdem: ANT2 (Regenrinne) gewinnt in 79-86% der Doppelempfänge mit Ø +4 dB Vorteil.\n"
+            "Trotzdem: Wenn ANT2 (Regenrinne) einen Doppelempfang gewinnt, dann im Schnitt mit +4 dB Vorteil.\n"
             "Das ist KEIN Antennen-Mismatch wie auf 40m — sondern reine Polarisations- und Pattern-Diversity.\n"
             "Asymmetrischer Vorteil: TX resonant (Stationen hören mich) + RX-Diversity (ich höre sie zurück)."
         ),
@@ -577,8 +577,8 @@ TEXTS_20M_OVERRIDE = {
         ),
         "p3_note2": (
             "Wichtig: Auf 20m ist ANT1 RESONANT — der Diversity-Gewinn entsteht NICHT durch Antennen-Mismatch. "
-            "Bei Stationen wo BEIDE Antennen empfangen, ist die Regenrinne in 79% (Standard) bzw 86% (DX) der "
-            "Fälle sogar STÄRKER als der resonante Dipol — durch Polarisations-/Pattern-Diversity. "
+            "Bei Stationen wo BEIDE Antennen empfangen und die Regenrinne gewinnt, ist sie im Schnitt "
+            "+4 dB stärker als der resonante Dipol — durch Polarisations-/Pattern-Diversity. "
             "Das macht 20m-Diversity übertragbar auf andere Setups mit zwei verschiedenartigen Antennen."
         ),
         "p4_annotation": (
@@ -605,7 +605,7 @@ TEXTS_20M_OVERRIDE = {
             "Diversity-Gewinn auf 20m ist KLEINER als auf 40m — aber das ist genau der Punkt:\n"
             "Auf 20m ist ANT1 bereits eine erstklassige resonante Antenne, da war 'mehr' nicht zu erwarten.\n"
             "Trotzdem zeigen die Daten: ANT2 fügt im Schnitt +{gain_lo:.0f}% bis +{gain_hi:.0f}% hinzu —\n"
-            "und in 79-86% der Doppelempfänge ist die Regenrinne sogar stärker als der Kelemen-Dipol.\n"
+            "und wenn die Regenrinne einen Doppelempfang gewinnt, dann mit Ø +4 dB gegenüber dem Kelemen-Dipol.\n"
             "Diversity DX bringt {d_gain:.0f}% — gezielter auf schwache DX-Signale."
         ),
         "p7_fazit_best": (
@@ -630,7 +630,7 @@ TEXTS_20M_OVERRIDE = {
         "p1_subtitle": "Resonant TX antenna + Diversity RX — the actual killer advantage — 20m FT8",
         "p1_summary_body": (
             "On 20m, ANT1 (Kelemen DP-201510) operates WITHIN its design band — a top-class resonant antenna.\n"
-            "Yet: ANT2 (gutter) wins in 79-86% of dual-receive cases with average +4 dB advantage.\n"
+            "Yet: when ANT2 (gutter) wins a dual-receive, it does so by +4 dB on average.\n"
             "This is NOT antenna mismatch like on 40m — it's pure polarization and pattern diversity.\n"
             "Asymmetric advantage: resonant TX (stations hear me) + RX diversity (I hear them back)."
         ),
@@ -665,8 +665,8 @@ TEXTS_20M_OVERRIDE = {
         ),
         "p3_note2": (
             "Important: On 20m ANT1 is RESONANT — the diversity gain does NOT come from antenna mismatch. "
-            "For stations where BOTH antennas receive, the gutter wins in 79% (Standard) / 86% (DX) of cases — "
-            "STRONGER than the resonant dipole — through polarization/pattern diversity. "
+            "For stations where BOTH antennas receive and the gutter wins, it is on average +4 dB "
+            "stronger than the resonant dipole — through polarization/pattern diversity. "
             "This makes 20m diversity transferable to other setups with two physically different antennas."
         ),
         "p4_annotation": (
@@ -693,7 +693,7 @@ TEXTS_20M_OVERRIDE = {
             "Diversity gain on 20m is SMALLER than on 40m — but that's exactly the point:\n"
             "On 20m, ANT1 is already a top-class resonant antenna, so 'more' was not to be expected.\n"
             "Yet the data shows: ANT2 adds on average +{gain_lo:.0f}% to +{gain_hi:.0f}% —\n"
-            "and in 79-86% of dual-receive cases, the gutter is even STRONGER than the Kelemen dipole.\n"
+            "and when the gutter wins a dual-receive, it does so by +4 dB avg over the Kelemen dipole.\n"
             "Diversity DX delivers {d_gain:.0f}% — targeted at weak DX signals."
         ),
         "p7_fazit_best": (
@@ -720,9 +720,9 @@ TEXTS_20M_OVERRIDE = {
 # Diversity-Standard-Gewinn (CI komplett ueber 0). 15m ist das hoehere resonante
 # Band → Faraday-Rotation skaliert mit f², Polarisations-Diversity wirkt staerker.
 # Damit ist 15m der staerkste Beleg der Studie: resonante TX-Antenne UND klarer
-# Gewinn. Hardcodierte „79-86%"-Doppelempfang-Quoten aus 20m werden NICHT
-# uebernommen (aus den Stats nicht reproduzierbar). Verifiziert: ANT2 gewinnt
-# Doppelempfaenge im Schnitt mit +4.3 dB (deckt sich mit 20m's +4 dB).
+# Gewinn. KEINE Doppelempfang-Gewinnquote in % (aus den Stats nicht
+# reproduzierbar — Detail-Logs erfassen nur ANT2-Siege). Verifiziert: ANT2
+# gewinnt Doppelempfaenge im Schnitt mit +4.3 dB (deckt sich mit 20m's +4 dB).
 TEXTS_15M_OVERRIDE = {
     "de": {
         "pdf_name": "Auswertung-15m-FT8.pdf",
