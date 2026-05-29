@@ -1543,6 +1543,99 @@ Schaden). Hobby-Tool-pragmatisch, KISS.
 
 ---
 
+## 18. Statistik-Diagramme: Berechnung, Modi-Vergleich, DX erfasst ALLE Stationen
+
+> **Status: dokumentiert 29.05.2026.** Entstanden aus Mike-Frage „wie ist das
+> Verhältnis Diversity vs. Normal auf 15m" — damit wir in 2 Monaten nicht
+> wieder im Code graben müssen. Methodik-Details auch in `auswertung.md` §3-6.
+
+### 18.1 ⛔ Was JEDER Modus loggt: ALLE Stationen (DX inklusive!)
+
+**Häufiger Irrtum (war sogar in `auswertung.md` §5 falsch dokumentiert):**
+„Diversity_Dx zählt nur Stationen mit SNR < −10". **Das ist FALSCH für die
+Statistik.**
+
+**Code-Beweis (29.05.2026 verifiziert):**
+- `core/station_accumulator.py:45-60` — `accumulate_stations` nimmt **jede**
+  Station mit gültigem Call in den Speicher. **KEIN SNR-Filter, KEIN
+  scoring_mode-Filter.** Gilt für Normal UND beide Diversity-Modi.
+- `ui/mw_cycle.py:456` — `_log_stats(len(self._diversity_stations), …)` loggt
+  die **Gesamtzahl** in die `statistics/<Modus>/<Band>/FT8/DATE_HH.md`-Datei.
+
+**Das `SNR < −10`-Kriterium** (`ui/mw_cycle.py:411-415`, `a1_weak`/`a2_weak`)
+betrifft **ausschließlich die Antennen-Verhältnis-Entscheidung im DX-Modus** —
+DX gewichtet den Antennen-Mix auf schwache DX-Signale (starke Lokale kommen eh
+auf beiden Antennen rein). Es filtert NICHTS aus der geloggten Stationszahl.
+
+→ **Alle 3 Modi sind direkt vergleichbar; DX ist voll für Diagramme nutzbar.**
+
+### 18.2 Verzeichnis-/Datei-Struktur der Messdaten
+
+```
+statistics/<Modus>/<Band>/FT8/YYYY-MM-DD_HH.md   ← 1 Datei pro Tag×UTC-Stunde
+                                                    1 Zeile pro 15s-Zyklus
+   <Modus> ∈ { Normal, Diversity_Normal (=Standard), Diversity_Dx (=DX) }
+   Spalten: | Zeit | Stationen | Ø SNR |
+statistics/<Modus>/<Band>/FT8/stations/YYYY-MM-DD_HH.md  ← pro-Station-Detail
+                                                            (für Rescue-Events)
+```
+
+### 18.3 Pooled Mean (Grundformel)
+
+```
+Ø Stationen/Zyklus = Σ(Stationen über alle Zyklen) / Σ(Zyklen)
+```
+Jeder 15s-Zyklus zählt gleich, keine Tagesgewichtung.
+
+### 18.4 ⛔ FAIRER Modi-Vergleich (PFLICHT — sonst Tageszeit-Bias)
+
+**Problem:** Mike misst die 3 Modi NICHT parallel, sondern wechselt über den
+Tag/über Tage durch. 15m ist stark tageszeitabhängig (mittags ~50 Sta./Zyklus,
+früh/abends viel weniger). Ein roher Mehrtages-Schnitt würde z.B.
+„Normal-früh" gegen „Standard-mittags" stellen → Modus-Unterschied und
+Tageszeit-Unterschied vermischt → Ergebnis wertlos.
+
+**Lösung — date+hour-gematchter Pooled Mean (über ALLE Tage):**
+1. Pro Modus alle `(Datum, UTC-Stunde)`-Blöcke mit Daten sammeln.
+2. **Faire Blöcke** = Schnittmenge der zu vergleichenden Modi (gleiche Stunde
+   am gleichen Tag → praktisch identische Funkbedingung).
+3. Pooled Mean NUR über diese fairen Blöcke — **gepoolt über alle Tage** in
+   der Schnittmenge (kein einzelner Tag! Mehrtages-Mittel ist der Sinn).
+4. Bei nur-3-Modi-gleichzeitig ist die Schnittmenge oft zu klein → **paarweise**
+   vergleichen (Normal∩Standard, Normal∩DX, Standard∩DX), jeweils auf der
+   größten gemeinsamen Block-Menge. Jeweils Normal = 100 %.
+5. Wenn eine Schnittmenge < 3 Stunden-Blöcke: Mike informieren, NICHT
+   trotzdem „nettes" Ergebnis melden.
+
+**Merksatz:** roher Schnitt = bequem aber verzerrt; date+hour-gematcht =
+mehr Tage gepoolt UND bedingungs-fair = die einzige belastbare Form.
+
+**Referenz-Ergebnis (15m FT8, 29.05.2026):** Normal 100 % ·
+**Standard +46 %** (13 Blöcke/8 Tage) · **DX +24 %** (8 Blöcke/5 Tage);
+Standard ~10 % über DX (11 Blöcke/7 Tage). Reihenfolge konsistent:
+Standard > DX > Normal. DX tauscht minimal Gesamtmenge gegen
+Schwachsignal-Ausbeute — beides gewollt.
+
+### 18.5 Diagramme + PDFs erzeugen
+
+```bash
+./venv/bin/python3 scripts/generate_plots.py   # Diversity/Stationen-PNGs +
+                                                # PDFs, IMMER DE (auswertung/)
+                                                # UND EN (auswertung/en/)
+./banduebersicht.sh                             # Band-Aktivität (P117/P118,
+                                                # Berliner Zeit, DST-aware)
+```
+Regel: Statistiken/PDFs immer DE **und** EN. PDF-Layout-Helpers
+`_ctext`/`_chline`/`_csection` (kein `_r_hline` — gibt's nicht mehr).
+
+### 18.6 Rescue-Events (optional, „mit Rescue")
+
+Aus `statistics/<Modus>/<Band>/FT8/stations/*.md`: eine Station zählt als
+Rescue wenn Antenne 1 ≤ −24 dB UND Antenne 2 > −24 dB (P150-Schwelle). Auf
+die Stundenfile-Summe addieren für „Ø mit Rescue".
+
+---
+
 ## Pflege dieser Datei
 
 **Neue Sektionen** anhängen wenn:

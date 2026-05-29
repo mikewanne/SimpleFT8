@@ -563,6 +563,8 @@ Feature-Plan: **ZUERST FEATURES.md grep'en**, dann Code lesen.
 | Netto-Leistung, graue Zahl in (), FWD·(1−Γ²), „abgestrahlt vs netto" | §14 | P156 Netto-Watt-Anzeige zwischen W und SWR |
 | **RX-Liste, Empfangsfenster, Aging, „alte Stationen kleben", `_slot_start_ts`/`_last_heard`, `remove_stale`, `_rebuild_rx_table`, leere Slots** | **§15** | **P157 Stations-Akkumulator + Aging — dict-Projektion, 2 Aging-Trigger, UTC=zuletzt-gehört** |
 | **TUNE-Dauer, `tune_duration_s`, Rechtsklick-Override, Auto-TUNE bei Bandwechsel, `auto_tune_on_band_change`, „Band gesperrt — SWR" welcher Pfad, RFPreset-Anker** | **§16** | **4 TUNE-Pfade + Dauer-Quellen, Rechtsklick=Ad-hoc (gewollt), 2 verschiedene gesperrt-Meldungen (TUNE-Median vs Live-Watchdog)** |
+| QSO-Fenster-Klick auf Anrufer während Auto-Hunt, Einschub, `_insert_pending_call`, RX-Liste=aktiv/QSO-Fenster=passiv | §17 | P158 wartende Station einschieben + Auto-Resume |
+| **Statistik-Diagramme, Modi-Vergleich, „DX zählt nur <-10?", Pooled Mean, fairer date+hour-Vergleich, `generate_plots.py`, alle Modi loggen ALLE Stationen** | **§18** | **Diagramm-Methodik: alle 3 Modi erfassen alle Stationen (DX-<-10 nur Antennen-Ratio), date+hour-gematchter Mehrtages-Vergleich, Erzeugung DE+EN** |
 
 ### Abgrenzung der 5 Doku-Dateien
 

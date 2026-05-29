@@ -90,19 +90,30 @@ nicht trotzdem auswerten und „nettes" Ergebnis melden.
 
 ---
 
-## 5. STOLPERSTEIN: Diversity_Dx ≠ Normal/Standard vergleichbar
+## 5. ✅ KORRIGIERT 29.05.2026: Alle 3 Modi erfassen ALLE Stationen — DX ist vergleichbar
 
-**Diversity_Dx-Modus zählt per Definition NUR Stationen mit SNR < −10 dB**
-(`core/diversity.py`, scoring_mode="dx"). Die starken Lokalstationen werden
-absichtlich rausgefiltert.
+> **WICHTIG — alte Version dieser Sektion war FALSCH.** Sie behauptete
+> „Diversity_Dx zählt nur SNR<-10". Das stimmt NICHT für die Statistik.
+> Code-verifiziert 29.05.2026 (`core/station_accumulator.py:45-60` +
+> `ui/mw_cycle.py:456`).
 
-→ DX hat IMMER weniger Stationen/Zyklus als Normal/Standard, das ist KEIN
-„Diversity-Verlust", sondern die DX-Modus-Definition. Bei Vergleich „Normal=100%"
-ist DX strukturell unter 100% — auch wenn Diversity einwandfrei läuft.
+**Fakt (code-belegt):** In ALLEN drei Modi (Normal, Diversity_Standard,
+Diversity_Dx) wird die **Gesamtzahl aller dekodierten Stationen** pro Zyklus
+geloggt. `accumulate_stations` nimmt jede Station mit gültigem Call in den
+Speicher — **kein SNR-Filter, kein scoring_mode-Filter**. `_log_stats` schreibt
+`len(self._diversity_stations)` = total.
 
-**Bei Mike's Anfrage „Normal=100%" trotzdem so darstellen, aber im Fazit
-explizit erklären:** „DX-Modus zählt nur SNR<-10, nicht direkt mit Normal
-vergleichbar."
+**Das `SNR < −10`-Kriterium betrifft NUR die Antennen-Verhältnis-Entscheidung**
+(`ui/mw_cycle.py:411-415`, `a1_weak`/`a2_weak`): DX gewichtet den Antennen-Mix
+auf schwache DX-Signale, weil starke Lokalstationen ohnehin auf beiden Antennen
+gut reinkommen. Es filtert NICHTS aus der Statistik raus.
+
+→ **Alle 3 Modi sind direkt vergleichbar** und DX ist voll für Diagramme
+nutzbar. Empirisch (15m FT8, fair gematcht): Standard +46 %, DX +24 % ggü.
+Normal. Standard liegt ~10 % über DX (DX tauscht minimal Gesamtmenge gegen
+bessere Schwachsignal-Ausbeute) — beides gewollt, kein „DX-Verlust".
+
+Detail-Doku der Mechanik: **FEATURES.md §18**.
 
 ---
 

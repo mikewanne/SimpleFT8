@@ -3,6 +3,31 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-29 — Doku-Fix: Statistik-Modi-Vergleich + DX erfasst ALLE Stationen
+
+Kein Versions-Bump (reine Doku, kein Code). Anlass: Mike-Frage „Verhältnis
+Diversity vs. Normal auf 15m". Dabei aufgedeckt: `auswertung.md` §5 war FALSCH
+(„Diversity_Dx zählt nur SNR<-10") — hat zu einer falschen Erst-Antwort geführt.
+
+**Code-Wahrheit (verifiziert):** Alle 3 Modi (Normal/Standard/DX) loggen die
+**Gesamtzahl** aller Stationen pro Zyklus. `accumulate_stations`
+(`core/station_accumulator.py:45-60`) filtert NICHT nach SNR/scoring_mode;
+`_log_stats` (`ui/mw_cycle.py:456`) schreibt `len(...)`. Das `SNR<-10`-Kriterium
+(`ui/mw_cycle.py:411-415`) betrifft NUR die DX-Antennen-Verhältnis-Entscheidung,
+nicht die Statistik. → Alle 3 Modi sind direkt vergleichbar, DX ist für
+Diagramme nutzbar.
+
+**Korrigiert/dokumentiert:**
+- `auswertung.md` §5 umgeschrieben („KORRIGIERT" + Code-Belege).
+- **FEATURES.md §18 NEU:** Statistik-Diagramm-Methodik komplett — was jeder Modus
+  loggt (alle Stationen), Verzeichnis-Struktur, Pooled Mean, **fairer
+  date+hour-gematchter Mehrtages-Vergleich** (Pflicht gegen Tageszeit-Bias),
+  Erzeugung (generate_plots.py + banduebersicht.sh, DE+EN), Rescue-Events.
+- CLAUDE.md Lookup-Tabelle: §17 + §18 ergänzt.
+
+**Referenz-Ergebnis 15m FT8 (fair, multi-tags):** Normal 100 % · Standard +46 %
+(13 Blöcke/8 Tage) · DX +24 % (8 Blöcke/5 Tage). Standard > DX > Normal.
+
 ## 2026-05-29 v0.98.44 — P158 Wartende Station ins Auto-Hunt-QSO einschieben
 
 Voller Workflow (V1→V2→R1→V3→Code→Final-R1), DeepSeek-v4-pro Design-R1 (0
