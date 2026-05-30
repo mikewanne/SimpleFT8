@@ -3,6 +3,36 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+## 2026-05-30 v0.98.46 — P162 EG5SUN-Bug GELÖST: typografisches Minus (1-Zeilen-Fix, KEIN Pfad-Umbau)
+
+**Root Cause (voller DeepSeek-Workflow, 2 Review-Runden v4-pro):** Auto-Hunt-QSO
+mit EG5SUN (schwach, −25 dB) — sie bestätigte mit R-Report, App wiederholte 5×
+stur den eigenen Rapport `-25` → Timeout. Ursache war KEIN fehlender Pfad und
+kein State-Designfehler, sondern ein **Parsing-Loch**: der Decode-String enthielt
+ein **typografisches Minus U+2212 ('−')** statt ASCII-Bindestrich. `int("−12")`
+wirft `ValueError` → `is_report` lieferte **False** → der R-Report wurde von
+KEINEM State-Block in `on_message_received` verarbeitet → der Slot-Ende-Retry
+wiederholte stur den eigenen Rapport. Das Unicode-Minus sieht im Fenster
+IDENTISCH aus wie ein ASCII-Bindestrich → unsichtbar.
+
+**Fix (1 Zeile, `core/message.py:is_report`):** `f3 = f3.replace("−", "-")` VOR
+`int()`. No-op für ASCII (kein Risiko 95%-Fälle). Der bestehende WAIT_REPORT-
+R-Report-Pfad (Z.629) erkennt den Rapport dann und sendet RR73.
+
+**Bewusst KEIN Umbau / KEIN neuer Pfad (Mike-bestätigt):** Sobald das Parsing
+stimmt, arbeiten die 6 bestehenden Abschluss-Pfade korrekt. DeepSeek riet 2× vom
+Rebuild ab (Pfade kodieren echte Protokoll-Nuancen). **`core/qso_state.py` ist
+UNBERÜHRT (git-diff leer)** — inkl. der Mike-wichtigen Schutzlogik: Höflichkeits-
+73 nur 1× (`courtesy_73_sent`), R-Report-Wiederholung max 2× dann ignoriert
+(`wait_73_retries`), 60s-Ausblenden nach QSO-Ende (P128). „QSO Ende = Ende"
+bleibt wie es war. KEIN 3× 73 (Mikes „3×73"-Sorge war ein Beispiel worauf man bei
+einem Rebuild hätte achten müssen — genau deshalb kein Rebuild).
+
+**Tests:** `tests/test_p162_unicode_report.py` NEU (9): Parser (ASCII+Unicode
+R-Report/Plain/Grid/RR73) + State-Machine e2e (EG5SUN Unicode-R-Report→RR73,
+kein Wiederhol-Loop, ASCII-Regression, Plain-Report→TX_REPORT). Volle Suite
+2205→2214, 0 Regression. Rollback-Tag `v0.98.45-pre-p162`. **Field-Test pending.**
+
 ## 2026-05-29 — Doku-Fix: Statistik-Modi-Vergleich + DX erfasst ALLE Stationen
 
 Kein Versions-Bump (reine Doku, kein Code). Anlass: Mike-Frage „Verhältnis
