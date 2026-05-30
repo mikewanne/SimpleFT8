@@ -1,5 +1,48 @@
 # HANDOFF — SimpleFT8
 
+## Stand 2026-05-30 — v0.98.46 P162: EG5SUN-Abschluss-Bug GELÖST (Unicode-Minus)
+
+**Code-Stand:** v0.98.46, Tests **2214 grün** (+9 P162). Voller DeepSeek-Workflow
+(2 Review-Runden). Rollback-Tag `v0.98.45-pre-p162`.
+
+**Was war kaputt (verständlich):** Auto-Hunt rief EG5SUN (sehr schwache Station,
+−25 dB). EG5SUN bestätigte uns („R-12" = hab dich, bin fertig), aber die App
+schickte 5× stur ihren eigenen Rapport `-25` statt RR73 → Timeout, QSO verloren.
+
+**Die eigentliche Ursache (überraschend):** KEIN fehlender Programm-Pfad, kein
+Logik-Designfehler. Das „R-12" kam mit einem **typografischen Minus** (ein
+Sonderzeichen, das im Fenster GENAU aussieht wie ein normaler Bindestrich) statt
+einem normalen Minus. Dadurch hat die App das „R-12" nicht als Rapport erkannt →
+keine Reaktion → der automatische Wiederhol-Mechanismus sendete blind weiter.
+
+**Fix:** EINE Zeile in `core/message.py` — das Sonderzeichen-Minus wird vor der
+Zahlenprüfung in ein normales Minus umgewandelt. Sicher: für normale Zeichen
+passiert nichts (kein Risiko für die 95%-Fälle). Danach greift der schon
+vorhandene „R-Report → RR73"-Pfad korrekt.
+
+**Bewusste Entscheidung (mit Mike abgestimmt):** KEIN Umbau der 6 Abschluss-
+Pfade, KEIN neuer Pfad. Sobald das „R-12" richtig erkannt wird, arbeiten die
+bestehenden Pfade korrekt. `core/qso_state.py` ist UNBERÜHRT — inkl. der wichtigen
+Schutzlogik die Mike erhalten wollte: Höflichkeits-73 nur 1×, R-Report-
+Wiederholung max 2× dann ignoriert, 60s-Ausblenden nach QSO-Ende („Ende = Ende").
+
+**⚠ Field-Test pending (Mike):** Beim nächsten schwachen DX, das mit R-Report
+„voraus" bestätigt → App sollte jetzt RR73 senden + sauber abschließen statt in
+die Rapport-Schleife zu laufen.
+
+**Offen (Mike-Notiz, KEINE Aktion bisher):** Frage ob nach dem ✓ jemals noch an
+dieselbe Station gesendet/empfangen wird (Mike-Verdacht aus Screenshot „QSO 73
+Fehler"). Im Screenshot SP5LST sah der Ablauf korrekt aus (Höflichkeits-73 VOR
+✓, danach nur CQ). Falls Mike echtes Senden NACH ✓ beobachtet → mit Debug-Log
+gezielt jagen (Cooldown/Ausblenden), KEIN neuer Pfad.
+
+**⚠ Tooling-Hinweis nächste Session:** Shell-/Datei-Ausgabe war zeitweise
+instabil (truncierte Outputs, „0 lines"-Reads). Verifikation lief zuverlässig
+nur über pytest-Zusammenfassung + rc-Codes + frische Dateien. Einzeln arbeiten,
+nicht blind Tool-Outputs vertrauen.
+
+---
+
 ## Stand 2026-05-30 — v0.98.45 P161: Toggle-Sortierung im RX-Header
 
 **Code-Stand:** v0.98.45, Tests **2205 grün** (+9 P161). Voller Workflow,
