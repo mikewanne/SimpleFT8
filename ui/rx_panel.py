@@ -52,6 +52,15 @@ _COLOR_ANSWER_ME_BG  = QColor("#5A4A10")   # Dunkles Gold: eigenes Callsign ange
 
 _MAX_CYCLES = 3  # Nur die letzten 3 Zyklen anzeigen
 
+# P161 Toggle-Sortierung: Spalte → Sortier-Modus (war 2× lokal dupliziert,
+# DeepSeek-DRY → zentrale Modul-Konstante).
+_COL_TO_SORT = {COL_UTC: "time", COL_DB: "snr", COL_LAND: "country", COL_KM: "dist"}
+# Default-Richtung beim ERSTEN Klick auf eine Spalte (reverse=True = absteigend).
+# Erhält das Verhalten vor P161 exakt: snr/dist/time absteigend (höchste/größte/
+# neueste oben), country alphabetisch A→Z. Zweiter Klick auf dieselbe Spalte
+# kippt die Richtung (Wechselschalter, Mike-Wunsch 30.05.2026, DeepSeek-R1 GO).
+_DEFAULT_REVERSE = {"time": True, "snr": True, "dist": True, "country": False}
+
 
 class RXPanel(QWidget):
     """Empfangsfenster — QTableWidget mit auto-resize Spalten.
@@ -73,6 +82,10 @@ class RXPanel(QWidget):
         self._my_grid = my_grid
         self._cycle_message_count = 0
         self._sort_mode = "time"
+        # P161: Sortier-Richtung (True = absteigend ▾). Toggle bei erneutem
+        # Klick auf dieselbe Spalte. Instanz-State, damit reapply_sort die
+        # Richtung über alle Cycle-Rebuilds hinweg beibehält.
+        self._sort_reverse = True
         self._rx_active = True
         self._country_filter: set = set(country_filter or [])
         self._ant_filter: int = 0  # 0=alle, 1=A1, 2=A2
@@ -523,11 +536,21 @@ class RXPanel(QWidget):
         self.rx_toggled.emit(self._rx_active)
 
     def _on_header_clicked(self, col: int):
-        """Klick auf nativen Spaltenkopf → sortieren + Farbe aktualisieren."""
-        _COL_TO_SORT = {COL_UTC: "time", COL_DB: "snr", COL_LAND: "country", COL_KM: "dist"}
-        if col in _COL_TO_SORT:
-            self._set_sort(_COL_TO_SORT[col])
-            self._update_sort_colors()
+        """Klick auf nativen Spaltenkopf → sortieren + Farbe aktualisieren.
+
+        P161 Wechselschalter: Klick auf dieselbe Spalte kippt die Richtung,
+        Klick auf eine andere Spalte startet mit deren Default-Richtung.
+        """
+        if col not in _COL_TO_SORT:
+            return
+        mode = _COL_TO_SORT[col]
+        if mode == self._sort_mode:
+            self._sort_reverse = not self._sort_reverse      # gleiche Spalte → kippen
+        else:
+            self._sort_mode = mode
+            self._sort_reverse = _DEFAULT_REVERSE[mode]       # neue Spalte → Default
+        self._set_sort(mode)
+        self._update_sort_colors()
 
     def _on_header_context_menu(self, pos):
         """Rechtsklick auf Spaltenkopf: Spalten ein-/ausblenden."""
@@ -567,18 +590,24 @@ class RXPanel(QWidget):
         self.hidden_cols_changed.emit(sorted(self._hidden_cols))
 
     def _update_sort_colors(self):
-        """Aktive Sortierung im Spaltenkopf markieren (Farbe + ▾)."""
-        _COL_TO_SORT = {COL_UTC: "time", COL_DB: "snr", COL_LAND: "country", COL_KM: "dist"}
+        """Aktive Sortierung im Spaltenkopf markieren (Farbe + Richtungspfeil).
+
+        P161: ↓ = absteigend (reverse), ↑ = aufsteigend. Nur die aktive
+        Sortier-Spalte bekommt Pfeil + Akzentfarbe.
+        """
         _LABELS = {COL_UTC: " UTC", COL_DB: "dB ", COL_DT: "DT ", COL_FREQ: "Freq ",
                    COL_LAND: " Land", COL_KM: "km ", COL_MSG: " Message", COL_ANT: "    Ant",
                    COL_SLOT: "Slot"}
+        # ↓/↑ statt ▾/▴: in Menlo breitenstabil (DeepSeek-R1 🟠2 — die
+        # Dreieck-Glyphen haben keinen garantiert gleichen Advance).
+        arrow = "↓" if self._sort_reverse else "↑"
         for col in range(COL_COUNT):
             item = self.table.horizontalHeaderItem(col)
             if item is None:
                 continue
             label = _LABELS.get(col, "")
             if _COL_TO_SORT.get(col) == self._sort_mode:
-                item.setText(f"{label}▾")
+                item.setText(f"{label}{arrow}")
                 item.setForeground(QColor("#00AAFF"))
             else:
                 item.setText(label)
@@ -629,12 +658,26 @@ class RXPanel(QWidget):
         if not messages:
             return
 
+        # P161: Richtung aus Instanz-State (Toggle in _on_header_clicked).
+        rev = self._sort_reverse
         if mode == "snr":
-            messages.sort(key=lambda x: x[0].snr, reverse=True)
+            messages.sort(key=lambda x: x[0].snr, reverse=rev)
         elif mode == "dist":
-            messages.sort(key=lambda x: -x[2])
+            # Stabiler Doppel-Sort (Timsort ist stabil): zuerst nach km in
+            # gewünschter Richtung, dann ein zweiter Sort der Stationen OHNE
+            # bekannte Entfernung (dist_km==0 → Anzeige "-") IMMER nach unten
+            # (bool-key False<True). Sonst kleben beim Aufsteigend-Sortieren
+            # (nächste oben) die vielen "-"-Einträge ganz oben, bevor die
+            # erste echte Station kommt — genau Mikes Haupt-Use-Case.
+            # Nur für dist: "-" ist häufig (kein Locator-Treffer); bei snr/
+            # country ist der Unbekannt-Fall selten → KISS, kein Sentinel
+            # (DeepSeek-R1: Sentinel nur für dist, nicht für alle vier).
+            # Hinweis: eine echte 0-km-Station würde im UI ebenfalls als "-"
+            # gezeigt → konsistent mit den unbekannten einsortiert.
+            messages.sort(key=lambda x: x[2], reverse=rev)
+            messages.sort(key=lambda x: x[2] == 0)         # "-" (keine km) unten
         elif mode == "country":
-            messages.sort(key=lambda x: x[1])
+            messages.sort(key=lambda x: x[1], reverse=rev)
         elif mode == "time":
             # P13 (v0.97.15): Sort auf Slot-Start-Timestamp (Float) wenn
             # gesetzt, sonst alte HHMMSS-Strings als Float interpretieren.
@@ -650,7 +693,7 @@ class RXPanel(QWidget):
                     return float(s)
                 except (ValueError, TypeError):
                     return 0.0
-            messages.sort(key=_time_key, reverse=True)
+            messages.sort(key=_time_key, reverse=rev)
 
         # Tabelle neu aufbauen
         self.table.setRowCount(0)
