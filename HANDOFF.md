@@ -51,9 +51,9 @@ Bandwechsel" skippt jetzt auf **jedem schon einmal gefunkten Band** (vorher
 nur wenn ein 10W-Anker da war). Das ist gewollt + besser. Wenn du auf einem
 Band noch nie warst, tunt er einmal — danach nicht mehr.
 
-**⚠ Field-Test am Radio pending:** Gain-Messung starten → „Kontroll-TUNE"
-statt „Auto-TUNE", danach KEIN „auf 10 W eingeregelt" mehr (nur kurz „prüfe
-SWR"). Bandsperre/SWR muss sich exakt wie vorher verhalten.
+**✅ Field-validiert 2026-05-30 (Mike, Gain-Messung):** Knopf heißt
+„Kontroll-TUNE", kein „auf 10 W eingeregelt" mehr — Mike: „punkte sind okay".
+P119 nicht mehr pending.
 
 **Push:** Sag Bescheid, wenn die P119-Commits raus sollen.
 

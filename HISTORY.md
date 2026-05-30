@@ -103,6 +103,12 @@ CQ-Caller-Queue. Edge-Cases über P122-Defer-Mechanik. Spec: TODO.md P158,
 FEATURES.md §17 NEU, Memory `project_p158_concept`. **Umsetzung: nächster Punkt,
 voller Workflow.**
 
+## 2026-05-30 — P119 field-validiert (Mike, Gain-Messung)
+
+Mike hat die Gain-Messung am Radio durchgeführt: Knopf zeigt „Kontroll-TUNE",
+das „Leistung wird auf 10 W eingeregelt" ist weg, restlicher Ablauf ok
+(„punkte sind okay"). P119 damit field-bestätigt, nicht mehr pending.
+
 ## 2026-05-29 v0.98.43 — P119 Phase B (10W-Einpendeln) + Krücke entfernt
 
 **Mike-Wunsch (am Radio, Gain-Messung-Screenshots):** Das „Leistung wird auf
