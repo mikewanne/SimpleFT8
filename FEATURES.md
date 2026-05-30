@@ -1394,6 +1394,37 @@ Stationen an. Drei Ursachen:
   → Variante-c-Refactor (remove_stale ganz rausziehen) wäre test-sicher
   gewesen, wurde aber als Overengineering verworfen.
 
+### Sortierung — Toggle/Wechselschalter (P161, v0.98.45)
+
+Klick auf einen Spaltenkopf (`_on_header_clicked`) sortiert nach dieser Spalte;
+sortierbar sind UTC, dB, Land, km (Map `_COL_TO_SORT`). **Wechselschalter:**
+erneuter Klick auf dieselbe Spalte kippt `self._sort_reverse` (Instanz-State),
+ein Klick auf eine ANDERE Spalte startet mit deren `_DEFAULT_REVERSE` (= das
+Erst-Klick-Verhalten vor P161: snr/dist/time absteigend, country A→Z). Der
+Header zeigt den Pfeil ↓ (absteigend) / ↑ (aufsteigend) nur auf der aktiven
+Spalte (`_update_sort_colors`). UTC ist der Default-Modus → der erste Klick
+darauf ist bereits ein Toggle, kein Default-Set.
+
+**Pfeil-Glyphen ↓/↑** statt ▾/▴ — letztere haben in Menlo keinen garantiert
+gleichen Advance und verschieben die Header-Ausrichtung (DeepSeek-R1 🟠2).
+
+`_set_sort`: snr/country/time = **reine Umkehr** via `reverse=self._sort_reverse`.
+**dist** zusätzlich **stabiler Doppel-Sort** (Python `list.sort` ist stabil):
+(1) `sort(key=km, reverse=rev)`, (2) zweiter stabiler `sort(key=lambda x: x[2]==0)`
+schiebt Stationen ohne bekannte Entfernung (`dist_km==0` → Anzeige „-") IMMER
+ans Ende. Sonst kleben beim Aufsteigend-Sortieren („nächste oben", Mikes Haupt-
+Use-Case) die vielen „-"-Einträge ganz oben. **Sentinel NUR für dist** — bei
+snr/country ist der Unbekannt-Fall („?" / SNR -30) selten genug, dass reine
+Umkehr KISS-näher ist (DeepSeek-R1 🟠1). Eine echte 0-km-Station wird im UI
+ohnehin als „-" gezeigt (`_populate_row`) → konsistent mit „unbekannt" unten.
+
+**WICHTIG:** `_sort_reverse` wird NUR in `_on_header_clicked` verändert,
+`_set_sort` liest ihn nur. Damit überlebt die Richtung die Cycle-Rebuilds:
+`reapply_sort()` läuft pro Slot (mw_cycle.py 2×) und ruft
+`_set_sort(self._sort_mode)`, ohne die Richtung zu resetten. Es gibt KEINEN
+Band-/Mode-Wechsel-Pfad der `_sort_mode` zurücksetzt → `_sort_reverse` muss
+nirgends mit-resettet werden (DeepSeek-R1 F4 verifiziert).
+
 ---
 
 ## 16. TUNE-Dauer & die vier TUNE-Pfade (wer nimmt welche Dauer?)

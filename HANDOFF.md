@@ -1,5 +1,38 @@
 # HANDOFF — SimpleFT8
 
+## Stand 2026-05-30 — v0.98.45 P161: Toggle-Sortierung im RX-Header
+
+**Code-Stand:** v0.98.45, Tests **2205 grün** (+9 P161). Voller Workflow,
+DeepSeek-v4-pro R1 (GO) + Final-R1 (PUSH FREIGEBEN, 0 Blocker).
+
+**Was (verständlich):** Die Spaltenköpfe der Empfangsliste (dB, km, UTC, Land)
+sind jetzt ein Wechselschalter. Einmal klicken → in die eine Richtung sortieren,
+nochmal auf dieselbe Spalte → andere Richtung. Ein kleiner Pfeil zeigt an wie's
+sortiert ist (↓ = von groß nach klein / neueste oben, ↑ = umgekehrt).
+Bei km bleiben Stationen ohne bekannte Entfernung („-") immer unten, egal
+welche Richtung — sonst kleben die beim Aufsteigend oben.
+
+**⚠ Field-Test am Radio pending:** Empfangsliste → auf „dB" klicken (stärkste
+oben) → nochmal „dB" (schwächste oben) → Pfeil dreht sich. Gleiches mit km
+(nächste/fernste), UTC, Land. App muss dafür auf v0.98.45 neu gestartet werden.
+
+**✅ Außerdem heute field-validiert:**
+- **P150/P152** — Mike hat ein **−25 dB QSO (YO9HB) komplett** gefunkt → der
+  Beweis dass der empfindlichere Decoder den AP-Lite-Krückstock ersetzt. Logs:
+  725 Decodes bei ≤ −24 dB an einem Vormittag.
+- **P119** — Gain-Messung zeigt „Kontroll-TUNE", kein „auf 10 W eingeregelt".
+
+**Offen / nächster Schritt:** README-Beweis-Block bauen (Mike-Wunsch 30.05.):
+Screenshot des −25-dB-QSO (YO9HB) auf GitHub-Hauptseite einbetten + dB-
+Verteilungs-Tabelle als harter Zahlen-Beweis. Screenshot liegt unter
+`~/Downloads/Xnip2026-05-30_08-42-52.png` — Ablage-Ordner + Form mit Mike
+klären (ganzer Screenshot vs nur QSO-Fenster).
+
+**Push:** Statistiken/Diagramme/P119-Doku sind gepusht (origin = f86298c).
+P161 + heutige Field-Validierungs-Doku liegen lokal — Push-Freigabe steht aus.
+
+---
+
 ## Stand 2026-05-29 — v0.98.44 P158: Wartende Station ins Auto-Hunt-QSO einschieben
 
 **Code-Stand:** v0.98.44, Tests **2196 grün** (+27 P158). Voller Workflow,

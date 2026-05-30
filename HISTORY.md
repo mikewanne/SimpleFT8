@@ -103,6 +103,51 @@ CQ-Caller-Queue. Edge-Cases über P122-Defer-Mechanik. Spec: TODO.md P158,
 FEATURES.md §17 NEU, Memory `project_p158_concept`. **Umsetzung: nächster Punkt,
 voller Workflow.**
 
+## 2026-05-30 v0.98.45 — P161 Toggle-Sortierung im RX-Header (Wechselschalter)
+
+**Mike-Wunsch:** Die Sortierung über die Spaltenköpfe der Empfangsliste (dB,
+km, UTC, Land) ging nur in EINE Richtung. Jetzt Wechselschalter: nochmal auf
+dieselbe Spalte klicken → andere Richtung. Pfeil zeigt Richtung an (↓
+absteigend / ↑ aufsteigend).
+
+**Umsetzung (voller Workflow, DeepSeek-v4-pro R1 GO + Final-R1 PUSH FREIGEBEN):**
+- Neuer Instanz-State `_sort_reverse` (überlebt Cycle-Rebuilds via
+  `reapply_sort`). Modul-Konstanten `_COL_TO_SORT` (war 2× lokal dupliziert,
+  DeepSeek-DRY) + `_DEFAULT_REVERSE` (Erst-Klick-Richtung pro Modus = exakt das
+  Verhalten vor P161 → 0 Regression).
+- `_on_header_clicked`: gleiche Spalte → Richtung kippen; andere Spalte →
+  Default-Richtung dieses Modus.
+- `_set_sort`: snr/country/time = reine Umkehr via `reverse`. **dist** zusätzlich
+  stabiler **Doppel-Sort**: zweiter Sort schiebt Stationen ohne bekannte
+  Entfernung (`dist_km==0` → Anzeige „-") IMMER nach unten — sonst kleben beim
+  Aufsteigend-Sortieren („nächste oben", Mikes Haupt-Use-Case) die vielen
+  „-"-Einträge oben. Sentinel NUR für dist (DeepSeek-R1 🟠1: bei snr/country ist
+  der Unbekannt-Fall selten → reine Umkehr, KISS).
+- `_update_sort_colors`: Pfeil ↓/↑ je nach Richtung auf der aktiven Spalte.
+
+DeepSeek: R1 GO mit 3 🟠-Empfehlungen, alle umgesetzt — 🟠2 Pfeile ▾/▴ → ↓/↑
+(in Menlo breitenstabil), 🟠1 Sentinel nur für dist (snr/country reine Umkehr),
+🟠3 `_sort_mode`-Self-Assign in `_set_sort` bewusst belassen (reapply_sort-
+Konsistenz). F4 verifiziert: kein `_sort_mode`-Reset-Pfad → `_sort_reverse`
+nirgends mit-resetten. Final-R1 PUSH FREIGEBEN 0 Blocker. Tests 2196→2205 (+9).
+FEATURES §15 erweitert. **Field-Test pending.**
+
+## 2026-05-30 — P150/P152 field-validiert (Mike, −25 dB QSO YO9HB)
+
+**Der Beweis für den AP-Lite-Ersatz.** Mike hat ein VOLLSTÄNDIGES QSO bei
+−25 dB gefunkt (YO9HB, beide Richtungen durch bis RR73, „QSO komplett"). Die
+Weak-Decode-Liste belegt es schwarz auf weiß:
+```
+06:38:12 | -25 dB | DL2FX YO9HB -20   | 1317 Hz | 20m FT8   (YO9HB gehört)
+06:40:42 | -21 dB | DA1MHH YO9HB R-23 |  700 Hz | 20m FT8   (YO9HB ruft DA1MHH)
+```
+dB-Verteilung 30.05. Vormittag (3238 schwache Decodes ≤ -21 dB): −26: 95,
+−25: 222, −24: 408, −23: 608, −22: 844, −21: 1061. → 725 Decodes bei −24 dB
+oder tiefer an einem Vormittag. Das ist der empirische Nachweis, dass die
+erhöhte Decoder-Empfindlichkeit (P150 `kMin_score 10→4`) die tiefen DX-Signale
+direkt hereinholt — ohne den Matched-Filter-Krückstock AP-Lite (P151 ausgebaut).
+P150/P152 field-bestätigt, nicht mehr pending.
+
 ## 2026-05-30 — P119 field-validiert (Mike, Gain-Messung)
 
 Mike hat die Gain-Messung am Radio durchgeführt: Knopf zeigt „Kontroll-TUNE",
