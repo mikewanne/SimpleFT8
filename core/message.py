@@ -43,20 +43,10 @@ class FT8Message:
 
     @property
     def is_report(self) -> bool:
-        """Ist ein Signal-Rapport (z.B. -08, +12, R-08).
-
-        P162 (30.05.2026): typografisches Minus U+2212 ('−') wird zu ASCII
-        '-' normalisiert BEVOR int() prüft. Manche Decode-/Frame-Typen
-        liefern das Unicode-Minus, das im Fenster IDENTISCH aussieht wie ein
-        ASCII-Bindestrich, aber von int() NICHT akzeptiert wird → der Report
-        würde sonst fälschlich nicht als Report erkannt (is_report=False),
-        die State-Machine reagiert nicht, und der Slot-Ende-Retry wiederholt
-        stur unseren Rapport (EG5SUN-Endlosschleife, Mike-Field-Bug 30.05.).
-        """
+        """Ist ein Signal-Rapport (z.B. -08, +12, R-08)."""
         f3 = self.field3
         if not f3:
             return False
-        f3 = f3.replace("−", "-")  # P162: typografisches Minus → ASCII
         if f3.startswith("R"):
             f3 = f3[1:]
         try:

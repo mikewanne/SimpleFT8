@@ -3,6 +3,24 @@
 Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
+
+## 2026-05-30 v0.98.47 — P162 zurückgenommen (war KEIN Bug)
+
+Der in v0.98.46 als „EG5SUN-Abschluss-Bug" dokumentierte Fix war eine
+Fehldiagnose und wurde entfernt. **Es gab keinen Code-Fehler — der Code war die
+ganze Zeit korrekt.**
+
+Mike-Klärung am Schirm (Screenshot 10:56–10:59): Wir riefen von Hand EG5SUN
+(`→ EG5SUN DA1MHH -25`). ZEITGLEICH rief uns eine völlig andere Station blind
+auf Verdacht (`← DA1MHH YO60GW R-12`). Die App reagierte korrekt NICHT auf
+YO60GW (≠ QSO-Partner EG5SUN); EG5SUN selbst antwortete nie → Timeout. Alles
+regelkonform. Das vermeintliche „typografische Minus U+2212" existierte nie
+(kein U+2212 in irgendeinem Log; Decoder liefert reines ASCII).
+
+Entfernt: `core/message.py:is_report` zurück auf Original,
+`tests/test_p162_unicode_report.py` gelöscht. Tests 2214→2205 (Vor-P162-Stand).
+`core/qso_state.py` war unberührt. Kein TODO-Eintrag (kein offener Bug).
+
 ## 2026-05-30 v0.98.46 — P162 EG5SUN-Bug GELÖST: typografisches Minus (1-Zeilen-Fix, KEIN Pfad-Umbau)
 
 **Root Cause (voller DeepSeek-Workflow, 2 Review-Runden v4-pro):** Auto-Hunt-QSO
