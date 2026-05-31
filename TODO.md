@@ -611,3 +611,19 @@ abgearbeitet — Ticket kann zu.
 
 *Stand 27.05.2026 08:50 — TODO komplett aufgeräumt (vorher 6859 Zeilen).
 Erledigte Tickets vor 24.05. archiviert in HISTORY.md.*
+
+## 🔲 „neue"-Filter + Auto-Hunt mit voller QRZ-Historie füttern (31.05.2026, Mike-Wunsch zurückgestellt)
+
+Aktuell kennt die „schon gefunkt"-Erkennung (`log/qso_log.py` → QSOLog,
+Worked-Before-Set) nur die paar hundert SimpleFT8-eigenen QSOs (Hauptordner +
+`adif/hochgeladen/`), NICHT die 18.329 QSOs im QRZ-Export
+(`adif/_backup_qrz_export/`, DA1MHH+DO4MHH).
+
+**Folge:** „NEUE"-Filter (RX-Liste, nur Anzeige) + Auto-Hunt-Scoring
+(neue Station = Bonus) behandeln längst gearbeitete Stationen als „neu".
+
+**Aufgabe:** `_backup_qrz_export` zusätzlich in den Worked-Before-Set laden
+(`QSOLog.load_directory(...)` in `ui/main_window.py:_init_qso_log`). DeepSeek
+(31.05.): unkritisch, ~18k Calls in ein set = <1 MB / <1 s Start. Portable-
+Suffixe werden schon gestrippt (`call.split("/")[0]`). Beide Calls = ein Pool.
+Eigener voller Workflow. Diplome-Feature (v0.98.49) nutzt denselben Ordner schon.

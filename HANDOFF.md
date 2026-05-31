@@ -1,82 +1,76 @@
 # HANDOFF — SimpleFT8
 
-**Aktueller Stand:** v0.98.48 (30.05.2026) — **P164 Klick auf uns-rufende Station
-generalisiert** (P158-Nachfolger). Tests 2212 grün. **Lokal committet (9034884),
-NICHT gepusht.**
+**Aktueller Stand:** v0.98.49 (31.05.2026) — **Diplome-Feature (DXCC/WAC/WAS/WAZ)**
+im Logbuch-Tab. Tests 2228 grün (+16). **Lokal NICHT committet/gepusht — siehe unten.**
 
 ---
 
-## Letzte Session (30.05.2026)
+## Letzte Session (31.05.2026)
 
-### P164 — eine Station die UNS ruft ist im QSO-Log IMMER klickbar (NEU, v0.98.48)
+### Diplome-Feature (NEU, v0.98.49) — voller DeepSeek-Workflow
 
-Voller DeepSeek-Workflow (V1→V2→R1→V3→Code→Final-R1, alle Runden v4-pro).
-**Final-R1 Runde 2: PUSH FREIGEBEN, 0 Blocker.** Commit `9034884`.
+Mike-Auftrag: DXCC-Label im Logbuch-Tab durch Button **„Diplome"** ersetzen →
+Dialog mit Übersicht der 4 Diplome (gearbeitet + per LoTW bestätigt), mit
+Staffelung wo offiziell vorhanden. DO4MHH (Mikes altes Klasse-E-Call) zählt mit.
 
-**Was:** Generalisierung von P158. Vorher war die `← Empf.`-Zeile im QSO-Log nur
-klickbar wenn Auto-Hunt aktiv + anderes QSO lief — Mikes Field-Fall (YO60GW rief
-während manuellem EG5SUN-QSO) fiel durchs Raster. Jetzt: klickbar sobald eine
-Station uns ruft (+ kein 73/rr73 + nicht CQ-Modus + nicht der aktuelle Partner =
-Doppel-Ruf-Schutz). Klick-Wirkung state-abhängig: IDLE→sofort rufen, aktives QSO
-mit A→A zu Ende, dann B einschieben. Doktrin „Höflichkeit > Stationszahl".
+**Umgesetzt:**
+- `core/awards.py` (NEU): `compute_awards(records)` → pro Diplom worked+confirmed
+  Sets. DXCC (Entity-Nr, Ziel 100), WAC (6 Kontinente, AN ausgeschlossen), WAS
+  (50 US-States via `US_STATES`-frozenset, AK/HI drin), WAZ (40 CQ-Zonen).
+  Bestätigt = NUR `LOTW_QSL_RCVD=Y`. `dxcc_tier_status()` für ARRL-Marken
+  100/150/200/250/300/Honor Roll. Beide Calls = ein Pool (set-dedup).
+- `ui/awards_dialog.py` (NEU): read-only Dialog, dunkles Theme, pro Diplom Karte
+  + Fortschrittsbalken + „🏅 erreicht"-Badge; DXCC mit Marken-Zeile.
+  Datenquellen-Hinweis (QRZ-Export DA1MHH & DO4MHH).
+- `ui/logbook_widget.py` (Edit): `dxcc_label` → `btn_awards` „Diplome";
+  `_on_awards_clicked` lädt `adif/_backup_qrz_export` **on-demand** dazu;
+  `_update_counters` ohne dxcc_label; Import AwardsDialog.
+- `tests/test_awards.py` (NEU): 16 Tests (distinct-Zählung, LoTW-Filter,
+  US-State-Validierung, AN-Ausschluss, CQ-Zonen-Range, DXCC-Staffelung, robust).
 
-**Architektur:** Merker `_insert_pending_call` aus `auto_hunt` ENTFERNT → ersetzt
-durch `_qso_pending_insert` in MainWindow (vom Auto-Hunt entkoppelt). Ein
-Klickbar-Prädikat, ein Merker, ein Start-Pfad (`_on_station_clicked` — alle
-Safety-Guards inkl. ANT1-TX-Verriegelung intakt). Alias `ACTIVE_QSO_STATES =
-HASH_RESOLVE_STATES`.
+**Datenquelle:** Diplome werten den QRZ-Export (`adif/_backup_qrz_export/`,
+18.329 QSOs DA1MHH+DO4MHH) on-demand beim Dialog-Öffnen aus — die reichen Felder
+(DXCC/CONT/STATE/CQZ/LOTW) stecken nur dort. Frische SimpleFT8-QSOs zählen erst
+nach erneutem QRZ-Export mit (dokumentiert im Dialog-Hinweis).
 
-**DeepSeek-Verlauf:** Plan-R1 NO-GO→GO (F2 🔴 HALT-Null, F4 Alias). Final-R1 Runde 1
-NACHBESSERN (2 🔴: HALT-Null fehlte noch, IDLE-Sofort-Ruf nutzte `clear()` statt
-`pop(call)`). Beide behoben. Final-R1 Runde 2 PUSH FREIGEBEN.
+**Staffelung (DeepSeek R1b Option A):** Nur DXCC hat eine echte numerische
+ARRL-Leiter → die wird gezeigt. WAC/WAS/WAZ sind „alles-oder-nichts" → Fortschritt
++ Badge, KEINE erfundenen Bronze/Silber/Gold (Ehrlichkeit > Gamification).
 
-**Geänderte Code-Dateien:** `core/qso_state.py` (Alias), `core/auto_hunt.py` (alte
-API + Dead Code raus), `ui/mw_cycle.py` (Klickbar-Prädikat + state-abhängiger
-Klick-Handler + Import), `ui/mw_qso.py` (maybe_start entkoppelt + HALT-Null),
-`ui/main_window.py` (Merker-Init), `ui/mw_radio.py` (Cleanup Band/Mode/RX).
-Plus Tests + FEATURES §17 + HISTORY + CLAUDE-Header + Memory.
+**DeepSeek-Workflow:** V1→V2→Design-R1 (GO, 6 Auflagen — alle umgesetzt:
+try/except DXCC, WAC ohne AN, LoTW-only, US-State-Filter, Button+on-demand,
+Datenquellen-Hinweis) + R1b (Staffelung Option A). **Final-R1 (Bestätigungs-Pass)
+konnte wegen Session-Tooling-Instabilität nicht eingelesen werden** — die
+DeepSeek-Läufe lieferten nach ~8 Aufrufen keinen lesbaren Output mehr. Design-R1
+hatte die exakten Code-Pfade aber bereits geprüft; alle Auflagen sind im Code
+verifiziert + 16 Unit-Tests + 0 Regressionen. **Explizites Final-R1 vor Push
+nachholen.**
 
-**Tests:** `test_p158_insert_pending_call.py` komplett auf P164 (34 Tests).
-Volle Suite **2212 passed, 0 Regression**.
-
-### Vorher gleiche Session: P162-Rücknahme (v0.98.47)
-
-P162 war eine Fehldiagnose (kein U+2212-Bug; YO60GW rief blind während wir EG5SUN
-riefen, Code war immer korrekt). Phantom-Fix entfernt, kein TODO-Eintrag.
-Commit `cd91712`.
-
----
-
-## ⛔ OFFEN — Push-Freigabe einholen (3 lokale Commits, NICHT gepusht)
-
-origin/main = `e6426ec` (Stand mit v0.98.46 + der P162-Falschbehauptung „GELÖST").
-Lokal voraus:
-1. `cd91712` — P162-Revert (korrigiert die öffentliche Falschbehauptung).
-2. `9034884` — P164 (neues Feature).
-
-**Beides braucht Mike-Freigabe zum `git push`** (Standing-Regel: push nur auf
-explizite Anfrage). Empfehlung: pushen, damit die öffentliche Doku nicht weiter
-einen nie-existierten Fix behauptet (Mike-Prinzip „nur behaupten was verifizierbar
-ist").
+**Tests:** Volle Suite **2228 passed, 0 Regression** (18.33s). 16 neue Award-Tests.
 
 ---
 
-## Nächste Schritte
+## ⛔ OFFEN
 
-1. **Push-Freigabe** für cd91712 + 9034884 (siehe oben).
-2. **P164 Field-Test** (Mike): während manuellem QSO ODER im IDLE eine
-   uns-rufende Station im QSO-Log anklicken → IDLE = sofort gerufen, aktives QSO
-   = nach dem QSO eingeschoben. Doppelklick-Hinweis: P164-Zeile ist ein
-   Einzelklick-Link (QTextBrowser anchorClicked), NICHT der RX-Listen-Doppelklick.
-3. Optional zurückgestellt: 30m-README-Publikation (Standard +18%, CI +2-+38%).
+1. **Final-R1 nachholen** (Tooling-bedingt nicht abgeschlossen), DANN
+2. **Lokaler Commit** des Diplome-Features (noch nicht committet wegen Tooling).
+3. **Push-Freigabe** durch Mike (Standing-Regel) — zusammen mit den 3 älteren
+   nicht-gepushten Commits (cd91712 P162-Revert, 9034884 P164, 725cedc HANDOFF).
+4. **Field-Test** Diplome-Button am Radio (Optik + reale Zahlen prüfen).
+
+## TODO (Mike-Wunsch, zurückgestellt)
+- **„neue"-Filter + Auto-Hunt mit voller QRZ-Historie füttern:** den
+  `_backup_qrz_export`-Ordner zusätzlich in `QSOLog` (`log/qso_log.py`,
+  Worked-Before-Set) laden, damit NEUE-Filter + Auto-Hunt die echte 18k-Historie
+  kennen (aktuell nur die paar hundert SimpleFT8-eigenen QSOs). Eigener
+  Workflow. → in TODO.md.
 
 ---
 
-## ⚠ Tooling-Warnung (diese Session durchgehend aktiv)
-Bash/Read-Ausgaben zeitweise trunkiert/verzögert/vermischt; ganze parallele
-Tool-Gruppen brachen durch einen Einzelfehler ab. Dateien selbst sind korrekt —
-Verifikation NUR über Python-Counts + pytest-Returncode in Datei, nie der Anzeige
-trauen. Diese Session entlarvte 2 Phantom-Bugs (vermeintlich „doppelter Import" +
-„take_pending_insert im Body") als reine Anzeige-Artefakte. Lesson für Tests:
-Methoden-Extraktions-Regex `(?=\n    def )` läuft über @decorator-Methoden hinaus
-→ `(?=\n    (?:def |@))` nutzen.
+## ⚠ Tooling-Warnung (diese Session durchgehend)
+Bash-stdout-Display + /tmp-Scratch-Reads zeitweise leer; DeepSeek-Läufe ab
+~8 Aufrufen ohne lesbaren Output; lange Befehle auto-backgrounden. **Write/Edit
++ pytest persistierten zuverlässig** (Code real geschrieben, Suite real grün).
+Verifikation NUR über pytest-Returncode + grep-in-Datei, nicht der Anzeige
+trauen. Lesson: Bash(write)+Read(file) NICHT im selben Message-Block (Race) —
+getrennte Messages.

@@ -17154,3 +17154,33 @@ QSO-Timeout (✗) vor V1 klären (vermutlich kein Block).
 Freigabe), Field-Validation am Radio steht noch aus. P124/P126 sind
 beide remote-tauglich (pure State-Machine, kein TUNE/PA-Pfad) —
 können vom Schreibtisch oder vor Ort angegangen werden.
+
+## 2026-05-31 v0.98.49 — Diplome-Feature (DXCC/WAC/WAS/WAZ)
+
+**Neu:** Logbuch-Tab DXCC-Label → Button „Diplome". Klick öffnet read-only
+Dialog mit den 4 klassischen Diplomen, je „gearbeitet" + „bestätigt (LoTW)" mit
+Fortschrittsbalken. DXCC zeigt die echten ARRL-Marken (100/150/200/250/300/Honor
+Roll); WAC/WAS/WAZ als Fortschritt + „🏅 erreicht"-Badge (keine erfundenen
+Bronze/Silber/Gold — DeepSeek R1b Option A, Ehrlichkeit > Gamification).
+
+**Datenquelle:** QRZ-Export `adif/_backup_qrz_export/` (18.329 QSOs DA1MHH+DO4MHH,
+beide Calls = ein Pool, set-dedup) — on-demand beim Dialog-Öffnen geladen, da nur
+dort die Felder DXCC/CONT/STATE/CQZ/LOTW_QSL_RCVD stecken. Frische SimpleFT8-QSOs
+zählen erst nach erneutem QRZ-Export (Hinweis im Dialog).
+
+**Code:** `core/awards.py` NEU (rein/testbar: compute_awards + dxcc_tier_status +
+US_STATES/WAC_CONTINENTS/DXCC_TIERS) · `ui/awards_dialog.py` NEU · `ui/logbook_widget.py`
+Edit (dxcc_label→btn_awards, _on_awards_clicked on-demand, _update_counters ohne
+dxcc_label, Import AwardsDialog). Bestätigt=NUR LOTW_QSL_RCVD=Y. WAS via 50er
+US_STATES-Set (AK/HI drin, nicht DXCC==291). WAC ohne AN.
+
+**Workflow:** V1→V2→Design-R1 (GO, 6 Auflagen alle umgesetzt) + R1b (Staffelung
+Option A). Final-R1 (Bestätigungs-Pass) tooling-bedingt nicht eingelesen —
+Design-R1 prüfte exakte Pfade, alle Auflagen im Code verifiziert. Explizites
+Final-R1 vor Push nachholen.
+
+**Tests:** 2212 → 2228 grün (+16 test_awards). 0 Regression.
+
+**Zurückgestellt (TODO):** „neue"-Filter + Auto-Hunt mit voller QRZ-Historie
+füttern (`_backup_qrz_export` in log/qso_log.py Worked-Before-Set laden).
+**Field-Test pending. Lokaler Commit + Push-Freigabe stehen aus.**

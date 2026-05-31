@@ -11,6 +11,7 @@ from ui.styles import MSGBOX_STYLE
 
 from log.adif import parse_all_adif_files, delete_qso
 from core.geo import callsign_to_country
+from ui.awards_dialog import AwardsDialog
 
 _FONT = "Menlo"
 _BG = "#0d0d1a"
@@ -107,12 +108,16 @@ class LogbookWidget(QWidget):
         self.search_input.textChanged.connect(self._on_filter_changed)
         toolbar.addWidget(self.search_input, 1)
 
-        self.dxcc_label = QLabel("DXCC: 0")
-        self.dxcc_label.setStyleSheet(
-            f"color: #00CCAA; font-family: {_FONT}; font-size: 11px; font-weight: bold; "
-            f"border: 1px solid #336; border-radius: 3px; padding: 2px 6px;"
+        self.btn_awards = QPushButton("Diplome")
+        self.btn_awards.setToolTip("Diplome-Übersicht (DXCC, WAC, WAS, WAZ)")
+        self.btn_awards.setStyleSheet(
+            f"QPushButton {{ color: #00CCAA; font-family: {_FONT}; font-size: 11px; "
+            f"font-weight: bold; background: rgba(0,160,140,0.15); "
+            f"border: 1px solid #336; border-radius: 3px; padding: 2px 8px; }}"
+            f"QPushButton:hover {{ background: rgba(0,200,170,0.30); color: #66FFDD; }}"
         )
-        toolbar.addWidget(self.dxcc_label)
+        self.btn_awards.clicked.connect(self._on_awards_clicked)
+        toolbar.addWidget(self.btn_awards)
 
         self.qso_count_label = QLabel("0 QSOs")
         self.qso_count_label.setStyleSheet(
@@ -333,18 +338,21 @@ class LogbookWidget(QWidget):
 
         self.table.setSortingEnabled(True)
 
+    def _on_awards_clicked(self):
+        """Diplome-Dialog oeffnen (QRZ-Backup on-demand dazuladen)."""
+        records = list(self._all_records)
+        backup = self._adif_dir / "_backup_qrz_export"
+        if not backup.is_dir():
+            backup = Path.cwd() / "adif" / "_backup_qrz_export"
+        if backup.is_dir():
+            try:
+                records += parse_all_adif_files(backup)
+            except Exception as e:  # pragma: no cover - defensiv
+                print(f"[Awards] Backup-Laden fehlgeschlagen: {e}")
+        AwardsDialog(records, self).exec()
+
     def _update_counters(self):
-        """DXCC und QSO Zaehler aktualisieren."""
-        countries = set()
-        calls = set()
-        for rec in self._all_records:
-            call = rec.get("CALL", "")
-            country = callsign_to_country(call)
-            if country:
-                countries.add(country)
-            if call:
-                calls.add(call)
-        self.dxcc_label.setText(f"DXCC: {len(countries)}")
+        """QSO-Zaehler aktualisieren."""
         self.qso_count_label.setText(f"{len(self._all_records)} QSOs")
 
     def _on_export_clicked(self):
