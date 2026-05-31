@@ -120,6 +120,12 @@ def _make_fake_mw(app, callsign: str = "DA1MHH",
     mw.rx_panel._rx_active = True
     mw.rx_panel.set_active_call = MagicMock()
 
+    # P164 (30.05.2026): on_message_decoded prüft jetzt unconditional
+    # _p158_is_insertable_caller + befüllt _p158_insertable (kein Auto-Hunt-
+    # Gate mehr). Fake braucht die Attribute (im echten MainWindow vorhanden).
+    mw._p158_insertable = {}
+    mw._qso_pending_insert = None
+
     # OMNI-CQ — echte Instanz (V5 signal-basiert, kein Worker-Mock noetig).
     mw._omni_cq = OmniCQ(
         encoder=mw.encoder,

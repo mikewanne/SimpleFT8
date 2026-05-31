@@ -319,6 +319,11 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         # die FT8Message für den späteren B-Start. Geleert nach Konsum +
         # bei jedem Auto-Hunt-Stop (_on_auto_hunt_stopped).
         self._p158_insertable: dict[str, "FT8Message"] = {}
+        # P164 (30.05.2026): einzelner Merker für die per Klick vorgemerkte
+        # Station, die nach dem aktuellen QSO eingeschoben wird (vom Auto-Hunt
+        # entkoppelt, ersetzt auto_hunt.set/take_pending_insert). Genullt bei
+        # Konsum, HALT, Band-/Mode-/RX-Wechsel.
+        self._qso_pending_insert = None
         self._recent_logged_calls: dict[tuple[str, str], float] = {}  # P1.7 (v0.95.19): ADIF-Dedup (call, band) → ts
         self._quick73_sent: set[str] = set()  # P94 (v0.97.66): Calls denen Quick-73 schon ging
         # P2.OMNI-REDESIGN v4.0 (v0.95.23): True wenn OMNI VOR aktuellem QSO

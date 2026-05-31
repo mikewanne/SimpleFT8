@@ -131,11 +131,8 @@ class AutoHunt(QObject):
         self._recent_qso: dict[tuple[str, str, str], float] = {}
         self._manual_override: bool = False     # Manueller Klick → pausieren
         self._current_target: Optional[str] = None
-        # P158 (29.05.2026): Puffer für eine während des laufenden QSO
-        # vorgemerkte fremde Station (Klick im QSO-Log). Wird am QSO-Ende
-        # konsumiert (mw_qso._p158_maybe_start_inserted_call) und bei jedem
-        # sofortigen Stop verworfen. Hält die letzte FT8Message (Freq/Slot).
-        self._insert_pending_call = None
+        # P164 (30.05.2026): Einschub-Merker entfernt — lebt jetzt als
+        # `_qso_pending_insert` in MainWindow (vom Auto-Hunt entkoppelt).
         # Slot-Affinitaet — bevorzugt Kandidaten mit gleichem tx_even:
         self._last_tx_even: Optional[bool] = None
         # Zeit-beschraenkte Session (10-Min-Hard-Stop):
@@ -283,11 +280,10 @@ class AutoHunt(QObject):
         self.active = False
         self._current_target = None
         self._auto_hunt_timer.stop()
-        # P158 (29.05.2026): Session-Ende verwirft einen vorgemerkten Einschub
-        # (Mike-Spec Edge-Case: deferred Stop vor B-Start → Puffer weg). Gilt
-        # für ALLE sofortigen Stops inkl. totmann_expired — eine beendete
-        # Session soll keine Station mehr automatisch rufen.
-        self._insert_pending_call = None
+        # P164 (30.05.2026): Einschub-Merker `_qso_pending_insert` lebt in
+        # MainWindow und wird dort beim Auto-Hunt-Stop NICHT genullt (ein
+        # manuell vorgemerktes B soll einen Auto-Hunt-Stop überleben). Cleanup
+        # nur via HALT/Band/Mode/RX/Konsum.
 
         if reason != "totmann_expired":
             self._cooldown.clear()
@@ -548,19 +544,9 @@ class AutoHunt(QObject):
         """
         self._current_target = None
 
-    def set_pending_insert(self, msg) -> None:
-        """P158 (29.05.2026): Fremde Station für Einschub nach aktuellem QSO
-        vormerken. Letzter-Klick-gewinnt (überschreibt vorigen Puffer, KEINE
-        Liste — KISS). `msg` ist die FT8Message (trägt Call/Freq/Slot für den
-        späteren Start über `mw_qso._on_station_clicked`)."""
-        self._insert_pending_call = msg
-
-    def take_pending_insert(self):
-        """P158 (29.05.2026): Vorgemerkten Einschub entnehmen + Puffer leeren.
-        Gibt die FT8Message zurück oder None. Aufruf am QSO-Ende."""
-        msg = self._insert_pending_call
-        self._insert_pending_call = None
-        return msg
+    # P164 (30.05.2026): set_pending_insert/take_pending_insert ENTFERNT.
+    # Der Einschub-Merker lebt jetzt als `_qso_pending_insert` in MainWindow
+    # (vom Auto-Hunt entkoppelt, funktioniert auch ohne laufende Session).
 
     def on_band_change(self):
         """Bandwechsel → Auto-Hunt-Session beenden + Cooldowns loeschen.

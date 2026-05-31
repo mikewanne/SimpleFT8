@@ -396,6 +396,11 @@ class QSOMixin:
         self.rx_panel.set_active_call("")
         # TX sofort stoppen (P60: zentraler Helper, cleart auch _pending_station_click)
         self._abort_active_tx()
+        # P164 (30.05.2026, DeepSeek-R1-F2 🔴): vorgemerkten Einschub verwerfen.
+        # HALT = Notbremse, alles weg. cancel() emittiert KEIN QSO-Signal →
+        # _p158_maybe_start_inserted_call läuft nicht → ein Pending bliebe sonst
+        # liegen und würde beim nächsten QSO-Ende als Geister-B feuern.
+        self._qso_pending_insert = None
         # CQ + QSO stoppen
         self.qso_sm.stop_cq()
         self.qso_sm.cancel()
@@ -1030,29 +1035,26 @@ class QSOMixin:
         self._maybe_resume_omni()
 
     def _p158_maybe_start_inserted_call(self):
-        """P158 (29.05.2026): Falls eine fremde Station während des gerade
-        beendeten QSO per Klick vorgemerkt wurde, jetzt einschieben.
+        """P164 (30.05.2026, generalisiert aus P158): Falls eine Station
+        während des gerade beendeten QSO per Klick vorgemerkt wurde, jetzt
+        einschieben. Vom Auto-Hunt ENTKOPPELT — der Merker `_qso_pending_insert`
+        lebt in MainWindow und funktioniert auch ohne laufenden Auto-Hunt
+        (z.B. nach manuellem QSO).
 
         Wird am Ende von `_on_qso_confirmed` (Erfolg) UND `_on_qso_timeout`
         (Timeout) gerufen — NACH `flush_pending_stop()` + `on_manual_qso_end()`.
-        Dadurch:
-        - Wenn Auto-Hunt zwischenzeitlich gestoppt wurde (deferred Timer/
-          Totmann via flush_pending_stop, HALT, Band): `active` ist False UND
-          `stop_auto_hunt` hat den Puffer schon geleert → take liefert None →
-          B wird verworfen (Mike-Spec Edge-Case).
-        - Sonst läuft B durch den bestehenden manuellen Klick-Pfad
-          (`_on_station_clicked`): OMNI-Pause, on_manual_qso_start (pausiert
-          Auto-Hunt), „Rufe B...", start_qso. Auto-Resume nach B kommt
-          automatisch über `_on_qso_confirmed`/`_on_qso_timeout` (on_manual_
-          qso_end). SWR-Sperre/TX-Race werden von _on_station_clicked
-          abgefangen.
+        B läuft durch den bestehenden manuellen Klick-Pfad
+        (`_on_station_clicked`): OMNI-Pause, on_manual_qso_start (pausiert
+        Auto-Hunt falls aktiv → Auto-Resume nach B), „Rufe B...", start_qso.
+        SWR-Sperre/Diversity/TX-Race werden von _on_station_clicked abgefangen.
+
+        HALT nullt `_qso_pending_insert` separat (siehe `_on_cancel`) → eine
+        Notbremse verwirft den vorgemerkten Einschub (DeepSeek-R1-🔴).
         """
-        ah = getattr(self, "_auto_hunt", None)
-        if ah is None or not ah.active:
-            return
-        msg = ah.take_pending_insert()
+        msg = self._qso_pending_insert
         if msg is None:
             return
+        self._qso_pending_insert = None
         self._p158_insertable.clear()
         self._on_station_clicked(msg)
 

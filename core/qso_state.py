@@ -869,6 +869,13 @@ HASH_RESOLVE_STATES = frozenset({
     QSOState.TX_73_COURTESY,
 })
 
+# P164 (30.05.2026): semantischer Alias — "aktives QSO mit festem Partner".
+# Inhaltlich identisch mit HASH_RESOLVE_STATES, aber eigener Name, damit die
+# P164-Klickbarkeits-Logik in der UI (eine uns-rufende Station im QSO-Fenster
+# klickbar machen, ausser es ist der aktuelle Partner) NICHT an den
+# P124-Hash-Aufloesungs-Zweck gekoppelt ist. DeepSeek-R1-F4-Empfehlung.
+ACTIVE_QSO_STATES = HASH_RESOLVE_STATES
+
 
 def is_hash_marker(call: str) -> bool:
     """Ist `call` ein FT8 i3-Frame Hash-Marker im 2. Feld?

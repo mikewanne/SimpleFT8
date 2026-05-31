@@ -4,6 +4,46 @@ Diese Datei wird nur ergänzt, niemals gelöscht oder überschrieben.
 Format: `## YYYY-MM-DD — Kurztitel` → Änderungen darunter.
 
 
+## 2026-05-30 v0.98.48 — P164 Klick auf uns-rufende Station generalisiert (P158-Nachfolger)
+
+**P164 — eine Station die UNS ruft ist im QSO-Log IMMER klickbar** (voller
+DeepSeek-Workflow V1→V2→R1→V3→Code→Final-R1, beide Runden v4-pro). Generalisierung
+der alten P158-Logik.
+
+**Mike-Spec 30.05.:** „Es ist Quatsch dass Auto-Hunt aktiv sein muss. Sie ruft
+uns — das ist der Punkt, damit ist sie im QSO-Fenster sichtbar. Es muss auch kein
+aktives QSO mit einer anderen Station sein." Doktrin „Höflichkeit > Stationszahl"
+(Memory `feedback_hoeflichkeit_vor_stationszahl`). Auftrag: „alte Logik durch neue
+ersetzen, NICHT zweiten Pfad bauen."
+
+**Vorher (P158):** Klickbar nur wenn Auto-Hunt aktiv + nicht manual_override +
+aktives QSO mit anderem Call + kein 73/rr73 — sperrte Mikes YO60GW-Fall aus
+(manuelles QSO lief, fremde Station rief, war nicht klickbar).
+
+**Jetzt (P164):** Klickbar wenn Station uns ruft + kein 73/rr73 + nicht CQ-Modus
++ NICHT der aktuelle QSO-Partner (Doppel-Ruf-Schutz, Mike-Einsicht — sonst klickt
+man die Station an mit der man gerade funkt → Doppel-QSO). Klick-Wirkung
+**state-abhängig**: kein aktives QSO → SOFORT rufen; aktives QSO mit A → A zu
+Ende, dann B einschieben, ggf. Auto-Resume.
+
+**Architektur:** Merker `_insert_pending_call` aus `auto_hunt` ENTFERNT, ersetzt
+durch `_qso_pending_insert` in MainWindow (vom Auto-Hunt entkoppelt → funktioniert
+auch ohne laufende Session). EIN Klickbar-Prädikat (`_p158_is_insertable_caller`),
+EIN Merker, EIN Start-Pfad (`_on_station_clicked` — alle Safety-Guards: SWR-Sperre,
+Diversity, TX-Buffer, ANT1-Verriegelung intakt). Neuer Alias `ACTIVE_QSO_STATES =
+HASH_RESOLVE_STATES` in qso_state.py (semantisch vom Hash-Resolve-Zweck getrennt,
+DeepSeek-R1-F4).
+
+**DeepSeek-Findings:** Plan-R1 NO-GO→GO (F2 🔴 HALT muss `_qso_pending_insert`
+nullen — eingebaut in `_on_cancel`; F4 Alias). Final-R1 NACHBESSERN→behoben:
+🔴 HALT-Null (war noch offen), 🔴 IDLE-Sofort-Ruf nutzt jetzt `pop(call)` statt
+`clear()` (andere uns-rufende Stationen im selben Slot bleiben klickbar).
+Cleanup `_qso_pending_insert` symmetrisch: Konsum, HALT, Band-/Mode-/RX-Wechsel.
+
+**Tests:** `test_p158_insert_pending_call.py` komplett auf P164 umgeschrieben
+(34 Tests, vorher 27). Volle Suite **2212 grün** (0 Regression). FEATURES.md §17
+aktualisiert. **FlexRadio Field-Test pending. Lokaler Commit, NICHT gepusht.**
+
 ## 2026-05-30 v0.98.47 — P162 zurückgenommen (war KEIN Bug)
 
 Der in v0.98.46 als „EG5SUN-Abschluss-Bug" dokumentierte Fix war eine

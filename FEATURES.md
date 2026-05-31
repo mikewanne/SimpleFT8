@@ -1504,11 +1504,25 @@ vom P159-Clamp-Bug, der den TUNE-MEDIAN betraf — andere Baustelle.)
 
 ---
 
-## 17. Aktiv vs. Passiv: RX-Liste jagen, QSO-Fenster antworten (P158 — v0.98.44)
+## 17. Aktiv vs. Passiv: RX-Liste jagen, QSO-Fenster antworten (P158 → P164)
 
-> **Status: IMPLEMENTIERT (29.05.2026, v0.98.44).** Voller Workflow,
-> DeepSeek-v4-pro Design-R1 + Final-R1. Hier dokumentiert weil es eine
-> **Design-Philosophie** festschreibt, die auch über P158 hinaus gilt.
+> **Status: IMPLEMENTIERT.** P158 (29.05.2026, v0.98.44) Erst-Bau,
+> **P164 (30.05.2026, v0.98.48) GENERALISIERT** (voller Workflow, DeepSeek-v4-pro
+> Plan-R1 + Final-R1). Hier dokumentiert weil es eine **Design-Philosophie**
+> festschreibt, die über das Einzelfeature hinaus gilt.
+>
+> **⚠ P164-Änderung gegenüber unten beschriebenem P158-Stand:** Die
+> Klickbarkeit ist NICHT mehr an Auto-Hunt + laufendes Fremd-QSO gebunden. Neue
+> Regel: eine Station ist klickbar sobald sie UNS ruft (+ kein 73/rr73 + nicht
+> CQ-Modus + NICHT der aktuelle Partner = Doppel-Ruf-Schutz). Klick-Wirkung
+> state-abhängig: **IDLE → sofort rufen**, **aktives QSO mit A → A zu Ende, dann
+> B einschieben**. Der Einschub-Merker heißt jetzt `_qso_pending_insert` und
+> lebt in **MainWindow** (vom Auto-Hunt ENTKOPPELT — `auto_hunt.set/
+> take_pending_insert` wurden ENTFERNT). Doktrin „Höflichkeit > Stationszahl"
+> (Memory `feedback_hoeflichkeit_vor_stationszahl`). Cleanup `_qso_pending_insert`:
+> Konsum + HALT (`_on_cancel`) + Band-/Mode-/RX-Wechsel. Der finale Anruf läuft
+> weiter über `_on_station_clicked` (alle Safety-Guards inkl. ANT1 intakt).
+> Der folgende P158-Text beschreibt die ursprüngliche, engere Variante.
 
 ### Die zwei Fenster, zwei Haltungen
 

@@ -1,26 +1,32 @@
-"""P158 (29.05.2026) — Wartende Station ins Auto-Hunt-QSO einschieben.
+"""P164 (30.05.2026, generalisiert aus P158) — Klick auf uns-rufende Station
+im QSO-Log.
 
-Mike-Field-Szenario: Auto-Hunt fährt ein QSO mit A. Fremde Station B ruft uns
-(DA1MHH) dazwischen → Zeile `← Empf. DA1MHH F5MYK IN97` im QSO-Log. Heute geht
-B verloren. P158: Zeile klickbar → B vorgemerkt → A ZU ENDE → B gerufen →
-Auto-Hunt Auto-Resume.
+Mike-Spec 30.05.: Eine Station die UNS ruft (im QSO-Fenster sichtbar) soll
+IMMER klickbar sein — KEIN Auto-Hunt-Zwang, KEIN "anderes aktives QSO muss
+laufen". Einzige inhaltliche Bedingung: sie ruft uns. Doktrin: Höflichkeit >
+Stationszahl (Memory feedback_hoeflichkeit_vor_stationszahl).
 
-Mike-Philosophie: RX-Liste = aktiv jagen, QSO-Fenster = passiv höflich
-antworten. Klick gehört ins QSO-Log, NICHT in die RX-Liste. Abgegrenzt von
-_pending_station_click (P1.24, bricht ab) + Caller-Queue (CQ-Modus).
+Mike-Einsicht: Der EINE Schutz der bleibt — nicht die Station anklickbar
+machen, mit der wir GERADE funken (sonst Doppel-QSO). Greift via
+ACTIVE_QSO_STATES + qso.their_call == caller.
 
-DeepSeek-v4-pro Design-R1: 0 Blocker. Eingebaute Findings:
-- 🟠1: _p158_insertable-Dict-Cleanup bei jedem Auto-Hunt-Stop
-- 🟠2: expliziter their_call-Null/Leer-Check im Guard
-- F1: QTextBrowser + anchorClicked statt QTextEdit-Subklasse
-- F2: Hook am Ende von _on_qso_confirmed/_on_qso_timeout (TX frei, IDLE)
+State-abhängige Klick-Wirkung (ein Pfad, kein Doppel-Pfad):
+- Aktives QSO mit ANDERER Station → B vormerken (_qso_pending_insert), A zu
+  Ende, B danach via _on_station_clicked.
+- Kein aktives QSO (IDLE) → B SOFORT via _on_station_clicked.
+- Klick auf aktuellen Partner → ignoriert.
+
+Der Einschub-Merker `_qso_pending_insert` lebt in MainWindow (vom Auto-Hunt
+ENTKOPPELT, ersetzt auto_hunt.set/take_pending_insert). DeepSeek-v4-pro
+Plan-R1: GO. Findings eingebaut: F2 🔴 HALT nullt _qso_pending_insert,
+F4 ACTIVE_QSO_STATES-Alias.
 
 Tests:
-- T1-T7: _p158_is_insertable_caller Logik (Source-Extraktion, kein Qt)
-- T8-T11: _on_hunt_insert_clicked Guards (Mocks)
-- T12-T14: _p158_maybe_start_inserted_call (mw_qso, Mocks)
-- T15-T17: AutoHunt set/take/stop-Puffer-API (qapp)
-- T18-T24: Source-Inspektion Verdrahtung (qso_panel/main_window/mw_qso/mw_cycle)
+- T1-T9: _p158_is_insertable_caller (Source-Extraktion, kein Qt)
+- T10-T15: _on_hunt_insert_clicked (state-abhängige Wirkung, Mocks)
+- T16-T19: _p158_maybe_start_inserted_call (mw_qso, vom Auto-Hunt entkoppelt)
+- T20-T31: Source-Inspektion Verdrahtung (render/wiring/cleanup/HALT/alt-API-weg)
+- T32-T34: echte QTextBrowser-Render + Signal-Roundtrip
 """
 
 from __future__ import annotations
@@ -48,27 +54,30 @@ QSO_PANEL_SRC = (REPO / "ui" / "qso_panel.py").read_text()
 MAIN_WINDOW_SRC = (REPO / "ui" / "main_window.py").read_text()
 AUTO_HUNT_SRC = (REPO / "core" / "auto_hunt.py").read_text()
 
+# Echte State-Werte für die Source-extrahierten Funktionen (kein Qt-Import).
+from core.qso_state import QSOState, ACTIVE_QSO_STATES  # noqa: E402
+
 
 # ---------------------------------------------------------------------------
-# Helper: Methode als unbound function aus mw_cycle.py extrahieren (kein Qt)
+# Helper: Methode als unbound function aus Source extrahieren (kein Qt)
 # ---------------------------------------------------------------------------
 
-def _extract_method(src: str, name: str):
+def _extract_method(src: str, name: str, extra_ns: dict | None = None):
     """Extrahiert eine Methode `def <name>(self, ...)` bis zur nächsten `def`
-    und exec't sie in isoliertem Namespace (vermeidet Qt-Import)."""
-    # Lookahead stoppt an nächster Methode ODER deren Decorator (@Slot etc.).
+    (oder deren Decorator) und exec't sie in isoliertem Namespace."""
     m = re.search(
         rf"def {re.escape(name)}\(self.*?(?=\n    (?:def |@))",
         src, re.S,
     )
     assert m is not None, f"Methode {name} nicht gefunden"
-    # Dedent um 4: def-Zeile steht bei col 0, Body bei col 8 → col 4.
     body = "\n".join(
         line[4:] if line.startswith("    ") else line
         for line in m.group(0).splitlines()
     )
-    # FT8Message-Annotation im isolierten Namespace auflösbar machen.
-    ns: dict = {"FT8Message": object}
+    ns: dict = {"FT8Message": object,
+                "ACTIVE_QSO_STATES": ACTIVE_QSO_STATES}
+    if extra_ns:
+        ns.update(extra_ns)
     exec(body, ns)  # noqa: S102 — kontrollierter Test-Code
     return ns[name]
 
@@ -79,16 +88,15 @@ def _insertable_fn():
 
 def _make_self(
     *,
-    ah_active: bool = True,
-    manual_override: bool = False,
+    state=QSOState.WAIT_REPORT,
+    cq_mode: bool = False,
     their_call: str = "EB3JT",
     my_call: str = "DA1MHH",
 ):
     qso = SimpleNamespace(their_call=their_call) if their_call else None
-    qso_sm = SimpleNamespace(qso=qso)
-    auto_hunt = SimpleNamespace(active=ah_active, _manual_override=manual_override)
+    qso_sm = SimpleNamespace(qso=qso, state=state, cq_mode=cq_mode)
     settings = SimpleNamespace(callsign=my_call)
-    return SimpleNamespace(_auto_hunt=auto_hunt, qso_sm=qso_sm, settings=settings)
+    return SimpleNamespace(qso_sm=qso_sm, settings=settings)
 
 
 def _make_msg(caller: str, *, is_73=False, is_rr73=False):
@@ -96,50 +104,49 @@ def _make_msg(caller: str, *, is_73=False, is_rr73=False):
 
 
 # ---------------------------------------------------------------------------
-# T1-T7: _p158_is_insertable_caller
+# T1-T9: _p158_is_insertable_caller (P164 generalisierte Regel)
 # ---------------------------------------------------------------------------
 
-def test_t1_foreign_caller_during_autohunt_qso_is_insertable():
-    """T1: B ruft uns während Auto-Hunt-QSO mit A → klickbar (Kern-Szenario)."""
+def test_t1_foreign_caller_during_active_qso_is_insertable():
+    """T1: B ruft uns während QSO mit A → klickbar (Kern-Szenario, Höflichkeit)."""
     fn = _insertable_fn()
     self = _make_self(their_call="EB3JT")
-    msg = _make_msg("F5MYK")
-    assert fn(self, msg) is True
+    assert fn(self, _make_msg("F5MYK")) is True
 
 
-def test_t2_current_partner_not_insertable():
-    """T2: Der aktuelle QSO-Partner selbst ist NICHT klickbar."""
+def test_t2_clickable_in_idle_without_autohunt():
+    """T2 (P164-KERN): IDLE, KEIN Auto-Hunt, Station ruft uns → KLICKBAR.
+
+    Genau Mikes YO60GW-Fall: P158 (alt) hätte hier NICHT gegriffen
+    (Auto-Hunt-Zwang), P164 schon."""
     fn = _insertable_fn()
-    self = _make_self(their_call="EB3JT")
-    msg = _make_msg("EB3JT")
-    assert fn(self, msg) is False
+    self = _make_self(state=QSOState.IDLE, their_call="")
+    assert fn(self, _make_msg("YO60GW")) is True
 
 
-def test_t3_autohunt_inactive_not_insertable():
-    """T3: Ohne aktiven Auto-Hunt kein Einschub-Angebot."""
+def test_t3_clickable_during_manual_qso():
+    """T3: manuelles QSO mit A (kein Auto-Hunt), B ruft → klickbar."""
     fn = _insertable_fn()
-    self = _make_self(ah_active=False)
-    assert fn(self, _make_msg("F5MYK")) is False
+    self = _make_self(state=QSOState.WAIT_RR73, their_call="DL1ABC")
+    assert fn(self, _make_msg("SP9XYZ")) is True
 
 
-def test_t4_manual_override_not_insertable():
-    """T4: Bei manuellem QSO (override) entscheidet User selbst, kein Angebot."""
+def test_t4_current_partner_not_insertable():
+    """T4: Doppel-Ruf-Schutz — die Station mit der wir GERADE funken → NEIN."""
     fn = _insertable_fn()
-    self = _make_self(manual_override=True)
-    assert fn(self, _make_msg("F5MYK")) is False
+    self = _make_self(state=QSOState.WAIT_REPORT, their_call="EB3JT")
+    assert fn(self, _make_msg("EB3JT")) is False
 
 
-def test_t5_no_active_qso_not_insertable():
-    """T5 (R1-🟠2): kein aktives QSO (their_call leer) → kein Einschub."""
+def test_t5_partner_in_idle_state_is_insertable():
+    """T5: their_call gesetzt aber State NICHT aktiv (IDLE) → Doppel-Ruf-Schutz
+    greift NICHT (kein laufendes QSO mehr) → klickbar."""
     fn = _insertable_fn()
-    self = _make_self(their_call="")
-    assert fn(self, _make_msg("F5MYK")) is False
-    self2 = _make_self(their_call=None)
-    assert fn(self2, _make_msg("F5MYK")) is False
+    self = _make_self(state=QSOState.IDLE, their_call="EB3JT")
+    assert fn(self, _make_msg("EB3JT")) is True
 
 
 def test_t6_own_call_not_insertable():
-    """T6: Defensive — eigener Call ist nie klickbar."""
     fn = _insertable_fn()
     self = _make_self(my_call="DA1MHH")
     assert fn(self, _make_msg("DA1MHH")) is False
@@ -153,213 +160,262 @@ def test_t7_confirmation_msgs_not_insertable():
     assert fn(self, _make_msg("F5MYK", is_rr73=True)) is False
 
 
+def test_t8_not_insertable_in_cq_mode():
+    """T8 (R1-F1): CQ-Modus → caller_queue ist zuständig, P164 schließt aus."""
+    fn = _insertable_fn()
+    self = _make_self(cq_mode=True, their_call="EB3JT")
+    assert fn(self, _make_msg("F5MYK")) is False
+
+
+def test_t9_empty_caller_not_insertable():
+    fn = _insertable_fn()
+    self = _make_self(their_call="EB3JT")
+    assert fn(self, _make_msg("")) is False
+
+
 # ---------------------------------------------------------------------------
-# T8-T11: _on_hunt_insert_clicked (Mocks)
+# T10-T15: _on_hunt_insert_clicked (state-abhängige Wirkung)
 # ---------------------------------------------------------------------------
 
 def _click_fn():
     return _extract_method(MW_CYCLE_SRC, "_on_hunt_insert_clicked")
 
 
-def _make_click_self(*, ah_active=True, their_call="EB3JT", insertable=None):
+def _make_click_self(*, state=QSOState.WAIT_REPORT, their_call="EB3JT",
+                     insertable=None):
     qso = SimpleNamespace(their_call=their_call) if their_call else None
-    auto_hunt = MagicMock()
-    auto_hunt.active = ah_active
     return SimpleNamespace(
-        _auto_hunt=auto_hunt,
-        qso_sm=SimpleNamespace(qso=qso),
+        qso_sm=SimpleNamespace(qso=qso, state=state),
         qso_panel=MagicMock(),
         _p158_insertable=insertable if insertable is not None else {},
+        _qso_pending_insert=None,
+        _on_station_clicked=MagicMock(),
     )
 
 
-def test_t8_click_happy_path_sets_pending_and_info():
-    """T8: gültiger Klick → set_pending_insert + add_info."""
+def test_t10_click_during_active_qso_sets_pending():
+    """T10: aktives QSO mit A, Klick auf B → B vorgemerkt (kein Sofort-Ruf)."""
     fn = _click_fn()
     msg = _make_msg("F5MYK")
-    self = _make_click_self(their_call="EB3JT", insertable={"F5MYK": msg})
+    self = _make_click_self(state=QSOState.WAIT_REPORT, their_call="EB3JT",
+                            insertable={"F5MYK": msg})
     fn(self, "F5MYK")
-    self._auto_hunt.set_pending_insert.assert_called_once_with(msg)
+    assert self._qso_pending_insert is msg
+    self._on_station_clicked.assert_not_called()
     assert self.qso_panel.add_info.called
 
 
-def test_t9_click_ignored_when_autohunt_inactive():
-    """T9: Auto-Hunt inaktiv → Klick ignoriert."""
+def test_t11_click_in_idle_calls_immediately():
+    """T11 (P164-KERN): kein aktives QSO → B SOFORT via _on_station_clicked."""
     fn = _click_fn()
-    self = _make_click_self(ah_active=False, insertable={"F5MYK": _make_msg("F5MYK")})
+    msg = _make_msg("F5MYK")
+    self = _make_click_self(state=QSOState.IDLE, their_call="",
+                            insertable={"F5MYK": msg})
     fn(self, "F5MYK")
-    self._auto_hunt.set_pending_insert.assert_not_called()
+    self._on_station_clicked.assert_called_once_with(msg)
+    assert self._qso_pending_insert is None
 
 
-def test_t10_click_ignored_when_no_other_qso():
-    """T10: kein aktives QSO ODER Klick == aktueller Partner → ignoriert
-    (deckt veraltete Zeile nach QSO-Ende + Klick-auf-B-während-B-QSO)."""
+def test_t12_click_on_current_partner_ignored():
+    """T12: Klick auf die Station mit der wir GERADE funken → noop."""
     fn = _click_fn()
-    # kein QSO
-    s1 = _make_click_self(their_call="", insertable={"F5MYK": _make_msg("F5MYK")})
-    fn(s1, "F5MYK")
-    s1._auto_hunt.set_pending_insert.assert_not_called()
-    # Klick auf aktuellen Partner
-    s2 = _make_click_self(their_call="F5MYK", insertable={"F5MYK": _make_msg("F5MYK")})
-    fn(s2, "F5MYK")
-    s2._auto_hunt.set_pending_insert.assert_not_called()
+    msg = _make_msg("EB3JT")
+    self = _make_click_self(state=QSOState.WAIT_REPORT, their_call="EB3JT",
+                            insertable={"EB3JT": msg})
+    fn(self, "EB3JT")
+    self._on_station_clicked.assert_not_called()
+    assert self._qso_pending_insert is None
 
 
-def test_t11_click_ignored_when_call_not_in_dict():
-    """T11: Call nicht (mehr) im Merk-Dict → ignoriert, kein Pending."""
+def test_t13_click_ignored_when_call_not_in_dict():
+    """T13: Call nicht (mehr) im Merk-Dict → ignoriert."""
     fn = _click_fn()
-    self = _make_click_self(their_call="EB3JT", insertable={})
+    self = _make_click_self(insertable={})
     fn(self, "F5MYK")
-    self._auto_hunt.set_pending_insert.assert_not_called()
+    self._on_station_clicked.assert_not_called()
+    assert self._qso_pending_insert is None
+
+
+def test_t14_click_in_idle_pops_only_clicked_key():
+    """T14 (DeepSeek-Final-R1-🔴): Sofort-Ruf im IDLE entfernt NUR den geklickten
+    Key — andere im selben Slot uns-rufende Stationen bleiben klickbar."""
+    fn = _click_fn()
+    msg = _make_msg("F5MYK")
+    other = _make_msg("OTHER")
+    self = _make_click_self(state=QSOState.IDLE, their_call="",
+                            insertable={"F5MYK": msg, "OTHER": other})
+    fn(self, "F5MYK")
+    assert "F5MYK" not in self._p158_insertable
+    assert self._p158_insertable.get("OTHER") is other  # bleibt klickbar
+
+
+def test_t15_click_during_qso_keeps_dict_until_consumed():
+    """T15: Vormerken (aktives QSO) leert das Dict NICHT sofort — erst der
+    Einschub-Konsum (_p158_maybe_start_inserted_call) räumt auf."""
+    fn = _click_fn()
+    msg = _make_msg("F5MYK")
+    self = _make_click_self(state=QSOState.WAIT_REPORT, their_call="EB3JT",
+                            insertable={"F5MYK": msg})
+    fn(self, "F5MYK")
+    assert "F5MYK" in self._p158_insertable
 
 
 # ---------------------------------------------------------------------------
-# T12-T14: _p158_maybe_start_inserted_call (mw_qso, Mocks)
+# T16-T19: _p158_maybe_start_inserted_call (mw_qso, vom Auto-Hunt entkoppelt)
 # ---------------------------------------------------------------------------
 
 def _maybe_start_fn():
     return _extract_method(MW_QSO_SRC, "_p158_maybe_start_inserted_call")
 
 
-def test_t12_maybe_start_happy_path_calls_station_clicked():
-    """T12: Puffer gesetzt + Auto-Hunt aktiv → _on_station_clicked(msg) +
-    Dict geleert (Einschub durch bestehenden Klick-Pfad)."""
+def test_t16_maybe_start_happy_path_calls_station_clicked():
+    """T16: _qso_pending_insert gesetzt → _on_station_clicked(msg) + cleanup,
+    OHNE Auto-Hunt-Abhängigkeit (P164-Entkopplung)."""
     fn = _maybe_start_fn()
     msg = _make_msg("F5MYK")
-    auto_hunt = MagicMock()
-    auto_hunt.active = True
-    auto_hunt.take_pending_insert.return_value = msg
     self = SimpleNamespace(
-        _auto_hunt=auto_hunt,
+        _qso_pending_insert=msg,
         _p158_insertable={"F5MYK": msg},
         _on_station_clicked=MagicMock(),
     )
     fn(self)
     self._on_station_clicked.assert_called_once_with(msg)
+    assert self._qso_pending_insert is None
     assert self._p158_insertable == {}
 
 
-def test_t13_maybe_start_noop_when_autohunt_stopped():
-    """T13 (Edge-Case): Auto-Hunt zwischenzeitlich gestoppt → kein B-Start."""
+def test_t17_maybe_start_works_without_autohunt():
+    """T17 (P164-KERN): kein _auto_hunt-Attribut nötig — Einschub funktioniert
+    auch nach manuellem QSO ohne laufenden Auto-Hunt."""
     fn = _maybe_start_fn()
-    auto_hunt = MagicMock()
-    auto_hunt.active = False
+    msg = _make_msg("F5MYK")
     self = SimpleNamespace(
-        _auto_hunt=auto_hunt,
+        _qso_pending_insert=msg,
+        _p158_insertable={},
+        _on_station_clicked=MagicMock(),
+    )
+    fn(self)  # darf NICHT auf self._auto_hunt zugreifen
+    self._on_station_clicked.assert_called_once_with(msg)
+
+
+def test_t18_maybe_start_noop_when_no_pending():
+    """T18: kein Pending → kein B-Start."""
+    fn = _maybe_start_fn()
+    self = SimpleNamespace(
+        _qso_pending_insert=None,
         _p158_insertable={},
         _on_station_clicked=MagicMock(),
     )
     fn(self)
     self._on_station_clicked.assert_not_called()
-    auto_hunt.take_pending_insert.assert_not_called()
 
 
-def test_t14_maybe_start_noop_when_no_pending():
-    """T14: aktiv aber kein Puffer → kein B-Start."""
+def test_t19_maybe_start_resets_pending_before_call():
+    """T19: _qso_pending_insert wird VOR _on_station_clicked genullt
+    (Reentrancy-Schutz — kein Doppel-Start)."""
     fn = _maybe_start_fn()
-    auto_hunt = MagicMock()
-    auto_hunt.active = True
-    auto_hunt.take_pending_insert.return_value = None
+    msg = _make_msg("F5MYK")
+    seen = {}
+
+    def _spy(m):
+        seen["pending_at_call"] = self._qso_pending_insert
+
     self = SimpleNamespace(
-        _auto_hunt=auto_hunt,
+        _qso_pending_insert=msg,
         _p158_insertable={},
-        _on_station_clicked=MagicMock(),
+        _on_station_clicked=_spy,
     )
     fn(self)
-    self._on_station_clicked.assert_not_called()
+    assert seen["pending_at_call"] is None
 
 
 # ---------------------------------------------------------------------------
-# T15-T17: AutoHunt Puffer-API (qapp)
+# T20-T31: Source-Inspektion Verdrahtung
 # ---------------------------------------------------------------------------
 
-def test_t15_set_take_roundtrip(qapp):
-    """T15: set_pending_insert → take_pending_insert gibt msg zurück."""
-    from core.auto_hunt import AutoHunt
-    ah = AutoHunt()
-    sentinel = object()
-    ah.set_pending_insert(sentinel)
-    assert ah.take_pending_insert() is sentinel
-
-
-def test_t16_take_clears_buffer(qapp):
-    """T16: take leert den Puffer (zweiter take → None)."""
-    from core.auto_hunt import AutoHunt
-    ah = AutoHunt()
-    ah.set_pending_insert(object())
-    ah.take_pending_insert()
-    assert ah.take_pending_insert() is None
-
-
-def test_t17_stop_clears_pending_insert(qapp):
-    """T17 (R1-🟠1 + Edge-Case): Session-Ende verwirft den Puffer."""
-    from core.auto_hunt import AutoHunt
-    ah = AutoHunt()
-    ah.active = True
-    ah.set_pending_insert(object())
-    ah.stop_auto_hunt("manual_halt")
-    assert ah.take_pending_insert() is None
-
-
-# ---------------------------------------------------------------------------
-# T18-T24: Source-Inspektion Verdrahtung
-# ---------------------------------------------------------------------------
-
-def test_t18_qso_panel_uses_qtextbrowser_with_anchor():
-    """T18 (F1): log_view ist QTextBrowser, Links abgefangen via anchorClicked,
-    Auto-Navigation aus."""
+def test_t20_qso_panel_uses_qtextbrowser_with_anchor():
     assert "self.log_view = QTextBrowser()" in QSO_PANEL_SRC
     assert "setOpenLinks(False)" in QSO_PANEL_SRC
     assert "anchorClicked.connect(self._on_anchor_clicked)" in QSO_PANEL_SRC
     assert "hunt_insert_clicked = Signal(str)" in QSO_PANEL_SRC
 
 
-def test_t19_add_rx_has_insert_call_param_and_anchor_render():
-    """T19: add_rx kennt insert_call; rx-Render nutzt _append_anchor_line."""
+def test_t21_add_rx_has_insert_call_param_and_anchor_render():
     assert "insert_call: str = \"\"" in QSO_PANEL_SRC
     assert "_append_anchor_line" in QSO_PANEL_SRC
-    # Anchor-Helper baut huntinsert:-href
     assert "huntinsert:" in QSO_PANEL_SRC
 
 
-def test_t20_main_window_inits_dict_and_wires_signal():
-    """T20: _p158_insertable initialisiert + hunt_insert_clicked verdrahtet."""
+def test_t22_main_window_inits_dict_pending_and_wires_signal():
+    """T22: _p158_insertable + _qso_pending_insert initialisiert, Signal
+    verdrahtet."""
     assert "self._p158_insertable" in MAIN_WINDOW_SRC
-    assert "hunt_insert_clicked.connect(self._on_hunt_insert_clicked)" in MAIN_WINDOW_SRC
+    assert "self._qso_pending_insert" in MAIN_WINDOW_SRC
+    assert ("hunt_insert_clicked.connect(self._on_hunt_insert_clicked)"
+            in MAIN_WINDOW_SRC)
 
 
-def test_t21_main_window_clears_dict_on_stop():
-    """T21 (R1-🟠1): _on_auto_hunt_stopped leert das Merk-Dict."""
-    m = re.search(r"def _on_auto_hunt_stopped\(self.*?(?=\n    def )",
+def test_t23_main_window_clears_dict_on_stop():
+    """T23: _on_auto_hunt_stopped leert das Merk-Dict (Auto-Hunt-Ende)."""
+    m = re.search(r"def _on_auto_hunt_stopped\(self.*?(?=\n    (?:def |@))",
                   MAIN_WINDOW_SRC, re.S)
     assert m is not None
     assert "_p158_insertable.clear()" in m.group(0)
 
 
-def test_t22_hook_in_both_qso_end_handlers():
-    """T22 (F2): _p158_maybe_start_inserted_call in _on_qso_confirmed UND
+def test_t24_hook_in_both_qso_end_handlers():
+    """T24: _p158_maybe_start_inserted_call in _on_qso_confirmed UND
     _on_qso_timeout aufgerufen."""
-    conf = re.search(r"def _on_qso_confirmed\(self.*?(?=\n    def )",
+    conf = re.search(r"def _on_qso_confirmed\(self.*?(?=\n    (?:def |@))",
                      MW_QSO_SRC, re.S)
-    tmo = re.search(r"def _on_qso_timeout\(self.*?(?=\n    def )",
+    tmo = re.search(r"def _on_qso_timeout\(self.*?(?=\n    (?:def |@))",
                     MW_QSO_SRC, re.S)
     assert conf and "_p158_maybe_start_inserted_call()" in conf.group(0)
     assert tmo and "_p158_maybe_start_inserted_call()" in tmo.group(0)
 
 
-def test_t23_maybe_start_reuses_station_clicked():
-    """T23: Einschub läuft über bestehenden _on_station_clicked-Pfad
-    (kein dupliziertes Start-Logik — KISS + Auto-Resume gratis)."""
-    m = re.search(r"def _p158_maybe_start_inserted_call\(self.*?(?=\n    def )",
+def test_t25_halt_nulls_pending_insert():
+    """T25 (R1-F2 🔴 BLOCKER): _on_cancel (HALT) nullt _qso_pending_insert —
+    sonst feuert ein vorgemerktes B nach dem nächsten QSO-Ende (Geister-B)."""
+    m = re.search(r"def _on_cancel\(self.*?(?=\n    (?:def |@))",
+                  MW_QSO_SRC, re.S)
+    assert m is not None
+    assert "self._qso_pending_insert = None" in m.group(0)
+
+
+def test_t26_maybe_start_reuses_station_clicked():
+    """T26: Einschub läuft über bestehenden _on_station_clicked-Pfad (KISS +
+    alle Safety-Guards)."""
+    m = re.search(r"def _p158_maybe_start_inserted_call\(self.*?(?=\n    (?:def |@))",
                   MW_QSO_SRC, re.S)
     assert m is not None
     assert "self._on_station_clicked(msg)" in m.group(0)
 
 
-def test_t24_on_message_decoded_offers_insert_before_dispatch():
-    """T24: on_message_decoded prüft _p158_is_insertable_caller und reicht
+def test_t27_maybe_start_decoupled_from_autohunt():
+    """T27 (P164): _p158_maybe_start_inserted_call greift NICHT mehr auf
+    _auto_hunt/take_pending_insert zu (vollständige Entkopplung)."""
+    m = re.search(r"def _p158_maybe_start_inserted_call\(self.*?(?=\n    (?:def |@))",
+                  MW_QSO_SRC, re.S)
+    assert m is not None
+    body = m.group(0)
+    assert "take_pending_insert" not in body
+    assert "_auto_hunt" not in body
+    assert "_qso_pending_insert" in body
+
+
+def test_t28_old_autohunt_insert_api_removed():
+    """T28 (P164): set_pending_insert/take_pending_insert/_insert_pending_call
+    sind aus auto_hunt.py ENTFERNT (Mike: alte Logik ersetzen, kein Doppel)."""
+    assert "def set_pending_insert" not in AUTO_HUNT_SRC
+    assert "def take_pending_insert" not in AUTO_HUNT_SRC
+    assert "_insert_pending_call" not in AUTO_HUNT_SRC
+
+
+def test_t29_on_message_decoded_offers_insert_before_dispatch():
+    """T29: on_message_decoded prüft _p158_is_insertable_caller und reicht
     insert_call an add_rx durch (im my_call-Zweig, vor State-Machine)."""
-    m = re.search(r"def on_message_decoded\(self.*?(?=\n    def )",
+    m = re.search(r"def on_message_decoded\(self.*?(?=\n    (?:def |@))",
                   MW_CYCLE_SRC, re.S)
     assert m is not None
     body = m.group(0)
@@ -368,13 +424,30 @@ def test_t24_on_message_decoded_offers_insert_before_dispatch():
     assert "self._p158_insertable[msg.caller] = msg" in body
 
 
+def test_t30_band_change_nulls_pending_insert():
+    """T30: Bandwechsel nullt _qso_pending_insert (Pending von Band A nicht
+    auf Band B feuern)."""
+    assert MW_QSO_SRC or True  # Marker
+    from pathlib import Path as _P
+    mw_radio = (REPO / "ui" / "mw_radio.py").read_text()
+    # mind. eine Clear-Stelle gekoppelt an _p158_insertable.clear()
+    assert mw_radio.count("self._qso_pending_insert = None") >= 1
+    # symmetrisch zu den _p158_insertable.clear()-Stellen
+    assert "self._qso_pending_insert = None" in mw_radio
+
+
+def test_t31_active_qso_states_alias_exists():
+    """T31 (R1-F4): qso_state.py exportiert ACTIVE_QSO_STATES (semantischer
+    Alias auf HASH_RESOLVE_STATES)."""
+    from core.qso_state import ACTIVE_QSO_STATES, HASH_RESOLVE_STATES
+    assert ACTIVE_QSO_STATES == HASH_RESOLVE_STATES
+
+
 # ---------------------------------------------------------------------------
-# T25-T27: Echte QTextBrowser-Render + Signal-Roundtrip (kein Mock)
+# T32-T34: echte QTextBrowser-Render + Signal-Roundtrip (kein Mock)
 # ---------------------------------------------------------------------------
 
-def test_t25_add_rx_renders_real_anchor(qapp):
-    """T25 (F1 real): add_rx(insert_call=...) erzeugt einen echten HTML-Anchor
-    mit huntinsert:-href im QTextBrowser-Dokument."""
+def test_t32_add_rx_renders_real_anchor(qapp):
     from ui.qso_panel import QSOPanel
     panel = QSOPanel()
     panel.add_rx("DA1MHH F5MYK IN97", tx_even=True,
@@ -384,17 +457,14 @@ def test_t25_add_rx_renders_real_anchor(qapp):
     assert "F5MYK IN97" in h
 
 
-def test_t26_normal_rx_has_no_anchor(qapp):
-    """T26: normale RX-Zeile (ohne insert_call) bleibt Plain — kein huntinsert."""
+def test_t33_normal_rx_has_no_anchor(qapp):
     from ui.qso_panel import QSOPanel
     panel = QSOPanel()
     panel.add_rx("DA1MHH OK1ABC 73", tx_even=True, slot_start_ts=0.0)
     assert "huntinsert:" not in panel.log_view.toHtml()
 
 
-def test_t27_anchor_clicked_emits_only_for_huntinsert(qapp):
-    """T27: _on_anchor_clicked emittiert hunt_insert_clicked(call) nur für
-    huntinsert:-Links, ignoriert fremde URLs."""
+def test_t34_anchor_clicked_emits_only_for_huntinsert(qapp):
     from PySide6.QtCore import QUrl
     from ui.qso_panel import QSOPanel
     panel = QSOPanel()

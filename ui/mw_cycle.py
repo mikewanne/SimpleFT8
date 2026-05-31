@@ -11,7 +11,7 @@ from PySide6.QtCore import Slot
 if TYPE_CHECKING:
     from .main_window import MainWindow
 
-from core.qso_state import QSOState
+from core.qso_state import QSOState, ACTIVE_QSO_STATES
 from core.message import FT8Message
 from core import ntp_time
 from core.station_accumulator import accumulate_stations, remove_stale
@@ -837,9 +837,10 @@ class CycleMixin:
             # „beendet ist beendet". R1-F5: NUR add_rx skippen, NICHT return
             # — sonst würde on_message_received unten nicht laufen.
             if not self._p128_recently_completed_block(msg.caller):
-                # P158 (29.05.2026): ruft uns ein fremder Call während
-                # Auto-Hunt ein ANDERES QSO fährt? → Zeile klickbar machen +
-                # letzten Decode merken (für Einschub nach QSO-Ende).
+                # P164 (30.05.2026, generalisiert aus P158): ruft uns eine
+                # Station (und ist nicht unser aktueller Partner)? → Zeile im
+                # QSO-Log klickbar machen + letzten Decode merken (für Sofort-
+                # Ruf im IDLE bzw. Einschub nach laufendem QSO).
                 insert_call = ""
                 if self._p158_is_insertable_caller(msg):
                     insert_call = msg.caller
@@ -1025,63 +1026,73 @@ class CycleMixin:
             pass  # debug_log darf NIE crashen
 
     def _p158_is_insertable_caller(self, msg: FT8Message) -> bool:
-        """P158 (29.05.2026): True wenn `msg` eine fremde Station ist, die UNS
-        ruft, während Auto-Hunt gerade ein ANDERES QSO fährt — genau der Fall,
-        den die State-Machine heute ignoriert (qso_state.py:604, caller !=
-        their_call → return). Solche Zeilen werden im QSO-Log klickbar.
+        """P164 (30.05.2026, generalisiert aus P158): True wenn `msg` eine
+        Station ist, die UNS ruft und damit im QSO-Log klickbar gemacht werden
+        soll. Generalisierung der alten P158-Regel — KEIN Auto-Hunt-Zwang mehr,
+        KEIN "anderes aktives QSO muss laufen".
 
-        Mike-Philosophie: QSO-Fenster = passiv höflich antworten. Klickbar nur
-        wo es Sinn ergibt — fremder aktiver Anrufer während laufendem Auto-QSO.
+        Mike-Doktrin (30.05.): Höflichkeit > Stationszahl. Wer uns ruft (im
+        QSO-Fenster sichtbar), dem wollen wir antworten können. Einzige
+        inhaltliche Bedingung: sie ruft uns.
 
         Bedingungen (alle MÜSSEN gelten):
-        - Auto-Hunt aktiv UND nicht im manual_override (bei manuellem Klick
-          entscheidet der User selbst, kein Einschub-Angebot)
-        - State-Machine in aktivem QSO mit gesetztem their_call (R1-🟠2:
-          expliziter Null/Leer-Check, sonst Klick im IDLE durchrutschen)
-        - msg.caller != qso.their_call (B ist NICHT der aktuelle Partner)
-        - msg.caller != my_call (Defensive)
+        - msg.caller gesetzt und != my_call (Defensive)
         - not 73/rr73 (B will Kontakt, nicht bestätigen)
+        - NICHT im CQ-Modus (DeepSeek-R1-F1: dort ist die caller_queue
+          zuständig, P164 würde einen zweiten konkurrierenden Mechanismus
+          schaffen → bewusster Ausschluss, Mike verliert nichts)
+        - NICHT die Station mit der wir GERADE funken (Mike-Einsicht: sonst
+          würde der Klick = "nach dem QSO nochmal rufen" = Doppel-QSO). Greift
+          nur wenn State in ACTIVE_QSO_STATES und qso.their_call == caller.
 
         Hinweis: msg.target == my_call ist durch den Aufruf-Kontext in
-        on_message_decoded bereits garantiert.
+        on_message_decoded (Z.832) bereits garantiert.
         """
-        ah = getattr(self, '_auto_hunt', None)
-        if ah is None or not ah.active or ah._manual_override:
-            return False
-        qso = self.qso_sm.qso
-        if qso is None or not qso.their_call:
-            return False
-        if not msg.caller or msg.caller == qso.their_call:
-            return False
-        if msg.caller == self.settings.callsign:
+        if not msg.caller or msg.caller == self.settings.callsign:
             return False
         if msg.is_73 or msg.is_rr73:
+            return False
+        if self.qso_sm.cq_mode:
+            return False
+        qso = self.qso_sm.qso
+        if (self.qso_sm.state in ACTIVE_QSO_STATES and qso
+                and qso.their_call == msg.caller):
             return False
         return True
 
     def _on_hunt_insert_clicked(self, call: str):
-        """P158 (29.05.2026): Klick auf eine klickbare Einschub-Zeile im
-        QSO-Log. Merkt die fremde Station für den Einschub NACH dem aktuellen
-        QSO vor (kein Abbruch — A wird zu Ende gefunkt).
+        """P164 (30.05.2026): Klick auf eine uns-rufende Station im QSO-Log.
 
-        Guards (decken „Klick auf veraltete Zeile" + „Klick während B-QSO" ab):
-        - Auto-Hunt muss aktiv sein
-        - Wir müssen aktuell in einem QSO mit einer ANDEREN Station sein
-          (sonst ergibt ein Einschub keinen Sinn → ignorieren)
-        - Der letzte Decode von `call` muss noch im Merk-Dict liegen
+        State-abhängige Wirkung (ein Pfad, keine Doppel-Logik):
+        - Aktives QSO mit einer ANDEREN Station läuft → B vormerken, A wird zu
+          Ende gefunkt, B danach eingeschoben (Höflichkeit).
+        - Kein aktives QSO (IDLE / kein fester Partner) → B SOFORT rufen.
+        - Klick auf die Station mit der wir GERADE funken → ignorieren
+          (Doppel-Ruf-Schutz, Mike-Einsicht).
+
+        Der finale Anruf läuft IMMER über _on_station_clicked → alle
+        Safety-Guards (SWR-Sperre, Diversity, TX-Buffer, ANT1-Verriegelung)
+        bleiben wirksam.
         """
-        ah = getattr(self, '_auto_hunt', None)
-        if ah is None or not ah.active:
-            return
-        qso = self.qso_sm.qso
-        if qso is None or not qso.their_call or qso.their_call == call:
-            return
         msg = self._p158_insertable.get(call)
         if msg is None:
             return
-        ah.set_pending_insert(msg)
-        self.qso_panel.add_info(
-            f"⏳ {call} vorgemerkt — wird nach diesem QSO gerufen")
+        qso = self.qso_sm.qso
+        in_active = (self.qso_sm.state in ACTIVE_QSO_STATES
+                     and qso is not None and bool(qso.their_call))
+        if in_active and qso.their_call == call:
+            return  # Doppel-Ruf-Schutz: Klick auf aktuellen Partner
+        if in_active:
+            self._qso_pending_insert = msg
+            self.qso_panel.add_info(
+                f"⏳ {call} vorgemerkt — wird nach diesem QSO gerufen")
+        else:
+            # DeepSeek-Final-R1-🔴: NUR den geklickten Key entfernen, NICHT das
+            # ganze Dict — sonst verlieren andere im selben Slot uns-rufende
+            # Stationen ihre Klickbarkeit (User will mehrere nacheinander
+            # abarbeiten). Andere Zeilen bleiben klickbar.
+            self._p158_insertable.pop(call, None)
+            self._on_station_clicked(msg)
 
     def _p94_quick73_filter(self, msg: FT8Message) -> bool:
         """P94 (v0.97.66): Quick-73-Ignore für kürzlich gearbeitete Stationen.
