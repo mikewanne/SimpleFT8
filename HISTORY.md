@@ -17184,3 +17184,18 @@ Final-R1 vor Push nachholen.
 **Zurückgestellt (TODO):** „neue"-Filter + Auto-Hunt mit voller QRZ-Historie
 füttern (`_backup_qrz_export` in log/qso_log.py Worked-Before-Set laden).
 **Field-Test pending. Lokaler Commit + Push-Freigabe stehen aus.**
+
+### 2026-05-31 — Nachtrag v0.98.49 (Doku + Final-R1)
+
+- **DeepSeek Final-R1: PUSH FREIGEBEN** (alle 6 Auflagen erfüllt, keine Bugs,
+  KISS) — der ursprüngliche v0.98.49-Eintrag hatte Final-R1 wegen Tooling noch
+  als „offen" notiert; jetzt eingelesen + bestätigt. Einziger Nicht-Blocker:
+  redundanter Fallback-Pfad in `_on_awards_clicked` (→ TODO Mini-Cleanup).
+- **FEATURES.md §19 NEU** (Diplome — Mechanik, Felder, Staffelung, Datenquelle,
+  Stolperfallen).
+- **Commit 2cce619** (saubere Trennung, Scratch-Datei per amend entfernt).
+  Memory: project_diplome_done + reference_tooling_long_session_flaky.
+- **Session-Tooling-Hinweis:** Bash-stdout/Datei-Lesungen kamen zeitweise leer
+  (langer Kontext + Auto-Backgrounding + Read-Dedup + Write/Read-Race im selben
+  Block) — Code/Disk/RAM in Ordnung (Write/Edit + pytest persistierten). Details
+  + Gegenmaßnahmen: Memory reference_tooling_long_session_flaky.

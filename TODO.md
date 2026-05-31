@@ -627,3 +627,12 @@ Worked-Before-Set) nur die paar hundert SimpleFT8-eigenen QSOs (Hauptordner +
 (31.05.): unkritisch, ~18k Calls in ein set = <1 MB / <1 s Start. Portable-
 Suffixe werden schon gestrippt (`call.split("/")[0]`). Beide Calls = ein Pool.
 Eigener voller Workflow. Diplome-Feature (v0.98.49) nutzt denselben Ordner schon.
+
+
+## 🔲 Diplome: Fallback-Pfad-Cleanup (Mini, DeepSeek-Final-R1-Hinweis 31.05.2026)
+
+`ui/logbook_widget.py:_on_awards_clicked`: der zweite Backup-Pfad
+`Path.cwd()/"adif"/"_backup_qrz_export"` ist im Normalfall redundant zu
+`self._adif_dir/"_backup_qrz_export"` (gleicher Ordner). Harmlos (nur ein
+doppelter `is_dir()`-Check, kein Crash) — bei Gelegenheit vereinfachen.
+Nicht-Blocker, Final-R1 hat ausdrücklich PUSH FREIGEBEN.

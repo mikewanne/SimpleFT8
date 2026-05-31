@@ -1699,3 +1699,44 @@ die Stundenfile-Summe addieren für „Ø mit Rescue".
 **Format:** Sektion mit Nummer + Titel, Kurzantwort am Anfang,
 Code-Pfade mit Datei:Zeile, Verlinkung zu HISTORY.md-Einträgen für
 Detail-History.
+
+---
+
+## §19 — Diplome (DXCC / WAC / WAS / WAZ)   [v0.98.49, 31.05.2026]
+
+**Was:** Im Logbuch-Tab ersetzt der Button **„Diplome"** (`ui/logbook_widget.py`
+`btn_awards`) das alte DXCC-Label. Klick → `_on_awards_clicked` lädt den
+QRZ-Export-Ordner `adif/_backup_qrz_export/` **on-demand** dazu (kombiniert mit
+`_all_records`) und öffnet den read-only `AwardsDialog` (`ui/awards_dialog.py`).
+
+**Berechnung** (`core/awards.py`, rein/testbar): `compute_awards(records)` liefert
+pro Diplom zwei Sets — `worked` (alle) und `confirmed` (Teilmenge):
+| Diplom | Feld | Ziel | Filter |
+|---|---|---|---|
+| DXCC | `DXCC` (Entity-Nr) | 100 | `_int_or_none` > 0 |
+| WAC | `CONT` | 6 | nur `WAC_CONTINENTS` (NA/SA/EU/AF/AS/OC — **AN raus**) |
+| WAS | `STATE` | 50 | nur `US_STATES`-frozenset (AK/HI drin, NICHT über DXCC==291!) |
+| WAZ | `CQZ` | 40 | 1..40 |
+
+**Bestätigt = NUR `LOTW_QSL_RCVD == "Y"`** (QRZ-Status `APP_QRZLOG_STATUS=C`
+zählt bewusst NICHT — kein Diplom-Programm erkennt ihn an).
+
+**Staffelung:** Nur **DXCC** hat eine echte numerische ARRL-Leiter →
+`DXCC_TIERS = (100,150,200,250,300)` + `DXCC_HONOR_ROLL = 331`, via
+`dxcc_tier_status(count)` (liefert erreichte Marke + nächstes Ziel; Honor Roll
+ab 331). WAC/WAS/WAZ sind „alles-oder-nichts" → Fortschrittsbalken + „🏅
+erreicht"-Badge bei 100 %. **KEINE erfundenen Bronze/Silber/Gold** (DeepSeek
+R1b Option A: Ehrlichkeit > Gamification; ein 25/50/75%-Schema liefert Unsinn
+wie „3 Kontinente = Silber").
+
+**Datenquelle / Grenze:** Die reichen Felder (DXCC/CONT/STATE/CQZ/LOTW) stecken
+NUR im QRZ-Export (DA1MHH + DO4MHH = ein gemeinsamer set-Pool, dedupliziert).
+SimpleFT8-eigene Tages-ADIFs haben sie NICHT → frische QSOs zählen erst nach
+erneutem QRZ-Export mit (Hinweis steht im Dialog-Untertitel).
+
+**Stolperfallen:**
+- `dxcc_label` wurde komplett entfernt (auch aus `_update_counters`) — bei neuen
+  Counter-Funktionen NICHT wieder referenzieren (sonst AttributeError).
+- On-demand-Laden ist Absicht (kein Startup-Cost; 18k QSOs nur bei Klick parsen).
+- NICHT mit dem „NEUE"-Filter / Worked-Before-Set (`log/qso_log.py`) verwechseln:
+  der kennt die QRZ-Historie (noch) NICHT — siehe TODO „QRZ-Historie füttern".
