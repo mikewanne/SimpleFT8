@@ -177,42 +177,67 @@ def test_double_active_check_in_select_next(qapp):
     msg = _make_cq_msg("DL1ABC", tx_even=True)
 
     # Verhalten emulieren: nach Kandidaten-Auswahl wird active=False gesetzt
-    # (z.B. durch parallel feuernden Timer). Wir patchen _score so dass es
-    # einmal active deaktiviert.
-    original_score = hunt._score
+    # (z.B. durch parallel feuernden Timer). Wir patchen _compute_priority
+    # (P165: ersetzte _score) so dass es einmal active deaktiviert.
+    original_prio = hunt._compute_priority
 
-    def _spying_score(c):
-        result = original_score(c)
+    def _spying_prio(c):
+        result = original_prio(c)
         hunt.active = False  # simuliert Race: Timer ist gerade abgelaufen
         return result
 
-    hunt._score = _spying_score
+    hunt._compute_priority = _spying_prio
 
     result = hunt.select_next([msg], qso_idle=True, presence_ok=True)
     assert result is None, "Doppel-Active-Check muss letzten Candidate blocken"
 
 
-def test_slot_affinity_prefers_same_tx_even(qapp):
-    """Bei _last_tx_even=True wird Kandidat mit tx_even=True bevorzugt."""
+def test_slot_affinity_is_last_tiebreaker(qapp):
+    """P165: Slot-Affinitaet ist nur noch LETZTER Tiebreaker im DX-Scoring.
+
+    Bei sonst gleichen Kandidaten (gleiche Seltenheit/Distanz/SNR) gewinnt der
+    mit gleichem tx_even wie die laufende Session.
+    """
     from core.auto_hunt import AutoHunt
     hunt = AutoHunt()
     hunt.start_auto_hunt(600)
     hunt._last_tx_even = True  # Affinitaet aus vorherigem Zyklus
 
-    msg_even = _make_cq_msg("DL1EVEN", tx_even=True, snr=-15)
-    msg_odd = _make_cq_msg("DL2ODD", tx_even=False, snr=-5)  # bessere SNR
-    # Trotz schlechterer SNR muss DL1EVEN gewaehlt werden (Slot-Affinitaet).
+    # Gleiche SNR → erst der Slot entscheidet (letzter Tiebreaker).
+    msg_even = _make_cq_msg("DL1EVEN", tx_even=True, snr=-10)
+    msg_odd = _make_cq_msg("DL2ODD", tx_even=False, snr=-10)
 
     result = hunt.select_next([msg_even, msg_odd], True, True)
     assert result is not None
     assert result.call == "DL1EVEN", (
-        "Slot-Affinitaet: Kandidat mit gleichem tx_even muss bevorzugt werden"
+        "Bei SNR-Gleichstand gewinnt der slot-gleiche Kandidat"
     )
     assert hunt._last_tx_even is True  # Affinitaet bleibt
 
 
-def test_slot_affinity_fallback_when_no_match(qapp):
-    """Wenn kein Kandidat mit gleichem tx_even: Fallback auf alle Kandidaten."""
+def test_better_snr_beats_slot_affinity(qapp):
+    """P165: bessere SNR schlaegt die Slot-Affinitaet (SNR steht VOR Slot).
+
+    Verhaltensaenderung ggü. vor P165: damals schlug der gleiche Slot eine
+    bessere SNR; jetzt zaehlt bei gleicher Seltenheit/Distanz die Signalstaerke.
+    """
+    from core.auto_hunt import AutoHunt
+    hunt = AutoHunt()
+    hunt.start_auto_hunt(600)
+    hunt._last_tx_even = True  # wir wollen even, aber odd ist staerker
+
+    msg_even = _make_cq_msg("DL1EVEN", tx_even=True, snr=-15)
+    msg_odd = _make_cq_msg("DL2ODD", tx_even=False, snr=-5)  # bessere SNR
+
+    result = hunt.select_next([msg_even, msg_odd], True, True)
+    assert result is not None
+    assert result.call == "DL2ODD", "Bessere SNR schlaegt den Slot-Vorzug (P165)"
+    assert hunt._last_tx_even is False
+
+
+def test_no_even_candidate_best_snr_wins(qapp):
+    """P165: ohne slot-gleichen Kandidaten entscheidet (bei gleicher Seltenheit)
+    die SNR. Beide odd → Slot-Tiebreaker neutral, besserer odd gewinnt."""
     from core.auto_hunt import AutoHunt
     hunt = AutoHunt()
     hunt.start_auto_hunt(600)
@@ -224,7 +249,7 @@ def test_slot_affinity_fallback_when_no_match(qapp):
     result = hunt.select_next([msg_odd1, msg_odd2], True, True)
     assert result is not None
     assert result.call == "DL2ODD2", (
-        "Fallback: ohne even-Kandidat soll bester odd gewaehlt werden"
+        "ohne even-Kandidat soll bester odd gewaehlt werden"
     )
     # _last_tx_even wird auf den neuen Slot aktualisiert
     assert hunt._last_tx_even is False

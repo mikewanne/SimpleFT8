@@ -29,6 +29,7 @@ from typing import Optional, List, TYPE_CHECKING
 from PySide6.QtCore import QObject, QTimer, Signal
 
 from .message import looks_like_callsign
+from .geo import callsign_to_country, callsign_to_distance
 
 if TYPE_CHECKING:
     from core.message import FT8Message
@@ -37,19 +38,46 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Scoring-Gewichte (nicht konfigurierbar — fest)
+# DX-Scoring (P165) — Seltenheit > Land-auf-Band-neu > Distanz > SNR > Slot.
+# Lexikografische Tupel-Rangordnung (kleiner = hoehere Prioritaet), KEIN
+# additives Gewichte-Tuning mehr. Fachlich begruendet: FT8 ist ein Schwach-
+# signal-DX-Modus (dekodiert bis ~-24 dB unter dem Rauschen) — die seltene,
+# weite, schwache Station ist die Perle, KEIN Ausschlussgrund (Mike 02.06.2026).
 # ─────────────────────────────────────────────────────────────────────────────
 
-_W_NEW_STATION = 3.0    # Noch nie gearbeitet → hoechste Prioritaet
-_W_NEW_BAND    = 2.0    # Gearbeitet, aber nicht auf diesem Band
-_W_SNR         = 0.1    # Leichte Praeferenz fuer staerkere Signale
-_W_AGE         = 0.05   # Aeltere CQs leicht bevorzugt (Fairness)
+# SNR-Boden statt Mindest-SNR: FT8 dekodiert bis ~-24 dB; -26 dB ist ein
+# Sicherheitspuffer gegen Geister-/Rausch-Decodes. Schwache Signale sind der
+# SINN des Modus (DX-Jagd) — frueher schnitt _MIN_SNR=-21 genau die Perlen ab.
+SNR_FLOOR = -26
 
-# Grenzen
-_MIN_SNR       = -21    # Unter -21 dB lohnt sich der Versuch nicht
+# Seltenheit fuer unaufloesbares Land ("?") oder fehlendes QSO-Log: neutral
+# (Mitte), damit ein unbekannter/garbage Call NICHT faelschlich als ATNO-Perle
+# (Klasse 0) ganz nach oben rutscht — aber auch nicht ganz nach unten faellt
+# (koennte ein exotischer Sonderpraefix sein).
+_RARITY_UNKNOWN = 2
+
 _MAX_ATTEMPTS  = 3      # Max Anrufversuche pro Station
 _COOLDOWN_SECS = 300    # 5 Minuten Cooldown nach fehlgeschlagenem Anruf
 _PAUSE_CYCLES  = 1      # Zyklen Pause nach QSO-Ende bevor naechste Station
+
+
+def country_rarity_class(count: int) -> int:
+    """QSO-Count mit einem Land → persoenliche Seltenheits-Klasse (0..4).
+
+    Kleiner = seltener = hoehere Prioritaet. Die Grenzen bilden die DX-Jagd-
+    Psychologie ab: 1-5 = Erinnerungs-QSOs, 6-20 = halb gefuellt, >100 =
+    Massenbetrieb. Der Bereich >100 wird bewusst zusammengefasst — ob 200 oder
+    4000 QSOs spielt fuer die Prioritaet keine Rolle (beides "Allerweltsland").
+    """
+    if count <= 0:
+        return 0   # ATNO — nie gearbeitet (groesste Perle)
+    if count <= 5:
+        return 1   # extrem selten
+    if count <= 20:
+        return 2   # selten
+    if count <= 100:
+        return 3   # gelegentlich
+    return 4       # Allerweltsland
 
 # P61 (v0.97.33): Recent-QSO-Cooldown — verhindert dass Auto-Hunt eine
 # Station unmittelbar nach abgeschlossenem QSO (oder unmittelbar nach
@@ -68,7 +96,6 @@ class _HuntCandidate:
     snr: int
     freq_hz: int
     first_seen: float      # Unix-Timestamp
-    score: float = 0.0
     tx_even: Optional[bool] = None  # Slot-Parity der Station
 
 
@@ -121,6 +148,7 @@ class AutoHunt(QObject):
         self._qso_log: Optional[QSOLog] = None
         self._band: str = "20m"
         self._mode: str = "FT8"     # P61: Mode-Awareness fuer Cooldown-Key
+        self._my_grid: str = ""     # P165: eigener Locator fuer DX-Distanz
         # Anruf-Fehlversuch-Cooldown (5 Min Sperre nach on_qso_timeout):
         self._cooldown: dict[str, float] = {}
         # P61 (v0.97.33): Recent-QSO-Cooldown nach Pick/Abschluss.
@@ -133,7 +161,9 @@ class AutoHunt(QObject):
         self._current_target: Optional[str] = None
         # P164 (30.05.2026): Einschub-Merker entfernt — lebt jetzt als
         # `_qso_pending_insert` in MainWindow (vom Auto-Hunt entkoppelt).
-        # Slot-Affinitaet — bevorzugt Kandidaten mit gleichem tx_even:
+        # P165: _last_tx_even ist jetzt der LETZTE Tiebreaker im DX-Scoring
+        # (frueher ein harter Vorfilter). Bei laufender Session leicht
+        # bevorzugt — eine seltene/weite Perle schlaegt den Slot-Vorzug.
         self._last_tx_even: Optional[bool] = None
         # Zeit-beschraenkte Session (10-Min-Hard-Stop):
         self._hunt_session_start: float = 0.0
@@ -154,6 +184,14 @@ class AutoHunt(QObject):
         gerufen — z.B. wenn User von FT8 auf FT4 wechselt soll selbe
         Station auf neuem Modus sofort wieder anrufbar sein."""
         self._mode = (mode or "FT8").upper()
+
+    def set_my_grid(self, grid: str):
+        """P165: eigenen Locator fuer die Distanz-Berechnung im DX-Scoring.
+
+        Ohne Grid liefert callsign_to_distance None → Distanz faellt im Tupel
+        auf 0 zurueck (kein Distanz-Vorzug, Seltenheit entscheidet allein).
+        """
+        self._my_grid = (grid or "").strip()
 
     def mark_pick(self, call: str):
         """P61: Pick-Zeitpunkt-Cooldown setzen. Verhindert dass Auto-Hunt
@@ -411,10 +449,11 @@ class AutoHunt(QObject):
                               f"age={int(now - last_fail)}s")
                 continue
 
-            # SNR-Minimum
+            # P165: SNR-Boden statt Mindest-SNR. Schwache DX-Signale sind die
+            # Perlen — nur klare Rausch-/Geister-Decodes (< -26 dB) raus.
             snr = msg.snr if msg.snr is not None else -30
-            if snr < _MIN_SNR:
-                _hlog("HUNT", f"SKIP call={call} reason=low_snr snr={snr}")
+            if snr < SNR_FLOOR:
+                _hlog("HUNT", f"SKIP call={call} reason=below_floor snr={snr}")
                 continue
 
             grid = msg.grid_or_report if getattr(msg, 'is_grid', False) else ""
@@ -429,31 +468,27 @@ class AutoHunt(QObject):
                 tx_even=tx_even,
             ))
 
-        _hlog("HUNT", f"CANDIDATES pre_affinity n={len(candidates)}")
+        _hlog("HUNT", f"CANDIDATES n={len(candidates)}")
         if not candidates:
             _hlog("HUNT", "NO_CANDIDATE reason=empty_list")
             return None
 
-        # Slot-Affinitaet: bei laufender Session bevorzugt gleiches tx_even,
-        # Fallback auf alle Kandidaten wenn keiner mit gleichem Slot.
-        if self._last_tx_even is not None:
-            same_slot = [c for c in candidates if c.tx_even == self._last_tx_even]
-            if same_slot:
-                candidates = same_slot
-        _hlog("HUNT", f"CANDIDATES post_affinity n={len(candidates)} "
-                     f"last_tx_even={self._last_tx_even}")
-
-        # Scoring
-        for c in candidates:
-            c.score = self._score(c)
-
-        # Beste Station (hoechster Score)
-        candidates.sort(key=lambda c: c.score, reverse=True)
-        best = candidates[0]
-
-        if best.score <= 0:
-            _hlog("HUNT", f"NO_CANDIDATE reason=score_zero best_call={best.call}")
+        # P165: schon gearbeitete STATION (dieser Call) auf diesem Band raus —
+        # keine Dublette. Eine ANDERE Station aus demselben (seltenen) Land
+        # bleibt Kandidat; band-spezifisch → DXCC-Band-Jagd moeglich.
+        if self._qso_log is not None:
+            candidates = [c for c in candidates
+                          if not self._qso_log.is_worked_on_band(c.call, self._band)]
+        if not candidates:
+            _hlog("HUNT", "NO_CANDIDATE reason=all_worked_on_band")
             return None
+
+        # P165: DX-Scoring als lexikografische Tupel-Rangordnung (kleiner =
+        # hoehere Prioritaet). Seltenheit > Land-auf-Band-neu > Distanz > SNR >
+        # Slot. Tupel mitfuehren fuers Logging.
+        scored = sorted(((self._compute_priority(c), c) for c in candidates),
+                        key=lambda t: t[0])
+        best_prio, best = scored[0]
 
         # Race-Condition-Sicherung: zwischen Anfangs-Check und Return koennte
         # _auto_hunt_timer abgelaufen sein. Mike's 10-Min-Hard-Cap ist ethisch
@@ -463,34 +498,41 @@ class AutoHunt(QObject):
             return None
 
         self._current_target = best.call
-        self._last_tx_even = best.tx_even  # Slot-Affinitaet fuer naechsten Zyklus
+        self._last_tx_even = best.tx_even  # Slot-Tiebreaker fuer naechsten Zyklus
         print(f"[Auto-Hunt] Ausgewaehlt: {best.call} "
-              f"(SNR={best.snr}, Score={best.score:.1f}, slot={best.tx_even})")
-        _hlog("HUNT", f"PICKED call={best.call} score={best.score:.1f} "
+              f"(SNR={best.snr}, Prio={best_prio}, slot={best.tx_even})")
+        _hlog("HUNT", f"PICKED call={best.call} prio={best_prio} "
                       f"snr={best.snr} tx_even={best.tx_even} freq={best.freq_hz}")
         return best
 
-    def _score(self, c: _HuntCandidate) -> float:
-        """Prioritaets-Score berechnen."""
-        score = 0.0
+    def _compute_priority(self, c: _HuntCandidate) -> tuple:
+        """DX-Scoring als lexikografisches Tupel (kleiner = hoehere Prioritaet).
 
-        # Noch nie gearbeitet → hoechste Prioritaet
-        if self._qso_log:
-            if not self._qso_log.is_worked(c.call):
-                score += _W_NEW_STATION
-            elif not self._qso_log.is_worked_on_band(c.call, self._band):
-                score += _W_NEW_BAND
-            # Schon auf diesem Band gearbeitet → Score 0 (ueberspringen)
-            else:
-                return 0.0
+        Reihenfolge (P165):
+          1. R         persoenliche Land-Seltenheit (0 ATNO .. 4 Allerwelt)
+          2. band_new  0 = Land auf diesem Band neu (Perle), 1 = schon gehabt
+          3. -dist     Distanz (weiter = kleiner = besser; Tiebreaker bei gleich R)
+          4. -snr      Signalstaerke (staerker = kleiner; nur Fein-Tiebreaker)
+          5. slot      0 = gleicher TX-Slot wie laufende Session, 1 = anders
+
+        Persoenliche Seltenheit ist das LEITMASS, Distanz nur Tiebreaker unter
+        gleicher Seltenheit — sonst schluege das weite-aber-haeufige USA das
+        nahe-aber-seltene San Marino. SNR ist KEIN K.o.-Kriterium mehr.
+        """
+        country = callsign_to_country(c.call)
+        if self._qso_log is not None and country and country != "?":
+            r = country_rarity_class(self._qso_log.get_country_count(country))
+            band_new = 0 if not self._qso_log.is_country_worked_on_band(
+                country, self._band) else 1
         else:
-            # Kein QSO-Log → alle gleich behandeln
-            score += _W_NEW_STATION
-
-        # SNR-Bonus (normalisiert: -21 dB → 0, +10 dB → 3.1)
-        score += _W_SNR * max(0, c.snr + 21)
-
-        return score
+            # Kein Log oder unaufloesbares Land: neutral, NIE als ATNO-Perle.
+            r = _RARITY_UNKNOWN
+            band_new = 1
+        dist = callsign_to_distance(c.call, self._my_grid) if self._my_grid else None
+        dist = dist if dist is not None else 0
+        slot = 0 if (self._last_tx_even is not None
+                     and c.tx_even == self._last_tx_even) else 1
+        return (r, band_new, -dist, -c.snr, slot)
 
     # ─────────────────────────────────────────────────────────────────────────
     # Events

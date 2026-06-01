@@ -1880,15 +1880,25 @@ def test_dx_preset_mode_priority():
 
 class _MockQSOLog:
     """Minimal-Mock eines QSO-Logs für AutoHunt-Tests."""
-    def __init__(self, worked=None, worked_on_band=None):
+    def __init__(self, worked=None, worked_on_band=None,
+                 country_count=None, country_band=None):
         self._worked = set(worked or [])
         self._wob = set(worked_on_band or [])  # set of (call, band) tuples
+        # P165: Laender-Statistik fuer das DX-Scoring
+        self._cc = dict(country_count or {})   # country -> QSO-count
+        self._cb = set(country_band or [])     # (country, BAND) tuples
 
     def is_worked(self, call):
         return call in self._worked
 
     def is_worked_on_band(self, call, band):
         return (call, band) in self._wob
+
+    def get_country_count(self, country):
+        return self._cc.get(country, 0)
+
+    def is_country_worked_on_band(self, country, band):
+        return (country, band.upper()) in self._cb
 
 
 def test_autohunt_gates():
@@ -1915,13 +1925,16 @@ def test_autohunt_selects_cq():
     assert result.call == "DL1ABC"
 
 
-def test_autohunt_snr_minimum():
-    """Stationen unter -21 dB SNR werden übersprungen."""
-    from core.auto_hunt import AutoHunt
+def test_autohunt_snr_floor():
+    """P165: SNR-Boden statt Mindest-SNR. -25 dB (DX-Perle) kommt durch,
+    nur unter -26 dB (Rausch/Geister) wird verworfen."""
+    from core.auto_hunt import AutoHunt, SNR_FLOOR
     hunt = AutoHunt()
     hunt.active = True
     msg = _make_msg("DL1ABC", "CQ", "CQ DL1ABC JO31")
-    msg.snr = -25  # Unter _MIN_SNR = -21
+    msg.snr = -25  # schwach, aber ueber dem Boden → Perle, NICHT mehr gefiltert
+    assert hunt.select_next([msg], True, True) is not None
+    msg.snr = SNR_FLOOR - 1  # unter dem Boden → verworfen
     assert hunt.select_next([msg], True, True) is None
 
 

@@ -49,6 +49,10 @@ def _make_hunt(band: str = "20m", mode: str = "FT8") -> AutoHunt:
     qso_log = MagicMock()
     qso_log.is_worked.return_value = False  # Erste QSO simuliert
     qso_log.is_worked_on_band.return_value = False
+    # P165: neue Laender-API fuer das DX-Scoring (diese Tests pruefen den
+    # Recent-QSO-Cooldown, nicht das Scoring — neutrale Defaults reichen).
+    qso_log.get_country_count.return_value = 0
+    qso_log.is_country_worked_on_band.return_value = False
     h.set_qso_log(qso_log)
     return h
 

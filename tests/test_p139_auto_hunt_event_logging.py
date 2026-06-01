@@ -105,20 +105,20 @@ def test_t5_select_next_logs_all_skip_reasons():
     pos = src.find("def select_next")
     end = src.find("\n    def ", pos + 1)
     body = src[pos:end]
+    # P165: "low_snr" → "below_floor" (Mindest-SNR ist jetzt ein -26-dB-Boden).
     for reason in ["empty_call", "not_callsign", "recent_qso_cooldown",
-                   "fail_cooldown", "low_snr"]:
+                   "fail_cooldown", "below_floor"]:
         assert f"reason={reason}" in body, (
             f"SKIP-Log fuer {reason!r} fehlt")
 
 
-def test_t6_select_next_logs_pre_and_post_affinity():
-    """T6 (R1-GELB-F3): pre/post-Affinity-Counts geloggt."""
+def test_t6_select_next_logs_candidate_count():
+    """T6 (P165): Kandidaten-Anzahl wird geloggt (Affinity-Phase entfiel)."""
     src = AUTO_HUNT.read_text()
     pos = src.find("def select_next")
     end = src.find("\n    def ", pos + 1)
     body = src[pos:end]
-    assert "pre_affinity n=" in body
-    assert "post_affinity n=" in body
+    assert "CANDIDATES n=" in body
 
 
 def test_t7_select_next_logs_no_candidate_with_reason():
@@ -127,9 +127,10 @@ def test_t7_select_next_logs_no_candidate_with_reason():
     pos = src.find("def select_next")
     end = src.find("\n    def ", pos + 1)
     body = src[pos:end]
-    # Mindestens 2 Reasons: empty_list (keine CQs) + score_zero (alle worked)
+    # Mindestens 2 Reasons: empty_list (keine CQs) + all_worked_on_band
+    # (P165: ersetzte score_zero — alle Kandidaten bereits auf Band gearbeitet).
     assert "NO_CANDIDATE reason=empty_list" in body
-    assert "NO_CANDIDATE reason=score_zero" in body
+    assert "NO_CANDIDATE reason=all_worked_on_band" in body
 
 
 def test_t8_select_next_logs_picked_event():
@@ -139,7 +140,7 @@ def test_t8_select_next_logs_picked_event():
     end = src.find("\n    def ", pos + 1)
     body = src[pos:end]
     assert "PICKED call=" in body
-    assert "score=" in body
+    assert "prio=" in body  # P165: score= → prio= (Tupel-Rangordnung)
     assert "tx_even=" in body
     assert "freq=" in body
 

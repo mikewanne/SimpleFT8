@@ -246,6 +246,12 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         hochgeladen_dir = Path.cwd() / "adif" / "hochgeladen"
         if hochgeladen_dir.is_dir():
             self.qso_log.load_directory(hochgeladen_dir)
+        # P165: QRZ-Export (~18k QSOs DA1MHH+DO4MHH) fuer Auto-Hunt-DX-Scoring —
+        # liefert die persoenliche Laender-Historie (Seltenheit + Land-auf-Band).
+        # Gemessen ~0.5s Parse+Laenderzaehlung → Eager-Load beim Start unkritisch.
+        qrz_export_dir = Path.cwd() / "adif" / "_backup_qrz_export"
+        if qrz_export_dir.is_dir():
+            self.qso_log.load_directory(qrz_export_dir)
         print(f"[QSOLog] {self.qso_log.worked_count()} unique Calls, {self.qso_log.qso_count()} QSOs")
 
         # ADIF-Daten in die Locator-DB pushen (qso_log-Source, prec_km 5/110).
@@ -427,6 +433,8 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self._auto_hunt.set_band(self.settings.band)
         # P61 (v0.97.33): Initialer Mode fuer AutoHunt Cooldown-Key
         self._auto_hunt.set_mode(self.settings.mode)
+        # P165: eigener Locator fuer das DX-Distanz-Scoring
+        self._auto_hunt.set_my_grid(self.settings.locator)
 
         # v0.75 Auto-Hunt UI-Lifecycle
         self._auto_hunt_cooldown_seconds: int = 0
