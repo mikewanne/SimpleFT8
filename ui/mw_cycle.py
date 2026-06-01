@@ -1092,7 +1092,12 @@ class CycleMixin:
             # Stationen ihre Klickbarkeit (User will mehrere nacheinander
             # abarbeiten). Andere Zeilen bleiben klickbar.
             self._p158_insertable.pop(call, None)
-            self._on_station_clicked(msg)
+            # P166: hard_stop=False — der P164-Klick im QSO-Fenster bleibt IMMER
+            # sanft (pausieren + Auto-Resume), auch im IDLE-Sofort-Ruf. Nur der
+            # RX-Listen-Doppelklick (Default hard_stop=True) stoppt Auto-Hunt
+            # hart. QSO-Fenster = höflich antworten + weiterjagen; RX-Liste =
+            # bewusste Übernahme.
+            self._on_station_clicked(msg, hard_stop=False)
 
     def _p94_quick73_filter(self, msg: FT8Message) -> bool:
         """P94 (v0.97.66): Quick-73-Ignore für kürzlich gearbeitete Stationen.

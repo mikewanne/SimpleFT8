@@ -165,13 +165,33 @@ class QSOMixin:
                 pass
 
     @Slot(object)
-    def _on_station_clicked(self, msg: FT8Message):
+    def _on_station_clicked(self, msg: FT8Message, hard_stop: bool = True):
         """User hat eine Station in der Empfangsliste angeklickt.
 
         P63 AC8/AC12 (v0.97.36): Marker-Pre-Check FIRST — auch gegen
         Buffering (R1-F5). Bei rotem Band wird der Klick weder
         ausgeführt noch gebuffert.
+
+        P166 (01.06.2026): `hard_stop=True` (RX-Listen-Doppelklick = bewusste
+        Übernahme durch den Operator) stoppt Auto-Hunt KOMPLETT — wie HALT,
+        nicht nur pausieren — bevor irgendetwas anderes passiert. Deckt damit
+        alle Pfade ab (TX-Buffer-Resume, SWR-Sperre, Slot-Lock, Normalfall).
+        `hard_stop=False` nutzt NUR der P164-Einschub
+        (`_p158_maybe_start_inserted_call`): der will bewusst pausieren +
+        nach dem eingeschobenen QSO Auto-Resume.
         """
+        # P166: Harter Auto-Hunt-Stop bei bewusstem RX-Listen-Doppelklick.
+        # GANZ OBEN, damit er auch greift, wenn der Klick gleich an SWR-Sperre/
+        # Slot-Lock/Einmessen abbricht (Mike: "ich weiß was ich tue → alles
+        # unterbrechen"). Verwirft zusätzlich einen vorgemerkten P164-Einschub
+        # (analog HALT in `_on_cancel`), sonst würde der nach dem RX-QSO noch
+        # gerufen. stop_auto_hunt ist idempotent → der gepufferte TX-Resume-
+        # Klick (ruft erneut hard_stop=True) macht keinen Schaden.
+        if hard_stop:
+            if self._auto_hunt.active:
+                self._auto_hunt.stop_auto_hunt("manual_halt")
+            self._qso_pending_insert = None
+            self._p158_insertable.clear()
         # P63 AC8/AC12 R1-F5: Marker-Pre-Check inkl. Buffer-Schutz
         band = self.settings.band.upper()
         if band in self._swr_blocked_bands:
@@ -240,8 +260,10 @@ class QSOMixin:
         if _cq_was_active:
             self.qso_sm.stop_cq()
             self.control_panel.set_cq_active(False)
-        # Auto-Hunt pausieren bei manuellem Klick
-        if self._auto_hunt.active:
+        # Auto-Hunt: P166 — der HARTE Stop lief bereits oben (hard_stop=True,
+        # RX-Listen-Doppelklick). Nur der P164-Einschub (hard_stop=False)
+        # pausiert hier, damit Auto-Hunt nach dem eingeschobenen QSO resumt.
+        if not hard_stop and self._auto_hunt.active:
             self._auto_hunt.on_manual_qso_start()
         # P1.14 KP3: alte their_call aus _active_qso_targets entfernen
         # (sonst Set-Bloat bei haeufigen Wechseln)
@@ -1056,7 +1078,10 @@ class QSOMixin:
             return
         self._qso_pending_insert = None
         self._p158_insertable.clear()
-        self._on_station_clicked(msg)
+        # P166: hard_stop=False → sanft (pausieren + Auto-Resume), KEIN harter
+        # Auto-Hunt-Stop. Sonst würde der höfliche QSO-Fenster-Einschub (P164)
+        # den Auto-Hunt beenden statt nach dem eingeschobenen QSO fortzusetzen.
+        self._on_station_clicked(msg, hard_stop=False)
 
     @Slot(list)
     def _on_caller_queue_changed(self, queue: list):

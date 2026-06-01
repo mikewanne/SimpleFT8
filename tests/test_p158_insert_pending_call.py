@@ -212,7 +212,8 @@ def test_t11_click_in_idle_calls_immediately():
     self = _make_click_self(state=QSOState.IDLE, their_call="",
                             insertable={"F5MYK": msg})
     fn(self, "F5MYK")
-    self._on_station_clicked.assert_called_once_with(msg)
+    # P166: P164-Klick im QSO-Fenster bleibt sanft → hard_stop=False
+    self._on_station_clicked.assert_called_once_with(msg, hard_stop=False)
     assert self._qso_pending_insert is None
 
 
@@ -279,7 +280,8 @@ def test_t16_maybe_start_happy_path_calls_station_clicked():
         _on_station_clicked=MagicMock(),
     )
     fn(self)
-    self._on_station_clicked.assert_called_once_with(msg)
+    # P166: Einschub bleibt sanft (pausieren + Auto-Resume) → hard_stop=False
+    self._on_station_clicked.assert_called_once_with(msg, hard_stop=False)
     assert self._qso_pending_insert is None
     assert self._p158_insertable == {}
 
@@ -295,7 +297,7 @@ def test_t17_maybe_start_works_without_autohunt():
         _on_station_clicked=MagicMock(),
     )
     fn(self)  # darf NICHT auf self._auto_hunt zugreifen
-    self._on_station_clicked.assert_called_once_with(msg)
+    self._on_station_clicked.assert_called_once_with(msg, hard_stop=False)
 
 
 def test_t18_maybe_start_noop_when_no_pending():
@@ -317,7 +319,7 @@ def test_t19_maybe_start_resets_pending_before_call():
     msg = _make_msg("F5MYK")
     seen = {}
 
-    def _spy(m):
+    def _spy(m, hard_stop=True):
         seen["pending_at_call"] = self._qso_pending_insert
 
     self = SimpleNamespace(
@@ -389,7 +391,8 @@ def test_t26_maybe_start_reuses_station_clicked():
     m = re.search(r"def _p158_maybe_start_inserted_call\(self.*?(?=\n    (?:def |@))",
                   MW_QSO_SRC, re.S)
     assert m is not None
-    assert "self._on_station_clicked(msg)" in m.group(0)
+    # P166: Einschub ruft jetzt mit hard_stop=False (sanft, Auto-Resume)
+    assert "self._on_station_clicked(msg, hard_stop=False)" in m.group(0)
 
 
 def test_t27_maybe_start_decoupled_from_autohunt():
