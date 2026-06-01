@@ -443,6 +443,64 @@ Slash-tolerant via `max(split("/"), key=len)` — fängt `DA1MHH/P`,
 
 ---
 
+## 7b. Auto-Hunt DX-Scoring (warum ruft Auto-Hunt das schwache Falkland statt der lauten DL-Station?)
+
+**Kurzantwort (P165, v0.98.51):** Auto-Hunt wählt nicht mehr nach „neu +
+laut", sondern nach **persönlicher Land-Seltenheit zuerst**, dann Entfernung,
+dann Signal nur als Stichentscheid. Eine seltene/weite DX-Perle schlägt jede
+nahe Allerweltsstation — auch wenn sie schwach ist (FT8 ist ein Schwachsignal-
+DX-Modus, dekodiert bis ~−24 dB; schwach = der Normalfall für DX, kein
+Ausschlussgrund).
+
+### Das Scoring — lexikografisches Tupel (kleiner = höhere Priorität)
+
+`core/auto_hunt.py:_compute_priority(c)` liefert `(R, band_new, -dist, -snr, slot)`,
+`select_next` sortiert aufsteigend, bester = erstes Element:
+
+| Ebene | Bedeutung | Quelle |
+|---|---|---|
+| **R** | Land-Seltenheit `country_rarity_class(count)` 0..4 | `qso_log.get_country_count(country)` |
+| **band_new** | 0 = Land auf diesem Band neu (Perle), 1 = schon | `qso_log.is_country_worked_on_band` |
+| **-dist** | Entfernung, weiter = besser (Tiebreaker bei gleicher R) | `geo.callsign_to_distance(call, my_grid)` |
+| **-snr** | Signalstärke, nur Fein-Tiebreaker | `c.snr` |
+| **slot** | gleicher TX-Slot wie laufende Session | `_last_tx_even` |
+
+`country_rarity_class`: 0 = ATNO (nie), 1 = 1–5×, 2 = 6–20×, 3 = 21–100×,
+4 = >100×. Quelle ist die **persönliche Historie** — beim Start lädt
+`_init_qso_log` zusätzlich `adif/_backup_qrz_export/` (~18k QSOs), und
+`qso_log` zählt pro Land mit (`callsign_to_country`, voller Call → konsistent
+Historie ↔ Live).
+
+### Warum Seltenheit das LEITMASS ist (nicht Distanz)
+
+Distanz allein wäre ein schlechter Proxy: San Marino (nah, selten) ginge unter,
+USA (weit, häufig) käme zu hoch. Beispiel-Rangfolge (verifiziert in
+`tests/test_p165_dx_scoring.py`):
+
+`Falkland VP8 (−24 dB, 13041 km, nie)` > `San Marino T7 (−5, 939 km, nie)` >
+`Japan JA (−10, 9280 km, 30×)` > `USA W (−8, 7611 km, 200×)` >
+`Deutschland DL (+5, 216 km, 4000×)`.
+
+→ Das **nahe** San Marino schlägt das **weite** Japan, weil ATNO > Klasse-3.
+
+### Stolperfallen
+
+- **`SNR_FLOOR = -26`** (nicht `_MIN_SNR=-21` mehr): nur Rausch-/Geister-Boden.
+  Wer ihn anhebt, filtert wieder DX-Perlen weg — das war genau der alte Bug.
+- **Slot-Affinität ist nur noch LETZTER Tiebreaker** (nicht Vorfilter): eine
+  Perle schlägt den Slot-Komfort. Bessere SNR schlägt den Slot ebenfalls.
+- **Vorfilter „gearbeitete STATION skippen"** ist call+band-spezifisch — eine
+  ANDERE Station aus demselben seltenen Land bleibt wählbar (kein Dublette-
+  Block auf Land-Ebene).
+- **`_RARITY_UNKNOWN=2`** für unauflösbares Land („?"): neutral, NIE als
+  ATNO-Perle hochgestuft.
+- **Bekannte Schwäche (Phase 2):** Sonderpräfixe (FT5 Kerguelen, FO/A
+  Clipperton …) werden von der Präfix-Tabelle als Mutterland (Frankreich)
+  geführt → fälschlich als „häufig". Normale DX (Falkland/Peru/Japan/Korea/
+  Brasilien …) alle korrekt. Die Exoten bleiben Handarbeit.
+
+---
+
 ## 8a. Debug-Log-Datei (für Bug-Diagnose nach dem Lauf)
 
 **Kurzantwort:** Es gibt ein File-Logging-Framework (`core/debug_log.py`,

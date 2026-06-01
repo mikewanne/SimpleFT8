@@ -9,6 +9,55 @@ Gelöscht wird nie etwas. Format: `## YYYY-MM-DD vX.YY — Kurztitel`.
 > stehen in `history/HISTORY_archiv_NN.md` (grep dort, falls eine alte Version
 > gesucht wird). Rotiert mit `tools/rotate_history.py`. Zuletzt: 2026-06-01.
 
+## 2026-06-02 v0.98.51 — Auto-Hunt DX-Scoring (Seltenheit > Distanz > Signal)
+
+**Feature (Mike-Wunsch, voller Workflow V1→V2→R1→V3→Code→Final-R1, 2 DeepSeek-
+Runden + Web-Recherche):** Auto-Hunt wählte bisher rein nach Neuheit + Signal-
+stärke → eine laute neue Europa-Station schlug immer das seltene, schwache DX
+(Mikes Falkland −24 dB wurde nie gerufen + fiel sogar durch den alten Filter
+`_MIN_SNR=-21`). Jetzt **DX-Jäger-Scoring**: persönliche Land-Seltenheit (aus
+der 18k-QSO-Historie) ist Leitmaß, dann Entfernung, dann Signal nur als
+Stichentscheid.
+
+**Drei Bausteine:**
+- `ui/main_window.py:_init_qso_log` lädt zusätzlich `adif/_backup_qrz_export/`
+  (~18.329 QSOs DA1MHH+DO4MHH) → Auto-Hunt kennt endlich die echte Historie
+  (gemessen 0,47 s Parse + Länderzählung → Eager-Load unkritisch). Außerdem
+  `_auto_hunt.set_my_grid(settings.locator)`.
+- `log/qso_log.py`: pro Land (`callsign_to_country`, voller Call) ein QSO-Zähler
+  `_country_count` + Land-Band-Set `_country_band`; neue API `get_country_count`
+  + `is_country_worked_on_band`.
+- `core/auto_hunt.py`: `_score` (additive Gewichte) ersetzt durch
+  `_compute_priority` = lexikografisches Tupel `(R, band_new, -dist, -snr, slot)`
+  (kleiner = höher). `country_rarity_class(count)`: 0 ATNO / 1–5 / 6–20 / 21–100 /
+  >100. `_MIN_SNR=-21` → `SNR_FLOOR=-26` (nur Rausch-Boden — schwaches DX ist die
+  Perle, FT8 dekodiert bis ~−24 dB). Slot-Affinität vom Vorfilter zum **letzten**
+  Tiebreaker (anders als DeepSeek empfahl — sicherer). Expliziter Vorfilter
+  „schon gearbeitete STATION (Call+Band) skippen" (keine Dublette; andere Station
+  aus seltenem Land bleibt wählbar). `_RARITY_UNKNOWN=2` für unauflösbares Land.
+
+**Verifizierte Rangfolge (Test):** Falkland VP8(−24,13041km) > San Marino
+T7(−5,939km,nah!) > Japan JA(−10,9280km,30×) > USA W(−8,7611km,200×) >
+Deutschland DL(+5,216km,4000×). Nahe-aber-seltene Perle (San Marino) schlägt
+weit-aber-häufig (Japan) — Seltenheit ist Leitmaß, nicht Distanz.
+
+**Mike-Kurswechsel:** Erste DeepSeek-Runde empfahl „SNR −21 lassen, schwaches DX
+nicht auto-rufen" — Mike widersprach klar („die schwache hört mich oft nicht, das
+ist GERADE der Sinn"). Web-Recherche bestätigte: FT8 ist Schwachsignal-DX-Modus,
+Seltenheit misst man via Clublog Most-Wanted. Claude-Catch gegen DeepSeek-Runde 1:
+dessen additiver +0,7-Distanzbonus hätte NICHT gereicht (SNR-Bonus reichte bis
++3,1) → lexikografische Tupel-Ordnung gewählt.
+
+**Bewusst weggelassen (KISS, Phase 2):** Kontinent-Stufe (Land-Seltenheit deckt
+sie ab), statische Most-Wanted-Liste, FT5/Sonderpräfix-Korrektur (bekanntes
+Restrisiko — Kerguelen FT5 wird als Frankreich gezählt; normale DX alle korrekt).
+
+**DeepSeek Final-R1: PUSH FREIGEBEN**, 0 Blocker, 2 🟡 (Cooldown-Schlüssel-
+Inkonsistenz = Bestandscode P61, nicht berührt; `_RARITY_UNKNOWN=2` bewusst).
+Hardware: nur Auswahl-Logik, TX bleibt ANT1. Tests 2233 → **2245** grün (+12,
+neu `test_p165_dx_scoring.py`; angepasst test_modules/auto_hunt_extended/p61/p139).
+**Field-Test pending, lokal committet, NICHT gepusht.**
+
 ## 2026-06-01 v0.98.50 — Bug 1 QSO-Log Anchor-Bleed + Bug 3 Meldungs-Kürzung
 
 **Bug 1 (Field, voller Workflow V1→V2→R1→V3→Code→Final-R1):** Im QSO-Verlauf

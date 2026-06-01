@@ -16,6 +16,29 @@
 
 ---
 
+# 🟡 P165 Phase 2 — Auto-Hunt DX-Scoring Verfeinerungen (02.06.2026, optional)
+
+DX-Scoring (Seltenheit > Distanz > Signal) ist live ab v0.98.51 (Phase 1).
+Offene optionale Verbesserungen — erst nach Field-Test entscheiden ob nötig:
+
+- **Sonderpräfix-Auflösung** (Restrisiko): `core/geo._PREFIX_MAP` führt FT5
+  (Kerguelen, Most-Wanted #8), FO/A (Clipperton) u.a. als Mutterland
+  (Frankreich) → werden fälschlich als „häufig" eingestuft und landen unten.
+  Fix bräuchte eine erweiterte Präfix→Entity-Tabelle. Normale DX alle korrekt
+  → niedrige Prio, die Exoten bleiben vorerst Handarbeit.
+- **Clublog Most-Wanted-Bonus** (verworfen für Phase 1, ggf. später): eine
+  kleine statische Top-N-Entity-Liste als zusätzliche Scoring-Dimension.
+  DeepSeek + Claude einig: persönliche Seltenheit reicht für ein Hobby-Tool,
+  Most-Wanted veraltet + braucht Präfix→Entity-Mapping (s.o. lückenhaft).
+- **Kontinent-Stufe**: bewusst weggelassen — Land-Seltenheit deckt sie ab
+  (neuer Kontinent = lauter ATNO-Länder). Nur falls Field-Test zeigt dass
+  feinere WAC-Steuerung gewünscht ist.
+- **`_RARITY_UNKNOWN` justieren** (aktuell 2/Mitte): falls Field-Log zeigt dass
+  Garbage-/„?"-Decodes zu oft hochkommen → auf 3 anheben (1-Zeilen-Tweak,
+  `core/auto_hunt.py`).
+
+---
+
 # ⚪ Bug 2 GESCHLOSSEN-ohne-Fix (01.06.2026) — seltene Doppel-RX-Zeile im QSO-Log
 
 Mike-Field (Screenshot LZ100LZ): zweimal exakt dieselbe Empfangs-Zeile

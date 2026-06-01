@@ -1,8 +1,35 @@
 # HANDOFF — SimpleFT8
 
-**Aktueller Stand:** v0.98.50 (01.06.2026) — **Bug 1 (QSO-Log Anchor-Bleed) +
-Bug 3 (Meldungs-Kürzung)** behoben (voller Workflow). Tests 2233 grün. **Lokal
-committet, NICHT gepusht.** Bug 2 diagnostiziert, offen (Mike-Entscheidung).
+**Aktueller Stand:** v0.98.51 (02.06.2026) — **Auto-Hunt DX-Scoring** (voller
+Workflow, 2 DeepSeek-Runden + Web-Recherche). Tests **2245 grün**. **Lokal
+committet, NICHT gepusht.** Field-Test pending.
+
+---
+
+## Session 02.06.2026 — Auto-Hunt DX-Scoring (v0.98.51, voller Workflow)
+
+**Mike-Wunsch:** Auto-Hunt soll seltene/weite/neue DX-Perlen bevorzugen statt
+lauter Europa-Nachbarn (Falkland −24 dB wurde nie gerufen). **Umgesetzt:**
+- `_init_qso_log` lädt `adif/_backup_qrz_export/` (18k QSOs) → echte Historie
+  (0,47 s) + `set_my_grid(settings.locator)`.
+- `log/qso_log.py`: Länder-Zähler `_country_count` + `_country_band`, API
+  `get_country_count` / `is_country_worked_on_band`.
+- `core/auto_hunt.py`: `_score` → `_compute_priority` (Tupel `(R, band_new,
+  -dist, -snr, slot)`, kleiner=höher), `country_rarity_class` (0 ATNO..4),
+  `_MIN_SNR=-21` → `SNR_FLOOR=-26`, Slot=letzter Tiebreaker, Vorfilter
+  „gearbeitete Station skippen", `_RARITY_UNKNOWN=2`.
+- Rangfolge verifiziert: Falkland > San Marino(nah!) > Japan > USA > DL.
+- DeepSeek Final-R1 **PUSH FREIGEBEN**, 0 Blocker. Hardware: TX bleibt ANT1.
+- Tests +12 (`test_p165_dx_scoring.py`); angepasst test_modules/auto_hunt_
+  extended/p61/p139. Prompts als Audit-Trail in `prompts/auto_hunt_scoring_*.md`.
+
+**Nächste Schritte:** Field-Test am Radio (ruft Auto-Hunt jetzt sichtbar die
+weiten/seltenen Perlen statt Europa?) · Push-Freigabe (Commits offen: P165 +
+Vorgänger Doku-Wartung/Bug1/3/Bug2-Doku/Diplome/P164/P162-Revert).
+
+**Bekanntes Restrisiko (Phase 2, TODO):** Sonderpräfixe wie FT5 (Kerguelen)
+werden in der Präfix-Tabelle als Mutterland (Frankreich) geführt → fälschlich
+als „häufig" eingestuft. Normale DX (Falkland/Peru/Japan/Korea…) korrekt.
 
 ---
 
