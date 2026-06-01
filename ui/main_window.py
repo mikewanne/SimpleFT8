@@ -1081,8 +1081,7 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
                       "(Meldung defern, QSO laeuft)")
             else:
                 self.qso_panel.add_info(
-                    "⏸ Auto-Hunt gestoppt — 5 Minuten ohne Mausbewegung. "
-                    "Maus bewegen und AUTO HUNT-Taste druecken zum Fortsetzen."
+                    "⏸ Auto-Hunt gestoppt — 5 Minuten ohne Mausbewegung."
                 )
                 print("[Auto-Hunt-UI] Stop — 5 Min Maus-Inaktivitaet")
             self._auto_hunt.stop_auto_hunt("mouse_inactive_5min")
@@ -1112,8 +1111,7 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
             return
         self._auto_hunt_stop_msg_pending = False
         self.qso_panel.add_info(
-            "⏸ Auto-Hunt gestoppt — 5 Minuten ohne Mausbewegung. "
-            "Maus bewegen und AUTO HUNT-Taste druecken zum Fortsetzen."
+            "⏸ Auto-Hunt gestoppt — 5 Minuten ohne Mausbewegung."
         )
 
     # ── Propagation ──────────────────────────────────────────────
@@ -1559,8 +1557,7 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
                     self.qso_sm.stop_cq()
                     self.control_panel.set_cq_active(False)
                     self.qso_panel.add_info(
-                        "Operator Presence abgelaufen — CQ gestoppt. "
-                        "Maus bewegen oder Taste druecken zum Fortsetzen."
+                        "Operator Presence abgelaufen — CQ gestoppt."
                     )
                 else:
                     # QSO laeuft → nach QSO-Ende stoppen
