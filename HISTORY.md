@@ -9,6 +9,39 @@ Gelöscht wird nie etwas. Format: `## YYYY-MM-DD vX.YY — Kurztitel`.
 > stehen in `history/HISTORY_archiv_NN.md` (grep dort, falls eine alte Version
 > gesucht wird). Rotiert mit `tools/rotate_history.py`. Zuletzt: 2026-06-01.
 
+## 2026-06-02 v0.98.52 — RX-Listen-Doppelklick = harter Auto-Hunt-Stop
+
+**Feature (Mike-Field, voller Workflow V1→V2→R1→V3→Code→Final-R1):** Doppelklick
+in der Empfangsliste ist eine BEWUSSTE Übernahme durch den Operator → ALLES
+unterbrechen (laufendes CQ, laufendes QSO, aktiver Auto-Hunt) und sofort die
+geklickte Station rufen, KEIN Auto-Resume. Vorher pausierte der Klick Auto-Hunt
+nur (`on_manual_qso_start` → `_manual_override`), `active` blieb True, Timer lief
+weiter → Mike sah Auto-Hunt weiterlaufen.
+
+**Umsetzung (KISS):** `_on_station_clicked(self, msg, hard_stop=True)` neuer
+Parameter. Stop-Block GANZ OBEN (vor allen Vorab-Returns):
+`if hard_stop: stop_auto_hunt("manual_halt") + _qso_pending_insert=None +
+_p158_insertable.clear()`. Deckt in EINEM Block alle Pfade ab (TX-Buffer-Resume,
+SWR-Sperre, Slot-Lock, Einmessen, Normal) — eleganter als DeepSeeks Vorschlag
+verteilter Stops (R1-🟡 F3+F4). Der alte Pausieren-Aufruf ist jetzt
+`if not hard_stop`. **Abgrenzung:** P164-Klick im QSO-FENSTER bleibt sanft
+(`hard_stop=False`, pausieren + Auto-Resume) — beide P164-Pfade (`mw_cycle.
+_on_hunt_insert_clicked` IDLE-Sofort + `mw_qso._p158_maybe_start_inserted_call`
+Einschub). RX-Liste = bewusste Übernahme (hart); QSO-Fenster = höflich antworten
++ weiterjagen (sanft).
+
+**Claude-Catch gegen DeepSeek-R1 (🟠 F2):** DeepSeek empfahl explizit
+`qso_sm.cancel()` vor `start_qso`. VERWORFEN nach Code-Verifikation —
+`qso_state.start_qso` (Z.297-330) bricht laufendes QSO bereits sauber ab
+(Pending-Reset + `_set_state(IDLE)`, P1.14 KP1). Final-R1 bestätigte die
+Verwerfung als korrekt.
+
+**DeepSeek Final-R1: PUSH FREIGEBEN**, 0 Blocker, 0 Findings. Hardware: nur
+Auswahl-/Stop-Logik, TX bleibt ANT1. Tests 2245 → **2255** (+10, neu
+`test_p166_rx_doubleclick_hardstop.py`; angepasst test_p158: 5 Einschub-Tests auf
+`hard_stop=False`). FEATURES §17 erweitert. **Field-Test pending, lokal
+committet, NICHT gepusht.**
+
 ## 2026-06-02 v0.98.51 — Auto-Hunt DX-Scoring (Seltenheit > Distanz > Signal)
 
 **Feature (Mike-Wunsch, voller Workflow V1→V2→R1→V3→Code→Final-R1, 2 DeepSeek-

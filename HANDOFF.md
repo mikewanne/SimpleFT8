@@ -1,8 +1,26 @@
 # HANDOFF — SimpleFT8
 
-**Aktueller Stand:** v0.98.51 (02.06.2026) — **Auto-Hunt DX-Scoring** (voller
-Workflow, 2 DeepSeek-Runden + Web-Recherche). Tests **2245 grün**. **Lokal
-committet, NICHT gepusht.** Field-Test pending.
+**Aktueller Stand:** v0.98.52 (02.06.2026) — **RX-Listen-Doppelklick = harter
+Auto-Hunt-Stop** (voller Workflow). Tests **2255 grün**. **Lokal committet,
+NICHT gepusht.** Field-Test pending.
+
+---
+
+## Session 02.06.2026 — RX-Doppelklick Hard-Stop (v0.98.52, voller Workflow)
+
+**Mike-Field:** Doppelklick in der RX-Liste während Auto-Hunt rief die Station,
+ließ Auto-Hunt aber weiterlaufen. Mike-Spec: bewusste Übernahme → ALLES
+unterbrechen (CQ/QSO/Auto-Hunt), sofort rufen, kein Resume.
+**Umsetzung:** `_on_station_clicked(msg, hard_stop=True)` + Stop-Block GANZ OBEN
+(`stop_auto_hunt("manual_halt")` + P164-Merker verwerfen) — deckt alle Pfade ab.
+P164-QSO-Fenster-Klick bleibt sanft (`hard_stop=False`, beide Pfade: mw_cycle
+IDLE-Sofort + mw_qso Einschub). **Claude-Catch:** DeepSeek-R1-🟠 `cancel()`
+verworfen (start_qso resettet schon, qso_state:297-330, P1.14). DeepSeek Final-R1
+**PUSH FREIGEBEN** 0 Blocker/Findings. Hardware: TX bleibt ANT1. Tests +10
+(`test_p166_*`); 5 P158-Tests auf hard_stop=False angepasst. FEATURES §17.
+
+**Nächste Schritte:** Field-Test (Doppelklick stoppt Auto-Hunt jetzt sichtbar?)
+· Push-Freigabe (Commits offen: P166 + P165 + Diagramme + Vorgänger).
 
 ---
 

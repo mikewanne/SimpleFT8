@@ -1659,6 +1659,28 @@ klickbar; auch nach `_rerender_all`).
 | CQ-Caller-Queue (`qso_sm.queue_changed`) | Warteliste bei normalem CQ-QSO | eigener Modus (nur cq_mode) |
 | **P158 `_insert_pending_call`** | **QSO-Fenster-Klick auf Anrufer** | **laufendes QSO zu Ende, dann B, dann Auto-Resume** |
 
+### P166 (01.06.2026): RX-Listen-Doppelklick = harter Stop, QSO-Fenster = sanft
+
+Die zentrale Verhaltens-Differenzierung der beiden Klick-Orte, gesteuert über den
+Parameter **`_on_station_clicked(msg, hard_stop=True)`**:
+
+| Klick-Ort | `hard_stop` | Auto-Hunt | Begründung |
+|---|---|---|---|
+| **RX-Liste (Doppelklick)** | **True** (Default) | **`stop_auto_hunt("manual_halt")`** — komplett aus, kein Resume | Operator übernimmt BEWUSST → alles unterbrechen |
+| QSO-Fenster (P164-Klick) | False | `on_manual_qso_start()` — pausieren, danach Auto-Resume | höflich antworten + weiterjagen |
+
+**Der Stop-Block steht GANZ OBEN** in `_on_station_clicked` (vor allen
+Vorab-Returns SWR/TX/Slot-Lock/Einmessen) → ein einziger Block deckt alle Pfade
+ab und greift auch, wenn der Ruf danach an einer Bandsperre scheitert. Er
+verwirft zusätzlich `_qso_pending_insert` + `_p158_insertable` (wie HALT). Beide
+P164-Pfade rufen explizit `hard_stop=False`: `mw_cycle._on_hunt_insert_clicked`
+(IDLE-Sofort-Ruf) UND `mw_qso._p158_maybe_start_inserted_call` (Einschub nach
+QSO). Der TX-Buffer-Resume (`_on_station_clicked(buffered)`) nutzt den Default
+→ hart (war ein RX-Klick); der doppelte Stop ist durch `stop_auto_hunt`-
+Idempotenz harmlos. **Kein `qso_sm.cancel()` nötig** — `start_qso` (qso_state.py:
+297-330, P1.14) bricht ein laufendes QSO bereits sauber ab (Pending-Reset +
+`_set_state(IDLE)`). Test: `tests/test_p166_rx_doubleclick_hardstop.py`.
+
 ---
 
 ## 18. Statistik-Diagramme: Berechnung, Modi-Vergleich, DX erfasst ALLE Stationen
