@@ -594,7 +594,14 @@ class QSOPanel(QWidget):
         cursor = self.log_view.textCursor()
         cursor.movePosition(QTextCursor.MoveOperation.End)
         self.log_view.setTextCursor(cursor)
-        self.log_view.setTextColor(QColor(color))
+        # Bug 1 (01.06.2026): vollständig frisches QTextCharFormat setzen
+        # (nicht nur setTextColor) — sonst erbt diese Zeile underline +
+        # anchorHref + isAnchor von einer vorausgehenden _append_anchor_line.
+        # setTextCursor(End) lädt das Anchor-Format am Dokument-Ende neu, daher
+        # genügt ein Reset NUR in _append_anchor_line nicht (Test blieb rot).
+        fmt = QTextCharFormat()
+        fmt.setForeground(QColor(color))
+        self.log_view.setCurrentCharFormat(fmt)
         self.log_view.append(text)
         # Auto-Scroll nach unten
         scrollbar = self.log_view.verticalScrollBar()
@@ -636,7 +643,12 @@ class QSOPanel(QWidget):
         cursor = self.log_view.textCursor()
         cursor.movePosition(QTextCursor.MoveOperation.End)
         self.log_view.setTextCursor(cursor)
-        self.log_view.setTextColor(QColor(color1))
+        # Bug 1 (01.06.2026): frisches Format für text1 (siehe _append_colored)
+        # — verhindert Anchor-Bleed auch bei zweifarbigen Zeilen (RX/TX mit
+        # ant_label). text2 ist bereits sauber (explizites fmt in insertText).
+        fmt1 = QTextCharFormat()
+        fmt1.setForeground(QColor(color1))
+        self.log_view.setCurrentCharFormat(fmt1)
         self.log_view.append(text1)
         cursor = self.log_view.textCursor()
         cursor.movePosition(QTextCursor.MoveOperation.End)
