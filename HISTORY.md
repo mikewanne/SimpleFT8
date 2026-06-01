@@ -34,12 +34,17 @@ Fortsetzen" aus 3 `add_info`-Meldungen (Auto-Hunt-5-Min ×2 + CQ-Presence-
 Totmann) in ui/main_window.py entfernt — der jeweils erste Satz sagt es schon
 indirekt (Mike).
 
-**Bug 2 (diagnostiziert, NICHT gefixt):** Sehr selten zwei Log-Einträge mit
-gleicher Uhrzeit (RX + TX im selben 15s-Slot, physikalisch unmöglich). Spur:
-TX-Zeitstempel = `encoder.next_boundary`, RX = `decoder.target_slot_start` →
-Slot-Übergangs-Race. Harmlos (QSO komplett, reiner Anzeige-Effekt). Ohne Repro
-nicht sicher fixbar + Encoder-Timing (CLAUDE.md „vorlegen") → als TODO + Debug-
-Log-Instrumentierung beim nächsten Auftreten, nicht blind gefixt.
+**Bug 2 (DeepSeek-Workflow, bewusst NICHT gefixt):** Sehr selten zwei IDENTISCHE
+„← Empf."-Zeilen, gleiche Sekunde (Erst-Diagnose „RX+TX gleiche Zeit" war falsch
+— Mike korrigiert: beide sind „← Empf."). DeepSeek-Diagnose: Decoder dedupliziert
+intern (`seen`-Set), 1 Decode/Slot (`_decode_busy`), nur ANT1 dekodiert (ANT2 =
+Diversity-Messung, nicht in `feed_audio`), 1 Signal-Verbindung → seltene Race,
+statisch nicht lokalisierbar. DeepSeek-Catch (wichtig): `on_message_received`
+läuft dabei theoretisch doppelt → es ist NICHT „nur Anzeige". ABER verifiziert
+harmlos: P1.7-Duplikat-Filter (`mw_qso.py:601-610`, 5-Min-Fenster) schützt das
+Logbuch vor Doppel-ADIF, `qso_log._worked` idempotent, keine Doppel-Sendung
+(Screenshot 1× RR73 + 1× ✓). Mike-Entscheidung KISS: nicht fixen (Risiko >
+Nutzen). Fallback (Dedup in `on_message_decoded`) + Diagnose-Prompt in TODO.md.
 
 ## 2026-05-31 v0.98.49 — Diplome-Feature (DXCC/WAC/WAS/WAZ)
 

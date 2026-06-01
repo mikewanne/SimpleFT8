@@ -16,27 +16,34 @@
 
 ---
 
-# 🟠 Bug 2 OFFEN (01.06.2026) — Doppel-Uhrzeit RX+TX im QSO-Log (sehr selten)
+# ⚪ Bug 2 GESCHLOSSEN-ohne-Fix (01.06.2026) — seltene Doppel-RX-Zeile im QSO-Log
 
-Mike-Field (Screenshot LZ100LZ): zwei Log-Einträge mit identischer Uhrzeit
-(`12:35:30 ← Empf.` + `12:35:30 → Gesendet RR73`) — RX und TX im selben 15s-Slot
-ist physikalisch unmöglich (FT8 half-duplex). Sehr selten, **harmlos** (QSO war
-komplett ✓, reiner Anzeige-Effekt).
+Mike-Field (Screenshot LZ100LZ): zweimal exakt dieselbe Empfangs-Zeile
+`12:35:30 ← Empf. DA1MHH LZ100LZ R-07` (gleicher Text, gleiche Sekunde). Sehr
+selten. (Erst-Diagnose „RX+TX gleiche Zeit" war FALSCH — Mike korrigiert: beide
+sind „← Empf.".)
 
-**Diagnose (v0.98.50):** TX-Log-Zeitstempel = `encoder.next_boundary`
-(core/encoder.py:382), RX = `decoder.target_slot_start` (core/decoder.py:341).
-Beim Slot-Übergang können beide auf denselben Slot-Start fallen → gleiche
-Uhrzeit. P93 (v0.97.65) hatte ein verwandtes Symptom schon adressiert (TX-
-Eintrag ans Slot-Ende verschoben).
+**DeepSeek-Workflow-Diagnose:** Auf dem normalen Decode-Weg dürfte das gar nicht
+entstehen — Decoder dedupliziert intern (`seen`-Set, decoder.py:445/494),
+1 Decode/Slot (`_decode_busy`-Guard), nur ANT1 wird dekodiert (ANT2 =
+Diversity-Messung, geht NICHT in `feed_audio`), 1 Signal-Verbindung
+(mw_radio.py:61), 1 `add_rx`-Call. → seltene Timing-Race, statisch nicht
+lokalisierbar.
 
-**NICHT blind gefixt:** Encoder-Timing (CLAUDE.md „vorlegen") + kein
-reproduzierbarer Trigger (AP-Lite-v2.2: kein End-to-End-Test → kein Blind-Fix).
-**Optionen (Mike entscheidet):**
-- (a) **[Empfohlen]** Beim nächsten Auftreten via Debug-Log (P21/P139)
-  `next_boundary` + `target_slot_start` + Slot-Index loggen → echte Root-Cause-
-  Daten, dann gezielt fixen. Bug ist harmlos genug zum Warten.
-- (b) Defensiver Anzeige-Guard: TX-Log-Zeitstempel auf nächsten Slot schieben,
-  wenn == unmittelbar vorhergehender RX-Slot (rein kosmetisch, ohne Repro).
+**Wichtig (DeepSeek-Catch):** der Doppel-Decode stößt theoretisch auch
+`on_message_received` (State-Machine) doppelt an → es ist NICHT „nur Anzeige".
+
+**Verifiziert HARMLOS → bewusst NICHT gefixt (Mike-Entscheidung, KISS):**
+- Logbuch korrekt: P1.7-Duplikat-Filter (`mw_qso.py:601-610`, 5-Min-Fenster)
+  blockt einen zweiten ADIF-Eintrag; `qso_log._worked` ist idempotent (Set).
+- Keine Doppel-Sendung (Screenshot: 1× RR73, 1× „✓ komplett").
+- Einziger Effekt: seltene kosmetische Doppel-Zeile in der Live-Anzeige.
+- Fix würde an nicht-reproduzierbarem Race rumdoktorn → Risiko > Nutzen.
+
+**Falls es doch häufiger wird:** robuster Fix = Dedup in `on_message_decoded`
+(Key `caller+raw+slot_start_ts`) VOR `add_rx` + `on_message_received` (schützt
+Anzeige UND State-Machine) + Debug-Log. Diagnose-Prompt liegt in
+`prompts/bug2_duplicate_rx_v2.md`.
 
 ---
 

@@ -16,15 +16,19 @@ NICHT (`setTextCursor(End)` lädt das Anchor-Format neu), kritisch geprüft +
 Test-First. Final-R1 ✅. 5 Tests (`tests/test_bug1_anchor_bleed.py`). 2228→2233.
 **Bug 3 ✅ (trivial):** redundanter „Maus bewegen…"-Hinweis aus 3 Meldungen
 (`ui/main_window.py`: Auto-Hunt-5-Min ×2 + CQ-Presence-Totmann) entfernt.
-**Bug 2 ⏳ OFFEN (Mike-Entscheidung):** sehr selten RX+TX-Log-Eintrag mit
-gleicher Uhrzeit. Diagnose = Encoder-Slot-Übergangs-Race (`encoder.next_boundary`
-vs `decoder.target_slot_start`). Harmlos (QSO komplett, reiner Anzeige-Effekt).
-NICHT blind gefixt (Encoder-Timing → CLAUDE-„vorlegen", kein Repro). Vorschlag:
-Debug-Log-Instrumentierung beim nächsten Auftreten statt Blind-Fix → TODO.md.
+**Bug 2 ⚪ GESCHLOSSEN-ohne-Fix:** sehr selten zwei IDENTISCHE „← Empf."-Zeilen,
+gleiche Sekunde (Erst-Diagnose „RX+TX gleiche Zeit" war FALSCH — Mike korrigiert:
+beide „← Empf."). Voller DeepSeek-Workflow: Decoder dedupliziert intern, 1 Decode/
+Slot, nur ANT1 dekodiert (ANT2 = Diversity-Messung), 1 Signal-Verbindung →
+seltene Race, statisch nicht lokalisierbar. DeepSeek-Catch: `on_message_received`
+läuft theoretisch doppelt → NICHT nur Anzeige. ABER verifiziert harmlos:
+P1.7-Duplikat-Filter (`mw_qso.py:601-610`) schützt das Logbuch, keine Doppel-
+Sendung (Screenshot 1× ✓). Mike-Entscheidung KISS: nicht fixen (Risiko > Nutzen).
+Fallback-Plan + Diagnose → TODO.md.
 
-**Nächste Schritte:** Bug 2 entscheiden · Field-Test am Radio (Diplome-Dialog +
-Bug-1-Fix sichtprüfen) · Push-Freigabe (jetzt 9 Commits offen: Doku-Wartung +
-Bug1/3 + Diplome + P164 + P162-Revert).
+**Nächste Schritte:** Field-Test am Radio (Diplome-Dialog + Bug-1-Fix
+sichtprüfen) · Push-Freigabe (Commits offen: Doku-Wartung + Bug1/3 + Bug2-Doku +
+Diplome + P164 + P162-Revert).
 
 ---
 
