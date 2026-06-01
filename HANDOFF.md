@@ -1,7 +1,48 @@
 # HANDOFF — SimpleFT8
 
-**Aktueller Stand:** v0.98.49 (31.05.2026) — **Diplome-Feature (DXCC/WAC/WAS/WAZ)**
-im Logbuch-Tab. Tests 2228 grün (+16). **Lokal NICHT committet/gepusht — siehe unten.**
+**Aktueller Stand:** v0.98.50 (01.06.2026) — **Bug 1 (QSO-Log Anchor-Bleed) +
+Bug 3 (Meldungs-Kürzung)** behoben (voller Workflow). Tests 2233 grün. **Lokal
+committet, NICHT gepusht.** Bug 2 diagnostiziert, offen (Mike-Entscheidung).
+
+---
+
+## Session 01.06.2026 (Teil 2) — Bug 1/2/3 aus Mike-Field-Test
+
+**Bug 1 ✅ (voller Workflow):** QSO-Log Anchor-Format blutete auf Folgezeilen
+(eigene „→ Gesendet"-TX wurden klickbare Links). Fix in `ui/qso_panel.py`:
+`_append_colored`/`_append_two_color` setzen ein frisches `QTextCharFormat` statt
+nur `setTextColor`. DeepSeek-R1 Root-Cause ✓ — sein Ein-Zeilen-Fix reichte aber
+NICHT (`setTextCursor(End)` lädt das Anchor-Format neu), kritisch geprüft +
+Test-First. Final-R1 ✅. 5 Tests (`tests/test_bug1_anchor_bleed.py`). 2228→2233.
+**Bug 3 ✅ (trivial):** redundanter „Maus bewegen…"-Hinweis aus 3 Meldungen
+(`ui/main_window.py`: Auto-Hunt-5-Min ×2 + CQ-Presence-Totmann) entfernt.
+**Bug 2 ⏳ OFFEN (Mike-Entscheidung):** sehr selten RX+TX-Log-Eintrag mit
+gleicher Uhrzeit. Diagnose = Encoder-Slot-Übergangs-Race (`encoder.next_boundary`
+vs `decoder.target_slot_start`). Harmlos (QSO komplett, reiner Anzeige-Effekt).
+NICHT blind gefixt (Encoder-Timing → CLAUDE-„vorlegen", kein Repro). Vorschlag:
+Debug-Log-Instrumentierung beim nächsten Auftreten statt Blind-Fix → TODO.md.
+
+**Nächste Schritte:** Bug 2 entscheiden · Field-Test am Radio (Diplome-Dialog +
+Bug-1-Fix sichtprüfen) · Push-Freigabe (jetzt 9 Commits offen: Doku-Wartung +
+Bug1/3 + Diplome + P164 + P162-Revert).
+
+---
+
+## Session 01.06.2026 — Doku-Wartung (Commit d994687, NICHT gepusht)
+
+Reine Infrastruktur, **kein App-Code** — Tests unberührt.
+- **CLAUDE.md entschlackt** 73k→38k (unter 40k-Warnschwelle): Versions-Inline-Block
+  + P-Code-Verträge nach HISTORY.md/FEATURES.md ausgelagert; DeepSeek-/Workflow-/
+  Hardware-Regeln unverändert.
+- **HISTORY.md rotiert** 804k→79k: nur noch letzte 30 Versionen (v0.98.20–v0.98.49),
+  ältere 203 Einträge in `history/HISTORY_archiv_01.md`. **Neue Einträge ab jetzt
+  OBEN anhängen** (Datei absteigend sortiert).
+- **`tools/rotate_history.py`** NEU — rotiert HISTORY.md mit Byte-Verifikation +
+  Backup (Dry-Run-Default, `--apply`; bei >40 Einträgen laufen lassen).
+- Start-Lese-Last (CLAUDE.md + HISTORY.md) ~876k→117k.
+- zshrc: `claude2`-Alias entfernt.
+- Backups (löschbar nach App-Start-Check): `/tmp/CLAUDE.md.bak-vor-trim-20260531`
+  + `HISTORY.md.bak-2026-06-01` (untracked im Projektordner).
 
 ---
 
@@ -50,13 +91,19 @@ nachholen.**
 
 ---
 
-## ⛔ OFFEN
+## ⛔ OFFEN (Stand 01.06.2026 — git-verifiziert, alter Block war veraltet)
 
-1. **Final-R1 nachholen** (Tooling-bedingt nicht abgeschlossen), DANN
-2. **Lokaler Commit** des Diplome-Features (noch nicht committet wegen Tooling).
-3. **Push-Freigabe** durch Mike (Standing-Regel) — zusammen mit den 3 älteren
-   nicht-gepushten Commits (cd91712 P162-Revert, 9034884 P164, 725cedc HANDOFF).
-4. **Field-Test** Diplome-Button am Radio (Optik + reale Zahlen prüfen).
+✅ **Final-R1 (PUSH FREIGEBEN) + Commit erledigt** — `2cce619` (Code) + `1bfb292`
+   (Final-R1 eingelesen, FEATURES §19). Tests 2228 grün. Diplome-Feature ist
+   code- + review-seitig FERTIG.
+
+Nur noch zwei Dinge, beide auf Mike-Seite:
+1. **Push-Freigabe** — 6 Commits warten (`origin/main..HEAD`): d994687 Doku-Wartung,
+   1bfb292 + 2cce619 Diplome, 725cedc + 9034884 P164, cd91712 P162-Revert.
+2. **Praxistest Diplome-Dialog** (kein Radio nötig — liest nur QRZ-Export):
+   Optik + reale Zahlen prüfen (DA1MHH+DO4MHH als ein Pool).
+
+Optional (kein Blocker): redundanter Fallback-Pfad im Diplome-Code aufräumen → TODO.md.
 
 ## TODO (Mike-Wunsch, zurückgestellt)
 - **„neue"-Filter + Auto-Hunt mit voller QRZ-Historie füttern:** den

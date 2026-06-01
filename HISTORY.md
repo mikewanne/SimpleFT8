@@ -9,6 +9,38 @@ Gelöscht wird nie etwas. Format: `## YYYY-MM-DD vX.YY — Kurztitel`.
 > stehen in `history/HISTORY_archiv_NN.md` (grep dort, falls eine alte Version
 > gesucht wird). Rotiert mit `tools/rotate_history.py`. Zuletzt: 2026-06-01.
 
+## 2026-06-01 v0.98.50 — Bug 1 QSO-Log Anchor-Bleed + Bug 3 Meldungs-Kürzung
+
+**Bug 1 (Field, voller Workflow V1→V2→R1→V3→Code→Final-R1):** Im QSO-Verlauf
+blutete das HTML-Anchor-Format der klickbaren „← Empf."-Einschub-Zeile (P164)
+auf nachfolgende Zeilen — eigene „→ Gesendet"-TX-Zeilen wurden optisch
+(cyan/unterstrichen) UND klickbar zu Links. Root Cause: `_append_anchor_line`
+(ui/qso_panel.py) hängt `<a>`-HTML via `append()` an → danach trägt das
+log_view-`currentCharFormat` underline+anchorHref+isAnchor; `_append_colored`/
+`_append_two_color` setzten via `setTextColor()` nur die Farbe zurück, und
+`setTextCursor(End)` lädt das Anchor-Format vom Dokument-Ende neu. **DeepSeek-R1
+lag bei der Root-Cause richtig, sein Ein-Zeilen-Fix (Reset nur in
+`_append_anchor_line`) reichte aber NICHT** — wegen des setTextCursor-Reloads
+blieb der Bleed (Test blieb rot, kritisch geprüft). **Fix:** `_append_colored` +
+`_append_two_color` setzen jetzt ein frisches `QTextCharFormat(foreground=color)`
+via `setCurrentCharFormat()` statt nur `setTextColor()` → kein Erben von
+underline/anchor. Final-R1: ✅ alle Pfade abgedeckt, KISS, 0 Seiteneffekte.
+5 neue Tests (tests/test_bug1_anchor_bleed.py) prüfen das echte QTextCharFormat
+pro Zeichen (TX/RX/Info kein isAnchor/underline/href; Anchor bleibt klickbar;
+auch nach `_rerender_all`). Tests 2228→2233.
+
+**Bug 3 (trivial):** Redundanten Fortsetzungs-Hinweis „Maus bewegen … zum
+Fortsetzen" aus 3 `add_info`-Meldungen (Auto-Hunt-5-Min ×2 + CQ-Presence-
+Totmann) in ui/main_window.py entfernt — der jeweils erste Satz sagt es schon
+indirekt (Mike).
+
+**Bug 2 (diagnostiziert, NICHT gefixt):** Sehr selten zwei Log-Einträge mit
+gleicher Uhrzeit (RX + TX im selben 15s-Slot, physikalisch unmöglich). Spur:
+TX-Zeitstempel = `encoder.next_boundary`, RX = `decoder.target_slot_start` →
+Slot-Übergangs-Race. Harmlos (QSO komplett, reiner Anzeige-Effekt). Ohne Repro
+nicht sicher fixbar + Encoder-Timing (CLAUDE.md „vorlegen") → als TODO + Debug-
+Log-Instrumentierung beim nächsten Auftreten, nicht blind gefixt.
+
 ## 2026-05-31 v0.98.49 — Diplome-Feature (DXCC/WAC/WAS/WAZ)
 
 **Neu:** Logbuch-Tab DXCC-Label → Button „Diplome". Klick öffnet read-only

@@ -16,6 +16,30 @@
 
 ---
 
+# 🟠 Bug 2 OFFEN (01.06.2026) — Doppel-Uhrzeit RX+TX im QSO-Log (sehr selten)
+
+Mike-Field (Screenshot LZ100LZ): zwei Log-Einträge mit identischer Uhrzeit
+(`12:35:30 ← Empf.` + `12:35:30 → Gesendet RR73`) — RX und TX im selben 15s-Slot
+ist physikalisch unmöglich (FT8 half-duplex). Sehr selten, **harmlos** (QSO war
+komplett ✓, reiner Anzeige-Effekt).
+
+**Diagnose (v0.98.50):** TX-Log-Zeitstempel = `encoder.next_boundary`
+(core/encoder.py:382), RX = `decoder.target_slot_start` (core/decoder.py:341).
+Beim Slot-Übergang können beide auf denselben Slot-Start fallen → gleiche
+Uhrzeit. P93 (v0.97.65) hatte ein verwandtes Symptom schon adressiert (TX-
+Eintrag ans Slot-Ende verschoben).
+
+**NICHT blind gefixt:** Encoder-Timing (CLAUDE.md „vorlegen") + kein
+reproduzierbarer Trigger (AP-Lite-v2.2: kein End-to-End-Test → kein Blind-Fix).
+**Optionen (Mike entscheidet):**
+- (a) **[Empfohlen]** Beim nächsten Auftreten via Debug-Log (P21/P139)
+  `next_boundary` + `target_slot_start` + Slot-Index loggen → echte Root-Cause-
+  Daten, dann gezielt fixen. Bug ist harmlos genug zum Warten.
+- (b) Defensiver Anzeige-Guard: TX-Log-Zeitstempel auf nächsten Slot schieben,
+  wenn == unmittelbar vorhergehender RX-Slot (rein kosmetisch, ohne Repro).
+
+---
+
 # ✅ P159 ERLEDIGT (v0.98.41, 28.05.2026) — SWR-Clamp-1.0 aus Median filtern
 
 Mike-Field-Bug: Bandsperre nach TUNE bewertete falsche SWR (mal „1.0"

@@ -1578,6 +1578,21 @@ gehören in die aktive RX-Liste, nicht ins passive QSO-Fenster.
 mehr, startet B auf veralteten Slot-Infos → evtl. erfolgloses QSO (kein
 Schaden). Hobby-Tool-pragmatisch, KISS.
 
+### ⚠ Anchor-Bleed-Falle (Bug 1, v0.98.50)
+
+Der HTML-Anchor aus `_append_anchor_line` (`log_view.append('<a …>')`)
+hinterlässt im QTextBrowser ein `currentCharFormat` mit `fontUnderline` +
+`anchorHref` + `isAnchor`. Die normalen Render-Methoden `_append_colored` /
+`_append_two_color` setzen deshalb ein **vollständig frisches `QTextCharFormat`**
+via `setCurrentCharFormat()` statt nur `setTextColor()` — sonst erben die
+Folgezeilen (eigene „→ Gesendet"-TX!) Unterstrich + Klickbarkeit (Bleed). **Nur
+`setTextColor` genügt NICHT**, und ein Reset NUR in `_append_anchor_line` auch
+nicht: das nachfolgende `setTextCursor(End)` lädt das Anchor-Format vom
+Dokument-Ende neu. **Jede neue Log-Render-Methode in `qso_panel.py` MUSS ein
+frisches CharFormat setzen.** Test: `tests/test_bug1_anchor_bleed.py` prüft das
+charFormat pro Zeichen (TX/RX/Info kein isAnchor/underline/href; Anchor bleibt
+klickbar; auch nach `_rerender_all`).
+
 ### Abgrenzung zu bestehenden Mechanismen (NICHT vermischen)
 
 | Mechanismus | Was | Verhalten |
