@@ -37,6 +37,44 @@ _SLOT_SAMPLES = {
     "FT2": int(3.8 * SAMP_RATE),    # 45600
 }
 
+# Decode-Wake-Offset pro Modus: Sekunden VOR Slot-Ende, zu denen der Decode-Loop
+# aufwacht. Bei den schnellen Modi (FT4) BEWUSST früher als der Fenster-Start
+# (s.u.), damit der Decode VOR der Encoder-Sende-Frist (Slot−0.8s) fertig ist —
+# sonst springt der Encoder-Drift-Guard auf den übernächsten Slot → 30s- statt
+# 15s-Periode (P168, 02.06.2026, Field-Bug Mike).
+_WAKE_OFFSETS = {"FT8": 2.5, "FT4": 1.5, "FT2": 0.3}
+
+# Fenster-Start-Offset pro Modus: Sekunden VOR Slot-Start, an denen das Decode-
+# Fenster beginnt. Das ist die ECHTE Verankerung des Decode-Fensters (und damit
+# der DT-Messung) — UNABHÄNGIG von der Weckzeit.
+#   • End-verankerte Modi (FT8/FT2): Fenster = letzte slot_samples des Buffers →
+#     Fenster-Start liegt WAKE s vor Slot-Start → WINDOW == WAKE (kein Tail-Pad).
+#   • Slot-ausgerichtete schnelle Modi (FT4): _process_cycle schneidet das Fenster
+#     fest auf [Slot−WINDOW; Slot−WINDOW+slot_dur] (Signal-Position = 0.5 wie im
+#     funktionierenden Original); der nach dem Signal liegende Rest (= WAKE−WINDOW
+#     Sekunden reine Stille) wird NACH der Aufbereitung mit Nullen aufgefüllt.
+# ⚠️ P168-Lehre (Field-Crash 02.06.): WAKE einfach erhöhen OHNE Slot-Ausrichtung
+# verschiebt das Signal aus dem ft8_lib-Sync-Fenster → 0 Decodes. Beide gehören
+# ZUSAMMEN. Pflicht: WINDOW ≤ WAKE (tail_pad = WAKE−WINDOW ≥ 0).
+_WINDOW_OFFSETS = {"FT8": 2.5, "FT4": 0.5, "FT2": 0.3}
+
+# WSJT-X-Protokoll: TX startet bei t=+0.5s im Slot. Der DT-Buffer-Offset
+# (Korrektur der gemessenen DT) = Fenster-Start-Offset + Protokoll-Offset.
+# Bewusst aus _WINDOW_OFFSETS abgeleitet (NICHT _WAKE_OFFSETS!) — die DT hängt an
+# der FENSTER-Position, nicht an der Weckzeit (genau das war der P168-Denkfehler).
+# Werte: FT8=3.0, FT4=1.0, FT2=0.8 (unverändert ggü. v0.98.55, jetzt aber korrekt
+# entkoppelt: WAKE darf sich ändern, ohne die DT zu verschieben).
+_PROTOCOL_TX_OFFSET = 0.5
+_DT_OFFSETS = {m: w + _PROTOCOL_TX_OFFSET for m, w in _WINDOW_OFFSETS.items()}
+
+# Tail-Padding pro Modus in Samples: der nach dem Signal liegende, mit Nullen zu
+# füllende Teil des Decode-Fensters = (WAKE − WINDOW) Sekunden. FT8/FT2 = 0
+# (Fenster end-verankert, kein Eingriff), FT4 = 1.0s = 12000 Samples @ 12kHz.
+_TAIL_PAD_SAMPLES = {
+    m: int(max(0.0, _WAKE_OFFSETS[m] - _WINDOW_OFFSETS.get(m, _WAKE_OFFSETS[m])) * SAMP_RATE)
+    for m in _WAKE_OFFSETS
+}
+
 # Signal Subtraction — wird per set_quality() angepasst
 MAX_SUBTRACT_PASSES = 5
 SUBTRACT_MIN_SNR = -18
@@ -74,6 +112,7 @@ class Decoder(QObject):
         self.my_call = my_call
         self._mode = mode
         self._slot_samples = _SLOT_SAMPLES.get(mode, CYCLE_SAMPLES_12K)
+        self._tail_pad_samples = _TAIL_PAD_SAMPLES.get(mode, 0)
         self._running = False
         self._audio_buffer_24k = []
         self._buffer_lock = threading.Lock()
@@ -132,6 +171,7 @@ class Decoder(QObject):
         """Protokoll wechseln: FT8, FT4, FT2."""
         self._mode = mode
         self._slot_samples = _SLOT_SAMPLES.get(mode, CYCLE_SAMPLES_12K)
+        self._tail_pad_samples = _TAIL_PAD_SAMPLES.get(mode, 0)
         print(f"[Decoder] Protokoll: {mode} (Slot: {self._slot_samples/SAMP_RATE:.1f}s)")
 
     def set_band(self, band: str):
@@ -193,9 +233,13 @@ class Decoder(QObject):
                 # fertig ist. Macht Encoder-Replace-Pfad ueberhaupt erst
                 # nutzbar (sonst CQ-Audio bereits in send_audio wenn
                 # _pending_reply gesetzt wird → 1 Slot Delay).
-                # SNR-Effekt < 0.1 dB (R1: FT8-Signal endet bei slot+13.14s,
-                # Hanning-Fenster dampft Rand). FT4/FT2 unveraendert.
-                _WAKE_OFFSETS = {"FT8": 2.5, "FT4": 0.5, "FT2": 0.3}
+                # P168 (02.06.2026): FT4 weckt 1.5s vor Slot-Ende (früher als
+                # die 0.5 davor), damit der Decode VOR der Encoder-Sende-Frist
+                # fertig ist → 15s- statt 30s-Periode. Das frühere Wecken ist NUR
+                # zusammen mit der Slot-Ausrichtung in _process_cycle sicher (sonst
+                # rutscht das Signal aus dem ft8_lib-Sync-Fenster → 0 Decodes, so
+                # geschehen beim ersten Versuch ohne Ausrichtung). Werte +
+                # Begründung: Modul-Konstanten _WAKE_OFFSETS / _WINDOW_OFFSETS oben.
                 _WAKE = _SLOT - _WAKE_OFFSETS.get(self._mode, 1.5)
                 cycle_pos = now % _SLOT
                 # target_slot_start PRE-SLEEP berechnen (driftfrei, unabhängig
@@ -298,15 +342,18 @@ class Decoder(QObject):
             # Anti-Alias Resampling 24k → 12k
             audio_12k = _resample_to_12k(audio_raw, source_rate=24000)
 
-            if len(audio_12k) > self._slot_samples:
-                audio_12k = audio_12k[-self._slot_samples:]
-            elif len(audio_12k) < self._slot_samples // 2:
-                print(f"[Decoder] Zu wenig Audio: {len(audio_12k)} < {self._slot_samples // 2}")
+            # Decode-Fenster bestimmen. Bei slot-ausgerichteten Modi (FT4) wecken
+            # wir früher (s. _WAKE_OFFSETS) und behalten nur den Nutzbereich
+            # (slot_samples − tail_pad), end-verankert (= robust gegen Sleep-Jitter
+            # wie bisher). Der nach dem Signal liegende Rest (reine Stille) wird
+            # erst NACH _preprocess_audio mit Nullen aufgefüllt — sonst verfälschten
+            # die Nullen RMS-Norm + Spectral-Whitening (DeepSeek-R1-Finding).
+            # FT8/FT2: tail_pad = 0 → _keep_samples == slot_samples → unverändert.
+            _keep_samples = self._slot_samples - self._tail_pad_samples
+            audio_12k = _keep_window(audio_12k, _keep_samples)
+            if audio_12k is None:
+                print(f"[Decoder] Zu wenig Audio (< {_keep_samples // 2})")
                 return
-            else:
-                audio_12k = np.pad(
-                    audio_12k, (0, max(0, self._slot_samples - len(audio_12k)))
-                )
 
             # DT-Korrektur: Audio-Buffer verschieben (nicht Sleep-Zeit!)
             # Positive Korrektur = Signale zu spät im Buffer → vorne abschneiden
@@ -323,6 +370,11 @@ class Decoder(QObject):
 
             t_pre = time.time()
             audio_12k = _preprocess_audio(audio_12k)
+            # Tail-Padding NACH der Aufbereitung: Post-Signal-Stille auf volle
+            # slot_samples auffüllen (ft8_lib erwartet ein Fenster dieser Länge).
+            # FT8/FT2: tail_pad = 0 → No-op. Nur FT4 (früh geweckt) füllt hier auf.
+            if self._tail_pad_samples > 0:
+                audio_12k = np.pad(audio_12k, (0, self._tail_pad_samples))
             t_decode = time.time()
             peak_12k = np.max(np.abs(audio_12k))
             print(f"[Decoder] Preprocessing: {t_decode - t_pre:.2f}s, Peak={peak_12k}")
@@ -468,15 +520,10 @@ class Decoder(QObject):
                         #    Slot-Start → DT um +_WAKE_OFFSETS zu hoch.
                         # 3) WSJT-X Protokoll: TX startet bei t=+0.5s im Slot →
                         #    Protokoll-Offset 0.5s direkt eingerechnet.
-                        # ⚠️ MUSS mit _WAKE_OFFSETS synchron bleiben (siehe Z.145):
-                        #    FT8: 2.5 + 0.5 = 3.0 (v0.95.7 — vorher fälschlich 2.0
-                        #    weil P1.9 Wake 1.5→2.5 erhöht aber DT_OFFSET nicht
-                        #    mit-erhöht, +1.0s DT-Drift bis 06.05.2026)
-                        #    FT4: 0.5 + 0.5 = 1.0
-                        #    FT2: 0.3 + 0.5 = 0.8
-                        # Ergebnis: Korrektur konvergiert auf ~0.27s (Hardware) statt
-                        # auf clamped 1.0 (Hardware+vergessener Wake-Anteil).
-                        _DT_OFFSETS = {"FT8": 3.0, "FT4": 1.0, "FT2": 0.8}
+                        # _DT_OFFSETS = _WAKE_OFFSETS + _PROTOCOL_TX_OFFSET (oben,
+                        # code-erzwungen abgeleitet — kann nicht mehr desyncen,
+                        # früher manuell verursachte das +1.0s DT-Drift bis 06.05.).
+                        # Ergebnis: Korrektur konvergiert auf ~0.27s (Hardware).
                         DT_BUFFER_OFFSET = _DT_OFFSETS.get(self._mode, 2.0)
                         raw_results.append({
                             **r,
@@ -595,6 +642,23 @@ def _apply_offset(audio: np.ndarray, offset_samples: int) -> np.ndarray:
     elif offset_samples < 0:
         return np.pad(audio[:offset_samples], (-offset_samples, 0))
     return audio
+
+
+def _keep_window(audio_12k: np.ndarray, keep_samples: int) -> np.ndarray | None:
+    """Audio end-verankert auf ``keep_samples`` Länge bringen.
+
+    Behält die LETZTEN ``keep_samples`` (robust gegen Sleep-Jitter, da am
+    aktuellsten Audio = Grab-Zeit verankert). Bei slot-ausgerichteten Modi
+    (FT4) ist ``keep_samples`` < slot_samples — der danach fehlende Rest (reine
+    Post-Signal-Stille) wird vom Aufrufer NACH der Aufbereitung mit Nullen
+    gefüllt. Gibt ``None`` zurück wenn deutlich zu wenig Audio (< Hälfte).
+    """
+    n = len(audio_12k)
+    if n > keep_samples:
+        return audio_12k[-keep_samples:]
+    if n < keep_samples // 2:
+        return None
+    return np.pad(audio_12k, (0, max(0, keep_samples - n)))
 
 
 # ── Audio-Vorverarbeitung ─────────────────────────────────────────────────────
