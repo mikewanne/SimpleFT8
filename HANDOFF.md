@@ -1,12 +1,44 @@
 # HANDOFF — SimpleFT8
 
-**Aktueller Stand:** v0.98.55 (02.06.2026) — **P167: eingeschobenes QSO (P164)
-hing nach 1 Anruf — Reentrancy-Fix** (voller Workflow). Einschub startete
-synchron im qso_state-Abschluss-Handler, der danach den State wieder auf IDLE
-setzte → QSO hing, Auto-Hunt blieb pausiert. Fix: Einschub via
-`QTimer.singleShot(0,…)` defern. Tests **2290 grün**. **Lokal committet, NICHT
-gepusht.** Field-Test pending. Davor v0.98.54 Logbuch-Sortierung, v0.98.53
-Diplome-Erweiterung.
+**Aktueller Stand:** v0.98.56 (02.06.2026) — **P168: FT4 sendete 30s-Periode
+statt 15s** (voller Workflow; 1. Versuch verworfen). Decoder weckte bei FT4
+strukturell nach der Sende-Frist → Encoder-Drift-Guard sprang +2 Slots →
+doppelte QSO-Dauer. **1. Versuch (nur WAKE 0,5→1,5) brach den Empfang (0 Decodes,
+Field-Crash) → zurückgerollt.** Echter Fix: Weckzeit/Fenster-Position/DT
+ENTKOPPELT — früh wecken + Decode-Fenster slot-ausgerichtet (`_keep_window` +
+Tail-Pad nach preprocess) + DT aus `_WINDOW_OFFSETS`. FT8/FT2 bit-identisch.
+Tests **2303 grün**. **Lokal committet, NICHT gepusht — Field-Test am Radio
+(15s-Takt + DT der Gegenstation 0,1–0,3s).** Davor v0.98.55 P167.
+
+---
+
+## Session 02.06.2026 — P168 FT4-Timing (v0.98.56, voller Workflow)
+
+**Mike-Field (2 QSOs, ms-Log):** FT4 doppelt so langsam — unsere TX 30s statt
+15s auseinander. FT4 = Zeitspar-Modus → 30s vergrault Stationen. **Root Cause:**
+Decoder weckt FT4 0,5s vor Slot-Ende (absolut 14,5s) → Decode ~0,24s nach
+Boundary fertig → zu spät für Audio-Start des Folge-Slots (Boundary−0,8,
+FlexRadio-1,3s-Buffer) → Encoder-Drift-Guard springt +2 Slots → 30s. Decoder
+weckt also STRUKTURELL nach der Sende-Frist; das Decode-Fenster hing an der
+Weckzeit (`audio_12k[-slot_samples:]`).
+
+**⚠️ 1. Versuch verworfen:** nur WAKE 0,5→1,5 → Empfang tot (0 Decodes, Field-
+Crash Mike), `dt_corrections.json FT4_20m` auf −0,5 vergiftet (bereinigt auf
++0,246). Grund: früheres Wecken verschob das gekoppelte Fenster → Signal aus dem
+ft8_lib-Sync-Fenster. **Lehre: Weckzeit ≠ Fenster-Position ≠ DT.**
+
+**Echter Fix (`core/decoder.py`):** 3 Größen entkoppelt — `_WAKE_OFFSETS["FT4"]`=1,5
+(früh wecken) · neuer `_WINDOW_OFFSETS` (Fenster slot-ausgerichtet [Slot−0,5;+7,0]
+via `_keep_window`, Tail-Pad 1,0s NACH preprocess) · `_DT_OFFSETS` aus WINDOW
+abgeleitet → FT4-DT konstant 1,0. FT8/FT2 bit-identisch (tail=0). DeepSeek
+Plan-R1 (Gold: Pad nach preprocess) + Final-R1 PUSH FREIGEBEN; Paritäts-
+Halluzination (/15) gegen encoder.py geprüft + verworfen. Tests 2290→2303 (+13,
+inkl. FT4-Positionierungs-Äquivalenz + FT8-Decode-Rundlauf). Kein TX-Eingriff.
+
+**Nächste Schritte:** App neu starten → FT4-Field-Test am Radio (sendet jetzt im
+15s-Takt? QSO ~30s statt ~60s? DT der Gegenstation 0,1–0,3s? Decode vollständig?)
+→ bei Erfolg pushen. Push-Freigabe Mike steht aus (v0.98.56 lokal committet;
+v0.98.53–55 bereits gepusht).
 
 ---
 

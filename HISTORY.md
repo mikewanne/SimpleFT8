@@ -9,6 +9,55 @@ Gelöscht wird nie etwas. Format: `## YYYY-MM-DD vX.YY — Kurztitel`.
 > stehen in `history/HISTORY_archiv_NN.md` (grep dort, falls eine alte Version
 > gesucht wird). Rotiert mit `tools/rotate_history.py`. Zuletzt: 2026-06-01.
 
+## 2026-06-02 v0.98.56 — P168: FT4 sendete mit 30s-Periode statt 15s (Decode-Pfad-Fix; 1. Versuch verworfen)
+
+**Bug (Mike-Field, 2 QSOs, ms-Log verifiziert):** FT4-QSOs liefen doppelt so
+langsam — unsere aufeinanderfolgenden Sendungen waren 30s auseinander statt 15s
+(07:30:07 → :37 → 07:31:07). FT4 ist GENAU der Zeitspar-Modus — 30s vergrault
+Gegenstationen. Gegenstation antwortete sauber → Problem auf unserer Seite.
+
+**Root Cause (verifiziert):** Der Decoder weckte bei FT4 0,5s vor Slot-Ende
+(absolut 14,5s); der Decode der Antwort war erst ~0,24s NACH dem Slot-Boundary
+fertig — zu spät für den Audio-Start des Folge-Slots (Boundary − 0,8s wegen
+FlexRadio-1,3s-TX-Buffer, `TARGET_TX_OFFSET=-0.8`). Encoder-Drift-Guard
+(`encoder.py:337`) sprang `+2*_SLOT` (15s) → 30s-Periode. Decoder weckt also
+**strukturell nach** der Sende-Frist; das Decode-Fenster war an die Weckzeit
+geklebt (`audio_12k[-slot_samples:]`), deshalb half „früher wecken" allein nicht.
+
+**⚠️ 1. Versuch GESCHEITERT (Field-Crash, zurückgerollt):** nur
+`_WAKE_OFFSETS["FT4"]` 0,5→1,5 (+ `_DT_OFFSETS` daraus abgeleitet → 2,0). Field-
+Test Mike: **0 Empfang auf 15/20/30m**, FT8 ok. Ursache: früheres Wecken
+verschob das mit der Weckzeit gekoppelte Decode-Fenster → Signal aus dem
+ft8_lib-FT4-Sync-Fenster (+2,24s statt +1,24s, SLIDE_OFFSETS deckt nur ±0,3s) →
+0 Decodes. `dt_corrections.json FT4_20m` durch die Fehl-DT auf −0,5 vergiftet
+(bereinigt). **Lehre: WAKE ist KEIN freier Knopf — Weckzeit, Fenster-Position
+und DT sind getrennte Größen.**
+
+**Fix (`core/decoder.py`, voller Workflow V1→V2→R1→V3→Code→Final-R1):** die drei
+vermischten Größen ENTKOPPELT.
+- `_WAKE_OFFSETS["FT4"]` = **1,5** (früh wecken → Decode rechtzeitig).
+- Neuer `_WINDOW_OFFSETS = {FT8:2.5, FT4:0.5, FT2:0.3}` — Decode-Fenster
+  **slot-ausgerichtet** auf [Slot−0,5; Slot+7,0] (Signal an gewohnter Position),
+  UNABHÄNGIG von der Weckzeit. Neuer reiner Helper `_keep_window` behält den
+  Nutzbereich (slot_samples − tail_pad) end-verankert; der Post-Signal-Rest
+  (`_TAIL_PAD_SAMPLES`, FT4 = 1,0s) wird **NACH** `_preprocess_audio` mit Nullen
+  gefüllt (sonst verfälschten die Nullen RMS-Norm + Whitening — DeepSeek-Finding).
+- `_DT_OFFSETS` jetzt aus `_WINDOW_OFFSETS` abgeleitet (NICHT `_WAKE`) → FT4-DT
+  konstant **1,0**, egal wie früh geweckt wird. FT8/FT2 **Bit-für-Bit
+  unverändert** (tail_pad = WAKE−WINDOW = 0).
+
+**DeepSeek:** Plan-R1 mit echtem Gold-Finding (Tail-Pad NACH preprocess, nicht
+davor) — übernommen. Final-R1 **PUSH FREIGEBEN** 0 Blocker. **Halluzination
+abgefangen:** DeepSeek behauptete einen Paritäts-Bug (`int(t/slot)%2` müsse für
+FT4 /15 statt /7.5) — gegen `encoder.py:381` geprüft (nutzt ebenfalls /7.5,
+FT4 alterniert auf 7,5s) und VERWORFEN; /15 hätte Decoder/Encoder desynchronisiert.
+Hardware: reine Decoder-Timing-Logik, **kein TX-Eingriff, ANT1/ANT2 unberührt.**
+Tests **2290→2303** (+13 `test_p168_ft4_timing.py`: Konstanten/Invarianten,
+`_keep_window`, FT4-Positionierungs-Äquivalenz zum Alt-Stand, FT8/FT2-Bit-
+Identität, FT8-Encode→`_process_cycle`→Decode-Rundlauf, 7,5s-Paritäts-Guard).
+**Field-Test am Radio pending** (15s-Periode + Decode-Vollständigkeit + DT der
+Gegenstation 0,1–0,3s zu bestätigen — Timing hardware-abhängig), NICHT gepusht.
+
 ## 2026-06-02 v0.98.55 — P167: Eingeschobenes QSO (P164) hängt nach 1 Anruf — Reentrancy-Fix
 
 **Bug (Mike-Field, v0.98.51-Log):** Auto-Hunt jagte 9A60CBM, fremde Station
