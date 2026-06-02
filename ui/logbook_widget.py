@@ -71,6 +71,48 @@ def _estimate_km(grid: str, callsign: str = "") -> str:
     return ""
 
 
+# Eigene Sortier-Rolle: UserRole ist in Spalte 0 bereits mit dem QSO-Record
+# belegt (Klick-Lookup), darum UserRole+1 fuer den Sortier-Schluessel.
+_SORT_ROLE = Qt.ItemDataRole.UserRole + 1
+
+
+class _SortableItem(QTableWidgetItem):
+    """QTableWidgetItem, das nach einem hinterlegten Schluessel (`_SORT_ROLE`)
+    sortiert statt nach dem Anzeige-Text.
+
+    Behebt den Datums-Bug: „02.06.26" wurde alphabetisch (Tag zuerst) statt
+    chronologisch sortiert. Ist kein Schluessel gesetzt, faellt der Vergleich
+    auf das Standard-Verhalten (DisplayRole-String) zurueck. Der Vergleich
+    laeuft immer nur innerhalb EINER Spalte, darum mischen sich Datums-String-
+    und km-Integer-Schluessel nie (kein `str < int`).
+    """
+
+    def __lt__(self, other):
+        a = self.data(_SORT_ROLE)
+        b = other.data(_SORT_ROLE)
+        if a is not None and b is not None:
+            return a < b
+        # Fallback: direkter Text-Vergleich. NICHT `super().__lt__(other)` —
+        # die C++-Basis ruft die Python-Override rekursiv auf (RecursionError).
+        return self.text() < other.text()
+
+
+def _date_sort_key(record: dict) -> str:
+    """Chronologischer Sortier-Schluessel: QSO_DATE + TIME_ON (auf 6 Stellen
+    normiert). 'YYYYMMDD' + 'HHMMSS' ist lexikografisch == chronologisch.
+    TIME_ON ist mal 4-stellig (HHMM), darum `ljust(6,'0')` (13:46 -> 134600)."""
+    d = str(record.get("QSO_DATE", ""))
+    t = str(record.get("TIME_ON", "")).ljust(6, "0")
+    return d + t
+
+
+def _km_sort_key(value: str) -> int:
+    """Numerischer Sortier-Schluessel fuer die km-Spalte. '~4281' -> 4281,
+    '311' -> 311, leer/ungueltig -> -1 (kein int()-Crash dank isdigit)."""
+    s = value.strip().lstrip("~")
+    return int(s) if s.isdigit() else -1
+
+
 class LogbookWidget(QWidget):
     """Logbuch-Tabelle mit Suche und DXCC-Zaehler."""
 
@@ -316,12 +358,19 @@ class LogbookWidget(QWidget):
                 else:
                     value = rec.get(key, "")
 
-                item = QTableWidgetItem(value)
+                item = _SortableItem(value)
                 item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
 
                 # Record als UserRole im ersten Item speichern (fuer Klick nach Sortierung)
                 if col == 0:
                     item.setData(Qt.ItemDataRole.UserRole, rec)
+
+                # Sortier-Schluessel fuer Datum (chronologisch) + km (numerisch),
+                # damit die Spalten nicht alphabetisch sortiert werden.
+                if key == "_DATETIME":
+                    item.setData(_SORT_ROLE, _date_sort_key(rec))
+                elif key == "_KM":
+                    item.setData(_SORT_ROLE, _km_sort_key(value))
 
                 # Farbcodierung
                 if key == "CALL":
