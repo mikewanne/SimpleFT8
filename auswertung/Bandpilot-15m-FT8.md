@@ -1,6 +1,6 @@
 # Bandpilot Empfehlung — 15m FT8
 
-Stand: 2026-06-01 (UTC, App-Start). Quelle: `statistics/<Mode>/15m/FT8/`.
+Stand: 2026-06-02 (UTC, App-Start). Quelle: `statistics/<Mode>/15m/FT8/`.
 
 Schwellen pro Stunde: ≥ 3 Messtage UND ≥ 20 Slots pro Modus.
 
@@ -17,11 +17,11 @@ Schwellen pro Stunde: ≥ 3 Messtage UND ≥ 20 Slots pro Modus.
 | 08 | 2·25.9 | 2·46.4 | 3·40.1 | _zu wenig Daten_ |
 | 09 | 5·42.5 | 3·46.1 | 3·37.7 | Diversity Standard |
 | 10 | 5·41.0 | 1·36.4 | 4·42.8 | _zu wenig Daten_ |
-| 11 | 5·38.1 | 2·37.6 | 6·39.0 | _zu wenig Daten_ |
-| 12 | 4·27.2 | 7·45.7 | 7·32.5 | Diversity Standard |
+| 11 | 5·38.1 | 3·34.2 | 6·39.0 | Diversity DX |
+| 12 | 4·27.2 | 8·44.9 | 7·32.5 | Diversity Standard |
 | 13 | 3·52.6 | 5·38.0 | 5·29.4 | Normal |
 | 14 | 3·56.9 | 5·52.7 | 8·29.1 | Normal |
-| 15 | 4·61.2 | 3·62.7 | 6·29.2 | Diversity Standard |
+| 15 | 4·61.2 | 4·61.4 | 6·29.2 | Diversity Standard |
 | 16 | 3·40.5 | 3·49.3 | 5·28.2 | Diversity Standard |
 | 17 | 2·38.4 | 3·42.7 | 5·30.1 | _zu wenig Daten_ |
 | 18 | 2·34.2 | 3·37.8 | 5·32.7 | _zu wenig Daten_ |
