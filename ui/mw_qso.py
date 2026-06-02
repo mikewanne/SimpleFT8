@@ -6,7 +6,7 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import Qt, Slot
+from PySide6.QtCore import Qt, Slot, QTimer
 
 if TYPE_CHECKING:
     from .main_window import MainWindow
@@ -422,7 +422,10 @@ class QSOMixin:
         # HALT = Notbremse, alles weg. cancel() emittiert KEIN QSO-Signal →
         # _p158_maybe_start_inserted_call läuft nicht → ein Pending bliebe sonst
         # liegen und würde beim nächsten QSO-Ende als Geister-B feuern.
+        # P167: auch den bereits deferten Einschub verwerfen (Race-Schutz —
+        # HALT im Event-Tick-Fenster zwischen Defer und Ausführung).
         self._qso_pending_insert = None
+        self._deferred_insert_msg = None
         # CQ + QSO stoppen
         self.qso_sm.stop_cq()
         self.qso_sm.cancel()
@@ -1078,6 +1081,28 @@ class QSOMixin:
             return
         self._qso_pending_insert = None
         self._p158_insertable.clear()
+        # P167 (02.06.2026): NICHT synchron starten. Dieser Hook läuft mitten
+        # im qso_state-Abschluss-Handler (qso_timeout/qso_confirmed.emit, beide
+        # DirectConnection = synchron). start_qso würde TX_CALL setzen, aber der
+        # Handler ruft DANACH `_resume_cq_if_needed()` → `_set_state(IDLE)` und
+        # überschreibt den frischen TX_CALL → Einschub-QSO hängt (1 Anruf, dann
+        # IDLE; Auto-Hunt bleibt pausiert). Defer in den nächsten Event-Tick:
+        # dann ist der State stabil IDLE, start_qso → TX_CALL bleibt erhalten.
+        # msg wird in einem Attribut geparkt, damit HALT (`_on_cancel`) den
+        # deferten Einschub noch verwerfen kann (Race-Schutz, DeepSeek-R1).
+        self._deferred_insert_msg = msg
+        QTimer.singleShot(0, self._execute_deferred_insert)
+
+    def _execute_deferred_insert(self):
+        """P167: den im nächsten Event-Tick deferten P164-Einschub ausführen
+        (siehe `_p158_maybe_start_inserted_call`). Läuft nachdem der
+        qso_state-Abschluss-Handler komplett durch ist (State stabil IDLE).
+        Wurde inzwischen HALT gedrückt, ist `_deferred_insert_msg` None → no-op.
+        """
+        msg = self._deferred_insert_msg
+        self._deferred_insert_msg = None
+        if msg is None:
+            return
         # P166: hard_stop=False → sanft (pausieren + Auto-Resume), KEIN harter
         # Auto-Hunt-Stop. Sonst würde der höfliche QSO-Fenster-Einschub (P164)
         # den Auto-Hunt beenden statt nach dem eingeschobenen QSO fortzusetzen.

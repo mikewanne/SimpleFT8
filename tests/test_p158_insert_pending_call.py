@@ -269,35 +269,44 @@ def _maybe_start_fn():
     return _extract_method(MW_QSO_SRC, "_p158_maybe_start_inserted_call")
 
 
-def test_t16_maybe_start_happy_path_calls_station_clicked():
-    """T16: _qso_pending_insert gesetzt → _on_station_clicked(msg) + cleanup,
-    OHNE Auto-Hunt-Abhängigkeit (P164-Entkopplung)."""
-    fn = _maybe_start_fn()
+def test_t16_maybe_start_happy_path_defers_via_qtimer():
+    """T16 (P167): _qso_pending_insert gesetzt → msg in _deferred_insert_msg
+    geparkt + QTimer-Defer (NICHT mehr synchron _on_station_clicked, sonst
+    Reentrancy-Bug). Cleanup sofort, OHNE Auto-Hunt-Abhängigkeit."""
+    qtimer = MagicMock()
+    fn = _extract_method(MW_QSO_SRC, "_p158_maybe_start_inserted_call",
+                         extra_ns={"QTimer": qtimer})
     msg = _make_msg("F5MYK")
     self = SimpleNamespace(
         _qso_pending_insert=msg,
         _p158_insertable={"F5MYK": msg},
-        _on_station_clicked=MagicMock(),
+        _deferred_insert_msg=None,
+        _execute_deferred_insert=lambda: None,
     )
     fn(self)
-    # P166: Einschub bleibt sanft (pausieren + Auto-Resume) → hard_stop=False
-    self._on_station_clicked.assert_called_once_with(msg, hard_stop=False)
+    # NICHT synchron — nur geparkt + scheduled.
+    assert self._deferred_insert_msg is msg
     assert self._qso_pending_insert is None
     assert self._p158_insertable == {}
+    qtimer.singleShot.assert_called_once_with(0, self._execute_deferred_insert)
 
 
 def test_t17_maybe_start_works_without_autohunt():
     """T17 (P164-KERN): kein _auto_hunt-Attribut nötig — Einschub funktioniert
     auch nach manuellem QSO ohne laufenden Auto-Hunt."""
-    fn = _maybe_start_fn()
+    qtimer = MagicMock()
+    fn = _extract_method(MW_QSO_SRC, "_p158_maybe_start_inserted_call",
+                         extra_ns={"QTimer": qtimer})
     msg = _make_msg("F5MYK")
     self = SimpleNamespace(
         _qso_pending_insert=msg,
         _p158_insertable={},
-        _on_station_clicked=MagicMock(),
+        _deferred_insert_msg=None,
+        _execute_deferred_insert=lambda: None,
     )
     fn(self)  # darf NICHT auf self._auto_hunt zugreifen
-    self._on_station_clicked.assert_called_once_with(msg, hard_stop=False)
+    assert self._deferred_insert_msg is msg
+    qtimer.singleShot.assert_called_once_with(0, self._execute_deferred_insert)
 
 
 def test_t18_maybe_start_noop_when_no_pending():
@@ -312,23 +321,26 @@ def test_t18_maybe_start_noop_when_no_pending():
     self._on_station_clicked.assert_not_called()
 
 
-def test_t19_maybe_start_resets_pending_before_call():
-    """T19: _qso_pending_insert wird VOR _on_station_clicked genullt
-    (Reentrancy-Schutz — kein Doppel-Start)."""
-    fn = _maybe_start_fn()
+def test_t19_maybe_start_resets_pending_before_defer():
+    """T19 (P167): _qso_pending_insert wird sofort genullt und der msg in
+    _deferred_insert_msg übergeben (kein Doppel-Defer bei erneutem Hook-Aufruf;
+    der eigentliche Reentrancy-Schutz ist das QTimer-Defer selbst)."""
+    qtimer = MagicMock()
+    fn = _extract_method(MW_QSO_SRC, "_p158_maybe_start_inserted_call",
+                         extra_ns={"QTimer": qtimer})
     msg = _make_msg("F5MYK")
-    seen = {}
-
-    def _spy(m, hard_stop=True):
-        seen["pending_at_call"] = self._qso_pending_insert
-
     self = SimpleNamespace(
         _qso_pending_insert=msg,
         _p158_insertable={},
-        _on_station_clicked=_spy,
+        _deferred_insert_msg=None,
+        _execute_deferred_insert=lambda: None,
     )
     fn(self)
-    assert seen["pending_at_call"] is None
+    assert self._qso_pending_insert is None
+    assert self._deferred_insert_msg is msg
+    # Zweiter Hook-Aufruf ohne neues Pending → kein erneutes Schedulen.
+    fn(self)
+    qtimer.singleShot.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
@@ -387,12 +399,18 @@ def test_t25_halt_nulls_pending_insert():
 
 def test_t26_maybe_start_reuses_station_clicked():
     """T26: Einschub läuft über bestehenden _on_station_clicked-Pfad (KISS +
-    alle Safety-Guards)."""
+    alle Safety-Guards). P167: synchron defert (QTimer), der eigentliche Klick
+    sitzt in _execute_deferred_insert."""
+    # P167: der Hook defert nur (kein synchroner Klick mehr).
     m = re.search(r"def _p158_maybe_start_inserted_call\(self.*?(?=\n    (?:def |@))",
                   MW_QSO_SRC, re.S)
     assert m is not None
-    # P166: Einschub ruft jetzt mit hard_stop=False (sanft, Auto-Resume)
-    assert "self._on_station_clicked(msg, hard_stop=False)" in m.group(0)
+    assert "QTimer.singleShot(0, self._execute_deferred_insert)" in m.group(0)
+    # Der eigentliche Klick (sanft, hard_stop=False) sitzt im deferred Executor.
+    m2 = re.search(r"def _execute_deferred_insert\(self.*?(?=\n    (?:def |@))",
+                   MW_QSO_SRC, re.S)
+    assert m2 is not None
+    assert "self._on_station_clicked(msg, hard_stop=False)" in m2.group(0)
 
 
 def test_t27_maybe_start_decoupled_from_autohunt():

@@ -330,6 +330,9 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         # entkoppelt, ersetzt auto_hunt.set/take_pending_insert). Genullt bei
         # Konsum, HALT, Band-/Mode-/RX-Wechsel.
         self._qso_pending_insert = None
+        # P167 (02.06.2026): der per QTimer deferte Einschub-msg (Race-Schutz —
+        # HALT kann ihn verwerfen, bevor der Event-Tick ihn ausführt).
+        self._deferred_insert_msg = None
         self._recent_logged_calls: dict[tuple[str, str], float] = {}  # P1.7 (v0.95.19): ADIF-Dedup (call, band) → ts
         self._quick73_sent: set[str] = set()  # P94 (v0.97.66): Calls denen Quick-73 schon ging
         # P2.OMNI-REDESIGN v4.0 (v0.95.23): True wenn OMNI VOR aktuellem QSO
