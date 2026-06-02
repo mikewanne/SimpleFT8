@@ -20,6 +20,15 @@ class QSOLog:
         self._country_band: set[tuple[str, str]] = set()
         self._count = 0
 
+    def clear(self):
+        """P169: Index leeren (für Reload nach Import — selbe Instanz, damit
+        Referenzen in auto_hunt/rx_panel gültig bleiben; _count bleibt korrekt)."""
+        self._worked.clear()
+        self._worked_band.clear()
+        self._country_count.clear()
+        self._country_band.clear()
+        self._count = 0
+
     def load_adif(self, path: Path) -> int:
         """Eine ADIF-Datei laden. Gibt Anzahl geladener QSOs zurueck."""
         records = parse_adif_file(path)
@@ -43,12 +52,17 @@ class QSOLog:
             self._count += 1
         return len(records)
 
-    def load_directory(self, directory: Path) -> int:
-        """Alle *.adi Dateien in einem Verzeichnis laden."""
+    def load_directory(self, directory: Path, recursive: bool = False) -> int:
+        """Alle *.adi Dateien in einem Verzeichnis laden.
+
+        recursive=True (P169): auch Unterordner (für die einzige Quelle
+        ``adif/erfasst/`` mit neu/ hochgeladen/ importiert/).
+        """
         total = 0
         if not directory.exists():
             return 0
-        for adi_file in sorted(directory.glob("*.adi")):
+        globber = directory.rglob if recursive else directory.glob
+        for adi_file in sorted(globber("*.adi")):
             n = self.load_adif(adi_file)
             if n > 0:
                 print(f"[QSOLog] {adi_file.name}: {n} QSOs geladen")

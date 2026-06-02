@@ -74,7 +74,8 @@ def test_on_delete_in_memory_update_no_full_refresh(app, tmp_path):
     """Bug-A: _on_delete_clicked entfernt Record aus _all_records ohne
     full reload."""
     from ui.logbook_widget import LogbookWidget
-    f = tmp_path / "test.adi"
+    f = tmp_path / "erfasst" / "neu" / "test.adi"  # P169: Quelle adif/erfasst/ rekursiv
+    f.parent.mkdir(parents=True, exist_ok=True)
     _write_test_adif(f, 50)
     widget = LogbookWidget()
     widget.load_adif(tmp_path)
@@ -91,7 +92,8 @@ def test_on_delete_in_memory_update_no_full_refresh(app, tmp_path):
 def test_on_delete_with_filter_record_disappears(app, tmp_path):
     """Bug-A: bei aktivem Filter verschwindet geloeschter Record sofort."""
     from ui.logbook_widget import LogbookWidget
-    f = tmp_path / "test.adi"
+    f = tmp_path / "erfasst" / "neu" / "test.adi"  # P169: Quelle adif/erfasst/ rekursiv
+    f.parent.mkdir(parents=True, exist_ok=True)
     _write_test_adif(f, 50)
     widget = LogbookWidget()
     widget.load_adif(tmp_path)

@@ -232,14 +232,14 @@ class LocatorDB:
             return 0
         return self._bulk_import_records(records)
 
-    def bulk_import_directory(self, directory: Path | str) -> int:
-        """Alle .adi-Dateien eines Verzeichnisses einlesen."""
+    def bulk_import_directory(self, directory: Path | str, recursive: bool = False) -> int:
+        """Alle .adi-Dateien eines Verzeichnisses einlesen (P169: recursive für erfasst/)."""
         from log.adif import parse_all_adif_files
         d = Path(directory)
         if not d.is_dir():
             return 0
         try:
-            records = parse_all_adif_files(d)
+            records = parse_all_adif_files(d, recursive=recursive)
         except OSError as e:
             LOG.warning("ADIF directory scan failed for %s: %s", d, e)
             return 0

@@ -119,6 +119,7 @@ class LogbookWidget(QWidget):
     upload_requested = Signal()  # Fuer QRZ.com Upload
     qso_clicked = Signal(dict)   # QSO-Eintrag angeklickt → Detail-Overlay
     export_status = Signal(str)  # P107 (v0.97.84): Statusbar-Toast nach Export
+    adif_imported = Signal(int)  # P169: nach Import (n neue QSOs) → qso_log reload
 
     def __init__(self, adif_directory: Path = None):
         super().__init__()
@@ -195,6 +196,22 @@ class LogbookWidget(QWidget):
         )
         btn_export.clicked.connect(self._on_export_clicked)
         toolbar.addWidget(btn_export)
+
+        # P169: Import-Button — fremde .adi (z.B. frischer QRZ-Export) einlesen →
+        # Kopie nach adif/erfasst/importiert/ → Index + Anzeige neu laden.
+        btn_import = QPushButton("Import")
+        btn_import.setFixedWidth(60)
+        btn_import.setToolTip(
+            "ADIF-Datei importieren (Kopie nach adif/erfasst/importiert/, "
+            "zählt sofort für den NEUE-Filter)")
+        btn_import.setStyleSheet(
+            f"QPushButton {{ background: rgba(120,90,0,0.3); color: #CCAA44; "
+            f"border: 1px solid #663; border-radius: 3px; font-family: {_FONT}; "
+            f"font-size: 10px; font-weight: bold; }}"
+            f"QPushButton:hover {{ background: rgba(140,110,0,0.4); color: #EECC66; }}"
+        )
+        btn_import.clicked.connect(self._on_import_clicked)
+        toolbar.addWidget(btn_import)
 
         self.btn_delete = QPushButton("Löschen")
         self.btn_delete.setFixedWidth(60)
@@ -319,12 +336,9 @@ class LogbookWidget(QWidget):
         """
         if directory:
             self._adif_dir = directory
-        records_active = parse_all_adif_files(self._adif_dir)
-        hochgeladen_dir = self._adif_dir / "hochgeladen"
-        records_archived = []
-        if hochgeladen_dir.is_dir():
-            records_archived = parse_all_adif_files(hochgeladen_dir)
-        self._all_records = records_active + records_archived
+        # P169: EINZIGE Quelle adif/erfasst/ rekursiv (neu/ hochgeladen/ importiert/).
+        erfasst = self._adif_dir / "erfasst"
+        self._all_records = parse_all_adif_files(erfasst, recursive=True)
         # Neueste zuerst: sortiert nach QSO_DATE + TIME_ON (beide ADIF-
         # Strings im sortierbaren Format YYYYMMDD / HHMM[SS]).
         self._all_records.sort(
@@ -388,17 +402,13 @@ class LogbookWidget(QWidget):
         self.table.setSortingEnabled(True)
 
     def _on_awards_clicked(self):
-        """Diplome-Dialog oeffnen (QRZ-Backup on-demand dazuladen)."""
-        records = list(self._all_records)
-        backup = self._adif_dir / "_backup_qrz_export"
-        if not backup.is_dir():
-            backup = Path.cwd() / "adif" / "_backup_qrz_export"
-        if backup.is_dir():
-            try:
-                records += parse_all_adif_files(backup)
-            except Exception as e:  # pragma: no cover - defensiv
-                print(f"[Awards] Backup-Laden fehlgeschlagen: {e}")
-        AwardsDialog(records, self).exec()
+        """Diplome-Dialog oeffnen.
+
+        P169: ``_all_records`` enthält durch das rekursive Laden von
+        adif/erfasst/ bereits die importierte QRZ-Historie (erfasst/importiert/);
+        kein separater Backup-Load mehr nötig.
+        """
+        AwardsDialog(list(self._all_records), self).exec()
 
     def _update_counters(self):
         """QSO-Zaehler aktualisieren."""
@@ -412,11 +422,63 @@ class LogbookWidget(QWidget):
         """
         from log.adif import export_all_records
         try:
-            out_path, count = export_all_records(self._adif_dir)
+            # P169: Projekt-Root übergeben — export_all_records hängt
+            # /adif/erfasst (Quelle) bzw. /adif/exports (Ziel) selbst an.
+            out_path, count = export_all_records(Path.cwd())
             msg = f"{count} QSOs → {out_path.name} exportiert"
             self.export_status.emit(msg)
         except Exception as e:
             self.export_status.emit(f"Export-Fehler: {e}")
+
+    def _on_import_clicked(self):
+        """P169: fremde ADIF-Datei importieren → Kopie nach erfasst/importiert/.
+
+        Validiert (parsebar + ≥1 CALL), kopiert mit UTC-Zeitstempel-Präfix (kein
+        Überschreiben), lädt die Anzeige neu und meldet per ``adif_imported`` den
+        qso_log-Reload an MainWindow (damit Filter/Auto-Hunt sofort greifen).
+        """
+        from PySide6.QtWidgets import QFileDialog
+        path, _sel = QFileDialog.getOpenFileName(
+            self, "ADIF-Datei importieren", str(Path.home()),
+            "ADIF (*.adi *.adif);;Alle Dateien (*)")
+        if not path:
+            return
+        n_calls, msg = self._import_adif_file(Path(path))
+        self.export_status.emit(msg)
+        if n_calls > 0:
+            self.load_adif()
+            self.adif_imported.emit(n_calls)
+
+    def _import_adif_file(self, src: Path) -> tuple[int, str]:
+        """P169 (testbarer Kern): ADIF validieren + nach erfasst/importiert/ kopieren.
+
+        Returns (n_calls, status_msg). n_calls<=0 = nicht importiert (Grund in msg).
+        Lädt NICHT neu / emittiert NICHT (das macht der Aufrufer) — so ohne
+        QFileDialog/Widget-Kontext testbar.
+        """
+        from log.adif import parse_adif_file
+        import shutil
+        import time as _t
+        try:
+            recs = parse_adif_file(src)
+        except Exception as e:
+            return -1, f"Import-Fehler: Datei nicht lesbar ({e})"
+        n_calls = sum(1 for r in recs if (r.get("CALL", "") or "").strip())
+        if n_calls == 0:
+            return 0, "Import abgebrochen: keine QSOs (CALL) gefunden."
+        dest_dir = Path.cwd() / "adif" / "erfasst" / "importiert"
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        ts = _t.strftime("%Y%m%d_%H%M%S", _t.gmtime())
+        dest = dest_dir / f"{ts}_{src.name}"
+        n = 0
+        while dest.exists():
+            n += 1
+            dest = dest_dir / f"{ts}_{n}_{src.name}"
+        try:
+            shutil.copy2(src, dest)
+        except OSError as e:
+            return -1, f"Import-Fehler beim Kopieren: {e}"
+        return n_calls, f"{n_calls} QSOs importiert → erfasst/importiert/"
 
     def _on_filter_changed(self, text: str):
         """Tabelle nach Suchbegriff filtern.

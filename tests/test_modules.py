@@ -1752,12 +1752,14 @@ def test_adif_ft4_submode():
 
 
 def test_adif_subdir_created():
-    """ADIF: Unterordner adif/ wird automatisch erstellt."""
+    """ADIF: P169 — frische QSOs nach adif/erfasst/neu/ (Schreibziel)."""
     import tempfile
     from log.adif import AdifWriter
     with tempfile.TemporaryDirectory() as tmp:
         writer = AdifWriter(tmp)
-        assert writer.directory.name == "adif"
+        assert writer.directory.name == "neu"
+        assert writer.directory.parent.name == "erfasst"
+        assert writer.directory.parent.parent.name == "adif"
         assert writer.directory.exists()
 
 

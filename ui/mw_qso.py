@@ -847,15 +847,17 @@ class QSOMixin:
             dlg.exec()
             return
 
-        # Filter: nur Records aus adif/ (NICHT adif/hochgeladen/) — AC-7
+        # P169: Upload-Kandidaten = NUR erfasst/neu/ (noch nicht hochgeladen).
+        # hochgeladen/ (schon raus) + importiert/ (Fremd-Export, schon auf QRZ)
+        # werden NICHT erneut gesendet.
         all_records = self.qso_panel.logbook._all_records
         records = [
             r for r in all_records
-            if "hochgeladen" not in r.get("_SOURCE_FILE", "").replace("\\", "/")
+            if "/erfasst/neu/" in r.get("_SOURCE_FILE", "").replace("\\", "/")
         ]
         if not records:
             self.statusBar().showMessage(
-                "Keine QSOs zum Hochladen — alle bereits in adif/hochgeladen/.", 5000)
+                "Keine QSOs zum Hochladen — alle bereits hochgeladen.", 5000)
             return
 
         from ui.qrz_upload_dialogs import QRZConfirmDialog
@@ -936,11 +938,14 @@ class QSOMixin:
               f"(cancelled={cancelled})")
 
     def _handle_qrz_file_results(self, file_results: dict) -> None:
-        """Files mit fail==0 und expected==processed nach adif/hochgeladen/."""
+        """Files mit fail==0 und expected==processed nach erfasst/hochgeladen/.
+
+        P169: Quelle erfasst/neu/ → Ziel erfasst/hochgeladen/ (beide unter der
+        einen rekursiv gelesenen Quelle; QSO bleibt durchgehend „gearbeitet").
+        """
         import shutil
         from pathlib import Path
-        adif_dir = Path.cwd() / "adif"
-        target_dir = adif_dir / "hochgeladen"
+        target_dir = Path.cwd() / "adif" / "erfasst" / "hochgeladen"
         try:
             target_dir.mkdir(parents=True, exist_ok=True)
         except OSError as e:
@@ -954,8 +959,9 @@ class QSOMixin:
                 src = Path(src_path)
                 if not src.is_file():
                     continue
-                # Schutz: nur Files aus adif/ verschieben (nicht aus hochgeladen/)
-                if "hochgeladen" in str(src).replace("\\", "/"):
+                # P169: nur Files aus erfasst/neu/ verschieben (nicht hochgeladen/
+                # oder importiert/ — die gehören nicht in den Upload-Move).
+                if "/erfasst/neu/" not in str(src).replace("\\", "/"):
                     continue
                 dest = target_dir / src.name
                 if dest.exists():
@@ -974,7 +980,7 @@ class QSOMixin:
             else:
                 skipped += 1
         if moved:
-            print(f"[QRZ] {moved} Datei(en) nach adif/hochgeladen/ verschoben "
+            print(f"[QRZ] {moved} Datei(en) nach erfasst/hochgeladen/ verschoben "
                   f"({skipped} bleiben wegen FAILs oder unvollstaendig)")
 
     def _show_qrz_status_widget(self, visible: bool, total: int = 0) -> None:

@@ -257,11 +257,11 @@ def test_worker_second_burst_cancels(qapp, monkeypatch, tmp_path):
 
 
 def test_handle_file_results_moves_when_all_ok(qapp, tmp_path, monkeypatch):
-    """File mit nur OK/Dup wird nach hochgeladen/ verschoben."""
+    """P169: File aus erfasst/neu/ wird nach erfasst/hochgeladen/ verschoben."""
     from ui.mw_qso import QSOMixin
-    adif_dir = tmp_path / "adif"
-    adif_dir.mkdir()
-    src = adif_dir / "2026-05-01.adi"
+    neu_dir = tmp_path / "adif" / "erfasst" / "neu"
+    neu_dir.mkdir(parents=True)
+    src = neu_dir / "2026-05-01.adi"
     src.write_text("dummy")
 
     file_results = {
@@ -273,7 +273,7 @@ def test_handle_file_results_moves_when_all_ok(qapp, tmp_path, monkeypatch):
 
     QSOMixin._handle_qrz_file_results(fake_self, file_results)
 
-    assert (adif_dir / "hochgeladen" / "2026-05-01.adi").exists()
+    assert (tmp_path / "adif" / "erfasst" / "hochgeladen" / "2026-05-01.adi").exists()
     assert not src.exists()
 
 
@@ -397,15 +397,16 @@ def test_update_window_title_reset(qapp):
 
 
 def test_logbook_loads_both_directories(qapp, tmp_path):
-    """LogbookWidget lädt aus adif/ UND adif/hochgeladen/."""
+    """P169: LogbookWidget lädt adif/erfasst/ rekursiv (neu/ + hochgeladen/)."""
     from ui.logbook_widget import LogbookWidget
     adif = tmp_path / "adif"
-    hochgeladen = adif / "hochgeladen"
-    adif.mkdir()
-    hochgeladen.mkdir()
+    neu = adif / "erfasst" / "neu"
+    hochgeladen = adif / "erfasst" / "hochgeladen"
+    neu.mkdir(parents=True)
+    hochgeladen.mkdir(parents=True)
 
     # ADIF-Format: <field:length>value<eor>
-    (adif / "active.adi").write_text(
+    (neu / "active.adi").write_text(
         "<adif_ver:5>3.1.7<eoh>\n"
         "<call:5>NEW01 <band:3>40m <mode:3>FT8 <qso_date:8>20260507 <eor>\n"
     )

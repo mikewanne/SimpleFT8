@@ -238,37 +238,38 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         """
         from log.qso_log import QSOLog
         self.qso_log = QSOLog()
-        self.qso_log.load_directory(Path.cwd())
+        # P169: EINZIGE Worked-Before-Quelle = adif/erfasst/ (rekursiv über
+        # neu/ hochgeladen/ importiert/). Ersetzt die alte verstreute Mehr-
+        # Quellen-Logik (adif/, hochgeladen/, _backup_qrz_export/).
+        erfasst_dir = Path.cwd() / "adif" / "erfasst"
+        self.qso_log.load_directory(erfasst_dir, recursive=True)
+        # Altlast: optionaler externer Import-Pfad (Setting) bleibt unterstützt.
         import_path = self.settings.get("adif_import_path")
         if import_path:
-            self.qso_log.load_directory(Path(import_path))
-        # P1.QRZ-UPLOAD-UI-2: hochgeladene QSOs auch in qso_log
-        hochgeladen_dir = Path.cwd() / "adif" / "hochgeladen"
-        if hochgeladen_dir.is_dir():
-            self.qso_log.load_directory(hochgeladen_dir)
-        # P165: QRZ-Export (~18k QSOs DA1MHH+DO4MHH) fuer Auto-Hunt-DX-Scoring —
-        # liefert die persoenliche Laender-Historie (Seltenheit + Land-auf-Band).
-        # Gemessen ~0.5s Parse+Laenderzaehlung → Eager-Load beim Start unkritisch.
-        qrz_export_dir = Path.cwd() / "adif" / "_backup_qrz_export"
-        if qrz_export_dir.is_dir():
-            self.qso_log.load_directory(qrz_export_dir)
+            self.qso_log.load_directory(Path(import_path), recursive=True)
         print(f"[QSOLog] {self.qso_log.worked_count()} unique Calls, {self.qso_log.qso_count()} QSOs")
 
         # ADIF-Daten in die Locator-DB pushen (qso_log-Source, prec_km 5/110).
         # Bei wiederholten App-Starts ueberschreibt cq_6/psk_6 hoeher-priorisiert.
-        # AdifWriter speichert in <cwd>/adif/, also dort als Default suchen.
-        adif_dir = Path.cwd() / "adif"
-        n_loc = 0
-        if adif_dir.is_dir():
-            n_loc += self.locator_db.bulk_import_directory(adif_dir)
-        # P1.QRZ-UPLOAD-UI-2: LocatorDB auch aus hochgeladen/
-        if hochgeladen_dir.is_dir():
-            n_loc += self.locator_db.bulk_import_directory(hochgeladen_dir)
+        n_loc = self.locator_db.bulk_import_directory(erfasst_dir, recursive=True)
         if import_path:
-            n_loc += self.locator_db.bulk_import_directory(Path(import_path))
+            n_loc += self.locator_db.bulk_import_directory(Path(import_path), recursive=True)
         if n_loc:
             print(f"[LocatorDB] {n_loc} Locators aus ADIF importiert "
                   f"({len(self.locator_db)} total in DB)")
+
+    def _on_adif_imported(self, n: int):
+        """P169: nach Logbuch-Import erfasst/ erneut einlesen.
+
+        clear()+reload in DERSELBEN qso_log-Instanz (Referenzen in auto_hunt/
+        rx_panel bleiben gültig). LocatorDB additiv (Set-Dedup intern).
+        """
+        erfasst_dir = Path.cwd() / "adif" / "erfasst"
+        self.qso_log.clear()
+        self.qso_log.load_directory(erfasst_dir, recursive=True)
+        self.locator_db.bulk_import_directory(erfasst_dir, recursive=True)
+        print(f"[QSOLog] Nach Import (+{n}): {self.qso_log.worked_count()} unique "
+              f"Calls, {self.qso_log.qso_count()} QSOs")
 
     def _init_radio_state(self):
         """Radio via Factory + Reconnect-Counter + DX-Tune-Dialog Slot."""
@@ -677,6 +678,8 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self.qso_panel.export_adif.connect(
             lambda msg: self.statusBar().showMessage(msg, 5000))
         self.qso_panel.logbook.qso_clicked.connect(self._on_logbook_qso_clicked)
+        # P169: nach ADIF-Import → Worked-Index (qso_log) + LocatorDB neu einlesen.
+        self.qso_panel.logbook.adif_imported.connect(self._on_adif_imported)
         # Bundle E (v0.97.22): TX-Slot-Lock Signal — persistiert in Settings.
         self.qso_panel.tx_slot_lock_changed.connect(self._on_tx_slot_lock_changed)
         # P158 (29.05.2026): Klick auf klickbare Einschub-Zeile im QSO-Log.

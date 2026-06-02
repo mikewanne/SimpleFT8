@@ -119,10 +119,14 @@ def delete_qso(record: Dict[str, str]) -> bool:
     return deleted
 
 
-def parse_all_adif_files(directory: Path) -> List[Dict[str, str]]:
-    """Alle ADIF-Dateien in einem Verzeichnis laden, nach Datum sortiert."""
+def parse_all_adif_files(directory: Path, recursive: bool = False) -> List[Dict[str, str]]:
+    """Alle ADIF-Dateien in einem Verzeichnis laden, nach Datum sortiert.
+
+    recursive=True (P169): auch Unterordner (für ``adif/erfasst/``).
+    """
     all_records = []
-    for adi_file in sorted(directory.glob("*.adi")):
+    globber = directory.rglob if recursive else directory.glob
+    for adi_file in sorted(globber("*.adi")):
         all_records.extend(parse_adif_file(adi_file))
     # Nach Datum+Zeit sortieren (neueste zuerst)
     all_records.sort(
@@ -150,9 +154,11 @@ def export_all_records(adif_directory: Path) -> tuple[Path, int]:
         (output_path, record_count). Wenn keine Records: count=0,
         Datei wird trotzdem mit Header geschrieben.
     """
-    src_dir = Path(adif_directory) / "adif"
-    archiv_dir = src_dir / "archiv" / "_konsolidiert"
-    out_dir = src_dir / "exports"
+    # P169: Quelle = adif/erfasst/ rekursiv. Nur App-Logs (SimpleFT8_LOG_*.adi)
+    # — die importierte QRZ-Historie (andere Dateinamen) bleibt aussen vor, sonst
+    # würde der Bulk-Export die 18k Fremd-QSOs mit re-exportieren.
+    erfasst_dir = Path(adif_directory) / "adif" / "erfasst"
+    out_dir = Path(adif_directory) / "adif" / "exports"
     out_dir.mkdir(parents=True, exist_ok=True)
 
     date_str = time.strftime("%Y%m%d", time.gmtime())
@@ -160,10 +166,8 @@ def export_all_records(adif_directory: Path) -> tuple[Path, int]:
 
     seen_keys: set[tuple] = set()
     records: list[Dict[str, str]] = []
-    for d in (src_dir, archiv_dir):
-        if not d.exists():
-            continue
-        for adi_file in sorted(d.glob("SimpleFT8_LOG_*.adi")):
+    if erfasst_dir.exists():
+        for adi_file in sorted(erfasst_dir.rglob("SimpleFT8_LOG_*.adi")):
             for rec in parse_adif_file(adi_file):
                 # Dedup: (CALL, QSO_DATE, TIME_ON) als Key
                 key = (rec.get("CALL", ""), rec.get("QSO_DATE", ""),
@@ -223,8 +227,9 @@ class AdifWriter:
     def __init__(self, directory: str | Path | None = None):
         if directory is None:
             directory = Path.cwd()
-        # ADIF-Dateien in adif/ Unterordner
-        self.directory = Path(directory) / "adif"
+        # P169: frische QSOs nach adif/erfasst/neu/ (einzige Worked-Quelle,
+        # rekursiv gelesen; "neu" = noch nicht zu QRZ hochgeladen).
+        self.directory = Path(directory) / "adif" / "erfasst" / "neu"
         self.directory.mkdir(parents=True, exist_ok=True)
 
     def _logfile_path(self) -> Path:
