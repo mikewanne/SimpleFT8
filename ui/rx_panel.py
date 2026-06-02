@@ -95,6 +95,11 @@ class RXPanel(QWidget):
         self._active_call: str = ""  # Callsign der gerade aktiv angerufenen Station
         self._qso_log = None  # QSOLog fuer Worked-Before Filter
         self._locator_db = None  # LocatorDB fuer exakte km-Berechnung pro Call
+        # P169 Phase 2: Callback () -> (band, mode) fuer den mode-genauen
+        # NEUE-Filter. Lazy aus settings gelesen (eine Quelle, keine verteilten
+        # Setter → keine „in Pfad X vergessen"-Sync-Bugs). None → call-only-
+        # Fallback (Test-Setups ohne Provider).
+        self._band_mode_provider = None
         # P32 (v0.97.14): defensive Filterung — Range-Check + COL_MSG-Schutz.
         # Ungueltige Eintraege (out-of-range, falscher Typ, COL_MSG) werden
         # stillschweigend verworfen statt Crash.
@@ -281,6 +286,16 @@ class RXPanel(QWidget):
     def set_locator_db(self, locator_db):
         """LocatorDB setzen — wird fuer exakte km-Berechnung pro Call genutzt."""
         self._locator_db = locator_db
+
+    def set_band_mode_provider(self, fn):
+        """P169 Phase 2: Callback `() -> (band, mode)` fuer den NEUE-Filter.
+
+        Wird in MainWindow als `lambda: (settings.band, settings.mode)`
+        verdrahtet. Lazy gelesen bei jeder Filter-Auswertung — damit ist der
+        Filter nach einem Band-/Mode-Wechsel automatisch aktuell (die RX-Tabelle
+        wird beim Wechsel ohnehin geleert und pro Slot neu aufgebaut).
+        """
+        self._band_mode_provider = fn
 
     def set_active_call(self, callsign: str):
         """Aktiv angerufene Station hervorheben (amber Hintergrund + bold)."""
@@ -792,11 +807,18 @@ class RXPanel(QWidget):
                 return True
             if self._ant_filter == 2 and not ant.startswith('A2'):
                 return True
-        # NEW-Filter: schon gearbeitete ausblenden
+        # NEW-Filter: schon gearbeitete ausblenden. P169 Phase 2: band+mode-genau
+        # — eine auf 20m FT8 gearbeitete Station bleibt auf 20m FT4 / 15m FT8
+        # sichtbar (dort „neu"). Mode/Band lazy aus dem Provider (settings).
         if self.btn_new_filter.isChecked() and self._qso_log is not None:
             caller = getattr(msg, 'caller', '')
-            if caller and self._qso_log.is_worked(caller):
-                return True
+            if caller:
+                if self._band_mode_provider is not None:
+                    band, mode = self._band_mode_provider()
+                    if self._qso_log.is_worked_on_band_mode(caller, band, mode):
+                        return True
+                elif self._qso_log.is_worked(caller):
+                    return True
         # Bundle E (v0.97.22): Bundle-D Slot-Filter zurückgebaut.
         # Even/Odd ist jetzt TX-Slot-Lock, kein RX-Filter mehr.
         return False

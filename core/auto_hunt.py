@@ -131,6 +131,11 @@ class AutoHunt(QObject):
     # ─────────────────────────────────────────────────────────────────────────
     auto_hunt_stopped = Signal(str)
 
+    # P169 Phase 2: Transparenz — feuert (entprellt) wenn ALLE decodierten,
+    # sonst rufbaren CQ-Stationen auf dem aktuellen Band+Mode schon gearbeitet
+    # sind. Args: (band, mode, n). main_window zeigt eine Info im QSO-Log.
+    all_worked = Signal(str, str, int)
+
     def __init__(self, is_qso_active_callback=None):
         """
         Args:
@@ -159,6 +164,10 @@ class AutoHunt(QObject):
         self._recent_qso: dict[tuple[str, str, str], float] = {}
         self._manual_override: bool = False     # Manueller Klick → pausieren
         self._current_target: Optional[str] = None
+        # P169 Phase 2: Entprell-Flag fuer die „alle gearbeitet"-Transparenz-
+        # Meldung. Reset NUR bei start_auto_hunt / set_band / set_mode (NICHT
+        # pro Pick — sonst Meldung nach jedem QSO auf voll-gearbeitetem Band).
+        self._all_worked_reported: bool = False
         # P164 (30.05.2026): Einschub-Merker entfernt — lebt jetzt als
         # `_qso_pending_insert` in MainWindow (vom Auto-Hunt entkoppelt).
         # P165: _last_tx_even ist jetzt der LETZTE Tiebreaker im DX-Scoring
@@ -176,14 +185,23 @@ class AutoHunt(QObject):
         self._qso_log = qso_log
 
     def set_band(self, band: str):
-        """Band setzen (fuer Worked-On-Band Check)."""
+        """Band setzen (fuer Worked-On-Band Check).
+
+        P169 Phase 2: wird bei JEDEM Bandwechsel gerufen (auch bei inaktivem
+        Auto-Hunt) → `_band` ist nie veraltet. Entprell-Flag der „alle
+        gearbeitet"-Meldung zuruecksetzen (neuer Kontext)."""
         self._band = band
+        self._all_worked_reported = False
 
     def set_mode(self, mode: str):
         """P61: Aktueller FT-Modus fuer Cooldown-Key. Wird bei Mode-Wechsel
         gerufen — z.B. wenn User von FT8 auf FT4 wechselt soll selbe
-        Station auf neuem Modus sofort wieder anrufbar sein."""
+        Station auf neuem Modus sofort wieder anrufbar sein.
+
+        P169 Phase 2: zusaetzlich Worked-On-Band-Mode-Check + Entprell-Flag der
+        „alle gearbeitet"-Meldung zuruecksetzen (neuer Kontext)."""
         self._mode = (mode or "FT8").upper()
+        self._all_worked_reported = False
 
     def set_my_grid(self, grid: str):
         """P165: eigenen Locator fuer die Distanz-Berechnung im DX-Scoring.
@@ -240,6 +258,8 @@ class AutoHunt(QObject):
         self._current_target = None
         self._cooldown.clear()
         self._last_tx_even = None
+        # P169 Phase 2: frischer Kontext → Transparenz-Meldung wieder zulassen.
+        self._all_worked_reported = False
         self._hunt_session_start = time.time()
         self._auto_hunt_timer.setInterval(duration_sec * 1000)
         self._auto_hunt_timer.start()
@@ -473,14 +493,23 @@ class AutoHunt(QObject):
             _hlog("HUNT", "NO_CANDIDATE reason=empty_list")
             return None
 
-        # P165: schon gearbeitete STATION (dieser Call) auf diesem Band raus —
-        # keine Dublette. Eine ANDERE Station aus demselben (seltenen) Land
-        # bleibt Kandidat; band-spezifisch → DXCC-Band-Jagd moeglich.
+        # P165/P169 Phase 2: schon gearbeitete STATION (dieser Call) auf diesem
+        # Band UND in diesem Mode raus — keine Dublette. Mode-genau: dieselbe
+        # Station auf 20m FT8 gearbeitet bleibt auf 20m FT4 ein gueltiges Ziel.
+        # Eine ANDERE Station aus demselben (seltenen) Land bleibt Kandidat.
+        n_before_worked = len(candidates)
         if self._qso_log is not None:
             candidates = [c for c in candidates
-                          if not self._qso_log.is_worked_on_band(c.call, self._band)]
+                          if not self._qso_log.is_worked_on_band_mode(
+                              c.call, self._band, self._mode)]
         if not candidates:
             _hlog("HUNT", "NO_CANDIDATE reason=all_worked_on_band")
+            # P169 Phase 2: Transparenz. Es gab rufbare CQ-Stationen, aber alle
+            # sind auf Band+Mode schon gearbeitet → einmal (entprellt) melden,
+            # damit der stille Auto-Hunt nicht raetselhaft wirkt.
+            if n_before_worked > 0 and not self._all_worked_reported:
+                self._all_worked_reported = True
+                self.all_worked.emit(self._band, self._mode, n_before_worked)
             return None
 
         # P165: DX-Scoring als lexikografische Tupel-Rangordnung (kleiner =

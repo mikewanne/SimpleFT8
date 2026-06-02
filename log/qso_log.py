@@ -16,6 +16,10 @@ class QSOLog:
     def __init__(self):
         self._worked: set[str] = set()
         self._worked_band: set[tuple] = set()
+        # P169 Phase 2: mode-genauer Index (call, band, mode). Eine Station auf
+        # 20m FT8 gilt damit auf 20m FT4 / 15m FT8 wieder als „neu". Additiv —
+        # _worked/_worked_band bleiben fuer call-only / mode-blinde Abfragen.
+        self._worked_band_mode: set[tuple[str, str, str]] = set()
         self._country_count: dict[str, int] = {}
         self._country_band: set[tuple[str, str]] = set()
         self._count = 0
@@ -25,6 +29,7 @@ class QSOLog:
         Referenzen in auto_hunt/rx_panel gültig bleiben; _count bleibt korrekt)."""
         self._worked.clear()
         self._worked_band.clear()
+        self._worked_band_mode.clear()
         self._country_count.clear()
         self._country_band.clear()
         self._count = 0
@@ -42,6 +47,14 @@ class QSOLog:
             band = rec.get("BAND", "").strip().upper()
             if band:
                 self._worked_band.add((base_call, band))
+            # P169 Phase 2: mode-genauer Index. Effektiver Mode = SUBMODE wenn
+            # vorhanden, sonst MODE (ADIF-Norm). Beispiele: unser FT4 = MFSK +
+            # SUBMODE FT4 → „FT4"; QRZ-Export FT4 = MODE FT4 → „FT4"; FT8 =
+            # MODE FT8 → „FT8". Leerer Mode wird NIE indiziert (waere Wildcard).
+            mode = (rec.get("SUBMODE", "").strip()
+                    or rec.get("MODE", "").strip()).upper()
+            if band and mode:
+                self._worked_band_mode.add((base_call, band, mode))
             # P165: Land-Statistik. callsign_to_country handhabt Slash-Calls
             # selbst (DXCC-Token), daher der VOLLE Call (konsistent mit dem
             # Live-Lookup in core/auto_hunt._compute_priority).
@@ -69,12 +82,22 @@ class QSOLog:
             total += n
         return total
 
-    def add_qso(self, call: str, band: str = ""):
-        """Neues QSO zur Laufzeit hinzufuegen."""
+    def add_qso(self, call: str, band: str = "", mode: str = ""):
+        """Neues QSO zur Laufzeit hinzufuegen.
+
+        P169 Phase 2: `mode` (z.B. „FT8"/„FT4"/„FT2") fuellt zusaetzlich den
+        mode-genauen Index `_worked_band_mode`. Fuer einen Eintrag dort muessen
+        BAND und MODE gesetzt sein — ein leerer Mode wird bewusst nicht
+        indiziert (sonst Wildcard ueber alle Modi). `_worked`/`_worked_band`/
+        `_country_*` werden unabhaengig vom Mode weiter befuellt.
+        """
         base_call = call.strip().upper().split("/")[0]
         self._worked.add(base_call)
         if band:
             self._worked_band.add((base_call, band.upper()))
+        mode_u = (mode or "").strip().upper()
+        if band and mode_u:
+            self._worked_band_mode.add((base_call, band.upper(), mode_u))
         # P165: Land-Statistik live mitfuehren (voller Call, s. load_adif).
         country = callsign_to_country(call.strip().upper())
         self._country_count[country] = self._country_count.get(country, 0) + 1
@@ -88,9 +111,23 @@ class QSOLog:
         return base_call in self._worked
 
     def is_worked_on_band(self, call: str, band: str) -> bool:
-        """Wurde dieses Callsign auf diesem Band schon gearbeitet?"""
+        """Wurde dieses Callsign auf diesem Band schon gearbeitet? (mode-blind)"""
         base_call = call.strip().upper().split("/")[0]
         return (base_call, band.upper()) in self._worked_band
+
+    def is_worked_on_band_mode(self, call: str, band: str, mode: str) -> bool:
+        """P169 Phase 2: Callsign auf diesem Band UND in diesem Mode gearbeitet?
+
+        Mode-genau: eine auf 20m FT8 gearbeitete Station liefert False fuer
+        20m FT4 und 15m FT8 → sie gilt dort wieder als „neu". Leerer/None mode
+        → False (ohne Mode kein mode-genaues Urteil; produktive Aufrufer liefern
+        immer settings.mode).
+        """
+        m = (mode or "").strip().upper()
+        if not m:
+            return False
+        base_call = call.strip().upper().split("/")[0]
+        return (base_call, band.upper(), m) in self._worked_band_mode
 
     def get_country_count(self, country: str) -> int:
         """P165: Anzahl QSOs mit diesem Land (DXCC-Kuerzel via core.geo).

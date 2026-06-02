@@ -604,9 +604,12 @@ class RadioMixin:
         self._diversity_ctrl.reset()
         self.control_panel.update_freq_histogram(
             self._diversity_ctrl.get_histogram_data())
-        # Auto-Hunt: Cooldowns loeschen bei Bandwechsel
+        # Auto-Hunt: Band IMMER aktualisieren (P169 Phase 2 / DeepSeek-R1-F2 —
+        # auch bei inaktivem Auto-Hunt, sonst ist `_band` beim naechsten Start
+        # veraltet und der Worked-on-Band-Mode-Check greift auf dem falschen
+        # Band). Session-Stop (`on_band_change`) nur wenn aktiv.
+        self._auto_hunt.set_band(band)
         if self._auto_hunt.active:
-            self._auto_hunt.set_band(band)
             self._auto_hunt.on_band_change()
         # OMNI bei Bandwechsel stoppen
         if hasattr(self, "_omni_cq") and self._omni_cq.is_active():

@@ -654,7 +654,9 @@ class QSOMixin:
         _dbg("QSO-DONE", f"adif.log_qso dt={_t.time()-_t_step:.3f}s")
 
         _t_step = _t.time()
-        self.qso_log.add_qso(qso_data.their_call, band)
+        # P169 Phase 2: Mode mitgeben → mode-genauer Worked-Index (settings.mode
+        # ist „FT8"/„FT4"/„FT2", dasselbe Token wie der ADIF-Loader normalisiert).
+        self.qso_log.add_qso(qso_data.their_call, band, self.settings.mode)
         _dbg("QSO-DONE", f"qso_log.add_qso dt={_t.time()-_t_step:.3f}s")
 
         # Antennen-Statistik pro QSO loggen — immer schreiben, "–" wenn kein Pref

@@ -95,6 +95,10 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self._connect_signals()
         self.rx_panel.set_qso_log(self.qso_log)
         self.rx_panel.set_locator_db(self.locator_db)
+        # P169 Phase 2: Band+Mode-Provider fuer den mode-genauen NEUE-Filter
+        # (lazy aus settings → keine verteilten Setter, kein Staleness).
+        self.rx_panel.set_band_mode_provider(
+            lambda: (self.settings.band, self.settings.mode))
 
         # Optionale Features (NACH _setup_ui, weil Signal-Connects gemacht werden)
         self._init_optional_features()
@@ -452,6 +456,8 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self._auto_hunt_cooldown_timer.timeout.connect(self._on_auto_hunt_cooldown_tick)
         # Signal: stop_auto_hunt(reason) → UI-Cooldown-Lifecycle
         self._auto_hunt.auto_hunt_stopped.connect(self._on_auto_hunt_stopped)
+        # P169 Phase 2: „alle gearbeitet"-Transparenz → Info im QSO-Log.
+        self._auto_hunt.all_worked.connect(self._on_auto_hunt_all_worked)
         # Button-Klick: start/stop_auto_hunt
         self.control_panel.btn_auto_hunt.toggled.connect(self._on_btn_auto_hunt_toggled)
 
@@ -1059,6 +1065,14 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         btn.setText(f"AUTO HUNT ({self._auto_hunt_cooldown_seconds})")
         self._auto_hunt_cooldown_timer.start()
         print(f"[Auto-Hunt-UI] Stop ({reason}) → 5s Reflexions-Cooldown")
+
+    def _on_auto_hunt_all_worked(self, band: str, mode: str, n: int):
+        """P169 Phase 2: Transparenz — Auto-Hunt schweigt, weil alle decodierten
+        CQ-Stationen auf Band+Mode schon gearbeitet sind. Einmal (entprellt vom
+        auto_hunt) im QSO-Log melden, damit der stille Lauf nicht raetselhaft
+        wirkt (Mike-Field 02.06.2026)."""
+        self.qso_panel.add_info(
+            f"Auto-Hunt: alle {n} Stationen auf {band} {mode} schon gearbeitet")
 
     def _on_auto_hunt_cooldown_tick(self):
         """1s-Tick waehrend 5s UI-Reflexions-Cooldown."""
