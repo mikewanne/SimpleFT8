@@ -1,14 +1,43 @@
 # HANDOFF — SimpleFT8
 
-**Aktueller Stand:** v0.98.56 (02.06.2026) — **P168: FT4 sendete 30s-Periode
-statt 15s** (voller Workflow; 1. Versuch verworfen). Decoder weckte bei FT4
-strukturell nach der Sende-Frist → Encoder-Drift-Guard sprang +2 Slots →
-doppelte QSO-Dauer. **1. Versuch (nur WAKE 0,5→1,5) brach den Empfang (0 Decodes,
-Field-Crash) → zurückgerollt.** Echter Fix: Weckzeit/Fenster-Position/DT
-ENTKOPPELT — früh wecken + Decode-Fenster slot-ausgerichtet (`_keep_window` +
-Tail-Pad nach preprocess) + DT aus `_WINDOW_OFFSETS`. FT8/FT2 bit-identisch.
-Tests **2303 grün**. **Lokal committet, NICHT gepusht — Field-Test am Radio
-(15s-Takt + DT der Gegenstation 0,1–0,3s).** Davor v0.98.55 P167.
+**Aktueller Stand:** v0.98.57 (02.06.2026) — **P169 Phase 1: adif/erfasst/ als
+einzige Worked-Quelle + ADIF-Import + Migration** (voller Workflow). EINE
+rekursiv gelesene Quelle `adif/erfasst/{neu,hochgeladen,importiert}/` statt der
+verstreuten Alt-Ordner. Migration der echten 18k QSOs gelaufen (copy→SHA256-
+verify→delete, Backup-ZIP, 9647 (Call,Band) byte-genau erhalten, Altordner weg).
+Code 8 Touchpoints umgestellt + Import-Button. DeepSeek Migration-R1 + Final-R1
+PUSH FREIGEBEN. Tests **2312 grün**. **Phase 2 (mode-genauer NEUE-Filter +
+Auto-Hunt-Transparenz) OFFEN — siehe TODO.** ⚠️ **Mike muss App neu starten**
+(Migration hat adif/ umgebaut; laufende Alt-Instanz liest verschobene Ordner).
+Lokal committet, **Push-Freigabe Mike ausstehend** (auch P168 v0.98.56 noch
+nicht gepusht). Davor v0.98.56 P168 (FT4-Timing, field-validiert).
+
+---
+
+## Session 02.06.2026 — P169 Phase 1: erfasst/ + Import + Migration (v0.98.57)
+
+**Anlass:** Auto-Hunt rief auf vollen Bändern nicht (Debug-Log: `all_worked_on_band`).
+Mike-Analyse → ADIF-Ablage „Kraut und Rüben": Worked-Index las nur 3/8 Ordner,
+nicht-rekursiv; frische QSOs zählten erst nach Upload; 95 Stationen nur in
+nicht-geladenen Ordnern; doppeltes `adif/adif/`.
+
+**Gemacht:** EINE Quelle `adif/erfasst/{neu,hochgeladen,importiert}/` (rekursiv).
+Migration via `tools/migrate_adif_erfasst.py` (copy→SHA256-verify→delete + Backup-
+ZIP nach Appsicherungen/, idempotent, Nicht-ADIF bleibt) — 75 .adi migriert,
+9647 (Call,Band) byte-genau erhalten. 8 Code-Touchpoints umgestellt
+(recursive-Load, AdifWriter→neu/, Upload neu→hochgeladen, export aus erfasst/,
+Diplome via _all_records, `QSOLog.clear()`). Import-Button (validieren→importiert/
+→reload). DeepSeek Migration-R1 (7 Findings→gehärtet) + Final-R1 PUSH FREIGEBEN.
+Tests 2303→2312 (+9). adif/ gitignored.
+
+**Nächste Schritte:**
+1. **Mike: App neu starten** → lädt neuen Code + erfasst/ (FT4-Empfang von P168
+   weiterhin gut). Auto-Hunt-„kein Ruf" war KEIN Bug, sondern P165-Filter (alle
+   Stationen auf vollem Band gearbeitet) — Phase 2 macht das mode-genau + sichtbar.
+2. **Phase 2** (eigener Workflow): mode-genauer Index `(Call,Band,Mode)` (SUBMODE
+   sonst MODE, Leerfall nie in Index); NEUE-Filter band+mode-genau; Auto-Hunt
+   nutzt's + entprellte „alle gearbeitet"-Meldung. Spec in TODO.md.
+3. Push-Freigabe Mike (P168 v0.98.56 + P169 v0.98.57 lokal).
 
 ---
 
@@ -35,10 +64,11 @@ Plan-R1 (Gold: Pad nach preprocess) + Final-R1 PUSH FREIGEBEN; Paritäts-
 Halluzination (/15) gegen encoder.py geprüft + verworfen. Tests 2290→2303 (+13,
 inkl. FT4-Positionierungs-Äquivalenz + FT8-Decode-Rundlauf). Kein TX-Eingriff.
 
-**Nächste Schritte:** App neu starten → FT4-Field-Test am Radio (sendet jetzt im
-15s-Takt? QSO ~30s statt ~60s? DT der Gegenstation 0,1–0,3s? Decode vollständig?)
-→ bei Erfolg pushen. Push-Freigabe Mike steht aus (v0.98.56 lokal committet;
-v0.98.53–55 bereits gepusht).
+**Field-Test BESTANDEN (02.06. 10:25 UTC):** FT4-QSO mit SV5AZK, unsere TX exakt
+15s-Takt (10:25:22→:37→:52→26:07→:22), Empfang voll (6 Stationen, −25 dB ok,
+DT≈0). 30s-Bug weg, Empfang heil.
+**Nächste Schritte:** Push-Freigabe Mike → `git push` (2 lokale Commits: b4e78b7
+Code + efac8cb Doku; v0.98.53–55 bereits gepusht).
 
 ---
 

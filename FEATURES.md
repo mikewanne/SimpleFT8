@@ -1899,3 +1899,60 @@ erst nach erneutem QRZ-Export mit (Hinweis steht im Dialog-Untertitel).
   überschreiben.
 - WPX-Tests sind gegen ECHTE Slash-Calls aus dem Log geschrieben (`OE/DL6CGU`,
   `N1UL/3`, …) — bei Änderungen an `wpx_prefix` diese Fälle nicht brechen.
+
+---
+
+## §20 — ADIF-Ablage: `adif/erfasst/` als einzige Worked-Quelle   [v0.98.57 P169 Phase 1, 02.06.2026]
+
+**Eine rekursiv gelesene Quelle** ersetzt die alte verstreute Mehr-Ordner-Logik.
+Vor P169 las der Worked-Index nur 3 von ~8 `adif/`-Ordnern (`glob`, nicht-rekursiv),
+frische QSOs zählten erst nach QRZ-Upload, 95 Stationen lebten nur in nicht-
+geladenen Ordnern, und ein doppelt verschachteltes `adif/adif/` (Alt-Bug aus
+`export_all_records(adif/)` → `+"/adif"`) sammelte Müll.
+
+### Struktur
+```
+adif/
+  erfasst/          ← EINZIGE Filter-/Logbuch-/LocatorDB-Quelle, REKURSIV gelesen
+    neu/            ← App schreibt fertige QSOs (AdifWriter), noch nicht zu QRZ hoch
+    hochgeladen/    ← nach QRZ-Upload hierher verschoben
+    importiert/     ← Fremd-Exporte (QRZ etc.), schon auf QRZ → KEIN Re-Upload
+  exports/          ← generierte Gesamt-Exporte (Output, KEINE Quelle)
+```
+`adif/` ist **gitignored** (QSO-Daten ausserhalb Git). Migrations-Backups in
+`Appsicherungen/adif_backup_pre_p169_*.zip`.
+
+### Wer liest/schreibt was (Verträge)
+- **Lesen (rekursiv):** `qso_log.load_directory(erfasst, recursive=True)`,
+  `LocatorDB.bulk_import_directory(erfasst, recursive=True)`, Logbuch
+  `parse_all_adif_files(erfasst, recursive=True)`. Alle drei nur erfasst/.
+- **Schreiben (App-QSO):** `AdifWriter.directory = adif/erfasst/neu/`.
+- **Upload (mw_qso):** Kandidaten = Records mit `_SOURCE_FILE` in `/erfasst/neu/`
+  (hochgeladen/ + importiert/ NIE re-uploaden!). Nach Upload Move neu/→hochgeladen/.
+- **Export (`export_all_records`):** rglob `SimpleFT8_LOG_*.adi` unter erfasst/ →
+  nur App-Logs, importierte Fremd-Historie (andere Dateinamen) ausgeschlossen.
+- **Diplome:** `_all_records` (= erfasst/ rekursiv) enthält die Historie schon —
+  kein separater `_backup_qrz_export`-Load mehr.
+
+### Import-Button (Logbuch)
+`_import_adif_file(src)` (testbarer Kern, ohne QFileDialog): validiert (≥1 CALL) →
+Kopie nach `erfasst/importiert/` (Zeitstempel-Präfix gegen Konflikt) → `_on_import_
+clicked` lädt Anzeige neu + Signal `adif_imported` → MainWindow `_on_adif_imported`
+→ `QSOLog.clear()` + reload (SELBE Instanz, damit auto_hunt/rx_panel-Referenzen
+gültig bleiben) + LocatorDB-Reload. Manuelles Kopieren nach erfasst/ greift beim
+nächsten Start ebenfalls.
+
+### Migration (`tools/migrate_adif_erfasst.py`)
+copy → **SHA256-byte-verify** (jede Quell-.adi muss in erfasst/ sein, parse-
+unabhängig) → erst dann EINZELN .adi löschen (kein `rmtree` → Nicht-ADIF wie
+`adif_stdout.log` bleibt). Content-addressed (idempotent, dedupt byte-identische
+Dateien). Backup-ZIP zuerst, Abbruch bei Verify-Mismatch ohne Löschen.
+`--dry-run` default, `--apply` führt aus. DeepSeek-geprüft (7 Findings gehärtet).
+
+### Stolperfallen
+- **Reload-Doppelzählung:** `load_directory` erneut auf dieselbe Quelle addiert
+  `_count` → IMMER `QSOLog.clear()` davor (Sets dedupen, `_count` nicht).
+- **`recursive=` nicht vergessen:** ohne rglob sieht der Lader die Unterordner
+  neu/hochgeladen/importiert NICHT → leerer Index.
+- **Phase 2 (offen):** Index ist noch `(Call,Band)` — mode-blind. Der NEUE-Filter
+  kann FT4/FT8 noch nicht trennen (→ TODO P169 Phase 2: `(Call,Band,Mode)`).

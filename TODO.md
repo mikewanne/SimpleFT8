@@ -16,6 +16,34 @@
 
 ---
 
+# 🔴 P169 Phase 2 — Mode-genauer Worked-Filter (02.06.2026, Mike-Spec)
+
+**Voraussetzung erfüllt:** Phase 1 (v0.98.57) hat die einzige Quelle `adif/erfasst/`
++ Import + Migration geliefert. Fundament sauber, Daten haben die Betriebsart
+(QRZ-Export: `MODE=FT8`/`MODE=FT4`; unsere ADIF: `MFSK+SUBMODE=FT4`).
+
+**Ziel (Mike):** NEUE-Filter band+mode-genau. Station auf 20m FT8 gearbeitet →
+bei NEUE auf 20m FT8 ausblenden, auf 20m FT4 ZEIGEN, auf 15m FT8 ZEIGEN.
+
+**Umsetzung (DeepSeek-R1-freigegeben, noch nicht codiert):**
+1. `log/qso_log.py`: Mode beim Einlesen normalisieren `effective_mode = SUBMODE
+   or MODE`; **Leerfall NIE in den Index** (leerer Mode = Wildcard → träfe alle
+   Modi). Neuer Index `_worked_band_mode: set[(call,band,mode)]` +
+   `is_worked_on_band_mode(call,band,mode)`. `_worked`/`_worked_band` bleiben.
+2. `add_qso(call, band, mode="")` — Live-Vermerk beim QSO-Abschluss mode-genau
+   (Aufruf in `mw_qso.py:657` um echten Mode ergänzen).
+3. `ui/rx_panel.py` NEUE-Filter: `is_worked(caller)` → `is_worked_on_band_mode(
+   caller, akt. Band, akt. Mode)`. rx_panel braucht Zugriff auf aktuelles
+   Band+Mode (Setter/Callback aus main_window).
+4. `core/auto_hunt.py`: `is_worked_on_band` → mode-genaue Prüfung; bei „alle
+   gearbeitet" **entprellte** Meldung (`_all_worked_reported`-Flag, Reset bei
+   Band/Mode-Wechsel) „Alle N auf {Band} {Mode} schon gearbeitet".
+
+**Eigener Workflow** (V1→V2→R1→V3→Code→Final-R1). Quelle der Mode-Norm + ADIF-
+Standard: HISTORY v0.98.57, FEATURES (erfasst/-§).
+
+---
+
 # 🟡 P165 Phase 2 — Auto-Hunt DX-Scoring Verfeinerungen (02.06.2026, optional)
 
 DX-Scoring (Seltenheit > Distanz > Signal) ist live ab v0.98.51 (Phase 1).

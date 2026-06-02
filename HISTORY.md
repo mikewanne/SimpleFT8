@@ -9,6 +9,42 @@ Gelöscht wird nie etwas. Format: `## YYYY-MM-DD vX.YY — Kurztitel`.
 > stehen in `history/HISTORY_archiv_NN.md` (grep dort, falls eine alte Version
 > gesucht wird). Rotiert mit `tools/rotate_history.py`. Zuletzt: 2026-06-01.
 
+## 2026-06-02 v0.98.57 — P169 Phase 1: adif/erfasst/ als einzige Worked-Quelle + ADIF-Import + Migration
+
+**Ausgangslage (Mike-Field):** Auto-Hunt rief auf vollen Bändern „kein Ruf raus"
+— Debug-Log zeigte `all_worked_on_band`: jede CQ-Station war schon gearbeitet
+(P165-Hard-Filter). Mike-Analyse deckte tiefere Unordnung auf: der Worked-Index
+las nur 3 von ~8 verstreuten adif/-Ordnern (`glob` nicht-rekursiv), frische QSOs
+zählten erst nach QRZ-Upload, 95 Stationen lebten NUR in nicht-geladenen Ordnern,
+ein doppelt verschachteltes `adif/adif/` (Alt-Bug aus `export_all_records(adif/)`).
+
+**Phase 1 (Ordnung+Import, voller Workflow V1→V2→R1→V3→Code→Final-R1):** EINE
+rekursiv gelesene Quelle `adif/erfasst/{neu,hochgeladen,importiert}/`.
+- **Migration** (`tools/migrate_adif_erfasst.py`, copy→SHA256-verify→delete, Backup-
+  ZIP, idempotent, Nicht-ADIF bleibt): 75 .adi → erfasst/ (neu 11, hochgeladen 15,
+  importiert 49), byte-genau verifiziert, 9647 (Call,Band) erhalten, Altordner weg.
+  Klassifikation Variante A: Historie→importiert/ (kein Re-Upload), frische
+  App-QSOs→neu/, hochgeladene→hochgeladen/. DeepSeek-R1 fand 7 Lücken (Call/Band-
+  Verify zu schwach, Re-Run-Dups, rmtree löscht `adif_stdout.log`) → gehärtet →
+  „AUSFÜHREN FREIGEBEN".
+- **Code (8 Touchpoints):** `load_directory`/`parse_all_adif_files`/
+  `bulk_import_directory` mit `recursive=`; qso_log+LocatorDB+Logbuch lesen nur
+  noch erfasst/ rekursiv; `AdifWriter`→`erfasst/neu/`; `export_all_records` aus
+  erfasst/ (nur `SimpleFT8_LOG_*`, Fremd-Historie ausgeschlossen); QRZ-Upload-
+  Kandidaten = nur `erfasst/neu/`, Move neu/→hochgeladen/; Diplome nutzen
+  `_all_records` direkt (Backup-Load entfällt); neuer `QSOLog.clear()` für
+  Reload-ohne-Doppelzählung.
+- **Import-Button** im Logbuch: ADIF wählen → validieren (≥1 CALL) → Kopie nach
+  `erfasst/importiert/` (Zeitstempel-Präfix) → Index+Anzeige+LocatorDB reload
+  (`adif_imported`-Signal). Manuelles Kopieren nach erfasst/ wird beim Start
+  ebenfalls erfasst.
+- **Final-R1 PUSH FREIGEBEN** (Upload-Filter wasserdicht, kein Re-Upload der
+  18k-Historie; 2 nicht-kritische Notizen: Reload-Race + hartes cwd, vertagt).
+- Tests 2303→**2312** (+9 `test_p169_erfasst.py`: rekursiv laden, clear/reload,
+  export, Import-Kern, Migrations-Integration + Idempotenz). adif/ ist gitignored
+  (Daten ausserhalb Git), Backup in Appsicherungen/. **Phase 2 (mode-genauer
+  NEUE-Filter + Auto-Hunt-Transparenz) offen — siehe TODO.** NICHT gepusht.
+
 ## 2026-06-02 v0.98.56 — P168: FT4 sendete mit 30s-Periode statt 15s (Decode-Pfad-Fix; 1. Versuch verworfen)
 
 **Bug (Mike-Field, 2 QSOs, ms-Log verifiziert):** FT4-QSOs liefen doppelt so
@@ -55,8 +91,9 @@ Hardware: reine Decoder-Timing-Logik, **kein TX-Eingriff, ANT1/ANT2 unberührt.*
 Tests **2290→2303** (+13 `test_p168_ft4_timing.py`: Konstanten/Invarianten,
 `_keep_window`, FT4-Positionierungs-Äquivalenz zum Alt-Stand, FT8/FT2-Bit-
 Identität, FT8-Encode→`_process_cycle`→Decode-Rundlauf, 7,5s-Paritäts-Guard).
-**Field-Test am Radio pending** (15s-Periode + Decode-Vollständigkeit + DT der
-Gegenstation 0,1–0,3s zu bestätigen — Timing hardware-abhängig), NICHT gepusht.
+**Field-Test am Radio BESTANDEN (02.06. 10:25 UTC):** FT4-QSO mit SV5AZK, unsere
+TX exakt im 15s-Takt (10:25:22→:37→:52→26:07→:22), Empfang voll (6 Stationen
+inkl. −25 dB), DT der Stationen ≈ 0. 30s-Bug behoben.
 
 ## 2026-06-02 v0.98.55 — P167: Eingeschobenes QSO (P164) hängt nach 1 Anruf — Reentrancy-Fix
 
