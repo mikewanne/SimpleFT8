@@ -9,6 +9,35 @@ Gelöscht wird nie etwas. Format: `## YYYY-MM-DD vX.YY — Kurztitel`.
 > stehen in `history/HISTORY_archiv_NN.md` (grep dort, falls eine alte Version
 > gesucht wird). Rotiert mit `tools/rotate_history.py`. Zuletzt: 2026-06-01.
 
+## 2026-06-02 v0.98.54 — Logbuch-Tabelle: Datums- + km-Spalte chronologisch/numerisch sortieren
+
+**Bug (Mike-Field, Screenshot):** Klick auf den „Datum"-Spaltenkopf sortierte
+alphabetisch über den Anzeige-Text „DD.MM.YY" → Tageszahl dominierte, 01.06./
+02.06. standen über 12.05./13.05. (Monat ignoriert). Beim Laden war die Tabelle
+korrekt (Python-Sort `_all_records`, Z.288), erst der Header-Klick übernahm Qts
+String-Sortierung. km-Spalte hatte denselben Bug (String statt numerisch).
+
+**Fix (`ui/logbook_widget.py`, voller Workflow V1→V2→R1→V3→Code→Final-R1):**
+- `_SortableItem(QTableWidgetItem)` mit `__lt__`: vergleicht hinterlegten
+  `_SORT_ROLE`-Schlüssel (`UserRole+1` — `UserRole` ist in Spalte 0 mit dem
+  QSO-Record belegt) wenn bei beiden gesetzt, sonst direkter Text-Vergleich.
+- `_date_sort_key` = `QSO_DATE + TIME_ON.ljust(6,"0")` (lexikografisch ==
+  chronologisch; TIME_ON-Padding gegen 4-/6-stellig-Mix — DeepSeek-🔴).
+- `_km_sort_key`: `strip().lstrip("~")`, `int(s) if s.isdigit() else -1`
+  (kein `int("")`-Crash — DeepSeek-🟠). Spalte gleich mitgefixt (gleicher Bug).
+- Initialsort unverändert (Python befüllt absteigend → neuestes oben).
+
+**Claude-Catch (Test fing es):** DeepSeek-Plan sah `super().__lt__(other)` als
+Fallback vor — das löst in PySide6 **RecursionError** aus (C++-Basis ruft die
+Python-Override erneut auf). Hätte das Sortieren nach Call/Band/Mode/Land
+zerschossen. Fix: `return self.text() < other.text()`. Final-R1 bestätigte den
+Fallback als korrekt + rekursionsfrei.
+
+**DeepSeek:** Plan-R1 (🔴 TIME_ON-Padding + 🟠 km-Crash, beide umgesetzt) +
+Final-R1 **PUSH FREIGEBEN** 0 Beanstandungen. Hardware: reine UI-Sortierung,
+kein TX. Tests **2278→2286** (+8, `test_logbook_sort.py` inkl. Screenshot-
+Reproduktion + End-to-End QTableWidget). **Field-Test pending, NICHT gepusht.**
+
 ## 2026-06-02 v0.98.53 — Diplome-Erweiterung: WAE + WPX + DXCC-Band-Tiefe + Sichtbarkeit
 
 **Mike-Wunsch:** DARC-Diplome (WAE, DLD) und weitere erstrebenswerte internationale

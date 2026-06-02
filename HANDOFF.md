@@ -1,8 +1,24 @@
 # HANDOFF — SimpleFT8
 
-**Aktueller Stand:** v0.98.53 (02.06.2026) — **Diplome-Erweiterung: WAE + WPX +
-DXCC-Band-Tiefe + Ein-/Ausblenden** (voller Workflow). Tests **2278 grün**.
-**Lokal NICHT committet, NICHT gepusht.** Field-Test pending.
+**Aktueller Stand:** v0.98.54 (02.06.2026) — **Logbuch-Datums-/km-Sortierung
+gefixt** (voller Workflow). Klick auf „Datum"-Header sortierte alphabetisch
+(Tag-zuerst) statt chronologisch. Tests **2286 grün**. **Lokal committet (Fix),
+NICHT gepusht.** Field-Test pending. Davor v0.98.53 Diplome-Erweiterung (committet).
+
+---
+
+## Session 02.06.2026 — Logbuch-Sortier-Fix (v0.98.54, voller Workflow)
+
+**Mike-Field (Screenshot):** „Datum"-Header-Klick sortierte „02.06.26" als Text
+→ 01.06./02.06. über 12.05./13.05. (Tageszahl dominiert). Fix `ui/logbook_widget.py`:
+`_SortableItem` sortiert nach `_SORT_ROLE`-Schlüssel — Datum `QSO_DATE+TIME_ON`
+(chronologisch), km numerisch. km gleich mitgefixt.
+**Claude-Catch (Test):** DeepSeek-Plan-Fallback `super().__lt__` = PySide6
+RecursionError → `self.text() < other.text()`. Final-R1 PUSH FREIGEBEN 0
+Beanstandungen. Tests 2278→2286 (+8). Reine UI-Sortierung, kein TX.
+
+**Nächste Schritte:** Field-Test (Datum-Header klicken → neuestes oben?) ·
+Push-Freigabe (offene Commits: Sortier-Fix + Diplome + P166 + P165 + Vorgänger).
 
 ---
 
