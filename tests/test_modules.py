@@ -1896,6 +1896,11 @@ class _MockQSOLog:
     def is_worked_on_band(self, call, band):
         return (call, band) in self._wob
 
+    def is_worked_on_band_mode(self, call, band, mode):
+        # P169 Phase 2: Fake mode-blind (testet Scoring, nicht Mode-Trennung)
+        # → (call, band) genuegt. Mode-Separation: test_p169_phase2.py (echte QSOLog).
+        return (call, band) in self._wob
+
     def get_country_count(self, country):
         return self._cc.get(country, 0)
 

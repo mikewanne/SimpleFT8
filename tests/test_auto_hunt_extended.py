@@ -33,6 +33,11 @@ class _MockQSOLog:
     def is_worked_on_band(self, call, band):
         return (call, band) in self._wob
 
+    def is_worked_on_band_mode(self, call, band, mode):
+        # P169 Phase 2: Fake mode-blind → (call, band). Mode-Separation deckt
+        # test_p169_phase2.py mit der echten QSOLog ab.
+        return (call, band) in self._wob
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Commit 4 — Session-Lifecycle (start/stop)

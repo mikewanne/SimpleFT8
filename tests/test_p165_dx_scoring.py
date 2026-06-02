@@ -163,7 +163,8 @@ def test_worked_station_on_band_skipped(qapp):
     Eine ANDERE Station aus demselben Land bleibt waehlbar.
     """
     log = QSOLog()
-    log.add_qso("VP8LP", "20m")  # diese exakte Station auf 20m schon gehabt
+    # P169 Phase 2: mode-genauer Filter → Mode mitgeben (Hunt default FT8).
+    log.add_qso("VP8LP", "20m", "FT8")  # diese exakte Station auf 20m FT8 schon gehabt
     h = _hunt(log)
     # Nur die bereits gearbeitete Station ruft → nichts zu tun
     assert h.select_next([_cq("VP8LP", snr=-12)], True, True) is None

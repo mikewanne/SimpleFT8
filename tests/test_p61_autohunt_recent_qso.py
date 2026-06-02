@@ -49,6 +49,9 @@ def _make_hunt(band: str = "20m", mode: str = "FT8") -> AutoHunt:
     qso_log = MagicMock()
     qso_log.is_worked.return_value = False  # Erste QSO simuliert
     qso_log.is_worked_on_band.return_value = False
+    # P169 Phase 2: Auto-Hunt filtert jetzt mode-genau. Ohne expliziten
+    # Return liefert MagicMock einen truthy Mock → alle Kandidaten gefiltert.
+    qso_log.is_worked_on_band_mode.return_value = False
     # P165: neue Laender-API fuer das DX-Scoring (diese Tests pruefen den
     # Recent-QSO-Cooldown, nicht das Scoring — neutrale Defaults reichen).
     qso_log.get_country_count.return_value = 0
