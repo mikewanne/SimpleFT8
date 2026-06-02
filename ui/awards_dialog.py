@@ -1,10 +1,15 @@
 """SimpleFT8 — Diplome-Dialog.
 
-Zeigt den Stand der vier Diplome (DXCC, WAC, WAS, WAZ): je gearbeitet und per
-LoTW bestaetigt, mit Fortschrittsbalken. DXCC zusaetzlich mit der offiziellen
-Marken-Staffelung (100/150/200/250/300/Honor Roll).
+Zeigt den Stand der Diplome (DXCC, WAE, WPX, WAC, WAS, WAZ): je gearbeitet und
+per LoTW bestaetigt, mit Fortschrittsbalken. DXCC zusaetzlich mit der offiziellen
+Marken-Staffelung (100/150/200/250/300/Honor Roll), dem DXCC-Challenge-Zaehler
+(Entity-Band-Slots, Ziel 1000) und einer kompakten 5-Band-DXCC-Statuszeile.
 
-Reine Anzeige — die gesamte Logik liegt in `core.awards`. Bekommt eine
+Jede Karte laesst sich per 👁-Button ausblenden; ausgeblendete Diplome wandern in
+einen Bereich unten und lassen sich per Klick wieder einblenden. Die Auswahl wird
+ueber `core.awards_prefs` persistiert (eigene JSON, kein Settings-Durchreichen).
+
+Reine Anzeige — die gesamte Diplom-Logik liegt in `core.awards`. Bekommt eine
 QSO-Record-Liste, berechnet einmalig beim Oeffnen und stellt das Ergebnis dar.
 """
 
@@ -15,27 +20,32 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt
 
 from core.awards import (
-    compute_awards, dxcc_tier_status, AWARD_ORDER, AWARD_INFO,
+    compute_awards, dxcc_tier_status, five_band_status,
+    AWARD_ORDER, AWARD_INFO, DXCC_CHALLENGE_GOAL,
 )
+import core.awards_prefs as awards_prefs
 
 _FONT = "Menlo"
 _BG = "#0d0d1a"
 
 
 class AwardsDialog(QDialog):
-    """Modaler Diplome-Ueberblick."""
+    """Modaler Diplome-Ueberblick mit Ein-/Ausblenden."""
 
     def __init__(self, records, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Diplome")
-        self.setMinimumWidth(440)
+        self.setMinimumWidth(460)
         self.setStyleSheet(
             f"QDialog {{ background: {_BG}; }} "
             f"QLabel {{ color: #DDD; font-family: {_FONT}; }}"
         )
         records = list(records or [])
-        awards = compute_awards(records)
-        self._build_ui(awards, len(records))
+        self._awards = compute_awards(records)
+        self._hidden = awards_prefs.load_hidden()
+        self._cards = {}
+        self._build_ui(self._awards, len(records))
+        self._apply_visibility()
 
     # ------------------------------------------------------------------ UI
 
@@ -69,7 +79,12 @@ class AwardsDialog(QDialog):
         col.setContentsMargins(0, 0, 0, 0)
         col.setSpacing(10)
         for key in AWARD_ORDER:
-            col.addWidget(self._award_card(key, awards[key]))
+            card = self._award_card(key, awards[key])
+            self._cards[key] = card
+            col.addWidget(card)
+
+        # Klappbereich fuer ausgeblendete Diplome
+        col.addWidget(self._build_hidden_area())
         col.addStretch(1)
         scroll.setWidget(body)
         outer.addWidget(scroll, 1)
@@ -89,6 +104,25 @@ class AwardsDialog(QDialog):
         row.addWidget(btn)
         outer.addLayout(row)
 
+    def _build_hidden_area(self) -> QWidget:
+        """Bereich unten: Header + Reihe klickbarer „wieder einblenden“-Buttons."""
+        wrap = QWidget()
+        wrap.setStyleSheet("background: transparent;")
+        lay = QVBoxLayout(wrap)
+        lay.setContentsMargins(2, 0, 2, 0)
+        lay.setSpacing(4)
+
+        self._hidden_header = QLabel("▸ Ausgeblendet (0)")
+        self._hidden_header.setStyleSheet(
+            f"color: #8899AA; font-family: {_FONT}; font-size: 10px;")
+        lay.addWidget(self._hidden_header)
+
+        self._hidden_row = QHBoxLayout()
+        self._hidden_row.setContentsMargins(0, 0, 0, 0)
+        self._hidden_row.setSpacing(6)
+        lay.addLayout(self._hidden_row)
+        return wrap
+
     def _award_card(self, key: str, data: dict) -> QFrame:
         worked = len(data["worked"])
         confirmed = len(data["confirmed"])
@@ -104,7 +138,7 @@ class AwardsDialog(QDialog):
         lay.setContentsMargins(12, 9, 12, 9)
         lay.setSpacing(5)
 
-        # Kopfzeile: Name + Badge
+        # Kopfzeile: Name + Badge + Auge
         head = QHBoxLayout()
         name = QLabel(data["label"])
         name.setStyleSheet(
@@ -118,6 +152,7 @@ class AwardsDialog(QDialog):
             f"color: {'#FFD24A' if achieved else '#AABBCC'}; "
             f"font-family: {_FONT}; font-size: 12px; font-weight: bold;")
         head.addWidget(badge)
+        head.addWidget(self._eye_button(key))
         lay.addLayout(head)
 
         # Beschreibung
@@ -128,17 +163,7 @@ class AwardsDialog(QDialog):
 
         # Fortschrittsbalken (gearbeitet)
         bar_max, bar_val = self._bar_range(key, worked, goal, data)
-        bar = QProgressBar()
-        bar.setRange(0, bar_max)
-        bar.setValue(bar_val)
-        bar.setTextVisible(False)
-        bar.setFixedHeight(8)
-        bar.setStyleSheet(
-            f"QProgressBar {{ background: #0d0d1a; border: 1px solid #2a2a44; "
-            f"border-radius: 4px; }} "
-            f"QProgressBar::chunk {{ background: "
-            f"{'#2ECC71' if achieved else '#3A8FD0'}; border-radius: 3px; }}")
-        lay.addWidget(bar)
+        lay.addWidget(self._progress_bar(bar_max, bar_val, achieved))
 
         # Zahlen-Zeile: gearbeitet / bestaetigt
         nums = QLabel(
@@ -147,11 +172,72 @@ class AwardsDialog(QDialog):
         nums.setStyleSheet(f"color: #CCD3DD; font-family: {_FONT}; font-size: 11px;")
         lay.addWidget(nums)
 
-        # DXCC: Marken-Staffelung
+        # DXCC: Marken-Staffelung + Challenge + 5-Band-DXCC
         if key == "DXCC":
             lay.addWidget(self._dxcc_tier_label(worked))
+            lay.addWidget(self._dxcc_challenge_widget(data))
+            lay.addWidget(self._five_band_label(data))
 
         return card
+
+    # ------------------------------------------------------------- Bausteine
+
+    def _eye_button(self, key: str) -> QPushButton:
+        btn = QPushButton("\U0001F441")   # 👁
+        btn.setToolTip(f"{key} ausblenden")
+        btn.setFixedSize(24, 22)
+        btn.setCursor(Qt.PointingHandCursor)
+        btn.setStyleSheet(
+            f"QPushButton {{ background: transparent; border: none; "
+            f"font-size: 12px; padding: 0px; }}"
+            f"QPushButton:hover {{ background: rgba(255,255,255,0.08); "
+            f"border-radius: 3px; }}"
+        )
+        btn.clicked.connect(lambda _=False, k=key: self._hide_award(k))
+        return btn
+
+    @staticmethod
+    def _progress_bar(bar_max, bar_val, achieved) -> QProgressBar:
+        bar = QProgressBar()
+        bar.setRange(0, max(1, bar_max))
+        bar.setValue(bar_val)
+        bar.setTextVisible(False)
+        bar.setFixedHeight(8)
+        bar.setStyleSheet(
+            f"QProgressBar {{ background: #0d0d1a; border: 1px solid #2a2a44; "
+            f"border-radius: 4px; }} "
+            f"QProgressBar::chunk {{ background: "
+            f"{'#2ECC71' if achieved else '#3A8FD0'}; border-radius: 3px; }}")
+        return bar
+
+    def _dxcc_challenge_widget(self, data: dict) -> QWidget:
+        """DXCC-Challenge: Entity-Band-Slots (Ziel 1000), eigener Balken."""
+        n = len(data.get("challenge", ()))
+        goal = DXCC_CHALLENGE_GOAL
+        wrap = QWidget()
+        wrap.setStyleSheet("background: transparent;")
+        lay = QVBoxLayout(wrap)
+        lay.setContentsMargins(0, 2, 0, 0)
+        lay.setSpacing(3)
+        lbl = QLabel(f"DXCC Challenge: <b>{n}</b> / {goal} Band-Slots")
+        lbl.setStyleSheet(f"color: #9AD0FF; font-family: {_FONT}; font-size: 10px;")
+        lay.addWidget(lbl)
+        lay.addWidget(self._progress_bar(goal, min(n, goal), n >= goal))
+        return wrap
+
+    def _five_band_label(self, data: dict) -> QLabel:
+        """Kompakte 5-Band-DXCC-Zeile: 80✓ 40✓ 20• 15✓ 10• (✓ ab 100 Entities)."""
+        parts = []
+        for band, cnt, reached in five_band_status(data.get("five_band", {})):
+            short = band[:-1] if band.endswith("M") else band
+            mark = "✓" if reached else "·"   # ✓ / ·
+            parts.append(f"{short}{mark}")
+        lbl = QLabel("5-Band-DXCC: " + "  ".join(parts))
+        lbl.setStyleSheet(f"color: #8FB8A0; font-family: {_FONT}; font-size: 10px;")
+        lbl.setToolTip("✓ = 100 Länder auf diesem Band gearbeitet "
+                       "(80/40/20/15/10 m). Offizielle Diplome verlangen "
+                       "LoTW-Bestätigung.")
+        return lbl
 
     @staticmethod
     def _bar_range(key, worked, goal, data):
@@ -180,3 +266,47 @@ class AwardsDialog(QDialog):
         lbl = QLabel(txt)
         lbl.setStyleSheet(f"color: #FFD24A; font-family: {_FONT}; font-size: 10px;")
         return lbl
+
+    # ---------------------------------------------------------- Sichtbarkeit
+
+    def _hide_award(self, key: str):
+        self._hidden.add(key)
+        awards_prefs.save_hidden(self._hidden)
+        self._apply_visibility()
+
+    def _show_award(self, key: str):
+        self._hidden.discard(key)
+        awards_prefs.save_hidden(self._hidden)
+        self._apply_visibility()
+
+    def _apply_visibility(self):
+        """Karten ein-/ausblenden + Klappbereich neu aufbauen."""
+        for key, card in self._cards.items():
+            card.setVisible(key not in self._hidden)
+
+        self._clear_layout(self._hidden_row)
+        hidden_keys = [k for k in AWARD_ORDER if k in self._hidden]
+        self._hidden_header.setText(f"▸ Ausgeblendet ({len(hidden_keys)})")
+        for key in hidden_keys:
+            b = QPushButton(f"{key}  ✛")
+            b.setToolTip(f"{key} wieder einblenden")
+            b.setCursor(Qt.PointingHandCursor)
+            b.setStyleSheet(
+                f"QPushButton {{ background: rgba(80,90,120,0.25); color: #AABBCC; "
+                f"border: 1px solid #2a2a44; border-radius: 3px; "
+                f"font-family: {_FONT}; font-size: 10px; padding: 2px 7px; }}"
+                f"QPushButton:hover {{ background: rgba(0,120,200,0.35); "
+                f"color: #DDEEFF; }}"
+            )
+            b.clicked.connect(lambda _=False, k=key: self._show_award(k))
+            self._hidden_row.addWidget(b)
+        self._hidden_row.addStretch(1)
+
+    @staticmethod
+    def _clear_layout(layout):
+        """Alle Items aus einem Layout entfernen (Widgets via deleteLater)."""
+        while layout.count():
+            item = layout.takeAt(0)
+            w = item.widget()
+            if w is not None:
+                w.deleteLater()

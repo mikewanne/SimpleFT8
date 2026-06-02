@@ -109,7 +109,7 @@ class LogbookWidget(QWidget):
         toolbar.addWidget(self.search_input, 1)
 
         self.btn_awards = QPushButton("Diplome")
-        self.btn_awards.setToolTip("Diplome-Übersicht (DXCC, WAC, WAS, WAZ)")
+        self.btn_awards.setToolTip("Diplome-Übersicht (DXCC, WAE, WPX, WAC, WAS, WAZ)")
         self.btn_awards.setStyleSheet(
             f"QPushButton {{ color: #00CCAA; font-family: {_FONT}; font-size: 11px; "
             f"font-weight: bold; background: rgba(0,160,140,0.15); "
