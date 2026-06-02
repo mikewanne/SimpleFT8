@@ -9,6 +9,48 @@ Gelöscht wird nie etwas. Format: `## YYYY-MM-DD vX.YY — Kurztitel`.
 > stehen in `history/HISTORY_archiv_NN.md` (grep dort, falls eine alte Version
 > gesucht wird). Rotiert mit `tools/rotate_history.py`. Zuletzt: 2026-06-01.
 
+## 2026-06-02 v0.98.53 — Diplome-Erweiterung: WAE + WPX + DXCC-Band-Tiefe + Sichtbarkeit
+
+**Mike-Wunsch:** DARC-Diplome (WAE, DLD) und weitere erstrebenswerte internationale
+Diplome ins bestehende Diplome-Feature (bisher DXCC/WAC/WAS/WAZ) + Funktion zum
+Ein-/Ausblenden einzelner Diplome. Voller Workflow (V1→V2→R1→V3→Mike-Freigabe→
+Code→Final-R1) mit DeepSeek v4-pro.
+
+**Machbarkeit zuerst verifiziert (grep über QRZ-Export):** DOK fehlt komplett →
+**DLD nicht automatisierbar** (Mike akzeptiert), IOTA überall „N/A" → raus.
+Machbar + erstrebenswert: **WAE** (über `CONT==EU` ableitbar) + **WPX** (Präfix
+aus `CALL`) + **DXCC-Band-Tiefe** (Band-Feld vorhanden).
+
+**Umgesetzt:**
+- **WAE (Worked All Europe, DARC):** Näherung über eindeutige europäische
+  DXCC-Entities (`CONT=="EU"`), Ziel 70. Tooltip ehrlich als Näherung
+  gekennzeichnet (kein offizielles WAE — Sonder-Multiplier wie IT9/GM-Shetland
+  nicht erfassbar). Mike-Regel „nur behaupten was verifizierbar".
+- **WPX (Worked All Prefixes, CQ):** neue `wpx_prefix(call)` in `core/awards.py`,
+  Ziel 300. Behandelt alle 3 Slash-Formen, gegen 25 echte Log-Calls verifiziert
+  (25/25): Mobil-Suffix (`F5OYA/P→F5`), Präfix-Slash vorn (`OE/DL6CGU→OE0`,
+  ohne Ziffer → „0"), Regions-Ziffer (`N1UL/3→N3`). PFX-Feld ignoriert (nur 46%
+  gefüllt → immer aus CALL). **Claude-Catch:** DeepSeek-R1-Skizze `digit_parts[0]`
+  war falsch (hätte `OE/DL6CGU→DL6` ergeben) → kürzerer Teil = Standort-Präfix.
+- **DXCC-Band-Tiefe:** DXCC-Karte erweitert um **Challenge-Zähler** (eindeutige
+  (Entity,Band)-Slots, Ziel 1000, nur HF 160-6 m — 60m/2m raus) + kompakte
+  **5-Band-DXCC-Zeile** (✓ ab 100 Entities je 80/40/20/15/10 m).
+- **Sichtbarkeit ein-/ausblenden:** neues Mini-Modul `core/awards_prefs.py`
+  (JSON `~/.simpleft8/awards_visibility.json`), KEIN Settings-Durchreichen durch
+  3 Konstruktor-Ebenen (DeepSeek-R1-🟠, entkoppelt + testbar). 👁-Button pro
+  Karte, Klappbereich unten mit klickbaren „wieder einblenden"-Buttons, Karten
+  via `setVisible` (kein Layout-Neubau). `AwardsDialog`-Signatur unverändert.
+
+**Echte Logbuch-Zahlen (18329 QSOs):** DXCC 157/123, WAE 63/59, WPX 1516/1147,
+WAC 6/6, WAS 49/48 (einer fehlt!), WAZ 38/33, Challenge 562, 5BD nur 15m ✓.
+
+**DeepSeek:** Plan-R1 (1🔴 WPX-Slash + 4 Findings, alle adressiert) + Final-R1
+**PUSH FREIGEBEN** (0 Blocker, 3🟡 — Leerzeichen-Härtung übernommen, defaultdict/
+Balken-Deckel bewusst gelassen = KISS). Hardware: reines Logdaten-Auswerten,
+**kein TX, ANT1/ANT2 unberührt.** Tests **2255→2278** (+23,
+`test_awards_expansion.py`). FEATURES §19 neu. **Field-Test pending, NICHT
+gepusht.**
+
 ## 2026-06-02 v0.98.52 — RX-Listen-Doppelklick = harter Auto-Hunt-Stop
 
 **Feature (Mike-Field, voller Workflow V1→V2→R1→V3→Code→Final-R1):** Doppelklick

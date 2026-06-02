@@ -1,8 +1,41 @@
 # HANDOFF — SimpleFT8
 
-**Aktueller Stand:** v0.98.52 (02.06.2026) — **RX-Listen-Doppelklick = harter
-Auto-Hunt-Stop** (voller Workflow). Tests **2255 grün**. **Lokal committet,
-NICHT gepusht.** Field-Test pending.
+**Aktueller Stand:** v0.98.53 (02.06.2026) — **Diplome-Erweiterung: WAE + WPX +
+DXCC-Band-Tiefe + Ein-/Ausblenden** (voller Workflow). Tests **2278 grün**.
+**Lokal NICHT committet, NICHT gepusht.** Field-Test pending.
+
+---
+
+## Session 02.06.2026 — Diplome-Erweiterung (v0.98.53, voller Workflow)
+
+**Mike-Wunsch:** DARC- + weitere internationale Diplome ins Diplome-Feature
+(war DXCC/WAC/WAS/WAZ) + einzelne Diplome ein-/ausblendbar. Mike-Wahl:
+WAE + WPX + DXCC-Band-Tiefe, Auge-Symbol pro Karte + Klappbereich.
+
+**Machbarkeit zuerst geprüft:** DLD nicht möglich (DOK fehlt in FT8-QSOs),
+IOTA nicht möglich („N/A"). WAE/WPX/DXCC-Band aus vorhandenen Feldern ableitbar.
+
+**Umgesetzt:**
+- `core/awards.py`: WAE (CONT==EU, Ziel 70, ehrlicher Näherungs-Tooltip), WPX
+  (`wpx_prefix()`, Ziel 300, alle 3 Slash-Formen gegen 25 echte Calls validiert),
+  DXCC-Challenge (Entity-Band-Slots, HF 160-6m, Ziel 1000) + 5-Band-DXCC-Status.
+- `core/awards_prefs.py` **neu**: Sichtbarkeits-Persistenz (eigene JSON, kein
+  Settings-Durchreichen — DeepSeek-🟠).
+- `ui/awards_dialog.py`: 👁-Toggle pro Karte, Klappbereich, DXCC-Erweiterungen.
+  Signatur unverändert (kein Bruch).
+- `tests/test_awards_expansion.py` **neu** (+23): WPX-Parser, WAE, Challenge,
+  5BD, awards_prefs round-trip, GUI-Smoke (Dialog bauen/toggle/persist).
+
+**Claude-Catch:** DeepSeek-WPX-Skizze `digit_parts[0]` falsch (`OE/DL6CGU→DL6`)
+→ korrekt „kürzerer Teil = Standort-Präfix" (`OE0`). Final-R1 PUSH FREIGEBEN 0
+Blocker, 1🟡 Leerzeichen-Härtung übernommen. Hardware: kein TX, ANT1/ANT2 unberührt.
+
+**Logbuch-Stand (18329 QSOs):** WAE 63/70, WPX 1516, WAS 49/50 (1 fehlt!),
+WAZ 38/40, Challenge 562/1000, 5BD: 15m ✓ Rest offen.
+
+**Nächste Schritte:** Field-Test (Dialog öffnen, Diplome prüfen, Auge-Toggle) ·
+lokal committen · Push-Freigabe (offene Commits: P166 + P165 + Diagramme +
+Vorgänger + Diplome-Erweiterung).
 
 ---
 

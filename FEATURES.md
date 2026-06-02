@@ -1797,7 +1797,7 @@ Detail-History.
 
 ---
 
-## §19 — Diplome (DXCC / WAC / WAS / WAZ)   [v0.98.49, 31.05.2026]
+## §19 — Diplome (DXCC / WAE / WPX / WAC / WAS / WAZ)   [v0.98.49 → erweitert v0.98.53, 02.06.2026]
 
 **Was:** Im Logbuch-Tab ersetzt der Button **„Diplome"** (`ui/logbook_widget.py`
 `btn_awards`) das alte DXCC-Label. Klick → `_on_awards_clicked` lädt den
@@ -1809,29 +1809,73 @@ pro Diplom zwei Sets — `worked` (alle) und `confirmed` (Teilmenge):
 | Diplom | Feld | Ziel | Filter |
 |---|---|---|---|
 | DXCC | `DXCC` (Entity-Nr) | 100 | `_int_or_none` > 0 |
+| WAE | `DXCC` **wenn** `CONT=="EU"` | 70 | **Näherung** über europäische DXCC-Entities |
+| WPX | aus `CALL` via `wpx_prefix()` | 300 | Präfix-Parsing (s. u.) |
 | WAC | `CONT` | 6 | nur `WAC_CONTINENTS` (NA/SA/EU/AF/AS/OC — **AN raus**) |
 | WAS | `STATE` | 50 | nur `US_STATES`-frozenset (AK/HI drin, NICHT über DXCC==291!) |
 | WAZ | `CQZ` | 40 | 1..40 |
 
+`AWARD_ORDER = ("DXCC","WAE","WPX","WAC","WAS","WAZ")`.
+
 **Bestätigt = NUR `LOTW_QSL_RCVD == "Y"`** (QRZ-Status `APP_QRZLOG_STATUS=C`
 zählt bewusst NICHT — kein Diplom-Programm erkennt ihn an).
 
+**WAE = bewusste Näherung (Ehrlichkeit):** Das offizielle WAE hat Multiplier
+(IT9-Sizilien, GM-Shetland, eu-Russland-Distrikte), die KEINE eigenen DXCC-Nummern
+sind → über `CONT==EU`-DXCC-Entities nicht erfassbar. `AWARD_INFO["WAE"]` und der
+Dialog-Tooltip kennzeichnen das explizit als „Näherung, kein offizielles WAE"
+(Mike-Regel „nur behaupten was verifizierbar"). DeepSeek-R1 bestätigte: feste
+WAE-Liste wäre „Fass ohne Boden" für ein Hobby-Tool.
+
+**WPX-Präfix (`wpx_prefix(call)`):** führender `[A-Z0-9]`-Teil bis zur LETZTEN
+Ziffer (Regex `^([A-Z0-9]*\d)[A-Z]*$`), drei Slash-Formen (gegen 25 echte
+Log-Calls validiert, 25/25):
+- **Mobil-Suffix** (`/P /M /QRP /QRPP /A …` via `_WPX_DROP_SUFFIXES`): verwerfen →
+  `F5OYA/P → F5`.
+- **Präfix-Slash vorn** (`OE/DL6CGU`): Standort-Präfix = der **kürzere** Teil; ohne
+  Ziffer WPX-Regel „0" anhängen → `OE0`, `SV9/DL1MTB → SV9`. **Claude-Catch:**
+  DeepSeeks Skizze „erster ziffernhaltiger Teil" wäre hier falsch (`→DL6`).
+- **Regions-Ziffer hinten** (`N1UL/3`): führende Buchstaben + neue Ziffer → `N3`.
+  PFX-Feld im Export wird IGNORIERT (nur 46 % gefüllt → immer aus CALL).
+
+**DXCC-Band-Tiefe** (nur DXCC-Karte, Zusatzanzeigen):
+- **Challenge** `awards["DXCC"]["challenge"]` = Set eindeutiger `(entity, band)`,
+  nur HF-Bänder `CHALLENGE_BANDS` (160-6 m — **60m/2m raus**), Ziel
+  `DXCC_CHALLENGE_GOAL = 1000`. Band-String upper-normalisiert ("20m"→"20M").
+- **5-Band-DXCC** `["five_band"]` = dict `band → set(entity)` für
+  `FIVE_BAND_BANDS = (80,40,20,15,10 m)`; `five_band_status()` → ✓ ab
+  `FIVE_BAND_GOAL = 100`. Kompakte Zeile „5-Band-DXCC: 80✓ 40· 20· 15✓ 10·".
+
 **Staffelung:** Nur **DXCC** hat eine echte numerische ARRL-Leiter →
 `DXCC_TIERS = (100,150,200,250,300)` + `DXCC_HONOR_ROLL = 331`, via
-`dxcc_tier_status(count)` (liefert erreichte Marke + nächstes Ziel; Honor Roll
-ab 331). WAC/WAS/WAZ sind „alles-oder-nichts" → Fortschrittsbalken + „🏅
-erreicht"-Badge bei 100 %. **KEINE erfundenen Bronze/Silber/Gold** (DeepSeek
-R1b Option A: Ehrlichkeit > Gamification; ein 25/50/75%-Schema liefert Unsinn
-wie „3 Kontinente = Silber").
+`dxcc_tier_status(count)`. WAE/WPX/WAC/WAS/WAZ sind „alles-oder-nichts" →
+Fortschrittsbalken + „🏅 erreicht"-Badge bei 100 %. **KEINE erfundenen
+Bronze/Silber/Gold** (DeepSeek R1b Option A: Ehrlichkeit > Gamification).
 
-**Datenquelle / Grenze:** Die reichen Felder (DXCC/CONT/STATE/CQZ/LOTW) stecken
-NUR im QRZ-Export (DA1MHH + DO4MHH = ein gemeinsamer set-Pool, dedupliziert).
-SimpleFT8-eigene Tages-ADIFs haben sie NICHT → frische QSOs zählen erst nach
-erneutem QRZ-Export mit (Hinweis steht im Dialog-Untertitel).
+**Ein-/Ausblenden (v0.98.53):** Jede Karte hat ein 👁-Button (`_eye_button` →
+`_hide_award`). Ausgeblendete wandern in den Klappbereich unten („▸ Ausgeblendet
+(N)" + klickbare „KEY ✛"-Buttons → `_show_award`). `_apply_visibility` steuert
+Karten via `setVisible` (KEIN Layout-Neubau — DeepSeek-Hinweis), baut nur die
+Einblend-Button-Reihe via `_clear_layout` neu. Persistenz: **eigenes Mini-Modul**
+`core/awards_prefs.py` (`load_hidden`/`save_hidden` → `~/.simpleft8/
+awards_visibility.json`, Liste der ausgeblendeten Keys, defensiv bei JSON-Fehlern
+→ leer). **Bewusst KEIN Settings-Durchreichen** durch MainWindow→qso_panel→
+LogbookWidget→AwardsDialog (DeepSeek-R1-🟠: entkoppelt, testbar, `AwardsDialog`-
+Signatur `(records, parent)` bleibt unverändert).
+
+**Datenquelle / Grenze:** Die reichen Felder (DXCC/CONT/STATE/CQZ/CALL/BAND/LOTW)
+stecken NUR im QRZ-Export (DA1MHH + DO4MHH = ein gemeinsamer set-Pool,
+dedupliziert). SimpleFT8-eigene Tages-ADIFs haben sie NICHT → frische QSOs zählen
+erst nach erneutem QRZ-Export mit (Hinweis steht im Dialog-Untertitel).
 
 **Stolperfallen:**
 - `dxcc_label` wurde komplett entfernt (auch aus `_update_counters`) — bei neuen
   Counter-Funktionen NICHT wieder referenzieren (sonst AttributeError).
 - On-demand-Laden ist Absicht (kein Startup-Cost; 18k QSOs nur bei Klick parsen).
-- NICHT mit dem „NEUE"-Filter / Worked-Before-Set (`log/qso_log.py`) verwechseln:
-  der kennt die QRZ-Historie (noch) NICHT — siehe TODO „QRZ-Historie füttern".
+- NICHT mit dem „NEUE"-Filter / Worked-Before-Set (`log/qso_log.py`) verwechseln —
+  das ist seit P165 separat (Auto-Hunt-Scoring), nicht der Diplom-Pool.
+- `awards_prefs._FILE` ist modul-level, damit Tests ihn auf `tmp_path`
+  monkeypatchen können — sonst würde ein GUI-Test Mikes echte Sichtbarkeits-Datei
+  überschreiben.
+- WPX-Tests sind gegen ECHTE Slash-Calls aus dem Log geschrieben (`OE/DL6CGU`,
+  `N1UL/3`, …) — bei Änderungen an `wpx_prefix` diese Fälle nicht brechen.

@@ -690,3 +690,25 @@ Eigener voller Workflow. Diplome-Feature (v0.98.49) nutzt denselben Ordner schon
 `self._adif_dir/"_backup_qrz_export"` (gleicher Ordner). Harmlos (nur ein
 doppelter `is_dir()`-Check, kein Crash) — bei Gelegenheit vereinfachen.
 Nicht-Blocker, Final-R1 hat ausdrücklich PUSH FREIGEBEN.
+
+---
+
+## 🔲 Diplome-Erweiterung Phase 2 (nice-to-have, v0.98.53, 02.06.2026)
+
+Optionale Verfeinerungen nach der Diplome-Erweiterung (WAE/WPX/DXCC-Band +
+Sichtbarkeit). Alles 🟡 — keine Blocker, Field-Test der v0.98.53 zuerst.
+
+- **WAE-Genauigkeit:** aktuell Näherung über `CONT==EU`-DXCC-Entities. Falls je
+  exakteres WAE gewünscht: feste WAE-Gebietsliste mit Sonder-Multipliern
+  (IT9-Sizilien, GM-Shetland, eu-Russland-Distrikte) — DeepSeek+Claude einig:
+  „Fass ohne Boden" für ein Hobby-Tool, nur bei echtem Bedarf.
+- **WPX-Stufen:** aktuell nur Basis 300. CQ hat Endorsements (300/350/.../1000 +
+  kontinental). Bei Wunsch analog zu DXCC-Tiers nachrüstbar.
+- **DLD (Deutschland-Diplom):** technisch geblockt — DOK fehlt komplett in den
+  FT8-QSOs. Nur möglich, wenn je eine DOK-Quelle dazukommt (z. B. Call→DOK-
+  Lookup-Tabelle). Aktuell bewusst NICHT umgesetzt.
+- **DXCC-Challenge/5BD auf bestätigt-Basis:** Anzeige nutzt `worked` (konsistent
+  mit der DXCC-Karte). Offiziell verlangen beide LoTW-Bestätigung — bei Wunsch
+  zweite confirmed-Variante.
+- **`compute_awards` defaultdict statt setdefault** (DeepSeek-Final-R1-🟡, rein
+  kosmetisch — bewusst gelassen, spart einen Import).
