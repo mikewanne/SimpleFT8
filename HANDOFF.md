@@ -1,16 +1,47 @@
 # HANDOFF — SimpleFT8
 
-**Aktueller Stand:** v0.98.57 (02.06.2026) — **P169 Phase 1: adif/erfasst/ als
-einzige Worked-Quelle + ADIF-Import + Migration** (voller Workflow). EINE
-rekursiv gelesene Quelle `adif/erfasst/{neu,hochgeladen,importiert}/` statt der
-verstreuten Alt-Ordner. Migration der echten 18k QSOs gelaufen (copy→SHA256-
-verify→delete, Backup-ZIP, 9647 (Call,Band) byte-genau erhalten, Altordner weg).
-Code 8 Touchpoints umgestellt + Import-Button. DeepSeek Migration-R1 + Final-R1
-PUSH FREIGEBEN. Tests **2312 grün**. **Phase 2 (mode-genauer NEUE-Filter +
-Auto-Hunt-Transparenz) OFFEN — siehe TODO.** ⚠️ **Mike muss App neu starten**
-(Migration hat adif/ umgebaut; laufende Alt-Instanz liest verschobene Ordner).
-Lokal committet, **Push-Freigabe Mike ausstehend** (auch P168 v0.98.56 noch
-nicht gepusht). Davor v0.98.56 P168 (FT4-Timing, field-validiert).
+**Aktueller Stand:** v0.98.58 (02.06.2026) — **P169 Phase 2: mode-genauer
+Worked-Filter (Call,Band,Mode) + Auto-Hunt-Transparenz** (voller Workflow).
+„Schon gearbeitet" unterscheidet jetzt die Betriebsart: eine auf 20m FT8
+gearbeitete Station ist auf 20m FT4 / 15m FT8 wieder „neu" — NEUE-Filter
+(RX-Liste) UND Auto-Hunt band+mode-genau. Neuer Index
+`QSOLog._worked_band_mode` (effektiver Mode = SUBMODE sonst MODE; leerer Mode nie
+indiziert), Live-`add_qso` gibt `settings.mode` mit, rx_panel liest Band+Mode
+lazy über Provider-Callback (kein Staleness), Auto-Hunt meldet entprellt „alle N
+auf {Band} {Mode} schon gearbeitet" im QSO-Log. Begleitfix: `auto_hunt.set_band`
+wird bei Bandwechsel jetzt IMMER aktualisiert (war nur bei aktiver Session →
+Staleness). DeepSeek R1 (6×🟡/⚪, F2+F4 angenommen, F1+F3 abgelehnt) + Final-R1
+**PUSH FREIGEBEN** (0 Bugs/Risiken). Land-Seltenheit bleibt mode-blind (keine
+P165-Regression). Tests **2324 grün** (+12). Kein TX-Eingriff, ANT1/ANT2
+unberührt. **Damit ist P169 komplett (Phase 1 + 2).** Lokal committet,
+**Push-Freigabe Mike ausstehend** (auch P168 v0.98.56 + P169 Phase 1 v0.98.57
+noch nicht gepusht). Field-Test pending.
+
+---
+
+## Session 02.06.2026 — P169 Phase 2: mode-genauer Worked-Filter (v0.98.58)
+
+**Anlass:** Mike — „NEUE soll ALLE Stationen filtern die ich auf DEM Band UND in
+DER Betriebsart gearbeitet habe: Station auf 20m FT8 → bei NEUE auf 20m FT8 nicht
+anzeigen, auf 20m FT4 anzeigen, auf 15m FT8 anzeigen." Plus: Auto-Hunt soll nicht
+stumm schweigen, wenn alle gearbeitet sind.
+
+**Gemacht (voller Workflow):** mode-genauer Index `_worked_band_mode` in
+`QSOLog` (additiv), `is_worked_on_band_mode(call,band,mode)`, Live-`add_qso` mit
+`settings.mode`. NEUE-Filter (rx_panel) band+mode-genau via Provider-Callback
+(lazy aus settings → keine Sync-Bugs). Auto-Hunt-Worked-Filter mode-genau +
+entprelltes `all_worked`-Signal → Info im QSO-Log. `set_band` bei Bandwechsel
+immer (Staleness-Fix). DeepSeek R1+Final-R1 PUSH FREIGEBEN. Tests 2312→2324
+(+12 `test_p169_phase2.py`). Mode-Norm: SUBMODE-vor-MODE (ADIF-Standard).
+
+**Nächste Schritte:**
+1. **Mike: App neu starten** (falls Phase-1-Neustart noch aussteht — Phase 2 ist
+   reiner Code, keine Datei-Migration). NEUE-Filter testen: Station auf einem
+   Band+Mode arbeiten → auf demselben Band+Mode bei NEUE weg, auf anderem
+   Mode/Band sichtbar.
+2. **Auto-Hunt auf vollem Band:** sollte jetzt „alle N auf {Band} {Mode} schon
+   gearbeitet" im QSO-Log zeigen statt stumm zu zählen.
+3. **Push** (P168 v0.98.56 + P169 v0.98.57 + v0.98.58) — auf Mikes Freigabe.
 
 ---
 

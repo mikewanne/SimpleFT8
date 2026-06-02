@@ -1954,5 +1954,40 @@ Dateien). Backup-ZIP zuerst, Abbruch bei Verify-Mismatch ohne Löschen.
   `_count` → IMMER `QSOLog.clear()` davor (Sets dedupen, `_count` nicht).
 - **`recursive=` nicht vergessen:** ohne rglob sieht der Lader die Unterordner
   neu/hochgeladen/importiert NICHT → leerer Index.
-- **Phase 2 (offen):** Index ist noch `(Call,Band)` — mode-blind. Der NEUE-Filter
-  kann FT4/FT8 noch nicht trennen (→ TODO P169 Phase 2: `(Call,Band,Mode)`).
+
+### Phase 2 — mode-genauer Worked-Filter (v0.98.58, P169 Phase 2)
+Drei Worked-Indizes in `QSOLog`, additiv (alle aus derselben erfasst/-Quelle):
+- `_worked: set[call]` — call-only (mode+band-blind).
+- `_worked_band: set[(call,band)]` — band-genau, mode-blind.
+- `_worked_band_mode: set[(call,band,mode)]` — **band+mode-genau (P169 Phase 2).**
+
+**Mode-Normalisierung (eine Regel, beide Schreibpfade):** effektiver Mode =
+`SUBMODE wenn vorhanden, sonst MODE`, `.upper()`. So liefern alle FT4-Quellen
+dasselbe Token: unsere ADIF `MODE=MFSK + SUBMODE=FT4` → „FT4", QRZ-Export
+`MODE=FT4` → „FT4". FT8 = `MODE=FT8` → „FT8". Der Live-Vermerk
+(`mw_qso.py:657 add_qso(call, band, settings.mode)`) nutzt dasselbe Token
+(`settings.mode` ist „FT8"/„FT4"/„FT2"). **Leerer Mode wird NIE in
+`_worked_band_mode` aufgenommen** (wäre eine Wildcard, die alle Modi träfe) —
+solche QSOs bleiben aber im mode-blinden `_worked_band`.
+
+**Zwei Verbraucher, mode-genau:**
+- NEUE-Filter (`rx_panel._row_should_hide`): `is_worked_on_band_mode(caller,
+  band, mode)`. Band+Mode kommen über `set_band_mode_provider(fn)` — ein
+  Callback `() -> (band, mode)`, in `main_window` als `lambda:(settings.band,
+  settings.mode)` verdrahtet. **Lazy gelesen** → keine verteilten Setter, kein
+  Staleness (die RX-Tabelle wird bei Band/Mode-Wechsel ohnehin geleert und pro
+  Slot neu mit frischer Filter-Auswertung aufgebaut). Kein Provider gesetzt →
+  call-only-Fallback `is_worked` (Test-Setups).
+- Auto-Hunt (`select_next`): `is_worked_on_band_mode(c.call, _band, _mode)`.
+  `_band` wird seit P169 Phase 2 bei JEDEM Bandwechsel aktualisiert
+  (`mw_radio:609`, auch bei inaktivem Auto-Hunt — sonst stale beim nächsten
+  Start). Transparenz: Signal `all_worked(band, mode, n)` feuert **entprellt**
+  (`_all_worked_reported`, Reset nur in start_auto_hunt/set_band/set_mode, NICHT
+  pro Pick), wenn vor dem Worked-Filter Kandidaten da waren und danach keine →
+  `main_window` zeigt „Auto-Hunt: alle N Stationen auf {Band} {Mode} schon
+  gearbeitet" im QSO-Log.
+
+**Mode-blind bewusst:** Land-Seltenheit / DXCC-Scoring (`_country_count`,
+`_country_band`, `_compute_priority`) bleibt mode-unabhängig — „habe ich dieses
+DXCC-Land gearbeitet" ist keine Mode-Frage. Nur der `(call,band)`-Dedup wurde
+mode-genau.

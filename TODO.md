@@ -16,31 +16,19 @@
 
 ---
 
-# 🔴 P169 Phase 2 — Mode-genauer Worked-Filter (02.06.2026, Mike-Spec)
+# ✅ P169 Phase 2 ERLEDIGT (v0.98.58, 02.06.2026) — Mode-genauer Worked-Filter
 
-**Voraussetzung erfüllt:** Phase 1 (v0.98.57) hat die einzige Quelle `adif/erfasst/`
-+ Import + Migration geliefert. Fundament sauber, Daten haben die Betriebsart
-(QRZ-Export: `MODE=FT8`/`MODE=FT4`; unsere ADIF: `MFSK+SUBMODE=FT4`).
-
-**Ziel (Mike):** NEUE-Filter band+mode-genau. Station auf 20m FT8 gearbeitet →
-bei NEUE auf 20m FT8 ausblenden, auf 20m FT4 ZEIGEN, auf 15m FT8 ZEIGEN.
-
-**Umsetzung (DeepSeek-R1-freigegeben, noch nicht codiert):**
-1. `log/qso_log.py`: Mode beim Einlesen normalisieren `effective_mode = SUBMODE
-   or MODE`; **Leerfall NIE in den Index** (leerer Mode = Wildcard → träfe alle
-   Modi). Neuer Index `_worked_band_mode: set[(call,band,mode)]` +
-   `is_worked_on_band_mode(call,band,mode)`. `_worked`/`_worked_band` bleiben.
-2. `add_qso(call, band, mode="")` — Live-Vermerk beim QSO-Abschluss mode-genau
-   (Aufruf in `mw_qso.py:657` um echten Mode ergänzen).
-3. `ui/rx_panel.py` NEUE-Filter: `is_worked(caller)` → `is_worked_on_band_mode(
-   caller, akt. Band, akt. Mode)`. rx_panel braucht Zugriff auf aktuelles
-   Band+Mode (Setter/Callback aus main_window).
-4. `core/auto_hunt.py`: `is_worked_on_band` → mode-genaue Prüfung; bei „alle
-   gearbeitet" **entprellte** Meldung (`_all_worked_reported`-Flag, Reset bei
-   Band/Mode-Wechsel) „Alle N auf {Band} {Mode} schon gearbeitet".
-
-**Eigener Workflow** (V1→V2→R1→V3→Code→Final-R1). Quelle der Mode-Norm + ADIF-
-Standard: HISTORY v0.98.57, FEATURES (erfasst/-§).
+Voller Workflow (V1→V2→R1→V3→Code→Final-R1, DeepSeek-v4-pro). NEUE-Filter +
+Auto-Hunt band+mode-genau: Station auf 20m FT8 gearbeitet → auf 20m FT4 / 15m
+FT8 wieder „neu". Neuer Index `QSOLog._worked_band_mode` (effektiver Mode =
+SUBMODE sonst MODE; leerer Mode nie indiziert) + `is_worked_on_band_mode`;
+Live-`add_qso` gibt `settings.mode` mit; rx_panel liest Band+Mode lazy über
+Provider-Callback (kein Staleness); Auto-Hunt meldet entprellt „alle N auf
+{Band} {Mode} schon gearbeitet". Begleitfix: `auto_hunt.set_band` bei Bandwechsel
+IMMER (war nur if-active → Staleness). Land-Seltenheit bleibt mode-blind (keine
+P165-Regression). DeepSeek R1 (6×🟡/⚪) + Final-R1 PUSH FREIGEBEN. Tests
+2312→2324 (+12 `test_p169_phase2.py`). **Details → HISTORY v0.98.58.**
+**Damit ist P169 komplett (Phase 1 + 2).** NICHT gepusht, Field-Test pending.
 
 ---
 

@@ -9,6 +9,59 @@ Gelöscht wird nie etwas. Format: `## YYYY-MM-DD vX.YY — Kurztitel`.
 > stehen in `history/HISTORY_archiv_NN.md` (grep dort, falls eine alte Version
 > gesucht wird). Rotiert mit `tools/rotate_history.py`. Zuletzt: 2026-06-01.
 
+## 2026-06-02 v0.98.58 — P169 Phase 2: mode-genauer Worked-Filter (Call,Band,Mode) + Auto-Hunt-Transparenz
+
+**Anlass:** Phase-1-Fundament (eine Quelle `adif/erfasst/`) steht; jetzt Mikes
+Kern-Wunsch — der „schon gearbeitet"-Filter soll die Betriebsart unterscheiden.
+Eine auf 20m FT8 gearbeitete Station ist auf **20m FT4** und **15m FT8** wieder
+ein gültiges Ziel (FT4 ist ein eigener „Sammelraum"). Zusätzlich soll Auto-Hunt
+nicht mehr stumm schweigen, wenn auf Band+Mode alle gearbeitet sind.
+
+**Gemacht (voller Workflow, V1→V2→R1→V3→Code→Final-R1, DeepSeek-v4-pro):**
+- `log/qso_log.py`: neuer Index `_worked_band_mode: set[(call,band,mode)]`,
+  additiv zu `_worked`/`_worked_band` (nicht entfernt). Befüllt in `load_adif`
+  (**effektiver Mode = SUBMODE wenn vorhanden, sonst MODE**, `.upper()` — unser
+  FT4=MFSK+SUBMODE FT4 → „FT4", QRZ-Export MODE=FT4 → „FT4", FT8 → „FT8";
+  **leerer Mode wird NIE indiziert** = Wildcard-Schutz) und in
+  `add_qso(call, band, mode="")`. Neue Methode `is_worked_on_band_mode(call,
+  band, mode)` (leerer/None mode-Param → False). `clear()` leert ihn mit.
+- `ui/mw_qso.py:657`: Live-`add_qso` gibt `self.settings.mode` mit (dasselbe
+  Token wie der ADIF-Loader normalisiert → Index konsistent).
+- `ui/rx_panel.py`: NEUE-Filter band+mode-genau via neuem **Provider-Callback**
+  `set_band_mode_provider(fn)` mit `fn() -> (band, mode)` (lazy aus `settings`
+  gelesen → eine Quelle, keine verteilten Setter, kein Staleness — bewusst gegen
+  einen kombinierten Setter entschieden, DeepSeek-R1-F1; vermeidet die
+  P102/P114-Sync-Bug-Klasse). Kein Provider → call-only-Fallback (Test-Setups).
+- `ui/main_window.py`: Provider verdrahtet (`lambda: (settings.band,
+  settings.mode)`), `all_worked`-Signal → `_on_auto_hunt_all_worked` →
+  `qso_panel.add_info("Auto-Hunt: alle N Stationen auf {Band} {Mode} schon
+  gearbeitet")`.
+- `core/auto_hunt.py`: Worked-Filter `is_worked_on_band` → `is_worked_on_band_mode`.
+  Neues Signal `all_worked = Signal(str, str, int)`, **entprellt** über
+  `_all_worked_reported` (Reset NUR in `start_auto_hunt`/`set_band`/`set_mode`,
+  **NICHT** pro Pick — DeepSeek-R1-F4, entspricht Mikes Spec; sonst Meldung nach
+  jedem QSO auf voll-gearbeitetem Band). Emit nur wenn vor dem Worked-Filter
+  Kandidaten da waren, danach keine (leeres Band → kein Emit).
+- `ui/mw_radio.py:609`: `auto_hunt.set_band(band)` jetzt **IMMER** (auch bei
+  inaktivem Auto-Hunt — DeepSeek-R1-F2; sonst ist `_band` beim nächsten Start
+  veraltet und der Worked-Check greift aufs falsche Band), Session-Stop
+  `on_band_change()` nur wenn aktiv.
+
+**Land-Seltenheit bleibt mode-blind** (DXCC = „habe ich dieses Land gearbeitet",
+mode-unabhängig) — `_country_count`/`_country_band`/`_compute_priority`
+unberührt, keine P165-Regression.
+
+**DeepSeek:** R1 (6 Findings, alle 🟡/⚪, 0 Blocker) — F2 (set_band immer) + F4
+(Debounce nur start/band/mode) angenommen (vereinfachten den Plan), F1
+(Provider→Setter) + F3 (_apply_filters-Trigger) abgelehnt (Callback ist gerade
+robuster; RX-Tabelle wird bei Band/Mode-Wechsel ohnehin geleert). Final-R1
+**PUSH FREIGEBEN** — 0 Bugs, 0 Risiken, Token-Konsistenz + Debounce + keine
+Races bestätigt.
+
+**Hardware:** reine State-/Anzeige-Logik, kein TX-Eingriff, ANT1/ANT2 unberührt.
+Tests **2312 → 2324** (+12 `test_p169_phase2.py`; 4 Test-Fakes/Mocks um
+`is_worked_on_band_mode` ergänzt). NICHT gepusht, Field-Test pending.
+
 ## 2026-06-02 v0.98.57 — P169 Phase 1: adif/erfasst/ als einzige Worked-Quelle + ADIF-Import + Migration
 
 **Ausgangslage (Mike-Field):** Auto-Hunt rief auf vollen Bändern „kein Ruf raus"
