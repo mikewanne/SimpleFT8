@@ -9,6 +9,41 @@ Gelöscht wird nie etwas. Format: `## YYYY-MM-DD vX.YY — Kurztitel`.
 > stehen in `history/HISTORY_archiv_NN.md` (grep dort, falls eine alte Version
 > gesucht wird). Rotiert mit `tools/rotate_history.py`. Zuletzt: 2026-06-01.
 
+## 2026-06-02 v0.98.55 — P167: Eingeschobenes QSO (P164) hängt nach 1 Anruf — Reentrancy-Fix
+
+**Bug (Mike-Field, v0.98.51-Log):** Auto-Hunt jagte 9A60CBM, fremde Station
+IN3BFW rief Mike dazwischen an, Mike klickte IN3BFW im QSO-Fenster (P164-Einschub
+„vorgemerkt"). Nach dem 9A60CBM-Timeout wurde IN3BFW **genau EINMAL** gerufen,
+dann blieb das Programm stehen: kein Retry, Auto-Hunt nahm nicht wieder auf.
+Log-Beleg: `[STATE] IDLE → TX_CALL` direkt gefolgt von `[STATE] TX_CALL → IDLE`.
+
+**Root Cause (Reentrancy, voller Workflow V1→V2→R1→V3→Code→Final-R1):** Der
+Einschub-Hook `_p158_maybe_start_inserted_call` startete das neue QSO **synchron
+mitten im qso_state-Abschluss-Handler**. `on_decoder_finished` (Timeout-Zweig,
+Z.424-426): `_set_state(TIMEOUT)` → `qso_timeout.emit()` (DirectConnection =
+synchron → Einschub → `start_qso` → State TX_CALL) → **danach**
+`_resume_cq_if_needed()` → kein CQ aktiv → `_set_state(IDLE)` überschrieb den
+frischen TX_CALL. QSO=IN3BFW, aber State IDLE → kein Retry; `_manual_override`
+(Auto-Hunt-Pause) wurde nie zurückgenommen → Auto-Hunt-Stillstand. Erfolgs-Pfad
+(`on_message_sent` TX_73_COURTESY, Z.543-545) hatte dasselbe Muster.
+
+**Fix (Option A + HALT-Race-Schutz, DeepSeek-bestätigt):** `ui/mw_qso.py` —
+`_p158_maybe_start_inserted_call` startet NICHT mehr synchron, sondern parkt den
+msg in `_deferred_insert_msg` und scheduled `QTimer.singleShot(0,
+_execute_deferred_insert)`. Der Einschub läuft erst im nächsten Event-Tick, wenn
+der qso_state-Handler komplett durch ist (State stabil IDLE) → `start_qso` →
+TX_CALL bleibt. `_on_cancel` (HALT) nullt zusätzlich `_deferred_insert_msg`
+(Race-Schutz, falls HALT im Tick-Fenster). Auto-Hunt-Resume bleibt erhalten
+(Einschub-QSO endet normal → `on_manual_qso_end`).
+
+**DeepSeek:** Diagnose-R1 (Root Cause bestätigt, Option A empfohlen + HALT-Schutz)
++ Final-R1 **PUSH FREIGEBEN** 0 Blocker (1🟡 Caller-Queue-Race: harmlos, da
+`start_qso` jedes laufende QSO sauber abbricht + Einschub gewollt priorisiert →
+TODO-Notiz). Hardware: reine GUI-Ablauf-Steuerung, kein TX-Eingriff, ANT1/ANT2
+unberührt. Tests **2286→2290** (+4 `test_p167_insert_defer.py`; 4 P158-Tests
+T16/T17/T19/T26 auf Defer angepasst). FEATURES §17. **Field-Test pending, NICHT
+gepusht.**
+
 ## 2026-06-02 v0.98.54 — Logbuch-Tabelle: Datums- + km-Spalte chronologisch/numerisch sortieren
 
 **Bug (Mike-Field, Screenshot):** Klick auf den „Datum"-Spaltenkopf sortierte

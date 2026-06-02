@@ -1636,6 +1636,26 @@ gehören in die aktive RX-Liste, nicht ins passive QSO-Fenster.
 mehr, startet B auf veralteten Slot-Infos → evtl. erfolgloses QSO (kein
 Schaden). Hobby-Tool-pragmatisch, KISS.
 
+### ⚠ Reentrancy-Falle: Einschub MUSS defert starten (P167, v0.98.55)
+
+**Bug:** `_p158_maybe_start_inserted_call` wird aus den QSO-Ende-Handlern
+gerufen, und die laufen SYNCHRON innerhalb des qso_state-Abschlusses:
+`on_decoder_finished`/`on_message_sent` → `qso_timeout.emit()` bzw.
+`qso_confirmed.emit()` (Qt.DirectConnection) → mw_qso-Handler → Einschub. Startet
+der Einschub das neue QSO synchron (`start_qso` → State TX_CALL), überschreibt
+der **danach** laufende `_resume_cq_if_needed()` (else-Zweig → `_set_state(IDLE)`,
+qso_state.py:474) den frischen TX_CALL → eingeschobenes QSO hängt nach 1 Anruf
+(State IDLE, kein Retry), und weil kein sauberes QSO-Ende kam, bleibt
+`_manual_override` (Auto-Hunt-Pause) → Auto-Hunt-Stillstand.
+
+**Fix:** Einschub NIE synchron aus dem QSO-Ende-Handler starten. msg in
+`_deferred_insert_msg` parken + `QTimer.singleShot(0, _execute_deferred_insert)`.
+Der Klick läuft erst im nächsten Event-Tick, wenn der qso_state-Handler komplett
+durch ist (State stabil IDLE) → `start_qso` → TX_CALL bleibt. `_on_cancel` (HALT)
+nullt `_deferred_insert_msg` (Race-Schutz). **Merksatz:** Ein Signal-Handler
+darf kein neues QSO starten, solange der emittierende qso_state-Code danach noch
+State-Cleanup macht — immer in den nächsten Event-Tick defern.
+
 ### ⚠ Anchor-Bleed-Falle (Bug 1, v0.98.50)
 
 Der HTML-Anchor aus `_append_anchor_line` (`log_view.append('<a …>')`)

@@ -712,3 +712,16 @@ Sichtbarkeit). Alles 🟡 — keine Blocker, Field-Test der v0.98.53 zuerst.
   zweite confirmed-Variante.
 - **`compute_awards` defaultdict statt setdefault** (DeepSeek-Final-R1-🟡, rein
   kosmetisch — bewusst gelassen, spart einen Import).
+
+---
+
+## 🔲 P167-Beobachtung: Caller-Queue vs deferter Einschub (🟡, 02.06.2026)
+
+DeepSeek-Final-R1-🟡 zu P167 (Einschub-Defer): Theoretischer Race im CQ-Modus —
+wenn `_resume_cq_if_needed` (synchron, vor dem Defer-Tick) eine wartende Station
+aus der Caller-Queue startet UND ein P164-Einschub vorgemerkt ist, läuft im
+nächsten Tick `start_qso(Einschub)`. **Kein Bug:** `start_qso` bricht das
+laufende Queue-QSO sauber ab (state≠IDLE → reset) → kein paralleles QSO, und der
+geklickte Einschub SOLL priorisiert sein (bewusster User-Klick). Nur
+beobachtungswürdig, kein Handlungsbedarf. Falls je auffällig: Defer-Tick auch im
+CQ-Queue-Pfad berücksichtigen.

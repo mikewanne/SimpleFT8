@@ -1,9 +1,30 @@
 # HANDOFF — SimpleFT8
 
-**Aktueller Stand:** v0.98.54 (02.06.2026) — **Logbuch-Datums-/km-Sortierung
-gefixt** (voller Workflow). Klick auf „Datum"-Header sortierte alphabetisch
-(Tag-zuerst) statt chronologisch. Tests **2286 grün**. **Lokal committet (Fix),
-NICHT gepusht.** Field-Test pending. Davor v0.98.53 Diplome-Erweiterung (committet).
+**Aktueller Stand:** v0.98.55 (02.06.2026) — **P167: eingeschobenes QSO (P164)
+hing nach 1 Anruf — Reentrancy-Fix** (voller Workflow). Einschub startete
+synchron im qso_state-Abschluss-Handler, der danach den State wieder auf IDLE
+setzte → QSO hing, Auto-Hunt blieb pausiert. Fix: Einschub via
+`QTimer.singleShot(0,…)` defern. Tests **2290 grün**. **Lokal committet, NICHT
+gepusht.** Field-Test pending. Davor v0.98.54 Logbuch-Sortierung, v0.98.53
+Diplome-Erweiterung.
+
+---
+
+## Session 02.06.2026 — P167 Einschub-Reentrancy (v0.98.55, voller Workflow)
+
+**Mike-Field (Log v0.98.51):** P164-Einschub (IN3BFW im QSO-Fenster geklickt)
+rief die Station nach dem laufenden QSO nur EINMAL, dann Stillstand (kein Retry,
+Auto-Hunt-Pause blieb). **Root Cause:** `_p158_maybe_start_inserted_call` lief
+synchron in `qso_timeout.emit`/`qso_confirmed.emit`; `start_qso` setzte TX_CALL,
+aber der Handler rief danach `_resume_cq_if_needed()` → `_set_state(IDLE)`,
+überschrieb TX_CALL. **Fix:** Einschub in nächsten Event-Tick defern
+(`_deferred_insert_msg` + `QTimer.singleShot(0, _execute_deferred_insert)`);
+HALT nullt den Merker (Race-Schutz). DeepSeek Diagnose-R1 + Final-R1 PUSH
+FREIGEBEN. Tests 2286→2290 (+4). Kein TX-Eingriff, ANT1/ANT2 unberührt.
+
+**Nächste Schritte:** Field-Test (Einschub während Auto-Hunt: ruft jetzt
+wiederholt + Auto-Hunt nimmt nach dem Einschub-QSO wieder auf?) · Push-Freigabe
+(offene Commits: P167 + Sortier-Fix + Diplome + P166 + Vorgänger).
 
 ---
 
