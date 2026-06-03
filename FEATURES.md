@@ -2015,3 +2015,57 @@ solche QSOs bleiben aber im mode-blinden `_worked_band`.
 `_country_band`, `_compute_priority`) bleibt mode-unabhängig — „habe ich dieses
 DXCC-Land gearbeitet" ist keine Mode-Frage. Nur der `(call,band)`-Dedup wurde
 mode-genau.
+
+## §21 — Logbuch-Skalierung (tausende QSOs) + Vollständigkeit Worked/Auswertung   [verifiziert 03.06.2026]
+
+**Frage Mike (03.06.2026):** „Die Logbuch-Liste bleibt voll — macht das jetzt
+kein Problem, aber bei mehreren tausend QSOs?" + „Werden alle Stationen (auch
+die bestehenden 18.000) über NEUE gefiltert und alle QSOs ausgewertet?"
+Antwort code-verifiziert: **Skalierung ist abgesichert, Abdeckung ist vollständig.**
+
+### Logbuch-Anzeige hat einen harten Deckel (kein QTableWidget-Tod)
+`ui/logbook_widget.py:24 _LOGBOOK_MAX_ROWS = 500` (P12-Fix, 11.05.2026). Das
+LogbookWidget ist ein **Zwei-Speicher** (analog QSOLog §10, aber andere Klasse):
+- `_all_records` (`logbook_widget.py:127`) = **ALLE** Datensätze im RAM
+  (`parse_all_adif_files(erfasst, recursive=True)`, `load_adif:341`). Bei 19.198
+  QSOs sind das 19.198 dicts — Speicher trivial, auch bei 100k.
+- Die **QTableWidget** zeichnet nur `_all_records[:500]` (`_populate_table`,
+  `:350-351`), nach Datum absteigend sortiert. **Egal ob 19k oder 100k im Log —
+  es werden nie mehr als 500 Zeilen gerendert.** Genau das verhindert den
+  60s-Hang / QTableWidget-Tod bei großen Logs.
+
+**Was trotzdem über ALLE Records läuft (schnelle Python-Schleifen, unkritisch):**
+- QSO-Zähler: `len(self._all_records)` (`:415`) → die „19198 QSOs"-Anzeige.
+- Suche/Filter: filtert das volle `_all_records`, zeigt `filtered[:500]`
+  (`:495-501`) — man findet jede Station, gezeigt werden die ersten 500 Treffer.
+- Diplome: `AwardsDialog(list(self._all_records))` (`:411`) → **alle** QSOs.
+- Export: `export_all_records` über erfasst/ rekursiv (alle App-Logs).
+
+### Der EINZIGE Skalierungs-Knackpunkt: per-QSO Re-Parse von Platte
+Nach jedem bestätigten QSO ruft `mw_qso.py:735 logbook.refresh()` →
+`load_adif()` → `parse_all_adif_files(...)` **liest alle ADIF-Dateien neu von
+der Platte** (O(Gesamt-QSOs Disk-IO). Bei 19k ≈ 1–2 s, läuft in der
+73-Bestätigungspause, unbemerkt; im Debug-Log gemessen als
+`QSO-CONF logbook.refresh dt=…`). Bei „mehreren tausend mehr" steigt das linear
+— eine **sanfte Steigung, keine Wand**. Würde erst bei ~50k+ spürbar.
+→ **Wenn es je träge wird:** statt Voll-Reparse den einen neuen Record an
+`_all_records` anhängen + Tabelle (capped) neu füllen, oder einen Datei-Cache
+einziehen. Jetzt **bewusst nicht** gebaut (KISS / kein Overengineering).
+**Gegensatz QSOLog (Worked-Index):** der wird NICHT pro QSO reparst — live
+inkrementell via `add_qso` (`mw_qso.py:657`); Voll-Reload nur bei App-Start
+(`_init_qso_log`) + Logbuch-Import (`_on_adif_imported` → `clear()`+reload).
+
+### Worked-Filter UND Auswertung decken die volle 18k-Historie ab
+Die historischen ~18.000 QSOs liegen seit P169 Phase 1 in
+`adif/erfasst/importiert/` (§20). Beide Verbraucher lesen erfasst/ **rekursiv**,
+also inklusive importiert/:
+- **NEUE-Filter + Auto-Hunt:** `main_window._init_qso_log:249
+  qso_log.load_directory(adif/erfasst, recursive=True)` → Start-Log
+  `[QSOLog] N Calls, M QSOs` (M ≈ 19198). Eine in der Historie gearbeitete
+  Station wird gefiltert — **band+mode-genau** (§20 Phase 2): 18k-QSO auf
+  20m FT8 → auf 20m FT4 / 15m FT8 wieder „neu".
+- **Diplome:** `_all_records` (s.o.) enthält die 18k → DXCC/WAE/WPX usw.
+  zählen die komplette Historie.
+
+**Merksatz:** Anzeige gedeckelt (500), Logik vollständig (alle). Das eine
+skaliert mit Disk-Reparse pro QSO — heute irrelevant, später ein Cache.
