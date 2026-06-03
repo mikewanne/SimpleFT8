@@ -1,5 +1,6 @@
 """SimpleFT8 ADIF Writer + Parser — QSO-Export und -Import im ADIF 3.1.7 Format."""
 
+import os
 import re
 import time
 from pathlib import Path
@@ -117,6 +118,91 @@ def delete_qso(record: Dict[str, str]) -> bool:
     if deleted:
         path.write_text(header + "".join(new_parts))
     return deleted
+
+
+def merge_adif_files(src: Path, dest: Path) -> tuple[int, int]:
+    """P170: QSO-Records aus ``src`` an die bestehende ``dest`` ANHÄNGEN.
+
+    Aufgerufen vom Upload-Move (``mw_qso._handle_qrz_file_results``), wenn in
+    ``adif/erfasst/hochgeladen/`` schon eine GLEICHNAMIGE Tagesdatei liegt
+    (gleicher Dateiname, andere QSOs derselben Session — z.B. Vormittag schon
+    hochgeladen, Nachmittag frisch gefunkt). Statt den Move zu überspringen
+    (→ Stau in ``neu/``) werden die neuen Records gemergt. Mike-Wahl 03.06.2026.
+
+    Datensicherheit (höchste Prio — ``dest`` enthält bereits hochgeladene QSOs):
+    - **Dedup** per ``(CALL, QSO_DATE, TIME_ON)`` — identischer Key wie
+      ``export_all_records`` — gegen die in ``dest`` vorhandenen UND innerhalb
+      von ``src`` (kein Doppelt-Anhängen, idempotent bei Re-Run).
+    - ``dest`` wird **byte-erhaltend** beibehalten (nur angehängt, NICHT neu
+      serialisiert); der ``src``-Header (alles vor ``<EOH>``) wird verworfen.
+    - Nur Blöcke mit ``CALL`` werden übernommen (App-QSOs haben immer CALL).
+    - **Atomar:** neuer Inhalt → Temp-Datei → ``os.replace``.
+    - **Striktes utf-8-Lesen** + ``<EOH>``-Validierung von ``dest``: kaputte
+      Bytes oder eine nicht-ADIF-``dest`` werfen eine Exception, die der Aufrufer
+      abfängt → BEIDE Dateien bleiben stehen, kein Datenverlust.
+
+    Returns ``(appended, skipped_dup)``. ``dest`` muss existieren.
+    """
+    _FIELD_RE = re.compile(r"<(\w+):(\d+)(?::\w+)?>", re.IGNORECASE)
+
+    def _records(text: str):
+        """(rec_dict, originaltext_block) je QSO-Block nach <EOH>. Header weg."""
+        eoh = text.upper().find("<EOH>")
+        body = text[eoh + 5:] if eoh >= 0 else text
+        parts = re.split(r"(<EOR>)", body, flags=re.IGNORECASE)
+        i = 0
+        while i < len(parts):
+            block = parts[i]
+            eor = parts[i + 1] if i + 1 < len(parts) else ""
+            i += 2
+            if not block.strip():
+                continue
+            rec = {}
+            for m in _FIELD_RE.finditer(block):
+                rec[m.group(1).upper()] = block[m.end():m.end() + int(m.group(2))].strip()
+            yield rec, block + eor
+
+    # dest strikt + BYTE-ERHALTEND lesen (newline="" → keine Newline-Übersetzung,
+    # auch auf Windows; striktes utf-8 wirft bei kaputten Bytes → Aufrufer skippt).
+    with open(dest, "r", encoding="utf-8", newline="") as f:
+        dest_text = f.read()
+    if "<EOH>" not in dest_text.upper():
+        raise ValueError(f"{dest.name}: kein <EOH> — keine gültige ADIF, Merge abgebrochen")
+
+    # Bestehende Keys direkt aus dest_text (kein zweiter Datei-Read).
+    seen: set[tuple] = set()
+    for rec, _ in _records(dest_text):
+        call = rec.get("CALL", "")
+        if call:
+            seen.add((call, rec.get("QSO_DATE", ""), rec.get("TIME_ON", "")))
+
+    with open(src, "r", encoding="utf-8", newline="") as f:
+        src_text = f.read()
+
+    append_parts: list[str] = []
+    appended = skipped = 0
+    for rec, raw in _records(src_text):
+        call = rec.get("CALL", "")
+        if not call:
+            continue  # Header-Rest / Müll — App-QSOs haben immer CALL
+        key = (call, rec.get("QSO_DATE", ""), rec.get("TIME_ON", ""))
+        if key in seen:
+            skipped += 1
+            continue
+        seen.add(key)
+        append_parts.append(raw)  # Originaltext byte-erhaltend
+        appended += 1
+
+    if append_parts:
+        new_content = dest_text
+        if not new_content.endswith("\n"):
+            new_content += "\n"
+        new_content += "".join(append_parts)
+        tmp = dest.with_name(dest.name + ".tmp")
+        with open(tmp, "w", encoding="utf-8", newline="") as f:
+            f.write(new_content)
+        os.replace(str(tmp), str(dest))
+    return appended, skipped
 
 
 def parse_all_adif_files(directory: Path, recursive: bool = False) -> List[Dict[str, str]]:

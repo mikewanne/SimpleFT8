@@ -947,6 +947,7 @@ class QSOMixin:
         """
         import shutil
         from pathlib import Path
+        from log.adif import merge_adif_files
         target_dir = Path.cwd() / "adif" / "erfasst" / "hochgeladen"
         try:
             target_dir.mkdir(parents=True, exist_ok=True)
@@ -954,6 +955,7 @@ class QSOMixin:
             self.statusBar().showMessage(f"Fehler hochgeladen-Ordner: {e}", 8000)
             return
         moved = 0
+        merged = 0
         skipped = 0
         for src_path, counts in file_results.items():
             processed = counts["ok"] + counts["dup"] + counts["fail"]
@@ -967,10 +969,33 @@ class QSOMixin:
                     continue
                 dest = target_dir / src.name
                 if dest.exists():
-                    print(f"[QRZ] Move uebersprungen — Ziel existiert: {dest}")
-                    self.statusBar().showMessage(
-                        f"File-Move uebersprungen: {src.name} bereits in hochgeladen/", 5000)
-                    skipped += 1
+                    # P170 (03.06.2026): GLEICHNAMIGE Tagesdatei schon in
+                    # hochgeladen/ → statt überspringen (führte zu Stau in neu/)
+                    # die neuen Records dedupliziert MERGEN (Mike-Wahl). Bei
+                    # Fehler (kaputte ADIF, Decode) bleiben BEIDE Dateien stehen
+                    # — kein Datenverlust.
+                    try:
+                        appended, dup = merge_adif_files(src, dest)
+                    except (OSError, ValueError, UnicodeDecodeError) as e:
+                        print(f"[QRZ] Merge {src.name} fehlgeschlagen: {e}")
+                        self.statusBar().showMessage(
+                            f"Merge uebersprungen: {src.name} ({e})", 6000)
+                        skipped += 1
+                        continue
+                    try:
+                        src.unlink()
+                    except OSError as e:
+                        # Merge ist drin (Daten in dest) — nur die Quelle blieb
+                        # liegen. Re-Run ist idempotent (dedupt) und löscht src
+                        # erneut. Als gemerged zählen (nicht skipped), separat loggen.
+                        print(f"[QRZ] Merge {src.name} ok, Quelle nicht geloescht: {e}")
+                        self.statusBar().showMessage(
+                            f"Merge ok, {src.name} bleibt (Loeschen fehlgeschlagen)", 5000)
+                        merged += 1
+                        continue
+                    merged += 1
+                    print(f"[QRZ] {src.name} in vorhandene hochgeladen/-Datei "
+                          f"gemerged ({appended} neu, {dup} schon vorhanden)")
                     continue
                 try:
                     shutil.move(str(src), str(dest))
@@ -981,9 +1006,9 @@ class QSOMixin:
                         f"File-Move fehlgeschlagen: {src.name} ({e})", 5000)
             else:
                 skipped += 1
-        if moved:
-            print(f"[QRZ] {moved} Datei(en) nach erfasst/hochgeladen/ verschoben "
-                  f"({skipped} bleiben wegen FAILs oder unvollstaendig)")
+        if moved or merged:
+            print(f"[QRZ] {moved} Datei(en) verschoben, {merged} gemerged nach "
+                  f"erfasst/hochgeladen/ ({skipped} bleiben wegen FAILs/unvollstaendig/Fehler)")
 
     def _show_qrz_status_widget(self, visible: bool, total: int = 0) -> None:
         """Statusbar-Cancel-Widget toggle."""
