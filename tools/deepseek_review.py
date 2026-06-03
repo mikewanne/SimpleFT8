@@ -65,7 +65,7 @@ def call_deepseek(prompt: str, key: str, model: str) -> dict:
     payload = {
         "model": model,
         "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": 16000,  # R1: reasoning + answer combined; 8K war zu knapp
+        "max_tokens": 32000,  # R1: reasoning + answer combined; 8K→16K→32K (v4-pro kann 131K; 16K verbrauchte das Reasoning komplett → leere Antwort)
     }
     req = urllib.request.Request(
         API_URL,
