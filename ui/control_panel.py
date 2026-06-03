@@ -50,6 +50,16 @@ def compute_net_power(fwd_w: float, swr: float) -> int:
     return int(round(fwd_w * (1.0 - gamma * gamma)))
 
 
+def swr_color(swr: float) -> str:
+    """Ampel-Farbe fuer einen SWR-Wert (gemeinsam: SWR-Body-Label + eingeklappter
+    RADIO-Header). <1.5 gruen, <2.5 gelb, sonst rot."""
+    if swr < 1.5:
+        return "#44FF44"
+    if swr < 2.5:
+        return "#FFD700"
+    return "#FF4444"
+
+
 class FrequencyHistogramWidget(QWidget):
     """50-Hz-Bin Frequenz-Histogramm: belegte Frequenzen + freie Lücke + CQ-Marker.
 
@@ -1802,13 +1812,33 @@ class ControlPanel(QWidget):
     def _refresh_radio_status_label(self):
         """P97 (v0.97.69): Header-Status der Radio-Kachel aktualisieren.
 
-        Zeigt aktuelle Sendeleistung als dezenten Suffix neben „RADIO"
+        Zeigt die eingestellte Sendeleistung als dezenten Suffix neben „RADIO"
         damit Mike auch bei eingeklappter Kachel die Wattzahl sieht.
-        """
-        if self._current_power_watts is None:
-            text = ""
-        else:
-            text = f"— {self._current_power_watts} W"
+
+        v0.99.0: Beim Senden (``_last_watt > 0``, analog ``_refresh_netto``)
+        zusaetzlich die Netto-Leistung (FWD durchs SWR runtergerechnet) + das
+        SWR (farbig per Ampel) anhaengen — so sieht man auch minimiert was
+        rausgeht. Format: „— 70 → 58 W · SWR 1.2". Im Empfang (kein TX,
+        ``_last_watt`` ~0 ueber den FWDPWR-Meter) faellt der Zusatz weg →
+        wieder „— 70 W"."""
+        p = self._current_power_watts
+        # getattr-Default: _refresh_radio_status_label wird in __init__ aufgerufen
+        # BEVOR _last_watt/_last_swr_for_netto gesetzt sind (Init-Reihenfolge).
+        last_watt = getattr(self, '_last_watt', 0.0)
+        last_swr = getattr(self, '_last_swr_for_netto', 1.0)
+        if not (last_watt > 0):
+            # Empfang / kein TX → nur eingestellte Leistung (Plain Text reicht).
+            text = "" if p is None else f"— {p} W"
+            if hasattr(self, '_radio_card_status_label'):
+                self._radio_card_status_label.setText(text)
+            return
+        # TX aktiv → Netto-Watt + farbiges SWR (Rich-Text fuer die SWR-Ampel;
+        # Grundfarbe des Labels bleibt fuer den Watt-Teil erhalten).
+        netto = compute_net_power(last_watt, last_swr)
+        swr = last_swr
+        prefix = "—" if p is None else f"— {p} →"
+        text = (f'{prefix} {netto} W · '
+                f'<span style="color:{swr_color(swr)};">SWR {swr:.1f}</span>')
         if hasattr(self, '_radio_card_status_label'):
             self._radio_card_status_label.setText(text)
 
@@ -2074,20 +2104,17 @@ class ControlPanel(QWidget):
         self.watt_label.setText(f"{watts:.0f} W")
         self._last_watt = watts
         self._refresh_netto()
+        self._refresh_radio_status_label()  # v0.99.0: eingeklappter Header live
 
     def update_swr(self, swr: float):
-        if swr < 1.5:
-            color = "#44FF44"
-        elif swr < 2.5:
-            color = "#FFD700"
-        else:
-            color = "#FF4444"
+        color = swr_color(swr)
         self.swr_label.setText(f"SWR {swr:.1f}")
         self.swr_label.setStyleSheet(
             f"color: {color}; font-family: {_FONT}; font-size: 14px; font-weight: bold;"
         )
         self._last_swr_for_netto = swr
         self._refresh_netto()
+        self._refresh_radio_status_label()  # v0.99.0: eingeklappter Header live
 
     def _refresh_netto(self):
         """P156: Netto-Leistung (FWD minus Reflexion) dezent anzeigen — NUR
@@ -2113,6 +2140,9 @@ class ControlPanel(QWidget):
         self._last_swr_for_netto = 1.0
         self._last_watt = 0.0
         self.netto_label.setText("")
+        # v0.99.0: eingeklappter Header zurueck auf „— {eingestellt} W"
+        # (Vorband-Netto/SWR ist ungueltig).
+        self._refresh_radio_status_label()
 
     def update_alc(self, alc: float):
         """ALC-Meter aktualisieren (nur intern, nicht mehr angezeigt)."""
