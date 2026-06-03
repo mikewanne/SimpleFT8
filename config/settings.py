@@ -93,6 +93,9 @@ DEFAULTS = {
     # AN = bei Bandwechsel mit stale/missing Gain wird DXTuneDialog
     # automatisch gestartet (analog Auto-TUNE).
     "auto_gain_on_band_change": False,
+    # 2026-06-03: Audio-Mithoer-Monitor (Diagnose) — RX-Audio auf Lautsprecher.
+    # Wird normal persistiert (NICHT in der band/mode-Exclude-Liste von save()).
+    "audio_monitor": False,
 }
 
 

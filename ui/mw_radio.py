@@ -44,6 +44,32 @@ class RadioMixin:
     Alle self.xxx Zugriffe funktionieren weil self = MainWindow Instanz.
     """
 
+    def _on_rx_audio(self, samples_int16):
+        """RX-Audio-Verteiler: Decoder ZUERST (unveraendert), dann optionaler
+        Mithoer-Monitor. Laeuft im VITA-49-Empfangsthread — nichts darf hier
+        blockieren (feed() ist nicht-blockierend, siehe core/audio_monitor.py)."""
+        self.decoder.feed_audio(samples_int16)
+        mon = getattr(self, "_audio_monitor", None)
+        if mon is not None and mon.active:
+            mon.feed(samples_int16)
+
+    def _set_audio_monitor(self, on: bool, persist: bool = True):
+        """Audio-Mithoer-Monitor an/aus (Diagnose). Bei Start-Fehler (kein
+        Audiogeraet) Toggle zurueckrollen + Info-Zeile (DeepSeek-🔴)."""
+        if on:
+            try:
+                self._audio_monitor.start()
+            except Exception as e:
+                self.rx_panel.set_audio_monitor_checked(False)
+                self.qso_panel.add_info("Audio-Mithoeren: kein Audiogeraet verfuegbar")
+                print(f"[AudioMonitor] Start fehlgeschlagen: {e}")
+                return
+        else:
+            self._audio_monitor.stop()
+        if persist:
+            self.settings.set("audio_monitor", on)
+            self.settings.save()
+
     def _start_radio(self):
         """FlexRadio verbinden und Decoder starten (mit Auto-Retry).
 
@@ -52,7 +78,10 @@ class RadioMixin:
         damit Hauptfenster zuerst sichtbar ist (Modal poppt darueber).
         """
         # Audio-Callback + Signals verbinden
-        self.radio.on_audio_callback = self.decoder.feed_audio
+        # Wrapper statt direkt decoder.feed_audio: speist zusaetzlich den
+        # optionalen Audio-Mithoer-Monitor. Decoder bleibt unangetastet und
+        # bekommt das Audio IMMER zuerst. Siehe core/audio_monitor.py.
+        self.radio.on_audio_callback = self._on_rx_audio
         self.radio.error.connect(lambda msg: print(f"[Radio] {msg}"))
         self.radio.connected.connect(self._on_radio_connected)
         self.radio.disconnected.connect(self._on_radio_disconnected)

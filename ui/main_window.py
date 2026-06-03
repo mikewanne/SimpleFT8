@@ -23,6 +23,7 @@ from core.timing import FT8Timer
 from core.qso_state import QSOStateMachine, QSOState
 from core.encoder import Encoder
 from core.decoder import Decoder
+from core.audio_monitor import AudioMonitor
 from core.message import FT8Message
 from core.diversity import DiversityController
 from log.adif import AdifWriter
@@ -196,6 +197,8 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         # P3 v0.95.20: initiales Band setzen (sonst Default "20m" bei
         # erstem Audio-Dump-Slot vor Bandwechsel)
         self.decoder.set_band(settings.band)
+        # Audio-Mithoer-Monitor (Diagnose) — RX-Audio optional auf Lautsprecher.
+        self._audio_monitor = AudioMonitor()
         self.adif = AdifWriter()
 
         # Stations-Statistik Logger + Warmup
@@ -675,6 +678,7 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
             my_grid=self.settings.locator,
             country_filter=self.settings.get("country_filter", []),
             hidden_cols=self.settings.get("rx_panel_hidden_cols", []),
+            audio_monitor=self.settings.get("audio_monitor", False),
         )
         self.qso_panel = QSOPanel()
         # Logbuch mit ADIF-Dateien laden (AdifWriter schreibt in adif/ Unterordner)
@@ -824,6 +828,12 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self.rx_panel.rx_toggled.connect(self._on_rx_panel_toggled)
         self.rx_panel.country_filter_changed.connect(self._on_country_filter_changed)
         self.rx_panel.hidden_cols_changed.connect(self._on_rx_hidden_cols_changed)
+        self.rx_panel.audio_monitor_toggled.connect(self._set_audio_monitor)
+        # Audio-Mithoeren beim Start automatisch aktivieren, wenn zuletzt an
+        # (persist=False → kein redundantes save). Defer via QTimer, damit ein
+        # evtl. Start-Fehler erst nach UI-Aufbau die Info-Zeile zeigen kann.
+        if self.settings.get("audio_monitor", False):
+            QTimer.singleShot(0, lambda: self._set_audio_monitor(True, persist=False))
 
         # Control Panel
         self.control_panel.mode_changed.connect(self._on_mode_changed)
@@ -1725,6 +1735,13 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
 
     def closeEvent(self, event):
         # P34-Stufe2: MessStatusDialog gibt's nicht mehr.
+
+        # Audio-Mithoer-Monitor sauber schliessen (PortAudio-Stream), sonst
+        # kann er im Hintergrund haengen bleiben (DeepSeek-🟡).
+        try:
+            self._audio_monitor.stop()
+        except Exception:
+            pass
 
         # P22-A10: Staged Preset-Eintraege verwerfen (kein Half-State).
         # P80: nur noch unified _gain_store.

@@ -73,11 +73,14 @@ class RXPanel(QWidget):
     rx_toggled = Signal(bool)  # True=RX ON, False=RX OFF
     country_filter_changed = Signal(list)  # gefilterte Länder (für Settings)
     hidden_cols_changed = Signal(list)  # P32: persistierte Spalten-Sichtbarkeit
+    audio_monitor_toggled = Signal(bool)  # 2026-06-03: RX-Audio-Mithoeren an/aus
 
     def __init__(self, my_call: str = "DA1MHH", my_grid: str = "JO31",
                  country_filter: list = None,
-                 hidden_cols: list = None):
+                 hidden_cols: list = None,
+                 audio_monitor: bool = False):
         super().__init__()
+        self._audio_monitor_on = audio_monitor
         self._my_call = my_call
         self._my_grid = my_grid
         self._cycle_message_count = 0
@@ -192,6 +195,25 @@ class RXPanel(QWidget):
         self.btn_new_filter.setStyleSheet(_FILTER_STYLE)
         self.btn_new_filter.clicked.connect(self._apply_filters)
         header_row.addWidget(self.btn_new_filter)
+
+        # 🔊 Audio-Mithoeren (Diagnose, 2026-06-03): RX-Audio auf Lautsprecher.
+        # Hoerst du Betrieb, aber die Liste bleibt leer → Problem liegt an der App.
+        self.btn_audio = QPushButton("🔊")
+        self.btn_audio.setCheckable(True)
+        self.btn_audio.setChecked(self._audio_monitor_on)
+        self.btn_audio.setFixedHeight(20)
+        self.btn_audio.setFixedWidth(32)
+        self.btn_audio.setToolTip(
+            "Empfangsaudio mithoeren (Diagnose) — hoerst du Gezwitscher, "
+            "aber die Liste bleibt leer, liegt es an der App, nicht am Band")
+        self.btn_audio.setStyleSheet("""
+            QPushButton { background:#222; color:#888; border:1px solid #444;
+                border-radius:2px; font-size:11px; }
+            QPushButton:checked { background:#004400; color:#44FF44; border-color:#44FF44; }
+            QPushButton:hover { background:#333; }
+        """)
+        self.btn_audio.clicked.connect(self._on_audio_toggled)
+        header_row.addWidget(self.btn_audio)
 
         header_row.addStretch()
         layout.addLayout(header_row)
@@ -549,6 +571,15 @@ class RXPanel(QWidget):
         else:
             self.btn_rx.setText("RX OFF")
         self.rx_toggled.emit(self._rx_active)
+
+    def _on_audio_toggled(self):
+        """🔊 Audio-Mithoeren an/aus → Signal an MainWindow (start/stop +
+        Persistenz). Bei Start-Fehler rollt MainWindow den Button zurueck."""
+        self.audio_monitor_toggled.emit(self.btn_audio.isChecked())
+
+    def set_audio_monitor_checked(self, on: bool):
+        """Button-Zustand ohne Signal setzen (Fehler-Rueckrollung / Boot)."""
+        self.btn_audio.setChecked(on)
 
     def _on_header_clicked(self, col: int):
         """Klick auf nativen Spaltenkopf → sortieren + Farbe aktualisieren.
