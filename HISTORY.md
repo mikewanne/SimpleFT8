@@ -21,6 +21,42 @@ Gelöscht wird nie etwas. Format: `## YYYY-MM-DD vX.YY — Kurztitel`.
 > *(Lokal nicht-gepusht beim Anker: `cfab444` v0.98.64 Mode-Abbruch-Fix + 2
 > Multiband-TODO-Commits — die haben die alte DT-Berechnung ebenfalls noch.)*
 
+## 2026-06-03 v0.99.3 — PSK-Timer-Spin behoben (4GB-Debug-Log-Flut) + OMNI-Diagnose-Marker
+
+**Mike-Field: Debug-Logdatei war 4 GB groß; separat: Auto-Hunt→OMNI-Wechsel
+dauerte ~1:45.** (DeepSeek R1 6/6 für den Log-Fix; Marker = reine Instrumentierung.)
+
+**Teil 1 — PSK-Timer-Spin (Log-Flut + CPU):** Die tägliche Debug-Datei
+(`~/.simpleft8/debug_*.log`) wuchs an EINEM Tag auf 4 GB — geflutet mit
+`[PSK] SKIP — _has_sent_cq=False` (tausende Zeilen/s). **Root Cause:**
+`_reset_psk_polling_on_change` (Band-/Modus-Wechsel) startet den PSK-Timer mit
+`start(0)` (Sofort-Fetch); ein QTimer mit Intervall 0 feuert so schnell wie die
+Event-Loop kann. In `_fetch_psk_stats` lag die Intervall-Umschaltung HINTER dem
+`_has_sent_cq`-Return → solange kein CQ raus war (Bandwechsel setzt
+`_has_sent_cq=False`) blieb der Timer bei 0 und spinnte endlos. **Fix:** Intervall-
+Umschaltung VOR den Return ziehen → Timer verlässt das 0-Intervall nach dem ersten
+Tick IMMER (egal ob CQ); Sofort-Fetch bei gesetztem `_has_sent_cq` bleibt erhalten;
+Flut-SKIP-Logzeile entfernt. Die bestehende Retention (`cleanup_old_files
+keep_days=1` in `main.py`) löscht alte Tage weiter — der Flood war der Größen-
+Treiber, nicht fehlende Bereinigung. Altlasten (06-02 2 GB + 06-03 4 GB) manuell
+gelöscht (~6 GB reclaimed; `debug_log` öffnet/schließt pro Write → gefahrlos).
+Tests 2384→**2387** (+3 `test_psk_timer_no_spin.py`, Fake-Self).
+
+**Teil 2 — OMNI-CQ Diagnose-Marker:** Um zu SEHEN (statt zu raten) warum der
+Auto-Hunt→OMNI-Wechsel ~1:45 dauerte, `debug_log("OMNI", …)`-Marker an den
+Lifecycle-Stellen: `omni_cq` START/STOP/PAUSE/RESUME + `on_cycle_start` (Early-
+Return gesplittet: nur aktiv+pausiert loggt „slot SKIP — paused", inaktiv still;
++ „slot SKIP — parity fresh/want", „TX CQ …", „TX SKIP — encoder busy");
+`mw_qso._maybe_resume_omni` (was_active/caller_queue + Pfad). Alle pro-Slot
+bounded, no-op wenn Debug aus. **Reines Logging, kein Verhaltenswechsel.**
+
+**Bekannt + verifiziert (Teil-Befund zum 1:45):** `omni_cq.resume_after_qso`
+behält nach einem QSO die ALTE Parität (`_cq_tx_even`) statt den nächsten freien
+Slot zu nehmen — kostet ≤1 Slot (Mikes „even→even"-Beobachtung). Das erklärt aber
+NUR ≤1 Slot, nicht 1:45 → der größere Blocker wird mit den Markern beim nächsten
+Wechsel sichtbar gemacht, dann gezielter Fix (separat, voller Workflow). **Kein
+TX-/Antennen-Eingriff.** NICHT gepusht.
+
 ## 2026-06-03 v0.99.2 — DT-Kalibrier-Knopf (⏱) nur auf FT8 sichtbar (FT4/FT2 ausblenden)
 
 **Voller Workflow (DeepSeek Final-R1 4/4 bestätigt). Mike-Wunsch.**

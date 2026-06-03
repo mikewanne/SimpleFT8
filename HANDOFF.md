@@ -1,16 +1,27 @@
 # HANDOFF — SimpleFT8
 
-**Aktueller Stand:** v0.99.2 (03.06.2026) — **DT-Kalibrier-Knopf (⏱) nur auf FT8
-sichtbar** (FT4/FT2 ausblenden, Fehlklick-Schutz; voller Workflow, DeepSeek Final-R1
-4/4). `rx_panel.set_calibrate_visible(visible)`; `_on_mode_changed` schaltet
-`mode=="FT8"`; `main_window` Initial-Sichtbarkeit; FT8-Guard in `_on_calibrate_dt`
-bleibt als Sicherheitsnetz. Reines Sichtbarkeits-Feature, ANT1/ANT2 unberührt. Tests
-2380→**2384** (+4). NICHT gepusht.
+**Aktueller Stand:** v0.99.3 (03.06.2026) — **PSK-Timer-Spin behoben (4 GB-Debug-Log-
+Flut) + OMNI-Diagnose-Marker.** PSK: `_reset_psk_polling_on_change` startet den Timer
+mit `start(0)`; lag die Intervall-Umschaltung hinter dem `_has_sent_cq`-Return,
+spinnte der Timer endlos (4 GB/Tag + CPU). Fix: Umschaltung VOR den Return (DeepSeek
+R1 6/6). Altlasten ~6 GB gelöscht. OMNI: `debug_log("OMNI",…)`-Marker an
+START/STOP/PAUSE/RESUME + `on_cycle_start` (paused/parity-skip/TX/encoder-busy) +
+`_maybe_resume_omni` → nächster Auto-Hunt→OMNI-Wechsel zeigt im Log exakt, warum
+~1:45 vergehen. Reines Timing/Logging, ANT1/ANT2 unberührt. Tests 2384→**2387** (+3).
+NICHT gepusht.
 
-**🔎 Offene Mike-Frage (Field 03.06.):** Wechsel Auto-Hunt → OMNI-CQ dauerte ~1:45
-bis zum ersten CQ (even→even). Mike-Idee: schneller in den CQ-Pfad, nächster freier
-Slot egal ob odd/even. → noch zu untersuchen (OMNI-CQ-Start-Pfad / Paritäts-Wahl /
-CQ-Freq-Suche).
+**🔎 Offene Mike-Frage (Field 03.06.) — Auto-Hunt→OMNI-Wechsel ~1:45:**
+Verifizierter Teil-Befund: `omni_cq.resume_after_qso` behält die ALTE Parität →
+≤1 Slot (Mikes „even→even"). Erklärt NICHT die vollen 1:45 → der größere Blocker
+wird jetzt mit den OMNI-Markern (v0.99.3) beim **nächsten Wechsel sichtbar**.
+**Nächster Schritt:** Mike reproduziert (Auto-Hunt→OMNI) mit aktivem Debug-Log →
+`~/.simpleft8/debug_*.log` lesen → echte Ursache → gezielter Fix (voller Workflow).
+Mike-Idee „nächster freier Slot egal Parität" bleibt als Quick-Win-Option (≤1 Slot).
+
+— **Vorgänger v0.99.2: DT-Kalibrier-Knopf (⏱) nur auf FT8 sichtbar** (FT4/FT2
+ausblenden, Fehlklick-Schutz; DeepSeek Final-R1 4/4). `rx_panel.set_calibrate_visible`;
+`_on_mode_changed` schaltet `mode=="FT8"`; FT8-Guard bleibt Sicherheitsnetz. Tests
+2380→2384. NICHT gepusht.
 
 — **Vorgänger v0.99.1: Eingeklappter RADIO-Header: Netto-Watt +
 farbiges SWR beim Senden** (voller Workflow, DeepSeek Plan-R1 GO + Final-R1 PUSH
