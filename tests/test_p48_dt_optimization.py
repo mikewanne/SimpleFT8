@@ -160,6 +160,22 @@ def test_migration_old_format_to_global_median(fresh_ntp, tmp_path, monkeypatch)
     assert nt._is_initial is False
 
 
+def test_migration_no_ft8_keys_skips(fresh_ntp, tmp_path, monkeypatch):
+    """Alte Datei OHNE FT8-Keys → KEINE Migration (FT4/FT2-Werte sind durch
+    ihren Modus-Versatz keine gueltige globale Basis). _is_initial bleibt True,
+    _correction 0.0 → Hardware-Default / erste FT8-Messung korrigiert sauber.
+    (DeepSeek-Final-R1-Bug 03.06.2026: frueher lud allnum-Fallback eine falsche
+    ~0-Basis.)"""
+    import json
+    nt = fresh_ntp
+    f = tmp_path / "old_ft4only.json"
+    f.write_text(json.dumps({"FT4_20m": 0.045, "FT2_40m": 0.10}))
+    monkeypatch.setattr(nt, "_DT_FILE", f)
+    nt._load_saved()
+    assert nt._correction == 0.0
+    assert nt._is_initial is True
+
+
 def test_new_format_loaded(fresh_ntp, tmp_path, monkeypatch):
     """Neues Single-Value-Format wird direkt geladen."""
     import json

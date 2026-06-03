@@ -39,6 +39,23 @@ MAX_CORRECTION = 1.0         # Clamp ±1.0s (Werte liegen ~0.26)
 DEADBAND = 0.02              # 20ms Totband (Anti-Einfrier)
 DAMPING = 0.7                # 70% Daempfung fuer Folge-Korrekturen
 
+# ── Modus-Versatz (field-kalibriert, PROVISORISCH) ────────────────────────────
+# Der gelernte Korrekturwert ist NICHT rein die Funkgeraet-Latenz — er ist
+# MODUS-ABHAENGIG (Mike-Field 03.06.2026, DeepSeek-bestaetigt): FT8 braucht
+# ~+0.29s, FT4 effektiv ~0. Der Unterschied ist ein protokoll-/fenster-
+# abhaengiger Versatz (je schneller der Modus, desto enger die Toleranz). Darum:
+# nur FT8 LERNT (`_correction`, viele Stationen); FT4/FT2 bekommen einen FESTEN
+# Delta obendrauf. `effektive_Korrektur(mode) = _correction + _MODE_DELTA[mode]`.
+#
+# _MODE_DELTA["FT4"] = -0.30: Field-Median der FT4-DT lag bei -0.30 (waehrend
+# FT8 bei 0 stand) → dieser Delta zentriert FT4 (Anzeige + RX-Decode-Fensterlage
+# + TX-Timing zugleich, weil alle ueber get_correction() laufen).
+# ⚠️ PROVISORISCH/empirisch: eine deterministische Ableitung aus _WINDOW_OFFSETS
+# ist aktuell NICHT gesichert (DeepSeek-F1 — evtl. steckt ein versteckter Fehler
+# in den FT4-Fenster-Konstanten, separat zu klaeren). Bei gravierender Hardware-
+# Aenderung neu kalibrieren. FT2 = 0.0 (Button versteckt, spaeter kalibrieren).
+_MODE_DELTA = {"FT8": 0.0, "FT4": -0.30, "FT2": 0.0}
+
 # MAD-basierter Outlier-Filter (Hampel-Filter).
 _MAD_K = 2.5
 _MAD_MIN_N = 7    # Unter 7 Werten kein Filter
@@ -137,20 +154,22 @@ def _load_saved() -> None:
         except (TypeError, ValueError):
             pass
         return
-    # Migration alt→global: Median der FT8_*-Werte (sonst aller numerischen).
-    # FT4/FT2-Ausreisser (z.B. FT4_20m=0.045) werden so verworfen.
+    # Migration alt→global: Median NUR der FT8_*-Werte (viele Stationen → robust).
+    # FT4/FT2-Ausreisser (z.B. FT4_20m=0.045) sind durch ihren Modus-Versatz KEINE
+    # gueltige globale Basis. Gibt es KEINE FT8-Keys, ist keine sichere Basis
+    # ableitbar → NICHT migrieren, bei _is_initial=True / _correction=0.0 bleiben
+    # (Hardware-Default bzw. erste FT8-Messung korrigiert sauber). Frueher fiel der
+    # Pool hier auf "alle numerischen Werte" zurueck → falsche ~0-Basis bei reinen
+    # FT4/FT2-Dateien (DeepSeek-Final-R1, 03.06.2026).
     ft8 = [v for k, v in data.items()
            if isinstance(v, (int, float)) and not isinstance(v, bool)
            and k.upper().startswith("FT8")]
-    allnum = [v for v in data.values()
-              if isinstance(v, (int, float)) and not isinstance(v, bool)]
-    pool = ft8 or allnum
-    if pool:
-        _correction = round(statistics.median(pool), 4)
-        _is_initial = False
-        src = (f"{len(ft8)} FT8-Werten (FT4/FT2-Ausreisser verworfen)" if ft8
-               else f"{len(allnum)} numerischen Werten (keine FT8-Keys)")
-        print(f"[DT-Korr] Migration alt→global: Median {_correction:+.3f}s aus {src}")
+    if not ft8:
+        return
+    _correction = round(statistics.median(ft8), 4)
+    _is_initial = False
+    print(f"[DT-Korr] Migration alt→global: Median {_correction:+.3f}s "
+          f"aus {len(ft8)} FT8-Werten (FT4/FT2-Ausreisser verworfen)")
 
 
 # Beim Import laden
@@ -196,21 +215,30 @@ def set_band(band: str) -> None:
 
 
 def get_time() -> float:
-    """Korrigierte Zeit — ueberall statt time.time() verwendbar."""
+    """Korrigierte Zeit — ueberall statt time.time() verwendbar.
+
+    Nutzt die EFFEKTIVE (modus-abhaengige) Korrektur, damit auch das TX-Timing
+    den FT4/FT2-Versatz beruecksichtigt (nicht nur die FT8-Basis)."""
     import time
-    return time.time() + _correction
+    return time.time() + get_correction()
 
 
 def get_correction() -> float:
-    """Aktueller globaler Korrekturwert in Sekunden."""
-    return _correction
+    """Effektive Korrektur fuer den AKTUELLEN Modus in Sekunden.
+
+    = gelernte FT8-Basis ``_correction`` + fester ``_MODE_DELTA[_mode]``.
+    Auf FT8 identisch zur Basis (Delta 0); FT4/FT2 bekommen ihren Versatz.
+    Wird vom RX-Decode-Shift (decoder), TX-Timing (get_time) und der Anzeige
+    genutzt → eine Quelle, ein konsistentes Ergebnis."""
+    return _correction + _MODE_DELTA.get(_mode, 0.0)
 
 
 def get_status_text() -> str:
-    """Status-String fuer UI."""
-    if _last_sample_count == 0 and _correction == 0.0:
+    """Status-String fuer UI — zeigt die EFFEKTIVE Korrektur des aktuellen Modus."""
+    eff = get_correction()
+    if _last_sample_count == 0 and eff == 0.0:
         return "DT-Korr: —"
-    return (f"DT-Korr: {_correction:+.2f}s "
+    return (f"DT-Korr: {eff:+.2f}s "
             f"(Median {_last_median_dt:+.2f}s, "
             f"Phase: {_phase} {_cycle_count})")
 
