@@ -1,6 +1,18 @@
 # HANDOFF — SimpleFT8
 
-**Aktueller Stand:** v0.99.1 (03.06.2026) — **Eingeklappter RADIO-Header: Netto-Watt +
+**Aktueller Stand:** v0.99.2 (03.06.2026) — **DT-Kalibrier-Knopf (⏱) nur auf FT8
+sichtbar** (FT4/FT2 ausblenden, Fehlklick-Schutz; voller Workflow, DeepSeek Final-R1
+4/4). `rx_panel.set_calibrate_visible(visible)`; `_on_mode_changed` schaltet
+`mode=="FT8"`; `main_window` Initial-Sichtbarkeit; FT8-Guard in `_on_calibrate_dt`
+bleibt als Sicherheitsnetz. Reines Sichtbarkeits-Feature, ANT1/ANT2 unberührt. Tests
+2380→**2384** (+4). NICHT gepusht.
+
+**🔎 Offene Mike-Frage (Field 03.06.):** Wechsel Auto-Hunt → OMNI-CQ dauerte ~1:45
+bis zum ersten CQ (even→even). Mike-Idee: schneller in den CQ-Pfad, nächster freier
+Slot egal ob odd/even. → noch zu untersuchen (OMNI-CQ-Start-Pfad / Paritäts-Wahl /
+CQ-Freq-Suche).
+
+— **Vorgänger v0.99.1: Eingeklappter RADIO-Header: Netto-Watt +
 farbiges SWR beim Senden** (voller Workflow, DeepSeek Plan-R1 GO + Final-R1 PUSH
 FREIGEBEN). Die eingeklappte RADIO-Kachel zeigt beim Senden „— 80 → 58 W · SWR 1.2"
 (SWR farbig per Ampel), im Empfang weiter „— 80 W". `ui/control_panel.py`: Helper

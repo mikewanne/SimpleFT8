@@ -521,7 +521,11 @@ Stale nach FT8→FT4→FT8).
 
 **UI:** ⏱-Knopf in `rx_panel` (neben 🔊, Signal `calibrate_requested`), Ergebnis in
 die QSO-Info-Zeile + Statusbar sofort. Statusbar zeigt jetzt einen festen Wert oder
-„DT: —" (kein `_phase`-„Korrektur"/„Aktiv"-Wechsel mehr).
+„DT: —" (kein `_phase`-„Korrektur"/„Aktiv"-Wechsel mehr). **v0.99.2: Knopf nur auf
+FT8 sichtbar** (`rx_panel.set_calibrate_visible`, geschaltet in
+`mw_radio._on_mode_changed` via `mode=="FT8"` + Initial in `main_window`) — auf
+FT4/FT2 ausgeblendet (Fehlklick-Schutz; DT wird ohnehin nur aus FT8 gemessen). Der
+FT8-Guard in `_on_calibrate_dt` bleibt als Sicherheitsnetz.
 
 **Bug-Analyse-Hinweis für später:** „DT-Wert verändert sich von selbst" KANN es ab
 v0.99.0 nicht mehr geben — wenn doch, ist irgendwo noch ein `_correction`-Write

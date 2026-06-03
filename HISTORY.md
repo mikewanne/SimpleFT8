@@ -21,6 +21,30 @@ Gelöscht wird nie etwas. Format: `## YYYY-MM-DD vX.YY — Kurztitel`.
 > *(Lokal nicht-gepusht beim Anker: `cfab444` v0.98.64 Mode-Abbruch-Fix + 2
 > Multiband-TODO-Commits — die haben die alte DT-Berechnung ebenfalls noch.)*
 
+## 2026-06-03 v0.99.2 — DT-Kalibrier-Knopf (⏱) nur auf FT8 sichtbar (FT4/FT2 ausblenden)
+
+**Voller Workflow (DeepSeek Final-R1 4/4 bestätigt). Mike-Wunsch.**
+
+Der ⏱-Kalibrier-Knopf war bisher immer sichtbar; auf FT4/FT2 zeigte der Handler nur
+eine Info „nur auf FT8". Mike: auf FT4 (und später FT2, wenn aktiviert) **ganz
+ausblenden**, damit man nicht versehentlich klickt (DT wird ohnehin nur aus FT8
+gemessen). Überschreibt bewusst die frühere „Info-statt-Ausblenden"-KISS-Entscheidung
+— Fehlklick-Schutz ist Mike wichtiger.
+
+- `ui/rx_panel.py`: neue Methode **`set_calibrate_visible(visible)`** →
+  `btn_calibrate.setVisible` (QHBoxLayout kollabiert das versteckte Widget).
+- `ui/mw_radio.py:_on_mode_changed` (zentraler Mode-Hook, deckt auch programmatische
+  Pfade ab; Re-Klick/Gain-Lock-Early-Returns davor): `set_calibrate_visible(mode ==
+  "FT8")`.
+- `ui/main_window.py`: Initial-Sichtbarkeit mode-abhängig (Start = FT8 → sichtbar).
+- FT8-Guard in `_on_calibrate_dt` BLEIBT als Sicherheitsnetz (DeepSeek: robust, nicht
+  redundant — fängt einen seltenen Stray-Signal-Fall ab).
+
+**Reines Sichtbarkeits-Feature, kein TX-/Antennen-Eingriff.** DeepSeek Final-R1: 4/4
+(einziger Mode-Hook, kein Stuck-State nach Rückwechsel, Guard sinnvoll, KISS). Tests
+2380→**2384** (+4 `test_calibrate_button_ft8only.py`: isHidden + Source-Wiring-Checks).
+NICHT gepusht.
+
 ## 2026-06-03 v0.99.1 — Eingeklappter RADIO-Header: Netto-Watt + farbiges SWR beim Senden
 
 **Voller Workflow (Plan-R1 GO + Final-R1 PUSH FREIGEBEN). Mike-Wunsch (heute schon
