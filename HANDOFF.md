@@ -1,6 +1,18 @@
 # HANDOFF — SimpleFT8
 
-**Aktueller Stand:** v0.99.0 (03.06.2026) — **DT-Korrektur: dynamisches Dauer-Lernen
+**Aktueller Stand:** v0.99.1 (03.06.2026) — **Eingeklappter RADIO-Header: Netto-Watt +
+farbiges SWR beim Senden** (voller Workflow, DeepSeek Plan-R1 GO + Final-R1 PUSH
+FREIGEBEN). Die eingeklappte RADIO-Kachel zeigt beim Senden „— 80 → 58 W · SWR 1.2"
+(SWR farbig per Ampel), im Empfang weiter „— 80 W". `ui/control_panel.py`: Helper
+`swr_color()` (DRY mit `update_swr`); `_refresh_radio_status_label` hängt bei
+`_last_watt>0` Netto-Watt (`compute_net_power`) + farbiges SWR (Rich-Text-Span) an;
+Live-Trigger in `update_watt`/`update_swr`/`reset_swr_display`; `getattr`-Default für
+Init-Reihenfolge. Reines Anzeige-Feature, ANT1/ANT2 unberührt. Tests 2370→**2380**
+(+10 `test_radio_header_collapsed.py`). **✅ DT-Kalibrierung (v0.99.0) field-validiert
+(Mike am Radio):** „klappt super", DT-Werte sehr gut im ±-Bereich, FT4 gut, App
+fühlt sich flüssiger an (weniger Arbeit pro Slot). NICHT gepusht.
+
+— **Vorgänger v0.99.0: DT-Korrektur: dynamisches Dauer-Lernen
 RAUS, manueller Kalibrier-Knopf REIN** (großer Umbau, voller Workflow, DeepSeek
 Plan-R1 GO + Final-R1 PUSH FREIGEBEN). Die automatische DT-Lernschleife
 (`core/ntp_time.py`: Mess-/Operate-Phasen, Dämpfung, Sprung-Reset, Fast-Convergence)

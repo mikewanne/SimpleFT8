@@ -21,6 +21,35 @@ Gelöscht wird nie etwas. Format: `## YYYY-MM-DD vX.YY — Kurztitel`.
 > *(Lokal nicht-gepusht beim Anker: `cfab444` v0.98.64 Mode-Abbruch-Fix + 2
 > Multiband-TODO-Commits — die haben die alte DT-Berechnung ebenfalls noch.)*
 
+## 2026-06-03 v0.99.1 — Eingeklappter RADIO-Header: Netto-Watt + farbiges SWR beim Senden
+
+**Voller Workflow (Plan-R1 GO + Final-R1 PUSH FREIGEBEN). Mike-Wunsch (heute schon
+besprochen, Plan lag in `/tmp/ds_radio_header.md`).**
+
+Die eingeklappte RADIO-Kachel zeigte bisher nur die eingestellte Leistung
+(„— 80 W"). Jetzt ergänzt sie beim **Senden** die Netto-Leistung (FWD durchs SWR
+runtergerechnet) + das SWR (farbig per Ampel): **„— 80 → 58 W · SWR 1.2"**. So sieht
+man auch minimiert, was rausgeht. Im Empfang (kein TX) fällt der Zusatz weg → wieder
+„— 80 W".
+
+**`ui/control_panel.py`:**
+- Neuer Modul-Helper **`swr_color(swr)`** (`<1.5` grün, `<2.5` gelb, sonst rot) —
+  DRY: `update_swr` nutzt ihn jetzt auch (vorher inline dupliziert).
+- **`_refresh_radio_status_label`** erweitert: bei `_last_watt > 0` (TX, gleicher
+  Guard wie `_refresh_netto`) hängt es `→ {netto} W · SWR {x.x}` an, SWR-Teil über
+  einen Rich-Text-`<span style="color:…">` eingefärbt; die Label-Grundfarbe
+  (`#00aacc` türkis) bleibt für den Watt-Teil. Power `None` + TX → ohne „→"-Präfix.
+- **Live-Trigger:** `update_watt`/`update_swr`/`reset_swr_display` rufen den
+  Header-Refresh. Der FWDPWR-Meter (`mw_tx.py:836`) ruft `update_watt` pro Tick —
+  im RX ~0 → `_last_watt`→0 → Header automatisch zurück auf „— {p} W".
+- **`getattr`-Default** für `_last_watt`/`_last_swr_for_netto`: der Refresh läuft in
+  `__init__` VOR deren Initialisierung (Init-Reihenfolge; mit Default abgefangen).
+
+**Reines Anzeige-Feature, kein TX-/Antennen-Eingriff, ANT1/ANT2 unberührt.**
+DeepSeek Plan-R1 GO + Final-R1 PUSH FREIGEBEN (5 Punkte, 0 Blocker; Rich-Text-
+AutoText reicht, getattr-Fix sauber). Tests 2370→**2380** (+10
+`test_radio_header_collapsed.py`; P156-Netto-Tests weiter grün). NICHT gepusht.
+
 ## 2026-06-03 v0.99.0 — DT-Korrektur: dynamisches Dauer-Lernen RAUS, manueller Kalibrier-Knopf REIN
 
 **Großer Umbau (voller Workflow: V1→V2→DeepSeek-R1→V3→Code→Tests→Final-R1, beide

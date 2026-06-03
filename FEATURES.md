@@ -1548,6 +1548,18 @@ farbig; eine dritte farbwechselnde Zahl wäre zu unruhig. Die Warn-Farbe
 gehört zum SWR. Das interessante Fenster ist SWR 1,5–3,0 (über gutem Match,
 unter der Bandsperre) — genau wo Netto-Verlust sichtbar wird.
 
+**v0.99.0/0.99.1 — dieselbe Info im EINGEKLAPPTEN RADIO-Header:** Wenn die
+RADIO-Kachel zugeklappt ist, zeigt das Suffix-Label (`lbl_radio_status`, nur dann
+sichtbar) beim Senden **„— {eingestellt} → {netto} W · SWR {x.x}"** — netto = dasselbe
+`compute_net_power`, SWR farbig per gemeinsamem Helper **`swr_color(swr)`** (`<1.5`
+grün, `<2.5` gelb, sonst rot; auch von `update_swr` genutzt → DRY). Realisiert in
+`_refresh_radio_status_label` per Rich-Text-`<span>` (Label-Grundfarbe `#00aacc`
+bleibt für den Watt-Teil). Live über `update_watt`/`update_swr`/`reset_swr_display`;
+Guard `_last_watt > 0` (identisch zu `_refresh_netto`) → im Empfang (FWDPWR-Meter
+~0) wieder „— {eingestellt} W". Power `None` + TX → ohne „→"-Präfix. `getattr`-
+Default für `_last_watt`/`_last_swr_for_netto` (Refresh läuft im `__init__` vor deren
+Initialisierung). Tests: `test_radio_header_collapsed.py`.
+
 ---
 
 ## 15. RX-Liste / Stations-Akkumulator + Aging (P157)
