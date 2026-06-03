@@ -1,19 +1,36 @@
 # HANDOFF — SimpleFT8
 
-**Aktueller Stand:** v0.98.64 (03.06.2026) — **FT-Modus-Wechsel bricht laufendes
-QSO/TX ab (gemeinsamer Abbruch-Helper)** (voller Workflow, DeepSeek R1+Final-R1).
-Mike-Field: Auto-Hunt lief auf FT8 (rief LY7Z), Mike wechselt direkt auf FT4 (kein
-HALT) → Auto-Hunt stoppt, aber die QSO-Maschine sendet LY7Z 3× weiter auf dem
-neuen Modus/Band. Ursache: `_on_mode_changed` brach laufendes QSO + TX nicht ab —
-Band- und Normal↔Diversity-Wechsel taten das, der FT-Modus-Wechsel hatte es
-vergessen („mode-aware Symmetrie"-Bug-Klasse, FEATURES §11). Fix `ui/mw_radio.py`:
-identischen Abbruch-Block in Helper **`_abort_qso_and_tx()`** extrahiert (QSO/CQ-
-Stop + `encoder.abort()` + `ptt_off()` + pending-TX-Log-Discard), von ALLEN drei
-Wechsel-Pfaden gerufen → Bug-Klasse strukturell weg. `_on_mode_changed`: Helper
-vor `set_protocol` (DeepSeek: keine Race) + Early-Return bei gleichem Modus. Reiner
-Stopp, kein neuer TX, ANT1/ANT2 unberührt. R1 (GO+3 Ergänzungen) + Final-R1 **PUSH
-FREIGEBEN**. Tests 2349→**2358** (+9 `test_mode_change_abort.py`; `test_bundle_i`
-+ `test_p131` auf Helper-Struktur angepasst). NICHT gepusht, Field-Test pending.
+**Aktueller Stand:** v0.99.0 (03.06.2026) — **DT-Korrektur: dynamisches Dauer-Lernen
+RAUS, manueller Kalibrier-Knopf REIN** (großer Umbau, voller Workflow, DeepSeek
+Plan-R1 GO + Final-R1 PUSH FREIGEBEN). Die automatische DT-Lernschleife
+(`core/ntp_time.py`: Mess-/Operate-Phasen, Dämpfung, Sprung-Reset, Fast-Convergence)
+war fragil — Wert pendelte/sprang ins Minus, FT8→FT4→FT8-Übergang verdarb ihn →
+OMNI-CQ sendete 30/60s. **Kein fester Konstanten-Wert möglich**, weil Mikes
+Ferienhaus-iMac (defekte Pufferbatterie) eine um 3–5s driftende Uhr hat → es
+braucht eine nachjustierbare Korrektur, aber als **bewusste Einmal-Messung auf
+Knopfdruck**. `core/ntp_time.py`: Lernschleife komplett entfernt; neu
+`record_samples()` (puffert nur das gleitende FT8-Fenster `deque(maxlen=3)`) +
+`calibrate()→(ok,msg)` (Median+MAD der Residuen, **inkrementell** `_correction +=
+median`, voller Schritt, Clamp ±1.0, **kein Negativ-Riegel** — driftende Uhr darf
+negativ). ⏱-Knopf in `rx_panel` (neben 🔊), Handler `mw_radio._on_calibrate_dt`
+(nur FT8, Info + Statusbar-Refresh). `get_time()`/`get_correction()` unverändert
+(v0.98.63-Slot-Takt-Fix intakt). **Reines Timing/Anzeige, ANT1/ANT2 unberührt.**
+Tests 2358→**2368** (+10, neu `test_dt_calibrate.py`; Lern-/Phasen-/DEADBAND-Tests
+durch Kalibrier-Äquivalente ersetzt). Encoder-Drift-Guard-Robustheit bleibt separates
+TODO. **⚠️ Mike: App NEU STARTEN** (kein Auto-Lernen mehr — DT-Wert per ⏱ setzen).
+Sicherheitsanker GitHub `22f3d07` (v0.98.63, alte DT-Berechnung). NICHT gepusht,
+Field-Test pending.
+
+**Nächster Schritt (Field-Test für Mike):** App neu starten → auf FT8 warten bis
+≥5 Stationen empfangen → ⏱-Knopf drücken → Info-Zeile zeigt „DT kalibriert: +0.xx s
+(aus N FT8-Stationen)" → DT-Zeiten der Stationen prüfen (sollten um 0 liegen). Auf
+FT4/FT2 erbt der Wert + Modus-Versatz automatisch. Bei driftender Ferienhaus-Uhr
+einfach erneut ⏱ drücken.
+
+— **Vorgänger v0.98.64: FT-Modus-Wechsel bricht laufendes QSO/TX ab (gemeinsamer
+Abbruch-Helper)** (voller Workflow). Fix `ui/mw_radio.py`: Abbruch-Block in Helper
+**`_abort_qso_and_tx()`** extrahiert, von allen drei Wechsel-Pfaden gerufen. Tests
+2349→2358. NICHT gepusht.
 
 — **Vorgänger v0.98.63: FT4-OMNI sendete 30s statt 15s —
 Slot-Takt vom Modus-Versatz entkoppelt** (voller Workflow, 2× DeepSeek). Mike-

@@ -9,6 +9,85 @@ Gelöscht wird nie etwas. Format: `## YYYY-MM-DD vX.YY — Kurztitel`.
 > stehen in `history/HISTORY_archiv_NN.md` (grep dort, falls eine alte Version
 > gesucht wird). Rotiert mit `tools/rotate_history.py`. Zuletzt: 2026-06-01.
 
+> ⚓ **SICHERHEITSANKER vor DT-Umbau (03.06.2026):** Der auf **GitHub** liegende
+> Stand `origin/main` = Commit **`22f3d07` (v0.98.63)** ist die **letzte Version
+> mit der alten DYNAMISCHEN DT-Wert-Berechnung** (automatisches Dauer-Lernen aus
+> den FT8-Stationen: measure-/operate-Phasen, Dämpfung, Sprung-Reset in
+> `core/ntp_time.py`). Diese Version wurde zuletzt am 03.06. von der 2.-Juni-
+> Arbeit gepusht. **Im Notfall wiederherstellen:**
+> `git checkout 22f3d07 -- core/ntp_time.py ui/mw_cycle.py` (nur DT-Schicht) oder
+> `git reset --hard 22f3d07` (kompletter Rückfall, verwirft den Umbau). Ab v0.99.0
+> ersetzt der **manuelle Kalibrier-Button** die dynamische Dauer-Berechnung.
+> *(Lokal nicht-gepusht beim Anker: `cfab444` v0.98.64 Mode-Abbruch-Fix + 2
+> Multiband-TODO-Commits — die haben die alte DT-Berechnung ebenfalls noch.)*
+
+## 2026-06-03 v0.99.0 — DT-Korrektur: dynamisches Dauer-Lernen RAUS, manueller Kalibrier-Knopf REIN
+
+**Großer Umbau (voller Workflow: V1→V2→DeepSeek-R1→V3→Code→Tests→Final-R1, beide
+DeepSeek-Runden PUSH FREIGEBEN). Mike-Entscheidung 03.06.2026.**
+
+**Vorgeschichte (warum):** Die automatische DT-Lernschleife in `core/ntp_time.py`
+(Mess-/Operate-Phasen, Dämpfung, Sprung-Reset, Fast-Convergence) hatte sich über
+Tage als fragil erwiesen — der gelernte Wert pendelte, sprang ins Minus, und ein
+Modus-Wechsel-Übergang (FT8→FT4→FT8) verdarb ihn (Decoder-Race lieferte eine
+verzerrte Übergangs-Mess-Runde → der Median zog die Korrektur weg). Folge: OMNI-CQ
+sendete statt 15s mal 30s, mal 60s (negativer Korrekturwert → Encoder-Drift-Guard).
+
+**Warum nicht einfach ein fester Konstanten-Wert?** Mikes Ferienhaus-iMac (2015)
+hat eine **defekte Pufferbatterie** und hängt nicht dauerhaft am Strom → die
+System-Uhr driftet je nach Standzeit um 3–5 Sekunden (mal vor, mal nach). Ein
+fester Wert würde veralten; macOS-NTP greift erst verzögert/nur online. Es braucht
+also eine **nachjustierbare** Korrektur — aber als **bewusste Einmal-Messung auf
+Knopfdruck**, nicht als fragile Dauer-Regelung.
+
+**Lösung (Mikes Modell):** Manueller Kalibrier-Knopf. Der Wert ändert sich NUR auf
+Druck → stabil (kein Pendeln, kein Übergangs-Bug, kein OMNI-Takt-Problem) UND
+nachjustierbar (am Ferienhaus per Klick). **Die gute alte Median+MAD-Berechnung
+bleibt** — sie läuft jetzt nur manuell statt automatisch.
+
+**`core/ntp_time.py` (Kern-Umbau):**
+- **Raus:** `_phase`/`_cycle_count`/`_measure_buffer`, `update_from_decoded`
+  (Lernen), Sprung-Reset (`abs(median)>1→0`), `DAMPING`, `INITIAL/STEADY_MEASURE_
+  CYCLES`, `OPERATE_CYCLES`, `DEADBAND`, Fast-Convergence-Konstanten, `reset()`.
+- **Neu `record_samples(dt_values)`:** puffert NUR (kein Lernen) — FT8-Slots in
+  `deque(maxlen=RECENT_SLOTS=3)` (~45s gleitendes Fenster); setzt die Anzeige-
+  Werte `_last_median_dt`/`_last_sample_count` für alle Modi (informativ).
+- **Neu `calibrate() → (ok, meldung)`:** flacht das Fenster, `< MIN_STATIONS(5)`
+  → `(False, "zu wenige FT8-Stationen …")`; sonst MAD-Filter → Median der
+  Residuen → **`_correction += median`** (INKREMENTELL — die `m.dt` sind Residuen
+  nach der aktuellen Korrektur, ein Klick konvergiert voll; voller Schritt, KEINE
+  Dämpfung) → symmetrischer Clamp ±1.0 → `_save_current()`. **KEIN Negativ-Riegel**
+  (bei vorlaufender Uhr ist ein negativer Wert legitim — Mike-Anweisung).
+- `set_mode`/`set_band` leeren das Kalibrier-Fenster (frischer Start nach Wechsel).
+- Unverändert: `get_time()` (reine FT8-Basis für den Slot-Takt — v0.98.63-Fix
+  intakt), `get_correction()` (Basis + `_MODE_DELTA`, RX-Decode + Anzeige),
+  `_load_saved()` (inkl. Migration alt→global), `_save_current()`, MAD-Filter,
+  `set_hardware_default(0.26)`, `MAX_CORRECTION`.
+
+**UI:** ⏱-Knopf in der Empfangs-Leiste (`ui/rx_panel.py`, neben 🔊, Signal
+`calibrate_requested`). Handler `ui/mw_radio.py:_on_calibrate_dt` — nur auf FT8
+(sonst Info „nur auf FT8 möglich"; KISS statt Button-Ausgrauen), Ergebnis in die
+QSO-Info-Zeile + Statusbar sofort aktualisiert. `ui/mw_cycle.py`:
+`update_from_decoded`→`record_samples`. `ui/main_window.py` Statusbar ohne `_phase`
+(zeigt festen Wert oder „DT: —").
+
+**Hardware:** reines Timing/Anzeige, **kein TX-Antennen-Eingriff** (ANT1=TX,
+ANT2=RX). DeepSeek Plan-R1 GO (alle 10 Punkte) + Final-R1 PUSH FREIGEBEN (9
+Prüfpunkte, 0 Blocker).
+
+**Tests 2358→2368 (+10):** neu `test_dt_calibrate.py` (18 Tests); die Lern-/
+Phasen-/DEADBAND-/`reset()`-Tests in `test_modules.py`/`test_p48_dt_optimization.py`/
+`test_p14_dt_symmetry.py` durch Kalibrier-Äquivalente ersetzt (Features existieren
+nicht mehr); Versions-Asserts in `test_p132`/`test_p134` von hart `0.98.x` auf
+versions-agnostischen Tupel-Vergleich (`>= (0,98,14)`) umgestellt.
+
+**Encoder-Drift-Guard-Robustheit** (gegen stabil-negativen Wert) bleibt bewusst ein
+separates TODO — die Schwung-Ursache des OMNI-Bugs ist mit dem stabilen Wert weg.
+
+**Sicherheitsanker** (Rückfall): GitHub `origin/main` = `22f3d07` (v0.98.63) = letzte
+Version mit dynamischer DT-Berechnung. **Mike: App neu starten** (kein Auto-Lernen
+mehr — DT-Wert per ⏱-Knopf setzen). NICHT gepusht, Field-Test pending.
+
 ## 2026-06-03 v0.98.64 — FT-Modus-Wechsel bricht laufendes QSO/TX ab (gemeinsamer Abbruch-Helper)
 
 **Mike-Field-Bug:** Auto-Hunt lief auf FT8 (rief Station LY7Z). Mike klickt direkt

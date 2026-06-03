@@ -16,6 +16,38 @@
 
 ---
 
+# ✅ DT-Korrektur: dynamisches Lernen RAUS, Kalibrier-Knopf REIN (v0.99.0, 03.06.2026)
+
+**ERLEDIGT** (großer Umbau, voller Workflow, DeepSeek Plan-R1 + Final-R1 PUSH
+FREIGEBEN). Automatische DT-Lernschleife komplett entfernt → manueller ⏱-Knopf
+(`ntp_time.calibrate()`, inkrementell aus FT8-Stationen, MIN_STATIONS=5, kein
+Negativ-Riegel). Beseitigt die DT-Instabilität (Pendeln/Minus/Übergangs-Bug →
+OMNI 30/60s). Details: HISTORY v0.99.0, FEATURES §6 (v0.99.0-Block).
+**Field-Test pending** (Mike: App neu starten → FT8 → ≥5 Stationen → ⏱ → DT-Zeiten
+prüfen). NICHT gepusht.
+
+### 🔧 Offene Folge-Punkte aus dem DT-Umbau (NICHT akut)
+
+1. **Encoder-Drift-Guard-Robustheit (separates TODO, von DeepSeek bestätigt):**
+   Der frühere OMNI-30/60s-Bug entstand durch WILDE Schwünge des gelernten Werts
+   ins Minus. Mit dem stabilen manuellen Wert ist diese Ursache strukturell weg.
+   ABER: ein *stabil leicht negativer* Wert (Ferienhaus-Uhr geht vor) könnte den
+   Cycle-Timer theoretisch knapp nach der Slot-Grenze feuern lassen → Drift-Guard
+   (`encoder.py:337`, overshoot>0.3 → +2 Slots). Robuster Fix: die
+   `cycle_pos<0.5`-Schwelle in `_next_slot_boundary` an `target_tx_offset` koppeln,
+   sodass der aktuelle Slot nur gewählt wird wenn seine Sende-Frist noch in der
+   Zukunft liegt. NUR angehen wenn ein Field-Symptom auftritt (KISS — kein Fix auf
+   Verdacht). Voller Workflow.
+2. **`record_samples` Mikro-Härtung (DeepSeek-Final-R1, optional):** der Range-Filter
+   `-2.0 <= dt <= 2.0` würde bei `dt=None` einen TypeError werfen. Kommt aktuell
+   NICHT vor (Decoder liefert immer float) und entspricht dem alten Verhalten →
+   nicht eingebaut. Falls je nötig: `if isinstance(dt,(int,float)) and -2.0<=dt<=2.0`.
+3. **`_MODE_DELTA["FT4"]=−0.30` ist empirisch** (nicht aus `_WINDOW_OFFSETS`
+   abgeleitet) — DeepSeek vermutet versteckten Fehler in den FT4-Fenster-Konstanten.
+   Separat zu klären; FT4-DT war field-validiert ~0, also nicht dringend.
+
+---
+
 # 🔵 NÄCHSTES GROSSES PROJEKT — Multiband Auto-Hunt (eigene Session, voller Workflow)
 
 **Mike-Auftrag 03.06.2026:** In einer **frischen Sitzung** angehen, **voller

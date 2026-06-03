@@ -464,6 +464,64 @@ DeepSeek R1 + Final-R1 PUSH FREIGEBEN. Tests 2348→2349.
 sehen* (RX-Fenster + Anzeige, modus-abhängig) und *wann wir senden* (Slot-Takt,
 modus-UNabhängig, echter Protokoll-Slot). Nie wieder beide über dieselbe Funktion.
 
+#### v0.99.0 — Dynamisches Dauer-Lernen RAUS, manueller Kalibrier-Knopf (⏱) REIN
+
+**Das ist die WICHTIGSTE Architektur-Änderung am DT-System.** Wer nach v0.99.0 in
+`core/ntp_time.py` debuggt: es gibt KEIN automatisches Lernen mehr.
+
+**Warum entfernt:** Die alte Lernschleife (Mess-/Operate-Phasen, Dämpfung 0.7,
+Sprung-Reset bei |median|>1, Fast-Convergence) regelte den Wert dauerhaft aus den
+empfangenen FT8-Stationen nach. Das war fragil: der Wert pendelte, konnte ins Minus
+laufen, und ein Modus-Wechsel-Übergang (FT8→FT4→FT8) lieferte über einen Decoder-
+Thread-Race eine verzerrte Mess-Runde, die den Median wegzog. Folge u.a.: OMNI-CQ-
+Takt verdoppelte sich (negativer Wert → Encoder-Drift-Guard, v0.98.63-Klasse).
+
+**Warum NICHT durch festen Konstanten-Wert ersetzt:** Mikes Ferienhaus-iMac (2015)
+hat eine defekte Pufferbatterie und hängt nicht dauerhaft am Strom → die System-Uhr
+driftet je nach Standzeit um 3–5 s (mal vor, mal nach). Ein fester Wert würde
+veralten; macOS-NTP greift erst verzögert/nur online. Die DT-Korrektur gleicht eben
+NICHT nur die konstante FlexRadio-Hardware-Latenz aus, sondern AUCH diese Uhr-Drift
+— also braucht es eine **nachjustierbare** Korrektur. (Das korrigiert die frühere
+P171-These „reine modus-unabhängige Hardware-Konstante" für Mikes Standort.)
+
+**Lösung — Funktionsverknüpfung:**
+1. **`record_samples(dt_values)`** (gerufen pro Slot aus `mw_cycle._update_dt_correction`):
+   puffert NUR. FT8-Slots wandern in `_recent_samples = deque(maxlen=RECENT_SLOTS=3)`
+   (~45 s gleitendes Fenster). Setzt `_last_median_dt`/`_last_sample_count` (Anzeige,
+   alle Modi). **Lernt NICHT** — `_correction` bleibt unangetastet.
+2. **`calibrate() → (ok, meldung)`** (gerufen aus `mw_radio._on_calibrate_dt` beim
+   ⏱-Klick): flacht `_recent_samples`; `< MIN_STATIONS(5)` → `(False, "zu wenige
+   FT8-Stationen …")`; sonst MAD-Filter → Median der Residuen → **`_correction +=
+   median`** (INKREMENTELL — siehe unten) → symmetr. Clamp ±1.0 → `_save_current()`.
+3. Der Wert ändert sich AUSSCHLIESSLICH hier (+ `_load_saved` beim Start +
+   `set_hardware_default`-Seed). Zwischen Klicks fest → stabil.
+
+**INKREMENTELL, nicht absolut (kritisch — sonst Divergenz):** Der Decoder
+verschiebt das RX-Audio bereits um `get_correction()` (decoder.py:361). Die
+gemessenen `m.dt` sind also die RESIDUEN nach der aktuellen Korrektur. `calibrate`
+ADDIERT darum den Residuen-Median (`_correction += median`), setzt ihn nicht
+absolut. Ein Klick konvergiert voll: corr=0.26, Bedarf 0 → Residuen ~−0.26 →
+0.26+(−0.26)=0. **Voller Schritt OHNE Dämpfung** (kein Regelkreis mehr → ein Klick
+soll fertig sein). Das ist exakt die alte, gute Median+MAD-Mathematik — nur manuell.
+
+**KEIN Negativ-Riegel:** Bei vorlaufender Uhr ist ein negativer Korrekturwert
+legitim (Mike-Anweisung). Nur ein symmetrischer Sanity-Clamp ±`MAX_CORRECTION`.
+
+**Nur auf FT8 kalibrierbar:** `record_samples` puffert nur bei `_mode=="FT8"` (viele
+Stationen → robuster Median); FT4/FT2 erben den Wert + `_MODE_DELTA`. Der Handler
+prüft den Modus und meldet sonst „nur auf FT8" (KISS statt Button-Ausgrauen —
+keine Mode-Wechsel-Verdrahtung). `set_mode`/`set_band` leeren das Fenster (kein
+Stale nach FT8→FT4→FT8).
+
+**UI:** ⏱-Knopf in `rx_panel` (neben 🔊, Signal `calibrate_requested`), Ergebnis in
+die QSO-Info-Zeile + Statusbar sofort. Statusbar zeigt jetzt einen festen Wert oder
+„DT: —" (kein `_phase`-„Korrektur"/„Aktiv"-Wechsel mehr).
+
+**Bug-Analyse-Hinweis für später:** „DT-Wert verändert sich von selbst" KANN es ab
+v0.99.0 nicht mehr geben — wenn doch, ist irgendwo noch ein `_correction`-Write
+außer `calibrate`/`_load_saved`/`set_hardware_default`. „DT auf FT4 falsch" → das ist
+`_MODE_DELTA["FT4"]=−0.30` (unverändert), nicht das Lernen.
+
 ### Multi-Radio (P121 v0.98.04)
 
 `TARGET_TX_OFFSET` ist FlexRadio-spezifisch. IC-7300/IC-7100-Forks
