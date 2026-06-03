@@ -84,6 +84,17 @@ versions-agnostischen Tupel-Vergleich (`>= (0,98,14)`) umgestellt.
 **Encoder-Drift-Guard-Robustheit** (gegen stabil-negativen Wert) bleibt bewusst ein
 separates TODO — die Schwung-Ursache des OMNI-Bugs ist mit dem stabilen Wert weg.
 
+**Field-Fix (gleiche Session, Mike am Radio):** Mehrfaches Drücken des ⏱-Knopfs ließ
+den Wert klettern (+0.36→+0.48→…→+1.00 Clamp), obwohl dieselben Stationen am Band
+waren. Ursache: `calibrate()` leerte `_recent_samples` NICHT — nach `_correction +=
+median` waren die gepufferten Slots veraltet (gegen die alte Korrektur gemessen),
+ein zweiter Druck vor dem Durchspülen des 3-Slot-Fensters addierte denselben Median
+nochmal (Additionskette). Fix: `_recent_samples.clear()` NUR im Erfolgsfall (nach
+`_save_current()`, im Lock); fehlgeschlagene Kalibrierung behält die Samples. Nächster
+Druck misst frisch gegen die neue Korrektur → stabil, kein Überkorrigieren.
+Inkrementelle Grundlogik bleibt korrekt (reiner State-Management-Bug). DeepSeek R1
+Diagnose+Fix bestätigt. Tests +2 → **2370**.
+
 **Sicherheitsanker** (Rückfall): GitHub `origin/main` = `22f3d07` (v0.98.63) = letzte
 Version mit dynamischer DT-Berechnung. **Mike: App neu starten** (kein Auto-Lernen
 mehr — DT-Wert per ⏱-Knopf setzen). NICHT gepusht, Field-Test pending.

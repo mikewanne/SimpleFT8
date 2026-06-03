@@ -15,9 +15,12 @@ median`, voller Schritt, Clamp ±1.0, **kein Negativ-Riegel** — driftende Uhr 
 negativ). ⏱-Knopf in `rx_panel` (neben 🔊), Handler `mw_radio._on_calibrate_dt`
 (nur FT8, Info + Statusbar-Refresh). `get_time()`/`get_correction()` unverändert
 (v0.98.63-Slot-Takt-Fix intakt). **Reines Timing/Anzeige, ANT1/ANT2 unberührt.**
-Tests 2358→**2368** (+10, neu `test_dt_calibrate.py`; Lern-/Phasen-/DEADBAND-Tests
-durch Kalibrier-Äquivalente ersetzt). Encoder-Drift-Guard-Robustheit bleibt separates
-TODO. **⚠️ Mike: App NEU STARTEN** (kein Auto-Lernen mehr — DT-Wert per ⏱ setzen).
+Tests 2358→**2370** (+12, neu `test_dt_calibrate.py`; Lern-/Phasen-/DEADBAND-Tests
+durch Kalibrier-Äquivalente ersetzt). **Field-Fix (Mike am Radio, gleiche Session):**
+mehrfaches Drücken ließ den Wert klettern (Puffer wurde nach Kalibrierung nicht
+geleert → Doppel-Addition) → `_recent_samples.clear()` nur im Erfolgsfall (DeepSeek
+R1 bestätigt, +2 Tests). Encoder-Drift-Guard-Robustheit bleibt separates TODO. **⚠️
+Mike: App NEU STARTEN** (kein Auto-Lernen mehr — DT-Wert per ⏱ setzen).
 Sicherheitsanker GitHub `22f3d07` (v0.98.63, alte DT-Berechnung). NICHT gepusht,
 Field-Test pending.
 

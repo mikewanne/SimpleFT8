@@ -492,7 +492,13 @@ P171-These „reine modus-unabhängige Hardware-Konstante" für Mikes Standort.)
 2. **`calibrate() → (ok, meldung)`** (gerufen aus `mw_radio._on_calibrate_dt` beim
    ⏱-Klick): flacht `_recent_samples`; `< MIN_STATIONS(5)` → `(False, "zu wenige
    FT8-Stationen …")`; sonst MAD-Filter → Median der Residuen → **`_correction +=
-   median`** (INKREMENTELL — siehe unten) → symmetr. Clamp ±1.0 → `_save_current()`.
+   median`** (INKREMENTELL — siehe unten) → symmetr. Clamp ±1.0 → `_save_current()`
+   → **`_recent_samples.clear()` (NUR bei Erfolg!)**. Das Leeren ist kritisch: die
+   gerade verbrauchten Slots wurden gegen die ALTE Korrektur gemessen; ohne Clear
+   addiert ein zweiter Druck (bevor 3 neue Slots das Fenster spülen) denselben
+   Median nochmal → der Wert klettert (+0.36→+0.48→…→Clamp; Field-Bug 03.06.2026,
+   gleiche Session). Eine fehlgeschlagene Kalibrierung (zu wenige) leert NICHT —
+   sonst gingen die gesammelten Samples verloren.
 3. Der Wert ändert sich AUSSCHLIESSLICH hier (+ `_load_saved` beim Start +
    `set_hardware_default`-Seed). Zwischen Klicks fest → stabil.
 
