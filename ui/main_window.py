@@ -1189,18 +1189,22 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         # (Mike: "geht anfrage raus ja/nein kommt antwort ja/nein
         # verarbeiten wir sie ja/nein").
         from core.debug_log import debug_log as _dbg
+        # WICHTIG (Field-Bug 03.06.2026): Intervall-Umschaltung VOR dem
+        # _has_sent_cq-Return. `_reset_psk_polling_on_change` startet den Timer
+        # mit `start(0)` (Sofort-Fetch) — ein QTimer mit Intervall 0 feuert so
+        # schnell wie die Event-Loop kann. Lag die Umschaltung hinter dem Return,
+        # blieb der Timer bei 0 solange noch kein CQ raus war und spinnte endlos
+        # → 4GB-Debug-Log/Tag + CPU-Dauerlast. Jetzt verlaesst der Timer das
+        # 0-Intervall nach dem ersten Tick IMMER (egal ob CQ).
+        if self._psk_first_fetch:
+            self._psk_first_fetch = False
+            self._psk_timer.setInterval(self._psk_repeat_interval)  # 5 Minuten
         if not self._has_sent_cq:
             self.control_panel.psk_label.setText("PSK: — (nur nach CQ)")
             self.control_panel.psk_label.setStyleSheet(
                 "color: #557766; font-family: Menlo; font-size: 10px; padding: 2px;"
             )
-            _dbg("PSK", "SKIP — _has_sent_cq=False (noch keine CQ gesendet)")
             return
-        # Nach erster Abfrage auf 3-Min-Intervall wechseln
-        if self._psk_first_fetch:
-            self._psk_first_fetch = False
-            self._psk_timer.setInterval(self._psk_repeat_interval)  # 5 Minuten
-            _dbg("PSK", "first fetch — Timer-Intervall auf 5 Min umgestellt")
         self._psk_band = self.settings.band.upper()
         _dbg("PSK", f"TRIGGER fetch — band={self._psk_band} mode={self.settings.mode}")
         threading.Thread(target=self._psk_worker, daemon=True).start()
