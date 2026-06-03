@@ -34,10 +34,75 @@ Stop), Fail-Cooldown pro (call,band), all_worked pro Band.
 Bändern garantiert über ANT1? Diversity-Pattern darf NIE ANT2 als TX-Slot vergeben.
 Antennen-Sicherheit ist die erste Frage — nicht erst im Test (CLAUDE.md-Regel).
 
-**Session-Start-Ablauf:** `multiband.md` lesen → Code-Touch-Points kartieren
-(qso_state, encoder, timing, diversity, omni_cq, auto_hunt, flexradio/Slice-B,
-mw_cycle) → Plan vorlegen → Mike-Freigabe → Code. **Slice-B-Code NICHT löschen**
-(reserviert für Multiband, Mike-Spec).
+## 📋 ABLAUFPLAN (DeepSeek-gehärtet 03.06.2026 — Reihenfolge bestätigt optimal)
+
+**Refactoring-Vorab-Urteil (Claude + DeepSeek einig): KEIN großes Vorab-Refactoring.**
+Modell 3 ändert minimal am field-validierten Kern — Umbau auf Verdacht widerspricht
+KISS. `auto_hunt.py` additiv erweiterbar; control_panel-Band-Buttons sind in einer
+Card/dict-API gekapselt (3-Stufen-Umbau lokal machbar); Slice-B wird IM Workflow
+adaptiert; Band/Modus-Persistenz ist bereits entfernt (App startet 20m+FT8). Band-
+Selector-Extraktion (a) + Slice-B-Smoke-Test (b) beide verworfen — Aufwand/Risiko
+ohne Nutzen.
+
+**Pro Code-Phase IMMER:** V1 → V2 (Self-Review) → **DeepSeek R1** → V3 →
+**Plan-Mode** → **Mike-Freigabe** → Code → Tests grün → **DeepSeek Final-R1** →
+Doku (HISTORY/HANDOFF/CLAUDE/FEATURES/TODO/Memory) → atomarer Commit. Nicht pushen
+ohne Mike. Vor JEDEM TX-Code: `set_tx_antenna("ANT1")` verifizieren.
+
+**Phase 0 — Vorbereitung ✅ ERLEDIGT (03.06.2026):** Dieser Ablaufplan +
+Refactoring-Check, 1× DeepSeek-gehärtet. (= diese Sitzung.)
+
+**Phase 0.5 — Bestands-Test-Audit (Session-Start, OHNE Code-Änderung):** Prüfen ob
+`test_auto_hunt_extended.py` / `test_p165_dx_scoring.py` / `mw_cycle`-Tests den
+Einzelband-`select_next`/Scoring-Pfad voll abdecken (heute: 28 Dateien, 45×
+`select_next`, 23 Kern-Tests = solide). Falls Lücke: einen fokussierten
+„Bit-Identitäts-Test" ergänzen, damit die grüne Ampel beim band-aware-Umbau ein
+echter Beweis ist. Reine Verifikation (DeepSeek-Empfehlung).
+
+**Phase 1 — Session-Start & Kartierung:** Doku lesen (CLAUDE/HISTORY/HANDOFF/
+FEATURES/MEMORY/**multiband.md**). **Multi-Agent-Code-Kartierung** (Explore-Fan-out,
+„max effort"): alle Touch-Points exakt auflisten (auto_hunt, encoder, timing,
+diversity, omni_cq, flexradio/Slice-B, mw_cycle, mw_radio, control_panel, rx_panel,
+qso_state). **⛔ Antennen-Sicherheit ZUERST klären:** TX garantiert ANT1 auf beiden
+Bändern? (vor jedem Design-Schritt, nicht erst im Test).
+
+**Phase 2 — Baustein 1: `switch_tx_band` (gefährliche Zone zuerst):** intern
+(Session bleibt, kein `stop_auto_hunt`) vs extern `set_band` (harter Stop, wie
+heute). Der 🔴-Pflicht-Punkt. Isoliert bauen + eigene Tests. Voller Workflow.
+
+**Phase 3 — Baustein 2: Slice-B-Aktivierung + Decode-Aggregation:** 2. Slice
+allokieren (Slice-B-Code adaptieren), DAX/RX-Stream, **Feature-Flag** (aus → 2.
+Slice nie allokiert), **Slice-Cleanup** (auch bei Absturz/Ende), **Band-Tag pro
+decodierter msg (nie None)**. Voller Workflow.
+
+**Phase 4 — Baustein 3: Auto-Hunt band-aware:** `_HuntCandidate.band` (Default
+`self._band`), in `select_next` alle `self._band`→`c.band` (Worked-Filter,
+Recent-QSO-Key, **Fail-Cooldown→`(call,band)`**, DX-Scoring), `all_worked` pro
+Band. **Bestands-Tests MÜSSEN grün bleiben** (= Bit-Identitäts-Beweis Einzelband).
+Voller Workflow.
+
+**Phase 5 — Baustein 4: UI:** Band-Buttons 2-Zustand→**3-Stufen-Cycle**
+(OFF→RX→TX→OFF, Auto-Promote, 3.-Band-Ablehnung), Band-Filter-Buttons im
+RX-Header, TX-Band-Indikator (Freq groß + Button kräftiger), gemeinsame
+Stationsliste mit Band-Farbspalte. **frontend-design-Skill** aufrufen. Voller
+Workflow.
+
+**Phase 6 — Baustein 5: Band-Umschalt-Sequenz (Fall A/B Timing):** in `mw_cycle`
+einpassen — **deterministischer Restzeit-Cutoff pro Modus**, TUNE-Slot-Einplanung
+(Fall B: ersten even-Slot überspringen), **„kein TX vor gültigem TUNE"** (notfalls
+TX-Verweigerung), `set_tx_antenna("ANT1")` vor jedem TX. Zeitkritisch auf
+Encoder-Höhe — eigener sorgfältiger Zyklus. Voller Workflow.
+
+**Phase 7 — Integration + Feldtest:** Gain-Default-UI-Hinweis (~10 dB nie
+gemessen), Gesamt-Feldtest am Radio (beide Bänder RX, Bandsprung-QSO,
+TUNE-Timing, ANT1-Check, Slice-Cleanup bei Ende). Mike testet.
+
+**Zeitrahmen:** ~6 Code-Phasen × eigener Workflow-Zyklus → mehrere Sitzungen.
+Zwischen den Phasen läuft die App jeweils stabil (jede Phase hinterlässt einen
+grünen, committeten Stand). „max effort": Extended Thinking + Plan-Mode + DeepSeek
+je Phase; Multi-Agent nur für die Kartierung (Phase 1), Code seriell.
+
+**Slice-B-Code NICHT löschen** (reserviert für Multiband, Mike-Spec).
 
 ---
 
