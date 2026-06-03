@@ -42,6 +42,10 @@ def _make_mw_radio(*, cq_mode: bool = False,
     obj = MagicMock()
     obj._on_rx_mode_changed = (
         RadioMixin._on_rx_mode_changed.__get__(obj))
+    # v0.98.64: Der Stop-Block wurde in _abort_qso_and_tx ausgelagert (DRY,
+    # gemeinsam mit Band-/FT-Modus-Wechsel). Echt mitbinden, sonst laeuft die
+    # jetzt zentrale Abbruch-Logik im Test nicht (waere ein Auto-Mock).
+    obj._abort_qso_and_tx = RadioMixin._abort_qso_and_tx.__get__(obj)
 
     # Pipeline-Lock-Check und radio.ip-Guard
     obj._gain_measure_locked = False

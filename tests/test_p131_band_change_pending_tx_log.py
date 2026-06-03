@@ -48,41 +48,48 @@ def _read_method_body(file_path: Path, method_name: str) -> str:
 
 
 def test_t1_band_changed_resets_pending_tx_log():
-    """T1: _on_band_changed setzt _pending_tx_log = None."""
+    """T1: _on_band_changed bricht via _abort_qso_and_tx ab; dort _pending_tx_log=None.
+
+    v0.98.64: Der Stop-Block (inkl. Pending-TX-Log-Discard) wurde in den
+    gemeinsamen Helper `_abort_qso_and_tx` ausgelagert (DRY mit FT-Modus-/
+    RX-Modus-Wechsel). Verhalten unveraendert — nur zentralisiert.
+    """
     body = _read_method_body(MW_RADIO, "_on_band_changed")
-    assert "_pending_tx_log = None" in body, (
-        "P131: _on_band_changed muss _pending_tx_log nullen")
+    assert "_abort_qso_and_tx()" in body, (
+        "P131/v0.98.64: _on_band_changed muss _abort_qso_and_tx() rufen")
+    helper = _read_method_body(MW_RADIO, "_abort_qso_and_tx")
+    assert "_pending_tx_log = None" in helper, (
+        "P131: _abort_qso_and_tx muss _pending_tx_log nullen")
 
 
 def test_t2_band_changed_reset_outside_is_transmitting_block():
-    """T2: Reset passiert UNABHAENGIG von is_transmitting (P127-Pattern).
+    """T2: Reset UNABHAENGIG von is_transmitting (P127-Pattern).
 
-    Strukturelle Pruefung: nach `encoder.is_transmitting`-Block kommt
-    `_pending_tx_log = None` als eigenes Statement.
+    Im Helper kommt `_pending_tx_log = None` NACH `encoder.abort()` (eigenes
+    Statement, ausserhalb des is_transmitting-Blocks); der Helper-Aufruf in
+    `_on_band_changed` steht VOR dem QSO-Panel-Clear.
     """
+    helper = _read_method_body(MW_RADIO, "_abort_qso_and_tx")
+    pos_abort = helper.find("encoder.abort()")
+    pos_reset = helper.find("_pending_tx_log = None")
+    assert pos_abort > 0 and pos_reset > 0
+    assert pos_abort < pos_reset, "Reset muss NACH abort() kommen"
+
     body = _read_method_body(MW_RADIO, "_on_band_changed")
-    # Markierung muss VOR dem QSO-Panel-Clear stehen und NACH encoder.abort
-    pos_abort = body.find("encoder.abort()")
-    pos_reset = body.find("_pending_tx_log = None")
-    # P143 (26.05.2026): log_view.clear() wurde ersetzt durch
-    # clear_log_completely() (Mike-Bug Bandwechsel ohne _entries-Clear).
-    # Anker bleibt funktional gleich -- Reset davor.
+    pos_helper = body.find("_abort_qso_and_tx()")
     pos_clear = body.find("qso_panel.clear_log_completely()")
     if pos_clear < 0:
         pos_clear = body.find("qso_panel.log_view.clear()")
-    assert pos_abort > 0
-    assert pos_reset > 0
-    assert pos_abort < pos_reset, "Reset muss NACH abort() kommen"
-    assert pos_reset < pos_clear, (
-        "Reset muss VOR clear_log_completely() kommen")
+    assert pos_helper > 0 and pos_clear > 0
+    assert pos_helper < pos_clear, (
+        "Abbruch (_abort_qso_and_tx) muss VOR clear_log_completely() kommen")
 
 
 def test_t3_band_changed_uses_hasattr_pattern():
-    """T3: hasattr-Guard fuer Lazy-Init des Attributs (analog P127)."""
-    body = _read_method_body(MW_RADIO, "_on_band_changed")
-    # hasattr(self, "_pending_tx_log") direkt vor dem Reset
-    assert "hasattr(self, '_pending_tx_log')" in body or \
-        'hasattr(self, "_pending_tx_log")' in body
+    """T3: hasattr-Guard fuer Lazy-Init des Attributs (analog P127, jetzt im Helper)."""
+    helper = _read_method_body(MW_RADIO, "_abort_qso_and_tx")
+    assert "hasattr(self, '_pending_tx_log')" in helper or \
+        'hasattr(self, "_pending_tx_log")' in helper
 
 
 # ---------------------------------------------------------------------------

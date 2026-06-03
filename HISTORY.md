@@ -9,6 +9,46 @@ Gelöscht wird nie etwas. Format: `## YYYY-MM-DD vX.YY — Kurztitel`.
 > stehen in `history/HISTORY_archiv_NN.md` (grep dort, falls eine alte Version
 > gesucht wird). Rotiert mit `tools/rotate_history.py`. Zuletzt: 2026-06-01.
 
+## 2026-06-03 v0.98.64 — FT-Modus-Wechsel bricht laufendes QSO/TX ab (gemeinsamer Abbruch-Helper)
+
+**Mike-Field-Bug:** Auto-Hunt lief auf FT8 (rief Station LY7Z). Mike klickt direkt
+auf den FT4-Button (Modus-Wechsel, KEIN HALT). Auto-Hunt stoppt korrekt (Button
+aus), ABER die QSO-State-Machine sendet danach noch **3× `LY7Z DA1MHH -17`** —
+jetzt auf dem neuen Modus/Band (FT4/17m), wo LY7Z uns nicht hören kann.
+
+**Diagnose (am Code verifiziert):** Es gibt drei Umschalt-Pfade in `ui/mw_radio.py`.
+`_on_band_changed` und `_on_rx_mode_changed` (Normal↔Diversity) brechen ein
+laufendes QSO + TX ab (`qso_sm.cancel()` + `encoder.abort()` + `ptt_off()`).
+**`_on_mode_changed` (FT8↔FT4↔FT2) tat das NICHT** — es stoppte nur Auto-Hunt +
+OMNI und schaltete das Protokoll um. Klassische „mode-aware Symmetrie"-Bug-Klasse
+(FEATURES §11): dieselbe Aktion in 2 von 3 Pfaden, im 3. vergessen. Der RX-Mode-
+Abbruch-Block trug sogar den Kommentar „R1-V4-pro Finding 1: encoder.abort() +
+ptt_off() ist nötig damit kein armed-er Slot durchrutscht" — genau dieser Fix
+wurde beim FT-Modus-Wechsel übersehen.
+
+**Fix (`ui/mw_radio.py`, gemeinsamer Helper):** Der Wort-für-Wort identische
+Abbruch-Block (Band + RX-Mode) in einen Helper **`_abort_qso_and_tx()`**
+extrahiert (CQ-/QSO-Stop, `encoder.abort()` + `ptt_off()`, pending-TX-Log-Discard
+P131). Alle **drei** Wechsel-Pfade rufen ihn jetzt → die Bug-Klasse ist
+strukturell unmöglich (ein neuer 4. Pfad kann ihn nicht mehr „vergessen"). In
+`_on_mode_changed`: Helper-Aufruf **vor `set_protocol`** (DeepSeek-R1: keine Race —
+der TX-Worker liest `_mode` nur vor dem Sleep, nach `abort()` nicht mehr) +
+**Early-Return wenn `mode == self.settings.mode`** (Re-Klick auf den aktiven
+Modus-Button bricht kein QSO mehr ab). Der RX-Mode-Pfad bekommt durch den Helper
+zusätzlich den pending-TX-Log-Discard (fachlich richtig — Antennen-Wechsel macht
+den Log ohnehin ungültig).
+
+**Hardware:** Reiner Stopp-Pfad, kein neuer TX, ANT1/ANT2 unberührt. Das vorher
+ungewollte Senden lief über ANT1; auf ungetuntem Band hätte der SWR-Watchdog
+gegriffen — gesendet werden soll es trotzdem nicht.
+
+DeepSeek R1 (GO + 3 Ergänzungen: pending-Discard, Early-Return, Helper — alle
+eingearbeitet) + Final-R1 **PUSH FREIGEBEN** (Reihenfolge sicher, Refactoring
+verhaltensgleich, Early-Return sicher, Tests legitim, kein Risiko). Tests
+2349→**2358** (+9 `test_mode_change_abort.py`; angepasst: `test_bundle_i.py`
+[Helper im Mock mitgebunden] + `test_p131` T1/T2/T3 [Source-Inspektion auf
+Helper-Struktur]). NICHT gepusht, Field-Test pending.
+
 ## 2026-06-03 v0.98.63 — FT4-OMNI sendete 30s statt 15s (Slot-Takt vom Modus-Versatz entkoppelt)
 
 **Mike-Field (OMNI-CQ auf FT4):** Station sendete nur alle 30s statt 15s

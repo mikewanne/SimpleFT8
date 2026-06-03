@@ -1171,8 +1171,19 @@ das `_entries.clear()` mit aufruft → kein Resurrection.
 **Kurzantwort:** Wenn die App zwei oder mehr parallele Pfade hat
 (Normal vs Diversity, FT8 vs FT4, ...), MÜSSEN alle Control-Panel-
 Updates symmetrisch in jedem Pfad gerufen werden. Vergessen in einem
-Pfad → stale-Anzeige-Bug. Bisher 4 Iterationen gefunden — wahrscheinlich
+Pfad → stale-Anzeige-Bug. Bisher 5 Iterationen gefunden — wahrscheinlich
 gibt's noch mehr.
+
+**Erweiterung (v0.98.64) — die Klasse betrifft auch AKTIONEN, nicht nur Anzeige:**
+Die drei Betriebs-Umschalt-Pfade (`_on_band_changed`, `_on_mode_changed`,
+`_on_rx_mode_changed`) müssen ALLE ein laufendes QSO + TX abbrechen
+(`qso_sm.cancel()` + `encoder.abort()` + `ptt_off()` + pending-TX-Log-Discard).
+Der Block war 2× Wort-für-Wort dupliziert und im **FT-Modus-Pfad vergessen** →
+FT8→FT4-Wechsel sendete die zuvor gerufene Station 3× weiter (Mike-Field
+03.06.2026). Lösung: Helper **`_abort_qso_and_tx()`** (mw_radio.py) kapselt den
+Abbruch zentral; alle drei rufen ihn. **Regel: bei JEDEM neuen Umschalt-/Kontext-
+Wechsel-Pfad `_abort_qso_and_tx()` aufrufen** — dann ist diese Bug-Klasse
+strukturell unmöglich.
 
 ### Bekannte Iterationen
 
@@ -1182,6 +1193,7 @@ gibt's noch mehr.
 | 2 | P114 (v0.97.99) | `_refresh_modeband_status_label()` | nur in einer der set-Methoden |
 | 3 | P135 (v0.98.16) | mode-aware Decode-Count | `_on_cycle_decoded` Slot-Parity |
 | 4 | **P141** (v0.98.23) | `compute_local_conditions` + `update_local_conditions` | `_handle_diversity_operate` (vs `_handle_normal_mode`) |
+| 5 | **v0.98.64** (03.06.2026) | **AKTION statt Anzeige:** QSO+TX-Abbruch (`qso_sm.cancel`+`encoder.abort`+`ptt_off`) | `_on_mode_changed` (vs `_on_band_changed` + `_on_rx_mode_changed`) → FT8→FT4 sendete Station 3× weiter; gelöst via Helper `_abort_qso_and_tx()` |
 
 ### Anatomie des Bugs
 

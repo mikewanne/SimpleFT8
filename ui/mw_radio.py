@@ -432,6 +432,33 @@ class RadioMixin:
                     print(f"[P10] PSK-Client-Update fehlgeschlagen: {e}")
 
     @Slot(str)
+    def _abort_qso_and_tx(self):
+        """Laufendes QSO + TX + vorgemerkten Sende-Log abbrechen.
+
+        Gemeinsamer Stopp-Pfad fuer ALLE Betriebs-Umschaltungen (Band-, FT-Modus-
+        und RX-Modus-Wechsel). Bricht CQ + laufendes QSO ab, stoppt aktiven TX
+        (PTT aus) und verwirft einen per ``Qt.QueuedConnection`` evtl. noch in der
+        Event-Queue liegenden Sende-Log-Eintrag (P131-Pattern) — damit beim
+        Wechsel kein „armed"-er Slot und kein veralteter Log-Eintrag durchrutscht.
+        Reiner Stopp — kein neuer TX, Antenne unveraendert.
+
+        War in ``_on_band_changed`` + ``_on_rx_mode_changed`` Wort-fuer-Wort
+        dupliziert; das Vergessen in ``_on_mode_changed`` war der Field-Bug (Mike
+        03.06.2026: FT8->FT4-Wechsel sendete die zuvor gerufene Station 3x weiter).
+        Ein Helper macht diese „mode-aware Symmetrie"-Bug-Klasse strukturell
+        unmoeglich (FEATURES §11).
+        """
+        if self.qso_sm.cq_mode or self.qso_sm.state != QSOState.IDLE:
+            self.qso_sm.stop_cq()
+            self.qso_sm.cancel()
+            self.control_panel.set_cq_active(False)
+        if self.encoder.is_transmitting:
+            self.encoder.abort()
+            if self.radio.ip:
+                self.radio.ptt_off()
+        if hasattr(self, "_pending_tx_log"):
+            self._pending_tx_log = None
+
     def _on_mode_changed(self, mode: str):
         # Pipeline-Lock-Schutz (v0.92 R1-Audit): blockiert auch programmatische
         # Pfade. Mode-Wechsel triggert `_check_diversity_preset` das
@@ -441,11 +468,22 @@ class RadioMixin:
             print(f"[Mode-Wechsel ignoriert: Pipeline laeuft, bleibe auf {current}]")
             self.control_panel._set_mode(current)
             return
+        # Kein echter Wechsel (Re-Klick auf den schon aktiven Modus-Button) →
+        # nichts tun, insbesondere KEIN QSO-Abbruch (DeepSeek-R1 03.06.2026).
+        if mode == self.settings.mode:
+            return
         # v0.75/v0.78: aktive Power-Modi bei FT-Mode-Wechsel (FT8/FT4/FT2) stoppen
         if hasattr(self, "_auto_hunt") and self._auto_hunt.active:
             self._auto_hunt.stop_auto_hunt("ft_mode_change")
         if hasattr(self, "_omni_cq") and self._omni_cq.is_active():
             self._omni_cq.stop("mode_change")
+        # Field-Bug Mike 03.06.2026: FT8->FT4-Wechsel stoppte Auto-Hunt, sendete
+        # aber die zuvor gerufene Station 3x weiter (auf neuem Modus/Band). Der
+        # Abbruch fehlte hier — Band- + RX-Modus-Wechsel hatten ihn. Vor
+        # set_protocol, damit der alte TX-Worker sauber endet bevor das Protokoll
+        # wechselt (DeepSeek-R1: keine Race, _mode wird im Worker nur vor dem
+        # Sleep gelesen).
+        self._abort_qso_and_tx()
         # P34: Dynamic-Buffer leeren bei Modus-Wechsel (AK10)
         if getattr(self, "_dynamic_ctrl", None) and self._dynamic_ctrl.is_active():
             self._dynamic_ctrl.reset()
@@ -582,23 +620,9 @@ class RadioMixin:
             self._dynamic_ctrl.reset()
 
         # ── BANDWECHSEL STOPPT ALLES ──────────────────────────
-        # CQ-Modus sofort stoppen
-        if self.qso_sm.cq_mode or self.qso_sm.state != QSOState.IDLE:
-            self.qso_sm.stop_cq()
-            self.qso_sm.cancel()
-            self.control_panel.set_cq_active(False)
-        # TX stoppen falls gerade gesendet wird
-        if self.encoder.is_transmitting:
-            self.encoder.abort()
-            if self.radio.ip:
-                self.radio.ptt_off()
-        # P131 (26.05.2026 Mike-Field-Bug, 15m→20m Wechsel): pending TX-Log
-        # verwerfen UNABHÄNGIG von is_transmitting (P127-Pattern).
-        # tx_started wird per Qt.QueuedConnection zugestellt — kann noch in
-        # der Event-Queue liegen waehrend wir hier sind. Defense-in-Depth
-        # zusammen mit dem band-Tag-Match in _on_tx_finished (mw_qso.py).
-        if hasattr(self, "_pending_tx_log"):
-            self._pending_tx_log = None
+        # CQ + laufendes QSO + TX + pending Sende-Log abbrechen (gemeinsamer
+        # Helper, P131-Pattern — war hier Wort-fuer-Wort inline, jetzt zentral).
+        self._abort_qso_and_tx()
         # QSO-Panel (Live Log) leeren — neues Band = neuer Kontext
         # P143 (26.05.2026): clear_log_completely() leert _entries
         # mit, sonst holt der 30s-Auto-Trim-Timer 30m-Sende-Einträge
@@ -842,15 +866,8 @@ class RadioMixin:
             # visuell, aber ein verzögerter CQ-Slot wurde aus dem normalen
             # CQ-Pfad (qso_sm.cq_mode) noch gesendet. R1-V4-pro Finding 1:
             # encoder.abort() + ptt_off() ist nötig damit kein armed-er
-            # Slot durchrutscht.
-            if self.qso_sm.cq_mode or self.qso_sm.state != QSOState.IDLE:
-                self.qso_sm.stop_cq()
-                self.qso_sm.cancel()
-                self.control_panel.set_cq_active(False)
-            if self.encoder.is_transmitting:
-                self.encoder.abort()
-                if self.radio.ip:
-                    self.radio.ptt_off()
+            # Slot durchrutscht. (Gemeinsamer Helper — war hier inline.)
+            self._abort_qso_and_tx()
 
         # Warmup: 60s keine Stats nach Moduswechsel
         import time as _time
