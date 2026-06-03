@@ -48,7 +48,8 @@ man auch minimiert, was rausgeht. Im Empfang (kein TX) fällt der Zusatz weg →
 **Reines Anzeige-Feature, kein TX-/Antennen-Eingriff, ANT1/ANT2 unberührt.**
 DeepSeek Plan-R1 GO + Final-R1 PUSH FREIGEBEN (5 Punkte, 0 Blocker; Rich-Text-
 AutoText reicht, getattr-Fix sauber). Tests 2370→**2380** (+10
-`test_radio_header_collapsed.py`; P156-Netto-Tests weiter grün). NICHT gepusht.
+`test_radio_header_collapsed.py`; P156-Netto-Tests weiter grün). **✅ Field-validiert
+(Mike am Radio 03.06.):** „SWR und Watt-Zahl super zu sehen". NICHT gepusht.
 
 ## 2026-06-03 v0.99.0 — DT-Korrektur: dynamisches Dauer-Lernen RAUS, manueller Kalibrier-Knopf REIN
 

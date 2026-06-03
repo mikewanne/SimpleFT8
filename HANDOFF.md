@@ -8,9 +8,10 @@ FREIGEBEN). Die eingeklappte RADIO-Kachel zeigt beim Senden „— 80 → 58 W �
 `_last_watt>0` Netto-Watt (`compute_net_power`) + farbiges SWR (Rich-Text-Span) an;
 Live-Trigger in `update_watt`/`update_swr`/`reset_swr_display`; `getattr`-Default für
 Init-Reihenfolge. Reines Anzeige-Feature, ANT1/ANT2 unberührt. Tests 2370→**2380**
-(+10 `test_radio_header_collapsed.py`). **✅ DT-Kalibrierung (v0.99.0) field-validiert
-(Mike am Radio):** „klappt super", DT-Werte sehr gut im ±-Bereich, FT4 gut, App
-fühlt sich flüssiger an (weniger Arbeit pro Slot). NICHT gepusht.
+(+10 `test_radio_header_collapsed.py`). **✅ BEIDE field-validiert (Mike am Radio
+03.06.):** RADIO-Header „SWR und Watt-Zahl super zu sehen"; DT-Kalibrierung (v0.99.0)
+„klappt super", DT sehr gut im ±-Bereich, FT4 gut, App flüssiger (weniger Arbeit pro
+Slot). NICHT gepusht.
 
 — **Vorgänger v0.99.0: DT-Korrektur: dynamisches Dauer-Lernen
 RAUS, manueller Kalibrier-Knopf REIN** (großer Umbau, voller Workflow, DeepSeek
