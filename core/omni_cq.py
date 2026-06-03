@@ -29,6 +29,8 @@ import logging
 import time
 from PySide6.QtCore import QObject, Signal, Slot
 
+from core.debug_log import debug_log
+
 logger = logging.getLogger(__name__)
 
 
@@ -108,6 +110,7 @@ class OmniCQ(QObject):
         self.omni_started.emit()
         logger.info("[OMNI-CQ] Start (Modus %s, Counter %d)",
                     mode, self._cq_target)
+        debug_log("OMNI", f"START Modus={mode} target={self._cq_target}")
 
     def stop(self, reason: str) -> None:
         if not self._active:
@@ -122,12 +125,14 @@ class OmniCQ(QObject):
         self._cq_target = _OMNI_DEFAULT_TARGET
         self.omni_stopped.emit(reason)
         logger.info("[OMNI-CQ] Stop (%s)", reason)
+        debug_log("OMNI", f"STOP reason={reason}")
 
     def pause(self) -> None:
         if not self._active or self._paused:
             return
         self._paused = True
         logger.info("[OMNI-CQ] Pause (QSO laeuft)")
+        debug_log("OMNI", "PAUSE (QSO laeuft)")
 
     def resume_after_qso(self, last_was_even: bool | None = None) -> None:
         """Resume nach QSO — P23: Counter zurueck auf TARGET.
@@ -148,6 +153,7 @@ class OmniCQ(QObject):
         parity_str = "E" if self._cq_tx_even else "O"
         logger.info("[OMNI-CQ] Resume (Counter %d, Paritaet %s)",
                     self._cq_remaining, parity_str)
+        debug_log("OMNI", f"RESUME parity={parity_str} remaining={self._cq_remaining}")
         self.cq_count_changed.emit(
             self._cq_remaining,
             bool(self._cq_tx_even) if self._cq_tx_even is not None else False,
@@ -225,7 +231,12 @@ class OmniCQ(QObject):
         Paritaet via signal). Parameter bleiben in der Signatur fuer
         Qt-Slot-Kompat (`@Slot(int, bool)` bindet an cycle_start signal).
         """
-        if not self._active or self._paused:
+        if not self._active:
+            return
+        if self._paused:
+            # Diagnose (03.06.2026): zeigt waehrend eines QSO, dass OMNI bewusst
+            # pausiert ist — bounded (1 Zeile/Slot). Nur wenn aktiv+pausiert.
+            debug_log("OMNI", "slot SKIP — paused (QSO laeuft)")
             return
 
         # V2-L9 Fresh-Compute is_even — robust gegen Signal-Latenz
@@ -242,6 +253,9 @@ class OmniCQ(QObject):
 
         # Nur senden wenn aktueller Slot die richtige Paritaet hat
         if fresh_is_even != self._cq_tx_even:
+            debug_log("OMNI",
+                      f"slot SKIP — parity fresh={'E' if fresh_is_even else 'O'} "
+                      f"want={'E' if self._cq_tx_even else 'O'}")
             return
 
         cq_msg = f"CQ {self._my_call} {self._my_grid}"
@@ -266,11 +280,16 @@ class OmniCQ(QObject):
             )
             label = self._slot_label(True, self._cq_tx_even_display)
             self.slot_action.emit(label, True, self._cq_tx_even_display)
+            debug_log("OMNI",
+                      f"TX CQ parity={'E' if self._cq_tx_even_display else 'O'} "
+                      f"freq={self._cq_audio_hz} remaining={self._cq_remaining_display}")
         else:
             label = self._slot_label(True, self._cq_tx_even)
             logger.warning(
                 "[OMNI-CQ] encoder busy -> Slot %s uebersprungen", label
             )
+            debug_log("OMNI",
+                      f"TX SKIP — encoder busy parity={'E' if self._cq_tx_even else 'O'}")
 
     # ── (P23: on_search_trigger entfernt — Counter ist jetzt OMNI-eigen) ─
 

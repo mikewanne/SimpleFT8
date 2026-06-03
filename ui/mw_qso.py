@@ -59,11 +59,15 @@ class QSOMixin:
           - QSO endete auf Even → Block 2 (Odd-First)
           - QSO endete auf Odd  → Block 1 (Even-First)
         """
+        from core.debug_log import debug_log as _dbg
+        _dbg("OMNI", f"maybe_resume — was_active={getattr(self, '_omni_was_active_pre_qso', False)} "
+                     f"caller_queue={len(self.qso_sm._caller_queue)}")
         if not getattr(self, '_omni_was_active_pre_qso', False):
             return
         # V2-L10: Caller-Queue selbst abarbeiten — OMNI hat kein qso_state.cq_mode
         # mehr, also greift _resume_cq_if_needed nicht.
         if self.qso_sm._caller_queue:
+            _dbg("OMNI", "maybe_resume — Caller-Queue: naechstes QSO direkt (OMNI bleibt pausiert)")
             next_msg = self.qso_sm._caller_queue.pop(0)
             self.qso_sm.queue_changed.emit(
                 [m.caller for m in self.qso_sm._caller_queue])
