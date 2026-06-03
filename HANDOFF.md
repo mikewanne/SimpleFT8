@@ -11,9 +11,11 @@ erben + Delta. DeepSeek Final-R1 fand zusätzlich P171-Migrations-Bug (FT4-only-
 Datei → falsche ~0-Basis) → gefixt (kein Migrate ohne FT8-Keys). R1 + Final-R1
 (nach Fix) **PUSH FREIGEBEN**. Tests 2339→**2348** (+9). Kein TX-Eingriff,
 ANT1/ANT2 unberührt. NICHT gepusht.
-**⚠️ Nächster Schritt — Mike testet FT4 am Radio (P168-Zone):** App neu starten,
-auf FT4 → (1) DT-Spalte jetzt um 0 statt −0.3? (2) **FT4-Decode-Anzahl stabil?**
-Bei Decode-Einbruch sofort melden → `_MODE_DELTA["FT4"]=0.0` = Rollback. — **Vorgänger
+**✅ Field-Test BESTANDEN (am Radio, 03.06.2026):** FT4-DT −0.3→~0 (leicht +0.1),
+Empfang STABIL (11 Stationen, KEIN P168-Decode-Einbruch — Risiko entwarnt),
+FT4-QSOs liefen (LZ2II, SV7BAY). Offene Mikrojustierung (NICHT akut): FT4 ~+0.1
+leicht über 0 → optional `_MODE_DELTA["FT4"]` −0.30→−0.20, aber NUR datenbasiert
+nach längerer Log-Beobachtung (Stations-Streuung ±0.2). — **Vorgänger
 v0.98.61: Audio-Mithör-Monitor (🔊-Toggle, Diagnose)** — RX-Audio auf Lautsprecher
 als Diagnose (Decoder unangetastet via Wrapper, 48k-Ringpuffer, sounddevice).
 Tests +15, PUSH FREIGEBEN, nicht gepusht. — **Vorgänger v0.98.60 P171: DT-Korrektur auf EINEN

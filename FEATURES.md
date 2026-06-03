@@ -398,9 +398,16 @@ nicht selbst lernen" bleibt gültig).
 - **Kein Teilfix:** Anzeige korrigieren, RX/TX aber unverändert wäre Pfusch
   (DeepSeek-🔴) — Anzeige geschönt, Signal physisch weiter daneben, FT4 sendet
   0.3s zu früh. Darum laufen ALLE drei über `get_correction()`.
-- **⚠️ P168-Zone (Feld-Test):** der FT4-RX-Shift fällt von +0.29s auf ~0 → die
-  FT4-Decode-Fensterlage verschiebt sich um 0.29s. Klein ggü. 7.5s-Slot, aber bei
-  Decode-Einbruch ist `_MODE_DELTA["FT4"]=0.0` der sofortige Rollback.
+- **✅ Field-validiert (03.06.2026, v0.98.62 am Radio):** FT4-DT von −0.3 auf ~0
+  (Schnitt leicht +0.1), **Empfang stabil — 11 Stationen dekodiert, KEIN P168-
+  Decode-Einbruch** (das gefürchtete Risiko ist damit entwarnt), FT4-QSOs laufen
+  (LZ2II, SV7BAY). Der FT4-RX-Shift fällt von +0.29s auf ~0 (Fensterlage 0.29s
+  verschoben) — das hat der Decode unbeschadet überstanden. Rollback bliebe
+  `_MODE_DELTA["FT4"]=0.0`.
+- **Leichte Überkorrektur offen (nicht akut):** FT4 liegt minimal über 0 (~+0.1;
+  FT8 ~0). Praktisch irrelevant (weit in Toleranz). Optionale Feinjustierung
+  `_MODE_DELTA["FT4"]` −0.30→−0.20 nur **datenbasiert** (nach längerer FT4-Median-
+  Beobachtung im Log), NICHT auf einen Screenshot hin (Stations-Streuung ±0.2).
 - **Migrations-Bug mitgefixt (DeepSeek-Final-R1):** `_load_saved()` lud bei Dateien
   OHNE FT8-Keys den Median ALLER Werte (inkl. FT4=0.045) als falsche Basis → jetzt
   ohne FT8-Keys keine Migration (`return`, `_is_initial=True`).
