@@ -9,6 +9,46 @@ Gelöscht wird nie etwas. Format: `## YYYY-MM-DD vX.YY — Kurztitel`.
 > stehen in `history/HISTORY_archiv_NN.md` (grep dort, falls eine alte Version
 > gesucht wird). Rotiert mit `tools/rotate_history.py`. Zuletzt: 2026-06-01.
 
+## 2026-06-03 v0.98.59 — P170: Upload-Move mergt bei Namens-Kollision (kein Stau in neu/ mehr)
+
+**Anlass (Mike-Field):** „jetzt habe ich 205 hochgeladen, werden die dann nicht
+als fertig verschoben? sonst häufen die sich in der App-Liste." Verifiziert am
+echten Datenstand: `adif/erfasst/neu/` = 205 QSOs in 12 Tagesdateien, **11 davon
+mit gleichnamigem Zwilling in `hochgeladen/`** (Folge der Phase-1-Migration:
+Vormittags-/Nachmittags-Sessions desselben Tages landeten in beiden Ordnern).
+
+**Root Cause:** `_handle_qrz_file_results` verschiebt nach erfolgreichem Upload
+`neu/`→`hochgeladen/`, **übersprang aber bei Namensgleichheit** (`if dest.exists():
+skip`) → Datei bleibt in `neu/`, QSOs häufen sich + werden bei jedem Upload erneut
+angeboten. Tritt strukturell immer wieder auf (tägliche Logdateien heißen gleich:
+vormittags hochgeladen, nachmittags weitergefunkt = gleicher Dateiname).
+
+**Fix (voller Workflow, Mike-Wahl „mergen"):** bei Kollision die Records der
+`neu/`-Datei dedupliziert an die vorhandene `hochgeladen/`-Datei anhängen, dann
+`neu/`-Datei löschen.
+- `log/adif.py:merge_adif_files(src, dest) -> (appended, skipped)` — neue pure
+  Funktion. Dedup-Key `(CALL, QSO_DATE, TIME_ON)` (identisch zu
+  `export_all_records`), gegen dest UND innerhalb src. **Datensicherheit:** dest
+  **byte-erhaltend** (nur Anhang, kein Reserialisieren), `open(...,
+  newline="")` (keine Newline-Übersetzung, auch Windows), striktes utf-8 +
+  `<EOH>`-Validierung → bei kaputter Datei ValueError. **Atomar:** Temp +
+  `os.replace`. Nur Blöcke mit CALL.
+- `ui/mw_qso.py:_handle_qrz_file_results`: dest-exists → `merge_adif_files` statt
+  skip, `src.unlink()` erst nach Merge; bei `(OSError, ValueError,
+  UnicodeDecodeError)` bleiben BEIDE Dateien (kein Datenverlust); idempotent
+  (Re-Run dedupt). Eigener `merged`-Zähler.
+
+**Aktuelle 205:** kein Skript/Hand-Anlegen — nach dem Fix + 1× QRZ-Upload gehen
+sie als Dups durch (fail==0) und werden je Datei gemergt, `neu/` leert sich.
+
+**DeepSeek:** R1 (2🔴/2🟠/3🟡 — Datensicherheit) → gehärtet. Final-R1 **NICHT
+FREIGEBEN** (🔴 Newline-Übersetzung bricht Byte-Erhalt auf Windows + 🟠
+Doppel-Read) → behoben (`newline=""`, dest-Keys aus dest_text) → Final-R1b
+**PUSH FREIGEBEN** (beide ✅, keine neuen Datenverlust-Pfade). Reine
+Dateioperation, kein TX-Eingriff, ANT1/ANT2 unberührt. Tests 2324→**2332**
+(+8 `test_p170_upload_merge.py` inkl. Byte-/CRLF-Erhalt + Idempotenz; bestehender
+Kollisions-Skip-Test auf Merge umgestellt). NICHT gepusht.
+
 ## 2026-06-02 v0.98.58 — P169 Phase 2: mode-genauer Worked-Filter (Call,Band,Mode) + Auto-Hunt-Transparenz
 
 **Anlass:** Phase-1-Fundament (eine Quelle `adif/erfasst/`) steht; jetzt Mikes

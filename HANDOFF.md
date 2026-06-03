@@ -1,6 +1,18 @@
 # HANDOFF — SimpleFT8
 
-**Aktueller Stand:** v0.98.58 (02.06.2026) — **P169 Phase 2: mode-genauer
+**Aktueller Stand:** v0.98.59 (03.06.2026) — **P170: Upload-Move mergt bei
+Namens-Kollision** (voller Workflow). Mike-Field: 205 hochgeladene QSOs blieben
+in der „neu"-Liste hängen, weil das Verschieben nach „fertig" (`hochgeladen/`)
+bei gleichnamiger Tagesdatei **übersprang** (11 von 12 neu-Dateien hatten einen
+Zwilling in hochgeladen/ — Folge der Phase-1-Migration). Fix: bei Kollision die
+Records dedupliziert **mergen** (`log/adif.py:merge_adif_files`, byte-erhaltend +
+atomar + `<EOH>`-Validierung), `neu/`-Datei danach löschen. DeepSeek R1 +
+Final-R1 (erst NICHT FREIGEBEN wegen Newline-Byte-Erhalt → behoben) → Final-R1b
+**PUSH FREIGEBEN**. Tests 2324→**2332** (+8). **Die 205 räumen sich von selbst
+auf:** App neu starten → **einmal QRZ-Upload klicken** → sie gehen als Dups durch
+und werden je Datei nach hochgeladen/ gemergt, „neu" leert sich. Reine
+Dateioperation, kein TX-Eingriff. NICHT gepusht (auch P168 v0.98.56 + P169
+v0.98.57/.58 offen). — **Vorgänger v0.98.58 P169 Phase 2: mode-genauer
 Worked-Filter (Call,Band,Mode) + Auto-Hunt-Transparenz** (voller Workflow).
 „Schon gearbeitet" unterscheidet jetzt die Betriebsart: eine auf 20m FT8
 gearbeitete Station ist auf 20m FT4 / 15m FT8 wieder „neu" — NEUE-Filter
@@ -16,6 +28,26 @@ P165-Regression). Tests **2324 grün** (+12). Kein TX-Eingriff, ANT1/ANT2
 unberührt. **Damit ist P169 komplett (Phase 1 + 2).** Lokal committet,
 **Push-Freigabe Mike ausstehend** (auch P168 v0.98.56 + P169 Phase 1 v0.98.57
 noch nicht gepusht). Field-Test pending.
+
+---
+
+## Session 03.06.2026 — P170: Upload-Move mergt bei Kollision (v0.98.59)
+
+**Anlass:** Mike-Frage „205 hochgeladen — werden die als fertig verschoben? sonst
+häufen die sich". Verifiziert: neu/ = 205 QSOs, 11/12 Dateien kollidieren mit
+gleichnamigen in hochgeladen/ → Verschieben übersprang → Stau.
+
+**Gemacht:** `merge_adif_files` (dedup `(CALL,QSO_DATE,TIME_ON)`, byte-erhaltend,
+atomar, `<EOH>`-validiert); `_handle_qrz_file_results` mergt bei Kollision statt
+zu skippen. DeepSeek 2 Runden (Datensicherheit), Final-R1b PUSH FREIGEBEN. Tests
+2324→2332 (+8).
+
+**Nächste Schritte:**
+1. **Mike: App neu starten, dann einmal „QRZ"-Upload klicken** → die 205 gehen
+   als Dups durch + werden je Datei nach hochgeladen/ gemergt → „neu" leert sich.
+   (Kein Hand-Anlegen nötig, die App macht es korrekt mit dem Fix.)
+2. **Push** offen: P168 v0.98.56 + P169 v0.98.57/.58 + P170 v0.98.59 — auf
+   Mikes Freigabe.
 
 ---
 

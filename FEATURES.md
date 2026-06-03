@@ -1929,6 +1929,16 @@ adif/
 - **Schreiben (App-QSO):** `AdifWriter.directory = adif/erfasst/neu/`.
 - **Upload (mw_qso):** Kandidaten = Records mit `_SOURCE_FILE` in `/erfasst/neu/`
   (hochgeladen/ + importiert/ NIE re-uploaden!). Nach Upload Move neu/→hochgeladen/.
+  **P170 (03.06.2026) — Move mergt bei Namens-Kollision:** liegt im Ziel schon
+  eine gleichnamige Tagesdatei (vormittags hochgeladen, nachmittags weitergefunkt
+  = gleicher Dateiname), wird NICHT übersprungen (das führte zu Stau in neu/),
+  sondern via `log/adif.py:merge_adif_files` dedupliziert (`(CALL,QSO_DATE,
+  TIME_ON)`) an die vorhandene hochgeladen/-Datei ANGEHÄNGT, dann die neu-Datei
+  gelöscht. Datensicher: dest byte-erhaltend (`open(...,newline="")`, nur Anhang,
+  kein Reserialisieren), atomar (Temp+os.replace), `<EOH>`-validiert → bei
+  kaputter/nicht-ADIF-dest bleibt alles stehen; idempotent (Re-Run dedupt).
+  Stolperfalle: Tagesdateien heißen strukturell gleich → ohne Merge stauen sich
+  upgeloadete QSOs in neu/ und werden immer wieder als QRZ-Dups angeboten.
 - **Export (`export_all_records`):** rglob `SimpleFT8_LOG_*.adi` unter erfasst/ →
   nur App-Logs, importierte Fremd-Historie (andere Dateinamen) ausgeschlossen.
 - **Diplome:** `_all_records` (= erfasst/ rekursiv) enthält die Historie schon —
