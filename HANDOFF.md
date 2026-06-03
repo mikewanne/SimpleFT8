@@ -20,9 +20,10 @@ Slot; −0.3-TX-Versatz würde uns bei der Gegenstation mit DT −0.3 zeigen).
 `time.time()`). DeepSeek R1 (wasserdicht) + Final-R1 **PUSH FREIGEBEN** (Schwelle
 korrekt, Umsetzung exakt, keine Nebenwirkungen, Kaltstart-Edge bestätigt). Tests
 2348→**2349** (Test umgedreht + neuer `test_slot_takt_invariant_but_rx_diverges`).
-**Nächster Schritt: Mike testet FT4-OMNI am Radio** (muss wieder 15s sein; will
-den Bug zur Bestätigung reproduzieren — Wert < 0.30 erzwingen → 30s). TODO-Eintrag
-gesetzt. NICHT gepusht (Push-Stapel v0.98.56–v0.98.63 wartet auf Mikes „push").
+**✅ Field-Test BESTANDEN (Mike am Radio, 03.06.2026):** FT4-Sende-Takt wieder
+korrekt (~8s Slot-Intervall, durch laufendes QSO bestätigt — kein 30s mehr),
+FT4-Empfang/DT-Zeiten sehr gut. Damit erledigt. Push-Stapel v0.98.56–v0.98.63
+freigegeben (Mike: „erst alles pushen, dann P124/P126 angehen").
 
 — **Vorgänger v0.98.62: DT-Korrektur modus-abhängig (FT4-Versatz)** (voller
 Workflow). FT8-DT um 0, FT4 alle ~−0.3 → `_MODE_DELTA = {FT8:0, FT4:−0.30, FT2:0}`

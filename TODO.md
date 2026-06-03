@@ -16,12 +16,12 @@
 
 ---
 
-# 🟡 FT4-OMNI-30s — gefixt v0.98.63, Field-Reproduktion durch Mike ausstehend
+# ✅ FT4-OMNI-30s ERLEDIGT (v0.98.63, 03.06.2026) — field-validiert
 
-**Status:** Code-Fix erledigt + 2× DeepSeek-bestätigt (voller Workflow). Offen ist
-nur Mikes Field-Reproduktion zur Bestätigung (Mike-Wunsch 03.06.: „ich schaue
-nachher ob ich den fehler reproduzieren kann, ist vielleicht besser wegen
-Diagnose").
+**Status:** Code-Fix + 2× DeepSeek-bestätigt + **✅ FIELD-TEST BESTANDEN** (Mike am
+Radio 03.06.): FT4-Sende-Takt wieder korrekt (~8s Slot-Intervall, durch laufendes
+QSO bestätigt — kein 30s mehr), FT4-Empfang/DT-Zeiten der empfangenen Stationen
+sehr gut. Damit erledigt.
 
 **Symptom (Mike-Field):** OMNI-CQ auf FT4 sendete nur alle 30s statt 15s,
 **intermittierend** — mal 15s, mal 30s, je nachdem ob vorher auf FT8 gewesen.

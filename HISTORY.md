@@ -43,9 +43,10 @@ DeepSeek R1 (Diagnose+Fix wasserdicht, kein versteckter Pfad) + Final-R1 **PUSH
 FREIGEBEN** (Schwellen-Erklärung korrekt, Umsetzung exakt, keine Nebenwirkungen,
 Kaltstart-Edge-Case bestätigt). Tests 2348→**2349** (`test_dt_mode_delta.py`:
 `test_get_time_uses_effective_correction` umgedreht → `test_get_time_uses_base_
-not_delta`, + neuer `test_slot_takt_invariant_but_rx_diverges`). **Field-Test:
-FT4-OMNI muss wieder 15s senden** — Mike will den Bug zur Bestätigung am Radio
-reproduzieren (Wert < 0.30 erzwingen → 30s). NICHT gepusht.
+not_delta`, + neuer `test_slot_takt_invariant_but_rx_diverges`). **✅ Field-Test
+BESTANDEN (Mike am Radio, 03.06.2026):** FT4-Sende-Takt wieder korrekt (~8s
+Slot-Intervall, durch laufendes QSO bestätigt — kein 30s mehr), FT4-Empfang/
+DT-Zeiten der empfangenen Stationen sehr gut.
 
 ## 2026-06-03 v0.98.62 — DT-Korrektur modus-abhängig (FT4-Versatz) + Migrations-Bug
 
