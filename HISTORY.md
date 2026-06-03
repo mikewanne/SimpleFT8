@@ -9,6 +9,40 @@ Gelöscht wird nie etwas. Format: `## YYYY-MM-DD vX.YY — Kurztitel`.
 > stehen in `history/HISTORY_archiv_NN.md` (grep dort, falls eine alte Version
 > gesucht wird). Rotiert mit `tools/rotate_history.py`. Zuletzt: 2026-06-01.
 
+## 2026-06-03 v0.98.62 — DT-Korrektur modus-abhängig (FT4-Versatz) + Migrations-Bug
+
+**Mike-Field:** Auf FT8 stand die DT der Stationen sauber um 0, auf **FT4** lagen
+ALLE systematisch bei ~−0.3 (mehrere Screenshots + App-Log verifiziert).
+Diagnose: Der gelernte Korrekturwert (+0.29, n=11) ist **NICHT rein die
+Funkgerät-Latenz** — er ist **modus-abhängig**. FT8 braucht +0.29, FT4 effektiv
+~0; der Unterschied ist ein protokoll-/fenster-abhängiger Versatz (je schneller
+der Modus, desto enger die Toleranz — Mike-Einsicht). P171 wandte den FT8-Wert
+unkorrigiert auf FT4 an → FT4 ~0.3 überkorrigiert (Anzeige negativ, Sende-Slot
+verschoben). Der alte FT4-Eigenwert (0.045) war also teilweise REAL, nicht nur
+1-Stationen-Artefakt.
+
+**Fix (`core/ntp_time.py`):** modus-abhängige effektive Korrektur. Neuer
+`_MODE_DELTA = {FT8:0.0, FT4:−0.30, FT2:0.0}` (field-kalibriert, PROVISORISCH).
+`get_correction()` → `_correction + _MODE_DELTA[_mode]`; `get_time()` (TX) +
+`get_status_text()` (Anzeige) nutzen die effektive Korrektur. Nur FT8 LERNT die
+Basis `_correction`; FT4/FT2 erben sie + festen Delta. EINE Quelle → RX-Decode-
+Shift, TX-Timing UND Anzeige werden zugleich zentriert (DeepSeek-bestätigt: kein
+Teilfix/„Pfusch"). F5 verifiziert (kein Pfad liest `_correction` direkt unter
+Umgehung des Delta). FT2=0.0 (Button versteckt, später kalibrieren).
+
+**DeepSeek Final-R1 fand zusätzlich einen P171-Migrations-Bug** (NICHT FREIGEBEN
+→ gefixt → freigegeben): `_load_saved()` lud bei Dateien OHNE FT8-Keys den Median
+ALLER numerischen Werte (inkl. FT4_20m=0.045) als falsche ~0-Basis + setzte
+`_is_initial=False` (Hardware-Default blockiert). Fix: bei fehlenden FT8-Keys
+NICHT migrieren (`return`, `_is_initial=True`).
+
+**⚠️ Feld-Test (P168-Zone):** Der FT4-RX-Decode-Shift ändert sich von +0.29s auf
+~0 → FT4-Decode-Fensterlage verschiebt sich um 0.29s. DeepSeek: klein ggü.
+7.5s-Slot, wahrscheinlich sicher, aber **FT4-Decode-Anzahl beobachten; bei
+Einbruch `_MODE_DELTA["FT4"]` zurück auf 0.0 = sofortiger Rollback.** Kein
+TX-Antennen-Eingriff, ANT1/ANT2 unberührt. Tests 2339→**2348** (+9:
+`test_dt_mode_delta.py` + Migrations-Test). NICHT gepusht, Feld-Test pending.
+
 ## 2026-06-03 v0.98.61 — Audio-Mithör-Monitor (🔊-Toggle, Diagnose-Feature)
 
 **Mike-Wunsch (Field):** unabhängig per Ohr prüfen können, ob auf der Frequenz

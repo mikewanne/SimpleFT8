@@ -377,6 +377,37 @@ Historie: bis v0.98.59 per-(Modus,Band) + Cross-Modus-Fallback (P48-B). P171
 vereinfachte auf einen Globalwert (Mike + DeepSeek: eine physikalische Konstante,
 gepoolte FT8-Messung ist die genaueste + KISS).
 
+### Modus-Versatz — Korrektur der „modus-unabhängig"-Annahme (`_MODE_DELTA`, v0.98.62, 03.06.2026)
+
+**Die P171-Annahme oben („modus- UND band-unabhängig") war zu stark.** Field-
+Beweis (Mike, mehrere Screenshots + App-Log): mit demselben globalen Wert (+0.29,
+FT8-gelernt) stand FT8-DT sauber um 0, **FT4 aber systematisch bei ~−0.3**. Der
+gelernte Wert ist also NICHT rein Hardware-Latenz — er ist **modus-abhängig** (je
+schneller der Modus, desto enger die Toleranz). Der alte per-Modus-FT4-Wert
+(0.045) war damit teilweise REAL, nicht nur 1-Stationen-Artefakt.
+
+**Lösung (`core/ntp_time.py`):** der globale Wert bleibt die **FT8-gelernte Basis**
+(`_correction`), plus ein **fester Modus-Delta**:
+`_MODE_DELTA = {FT8: 0.0, FT4: −0.30, FT2: 0.0}` (field-kalibriert, PROVISORISCH).
+`get_correction()` liefert `_correction + _MODE_DELTA[_mode]` — **eine Quelle** für
+RX-Decode-Shift (`decoder.py:361`), TX-Timing (`get_time()`) UND Anzeige
+(`get_status_text()` / `mw_cycle:280`). So zentriert ein Wert alle drei zugleich.
+Nur FT8 lernt die Basis; FT4/FT2 erben sie + Delta (P171s „wenige Stationen →
+nicht selbst lernen" bleibt gültig).
+
+- **Kein Teilfix:** Anzeige korrigieren, RX/TX aber unverändert wäre Pfusch
+  (DeepSeek-🔴) — Anzeige geschönt, Signal physisch weiter daneben, FT4 sendet
+  0.3s zu früh. Darum laufen ALLE drei über `get_correction()`.
+- **⚠️ P168-Zone (Feld-Test):** der FT4-RX-Shift fällt von +0.29s auf ~0 → die
+  FT4-Decode-Fensterlage verschiebt sich um 0.29s. Klein ggü. 7.5s-Slot, aber bei
+  Decode-Einbruch ist `_MODE_DELTA["FT4"]=0.0` der sofortige Rollback.
+- **Migrations-Bug mitgefixt (DeepSeek-Final-R1):** `_load_saved()` lud bei Dateien
+  OHNE FT8-Keys den Median ALLER Werte (inkl. FT4=0.045) als falsche Basis → jetzt
+  ohne FT8-Keys keine Migration (`return`, `_is_initial=True`).
+- **Offen:** Der FT4-Delta ist empirisch (−0.30), nicht aus `_WINDOW_OFFSETS`
+  abgeleitet. DeepSeek vermutet einen versteckten Fehler in den FT4-Fenster-
+  Konstanten — separat zu klären.
+
 ### Multi-Radio (P121 v0.98.04)
 
 `TARGET_TX_OFFSET` ist FlexRadio-spezifisch. IC-7300/IC-7100-Forks
