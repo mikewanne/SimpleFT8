@@ -61,19 +61,19 @@ def test_settings_backward_compat_no_radio_timing_block(tmp_path, monkeypatch):
 
 @pytest.fixture
 def fresh_ntp(monkeypatch):
-    """Frischer DT-Modul-State fuer deterministische Tests (P171 Globalwert).
+    """Frischer DT-Modul-State fuer deterministische Tests (Globalwert).
 
     _DT_FILE-Schutz kommt schon aus conftest.py.
     """
+    import collections
     import core.ntp_time as nt
     monkeypatch.setattr(nt, "_correction", 0.0)
     monkeypatch.setattr(nt, "_hardware_default_offset", 0.0)
     monkeypatch.setattr(nt, "_mode", "FT8")
     monkeypatch.setattr(nt, "_band", "20m")
-    monkeypatch.setattr(nt, "_phase", "measure")
     monkeypatch.setattr(nt, "_is_initial", True)
-    monkeypatch.setattr(nt, "_cycle_count", 0)
-    monkeypatch.setattr(nt, "_measure_buffer", [])
+    monkeypatch.setattr(nt, "_recent_samples",
+                        collections.deque(maxlen=nt.RECENT_SLOTS))
     yield nt
 
 
@@ -114,27 +114,33 @@ def test_set_mode_keeps_global_correction(fresh_ntp):
     assert nt._correction == 0.26
 
 
-def test_ft4_ft2_do_not_write(fresh_ntp):
-    """FT4/FT2: update_from_decoded ist No-op (kein Lernen/Schreiben)."""
+def test_ft4_ft2_do_not_buffer(fresh_ntp):
+    """v0.99.0: FT4/FT2 fuellen den Kalibrier-Puffer NICHT (nur FT8 wird
+    kalibriert) — der globale Wert bleibt."""
     nt = fresh_ntp
     nt._correction = 0.26
     nt._is_initial = False
     nt.set_mode("FT4", "20m")
-    assert nt.update_from_decoded([0.5] * 10) is False
+    nt.record_samples([0.5] * 10)
+    assert len(nt._recent_samples) == 0
     assert nt._correction == 0.26
     nt.set_mode("FT2", "20m")
-    assert nt.update_from_decoded([0.5] * 10) is False
+    nt.record_samples([0.5] * 10)
+    assert len(nt._recent_samples) == 0
     assert nt._correction == 0.26
 
 
-def test_ft8_learns_and_persists(fresh_ntp):
-    """FT8 misst weiterhin (Erstkorrektur) und schreibt das neue Format."""
+def test_ft8_calibrate_and_persists(fresh_ntp):
+    """FT8: record_samples puffert, calibrate() korrigiert inkrementell und
+    schreibt das Single-Value-Format."""
     import json
     nt = fresh_ntp
     nt.set_mode("FT8", "20m")
+    nt._correction = 0.0
     nt._is_initial = True
-    nt.update_from_decoded([0.5] * 5)
-    nt.update_from_decoded([0.5] * 5)   # 2 Slots → Erstkorrektur
+    nt.record_samples([0.5] * 6)
+    ok, msg = nt.calibrate()
+    assert ok is True
     assert abs(nt._correction - 0.5) < 0.05
     assert nt._is_initial is False
     data = json.loads(nt._DT_FILE.read_text())
@@ -188,56 +194,10 @@ def test_new_format_loaded(fresh_ntp, tmp_path, monkeypatch):
     assert nt._is_initial is False
 
 
-# ── P48-D Schnell-Konvergenz ─────────────────────────────────────────────
-
-
-def test_fast_convergence_with_hardware_default(fresh_ntp):
-    """Realer Default-Pfad: Hardware-Default 0.26 + 12 Stationen mit kleiner
-    Streuung → 1 Slot reicht (Fast-Path).
-    """
-    nt = fresh_ntp
-    nt._hardware_default_offset = 0.26
-    nt.set_mode("FT8", "20m")
-    assert nt._is_initial is True
-
-    # 12 Stationen mit DT ~0 (Korrektur passt schon ungefaehr)
-    result = nt.update_from_decoded([0.0] * 12)
-
-    # Fast-Path → phase wechselt nach 1 Slot auf "operate"
-    assert result is True, "Sollte True (Mess-Phase abgeschlossen) liefern"
-    assert nt._phase == "operate", f"Phase sollte 'operate' sein, war '{nt._phase}'"
-    assert nt._cycle_count == 0  # nach Wechsel auf operate zurueckgesetzt
-
-
-def test_fast_convergence_high_stdev_blocked(fresh_ntp):
-    """Hohe Streuung → kein Fast-Path, wartet auf 2 Slots."""
-    nt = fresh_ntp
-    nt._hardware_default_offset = 0.26
-    nt.set_mode("FT8", "20m")
-
-    # 12 Stationen mit Stddev > 0.1 (alterniert 0.0/0.5)
-    high_stdev_values = [0.0, 0.5] * 6
-    result = nt.update_from_decoded(high_stdev_values)
-
-    # 1. Slot ohne Fast-Path → noch keine Korrektur
-    assert result is False, "1. Slot ohne Fast-Path sollte False liefern"
-    assert nt._phase == "measure"
-    assert nt._cycle_count == 1
-
-
-def test_fast_convergence_few_stations_blocked(fresh_ntp):
-    """Wenig Stationen (<10) → kein Fast-Path."""
-    nt = fresh_ntp
-    nt._hardware_default_offset = 0.26
-    nt.set_mode("FT8", "20m")
-
-    # 5 Stationen mit kleiner Streuung — aber unter Schwelle
-    result = nt.update_from_decoded([0.0, 0.01, -0.01, 0.02, 0.0])
-
-    # Kein Fast-Path (zu wenig Stationen) → 1. Slot bleibt in measure
-    assert result is False
-    assert nt._phase == "measure"
-    assert nt._cycle_count == 1
+# ── v0.99.0: Schnell-Konvergenz (P48-D) entfernt ─────────────────────────
+# Das automatische Mehr-Slot-Lernen mit Fast-Path gibt es nicht mehr — der
+# Kalibrier-Knopf nimmt das gleitende Fenster in EINEM Schritt. Kalibrier-Tests:
+# test_dt_calibrate.py.
 
 
 # ── P48-A Encoder tx_buffer_s ────────────────────────────────────────────

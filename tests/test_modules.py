@@ -21,48 +21,37 @@ import numpy as np
 
 # ── NTP Time ─────────────────────────────────────────────────────────────────
 
-def test_ntp_reset():
-    """Reset mit keep_correction=False setzt auf 0."""
+# v0.99.0: automatisches DT-Lernen (Mess-/Operate-Phasen, Daempfung,
+# Sprung-Reset, reset()) ENTFERNT — der Wert wird nur per Kalibrier-Knopf
+# gesetzt (ntp_time.calibrate). Umfassende Kalibrier-Tests: test_dt_calibrate.py.
+
+def _seed_ntp(nt, correction=0.0, mode="FT8"):
+    """Helper: ntp_time-State deterministisch setzen (kein reset() mehr)."""
+    nt._correction = correction
+    nt._mode = mode
+    nt._is_initial = (correction == 0.0)
+    nt._recent_samples.clear()
+
+
+def test_ntp_set_mode_clears_buffer():
+    """set_mode leert das gleitende Kalibrier-Fenster (frischer Start)."""
     from core import ntp_time
-    ntp_time.reset(keep_correction=False)
-    assert ntp_time.get_correction() == 0.0
+    _seed_ntp(ntp_time, 0.26, "FT8")
+    ntp_time.record_samples([0.1] * 6)
+    assert len(ntp_time._recent_samples) == 1
+    ntp_time.set_mode("FT4")
+    assert len(ntp_time._recent_samples) == 0
 
 
-def test_ntp_too_few_stations():
-    """Weniger als MIN_STATIONS → keine Korrektur."""
+def test_ntp_calibrate_too_few_stations():
+    """Weniger als MIN_STATIONS im Puffer → calibrate() liefert (False, …),
+    Korrektur bleibt unveraendert."""
     from core import ntp_time
-    ntp_time._mode = "FT8"   # P171: nur FT8 misst
-    ntp_time.reset()
-    assert not ntp_time.update_from_decoded([0.3, 0.4])
-
-
-def test_ntp_positive_correction():
-    """10 Stationen mit dt=+0.8 → kumulative Korrektur +0.8 (erster Zyklus = 100%)."""
-    from core import ntp_time
-    ntp_time._mode = "FT8"   # P171: nur FT8 misst
-    ntp_time.reset(keep_correction=False)
-    # Braucht bis zu MEASURE_CYCLES Zyklen bis Korrektur angewendet wird
-    for _ in range(4):
-        ntp_time.update_from_decoded([0.8] * 10)
-    corr = ntp_time.get_correction()
-    assert 0.5 < corr < 1.0, f"DT-Korrektur: {corr}"
-    ntp_time.reset()
-
-
-def test_ntp_deadband():
-    """DT unter DEADBAND (P14: 0.02s) → keine Korrektur.
-
-    Hinweis (P14): DEADBAND wurde von 0.05 auf 0.02 reduziert (R1-F1
-    Anti-Einfrier am Rand). Test nutzt jetzt 0.01s im Totband.
-    """
-    from core import ntp_time
-    ntp_time._mode = "FT8"   # P171: nur FT8 misst
-    ntp_time.reset(keep_correction=False)
-    for _ in range(4):
-        ntp_time.update_from_decoded([0.01] * 10)
-    assert ntp_time.get_correction() == 0.0, \
-        f"Totband: sollte 0 sein, ist {ntp_time.get_correction()}"
-    ntp_time.reset(keep_correction=False)
+    _seed_ntp(ntp_time, 0.26, "FT8")
+    ntp_time.record_samples([0.3, 0.4])   # nur 2 < MIN_STATIONS
+    ok, msg = ntp_time.calibrate()
+    assert ok is False
+    assert ntp_time._correction == 0.26
 
 
 # ── OMNI-CQ Pattern-Tests siehe tests/test_omni_cq_worker.py (P4.OMNI-NEUBAU) ─
@@ -559,8 +548,8 @@ def test_qso_caller_queue():
 # ── DT Correction Persistence ────────────────────────────────────────────────
 
 def test_dt_correction_mode_switch():
-    """P171: Modus-Wechsel BEHAELT den globalen Korrekturwert (kein Per-Modus-
-    Laden mehr — die Korrektur ist die modus-unabhaengige Hardware-Latenz)."""
+    """Modus-Wechsel BEHAELT den globalen Korrekturwert (kein Per-Modus-Laden —
+    die Korrektur ist die modus-unabhaengige Hardware-Latenz/Uhr-Offset)."""
     from core import ntp_time
     ntp_time._correction = 0.5
     ntp_time._mode = "FT8"
@@ -571,58 +560,24 @@ def test_dt_correction_mode_switch():
     # Zurueck auf FT8 → weiterhin 0.5
     ntp_time.set_mode("FT8")
     assert abs(ntp_time._correction - 0.5) < 0.01
-    # Reset
-    ntp_time.reset(keep_correction=False)
 
 
-# ── NTP/DT Correction Logic ──────────────────────────────────────────────────
+# ── DT-Kalibrierung (v0.99.0) ─────────────────────────────────────────────────
+# Die fruehere Lern-Logik (Erstkorrektur/Daempfung/Sprung-Reset) wurde durch den
+# manuellen Kalibrier-Knopf ersetzt. Detail-Tests: test_dt_calibrate.py.
 
-def test_dt_first_correction_full():
-    """Erstkorrektur: 100% des Medians angewendet (nicht gedaempft)."""
+def test_dt_calibrate_incremental_full_step():
+    """calibrate() addiert den vollen Median der Residuen (keine Daempfung):
+    corr=0.5 + Residuen +0.2 → 0.7. Ein Klick konvergiert."""
     from core import ntp_time
-    ntp_time._mode = "FT8"   # P171: nur FT8 misst
-    ntp_time.reset(keep_correction=False)
-    ntp_time._is_initial = True
-    # 2 Zyklen mit DT +0.5
-    ntp_time.update_from_decoded([0.5, 0.5, 0.5, 0.5, 0.5])
-    ntp_time.update_from_decoded([0.5, 0.5, 0.5, 0.5, 0.5])
-    # Erstkorrektur: volle 0.5
-    assert abs(ntp_time._correction - 0.5) < 0.05, f"Erstkorrektur erwartet ~0.5, got {ntp_time._correction}"
-    assert not ntp_time._is_initial
-    ntp_time.reset(keep_correction=False)
-
-
-def test_dt_fine_correction_damped():
-    """Feinkorrektur: nur 70% des Medians (Daempfung)."""
-    from core import ntp_time
-    ntp_time.reset(keep_correction=False)
+    ntp_time._correction = 0.5
+    ntp_time._mode = "FT8"
     ntp_time._is_initial = False
-    ntp_time._correction = 0.5
-    ntp_time._phase = "measure"
-    ntp_time._cycle_count = 0
-    ntp_time._measure_buffer = []
-    # 2 Zyklen mit DT +0.2 (Restfehler)
-    ntp_time.update_from_decoded([0.2, 0.2, 0.2, 0.2, 0.2])
-    ntp_time.update_from_decoded([0.2, 0.2, 0.2, 0.2, 0.2])
-    # Feinkorrektur: 0.5 + (0.2 × 0.7) = 0.64
-    expected = 0.5 + 0.2 * 0.7
-    assert abs(ntp_time._correction - expected) < 0.05, f"Feinkorrektur erwartet ~{expected}, got {ntp_time._correction}"
-    ntp_time.reset(keep_correction=False)
-
-
-def test_dt_jump_detection():
-    """Sprung >1.5s → Reset auf 0 + neu messen."""
-    from core import ntp_time
-    ntp_time.reset(keep_correction=False)
-    ntp_time._correction = 0.5
-    ntp_time._phase = "operate"
-    ntp_time._cycle_count = 0
-    # DT ploetzlich bei +2.0 → Sprung erkannt
-    ntp_time.update_from_decoded([2.0, 2.0, 2.0, 2.0])
-    assert ntp_time._correction == 0.0, "Nach Sprung soll Korrektur 0.0 sein"
-    assert ntp_time._phase == "measure"
-    assert ntp_time._is_initial
-    ntp_time.reset(keep_correction=False)
+    ntp_time._recent_samples.clear()
+    ntp_time.record_samples([0.2] * 8)
+    ok, msg = ntp_time.calibrate()
+    assert ok is True
+    assert abs(ntp_time._correction - 0.7) < 0.02, ntp_time._correction
 
 
 # ── FT8Message Parser ────────────────────────────────────────────────────────
@@ -950,12 +905,10 @@ def test_measure_cycles_multiplier():
     assert base * _MULT["FT2"] == 24
 
 
-def test_dt_min_stations_per_mode():
-    """DT MIN_STATIONS: FT8=3, FT4=2, FT2=1."""
-    _MIN = {"FT8": 3, "FT4": 2, "FT2": 1}
-    assert _MIN["FT8"] == 3
-    assert _MIN["FT4"] == 2
-    assert _MIN["FT2"] == 1
+def test_dt_min_stations_single_value():
+    """v0.99.0: EINE Mindestanzahl fuer die manuelle Kalibrierung (5)."""
+    from core import ntp_time
+    assert ntp_time.MIN_STATIONS == 5
 
 
 # ── ADIF Writer/Parser ────────────────────────────────────────────────────────
@@ -1222,7 +1175,7 @@ def test_protocol_ft2_different_from_ft4():
 # ── DT Persistence (P171 Globalwert) ──────────────────────────────────────────
 
 def test_dt_save_load_file():
-    """P171: DT-Wert wird im neuen Single-Value-Format gespeichert."""
+    """DT-Wert wird im Single-Value-Format gespeichert."""
     from core import ntp_time
     import json
     ntp_time._correction = 0.55
@@ -1230,35 +1183,35 @@ def test_dt_save_load_file():
     data = json.loads(ntp_time._DT_FILE.read_text())
     assert data.get("dt_correction_s") == 0.55
     assert ntp_time._DT_FILE.exists()
-    ntp_time.reset(keep_correction=False)
 
 
-def test_dt_ft2_ft4_no_measure():
-    """P171: FT2 und FT4 messen/schreiben NICHT — update ist No-op (der globale
-    FT8-Wert bleibt)."""
+def test_dt_ft2_ft4_not_buffered():
+    """v0.99.0: FT2/FT4 fuellen den Kalibrier-Puffer NICHT (nur FT8 wird
+    kalibriert) — der globale Wert bleibt."""
     from core import ntp_time
-    ntp_time.reset(keep_correction=False)
     ntp_time._correction = 0.26
+    ntp_time._recent_samples.clear()
     ntp_time._mode = "FT2"
-    assert ntp_time.update_from_decoded([0.5] * 10) is False
-    assert ntp_time._correction == 0.26
+    ntp_time.record_samples([0.5] * 10)
+    assert len(ntp_time._recent_samples) == 0
     ntp_time._mode = "FT4"
-    assert ntp_time.update_from_decoded([0.5] * 10) is False
+    ntp_time.record_samples([0.5] * 10)
+    assert len(ntp_time._recent_samples) == 0
     assert ntp_time._correction == 0.26
     ntp_time._mode = "FT8"
-    ntp_time.reset(keep_correction=False)
 
 
 def test_dt_max_correction_clamp():
-    """Korrektur wird auf ±MAX_CORRECTION (1.0s) begrenzt (FT8)."""
+    """calibrate() begrenzt auf ±MAX_CORRECTION (1.0s)."""
     from core import ntp_time
     ntp_time._mode = "FT8"
-    ntp_time.reset(keep_correction=False)
-    ntp_time._is_initial = True
-    ntp_time.update_from_decoded([1.9, 1.9, 1.9, 1.9, 1.9])
-    ntp_time.update_from_decoded([1.9, 1.9, 1.9, 1.9, 1.9])
+    ntp_time._correction = 0.5
+    ntp_time._is_initial = False
+    ntp_time._recent_samples.clear()
+    ntp_time.record_samples([1.9] * 8)   # Residuen weit jenseits 1.0
+    ntp_time.calibrate()
     assert ntp_time._correction <= ntp_time.MAX_CORRECTION
-    ntp_time.reset(keep_correction=False)
+    assert ntp_time._correction >= -ntp_time.MAX_CORRECTION
 
 
 # ── Presence Timer ────────────────────────────────────────────────────────────

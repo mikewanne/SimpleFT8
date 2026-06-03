@@ -29,15 +29,15 @@ MIKE_20_VALUES = [
 @pytest.fixture
 def fresh_ntp(monkeypatch):
     """Frischer DT-Modul-State."""
+    import collections
     import core.ntp_time as nt
     monkeypatch.setattr(nt, "_correction", 0.0)
     monkeypatch.setattr(nt, "_hardware_default_offset", 0.0)
     monkeypatch.setattr(nt, "_mode", "FT8")
     monkeypatch.setattr(nt, "_band", "20m")
-    monkeypatch.setattr(nt, "_phase", "measure")
     monkeypatch.setattr(nt, "_is_initial", True)
-    monkeypatch.setattr(nt, "_cycle_count", 0)
-    monkeypatch.setattr(nt, "_measure_buffer", [])
+    monkeypatch.setattr(nt, "_recent_samples",
+                        collections.deque(maxlen=nt.RECENT_SLOTS))
     yield nt
 
 
@@ -113,98 +113,69 @@ def test_mad_filter_notnagel_min3():
         f"Notnagel verletzt: Filter gab {len(filtered)} Werte zurueck"
 
 
-# ── DEADBAND-Konstante ───────────────────────────────────────────────────
+# ── R1-F2 Sanity-Anker (Wurzel-Test) — auf Kalibrier-Knopf umgestellt ─────
 
 
-def test_deadband_constant_002():
-    """T6: DEADBAND wurde von 0.05 auf 0.02 reduziert (R1-F1)."""
-    from core.ntp_time import DEADBAND
-    assert DEADBAND == 0.02
+def test_simple_median_mikes_data_converges(fresh_ntp, monkeypatch):
+    """T7: SANITY-ANKER — eine Kalibrierung mit Mike's 20 Werten konvergiert.
 
-
-# ── R1-F2 Sanity-Anker (Wurzel-Test) ─────────────────────────────────────
-
-
-def test_simple_median_mikes_data_converges_to_020(fresh_ntp, monkeypatch):
-    """T7: R1-F2 SANITY-ANKER — Verifikation dass der bisherige Algorithmus
-    grundsaetzlich KONVERGIERT.
-
-    Setup: _correction=0.27, _is_initial=False, 2 MEASURE-Slots mit Mike's
-    20 Werten (Median -0.1). Erwartung: avg_median = -0.1, delta = -0.07,
-    Endkorrektur = 0.20 ± 0.01.
-
-    WICHTIG: Dieser Test bypasst den MAD-Filter (Identity) um den
-    BISHERIGEN Algorithmus zu pruefen. Wenn dieser Test fail wird,
-    ist ein bisher unbekannter Bug in update_from_decoded zu finden,
-    BEVOR MAD-Filter irgendwas korrigiert (R1-F2-Anti-Symptom-Fix).
+    Setup: _correction=0.27, ein Slot mit Mike's 20 Werten (Median -0.1),
+    MAD-Filter Identity-gestubbt. calibrate() addiert den vollen Median
+    (keine Daempfung mehr): 0.27 + (-0.1) = 0.17.
     """
     nt = fresh_ntp
     nt._correction = 0.27
     nt._is_initial = False
-    nt._phase = "measure"
-    nt._cycle_count = 0
-    nt._measure_buffer = []
+    nt._recent_samples.clear()
 
     # MAD-Filter zu Identity stuben (testet rohen Algorithmus)
     monkeypatch.setattr(nt, "_filter_outliers_mad", lambda values, k=2.5: list(values))
 
-    # 1. MEASURE-Slot
-    result1 = nt.update_from_decoded(MIKE_20_VALUES)
-    assert result1 is False, "1. Slot sollte False (noch sammeln)"
-    assert nt._phase == "measure"
-
-    # 2. MEASURE-Slot
-    result2 = nt.update_from_decoded(MIKE_20_VALUES)
-    assert result2 is True, "2. Slot sollte True (Korrektur applied)"
-
-    # Erwartung: avg_median = -0.1, delta = -0.1 × 0.7 = -0.07
-    # → _correction = 0.27 - 0.07 = 0.20
-    assert nt._correction == pytest.approx(0.20, abs=0.01), \
-        f"Korrektur sollte ~0.20 sein, war {nt._correction:+.4f}"
+    nt.record_samples(MIKE_20_VALUES)
+    ok, msg = nt.calibrate()
+    assert ok is True
+    # Median(MIKE_20) = -0.1 → 0.27 + (-0.1) = 0.17 (voller Schritt)
+    assert nt._correction == pytest.approx(0.17, abs=0.01), \
+        f"Korrektur sollte ~0.17 sein, war {nt._correction:+.4f}"
 
 
-# ── MAD-Filter im update_from_decoded Pfad ───────────────────────────────
+# ── MAD-Filter im Kalibrier-Pfad ─────────────────────────────────────────
 
 
-def test_mad_filter_mikes_data_no_update(fresh_ntp):
-    """T8: Mit aktivem MAD-Filter bleibt Korrektur unveraendert (Mike's
-    Daten ergeben filtered_median ~0 → im Totband → kein Update)."""
+def test_mad_filter_mikes_data_near_no_change(fresh_ntp):
+    """T8: Mit aktivem MAD-Filter aendert die Kalibrierung kaum etwas — Mike's
+    Daten ergeben nach Outlier-Entfernung einen Median ~0."""
     nt = fresh_ntp
     nt._correction = 0.27
     nt._is_initial = False
-    nt._phase = "measure"
-    nt._cycle_count = 0
-    nt._measure_buffer = []
+    nt._recent_samples.clear()
 
-    # 1. Slot
-    nt.update_from_decoded(MIKE_20_VALUES)
-    # 2. Slot
-    nt.update_from_decoded(MIKE_20_VALUES)
-    # MAD-Filter hat Outliers entfernt, Median ~0, im Totband → kein Update
-    assert nt._correction == pytest.approx(0.27, abs=0.005), \
-        f"Korrektur sollte unveraendert bleiben, war {nt._correction:+.4f}"
+    nt.record_samples(MIKE_20_VALUES)
+    ok, msg = nt.calibrate()
+    assert ok is True
+    # MAD-Filter entfernt Outliers, Median ~0 → Korrektur bleibt ~0.27
+    assert nt._correction == pytest.approx(0.27, abs=0.025), \
+        f"Korrektur sollte ~unveraendert bleiben, war {nt._correction:+.4f}"
 
 
 # ── Debug-Logging Opt-In ─────────────────────────────────────────────────
 
 
 def test_debug_log_opt_in(monkeypatch, capsys, fresh_ntp):
-    """T9: Bei SIMPLEFT8_DT_DEBUG=1 schreibt update_from_decoded eine
+    """T9: Bei SIMPLEFT8_DT_DEBUG=1 schreibt record_samples eine
     [DT-DBG]-Zeile pro Slot."""
     import core.ntp_time as nt
     monkeypatch.setattr(nt, "_DT_DEBUG", True)
     nt._correction = 0.27
     nt._is_initial = False
-    nt._phase = "measure"
-    nt._cycle_count = 0
-    nt._measure_buffer = []
+    nt._recent_samples.clear()
 
-    nt.update_from_decoded(MIKE_20_VALUES)
+    nt.record_samples(MIKE_20_VALUES)
     captured = capsys.readouterr()
     assert "[DT-DBG]" in captured.out, \
         f"Debug-Zeile erwartet, captured: {captured.out!r}"
-    assert "raw=" in captured.out
-    assert "filt=" in captured.out
+    assert "median=" in captured.out
+    assert "corr=" in captured.out
 
 
 def test_debug_log_default_off(monkeypatch, capsys, fresh_ntp):
@@ -218,11 +189,9 @@ def test_debug_log_default_off(monkeypatch, capsys, fresh_ntp):
     monkeypatch.setattr(nt, "_DT_DEBUG", False)
     nt._correction = 0.27
     nt._is_initial = False
-    nt._phase = "measure"
-    nt._cycle_count = 0
-    nt._measure_buffer = []
+    nt._recent_samples.clear()
 
-    nt.update_from_decoded(MIKE_20_VALUES)
+    nt.record_samples(MIKE_20_VALUES)
     captured = capsys.readouterr()
     assert "[DT-DBG]" not in captured.out, \
         f"Debug-Zeile sollte NICHT erscheinen, captured: {captured.out!r}"

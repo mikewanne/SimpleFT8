@@ -292,10 +292,11 @@ def test_t14_app_version_bumped():
     src = MAIN_PY.read_text()
     # P132 war 0.98.13, P134 0.98.14, P131 0.98.15
     import re
-    m = re.search(r'APP_VERSION = "0\.98\.(\d+)"', src)
+    m = re.search(r'APP_VERSION = "(\d+)\.(\d+)\.(\d+)"', src)
     assert m is not None, "APP_VERSION-Format unerwartet"
-    assert int(m.group(1)) >= 14, (
-        f"P132+P134: APP_VERSION mindestens 0.98.14, gefunden 0.98.{m.group(1)}")
+    version = tuple(int(g) for g in m.groups())
+    assert version >= (0, 98, 14), (
+        f"P132+P134: APP_VERSION mindestens 0.98.14, gefunden {'.'.join(map(str, version))}")
 
 
 # ---------------------------------------------------------------------------

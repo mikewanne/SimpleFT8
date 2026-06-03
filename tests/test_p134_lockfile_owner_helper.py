@@ -217,10 +217,11 @@ def test_t15_app_version_bumped_to_0_98_14():
     """T15: APP_VERSION ist >= 0.98.14 fuer P134."""
     src = MAIN_PY.read_text()
     import re
-    m = re.search(r'APP_VERSION = "0\.98\.(\d+)"', src)
+    m = re.search(r'APP_VERSION = "(\d+)\.(\d+)\.(\d+)"', src)
     assert m is not None
-    assert int(m.group(1)) >= 14, (
-        f"P134: mindestens 0.98.14, gefunden 0.98.{m.group(1)}")
+    version = tuple(int(g) for g in m.groups())
+    assert version >= (0, 98, 14), (
+        f"P134: mindestens 0.98.14, gefunden {'.'.join(map(str, version))}")
 
 
 # ---------------------------------------------------------------------------
