@@ -53,6 +53,24 @@ class RadioMixin:
         if mon is not None and mon.active:
             mon.feed(samples_int16)
 
+    def _on_calibrate_dt(self):
+        """⏱-Knopf: DT-Zeit einmalig aus den aktuellen FT8-Stationen kalibrieren.
+
+        v0.99.0: ersetzt das frühere automatische Dauer-Lernen. Nur auf FT8
+        sinnvoll (der Kalibrier-Puffer sammelt nur FT8-Slots). Bei anderem Modus
+        eine klare Info statt Button-Ausgrauen (KISS, keine Mode-Wechsel-
+        Verdrahtung). Ergebnis-Meldung in die QSO-Info-Zeile + Statusbar sofort
+        aktualisieren (nicht erst beim nächsten Slot)."""
+        from core import ntp_time
+        if self.settings.get("mode", "FT8") != "FT8":
+            self.qso_panel.add_info(
+                "DT-Kalibrierung nur auf FT8 möglich (dort sind genug Stationen). "
+                "Der Wert gilt danach auch für FT4/FT2.")
+            return
+        ok, msg = ntp_time.calibrate()
+        self.qso_panel.add_info(msg)
+        self._update_statusbar()
+
     def _set_audio_monitor(self, on: bool, persist: bool = True):
         """Audio-Mithoer-Monitor an/aus (Diagnose). Bei Start-Fehler (kein
         Audiogeraet) Toggle zurueckrollen + Info-Zeile (DeepSeek-🔴)."""

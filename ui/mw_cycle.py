@@ -272,11 +272,15 @@ class CycleMixin:
                 m._slot_start_ts = fallback_slot_start
 
     def _update_dt_correction(self, messages):
-        """DT-Korrektur aus dekodierten Nachrichten aktualisieren + Anzeige."""
+        """DT-Werte der Slot-Stationen puffern (fuer Kalibrier-Knopf) + Anzeige.
+
+        v0.99.0: KEIN automatisches Lernen mehr — ``record_samples`` puffert nur
+        das gleitende FT8-Fenster fuer ``ntp_time.calibrate()``. Der
+        Korrekturwert aendert sich ausschliesslich auf Knopfdruck."""
         if not messages:
             return
         dt_values = [m.dt for m in messages if hasattr(m, 'dt')]
-        ntp_time.update_from_decoded(dt_values)
+        ntp_time.record_samples(dt_values)
         corr = ntp_time.get_correction()
         n = ntp_time._last_sample_count
         if n > 0:

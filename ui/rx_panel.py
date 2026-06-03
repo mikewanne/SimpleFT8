@@ -74,6 +74,7 @@ class RXPanel(QWidget):
     country_filter_changed = Signal(list)  # gefilterte Länder (für Settings)
     hidden_cols_changed = Signal(list)  # P32: persistierte Spalten-Sichtbarkeit
     audio_monitor_toggled = Signal(bool)  # 2026-06-03: RX-Audio-Mithoeren an/aus
+    calibrate_requested = Signal()  # v0.99.0: DT-Zeit manuell kalibrieren (Knopf)
 
     def __init__(self, my_call: str = "DA1MHH", my_grid: str = "JO31",
                  country_filter: list = None,
@@ -214,6 +215,24 @@ class RXPanel(QWidget):
         """)
         self.btn_audio.clicked.connect(self._on_audio_toggled)
         header_row.addWidget(self.btn_audio)
+
+        # ⏱ DT-Zeit kalibrieren (v0.99.0): einmalige Messung aus den FT8-Stationen.
+        # Ersetzt das frühere automatische Dauer-Lernen — Wert ändert sich nur
+        # auf Knopfdruck (stabil; für driftende Uhr per Klick nachjustierbar).
+        self.btn_calibrate = QPushButton("⏱")
+        self.btn_calibrate.setFixedHeight(20)
+        self.btn_calibrate.setFixedWidth(32)
+        self.btn_calibrate.setToolTip(
+            "DT-Zeit kalibrieren — misst die Korrektur einmal aus den aktuellen "
+            "FT8-Stationen (Median). Nur auf FT8 sinnvoll.")
+        self.btn_calibrate.setStyleSheet("""
+            QPushButton { background:#222; color:#FFAA33; border:1px solid #774400;
+                border-radius:2px; font-size:11px; }
+            QPushButton:hover { background:#332200; color:#FFCC66; border-color:#FFAA33; }
+            QPushButton:pressed { background:#553300; }
+        """)
+        self.btn_calibrate.clicked.connect(self.calibrate_requested.emit)
+        header_row.addWidget(self.btn_calibrate)
 
         header_row.addStretch()
         layout.addLayout(header_row)

@@ -829,6 +829,7 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self.rx_panel.country_filter_changed.connect(self._on_country_filter_changed)
         self.rx_panel.hidden_cols_changed.connect(self._on_rx_hidden_cols_changed)
         self.rx_panel.audio_monitor_toggled.connect(self._set_audio_monitor)
+        self.rx_panel.calibrate_requested.connect(self._on_calibrate_dt)
         # Audio-Mithoeren beim Start automatisch aktivieren, wenn zuletzt an
         # (persist=False → kein redundantes save). Defer via QTimer, damit ein
         # evtl. Start-Fehler erst nach UI-Aufbau die Info-Zeile zeigen kann.
@@ -1416,14 +1417,14 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         # _dt_indicator (rechts in Statusbar neben _stats_indicator).
         # Globaler Statusbar-Style bleibt grau wie in __init__ gesetzt —
         # nicht mehr dynamisch ändern (sonst werden ALLE Texte grün).
+        # v0.99.0: keine Mess-/Operate-Phasen mehr — der Wert ist fest und
+        # aendert sich nur per Kalibrier-Knopf. Anzeige: "—" wenn nie kalibriert,
+        # sonst der feste effektive Wert (grau).
         from core import ntp_time
-        dt_phase = ntp_time._phase
         if ntp_time._correction == 0.0 and ntp_time._is_initial:
             dt_text, dt_color = "DT: —", "#888"
-        elif dt_phase == "measure":
-            dt_text, dt_color = "DT: Korrektur", "#00DD66"
         else:
-            dt_text, dt_color = "DT: Aktiv", "#888"
+            dt_text, dt_color = f"DT: {ntp_time.get_correction():+.2f}s", "#888"
         if hasattr(self, '_dt_indicator'):
             self._dt_indicator.setText(dt_text)
             self._dt_indicator.setStyleSheet(
