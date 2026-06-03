@@ -318,19 +318,33 @@ def test_handle_file_results_skipped_when_partial(qapp, tmp_path, monkeypatch):
     assert src.exists()
 
 
-def test_handle_file_results_skips_when_dest_exists(qapp, tmp_path, monkeypatch):
-    """File-Move wird übersprungen wenn Ziel-Datei in hochgeladen/ schon existiert (R1-Fix)."""
+def test_handle_file_results_merges_when_dest_exists(qapp, tmp_path, monkeypatch):
+    """P170: gleichnamige Datei in hochgeladen/ → MERGEN statt überspringen.
+
+    Die neuen Records aus erfasst/neu/ werden dedupliziert an die vorhandene
+    hochgeladen/-Datei angehängt, dann die neu-Datei gelöscht."""
     from ui.mw_qso import QSOMixin
-    adif_dir = tmp_path / "adif"
-    hoch = adif_dir / "hochgeladen"
+    from log.adif import parse_adif_file
+    neu = tmp_path / "adif" / "erfasst" / "neu"
+    hoch = tmp_path / "adif" / "erfasst" / "hochgeladen"
+    neu.mkdir(parents=True)
     hoch.mkdir(parents=True)
-    src = adif_dir / "2026-05-04.adi"
-    src.write_text("new content")
-    existing = hoch / "2026-05-04.adi"
-    existing.write_text("old content")
+    src = neu / "SimpleFT8_LOG_20260504.adi"
+    dest = hoch / "SimpleFT8_LOG_20260504.adi"
+    # dest: 1 QSO (AA1AA). src: AA1AA (=Dup) + BB2BB (neu).
+    dest.write_text(
+        "<adif_ver:5>3.1.7<eoh>\n"
+        "<call:5>AA1AA <qso_date:8>20260504 <time_on:6>120000 "
+        "<band:3>20m <mode:3>FT8 <eor>\n")
+    src.write_text(
+        "<adif_ver:5>3.1.7<eoh>\n"
+        "<call:5>AA1AA <qso_date:8>20260504 <time_on:6>120000 "
+        "<band:3>20m <mode:3>FT8 <eor>\n"
+        "<call:5>BB2BB <qso_date:8>20260504 <time_on:6>123000 "
+        "<band:3>20m <mode:3>FT8 <eor>\n")
 
     file_results = {
-        str(src): {"ok": 3, "dup": 0, "fail": 0, "expected": 3}
+        str(src): {"ok": 2, "dup": 0, "fail": 0, "expected": 2}
     }
     fake_self = MagicMock()
     fake_self.statusBar.return_value = MagicMock()
@@ -338,10 +352,11 @@ def test_handle_file_results_skips_when_dest_exists(qapp, tmp_path, monkeypatch)
 
     QSOMixin._handle_qrz_file_results(fake_self, file_results)
 
-    # Quelle bleibt unverändert, Ziel nicht ueberschrieben
-    assert src.exists()
-    assert src.read_text() == "new content"
-    assert existing.read_text() == "old content"
+    # Quelle gelöscht, Ziel = Union dedupliziert (AA1AA + BB2BB)
+    assert not src.exists()
+    calls = {r["CALL"] for r in parse_adif_file(dest)}
+    assert calls == {"AA1AA", "BB2BB"}
+    assert len(parse_adif_file(dest)) == 2  # AA1AA nicht doppelt
 
 
 def test_handle_file_results_skips_hochgeladen_path(qapp, tmp_path, monkeypatch):
