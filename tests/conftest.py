@@ -17,6 +17,11 @@ veraendert.
 
 Diese Fixture schiebt fuer JEDEN Test eine tmp-Datei vor ``_DT_FILE``
 — Tests laufen unveraendert, Mike's Datei bleibt unangetastet.
+
+P171 (03.06.2026): ``ntp_time`` nutzt jetzt EINEN globalen DT-Wert (kein
+``_saved``-Dict / kein per-(Modus,Band)-Logging mehr; die genannten
+historischen Testnamen existieren nicht mehr). ``_save_current()`` schreibt
+weiterhin bei FT8-Messung → der ``_DT_FILE``-Schutz hier bleibt zwingend.
 """
 from __future__ import annotations
 

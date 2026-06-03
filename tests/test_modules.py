@@ -29,8 +29,9 @@ def test_ntp_reset():
 
 
 def test_ntp_too_few_stations():
-    """Weniger als 5 Stationen → keine Korrektur."""
+    """Weniger als MIN_STATIONS → keine Korrektur."""
     from core import ntp_time
+    ntp_time._mode = "FT8"   # P171: nur FT8 misst
     ntp_time.reset()
     assert not ntp_time.update_from_decoded([0.3, 0.4])
 
@@ -38,8 +39,9 @@ def test_ntp_too_few_stations():
 def test_ntp_positive_correction():
     """10 Stationen mit dt=+0.8 → kumulative Korrektur +0.8 (erster Zyklus = 100%)."""
     from core import ntp_time
-    ntp_time.reset()
-    # Braucht 4 Zyklen (MEASURE_CYCLES) bis Korrektur angewendet wird
+    ntp_time._mode = "FT8"   # P171: nur FT8 misst
+    ntp_time.reset(keep_correction=False)
+    # Braucht bis zu MEASURE_CYCLES Zyklen bis Korrektur angewendet wird
     for _ in range(4):
         ntp_time.update_from_decoded([0.8] * 10)
     corr = ntp_time.get_correction()
@@ -54,6 +56,7 @@ def test_ntp_deadband():
     Anti-Einfrier am Rand). Test nutzt jetzt 0.01s im Totband.
     """
     from core import ntp_time
+    ntp_time._mode = "FT8"   # P171: nur FT8 misst
     ntp_time.reset(keep_correction=False)
     for _ in range(4):
         ntp_time.update_from_decoded([0.01] * 10)
@@ -556,16 +559,16 @@ def test_qso_caller_queue():
 # ── DT Correction Persistence ────────────────────────────────────────────────
 
 def test_dt_correction_mode_switch():
-    """DT-Korrektur: Modus-Wechsel laedt gespeicherten Wert."""
+    """P171: Modus-Wechsel BEHAELT den globalen Korrekturwert (kein Per-Modus-
+    Laden mehr — die Korrektur ist die modus-unabhaengige Hardware-Latenz)."""
     from core import ntp_time
-    # Simuliere: FT8 hat Korrektur +0.5
     ntp_time._correction = 0.5
     ntp_time._mode = "FT8"
-    ntp_time._saved = {"FT8": 0.5, "FT4": 0.3}
-    # Wechsel auf FT4 → soll 0.3 laden
+    ntp_time._is_initial = False
+    # Wechsel auf FT4 → globaler Wert bleibt 0.5
     ntp_time.set_mode("FT4")
-    assert abs(ntp_time._correction - 0.3) < 0.01
-    # Zurueck auf FT8 → soll 0.5 laden
+    assert abs(ntp_time._correction - 0.5) < 0.01
+    # Zurueck auf FT8 → weiterhin 0.5
     ntp_time.set_mode("FT8")
     assert abs(ntp_time._correction - 0.5) < 0.01
     # Reset
@@ -577,6 +580,7 @@ def test_dt_correction_mode_switch():
 def test_dt_first_correction_full():
     """Erstkorrektur: 100% des Medians angewendet (nicht gedaempft)."""
     from core import ntp_time
+    ntp_time._mode = "FT8"   # P171: nur FT8 misst
     ntp_time.reset(keep_correction=False)
     ntp_time._is_initial = True
     # 2 Zyklen mit DT +0.5
@@ -1215,87 +1219,45 @@ def test_protocol_ft2_different_from_ft4():
     assert ft4_20 != ft2_20, f"FT4 und FT2 auf 20m gleich: {ft4_20}"
 
 
-# ── DT Pro-Modus Persistence ──────────────────────────────────────────────────
+# ── DT Persistence (P171 Globalwert) ──────────────────────────────────────────
 
 def test_dt_save_load_file():
-    """DT-Werte werden in JSON gespeichert und geladen (Key: Modus_Band)."""
+    """P171: DT-Wert wird im neuen Single-Value-Format gespeichert."""
     from core import ntp_time
+    import json
     ntp_time._correction = 0.55
-    ntp_time._mode = "FT8"
-    ntp_time._band = "20m"
     ntp_time._save_current()
-    assert ntp_time._saved.get("FT8_20m") == 0.55
-    # Datei existiert
+    data = json.loads(ntp_time._DT_FILE.read_text())
+    assert data.get("dt_correction_s") == 0.55
     assert ntp_time._DT_FILE.exists()
     ntp_time.reset(keep_correction=False)
 
 
-def test_dt_set_mode_loads_saved():
-    """set_mode() laedt gespeicherten Wert via Legacy-Migration.
-
-    P48-Hinweis: Legacy-Migration vom alten Schluessel ('FT4') laedt zwar
-    den Wert, _is_initial bleibt aber True (kein eigener Wert fuer
-    'FT4_<band>'-Key auf Disk).
-    """
+def test_dt_ft2_ft4_no_measure():
+    """P171: FT2 und FT4 messen/schreiben NICHT — update ist No-op (der globale
+    FT8-Wert bleibt)."""
     from core import ntp_time
-    ntp_time._saved = {"FT8": 0.7, "FT4": 0.3, "FT2": 0.1}
-    ntp_time._hardware_default_offset = 0.0  # P48: Test-Reset
-    ntp_time.set_mode("FT4")
-    assert abs(ntp_time._correction - 0.3) < 0.01
-    ntp_time.set_mode("FT2")
-    assert abs(ntp_time._correction - 0.1) < 0.01
     ntp_time.reset(keep_correction=False)
-
-
-def test_dt_set_mode_no_saved():
-    """set_mode() ohne gespeicherten Wert UND ohne Hardware-Default → 0 + initial."""
-    from core import ntp_time
-    ntp_time._saved = {}
-    ntp_time._hardware_default_offset = 0.0  # P48: Test-Reset
-    ntp_time.set_mode("FT2")
-    assert ntp_time._correction == 0.0
-    assert ntp_time._is_initial is True
-    ntp_time.reset(keep_correction=False)
-
-
-def test_dt_set_mode_saves_old():
-    """set_mode() speichert alten Wert bevor gewechselt wird (Key: Modus_Band)."""
-    from core import ntp_time
-    ntp_time._mode = "FT8"
-    ntp_time._band = "20m"
-    ntp_time._correction = 0.65
-    ntp_time._saved = {}
-    ntp_time.set_mode("FT4")
-    assert ntp_time._saved.get("FT8_20m") == 0.65
-    ntp_time.reset(keep_correction=False)
-
-
-def test_dt_min_stations_ft2():
-    """FT2: MIN_STATIONS=2 (nicht 1, Ausreisser-Schutz)."""
-    from core import ntp_time
+    ntp_time._correction = 0.26
     ntp_time._mode = "FT2"
-    # 1 Station reicht NICHT
-    result = ntp_time.update_from_decoded([0.5])
-    assert result is False
-    # 2 Stationen reichen
-    ntp_time._phase = "measure"
-    ntp_time._cycle_count = 0
-    ntp_time._measure_buffer = []
-    result = ntp_time.update_from_decoded([0.5, 0.5])
-    assert result is not None  # Wurde verarbeitet (True oder False)
+    assert ntp_time.update_from_decoded([0.5] * 10) is False
+    assert ntp_time._correction == 0.26
+    ntp_time._mode = "FT4"
+    assert ntp_time.update_from_decoded([0.5] * 10) is False
+    assert ntp_time._correction == 0.26
+    ntp_time._mode = "FT8"
     ntp_time.reset(keep_correction=False)
 
 
 def test_dt_max_correction_clamp():
-    """Korrektur wird auf ±2.0s begrenzt."""
+    """Korrektur wird auf ±MAX_CORRECTION (1.0s) begrenzt (FT8)."""
     from core import ntp_time
+    ntp_time._mode = "FT8"
     ntp_time.reset(keep_correction=False)
     ntp_time._is_initial = True
-    ntp_time._phase = "measure"
-    # Extrem hohe DT-Werte → Korrektur darf nicht ueber 2.0 gehen
     ntp_time.update_from_decoded([1.9, 1.9, 1.9, 1.9, 1.9])
     ntp_time.update_from_decoded([1.9, 1.9, 1.9, 1.9, 1.9])
-    assert ntp_time._correction <= 2.0
+    assert ntp_time._correction <= ntp_time.MAX_CORRECTION
     ntp_time.reset(keep_correction=False)
 
 

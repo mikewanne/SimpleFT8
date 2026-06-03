@@ -1,13 +1,13 @@
-"""P48 — DT-System aufraeumen + tunen (v0.97.13).
+"""P48/P171 — DT-System.
 
-15 Tests fuer 4 Teile:
 - A: Settings-Block radio_timing (tx_buffer_s + rx_hardware_offset_default_s)
-- B: Cross-Modus-Fallback FT8 > FT4 > FT2 auf gleichem Band
-- C: Hardware-Default als Kaltstart (statt 0.0)
-- D: Schnell-Konvergenz bei >=10 Stationen mit kleiner Streuung
+- P171: EIN globaler Korrekturwert (gelernt nur aus FT8, von allen Modi/Baendern
+  genutzt). Seed via Hardware-Default; Mode-/Band-Wechsel behaelt den Wert;
+  FT4/FT2 schreiben nie; Migration alt-per-(Modus,Band) → Median der FT8-Werte.
+- D: Schnell-Konvergenz bei >=10 Stationen mit kleiner Streuung (FT8).
 
-Wichtig: _is_initial = _saved.get(_mode_key()) is None (P48-Fix fuer R1-Bug).
-Cross-Modus-Fallback und Hardware-Default zaehlen NICHT als eigene Messung.
+P171 (03.06.2026) ersetzte den frueheren per-(Modus,Band)-Speicher +
+Cross-Modus-Fallback (P48-B) durch einen Globalwert.
 """
 from __future__ import annotations
 
@@ -61,15 +61,13 @@ def test_settings_backward_compat_no_radio_timing_block(tmp_path, monkeypatch):
 
 @pytest.fixture
 def fresh_ntp(monkeypatch):
-    """Frischer DT-Modul-State fuer deterministische Tests.
+    """Frischer DT-Modul-State fuer deterministische Tests (P171 Globalwert).
 
     _DT_FILE-Schutz kommt schon aus conftest.py.
     """
     import core.ntp_time as nt
-    monkeypatch.setattr(nt, "_saved", {})
     monkeypatch.setattr(nt, "_correction", 0.0)
     monkeypatch.setattr(nt, "_hardware_default_offset", 0.0)
-    monkeypatch.setattr(nt, "_last_logged_load", None)
     monkeypatch.setattr(nt, "_mode", "FT8")
     monkeypatch.setattr(nt, "_band", "20m")
     monkeypatch.setattr(nt, "_phase", "measure")
@@ -79,109 +77,99 @@ def fresh_ntp(monkeypatch):
     yield nt
 
 
-# ── P48-C Hardware-Default ───────────────────────────────────────────────
+# ── P171 Seed (Hardware-Default) ──────────────────────────────────────────
 
 
-def test_load_for_current_key_returns_hardware_default(fresh_ntp):
-    """Keine eigenen, keine Geschwister-Werte → Hardware-Default."""
+def test_hardware_default_seeds_when_empty(fresh_ntp):
+    """set_hardware_default seedet _correction, wenn global noch leer."""
     nt = fresh_ntp
-    nt._hardware_default_offset = 0.26
-    assert nt._load_for_current_key() == 0.26
-
-
-def test_hardware_default_setter():
-    """set_hardware_default schreibt Modul-Var."""
-    import core.ntp_time as nt
-    nt.set_hardware_default(0.3)
-    assert nt._hardware_default_offset == 0.3
-    nt.set_hardware_default(0.0)  # reset
-
-
-# ── P48-B Cross-Modus-Fallback ───────────────────────────────────────────
-
-
-def test_cross_mode_ft2_prefers_ft8_over_ft4(fresh_ntp):
-    """FT2 nimmt FT8 vor FT4 (FT8-Median solider per R1-Finding 4)."""
-    nt = fresh_ntp
-    nt._saved = {"FT8_30m": 0.27, "FT4_30m": 0.25}
-    nt._mode = "FT2"
-    nt._band = "30m"
-    assert nt._load_for_current_key() == 0.27
-
-
-def test_cross_mode_ft2_falls_back_to_ft4_when_no_ft8(fresh_ntp):
-    """Wenn FT8 leer, FT2 → FT4."""
-    nt = fresh_ntp
-    nt._saved = {"FT4_30m": 0.25}
-    nt._mode = "FT2"
-    nt._band = "30m"
-    assert nt._load_for_current_key() == 0.25
-
-
-def test_cross_mode_ft4_uses_ft8(fresh_ntp):
-    """FT4 nimmt FT8-Wert vom gleichen Band."""
-    nt = fresh_ntp
-    nt._saved = {"FT8_30m": 0.27}
-    nt._mode = "FT4"
-    nt._band = "30m"
-    assert nt._load_for_current_key() == 0.27
-
-
-def test_cross_mode_no_fallback_for_ft8(fresh_ntp):
-    """FT8 ist Master — nutzt keinen FT4/FT2-Fallback."""
-    nt = fresh_ntp
-    nt._saved = {"FT4_30m": 0.27}
-    nt._hardware_default_offset = 0.26
-    nt._mode = "FT8"
-    nt._band = "30m"
-    # FT8 ignoriert FT4 als Fallback → Hardware-Default
-    assert nt._load_for_current_key() == 0.26
-
-
-def test_cross_mode_prefers_own_value(fresh_ntp):
-    """Eigener gemessener Wert hat IMMER Vorrang vor Fallback."""
-    nt = fresh_ntp
-    nt._saved = {"FT2_30m": 0.29, "FT8_30m": 0.27}
-    nt._hardware_default_offset = 0.26
-    nt._mode = "FT2"
-    nt._band = "30m"
-    assert nt._load_for_current_key() == 0.29
-
-
-# ── P48 _is_initial Bug-Fix (R1-Finding 1) ───────────────────────────────
-
-
-def test_is_initial_true_with_hardware_default(fresh_ntp):
-    """Mit Hardware-Default 0.26 geladen, aber _is_initial bleibt True
-    (Bug-Fix R1-Finding 1: eigene Messung als Kriterium, nicht saved_val=0.0).
-    """
-    nt = fresh_ntp
-    nt._hardware_default_offset = 0.26
-    nt.set_mode("FT8", "20m")
-    assert nt._is_initial is True, \
-        "Hardware-Default-Wert geladen, aber als eigene Messung verkannt"
+    nt.set_hardware_default(0.26)
+    assert nt._hardware_default_offset == 0.26
     assert nt._correction == 0.26
+    assert nt._is_initial is True   # Seed zaehlt nicht als eigene Messung
 
 
-def test_is_initial_false_when_own_measurement_exists(fresh_ntp):
-    """Eigener Wert vorhanden → _is_initial = False."""
+def test_hardware_default_does_not_override_measured(fresh_ntp):
+    """Seed greift NICHT, wenn schon ein gemessener/migrierter Wert da ist."""
     nt = fresh_ntp
-    nt._saved = {"FT8_20m": 0.27}
-    nt.set_mode("FT8", "20m")
-    assert nt._is_initial is False
+    nt._correction = 0.27
+    nt._is_initial = False
+    nt.set_hardware_default(0.26)
     assert nt._correction == 0.27
 
 
-def test_is_initial_true_after_cross_mode_fallback(fresh_ntp):
-    """Cross-Modus-Fallback liefert Wert, aber _is_initial bleibt True
-    (kein eigener Wert auf Disk fuer diese Mode-Band-Kombi).
-    """
+# ── P171 Globalwert bleibt ueber Mode-/Band-Wechsel ───────────────────────
+
+
+def test_set_mode_keeps_global_correction(fresh_ntp):
+    """Kern P171: Umschalten auf FT4/FT2 behaelt den (FT8-)Korrekturwert."""
     nt = fresh_ntp
-    nt._saved = {"FT8_30m": 0.27}
-    nt.set_mode("FT2", "30m")
-    assert nt._is_initial is True, \
-        "FT2 hat keinen eigenen Wert — _is_initial sollte True bleiben"
-    assert nt._correction == 0.27  # Cross-Modus von FT8
+    nt._correction = 0.26
+    nt._is_initial = False
+    nt.set_mode("FT4", "20m")
+    assert nt._correction == 0.26 and nt._is_initial is False
+    nt.set_mode("FT2", "40m")
+    assert nt._correction == 0.26
+    nt.set_band("15m")
+    assert nt._correction == 0.26
+
+
+def test_ft4_ft2_do_not_write(fresh_ntp):
+    """FT4/FT2: update_from_decoded ist No-op (kein Lernen/Schreiben)."""
+    nt = fresh_ntp
+    nt._correction = 0.26
+    nt._is_initial = False
+    nt.set_mode("FT4", "20m")
+    assert nt.update_from_decoded([0.5] * 10) is False
+    assert nt._correction == 0.26
+    nt.set_mode("FT2", "20m")
+    assert nt.update_from_decoded([0.5] * 10) is False
+    assert nt._correction == 0.26
+
+
+def test_ft8_learns_and_persists(fresh_ntp):
+    """FT8 misst weiterhin (Erstkorrektur) und schreibt das neue Format."""
+    import json
+    nt = fresh_ntp
+    nt.set_mode("FT8", "20m")
+    nt._is_initial = True
+    nt.update_from_decoded([0.5] * 5)
+    nt.update_from_decoded([0.5] * 5)   # 2 Slots → Erstkorrektur
+    assert abs(nt._correction - 0.5) < 0.05
+    assert nt._is_initial is False
+    data = json.loads(nt._DT_FILE.read_text())
+    assert "dt_correction_s" in data
+
+
+# ── P171 Migration alt→global ─────────────────────────────────────────────
+
+
+def test_migration_old_format_to_global_median(fresh_ntp, tmp_path, monkeypatch):
+    """Alte per-(Modus,Band)-json → globaler Wert = Median der FT8-Werte;
+    FT4/FT2-Ausreisser (FT4_20m=0.045) werden verworfen."""
+    import json
+    nt = fresh_ntp
+    f = tmp_path / "old_dt.json"
+    f.write_text(json.dumps({
+        "FT8_20m": 0.27, "FT8_40m": 0.30, "FT8_30m": 0.24,
+        "FT4_20m": 0.045, "FT2_20m": 0.246,
+    }))
+    monkeypatch.setattr(nt, "_DT_FILE", f)
+    nt._load_saved()
+    assert nt._correction == 0.27   # Median(0.27,0.30,0.24); 0.045 ignoriert
+    assert nt._is_initial is False
+
+
+def test_new_format_loaded(fresh_ntp, tmp_path, monkeypatch):
+    """Neues Single-Value-Format wird direkt geladen."""
+    import json
+    nt = fresh_ntp
+    f = tmp_path / "new_dt.json"
+    f.write_text(json.dumps({"dt_correction_s": 0.255}))
+    monkeypatch.setattr(nt, "_DT_FILE", f)
+    nt._load_saved()
+    assert nt._correction == 0.255
+    assert nt._is_initial is False
 
 
 # ── P48-D Schnell-Konvergenz ─────────────────────────────────────────────

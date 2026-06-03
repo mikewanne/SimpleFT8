@@ -1,4 +1,4 @@
-"""Bundle A — P43 setproctitle + P20 Log-Rotation + P18 DT-Print-Dedup (v0.97.12).
+"""Bundle A — P43 setproctitle + P20 Log-Rotation (v0.97.12).
 
 T1 — setproctitle import-try in main.py (Source-Check Pattern analog P47).
 T2 — dated_log_filename liefert datierten Pfad.
@@ -6,8 +6,9 @@ T3 — cleanup_old_main_logs respektiert keep_days und laesst Symlink/Archive in
 T4 — setup_main_log archiviert vorhandene regulaere simpleft8.log dauerhaft.
 T5 — setup_main_log ersetzt vorhandenen Symlink atomar auf heutige Datei.
 T6 — setup_main_log fallback bei OSError im Symlink-Setup (kein Crash).
-T7 — _log_load_dedup skipt identische (key, saved_val)-Aufrufe.
-T8 — _log_load_dedup loggt bei Wertaenderung erneut.
+
+P18 DT-Print-Dedup (T7/T8) entfernt mit P171 (03.06.2026) — der per-(Modus,Band)-
+Lade-Log existiert nicht mehr (globaler DT-Wert, kein Per-Key-Laden/-Logging).
 """
 from __future__ import annotations
 
@@ -159,50 +160,6 @@ def test_setup_main_log_fallback_on_symlink_error(tmp_path, monkeypatch):
                 pass
 
 
-# ── P18 DT-Print-Dedup ───────────────────────────────────────────────────
-
-
-@pytest.fixture
-def reset_ntp(monkeypatch):
-    """Frischer DT-Modul-State fuer deterministische Tests.
-
-    Hinweis: _DT_FILE-Disk-Schutz steht in tests/conftest.py
-    (autouse-Fixture, global fuer ALLE Tests). Hier nur der
-    Modul-State-Reset fuer die Dedup-Logik.
-    """
-    import core.ntp_time as nt
-    monkeypatch.setattr(nt, "_last_logged_load", None)
-    monkeypatch.setattr(nt, "_saved", {})
-    monkeypatch.setattr(nt, "_correction", 0.0)
-    yield nt
-
-
-def test_dt_dedup_skips_repeat(reset_ntp, capsys):
-    """Zweimaliger set_mode mit gleichem Wert → nur 1× print."""
-    nt = reset_ntp
-    nt._saved["FT8_20m"] = 0.65
-
-    nt.set_mode("FT8", "20m")
-    nt.set_mode("FT8", "20m")
-
-    captured = capsys.readouterr().out
-    matches = re.findall(
-        r"\[DT-Korr\] FT8_20m: Gespeicherter Wert \+0\.650s geladen",
-        captured,
-    )
-    assert len(matches) == 1, \
-        f"Erwartet 1 print, war {len(matches)}.\nOutput:\n{captured}"
-
-
-def test_dt_dedup_logs_on_change(reset_ntp, capsys):
-    """Wechsel auf andere Modus+Band-Kombi → erneut print (Cache invalidiert)."""
-    nt = reset_ntp
-    nt._saved["FT8_20m"] = 0.65
-    nt._saved["FT4_40m"] = 0.42
-
-    nt.set_mode("FT8", "20m")
-    nt.set_mode("FT4", "40m")
-
-    captured = capsys.readouterr().out
-    assert "[DT-Korr] FT8_20m: Gespeicherter Wert +0.650s" in captured
-    assert "[DT-Korr] FT4_40m: Gespeicherter Wert +0.420s" in captured
+# P18 DT-Print-Dedup-Tests (T7/T8) mit P171 entfernt — set_mode laedt/loggt
+# keinen per-(Modus,Band)-Wert mehr (globaler DT-Wert). Siehe
+# tests/test_p48_dt_optimization.py fuer die P171-DT-Tests.

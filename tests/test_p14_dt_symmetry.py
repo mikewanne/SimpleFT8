@@ -30,10 +30,8 @@ MIKE_20_VALUES = [
 def fresh_ntp(monkeypatch):
     """Frischer DT-Modul-State."""
     import core.ntp_time as nt
-    monkeypatch.setattr(nt, "_saved", {})
     monkeypatch.setattr(nt, "_correction", 0.0)
     monkeypatch.setattr(nt, "_hardware_default_offset", 0.0)
-    monkeypatch.setattr(nt, "_last_logged_load", None)
     monkeypatch.setattr(nt, "_mode", "FT8")
     monkeypatch.setattr(nt, "_band", "20m")
     monkeypatch.setattr(nt, "_phase", "measure")
