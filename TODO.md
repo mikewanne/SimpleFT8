@@ -16,6 +16,31 @@
 
 ---
 
+# 🔵 NÄCHSTES GROSSES PROJEKT — Multiband Auto-Hunt (eigene Session, voller Workflow)
+
+**Mike-Auftrag 03.06.2026:** In einer **frischen Sitzung** angehen, **voller
+DeepSeek-Workflow** (V1→V2→R1→V3→Plan-Mode→Mike-Freigabe→Code→Final-R1), mit
+maximaler Gründlichkeits-Einstellung (Extended/„max effort" Thinking + Plan-Mode;
+Modell bleibt Opus 4.8, Fast-Mode AUS). Nicht zwischendurch — berührt TX-Timing,
+Antennen-Sicherheit und State-Machine.
+
+**Konzept liegt fertig vor:** `multiband.md` — **Modell 3/B** (dünne additive
+Schicht, Core unberührt), 2× DeepSeek-gehärtet. Auto-Hunt über die Empfangsliste
+mit Band-Speicherung pro Station (`_HuntCandidate.band`), Band-Sprung-Hysterese,
+interner `switch_tx_band(band)` (QSO-Session bleibt) vs externer `set_band` (harter
+Stop), Fail-Cooldown pro (call,band), all_worked pro Band.
+
+**⛔ ZUERST klären (vor JEDER Code-Zeile, Hardware-Pflicht):** Läuft TX auf BEIDEN
+Bändern garantiert über ANT1? Diversity-Pattern darf NIE ANT2 als TX-Slot vergeben.
+Antennen-Sicherheit ist die erste Frage — nicht erst im Test (CLAUDE.md-Regel).
+
+**Session-Start-Ablauf:** `multiband.md` lesen → Code-Touch-Points kartieren
+(qso_state, encoder, timing, diversity, omni_cq, auto_hunt, flexradio/Slice-B,
+mw_cycle) → Plan vorlegen → Mike-Freigabe → Code. **Slice-B-Code NICHT löschen**
+(reserviert für Multiband, Mike-Spec).
+
+---
+
 # ✅ FT4-OMNI-30s ERLEDIGT (v0.98.63, 03.06.2026) — field-validiert
 
 **Status:** Code-Fix + 2× DeepSeek-bestätigt + **✅ FIELD-TEST BESTANDEN** (Mike am
