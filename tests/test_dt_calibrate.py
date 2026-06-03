@@ -153,6 +153,36 @@ def test_calibrate_message_shows_value_and_count(nt):
     assert "9" in msg
 
 
+def test_calibrate_clears_buffer_on_success(nt):
+    """Field-Bug 03.06.2026: erfolgreiche Kalibrierung leert den Puffer — sonst
+    addiert ein zweiter Druck (vor frischen Slots) denselben Median nochmal."""
+    nt._correction = 0.0
+    nt._mode = "FT8"
+    nt.record_samples([0.12] * 8)
+    ok1, _ = nt.calibrate()
+    assert ok1 is True
+    assert len(nt._recent_samples) == 0            # Puffer geleert
+    first = nt._correction
+    # Sofortiger zweiter Druck → Puffer leer → (False), Korrektur UNVERÄNDERT
+    ok2, _ = nt.calibrate()
+    assert ok2 is False
+    assert nt._correction == first                 # KEINE Doppel-Addition
+
+
+def test_calibrate_failed_keeps_buffer(nt):
+    """Fehlgeschlagene Kalibrierung (zu wenige) verwirft die gesammelten Samples
+    NICHT — Mike kann nach kurzem Warten erfolgreich nachkalibrieren."""
+    nt._correction = 0.0
+    nt._mode = "FT8"
+    nt.record_samples([0.2] * 3)                   # < MIN_STATIONS
+    ok, _ = nt.calibrate()
+    assert ok is False
+    assert len(nt._recent_samples) == 1            # Slot bleibt erhalten
+    nt.record_samples([0.2] * 3)                   # jetzt 6 ≥ MIN_STATIONS
+    ok2, _ = nt.calibrate()
+    assert ok2 is True
+
+
 # ── Negativ erlaubt (kein Riegel), Clamp ±1.0 ────────────────────────────
 
 

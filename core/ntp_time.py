@@ -301,6 +301,12 @@ def calibrate() -> tuple[bool, str]:
                           min(MAX_CORRECTION, _correction + median_residual))
         _is_initial = False
         _save_current()
+        # Puffer NUR im Erfolgsfall leeren: die gerade verbrauchten Slots wurden
+        # gegen die ALTE Korrektur gemessen — nach dem Anwenden sind sie veraltet.
+        # Sonst würde ein erneuter Druck (bevor 3 neue Slots das Fenster spülen)
+        # denselben Residuen-Median nochmal addieren → Wert klettert (Field-Bug
+        # 03.06.2026). Der nächste Druck misst frisch gegen die neue Korrektur.
+        _recent_samples.clear()
         print(f"[DT-Korr] Kalibriert: Median(Residuen)={median_residual:+.3f}s "
               f"aus {n} Stationen → {_correction:+.3f}s")
         return (True,
