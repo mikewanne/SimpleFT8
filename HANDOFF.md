@@ -1,7 +1,20 @@
 # HANDOFF — SimpleFT8
 
-**Aktueller Stand:** v0.98.59 (03.06.2026) — **P170: Upload-Move mergt bei
-Namens-Kollision** (voller Workflow). Mike-Field: 205 hochgeladene QSOs blieben
+**Aktueller Stand:** v0.98.60 (03.06.2026) — **P171: DT-Korrektur auf EINEN
+globalen Wert** (voller Workflow). Mike: wenige Stationen auf FT4/FT2
+verschlechtern den DT-Wert; die Korrektur ist die Funkgerät-Latenz und damit
+modus-/band-unabhängig → nur FT8 misst, FT4/FT2 lesen, **ein Wert für alle
+Bänder/Modi**. Field-Beweis: FT4_20m=0.045 war ein 1-Stationen-Ausreißer (FT8
+~0.27). `core/ntp_time.py` auf einen globalen `_correction` umgebaut
+(`{"dt_correction_s":0.26}`); `set_mode`/`set_band` behalten ihn;
+`update_from_decoded` nur bei FT8; Migration alt→global = Median der FT8-Werte
+(in-memory, kein Import-Write); Cross-Modus-Fallback/per-Modus-Logik entfernt
+(übersichtlicher). DeepSeek R1 + Final-R1 **PUSH FREIGEBEN** (kein Datenverlust,
+Seed/Migration robust). Tooling: `deepseek_review.py max_tokens 16K→32K` (v4-pro
+sprengte das Limit). Tests 2332→**2324** (entfernte Sonderpfade). **⚠️ Mike: App
+NEU STARTEN** (Migration baut dt_corrections.json um). Kein TX-Eingriff. NICHT
+gepusht (auch P168 v0.98.56 + P169 v0.98.57/.58 + P170 v0.98.59 offen). —
+**Vorgänger v0.98.59 P170: Upload-Move mergt bei Namens-Kollision** (voller Workflow). Mike-Field: 205 hochgeladene QSOs blieben
 in der „neu"-Liste hängen, weil das Verschieben nach „fertig" (`hochgeladen/`)
 bei gleichnamiger Tagesdatei **übersprang** (11 von 12 neu-Dateien hatten einen
 Zwilling in hochgeladen/ — Folge der Phase-1-Migration). Fix: bei Kollision die
@@ -28,6 +41,26 @@ P165-Regression). Tests **2324 grün** (+12). Kein TX-Eingriff, ANT1/ANT2
 unberührt. **Damit ist P169 komplett (Phase 1 + 2).** Lokal committet,
 **Push-Freigabe Mike ausstehend** (auch P168 v0.98.56 + P169 Phase 1 v0.98.57
 noch nicht gepusht). Field-Test pending.
+
+---
+
+## Session 03.06.2026 — P171: DT-Korrektur global (v0.98.60)
+
+**Anlass:** Mike — DT-Wert auf FT4/FT2 verschlechtert durch wenige Stationen; die
+Korrektur ist Funkgerät-Latenz (modus-/band-unabhängig) → nur FT8 ermitteln, ein
+Globalwert. Field-Beweis FT4_20m=0.045 (1-Stationen-Artefakt).
+
+**Gemacht:** `core/ntp_time.py` auf einen globalen Wert umgebaut (nur FT8 misst/
+schreibt, FT4/FT2 lesen; Migration alt→global = Median der FT8-Werte; Cross-
+Modus-/per-Modus-Logik raus). DeepSeek R1 + Final-R1 PUSH FREIGEBEN. Tests
+2332→2324.
+
+**Nächste Schritte:**
+1. **Mike: App NEU STARTEN** → Migration baut `~/.simpleft8/dt_corrections.json`
+   auf den Globalwert um (Median der FT8-Werte ~0.26; FT4_20m=0.045-Müll fällt
+   raus). Danach lernt nur noch FT8, FT4/FT2 fahren mit dem FT8-Wert.
+2. **Push** offen: P168 v0.98.56 + P169 v0.98.57/.58 + P170 v0.98.59 +
+   P171 v0.98.60 — auf Mikes Freigabe.
 
 ---
 

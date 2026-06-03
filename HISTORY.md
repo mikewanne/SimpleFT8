@@ -9,6 +9,50 @@ Gelöscht wird nie etwas. Format: `## YYYY-MM-DD vX.YY — Kurztitel`.
 > stehen in `history/HISTORY_archiv_NN.md` (grep dort, falls eine alte Version
 > gesucht wird). Rotiert mit `tools/rotate_history.py`. Zuletzt: 2026-06-01.
 
+## 2026-06-03 v0.98.60 — P171: DT-Korrektur auf EINEN globalen Wert (nur FT8 misst)
+
+**Anlass (Mike):** Beim Ermitteln der DT-Zeit auf FT4/FT2 verschlechtern die
+wenigen Stationen den Wert (DT wird mit mehr Stationen genauer). Mikes These:
+die DT-Korrektur ist die Funkgerät-Latenz und damit modus- (und band-)unabhängig
+→ nur FT8 (viele Stationen) sollte sie ermitteln, FT4/FT2 nur lesen; ein Wert pro
+Band — und da es reine Hardware ist, reicht sogar **ein Wert für alles**.
+
+**Verifiziert (Mike + DeepSeek einig):** physikalisch korrekt. Die gelernte
+Korrektur (~0.26s) ist die konstante FlexRadio-RX-/Transport-Latenz (VITA-49) —
+die modus-/slot-abhängige Fensterlage liegt SEPARAT in `decoder._DT_OFFSETS`.
+**Field-Beweis** in Mikes `dt_corrections.json`: fast alle FT4/FT2-Werte matchen
+FT8 — einziger Ausreißer **FT4_20m=0.0451** (statt ~0.27), ein 1-Stationen-
+Artefakt (`_MIN={FT8:3,FT4:1,FT2:1}` — FT4/FT2 „maßen" ab 1 Station). Ein
+Globalwert ist nicht nur KISS, sondern als gepoolte FT8-Messung auch die
+genaueste Schätzung der einen Konstante. Decode-Unabhängigkeit geklärt: die
+Korrektur ist KEINE Voraussetzung fürs Dekodieren (Decoder sucht Sync über
+Sekunden; DT wird AUS Decodes gelernt; Kaltstart = Hardware-Default 0.26).
+
+**Gemacht (voller Workflow, `core/ntp_time.py`):**
+- EIN globaler `_correction` für alle Modi/Bänder. `set_mode`/`set_band` ändern
+  ihn NICHT mehr (behalten ihn; nur Mess-Phase reset). `update_from_decoded`:
+  `if _mode != "FT8": return False` — nur FT8 misst/schreibt; FT4/FT2 No-op.
+  `MIN_STATIONS=3` einheitlich, Clamp `MAX_CORRECTION=1.0`. Mess-/Operate-Phasen
+  + Sprung-Reset + Schnell-Konvergenz nur FT8.
+- Persistenz neues Format `{"dt_correction_s": <float>}`. Migration alt→global
+  (Median der FT8-Werte) in `_load_saved()` — **in-memory, kein Schreiben beim
+  Import** (Datensicherheit), Datei wird bei erster FT8-Messung überführt. Der
+  kaputte FT4_20m=0.045 verschwindet dabei automatisch.
+- `set_hardware_default` seedet nur bei leerem Zustand. **Entfernt:** `_mode_key`,
+  `_load_for_current_key` (Cross-Modus-Fallback P48-B), per-Modus `_MIN`/
+  `_MAX_CORR`, `_log_load_dedup` → deutlich übersichtlicher.
+
+**DeepSeek:** R1 (3🔴/2🟠/3🟡 — `_is_initial`-Klarheit, Anzeige-Schwelle,
+Save-on-exit) → gehärtet/aufgelöst (FT4/FT2 ganz raus statt Split-Schwelle;
+FT8 speichert sofort → kein Datenverlust). **Tooling:** v4-pro sprengte mit dem
+langen Prompt das 16K-Output-Limit (Reasoning fraß alles → leere Antwort) →
+`tools/deepseek_review.py max_tokens 16K→32K`. Final-R1 **PUSH FREIGEBEN**
+(kein Datenverlust, Seed/Migration robust, keine toten Referenzen; 1🟡 Migrations-
+Meldung präzisiert). Reine Timing-Logik, kein TX-Eingriff, ANT1/ANT2 unberührt.
+Tests **2332→2324** (per-Modus-/Cross-Modus-/Dedup-Tests entfallen, P171-Global-
+Tests dazu; netto −8 durch entfernte Sonderpfade). **⚠️ Mike: App NEU STARTEN**
+(Migration baut dt_corrections.json um). NICHT gepusht.
+
 ## 2026-06-03 v0.98.59 — P170: Upload-Move mergt bei Namens-Kollision (kein Stau in neu/ mehr)
 
 **Anlass (Mike-Field):** „jetzt habe ich 205 hochgeladen, werden die dann nicht

@@ -354,14 +354,28 @@ FlexRadio puffert TX-Samples konstant 1.3s vor RF-Ausgabe. Audio
 **Validiert:** 8 FT8-Zyklen 0.0s DT am Icom-Empfänger gemessen
 (20m + 40m getestet).
 
-### Persistierung
+### Persistierung — EIN globaler Wert (P171, 03.06.2026)
 
-`~/.simpleft8/dt_corrections.json` mit Key-Format `"FT8_20m"`
-(Modus_Band). Migration von altem Format `"FT8"` → `"FT8_20m"`
-in `_load_for_current_key()` automatisch.
+`~/.simpleft8/dt_corrections.json` = `{"dt_correction_s": 0.26}` — EIN
+globaler Wert für alle Modi und Bänder. Die gelernte Korrektur ist die
+KONSTANTE FlexRadio-RX-Hardware-/Transport-Latenz (VITA-49) und damit
+**modus- UND band-unabhängig**; die modus-/slot-abhängige Fensterlage liegt
+separat in `decoder._DT_OFFSETS`.
 
-`set_band()` / `set_mode(mode, band)` lädt gespeicherten Wert
-sofort beim Wechsel.
+- **Gelernt NUR aus FT8** (`update_from_decoded` gated mit `if _mode != "FT8":
+  return False`). FT8 hat viele Stationen → robuster Median. FT4/FT2 haben zu
+  wenige (`_MIN` war 1!) → verschlechterten den Wert (Field-Beweis:
+  FT4_20m=0.045 statt 0.27). FT4/FT2 nutzen den Wert, schreiben/messen NIE.
+- **`set_mode`/`set_band` BEHALTEN den Globalwert** (kein Per-Key-Laden mehr) —
+  Umschalten auf FT4/FT2 fährt mit dem FT8-Wert weiter.
+- **Migration** vom alten per-(Modus,Band)-Format: globaler Wert = Median der
+  FT8-Werte (in-memory in `_load_saved()`, kein Schreiben beim Import; Datei
+  wird bei erster FT8-Messung ins neue Format überführt). Seed-Kaltstart =
+  Hardware-Default 0.26.
+
+Historie: bis v0.98.59 per-(Modus,Band) + Cross-Modus-Fallback (P48-B). P171
+vereinfachte auf einen Globalwert (Mike + DeepSeek: eine physikalische Konstante,
+gepoolte FT8-Messung ist die genaueste + KISS).
 
 ### Multi-Radio (P121 v0.98.04)
 
