@@ -16,6 +16,36 @@
 
 ---
 
+# 🟡 FT4-OMNI-30s — gefixt v0.98.63, Field-Reproduktion durch Mike ausstehend
+
+**Status:** Code-Fix erledigt + 2× DeepSeek-bestätigt (voller Workflow). Offen ist
+nur Mikes Field-Reproduktion zur Bestätigung (Mike-Wunsch 03.06.: „ich schaue
+nachher ob ich den fehler reproduzieren kann, ist vielleicht besser wegen
+Diagnose").
+
+**Symptom (Mike-Field):** OMNI-CQ auf FT4 sendete nur alle 30s statt 15s,
+**intermittierend** — mal 15s, mal 30s, je nachdem ob vorher auf FT8 gewesen.
+
+**Ursache (NICHT unbekannt — verstanden + DeepSeek-bestätigt):** Regression aus
+v0.98.62. Der Cycle-Timer (`timing.py:43`) leitet den Slot-Takt aus
+`ntp_time.get_time()` ab; `get_time()` zog seit v0.98.62 den
+`_MODE_DELTA["FT4"]=−0.30` mit → `cycle_start` feuerte auf FT4 zu spät → OMNI-TX
+landete im aktuellen Slot mit abgelaufener Sende-Frist → Encoder-Drift-Guard
+(`encoder.py:337`) +2 Slots → 30s. **Schwellenabhängig:** kippt sobald der
+FT8-gelernte `_correction < 0.30` (dann FT4-effektiv ≤ 0). Der Wechsel FT8→FT4
+erklärt die Intermittenz: auf FT8 ändert sich der gelernte Wert (nur FT8 misst),
+und ob FT4 danach kippt, hängt davon ab, ob er gerade über/unter 0.30 liegt.
+
+**Fix (v0.98.63):** `get_time()` nutzt nur die FT8-Basis (OHNE Delta) → Slot-Takt
+deterministisch 15s. Details → HISTORY/FEATURES §6 (v0.98.63-Block).
+
+**Reproduktion am Radio (für Mike, optional — bestätigt die Diagnose):**
+`_correction < 0.30` erzwingen (z.B. wenn der DT-Status auf FT8 unter +0.30 steht),
+dann auf FT4 OMNI-CQ → mit dem Fix bleibt es **15s** (vor dem Fix wären es 30s
+gewesen). Wenn FT4-OMNI durchgehend 15s sendet → Bug erledigt, Eintrag schließen.
+
+---
+
 # ✅ P169 Phase 2 ERLEDIGT (v0.98.58, 02.06.2026) — Mode-genauer Worked-Filter
 
 Voller Workflow (V1→V2→R1→V3→Code→Final-R1, DeepSeek-v4-pro). NEUE-Filter +

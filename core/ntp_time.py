@@ -48,8 +48,12 @@ DAMPING = 0.7                # 70% Daempfung fuer Folge-Korrekturen
 # Delta obendrauf. `effektive_Korrektur(mode) = _correction + _MODE_DELTA[mode]`.
 #
 # _MODE_DELTA["FT4"] = -0.30: Field-Median der FT4-DT lag bei -0.30 (waehrend
-# FT8 bei 0 stand) → dieser Delta zentriert FT4 (Anzeige + RX-Decode-Fensterlage
-# + TX-Timing zugleich, weil alle ueber get_correction() laufen).
+# FT8 bei 0 stand) → dieser Delta zentriert FT4 in Anzeige + RX-Decode-
+# Fensterlage (beide ueber get_correction()). NICHT im Slot-Takt/TX: der laeuft
+# ueber get_time() auf der reinen FT8-Basis (v0.98.63). Sonst feuert cycle_start
+# auf FT4 zu spaet (an der Slot-Grenze statt davor) und der Encoder-Drift-Guard
+# verdoppelt den Sende-Takt (OMNI-CQ 30s statt 15s) — schwellenabhaengig, kippt
+# sobald _correction < 0.30 (dann FT4-effektiv ≤ 0). Field-Bug Mike 03.06.2026.
 # ⚠️ PROVISORISCH/empirisch: eine deterministische Ableitung aus _WINDOW_OFFSETS
 # ist aktuell NICHT gesichert (DeepSeek-F1 — evtl. steckt ein versteckter Fehler
 # in den FT4-Fenster-Konstanten, separat zu klaeren). Bei gravierender Hardware-
@@ -215,12 +219,19 @@ def set_band(band: str) -> None:
 
 
 def get_time() -> float:
-    """Korrigierte Zeit — ueberall statt time.time() verwendbar.
+    """Hardware-korrigierte Zeit fuer den Slot-TAKT — ueberall statt time.time().
 
-    Nutzt die EFFEKTIVE (modus-abhaengige) Korrektur, damit auch das TX-Timing
-    den FT4/FT2-Versatz beruecksichtigt (nicht nur die FT8-Basis)."""
+    Nutzt NUR die gelernte FT8-Basis ``_correction`` (Hardware-/Transport-Latenz),
+    bewusst OHNE den modus-abhaengigen ``_MODE_DELTA``. Begruendung (v0.98.63):
+    Der Cycle-Timer (``timing.py``) leitet aus dieser Zeit den Slot-Takt ab, der
+    u.a. OMNI-CQ-TX triggert. Der Modus-Versatz ist ein RX-/Anzeige-Phaenomen
+    (Decode-Fensterlage + wie wir andere sehen) und gehoert NICHT in den Sende-
+    Takt: zoege man ihn mit, feuerte ``cycle_start`` auf FT4 zu spaet (an der
+    Slot-Grenze statt davor), der Encoder-Drift-Guard sprang +2 Slots → 30s statt
+    15s (Field-Bug Mike 03.06.2026, DeepSeek-bestaetigt). TX-Timing selbst laeuft
+    im Encoder ohnehin gegen reine ``time.time()`` (absoluter Protokoll-Slot)."""
     import time
-    return time.time() + get_correction()
+    return time.time() + _correction
 
 
 def get_correction() -> float:
@@ -228,8 +239,9 @@ def get_correction() -> float:
 
     = gelernte FT8-Basis ``_correction`` + fester ``_MODE_DELTA[_mode]``.
     Auf FT8 identisch zur Basis (Delta 0); FT4/FT2 bekommen ihren Versatz.
-    Wird vom RX-Decode-Shift (decoder), TX-Timing (get_time) und der Anzeige
-    genutzt → eine Quelle, ein konsistentes Ergebnis."""
+    Wird vom RX-Decode-Shift (decoder) und der Anzeige (get_status_text,
+    mw_cycle) genutzt — NICHT vom Slot-Takt: der laeuft ueber get_time() auf
+    der reinen FT8-Basis (sonst Sende-Takt-Verdopplung, s. get_time; v0.98.63)."""
     return _correction + _MODE_DELTA.get(_mode, 0.0)
 
 

@@ -1,21 +1,37 @@
 # HANDOFF — SimpleFT8
 
-**Aktueller Stand:** v0.98.62 (03.06.2026) — **DT-Korrektur modus-abhängig
-(FT4-Versatz behoben)** (voller Workflow). Mike-Field: FT8-DT sauber um 0, FT4
-alle ~−0.3. Der gelernte Korrekturwert ist NICHT rein Funkgerät-Latenz, sondern
-modus-abhängig (FT8 ~+0.29, FT4 ~0; je schneller der Modus, desto enger die
-Toleranz). Fix `core/ntp_time.py`: `_MODE_DELTA = {FT8:0, FT4:−0.30, FT2:0}`
-(field-kalibriert, provisorisch) auf `get_correction()` → RX-Shift + TX-Timing +
-Anzeige zugleich zentriert (DeepSeek: kein Teilfix). Nur FT8 lernt Basis, FT4/FT2
-erben + Delta. DeepSeek Final-R1 fand zusätzlich P171-Migrations-Bug (FT4-only-
-Datei → falsche ~0-Basis) → gefixt (kein Migrate ohne FT8-Keys). R1 + Final-R1
-(nach Fix) **PUSH FREIGEBEN**. Tests 2339→**2348** (+9). Kein TX-Eingriff,
-ANT1/ANT2 unberührt. NICHT gepusht.
-**✅ Field-Test BESTANDEN (am Radio, 03.06.2026):** FT4-DT −0.3→~0 (leicht +0.1),
-Empfang STABIL (11 Stationen, KEIN P168-Decode-Einbruch — Risiko entwarnt),
-FT4-QSOs liefen (LZ2II, SV7BAY). Offene Mikrojustierung (NICHT akut): FT4 ~+0.1
-leicht über 0 → optional `_MODE_DELTA["FT4"]` −0.30→−0.20, aber NUR datenbasiert
-nach längerer Log-Beobachtung (Stations-Streuung ±0.2). — **Vorgänger
+**Aktueller Stand:** v0.98.63 (03.06.2026) — **FT4-OMNI sendete 30s statt 15s —
+Slot-Takt vom Modus-Versatz entkoppelt** (voller Workflow, 2× DeepSeek). Mike-
+Field: OMNI-CQ auf FT4 sendete nur alle 30s (Log je +30s), **intermittierend**
+(mal 15s mal 30s, je nachdem ob vorher FT8). **Regression aus v0.98.62.**
+Diagnose: Der Cycle-Timer (`timing.py:43`) leitet den Slot-Takt aus
+`ntp_time.get_time()` ab — und `get_time()` zog seit v0.98.62 den
+`_MODE_DELTA["FT4"]=−0.30` mit → `cycle_start` feuerte auf FT4 zu spät (an der
+Grenze) → OMNI-TX landete im aktuellen Slot dessen Sende-Frist schon vorbei war →
+Encoder-Drift-Guard (`encoder.py:337`) +2 Slots, Folge-Slot „encoder busy" → 30s.
+**Schwellenabhängig:** kippt sobald `_correction < 0.30` (FT4-effektiv ≤ 0); da
+nur FT8 misst und der Wert um ~0.27–0.45 schwankt, flackerte es. Fix
+(`core/ntp_time.py`, 1 Funktion): `get_time()` nutzt jetzt NUR die FT8-Basis
+`_correction` (OHNE Delta) → Slot-Takt immer deutlich positiv → deterministisch
+15s. `get_correction()` (mit Delta) bleibt für RX-Decode-Shift + Anzeige → FT4
+zentriert (keine RX-Regression). Physikalisch korrekt (TX am echten Protokoll-
+Slot; −0.3-TX-Versatz würde uns bei der Gegenstation mit DT −0.3 zeigen).
+**Kein TX-Antennen-Eingriff, ANT1/ANT2 unberührt** (Encoder nutzt ohnehin reine
+`time.time()`). DeepSeek R1 (wasserdicht) + Final-R1 **PUSH FREIGEBEN** (Schwelle
+korrekt, Umsetzung exakt, keine Nebenwirkungen, Kaltstart-Edge bestätigt). Tests
+2348→**2349** (Test umgedreht + neuer `test_slot_takt_invariant_but_rx_diverges`).
+**Nächster Schritt: Mike testet FT4-OMNI am Radio** (muss wieder 15s sein; will
+den Bug zur Bestätigung reproduzieren — Wert < 0.30 erzwingen → 30s). TODO-Eintrag
+gesetzt. NICHT gepusht (Push-Stapel v0.98.56–v0.98.63 wartet auf Mikes „push").
+
+— **Vorgänger v0.98.62: DT-Korrektur modus-abhängig (FT4-Versatz)** (voller
+Workflow). FT8-DT um 0, FT4 alle ~−0.3 → `_MODE_DELTA = {FT8:0, FT4:−0.30, FT2:0}`
+auf `get_correction()`; nur FT8 lernt Basis, FT4/FT2 erben + Delta. DeepSeek
+Final-R1 fand P171-Migrations-Bug (FT4-only-Datei → falsche ~0-Basis) → gefixt.
+**✅ Field-Test BESTANDEN:** FT4-DT −0.3→~0 (leicht +0.1), Empfang STABIL (11
+Stationen, kein P168-Einbruch), FT4-QSOs liefen (LZ2II, SV7BAY). Offene
+Mikrojustierung (NICHT akut): optional `_MODE_DELTA["FT4"]` −0.30→−0.20, NUR
+datenbasiert. Tests →2348. NICHT gepusht. — **Vorgänger
 v0.98.61: Audio-Mithör-Monitor (🔊-Toggle, Diagnose)** — RX-Audio auf Lautsprecher
 als Diagnose (Decoder unangetastet via Wrapper, 48k-Ringpuffer, sounddevice).
 Tests +15, PUSH FREIGEBEN, nicht gepusht. — **Vorgänger v0.98.60 P171: DT-Korrektur auf EINEN

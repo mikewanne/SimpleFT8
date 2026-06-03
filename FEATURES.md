@@ -389,15 +389,25 @@ schneller der Modus, desto enger die Toleranz). Der alte per-Modus-FT4-Wert
 **Lösung (`core/ntp_time.py`):** der globale Wert bleibt die **FT8-gelernte Basis**
 (`_correction`), plus ein **fester Modus-Delta**:
 `_MODE_DELTA = {FT8: 0.0, FT4: −0.30, FT2: 0.0}` (field-kalibriert, PROVISORISCH).
-`get_correction()` liefert `_correction + _MODE_DELTA[_mode]` — **eine Quelle** für
-RX-Decode-Shift (`decoder.py:361`), TX-Timing (`get_time()`) UND Anzeige
-(`get_status_text()` / `mw_cycle:280`). So zentriert ein Wert alle drei zugleich.
-Nur FT8 lernt die Basis; FT4/FT2 erben sie + Delta (P171s „wenige Stationen →
-nicht selbst lernen" bleibt gültig).
+`get_correction()` liefert `_correction + _MODE_DELTA[_mode]` — für RX-Decode-Shift
+(`decoder.py:361`) und Anzeige (`get_status_text()` / `mw_cycle:280`). **NICHT für
+den Slot-Takt:** `get_time()` (Cycle-Timer `timing.py:43`) nutzt seit **v0.98.63**
+NUR die FT8-Basis `_correction`, OHNE Delta (s. den v0.98.63-Block unten — anfangs
+lief auch `get_time()` über den Delta, das brach den Sende-Takt). Nur FT8 lernt die
+Basis; FT4/FT2 erben sie + Delta (P171s „wenige Stationen → nicht selbst lernen"
+bleibt gültig).
 
-- **Kein Teilfix:** Anzeige korrigieren, RX/TX aber unverändert wäre Pfusch
-  (DeepSeek-🔴) — Anzeige geschönt, Signal physisch weiter daneben, FT4 sendet
-  0.3s zu früh. Darum laufen ALLE drei über `get_correction()`.
+- **Anzeige + RX-Decode gehören zusammen** (`get_correction()`): Anzeige
+  korrigieren, RX-Decode-Fenster aber unverändert wäre Pfusch (DeepSeek-🔴
+  v0.98.62) — Anzeige geschönt, Signal physisch daneben. Beide über `get_correction`.
+- **Slot-Takt/TX gehört NICHT dazu (v0.98.63-Korrektur):** Der ursprüngliche
+  v0.98.62-Satz „auch TX über get_correction, sonst Pfusch" war für den Sende-Takt
+  FALSCH. `get_time()` mit Delta verschob den Cycle-Timer → FT4-OMNI sendete 30s
+  statt 15s (Encoder-Drift-Guard, schwellenabhängig ab `_correction<0.30`). Der
+  Slot-Takt muss am **echten Protokoll-Slot** hängen, nicht am RX-Wahrnehmungs-
+  Versatz: würde man TX um −0.3 verschieben, erschiene man bei der Gegenstation
+  selbst mit DT −0.3. Darum `get_time()` = reine FT8-Basis (TX-Audio läuft im
+  Encoder ohnehin gegen reine `time.time()`). Details → v0.98.63-Block unten.
 - **✅ Field-validiert (03.06.2026, v0.98.62 am Radio):** FT4-DT von −0.3 auf ~0
   (Schnitt leicht +0.1), **Empfang stabil — 11 Stationen dekodiert, KEIN P168-
   Decode-Einbruch** (das gefürchtete Risiko ist damit entwarnt), FT4-QSOs laufen
@@ -414,6 +424,45 @@ nicht selbst lernen" bleibt gültig).
 - **Offen:** Der FT4-Delta ist empirisch (−0.30), nicht aus `_WINDOW_OFFSETS`
   abgeleitet. DeepSeek vermutet einen versteckten Fehler in den FT4-Fenster-
   Konstanten — separat zu klären.
+
+#### v0.98.63 — Slot-Takt vom Modus-Versatz entkoppelt (Folge-Bug von v0.98.62)
+
+**Symptom:** OMNI-CQ auf FT4 sendete nur alle 30s statt 15s — und das
+**intermittierend** (mal 15s, mal 30s, je nachdem ob Mike vorher auf FT8 war).
+
+**Funktionsverknüpfung (das eigentlich Lehrreiche):** Es gibt zwei Konsumenten
+der DT-Korrektur mit GEGENSÄTZLICHEM Bedarf:
+1. **RX-Decode-Shift (`decoder.py:361`) + Anzeige** — wollen den modus-abhängigen
+   Versatz (FT4-Fenster zentrieren, Stationen bei DT~0 zeigen). → `get_correction()`.
+2. **Slot-Takt-Geber (`timing.py:43` → `cycle_start` → OMNI-CQ-TX-Trigger)** — darf
+   den Versatz NICHT sehen, sonst feuert er auf FT4 zu spät. → `get_time()`.
+
+v0.98.62 ließ BEIDE über `get_correction()` (mit Delta) laufen. Der Cycle-Timer
+feuerte dadurch auf FT4 ~an der Slot-Grenze statt davor → der OMNI-CQ-TX-Trigger
+(`omni_cq.on_cycle_start` → `encoder.transmit`) wählte den AKTUELLEN Slot, dessen
+Sende-Frist (Grenze−0.8, FlexRadio-1.3s-TX-Buffer) bereits 0.8s vorbei war → der
+**Encoder-Drift-Guard** (`encoder.py:337`, overshoot>0.3 → +2 Slots) sprang, der
+eigentliche Folge-Slot fand „encoder busy" vor → 30s. **Identische Klasse wie
+P168** (Drift-Guard verdoppelt den Takt), aber andere Ursache: nicht das Decode-
+Timing, sondern die Timer-Verschiebung.
+
+**Schwellenabhängigkeit (erklärt die Intermittenz):** Es kippt exakt bei
+`_correction = −_MODE_DELTA["FT4"] = 0.30`. Bei `_correction > 0.30` ist FT4
+effektiv > 0 → Timer feuert vor der Grenze → 15s. Bei `_correction ≤ 0.30` → FT4
+effektiv ≤ 0 → Timer feuert an/nach der Grenze → Drift-Guard → 30s. Da **nur FT8
+misst** und der gelernte Wert um ~0.27–0.45 schwankt, flackerte FT4-OMNI je nach
+aktuellem FT8-Messwert — deshalb „mal 15s, mal 30s, abhängig vom vorherigen
+FT8-Betrieb".
+
+**Fix (`core/ntp_time.py`, 1 Funktion):** `get_time()` → `time.time() + _correction`
+(reine FT8-Basis, OHNE `_MODE_DELTA`). `get_correction()` (mit Delta) unverändert
+für RX-Decode + Anzeige. Slot-Takt damit immer deutlich positiv → deterministisch
+15s, unabhängig vom Messwert. Kein TX-Antennen-Eingriff, ANT1/ANT2 unberührt.
+DeepSeek R1 + Final-R1 PUSH FREIGEBEN. Tests 2348→2349.
+
+**Merksatz:** Der DT-Korrektur-Wert hat ZWEI getrennte Rollen — *wie wir andere
+sehen* (RX-Fenster + Anzeige, modus-abhängig) und *wann wir senden* (Slot-Takt,
+modus-UNabhängig, echter Protokoll-Slot). Nie wieder beide über dieselbe Funktion.
 
 ### Multi-Radio (P121 v0.98.04)
 

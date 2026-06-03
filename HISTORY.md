@@ -9,6 +9,44 @@ Gelöscht wird nie etwas. Format: `## YYYY-MM-DD vX.YY — Kurztitel`.
 > stehen in `history/HISTORY_archiv_NN.md` (grep dort, falls eine alte Version
 > gesucht wird). Rotiert mit `tools/rotate_history.py`. Zuletzt: 2026-06-01.
 
+## 2026-06-03 v0.98.63 — FT4-OMNI sendete 30s statt 15s (Slot-Takt vom Modus-Versatz entkoppelt)
+
+**Mike-Field (OMNI-CQ auf FT4):** Station sendete nur alle 30s statt 15s
+(Log-Zeitstempel je +30s). Auf FT8 unauffällig (dort sind 30s der normale
+Paritäts-Takt). Trat NACH v0.98.62 auf — und **intermittierend**: mal 15s, mal
+30s, je nachdem ob Mike vorher auf FT8 war.
+
+**Diagnose (voller Workflow, 2× DeepSeek-bestätigt):** Regression aus v0.98.62.
+Der Cycle-Timer (`core/timing.py:43`) leitet den Slot-Takt aus
+`ntp_time.get_time()` ab — und `get_time()` zog seit v0.98.62 den modus-
+abhängigen `_MODE_DELTA["FT4"]=−0.30` mit. Dadurch feuerte `cycle_start` auf FT4
+zu spät (an der Slot-Grenze statt davor), der OMNI-CQ-TX-Trigger
+(`omni_cq.on_cycle_start` → `encoder.transmit`) landete im AKTUELLEN Slot dessen
+Sende-Frist (Grenze−0.8) schon 0.8s vergangen war → **Encoder-Drift-Guard**
+(`encoder.py:337`) sprang +2 Slots, der eigentliche Folge-Slot fand „encoder
+busy" vor → effektiv 30s. **Schwellenabhängig:** kippt sobald der gelernte FT8-
+Wert `_correction < 0.30` (dann FT4-effektiv ≤ 0 → Timer feuert an/nach Grenze).
+Bei `_correction > 0.30` feuert er davor → 15s. Da nur FT8 misst und der Wert um
+~0.27–0.45 schwankt, flackerte FT4-OMNI je nach aktuellem FT8-Messwert.
+
+**Fix (`core/ntp_time.py`, 1 Funktion):** `get_time()` nutzt jetzt NUR die
+FT8-Basis `_correction` (OHNE `_MODE_DELTA`) — der Slot-Takt läuft wieder auf der
+reinen Hardware-Zeit, immer deutlich positiv → deterministisch 15s, egal wie der
+Messwert steht. `get_correction()` (mit Delta) bleibt unverändert für RX-Decode-
+Shift (decoder:361) + Anzeige → FT4-Empfang/Anzeige bleiben zentriert (keine
+Regression). Physikalisch korrekt: der Modus-Versatz ist ein RX-/Anzeige-
+Phänomen; würde man TX um −0.3 verschieben, erschiene man bei der Gegenstation
+selbst mit DT −0.3. **Kein TX-Antennen-Eingriff, ANT1/ANT2 unberührt** — TX läuft
+im Encoder ohnehin gegen reine `time.time()` (absoluter Protokoll-Slot).
+
+DeepSeek R1 (Diagnose+Fix wasserdicht, kein versteckter Pfad) + Final-R1 **PUSH
+FREIGEBEN** (Schwellen-Erklärung korrekt, Umsetzung exakt, keine Nebenwirkungen,
+Kaltstart-Edge-Case bestätigt). Tests 2348→**2349** (`test_dt_mode_delta.py`:
+`test_get_time_uses_effective_correction` umgedreht → `test_get_time_uses_base_
+not_delta`, + neuer `test_slot_takt_invariant_but_rx_diverges`). **Field-Test:
+FT4-OMNI muss wieder 15s senden** — Mike will den Bug zur Bestätigung am Radio
+reproduzieren (Wert < 0.30 erzwingen → 30s). NICHT gepusht.
+
 ## 2026-06-03 v0.98.62 — DT-Korrektur modus-abhängig (FT4-Versatz) + Migrations-Bug
 
 **Mike-Field:** Auf FT8 stand die DT der Stationen sauber um 0, auf **FT4** lagen
