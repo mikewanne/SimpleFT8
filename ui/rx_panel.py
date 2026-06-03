@@ -600,6 +600,13 @@ class RXPanel(QWidget):
         """Button-Zustand ohne Signal setzen (Fehler-Rueckrollung / Boot)."""
         self.btn_audio.setChecked(on)
 
+    def set_calibrate_visible(self, visible: bool):
+        """⏱-Kalibrier-Knopf ein-/ausblenden. v0.99.2: nur auf FT8 sichtbar —
+        DT wird ausschliesslich aus FT8 gemessen, auf FT4/FT2 waere ein Klick
+        sinnlos (Mike-Wunsch: gar nicht erst versehentlich klickbar). Das
+        QHBoxLayout kollabiert das versteckte Widget automatisch."""
+        self.btn_calibrate.setVisible(visible)
+
     def _on_header_clicked(self, col: int):
         """Klick auf nativen Spaltenkopf → sortieren + Farbe aktualisieren.
 

@@ -526,6 +526,9 @@ class RadioMixin:
         self._stats_warmup_cycles = 6
         # RX-Liste + QSO-Panel leeren bei Mode-Wechsel (neuer Modus = neuer Kontext)
         self.rx_panel.table.setRowCount(0)
+        # v0.99.2: DT-Kalibrier-Knopf nur auf FT8 zeigen (dort wird gemessen) —
+        # auf FT4/FT2 ausblenden, damit man nicht versehentlich klickt.
+        self.rx_panel.set_calibrate_visible(mode == "FT8")
         self._diversity_stations = {}
         self._normal_stations = {}
         # P128 (25.05.2026): Cooldown-Dict bei Mode-Wechsel leeren

@@ -830,6 +830,10 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         self.rx_panel.hidden_cols_changed.connect(self._on_rx_hidden_cols_changed)
         self.rx_panel.audio_monitor_toggled.connect(self._set_audio_monitor)
         self.rx_panel.calibrate_requested.connect(self._on_calibrate_dt)
+        # v0.99.2: ⏱-Knopf initial nur auf FT8 sichtbar (Start ist FT8;
+        # _on_mode_changed schaltet ihn bei Modus-Wechsel mit).
+        self.rx_panel.set_calibrate_visible(
+            self.settings.get("mode", "FT8") == "FT8")
         # Audio-Mithoeren beim Start automatisch aktivieren, wenn zuletzt an
         # (persist=False → kein redundantes save). Defer via QTimer, damit ein
         # evtl. Start-Fehler erst nach UI-Aufbau die Info-Zeile zeigen kann.
