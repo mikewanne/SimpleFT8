@@ -3,6 +3,9 @@
 > **Status:** Konzept vollständig + DeepSeek-geprüft (Urteil: Umsetzung
 > empfohlen) — KEIN Spec, KEIN Code, noch keine Umsetzungs-Entscheidung.
 > Erstellt: 2026-05-22 (Mike + Claude).
+> **Erweitert 2026-06-03:** Auto-Hunt-Architektur bei zwei Bändern geklärt +
+> ein zweites Mal DeepSeek-gehärtet (1 🔴 Blocker gefunden) — siehe Abschnitt
+> „Auto-Hunt bei zwei Bändern" am Ende.
 
 ---
 
@@ -500,9 +503,151 @@ Parallelitäts-Problem. Auch der Zeitsync-Einwand ist erledigt
 
 ---
 
+## Auto-Hunt bei zwei Bändern — Architektur & DeepSeek-Härtung (2026-06-03)
+
+**Anlass (Mike):** „Wie bekommen wir Auto-Hunt bei 2 erfassten Bändern hin?
+Das geht ja nur, wenn wir nach der Empfangsliste arbeiten und speichern, auf
+welchem Band sich die Station befindet." — exakt richtig erkannt. Mike's zweite
+Sorge: „Bauen wir einen kompletten neuen Pfad, oder zerstören wir den
+bestehenden, field-validierten Einzelband-Pfad?" Diese Frage wurde mit DeepSeek
+(V4-pro) ein zweites Mal durchgesprochen.
+
+### Grundsatz-Entscheidung: dünne additive Schicht, Kern unangetastet (Modell 3)
+
+Drei denkbare Wege:
+- **Modell 1 — kompletter Parallel-Pfad** (Multiband fährt alles selbst, Normal
+  bleibt 100% unberührt): **verworfen.** Müsste den gefährlichsten Code
+  (QSO-State-Machine, Encoder, Slot-Timing) duplizieren → doppelte Pflege,
+  Drift-Risiko, Overengineering — und greift am Ende doch auf dieselbe eine PA.
+- **Modell 2 — Kern umschreiben** (Band überall zur Variablen): maximal KISS,
+  aber Eingriff mitten ins funktionierende Herz. **Verworfen** (Mikes Angst).
+- **Modell 3 — dünne Schicht obendrauf:** **gewählt.** Die Grenze liegt NICHT
+  zwischen „Normal" und „Multiband", sondern zwischen zwei Schichten:
+  - **Empfang + Bandauswahl** (neu, additiv): 2. Slice füttert dieselbe
+    Empfangsliste; jede Station trägt ein Band-Etikett; vor dem Anruf wird
+    einmal „stimm TX-Band auf X" eingeschoben.
+  - **QSO + Senden + Timing + Hardware** (unverändert, geteilt): sobald gerufen
+    wird, läuft EXAKT der heutige Pfad — er weiß nichts von Multiband. Da es nur
+    einen Sender + ein QSO zur Zeit gibt, braucht es hier KEINEN zweiten Pfad.
+
+**DeepSeek-Urteil (2. Runde):** Modell 3 ist der KISS-este UND sicherste Weg.
+Größte Gefahr ist keine Fehlkonstruktion, sondern die **Unterschätzung der
+Band-Umschalt-Schicht** (s.u.) — die muss hart getestet werden.
+
+**Drei Sicherungen gegen das „Kern-kaputt-machen"-Risiko:**
+1. **Band als Parameter mit Default = aktuelles Band** → im Einzelband-Betrieb
+   ist „das Band der Station" immer das eine aktive Band → Verhalten
+   **bit-identisch** wie heute.
+2. **Die Bestands-Tests bleiben grün** = mathematischer Beweis, dass
+   Normal/Diversity unverändert sind.
+3. **Feature-Flag:** Multiband aus → 2. Slice nie allokiert, Band-Schicht
+   inaktiv, heutiger Code läuft.
+
+### Auto-Hunt konkret band-aware machen
+
+- **Band-Etikett ab Decode:** Jede dekodierte Nachricht trägt ihr Quell-Band
+  (welcher Slice). Der Aggregator vergibt **IMMER** ein Band, **nie `None`** —
+  im Einzelband-Modus schlicht das aktuelle Band. (DeepSeek-Bedingung für
+  Bit-Identität.)
+- **`_HuntCandidate` kriegt additiv ein `band`-Feld** (Default = `self._band`).
+- **In `select_next` ALLE `self._band` → `c.band`** an diesen Stellen:
+  1. Worked-Filter `is_worked_on_band_mode(c.call, c.band, self._mode)`.
+  2. Recent-QSO-Cooldown-Key `(base, c.band.upper(), self._mode.upper())`.
+  3. **Fail-Cooldown-Key** `_cooldown` → von reinem `call` auf `(call, band)`
+     erweitern (🟡 DeepSeek: sonst sperrt ein Fehlversuch auf 15m denselben
+     Call auf 20m). Kleine, risikofreie Änderung.
+  4. DX-Scoring `_compute_priority` „Land auf diesem Band neu?" über `c.band`.
+  Im Einzelband ist `c.band == self._band` → identisches Verhalten.
+- **Kandidaten-Pool aus beiden Bändern** gespeist (jede msg mit Band-Tag) →
+  Auto-Hunt vergleicht DX-Wert bandübergreifend.
+
+### 🔴 PFLICHT: interner TX-Bandsprung ≠ User-Bandwechsel (DeepSeek-Blocker)
+
+Heute: manueller Bandwechsel → `on_band_change` → `stop_auto_hunt("band_change")`
+= **bewusster, harter Auto-Hunt-Stop** (Session-Ende). Im Multiband muss der
+**automatische** Bandsprung beim Pick die Auto-Hunt-Session aber **behalten** —
+sonst beendet Auto-Hunt sich beim ersten Bandsprung selbst (funktionaler
+Fehler).
+
+**Lösung (Pflicht bei Umsetzung):** zwei getrennte Wege —
+- **`switch_tx_band(band)` (intern, NEU):** stellt `_band` + Radio aufs Zielband
+  um, resettet `_last_tx_even` (Slot-Parität) und `_all_worked_reported`, lässt
+  `active` **unberührt** → KEIN `stop_auto_hunt`. Für den Pick-getriebenen
+  Bandsprung binnen einer Session.
+- **`set_band(band)` (extern, User-Klick):** bleibt wie heute = harter
+  Session-Stop. Der bewusste User-Bandwechsel beendet Auto-Hunt weiterhin sofort.
+
+### 🟠 Die Band-Umschalt-Sequenz ist ein eigener, sensibler Baustein
+
+Vor dem ersten TX aufs Zielband: TX-Flag auf den Ziel-Slice, 6h-Cache-Werte
+(Power/Gain) setzen, ATU-Lösung recallen, ggf. Tune-Slot einplanen (Fall A/B
+oben). Das ist **zeitkritische neue Logik auf Encoder-Höhe**, kein trivialer
+Additiv-Layer — sie muss in den Slot-Zyklus (`mw_cycle`) eingepasst werden
+(Restzeit-Prüfung, Slot-Parität erhalten). Wo möglich die **bestehenden
+manuellen-Bandwechsel-Methoden wiederverwenden** statt neu bauen. Evtl. ein
+`prepare_tx_band(band)` am Radio/Encoder-Interface.
+**ANT1 IMMER** — vor jedem TX `set_tx_antenna("ANT1")` verifizieren (Hardware).
+→ **Isoliert entwerfen + eigene Tests**, nicht „nebenbei".
+
+### Bandsprung-Politik: natürliche Hysterese statt expliziter Schwelle
+
+**Ziel (Mike, „Modell B"):** am aktuellen Band kleben, nicht ständig hüpfen
+(jeder Sprung kostet das andere Band kurz Empfang — ein Sender, TX blockt RX).
+
+**Erkenntnis (DeepSeek):** Das lexikografische DX-Scoring (Seltenheit >>
+Land-auf-Band-neu >> Distanz >> SNR >> Slot) **liefert diese Hysterese schon von
+selbst** — ein Bandsprung passiert nur, wenn die beste Station des anderen
+Bandes in der Seltenheits-Rangordnung vorne liegt; ein bloß lauteres Signal
+derselben Seltenheitsklasse springt NICHT.
+
+**Entscheidung (Claude, Boss):** **Erster Release OHNE explizite
+Hysterese-Schwelle** (KISS — natürliche Scoring-Hysterese nutzen). Im Feld
+beobachten. **Nachrüst-Pfad nur falls Mike zu häufiges Bandhüpfen meldet:**
+erzwungener Verbleib am aktuellen TX-Band, außer die andere-Band-Station ist
+um **≥2 Seltenheitsklassen** besser (ATNO/extrem-selten vs. Allerweltsland).
+So bleibt Mikes Wunsch (B) gewahrt, ohne Komplexität auf Verdacht.
+
+### Manueller Station-Klick bei laufendem Auto-Hunt (Multiband)
+
+Konsistent zum Einzelband: Ein **manueller Klick/Doppelklick auf eine Station**
+ist eine bewusste Übernahme → **harter Auto-Hunt-Stop** (wie P166 im Einzelband,
+kein Auto-Resume). Sitzt die geklickte Station auf dem anderen Band, wird das
+TX-Band dabei auf ihr Band gestellt — der nötige Bandwechsel läuft hier über den
+**Anruf-Pfad** (die Auto-Hunt-Session endet ohnehin), NICHT über das
+session-erhaltende `switch_tx_band`. Das „laufendes QSO → Klick puffern,
+CQ/unbeantworteter Anruf → sofort wechseln"-Verhalten (Abschnitt „QSO-Verhalten
+beim Band-Klick") bleibt unverändert gültig.
+
+### 🟡 Weitere Detail-Anpassungen (DeepSeek)
+
+- **`all_worked`-Signal Multiband-tauglich — Entscheidung: pro Band auswerten.**
+  Heute ein globales Flag + Signal mit EINEM Band. Im Multiband wird der
+  „alle CQ-Stationen schon gearbeitet"-Zustand **pro Band** ermittelt und die
+  Meldung nennt das jeweilige Band („Auto-Hunt: alle N Stationen auf {Band}
+  {Mode} schon gearbeitet"). Kein globales Flag über beide Bänder (das wäre
+  verwirrend, wenn ein Band voll, das andere offen ist).
+- **`_last_tx_even` Slot-Tiebreaker** wird band-übergreifend — **kein**
+  Fehlverhalten, nur ein beobachtbarer Unterschied zum reinen Einzelband.
+  Unkritisch.
+
+### Umsetzungs-Reihenfolge (DeepSeek-Empfehlung, übernommen)
+
+1. **Zuerst** den internen Band-Wechsel-Mechanismus (`switch_tx_band`) bauen +
+   **isoliert testen** — die gefährliche Zone zuerst im Griff haben.
+2. **Dann** die Decode-Aggregation (2. Strom annehmen) + band-getaggten
+   Kandidaten-Pool.
+3. **Dann** Scoring/Filter/Cooldowns auf `c.band` umstellen + Detail-Punkte.
+4. Bei der tatsächlichen Umsetzung: **eigener voller Workflow-Zyklus**
+   (V1→V2→R1→V3) — die 🔴/🟠-Punkte oben als Pflicht.
+
+---
+
 ## Nächster Schritt
 
-Konzept vollständig und DeepSeek-geprüft (Urteil: Umsetzung empfohlen).
-Offen ist nur noch die **Umsetzungs-Entscheidung** — ob/wann Multiband
-gebaut wird. Bei Umsetzung: eigener voller Workflow-Zyklus, die fünf
-Review-Findings oben als Pflicht-Punkte.
+Konzept vollständig und **zweifach** DeepSeek-geprüft (Urteil: Umsetzung
+empfohlen, Modell 3 = dünne Schicht). Offen ist nur noch die
+**Umsetzungs-Entscheidung** — ob/wann Multiband gebaut wird. Bei Umsetzung:
+eigener voller Workflow-Zyklus, die fünf Review-Findings (DeepSeek 22.05.) **und**
+die Auto-Hunt-Findings (🔴 interner vs. externer Bandwechsel, 🟠 Band-Umschalt-
+Sequenz isoliert testen, 🟡 Fail-Cooldown `(call,band)` + `all_worked`) als
+Pflicht-Punkte, in der Reihenfolge oben.
