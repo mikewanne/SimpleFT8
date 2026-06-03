@@ -9,6 +9,38 @@ Gelöscht wird nie etwas. Format: `## YYYY-MM-DD vX.YY — Kurztitel`.
 > stehen in `history/HISTORY_archiv_NN.md` (grep dort, falls eine alte Version
 > gesucht wird). Rotiert mit `tools/rotate_history.py`. Zuletzt: 2026-06-01.
 
+## 2026-06-03 v0.98.61 — Audio-Mithör-Monitor (🔊-Toggle, Diagnose-Feature)
+
+**Mike-Wunsch (Field):** unabhängig per Ohr prüfen können, ob auf der Frequenz
+Betrieb ist — hörst du FT8-Gezwitscher, aber die Empfangsliste bleibt leer →
+Problem liegt an der App (Decode), nicht am leeren Band. Anlass: 30m-FT4-Frage
+(Band war per Live-Log verifiziert wirklich leer), Mike vermisste das
+NF-Mithören vom Icom 7300.
+
+**Neu `core/audio_monitor.py` (`AudioMonitor`):** legt das empfangene RX-Audio
+(24 kHz int16 mono, dasselbe das der Decoder bekommt) optional auf den
+Standard-Lautsprecher. **Decoder bleibt unangetastet** — Abzweig über einen
+Wrapper `mw_radio._on_rx_audio` (Decoder ZUERST, dann Monitor). Vorallokierter
+numpy-Ringpuffer (GC-frei, nicht-blockierend im VITA-49-Empfangsthread =
+Decode-Timing-Thread), sounddevice-OutputStream-Callback (eigener PortAudio-
+Thread). **Ausgabe fest 48 kHz** (24k ×2 sample-and-hold, kein Pitch-Shift — 24k
+ist auf macOS/CoreAudio nicht überall nativ). Underrun → Stille (read-Index
+bleibt, kein Versatz nach TX-Pausen). `active` = GIL-atomares bool, Lock um die
+Ringpuffer-Indizes.
+
+**UI:** 🔊-Toggle in der RX-Leiste neben „NEUE" (`rx_panel.btn_audio` →
+`audio_monitor_toggled`-Signal). **Persistent** (`settings["audio_monitor"]`,
+Default False) — beim Start automatisch aktiv, wenn zuletzt an (QTimer-defer).
+**Start-Fehler** (kein Audiogerät) → Button springt zurück + Info-Zeile
+„Audio-Mithören: kein Audiogerät verfügbar". `closeEvent` → `stop()`.
+
+**Hardware:** reiner RX-Ausgang, **kein TX, ANT1/ANT2 unberührt.** DeepSeek R1
+(2🔴 feste 48k-Ausgabe + Fehler-Rückrollung, 3🟠/🟡 vorallokierter Ringpuffer/
+Underrun/Lifecycle — alle eingearbeitet) + Final-R1 **PUSH FREIGEBEN** (7
+Prüfpunkte verifiziert, 0 Bugs, keine Races). Tests 2324→**2339** (+15
+`test_audio_monitor.py`, ohne echtes Audiogerät via Fake-sounddevice). NICHT
+gepusht.
+
 ## 2026-06-03 v0.98.60 — P171: DT-Korrektur auf EINEN globalen Wert (nur FT8 misst)
 
 **Anlass (Mike):** Beim Ermitteln der DT-Zeit auf FT4/FT2 verschlechtern die

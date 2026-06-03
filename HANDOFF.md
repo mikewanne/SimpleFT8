@@ -1,6 +1,19 @@
 # HANDOFF — SimpleFT8
 
-**Aktueller Stand:** v0.98.60 (03.06.2026) — **P171: DT-Korrektur auf EINEN
+**Aktueller Stand:** v0.98.61 (03.06.2026) — **Audio-Mithör-Monitor
+(🔊-Toggle, Diagnose)** (voller Workflow). RX-Audio optional auf den
+Lautsprecher, um per Ohr zu prüfen ob Betrieb ist (Gezwitscher + leere
+Empfangsliste = App-Problem, nicht leeres Band). `core/audio_monitor.py`:
+vorallokierter numpy-Ringpuffer (GC-frei, nicht-blockierend im VITA-49-
+Empfangsthread), sounddevice-Callback, 48k-Ausgabe ×2 (kein Pitch-Shift),
+Decoder unangetastet via Wrapper `_on_rx_audio`. 🔊-Toggle neben NEUE,
+persistent + Auto-Start, Start-Fehler → Button zurück + Info, closeEvent →
+stop. DeepSeek R1 (2🔴+3🟠/🟡) + Final-R1 **PUSH FREIGEBEN** (0 Bugs, keine
+Races). Tests 2324→**2339** (+15). Reiner RX, kein TX, ANT1/ANT2 unberührt.
+NICHT gepusht. **Nächster Schritt: DT-Untersuchung** (Mike: alle Stationen im
+negativen DT-Bereich ~−0.27; geladener Globalwert ist +0.316 — prüfen ob der
+FT8-Lernpfad nach P171 korrekt nachregelt und ob FT4/FT2 den Wert sauber
+nutzen). — **Vorgänger v0.98.60 P171: DT-Korrektur auf EINEN
 globalen Wert** (voller Workflow). Mike: wenige Stationen auf FT4/FT2
 verschlechtern den DT-Wert; die Korrektur ist die Funkgerät-Latenz und damit
 modus-/band-unabhängig → nur FT8 misst, FT4/FT2 lesen, **ein Wert für alle

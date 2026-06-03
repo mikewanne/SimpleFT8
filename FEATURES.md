@@ -2069,3 +2069,35 @@ also inklusive importiert/:
 
 **Merksatz:** Anzeige gedeckelt (500), Logik vollständig (alle). Das eine
 skaliert mit Disk-Reparse pro QSO — heute irrelevant, später ein Cache.
+
+## §22 — Audio-Mithör-Monitor (🔊, Diagnose)   [v0.98.61, 03.06.2026]
+
+**Zweck:** unabhängiger Referenzkanal (Ohr) gegen die Decode-Anzeige. Hörst du
+Betrieb, aber die Empfangsliste bleibt leer → Problem liegt an der App, nicht am
+Band. Reine Diagnose, kein Komfort-Feature (Mike-Anlass: 30m-FT4 war wirklich
+leer, vermisste das NF-Mithören vom Icom 7300).
+
+**Pfad (Decoder unangetastet):** `radio.on_audio_callback` →
+`mw_radio._on_rx_audio` (Wrapper) → `decoder.feed_audio()` ZUERST (unverändert)
+→ wenn Monitor aktiv: `AudioMonitor.feed()`. Der Decoder bekommt das Audio immer
+zuerst und merkt nichts vom Monitor. War vorher `on_audio_callback =
+decoder.feed_audio` direkt.
+
+**`core/audio_monitor.py`:** 24 kHz int16 mono rein, 48 kHz raus (×2
+sample-and-hold, kein Pitch-Shift — 24k ist auf macOS/CoreAudio nicht überall
+nativ → DeepSeek-🔴). Vorallokierter numpy-Ringpuffer (GC-frei), `feed()`
+schreibt im Empfangsthread (nicht-blockierend, kurzer Lock — schützt das
+Decode-Timing), `_sd_callback` liest im PortAudio-Thread, Underrun → Stille
+(read-Index NIE über write → kein Versatz nach TX-Pausen). `active` =
+GIL-atomares bool. Datenraten-Balance: 24000 Sa/s rein = `frames//2` pro
+48k-Callback (blocksize 2400) → langfristig stabil.
+
+**UI/Persistenz:** `rx_panel.btn_audio` (🔊, checkable, neben NEUE) →
+`audio_monitor_toggled(bool)` → `mw_radio._set_audio_monitor(on, persist)`.
+Zustand in `settings["audio_monitor"]` (Default False, normal persistiert —
+NICHT in der band/mode-Exclude-Liste), beim Start auto-aktiv wenn zuletzt an
+(QTimer-defer, `persist=False`). Start-Fehler (kein Gerät) → `start()` wirft →
+`set_audio_monitor_checked(False)` + `qso_panel.add_info(...)`. `closeEvent` →
+`stop()` (PortAudio-Stream sauber schließen).
+
+**Hardware:** reiner RX-Ausgang, KEIN TX, ANT1/ANT2 unberührt.
