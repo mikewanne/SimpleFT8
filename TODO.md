@@ -18,6 +18,20 @@
 
 # 🔧 OFFEN: Auto-Hunt aus akkumuliertem Pool + Frische-Fenster + „gearbeitete ignorieren"-Schalter   [Plan abgestimmt 04.06.2026, voller Workflow pending]
 
+> **✅ FINALE SPEC (abgestimmt 04.06.2026, vor Compact gesichert):**
+> - **Frische-Fenster = modus-aware Konstante `AUTO_HUNT_FRESH_SLOTS = {FT8:3, FT4:3, FT2:3}`.**
+>   3 Slots in ALLEN Modi (NICHT FT4 mehr!). Begründung: eine CQ-Station ruft in jedem
+>   2. Slot — modus-invariant in Slots → „3 Slots" = überall ≤1 verpasster Ruf. FT4
+>   ruft *häufiger* (alle 15 s vs. 30 s), man fängt sie schneller, nicht langsamer.
+>   FT4 auf **4 nur datenbasiert** anheben, falls Field zeigt dass FT4-Decodes öfter
+>   ausfallen — NICHT auf Verdacht. (Heute sieht Auto-Hunt nur 1 Slot → 3 = großer Sprung.)
+> - **„Gearbeitete"-Schalter:** Checkbox im settings_dialog, Default = wie heute
+>   (gearbeitete überspringen). Label „**Schon gearbeitete Stationen auch anrufen**"
+>   (AN = Diplom-Modus). **Steuert NUR Auto-Hunt** — der NEUE-Knopf bleibt der getrennte
+>   Anzeige-Filter (Anzeige vs. Auto-Hunt-Verhalten waren immer unabhängig).
+> - **„alle N gearbeitet"-Meldung klarer** formulieren (N = Moment-Slot, nicht Listengröße).
+> - Mike-„gut" = Zustimmung zu dieser Spec; bei Workflow-Start nochmal kurz bestätigen lassen.
+
 **Mike-Plan (abgestimmt, aufgeschoben durch den STOPP-Bug v0.99.6).** Zwei
 Probleme aus einem Guss:
 
