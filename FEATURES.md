@@ -2422,3 +2422,76 @@ Empfangs-Slot** (nur Nachsende-Schutz) → das ist `WAIT_73_MAX_CYCLES = 2`.
 
 Querverweis: §7 (Auto-Hunt Call-Validation), §8 (QSO-Ende-Blocker/Cooldowns),
 §17 (Aktiv/Passiv). **Hardware:** reine Timing-/State-Logik, kein TX-Eingriff.
+
+---
+
+## §25 — Auto-Hunt wählt aus dem akkumulierten Pool (nicht nur dem Moment-Slot) + Worked-Schalter   [v0.99.7, 04.06.2026]
+
+**Worum es geht (Mike-Field):** Auto-Hunt sah bis v0.99.6 nur den **Moment-Slot** und
+ignorierte sichtbare, sekundenalte CQ-Stationen. Außerdem fehlte ein Schalter, um für
+die Diplom-Jagd schon gearbeitete Stationen erneut anzurufen.
+
+### Die zwei Datenwelten (warum es vorher inkonsistent war)
+
+| Komponente | Datenquelle | Sichtbarkeit |
+|---|---|---|
+| **RX-Liste (Anzeige)** | `core/station_accumulator.py` — akkumuliertes dict `_diversity_stations` | CQ-Rufer bis `AGING_SLOTS_CQ_CALLER=20` Slots |
+| **Auto-Hunt (vorher)** | nur `messages` = 1 Decode-Slot (`_run_auto_hunt(messages)`) | nur was GERADE in diesem 15/7,5-s-Moment rief |
+
+→ Man sah eine 45 s alte CQ-Station in der Liste, Auto-Hunt „kannte" sie nicht. Bei FT4
+(kürzere Slots) doppelt spürbar. Bei leerem Decode-Slot wählte Auto-Hunt gar nichts.
+
+### Wie es jetzt läuft (v0.99.7)
+
+1. **Pool-Quelle.** `mw_cycle._build_auto_hunt_pool()` baut die Kandidatenliste aus dem
+   **gleichen Akkumulator wie die RX-Liste** (`_diversity_stations`), gefiltert auf:
+   - `is_cq` — **Live-Property** aus `field1` (core/message.py). Der Akkumulator
+     aktualisiert `field1/2/3` bei Inhaltsänderung → eine CQ-Station, die ins QSO
+     wechselt, hat sofort `is_cq==False` und fällt automatisch aus dem Pool.
+   - **Frische:** `(now − _last_heard) ≤ AUTO_HUNT_FRESH_SLOTS[mode]·slot + 1.0`.
+     `_last_heard` setzt der Akkumulator IMMER (P157). Der **+1,0 s-Puffer** fängt
+     Qt-Timer-Jitter an der Slot-Grenze (DeepSeek-R1).
+   - `_run_auto_hunt` übergibt den Pool an `select_next` (Signatur unverändert — die
+     Methode weiß nicht, woher die Liste kommt). **Reihenfolge-Garantie:**
+     `accumulate_stations` läuft in `_on_cycle_decoded` VOR `_run_auto_hunt`, der Pool
+     ist also inkl. Moment-Slot aktuell.
+   - **Hauptgewinn:** Auto-Hunt wählt jetzt auch bei einem leeren Decode-Slot aus dem
+     Pool — die Anzeige und das Anrufverhalten sind wieder konsistent.
+
+2. **`AUTO_HUNT_FRESH_SLOTS = {"FT8":3,"FT4":3,"FT2":3}`** (Modul-Konstante in
+   `core/auto_hunt.py`). **Warum überall 3 (nicht FT4 mehr):** eine CQ-Station ruft
+   modus-invariant jeden 2. Slot → der letzte CQ liegt ≤1 Slot zurück → 2 = Minimum,
+   3 = +1 Puffer für einen ausgelassenen Decode. FT4 ruft *häufiger* (alle 7,5 s statt
+   15 s) → man fängt sie schneller, nicht langsamer. FT4 nur **datenbasiert** auf 4
+   anheben, falls ein Field-Log zeigt dass FT4-Decodes öfter ausfallen — NICHT auf
+   Verdacht (KISS).
+
+3. **Worked-Schalter (Diplom-Modus).** Instanz-Flag `_skip_worked` (Default `True`) +
+   Setter `set_skip_worked`. Der P169-Worked-Filter in `select_next` (Band+Mode-genau)
+   inklusive der „alle gearbeitet"-Transparenz (`n_before_worked` + `all_worked`-Emit)
+   läuft jetzt **komplett innerhalb** von `if self._skip_worked and self._qso_log is not
+   None:`. Bei `_skip_worked=False` bleiben gearbeitete Stationen Kandidaten und die
+   „alle gearbeitet"-Meldung feuert bewusst nie. `_run_auto_hunt` setzt das Flag **pro
+   Slot live** aus `settings.get("auto_hunt_call_worked", False)` → eine Änderung im
+   Settings-Dialog wirkt sofort, ohne extra Signal-Routing.
+
+   ⚠️ **Trennung Anzeige vs. Auto-Hunt:** Der Schalter steuert NUR Auto-Hunt. Der
+   **NEUE-Knopf** der RX-Liste (`rx_panel` Worked-Filter, §20/P169) ist davon
+   unabhängig — Anzeige-Filter und Anruf-Verhalten waren immer getrennt.
+
+4. **Klarere „alle gearbeitet"-Meldung** (`main_window._on_auto_hunt_all_worked`):
+   „Auto-Hunt: alle **N aktiven CQ-Rufer** auf {Band} {Mode} schon gearbeitet". N ist
+   jetzt die Pool-Größe = was der Operator sieht (vorher = 1-2 Moment-Slot, verwirrend).
+
+### Stolperfallen / Verträge
+- **`_build_auto_hunt_pool` Pool-Auswahl:** `_diversity_stations` wenn
+  `_rx_mode=="diversity"`, sonst `_normal_stations` (Fallback ist toter Pfad —
+  Auto-Hunt ist nur im Diversity-Modus aktiv; bewusst KEIN Log/Import dafür, KISS).
+- **Doppel-Pick:** eine gepickte Station bleibt im Pool (Aging 20 Slots), wird aber von
+  `select_next`'s `_recent_qso`-Cooldown (30 Min) zuverlässig vor dem Scoring gefiltert.
+- **`_last_heard` defensiv:** `getattr(m,'_last_heard',0)` → eine Station ohne den
+  Stempel würde rausfallen (kann nicht vorkommen, accumulate setzt ihn immer).
+
+Querverweis: §7 (Call-Validation), §15 (RX-Akkumulator + Aging), §18 (Worked-Index),
+§20 (adif/erfasst Worked-Quelle), §24 (WAIT_73-Pause). **Hardware:** reine State-/
+Auswahl-/Anzeige-Logik, kein TX-Pfad, ANT1/ANT2 unberührt.

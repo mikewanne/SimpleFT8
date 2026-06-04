@@ -16,9 +16,18 @@
 
 ---
 
-# 🔧 OFFEN: Auto-Hunt aus akkumuliertem Pool + Frische-Fenster + „gearbeitete ignorieren"-Schalter   [Plan abgestimmt 04.06.2026, voller Workflow pending]
+# ✅ ERLEDIGT v0.99.7: Auto-Hunt aus akkumuliertem Pool + Frische-Fenster + „gearbeitete auch anrufen"-Schalter   [04.06.2026, voller Workflow, DeepSeek Plan-R1 GO + Final-R1 PUSH FREIGEBEN, Field-Test pending]
 
-> **✅ FINALE SPEC (abgestimmt 04.06.2026, vor Compact gesichert):**
+> **✅ UMGESETZT genau nach Spec:** Pool aus `_diversity_stations` (frische CQ-Rufer,
+> `AUTO_HUNT_FRESH_SLOTS={"FT8":3,"FT4":3,"FT2":3}` + 1 s Jitter-Puffer); Schalter
+> `auto_hunt_call_worked` (Default aus) + Checkbox „FT8 & Diversity"-Tab, steuert NUR
+> Auto-Hunt; Meldung „alle N aktiven CQ-Rufer … schon gearbeitet". Reine State-/Anzeige-
+> Logik, ANT1/ANT2 unberührt. Tests 2405→2417 (+12 `test_autohunt_pool.py`). Details:
+> HISTORY v0.99.7, **FEATURES §25**. NICHT gepusht, Field-Test pending.
+> **Folge-Schraube (nur datenbasiert):** FT4-Frische auf 4 anheben, falls Field zeigt
+> dass FT4-Decodes öfter ausfallen.
+
+> **✅ FINALE SPEC (abgestimmt 04.06.2026, vor Compact gesichert) — umgesetzt:**
 > - **Frische-Fenster = modus-aware Konstante `AUTO_HUNT_FRESH_SLOTS = {FT8:3, FT4:3, FT2:3}`.**
 >   3 Slots in ALLEN Modi (NICHT FT4 mehr!). Begründung: eine CQ-Station ruft in jedem
 >   2. Slot — modus-invariant in Slots → „3 Slots" = überall ≤1 verpasster Ruf. FT4

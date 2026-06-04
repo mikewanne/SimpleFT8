@@ -1,29 +1,31 @@
 # HANDOFF — SimpleFT8
 
-**Aktueller Stand:** v0.99.6 (04.06.2026) — **HALT→STOPP: ein zentraler Notstopp für
-alles.** Mike-Field (akut): Auto-Hunt + OMNI nicht stoppbar — (A) STOPP-Knopf
-ausgegraut bei Auto-Hunt/OMNI im IDLE-Zwischenzustand + während Diversity-Messung
-(Enable-Logik kannte nur „QSO/Normal-CQ") → kein Notaus; (B) Modus-Toggle-OFF
-armierte bei laufendem QSO nur, statt zu stoppen. Mike: „HALT heißt Notstopp." Button
-**„HALT"→„STOPP"** + Tooltip. STOPP-Knopf + Auto-Hunt-Toggle + OMNI-Toggle rufen alle
-dasselbe **`_execute_full_halt()`** (kompromisslos sofort, kein Armieren). Das Modul
-schaltet JEDE TX-Quelle ab: Encoder, CQ, QSO, OMNI, Auto-Hunt + **NEU (DeepSeek-Catch
-🔴):** TUNE-Träger (`_tune_stop(None)`, lief NICHT über `_abort_active_tx`) + Einmess-
-Dialog (`reject()`) + Diversity-Mess-Lock. STOPP-Knopf **immer drückbar**
-(`btn_cancel.setEnabled` aus `_on_state_changed` + beiden mw_radio-Lock-Methoden raus).
-Entfernt: `_arm_deferred_halt`/`disable_cq_resume`/`QSO_IN_EXCHANGE_STATES`/
-`set_halt_armed`/`_halt_armed`; `cancel()`+`_was_cq=False`. Reine State-/UI-Logik,
-ANT1/ANT2 unberührt (STOPP schaltet jetzt jeden Träger ab = Sicherheits-PLUS).
-DeepSeek Plan-R1 (PLAN ÜBERARBEITEN → TUNE ergänzt) + Final-R1 PUSH FREIGEBEN. Tests
-2402→**2405** (`test_halt_unified.py` neu, 14). FEATURES §23. **NICHT gepusht,
-Field-Test pending.**
+**Aktueller Stand:** v0.99.7 (04.06.2026) — **Auto-Hunt aus akkumuliertem Pool +
+Frische-Fenster + „gearbeitete auch anrufen"-Schalter.** Mike-Field (vor Compact
+abgestimmt): (1) Auto-Hunt sah nur den Moment-Slot (`_run_auto_hunt(messages)` = 1
+Decode-Zyklus), während die RX-Liste akkumuliert (CQ-Rufer bis 20 Slots) → man sieht
+eine 45s-alte CQ-Station, Auto-Hunt ignoriert sie; bei FT4 schlimmer; bei leerem Slot
+wählte er nichts. (2) Kein Schalter um schon gearbeitete Stationen erneut anzurufen
+(Diplom-Jagd). **Lösung (KISS, additiv):** Konstante
+`core/auto_hunt.py:AUTO_HUNT_FRESH_SLOTS={"FT8":3,"FT4":3,"FT2":3}`; Helper
+`mw_cycle._build_auto_hunt_pool()` füttert `select_next` mit den frischen CQ-Rufern aus
+`_diversity_stations` (`is_cq` Live-Property + `(now-_last_heard)<=fresh*slot+1.0`, +1 s
+Jitter-Puffer DeepSeek). Instanz-Flag `_skip_worked` (Default True) + Setter
+`set_skip_worked`; Worked-Filter in `select_next` nur unter
+`if self._skip_worked and self._qso_log is not None:`; Setting `auto_hunt_call_worked`
+(Default False) + Checkbox im Settings-Dialog („FT8 & Diversity") + `_run_auto_hunt`
+setzt das Flag pro Slot live. Meldung „alle N aktiven CQ-Rufer … schon gearbeitet".
+**Steuert NUR Auto-Hunt — NEUE-Filter der RX-Liste bleibt getrennt.** Reine State-/
+Auswahl-/Anzeige-Logik, kein TX-Pfad, ANT1/ANT2 unberührt. DeepSeek Plan-R1 GO (3
+Korrekturen eingebaut) + Final-R1 PUSH FREIGEBEN (0 Blocker). Tests 2405→**2417** (+12
+`test_autohunt_pool.py`). FEATURES §25. **NICHT gepusht, Field-Test pending.**
 
-**▶ NÄCHSTER SCHRITT (Mike-Plan, aufgeschoben durch den STOPP-Bug):** Auto-Hunt aus
-dem **akkumulierten Stations-Pool** statt nur dem Moment-Slot wählen lassen, mit
-**Frische-Fenster `AUTO_HUNT_FRESH_SLOTS = 3`** (FT8 45 s / FT4 22,5 s; justierbar
-auf 4) + **„gearbeitete ignorieren"-Schalter** (Diplom-Jagd, settings_dialog). Voller
-Workflow. Anlass/Analyse: Auto-Hunt sieht aktuell nur den 1 Decode-Slot, die Anzeige
-akkumuliert (CQ-Rufer 20 Slots) → Inkonsistenz, bei FT4 schlimmer. Mike-Field belegt.
+**▶ NÄCHSTER SCHRITT:** **Field-Test v0.99.5/0.99.6/0.99.7** am Radio (App neu starten):
+STOPP-Knopf stoppt alles sofort + immer drückbar (v0.99.6); kürzere QSO-Pause (v0.99.5);
+**Auto-Hunt** ruft jetzt auch ältere sichtbare CQ-Stationen + der Diplom-Schalter
+(v0.99.7). Danach: **push** (auf Mikes Wort) — aktuell **10 Commits ungepusht** seit
+Sicherheitsanker `bfa20dd`. Backlog: TODO.md (Multiband = nächstes großes Projekt,
+eigene Session).
 
 **Nebenbei (04.06.):** Mike hatte versehentlich die DT neu kalibriert (−0.69) →
 auf 0.26 zurückgesetzt; Mike justierte selbst auf 0.22 (eigener Wert, steht so).

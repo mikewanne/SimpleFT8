@@ -33,6 +33,66 @@ Gelöscht wird nie etwas. Format: `## YYYY-MM-DD vX.YY — Kurztitel`.
 > Minus, −0.69] → `~/.simpleft8/dt_corrections.json` manuell auf Hardware-Default
 > 0.26 zurückgesetzt; greift nach App-Neustart.)*
 
+## 2026-06-04 v0.99.7 — Auto-Hunt aus akkumuliertem Pool + Frische-Fenster + „gearbeitete auch anrufen"-Schalter
+
+**Voller autonomer Workflow** (V1→V2→DeepSeek-Plan-R1 [GO, 3 Korrekturen]→V3→Code→
+Tests→DeepSeek-Final-R1 [PUSH FREIGEBEN, 0 Blocker]).
+
+**Anlass (Mike-Field, abgestimmt, vor Compact gesichert in TODO.md):** Zwei Probleme
+aus einem Guss.
+
+1. **Auto-Hunt sah nur den Moment-Slot.** `mw_cycle._run_auto_hunt(messages)` gab
+   `select_next` nur die Decodes EINES 15s/7,5s-Slots. Die RX-Liste akkumuliert dagegen
+   über `core/station_accumulator.py` (CQ-Rufer bis `AGING_SLOTS_CQ_CALLER=20` Slots
+   sichtbar). Folge: man SIEHT eine 45s-alte CQ-Station in der Liste, Auto-Hunt
+   ignoriert sie, weil sie in genau diesem Moment nicht ruft. Bei FT4 schlimmer
+   (kürzere Slots). Bei leerem Decode-Slot wählte Auto-Hunt gar nichts.
+2. **Kein „gearbeitete trotzdem anrufen"-Schalter.** select_next filterte gearbeitete
+   Stationen (Band+Mode-genau, P169) IMMER raus — für Diplom-Jagd (z.B. 250 USA-QSOs
+   im neuen Zeitraum) will Mike sie optional wieder anrufen.
+
+**Lösung (KISS, additiv, select_next-Signatur unverändert):**
+
+- **Pool statt Moment-Slot.** Neue Modul-Konstante `core/auto_hunt.py:AUTO_HUNT_FRESH_SLOTS
+  = {"FT8":3,"FT4":3,"FT2":3}`. Neuer Helper `mw_cycle._build_auto_hunt_pool()` baut die
+  frischen CQ-Rufer aus dem rx-mode-passenden Akkumulator (`_diversity_stations`):
+  `is_cq` (Live-Property aus field1 → eine ins QSO gewechselte Station fällt automatisch
+  raus) UND `(now - _last_heard) <= fresh*slot + 1.0` (P157 setzt `_last_heard` immer;
+  +1,0 s = Jitter-Puffer, DeepSeek-R1). `_run_auto_hunt` übergibt diesen Pool an
+  `select_next`. Pool ist aktuell — `accumulate_stations` läuft in `_on_cycle_decoded`
+  VOR `_run_auto_hunt`. **Hauptgewinn:** Auto-Hunt wählt jetzt auch bei leerem
+  Moment-Slot aus dem Pool. **„3" begründet:** eine CQ-Station ruft modus-invariant jeden
+  2. Slot → 3 Slots = überall ≤1 verpasster Ruf Puffer. FT4 ruft HÄUFIGER (kürzere
+  Slots), fängt man schneller — FT4 nur datenbasiert auf 4 anheben, NICHT auf Verdacht.
+- **„gearbeitete auch anrufen"-Schalter.** `core/auto_hunt.py`: Instanz-Flag
+  `_skip_worked=True` (Default) + Setter `set_skip_worked`. Der Worked-Filter-Block in
+  `select_next` (inkl. `n_before_worked` + `all_worked`-Emit) läuft nur noch unter
+  `if self._skip_worked and self._qso_log is not None:` (DeepSeek-Korrektur: alles
+  geschlossen im Block, kein NameError-Pfad). `config/settings.py` DEFAULTS:
+  `auto_hunt_call_worked: False`. `ui/settings_dialog.py`: Checkbox „Schon gearbeitete
+  Stationen auch anrufen" (Tab „FT8 & Diversity") + load/save/reset. `mw_cycle._run_auto_hunt`
+  setzt das Flag pro Slot live: `set_skip_worked(not settings.get("auto_hunt_call_worked",
+  False))` → Settings-Änderung wirkt sofort, kein Dialog-Hook. **Steuert NUR Auto-Hunt** —
+  der NEUE-Filter der RX-Liste bleibt der getrennte Anzeige-Filter.
+- **Klarere Meldung.** `main_window._on_auto_hunt_all_worked`: „Auto-Hunt: alle N aktiven
+  CQ-Rufer auf {Band} {Mode} schon gearbeitet" (N = Pool-Größe = was man sieht, nicht
+  mehr 1-2 Moment-Slot). Im Diplom-Modus (`_skip_worked=False`) feuert sie bewusst nie.
+
+**DeepSeek Plan-R1 GO** (3 Korrekturen eingebaut: +1,0 s Jitter-Puffer statt halber Slot;
+Worked-Filter explizit klammern; Fallback-Pool — als Kommentar statt Log-Zeile umgesetzt,
+da der Normal-Pfad effektiv tot ist [Auto-Hunt nur in Diversity] und ein Import dafür der
+Overengineering-Tick wäre). **Final-R1 PUSH FREIGEBEN** (7 Prüfpunkte, 0 Blocker:
+Worked-Block geschlossen, Frische defensiv, kein Race, Doppel-Pick durch
+`_recent_qso`-Cooldown ausgeschlossen, Hardware unberührt).
+
+**Reine State-/Auswahl-/Anzeige-Logik, kein TX-Pfad-Eingriff, ANT1/ANT2 unberührt**
+(Auto-Hunt-TX läuft unverändert über `start_qso`). Tests 2405→**2417** (+12
+`test_autohunt_pool.py`: Frische-Konstante, skip_worked-Default/Setter, Worked an=filtert/
+aus=behält, all_worked-nie-im-Diplom-Modus, Pool-Frische frisch-drin/alt-raus,
+is_cq-Live-Filter, +1s-Jitter-Beweis, modus-aware FT4-Fenster, Default-bei-unbekanntem-
+Modus, leer-bei-allen-stale; `test_p123` T2-Mock um `_build_auto_hunt_pool`-Stub ergänzt).
+**NICHT gepusht, Field-Test pending.**
+
 ## 2026-06-04 v0.99.6 — HALT→STOPP: ein zentraler Notstopp für alles (v0.99.4-Armieren raus)
 
 **Voller Workflow (V1→V2→DeepSeek-Plan-R1 [PLAN ÜBERARBEITEN → TUNE-Träger
