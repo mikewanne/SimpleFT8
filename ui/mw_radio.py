@@ -1385,7 +1385,8 @@ class RadioMixin:
         """
         self.control_panel.btn_cq.setEnabled(not locked)
         self.control_panel.btn_advance.setEnabled(not locked)
-        self.control_panel.btn_cancel.setEnabled(not locked)
+        # v0.99.6: btn_cancel (STOPP) NICHT sperren — Notstopp muss auch während
+        # der Messung greifen (STOPP bricht die Messung ab + löst den Lock).
         # Hunt blockieren: RX-Tabelle Klicks ignorieren
         self._diversity_measuring = locked
         self.rx_panel.table.setEnabled(not locked)
@@ -2108,7 +2109,8 @@ class RadioMixin:
         # CQ + QSO-Buttons sperren
         self.control_panel.btn_cq.setEnabled(not locked)
         self.control_panel.btn_advance.setEnabled(not locked)
-        self.control_panel.btn_cancel.setEnabled(not locked)
+        # v0.99.6: btn_cancel (STOPP) NICHT sperren — Notstopp muss auch während
+        # der Gain-/Einmess-Pipeline greifen (STOPP löst _set_gain_measure_lock).
         # Normal/Diversity sperren
         self.control_panel.btn_normal.setEnabled(not locked)
         self.control_panel.btn_diversity.setEnabled(not locked)

@@ -341,9 +341,6 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         # P167 (02.06.2026): der per QTimer deferte Einschub-msg (Race-Schutz —
         # HALT kann ihn verwerfen, bevor der Event-Tick ihn ausführt).
         self._deferred_insert_msg = None
-        # v0.99.4: Deferred-HALT armiert (laufendes QSO erst zu Ende, dann Stopp).
-        # 2. HALT-Druck während armiert = sofort hart abbrechen (Notausgang).
-        self._halt_armed = False
         self._recent_logged_calls: dict[tuple[str, str], float] = {}  # P1.7 (v0.95.19): ADIF-Dedup (call, band) → ts
         self._quick73_sent: set[str] = set()  # P94 (v0.97.66): Calls denen Quick-73 schon ging
         # P2.OMNI-REDESIGN v4.0 (v0.95.23): True wenn OMNI VOR aktuellem QSO
@@ -956,9 +953,9 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
                 btn.blockSignals(True)
                 btn.setChecked(False)
                 btn.blockSignals(False)
-                self.qso_panel.add_info("Erst HALT drücken, dann OMNI-CQ")
+                self.qso_panel.add_info("Erst STOPP drücken, dann OMNI-CQ")
                 self.statusBar().showMessage(
-                    "Erst HALT drücken — dann OMNI-CQ starten", 4000)
+                    "Erst STOPP drücken — dann OMNI-CQ starten", 4000)
                 return
             self._omni_cq.start()
             self.control_panel.update_omni_tx(True)
@@ -1053,9 +1050,9 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
                 btn.blockSignals(True)
                 btn.setChecked(False)
                 btn.blockSignals(False)
-                self.qso_panel.add_info("Erst HALT drücken, dann Auto-Hunt")
+                self.qso_panel.add_info("Erst STOPP drücken, dann Auto-Hunt")
                 self.statusBar().showMessage(
-                    "Erst HALT drücken — dann Auto-Hunt starten", 4000)
+                    "Erst STOPP drücken — dann Auto-Hunt starten", 4000)
                 return
             # P81 (v0.97.53): pending Stop-Meldung beim Manual-Restart
             # silent clearen — sonst Geister-Meldung beim naechsten QSO-Ende.
