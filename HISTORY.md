@@ -21,6 +21,49 @@ Gelöscht wird nie etwas. Format: `## YYYY-MM-DD vX.YY — Kurztitel`.
 > *(Lokal nicht-gepusht beim Anker: `cfab444` v0.98.64 Mode-Abbruch-Fix + 2
 > Multiband-TODO-Commits — die haben die alte DT-Berechnung ebenfalls noch.)*
 
+## 2026-06-04 v0.99.4 — Einheitliche Bedienung über HALT + smartes HALT (Ruf sofort / QSO deferred)
+
+**Voller Workflow (V1→V2→DeepSeek-Plan-R1→V3→Code→Tests→Final-R1; Plan-R1 mit 2
+Korrekturen, Final-R1 PUSH FREIGEBEN 6/6). Mike-Wunsch.**
+
+**Anlass:** Asymmetrie in der Bedienung — aus Auto-Hunt musste man **erst HALT**
+drücken, bevor OMNI-CQ ging; umgekehrt (OMNI→Auto-Hunt) ging es **direkt**. Das
+machte „in der Bedienung kirre" und konnte ein laufendes QSO unhöflich abbrechen.
+
+**Lösung (Mikes Modell):** ALLES über HALT — und HALT wird intelligent.
+- **Modus-Buttons (OMNI/Auto-Hunt) starten nur aus Ruhe.** Läuft der andere Modus
+  oder ein Ruf/QSO → refuse + Hinweis „erst HALT" (kein direktes Supersede mehr;
+  beide Buttons jetzt symmetrisch).
+- **HALT smart:** ein **Ruf** (wir rufen, die Gegenstation hat NICHT geantwortet —
+  Zustände bis `WAIT_REPORT`) wird **sofort** gestoppt. Ein **laufendes QSO im
+  Austausch** (ab `TX_REPORT`, Rapport empfangen → wird geloggt) → **armiert**: das
+  QSO läuft + loggt regulär zu Ende, dann automatisch IDLE. Info-Zeile *„HALT —
+  stoppt nach QSO-Ende (QSO läuft noch)"* + oranger **„HALT •"**-Button.
+- **2× HALT = sofort hart abbrechen** (Notausgang, auch mitten im QSO).
+
+**`core/qso_state.py`:** neue **`disable_cq_resume()`** (löscht `cq_mode` + `_was_cq`
++ `_caller_queue`) — reines `stop_cq()` ließ `_was_cq`/Queue stehen, `_resume_cq_if_
+needed` hätte CQ nach QSO-Ende wiederbelebt (**DeepSeek-R1-Gold-Finding**). Neue
+Konstante **`QSO_IN_EXCHANGE_STATES`** = die 5 Austausch-Zustände (Rapport empfangen;
+BEWUSST OHNE `TX_CALL`/`WAIT_REPORT` = Ruf).
+
+**`ui/mw_qso.py`:** `_on_cancel` ist jetzt ein **Dispatcher** (armiert→`_execute_full_
+halt` / Austausch→`_arm_deferred_halt` / Ruf→`_execute_full_halt`). `_arm_deferred_
+halt` stillt Auto-Hunt/OMNI/CQ-Resume + pending-Insert, **bricht das QSO NICHT ab**
+→ es läuft mangels Resume von selbst nach IDLE aus. `_execute_full_halt` = bisheriges
+hartes HALT (`cancel()`+`_abort_active_tx`) + armiert-Reset. `_on_state_changed` löst
+das armiert-Flag bei IDLE auf (einzige Aufhebe-Stelle).
+
+**`ui/main_window.py`:** Modus-Button-Start-Guard (nur aus `IDLE`/`CQ_WAIT` + anderer
+Modus inaktiv); OFF-Zweige delegieren an `_on_cancel()` mit `is_active()`-Re-Entry-
+Schutz (**DeepSeek-R1**: stop→setChecked(False)→toggled feuert nicht erneut).
+`_halt_armed`-Init. **`ui/control_panel.py`:** `set_halt_armed()` (Button-Optik).
+
+**Reines State-/UI-Verhalten, kein TX-Antennen-Eingriff, ANT1/ANT2 unberührt.**
+Tests 2387→**2398** (+11 `test_halt_unified.py`; 12 Bestands-Tests auf das neue
+Verhalten angepasst: Supersede→Refuse, Source-Checks→`_execute_full_halt`, Mock-
+Guards). NICHT gepusht, Field-Test pending.
+
 ## 2026-06-03 v0.99.3 — PSK-Timer-Spin behoben (4GB-Debug-Log-Flut) + OMNI-Diagnose-Marker
 
 **Mike-Field: Debug-Logdatei war 4 GB groß; separat: Auto-Hunt→OMNI-Wechsel

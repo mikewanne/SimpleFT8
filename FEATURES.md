@@ -2280,3 +2280,52 @@ NICHT in der band/mode-Exclude-Liste), beim Start auto-aktiv wenn zuletzt an
 `stop()` (PortAudio-Stream sauber schließen).
 
 **Hardware:** reiner RX-Ausgang, KEIN TX, ANT1/ANT2 unberührt.
+
+---
+
+## §23 — Einheitliche Bedienung über HALT + smartes HALT   [v0.99.4, 04.06.2026]
+
+**„Warum muss ich erst HALT drücken, um den Modus zu wechseln?" / „Warum bricht HALT
+mein QSO nicht sofort ab?"**
+
+Bis v0.99.3 war die Bedienung **asymmetrisch**: aus Auto-Hunt musste man erst HALT
+drücken, dann OMNI-CQ; umgekehrt ging OMNI→Auto-Hunt direkt (Auto-Hunt-Button
+superseded OMNI). v0.99.4 macht **alles über HALT** + HALT intelligent.
+
+### Ruf vs QSO (die zentrale Unterscheidung)
+- **Ruf** = wir rufen, die Gegenstation hat **noch nicht geantwortet**. Zustände:
+  `CQ_CALLING`, `CQ_WAIT`, `TX_CALL`, `WAIT_REPORT`.
+- **QSO im Austausch** = **Rapport empfangen** → das QSO wird geloggt. Zustände in
+  `core/qso_state.py:QSO_IN_EXCHANGE_STATES` = `{TX_REPORT, WAIT_RR73, TX_RR73,
+  WAIT_73, TX_73_COURTESY}`. **Bewusst OHNE** `TX_CALL`/`WAIT_REPORT`.
+
+### HALT-Button (`mw_qso._on_cancel` = Dispatcher)
+1. **armiert** (`_halt_armed`) → **2. Druck** = `_execute_full_halt` (sofort hart,
+   bricht auch ein Austausch-QSO ab). Notausgang.
+2. **Austausch-QSO** → `_arm_deferred_halt`: stillt Auto-Hunt + OMNI + CQ-Resume +
+   pending-Insert, **bricht das QSO NICHT ab**. Das QSO läuft + loggt regulär zu Ende
+   und landet mangels Resume von selbst in `IDLE`. Info „HALT — stoppt nach QSO-Ende",
+   oranger **„HALT •"**-Button (`control_panel.set_halt_armed`).
+3. **Ruf / nur Modus / nichts** → `_execute_full_halt` (sofort).
+
+**Aufhebung des armierten Zustands:** EINE Stelle — `_on_state_changed`, wenn der
+State `IDLE` wird (Austausch-States erreichen IDLE nur am QSO-Ende; der 2×-Notausgang
+nimmt `_execute_full_halt` und setzt das Flag selbst zurück).
+
+### Die KISS-Garantie (DeepSeek-R1-Gold-Finding)
+`_arm_deferred_halt` ruft **`qso_sm.disable_cq_resume()`**, NICHT nur `stop_cq()`.
+`stop_cq()` setzt nur `cq_mode=False`, lässt aber `_was_cq` + `_caller_queue` stehen —
+`_resume_cq_if_needed` (qso_state:461 `if cq_mode or _was_cq`) hätte CQ nach QSO-Ende
+**wiederbelebt** und den Deferred-HALT ausgehebelt. `disable_cq_resume` löscht alle
+drei Quellen. So genügt es, beim Armieren die Resume-Quellen stillzulegen — kein
+Eingriff in die 3 QSO-Ende-Hooks nötig.
+
+### Modus-Buttons (`main_window`, jetzt symmetrisch)
+- **Start (ON):** nur aus Ruhe — `state in (IDLE, CQ_WAIT)` UND der andere Modus
+  inaktiv; sonst refuse + uncheck + „erst HALT". **Kein Supersede mehr.**
+- **Stopp (OFF):** delegiert an `_on_cancel()` (das smarte HALT). **Re-Entry-Schutz**
+  über den `elif not checked and self._<mode>.is_active():`-Guard: das interne
+  `stop()` → `setChecked(False)` feuert `toggled` erneut, läuft dann aber nicht
+  nochmal in den OFF-Zweig (is_active==False). DeepSeek-R1.
+
+**Hardware:** reines State-/UI-Verhalten, KEIN TX-Antennen-Eingriff (ANT1=TX).

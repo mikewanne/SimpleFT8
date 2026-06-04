@@ -1,7 +1,23 @@
 # HANDOFF — SimpleFT8
 
-**Aktueller Stand:** v0.99.3 (03.06.2026) — **PSK-Timer-Spin behoben (4 GB-Debug-Log-
-Flut) + OMNI-Diagnose-Marker.** PSK: `_reset_psk_polling_on_change` startet den Timer
+**Aktueller Stand:** v0.99.4 (04.06.2026) — **Einheitliche Bedienung über HALT +
+smartes HALT (Ruf sofort / QSO deferred).** Mike-Wunsch: Asymmetrie weg (Auto-Hunt→
+OMNI ging nur via HALT, umgekehrt direkt). Jetzt: Modus-Buttons starten nur aus Ruhe
+(sonst „erst HALT"); HALT smart — **Ruf** (kein Rapport, bis `WAIT_REPORT`) → sofort,
+**laufendes QSO** (ab `TX_REPORT`) → armiert (QSO läuft + loggt zu Ende, dann IDLE;
+Info-Zeile + oranger „HALT •"-Button), **2× HALT** = sofort hart abbrechen. Neu
+`qso_state.disable_cq_resume()` (cq_mode+_was_cq+caller_queue — DeepSeek-R1-Fix gegen
+CQ-Wiederaufleben) + `QSO_IN_EXCHANGE_STATES`; `_on_cancel`-Dispatcher +
+`_arm_deferred_halt`/`_execute_full_halt`; Modus-Buttons OFF→`_on_cancel` (Re-Entry-
+Guard via is_active). Reines State-/UI-Verhalten, ANT1/ANT2 unberührt. DeepSeek
+Plan-R1 (2 Korrekturen) + Final-R1 6/6 PUSH FREIGEBEN. Tests 2387→**2398** (+11).
+**Field-Test pending.** NICHT gepusht.
+
+**🔎 Weiter offen (separat):** Auto-Hunt→OMNI-Wechsel-Dauer ~1:45 — OMNI-Diagnose-
+Marker (v0.99.3) liegen; Mike reproduziert mit Debug-Log → echte Ursache lesen.
+
+— **Vorgänger v0.99.3: PSK-Timer-Spin behoben (4 GB-Debug-Log-Flut) +
+OMNI-Diagnose-Marker.** PSK: `_reset_psk_polling_on_change` startet den Timer
 mit `start(0)`; lag die Intervall-Umschaltung hinter dem `_has_sent_cq`-Return,
 spinnte der Timer endlos (4 GB/Tag + CPU). Fix: Umschaltung VOR den Return (DeepSeek
 R1 6/6). Altlasten ~6 GB gelöscht. OMNI: `debug_log("OMNI",…)`-Marker an
