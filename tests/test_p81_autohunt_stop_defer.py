@@ -149,12 +149,14 @@ def test_t5_manual_restart_clear_silent():
     """Flag=True → btn-toggled(True) → Flag=False, KEIN add_info."""
     from ui import main_window as mw_mod
 
+    from core.qso_state import QSOState
     obj = MagicMock()
     obj._auto_hunt = MagicMock(active=False)
     obj._auto_hunt_stop_msg_pending = True
     obj.settings = MagicMock(band="40m")
     obj._swr_blocked_bands = set()
     obj._omni_cq = MagicMock(is_active=MagicMock(return_value=False))
+    obj.qso_sm = MagicMock(state=QSOState.IDLE)   # v0.99.4: Start-Guard (nur aus Ruhe)
     obj._auto_hunt_polling_timer = MagicMock()
     obj._on_auto_hunt_polling_tick = MagicMock()
     obj.qso_panel = MagicMock()
@@ -241,10 +243,12 @@ def test_t7_full_cycle_defer_then_flush():
 
 
 def test_t8_halt_flushes_pending():
-    """R1-F1 (ROT): Flag=True + HALT → add_info(Stop-Msg) + Flag=False.
+    """R1-F1 (ROT): Flag=True + harter HALT → add_info(Stop-Msg) + Flag=False.
 
-    _on_cancel emittiert weder qso_timeout noch qso_confirmed_visual —
-    ohne Flush wuerde die Meldung dauerhaft verloren gehen.
+    v0.99.4: der harte HALT-Pfad (Flush) lebt jetzt in _execute_full_halt
+    (``_on_cancel`` delegiert dorthin). Der Pfad emittiert weder qso_timeout
+    noch qso_confirmed_visual — ohne Flush wuerde die Meldung dauerhaft
+    verloren gehen.
     """
     from ui import main_window as mw_mod
     from ui import mw_qso
@@ -255,6 +259,10 @@ def test_t8_halt_flushes_pending():
     obj.rx_panel = MagicMock()
     obj._abort_active_tx = MagicMock()
     obj.qso_sm = MagicMock()
+    # v0.99.4: nicht armiert + State nicht „im Austausch" → _on_cancel nimmt den
+    # harten Sofort-Pfad (_execute_full_halt). (MagicMock-Default waere truthy →
+    # faelschlich der 2×-HALT-Notausgang-Pfad.)
+    obj._halt_armed = False
     obj.control_panel = MagicMock()
     obj._auto_hunt = MagicMock(active=False)
     obj._omni_cq = MagicMock(is_active=MagicMock(return_value=False))
@@ -265,7 +273,9 @@ def test_t8_halt_flushes_pending():
         lambda: mw_mod.MainWindow._flush_auto_hunt_stop_msg(obj)
     )
 
-    mw_qso.QSOMixin._on_cancel(obj)
+    # v0.99.4: harter HALT-Pfad direkt testen (obj ist MagicMock → die
+    # _on_cancel→_execute_full_halt-Delegation wuerde sonst nur den Mock treffen).
+    mw_qso.QSOMixin._execute_full_halt(obj)
 
     # HALT-Meldung im Panel + Stop-Msg via Flush
     assert obj.qso_panel.add_info.call_count == 2

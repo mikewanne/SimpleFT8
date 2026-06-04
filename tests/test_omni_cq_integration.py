@@ -336,32 +336,33 @@ def test_halt_stops_omni_and_clears_pre_qso_flag(app):
 
 
 # ===========================================================================
-# I11 — Auto-Hunt-Toggle stoppt OMNI mit reason "superseded" (AC11c)
+# I11 (v0.99.4) — Auto-Hunt-Klick bei aktivem OMNI wird ABGELEHNT (erst HALT)
 # ===========================================================================
-def test_auto_hunt_toggle_stops_omni_superseded(app):
+def test_auto_hunt_toggle_refused_when_omni_active(app):
+    """v0.99.4: kein direktes Supersede mehr. Klick auf Auto-Hunt während OMNI
+    aktiv ist → Hinweis „erst HALT", OMNI bleibt aktiv, Auto-Hunt startet NICHT."""
     mw = _make_fake_mw(app)
-    captured: list[str] = []
-    mw._omni_cq.omni_stopped.connect(lambda r: captured.append(r))
     MainWindow._on_btn_omni_cq_toggled(mw, True)
-    # Auto-Hunt-Toggle (checked=True) — Coupling stoppt OMNI
+    assert mw._omni_cq.is_active() is True
     MainWindow._on_btn_auto_hunt_toggled(mw, True)
-    assert captured == ["superseded"]
-    assert mw._omni_cq.is_active() is False
-    mw._auto_hunt.start_auto_hunt.assert_called_once()
+    assert mw._omni_cq.is_active() is True             # OMNI bleibt aktiv
+    mw._auto_hunt.start_auto_hunt.assert_not_called()   # Auto-Hunt startet NICHT
+    mw.qso_panel.add_info.assert_called()               # „erst HALT"-Hinweis
+    mw._omni_cq.stop("test_cleanup")
 
 
 # ===========================================================================
-# I12 — OMNI-Toggle stoppt Auto-Hunt (gegenseitige Exklusivitaet, AC11c)
+# I12 (v0.99.4) — OMNI-Klick bei aktivem Auto-Hunt wird ABGELEHNT (erst HALT)
 # ===========================================================================
-def test_omni_toggle_stops_auto_hunt(app):
+def test_omni_toggle_refused_when_auto_hunt_active(app):
+    """v0.99.4: kein direktes Supersede mehr. Klick auf OMNI während Auto-Hunt
+    aktiv ist → Hinweis „erst HALT", OMNI startet NICHT, kein superseded-Stop."""
     mw = _make_fake_mw(app)
     mw._auto_hunt.active = True
     MainWindow._on_btn_omni_cq_toggled(mw, True)
-    try:
-        mw._auto_hunt.stop_auto_hunt.assert_called_once_with("superseded")
-        assert mw._omni_cq.is_active() is True
-    finally:
-        mw._omni_cq.stop("test_cleanup")
+    assert mw._omni_cq.is_active() is False             # OMNI startet NICHT
+    mw._auto_hunt.stop_auto_hunt.assert_not_called()     # kein superseded-Stop
+    mw.qso_panel.add_info.assert_called()                # „erst HALT"-Hinweis
 
 
 # ===========================================================================

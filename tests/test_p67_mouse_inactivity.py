@@ -105,11 +105,13 @@ def test_t4_toggle_setzt_anker():
     """_on_btn_auto_hunt_toggled(True) setzt Anker vor start_auto_hunt."""
     from ui import main_window as mw_mod
 
+    from core.qso_state import QSOState
     obj = MagicMock()
     obj._auto_hunt = MagicMock(active=False)
     obj._auto_hunt_last_mouse_t = 0.0
     obj._omni_cq = MagicMock()
     obj._omni_cq.is_active.return_value = False
+    obj.qso_sm = MagicMock(state=QSOState.IDLE)   # v0.99.4: Start-Guard (nur aus Ruhe)
     obj.settings.band = "20m"
     obj._swr_blocked_bands = set()
     obj._on_auto_hunt_polling_tick = MagicMock()
@@ -350,11 +352,13 @@ def test_t13_reihenfolge_anker_vor_start():
     5-Min-Schicht ausloesen)."""
     from ui import main_window as mw_mod
 
+    from core.qso_state import QSOState
     obj = MagicMock()
     obj._auto_hunt = MagicMock(active=False)
     obj._auto_hunt_last_mouse_t = 0.0
     obj._omni_cq = MagicMock()
     obj._omni_cq.is_active.return_value = False
+    obj.qso_sm = MagicMock(state=QSOState.IDLE)   # v0.99.4: Start-Guard (nur aus Ruhe)
     obj.settings.band = "20m"
     obj._swr_blocked_bands = set()
     obj._on_auto_hunt_polling_tick = MagicMock()

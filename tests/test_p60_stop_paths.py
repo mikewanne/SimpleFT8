@@ -96,28 +96,24 @@ def test_t10_helper_safe_without_pending_click_attr():
 # ─────────────────────────────────────────────────────────────────────
 
 def test_t4_omni_toggle_off_calls_helper():
-    """T4: _on_btn_omni_cq_toggled Stop-Pfad ruft _abort_active_tx."""
+    """T4 (v0.99.4): _on_btn_omni_cq_toggled OFF-Pfad delegiert an _on_cancel
+    (einheitliches smartes HALT — TX-Abbruch passiert in _execute_full_halt)."""
     src = (Path(__file__).resolve().parent.parent / "ui" / "main_window.py").read_text()
     method_start = src.find("def _on_btn_omni_cq_toggled")
     method_end = src.find("\n    def ", method_start + 10)
     body = src[method_start:method_end]
-    # Helper muss VOR omni_cq.stop("manual_halt") aufgerufen werden
-    helper_idx = body.find("_abort_active_tx")
-    stop_idx = body.find('_omni_cq.stop("manual_halt")')
-    assert helper_idx > 0, "P60: _on_btn_omni_cq_toggled muss _abort_active_tx aufrufen"
-    assert helper_idx < stop_idx, "P60: _abort_active_tx muss VOR _omni_cq.stop kommen"
+    assert "self._on_cancel()" in body, (
+        "v0.99.4: OMNI-OFF muss an _on_cancel (HALT) delegieren")
 
 
 def test_t5_auto_hunt_toggle_off_calls_helper():
-    """T5: _on_btn_auto_hunt_toggled Stop-Pfad ruft _abort_active_tx."""
+    """T5 (v0.99.4): _on_btn_auto_hunt_toggled OFF-Pfad delegiert an _on_cancel."""
     src = (Path(__file__).resolve().parent.parent / "ui" / "main_window.py").read_text()
     method_start = src.find("def _on_btn_auto_hunt_toggled")
     method_end = src.find("\n    def ", method_start + 10)
     body = src[method_start:method_end]
-    helper_idx = body.find("_abort_active_tx")
-    stop_idx = body.find('stop_auto_hunt("manual_halt")')
-    assert helper_idx > 0, "P60: _on_btn_auto_hunt_toggled muss _abort_active_tx aufrufen"
-    assert helper_idx < stop_idx, "P60: _abort_active_tx muss VOR stop_auto_hunt kommen"
+    assert "self._on_cancel()" in body, (
+        "v0.99.4: Auto-Hunt-OFF muss an _on_cancel (HALT) delegieren")
 
 
 def test_t6_normal_cq_stop_calls_helper():
@@ -191,12 +187,13 @@ def test_t8_helper_does_not_change_antenna():
 
 
 def test_halt_uses_helper():
-    """Konsistenz: _on_cancel (HALT) nutzt Helper statt Inline-Block."""
+    """Konsistenz (v0.99.4): der harte HALT-Pfad (_execute_full_halt) nutzt
+    _abort_active_tx statt Inline-Block."""
     src = (Path(__file__).resolve().parent.parent / "ui" / "mw_qso.py").read_text()
-    method_start = src.find("def _on_cancel")
+    method_start = src.find("def _execute_full_halt")
     method_end = src.find("\n    def ", method_start + 10)
     body = src[method_start:method_end]
     assert "_abort_active_tx" in body, (
-        "P60: _on_cancel sollte _abort_active_tx nutzen (Konsistenz mit "
+        "P60: _execute_full_halt sollte _abort_active_tx nutzen (Konsistenz mit "
         "Toggle-Stop-Pfaden)"
     )

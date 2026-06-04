@@ -45,7 +45,7 @@ def test_t1_on_cancel_calls_stop_auto_hunt_with_manual_halt():
     """
     import re
     m = re.search(
-        r"def _on_cancel\(self\).*?(?=\n    @?Slot|\n    def )",
+        r"def _execute_full_halt\(self\).*?(?=\n    @?Slot|\n    def )",
         MW_QSO_SRC, re.S)
     assert m is not None, "_on_cancel nicht gefunden"
     body = m.group(0)
@@ -202,7 +202,7 @@ def test_t7_p147_comment_in_on_cancel():
     und Erklärung warum on_manual_qso_end nicht reicht."""
     import re
     m = re.search(
-        r"def _on_cancel\(self\).*?(?=\n    @?Slot|\n    def )",
+        r"def _execute_full_halt\(self\).*?(?=\n    @?Slot|\n    def )",
         MW_QSO_SRC, re.S)
     body = m.group(0)
     assert "P147" in body, (

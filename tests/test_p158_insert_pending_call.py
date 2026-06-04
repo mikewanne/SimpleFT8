@@ -391,7 +391,7 @@ def test_t24_hook_in_both_qso_end_handlers():
 def test_t25_halt_nulls_pending_insert():
     """T25 (R1-F2 🔴 BLOCKER): _on_cancel (HALT) nullt _qso_pending_insert —
     sonst feuert ein vorgemerktes B nach dem nächsten QSO-Ende (Geister-B)."""
-    m = re.search(r"def _on_cancel\(self.*?(?=\n    (?:def |@))",
+    m = re.search(r"def _execute_full_halt\(self.*?(?=\n    (?:def |@))",
                   MW_QSO_SRC, re.S)
     assert m is not None
     assert "self._qso_pending_insert = None" in m.group(0)
