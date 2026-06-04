@@ -16,6 +16,47 @@
 
 ---
 
+# 🔧 OFFEN: Auto-Hunt aus akkumuliertem Pool + Frische-Fenster + „gearbeitete ignorieren"-Schalter   [Plan abgestimmt 04.06.2026, voller Workflow pending]
+
+**Mike-Plan (abgestimmt, aufgeschoben durch den STOPP-Bug v0.99.6).** Zwei
+Probleme aus einem Guss:
+
+1. **Auto-Hunt sieht nur den Moment-Slot** (`_run_auto_hunt(messages)` = 1 Decode-
+   Zyklus), während die RX-Liste über `core/station_accumulator.py` akkumuliert
+   (CQ-Rufer `AGING_SLOTS_CQ_CALLER = 20` Slots sichtbar) → **Inkonsistenz**: man
+   sieht Stationen, die Auto-Hunt ignoriert, nur weil sie in diesem 7,5/15-s-Moment
+   nicht rufen. Bei **FT4 doppelt so schlimm** (kürzere Slots). Mike-Field belegt
+   („alle 1/2 gearbeitet" + sichtbare Liste größer).
+   → **Fix:** Auto-Hunt aus dem akkumulierten Pool wählen, beschränkt auf frische
+   CQ-Rufer. **Konstante `AUTO_HUNT_FRESH_SLOTS = 3`** (FT8 45 s / FT4 22,5 s /
+   FT2 11,4 s; justierbar auf 4). „3" begründet: eine CQ-Station ruft nur jeden
+   2. Slot (letztes CQ ≤1 Slot her) → 2 = Minimum, 3 = +1 Puffer für ausgelassenen
+   Decode; 4 fängt schon „Leichen". War vorher effektiv **1** (nur Moment-Slot).
+
+2. **„Schon gearbeitete Stationen ignorieren"-Schalter** (settings_dialog, default
+   AN = wie heute). AUS → Auto-Hunt ruft auch gearbeitete an (Diplom-Jagd, z. B.
+   USA 250 — alte QSOs im neuen Zeitraum nochmal). Hinweis: DX-Scoring priorisiert
+   weiter nach Seltenheit (USA = Allerweltsland, käme zuletzt) → für gezielt-USA
+   evtl. später ein Auto-Hunt-Land-Filter (Stufe 2, nur bei Bedarf).
+
+Begleitend: die „alle N gearbeitet"-Meldung klarer formulieren (N = Slot-
+Moment, nicht Listengröße — verwirrt sonst).
+
+→ **Voller Workflow** (Plan ist schon weitgehend abgestimmt). Reine State-/Anzeige-
+Logik, kein TX-Eingriff, ANT1/ANT2 unberührt.
+
+---
+
+# ✅ ERLEDIGT v0.99.6: HALT→STOPP — ein zentraler Notstopp für alles   [04.06.2026, voller Workflow, Final-R1 PUSH FREIGEBEN, Field-Test pending]
+
+**Umgesetzt:** Button „HALT"→„STOPP" + Tooltip; STOPP-Knopf + Auto-Hunt-Toggle +
+OMNI-Toggle rufen alle `_execute_full_halt()` (kompromisslos sofort). Schaltet JEDE
+TX-Quelle ab inkl. **TUNE-Träger** (🔴 DeepSeek-Catch), Einmess-Dialog, Mess-Lock.
+STOPP-Knopf immer drückbar (Bug A). v0.99.4-Armier-Mechanik komplett entfernt.
+Tests 2402→2405. Details: HISTORY/FEATURES §23. **NICHT gepusht, Field-Test pending.**
+
+---
+
 # ✅ ERLEDIGT v0.99.5: WAIT_73-Horchphase verkürzt (Auto-Hunt-Pause ~60→45 s)   [04.06.2026, voller Workflow, Final-R1 PUSH FREIGEBEN, Field-Test pending]
 
 **Umgesetzt:** `WAIT_73_MAX_CYCLES = 2` (war hartcodiert 3) in `core/qso_state.py`.

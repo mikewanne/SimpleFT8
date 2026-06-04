@@ -33,6 +33,45 @@ Gelöscht wird nie etwas. Format: `## YYYY-MM-DD vX.YY — Kurztitel`.
 > Minus, −0.69] → `~/.simpleft8/dt_corrections.json` manuell auf Hardware-Default
 > 0.26 zurückgesetzt; greift nach App-Neustart.)*
 
+## 2026-06-04 v0.99.6 — HALT→STOPP: ein zentraler Notstopp für alles (v0.99.4-Armieren raus)
+
+**Voller Workflow (V1→V2→DeepSeek-Plan-R1 [PLAN ÜBERARBEITEN → TUNE-Träger
+ergänzt] →V3→Code→Tests→Final-R1 PUSH FREIGEBEN). Mike-Wunsch, sicherheitsrelevant.**
+
+**Anlass (Mike-Field, akut):** Auto-Hunt UND OMNI-CQ ließen sich nicht mehr
+stoppen. Zwei Ursachen aus dem v0.99.4-HALT-Umbau: **(A)** Der HALT-Knopf
+(`btn_cancel`) war **ausgegraut**, sobald Auto-Hunt/OMNI liefen aber gerade kein
+QSO aktiv war (`mw_qso` Enable-Logik kannte nur „QSO oder Normal-CQ") + während
+der Diversity-Messung → **kein Notaus**, Catch-22 mit „erst HALT drücken". **(B)**
+Modus-Toggle-OFF rief das smarte `_on_cancel`, das bei laufendem QSO nur
+**armierte** statt zu stoppen → Knopf-Farbe wechselte, OMNI lief weiter.
+
+**Mike-Entscheidung:** „HALT heißt Notstopp." Button **„HALT" → „STOPP"** +
+Tooltip „Alles wird sofort abgebrochen". STOPP-Knopf + Auto-Hunt-Toggle +
+OMNI-Toggle rufen **alle dasselbe `_execute_full_halt()`** — kompromisslos sofort,
+kein Armieren/Vormerken. Die ganze v0.99.4-Deferred-Mechanik entfernt.
+
+**`_execute_full_halt` = Notstopp-Modul für JEDE TX-Quelle:** Encoder-TX, CQ,
+laufendes QSO, OMNI, Auto-Hunt + **NEU (DeepSeek-Plan-R1-Catch):** **TUNE-Träger**
+(`_tune_stop(None)` wenn `_tune_active` — der lief über einen EIGENEN Weg, NICHT
+`_abort_active_tx`; bei aktivem TUNE blieb der Träger trotz STOPP an = 🔴
+Sicherheitsverstoß „TX jederzeit beenden") + **Einmess-Dialog** (`_dx_tune_dialog.reject()`)
++ **Diversity-Gain-Mess-Lock** (`_set_gain_measure_lock(False)`). STOPP-Knopf
+**IMMER drückbar** (`btn_cancel.setEnabled` aus `_on_state_changed` + aus beiden
+mw_radio-Lock-Methoden `_set_cq_locked`/`_set_gain_measure_lock` entfernt).
+
+**Entfernt:** `_arm_deferred_halt`, `disable_cq_resume`, `QSO_IN_EXCHANGE_STATES`,
+`set_halt_armed`/`_halt_armed_style`/`_halt_armed`, IDLE-Armier-Block, „erst
+HALT"→„erst STOPP". `cancel()` setzt jetzt `_was_cq=False` (DeepSeek 🟡).
+
+**Hardware:** reine State-/UI-Logik, **kein TX-Antennen-Eingriff (ANT1=TX);** im
+Gegenteil — STOPP schaltet jetzt JEDEN Träger ab (Sicherheits-PLUS). DeepSeek
+Plan-R1 fand die TUNE-Lücke (Plan überarbeitet) + Final-R1 **PUSH FREIGEBEN** (alle
+TX-Pfade abgedeckt, Reihenfolge sicher, idempotent, keine toten Reste). Tests
+2402→**2405** (`test_halt_unified.py` neu, 14: alle TX-Quellen + Bug-A-Source-
+Regression „btn_cancel nie ausgegraut"; test_p81 Text HALT→STOPP). **NICHT
+gepusht, Field-Test pending.**
+
 ## 2026-06-04 v0.99.5 — WAIT_73-Horchphase nach RR73 von 3 auf 2 Slots verkürzt
 
 **Voller Workflow (V1→V2→DeepSeek-Plan-R1→V3→Code→Tests→Final-R1; Plan-R1 0 Bugs

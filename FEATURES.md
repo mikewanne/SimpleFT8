@@ -2283,52 +2283,59 @@ NICHT in der band/mode-Exclude-Liste), beim Start auto-aktiv wenn zuletzt an
 
 ---
 
-## §23 — Einheitliche Bedienung über HALT + smartes HALT   [v0.99.4, 04.06.2026]
+## §23 — STOPP: ein zentraler Notstopp für alles   [v0.99.6, 04.06.2026 — ersetzt v0.99.4 „smartes HALT"]
 
-**„Warum muss ich erst HALT drücken, um den Modus zu wechseln?" / „Warum bricht HALT
-mein QSO nicht sofort ab?"**
+**„Warum lässt sich Auto-Hunt/OMNI nicht stoppen?" / „Warum ist der STOPP-Knopf grau?"**
 
-Bis v0.99.3 war die Bedienung **asymmetrisch**: aus Auto-Hunt musste man erst HALT
-drücken, dann OMNI-CQ; umgekehrt ging OMNI→Auto-Hunt direkt (Auto-Hunt-Button
-superseded OMNI). v0.99.4 macht **alles über HALT** + HALT intelligent.
+**Geschichte:** v0.99.4 baute ein *smartes* HALT (Ruf sofort / laufendes QSO armiert
+→ zu Ende / 2× = hart). Das erwies sich im Feld als fehleranfällig: **(A)** der
+HALT-Knopf war **ausgegraut**, sobald Auto-Hunt/OMNI liefen aber kein QSO aktiv war
+(Enable-Logik kannte nur „QSO oder Normal-CQ") + während der Diversity-Messung →
+kein Notaus, Catch-22 mit „erst HALT drücken". **(B)** Modus-Toggle-OFF armierte bei
+laufendem QSO nur, statt zu stoppen. **v0.99.6** verwirft das smarte Modell: „HALT
+heißt Notstopp" (Mike). Button **„HALT" → „STOPP"**.
 
-### Ruf vs QSO (die zentrale Unterscheidung)
-- **Ruf** = wir rufen, die Gegenstation hat **noch nicht geantwortet**. Zustände:
-  `CQ_CALLING`, `CQ_WAIT`, `TX_CALL`, `WAIT_REPORT`.
-- **QSO im Austausch** = **Rapport empfangen** → das QSO wird geloggt. Zustände in
-  `core/qso_state.py:QSO_IN_EXCHANGE_STATES` = `{TX_REPORT, WAIT_RR73, TX_RR73,
-  WAIT_73, TX_73_COURTESY}`. **Bewusst OHNE** `TX_CALL`/`WAIT_REPORT`.
+### Das Prinzip (KISS)
+**EIN** Stopp-Pfad: `mw_qso._on_cancel()` → `_execute_full_halt()`. Ausgelöst von
+**STOPP-Knopf** (`cancel_clicked`), **Auto-Hunt-Toggle-OFF** und **OMNI-Toggle-OFF** —
+alle drei rufen dieselbe Funktion. Kompromisslos sofort, kein Armieren, kein
+„nach QSO-Ende". `_on_cancel` ist nur noch ein dünner Wrapper.
 
-### HALT-Button (`mw_qso._on_cancel` = Dispatcher)
-1. **armiert** (`_halt_armed`) → **2. Druck** = `_execute_full_halt` (sofort hart,
-   bricht auch ein Austausch-QSO ab). Notausgang.
-2. **Austausch-QSO** → `_arm_deferred_halt`: stillt Auto-Hunt + OMNI + CQ-Resume +
-   pending-Insert, **bricht das QSO NICHT ab**. Das QSO läuft + loggt regulär zu Ende
-   und landet mangels Resume von selbst in `IDLE`. Info „HALT — stoppt nach QSO-Ende",
-   oranger **„HALT •"**-Button (`control_panel.set_halt_armed`).
-3. **Ruf / nur Modus / nichts** → `_execute_full_halt` (sofort).
+### `_execute_full_halt` — schaltet JEDE TX-Quelle ab
+1. **Encoder-TX** (laufende FT8-Audio) — `_abort_active_tx()` (`encoder.abort()` + `ptt_off`).
+2. **CQ + laufendes QSO** — `qso_sm.stop_cq()` + `qso_sm.cancel()` (cancelt cleart
+   `_was_cq`/`_caller_queue` → kein Resume).
+3. **OMNI + Auto-Hunt** — `stop("manual_halt")` / `stop_auto_hunt("manual_halt")`.
+4. **TUNE-Träger** (🔴 Sicherheit) — `_tune_stop(None)` wenn `_tune_active`. **Wichtig:**
+   TUNE läuft über einen EIGENEN Weg, NICHT `_abort_active_tx` (das greift nur bei
+   `encoder.is_transmitting`). Ohne diesen Zweig bliebe der Träger trotz STOPP an —
+   das war der DeepSeek-Plan-R1-Catch. Deckt auch den DX-Tune/Einmess-Träger ab
+   (läuft ebenfalls über `_tune_active`).
+5. **Einmess-Dialog** — `_dx_tune_dialog.reject()` wenn offen.
+6. **Diversity-Gain-Mess-Lock** — `_set_gain_measure_lock(False)` wenn `_gain_measure_locked`.
 
-**Aufhebung des armierten Zustands:** EINE Stelle — `_on_state_changed`, wenn der
-State `IDLE` wird (Austausch-States erreichen IDLE nur am QSO-Ende; der 2×-Notausgang
-nimmt `_execute_full_halt` und setzt das Flag selbst zurück).
+Reihenfolge: erst TUNE-Hardware-Stopp, dann Dialog-reject (ruft ggf. selbst
+`_tune_stop` → idempotent via `_tune_stop_active`-Re-Entry-Sperre), dann Lock lösen.
+**Voll idempotent** — Mehrfachklick/Leerlauf ist no-op.
 
-### Die KISS-Garantie (DeepSeek-R1-Gold-Finding)
-`_arm_deferred_halt` ruft **`qso_sm.disable_cq_resume()`**, NICHT nur `stop_cq()`.
-`stop_cq()` setzt nur `cq_mode=False`, lässt aber `_was_cq` + `_caller_queue` stehen —
-`_resume_cq_if_needed` (qso_state:461 `if cq_mode or _was_cq`) hätte CQ nach QSO-Ende
-**wiederbelebt** und den Deferred-HALT ausgehebelt. `disable_cq_resume` löscht alle
-drei Quellen. So genügt es, beim Armieren die Resume-Quellen stillzulegen — kein
-Eingriff in die 3 QSO-Ende-Hooks nötig.
+### STOPP-Knopf ist IMMER drückbar (Bug A)
+KEIN state-/lock-abhängiges `btn_cancel.setEnabled` mehr — ein Notstopp darf nie grau
+sein. Entfernt aus `_on_state_changed` (war: bei Auto-Hunt/OMNI-IDLE grau) UND aus
+beiden mw_radio-Lock-Methoden (`_set_cq_locked`/`_set_gain_measure_lock`, war: während
+Messung grau). Regressionstest `test_halt_unified.test_stopp_button_never_disabled`
+(Source-Inspektion).
 
-### Modus-Buttons (`main_window`, jetzt symmetrisch)
+### Modus-Buttons (`main_window`)
 - **Start (ON):** nur aus Ruhe — `state in (IDLE, CQ_WAIT)` UND der andere Modus
-  inaktiv; sonst refuse + uncheck + „erst HALT". **Kein Supersede mehr.**
-- **Stopp (OFF):** delegiert an `_on_cancel()` (das smarte HALT). **Re-Entry-Schutz**
-  über den `elif not checked and self._<mode>.is_active():`-Guard: das interne
-  `stop()` → `setChecked(False)` feuert `toggled` erneut, läuft dann aber nicht
-  nochmal in den OFF-Zweig (is_active==False). DeepSeek-R1.
+  inaktiv; sonst refuse + „erst STOPP". Kein Supersede.
+- **Stopp (OFF):** `_on_cancel()` (= sofort-Notstopp). Re-Entry-Schutz über
+  `elif not checked and self._<mode>.is_active():` (stop → `setChecked(False)` feuert
+  `toggled` erneut, dann is_active==False → kein zweiter Durchlauf).
 
-**Hardware:** reines State-/UI-Verhalten, KEIN TX-Antennen-Eingriff (ANT1=TX).
+**Entfernt ggü. v0.99.4:** `_arm_deferred_halt`, `disable_cq_resume`,
+`QSO_IN_EXCHANGE_STATES`, `set_halt_armed`/`_halt_armed_style`/`_halt_armed`,
+IDLE-Armier-Block. **Hardware:** reine State-/UI-Logik, kein TX-Antennen-Eingriff
+(ANT1=TX) — im Gegenteil, STOPP schaltet jetzt jeden Träger ab (Sicherheits-PLUS).
 
 
 ## §24 — Pause zwischen QSO-Ende und nächstem Auto-Hunt-Ruf (die WAIT_73-Horchphase)   [analysiert 04.06.2026, DeepSeek-bestätigt]

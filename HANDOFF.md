@@ -1,27 +1,41 @@
 # HANDOFF — SimpleFT8
 
-**Aktueller Stand:** v0.99.5 (04.06.2026) — **WAIT_73-Horchphase nach RR73 von 3 auf
-2 Slots verkürzt (Auto-Hunt-Pause ~60→45 s, WSJT-X-konform).** Mike-Field: ~60 s
-Pause zwischen abgeschlossenem QSO und nächstem Auto-Hunt-Ruf. Nach RR73 ist das QSO
-bereits geloggt; `on_cycle_end` WAIT_73-Branch horchte 3 Leer-Slots (45 s) auf ein 73,
-das im verkürzten FT8-Modus meist nie kommt — Auto-Hunt darf in der Zeit nichts picken.
-WSJT-X-Recherche + DeepSeek: der verkürzte Modus (RR73) wartet NICHT auf ein 73 (nur
-der lange RRR-Modus), beobachtet genau 1 Empfangs-Slot (Nachsende-Schutz). Fix
-`core/qso_state.py`: neue Konstante **`WAIT_73_MAX_CYCLES = 2`** (war hartcodiert 3).
-„2" = Untergrenze (`on_cycle_end` triggert am Slot-START → erster RX-Slot wird noch
-abgewartet; 1 verpasst das 73). Höflichkeits-73 + Nachsende-Schutz bleiben
-(Kompatibilitäts-Brücke; Stufe 2 + 2-Modi-Schalter verworfen). Reine Timing-/State-
-Logik, ANT1/ANT2 unberührt. DeepSeek Plan-R1 (Off-by-one bestätigt) + Final-R1 PUSH
-FREIGEBEN (0 Bugs/0 Risiken). Tests 2398→**2402** (+4 `test_wait73_threshold.py` inkl.
-Off-by-one-Mutationsbeweis). **Field-Test pending. NICHT gepusht** (Rückfallpunkt
-`bfa20dd` gepusht → `git checkout bfa20dd -- core/qso_state.py`).
+**Aktueller Stand:** v0.99.6 (04.06.2026) — **HALT→STOPP: ein zentraler Notstopp für
+alles.** Mike-Field (akut): Auto-Hunt + OMNI nicht stoppbar — (A) STOPP-Knopf
+ausgegraut bei Auto-Hunt/OMNI im IDLE-Zwischenzustand + während Diversity-Messung
+(Enable-Logik kannte nur „QSO/Normal-CQ") → kein Notaus; (B) Modus-Toggle-OFF
+armierte bei laufendem QSO nur, statt zu stoppen. Mike: „HALT heißt Notstopp." Button
+**„HALT"→„STOPP"** + Tooltip. STOPP-Knopf + Auto-Hunt-Toggle + OMNI-Toggle rufen alle
+dasselbe **`_execute_full_halt()`** (kompromisslos sofort, kein Armieren). Das Modul
+schaltet JEDE TX-Quelle ab: Encoder, CQ, QSO, OMNI, Auto-Hunt + **NEU (DeepSeek-Catch
+🔴):** TUNE-Träger (`_tune_stop(None)`, lief NICHT über `_abort_active_tx`) + Einmess-
+Dialog (`reject()`) + Diversity-Mess-Lock. STOPP-Knopf **immer drückbar**
+(`btn_cancel.setEnabled` aus `_on_state_changed` + beiden mw_radio-Lock-Methoden raus).
+Entfernt: `_arm_deferred_halt`/`disable_cq_resume`/`QSO_IN_EXCHANGE_STATES`/
+`set_halt_armed`/`_halt_armed`; `cancel()`+`_was_cq=False`. Reine State-/UI-Logik,
+ANT1/ANT2 unberührt (STOPP schaltet jetzt jeden Träger ab = Sicherheits-PLUS).
+DeepSeek Plan-R1 (PLAN ÜBERARBEITEN → TUNE ergänzt) + Final-R1 PUSH FREIGEBEN. Tests
+2402→**2405** (`test_halt_unified.py` neu, 14). FEATURES §23. **NICHT gepusht,
+Field-Test pending.**
+
+**▶ NÄCHSTER SCHRITT (Mike-Plan, aufgeschoben durch den STOPP-Bug):** Auto-Hunt aus
+dem **akkumulierten Stations-Pool** statt nur dem Moment-Slot wählen lassen, mit
+**Frische-Fenster `AUTO_HUNT_FRESH_SLOTS = 3`** (FT8 45 s / FT4 22,5 s; justierbar
+auf 4) + **„gearbeitete ignorieren"-Schalter** (Diplom-Jagd, settings_dialog). Voller
+Workflow. Anlass/Analyse: Auto-Hunt sieht aktuell nur den 1 Decode-Slot, die Anzeige
+akkumuliert (CQ-Rufer 20 Slots) → Inkonsistenz, bei FT4 schlimmer. Mike-Field belegt.
 
 **Nebenbei (04.06.):** Mike hatte versehentlich die DT neu kalibriert (−0.69) →
-`~/.simpleft8/dt_corrections.json` auf 0.26 zurückgesetzt; Mike hat danach selbst
-auf 0.22 nachjustiert (eigener Wert, steht so).
+auf 0.26 zurückgesetzt; Mike justierte selbst auf 0.22 (eigener Wert, steht so).
 
 **🔎 Weiter offen (separat):** Auto-Hunt→OMNI-Wechsel-Dauer ~1:45 — OMNI-Diagnose-
 Marker (v0.99.3) liegen; Mike reproduziert mit Debug-Log → echte Ursache lesen.
+
+— **Vorgänger v0.99.5: WAIT_73-Horchphase nach RR73 von 3 auf 2 Slots verkürzt
+(Auto-Hunt-Pause ~60→45 s, WSJT-X-konform).** `WAIT_73_MAX_CYCLES = 2` (war 3).
+„2" = Untergrenze (on_cycle_end triggert am Slot-START → erster RX-Slot noch
+abgewartet). Höflichkeits-73 + Nachsende-Schutz bleiben. DeepSeek Plan-R1 + Final-R1
+PUSH FREIGEBEN. Tests 2398→2402. Field-Test pending (Rückfallpunkt `bfa20dd` gepusht).
 
 — **Vorgänger v0.99.4: Einheitliche Bedienung über HALT + smartes HALT (Ruf sofort /
 QSO deferred).** Modus-Buttons starten nur aus Ruhe (sonst „erst HALT"); HALT smart —
