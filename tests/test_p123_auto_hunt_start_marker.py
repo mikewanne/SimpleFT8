@@ -73,6 +73,7 @@ def test_t2_run_auto_hunt_calls_add_info():
     qso_panel = MagicMock()
     settings = MagicMock()
     settings.get.return_value = 5
+    settings.mode = "FT8"
 
     fake = SimpleNamespace(
         _auto_hunt=auto_hunt,
@@ -84,6 +85,10 @@ def test_t2_run_auto_hunt_calls_add_info():
         qso_panel=qso_panel,
         presence_can_tx=lambda: True,
         _antenna_pref_label=lambda call: " (ANT1)",
+        # v0.99.7: _run_auto_hunt baut jetzt den Pool via _build_auto_hunt_pool
+        # (select_next ist gemockt → Pool-Inhalt egal). Pool-Logik separat in
+        # test_autohunt_pool.py; hier nur den Start-Marker pruefen.
+        _build_auto_hunt_pool=lambda: [],
     )
 
     CycleMixin._run_auto_hunt(fake, messages=[])
