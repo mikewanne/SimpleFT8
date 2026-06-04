@@ -21,9 +21,9 @@ Korrekturen eingebaut) + Final-R1 PUSH FREIGEBEN (0 Blocker). Tests 2405→**241
 `test_autohunt_pool.py`). FEATURES §25. **NICHT gepusht, Field-Test pending.**
 
 **▶ NÄCHSTER SCHRITT:** **Field-Test v0.99.5/0.99.6/0.99.7** am Radio (App neu starten):
-STOPP-Knopf stoppt alles sofort + immer drückbar (v0.99.6); kürzere QSO-Pause (v0.99.5);
-**Auto-Hunt** ruft jetzt auch ältere sichtbare CQ-Stationen + der Diplom-Schalter
-(v0.99.7). Danach: **push** (auf Mikes Wort) — aktuell **10 Commits ungepusht** seit
+STOPP-Knopf stoppt alles sofort + immer drückbar (v0.99.6); **Auto-Hunt** ruft jetzt
+auch ältere sichtbare CQ-Stationen + der Diplom-Schalter (v0.99.7). **v0.99.5 kürzere
+QSO-Pause ✅ field-validiert (Mike 04.06. „läuft").** Danach: **push** (auf Mikes Wort) — aktuell **10 Commits ungepusht** seit
 Sicherheitsanker `bfa20dd`. Backlog: TODO.md (Multiband = nächstes großes Projekt,
 eigene Session).
 

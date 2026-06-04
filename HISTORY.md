@@ -164,8 +164,9 @@ Modus — FT8-Protokoll interoperabel; ein Schalter wäre Overengineering).
 unberührt).** Tests 2398→**2402** (+4 `test_wait73_threshold.py`: Konstante==2,
 kein Trigger vor Schwelle, Trigger genau bei Schwelle, Off-by-one-Garantie [73 im
 ersten RX-Slot gefangen, bräche bei Schwelle 1 — Mutationsbeweis]; `test_p33` T2.3
-+ `test_p1_10` Test 8 konstantengerecht angepasst). **NICHT gepusht — Field-Test
-pending** (Rückfallpunkt `bfa20dd` gepusht; Notfall `git checkout bfa20dd --
++ `test_p1_10` Test 8 konstantengerecht angepasst). **✅ FIELD-VALIDIERT (Mike
+04.06.2026): „kürzere Pause läuft" — Slot gespart, verkürztes QSO funktioniert.**
+NICHT gepusht (Rückfallpunkt `bfa20dd` gepusht; Notfall `git checkout bfa20dd --
 core/qso_state.py`).
 
 ## 2026-06-04 v0.99.4 — Einheitliche Bedienung über HALT + smartes HALT (Ruf sofort / QSO deferred)
