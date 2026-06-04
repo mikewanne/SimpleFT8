@@ -1,27 +1,29 @@
 # HANDOFF — SimpleFT8
 
-**Aktueller Stand:** v0.99.8 (05.06.2026) — **Einmess-Fenster verschlankt (ein
-Fortschritts-Zähler statt drei, doppelter Titel raus).** Mike-Field: das Diversity-/
-Gain-Kalibrier-Fenster (`ui/dx_tune_dialog.py`) war zu groß und zeigte drei/vier
-Fortschritts-Angaben gleichzeitig („Runde 1/2", „Schritt 5/12 (5/6 in dieser Runde)",
-Balken „4/12") + doppelten Titel. **Umbau (reine Anzeige, Mess-/Antennen-Logik
-unberührt, TX bleibt ANT1):** großes Body-Titel-Label raus (Doppelung; Fenstertitel
-bleibt); `step_label` nur noch „Gerade: ANT2 · 10 dB"; Balken-Text trägt Zyklus +
-Restzeit zusammen „Zyklus 5 / 12 · noch ~2:00 min"; **Off-by-one behoben** (`setValue(
-_step+1)` → Balken=Text); `time_label` + `mode_label` entfernt; gelber Fachjargon-Block
-→ eine graue Zeile „TX bleibt auf ANT1 · vergleicht ANT1 ↔ ANT2"; Results-Header
-verständlicher; Höhe 460→**360 px**. DeepSeek Design-R1 (Aufbau GO) + Final-R1 PUSH
-FREIGEBEN (0 Blocker). Tests 2417→**2423** (+6 `test_calibration_dialog_smoke.py`).
-**NICHT gepusht, Field-Test pending (visueller Check: passt alles in 360 px?).**
+**Aktueller Stand:** v0.99.9 (05.06.2026) — **Diagnose-Logging für ungeklärten
+Watt-/RF-Bug (verhaltensneutral).** Mike-Field: sporadisch zeigt die App **RF 100 %**,
+das Funkgerät macht aber nur ~60 W (Ziel 70 W) und die Regelung „klebt"; heilt sich
+beim Umschalten der Watt-Zahl (frischer `set_power`). **⚠️ Meine erste Diagnose war
+falsch — Mike hat sie widerlegt:** „Hardware-Decke/Clipschutz" stimmte nicht (Ziel 80 W
+→ RF 80 % → 83 W, rfpower nicht am Anschlag → echter **Sync-/Freeze-Fehler**, kein Limit;
+Clipschutz 75 % ist auch nicht der Flaschenhals). **Mike-Plan: erst diagnostizieren, nicht
+raten-fixen.** `ui/mw_tx.py` `debug_log("TXPWR", …)` an 3 Stellen (`_auto_adjust_tx_level`
+1×/Slot mit {band/mode, target, app_rf%, fwdpwr, audio, peak, swr, conv, action};
+`_on_power_changed`; `_apply_rf_preset`). **Nur bei aktivem Debug-Log, kein Hot-Path-Flood.**
+`action="hold"`-Default (DeepSeek-R1-Catch gegen NameError). Reines Logging, **ANT1=TX
+unberührt.** DeepSeek R1 (Design) + Final-R1 (Diff) verhaltensneutral. Tests 2423→**2426**
+(+3 `test_txpwr_diag.py`). **Bug bleibt offen → TODO.md** (bei Wiederauftreten Debug-Log
+an → `[TXPWR]` im `~/.simpleft8/debug_*.log` lesen). **NICHT gepusht.**
 
-**▶ NÄCHSTER SCHRITT:** **Field-Test v0.99.8** am Radio: **Einmess-Fenster** kompakter
-+ ein Fortschritts-Zähler (visuell prüfen ob bei 360 px nichts abgeschnitten ist).
-**Bereits ✅ field-validiert:** v0.99.5 kürzere QSO-Pause (Mike 04.06. „läuft") +
-**v0.99.6 STOPP-Schalter** (Mike 05.06.: stoppt Auto-Hunt + OMNI CQ sofort) +
-**v0.99.7 Auto-Hunt-Pool** (Mike 05.06.: „es werden jetzt auch ältere Stationen gerufen
-wenn das in den Einstellungen gewollt ist"). Danach: **push** (auf Mikes Wort) — aktuell
-**16 Commits ungepusht** seit Sicherheitsanker `bfa20dd`. Backlog: TODO.md (Multiband =
-nächstes großes Projekt, eigene Session).
+**▶ NÄCHSTER SCHRITT:** **Bei Wiederauftreten des Watt-Bugs:** Mike schaltet Debug-Log an
+(Ctrl+D), reproduziert, dann lesen wir `~/.simpleft8/debug_*.log` nach `[TXPWR]` →
+zeigt, ob „App 100 % / Gerät 60 W, action=hold, set_power NICHT gesendet" = Sync-Freeze
+bestätigt → gezielter Fix (set_power periodisch bestätigen / nach Slice-Switch neu senden).
+**Außerdem offen — Field-Test v0.99.8** (Einmess-Fenster bei 360 px visuell prüfen).
+**Bereits ✅ field-validiert:** v0.99.5 kürzere QSO-Pause + **v0.99.6 STOPP-Schalter**
+(Mike 05.06.) + **v0.99.7 Auto-Hunt-Pool** (Mike 05.06.: „ruft auch ältere Stationen").
+Danach: **push** (auf Mikes Wort) — aktuell **19 Commits ungepusht** seit Sicherheitsanker
+`bfa20dd`. Backlog: TODO.md (Multiband = nächstes großes Projekt, eigene Session).
 
 **Nebenbei (04.06.):** Mike hatte versehentlich die DT neu kalibriert (−0.69) →
 auf 0.26 zurückgesetzt; Mike justierte selbst auf 0.22 (eigener Wert, steht so).

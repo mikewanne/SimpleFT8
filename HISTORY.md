@@ -33,6 +33,50 @@ Gelöscht wird nie etwas. Format: `## YYYY-MM-DD vX.YY — Kurztitel`.
 > Minus, −0.69] → `~/.simpleft8/dt_corrections.json` manuell auf Hardware-Default
 > 0.26 zurückgesetzt; greift nach App-Neustart.)*
 
+## 2026-06-05 v0.99.9 — Diagnose-Logging für ungeklärten Watt-/RF-Bug (verhaltensneutral)
+
+**Diagnose-Feature, DeepSeek-R1 (Design) + Final-R1 (Diff) — verhaltensneutral bestätigt.**
+
+**Anlass (Mike-Field 05.06.):** Sporadisch zeigt die App **RF 100 %**, das Funkgerät
+macht aber nur ~60 W (Ziel 70 W) und die Regelung passt nichts mehr an — sie „klebt".
+Heilt sich, sobald Mike die Ziel-Wattzahl umschaltet (frischer `set_power`). SWR
+durchgehend 1,3 (kein Foldback).
+
+**⚠️ Erste Diagnose war falsch — Mike hat sie widerlegt (verify-don't-assume):** Ich
+hatte auf eine „Hardware-Decke / Clipschutz-Limit" getippt. Mikes zweiter Screenshot
+zeigte aber Ziel **80 W → RF 80 % → 83 W** (rfpower NICHT am Anschlag) → rfpower↔Watt ist
+normal ~linear, die 100 %/60 W sind ein **echter Sync-/Freeze-Fehler, kein Limit**. Auch
+der **Clipschutz (75 %) ist nicht die Ursache**: bei 75 % Audio kommen nachweislich 83 W,
+Audio-Drive ist also nicht der Flaschenhals. **Leitende Hypothese:** `_auto_adjust_tx_level`
+schickt keine neuen `set_power` mehr, sobald `new_rfpower==_rfpower_current` (Anschlag) →
+markiert konvergiert + verstummt; wenn das Radio seine Leistung zwischendurch zurücksetzt
+(Bandwechsel ODER Diversity-Slice-/Antennen-Umschaltung laden ein Profil — der `set_power`-
+Kommentar warnt davor), bleibt die App auf 100 %, das Radio tiefer → klebt. Watt-Knopf =
+frischer `set_power` = Heilung.
+
+**Gemacht (Mike-Plan: erst diagnostizieren, nicht raten-fixen) — reines Logging, KEINE
+Regelungsänderung:** `ui/mw_tx.py` `debug_log("TXPWR", …)` an 3 Stellen:
+- **`_auto_adjust_tx_level`** (1×/Sende-Slot): `{band/mode, target, app_rf%, fwdpwr,
+  audio, peak, swr, conv-Flags, action}`. `action` ∈ {`set_rf->N`, `converge_save`,
+  `hold`} zeigt, ob/warum `set_power` (nicht) gesendet wurde. **DeepSeek-R1-Catch:**
+  `action="hold"`-Default VOR dem if/elif (sonst NameError im In-Band-Zweig).
+- **`_on_power_changed`** (Watt-Knopf = die „Heilung"): `power_btn target=…W set_power=…`.
+- **`_apply_rf_preset`** (Band-/Watt-/Init-Wechsel laden rfpower neu): `apply_preset
+  {band}_{watts}W → rf=…% (hit/default)`.
+
+**Nur bei aktivem Debug-Log** (Ctrl+D), 1×/Slot → **kein Hot-Path-Flood** (bewusst NICHT
+in den FWDPWR-Meter-Callback geloggt — das wäre die 4-GB-Falle von v0.99.3). Mit den
+bestehenden `[ANT]`-Logs per Zeitstempel korrelierbar (Diversity-Switch → danach kleben?).
+DeepSeeks Zusatz-Log am Band-/Diversity-Switch **bewusst verworfen** (redundant: Band über
+`_apply_rf_preset`-Log, Diversity über bestehende `[ANT]`-Logs — KISS). DeepSeek Final-R1
+auf den Diff: verhaltensneutral, `action` in allen Pfaden definiert, Attribut-Zugriffe
+gültig, kein Flood. **Bug bleibt offen** (TODO.md) — bei Wiederauftreten Debug-Log an →
+`~/.simpleft8/debug_*.log` nach `[TXPWR]` lesen → echte Ursache → gezielter Fix.
+
+Reines Logging, **kein TX-Pfad-/Antennen-Eingriff, ANT1=TX unberührt.** Tests 2423→**2426**
+(+3 `test_txpwr_diag.py`: `action`-NameError-Guard [Mutationsbeweis: In-Band+konvergiert =
+nur Default greift], rfpower-Hoch bei Untermaß, Konvergenz-Speicher-Pfad). **NICHT gepusht.**
+
 ## 2026-06-05 v0.99.8 — Einmess-Fenster verschlankt (ein Fortschritts-Zähler statt drei, doppelter Titel raus)
 
 **Voller Workflow** (V1→DeepSeek-Design-R1 [Aufbau GO]→V3→Code→Tests→DeepSeek-Final-R1

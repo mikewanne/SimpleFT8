@@ -16,6 +16,36 @@
 
 ---
 
+# 🟡 OFFEN: Ungeklärter Watt-Bug — RF-Anzeige hängt am Anschlag, Output bleibt zu niedrig   [05.06.2026, Diagnose-Logging gebaut, wartet auf Wiederauftreten]
+
+> **Symptom (Mike-Field 05.06.):** Sporadisch zeigt die App **RF 100 %**, das
+> Funkgerät macht aber nur **~60 W** (Ziel 70 W) und die Regelung passt **nichts
+> mehr an** — sie „klebt". Heilt sich, sobald Mike die **Watt-Zahl umschaltet**
+> (frischer `set_power` → Gerät wieder synchron, z. B. 70 W → RF 73 % → 71 W sauber).
+> SWR war durchgehend 1,3 (also kein Foldback). Selbes Band; FT8↔FT4 unsicher.
+>
+> **Erste (falsche) Vermutung war „Hardware-Decke" — widerlegt:** bei Ziel 80 W
+> macht das Gerät 83 W bei RF **80 %** (nicht am Anschlag). rfpower↔Watt ist also
+> normal ~linear; die 100 %/60 W sind ein **echter Sync-/Freeze-Fehler**, kein Limit.
+>
+> **Leitende Hypothese:** Die Regelung (`_auto_adjust_tx_level`) hört auf, neue
+> `set_power`-Befehle zu schicken, sobald sie sich am 100 %-Anschlag „konvergiert"
+> wähnt. Wenn das Funkgerät seine Leistung zwischendurch zurücksetzt (Bandwechsel
+> ODER Diversity-Antennen-/Slice-Umschaltung laden ein Profil — `set_power`-Kommentar
+> warnt davor), bleibt die App auf „100 %", das Gerät tiefer → Output klebt. Watt-Knopf
+> = frischer `set_power` = Heilung. **Clipschutz (75 %) ist NICHT die Ursache** (bei
+> 75 % Audio kommen nachweislich 83 W → Audio-Drive ist nicht der Flaschenhals).
+>
+> **Diagnose eingebaut (v0.99.9, 05.06.):** `debug_log("TXPWR", …)` schreibt pro
+> Sende-Slot {Band/Mode, Ziel, App-RF %, gemessene Watt, Audio, Peak, SWR, Konvergenz-
+> Flags, ausgeführte Aktion} + bei Watt-Knopf-/Preset-Wechsel. **NUR bei aktivem
+> Debug-Log** (Ctrl+D), 1×/Slot — kein Hot-Path-Flood. **Nächster Schritt:** bei
+> Wiederauftreten Debug-Log an → `~/.simpleft8/debug_*.log` nach `[TXPWR]` lesen →
+> zeigt, ob „App 100 % / Gerät 60 W, set_power NICHT gesendet" = Hypothese bestätigt
+> → gezielter Fix (set_power periodisch bestätigen / nach Slice-Switch neu senden).
+
+---
+
 # ✅ ERLEDIGT v0.99.7: Auto-Hunt aus akkumuliertem Pool + Frische-Fenster + „gearbeitete auch anrufen"-Schalter   [04.06.2026, voller Workflow, DeepSeek Plan-R1 GO + Final-R1 PUSH FREIGEBEN, Field-Test pending]
 
 > **✅ UMGESETZT genau nach Spec:** Pool aus `_diversity_stations` (frische CQ-Rufer,
