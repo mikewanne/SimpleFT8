@@ -133,7 +133,9 @@ Worked-Block geschlossen, Frische defensiv, kein Race, Doppel-Pick durch
 aus=behält, all_worked-nie-im-Diplom-Modus, Pool-Frische frisch-drin/alt-raus,
 is_cq-Live-Filter, +1s-Jitter-Beweis, modus-aware FT4-Fenster, Default-bei-unbekanntem-
 Modus, leer-bei-allen-stale; `test_p123` T2-Mock um `_build_auto_hunt_pool`-Stub ergänzt).
-**NICHT gepusht, Field-Test pending.**
+**✅ FIELD-VALIDIERT (Mike 05.06.2026): „es werden jetzt auch ältere Stationen gerufen
+wenn das in den Einstellungen gewollt ist" — Auto-Hunt greift die noch sichtbaren CQ-Rufer
+aus dem Pool ab, der Diplom-Schalter steuert die gearbeiteten. NICHT gepusht.**
 
 ## 2026-06-04 v0.99.6 — HALT→STOPP: ein zentraler Notstopp für alles (v0.99.4-Armieren raus)
 

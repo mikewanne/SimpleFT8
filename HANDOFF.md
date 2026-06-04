@@ -14,14 +14,14 @@ verständlicher; Höhe 460→**360 px**. DeepSeek Design-R1 (Aufbau GO) + Final-
 FREIGEBEN (0 Blocker). Tests 2417→**2423** (+6 `test_calibration_dialog_smoke.py`).
 **NICHT gepusht, Field-Test pending (visueller Check: passt alles in 360 px?).**
 
-**▶ NÄCHSTER SCHRITT:** **Field-Test v0.99.7/0.99.8** am Radio (App neu starten):
-**Auto-Hunt** ruft auch ältere sichtbare CQ-Stationen + Diplom-Schalter (v0.99.7);
-**Einmess-Fenster** kompakter + ein Fortschritts-Zähler (v0.99.8 — visuell prüfen ob
-nichts abgeschnitten). **Bereits ✅ field-validiert:** v0.99.5 kürzere QSO-Pause (Mike
-04.06. „läuft") + **v0.99.6 STOPP-Schalter (Mike 05.06.: stoppt Auto-Hunt + OMNI CQ
-sofort).** Danach: **push** (auf Mikes Wort) — aktuell **14 Commits ungepusht** seit
-Sicherheitsanker `bfa20dd`. Backlog: TODO.md (Multiband = nächstes großes Projekt,
-eigene Session).
+**▶ NÄCHSTER SCHRITT:** **Field-Test v0.99.8** am Radio: **Einmess-Fenster** kompakter
++ ein Fortschritts-Zähler (visuell prüfen ob bei 360 px nichts abgeschnitten ist).
+**Bereits ✅ field-validiert:** v0.99.5 kürzere QSO-Pause (Mike 04.06. „läuft") +
+**v0.99.6 STOPP-Schalter** (Mike 05.06.: stoppt Auto-Hunt + OMNI CQ sofort) +
+**v0.99.7 Auto-Hunt-Pool** (Mike 05.06.: „es werden jetzt auch ältere Stationen gerufen
+wenn das in den Einstellungen gewollt ist"). Danach: **push** (auf Mikes Wort) — aktuell
+**16 Commits ungepusht** seit Sicherheitsanker `bfa20dd`. Backlog: TODO.md (Multiband =
+nächstes großes Projekt, eigene Session).
 
 **Nebenbei (04.06.):** Mike hatte versehentlich die DT neu kalibriert (−0.69) →
 auf 0.26 zurückgesetzt; Mike justierte selbst auf 0.22 (eigener Wert, steht so).
