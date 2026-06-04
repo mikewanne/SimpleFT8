@@ -1,31 +1,26 @@
 # HANDOFF — SimpleFT8
 
-**Aktueller Stand:** v0.99.7 (04.06.2026) — **Auto-Hunt aus akkumuliertem Pool +
-Frische-Fenster + „gearbeitete auch anrufen"-Schalter.** Mike-Field (vor Compact
-abgestimmt): (1) Auto-Hunt sah nur den Moment-Slot (`_run_auto_hunt(messages)` = 1
-Decode-Zyklus), während die RX-Liste akkumuliert (CQ-Rufer bis 20 Slots) → man sieht
-eine 45s-alte CQ-Station, Auto-Hunt ignoriert sie; bei FT4 schlimmer; bei leerem Slot
-wählte er nichts. (2) Kein Schalter um schon gearbeitete Stationen erneut anzurufen
-(Diplom-Jagd). **Lösung (KISS, additiv):** Konstante
-`core/auto_hunt.py:AUTO_HUNT_FRESH_SLOTS={"FT8":3,"FT4":3,"FT2":3}`; Helper
-`mw_cycle._build_auto_hunt_pool()` füttert `select_next` mit den frischen CQ-Rufern aus
-`_diversity_stations` (`is_cq` Live-Property + `(now-_last_heard)<=fresh*slot+1.0`, +1 s
-Jitter-Puffer DeepSeek). Instanz-Flag `_skip_worked` (Default True) + Setter
-`set_skip_worked`; Worked-Filter in `select_next` nur unter
-`if self._skip_worked and self._qso_log is not None:`; Setting `auto_hunt_call_worked`
-(Default False) + Checkbox im Settings-Dialog („FT8 & Diversity") + `_run_auto_hunt`
-setzt das Flag pro Slot live. Meldung „alle N aktiven CQ-Rufer … schon gearbeitet".
-**Steuert NUR Auto-Hunt — NEUE-Filter der RX-Liste bleibt getrennt.** Reine State-/
-Auswahl-/Anzeige-Logik, kein TX-Pfad, ANT1/ANT2 unberührt. DeepSeek Plan-R1 GO (3
-Korrekturen eingebaut) + Final-R1 PUSH FREIGEBEN (0 Blocker). Tests 2405→**2417** (+12
-`test_autohunt_pool.py`). FEATURES §25. **NICHT gepusht, Field-Test pending.**
+**Aktueller Stand:** v0.99.8 (05.06.2026) — **Einmess-Fenster verschlankt (ein
+Fortschritts-Zähler statt drei, doppelter Titel raus).** Mike-Field: das Diversity-/
+Gain-Kalibrier-Fenster (`ui/dx_tune_dialog.py`) war zu groß und zeigte drei/vier
+Fortschritts-Angaben gleichzeitig („Runde 1/2", „Schritt 5/12 (5/6 in dieser Runde)",
+Balken „4/12") + doppelten Titel. **Umbau (reine Anzeige, Mess-/Antennen-Logik
+unberührt, TX bleibt ANT1):** großes Body-Titel-Label raus (Doppelung; Fenstertitel
+bleibt); `step_label` nur noch „Gerade: ANT2 · 10 dB"; Balken-Text trägt Zyklus +
+Restzeit zusammen „Zyklus 5 / 12 · noch ~2:00 min"; **Off-by-one behoben** (`setValue(
+_step+1)` → Balken=Text); `time_label` + `mode_label` entfernt; gelber Fachjargon-Block
+→ eine graue Zeile „TX bleibt auf ANT1 · vergleicht ANT1 ↔ ANT2"; Results-Header
+verständlicher; Höhe 460→**360 px**. DeepSeek Design-R1 (Aufbau GO) + Final-R1 PUSH
+FREIGEBEN (0 Blocker). Tests 2417→**2423** (+6 `test_calibration_dialog_smoke.py`).
+**NICHT gepusht, Field-Test pending (visueller Check: passt alles in 360 px?).**
 
-**▶ NÄCHSTER SCHRITT:** **Field-Test v0.99.5/0.99.6/0.99.7** am Radio (App neu starten):
-STOPP-Knopf stoppt alles sofort + immer drückbar (v0.99.6); **Auto-Hunt** ruft jetzt
-auch ältere sichtbare CQ-Stationen + der Diplom-Schalter (v0.99.7). **v0.99.5 kürzere
-QSO-Pause ✅ field-validiert (Mike 04.06. „läuft").** Danach: **push** (auf Mikes Wort) — aktuell **10 Commits ungepusht** seit
-Sicherheitsanker `bfa20dd`. Backlog: TODO.md (Multiband = nächstes großes Projekt,
-eigene Session).
+**▶ NÄCHSTER SCHRITT:** **Field-Test v0.99.6/0.99.7/0.99.8** am Radio (App neu starten):
+STOPP-Knopf stoppt alles sofort + immer drückbar (v0.99.6); **Auto-Hunt** ruft auch
+ältere sichtbare CQ-Stationen + Diplom-Schalter (v0.99.7); **Einmess-Fenster** kompakter
++ ein Fortschritts-Zähler (v0.99.8 — visuell prüfen ob nichts abgeschnitten). **v0.99.5
+kürzere QSO-Pause ✅ field-validiert (Mike 04.06. „läuft").** Danach: **push** (auf Mikes
+Wort) — aktuell **14 Commits ungepusht** seit Sicherheitsanker `bfa20dd`. Backlog:
+TODO.md (Multiband = nächstes großes Projekt, eigene Session).
 
 **Nebenbei (04.06.):** Mike hatte versehentlich die DT neu kalibriert (−0.69) →
 auf 0.26 zurückgesetzt; Mike justierte selbst auf 0.22 (eigener Wert, steht so).

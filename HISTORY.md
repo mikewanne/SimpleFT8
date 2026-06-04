@@ -33,6 +33,48 @@ Gelöscht wird nie etwas. Format: `## YYYY-MM-DD vX.YY — Kurztitel`.
 > Minus, −0.69] → `~/.simpleft8/dt_corrections.json` manuell auf Hardware-Default
 > 0.26 zurückgesetzt; greift nach App-Neustart.)*
 
+## 2026-06-05 v0.99.8 — Einmess-Fenster verschlankt (ein Fortschritts-Zähler statt drei, doppelter Titel raus)
+
+**Voller Workflow** (V1→DeepSeek-Design-R1 [Aufbau GO]→V3→Code→Tests→DeepSeek-Final-R1
+[PUSH FREIGEBEN, 0 Blocker]). Mike-Field: das Diversity-/Gain-Kalibrier-Fenster
+(`ui/dx_tune_dialog.py`) war zu groß und zeigte **drei, vier verschiedene
+Fortschrittsangaben gleichzeitig** („Runde 1/2", „Schritt 5/12 (5/6 in dieser Runde)",
+Balken „4/12 Zyklen") plus einen doppelten Titel — verwirrend. Mike: „können wir das
+Fenster kleiner und übersichtlicher machen?"
+
+**Umbau (reine Anzeige-Logik, Mess-/Scoring-/Antennen-Logik UNBERÜHRT, TX bleibt ANT1):**
+- **Doppelten Titel weg:** großes Body-Titel-Label entfernt (war identisch zum
+  Fenstertitel der Titelleiste; `_title_label` war nirgends sonst genutzt). Fenstertitel
+  (`windowTitle`, von `_get_mode_label()`) bleibt unverändert — 4 Smoke-Tests asserten ihn.
+- **Drei Fortschritts-Zähler → einer:** `step_label` zeigt jetzt nur das Lebenszeichen
+  „Gerade: ANT2 · 10 dB" (war „Runde 1/2 — ANT1 Gain 20 dB"); der Balken-Text trägt
+  Zyklus + Restzeit zusammen „Zyklus 5 / 12 · noch ~2:00 min" (gesetzt in `_update_time`
+  via `progress.setFormat`). **Off-by-one behoben:** der Balkenwert zählt jetzt den
+  LAUFENDEN Zyklus mit (`setValue(_step+1)`) → Balken und Text nennen dieselbe Zahl
+  (vorher Balken=`_step`=4, Label=`_step+1`=5 → wirkte widersprüchlich).
+- **`time_label`-Widget entfernt** (Restzeit wandert in den Balken-Text); **`mode_label`
+  „Misst gleichzeitig für Standard- und DX-Modus" entfernt** (+ aus
+  `_apply_state_ui`-Visibility-Schleife); **gelber 2-Zeilen-Fachjargon-Block** („12 Zyklen
+  interleaved …") → **eine graue Zeile** „TX bleibt auf ANT1 · vergleicht ANT1 ↔ ANT2"
+  (↔ statt seltenem ⇄, DeepSeek-Font-Hinweis).
+- **`detail_label`-Widget BLEIBT** für die ADC-Übersteuerungs-Warnung + die
+  Abschluss-Meldung; im Normalbetrieb jetzt leer (`setText("")` in `_start_step`).
+- **Results-Header** „(Top-5 SNR-Schnitt pro Kombination)" → „— Ø SNR pro Antenne & Gain".
+- **Höhe** 460/490/510 → **360/390/410 px** (Banner/TUNE-Aufschläge bleiben).
+- Abschluss setzt Balken auf „Fertig — alle Zyklen gemessen".
+- Veraltete Code-Kommentare „8 Schritte" → „12 Schritte" (Schedule ist real 12:
+  `GAIN_VALUES=[0,10,20]` × 2 Antennen × 2 Runden).
+
+DeepSeek Design-R1 segnete den Aufbau ab (3 Verfeinerungen: „Runde 1/2" raus, Tabellen-
+Kopfzeile statt „Top-5-Schnitt"-Legende, „gilt für Std+DX" weg — alle übernommen;
+Modal-Annahme von DeepSeek war falsch [Dialog ist `setModal(False)`], ohne Folge).
+Final-R1 **PUSH FREIGEBEN** (kein toter Verweis, Balken-Logik über alle 12 Schritte +
+Adaptiv-Stop konsistent, keine Regression). Tests 2417→**2423** (+6
+`test_calibration_dialog_smoke.py`: step_label-Format, Balken-Sync `_step+1`, Balken-Text
+mit Zyklus+Restzeit, detail_label leer, Höhe ≤380, entfernte Widgets per Source; der
+P146-mode_label-Test auf „entfernt" umgeschrieben). **NICHT gepusht, Field-Test pending
+(visueller Check: passt alles in 360 px ohne Abschneidung?).**
+
 ## 2026-06-04 v0.99.7 — Auto-Hunt aus akkumuliertem Pool + Frische-Fenster + „gearbeitete auch anrufen"-Schalter
 
 **Voller autonomer Workflow** (V1→V2→DeepSeek-Plan-R1 [GO, 3 Korrekturen]→V3→Code→
