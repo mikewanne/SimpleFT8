@@ -410,6 +410,17 @@ class SettingsDialog(QDialog):
         bp_row.addStretch()
         form.addRow("Bandpilot — Verhalten:", bp_row)
 
+        # ── v0.99.7 Auto-Hunt Diplom-Modus ──────────────────────────
+        self.auto_hunt_worked_cb = QCheckBox("Schon gearbeitete Stationen auch anrufen")
+        self.auto_hunt_worked_cb.setToolTip(
+            "Auto-Hunt ruft normalerweise nur Stationen an, die du auf diesem\n"
+            "Band und in dieser Betriebsart noch NICHT gearbeitet hast.\n"
+            "Aktiviert: ruft auch schon gearbeitete Stationen wieder an — fuer\n"
+            "Diplom-Jagd (z.B. ein USA-Diplom im neuen Zeitraum, alte QSOs\n"
+            "zaehlen dort erneut wenn die Gegenstation bestaetigt).\n"
+            "Betrifft NUR Auto-Hunt — der NEUE-Filter der RX-Liste bleibt getrennt.")
+        form.addRow("", self.auto_hunt_worked_cb)
+
         # ── P50 (v0.97.20) Sichtbare Bänder ─────────────────────────
         bands_group = QGroupBox("Sichtbare Bänder")
         bands_group.setToolTip(
@@ -679,6 +690,9 @@ class SettingsDialog(QDialog):
         mode = self.settings.get("bandpilot_mode", "off")
         self.bandpilot_mode_combo.setCurrentIndex(
             {"off": 0, "auto": 1, "manual": 2}.get(mode, 0))
+        # v0.99.7: Auto-Hunt Diplom-Modus
+        self.auto_hunt_worked_cb.setChecked(
+            self.settings.get("auto_hunt_call_worked", False))
         # P50 (v0.97.20): Sichtbare Bänder — Default alle 9 aktiv
         enabled = set(self.settings.get_enabled_bands())
         for b, cb in self._band_checkboxes.items():
@@ -841,6 +855,9 @@ class SettingsDialog(QDialog):
         # v0.88 Bandpilot Stunden-Logik
         self.settings.set("bandpilot_mode",
                           {0: "off", 1: "auto", 2: "manual"}[self.bandpilot_mode_combo.currentIndex()])
+        # v0.99.7: Auto-Hunt Diplom-Modus
+        self.settings.set("auto_hunt_call_worked",
+                          self.auto_hunt_worked_cb.isChecked())
         # P50 (v0.97.20): Sichtbare Bänder
         enabled_bands = [b for b, cb in self._band_checkboxes.items() if cb.isChecked()]
         self.settings.set_enabled_bands(enabled_bands)
@@ -884,6 +901,8 @@ class SettingsDialog(QDialog):
         self.radio_ip.setText("")  # Auto-Discovery
         self.language_combo.setCurrentIndex(0)  # Deutsch
         self.debug_console_cb.setChecked(False)
+        # v0.99.7: Auto-Hunt Diplom-Modus Default = aus
+        self.auto_hunt_worked_cb.setChecked(False)
         # P3 v0.95.20: Audio-Dump
         self.audio_dump_cb.setChecked(False)
         self.audio_dump_max_spin.setValue(200)

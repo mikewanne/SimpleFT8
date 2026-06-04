@@ -15,6 +15,7 @@ from core.qso_state import QSOState, ACTIVE_QSO_STATES
 from core.message import FT8Message
 from core import ntp_time
 from core.station_accumulator import accumulate_stations, remove_stale
+from core.auto_hunt import AUTO_HUNT_FRESH_SLOTS
 from radio.presets import PREAMP_PRESETS
 
 # P94 (v0.97.66): Quick-73-Fenster für kürzlich gearbeitete Stationen.
@@ -531,13 +532,45 @@ class CycleMixin:
             self.rx_panel.add_message(msg)
         self.rx_panel.reapply_sort()
 
+    def _build_auto_hunt_pool(self):
+        """v0.99.7: Frische CQ-Rufer aus dem akkumulierten Stations-Pool.
+
+        Auto-Hunt sah bisher nur den Moment-Slot (`messages`) — eine 45s-alte,
+        sichtbare CQ-Station wurde ignoriert. Jetzt waehlt Auto-Hunt aus dem
+        gleichen Akkumulator wie die RX-Liste (station_accumulator), beschraenkt
+        auf Stationen die in den letzten `AUTO_HUNT_FRESH_SLOTS`-Slots zuletzt
+        gerufen haben.
+
+        `is_cq` ist ein Live-Property (aus field1): wechselt eine CQ-Station ins
+        QSO, faellt sie automatisch raus. `_last_heard` setzt accumulate_stations
+        immer (P157). Der +1.0s-Puffer faengt Qt-Timer-Jitter an der Slot-Grenze
+        (DeepSeek-R1). Pool ist aktuell: accumulate_stations laeuft in
+        `_on_cycle_decoded` VOR `_run_auto_hunt`.
+        """
+        # Auto-Hunt ist nur im Diversity-Modus aktiv → _diversity_stations.
+        # Fallback _normal_stations ist ein toter Pfad (defensiv, harmlos).
+        pool_dict = (self._diversity_stations if self._rx_mode == "diversity"
+                     else self._normal_stations)
+        slot = self.timer.cycle_duration
+        fresh = AUTO_HUNT_FRESH_SLOTS.get(self.settings.mode.upper(), 3)
+        max_age = fresh * slot + 1.0   # +1s Jitter-Puffer (DeepSeek-R1)
+        now = time.time()
+        return [m for m in pool_dict.values()
+                if getattr(m, 'is_cq', False)
+                and (now - getattr(m, '_last_heard', 0)) <= max_age]
+
     def _run_auto_hunt(self, messages):
         """Auto-Hunt: automatisch CQ-Stationen anrufen (verstecktes Feature)."""
         if not self._auto_hunt.active:
             return
+        # v0.99.7: Worked-Filter-Schalter pro Slot live aus dem Setting setzen
+        # (Default: gearbeitete ueberspringen). AN = Diplom-Modus.
+        self._auto_hunt.set_skip_worked(
+            not self.settings.get("auto_hunt_call_worked", False))
         _idle = self.qso_sm.state in (QSOState.IDLE, QSOState.TIMEOUT)
+        # v0.99.7: aus dem akkumulierten Pool waehlen statt nur Moment-Slot.
         _candidate = self._auto_hunt.select_next(
-            messages=messages or [],
+            messages=self._build_auto_hunt_pool(),
             qso_idle=_idle,
             presence_ok=self.presence_can_tx(),
         )

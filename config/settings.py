@@ -63,6 +63,9 @@ DEFAULTS = {
     "mode": "FT8",
     "auto_mode": False,
     "max_calls": 5,    # P98 (v0.97.70): 99 → 5 (FT8-Standard, Mike-Field-Test)
+    # v0.99.7: Auto-Hunt ruft auch schon gearbeitete Stationen an (Diplom-Modus).
+    # False (Default) = wie bisher: gearbeitete (Band+Mode-genau) ueberspringen.
+    "auto_hunt_call_worked": False,
     "tune_power": 10,
     "diversity_operate_cycles": 80,  # 80/160/240 — Betriebszyklen bis Neueinmessung
     "radio_type": "flex",            # "flex"/"flexradio" = FlexRadio SmartSDR,

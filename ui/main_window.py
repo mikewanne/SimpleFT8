@@ -1100,7 +1100,8 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         auto_hunt) im QSO-Log melden, damit der stille Lauf nicht raetselhaft
         wirkt (Mike-Field 02.06.2026)."""
         self.qso_panel.add_info(
-            f"Auto-Hunt: alle {n} Stationen auf {band} {mode} schon gearbeitet")
+            f"Auto-Hunt: alle {n} aktiven CQ-Rufer auf {band} {mode} schon "
+            "gearbeitet")
 
     def _on_auto_hunt_cooldown_tick(self):
         """1s-Tick waehrend 5s UI-Reflexions-Cooldown."""

@@ -60,6 +60,15 @@ _MAX_ATTEMPTS  = 3      # Max Anrufversuche pro Station
 _COOLDOWN_SECS = 300    # 5 Minuten Cooldown nach fehlgeschlagenem Anruf
 _PAUSE_CYCLES  = 1      # Zyklen Pause nach QSO-Ende bevor naechste Station
 
+# v0.99.7 (04.06.2026): Auto-Hunt waehlt aus dem akkumulierten Stations-Pool
+# (station_accumulator), nicht mehr nur aus dem Moment-Slot. „Frisch" = die
+# Station hat in den letzten N Slots zuletzt gerufen. Modus-aware, aber bewusst
+# in ALLEN Modi 3: eine CQ-Station ruft modus-invariant jeden 2. Slot → 3 Slots
+# = ueberall hoechstens 1 verpasster Ruf Puffer. FT4 ruft HAEUFIGER (kuerzere
+# Slots), man faengt sie schneller — nicht langsamer. FT4 nur datenbasiert auf
+# 4 anheben (NICHT auf Verdacht). Frueher sah Auto-Hunt effektiv nur 1 Slot.
+AUTO_HUNT_FRESH_SLOTS = {"FT8": 3, "FT4": 3, "FT2": 3}
+
 
 def country_rarity_class(count: int) -> int:
     """QSO-Count mit einem Land → persoenliche Seltenheits-Klasse (0..4).
@@ -164,6 +173,10 @@ class AutoHunt(QObject):
         self._recent_qso: dict[tuple[str, str, str], float] = {}
         self._manual_override: bool = False     # Manueller Klick → pausieren
         self._current_target: Optional[str] = None
+        # v0.99.7: „Schon gearbeitete Stationen ueberspringen" (Default = wie
+        # bisher). False = Diplom-Modus, dann werden auch gearbeitete Stationen
+        # wieder angerufen. Gesetzt pro Slot aus dem Setting via set_skip_worked.
+        self._skip_worked: bool = True
         # P169 Phase 2: Entprell-Flag fuer die „alle gearbeitet"-Transparenz-
         # Meldung. Reset NUR bei start_auto_hunt / set_band / set_mode (NICHT
         # pro Pick — sonst Meldung nach jedem QSO auf voll-gearbeitetem Band).
@@ -210,6 +223,16 @@ class AutoHunt(QObject):
         auf 0 zurueck (kein Distanz-Vorzug, Seltenheit entscheidet allein).
         """
         self._my_grid = (grid or "").strip()
+
+    def set_skip_worked(self, skip: bool):
+        """v0.99.7: Worked-Filter an/aus. True (Default) = schon gearbeitete
+        Stationen ueberspringen (Band+Mode-genau). False = Diplom-Modus: auch
+        gearbeitete wieder anrufen (z.B. USA-Diplom im neuen Zeitraum).
+
+        Wird in mw_cycle._run_auto_hunt pro Slot aus dem Setting
+        `auto_hunt_call_worked` gesetzt → eine Aenderung im Settings-Dialog
+        wirkt sofort, ohne extra Signal-Routing."""
+        self._skip_worked = bool(skip)
 
     def mark_pick(self, call: str):
         """P61: Pick-Zeitpunkt-Cooldown setzen. Verhindert dass Auto-Hunt
@@ -497,20 +520,25 @@ class AutoHunt(QObject):
         # Band UND in diesem Mode raus — keine Dublette. Mode-genau: dieselbe
         # Station auf 20m FT8 gearbeitet bleibt auf 20m FT4 ein gueltiges Ziel.
         # Eine ANDERE Station aus demselben (seltenen) Land bleibt Kandidat.
-        n_before_worked = len(candidates)
-        if self._qso_log is not None:
+        #
+        # v0.99.7: Worked-Filter NUR wenn _skip_worked aktiv (Default). Im
+        # Diplom-Modus (_skip_worked=False) bleiben gearbeitete Stationen
+        # Kandidaten → die „alle gearbeitet"-Transparenz-Meldung feuert dann
+        # bewusst nie (gearbeitete sind ja gewollte Ziele).
+        if self._skip_worked and self._qso_log is not None:
+            n_before_worked = len(candidates)
             candidates = [c for c in candidates
                           if not self._qso_log.is_worked_on_band_mode(
                               c.call, self._band, self._mode)]
-        if not candidates:
-            _hlog("HUNT", "NO_CANDIDATE reason=all_worked_on_band")
-            # P169 Phase 2: Transparenz. Es gab rufbare CQ-Stationen, aber alle
-            # sind auf Band+Mode schon gearbeitet → einmal (entprellt) melden,
-            # damit der stille Auto-Hunt nicht raetselhaft wirkt.
-            if n_before_worked > 0 and not self._all_worked_reported:
-                self._all_worked_reported = True
-                self.all_worked.emit(self._band, self._mode, n_before_worked)
-            return None
+            if not candidates:
+                _hlog("HUNT", "NO_CANDIDATE reason=all_worked_on_band")
+                # P169 Phase 2: Transparenz. Es gab rufbare CQ-Stationen, aber
+                # alle sind auf Band+Mode schon gearbeitet → einmal (entprellt)
+                # melden, damit der stille Auto-Hunt nicht raetselhaft wirkt.
+                if n_before_worked > 0 and not self._all_worked_reported:
+                    self._all_worked_reported = True
+                    self.all_worked.emit(self._band, self._mode, n_before_worked)
+                return None
 
         # P165: DX-Scoring als lexikografische Tupel-Rangordnung (kleiner =
         # hoehere Prioritaet). Seltenheit > Land-auf-Band-neu > Distanz > SNR >
