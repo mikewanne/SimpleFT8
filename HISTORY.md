@@ -171,8 +171,10 @@ Gegenteil — STOPP schaltet jetzt JEDEN Träger ab (Sicherheits-PLUS). DeepSeek
 Plan-R1 fand die TUNE-Lücke (Plan überarbeitet) + Final-R1 **PUSH FREIGEBEN** (alle
 TX-Pfade abgedeckt, Reihenfolge sicher, idempotent, keine toten Reste). Tests
 2402→**2405** (`test_halt_unified.py` neu, 14: alle TX-Quellen + Bug-A-Source-
-Regression „btn_cancel nie ausgegraut"; test_p81 Text HALT→STOPP). **NICHT
-gepusht, Field-Test pending.**
+Regression „btn_cancel nie ausgegraut"; test_p81 Text HALT→STOPP). **✅ FIELD-
+VALIDIERT (Mike 05.06.2026): STOPP-Schalter funktioniert bei Auto-Hunt genauso wie
+bei OMNI CQ — beide werden sofort gestoppt (= der Bug-Kern war gelöst).** NICHT
+gepusht.
 
 ## 2026-06-04 v0.99.5 — WAIT_73-Horchphase nach RR73 von 3 auf 2 Slots verkürzt
 
