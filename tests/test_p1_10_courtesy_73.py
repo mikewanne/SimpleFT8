@@ -25,7 +25,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtWidgets import QApplication
 
-from core.qso_state import QSOStateMachine, QSOState, QSOData
+from core.qso_state import QSOStateMachine, QSOState, QSOData, WAIT_73_MAX_CYCLES
 from core.message import FT8Message
 
 
@@ -243,7 +243,8 @@ def test_qso_confirmed_fires_once_after_courtesy_73():
 
 
 def test_wait_73_timeout_without_73_unchanged():
-    """P1.10: WAIT_73-Timeout 3 Slots ohne 73 -> bisheriges Verhalten."""
+    """P1.10: WAIT_73-Timeout WAIT_73_MAX_CYCLES Slots ohne 73 -> bisheriges
+    Verhalten (qso_confirmed + resume, kein Courtesy-73; Schwelle v0.99.5 3→2)."""
     _ensure_app()
     sm = QSOStateMachine("DA1MHH", "JO31")
     _setup_wait_73_state(sm)
@@ -253,8 +254,8 @@ def test_wait_73_timeout_without_73_unchanged():
     sm.qso_confirmed.connect(confirmed.append)
     sm.send_message.connect(sent.append)
 
-    # 3x on_cycle_end ohne 73-Empfang -> Timeout-Pfad
-    for _ in range(3):
+    # WAIT_73_MAX_CYCLES× on_cycle_end ohne 73-Empfang -> Timeout-Pfad
+    for _ in range(WAIT_73_MAX_CYCLES):
         sm.on_cycle_end()
 
     # Bisheriges Verhalten: qso_confirmed + _resume_cq, kein Courtesy-73

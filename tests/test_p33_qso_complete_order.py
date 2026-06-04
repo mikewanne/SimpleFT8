@@ -15,7 +15,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtWidgets import QApplication
 
-from core.qso_state import QSOStateMachine, QSOState, QSOData
+from core.qso_state import QSOStateMachine, QSOState, QSOData, WAIT_73_MAX_CYCLES
 from core.message import FT8Message
 
 
@@ -96,8 +96,9 @@ def test_t2_2_visual_and_full_fire_after_courtesy_sent():
 # ── T2.3: WAIT_73-Timeout-Pfad unverändert ────────────────────────────
 
 def test_t2_3_wait_73_timeout_emits_visual_and_full_in_order():
-    """T2.3 (Bundle I AC2.2): 3× on_cycle_end in WAIT_73 → visual + full
-    direkt nacheinander (unverändert seit P33)."""
+    """T2.3 (Bundle I AC2.2): WAIT_73_MAX_CYCLES× on_cycle_end in WAIT_73 →
+    visual + full direkt nacheinander (Reihenfolge seit P33; Schwelle v0.99.5
+    3→2 = WAIT_73_MAX_CYCLES)."""
     _ensure_app()
     sm = QSOStateMachine("DA1MHH", "JO31")
     _setup_wait_73_state(sm)
@@ -108,9 +109,9 @@ def test_t2_3_wait_73_timeout_emits_visual_and_full_in_order():
     sm.qso_confirmed_visual.connect(lambda q: emit_order.append("visual"))
     sm.qso_confirmed.connect(lambda q: emit_order.append("full"))
 
-    sm.on_cycle_end()  # timeout_cycles=1
-    sm.on_cycle_end()  # timeout_cycles=2
-    sm.on_cycle_end()  # timeout_cycles=3 → trigger
+    # WAIT_73_MAX_CYCLES Leer-Slots ohne 73 → Trigger beim letzten Aufruf.
+    for _ in range(WAIT_73_MAX_CYCLES):
+        sm.on_cycle_end()
 
     assert emit_order == ["visual", "full"], (
         f"Erwartet ['visual', 'full'], bekommen: {emit_order}"
