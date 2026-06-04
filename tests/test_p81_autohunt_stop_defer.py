@@ -281,6 +281,6 @@ def test_t8_halt_flushes_pending():
     assert obj.qso_panel.add_info.call_count == 2
     halt_call = obj.qso_panel.add_info.call_args_list[0]
     stop_call = obj.qso_panel.add_info.call_args_list[1]
-    assert "HALT" in str(halt_call)
+    assert "STOPP" in str(halt_call)   # v0.99.6: „HALT" → „STOPP"
     assert "Auto-Hunt gestoppt" in str(stop_call)
     assert obj._auto_hunt_stop_msg_pending is False

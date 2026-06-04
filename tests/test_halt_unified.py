@@ -1,152 +1,153 @@
-"""v0.99.4 — Einheitliche Bedienung über HALT + smartes HALT (Ruf/QSO).
+"""v0.99.6 — STOPP = ein zentraler Notstopp für alles.
 
-- Modus-Wechsel immer über HALT (Buttons starten nur aus Ruhe).
-- HALT smart: Ruf (kein Rapport) → sofort; QSO im Austausch → deferred (QSO läuft
-  zu Ende, dann IDLE); 2× HALT → sofort hart abbrechen (Notausgang).
-- DeepSeek-R1-Fix: disable_cq_resume() statt nur stop_cq() (sonst CQ-Wiederaufleben).
+„HALT heißt Notstopp" (Mike 04.06.2026): der Button „HALT" → „STOPP", und STOPP
+(wie auch Auto-Hunt-Toggle-OFF und OMNI-Toggle-OFF) bricht SOFORT JEDE TX-Quelle
+ab — kein Armieren/Vormerken mehr (v0.99.4-Deferred-Mechanik entfernt).
+
+`_execute_full_halt` ist das Modul: Encoder-TX, CQ, QSO, OMNI, Auto-Hunt, TUNE-
+Träger (🔴 Sicherheit), Einmess-Dialog und Diversity-Gain-Mess-Lock.
 """
 from __future__ import annotations
 
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from core.qso_state import (
-    QSOState, QSOStateMachine, QSO_IN_EXCHANGE_STATES,
-)
+from core.qso_state import QSOState, QSOStateMachine
 from ui.mw_qso import QSOMixin
 
 
-# ── Konstante: Ruf vs QSO-Abgrenzung ─────────────────────────────────────
-def test_exchange_states_exclude_ruf_phases():
-    """Ruf-Phasen (rufen, kein Rapport empfangen) NICHT „im Austausch"."""
-    assert QSOState.TX_CALL not in QSO_IN_EXCHANGE_STATES
-    assert QSOState.WAIT_REPORT not in QSO_IN_EXCHANGE_STATES
-    assert QSOState.CQ_CALLING not in QSO_IN_EXCHANGE_STATES
-    assert QSOState.CQ_WAIT not in QSO_IN_EXCHANGE_STATES
-    # Austausch = Rapport empfangen → wird geloggt:
-    assert QSOState.TX_REPORT in QSO_IN_EXCHANGE_STATES
-    assert QSOState.WAIT_RR73 in QSO_IN_EXCHANGE_STATES
-    assert QSOState.WAIT_73 in QSO_IN_EXCHANGE_STATES
+# ── Armier-Mechanik ist KOMPLETT entfernt ────────────────────────────────
+def test_armier_mechanik_entfernt():
+    """Die v0.99.4-Deferred-Symbole existieren nicht mehr."""
+    import core.qso_state as qs
+    assert not hasattr(qs, "QSO_IN_EXCHANGE_STATES")
+    assert not hasattr(QSOStateMachine, "disable_cq_resume")
+    assert not hasattr(QSOMixin, "_arm_deferred_halt")
 
 
-# ── disable_cq_resume (DeepSeek-R1-Fix) ──────────────────────────────────
-def test_disable_cq_resume_clears_all_sources():
-    """Löscht cq_mode + _was_cq + caller_queue — reines stop_cq() reichte NICHT."""
-    sm = QSOStateMachine("DA1MHH", "JO31")
-    sm.cq_mode = True
-    sm._was_cq = True
-    sm._caller_queue.append(MagicMock(caller="EA3XX"))
-    sm.disable_cq_resume()
-    assert sm.cq_mode is False
-    assert sm._was_cq is False
-    assert sm._caller_queue == []
+# ── _on_cancel ist nur noch ein dünner Wrapper auf _execute_full_halt ────
+def test_on_cancel_delegates_to_execute_full_halt():
+    """Kein Dispatcher mehr — _on_cancel ruft IMMER sofort _execute_full_halt."""
+    obj = SimpleNamespace(_execute_full_halt=MagicMock())
+    QSOMixin._on_cancel(obj)
+    obj._execute_full_halt.assert_called_once()
 
 
-def test_disable_cq_resume_keeps_running_qso_state():
-    """Greift NICHT in den State ein → laufendes QSO läuft regulär zu Ende."""
-    sm = QSOStateMachine("DA1MHH", "JO31")
-    sm.state = QSOState.WAIT_RR73
-    sm.disable_cq_resume()
-    assert sm.state == QSOState.WAIT_RR73   # unberührt
-
-
-# ── _on_cancel Dispatcher-Routing ────────────────────────────────────────
-def _disp_obj(armed, state):
+# ── Helper: obj mit allen Attributen die _execute_full_halt anfasst ──────
+def _halt_obj(tune_active=False, dx_dialog=None, gain_locked=False,
+              auto_hunt_active=False, omni_active=False):
     return SimpleNamespace(
-        _halt_armed=armed,
-        qso_sm=SimpleNamespace(state=state),
-        _execute_full_halt=MagicMock(),
-        _arm_deferred_halt=MagicMock(),
-        qso_panel=MagicMock(),
-    )
-
-
-def test_on_cancel_ruf_executes_full_halt():
-    """Ruf (WAIT_REPORT, kein Rapport) → sofort harter Stopp."""
-    obj = _disp_obj(armed=False, state=QSOState.WAIT_REPORT)
-    QSOMixin._on_cancel(obj)
-    obj._execute_full_halt.assert_called_once()
-    obj._arm_deferred_halt.assert_not_called()
-
-
-def test_on_cancel_active_qso_arms_deferred():
-    """Laufendes QSO (WAIT_RR73) → armieren (nicht hart abbrechen)."""
-    obj = _disp_obj(armed=False, state=QSOState.WAIT_RR73)
-    QSOMixin._on_cancel(obj)
-    obj._arm_deferred_halt.assert_called_once()
-    obj._execute_full_halt.assert_not_called()
-
-
-def test_on_cancel_idle_executes_full_halt():
-    """Nichts/nur Modus (IDLE) → sofort harter Stopp."""
-    obj = _disp_obj(armed=False, state=QSOState.IDLE)
-    QSOMixin._on_cancel(obj)
-    obj._execute_full_halt.assert_called_once()
-
-
-def test_on_cancel_second_press_forces_full_halt():
-    """2× HALT (bereits armiert) → Notausgang: sofort hart abbrechen, auch im QSO."""
-    obj = _disp_obj(armed=True, state=QSOState.WAIT_RR73)
-    QSOMixin._on_cancel(obj)
-    obj._execute_full_halt.assert_called_once()   # NICHT _arm_deferred_halt
-    obj._arm_deferred_halt.assert_not_called()
-    obj.qso_panel.add_info.assert_called()        # „HALT (2×)"-Meldung
-
-
-# ── _arm_deferred_halt: Resume-Quellen still, QSO unberührt ───────────────
-def test_arm_deferred_halt_silences_resume_sources():
-    obj = SimpleNamespace(
-        _halt_armed=False,
-        _auto_hunt=MagicMock(active=True),
-        _omni_cq=MagicMock(is_active=MagicMock(return_value=True)),
-        qso_sm=MagicMock(),
-        control_panel=MagicMock(),
-        qso_panel=MagicMock(),
-        statusBar=MagicMock(return_value=MagicMock()),
+        _active_qso_targets=MagicMock(),
+        rx_panel=MagicMock(),
+        _abort_active_tx=MagicMock(),
         _qso_pending_insert="stub",
         _deferred_insert_msg="stub",
+        qso_sm=MagicMock(),
+        control_panel=MagicMock(),
+        _auto_hunt=MagicMock(active=auto_hunt_active),
+        _omni_cq=MagicMock(is_active=MagicMock(return_value=omni_active)),
+        _tune_active=tune_active,
+        _tune_stop=MagicMock(),
+        _dx_tune_dialog=dx_dialog,
+        _gain_measure_locked=gain_locked,
+        _set_gain_measure_lock=MagicMock(),
+        _last_qso_tx_even="stub",
+        qso_panel=MagicMock(),
+        _flush_auto_hunt_stop_msg=MagicMock(),
+        statusBar=MagicMock(return_value=MagicMock()),
     )
-    QSOMixin._arm_deferred_halt(obj)
-    assert obj._halt_armed is True
-    obj._auto_hunt.stop_auto_hunt.assert_called_once_with("manual_halt")
-    obj._omni_cq.stop.assert_called_once_with("manual_halt")
-    obj.qso_sm.disable_cq_resume.assert_called_once()  # NICHT nur stop_cq
-    assert obj._qso_pending_insert is None             # kein Einschub danach
-    assert obj._deferred_insert_msg is None
-    obj.control_panel.set_halt_armed.assert_called_once_with(True)
 
 
-def test_execute_full_halt_resets_armed():
-    """Harter HALT setzt das armiert-Flag + Button-Optik zurück."""
-    obj = MagicMock()
-    obj._halt_armed = True
-    obj._auto_hunt = MagicMock(active=False)
-    obj._omni_cq = MagicMock(is_active=MagicMock(return_value=False))
-    obj.statusBar = MagicMock(return_value=MagicMock())
+# ── Die bekannten TX-Quellen ─────────────────────────────────────────────
+def test_stops_encoder_cq_and_qso():
+    obj = _halt_obj()
     QSOMixin._execute_full_halt(obj)
-    assert obj._halt_armed is False
-    obj.control_panel.set_halt_armed.assert_any_call(False)
+    obj._abort_active_tx.assert_called_once()
+    obj.qso_sm.stop_cq.assert_called_once()
+    obj.qso_sm.cancel.assert_called_once()
+    # Einschub verworfen
+    assert obj._qso_pending_insert is None
+    assert obj._deferred_insert_msg is None
 
 
-# ── Armiert-Aufhebung bei IDLE ───────────────────────────────────────────
-def test_state_change_to_idle_clears_armed():
-    """Armiertes QSO endet (IDLE) → Flag + Button-Optik weg + Bestätigung."""
-    obj = MagicMock()
-    obj._halt_armed = True
-    obj.decoder = MagicMock()
-    obj.qso_sm = MagicMock(qso=None)
-    obj.statusBar = MagicMock(return_value=MagicMock())
-    QSOMixin._on_state_changed(obj, QSOState.IDLE)
-    assert obj._halt_armed is False
-    obj.control_panel.set_halt_armed.assert_called_with(False)
-    obj.qso_panel.add_info.assert_called()
+def test_stops_auto_hunt_when_active():
+    obj = _halt_obj(auto_hunt_active=True)
+    QSOMixin._execute_full_halt(obj)
+    obj._auto_hunt.stop_auto_hunt.assert_called_with("manual_halt")
 
 
-def test_state_change_to_idle_noop_when_not_armed():
-    """Nicht armiert → IDLE-Wechsel ändert nichts an HALT-Optik."""
-    obj = MagicMock()
-    obj._halt_armed = False
-    obj.decoder = MagicMock()
-    obj.qso_sm = MagicMock(qso=None)
-    QSOMixin._on_state_changed(obj, QSOState.IDLE)
+def test_stops_omni_when_active():
+    obj = _halt_obj(omni_active=True)
+    QSOMixin._execute_full_halt(obj)
+    obj._omni_cq.stop.assert_called_with("manual_halt")
+
+
+# ── NEU v0.99.6: die TX-Quellen außerhalb des Encoder-Pfads ──────────────
+def test_stops_tune_carrier_when_active():
+    """🔴 Sicherheit: aktiver TUNE-Träger MUSS abgeschaltet werden."""
+    obj = _halt_obj(tune_active=True)
+    QSOMixin._execute_full_halt(obj)
+    obj._tune_stop.assert_called_once_with(None)
+
+
+def test_skips_tune_when_inactive():
+    """Kein TUNE aktiv → _tune_stop NICHT rufen (idempotent/no-op)."""
+    obj = _halt_obj(tune_active=False)
+    QSOMixin._execute_full_halt(obj)
+    obj._tune_stop.assert_not_called()
+
+
+def test_closes_dx_tune_dialog_when_open():
+    dlg = MagicMock()
+    obj = _halt_obj(dx_dialog=dlg)
+    QSOMixin._execute_full_halt(obj)
+    dlg.reject.assert_called_once()
+
+
+def test_no_dialog_reject_when_none():
+    obj = _halt_obj(dx_dialog=None)
+    QSOMixin._execute_full_halt(obj)  # darf nicht crashen
+
+
+def test_releases_gain_measure_lock_when_locked():
+    obj = _halt_obj(gain_locked=True)
+    QSOMixin._execute_full_halt(obj)
+    obj._set_gain_measure_lock.assert_called_once_with(False)
+
+
+def test_skips_gain_lock_release_when_not_locked():
+    obj = _halt_obj(gain_locked=False)
+    QSOMixin._execute_full_halt(obj)
+    obj._set_gain_measure_lock.assert_not_called()
+
+
+# ── Keine Armier-Optik mehr ──────────────────────────────────────────────
+def test_no_armed_button_optic():
+    """STOPP ruft kein set_halt_armed mehr (Armier-Optik entfernt)."""
+    obj = _halt_obj()
+    QSOMixin._execute_full_halt(obj)
     obj.control_panel.set_halt_armed.assert_not_called()
+
+
+# ── cancel() löscht _was_cq (DeepSeek-🟡) ────────────────────────────────
+def test_cancel_clears_was_cq():
+    sm = QSOStateMachine("DA1MHH", "JO31")
+    sm._was_cq = True
+    sm.cancel()
+    assert sm._was_cq is False
+
+
+# ── Bug A: STOPP-Button darf NIE ausgegraut werden ───────────────────────
+def test_stopp_button_never_disabled():
+    """Keine state-/lock-abhängige `btn_cancel.setEnabled` mehr — ein Notstopp
+    muss immer drückbar sein. War der Wurzel-Bug: bei Auto-Hunt/OMNI im IDLE-
+    Zwischenzustand und während der Diversity-Messung wurde der Knopf grau →
+    kein Notaus (Catch-22 mit „erst STOPP drücken")."""
+    import inspect
+    from ui import mw_radio
+    for fn in (QSOMixin._on_state_changed,
+               mw_radio.RadioMixin._set_cq_locked,
+               mw_radio.RadioMixin._set_gain_measure_lock):
+        assert "btn_cancel.setEnabled" not in inspect.getsource(fn), (
+            f"{fn.__qualname__} darf btn_cancel nicht (mehr) sperren — "
+            "STOPP ist ein Notstopp und muss immer drückbar bleiben")
