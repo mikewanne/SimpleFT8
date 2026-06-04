@@ -108,6 +108,17 @@ MAX_RR73_RETRIES = 5    # P98 (v0.97.70): 3 → 5. Mike-Field-Test 20.05.:
                         # bei „halbem QSO" (R-Report empfangen, RR73
                         # gesendet, Gegenstation kriegt's nicht) waren
                         # 3 Retries zu knapp → 5 gibt mehr Geduld.
+WAIT_73_MAX_CYCLES = 2  # v0.99.5: nach RR73 (QSO bereits via qso_complete
+                        # geloggt) max so viele Leer-Slots auf ein 73 warten,
+                        # dann weiter (resume_cq / Auto-Hunt nächste Station).
+                        # War 3 (= 45s bei FT8) → zu konservativ. WSJT-X im
+                        # verkürzten Modus beobachtet GENAU 1 Empfangs-Slot
+                        # nach RR73 (Nachsende-Schutz), wartet/sendet kein 73.
+                        # „2" ist die Untergrenze: on_cycle_end triggert am
+                        # Slot-START, so wird der erste (einzig relevante)
+                        # RX-Slot noch voll abgewartet (73/R-Report kommen via
+                        # on_message_received). 1 würde VOR dem Decode dieses
+                        # Slots triggern → 73 verpasst. FEATURES §24.
 
 
 @dataclass
@@ -374,8 +385,9 @@ class QSOStateMachine(QObject):
             return
         if self.state == QSOState.WAIT_73:
             self.qso.timeout_cycles += 1
-            if self.qso.timeout_cycles >= 3:
-                print(f"[QSO] WAIT_73 Timeout — kein 73 empfangen, QSO trotzdem komplett")
+            if self.qso.timeout_cycles >= WAIT_73_MAX_CYCLES:
+                print(f"[QSO] WAIT_73 nach {WAIT_73_MAX_CYCLES} Slots ohne 73 — "
+                      f"QSO komplett (WSJT-X-konform, verkürzt)")
                 # P33 (v0.97.14): visual+full direkt nacheinander — kein
                 # Courtesy-Send in diesem Pfad, also nichts zu trennen.
                 self.qso_confirmed_visual.emit(self.qso)
