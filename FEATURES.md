@@ -2329,3 +2329,75 @@ Eingriff in die 3 QSO-Ende-Hooks nötig.
   nochmal in den OFF-Zweig (is_active==False). DeepSeek-R1.
 
 **Hardware:** reines State-/UI-Verhalten, KEIN TX-Antennen-Eingriff (ANT1=TX).
+
+
+## §24 — Pause zwischen QSO-Ende und nächstem Auto-Hunt-Ruf (die WAIT_73-Horchphase)   [analysiert 04.06.2026, DeepSeek-bestätigt]
+
+**„Warum dauert es ~60 s vom abgeschlossenen QSO bis zum nächsten Auto-Hunt-Ruf?"**
+
+Feld-Beobachtung (Mike 04.06.2026, FT8, Slot = 15 s):
+```
+11:52:30  → RR73 an EA3DYI        ✓ QSO komplett   (KEIN 73 von EA3DYI im Log)
+            Rufe EA4ENG...
+11:53:30  → erster Ruf an EA4ENG
+```
+→ **60 s = 4 Slots Pause.**
+
+### Ursachen-Kette (Code-verifiziert + DeepSeek-R1 04.06. bestätigt, kein weiterer Pfad)
+1. `qso_state.py on_message_sent`, Branch **TX_RR73** (Z.541-547): nach dem RR73-Send
+   wird `qso_complete` gefeuert (**QSO ist geloggt**), State → **WAIT_73**.
+2. `qso_state.py on_cycle_end`, Branch **WAIT_73** (Z.375-384): pro Slot-Start
+   `timeout_cycles += 1`; erst bei **`>= 3`** → `qso_confirmed*` + `_resume_cq_if_needed`.
+   Im Auto-Hunt (`cq_mode=False`, `_was_cq=False`) mündet das in **IDLE** (Z.488-489).
+   → **3 Zyklen × 15 s = 45 s** reine Wartezeit auf ein 73, das oft nie kommt.
+3. `mw_cycle.py _run_auto_hunt` (Z.534-543): `select_next` läuft nur mit
+   `qso_idle = state in (IDLE, TIMEOUT)` (Z.538). Solange WAIT_73 aktiv ist, pickt
+   Auto-Hunt **gar nichts** (`select_next` Z.422 `if not qso_idle: return None`).
+4. Nach IDLE noch 1 Decode-Zyklus + Sende-Slot (~15 s).
+→ **45 s (WAIT_73) + ~15 s (Pick/Slot) = 60 s.**
+
+### Wozu die WAIT_73-Phase überhaupt dient
+Das QSO ist nach RR73 **bereits geloggt**. WAIT_73 hat nur zwei Zwecke:
+- **(a)** ein **Höflichkeits-73** zurücksenden, FALLS die Gegenstation ein 73 schickt
+  (`courtesy_73_sent`, Z.776-790).
+- **(b)** **RR73-Nachsende-Schutz**: hört die Gegenstation unser RR73 nicht und
+  wiederholt ihren R-Report, senden wir RR73 erneut (Z.801-813).
+Beides wird über `on_message_received` **sofort** ausgelöst, sobald etwas empfangen
+wird — der `timeout_cycles`-Zähler entscheidet NUR, wie lange wir warten wenn
+**nichts** kommt.
+
+### ⚠️ Timing-Subtilität: warum „2" die Untergrenze ist, nicht „1"
+Der Rücksprung nach IDLE passiert in `on_cycle_end` am **Slot-ANFANG** — also BEVOR
+der Decode dieses Slots läuft. Das einzige relevante 73/R-Report-Fenster ist der
+**eine** RX-Slot direkt nach unserem RR73 (N+1):
+- **timeout=1** → bei N+1-START schon IDLE, BEVOR der N+1-Decode (mit dem 73) läuft
+  → 73 fällt in den IDLE-Branch (Z.573-575 „ignoriert") → Höflichkeit + Nachsende-
+  Schutz **verpasst**. Zu aggressiv.
+- **timeout=2** → N+1 wird voll dekodiert (73/R-Report wird gefangen), Rücksprung erst
+  bei N+2-START. **Untergrenze, die das relevante Fenster noch sicher abwartet.**
+
+### WSJT-X-Recherche (04.06.2026) — wir sind beim Aufbau schon optimal, nur die Horchphase ist zu lang
+Offizielle WSJT-X-Verkürzungen eines FT8-QSOs:
+- **RRR+73 → RR73** (Ende verkürzen) → **nutzen wir schon** (wir senden RR73).
+- **Grid überspringen, mit Report starten** (Anfang verkürzen) → **nutzen wir schon**
+  (Hunt-Antwort ist direkt der Report, im Log „EA3DYI DA1MHH -13", kein Grid).
+- **Best Practice nach RR73** (WSJT-X-Doku, wörtlich): *„Log the QSO when you send
+  RR73 and watch carefully in the next receive cycle … If they resend their exchange,
+  then resend your RR73."* + *„Don't send a redundant 73 after receiving RR73 — just
+  log it."*
+→ WSJT-X beobachtet also **genau 1 Empfangs-Zyklus** nach RR73 — exakt unser
+**timeout=2**. Unser aktueller Wert **3** ist damit ZU konservativ; 3→2 macht uns
+**WSJT-X-konform** (kein „aggressiver Hack").
+
+### Status / Empfehlung (noch NICHT umgesetzt — Mike-Entscheidung offen)
+- **Empfohlen:** `WAIT_73`-Schwelle in `on_cycle_end` von **3 → 2** (eine Konstante,
+  global; auch CQ/manuell sicher, da das 73-Fenster weiter abgedeckt ist). Lücke
+  60 → ~45 s, WSJT-X-konform, Höflichkeit + Nachsende-Schutz bleiben.
+- **Verworfen:** 3→1 (verpasst 73-Fenster), „in WAIT_73 schon picken" (bricht
+  laufendes 73/Retry ab → Geister-Calls).
+- **Restliche ~15 s** (Decode + Sende-Slot) sind ohne Risiko nicht entfernbar; ein
+  noch schnellerer Weg (IDLE direkt nach dem ersten RX-Decode statt am Slot-Anfang)
+  spart ~8 s mehr, ist aber kein 1-Zeilen-Fix.
+
+Querverweis: §7 (Auto-Hunt Call-Validation), §8 (QSO-Ende-Blocker/Cooldowns),
+§17 (Aktiv/Passiv). **Hardware:** reine Timing-/State-Logik, kein TX-Eingriff.

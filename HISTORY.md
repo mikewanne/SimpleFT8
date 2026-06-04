@@ -21,6 +21,18 @@ Gelöscht wird nie etwas. Format: `## YYYY-MM-DD vX.YY — Kurztitel`.
 > *(Lokal nicht-gepusht beim Anker: `cfab444` v0.98.64 Mode-Abbruch-Fix + 2
 > Multiband-TODO-Commits — die haben die alte DT-Berechnung ebenfalls noch.)*
 
+> ⚓ **SICHERHEITSANKER vor WAIT_73-Verkürzung (04.06.2026):** Dieser Push-Stand
+> (**v0.99.4**, gepusht auf `origin/main`) ist die **letzte Version mit der langen
+> Auto-Hunt-Horchphase** — nach RR73 werden **3 Slots (45 s)** auf ein 73 gewartet,
+> bevor Auto-Hunt die nächste Station ruft (`core/qso_state.py on_cycle_end`,
+> WAIT_73 `timeout_cycles >= 3`). Geplanter nächster Schritt: **3 → 2** (WSJT-X-
+> konform, FEATURES §24). **Im Notfall zurück:** `git checkout <dieser-Commit> --
+> core/qso_state.py` oder `git reset --hard <dieser-Commit>`. Begründung +
+> Recherche + DeepSeek-Bestätigung: **FEATURES §24**, Backlog: **TODO.md**.
+> *(Nebenbei am 04.06.: Mike hat versehentlich die DT neu kalibriert [Wert ins
+> Minus, −0.69] → `~/.simpleft8/dt_corrections.json` manuell auf Hardware-Default
+> 0.26 zurückgesetzt; greift nach App-Neustart.)*
+
 ## 2026-06-04 v0.99.4 — Einheitliche Bedienung über HALT + smartes HALT (Ruf sofort / QSO deferred)
 
 **Voller Workflow (V1→V2→DeepSeek-Plan-R1→V3→Code→Tests→Final-R1; Plan-R1 mit 2

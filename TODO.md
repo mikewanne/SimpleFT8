@@ -16,6 +16,31 @@
 
 ---
 
+# 🔧 OFFEN: WAIT_73-Horchphase verkürzen (Auto-Hunt-Pause 60→45 s)   [analysiert 04.06.2026, DeepSeek-bestätigt, Mike-Entscheidung offen]
+
+**Symptom (Mike-Field 04.06.):** ~60 s Pause zwischen abgeschlossenem QSO und
+nächstem Auto-Hunt-Ruf. Ursache vollständig analysiert + DeepSeek-R1-bestätigt +
+WSJT-X-Recherche → **FEATURES.md §24**.
+
+**Kern:** nach RR73 (QSO bereits geloggt) horcht `WAIT_73` **3 Slots = 45 s** auf
+ein 73, das oft nie kommt; Auto-Hunt darf in dieser Zeit nichts picken
+(`mw_cycle._run_auto_hunt` Z.538 `qso_idle = state in (IDLE,TIMEOUT)`).
+
+**Empfohlener Fix (KISS, 1 Konstante):** `qso_state.py on_cycle_end` WAIT_73-Schwelle
+**3 → 2** (Z.377 `>= 3`). Macht uns **WSJT-X-konform** (deren Best Practice =
+genau 1 Empfangs-Zyklus nach RR73 beobachten). „2" ist die Untergrenze: timeout=1
+verpasst das 73/R-Report-Fenster (Rücksprung in IDLE passiert am Slot-ANFANG, vor
+dem Decode des relevanten Slots — Details §24). Lücke 60→~45 s; Höflichkeits-73 +
+RR73-Nachsende-Schutz bleiben erhalten.
+
+**Verworfen:** 3→1 (verpasst 73-Fenster), Picken während WAIT_73 (bricht 73/Retry ab).
+**Restliche ~15 s** (Decode + Sende-Slot) nicht risikofrei entfernbar.
+
+→ Wenn Mike GO gibt: **voller Workflow** (V1→V2→R1→V3→Plan→Code→Tests→Final-R1).
+Reine Timing-/State-Logik, kein TX-Eingriff, ANT1/ANT2 unberührt.
+
+---
+
 # ✅ DT-Korrektur: dynamisches Lernen RAUS, Kalibrier-Knopf REIN (v0.99.0, 03.06.2026)
 
 **ERLEDIGT** (großer Umbau, voller Workflow, DeepSeek Plan-R1 + Final-R1 PUSH
