@@ -1,32 +1,32 @@
 # Bandpilot Empfehlung — 20m FT8
 
-Stand: 2026-06-02 (UTC, App-Start). Quelle: `statistics/<Mode>/20m/FT8/`.
+Stand: 2026-06-04 (UTC, App-Start). Quelle: `statistics/<Mode>/20m/FT8/`.
 
 Schwellen pro Stunde: ≥ 3 Messtage UND ≥ 20 Slots pro Modus.
 
 | UTC | Normal | Div Standard | Div DX | Top-1 |
 |---:|---:|---:|---:|:---|
-| 00 | 2·36.4 | 3·18.7 | 5·37.2 | _zu wenig Daten_ |
-| 01 | 2·25.9 | 3·13.5 | 5·32.7 | _zu wenig Daten_ |
-| 02 | 4·13.8 | 3·8.8 | 5·26.5 | Diversity DX |
-| 03 | 5·21.8 | 4·19.9 | 6·30.8 | Diversity DX |
-| 04 | 9·27.2 | 3·40.5 | 8·45.5 | Diversity DX |
-| 05 | 6·31.7 | 5·42.0 | 9·46.0 | Diversity DX |
-| 06 | 7·39.1 | 5·39.5 | 9·49.3 | Diversity DX |
-| 07 | 10·45.1 | 6·51.6 | 12·47.3 | Diversity Standard |
-| 08 | 8·44.3 | 6·52.0 | 7·51.4 | Diversity Standard |
-| 09 | 10·43.4 | 6·46.3 | 8·51.2 | Diversity DX |
-| 10 | 7·47.8 | 6·48.5 | 11·54.3 | Diversity DX |
-| 11 | 3·55.5 | 6·44.1 | 11·54.2 | Normal |
-| 12 | 4·61.7 | 7·44.9 | 11·50.8 | Normal |
+| 00 | 3·29.5 | 3·18.7 | 5·37.2 | Diversity DX |
+| 01 | 3·22.6 | 3·13.5 | 6·32.7 | Diversity DX |
+| 02 | 4·13.8 | 3·8.8 | 6·26.6 | Diversity DX |
+| 03 | 5·21.8 | 4·19.9 | 7·30.8 | Diversity DX |
+| 04 | 9·27.2 | 3·40.5 | 10·45.4 | Diversity DX |
+| 05 | 6·31.7 | 5·42.0 | 11·45.7 | Diversity DX |
+| 06 | 7·39.1 | 5·39.5 | 11·49.1 | Diversity DX |
+| 07 | 11·46.5 | 7·51.2 | 14·48.3 | Diversity Standard |
+| 08 | 9·50.3 | 6·52.0 | 8·52.9 | Diversity DX |
+| 09 | 10·43.4 | 6·46.3 | 9·52.8 | Diversity DX |
+| 10 | 8·48.8 | 6·48.5 | 13·54.3 | Diversity DX |
+| 11 | 3·55.5 | 6·44.1 | 13·52.7 | Normal |
+| 12 | 5·61.6 | 7·44.9 | 11·50.8 | Normal |
 | 13 | 2·54.7 | 4·43.7 | 6·49.8 | _zu wenig Daten_ |
-| 14 | 4·55.1 | 6·57.2 | 10·55.2 | Diversity Standard |
+| 14 | 4·55.1 | 7·57.0 | 10·55.2 | Diversity Standard |
 | 15 | 6·63.4 | 8·60.2 | 11·56.8 | Normal |
 | 16 | 6·61.2 | 11·63.5 | 9·53.4 | Diversity Standard |
 | 17 | 7·65.2 | 9·61.7 | 8·53.8 | Normal |
-| 18 | 6·61.6 | 5·56.0 | 6·53.0 | Normal |
-| 19 | 4·57.8 | 5·50.6 | 5·51.0 | Normal |
-| 20 | 3·61.8 | 5·45.7 | 5·49.3 | Normal |
-| 21 | 4·60.0 | 5·39.2 | 5·45.5 | Normal |
-| 22 | 3·51.7 | 4·36.0 | 5·40.2 | Normal |
-| 23 | 3·48.5 | 4·32.9 | 5·38.0 | Normal |
+| 18 | 6·61.6 | 6·54.6 | 6·53.0 | Normal |
+| 19 | 4·57.8 | 6·48.7 | 5·51.0 | Normal |
+| 20 | 3·61.8 | 6·46.0 | 5·49.3 | Normal |
+| 21 | 4·60.0 | 6·40.1 | 5·45.5 | Normal |
+| 22 | 4·46.3 | 5·37.5 | 5·40.2 | Normal |
+| 23 | 4·37.5 | 4·32.9 | 5·38.0 | Diversity DX |
