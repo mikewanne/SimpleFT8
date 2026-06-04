@@ -33,6 +33,42 @@ Gelöscht wird nie etwas. Format: `## YYYY-MM-DD vX.YY — Kurztitel`.
 > Minus, −0.69] → `~/.simpleft8/dt_corrections.json` manuell auf Hardware-Default
 > 0.26 zurückgesetzt; greift nach App-Neustart.)*
 
+## 2026-06-04 v0.99.5 — WAIT_73-Horchphase nach RR73 von 3 auf 2 Slots verkürzt
+
+**Voller Workflow (V1→V2→DeepSeek-Plan-R1→V3→Code→Tests→Final-R1; Plan-R1 0 Bugs
+Off-by-one bestätigt, Final-R1 PUSH FREIGEBEN 0 Bugs/0 Risiken). Mike-Wunsch nach
+Field-Beobachtung + WSJT-X-Recherche.**
+
+**Anlass:** ~60 s Pause zwischen abgeschlossenem QSO und nächstem Auto-Hunt-Ruf
+(Field 04.06.). Ursache (FEATURES §24): nach dem Senden von RR73 ist das QSO
+bereits via `qso_complete` geloggt, aber `on_cycle_end` WAIT_73-Branch horchte
+**3 Leer-Slots (45 s)** auf ein 73, das im verkürzten FT8-Modus meist nie kommt;
+Auto-Hunt darf in der Zeit nichts picken (`qso_idle`-Guard). WSJT-X-Recherche +
+DeepSeek bestätigt: der **verkürzte** Modus (RR73) wartet NICHT auf ein 73 (nur
+der lange RRR-Modus) — er beobachtet genau **1 Empfangs-Slot** (Nachsende-Schutz).
+
+**Fix (`core/qso_state.py`):** neue Modul-Konstante **`WAIT_73_MAX_CYCLES = 2`**
+(mit WSJT-X- + Off-by-one-Begründung im Kommentar); der WAIT_73-Branch nutzt sie
+statt der hartcodierten `3`. **„2" ist die Untergrenze:** `on_cycle_end` triggert
+am Slot-START, der erste (einzig relevante) RX-Slot N+1 wird dadurch noch voll
+abgewartet (73/R-Report kommen via `on_message_received`). „1" würde am N+1-START
+triggern BEVOR dessen Decode das 73 sieht → 73 fiele in den IDLE-Branch (verpasst).
+Höflichkeits-73-Pfad, `wait_73_retries`, `_resume_cq_if_needed`, `MAX_QSO_DURATION`-
+Check **unverändert**. Pause ~60→45 s (WAIT_73-Teil 45→30 s).
+
+**Stufe 1 von 2:** Höflichkeits-73 bleibt bewusst als **Kompatibilitäts-Brücke** zu
+langen/IC-7300-Stationen (Stufe 2 = ganz entfernen wurde verworfen — null Zeitgewinn,
+mehr Risiko). **Keine 2-Modi-Einstellung** (verkürzt ist voll kompatibel zum langen
+Modus — FT8-Protokoll interoperabel; ein Schalter wäre Overengineering).
+
+**Hardware:** reine Timing-/State-Logik, **kein TX-Antennen-Eingriff (ANT1=TX
+unberührt).** Tests 2398→**2402** (+4 `test_wait73_threshold.py`: Konstante==2,
+kein Trigger vor Schwelle, Trigger genau bei Schwelle, Off-by-one-Garantie [73 im
+ersten RX-Slot gefangen, bräche bei Schwelle 1 — Mutationsbeweis]; `test_p33` T2.3
++ `test_p1_10` Test 8 konstantengerecht angepasst). **NICHT gepusht — Field-Test
+pending** (Rückfallpunkt `bfa20dd` gepusht; Notfall `git checkout bfa20dd --
+core/qso_state.py`).
+
 ## 2026-06-04 v0.99.4 — Einheitliche Bedienung über HALT + smartes HALT (Ruf sofort / QSO deferred)
 
 **Voller Workflow (V1→V2→DeepSeek-Plan-R1→V3→Code→Tests→Final-R1; Plan-R1 mit 2

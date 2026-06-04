@@ -2389,15 +2389,29 @@ Offizielle WSJT-X-Verkürzungen eines FT8-QSOs:
 **timeout=2**. Unser aktueller Wert **3** ist damit ZU konservativ; 3→2 macht uns
 **WSJT-X-konform** (kein „aggressiver Hack").
 
-### Status / Empfehlung (noch NICHT umgesetzt — Mike-Entscheidung offen)
-- **Empfohlen:** `WAIT_73`-Schwelle in `on_cycle_end` von **3 → 2** (eine Konstante,
-  global; auch CQ/manuell sicher, da das 73-Fenster weiter abgedeckt ist). Lücke
-  60 → ~45 s, WSJT-X-konform, Höflichkeit + Nachsende-Schutz bleiben.
-- **Verworfen:** 3→1 (verpasst 73-Fenster), „in WAIT_73 schon picken" (bricht
-  laufendes 73/Retry ab → Geister-Calls).
-- **Restliche ~15 s** (Decode + Sende-Slot) sind ohne Risiko nicht entfernbar; ein
-  noch schnellerer Weg (IDLE direkt nach dem ersten RX-Decode statt am Slot-Anfang)
-  spart ~8 s mehr, ist aber kein 1-Zeilen-Fix.
+### WSJT-X-Erkenntnis (04.06.2026, recherchiert + Mike-Wette bestätigt)
+Der **verkürzte** FT8-Modus (RR73 als Abschluss) **wartet NICHT auf ein 73** —
+nur der **lange** Modus (RRR) tut das (*„if you have RRR set, it means you wish
+to see 73 from the other station. If you had RR73, things change … RR73 already
+contains your 73"*, wsjt-devel). Das frühere lange Warten war ein Erbe vom
+RRR-/IC-7300-Verhalten; unser Code-Kommentar „WSJT-X/JTDX senden das 73 als
+Standard" war irreführend. WSJT-X verkürzt beobachtet nach RR73 **genau 1
+Empfangs-Slot** (nur Nachsende-Schutz) → das ist `WAIT_73_MAX_CYCLES = 2`.
+
+### Status: ✅ UMGESETZT v0.99.5 (Stufe 1)
+- `core/qso_state.py`: Modul-Konstante **`WAIT_73_MAX_CYCLES = 2`**;
+  `on_cycle_end` WAIT_73-Branch nutzt sie statt hartcodierter `3`. Pause **~60→45 s
+  gesamt** (davon WAIT_73-Wartezeit **45→30 s**; die restlichen ~15 s = Decode +
+  Sende-Slot bleiben). Test-Absicherung `test_wait73_threshold.py` (4) inkl.
+  Off-by-one-Mutationsbeweis.
+- **„2" ist die Untergrenze** (on_cycle_end am Slot-START → erster RX-Slot wird noch
+  abgewartet; 1 verpasst das 73). **Höflichkeits-73 + Nachsende-Schutz bleiben** =
+  Kompatibilitäts-Brücke zu langen/IC-7300-Stationen (Stufe 2 „73 ganz raus"
+  verworfen: 0 Zeitgewinn, mehr Risiko). **Keine 2-Modi-Einstellung** (verkürzt ist
+  protokoll-kompatibel zum langen Modus → Schalter wäre Overengineering).
+- **Restliche ~15 s** (Decode + Sende-Slot) ohne Risiko nicht entfernbar; ein noch
+  schnellerer Weg (IDLE direkt nach dem ersten RX-Decode statt am Slot-Anfang) spart
+  ~8 s mehr, ist aber kein 1-Zeilen-Fix (offen, nur bei Bedarf).
 
 Querverweis: §7 (Auto-Hunt Call-Validation), §8 (QSO-Ende-Blocker/Cooldowns),
 §17 (Aktiv/Passiv). **Hardware:** reine Timing-/State-Logik, kein TX-Eingriff.

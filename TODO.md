@@ -16,7 +16,12 @@
 
 ---
 
-# 🔧 OFFEN: WAIT_73-Horchphase verkürzen (Auto-Hunt-Pause 60→45 s)   [analysiert 04.06.2026, DeepSeek-bestätigt, Mike-Entscheidung offen]
+# ✅ ERLEDIGT v0.99.5: WAIT_73-Horchphase verkürzt (Auto-Hunt-Pause ~60→45 s)   [04.06.2026, voller Workflow, Final-R1 PUSH FREIGEBEN, Field-Test pending]
+
+**Umgesetzt:** `WAIT_73_MAX_CYCLES = 2` (war hartcodiert 3) in `core/qso_state.py`.
+Pause ~60→45 s (WAIT_73-Teil 45→30 s). Tests 2398→2402. **NICHT gepusht** —
+Rückfallpunkt `bfa20dd` (`git checkout bfa20dd -- core/qso_state.py`). Details
+unten + FEATURES §24 + HISTORY v0.99.5.
 
 **Symptom (Mike-Field 04.06.):** ~60 s Pause zwischen abgeschlossenem QSO und
 nächstem Auto-Hunt-Ruf. Ursache vollständig analysiert + DeepSeek-R1-bestätigt +

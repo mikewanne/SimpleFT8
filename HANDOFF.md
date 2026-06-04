@@ -1,20 +1,34 @@
 # HANDOFF — SimpleFT8
 
-**Aktueller Stand:** v0.99.4 (04.06.2026) — **Einheitliche Bedienung über HALT +
-smartes HALT (Ruf sofort / QSO deferred).** Mike-Wunsch: Asymmetrie weg (Auto-Hunt→
-OMNI ging nur via HALT, umgekehrt direkt). Jetzt: Modus-Buttons starten nur aus Ruhe
-(sonst „erst HALT"); HALT smart — **Ruf** (kein Rapport, bis `WAIT_REPORT`) → sofort,
-**laufendes QSO** (ab `TX_REPORT`) → armiert (QSO läuft + loggt zu Ende, dann IDLE;
-Info-Zeile + oranger „HALT •"-Button), **2× HALT** = sofort hart abbrechen. Neu
-`qso_state.disable_cq_resume()` (cq_mode+_was_cq+caller_queue — DeepSeek-R1-Fix gegen
-CQ-Wiederaufleben) + `QSO_IN_EXCHANGE_STATES`; `_on_cancel`-Dispatcher +
-`_arm_deferred_halt`/`_execute_full_halt`; Modus-Buttons OFF→`_on_cancel` (Re-Entry-
-Guard via is_active). Reines State-/UI-Verhalten, ANT1/ANT2 unberührt. DeepSeek
-Plan-R1 (2 Korrekturen) + Final-R1 6/6 PUSH FREIGEBEN. Tests 2387→**2398** (+11).
-**Field-Test pending.** NICHT gepusht.
+**Aktueller Stand:** v0.99.5 (04.06.2026) — **WAIT_73-Horchphase nach RR73 von 3 auf
+2 Slots verkürzt (Auto-Hunt-Pause ~60→45 s, WSJT-X-konform).** Mike-Field: ~60 s
+Pause zwischen abgeschlossenem QSO und nächstem Auto-Hunt-Ruf. Nach RR73 ist das QSO
+bereits geloggt; `on_cycle_end` WAIT_73-Branch horchte 3 Leer-Slots (45 s) auf ein 73,
+das im verkürzten FT8-Modus meist nie kommt — Auto-Hunt darf in der Zeit nichts picken.
+WSJT-X-Recherche + DeepSeek: der verkürzte Modus (RR73) wartet NICHT auf ein 73 (nur
+der lange RRR-Modus), beobachtet genau 1 Empfangs-Slot (Nachsende-Schutz). Fix
+`core/qso_state.py`: neue Konstante **`WAIT_73_MAX_CYCLES = 2`** (war hartcodiert 3).
+„2" = Untergrenze (`on_cycle_end` triggert am Slot-START → erster RX-Slot wird noch
+abgewartet; 1 verpasst das 73). Höflichkeits-73 + Nachsende-Schutz bleiben
+(Kompatibilitäts-Brücke; Stufe 2 + 2-Modi-Schalter verworfen). Reine Timing-/State-
+Logik, ANT1/ANT2 unberührt. DeepSeek Plan-R1 (Off-by-one bestätigt) + Final-R1 PUSH
+FREIGEBEN (0 Bugs/0 Risiken). Tests 2398→**2402** (+4 `test_wait73_threshold.py` inkl.
+Off-by-one-Mutationsbeweis). **Field-Test pending. NICHT gepusht** (Rückfallpunkt
+`bfa20dd` gepusht → `git checkout bfa20dd -- core/qso_state.py`).
+
+**Nebenbei (04.06.):** Mike hatte versehentlich die DT neu kalibriert (−0.69) →
+`~/.simpleft8/dt_corrections.json` auf 0.26 zurückgesetzt; Mike hat danach selbst
+auf 0.22 nachjustiert (eigener Wert, steht so).
 
 **🔎 Weiter offen (separat):** Auto-Hunt→OMNI-Wechsel-Dauer ~1:45 — OMNI-Diagnose-
 Marker (v0.99.3) liegen; Mike reproduziert mit Debug-Log → echte Ursache lesen.
+
+— **Vorgänger v0.99.4: Einheitliche Bedienung über HALT + smartes HALT (Ruf sofort /
+QSO deferred).** Modus-Buttons starten nur aus Ruhe (sonst „erst HALT"); HALT smart —
+Ruf (bis `WAIT_REPORT`) → sofort, laufendes QSO (ab `TX_REPORT`) → armiert (QSO läuft +
+loggt zu Ende; oranger „HALT •"), 2× HALT = sofort hart. Neu `disable_cq_resume()`
+(DeepSeek-R1 gegen CQ-Wiederaufleben) + `QSO_IN_EXCHANGE_STATES`; `_on_cancel`-
+Dispatcher + `_arm_deferred_halt`/`_execute_full_halt`. Tests 2387→2398 (+11). NICHT gepusht.
 
 — **Vorgänger v0.99.3: PSK-Timer-Spin behoben (4 GB-Debug-Log-Flut) +
 OMNI-Diagnose-Marker.** PSK: `_reset_psk_polling_on_change` startet den Timer
