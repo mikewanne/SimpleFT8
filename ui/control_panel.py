@@ -1259,13 +1259,22 @@ class _QSOStatusCard(QFrame):
         self.btn_advance.setVisible(False)
         self.btn_cancel = QPushButton("HALT")
         self.btn_cancel.setFixedHeight(22)
-        self.btn_cancel.setStyleSheet(
+        # v0.99.4: zwei Stile — normal (rot) + armiert (orange, wartet auf QSO-Ende).
+        self._halt_normal_style = (
             f"QPushButton {{ background: rgba(180,0,0,0.4); color: #FF4444; "
             f"border: 1px solid rgba(220,40,40,0.6); border-radius: 4px; padding: 2px; "
             f"font-size: 11px; font-weight: bold; font-family: {_FONT}; }}"
             f"QPushButton:hover {{ background: rgba(220,0,0,0.6); color: #FF6666; }}"
             f"QPushButton:disabled {{ background: #2a2a2a; color: #666666; border: 1px solid #444444; }}"
         )
+        self._halt_armed_style = (
+            f"QPushButton {{ background: rgba(180,90,0,0.5); color: #FFAA33; "
+            f"border: 1px solid rgba(255,150,40,0.8); border-radius: 4px; padding: 2px; "
+            f"font-size: 11px; font-weight: bold; font-family: {_FONT}; }}"
+            f"QPushButton:hover {{ background: rgba(220,110,0,0.7); color: #FFCC66; }}"
+            f"QPushButton:disabled {{ background: #2a2a2a; color: #666666; border: 1px solid #444444; }}"
+        )
+        self.btn_cancel.setStyleSheet(self._halt_normal_style)
         adv_row.addWidget(self.btn_advance)
         adv_row.addWidget(self.btn_cancel)
         lay.addLayout(adv_row)
@@ -2207,6 +2216,16 @@ class ControlPanel(QWidget):
     def set_cq_active(self, active: bool):
         self.btn_cq.setChecked(active)
         self.btn_cq.setText("CQ AKTIV ■" if active else "CQ RUFEN")
+
+    def set_halt_armed(self, armed: bool):
+        """v0.99.4: HALT-Button zeigt den armierten Deferred-Zustand (orange „HALT •",
+        wartet bis das laufende QSO zu Ende ist) bzw. zurueck auf normal (rot)."""
+        if armed:
+            self.btn_cancel.setText("HALT •")
+            self.btn_cancel.setStyleSheet(self._halt_armed_style)
+        else:
+            self.btn_cancel.setText("HALT")
+            self.btn_cancel.setStyleSheet(self._halt_normal_style)
 
     def set_tuner_present(self, value: bool) -> None:
         """P63 (v0.97.36): TUNE-Button-Sichtbarkeit live setzen.

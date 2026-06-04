@@ -417,7 +417,54 @@ class QSOMixin:
 
     @Slot()
     def _on_cancel(self):
-        """HALT — stoppt ALLES: CQ, QSO, TX, Messung, OMNI, Auto-Hunt."""
+        """HALT — einheitlicher Stopp (v0.99.4).
+
+        - **2. Druck waehrend armiert** → sofort hart abbrechen (Notausgang).
+        - **Laufendes QSO** (Gegenstation hat geantwortet, ``QSO_IN_EXCHANGE_STATES``)
+          → armieren: QSO laeuft + loggt regulaer zu Ende, dann automatisch IDLE
+          (Info-Zeile). Bricht das QSO NICHT hart ab.
+        - **Ruf** (kein Rapport empfangen) / nur Modus / nichts → sofort stoppen.
+        """
+        from core.qso_state import QSO_IN_EXCHANGE_STATES
+        if getattr(self, '_halt_armed', False):
+            self._execute_full_halt()
+            self.qso_panel.add_info("HALT (2×) — sofort abgebrochen")
+            return
+        if self.qso_sm.state in QSO_IN_EXCHANGE_STATES:
+            self._arm_deferred_halt()
+            return
+        self._execute_full_halt()
+
+    def _arm_deferred_halt(self):
+        """Deferred HALT: laufendes QSO NICHT abbrechen, aber ALLE Resume-Quellen
+        (Auto-Hunt/OMNI/CQ/Warteliste/Einschub) sofort stilllegen → nach QSO-Ende
+        landet alles mangels Resume von selbst in IDLE (Aufhebung in
+        ``_on_state_changed`` bei IDLE)."""
+        self._halt_armed = True
+        if self._auto_hunt.active:
+            self._auto_hunt.stop_auto_hunt("manual_halt")
+        if self._omni_cq.is_active():
+            self._omni_cq.stop("manual_halt")
+        # DeepSeek-R1: stop_cq() allein reicht NICHT (_was_cq + _caller_queue
+        # wuerden CQ nach QSO-Ende wiederbeleben) → disable_cq_resume().
+        self.qso_sm.disable_cq_resume()
+        self.control_panel.set_cq_active(False)
+        # Kein Einschub-QSO nach diesem QSO (P164/P167).
+        self._qso_pending_insert = None
+        self._deferred_insert_msg = None
+        self.control_panel.set_halt_armed(True)
+        self.qso_panel.add_info("HALT — stoppt nach QSO-Ende (QSO läuft noch)")
+        self.statusBar().showMessage("HALT armiert — stoppt nach QSO-Ende", 5000)
+        print("[HALT] armiert (deferred — QSO läuft noch)")
+
+    def _execute_full_halt(self):
+        """HALT — stoppt SOFORT ALLES: CQ, QSO, TX, Messung, OMNI, Auto-Hunt.
+
+        Bricht auch ein laufendes QSO hart ab (``qso_sm.cancel()`` +
+        ``_abort_active_tx()``). Genutzt fuer Ruf/Modus-Stopp und den
+        2×-HALT-Notausgang."""
+        self._halt_armed = False
+        self.control_panel.set_halt_armed(False)
         self._active_qso_targets.clear()
         self.rx_panel.set_active_call("")
         # TX sofort stoppen (P60: zentraler Helper, cleart auch _pending_station_click)
@@ -469,6 +516,16 @@ class QSOMixin:
     def _on_state_changed(self, state: QSOState):
         name = state.name
         self.control_panel.update_state(name)
+        # v0.99.4: armiertes Deferred-HALT → das laufende QSO ist jetzt zu Ende
+        # (IDLE). Resume-Quellen wurden beim Armieren stillgelegt → IDLE ist
+        # endgueltig. Flag + Button-Optik aufloesen, Bestaetigung. (Der
+        # 2×-HALT-Notausgang nimmt den _execute_full_halt-Pfad und setzt das
+        # Flag selbst zurueck, kommt also nicht hierher.)
+        if state == QSOState.IDLE and getattr(self, '_halt_armed', False):
+            self._halt_armed = False
+            self.control_panel.set_halt_armed(False)
+            self.qso_panel.add_info("HALT — QSO beendet, gestoppt")
+            self.statusBar().showMessage("HALT — gestoppt", 4000)
         # AP-Prioritaet: aktiver QSO-Partner bekommt hoechste AP-Hint-Prioritaet
         if state not in (QSOState.IDLE, QSOState.TIMEOUT):
             self.decoder.priority_call = (

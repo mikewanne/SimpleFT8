@@ -341,6 +341,9 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         # P167 (02.06.2026): der per QTimer deferte Einschub-msg (Race-Schutz —
         # HALT kann ihn verwerfen, bevor der Event-Tick ihn ausführt).
         self._deferred_insert_msg = None
+        # v0.99.4: Deferred-HALT armiert (laufendes QSO erst zu Ende, dann Stopp).
+        # 2. HALT-Druck während armiert = sofort hart abbrechen (Notausgang).
+        self._halt_armed = False
         self._recent_logged_calls: dict[tuple[str, str], float] = {}  # P1.7 (v0.95.19): ADIF-Dedup (call, band) → ts
         self._quick73_sent: set[str] = set()  # P94 (v0.97.66): Calls denen Quick-73 schon ging
         # P2.OMNI-REDESIGN v4.0 (v0.95.23): True wenn OMNI VOR aktuellem QSO
@@ -944,27 +947,29 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
                     f"⚠ OMNI blockiert — Band {band} SWR-Sperre. "
                     "Manueller TUNE zum Freischalten.")
                 return
-            if self.qso_sm.state not in (QSOState.IDLE, QSOState.CQ_WAIT):
+            # v0.99.4: einheitlich über HALT — OMNI startet nur aus Ruhe. Läuft
+            # Auto-Hunt oder ein Ruf/QSO → erst HALT (kein direktes Supersede mehr;
+            # symmetrisch zum Auto-Hunt-Button, der jetzt genauso refuset).
+            if self._auto_hunt.active or self.qso_sm.state not in (
+                    QSOState.IDLE, QSOState.CQ_WAIT):
                 btn = self.control_panel.btn_omni_cq
                 btn.blockSignals(True)
                 btn.setChecked(False)
                 btn.blockSignals(False)
+                self.qso_panel.add_info("Erst HALT drücken, dann OMNI-CQ")
                 self.statusBar().showMessage(
-                    "OMNI-CQ nur startbar wenn kein aktives QSO laeuft "
-                    "— erst laufendes QSO beenden",
-                    4000,
-                )
+                    "Erst HALT drücken — dann OMNI-CQ starten", 4000)
                 return
-            if self._auto_hunt.active:
-                self._auto_hunt.stop_auto_hunt("superseded")
             self._omni_cq.start()
             self.control_panel.update_omni_tx(True)
             self._update_statusbar()
             print("[OMNI-CQ] User-Start")
         elif not checked and self._omni_cq.is_active():
-            # P60 (v0.97.32): TX-Slot SOFORT abbrechen + Click-Puffer leeren
-            self._abort_active_tx()
-            self._omni_cq.stop("manual_halt")
+            # v0.99.4: OFF über das einheitliche smarte HALT (Ruf sofort / QSO
+            # deferred + Notausgang). Der is_active()-Guard oben schützt gegen
+            # Re-Entry: stop() → omni_stopped → setChecked(False) feuert toggled
+            # erneut, aber dann ist is_active()==False (DeepSeek-R1).
+            self._on_cancel()
 
     def _on_omni_stopped(self, reason: str):
         """Slot fuer OmniCQ.omni_stopped(reason): Button-State + Statusbar
@@ -1039,8 +1044,19 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
                     f"⚠ Auto-Hunt blockiert — Band {band} SWR-Sperre. "
                     "Manueller TUNE zum Freischalten.")
                 return
-            if self._omni_cq.is_active():
-                self._omni_cq.stop("superseded")
+            # v0.99.4: einheitlich über HALT — Auto-Hunt startet nur aus Ruhe.
+            # Läuft OMNI oder ein Ruf/QSO → erst HALT (kein direktes Supersede
+            # mehr; symmetrisch zum OMNI-Button).
+            if self._omni_cq.is_active() or self.qso_sm.state not in (
+                    QSOState.IDLE, QSOState.CQ_WAIT):
+                btn = self.control_panel.btn_auto_hunt
+                btn.blockSignals(True)
+                btn.setChecked(False)
+                btn.blockSignals(False)
+                self.qso_panel.add_info("Erst HALT drücken, dann Auto-Hunt")
+                self.statusBar().showMessage(
+                    "Erst HALT drücken — dann Auto-Hunt starten", 4000)
+                return
             # P81 (v0.97.53): pending Stop-Meldung beim Manual-Restart
             # silent clearen — sonst Geister-Meldung beim naechsten QSO-Ende.
             self._auto_hunt_stop_msg_pending = False
@@ -1053,9 +1069,9 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
             self._on_auto_hunt_polling_tick()  # initialer Text-Set
             print("[Auto-Hunt] User-Start (10 Min)")
         elif not checked and self._auto_hunt.active:
-            # P60 (v0.97.32): TX-Slot SOFORT abbrechen + Click-Puffer leeren
-            self._abort_active_tx()
-            self._auto_hunt.stop_auto_hunt("manual_halt")
+            # v0.99.4: OFF über das einheitliche smarte HALT (Ruf sofort / QSO
+            # deferred + Notausgang). is_active()-Guard schützt gegen Re-Entry.
+            self._on_cancel()
 
     def _on_auto_hunt_stopped(self, reason: str):
         """Slot fuer auto_hunt_stopped(reason): startet UI-Reflexions-Cooldown.

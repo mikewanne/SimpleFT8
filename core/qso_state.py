@@ -208,6 +208,21 @@ class QSOStateMachine(QObject):
         if self.state in (QSOState.CQ_CALLING, QSOState.CQ_WAIT):
             self._set_state(QSOState.IDLE)
 
+    def disable_cq_resume(self):
+        """ALLE CQ-/Warteliste-Resume-Quellen stilllegen (Deferred-HALT, v0.99.4).
+
+        Reines ``stop_cq()`` reicht NICHT: ``_resume_cq_if_needed`` resumed auch
+        bei ``_was_cq`` und arbeitet die ``_caller_queue`` ab → CQ lebte nach
+        QSO-Ende wieder auf (DeepSeek-R1 03.06.2026). Hier ALLE drei Quellen
+        loeschen, OHNE das laufende QSO anzutasten (State unberuehrt → das QSO
+        laeuft + loggt regulaer zu Ende, landet mangels Resume danach in IDLE).
+        """
+        self.cq_mode = False
+        self._was_cq = False
+        if self._caller_queue:
+            self._caller_queue.clear()
+            self.queue_changed.emit([])
+
     def _send_cq(self):
         """CQ-Ruf senden (Normal-CQ, nicht OMNI).
 
@@ -875,6 +890,18 @@ HASH_RESOLVE_STATES = frozenset({
 # klickbar machen, ausser es ist der aktuelle Partner) NICHT an den
 # P124-Hash-Aufloesungs-Zweck gekoppelt ist. DeepSeek-R1-F4-Empfehlung.
 ACTIVE_QSO_STATES = HASH_RESOLVE_STATES
+
+# v0.99.4: QSO „im Austausch" = die Gegenstation hat GEANTWORTET (Rapport
+# empfangen) → das QSO wird geloggt und soll von HALT NICHT hart abgebrochen,
+# sondern sauber zu Ende gefuehrt werden (Deferred-HALT). BEWUSST OHNE TX_CALL
+# und WAIT_REPORT — das ist noch reines Rufen ohne Antwort (= „Ruf", HALT sofort).
+QSO_IN_EXCHANGE_STATES = frozenset({
+    QSOState.TX_REPORT,
+    QSOState.WAIT_RR73,
+    QSOState.TX_RR73,
+    QSOState.WAIT_73,
+    QSOState.TX_73_COURTESY,
+})
 
 
 def is_hash_marker(call: str) -> bool:
