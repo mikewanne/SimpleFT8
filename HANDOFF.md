@@ -1,29 +1,28 @@
 # HANDOFF — SimpleFT8
 
-**Aktueller Stand:** v0.99.9 (05.06.2026) — **auf GitHub gepusht** (`origin/main`,
-Commit `a80eebc`) + Tag **`v0.99.9-pre-optimierung`** (Rückfallpunkt). Danach läuft die
-**OPTIMIERUNGS-KAMPAGNE** (Mike-Auftrag): ganze App auf **KISS / Lesbarkeit / Robustheit
-> Geschwindigkeit** durchgehen. Vollständiger Audit (Claude + DeepSeek, 5 Reviews) liegt in
-**`OPTIMIERUNG_AUDIT.md`** (Teil 1 Decoder/Speed + control_panel, Teil 2 ganze App KISS/
-Robustheit). Lebender Plan + Fortschritts-Tracker = **`OPTIMIERUNGSWORKFLOW.md`** (überlebt
-Compacts, OPT-01..66, Reihenfolge: toter Code → Robustheit → KISS → Speed nachrangig).
-**Tests-Basis 2426 grün.** v0.99.9-Detail (TXPWR-Diagnose, Watt-Bug offen) → HISTORY/TODO.
+**Aktueller Stand:** v0.99.10 (05.06.2026) — **Optimierungs-Kampagne Stufe 1 (toter Code)
+KOMPLETT + autonom abgearbeitet.** 4 atomare Commits (Bundles A–D), reine Entfernung,
+projektweit pyflakes-verifiziert, **0 Verhaltensänderung, ANT1=TX unberührt**, jedes Bündel
+DeepSeek-R1 FREIGEBEN + volle Suite grün. Tests **2426→2425** (1 Deprecated-Stub-Test mit
+raus). Inhalt: tote Methoden/Signale/Stubs · ungenutzte Imports (17 Dateien) · tote Locals
+(10) · f-Strings ohne Platzhalter (15). Detail → HISTORY v0.99.10 + Fortschritts-Log in
+**`OPTIMIERUNGSWORKFLOW.md`**. Rückfall-Tag `v0.99.9-pre-optimierung`. **NICHT gepusht.**
 
-**🟢 START-SATZ NACH COMPACT (Mike tippt das → wir machen GENAU hier weiter):**
-> **„Optimierung weiter — Stufe 1 toter Code, autonom"**
+**⛔ AUTONOMIE-GRENZE ERREICHT — wartet auf Mike-Entscheid (nichts eigenmächtig):**
+1. **Stufe 2 (Robustheit) starten?** Höchster Wert: PSK-Worker-Thread→Qt-Signal (OPT-52),
+   Start-Crash-Schutz `load()`/Migration (OPT-50/51), `atomic_write_json`-Helfer (OPT-54),
+   `is_busy`-Property (OPT-61) … ⚠️ Enthält **TX-Pfad-Verdacht OPT-59**
+   (`_p94_quick73_filter` evtl. ohne `_abort_active_tx` — dreifach prüfen) + zwei
+   **Zufallsfund-Bug-Verdachte**: OPT-55 (ADIF `CALL.upper()` für QRZ-Upload) /
+   OPT-58 (`_execute_full_halt` leert `_p158_insertable` nicht → veraltete Einschub-Zeilen).
+2. **OPT-Q1/Q2:** `core/ap_decoder.py` + `core/osd_decoder.py` + `core/diversity_merger.py`
+   sind nirgends verdrahtet — reservierte Zukunft (wie Slice-B) oder löschbar? **Bis
+   Entscheid NICHT anfassen.**
+3. **Push?** Aktuell **8 Commits lokal ungepusht** (3 Doku + 4 Bundles + Milestone) — Push
+   erst auf Mike-Wort.
 
-**▶ NÄCHSTER SCHRITT (autonom nach Compact, voller DeepSeek-Workflow):**
-1. `CLAUDE.md → HISTORY.md (Anker) → HANDOFF.md → OPTIMIERUNGSWORKFLOW.md` lesen.
-2. **Stufe 1 (toter Code) abarbeiten** — OPT-01..04 + OPT-40..43 (alle projektweit auf
-   0 Aufrufe verifiziert, reine Entfernung). Sinnvoll in Bündeln: je Bündel → volle Suite
-   grün (Basis 2426) → 1 DeepSeek-Sichtung → atomarer Commit → Plan/HISTORY/HANDOFF updaten.
-3. **Grenze der Autonomie:** Stufe 1 KOMPLETT autonom. **DANN STOPPEN + Mike melden** —
-   Stufe 2 (Robustheit) enthält **TX-Pfad-Verdacht (OPT-59)** + Zufallsfund-Bug-Verdachte
-   (OPT-55/58) → die erst nach Rückmeldung.
-4. **NICHT anfassen** (warten auf Mike-Entscheidung OPT-Q1/Q2): `ap_decoder.py`,
-   `osd_decoder.py`, `diversity_merger.py` (reserviert?) — siehe Plan „Offene Entscheidungen".
-**Status Git:** v0.99.9 gepusht; aktuell **2 Doku-Commits lokal ungepusht** (Audit Teil 2 +
-Plan) — Push erst auf Mike-Wort.
+**Reihenfolge (Plan):** Robustheit → KISS → Speed nachrangig → große Methoden. Alle
+OPT-Punkte + Status: **`OPTIMIERUNGSWORKFLOW.md`**. Voller Audit-Befund: `OPTIMIERUNG_AUDIT.md`.
 
 **Nebenbei (04.06.):** Mike hatte versehentlich die DT neu kalibriert (−0.69) →
 auf 0.26 zurückgesetzt; Mike justierte selbst auf 0.22 (eigener Wert, steht so).

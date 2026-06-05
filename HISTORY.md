@@ -43,6 +43,40 @@ Gelöscht wird nie etwas. Format: `## YYYY-MM-DD vX.YY — Kurztitel`.
 > Minus, −0.69] → `~/.simpleft8/dt_corrections.json` manuell auf Hardware-Default
 > 0.26 zurückgesetzt; greift nach App-Neustart.)*
 
+## 2026-06-05 v0.99.10 — Optimierung Stufe 1: toter Code entfernt (Bundles A–D)
+
+**Erste Stufe der Optimierungs-Kampagne (Mike-Auftrag „nur Optimierungen, keine
+Verhaltensänderung"). Reine Entfernung, projektweit pyflakes-verifiziert, jedes
+Bündel mit DeepSeek-R1 FREIGEBEN + voller Testsuite grün.** Plan/Tracker:
+`OPTIMIERUNGSWORKFLOW.md`. Rückfall-Tag `v0.99.9-pre-optimierung`.
+
+- **Bundle A (OPT-03/40/41/42/43) — Commit `4f9bf65`:** tote Methoden/Signale/
+  Konstanten/Stubs projektweit (0 Aufrufer, je gegen ganze Live-Codebasis + tests
+  gegrep't). control_panel: `set_tx_freq`, `_group_label`, `_separator`, `_band_btn`,
+  `_toggle_btn`, `_on_tx_level_changed` + Signale `tx_level_changed`/`preamp_changed`
+  (+ verwaister Import `_SEP_COLOR`). direction_map_widget: `_paint_user_distance_rings`,
+  `_paint_user_sector_lines` (+ `DISTANCE_RINGS_KM`, Import `SECTOR_COUNT`).
+  rx_panel: `add_cycle_separator`, `_populate_separator_row`, `_MAX_CYCLES`
+  (+ `_FONT_SEP`, `_COLOR_SEP`). qso_panel: `_slot_tag`. settings: `get_normal_preset`
+  (Deprecated-Stub) + dessen Test. Tests 2426→2425 (1 Deprecated-Test mit raus).
+- **Bundle B (OPT-01) — Commit `da52113`:** ungenutzte Imports in 17 Dateien (frischer
+  pyflakes-Lauf, je gegen Live-Code verifiziert). Inkl. 1 totes `TYPE_CHECKING`-Import
+  (`auto_hunt.FT8Message`) + 4× totes lokales `import time as _time` (mw_radio).
+  BEHALTEN: `__init__.py`-Re-Exports (öffentliche Paket-API) + 4 `TYPE_CHECKING`-
+  MainWindow (Mixin-Typ-Hints, Audit §2c).
+- **Bundle C (OPT-02) — Commit `a4cebc3`:** 10 tote lokale Variablen (pyflakes-
+  autoritativ; jede rechte Seite seiteneffektfrei → ganze Zeile weg): main_window `freq`,
+  control_panel `_SEP_SS`, mw_radio `mw`+`mode`, logbook_widget `t`, dx_tune_dialog
+  `ant1_gain`+`ant2_gain`, mw_cycle `qso_busy`, flexradio `body` (TCP-Response-Parser,
+  KEIN TX/Slice-B), generate_plots `d_rsc` (nur toter DE-Block).
+- **Bundle D (OPT-04) — Commit `91527d8`:** 15 f-Strings ohne Platzhalter geglättet
+  (`f` weg = identische Ausgabe). 2 CSS-Templates mit escaped `{{` (qso_detail_overlay:44,
+  awards_dialog:191) bewusst übersprungen.
+
+**ANT1=TX-Pfad in allen Bündeln unberührt.** Tests **2426→2425** (netto −1: der eine
+entfernte Deprecated-Stub-Test). **NICHT gepusht.** Autonomie-Grenze erreicht — Stufe 2
+(Robustheit, enthält TX-Pfad-Verdacht OPT-59 + Bug-Verdachte OPT-55/58) wartet auf Mike.
+
 ## 2026-06-05 v0.99.9 — Diagnose-Logging für ungeklärten Watt-/RF-Bug (verhaltensneutral)
 
 **Diagnose-Feature, DeepSeek-R1 (Design) + Final-R1 (Diff) — verhaltensneutral bestätigt.**
