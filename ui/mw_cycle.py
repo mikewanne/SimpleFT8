@@ -226,10 +226,7 @@ class CycleMixin:
         volle ~60s Karenzzeit verfuegbar sind und kein Mid-QSO-Frequenz-
         sprung passiert.
         """
-        qso_busy = self.qso_sm.state not in (
-            QSOState.IDLE, QSOState.TIMEOUT,
-            QSOState.CQ_CALLING, QSOState.CQ_WAIT,
-        )
+        qso_busy = self.qso_sm.is_busy
         with self._diversity_lock:
             self._diversity_ctrl.sync_from_stations(self._diversity_stations)
             if qso_busy:
@@ -670,10 +667,7 @@ class CycleMixin:
                 self._diversity_ctrl.on_operate_cycle()
 
                 # Smart Antenna: waehrend QSO auf beste Antenne forcieren
-                _in_qso = self.qso_sm.state not in (
-                    QSOState.IDLE, QSOState.TIMEOUT,
-                    QSOState.CQ_CALLING, QSOState.CQ_WAIT,
-                )
+                _in_qso = self.qso_sm.is_busy
                 pref_ant = None
                 if _in_qso and self.qso_sm.qso.their_call and hasattr(self, '_antenna_prefs'):
                     pref_ant = self._antenna_prefs.get(self.qso_sm.qso.their_call)

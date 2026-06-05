@@ -220,9 +220,7 @@ class QSOMixin:
             if self.qso_sm.cq_mode:
                 self.qso_sm.stop_cq()
                 self.control_panel.set_cq_active(False)
-            elif self.qso_sm.state not in (QSOState.IDLE, QSOState.TIMEOUT,
-                                            QSOState.CQ_CALLING,
-                                            QSOState.CQ_WAIT):
+            elif self.qso_sm.is_busy:
                 # Hunt-QSO laeuft → abbrechen damit on_message_sent nicht
                 # in WAIT_REPORT/RR73 wechselt
                 self.qso_sm.cancel()
@@ -367,8 +365,7 @@ class QSOMixin:
                 self.control_panel.set_cq_active(False)
                 return
             # Laufendes Hunt-QSO abbrechen bevor CQ startet!
-            if self.qso_sm.state not in (QSOState.IDLE, QSOState.TIMEOUT,
-                                          QSOState.CQ_CALLING, QSOState.CQ_WAIT):
+            if self.qso_sm.is_busy:
                 self.qso_sm.cancel()
                 self._active_qso_targets.clear()
                 self.rx_panel.set_active_call("")

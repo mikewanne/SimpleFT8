@@ -1153,11 +1153,7 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         """True wenn ein QSO im Gange ist, also die Stop-Meldung deferred
         werden soll. „kein QSO" = IDLE, TIMEOUT, CQ_CALLING, CQ_WAIT.
         """
-        from core.qso_state import QSOState
-        return self.qso_sm.state not in (
-            QSOState.IDLE, QSOState.TIMEOUT,
-            QSOState.CQ_CALLING, QSOState.CQ_WAIT,
-        )
+        return self.qso_sm.is_busy
 
     def _flush_auto_hunt_stop_msg(self):
         """Wenn eine deferred Stop-Meldung pending ist, jetzt im QSO-Panel
@@ -1459,9 +1455,7 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         recalc = getattr(self._diversity_ctrl, '_recalc_count', 0)
         freq_str = f"  |  Freq: #{recalc} {cq_hz}Hz" if cq_hz else ""
         # Smart Antenna waehrend QSO
-        from core.qso_state import QSOState
-        _in_qso = self.qso_sm.state not in (
-            QSOState.IDLE, QSOState.TIMEOUT, QSOState.CQ_CALLING, QSOState.CQ_WAIT)
+        _in_qso = self.qso_sm.is_busy
         if _in_qso and self.qso_sm.qso.their_call:
             if (self._rx_mode == "diversity"
                     and hasattr(self, '_antenna_prefs')):
@@ -1612,8 +1606,7 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
             # CQ stoppen (aber laufendes QSO zu Ende fuehren!)
             if self.qso_sm.cq_mode:
                 # Nur CQ stoppen wenn KEIN aktives QSO laeuft
-                if self.qso_sm.state in (QSOState.CQ_CALLING, QSOState.CQ_WAIT,
-                                          QSOState.IDLE, QSOState.TIMEOUT):
+                if not self.qso_sm.is_busy:
                     self.qso_sm.stop_cq()
                     self.control_panel.set_cq_active(False)
                     self.qso_panel.add_info(

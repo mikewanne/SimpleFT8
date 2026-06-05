@@ -203,6 +203,19 @@ class QSOStateMachine(QObject):
         """Aktuellen SNR-Wert vom Decoder übernehmen."""
         self._last_snr = snr
 
+    @property
+    def is_busy(self) -> bool:
+        """True wenn eine QSO-Austausch-Sequenz mit einer Gegenstation laeuft.
+
+        „Nicht busy" = IDLE / TIMEOUT / CQ_CALLING / CQ_WAIT — in diesen
+        Zustaenden laeuft kein QSO, das vor Bandwechsel / Frequenzsprung /
+        Stop geschuetzt werden muesste. (OPT-61: ersetzt 7× dasselbe Tupel.)
+        """
+        return self.state not in (
+            QSOState.IDLE, QSOState.TIMEOUT,
+            QSOState.CQ_CALLING, QSOState.CQ_WAIT,
+        )
+
     # ── CQ-Modus ────────────────────────────────────────────────
 
     def start_cq(self):

@@ -25,6 +25,15 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 
+def _qso_sm_in_state(state):
+    """Echte QSOStateMachine im gewuenschten State — so liefert
+    `qso_sm.is_busy` die ECHTE Property (OPT-61), keine Mock-Truthiness."""
+    from core.qso_state import QSOStateMachine
+    sm = QSOStateMachine("DA1MHH", "JO31")
+    sm.state = state
+    return sm
+
+
 # ── T1 — kein-QSO-States: add_info SOFORT, KEIN Defer ─────────────────
 
 
@@ -40,7 +49,7 @@ def test_t1_polling_tick_sofort_bei_kein_qso(state_name):
     obj._auto_hunt_polling_timer = MagicMock()
     obj._auto_hunt_last_mouse_t = 0.0
     obj._auto_hunt_stop_msg_pending = False
-    obj.qso_sm = MagicMock(state=getattr(QSOState, state_name))
+    obj.qso_sm = _qso_sm_in_state(getattr(QSOState, state_name))
     obj._qso_active_for_msg_defer = (
         lambda: mw_mod.MainWindow._qso_active_for_msg_defer(obj)
     )
@@ -74,7 +83,7 @@ def test_t2_polling_tick_defert_bei_aktivem_qso(state_name):
     obj._auto_hunt_polling_timer = MagicMock()
     obj._auto_hunt_last_mouse_t = 0.0
     obj._auto_hunt_stop_msg_pending = False
-    obj.qso_sm = MagicMock(state=getattr(QSOState, state_name))
+    obj.qso_sm = _qso_sm_in_state(getattr(QSOState, state_name))
     obj._qso_active_for_msg_defer = (
         lambda: mw_mod.MainWindow._qso_active_for_msg_defer(obj)
     )
