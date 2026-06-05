@@ -163,6 +163,64 @@ Theme-Änderungen.
 
 ---
 
+# TEIL 2 — Ganze App, Brille KISS / Lesbarkeit / Robustheit (Mike-Priorität 05.06.)
+
+> 3 weitere DeepSeek-Reviews (GUI/Globus/Listen · Speichern/Laden · Orchestrierung) +
+> eigene Robustheits-Stichprobe. **Jeder Fund gegen den echten Code verifiziert** —
+> Status: ✅ bestätigt · ⚠️ vor Fix verifizieren · ❌ Fehlalarm (raus).
+> **Priorität laut Mike: Robustheit + KISS > Geschwindigkeit.**
+
+## A · ROBUSTHEIT (höchster Wert)
+
+| # | Datei | Fund | Status | Fix | Aufw./Risiko |
+|---|---|---|---|---|---|
+| R1 | `main_window.py:1271` | **PSK-Worker ruft `control_panel.update_psk_stats()` direkt aus Hintergrund-Thread** (Z.1224 startet Thread) — Qt-Widgets sind nicht thread-safe → undefiniert, Crash-Gefahr | ✅ bestätigt | GUI-Update per Qt-Signal an Main-Thread (wie `direction_map_signal`) | M / **hoch ohne Fix** |
+| R2 | `config/settings.py:161` | **`load()` ruft Migration ungeschützt**, Migration ruft `save()` (Z.185) → Plattenfehler = **Crash beim App-Start** | ✅ bestätigt | `try/except` um Migration; bei Fehler nur `print`, App startet weiter | S / niedrig |
+| R3 | `core/preset_store.py` `__init__` | `migrate_legacy_files()` ungeschützt → Plattenfehler crasht PresetStore-Init = App-Start | ⚠️ Muster wie R2 | `try/except` analog | S / niedrig |
+| R4 | `config/settings.py:115` `load()` | **Keine Typ-Validierung** der geladenen JSON — korruptes `callsign`/`locator` (z.B. `null`) wandert still in die Settings → später TypeError/stille Fehler | ✅ Muster bestätigt | kritische Felder nach `update` per `isinstance` gegen Default prüfen | M / niedrig |
+| R5 | App-weit | **~60 stille `except …: pass`** — manche berechtigt (Debug-Log darf nie crashen), aber pauschal verstecken sie echte Fehler | ✅ gezählt (eigener Fund) | durchgehen, riskante auf konkrete Exception einengen + `print` | M / niedrig |
+| R6 | `core/ntp_time.py:188` | DT-Wert wird **nicht atomar** geschrieben (`write_text`); dasselbe atomare Muster ist in 5 Stores per Copy-Paste, einer (ntp_time) hat's vergessen | ✅ bestätigt (eigener Fund) | **gemeinsamer `atomic_write_json`-Helfer** (DRY **+** schließt Lücke) | S / niedrig |
+| R7 | `log/adif.py` Record-Write | **CALL ohne `.upper()`** + RST nicht validiert → QRZ/LoTW können Datensätze **still abweisen** | ⚠️ vor Fix verifizieren | `call.upper()` + RST-Format prüfen | S / niedrig |
+| R8 | `main_window.py` `closeEvent` | (a) `dx_tuning`-Modus beim Schließen nicht zurückgesetzt; (b) broad `except: pass` um `audio_monitor.stop()` | ⚠️ plausibel | `elif dx_tuning`-Branch + Exception eingrenzen | S / niedrig |
+| R9 | `core/station_stats.py` | Writer-Thread hat **keinen sauberen Stop** (kein `Event`) → unvollständige Statistik bei abruptem Schließen | ✅ Muster | `threading.Event` + `shutdown()` | S / sehr niedrig |
+| R10 | `mw_qso.py:429` `_execute_full_halt` | **leert `_p158_insertable` NICHT** (in `_on_cancel` schon, Z.198/1149) → nach STOPP evtl. veraltete klickbare Einschub-Zeilen | ✅ Lücke bestätigt, ⚠️ Severity prüfen | ggf. `_p158_insertable.clear()` ergänzen | S / niedrig |
+| R11 | `mw_cycle.py:1139` `_p94_quick73_filter` | sendet 73 evtl. ohne `_abort_active_tx`-Schutz | ⚠️ **TX-Pfad — sehr genau verifizieren** | erst lesen, dann ggf. abort davor | S / **TX → vorsichtig** |
+
+> **R1, R2, R7, R10, R11 sind die heißesten** — R1 (Thread) + R2 (Start-Crash) sind echte
+> Robustheits-Löcher; R7 betrifft deine QRZ-Uploads; R10/R11 sind Zufallsfund-Bug-Verdacht
+> (laut deiner Regel zu fixen — aber R11 ist TX-Pfad, da prüfe ich dreifach).
+
+## B · KISS / LESBARKEIT
+
+| # | Datei | Fund | Status | Vorschlag | Aufw. |
+|---|---|---|---|---|---|
+| K1 | `mw_cycle.py`/`mw_qso.py` u.a. | **„aktives QSO?"-Tupel `(IDLE,TIMEOUT,CQ_CALLING,CQ_WAIT)` 11× kopiert** | ✅ 11 Vorkommen | Property `qso_sm.is_busy` — eine Quelle (KISS **+** robust gegen neue States) | S |
+| K2 | `config/settings.py` | **3 fast gleiche Preset-Zugriffe** (`get_dx_preset`/`get_gain_preset`/`get_normal_preset` + getrennte Keys) verwirren | ✅ | vereinheitlichen / veraltete Pfade raus | M |
+| K3 | `direction_map_widget.py` | Locator-Auflösung (DB→Fallback→lat/lon→Genauigkeit) in 2 Methoden dupliziert | ✅ | Helfer `_resolve_station_position()` | S-M |
+| K4 | `config/settings.py` | `get_enabled_bands`/`set_enabled_bands` Band-Validierung dupliziert | ✅ | privater `_valid_bands(raw)` | S |
+| K5 | `main_window.py` `_update_statusbar` | ~80 Z., mischt Freq/Modus/OMNI/DT/Smart-Antenne | ✅ | in `_build_status_*`-Teile zerlegen | M |
+| K6 | `mw_cycle.py:388` `_handle_diversity_operate` | ~80 Z., Statistik+Score+UI vermischt | ✅ existiert | Berechnung auslagern, Methode = Orchestrator | S-M |
+
+## C · TOTER CODE (projektweit verifiziert = 0 Aufrufe)
+
+✅ **Sicher entfernbar:** `direction_map_widget.py` (Import `azimuthal_equidistant_project`,
+Methoden `_paint_user_distance_rings`, `_paint_user_sector_lines`) · `rx_panel.py`
+(`_MAX_CYCLES`, `add_cycle_separator`, `_populate_separator_row`) · `qso_panel.py`
+(`_slot_tag`) · `config/settings.py` (`get_normal_preset` = deprecated-Stub gibt `{}`) ·
+`main_window.py` (tote `freq`-Zuweisung in `_update_statusbar`).
+
+❌ **Fehlalarm korrigiert:** `entries_to_station_points` ist **NICHT tot** — wird in
+`main_window.py:1680` genutzt (war nur nicht in den Review-Dateien sichtbar). **Bleibt.**
+
+## D · POSITIV (vorbildlich — nicht anfassen)
+
+`core/rf_preset_store.py` (atomar, Plausi-Checks, Auto-Backup), `core/locator_db.py`
+(sauberer RLock, kopierte Einträge, atomar), `core/preset_store.py` (Stage/Commit-Pattern,
+atomar — außer R3-Migration), `config/settings.py:save()` (atomar), `ui/logbook_widget.py`
+(sauber). DeepSeek hat hier ehrlich „keine Funde" gesagt.
+
+---
+
 ## Anhang — Tooling
 
 - `pyflakes` + `vulture` wurden für die Analyse in den venv installiert (von der App nicht

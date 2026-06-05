@@ -42,6 +42,60 @@
 
 ---
 
+## 🎯 AUSFÜHRUNGS-REIHENFOLGE (Mike-Priorität 05.06.: **KISS/Robustheit > Geschwindigkeit**)
+
+Gilt über ALLE Punkte (Teil-1-Tabellen „STUFE 1-3" weiter unten **+** Teil-2-Tabellen direkt
+hier). **Die STUFE-Nummern unten sind NICHT die Reihenfolge** — diese Liste ist es:
+
+1. **Toter Code** (risikolos, sofort, reine Entfernung): OPT-01..04 **+** OPT-40..43.
+2. **Robustheit** (höchster Wert, je eigener Workflow): OPT-50..60. ⚠️ Verdachts-Bugs
+   (OPT-55/58/59) ERST verifizieren, dann fixen — OPT-59 ist TX-Pfad (dreifach prüfen).
+3. **KISS / Lesbarkeit**: OPT-61..64 **+** OPT-21 (Empfangskontext-Reset) **+** OPT-12/22.
+4. **Geschwindigkeit (NACHRANGIG)** — nur nebenbei, wenn wir eh in der Datei sind:
+   OPT-05..11, OPT-20 (Float/Int, eigener Workflow+Decode-Tests), OPT-23, OPT-24.
+5. **Große Methoden entflechten** (langfristig, opportunistisch): OPT-30..32 + OPT-65/66.
+
+Quelle aller Befunde: `OPTIMIERUNG_AUDIT.md` (Teil 1 = Decoder/Speed + control_panel;
+**Teil 2 = ganze App, KISS/Robustheit**).
+
+---
+
+## TEIL 2 — Toter Code (zusätzlich, projektweit auf 0 Aufrufe verifiziert)
+| ID | Was | Datei | Status |
+|---|---|---|---|
+| OPT-40 | Import `azimuthal_equidistant_project` + Methoden `_paint_user_distance_rings` / `_paint_user_sector_lines` | direction_map_widget.py | ☐ |
+| OPT-41 | Konstante `_MAX_CYCLES` + Methoden `add_cycle_separator` / `_populate_separator_row` | rx_panel.py | ☐ |
+| OPT-42 | Methode `_slot_tag` | qso_panel.py | ☐ |
+| OPT-43 | `get_normal_preset` (deprecated-Stub, gibt immer `{}`) | config/settings.py | ☐ |
+| | _❌ NICHT entfernen: `entries_to_station_points` ist genutzt (main_window:1680) — Fehlalarm._ | | |
+
+## TEIL 2 — Robustheit (höchster Wert — je eigener Workflow)
+| ID | Was | Datei | Status |
+|---|---|---|---|
+| OPT-50 | `load()`-Migration in `try/except` → kein App-Start-Crash bei Plattenfehler (✅ bestätigt) | settings.py:161 | ☐ |
+| OPT-51 | `migrate_legacy_files()` in `__init__` in `try/except` (analog) | preset_store.py | ☐ |
+| OPT-52 | **PSK-Worker: GUI-Update per Qt-Signal** statt direkt aus Thread (✅ Z.1271 bestätigt) | main_window.py | ☐ |
+| OPT-53 | `load()`: kritische Felder (`callsign`/`locator`/…) per `isinstance` validieren | settings.py:115 | ☐ |
+| OPT-54 | **`atomic_write_json`-Helfer** (DRY 5 Stores) + `ntp_time` atomar nachziehen (✅) | core/ (neu) + ntp_time.py | ☐ |
+| OPT-55 | ⚠️ ADIF: CALL `.upper()` + RST validieren (QRZ-Upload-Sicherheit) — **erst verifizieren** | log/adif.py | ☐ |
+| OPT-56 | `closeEvent`: `dx_tuning`-Branch + breites `except` eingrenzen | main_window.py | ☐ |
+| OPT-57 | `station_stats` Writer-Thread sauberer Stop (`threading.Event`) | station_stats.py | ☐ |
+| OPT-58 | ⚠️ **Zufallsfund-Verdacht:** `_execute_full_halt` leert `_p158_insertable` nicht → veraltete Einschub-Zeilen nach STOPP. **Severity prüfen, dann ggf. `.clear()`** | mw_qso.py:429 | ☐ |
+| OPT-59 | ⚠️ **TX-PFAD, dreifach prüfen:** `_p94_quick73_filter` sendet 73 evtl. ohne `_abort_active_tx` | mw_cycle.py:1139 | ☐ |
+| OPT-60 | ~60 stille `except…: pass` durchgehen, riskante auf konkrete Exception + `print` (laufend) | App-weit | ☐ |
+
+## TEIL 2 — KISS / Lesbarkeit
+| ID | Was | Datei | Status |
+|---|---|---|---|
+| OPT-61 | Property `qso_sm.is_busy` statt 11× kopiertem `(IDLE,TIMEOUT,CQ_CALLING,CQ_WAIT)`-Tupel (✅ 11×) | qso_state + Aufrufer | ☐ |
+| OPT-62 | 3 Preset-Zugriffe (`get_dx`/`get_gain`/`get_normal`) vereinheitlichen / veraltete Pfade raus | settings.py | ☐ |
+| OPT-63 | Locator-Auflösung-Duplikat → Helfer `_resolve_station_position()` | direction_map_widget.py | ☐ |
+| OPT-64 | `get_enabled_bands`/`set_enabled_bands` Validierung → `_valid_bands(raw)` | settings.py | ☐ |
+| OPT-65 | `_update_statusbar` (~80 Z.) in `_build_status_*`-Teile (langfristig) | main_window.py | ☐ |
+| OPT-66 | `_handle_diversity_operate` (~80 Z.) Berechnung auslagern (langfristig) | mw_cycle.py | ☐ |
+
+---
+
 ## STUFE 1 — Quick-Wins (S-Aufwand, kein Verhaltensrisiko)
 
 > Diese Stufe darf in **2-3 Bündeln** laufen (Dead-Code / Speed-Konstanten / Style),
@@ -110,6 +164,11 @@
 
 > Pro erledigtem Punkt eine Zeile: `YYYY-MM-DD · OPT-NN · Kurz · Tests X→Y · Commit <sha>`.
 
+- 2026-06-05 · Audit Teil 2 · Mike-Priorität: **KISS/Robustheit > Speed**. 3 DeepSeek-
+  Reviews (GUI/Globus/Listen · Speichern/Laden · Orchestrierung) + eigene Robustheits-
+  Stichprobe → AUDIT Teil 2 + neue Items OPT-40..66. Schlüsselfunde gegen echten Code
+  verifiziert (1 Fehlalarm raus: `entries_to_station_points`). Reihenfolge neu (Toter Code
+  → Robustheit → KISS → Speed nachrangig).
 - 2026-06-05 · Setup · Plan angelegt, v0.99.9 gepusht + Tag `v0.99.9-pre-optimierung`,
   Tests-Basis **2426** grün. **DeepSeek-Review des Plans: voller GO** (Reihenfolge optimal,
   alle Stufe-1-Punkte verhaltensneutral, keine Overengineering-Punkte; OPT-06-Bedingung
