@@ -75,7 +75,7 @@ Quelle aller Befunde: `OPTIMIERUNG_AUDIT.md` (Teil 1 = Decoder/Speed + control_p
 | OPT-50 | `load()`-Migration `save()` in `try/except` → kein App-Start-Crash bei Plattenfehler (v0.99.12, +Mutationstest) | settings.py | ☑ |
 | OPT-51 | `migrate_legacy_files()` in `try/except` — **war BEREITS so** (preset_store.py:175-179), verify-don't-assume | preset_store.py | ☑ |
 | OPT-52 | **PSK-Worker: GUI-Update per Qt-Signal** statt direkt aus Thread (✅ Z.1271 bestätigt) | main_window.py | ☐ |
-| OPT-53 | `load()`: kritische Felder (`callsign`/`locator`/…) per `isinstance` validieren | settings.py:115 | ☐ |
+| OPT-53 | `load()`: bekannte Felder gegen DEFAULTS-Typ validiert (`_validate_types`, `type() is type()` → bool/int-Falle vermieden; dynamische Keys unberührt). v0.99.14 | settings.py | ☑ |
 | OPT-54 | **`atomic_write_json`-Helfer** (DRY) + `ntp_time` atomar nachgezogen — Helfer + 5 core-Stores migriert; settings bewusst raus (core/__init__-Last). v0.99.13 | core/atomic_json.py + ntp_time.py +5 | ☑ |
 | OPT-55 | ⚠️ ADIF: CALL `.upper()` + RST validieren (QRZ-Upload-Sicherheit) — **erst verifizieren** | log/adif.py | ☐ |
 | OPT-56 | `closeEvent`: `dx_tuning`-Branch + breites `except` eingrenzen | main_window.py | ☐ |
@@ -164,6 +164,18 @@ Quelle aller Befunde: `OPTIMIERUNG_AUDIT.md` (Teil 1 = Decoder/Speed + control_p
 
 > Pro erledigtem Punkt eine Zeile: `YYYY-MM-DD · OPT-NN · Kurz · Tests X→Y · Commit <sha>`.
 
+- 2026-06-05 · **OPT-53 (v0.99.14, Stufe 2 Robustheit, voller Workflow)** ·
+  `config/settings.py:load()` übernahm geladene config.json-Werte blind
+  (`update(saved)`) → neue `_validate_types()` prüft jedes **DEFAULTS**-Feld gegen
+  `type(value) is type(default)` und resettet bei Mismatch auf den Default (+ Meldung),
+  Aufruf vor den Migrationen. **`type() is type()` statt isinstance** = bool/int sauber
+  getrennt (`flexradio_port: true` würde mit isinstance durchrutschen — Mutationsbeweis-
+  Test). Iteriert nur über DEFAULTS → dynamische Keys (enabled_bands/tx_slot_lock/
+  presets) unberührt. Normalbetrieb 0 Änderung. DeepSeek Plan-R1 **GO ohne Korrekturen**
+  (alle DEFAULTS generisch = KISS; float→Reset akzeptabel; Platzierung vor Migrationen
+  ok) + Final-R1 **PUSH FREIGEBEN**. Reines Settings-Laden, ANT1=TX unberührt. Tests
+  2424→**2433** (+9 `test_settings_typecheck.py`). Commit `e36c995`. **→ Nächster offener
+  Punkt: OPT-56** (closeEvent dx_tuning + breites except). OPT-52 (Threading) → Mike.
 - 2026-06-05 · **OPT-54 (v0.99.13, Stufe 2 Robustheit, voller Workflow)** ·
   `core/atomic_json.py` neu (`atomic_write_json`, DRY) + `ntp_time._save_current`
   von nicht-atomarem `write_text` auf den Helfer umgestellt (**schließt die

@@ -43,6 +43,33 @@ Gelöscht wird nie etwas. Format: `## YYYY-MM-DD vX.YY — Kurztitel`.
 > Minus, −0.69] → `~/.simpleft8/dt_corrections.json` manuell auf Hardware-Default
 > 0.26 zurückgesetzt; greift nach App-Neustart.)*
 
+## 2026-06-05 v0.99.14 — OPT-53: Settings-Typvalidierung beim Laden
+
+**Optimierungs-Kampagne, Stufe 2 (Robustheit), voller Workflow (DeepSeek Plan-R1 GO
+ohne Korrekturen + Final-R1 PUSH FREIGEBEN).** `config/settings.py:load()` übernahm
+geladene `config.json`-Werte **blind** (`self._data.update(saved)`) — eine von Hand
+verkorkste config (falscher Typ, z.B. `"flexradio_port": true` oder `"callsign": 123`)
+lief in Folgefehler.
+
+**Neu `_validate_types()`:** iteriert über `DEFAULTS`, prüft `type(value) is
+type(default)` und fällt bei Mismatch auf den Default zurück (+ Meldung). Aufruf direkt
+nach `update(saved)`, **vor** den bestehenden Migrationen (die arbeiten dann mit
+typkorrekten Werten).
+
+- **Iteriert NUR über `DEFAULTS`** → dynamische/persistierte Keys außerhalb
+  (`enabled_bands`, `tx_slot_lock`, `normal_tx_freq_per_band`, Preset-Strukturen)
+  bleiben unberührt.
+- **`type() is type()` statt `isinstance`** → trennt bewusst `bool` von `int`:
+  `isinstance(True, int)` ist `True`, ein versehentliches `true` als Port würde sonst
+  durchrutschen. Mutationsbeweis-Test (`flexradio_port: true` → Reset).
+- Normalbetrieb (korrekte config): **0 Änderung**. `float`-statt-`int` → Reset
+  (kein DEFAULTS-Feld ist float — bewusst konservativ, DeepSeek bestätigt).
+- `radio_timing`-Inhalt nicht geprüft (nur Top-Typ dict) — out-of-scope, KISS.
+
+Reines Settings-Laden, **kein TX-/Antennen-Pfad — ANT1=TX unberührt.** DeepSeek Plan-R1
+**GO** (5 Punkte, 0 Korrekturen) + Final-R1 **PUSH FREIGEBEN**. Tests 2424→**2433** (+9
+`test_settings_typecheck.py`). Commit `e36c995`. NICHT gepusht.
+
 ## 2026-06-05 v0.99.13 — OPT-54: atomic_write_json-Helfer (DRY) + ntp_time-Atomaritäts-Lücke
 
 **Optimierungs-Kampagne, Stufe 2 (Robustheit), voller Workflow (DeepSeek Plan-R1 GO
