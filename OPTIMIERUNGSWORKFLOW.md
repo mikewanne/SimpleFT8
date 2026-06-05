@@ -78,11 +78,11 @@ Quelle aller Befunde: `OPTIMIERUNG_AUDIT.md` (Teil 1 = Decoder/Speed + control_p
 | OPT-53 | `load()`: bekannte Felder gegen DEFAULTS-Typ validiert (`_validate_types`, `type() is type()` → bool/int-Falle vermieden; dynamische Keys unberührt). v0.99.14 | settings.py | ☑ |
 | OPT-54 | **`atomic_write_json`-Helfer** (DRY) + `ntp_time` atomar nachgezogen — Helfer + 5 core-Stores migriert; settings bewusst raus (core/__init__-Last). v0.99.13 | core/atomic_json.py + ntp_time.py +5 | ☑ |
 | OPT-55 | ⚠️ ADIF: CALL `.upper()` + RST validieren (QRZ-Upload-Sicherheit) — **erst verifizieren** | log/adif.py | ☐ |
-| OPT-56 | `closeEvent`: `dx_tuning`-Branch + breites `except` eingrenzen | main_window.py | ☐ |
-| OPT-57 | `station_stats` Writer-Thread sauberer Stop (`threading.Event`) | station_stats.py | ☐ |
+| OPT-56 | `closeEvent`: breites `except` um `audio_monitor.stop()` entfernt (getattr-Guard; stop() ist intern robust). dx_tuning-Teil = NICHT-FUND (parent=self, Laufzeit-State). v0.99.15 | main_window.py | ☑ |
+| OPT-57 | `station_stats` Writer-Thread sauberer Stop — **Sentinel** + `shutdown(timeout=5)` (statt Event: FIFO-Drain-Garantie), closeEvent-Aufruf. v0.99.16 | station_stats.py | ☑ |
 | OPT-58 | ⚠️ **Zufallsfund-Verdacht:** `_execute_full_halt` leert `_p158_insertable` nicht → veraltete Einschub-Zeilen nach STOPP. **Severity prüfen, dann ggf. `.clear()`** | mw_qso.py:429 | ☐ |
 | OPT-59 | ⚠️ **TX-PFAD, dreifach prüfen:** `_p94_quick73_filter` sendet 73 evtl. ohne `_abort_active_tx` | mw_cycle.py:1139 | ☐ |
-| OPT-60 | ~60 stille `except…: pass` durchgehen, riskante auf konkrete Exception + `print` (laufend) | App-weit | ☐ |
+| OPT-60 | ~60 stille `except…: pass` durchgegangen → **kein systematischer Handlungsbedarf** (verify-don't-assume): **0 bare `except:`** (Hauptrisiko fehlt), 59 Blöcke davon 15 in `flexradio.py` (TX-Pfad, gesperrt), Rest überwiegend legitimes Best-Effort (Daten-Lade-Defensive, Cleanup). Massenumstellung = Busy-Work + Regressionsrisiko. Nur opportunistische Einzelfixes. | App-weit | ☑ geprüft |
 
 ## TEIL 2 — KISS / Lesbarkeit
 | ID | Was | Datei | Status |
@@ -164,6 +164,31 @@ Quelle aller Befunde: `OPTIMIERUNG_AUDIT.md` (Teil 1 = Decoder/Speed + control_p
 
 > Pro erledigtem Punkt eine Zeile: `YYYY-MM-DD · OPT-NN · Kurz · Tests X→Y · Commit <sha>`.
 
+- 2026-06-05 · **OPT-60 (geprüft, KEIN Code)** · ~60 stille `except: pass` app-weit
+  triagiert: **0 bare `except:`** (das Hauptrisiko existiert nicht), 59 Blöcke davon
+  **15 in `flexradio.py`** (TX-Pfad — gesperrt), der Rest überwiegend bewusstes
+  Best-Effort (korrupte-JSON-Lade-Defensive `ntp_time`/`preset_store`, Cleanup
+  `audio_monitor.stop` [in OPT-56 als robust bestätigt], UI-Guards). **Bewertung
+  (verify-don't-assume + KISS): kein systematischer Handlungsbedarf** — Massen-
+  umstellung wäre Busy-Work mit Regressionsrisiko, teils im gesperrten TX-Pfad.
+  OPT-60 herabgestuft auf „opportunistische Einzelfixes". Kein Commit.
+- 2026-06-05 · **OPT-57 (v0.99.16, Stufe 2 Robustheit, voller Workflow)** ·
+  `station_stats` Writer (Daemon-Thread, `while True`, kein Stop) → Modul-Sentinel
+  `_SHUTDOWN` + `shutdown(timeout=5.0)`: reiht den Sentinel ein (FIFO-Drain-Garantie
+  für alle davor liegenden Einträge), joint mit Timeout. `_writer_loop` nur +
+  `if entry is _SHUTDOWN: break` (get(timeout=5) unverändert → Laufbetrieb 0 Änderung).
+  closeEvent ruft `_stats_logger.shutdown()` am Ende (getattr-Guard). **Sentinel statt
+  Audit-„Event"** (eigene Entscheidung: FIFO-Drain gratis, kein Polling-Opfer). DeepSeek
+  Plan-R1 GO (join-Timeout-Auflage kritisch geprüft: `get` hängt nicht 5s, `put` weckt
+  sofort) + Final-R1 **PUSH FREIGEBEN** (Race ausgeschlossen). Tests 2434→**2438** (+4).
+  Commit `9af78bb`.
+- 2026-06-05 · **OPT-56 (v0.99.15, Stufe 2 Robustheit, voller Workflow)** ·
+  closeEvent: breites `except Exception: pass` um `audio_monitor.stop()` entfernt →
+  `getattr`-Guard (stop() ist intern robust+idempotent, das äußere except verschluckte
+  echte Bugs). **Teil (a) dx_tuning = NICHT-FUND** (verify-don't-assume: `_dx_tune_dialog`
+  hat `parent=self` → Qt schließt ihn; `_rx_mode`/Lock sind Laufzeit-State). DeepSeek-R1
+  GO (empfahl exakt die `is not None`-Variante). Tests 2433→**2434** (+1 Mutationsbeweis).
+  Commit `d6bc901`. **→ Nächster offener Punkt: KISS-Stufe (OPT-61 `is_busy`-Property).**
 - 2026-06-05 · **OPT-53 (v0.99.14, Stufe 2 Robustheit, voller Workflow)** ·
   `config/settings.py:load()` übernahm geladene config.json-Werte blind
   (`update(saved)`) → neue `_validate_types()` prüft jedes **DEFAULTS**-Feld gegen

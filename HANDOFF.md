@@ -2,32 +2,35 @@
 
 **🟢 START-SATZ NACH COMPACT (Mike tippt das → genau hier weiter):** „**Optimierung weiter,
 autonom**" — dann `CLAUDE.md → HISTORY.md (Anker) → HANDOFF.md → OPTIMIERUNGSWORKFLOW.md`
-lesen, NICHT neu planen, beim ersten offenen ☐ weiter (aktuell nächster Punkt: **OPT-56**
-[closeEvent dx_tuning + breites except], dann OPT-57/60). Gesperrt bis Mike-Wort:
-OPT-59/55/58 + Threading OPT-52 + Push.
+lesen, NICHT neu planen, beim ersten offenen ☐ weiter (aktuell nächster Punkt: **KISS-Stufe
+OPT-61** [`is_busy`-Property statt 11× kopiertem State-Tupel], dann OPT-62/63/64). Gesperrt
+bis Mike-Wort: OPT-59/55/58 + Threading OPT-52 + Push.
 
-**Aktueller Stand:** v0.99.14 (05.06.2026) — **Optimierungs-Kampagne läuft autonom.**
-Erledigt: **Stufe 1 (toter Code, v0.99.10, Bundles A–D)** + **3 tote Module entfernt
-(v0.99.11, OPT-Q1/Q2 = Mike-Entscheid: nicht FT2-relevant → weg)** + **OPT-50/51 Start-
-Crash-Schutz (v0.99.12)** + **OPT-54 `atomic_write_json`-Helfer (DRY) + ntp_time-
-Atomaritäts-Lücke (v0.99.13)** + **OPT-53 Settings-Typvalidierung beim Laden (v0.99.14)**.
-Alles reine/robustheits-Änderung, **ANT1=TX unberührt**, jedes Stück DeepSeek-R1 FREIGEBEN,
-Tests durchgehend grün (**aktuell 2433**). Detail → HISTORY v0.99.10–14 + Fortschritts-Log
-in **`OPTIMIERUNGSWORKFLOW.md`**. Rückfall-Tag `v0.99.9-pre-optimierung`. **NICHT gepusht
-(genaue Zahl via `git log --oneline origin/main..HEAD | wc -l`).**
+**Aktueller Stand:** v0.99.16 (05.06.2026) — **Optimierungs-Kampagne läuft autonom.
+Robustheits-Stufe (OPT-50..60) abgeschlossen** (außer den Mike-gesperrten OPT-55/58/59).
+Erledigt: **Stufe 1 toter Code (v0.99.10)** + **3 tote Module (v0.99.11)** + **OPT-50/51
+Start-Crash-Schutz (v0.99.12)** + **OPT-54 `atomic_write_json`-Helfer (v0.99.13)** + **OPT-53
+Settings-Typvalidierung (v0.99.14)** + **OPT-56 closeEvent-except entschärft (v0.99.15)** +
+**OPT-57 station_stats sauberer Thread-Stop (v0.99.16)** + **OPT-60 geprüft = kein
+Handlungsbedarf** (0 bare except, Rest legitim/TX-gesperrt). Alles reine/robustheits-
+Änderung, **ANT1=TX unberührt**, jedes Stück DeepSeek-R1 FREIGEBEN, Tests durchgehend grün
+(**aktuell 2438**). Detail → HISTORY v0.99.10–16 + Fortschritts-Log in
+**`OPTIMIERUNGSWORKFLOW.md`**. Rückfall-Tag `v0.99.9-pre-optimierung`. **NICHT gepusht
+(genaue Zahl via `git log --oneline origin/main..HEAD | wc -l` — aktuell ~19).**
 
-**▶ NÄCHSTE Robustheits-Punkte (autonom fortsetzbar, je voller Workflow):** OPT-56
-(`closeEvent`: dx_tuning-Branch + breites except eingrenzen, main_window.py), OPT-57
-(station_stats Writer-Thread sauberer Stop via Event), OPT-60 (stille `except: pass`
-durchgehen). Dann KISS (OPT-61 `is_busy`-Property …). OPT-52 (PSK-Worker Thread→Qt-Signal)
-berührt Threading → Mike kurz vorlegen.
+**▶ NÄCHSTE Punkte (KISS-Stufe, autonom fortsetzbar, je voller Workflow):** OPT-61
+(Property `qso_sm.is_busy` statt 11× kopiertem `(IDLE,TIMEOUT,CQ_CALLING,CQ_WAIT)`-Tupel),
+OPT-62 (3 Preset-Zugriffe vereinheitlichen), OPT-63 (Locator-Auflösung-Duplikat → Helfer),
+OPT-64 (`get/set_enabled_bands`-Validierung). Danach Speed (nachrangig) + große Methoden.
+OPT-52 (PSK-Worker Thread→Qt-Signal) berührt Threading → Mike kurz vorlegen.
 
-**Zuletzt erledigt:** **OPT-53** (v0.99.14): `settings.load()` validiert geladene Werte
-gegen DEFAULTS-Typ (`_validate_types`, `type() is type()` → bool/int-Falle vermieden,
-dynamische Keys unberührt); DeepSeek Plan-R1 GO + Final-R1 PUSH FREIGEBEN; Tests 2424→2433
-(+9); Commit `e36c995`. **Davor OPT-54** (v0.99.13): `core/atomic_json.py` neu, ntp_time
-von `write_text` auf atomar + 5 core-Stores; settings bewusst NICHT (core/__init__-Last);
-Tests 2416→2424; Commits `7ed850c`+`7fd8a9c`.
+**Zuletzt erledigt (Robustheits-Block):** **OPT-57** (v0.99.16, `9af78bb`): station_stats
+Daemon-Thread sauberer Stop via Sentinel + `shutdown()` (FIFO-Drain), closeEvent-Aufruf;
+Tests 2434→2438. **OPT-56** (v0.99.15, `d6bc901`): closeEvent breites except um
+audio_monitor.stop() raus (stop() ist intern robust); dx_tuning-Teil = NICHT-FUND
+(parent=self); Tests 2433→2434. **OPT-60** (geprüft, kein Code): 0 bare except, kein
+systematischer Handlungsbedarf. **Davor OPT-53** (v0.99.14, `e36c995`) + **OPT-54**
+(v0.99.13, `7ed850c`+`7fd8a9c`).
 
 **⛔ NUR nach Mike-Rückmeldung (nichts eigenmächtig):**
 - **TX-Pfad-Verdacht OPT-59** (`_p94_quick73_filter` evtl. ohne `_abort_active_tx` —

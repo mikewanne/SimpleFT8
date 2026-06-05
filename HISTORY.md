@@ -43,6 +43,49 @@ Gelöscht wird nie etwas. Format: `## YYYY-MM-DD vX.YY — Kurztitel`.
 > Minus, −0.69] → `~/.simpleft8/dt_corrections.json` manuell auf Hardware-Default
 > 0.26 zurückgesetzt; greift nach App-Neustart.)*
 
+## 2026-06-05 v0.99.16 — OPT-57: station_stats Writer-Thread sauberer Stop (Sentinel + shutdown)
+
+**Optimierungs-Kampagne, Stufe 2 (Robustheit), voller Workflow (DeepSeek Plan-R1 GO
++ Final-R1 PUSH FREIGEBEN).** Der Statistik-Writer (`core/station_stats.py`) ist ein
+**Daemon-Thread** mit `while True` + `queue.get(timeout=5)`, **ohne Stop-Mechanismus** —
+beim App-Close wurde er beim Interpreter-Exit hart gekillt, noch in der Queue liegende
+Einträge gingen verloren („unvollständige Statistik bei abruptem Schließen", Audit R9).
+
+**Neu:** Modul-Sentinel `_SHUTDOWN = object()` + `shutdown(timeout=5.0)`. shutdown()
+reiht den Sentinel ein (FIFO → alle **davor** liegenden Einträge werden noch geschrieben
+= Drain-Garantie ohne separate Schleife) und joint den Thread mit Timeout (kein Hängen
+des App-Close; bei echtem IO-Hang Daemon-Kill-Fallback). `_writer_loop` bekommt nur einen
+`if entry is _SHUTDOWN: break`-Check — `get(timeout=5)` unverändert, **im Laufbetrieb
+0 Verhaltensänderung**. `MainWindow.closeEvent` ruft `_stats_logger.shutdown()` am Ende
+(nach timer.stop()+decoder.stop() → keine neuen Log-Einträge), getattr-Guard.
+
+**Sentinel statt Audit-Vorschlag „Event"** (eigene Code-Entscheidung): FIFO-Drain-
+Garantie gratis, `get(timeout=5)` bleibt (kein Polling-Opfer). DeepSeek Plan-R1 GO
+(join-Timeout-Auflage kritisch geprüft: `get` hängt **nicht** 5 s — `queue.put` weckt
+`get` sofort → 5.0 s als Disk-Write-Puffer gesetzt) + Final-R1 **PUSH FREIGEBEN** (Race
+ausgeschlossen: alle Log-Quellen sind timer/decoder-getrieben, beide vor shutdown
+gestoppt). Threading-Robustheit, **kein TX-/Antennen-Pfad — ANT1=TX unberührt.** Tests
+2434→**2438** (+4 `test_stats_shutdown.py`, inkl. Drain-Mutationsbeweis 25→25 Zeilen).
+Commit `9af78bb`. NICHT gepusht.
+
+## 2026-06-05 v0.99.15 — OPT-56: closeEvent — breites except um audio_monitor.stop() entfernt
+
+**Optimierungs-Kampagne, Stufe 2 (Robustheit), voller Workflow (DeepSeek-R1 GO).**
+`MainWindow.closeEvent` hatte ein `try: self._audio_monitor.stop() except Exception:
+pass`. `audio_monitor.stop()` ist aber **bereits intern robust + idempotent** (fängt
+PortAudio-Fehler selbst) — das äußere except war redundant UND verschluckte echte Bugs
+(z.B. AttributeError). Ersetzt durch `getattr`-Guard (konsistent mit `_gain_store`/
+`_qrz_worker` im selben closeEvent), kein breites except mehr.
+
+**Audit-Teil (a) „dx_tuning-Modus beim Schließen nicht zurückgesetzt" = NICHT-FUND**
+(verify-don't-assume): der `_dx_tune_dialog` wird mit `parent=self` gebaut → Qt zerstört
+ihn beim App-Close automatisch; `_rx_mode`/Gain-Lock sind reiner Laufzeit-State (nicht
+persistiert); `radio.disconnect()` kappt ohnehin alle Slices. Kein persistenter
+Reststate, kein TX-Pfad. DeepSeek-R1 bestätigt beide Befunde + empfahl exakt die
+umgesetzte `is not None`-Variante. Reines Shutdown-Handling, **ANT1=TX unberührt.**
+Tests 2433→**2434** (+1 Mutationsbeweis: `stop()` schluckt Stream-Fehler → äußeres except
+überflüssig). Commit `d6bc901`. NICHT gepusht.
+
 ## 2026-06-05 v0.99.14 — OPT-53: Settings-Typvalidierung beim Laden
 
 **Optimierungs-Kampagne, Stufe 2 (Robustheit), voller Workflow (DeepSeek Plan-R1 GO
