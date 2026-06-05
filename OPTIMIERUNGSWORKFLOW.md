@@ -63,10 +63,10 @@ Quelle aller Befunde: `OPTIMIERUNG_AUDIT.md` (Teil 1 = Decoder/Speed + control_p
 ## TEIL 2 — Toter Code (zusätzlich, projektweit auf 0 Aufrufe verifiziert)
 | ID | Was | Datei | Status |
 |---|---|---|---|
-| OPT-40 | Import `azimuthal_equidistant_project` + Methoden `_paint_user_distance_rings` / `_paint_user_sector_lines` | direction_map_widget.py | ☐ |
-| OPT-41 | Konstante `_MAX_CYCLES` + Methoden `add_cycle_separator` / `_populate_separator_row` | rx_panel.py | ☐ |
-| OPT-42 | Methode `_slot_tag` | qso_panel.py | ☐ |
-| OPT-43 | `get_normal_preset` (deprecated-Stub, gibt immer `{}`) | config/settings.py | ☐ |
+| OPT-40 | Import `azimuthal_equidistant_project` + Methoden `_paint_user_distance_rings` / `_paint_user_sector_lines` (+ verwaist: `DISTANCE_RINGS_KM`, Import `SECTOR_COUNT`) | direction_map_widget.py | ☑ |
+| OPT-41 | Konstante `_MAX_CYCLES` + Methoden `add_cycle_separator` / `_populate_separator_row` (+ verwaist: `_FONT_SEP`, `_COLOR_SEP`) | rx_panel.py | ☑ |
+| OPT-42 | Methode `_slot_tag` | qso_panel.py | ☑ |
+| OPT-43 | `get_normal_preset` (deprecated-Stub, gibt immer `{}`) + dessen Test | config/settings.py | ☑ |
 | | _❌ NICHT entfernen: `entries_to_station_points` ist genutzt (main_window:1680) — Fehlalarm._ | | |
 
 ## TEIL 2 — Robustheit (höchster Wert — je eigener Workflow)
@@ -106,7 +106,7 @@ Quelle aller Befunde: `OPTIMIERUNG_AUDIT.md` (Teil 1 = Decoder/Speed + control_p
 |---|---|---|---|
 | OPT-01 | Ungenutzte Imports entfernen | control_panel, settings_dialog, qso_panel, qso_detail_overlay, rx_panel, help_dialog, propagation, mw_tx(469), mw_qso (Liste: AUDIT §2a) | ☐ |
 | OPT-02 | Tote lokale Variablen entfernen | mw_radio(mw/mode/sst/te/3×_time), mw_cycle(qso_busy), main_window(freq), dx_tune_dialog(ant2_gain), logbook_widget(t), control_panel(@1918/1932/1936/2152) | ☐ |
-| OPT-03 | Tote UI-Helfer + Legacy-Signale entfernen | control_panel: `set_tx_freq`, `_group_label`, `_separator`, `_band_btn`, `_toggle_btn`, `_on_tx_level_changed` + Signale `tx_level_changed`, `preamp_changed` | ☐ |
+| OPT-03 | Tote UI-Helfer + Legacy-Signale entfernen | control_panel: `set_tx_freq`, `_group_label`, `_separator`, `_band_btn`, `_toggle_btn`, `_on_tx_level_changed` + Signale `tx_level_changed`, `preamp_changed` (+ verwaist: Import `_SEP_COLOR`) | ☑ |
 | OPT-04 | f-Strings ohne Platzhalter glätten (kosmetisch) | mw_radio 2220/2287/2293, mw_qso 236, mw_cycle 694, qso_detail_overlay 45 | ☐ |
 
 ### Bündel 1B — Speed-Konstanten (verhaltensneutrales Caching)
@@ -164,6 +164,17 @@ Quelle aller Befunde: `OPTIMIERUNG_AUDIT.md` (Teil 1 = Decoder/Speed + control_p
 
 > Pro erledigtem Punkt eine Zeile: `YYYY-MM-DD · OPT-NN · Kurz · Tests X→Y · Commit <sha>`.
 
+- 2026-06-05 · **Bundle A (OPT-03/40/41/42/43)** · Toter Code projektweit entfernt:
+  6 tote control_panel-Helfer/Signale, 2 direction_map-Paint-Methoden, 2 rx_panel-
+  Separator-Methoden + `_MAX_CYCLES`, `qso_panel._slot_tag`, `settings.get_normal_preset`
+  (+ dessen Test). Inkl. transitive Orphans (`_SEP_COLOR`, `DISTANCE_RINGS_KM`,
+  Import `SECTOR_COUNT`, `_FONT_SEP`, `_COLOR_SEP`). Jedes Symbol vorab gegen ganze
+  Live-Codebasis + tests gegrep't (0 Refs). pyflakes sauber, Tests **2426→2425**
+  (1 Deprecated-Test mit raus). DeepSeek-R1 **FREIGEBEN** (verhaltensneutral, keine
+  dynamische Nutzung, keine transitive Leiche). Commit `<bundleA>`.
+  _Notiert für später (NICHT jetzt): `control_panel._tx_freq` ist nach `set_tx_freq`-
+  Entfernung konstant `None` → KISS-Inline-Kandidat (Stufe 3). `settings.save_normal_preset`
+  ist Zwilling-Stub von `get_normal_preset` → bei OPT-62/K2 mitprüfen._
 - 2026-06-05 · Audit Teil 2 · Mike-Priorität: **KISS/Robustheit > Speed**. 3 DeepSeek-
   Reviews (GUI/Globus/Listen · Speichern/Laden · Orchestrierung) + eigene Robustheits-
   Stichprobe → AUDIT Teil 2 + neue Items OPT-40..66. Schlüsselfunde gegen echten Code

@@ -234,12 +234,6 @@ class QSOPanel(QWidget):
         self._btn_tab_qso.setStyleSheet(active_ss if self._btn_tab_qso.isChecked() else inactive_ss)
         self._btn_tab_log.setStyleSheet(active_ss if self._btn_tab_log.isChecked() else inactive_ss)
 
-    def _slot_tag(self) -> str:
-        """Aktuellen Slot als Tag: [E] oder [O]."""
-        now = time.time()
-        slot = getattr(self, '_cycle_duration', 15.0)
-        return "[E]" if int(now / slot) % 2 == 0 else "[O]"
-
     def add_tx(self, message: str, ant_label: str = "",
                tx_even: bool | None = None,
                slot_start_ts: float | None = None,

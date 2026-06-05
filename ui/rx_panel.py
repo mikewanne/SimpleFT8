@@ -26,7 +26,6 @@ COL_SLOT = 8
 COL_COUNT = 9
 
 _FONT = QFont("Menlo", 11)
-_FONT_SEP = QFont("Menlo", 9)
 
 
 def _format_dt(dt: float) -> str:
@@ -46,11 +45,8 @@ _COLOR_CQ = QColor("#FF4444")
 _COLOR_DIRECTED = QColor("#FFD700")
 _COLOR_DONE = QColor("#44FF44")
 _COLOR_NORMAL = QColor("#CCCCCC")
-_COLOR_SEP = QColor("#444444")
 _COLOR_ACTIVE_CALL_BG = QColor("#2A1500")   # Dunkles Amber: aktiv angerufene Station
 _COLOR_ANSWER_ME_BG  = QColor("#5A4A10")   # Dunkles Gold: eigenes Callsign angesprochen
-
-_MAX_CYCLES = 3  # Nur die letzten 3 Zyklen anzeigen
 
 # P161 Toggle-Sortierung: Spalte → Sortier-Modus (war 2× lokal dupliziert,
 # DeepSeek-DRY → zentrale Modul-Konstante).
@@ -409,18 +405,6 @@ class RXPanel(QWidget):
         self._cycle_message_count += 1
         self.table.setRowHidden(insert_pos, self._row_should_hide(insert_pos))
 
-    def add_cycle_separator(self, count: int):
-        """Neuer Zyklus: ALLES LOESCHEN, nur aktuelle Stationen zeigen.
-
-        Alter Zyklus ist weg — komplett. Wenn eine Station noch da ist,
-        taucht sie im naechsten Zyklus wieder auf.
-        """
-        if not self._rx_active:
-            return
-        # ALLES loeschen — nur aktueller Zyklus wird angezeigt
-        self.table.setRowCount(0)
-        self._cycle_message_count = 0
-
     # ── Zeilen befuellen ──────────────────────────────────────
 
     def _populate_row(self, row: int, msg: FT8Message):
@@ -556,27 +540,6 @@ class RXPanel(QWidget):
                     f = it.font()
                     f.setBold(True)
                     it.setFont(f)
-
-    def _populate_separator_row(self, row: int, count: int):
-        """Zyklus-Trenner-Zeile einfuegen."""
-        utc = time.strftime("%H:%M:%S", time.gmtime())
-        if count > 0:
-            sep_text = (f"--- {utc} -- {count} "
-                        f"Station{'en' if count != 1 else ''} "
-                        f"{'---' * 10}")
-        else:
-            sep_text = f"--- {utc} -- keine Stationen {'---' * 9}"
-
-        # Separator ueber alle Spalten: Text nur in erster Zelle,
-        # aber Span ueber alle Spalten
-        self.table.setSpan(row, 0, 1, COL_COUNT)
-
-        item = QTableWidgetItem(sep_text)
-        item.setFont(_FONT_SEP)
-        item.setForeground(_COLOR_SEP)
-        item.setFlags(Qt.ItemFlag.NoItemFlags)
-        item.setData(Qt.ItemDataRole.UserRole, None)  # Kein FT8Message
-        self.table.setItem(row, 0, item)
 
     # ── Sortierung ────────────────────────────────────────────
 

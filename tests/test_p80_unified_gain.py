@@ -300,13 +300,6 @@ def test_settings_load_pops_normal_presets(tmp_path, monkeypatch):
     assert "normal_presets" not in s._data
 
 
-def test_settings_get_normal_preset_deprecated_returns_empty():
-    """P80: get_normal_preset ist Stub, returnt leeres dict."""
-    from config.settings import Settings
-    s = Settings()
-    assert s.get_normal_preset("20m") == {}
-
-
 def test_settings_save_normal_preset_deprecated_noop():
     """P80: save_normal_preset ist no-op."""
     from config.settings import Settings

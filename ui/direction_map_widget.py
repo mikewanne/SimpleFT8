@@ -33,12 +33,12 @@ from PySide6.QtWidgets import (
 )
 
 from core.direction_pattern import (
-    SECTOR_COUNT, SECTOR_WIDTH_DEG, SectorBucket, StationPoint,
+    SECTOR_WIDTH_DEG, SectorBucket, StationPoint,
     aggregate_sectors, is_mobile,
 )
 from core.geo import (
     _COUNTRY_COORDS, _PREFIX_MAP,
-    azimuthal_equidistant_project, distance_km, orthographic_project,
+    distance_km, orthographic_project,
     safe_locator_to_latlon,
 )
 
@@ -137,7 +137,6 @@ STATION_MAX_PX = 8
 STATION_SNR_MIN = -25.0
 STATION_SNR_MAX = 5.0
 
-DISTANCE_RINGS_KM = (3000, 6000, 9000, 12000, 15000)
 COMPASS_LABELS = ("N", "NE", "E", "SE", "S", "SW", "W", "NW")
 RESIZE_DEBOUNCE_MS = 200
 MAX_DISTANCE_KM = 18000.0
@@ -968,63 +967,6 @@ class MapCanvas(QWidget):
         painter.setPen(core_pen)
         for p in polys:
             painter.drawPolyline(p)
-
-    def _paint_user_distance_rings(self, painter: QPainter) -> None:
-        """Distance-Rings am User-Marker. Nur wenn User auf sichtbarer Hemisphaere.
-        Pixel-Skala: 1° Großkreis ≈ pi*radius/180 px (Naeherung am User-Punkt)."""
-        user_pos = self._user_screen_pos()
-        if user_pos is None:
-            return
-        ux, uy = user_pos
-        globe_r = self._radius_px()
-        # Erdumfang: 40075 km = 360°. 1° = 111.32 km.
-        # Auf der Globus-Sphaere: 1° entspricht globe_r * pi/180 Pixeln (am Punkt selbst).
-        pen = QPen(QColor(self._theme["rings"]))
-        pen.setStyle(Qt.DashLine)
-        pen.setWidthF(0.8)
-        painter.setPen(pen)
-        painter.setBrush(Qt.NoBrush)
-        # Clip auf Globus-Disk (Distanzring darf nicht ueber den Globus-Rand)
-        cx, cy = self._center_px()
-        painter.save()
-        from PySide6.QtGui import QPainterPath
-        clip = QPainterPath()
-        clip.addEllipse(QPointF(cx, cy), globe_r, globe_r)
-        painter.setClipPath(clip)
-        for km in DISTANCE_RINGS_KM:
-            # km auf Sphaere → Bogen-Winkel in rad → Pixel auf Tangentialebene
-            ang_rad = (km / 6371.0)  # Erdradius
-            r_px = globe_r * math.sin(ang_rad)  # Orthographic: Sehnen-Projektion
-            if r_px > globe_r * 1.2:
-                continue
-            painter.drawEllipse(QPointF(ux, uy), r_px, r_px)
-        painter.restore()
-
-    def _paint_user_sector_lines(self, painter: QPainter) -> None:
-        """Sektor-Linien um den User. Nur wenn User auf sichtbarer Hemisphaere."""
-        user_pos = self._user_screen_pos()
-        if user_pos is None:
-            return
-        ux, uy = user_pos
-        globe_r = self._radius_px()
-        # Sektoren als kurze Linien (15% des Globus-Radius, sonst Verzerrung)
-        line_len = globe_r * 0.15
-        pen = QPen(QColor(self._theme["sector_lines"]))
-        pen.setWidthF(0.5)
-        painter.setPen(pen)
-        cx, cy = self._center_px()
-        painter.save()
-        from PySide6.QtGui import QPainterPath
-        clip = QPainterPath()
-        clip.addEllipse(QPointF(cx, cy), globe_r, globe_r)
-        painter.setClipPath(clip)
-        for i in range(SECTOR_COUNT):
-            angle_deg = i * SECTOR_WIDTH_DEG - SECTOR_WIDTH_DEG / 2.0
-            rad = math.radians(angle_deg)
-            x = ux + line_len * math.sin(rad)
-            y = uy - line_len * math.cos(rad)
-            painter.drawLine(QPointF(ux, uy), QPointF(x, y))
-        painter.restore()
 
     def _paint_compass(self, painter: QPainter) -> None:
         # Compass bleibt am Bildschirm-Center: zeigt N/E/S/W relative zur

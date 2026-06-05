@@ -320,18 +320,6 @@ class Settings:
                 return specific
         return presets.get(band)
 
-    def get_normal_preset(self, band: str) -> dict:
-        """[DEPRECATED P80, v0.97.52] Normal-Modus Gain liegt jetzt im
-        unified ``PresetStore`` (``~/.simpleft8/kalibrierung/presets.json``).
-        Aufrufer sollen ``self._gain_store.get(band)`` nutzen.
-
-        Returnt leeres dict — alle Live-Aufrufer wurden in P80 migriert.
-        Stub bleibt fuer 1 Version als Backwards-Compat-Schutz.
-        """
-        print("[P80] DEPRECATED settings.get_normal_preset gerufen — "
-              "Aufrufer auf _gain_store.get(band) umstellen.")
-        return {}
-
     def save_normal_preset(self, band: str, gain: int, rxant: str = "ANT1"):
         """[DEPRECATED P80, v0.97.52] No-op — Persistenz uebernimmt jetzt
         ``PresetStore.save_gain(band, ...)`` im unified Store.

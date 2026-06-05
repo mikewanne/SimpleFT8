@@ -22,7 +22,7 @@ from config.settings import BAND_FREQUENCIES
 from main import APP_VERSION
 from ui.widgets.stars_widget import StarsConditionWidget
 from ui.styles import (
-    BG as _BG, TEXT as _TEXT, FONT as _FONT, SEP_COLOR as _SEP_COLOR,
+    BG as _BG, TEXT as _TEXT, FONT as _FONT,
     MIN_WIDTH as _MIN_WIDTH, LED_GREEN as _LED_GREEN, LED_BLUE as _LED_BLUE,
     DIV_PCT_OFF as _DIV_PCT_OFF, DIV_PCT_GREEN as _DIV_PCT_GREEN,
     DIV_PCT_RED as _DIV_PCT_RED, DIV_PCT_TEAL as _DIV_PCT_TEAL,
@@ -95,11 +95,6 @@ class FrequencyHistogramWidget(QWidget):
         self._cq_freq      = data.get('cq_freq')
         self._gap_start_hz = data.get('gap_start_hz')
         self._gap_end_hz   = data.get('gap_end_hz')
-        self.update()
-
-    def set_tx_freq(self, freq_hz: int | None):
-        """Aktuelle TX-Frequenz setzen (Hunt-Mode oder manuelle Auswahl)."""
-        self._tx_freq = freq_hz
         self.update()
 
     def set_clickable(self, clickable: bool):
@@ -1357,7 +1352,6 @@ class ControlPanel(QWidget):
         cancel_clicked: () — QSO abbrechen
         cq_clicked: () — CQ-Modus starten/stoppen
         tune_clicked: (bool)
-        tx_level_changed: (int)
         rx_mode_changed: (str) — "normal", "diversity"
         settings_clicked: ()
         bias_changed: (str) — Diversity-Bias Preset
@@ -1378,8 +1372,6 @@ class ControlPanel(QWidget):
     # Der frühere Bubble-Hop über dieses ControlPanel-Signal ging zur
     # Laufzeit tot (Mike-Field-Test 21.05., DeepSeek-V4-pro-Diagnose H1).
     dx_preset_changed = Signal(str)
-    tx_level_changed = Signal(int)
-    preamp_changed = Signal(bool)           # Legacy, nicht mehr genutzt
     rx_mode_changed = Signal(str)
     diversity_subtoggle_requested = Signal()  # Bundle G: 2. Klick auf DIVERSITY → Std↔DX-Toggle
     settings_clicked = Signal()
@@ -1615,63 +1607,6 @@ class ControlPanel(QWidget):
     # =====================================================================
     # Helper: UI-Bausteine
     # =====================================================================
-    def _group_label(self, text: str) -> QLabel:
-        """Gruppenueberschrift — klein, gedimmt."""
-        lbl = QLabel(text)
-        lbl.setStyleSheet(
-            f"color: #5588AA; font-size: 10px; font-family: {_FONT}; "
-            f"font-weight: bold; padding-top: 2px; padding-bottom: 0px;"
-        )
-        return lbl
-
-    def _separator(self) -> QFrame:
-        """1px Trennlinie in #333."""
-        line = QFrame()
-        line.setFrameShape(QFrame.Shape.HLine)
-        line.setFixedHeight(1)
-        line.setStyleSheet(f"background: {_SEP_COLOR}; border: none;")
-        return line
-
-    def _band_btn(self, text: str, checked: bool = False) -> QPushButton:
-        """Kompakter Band-Button."""
-        btn = QPushButton(text)
-        btn.setCheckable(True)
-        btn.setChecked(checked)
-        btn.setFixedHeight(22)
-        btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: #2a2a3e; color: #AAA; border: 1px solid #444;
-                border-radius: 3px; padding: 1px 2px; font-family: {_FONT};
-                font-size: 10px; min-width: 24px;
-            }}
-            QPushButton:checked {{
-                background-color: #0066AA; color: white; border-color: #00AAFF;
-            }}
-            QPushButton:hover {{ background-color: #333; }}
-        """)
-        return btn
-
-    def _toggle_btn(self, text: str, checked: bool = False, width: int = 0) -> QPushButton:
-        """Toggle-Button fuer Modus (FT8/FT4)."""
-        btn = QPushButton(text)
-        btn.setCheckable(True)
-        btn.setChecked(checked)
-        btn.setFixedHeight(24)
-        if width:
-            btn.setFixedWidth(width)
-        btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: #2a2a3e; color: #AAA; border: 1px solid #444;
-                border-radius: 4px; padding: 2px 8px; font-family: {_FONT};
-                font-size: 11px; font-weight: bold;
-            }}
-            QPushButton:checked {{
-                background-color: #0066AA; color: white; border-color: #00AAFF;
-            }}
-            QPushButton:hover {{ background-color: #333; }}
-        """)
-        return btn
-
     @staticmethod
     def _rx_btn_style(colors: str) -> str:
         """StyleSheet fuer NORMAL/DIVERSITY Buttons."""
@@ -2097,10 +2032,6 @@ class ControlPanel(QWidget):
         # P97 (v0.97.69): Header-Status der Radio-Kachel aktualisieren
         self._current_power_watts = int(best)
         self._refresh_radio_status_label()
-
-    def _on_tx_level_changed(self, value: int):
-        self.tx_level_label.setText(f"TX-Pegel: {value}%")
-        self.tx_level_changed.emit(value)
 
     def _on_tune_clicked(self):
         self.tune_clicked.emit(self.btn_tune.isChecked())
