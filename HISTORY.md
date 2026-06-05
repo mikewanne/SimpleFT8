@@ -43,6 +43,46 @@ Gelöscht wird nie etwas. Format: `## YYYY-MM-DD vX.YY — Kurztitel`.
 > Minus, −0.69] → `~/.simpleft8/dt_corrections.json` manuell auf Hardware-Default
 > 0.26 zurückgesetzt; greift nach App-Neustart.)*
 
+## 2026-06-05 v0.99.17 — OPT-61: KISS — QSOStateMachine.is_busy-Property statt 7× kopiertem State-Tupel
+
+**Optimierungs-Kampagne, KISS-Stufe (erster Punkt), voller Workflow.** Das
+4-State-Set `(IDLE, TIMEOUT, CQ_CALLING, CQ_WAIT)` — „kein QSO-Austausch mit
+einer Gegenstation im Gange" — war an **7 UI-Call-Sites** identisch kopiert.
+Neue `@property is_busy` in `QSOStateMachine` (`core/qso_state.py`) kapselt es
+einmal (Inline-Tupel, KISS — keine Modul-Konstante nötig): `return self.state
+not in (IDLE, TIMEOUT, CQ_CALLING, CQ_WAIT)`. 6 Call-Sites `not in (...)` →
+`is_busy`, 1 Call-Site (`in (...)`) → `not is_busy`:
+- `ui/main_window.py`: `_qso_active_for_msg_defer` (return), `_in_qso`
+  (Statusbar-Smart-Antenna), CQ-Stop-Guard (`in`-Form → `not is_busy`).
+- `ui/mw_cycle.py`: `qso_busy` (Diversity-Search-Counter), `_in_qso`
+  (Smart-Antenna im Operate-Zyklus).
+- `ui/mw_qso.py`: 2× Hunt-QSO-Abbruch (Klick-gebuffert, vor CQ-Start).
+
+**⭐ Verify-don't-assume:** Das Audit behauptete „11× kopiertes Tupel". Live-grep
+zeigte **genau 7** echte Treffer dieses EXAKTEN Sets — die übrigen CQ_WAIT-
+Vorkommen sind semantisch ANDERE Mengen (2-State `(IDLE,CQ_WAIT)`, 3-State
+`(IDLE,CQ_WAIT,CQ_CALLING)`, 6-State mit `WAIT_73`/`TX_73_COURTESY`) und blieben
+bewusst unangetastet (Scope-Disziplin, keine Verhaltensänderung).
+
+Begleitend: 2 jetzt tote lokale `from core.qso_state import QSOState` in
+`main_window.py` entfernt (pyflakes-bestätigt sauber, AST-Parse OK, kein
+„undefined name" → kein noch gebrauchter Import versehentlich entfernt).
+
+**Reine Dedup, keine Verhaltensänderung, ANT1=TX unberührt** (State-Lese-Logik).
+DeepSeek R1 **GO** (alle 6 Fragen, keine Korrekturen: Inline-Tupel ✓, `is_busy`-
+Name ✓, Wrapper behalten ✓, thread-safe ✓) + Final-R1 **PUSH FREIGEBEN**.
+
+**Test-Anpassung:** `test_p81_autohunt_stop_defer.py` T1 mockte `qso_sm` als
+`MagicMock(state=...)` und ließ die echte `_qso_active_for_msg_defer` laufen —
+die liest jetzt `qso_sm.is_busy` → bei MagicMock truthy → T1 (kein-QSO-States,
+erwartet `False`) brach. Fix via Helper `_qso_sm_in_state` (baut eine ECHTE
+`QSOStateMachine` → `is_busy` ist die echte Property, keine Logik-Duplikation
+im Test); T2 besteht dadurch aus dem RICHTIGEN Grund (vorher zufällig durch
+Mock-Truthiness). Tests 2438→**2453** (+15 `test_qso_is_busy.py`: alle 12
+Enum-States explizit eingeordnet + Vollständigkeits-/Komplement-Mutationsbeweis,
+der bei jeder künftigen Set-Änderung anschlägt). Commit `6a48ea6`. **NICHT
+gepusht.**
+
 ## 2026-06-05 v0.99.16 — OPT-57: station_stats Writer-Thread sauberer Stop (Sentinel + shutdown)
 
 **Optimierungs-Kampagne, Stufe 2 (Robustheit), voller Workflow (DeepSeek Plan-R1 GO

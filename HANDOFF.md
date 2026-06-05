@@ -3,34 +3,36 @@
 **🟢 START-SATZ NACH COMPACT (Mike tippt das → genau hier weiter):** „**Optimierung weiter,
 autonom**" — dann `CLAUDE.md → HISTORY.md (Anker) → HANDOFF.md → OPTIMIERUNGSWORKFLOW.md`
 lesen, NICHT neu planen, beim ersten offenen ☐ weiter (aktuell nächster Punkt: **KISS-Stufe
-OPT-61** [`is_busy`-Property statt 11× kopiertem State-Tupel], dann OPT-62/63/64). Gesperrt
-bis Mike-Wort: OPT-59/55/58 + Threading OPT-52 + Push.
+OPT-62** [3 Preset-Zugriffe `get_dx`/`get_gain`/`get_normal` in settings.py vereinheitlichen],
+dann OPT-63/64). Gesperrt bis Mike-Wort: OPT-59/55/58 + Threading OPT-52 + Push.
 
-**Aktueller Stand:** v0.99.16 (05.06.2026) — **Optimierungs-Kampagne läuft autonom.
-Robustheits-Stufe (OPT-50..60) abgeschlossen** (außer den Mike-gesperrten OPT-55/58/59).
-Erledigt: **Stufe 1 toter Code (v0.99.10)** + **3 tote Module (v0.99.11)** + **OPT-50/51
+**Aktueller Stand:** v0.99.17 (05.06.2026) — **Optimierungs-Kampagne läuft autonom.
+Robustheits-Stufe (OPT-50..60) abgeschlossen, KISS-Stufe begonnen (OPT-61 ✓).** Erledigt:
+**Stufe 1 toter Code (v0.99.10)** + **3 tote Module (v0.99.11)** + **OPT-50/51
 Start-Crash-Schutz (v0.99.12)** + **OPT-54 `atomic_write_json`-Helfer (v0.99.13)** + **OPT-53
 Settings-Typvalidierung (v0.99.14)** + **OPT-56 closeEvent-except entschärft (v0.99.15)** +
 **OPT-57 station_stats sauberer Thread-Stop (v0.99.16)** + **OPT-60 geprüft = kein
-Handlungsbedarf** (0 bare except, Rest legitim/TX-gesperrt). Alles reine/robustheits-
-Änderung, **ANT1=TX unberührt**, jedes Stück DeepSeek-R1 FREIGEBEN, Tests durchgehend grün
-(**aktuell 2438**). Detail → HISTORY v0.99.10–16 + Fortschritts-Log in
-**`OPTIMIERUNGSWORKFLOW.md`**. Rückfall-Tag `v0.99.9-pre-optimierung`. **NICHT gepusht
-(genaue Zahl via `git log --oneline origin/main..HEAD | wc -l` — aktuell ~19).**
+Handlungsbedarf** + **OPT-61 `is_busy`-Property (v0.99.17, KISS, 7× Dedup)**. Alles
+reine/robustheits-/KISS-Änderung, **ANT1=TX unberührt**, jedes Stück DeepSeek-R1 FREIGEBEN,
+Tests durchgehend grün (**aktuell 2453**). Detail → HISTORY v0.99.10–17 + Fortschritts-Log
+in **`OPTIMIERUNGSWORKFLOW.md`**. Rückfall-Tag `v0.99.9-pre-optimierung`. **NICHT gepusht
+(genaue Zahl via `git log --oneline origin/main..HEAD | wc -l` — aktuell ~20).**
 
-**▶ NÄCHSTE Punkte (KISS-Stufe, autonom fortsetzbar, je voller Workflow):** OPT-61
-(Property `qso_sm.is_busy` statt 11× kopiertem `(IDLE,TIMEOUT,CQ_CALLING,CQ_WAIT)`-Tupel),
-OPT-62 (3 Preset-Zugriffe vereinheitlichen), OPT-63 (Locator-Auflösung-Duplikat → Helfer),
-OPT-64 (`get/set_enabled_bands`-Validierung). Danach Speed (nachrangig) + große Methoden.
-OPT-52 (PSK-Worker Thread→Qt-Signal) berührt Threading → Mike kurz vorlegen.
+**▶ NÄCHSTE Punkte (KISS-Stufe, autonom fortsetzbar, je voller Workflow):** OPT-62
+(3 Preset-Zugriffe `get_dx`/`get_gain`/`get_normal` vereinheitlichen, settings.py),
+OPT-63 (Locator-Auflösung-Duplikat → Helfer `_resolve_station_position`,
+direction_map_widget.py), OPT-64 (`get/set_enabled_bands`-Validierung, settings.py).
+Danach Speed (nachrangig) + große Methoden. OPT-52 (PSK-Worker Thread→Qt-Signal) berührt
+Threading → Mike kurz vorlegen.
 
-**Zuletzt erledigt (Robustheits-Block):** **OPT-57** (v0.99.16, `9af78bb`): station_stats
-Daemon-Thread sauberer Stop via Sentinel + `shutdown()` (FIFO-Drain), closeEvent-Aufruf;
-Tests 2434→2438. **OPT-56** (v0.99.15, `d6bc901`): closeEvent breites except um
-audio_monitor.stop() raus (stop() ist intern robust); dx_tuning-Teil = NICHT-FUND
-(parent=self); Tests 2433→2434. **OPT-60** (geprüft, kein Code): 0 bare except, kein
-systematischer Handlungsbedarf. **Davor OPT-53** (v0.99.14, `e36c995`) + **OPT-54**
-(v0.99.13, `7ed850c`+`7fd8a9c`).
+**Zuletzt erledigt:** **OPT-61** (v0.99.17, `6a48ea6`): KISS — `@property is_busy` in
+`QSOStateMachine` ersetzt 4-State-Set an 7 UI-Call-Sites (6× `not in`, 1× `in`→`not`).
+Verify-don't-assume: Audit sagte „11×", real genau 7; andere 2/3/6-State-Sets unberührt.
+2 tote QSOState-Importe mit raus. Test-Fix `test_p81` (Helper `_qso_sm_in_state` = echte
+SM). DeepSeek R1 GO + Final-R1 PUSH FREIGEBEN. Tests 2438→2453 (+15 `test_qso_is_busy`).
+**Davor OPT-57** (v0.99.16, `9af78bb`): station_stats Daemon-Thread sauberer Stop via
+Sentinel + `shutdown()`. **OPT-56** (v0.99.15, `d6bc901`): closeEvent breites except raus.
+**OPT-60** (geprüft, kein Code). **OPT-53** (v0.99.14, `e36c995`) + **OPT-54** (v0.99.13).
 
 **⛔ NUR nach Mike-Rückmeldung (nichts eigenmächtig):**
 - **TX-Pfad-Verdacht OPT-59** (`_p94_quick73_filter` evtl. ohne `_abort_active_tx` —

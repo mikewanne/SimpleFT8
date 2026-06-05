@@ -87,7 +87,7 @@ Quelle aller Befunde: `OPTIMIERUNG_AUDIT.md` (Teil 1 = Decoder/Speed + control_p
 ## TEIL 2 — KISS / Lesbarkeit
 | ID | Was | Datei | Status |
 |---|---|---|---|
-| OPT-61 | Property `qso_sm.is_busy` statt 11× kopiertem `(IDLE,TIMEOUT,CQ_CALLING,CQ_WAIT)`-Tupel (✅ 11×) | qso_state + Aufrufer | ☐ |
+| OPT-61 | Property `qso_sm.is_busy` statt kopiertem `(IDLE,TIMEOUT,CQ_CALLING,CQ_WAIT)`-Tupel — **real 7× (nicht 11×), verify-don't-assume**; andere 2/3/6-State-Sets unberührt. v0.99.17 | qso_state + Aufrufer | ☑ |
 | OPT-62 | 3 Preset-Zugriffe (`get_dx`/`get_gain`/`get_normal`) vereinheitlichen / veraltete Pfade raus | settings.py | ☐ |
 | OPT-63 | Locator-Auflösung-Duplikat → Helfer `_resolve_station_position()` | direction_map_widget.py | ☐ |
 | OPT-64 | `get_enabled_bands`/`set_enabled_bands` Validierung → `_valid_bands(raw)` | settings.py | ☐ |
@@ -164,6 +164,19 @@ Quelle aller Befunde: `OPTIMIERUNG_AUDIT.md` (Teil 1 = Decoder/Speed + control_p
 
 > Pro erledigtem Punkt eine Zeile: `YYYY-MM-DD · OPT-NN · Kurz · Tests X→Y · Commit <sha>`.
 
+- 2026-06-05 · **OPT-61 (v0.99.17, KISS-Stufe, voller Workflow)** · Neue
+  `@property is_busy` in `QSOStateMachine` (`core/qso_state.py`, Inline-Tupel)
+  ersetzt das 4-State-Set `(IDLE,TIMEOUT,CQ_CALLING,CQ_WAIT)` an **7** UI-Call-
+  Sites (main_window 3×, mw_cycle 2×, mw_qso 2×): 6× `not in` → `is_busy`, 1×
+  `in` → `not is_busy`. **Verify-don't-assume: Audit sagte „11×" — real genau 7**;
+  übrige CQ_WAIT-Treffer sind ANDERE Mengen (2/3/6-State) → unangetastet. 2 tote
+  lokale `QSOState`-Importe (main_window) mit raus (pyflakes-sauber, kein
+  undefined). Reine Dedup, keine Verhaltensänderung, ANT1=TX unberührt. DeepSeek
+  R1 GO + Final-R1 **PUSH FREIGEBEN**. Test-Fix `test_p81` (T1 mockte `qso_sm`
+  → `is_busy` truthy; Helper `_qso_sm_in_state` = echte SM, keine Logik-Dup).
+  Tests 2438→**2453** (+15 `test_qso_is_busy.py`: 12 States + Komplement-Beweis).
+  Commit `6a48ea6`. **→ Nächster offener Punkt: OPT-62 (3 Preset-Zugriffe
+  vereinheitlichen, settings.py).**
 - 2026-06-05 · **OPT-60 (geprüft, KEIN Code)** · ~60 stille `except: pass` app-weit
   triagiert: **0 bare `except:`** (das Hauptrisiko existiert nicht), 59 Blöcke davon
   **15 in `flexradio.py`** (TX-Pfad — gesperrt), der Rest überwiegend bewusstes
