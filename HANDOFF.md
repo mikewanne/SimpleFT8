@@ -1,29 +1,29 @@
 # HANDOFF — SimpleFT8
 
-**Aktueller Stand:** v0.99.9 (05.06.2026) — **Diagnose-Logging für ungeklärten
-Watt-/RF-Bug (verhaltensneutral).** Mike-Field: sporadisch zeigt die App **RF 100 %**,
-das Funkgerät macht aber nur ~60 W (Ziel 70 W) und die Regelung „klebt"; heilt sich
-beim Umschalten der Watt-Zahl (frischer `set_power`). **⚠️ Meine erste Diagnose war
-falsch — Mike hat sie widerlegt:** „Hardware-Decke/Clipschutz" stimmte nicht (Ziel 80 W
-→ RF 80 % → 83 W, rfpower nicht am Anschlag → echter **Sync-/Freeze-Fehler**, kein Limit;
-Clipschutz 75 % ist auch nicht der Flaschenhals). **Mike-Plan: erst diagnostizieren, nicht
-raten-fixen.** `ui/mw_tx.py` `debug_log("TXPWR", …)` an 3 Stellen (`_auto_adjust_tx_level`
-1×/Slot mit {band/mode, target, app_rf%, fwdpwr, audio, peak, swr, conv, action};
-`_on_power_changed`; `_apply_rf_preset`). **Nur bei aktivem Debug-Log, kein Hot-Path-Flood.**
-`action="hold"`-Default (DeepSeek-R1-Catch gegen NameError). Reines Logging, **ANT1=TX
-unberührt.** DeepSeek R1 (Design) + Final-R1 (Diff) verhaltensneutral. Tests 2423→**2426**
-(+3 `test_txpwr_diag.py`). **Bug bleibt offen → TODO.md** (bei Wiederauftreten Debug-Log
-an → `[TXPWR]` im `~/.simpleft8/debug_*.log` lesen). **NICHT gepusht.**
+**Aktueller Stand:** v0.99.9 (05.06.2026) — **auf GitHub gepusht** (`origin/main`,
+Commit `a80eebc`) + Tag **`v0.99.9-pre-optimierung`** (Rückfallpunkt). Danach läuft die
+**OPTIMIERUNGS-KAMPAGNE** (Mike-Auftrag): ganze App auf **KISS / Lesbarkeit / Robustheit
+> Geschwindigkeit** durchgehen. Vollständiger Audit (Claude + DeepSeek, 5 Reviews) liegt in
+**`OPTIMIERUNG_AUDIT.md`** (Teil 1 Decoder/Speed + control_panel, Teil 2 ganze App KISS/
+Robustheit). Lebender Plan + Fortschritts-Tracker = **`OPTIMIERUNGSWORKFLOW.md`** (überlebt
+Compacts, OPT-01..66, Reihenfolge: toter Code → Robustheit → KISS → Speed nachrangig).
+**Tests-Basis 2426 grün.** v0.99.9-Detail (TXPWR-Diagnose, Watt-Bug offen) → HISTORY/TODO.
 
-**▶ NÄCHSTER SCHRITT:** **Bei Wiederauftreten des Watt-Bugs:** Mike schaltet Debug-Log an
-(Ctrl+D), reproduziert, dann lesen wir `~/.simpleft8/debug_*.log` nach `[TXPWR]` →
-zeigt, ob „App 100 % / Gerät 60 W, action=hold, set_power NICHT gesendet" = Sync-Freeze
-bestätigt → gezielter Fix (set_power periodisch bestätigen / nach Slice-Switch neu senden).
-**Außerdem offen — Field-Test v0.99.8** (Einmess-Fenster bei 360 px visuell prüfen).
-**Bereits ✅ field-validiert:** v0.99.5 kürzere QSO-Pause + **v0.99.6 STOPP-Schalter**
-(Mike 05.06.) + **v0.99.7 Auto-Hunt-Pool** (Mike 05.06.: „ruft auch ältere Stationen").
-Danach: **push** (auf Mikes Wort) — aktuell **19 Commits ungepusht** seit Sicherheitsanker
-`bfa20dd`. Backlog: TODO.md (Multiband = nächstes großes Projekt, eigene Session).
+**🟢 START-SATZ NACH COMPACT (Mike tippt das → wir machen GENAU hier weiter):**
+> **„Optimierung weiter — Stufe 1 toter Code, autonom"**
+
+**▶ NÄCHSTER SCHRITT (autonom nach Compact, voller DeepSeek-Workflow):**
+1. `CLAUDE.md → HISTORY.md (Anker) → HANDOFF.md → OPTIMIERUNGSWORKFLOW.md` lesen.
+2. **Stufe 1 (toter Code) abarbeiten** — OPT-01..04 + OPT-40..43 (alle projektweit auf
+   0 Aufrufe verifiziert, reine Entfernung). Sinnvoll in Bündeln: je Bündel → volle Suite
+   grün (Basis 2426) → 1 DeepSeek-Sichtung → atomarer Commit → Plan/HISTORY/HANDOFF updaten.
+3. **Grenze der Autonomie:** Stufe 1 KOMPLETT autonom. **DANN STOPPEN + Mike melden** —
+   Stufe 2 (Robustheit) enthält **TX-Pfad-Verdacht (OPT-59)** + Zufallsfund-Bug-Verdachte
+   (OPT-55/58) → die erst nach Rückmeldung.
+4. **NICHT anfassen** (warten auf Mike-Entscheidung OPT-Q1/Q2): `ap_decoder.py`,
+   `osd_decoder.py`, `diversity_merger.py` (reserviert?) — siehe Plan „Offene Entscheidungen".
+**Status Git:** v0.99.9 gepusht; aktuell **2 Doku-Commits lokal ungepusht** (Audit Teil 2 +
+Plan) — Push erst auf Mike-Wort.
 
 **Nebenbei (04.06.):** Mike hatte versehentlich die DT neu kalibriert (−0.69) →
 auf 0.26 zurückgesetzt; Mike justierte selbst auf 0.22 (eigener Wert, steht so).
