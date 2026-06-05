@@ -120,6 +120,10 @@ class Settings:
                 self._data.update(saved)
             except (json.JSONDecodeError, IOError):
                 pass
+        # OPT-53 (Robustheit): geladene Werte gegen die DEFAULTS-Typen absichern,
+        # BEVOR die Migrationen darauf arbeiten. Eine von Hand verkorkste
+        # config.json (falscher Typ) wuerde sonst blind uebernommen -> Folgefehler.
+        self._validate_types()
         # P47: tote Frequenz-Keys aus alten Configs entfernen (v0.97.11+).
         # Idempotent — Dict-Pop ist No-op bei fehlendem Key.
         self._data.pop("audio_freq_hz", None)
@@ -159,6 +163,28 @@ class Settings:
         if rt == _legacy_p48:
             self._data["radio_timing"] = {}
         self._migrate_bandpilot_settings_v088()
+
+    def _validate_types(self):
+        """Bekannte Settings-Felder gegen ihren ``DEFAULTS``-Typ absichern (OPT-53).
+
+        JSON kann beliebige Typen liefern (von Hand falsch editierte config.json).
+        Weicht ein geladener Wert vom Typ seines Defaults ab, wird der Default
+        behalten + eine Meldung ausgegeben.
+
+        - **Iteriert nur ueber ``DEFAULTS``** → dynamische/persistierte Keys
+          ausserhalb (``enabled_bands``, ``tx_slot_lock``,
+          ``normal_tx_freq_per_band``, Preset-Strukturen) bleiben unberuehrt.
+        - **``type(x) is type(default)`` statt ``isinstance``** → trennt bewusst
+          ``bool`` von ``int``: ``isinstance(True, int)`` ist ``True``, ein
+          versehentliches ``"flexradio_port": true`` wuerde sonst durchrutschen.
+        - Im Normalbetrieb (korrekte config) 0 Aenderung.
+        """
+        for key, default_val in DEFAULTS.items():
+            if type(self._data.get(key)) is not type(default_val):
+                print(f"[Settings] '{key}': Typ "
+                      f"{type(self._data.get(key)).__name__} statt "
+                      f"{type(default_val).__name__} → Default {default_val!r}")
+                self._data[key] = default_val
 
     def _migrate_bandpilot_settings_v088(self):
         """v0.87 → v0.88 Migration: alte Bandpilot-Keys → bandpilot_mode.
