@@ -43,6 +43,31 @@ Gelöscht wird nie etwas. Format: `## YYYY-MM-DD vX.YY — Kurztitel`.
 > Minus, −0.69] → `~/.simpleft8/dt_corrections.json` manuell auf Hardware-Default
 > 0.26 zurückgesetzt; greift nach App-Neustart.)*
 
+## 2026-06-05 v0.99.11 — 3 tote Module entfernt (OPT-Q1/Q2 aufgelöst, Mike-Entscheid)
+
+**Mike-Entscheid (wörtlich):** „ap_decoder / osd_decoder / diversity_merger — die hängen
+nirgends dran. Wenn die nicht gebraucht werden, keine Verlinkung haben, brauchen wir sie
+in Zukunft auch nicht — **AUSSER sie sind FT2-relevant**."
+
+**Verifiziert (verify-don't-assume):** Alle drei sind **0× live verdrahtet** und **rein
+FT8** (kein FT2-Bezug): `core/ap_decoder.py` (A-Priori-Decoding, FT8-Bitlayout c28/i3,
+`PyFT8.pack_ft8_c28`), `core/osd_decoder.py` (Ordered-Statistics-Decoding, FT8-LDPC
+(174,91)), `core/diversity_merger.py` (Docstring „Fusioniert **FT8**-Dekodierungen", nur
+in `tests/test_diversity_merger.py` referenziert). ap/osd hatten gar keinen Test.
+
+**Slice-B-Reserve geprüft (DeepSeek bestätigt):** `diversity_merger` ist **NICHT** die
+Merge-Logik des reservierten Slice-B-/Dual-RX-Multiband-Pfades. Die aktuelle Diversity-
+Architektur misst RX-Pattern + Gain/Ratio und dekodiert mit EINEM Decoder auf der
+dominanten Antenne; `diversity_merger` (decode-beide-Antennen→fusionieren,
+`on_decoder_a_done`/`on_decoder_b_done`) ist ein davon losgelöstes, nie verdrahtetes
+Alt-Experiment. Der hardware-nahe Slice-B-Code in `flexradio.py` bleibt unberührt + reserviert.
+
+**Entfernt:** `core/ap_decoder.py`, `core/osd_decoder.py`, `core/diversity_merger.py`,
+`tests/test_diversity_merger.py` (10 Tests) + Dateibaum-Zeile in `README.md`. **`PyFT8`
+bleibt** (unabhängig von `core/message.py` live genutzt). DeepSeek-R1 **ENTFERNEN FREIGEBEN**
+(alle 3 tot + nicht FT2-relevant + nicht Slice-B-Baustein + keine dynamische Nutzung).
+Tests **2425→2415** (−10, die diversity_merger-Tests). **NICHT gepusht.**
+
 ## 2026-06-05 v0.99.10 — Optimierung Stufe 1: toter Code entfernt (Bundles A–D)
 
 **Erste Stufe der Optimierungs-Kampagne (Mike-Auftrag „nur Optimierungen, keine

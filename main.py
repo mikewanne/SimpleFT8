@@ -13,7 +13,7 @@ import atexit
 import signal
 from pathlib import Path
 
-APP_VERSION = "0.99.10"
+APP_VERSION = "0.99.11"
 
 # ── P43: Activity Monitor zeigt Prozess-Namen statt nur "Python" ──
 # Bei der P30-Memory-Leak-Diagnose 12.05. konnte Mike SimpleFT8 nicht

@@ -163,7 +163,6 @@ SimpleFT8/
 │   ├── decoder.py / encoder.py     # FT8/FT4/FT2 decode + 5-pass subtraction
 │   ├── qso_state.py                # Hunt + CQ + Waitlist state machine
 │   ├── diversity.py                # Standard/DX scoring, 70:30 / 50:50
-│   ├── diversity_merger.py         # ANT1+ANT2 merge, SNR-winner selection
 │   ├── station_stats.py            # Async per-cycle logging → statistics/
 │   ├── antenna_pref.py             # Per-callsign antenna preference
 │   ├── locator_db.py               # Persistent Maidenhead cache (JSON)

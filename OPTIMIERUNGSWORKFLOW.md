@@ -154,8 +154,8 @@ Quelle aller Befunde: `OPTIMIERUNG_AUDIT.md` (Teil 1 = Decoder/Speed + control_p
 
 | ID | Frage | Status |
 |---|---|---|
-| OPT-Q1 | `core/ap_decoder.py` (`try_ap_decode`) + `core/osd_decoder.py` (`try_osd_decode`) sind nirgends verdrahtet — reservierte Decode-Technik (AP/OSD) oder löschbar? | ⏸ Mike |
-| OPT-Q2 | `core/diversity_merger.py` (`DiversityMerger`) nur in Tests — Multiband-/Dual-RX-Reserve wie Slice-B, oder veraltet? | ⏸ Mike |
+| OPT-Q1 | `core/ap_decoder.py` + `core/osd_decoder.py` — Mike-Entscheid 05.06.: nicht verlinkt + nicht FT2-relevant (rein FT8, PyFT8-LDPC) → **ENTFERNT** (v0.99.11) | ✅ ENTFERNT |
+| OPT-Q2 | `core/diversity_merger.py` (+ Test) — nicht FT2-relevant, NICHT der Slice-B-Merge-Baustein (DeepSeek bestätigt) → **ENTFERNT** (v0.99.11) | ✅ ENTFERNT |
 | OPT-Q3 | `direction_map_widget.py` Quaternion-Helfer (`_quat_*`, `_paint_user_distance_rings`, `_paint_user_sector_lines`) + Einzel-Helfer aus AUDIT §2b — je prüfen ob echte Leichen | ⏸ später, einzeln |
 
 ---
@@ -164,6 +164,12 @@ Quelle aller Befunde: `OPTIMIERUNG_AUDIT.md` (Teil 1 = Decoder/Speed + control_p
 
 > Pro erledigtem Punkt eine Zeile: `YYYY-MM-DD · OPT-NN · Kurz · Tests X→Y · Commit <sha>`.
 
+- 2026-06-05 · **OPT-Q1/Q2 aufgelöst (v0.99.11)** · 3 tote Module entfernt nach Mike-
+  Entscheid (nicht verlinkt + nicht FT2-relevant → weg): `ap_decoder` + `osd_decoder`
+  (rein FT8, PyFT8-LDPC, kein Test) + `diversity_merger` (+ 10er-Test). DeepSeek-R1
+  ENTFERNEN FREIGEBEN inkl. Slice-B-Unabhängigkeit (diversity_merger ≠ reservierter
+  Dual-RX-Merge-Baustein; flexradio-Slice-B unberührt). README-Dateibaum angepasst,
+  PyFT8 bleibt (message.py live). Tests 2425→**2415** (−10). Commit `<bundleE>`.
 - 2026-06-05 · **Bundle D (OPT-04)** · 15 f-Strings ohne Platzhalter geglättet (`f`-Präfix
   weg = identische Ausgabe): qso_state(2), qrz_upload_worker, control_panel(5, inkl.
   2-Literal-`debug_log`), mw_radio(4), mw_qso, mw_cycle, flexradio(2). Jede Stelle auf
