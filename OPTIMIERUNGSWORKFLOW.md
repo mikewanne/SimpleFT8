@@ -105,7 +105,7 @@ Quelle aller Befunde: `OPTIMIERUNG_AUDIT.md` (Teil 1 = Decoder/Speed + control_p
 | ID | Was | Datei | Status |
 |---|---|---|---|
 | OPT-01 | Ungenutzte Imports entfernen (frischer pyflakes-Lauf, je gegen Live-Code verifiziert; `__init__`-Re-Exports + TYPE_CHECKING-MainWindow bewusst BEHALTEN) | core/message, propagation, debug_log, station_stats, auto_hunt(TYPE_CHECKING FT8Message), control_panel, settings_dialog, main_window, help_dialog, rx_panel, qso_detail_overlay, direction_map_widget, qso_panel, mw_qso, mw_tx(469), mw_radio(4× lokales `time`), bootstrap_ci | ☑ |
-| OPT-02 | Tote lokale Variablen entfernen (die 4× `import time as _time` in mw_radio waren unused IMPORTS → schon in Bundle B/OPT-01 raus) | mw_radio(mw/mode/sst/te), mw_cycle(qso_busy), main_window(freq), dx_tune_dialog(ant2_gain), logbook_widget(t), control_panel(@1918/1932/1936/2152 + `_SEP_SS`@869) | ☐ |
+| OPT-02 | Tote lokale Variablen entfernen (pyflakes-autoritativ; Audit-Liste war ungenau — `sst/te` + control_panel-`@191x` waren NICHT tot; dafür Zusatzfunde flexradio/generate_plots/dx_tune ant1_gain) | main_window(freq), control_panel(`_SEP_SS`), mw_radio(mw, mode), logbook_widget(t), dx_tune_dialog(ant1_gain, ant2_gain), mw_cycle(qso_busy), flexradio(body), generate_plots(d_rsc) | ☑ |
 | OPT-03 | Tote UI-Helfer + Legacy-Signale entfernen | control_panel: `set_tx_freq`, `_group_label`, `_separator`, `_band_btn`, `_toggle_btn`, `_on_tx_level_changed` + Signale `tx_level_changed`, `preamp_changed` (+ verwaist: Import `_SEP_COLOR`) | ☑ |
 | OPT-04 | f-Strings ohne Platzhalter glätten (kosmetisch) | mw_radio 2220/2287/2293, mw_qso 236, mw_cycle 694, qso_detail_overlay 45 | ☐ |
 
@@ -164,6 +164,13 @@ Quelle aller Befunde: `OPTIMIERUNG_AUDIT.md` (Teil 1 = Decoder/Speed + control_p
 
 > Pro erledigtem Punkt eine Zeile: `YYYY-MM-DD · OPT-NN · Kurz · Tests X→Y · Commit <sha>`.
 
+- 2026-06-05 · **Bundle C (OPT-02)** · 10 tote lokale Variablen entfernt (pyflakes-
+  autoritativ, je rechte Seite als seiteneffektfrei verifiziert → ganze Zeile weg):
+  main_window `freq`, control_panel `_SEP_SS`, mw_radio `mw`+`mode`, logbook_widget `t`,
+  dx_tune_dialog `ant1_gain`+`ant2_gain`, mw_cycle `qso_busy`, **flexradio `body`**
+  (TCP-Response-Parser, KEIN TX/Slice-B), generate_plots `d_rsc` (nur toter DE-Block,
+  EN-Block bei Z.1807 nutzt es → unberührt). pyflakes 0 tote Locals mehr, Tests **2425
+  grün**, DeepSeek-R1 **FREIGEBEN** (alle RHS reine Getter, kein Seiteneffekt). Commit `<bundleC>`.
 - 2026-06-05 · **Bundle B (OPT-01)** · Ungenutzte Imports projektweit entfernt (17
   Dateien): frischer `pyflakes`-Lauf, jeder Treffer gegen Live-Code verifiziert
   (`grep -cnw` = nur Import-Zeile). Inkl. 1 toter `TYPE_CHECKING`-Import

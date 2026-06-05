@@ -1271,7 +1271,6 @@ class FlexRadio(QObject):
             match = re.match(r"R(\d+)\|(.+)", line)
             if match:
                 seq = int(match.group(1))
-                body = match.group(2)
                 self._responses[seq] = line
                 event = self._response_events.pop(seq, None)
                 if event:

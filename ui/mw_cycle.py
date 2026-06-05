@@ -389,10 +389,6 @@ class CycleMixin:
         """Diversity-Operate-Phase: Stationen akkumulieren + Stats-Logging."""
         self._feed_locator_db(messages)
         self._feed_rx_history(messages, antenna=ant)
-        qso_busy = self.qso_sm.state not in (
-            QSOState.IDLE, QSOState.TIMEOUT,
-            QSOState.CQ_CALLING, QSOState.CQ_WAIT,
-        )
 
         # Diversity: gemeinsame Akkumulation mit Antennen-Info
         changed, comparisons = accumulate_stations(

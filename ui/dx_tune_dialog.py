@@ -691,8 +691,6 @@ class DXTuneDialog(QDialog):
         self.radio.set_tx_antenna("ANT1")
 
         # UI kurz aktualisieren, dann automatisch schliessen
-        ant1_gain = self._results["ant1_gain"]
-        ant2_gain = self._results["ant2_gain"]
         std_a1 = self._results["standard"]["ant1_gain"]
         std_a2 = self._results["standard"]["ant2_gain"]
         dx_a1  = self._results["dx"]["ant1_gain"]

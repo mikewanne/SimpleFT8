@@ -863,8 +863,6 @@ class _RadioCard(QFrame):
         body_lay.setContentsMargins(0, 0, 0, 0)
         body_lay.setSpacing(5)
 
-        _SEP_SS = "background: #445544; max-height: 1px; min-height: 1px;"
-
         # ── Sektion 1: PSK Info + Map ─────────────────────────
         psk_frame = QFrame()
         psk_frame.setStyleSheet(

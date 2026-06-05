@@ -1409,7 +1409,6 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
             freq_display = f"TUNE: {self._tune_freq_mhz * 1000:.3f} kHz"
         else:
             freq_display = f"{work_freq * 1000:.3f} kHz"
-        freq = work_freq  # Rückwärtskompatibilität für restliche Nutzung
         mode_labels = {
             "normal": "Normal",
             "diversity": "DIVERSITY",

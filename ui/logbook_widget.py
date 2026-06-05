@@ -43,7 +43,6 @@ _HIDE_ORDER = (5, 3, 2)
 def _format_datetime(record: dict) -> str:
     """QSO_DATE + TIME_ON in kompaktes deutsches Format: DD.MM.YY HH:MM"""
     d = record.get("QSO_DATE", "")
-    t = record.get("TIME_ON", "")
     if len(d) == 8:
         return f"{d[6:8]}.{d[4:6]}.{d[2:4]}"
     return d

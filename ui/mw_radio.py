@@ -739,7 +739,6 @@ class RadioMixin:
         #   Ziel-Watt-Wert wird via _auto_adjust_tx_level gespeichert.
         _has_anchor = False
         try:
-            mw = self._main_window if hasattr(self, "_main_window") else self
             _has_anchor = self.rf_preset_store.has_any_preset(
                 self.radio.radio_type, band)
         except (AttributeError, Exception):
@@ -1422,7 +1421,6 @@ class RadioMixin:
         with self._diversity_lock:
             self._diversity_current_ant = "A1"
             self._diversity_ant_queue = deque()  # (ant, phase) Tupel
-        mode = self.settings.mode
         band = self.settings.band
         self._diversity_ctrl.scoring_mode = scoring_mode
 

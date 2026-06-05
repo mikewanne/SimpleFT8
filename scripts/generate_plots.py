@@ -1632,7 +1632,6 @@ def _r_title_page(pdf: PdfPages, summary: dict, fair_summary: dict, time_range: 
     s_avg  = s_fair.get("avg", 0.0)
     d_avg  = d_fair.get("avg", 0.0)
     s_rsc  = s_fair.get("avg_rescue", 0.0)
-    d_rsc  = d_fair.get("avg_rescue", 0.0)
     s_nref = s_fair.get("n_avg_common", 0.0)
     d_nref = d_fair.get("n_avg_common", 0.0)
     def pct(a, b): return f"{(a / b - 1) * 100:+.0f}%" if b > 0 else "n/a"
