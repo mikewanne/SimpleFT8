@@ -3,11 +3,13 @@
 **🟢 START-SATZ NACH COMPACT (Mike tippt das → genau hier weiter):** „**Optimierung weiter,
 autonom**" — dann `CLAUDE.md → HISTORY.md (Anker) → HANDOFF.md → OPTIMIERUNGSWORKFLOW.md`
 lesen, NICHT neu planen, beim ersten offenen ☐ weiter (aktuell nächster Punkt: **KISS-Stufe
-OPT-62** [3 Preset-Zugriffe `get_dx`/`get_gain`/`get_normal` in settings.py vereinheitlichen],
-dann OPT-63/64). Gesperrt bis Mike-Wort: OPT-59/55/58 + Threading OPT-52 + Push.
+OPT-63** [Locator-Auflösung-Duplikat → Helfer `_resolve_station_position`,
+direction_map_widget.py], dann OPT-64). **OPT-62 geprüft = obsolet** (Audit-Befund durch
+P80/P51-Migration überholt, Preset-Methoden test-only; `save_*`-Entfernung → Mike-Vorlage
+OPT-Q4). Gesperrt bis Mike-Wort: OPT-59/55/58 + Threading OPT-52 + Push + OPT-Q4 (save_*).
 
 **Aktueller Stand:** v0.99.17 (05.06.2026) — **Optimierungs-Kampagne läuft autonom.
-Robustheits-Stufe (OPT-50..60) abgeschlossen, KISS-Stufe begonnen (OPT-61 ✓).** Erledigt:
+Robustheits-Stufe (OPT-50..60) abgeschlossen, KISS-Stufe läuft (OPT-61 ✓, OPT-62 geprüft=obsolet).** Erledigt:
 **Stufe 1 toter Code (v0.99.10)** + **3 tote Module (v0.99.11)** + **OPT-50/51
 Start-Crash-Schutz (v0.99.12)** + **OPT-54 `atomic_write_json`-Helfer (v0.99.13)** + **OPT-53
 Settings-Typvalidierung (v0.99.14)** + **OPT-56 closeEvent-except entschärft (v0.99.15)** +
@@ -18,12 +20,12 @@ Tests durchgehend grün (**aktuell 2453**). Detail → HISTORY v0.99.10–17 + F
 in **`OPTIMIERUNGSWORKFLOW.md`**. Rückfall-Tag `v0.99.9-pre-optimierung`. **NICHT gepusht
 (genaue Zahl via `git log --oneline origin/main..HEAD | wc -l` — aktuell ~20).**
 
-**▶ NÄCHSTE Punkte (KISS-Stufe, autonom fortsetzbar, je voller Workflow):** OPT-62
-(3 Preset-Zugriffe `get_dx`/`get_gain`/`get_normal` vereinheitlichen, settings.py),
-OPT-63 (Locator-Auflösung-Duplikat → Helfer `_resolve_station_position`,
-direction_map_widget.py), OPT-64 (`get/set_enabled_bands`-Validierung, settings.py).
-Danach Speed (nachrangig) + große Methoden. OPT-52 (PSK-Worker Thread→Qt-Signal) berührt
-Threading → Mike kurz vorlegen.
+**▶ NÄCHSTE Punkte (KISS-Stufe, autonom fortsetzbar, je voller Workflow):** OPT-63
+(Locator-Auflösung-Duplikat → Helfer `_resolve_station_position`, direction_map_widget.py),
+OPT-64 (`get/set_enabled_bands`-Validierung, settings.py). Danach Speed (nachrangig) +
+große Methoden. OPT-52 (PSK-Worker Thread→Qt-Signal) berührt Threading → Mike kurz vorlegen.
+**OPT-Q4 (Mike-Vorlage):** `settings.save_dx_preset`/`save_normal_preset` (tote/no-op API +
+Regression-Wächter) entfernen? Claude-Empfehlung BEHALTEN (KISS-Gewinn ~0, test-only).
 
 **Zuletzt erledigt:** **OPT-61** (v0.99.17, `6a48ea6`): KISS — `@property is_busy` in
 `QSOStateMachine` ersetzt 4-State-Set an 7 UI-Call-Sites (6× `not in`, 1× `in`→`not`).

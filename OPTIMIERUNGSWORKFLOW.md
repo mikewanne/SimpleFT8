@@ -88,7 +88,7 @@ Quelle aller Befunde: `OPTIMIERUNG_AUDIT.md` (Teil 1 = Decoder/Speed + control_p
 | ID | Was | Datei | Status |
 |---|---|---|---|
 | OPT-61 | Property `qso_sm.is_busy` statt kopiertem `(IDLE,TIMEOUT,CQ_CALLING,CQ_WAIT)`-Tupel — **real 7× (nicht 11×), verify-don't-assume**; andere 2/3/6-State-Sets unberührt. v0.99.17 | qso_state + Aufrufer | ☑ |
-| OPT-62 | 3 Preset-Zugriffe (`get_dx`/`get_gain`/`get_normal`) vereinheitlichen / veraltete Pfade raus | settings.py | ☐ |
+| OPT-62 | ~~3 Preset-Zugriffe vereinheitlichen~~ — **OBSOLET (verify-don't-assume + DeepSeek-R1):** Befund durch P80/P51-Migration + Bundle A (get_normal_preset raus) überholt; `get_dx_preset`/`get_gain_preset` nur noch test-only, `save_dx_preset`=tote API (T7-Wächter), `save_normal_preset`=no-op. Kein App-KISS-Gewinn; Wrapper wäre Overengineering an Test-Code. **`save_*`-Entfernung → ⏸ Mike-Vorlage (Q4, öffentliche API).** | settings.py | ☑ geprüft |
 | OPT-63 | Locator-Auflösung-Duplikat → Helfer `_resolve_station_position()` | direction_map_widget.py | ☐ |
 | OPT-64 | `get_enabled_bands`/`set_enabled_bands` Validierung → `_valid_bands(raw)` | settings.py | ☐ |
 | OPT-65 | `_update_statusbar` (~80 Z.) in `_build_status_*`-Teile (langfristig) | main_window.py | ☐ |
@@ -157,6 +157,7 @@ Quelle aller Befunde: `OPTIMIERUNG_AUDIT.md` (Teil 1 = Decoder/Speed + control_p
 | OPT-Q1 | `core/ap_decoder.py` + `core/osd_decoder.py` — Mike-Entscheid 05.06.: nicht verlinkt + nicht FT2-relevant (rein FT8, PyFT8-LDPC) → **ENTFERNT** (v0.99.11) | ✅ ENTFERNT |
 | OPT-Q2 | `core/diversity_merger.py` (+ Test) — nicht FT2-relevant, NICHT der Slice-B-Merge-Baustein (DeepSeek bestätigt) → **ENTFERNT** (v0.99.11) | ✅ ENTFERNT |
 | OPT-Q3 | `direction_map_widget.py` Quaternion-Helfer (`_quat_*`, `_paint_user_distance_rings`, `_paint_user_sector_lines`) + Einzel-Helfer aus AUDIT §2b — je prüfen ob echte Leichen | ⏸ später, einzeln |
+| OPT-Q4 | **(aus OPT-62)** `settings.save_dx_preset` (tote API, T7-Wächter prüft Nicht-Aufruf) + `settings.save_normal_preset` (no-op-deprecated) entfernen? Beide öffentliche Python-API + bewusste Regression-Wächter → Entfernen wäre Breaking Change. DeepSeek: Mike-Sache. **Claude-Empfehlung: BEHALTEN** (Audit Z.98 „behalten"; Wächter-Tests sind billiger Schutz; KISS-Gewinn ~0 da test-only) | ⏸ Mike |
 
 ---
 
@@ -164,6 +165,15 @@ Quelle aller Befunde: `OPTIMIERUNG_AUDIT.md` (Teil 1 = Decoder/Speed + control_p
 
 > Pro erledigtem Punkt eine Zeile: `YYYY-MM-DD · OPT-NN · Kurz · Tests X→Y · Commit <sha>`.
 
+- 2026-06-05 · **OPT-62 (geprüft, OBSOLET — KEIN Code)** · K2 „3 Preset-Zugriffe
+  vereinheitlichen" durch Architektur-Migration überholt: `get_normal_preset` schon
+  raus (Bundle A); App nutzt seit P80/P51 den unified `PresetStore`/`rf_preset_store`,
+  NICHT mehr `get_dx_preset`/`get_gain_preset`/`save_*` (alle nur noch test-only;
+  `save_dx_preset`=tote API mit T7-Wächter, `save_normal_preset`=no-op). **verify-don't-
+  assume:** Audit-Befund veraltet + widersprach sich selbst (Z.98 „behalten"). DeepSeek-R1
+  bestätigt: OBSOLET wie OPT-60, Wrapper (get_dx_preset→get_gain_preset) wäre
+  Overengineering an Test-Code, `save_*`-Entfernung = Mike-Sache (öffentliche API +
+  Regression-Wächter → OPT-Q4). Herabgestuft, kein Commit-Code.
 - 2026-06-05 · **OPT-61 (v0.99.17, KISS-Stufe, voller Workflow)** · Neue
   `@property is_busy` in `QSOStateMachine` (`core/qso_state.py`, Inline-Tupel)
   ersetzt das 4-State-Set `(IDLE,TIMEOUT,CQ_CALLING,CQ_WAIT)` an **7** UI-Call-
