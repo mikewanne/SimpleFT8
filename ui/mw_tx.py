@@ -466,8 +466,6 @@ class TXMixin:
         self._fwdpwr_samples.clear()
         avg_fwdpwr = (sum(samples) / len(samples)) if samples else 0.0
 
-        from PySide6.QtWidgets import QMessageBox
-
         if swr_now <= swr_limit:
             was_blocked = band in self._swr_blocked_bands
             self._swr_blocked_bands.discard(band)

@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, Slot, Signal, QTimer
 
-from config.settings import Settings, BAND_FREQUENCIES
+from config.settings import Settings
 from core.timing import FT8Timer
 from core.qso_state import QSOStateMachine, QSOState
 from core.encoder import Encoder

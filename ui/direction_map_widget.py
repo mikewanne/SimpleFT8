@@ -28,8 +28,8 @@ from PySide6.QtGui import (
     QBrush, QColor, QFont, QPainter, QPen, QPixmap, QPolygonF,
 )
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QDialog, QFrame, QHBoxLayout, QLabel,
-    QPushButton, QSizePolicy, QSpinBox, QVBoxLayout, QWidget,
+    QCheckBox, QComboBox, QDialog, QHBoxLayout, QLabel,
+    QPushButton, QSizePolicy, QVBoxLayout, QWidget,
 )
 
 from core.direction_pattern import (

@@ -21,7 +21,7 @@ import xml.etree.ElementTree as ET
 import urllib.request
 import urllib.error
 from datetime import datetime, timezone, timedelta
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Optional
 
 # ─────────────────────────────────────────────────────────────────────────────
 DATA_URL         = "https://www.hamqsl.com/solarxml.php"

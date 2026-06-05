@@ -2,9 +2,8 @@
 
 import html
 import time
-from pathlib import Path
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QTextEdit, QTextBrowser,
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QTextBrowser,
     QPushButton, QStackedWidget, QSizePolicy, QMenu,
 )
 from PySide6.QtCore import Qt, Signal, QTimer

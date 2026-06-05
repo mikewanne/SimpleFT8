@@ -5,7 +5,7 @@ import time
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QTableWidget,
     QTableWidgetItem, QPushButton, QHeaderView, QAbstractItemView, QMenu,
-    QFrame, QSizePolicy,
+    QFrame,
 )
 from PySide6.QtCore import Signal, Qt
 from PySide6.QtGui import QColor, QFont

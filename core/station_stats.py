@@ -16,7 +16,6 @@ Grund: Bei Moduswechsel innerhalb einer Stunde werden Zaehler resettet,
 Threading: async via Queue + Daemon-Thread (blockiert nie den Decoder)
 """
 
-import os
 import queue
 import threading
 import time

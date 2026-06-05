@@ -16,7 +16,6 @@ Beispiel: `14:35:42.123 [ANT] cmd=ANT2 gain=10dB`
 """
 from __future__ import annotations
 
-import os
 import threading
 import time
 from datetime import datetime, timedelta

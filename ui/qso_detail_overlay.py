@@ -2,10 +2,9 @@
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel,
-    QPushButton, QLineEdit, QTextEdit, QFrame, QScrollArea,
+    QPushButton, QLineEdit, QFrame, QScrollArea,
 )
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QFont, QPixmap
+from PySide6.QtCore import Signal
 
 _FONT = "Menlo"
 _BG = "#111118"

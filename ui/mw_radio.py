@@ -658,7 +658,6 @@ class RadioMixin:
         self.qso_panel.status_label.setText("Bandwechsel")
 
         # Warmup: 60s keine Stats nach Bandwechsel
-        import time as _time
         self._stats_warmup_cycles = 6
 
         # Empfangsliste komplett leeren bei Bandwechsel
@@ -891,7 +890,6 @@ class RadioMixin:
             self._abort_qso_and_tx()
 
         # Warmup: 60s keine Stats nach Moduswechsel
-        import time as _time
         self._stats_warmup_cycles = 6
 
         # P115 (v0.98.00): Mike-Spec — RX-Stationsliste NICHT leeren bei
@@ -1842,7 +1840,6 @@ class RadioMixin:
         Tabellen leeren) laufen weiter, nur die TUNE-Hardware-Aufrufe
         werden in den Dialog verschoben.
         """
-        import time as _time
         self._stats_warmup_cycles = 99999  # Blockiert bis nach Einmessen+Warmup
         self._gain_scoring_mode = scoring_mode
         from PySide6.QtCore import QTimer
@@ -2257,7 +2254,6 @@ class RadioMixin:
         Wenn alte Werte vorhanden: still laden ohne Neu-Messung — kein
         Endlos-Pipeline-Restart. Wenn nichts da: Diversity deaktivieren.
         """
-        import time as _time
         self._dx_tune_dialog = None
         self._set_gain_measure_lock(False)
         # v0.94: Pending-Flags bei Cancel zuruecksetzen.

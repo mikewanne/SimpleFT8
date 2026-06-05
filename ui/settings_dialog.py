@@ -1,19 +1,16 @@
 """SimpleFT8 Settings Dialog — Einstellungen bearbeiten und in config.json speichern."""
 
-import time
-
 from pathlib import Path
 
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel, QGridLayout,
-    QLineEdit, QSpinBox, QDoubleSpinBox, QPushButton, QGroupBox,
+    QLineEdit, QSpinBox, QPushButton, QGroupBox,
     QComboBox, QMessageBox, QToolButton, QFileDialog,
-    QTableWidget, QTableWidgetItem, QHeaderView,
     QTabWidget, QWidget, QFrame, QCheckBox, QScrollArea,
 )
 from PySide6.QtCore import Qt, QTimer
 
-from config.settings import Settings, DEFAULTS, BAND_FREQUENCIES
+from config.settings import Settings
 from ui.styles import MSGBOX_STYLE
 # Bundle J (v0.97.27): einheitlicher Help-Dialog mit Scrollbar (Mike-Designentscheidung).
 from ui.simple_help_dialog import show_simple_help

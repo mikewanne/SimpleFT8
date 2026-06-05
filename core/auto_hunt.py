@@ -32,7 +32,6 @@ from .message import looks_like_callsign
 from .geo import callsign_to_country, callsign_to_distance
 
 if TYPE_CHECKING:
-    from core.message import FT8Message
     from log.qso_log import QSOLog
 
 logger = logging.getLogger(__name__)

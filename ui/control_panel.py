@@ -7,7 +7,7 @@ import time
 from collections import deque
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QSlider, QFrame, QGridLayout, QButtonGroup, QProgressBar, QSpinBox,
+    QFrame, QGridLayout, QButtonGroup, QProgressBar, QSpinBox,
     QMenu,
 )
 
@@ -22,15 +22,12 @@ from config.settings import BAND_FREQUENCIES
 from main import APP_VERSION
 from ui.widgets.stars_widget import StarsConditionWidget
 from ui.styles import (
-    BG as _BG, TEXT as _TEXT, FONT as _FONT,
+    TEXT as _TEXT, FONT as _FONT,
     MIN_WIDTH as _MIN_WIDTH, LED_GREEN as _LED_GREEN, LED_BLUE as _LED_BLUE,
     DIV_PCT_OFF as _DIV_PCT_OFF, DIV_PCT_GREEN as _DIV_PCT_GREEN,
     DIV_PCT_RED as _DIV_PCT_RED, DIV_PCT_TEAL as _DIV_PCT_TEAL,
-    DIV_PCT_YELLOW as _DIV_PCT_YELLOW,
-    BTN_BASE as _BTN_BASE,
     CARD_BLUE as _CARD_SS_BLUE, CARD_GREEN as _CARD_SS_GREEN,
     CARD_TEAL as _CARD_SS_TEAL, CARD_ORANGE as _CARD_SS_ORANGE,
-    CARD_DEFAULT as _CARD_SS,
 )
 
 

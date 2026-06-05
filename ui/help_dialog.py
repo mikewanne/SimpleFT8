@@ -5,7 +5,7 @@ from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QListWidget, QTextBrowser,
     QLabel, QComboBox,
 )
-from PySide6.QtCore import Qt, QSettings
+from PySide6.QtCore import QSettings
 
 
 # Feature-Liste: (Anzeige-Name DE, Anzeige-Name EN, Datei-Basis)

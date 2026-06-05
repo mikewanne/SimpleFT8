@@ -104,8 +104,8 @@ Quelle aller Befunde: `OPTIMIERUNG_AUDIT.md` (Teil 1 = Decoder/Speed + control_p
 ### Bündel 1A — Toter Code (reine Entfernung)
 | ID | Was | Datei | Status |
 |---|---|---|---|
-| OPT-01 | Ungenutzte Imports entfernen | control_panel, settings_dialog, qso_panel, qso_detail_overlay, rx_panel, help_dialog, propagation, mw_tx(469), mw_qso (Liste: AUDIT §2a) | ☐ |
-| OPT-02 | Tote lokale Variablen entfernen | mw_radio(mw/mode/sst/te/3×_time), mw_cycle(qso_busy), main_window(freq), dx_tune_dialog(ant2_gain), logbook_widget(t), control_panel(@1918/1932/1936/2152) | ☐ |
+| OPT-01 | Ungenutzte Imports entfernen (frischer pyflakes-Lauf, je gegen Live-Code verifiziert; `__init__`-Re-Exports + TYPE_CHECKING-MainWindow bewusst BEHALTEN) | core/message, propagation, debug_log, station_stats, auto_hunt(TYPE_CHECKING FT8Message), control_panel, settings_dialog, main_window, help_dialog, rx_panel, qso_detail_overlay, direction_map_widget, qso_panel, mw_qso, mw_tx(469), mw_radio(4× lokales `time`), bootstrap_ci | ☑ |
+| OPT-02 | Tote lokale Variablen entfernen (die 4× `import time as _time` in mw_radio waren unused IMPORTS → schon in Bundle B/OPT-01 raus) | mw_radio(mw/mode/sst/te), mw_cycle(qso_busy), main_window(freq), dx_tune_dialog(ant2_gain), logbook_widget(t), control_panel(@1918/1932/1936/2152 + `_SEP_SS`@869) | ☐ |
 | OPT-03 | Tote UI-Helfer + Legacy-Signale entfernen | control_panel: `set_tx_freq`, `_group_label`, `_separator`, `_band_btn`, `_toggle_btn`, `_on_tx_level_changed` + Signale `tx_level_changed`, `preamp_changed` (+ verwaist: Import `_SEP_COLOR`) | ☑ |
 | OPT-04 | f-Strings ohne Platzhalter glätten (kosmetisch) | mw_radio 2220/2287/2293, mw_qso 236, mw_cycle 694, qso_detail_overlay 45 | ☐ |
 
@@ -164,6 +164,15 @@ Quelle aller Befunde: `OPTIMIERUNG_AUDIT.md` (Teil 1 = Decoder/Speed + control_p
 
 > Pro erledigtem Punkt eine Zeile: `YYYY-MM-DD · OPT-NN · Kurz · Tests X→Y · Commit <sha>`.
 
+- 2026-06-05 · **Bundle B (OPT-01)** · Ungenutzte Imports projektweit entfernt (17
+  Dateien): frischer `pyflakes`-Lauf, jeder Treffer gegen Live-Code verifiziert
+  (`grep -cnw` = nur Import-Zeile). Inkl. 1 toter `TYPE_CHECKING`-Import
+  (`auto_hunt.FT8Message`, 0 Annotation-Nutzung) + 4× tote lokale `import time as _time`
+  in mw_radio. **Bewusst BEHALTEN:** `__init__.py`-Re-Exports (öffentliche Paket-API →
+  Breaking Change, Mike-Sache) + 4 `TYPE_CHECKING`-MainWindow (Mixin-Typ-Hints, Audit §2c).
+  pyflakes-Rest = exakt diese gewollten. Syntax-Check OK, Tests **2425 grün** (unverändert),
+  DeepSeek-R1 **FREIGEBEN** (kein String-Annotation/`__all__`/getattr/Seiteneffekt-Import).
+  Commit `<bundleB>`.
 - 2026-06-05 · **Bundle A (OPT-03/40/41/42/43)** · Toter Code projektweit entfernt:
   6 tote control_panel-Helfer/Signale, 2 direction_map-Paint-Methoden, 2 rx_panel-
   Separator-Methoden + `_MAX_CYCLES`, `qso_panel._slot_tag`, `settings.get_normal_preset`
