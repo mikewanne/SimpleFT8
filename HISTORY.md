@@ -9,6 +9,16 @@ Gelöscht wird nie etwas. Format: `## YYYY-MM-DD vX.YY — Kurztitel`.
 > stehen in `history/HISTORY_archiv_NN.md` (grep dort, falls eine alte Version
 > gesucht wird). Rotiert mit `tools/rotate_history.py`. Zuletzt: 2026-06-01.
 
+> ⚓⚓ **ANKER — LETZTE VERSION VOR DER OPTIMIERUNGS-KAMPAGNE (05.06.2026):**
+> **`v0.99.9`** ist die letzte Feature-/Bugfix-Version, bevor wir mit reinen
+> Optimierungen (Vereinfachung / Geschwindigkeit / toter Code) beginnen. Dieser
+> Stand wurde auf **GitHub gepusht** und zusätzlich als Git-Tag
+> **`v0.99.9-pre-optimierung`** markiert (Rückfallpunkt). **Regel ab hier:** NUR
+> Optimierungen; Bugs werden nur korrigiert, wenn Claude oder DeepSeek sie
+> ZUFÄLLIG finden — sonst wird ausschließlich optimiert. Plan + Fortschritt:
+> **`OPTIMIERUNGSWORKFLOW.md`** (überlebt Compacts). Im Notfall komplett zurück:
+> `git checkout v0.99.9-pre-optimierung`.
+
 > ⚓ **SICHERHEITSANKER vor DT-Umbau (03.06.2026):** Der auf **GitHub** liegende
 > Stand `origin/main` = Commit **`22f3d07` (v0.98.63)** ist die **letzte Version
 > mit der alten DYNAMISCHEN DT-Wert-Berechnung** (automatisches Dauer-Lernen aus
