@@ -502,7 +502,7 @@ class FlexRadio(QObject):
                                 f"C{tmp_seq}|client disconnect {candidate}\n".encode()
                             )
                             time.sleep(1)
-                            print(f"[FlexRadio] SmartSDR-M disconnected!")
+                            print("[FlexRadio] SmartSDR-M disconnected!")
                             break
 
         except (socket.error, OSError) as e:
@@ -821,7 +821,7 @@ class FlexRadio(QObject):
                                 continue
 
         if idx_b is None:
-            print(f"[Diversity] FEHLER: Kein 2. Slice gefunden!")
+            print("[Diversity] FEHLER: Kein 2. Slice gefunden!")
             return
         # Panadapter-Handle = 0x4000000 + idx_b (Konvention)
         self._panafall_b = f"0x4000000{idx_b}"

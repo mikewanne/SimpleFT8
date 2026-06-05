@@ -163,7 +163,7 @@ class QRZUploadWorker(QObject):
             if consecutive_fails >= self.MAX_CONSECUTIVE_FAILS:
                 if cooldown_used:
                     # Zweiter Burst → Cancel
-                    print(f"[QRZ-Worker] Zweiter Fail-Burst nach Cooldown → Cancel")
+                    print("[QRZ-Worker] Zweiter Fail-Burst nach Cooldown → Cancel")
                     self._cancel_event.set()
                     break
                 cooldown_used = True

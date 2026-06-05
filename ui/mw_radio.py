@@ -2212,7 +2212,7 @@ class RadioMixin:
             print(f"[Diversity] Post-Gain → Diversity starten ({scoring})")
             self._enable_diversity(scoring_mode=scoring)
             self._stats_warmup_cycles = 6
-            print(f"[Diversity] Kalibrierung fertig → 4 Zyklen Warmup")
+            print("[Diversity] Kalibrierung fertig → 4 Zyklen Warmup")
 
         self._update_statusbar()
         self._show_calibration_done(band, ant1_g, ant2_g)
@@ -2278,13 +2278,13 @@ class RadioMixin:
             if (entry is not None
                     and "gain_timestamp" in entry
                     and entry.get("ant2_calibrated") is True):
-                print(f"[Diversity] Cancel → Stale-Acceptance: Gain bleibt, "
-                      f"Dynamic startet live")
+                print("[Diversity] Cancel → Stale-Acceptance: Gain bleibt, "
+                      "Dynamic startet live")
                 self._enable_diversity(scoring_mode=scoring)
                 self._stats_warmup_cycles = 6
             else:
                 # Keine Diversity-Werte vorhanden → Diversity deaktivieren
-                print(f"[Diversity] Cancel ohne ANT2-Kalibrierung → Diversity AUS")
+                print("[Diversity] Cancel ohne ANT2-Kalibrierung → Diversity AUS")
                 self._disable_diversity()
                 self.control_panel.set_rx_mode("normal")
                 self._stats_warmup_cycles = 6

@@ -687,7 +687,7 @@ class CycleMixin:
                 else:
                     self._diversity_current_ant = self._diversity_ctrl.choose()
                     if getattr(self, '_pref_logged', False):
-                        print(f"[Antenna] QSO beendet → zurueck zu Diversity-Rhythmus")
+                        print("[Antenna] QSO beendet → zurueck zu Diversity-Rhythmus")
                         self._pref_logged = False
 
                 if self._diversity_current_ant == "A1":

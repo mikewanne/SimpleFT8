@@ -511,7 +511,7 @@ class QSOStateMachine(QObject):
                     self.send_message.emit(tx_msg)
                 elif pending.is_r_report:
                     self.qso.their_snr = pending.grid_or_report
-                    self._dbg.log("TX", f"Pending R-Report → TX_RR73")
+                    self._dbg.log("TX", "Pending R-Report → TX_RR73")
                     tx_msg = f"{self.qso.their_call} {self.my_call} RR73"
                     self._set_state(QSOState.TX_RR73)
                     self.send_message.emit(tx_msg)
@@ -625,7 +625,7 @@ class QSOStateMachine(QObject):
                     self._dbg.log("RX", f"RR73/73 waehrend TX_CALL gemerkt von {msg.caller} → wird TX_RR73")
                     return
                 # WAIT_REPORT + RR73/73 → sende 73 (WSJT-X konform, Station hat alles empfangen)
-                self._dbg.log("RX", f"Vorwaerts-Sprung: RR73/73 in WAIT_REPORT → TX_73")
+                self._dbg.log("RX", "Vorwaerts-Sprung: RR73/73 in WAIT_REPORT → TX_73")
                 tx_msg = f"{self.qso.their_call} {self.my_call} 73"
                 self._set_state(QSOState.TX_RR73)
                 self.send_message.emit(tx_msg)

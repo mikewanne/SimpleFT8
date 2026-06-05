@@ -232,7 +232,7 @@ class QSOMixin:
                 3000)
             return
         if getattr(self, '_diversity_measuring', False):
-            print(f"[QSO] Einmessen aktiv — Hunt blockiert")
+            print("[QSO] Einmessen aktiv — Hunt blockiert")
             return
         # Bundle E (v0.97.22): TX-Slot-Lock-Validierung vor allen QSO-
         # State-Mutationen. Lock greift nur in Normal-Modus.

@@ -940,13 +940,13 @@ class _RadioCard(QFrame):
         signal_row.setSpacing(6)
         self.peak_label = QLabel("Clipschutz —")
         self.peak_label.setFixedWidth(100)
-        self.peak_label.setStyleSheet(f"color: #557766; " + _lbl_ss)
+        self.peak_label.setStyleSheet("color: #557766; " + _lbl_ss)
         self.tx_level_label = QLabel("TX-Pegel: 75%")
         self.tx_level_label.setFixedWidth(90)
-        self.tx_level_label.setStyleSheet(f"color: #AAAACC; " + _lbl_ss)
+        self.tx_level_label.setStyleSheet("color: #AAAACC; " + _lbl_ss)
         self.rf_power_label = QLabel("RF: —")
         self.rf_power_label.setFixedWidth(70)
-        self.rf_power_label.setStyleSheet(f"color: #FFAA44; " + _lbl_ss)
+        self.rf_power_label.setStyleSheet("color: #FFAA44; " + _lbl_ss)
         # tx_level_bar bleibt als Dummy erhalten (wird intern noch referenziert)
         self.tx_level_bar = QProgressBar()
         self.tx_level_bar.setVisible(False)
@@ -2172,8 +2172,8 @@ class ControlPanel(QWidget):
         # nicht beides zu rufen (Logic: wenn callback gesetzt, nur callback).
         self._radio_card.tune_override_requested.connect(callback)
         debug_log("P102",
-                  f"callback set on radio_card._tune_override_callback, "
-                  f"signal also connected")
+                  "callback set on radio_card._tune_override_callback, "
+                  "signal also connected")
 
     def set_tx_active(self, active: bool):
         if active:
