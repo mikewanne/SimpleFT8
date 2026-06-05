@@ -6,7 +6,16 @@
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![Platform: macOS](https://img.shields.io/badge/platform-macOS-lightgrey.svg)](https://www.apple.com/macos/)
 [![Ham Radio](https://img.shields.io/badge/ham--radio-FT8%2FFT4%2FFT2-orange.svg)](https://www.physics.princeton.edu/pulsar/k1jt/wsjtx.html)
-[![Tests](https://img.shields.io/badge/tests-2196%20passed-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-2469%20passed-brightgreen.svg)]()
+
+> **📌 Project status (June 2026):** This public repository is a completed
+> **feasibility study**, frozen at **v1.0**. The concept works — single-SCU
+> diversity gain is real and measurable. Active development now continues
+> privately.
+>
+> **📌 Projektstatus (Juni 2026):** Dieses öffentliche Repository ist eine
+> abgeschlossene **Machbarkeitsstudie**, eingefroren bei **v1.0**. Das Konzept
+> funktioniert. Die aktive Weiterentwicklung läuft ab jetzt privat.
 
 ---
 
