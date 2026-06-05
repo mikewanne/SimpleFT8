@@ -43,6 +43,37 @@ Gelöscht wird nie etwas. Format: `## YYYY-MM-DD vX.YY — Kurztitel`.
 > Minus, −0.69] → `~/.simpleft8/dt_corrections.json` manuell auf Hardware-Default
 > 0.26 zurückgesetzt; greift nach App-Neustart.)*
 
+## 2026-06-05 v0.99.18 — OPT-63: KISS — `_resolve_station_position`-Helfer (DRY Locator-Auflösung)
+
+**Optimierungs-Kampagne, KISS-Stufe, voller Workflow.** Zwei Modul-Funktionen in
+`ui/direction_map_widget.py` — `snapshot_to_station_points` (Live-Karten-Snapshot)
+und `entries_to_station_points` (RX-History) — lösten die Stations-Position **fast
+identisch** auf: `locator_db.get_position` (persistent, mit Genauigkeit `prec_km`) →
+Fallback-Locator → `safe_locator_to_latlon` → `prec_km = 5` (6-stellig) / `110`
+(4-stellig). Der gemeinsame Block (je ~18-24 Z.) ist jetzt der Modul-Helfer
+**`_resolve_station_position(call, fallback_loc, locator_db=None, locator_cache=None)`**
+→ `(lat, lon, prec_km, loc)` oder `None`.
+
+**Unterschiede sauber gekapselt (keine Verhaltensänderung):**
+- **Fallback-Quelle** bleibt im jeweiligen Aufrufer: snapshot übergibt
+  `data.get("locator") or locator_cache.get(call)`, entries `getattr(e,"locator",None)`.
+- **`locator_cache.update` NUR bei Fallback-Treffer** (nicht bei DB-Treffer — der
+  Helfer `return`t vor dem Cache-Block) und nur wenn ein Cache übergeben wurde
+  (entries übergibt keinen → `if locator_cache is not None`-Guard).
+- `is_mobile`-Filter, Rescue-Antennen-Klassifikation, `band`, `StationPoint`-
+  Konstruktion bleiben unverändert in den jeweiligen Funktionen (Scope-Disziplin).
+
+**Reine Dedup, kein TX-Pfad (reine Karten-Anzeige), ANT1=TX unberührt.** DeepSeek R1
+**GO** (Verhaltensgleichheit a/b/c einzeln verifiziert: cache-update nur Fallback;
+`data.get(...) or cache.get(...)` vorab = identisch; DB-gegeben-aber-`get_position`-
+None fällt korrekt durch) + Final-R1 **PUSH FREIGEBEN**. Rückgabe 4-Tuple+None
+bewusst statt NamedTuple (KISS, Entpackung sofort im Aufrufer). pyflakes sauber
+(keine toten `pos`/`entry`/`latlon`-Locals), AST OK. Tests 2453→**2461** (+8
+`test_resolve_station_position.py`: DB-Treffer-ohne-cache-update, leeres entry→`loc=""`,
+DB-None-durchfallen, Fallback 4-/6-stellig prec 110/5, cache-Update, cache=None-kein-
+Crash, None/ungültig→None; die 6 bestehenden `snapshot_to_points`-Tests grün).
+Commit `7f0b0e3`. **NICHT gepusht.**
+
 ## 2026-06-05 v0.99.17 — OPT-61: KISS — QSOStateMachine.is_busy-Property statt 7× kopiertem State-Tupel
 
 **Optimierungs-Kampagne, KISS-Stufe (erster Punkt), voller Workflow.** Das

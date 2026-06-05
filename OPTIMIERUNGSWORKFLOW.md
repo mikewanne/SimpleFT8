@@ -89,7 +89,7 @@ Quelle aller Befunde: `OPTIMIERUNG_AUDIT.md` (Teil 1 = Decoder/Speed + control_p
 |---|---|---|---|
 | OPT-61 | Property `qso_sm.is_busy` statt kopiertem `(IDLE,TIMEOUT,CQ_CALLING,CQ_WAIT)`-Tupel — **real 7× (nicht 11×), verify-don't-assume**; andere 2/3/6-State-Sets unberührt. v0.99.17 | qso_state + Aufrufer | ☑ |
 | OPT-62 | ~~3 Preset-Zugriffe vereinheitlichen~~ — **OBSOLET (verify-don't-assume + DeepSeek-R1):** Befund durch P80/P51-Migration + Bundle A (get_normal_preset raus) überholt; `get_dx_preset`/`get_gain_preset` nur noch test-only, `save_dx_preset`=tote API (T7-Wächter), `save_normal_preset`=no-op. Kein App-KISS-Gewinn; Wrapper wäre Overengineering an Test-Code. **`save_*`-Entfernung → ⏸ Mike-Vorlage (Q4, öffentliche API).** | settings.py | ☑ geprüft |
-| OPT-63 | Locator-Auflösung-Duplikat → Helfer `_resolve_station_position()` | direction_map_widget.py | ☐ |
+| OPT-63 | Locator-Auflösung-Duplikat → Helfer `_resolve_station_position()` (snapshot + entries, DRY; cache-update nur Fallback). v0.99.18 | direction_map_widget.py | ☑ |
 | OPT-64 | `get_enabled_bands`/`set_enabled_bands` Validierung → `_valid_bands(raw)` | settings.py | ☐ |
 | OPT-65 | `_update_statusbar` (~80 Z.) in `_build_status_*`-Teile (langfristig) | main_window.py | ☐ |
 | OPT-66 | `_handle_diversity_operate` (~80 Z.) Berechnung auslagern (langfristig) | mw_cycle.py | ☐ |
@@ -165,6 +165,17 @@ Quelle aller Befunde: `OPTIMIERUNG_AUDIT.md` (Teil 1 = Decoder/Speed + control_p
 
 > Pro erledigtem Punkt eine Zeile: `YYYY-MM-DD · OPT-NN · Kurz · Tests X→Y · Commit <sha>`.
 
+- 2026-06-05 · **OPT-63 (v0.99.18, KISS-Stufe, voller Workflow)** · Locator-Auflösung-
+  Duplikat in `direction_map_widget.py` (`snapshot_to_station_points` +
+  `entries_to_station_points`) → Modul-Helfer `_resolve_station_position(call,
+  fallback_loc, locator_db, locator_cache)` → `(lat,lon,prec_km,loc)|None`. Gemeinsamer
+  Block (DB-Lookup mit prec_km → Fallback-Locator → `safe_locator_to_latlon` →
+  prec 5/110) gekapselt; Fallback-Quelle + `is_mobile`/Rescue/StationPoint-Bau bleiben
+  im Aufrufer; `cache.update` nur bei Fallback-Treffer (Guard `is not None`). Reine
+  Dedup, kein TX-Pfad, ANT1=TX unberührt. DeepSeek R1 GO (Verhaltensgleichheit a/b/c
+  verifiziert) + Final-R1 PUSH FREIGEBEN. Tests 2453→**2461** (+8
+  `test_resolve_station_position.py`). Commit `7f0b0e3`. **→ Nächster offener Punkt:
+  OPT-64 (`get/set_enabled_bands`-Validierung, settings.py).**
 - 2026-06-05 · **OPT-62 (geprüft, OBSOLET — KEIN Code)** · K2 „3 Preset-Zugriffe
   vereinheitlichen" durch Architektur-Migration überholt: `get_normal_preset` schon
   raus (Bundle A); App nutzt seit P80/P51 den unified `PresetStore`/`rf_preset_store`,
