@@ -186,6 +186,28 @@ def test_stop_without_start_is_safe():
     assert mon.active is False
 
 
+def test_stop_swallows_stream_errors():
+    """OPT-56: stop() ist intern robust — wirft stream.stop()/close() eine
+    Exception, propagiert sie NICHT. Genau das macht das fruehere breite
+    `except Exception: pass` im MainWindow.closeEvent ueberfluessig (entfernt
+    in v0.99.15). Mutationsbeweis: ohne das interne try/except in stop() wuerde
+    dieser Test mit RuntimeError brechen.
+    """
+    class _ExplodingStream:
+        def stop(self):
+            raise RuntimeError("PortAudio kaputt")
+
+        def close(self):
+            raise OSError("device weg")
+
+    mon = AudioMonitor()
+    mon._stream = _ExplodingStream()
+    mon.active = True
+    mon.stop()                               # darf NICHT werfen
+    assert mon.active is False
+    assert mon._stream is None
+
+
 # ── Settings-Persistenz ─────────────────────────────────────────────────────
 
 def test_audio_monitor_default_false():

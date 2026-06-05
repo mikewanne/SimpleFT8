@@ -1759,11 +1759,14 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         # P34-Stufe2: MessStatusDialog gibt's nicht mehr.
 
         # Audio-Mithoer-Monitor sauber schliessen (PortAudio-Stream), sonst
-        # kann er im Hintergrund haengen bleiben (DeepSeek-🟡).
-        try:
-            self._audio_monitor.stop()
-        except Exception:
-            pass
+        # kann er im Hintergrund haengen bleiben. OPT-56: stop() ist intern
+        # robust + idempotent (faengt PortAudio-Fehler selbst) — daher kein
+        # breites `except Exception: pass` mehr (das verschluckte auch echte
+        # Bugs). Nur ein getattr-Guard fuer den Init-Crash-Fall, konsistent mit
+        # _gain_store/_qrz_worker weiter unten.
+        monitor = getattr(self, "_audio_monitor", None)
+        if monitor is not None:
+            monitor.stop()
 
         # P22-A10: Staged Preset-Eintraege verwerfen (kein Half-State).
         # P80: nur noch unified _gain_store.
