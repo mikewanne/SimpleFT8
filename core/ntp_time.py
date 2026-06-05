@@ -43,6 +43,8 @@ import threading
 from collections import deque
 from pathlib import Path
 
+from core.atomic_json import atomic_write_json
+
 # ── Konfiguration ─────────────────────────────────────────────────────────────
 
 MIN_STATIONS = 5             # Mindestanzahl FT8-Stationen fuer eine Kalibrierung
@@ -184,8 +186,9 @@ _load_saved()
 def _save_current() -> None:
     """Globalen Korrekturwert speichern (Single-Value-Format)."""
     try:
-        _DT_FILE.parent.mkdir(parents=True, exist_ok=True)
-        _DT_FILE.write_text(json.dumps({_SAVE_KEY: round(_correction, 4)}, indent=2))
+        # atomar via core.atomic_json (OPT-54 — war write_text, nicht atomar:
+        # Crash mid-write konnte dt_corrections.json zerreissen)
+        atomic_write_json(_DT_FILE, {_SAVE_KEY: round(_correction, 4)}, indent=2)
     except Exception as e:
         print(f"[DT-Korr] Speichern fehlgeschlagen: {e}")
 

@@ -27,13 +27,13 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import threading
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Iterable
 
+from core.atomic_json import atomic_write_json
 from core.geo import MOBILE_SUFFIXES, safe_locator_to_latlon
 
 LOG = logging.getLogger(__name__)
@@ -100,9 +100,8 @@ class LocatorDB:
                     continue
 
     def save(self) -> None:
-        """Atomar schreiben (.tmp + os.replace). Erzeugt Parent-Dir falls noetig."""
+        """Atomar via core.atomic_json (OPT-54; mkdir macht der Helfer)."""
         with self._lock:
-            self._path.parent.mkdir(parents=True, exist_ok=True)
             data = {
                 "version": SCHEMA_VERSION,
                 "calls": {
@@ -116,10 +115,7 @@ class LocatorDB:
                     for call, e in self._calls.items()
                 },
             }
-            tmp = self._path.with_suffix(self._path.suffix + ".tmp")
-            with open(tmp, "w", encoding="utf-8") as f:
-                json.dump(data, f, separators=(",", ":"))
-            os.replace(tmp, self._path)
+            atomic_write_json(self._path, data, separators=(",", ":"))
             self._dirty = False
 
     # ── Lookup ─────────────────────────────────────────────

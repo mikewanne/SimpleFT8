@@ -31,6 +31,8 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass, asdict, field
 from pathlib import Path
 
+from core.atomic_json import atomic_write_json
+
 
 PSK_QUERY_URL = (
     "https://retrieve.pskreporter.info/query?"
@@ -241,18 +243,14 @@ class PSKReporterClient:
 
     def save_cache(self, spots: list[Spot]) -> None:
         """Cache schreiben. Erzeugt Verzeichnis falls noetig."""
-        self._cache_path.parent.mkdir(parents=True, exist_ok=True)
         data = {
             "timestamp": time.time(),
             "call": self._call,
             "mode": self._mode,
             "spots": [s.to_dict() for s in spots],
         }
-        # atomar: erst .tmp, dann rename
-        tmp = self._cache_path.with_suffix(".tmp")
-        with open(tmp, "w") as f:
-            json.dump(data, f, separators=(",", ":"))
-        os.replace(tmp, self._cache_path)
+        # atomar via core.atomic_json (OPT-54; mkdir macht der Helfer)
+        atomic_write_json(self._cache_path, data, separators=(",", ":"))
 
     def cached_spots(self) -> list[Spot]:
         """Spots aus Cache laden (deserialisiert)."""

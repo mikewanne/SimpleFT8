@@ -19,12 +19,13 @@ kann lineare Interpolation systematisch unterschätzen).
 """
 
 import json
-import os
 import shutil
 import threading
 import time
 from pathlib import Path
 from typing import Optional
+
+from core.atomic_json import atomic_write_json
 
 CONFIG_DIR = Path.home() / ".simpleft8"
 DEFAULT_PATH = CONFIG_DIR / "rf_presets.json"
@@ -93,12 +94,8 @@ class RFPresetStore:
         return None, 0.0
 
     def _save_locked(self) -> None:
-        """Atomic write: Tempfile + os.replace (POSIX-atomic)."""
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        tmp_path = self._path.with_name(self._path.name + ".tmp")
-        with tmp_path.open("w") as f:
-            json.dump(self._data, f, indent=2)
-        os.replace(str(tmp_path), str(self._path))
+        """Atomic write via core.atomic_json (OPT-54; mkdir macht der Helfer)."""
+        atomic_write_json(self._path, self._data, indent=2)
 
     # ── Lesen ────────────────────────────────────────────────────────────────
 

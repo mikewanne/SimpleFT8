@@ -32,10 +32,11 @@ Migration siehe ``config/settings.py:_migrate_bandpilot_settings_v088``.
 from __future__ import annotations
 
 import json
-import os
 import re
 import time
 from pathlib import Path
+
+from core.atomic_json import atomic_write_json
 
 # ── Schwellen pro Stunde (alle drei Modi muessen erfuellen) ──────────────
 MIN_DAYS_HOUR = 3
@@ -339,11 +340,8 @@ class HourlyBandpilotCache:
             self._save()
 
     def _save(self) -> None:
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = self._path.with_suffix(".tmp")
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(self._data, f, indent=2)
-        os.replace(tmp, self._path)
+        # atomar via core.atomic_json (OPT-54; mkdir macht der Helfer)
+        atomic_write_json(self._path, self._data, indent=2)
 
 
 class HourlyBandpilot:

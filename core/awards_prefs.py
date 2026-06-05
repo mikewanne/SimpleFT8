@@ -12,8 +12,9 @@ dem bereits etablierten Muster eigener JSONs unter `~/.simpleft8/`
 """
 
 import json
-import os
 from pathlib import Path
+
+from core.atomic_json import atomic_write_json
 
 # Modul-level, damit Tests ihn auf ein tmp-Verzeichnis umbiegen koennen.
 _FILE = Path.home() / ".simpleft8" / "awards_visibility.json"
@@ -37,10 +38,7 @@ def save_hidden(hidden) -> None:
     Fehler werden geschluckt (Sichtbarkeit ist Komfort, kein kritischer State).
     """
     try:
-        _FILE.parent.mkdir(parents=True, exist_ok=True)
-        tmp = _FILE.with_suffix(".tmp")
-        with open(tmp, "w") as f:
-            json.dump(sorted(str(k) for k in hidden), f, indent=2)
-        os.replace(tmp, _FILE)
+        # atomar via core.atomic_json (OPT-54)
+        atomic_write_json(_FILE, sorted(str(k) for k in hidden), indent=2)
     except OSError:
         pass
