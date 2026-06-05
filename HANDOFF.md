@@ -7,7 +7,11 @@ OPT-62 obsolet) — nächste offene Stufe ist **Geschwindigkeit (Mike: NACHRANGI
 **große Methoden** (langfristig). Da die „sicheren/klaren" Stufen (toter Code, Robustheit,
 KISS) durch sind und der Rest nachrangig/heikler (Decoder-nah) ist → **Richtungs-Abstimmung
 mit Mike sinnvoll**, NICHT blind weiter. Gesperrt bis Mike-Wort: OPT-59/55/58 + Threading
-OPT-52 + Push (24 Commits) + OPT-Q4 (save_*).
+OPT-52 + OPT-Q4 (save_*).
+
+**✅ GEPUSHT (Mike-Freigabe 05.06.2026):** Die komplette Robustheits- + KISS-Kampagne
+(25 Commits, v0.99.10–v0.99.19) liegt auf **`origin/main` (`e097acc`)**. 0 ungepusht,
+Arbeitsbaum sauber. Rückfall-Tag `v0.99.9-pre-optimierung` (`a80eebc`) bleibt.
 
 **Aktueller Stand:** v0.99.19 (05.06.2026) — **Optimierungs-Kampagne: Robustheits-Stufe
 (OPT-50..60) UND KISS-Stufe (OPT-61/63/64, OPT-62 obsolet) ABGESCHLOSSEN.** Erledigt:
@@ -17,8 +21,8 @@ Settings-Typvalidierung (v0.99.14)** + **OPT-56 closeEvent-except entschärft (v
 **OPT-57 station_stats sauberer Thread-Stop (v0.99.16)** + **OPT-60 geprüft = kein
 Handlungsbedarf** + **OPT-61 `is_busy`-Property (v0.99.17, KISS, 7× Dedup)**. Alles
 reine/robustheits-/KISS-Änderung, **ANT1=TX unberührt**, jedes Stück DeepSeek-R1 FREIGEBEN,
-Tests durchgehend grün (**aktuell 2453**). Detail → HISTORY v0.99.10–17 + Fortschritts-Log
-in **`OPTIMIERUNGSWORKFLOW.md`**. Rückfall-Tag `v0.99.9-pre-optimierung`. **NICHT gepusht
+Tests durchgehend grün (**aktuell 2469**). Detail → HISTORY v0.99.10–19 + Fortschritts-Log
+in **`OPTIMIERUNGSWORKFLOW.md`**. Rückfall-Tag `v0.99.9-pre-optimierung`. **✅ GEPUSHT (origin/main e097acc)
 (genaue Zahl via `git log --oneline origin/main..HEAD | wc -l` — aktuell ~20).**
 
 **▶ NÄCHSTE Stufe (Mike-Richtungsentscheidung empfohlen — keine „sicheren" Punkte mehr offen):**
@@ -29,7 +33,7 @@ in **`OPTIMIERUNGSWORKFLOW.md`**. Rückfall-Tag `v0.99.9-pre-optimierung`. **NIC
 - **Große Methoden** (langfristig/opportunistisch): `OPT-65` `_update_statusbar`,
   `OPT-66` `_handle_diversity_operate`, `OPT-30..32` control_panel/mw_radio.
 - **Gesperrt bis Mike-Wort:** OPT-59 (TX-Pfad) / OPT-55 / OPT-58 (Bug-Verdachte),
-  OPT-52 (Threading), **Push (24 Commits)**, OPT-Q4 (`save_*`-API entfernen — Empfehlung BEHALTEN).
+  OPT-52 (Threading), OPT-Q4 (`save_*`-API entfernen — Empfehlung BEHALTEN). **(Push: ✅ erledigt 05.06., origin/main e097acc.)**
 
 **Zuletzt erledigt:** **OPT-64** (v0.99.19, `c9726b7`): KISS — Modul-Funktion `_valid_bands`
 dedupliziert die Band-Validierung in `get_enabled_bands` + `set_enabled_bands` (settings.py;
