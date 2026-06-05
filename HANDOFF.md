@@ -1,5 +1,10 @@
 # HANDOFF — SimpleFT8
 
+**🟢 START-SATZ NACH COMPACT (Mike tippt das → genau hier weiter):** „**Optimierung weiter,
+autonom**" — dann `CLAUDE.md → HISTORY.md (Anker) → HANDOFF.md → OPTIMIERUNGSWORKFLOW.md`
+lesen, NICHT neu planen, beim ersten offenen ☐ weiter (aktuell nächster Punkt: **OPT-54**,
+dann OPT-53). Gesperrt bis Mike-Wort: OPT-59/55/58 + Threading OPT-52 + Push.
+
 **Aktueller Stand:** v0.99.12 (05.06.2026) — **Optimierungs-Kampagne läuft autonom.**
 Erledigt: **Stufe 1 (toter Code, v0.99.10, Bundles A–D)** + **3 tote Module entfernt
 (v0.99.11, OPT-Q1/Q2 = Mike-Entscheid: nicht FT2-relevant → weg)** + **OPT-50/51 Start-
