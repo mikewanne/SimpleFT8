@@ -49,6 +49,25 @@ def get_tune_freq_mhz(band: str, mode: str) -> float | None:
         m = "FT8"
     return TUNE_FREQS.get(f"{band}_{m}")
 
+
+def _valid_bands(raw) -> list[str]:
+    """Rohe Band-Liste defensiv validieren (OPT-64, DRY für get_/set_enabled_bands).
+
+    Nur Strings die in ``BAND_FREQUENCIES`` sind, dedupliziert (Reihenfolge des
+    ersten Auftretens erhalten). Bei nicht-Liste ODER leerem Ergebnis → Default
+    (alle Bänder).
+    """
+    if not isinstance(raw, list):
+        return list(BAND_FREQUENCIES.keys())
+    valid: list[str] = []
+    seen: set[str] = set()
+    for b in raw:
+        if isinstance(b, str) and b in BAND_FREQUENCIES and b not in seen:
+            valid.append(b)
+            seen.add(b)
+    return valid or list(BAND_FREQUENCIES.keys())
+
+
 DEFAULTS = {
     "callsign": "DA1MHH",
     "locator": "JO31",
@@ -260,18 +279,7 @@ class Settings:
         Einträge (kein String, nicht in ``BAND_FREQUENCIES``, Duplikate).
         Bei leerer/komplett-ungültiger Liste → Fallback auf Default.
         """
-        raw = self._data.get("enabled_bands")
-        if not isinstance(raw, list):
-            return list(BAND_FREQUENCIES.keys())
-        valid: list[str] = []
-        seen: set[str] = set()
-        for b in raw:
-            if isinstance(b, str) and b in BAND_FREQUENCIES and b not in seen:
-                valid.append(b)
-                seen.add(b)
-        if not valid:
-            return list(BAND_FREQUENCIES.keys())
-        return valid
+        return _valid_bands(self._data.get("enabled_bands"))
 
     def set_enabled_bands(self, bands: list[str]) -> None:
         """Setzt die Liste der sichtbaren Bänder.
@@ -280,15 +288,7 @@ class Settings:
         resultierender Liste → Default (alle 9). Persistiert NICHT
         automatisch — Caller ruft ``save()``.
         """
-        valid: list[str] = []
-        seen: set[str] = set()
-        for b in bands:
-            if isinstance(b, str) and b in BAND_FREQUENCIES and b not in seen:
-                valid.append(b)
-                seen.add(b)
-        if not valid:
-            valid = list(BAND_FREQUENCIES.keys())
-        self._data["enabled_bands"] = valid
+        self._data["enabled_bands"] = _valid_bands(bands)
 
     @property
     def callsign(self):
