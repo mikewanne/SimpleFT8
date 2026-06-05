@@ -43,6 +43,39 @@ Gelöscht wird nie etwas. Format: `## YYYY-MM-DD vX.YY — Kurztitel`.
 > Minus, −0.69] → `~/.simpleft8/dt_corrections.json` manuell auf Hardware-Default
 > 0.26 zurückgesetzt; greift nach App-Neustart.)*
 
+## 2026-06-05 v0.99.13 — OPT-54: atomic_write_json-Helfer (DRY) + ntp_time-Atomaritäts-Lücke
+
+**Optimierungs-Kampagne, Stufe 2 (Robustheit), voller Workflow (DeepSeek Plan-R1 GO
++ Final-R1 PUSH FREIGEBEN).** `core/ntp_time.py:_save_current` schrieb
+`dt_corrections.json` per `write_text` — **nicht atomar**: ein Absturz mitten im
+Schreiben konnte die Datei zerreißen. **9 andere Stores** hatten dasselbe
+`mkdir + tmp + os.replace`-Muster per Copy-Paste; nur ntp_time hatte's vergessen.
+
+**Neu `core/atomic_json.py`:** `atomic_write_json(path, data, *, encoding="utf-8",
+**dump_kwargs)` — EINE getestete Stelle. `dump_kwargs` (`indent=2` bzw.
+`separators=(",",":")`) werden 1:1 durchgereicht → erzeugte Bytes **bit-identisch**
+zum bisherigen Inline-Code (`ensure_ascii=True`-Default → reine ASCII → encoding
+irrelevant). **Wirft Exceptions durch — schluckt nie selbst** (jeder Aufrufer behält
+seine `try/except`-Hülle).
+
+**Migriert:** ntp_time (schließt die Lücke, atomar) + **5 core-Stores**
+(`awards_prefs`, `rf_preset_store`, `mode_recommender`, `psk_reporter`,
+`locator_db`). 3× totes `import os` entfernt (`os.replace` war die letzte
+os-Nutzung — pyflakes-bestätigt). **Bewusst NICHT migriert:** `preset_store`
+(fsync + Rollback — robuster), `adif` (roher Text), `rx_history` (retry-/dirty-Loop),
+**`config/settings.py`** (bewusst stdlib-rein — `core/__init__` lädt
+decoder+encoder+ft8_lib-dylib; ein `from core…`-Import würde dieses schwere Paket
+in jeden isolierten settings-Import ziehen; settings ist ohnehin schon atomar).
+
+**DeepSeek:** Plan-R1 GO (Scope 6 migrieren/3 ausschließen bestätigt) → beim
+Implementieren `core/__init__`-Last verifiziert → **settings aus dem Scope
+genommen** (Final-R1 segnete die Korrektur ab). Final-R1 **PUSH FREIGEBEN**
+(6 Prüfpunkte: bit-Identität, tmp-Name ephemer, mkdir-Reihenfolge, Lock-sicher,
+import-Cleanup, kein Deadlock). Reines File-IO, **kein TX-/Antennen-Pfad — ANT1=TX
+unberührt.** Tests 2416→**2424** (+8 `test_atomic_json.py`: round-trip, mkdir-parents,
+kein tmp-Rest, dump_kwargs-Durchreichung, Exception propagiert, kein Teil-File bei
+dump-Fehler). Commit `7ed850c`. NICHT gepusht.
+
 ## 2026-06-05 v0.99.12 — App-Start-Crash-Schutz für Settings-Migration (OPT-50, Robustheit)
 
 **Erste Robustheits-Verbesserung der Optimierungs-Kampagne (Stufe 2). Voller Workflow,

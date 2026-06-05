@@ -76,7 +76,7 @@ Quelle aller Befunde: `OPTIMIERUNG_AUDIT.md` (Teil 1 = Decoder/Speed + control_p
 | OPT-51 | `migrate_legacy_files()` in `try/except` — **war BEREITS so** (preset_store.py:175-179), verify-don't-assume | preset_store.py | ☑ |
 | OPT-52 | **PSK-Worker: GUI-Update per Qt-Signal** statt direkt aus Thread (✅ Z.1271 bestätigt) | main_window.py | ☐ |
 | OPT-53 | `load()`: kritische Felder (`callsign`/`locator`/…) per `isinstance` validieren | settings.py:115 | ☐ |
-| OPT-54 | **`atomic_write_json`-Helfer** (DRY 5 Stores) + `ntp_time` atomar nachziehen (✅) | core/ (neu) + ntp_time.py | ☐ |
+| OPT-54 | **`atomic_write_json`-Helfer** (DRY) + `ntp_time` atomar nachgezogen — Helfer + 5 core-Stores migriert; settings bewusst raus (core/__init__-Last). v0.99.13 | core/atomic_json.py + ntp_time.py +5 | ☑ |
 | OPT-55 | ⚠️ ADIF: CALL `.upper()` + RST validieren (QRZ-Upload-Sicherheit) — **erst verifizieren** | log/adif.py | ☐ |
 | OPT-56 | `closeEvent`: `dx_tuning`-Branch + breites `except` eingrenzen | main_window.py | ☐ |
 | OPT-57 | `station_stats` Writer-Thread sauberer Stop (`threading.Event`) | station_stats.py | ☐ |
@@ -164,6 +164,22 @@ Quelle aller Befunde: `OPTIMIERUNG_AUDIT.md` (Teil 1 = Decoder/Speed + control_p
 
 > Pro erledigtem Punkt eine Zeile: `YYYY-MM-DD · OPT-NN · Kurz · Tests X→Y · Commit <sha>`.
 
+- 2026-06-05 · **OPT-54 (v0.99.13, Stufe 2 Robustheit, voller Workflow)** ·
+  `core/atomic_json.py` neu (`atomic_write_json`, DRY) + `ntp_time._save_current`
+  von nicht-atomarem `write_text` auf den Helfer umgestellt (**schließt die
+  Atomaritäts-Lücke**) + 5 weitere core-Stores migriert (`awards_prefs`,
+  `rf_preset_store`, `mode_recommender`, `psk_reporter`, `locator_db`); 3× totes
+  `import os` entfernt. dump_kwargs durchgereicht → Bytes bit-identisch. **Scope-
+  Korrektur ggü. Plan-R1:** `config/settings.py` NICHT migriert — beim
+  Implementieren verifiziert dass `core/__init__` decoder+encoder+ft8_lib lädt →
+  ein `from core…`-Import zöge das in jeden isolierten settings-Import; settings
+  ist ohnehin schon atomar (DeepSeek Final-R1 segnete die Korrektur ab). Bewusst
+  ausgeschlossen außerdem: `preset_store` (fsync+Rollback), `adif` (Rohtext),
+  `rx_history` (retry-Loop). DeepSeek Plan-R1 GO + Final-R1 **PUSH FREIGEBEN**
+  (6 Prüfpunkte). Reines File-IO, ANT1=TX unberührt. Tests 2416→**2424** (+8
+  `test_atomic_json.py`). Commit `7ed850c`. **→ Nächster offener Punkt: OPT-53**
+  (Settings-Typvalidierung). OPT-52 (PSK-Worker Thread→Qt-Signal) berührt
+  Threading → Mike kurz vorlegen.
 - 2026-06-05 · **OPT-50/51 (v0.99.12, Stufe 2 Robustheit, voller Workflow)** · App-Start-
   Crash-Schutz: `self.save()` in `settings._migrate_bandpilot_settings_v088` in
   `try/except Exception`+print (fail-silent, idempotent) — die einzige crashende Stelle der
