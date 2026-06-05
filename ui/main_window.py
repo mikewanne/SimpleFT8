@@ -1818,4 +1818,10 @@ class MainWindow(QMainWindow, CycleMixin, QSOMixin, RadioMixin, TXMixin):
         except OSError as e:
             print(f"[RxHistory] Save fehlgeschlagen: {e}")
         self.settings.save()
+        # Stats-Writer sauber stoppen: restliche Queue schreiben (OPT-57).
+        # Timer + Decoder sind oben bereits gestoppt → es laufen keine neuen
+        # Eintraege mehr auf; shutdown() drained die Queue mit Timeout-Schutz.
+        stats = getattr(self, "_stats_logger", None)
+        if stats is not None:
+            stats.shutdown()
         event.accept()

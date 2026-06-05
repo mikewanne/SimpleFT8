@@ -23,6 +23,11 @@ from pathlib import Path
 
 FT8_DECODE_THRESHOLD = -24
 
+# OPT-57: Sentinel fuer sauberen Writer-Stop. In die Queue gelegt signalisiert er
+# dem Writer-Loop das Ende — da die Queue FIFO ist, sind alle DAVOR eingereihten
+# Eintraege bis dahin geschrieben (Drain-Garantie ohne separate Schleife).
+_SHUTDOWN = object()
+
 
 def get_active_reception_mode(rx_mode: str, scoring_mode: str = "normal") -> str | None:
     """Aktiven Empfangsmodus als Verzeichnisname.
@@ -237,10 +242,32 @@ class StationStatsLogger:
             except queue.Empty:
                 continue
 
+            if entry is _SHUTDOWN:
+                break  # OPT-57: sauberer Stop — alle FIFO-davor liegenden
+                       # Eintraege sind hier bereits geschrieben.
+
             try:
                 self._write_entry(entry)
             except Exception as e:
                 print(f"[Stats] Schreibfehler: {e}")
+
+    def shutdown(self, timeout: float = 5.0):
+        """Writer-Thread sauber stoppen (OPT-57) — beim App-Close aufrufen.
+
+        Reiht den Sentinel ein (alle bereits eingereihten Eintraege werden
+        wegen FIFO noch geschrieben) und joint den Thread. Der ``timeout``
+        verhindert ein Haengen des App-Close: der Drain dauert normalerweise
+        nur Millisekunden (wenige Eintraege, je ein paar Zeilen .md); 5 s ist
+        ein grosszuegiger Puffer gegen eine langsame Platte. Laeuft der Timeout
+        ab (echter IO-Hang), greift der Daemon-Kill beim Interpreter-Exit.
+        Idempotent: ein zweiter Aufruf reiht nur einen weiteren — ignorierten —
+        Sentinel ein und joint einen bereits beendeten Thread (No-op).
+        """
+        try:
+            self._queue.put(_SHUTDOWN, timeout=1.0)
+        except queue.Full:
+            pass  # 1 s voll geblieben → Daemon-Kill faengt den Rest (Best-Effort)
+        self._thread.join(timeout=timeout)
 
     def _write_entry(self, entry: dict):
         """Einen Eintrag in die passende Stunden-Datei schreiben."""
