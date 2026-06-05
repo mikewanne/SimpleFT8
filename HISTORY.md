@@ -43,6 +43,38 @@ Gelöscht wird nie etwas. Format: `## YYYY-MM-DD vX.YY — Kurztitel`.
 > Minus, −0.69] → `~/.simpleft8/dt_corrections.json` manuell auf Hardware-Default
 > 0.26 zurückgesetzt; greift nach App-Neustart.)*
 
+## 2026-06-05 v0.99.19 — OPT-64: KISS — `_valid_bands`-Modul-Funktion (DRY Band-Validierung)
+
+**Optimierungs-Kampagne, KISS-Stufe (letzter Punkt — damit KISS komplett), voller
+Workflow.** `config/settings.py`: `get_enabled_bands` + `set_enabled_bands` enthielten
+dieselbe Band-Validierung — Filter auf Strings die in `BAND_FREQUENCIES` sind,
+dedupliziert mit **Reihenfolge-Erhalt** (erstes Auftreten), Fallback auf Default (alle
+Bänder) bei nicht-Liste/leerem Ergebnis. Extrahiert in **Modul-Funktion `_valid_bands(raw)`**
+(bei den anderen Modul-Funktionen, vor `DEFAULTS`).
+
+**DeepSeek-R1-Korrektur übernommen:** Modul-Funktion statt Instanz-Methode (`_valid_bands`
+nutzt nur die Modul-Konstante `BAND_FREQUENCIES`, kein `self`-State → KISS, isoliert
+testbar). Aufrufer: `get` → `return _valid_bands(self._data.get("enabled_bands"))`,
+`set` → `self._data["enabled_bands"] = _valid_bands(bands)`.
+
+**Variante A (isinstance-Check im Helfer):** `get` exakt verhaltensgleich. `set` bei
+Listen identisch; einziger Unterschied `set(None)` → Default statt `TypeError` — reine
+Robustheits-Verbesserung in einem Pfad, der **im Betrieb nie auftritt** (einziger
+App-Aufrufer `settings_dialog.py:860` übergibt eine echte Liste aus Checkboxen; Test T11
+prüft Liste-MIT-Garbage, keinen non-list-Input). DeepSeek bestätigt: „im Betrieb
+vollkommen neutral".
+
+**Reine Dedup, kein TX-Pfad (Settings-Logik), ANT1=TX unberührt.** DeepSeek R1 **GO**
+(A bevorzugt, Reihenfolge/Dedup korrekt, Modul-Funktion-Empfehlung) + Final-R1 **PUSH
+FREIGEBEN**. Tests 2461→**2469** (+8 `test_valid_bands.py`: None/non-list/leer/nur-Garbage
+→ Default; Reihenfolge-Erhalt; Dedup-erstes-Vorkommen; gemischt filtert Garbage;
+all-roundtrip — Reihenfolge + None→Default als Mutationsbeweis). Die 11 bestehenden
+`test_p50_bands_visibility`-Tests (T1-T11) weiter grün. Commit `c9726b7`. **NICHT gepusht.**
+
+**▶ Damit ist die KISS-Stufe der Kampagne komplett** (OPT-61 `is_busy`, OPT-63
+`_resolve_station_position`, OPT-64 `_valid_bands`; OPT-62 geprüft=obsolet). Nächste
+Stufe: Geschwindigkeit (nachrangig, OPT-05..11/20/23/24) + große Methoden (OPT-65/66/30..32).
+
 ## 2026-06-05 v0.99.18 — OPT-63: KISS — `_resolve_station_position`-Helfer (DRY Locator-Auflösung)
 
 **Optimierungs-Kampagne, KISS-Stufe, voller Workflow.** Zwei Modul-Funktionen in

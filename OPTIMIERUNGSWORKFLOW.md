@@ -90,7 +90,7 @@ Quelle aller Befunde: `OPTIMIERUNG_AUDIT.md` (Teil 1 = Decoder/Speed + control_p
 | OPT-61 | Property `qso_sm.is_busy` statt kopiertem `(IDLE,TIMEOUT,CQ_CALLING,CQ_WAIT)`-Tupel — **real 7× (nicht 11×), verify-don't-assume**; andere 2/3/6-State-Sets unberührt. v0.99.17 | qso_state + Aufrufer | ☑ |
 | OPT-62 | ~~3 Preset-Zugriffe vereinheitlichen~~ — **OBSOLET (verify-don't-assume + DeepSeek-R1):** Befund durch P80/P51-Migration + Bundle A (get_normal_preset raus) überholt; `get_dx_preset`/`get_gain_preset` nur noch test-only, `save_dx_preset`=tote API (T7-Wächter), `save_normal_preset`=no-op. Kein App-KISS-Gewinn; Wrapper wäre Overengineering an Test-Code. **`save_*`-Entfernung → ⏸ Mike-Vorlage (Q4, öffentliche API).** | settings.py | ☑ geprüft |
 | OPT-63 | Locator-Auflösung-Duplikat → Helfer `_resolve_station_position()` (snapshot + entries, DRY; cache-update nur Fallback). v0.99.18 | direction_map_widget.py | ☑ |
-| OPT-64 | `get_enabled_bands`/`set_enabled_bands` Validierung → `_valid_bands(raw)` | settings.py | ☐ |
+| OPT-64 | `get_enabled_bands`/`set_enabled_bands` Validierung → Modul-Funktion `_valid_bands(raw)` (DeepSeek: Modul-Fn statt Methode; Variante A, im Betrieb verhaltensneutral). v0.99.19 | settings.py | ☑ |
 | OPT-65 | `_update_statusbar` (~80 Z.) in `_build_status_*`-Teile (langfristig) | main_window.py | ☐ |
 | OPT-66 | `_handle_diversity_operate` (~80 Z.) Berechnung auslagern (langfristig) | mw_cycle.py | ☐ |
 
@@ -165,6 +165,16 @@ Quelle aller Befunde: `OPTIMIERUNG_AUDIT.md` (Teil 1 = Decoder/Speed + control_p
 
 > Pro erledigtem Punkt eine Zeile: `YYYY-MM-DD · OPT-NN · Kurz · Tests X→Y · Commit <sha>`.
 
+- 2026-06-05 · **OPT-64 (v0.99.19, KISS-Stufe — LETZTER Punkt, voller Workflow)** ·
+  `get_enabled_bands`/`set_enabled_bands` (`config/settings.py`) teilten dieselbe
+  Band-Validierung → **Modul-Funktion `_valid_bands(raw)`** (DeepSeek-R1: Modul-Fn statt
+  Instanz-Methode, nutzt nur `BAND_FREQUENCIES`). Variante A (isinstance im Helfer):
+  `get` exakt gleich, `set(None)`→Default statt Crash (Robustheit, im Betrieb nie
+  ausgelöst — einziger Aufrufer übergibt echte Liste). Reihenfolge-Erhalt + Dedup
+  unverändert. Reine Dedup, kein TX. DeepSeek R1 GO + Final-R1 PUSH FREIGEBEN. Tests
+  2461→**2469** (+8 `test_valid_bands.py`). Commit `c9726b7`. **→ KISS-Stufe KOMPLETT
+  (OPT-61/63/64; OPT-62 obsolet). Nächste Stufe: Speed (nachrangig, OPT-05..11/20/23/24)
+  + große Methoden (OPT-65/66/30..32).**
 - 2026-06-05 · **OPT-63 (v0.99.18, KISS-Stufe, voller Workflow)** · Locator-Auflösung-
   Duplikat in `direction_map_widget.py` (`snapshot_to_station_points` +
   `entries_to_station_points`) → Modul-Helfer `_resolve_station_position(call,

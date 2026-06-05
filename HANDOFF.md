@@ -2,14 +2,15 @@
 
 **🟢 START-SATZ NACH COMPACT (Mike tippt das → genau hier weiter):** „**Optimierung weiter,
 autonom**" — dann `CLAUDE.md → HISTORY.md (Anker) → HANDOFF.md → OPTIMIERUNGSWORKFLOW.md`
-lesen, NICHT neu planen, beim ersten offenen ☐ weiter (aktuell nächster Punkt: **KISS-Stufe
-OPT-64** [`get_enabled_bands`/`set_enabled_bands`-Validierung → `_valid_bands(raw)`,
-settings.py]; danach Speed nachrangig + große Methoden OPT-65/66). **OPT-62 geprüft =
-obsolet** (`save_*`-Entfernung → Mike-Vorlage OPT-Q4). Gesperrt bis Mike-Wort:
-OPT-59/55/58 + Threading OPT-52 + Push + OPT-Q4 (save_*).
+lesen, NICHT neu planen, beim ersten offenen ☐ weiter. **⚠️ KISS-Stufe KOMPLETT** (OPT-61/63/64,
+OPT-62 obsolet) — nächste offene Stufe ist **Geschwindigkeit (Mike: NACHRANGIG)** +
+**große Methoden** (langfristig). Da die „sicheren/klaren" Stufen (toter Code, Robustheit,
+KISS) durch sind und der Rest nachrangig/heikler (Decoder-nah) ist → **Richtungs-Abstimmung
+mit Mike sinnvoll**, NICHT blind weiter. Gesperrt bis Mike-Wort: OPT-59/55/58 + Threading
+OPT-52 + Push (24 Commits) + OPT-Q4 (save_*).
 
-**Aktueller Stand:** v0.99.18 (05.06.2026) — **Optimierungs-Kampagne läuft autonom.
-Robustheits-Stufe (OPT-50..60) abgeschlossen, KISS-Stufe läuft (OPT-61 ✓, OPT-62 obsolet, OPT-63 ✓).** Erledigt:
+**Aktueller Stand:** v0.99.19 (05.06.2026) — **Optimierungs-Kampagne: Robustheits-Stufe
+(OPT-50..60) UND KISS-Stufe (OPT-61/63/64, OPT-62 obsolet) ABGESCHLOSSEN.** Erledigt:
 **Stufe 1 toter Code (v0.99.10)** + **3 tote Module (v0.99.11)** + **OPT-50/51
 Start-Crash-Schutz (v0.99.12)** + **OPT-54 `atomic_write_json`-Helfer (v0.99.13)** + **OPT-53
 Settings-Typvalidierung (v0.99.14)** + **OPT-56 closeEvent-except entschärft (v0.99.15)** +
@@ -20,22 +21,24 @@ Tests durchgehend grün (**aktuell 2453**). Detail → HISTORY v0.99.10–17 + F
 in **`OPTIMIERUNGSWORKFLOW.md`**. Rückfall-Tag `v0.99.9-pre-optimierung`. **NICHT gepusht
 (genaue Zahl via `git log --oneline origin/main..HEAD | wc -l` — aktuell ~20).**
 
-**▶ NÄCHSTE Punkte (KISS-Stufe, autonom fortsetzbar, je voller Workflow):** OPT-64
-(`get_enabled_bands`/`set_enabled_bands`-Validierung → `_valid_bands(raw)`, settings.py).
-Danach Speed (nachrangig, OPT-05..11/20/23/24) + große Methoden (OPT-65/66/30..32).
-OPT-52 (PSK-Worker Thread→Qt-Signal) berührt Threading → Mike kurz vorlegen.
-**OPT-Q4 (Mike-Vorlage):** `settings.save_dx_preset`/`save_normal_preset` (tote/no-op API +
-Regression-Wächter) entfernen? Claude-Empfehlung BEHALTEN (KISS-Gewinn ~0, test-only).
+**▶ NÄCHSTE Stufe (Mike-Richtungsentscheidung empfohlen — keine „sicheren" Punkte mehr offen):**
+- **Speed (Mike: NACHRANGIG)** — Bündel 1B `OPT-05..11` (Modul-Konstanten in `decoder.py`
+  vorberechnen: `np.hanning`/Filter-Taps, Slot-Dauer-Dict, target_rms; verhaltensneutrales
+  Caching, aber Decoder-nah) + `OPT-20` Float/Int-Pipeline (braucht Decode-Referenztests,
+  heikler) + `OPT-23/24`.
+- **Große Methoden** (langfristig/opportunistisch): `OPT-65` `_update_statusbar`,
+  `OPT-66` `_handle_diversity_operate`, `OPT-30..32` control_panel/mw_radio.
+- **Gesperrt bis Mike-Wort:** OPT-59 (TX-Pfad) / OPT-55 / OPT-58 (Bug-Verdachte),
+  OPT-52 (Threading), **Push (24 Commits)**, OPT-Q4 (`save_*`-API entfernen — Empfehlung BEHALTEN).
 
-**Zuletzt erledigt:** **OPT-63** (v0.99.18, `7f0b0e3`): KISS — Modul-Helfer
-`_resolve_station_position` dedupliziert die Locator-Auflösung in `snapshot_to_station_points`
-+ `entries_to_station_points` (DB→Fallback→latlon→prec; cache-update nur Fallback,
-Guard `is not None`). Reine Dedup, kein TX. DeepSeek R1 GO + Final-R1 PUSH FREIGEBEN.
-Tests 2453→2461 (+8 `test_resolve_station_position`). **Davor OPT-61** (v0.99.17, `6a48ea6`):
-`@property is_busy` ersetzt 4-State-Set an 7 Call-Sites (verify-don't-assume: real 7, nicht
-„11×"). **OPT-62** (geprüft=obsolet, kein Code). **OPT-57** (v0.99.16, `9af78bb`)
-station_stats Sentinel-Stop. **OPT-56** (v0.99.15) closeEvent-except. **OPT-60** (geprüft).
-**OPT-53** (v0.99.14) + **OPT-54** (v0.99.13).
+**Zuletzt erledigt:** **OPT-64** (v0.99.19, `c9726b7`): KISS — Modul-Funktion `_valid_bands`
+dedupliziert die Band-Validierung in `get_enabled_bands` + `set_enabled_bands` (settings.py;
+Variante A, im Betrieb verhaltensneutral). DeepSeek R1 GO (Modul-Fn-Empfehlung) + Final-R1
+PUSH FREIGEBEN. Tests 2461→2469 (+8 `test_valid_bands`). **→ KISS-Stufe komplett.**
+**Davor OPT-63** (v0.99.18, `7f0b0e3`): `_resolve_station_position`-Helfer (Locator-Auflösung
+DRY). **OPT-61** (v0.99.17, `6a48ea6`): `@property is_busy` (verify-don't-assume: real 7, nicht
+„11×"). **OPT-62** (geprüft=obsolet). **OPT-57** (v0.99.16) station_stats Sentinel-Stop.
+**OPT-56** (v0.99.15) closeEvent-except. **OPT-60** (geprüft). **OPT-53/54** (v0.99.13/14).
 
 **⛔ NUR nach Mike-Rückmeldung (nichts eigenmächtig):**
 - **TX-Pfad-Verdacht OPT-59** (`_p94_quick73_filter` evtl. ohne `_abort_active_tx` —
