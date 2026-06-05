@@ -1,25 +1,24 @@
 # HANDOFF — SimpleFT8
 
-**Aktueller Stand:** v0.99.10 (05.06.2026) — **Optimierungs-Kampagne Stufe 1 (toter Code)
-KOMPLETT + autonom abgearbeitet.** 4 atomare Commits (Bundles A–D), reine Entfernung,
-projektweit pyflakes-verifiziert, **0 Verhaltensänderung, ANT1=TX unberührt**, jedes Bündel
-DeepSeek-R1 FREIGEBEN + volle Suite grün. Tests **2426→2425** (1 Deprecated-Stub-Test mit
-raus). Inhalt: tote Methoden/Signale/Stubs · ungenutzte Imports (17 Dateien) · tote Locals
-(10) · f-Strings ohne Platzhalter (15). Detail → HISTORY v0.99.10 + Fortschritts-Log in
-**`OPTIMIERUNGSWORKFLOW.md`**. Rückfall-Tag `v0.99.9-pre-optimierung`. **NICHT gepusht.**
+**Aktueller Stand:** v0.99.12 (05.06.2026) — **Optimierungs-Kampagne läuft autonom.**
+Erledigt: **Stufe 1 (toter Code, v0.99.10, Bundles A–D)** + **3 tote Module entfernt
+(v0.99.11, OPT-Q1/Q2 = Mike-Entscheid: nicht FT2-relevant → weg)** + **OPT-50/51 Start-
+Crash-Schutz (v0.99.12, Stufe 2 Robustheit)**. Alles reine/robustheits-Änderung,
+**ANT1=TX unberührt**, jedes Stück DeepSeek-R1 FREIGEBEN, Tests durchgehend grün
+(**aktuell 2416**). Detail → HISTORY v0.99.10–12 + Fortschritts-Log in
+**`OPTIMIERUNGSWORKFLOW.md`**. Rückfall-Tag `v0.99.9-pre-optimierung`. **NICHT gepusht
+(10 Commits ungepusht).**
 
-**⛔ AUTONOMIE-GRENZE ERREICHT — wartet auf Mike-Entscheid (nichts eigenmächtig):**
-1. **Stufe 2 (Robustheit) starten?** Höchster Wert: PSK-Worker-Thread→Qt-Signal (OPT-52),
-   Start-Crash-Schutz `load()`/Migration (OPT-50/51), `atomic_write_json`-Helfer (OPT-54),
-   `is_busy`-Property (OPT-61) … ⚠️ Enthält **TX-Pfad-Verdacht OPT-59**
-   (`_p94_quick73_filter` evtl. ohne `_abort_active_tx` — dreifach prüfen) + zwei
-   **Zufallsfund-Bug-Verdachte**: OPT-55 (ADIF `CALL.upper()` für QRZ-Upload) /
-   OPT-58 (`_execute_full_halt` leert `_p158_insertable` nicht → veraltete Einschub-Zeilen).
-2. **OPT-Q1/Q2:** `core/ap_decoder.py` + `core/osd_decoder.py` + `core/diversity_merger.py`
-   sind nirgends verdrahtet — reservierte Zukunft (wie Slice-B) oder löschbar? **Bis
-   Entscheid NICHT anfassen.**
-3. **Push?** Aktuell **8 Commits lokal ungepusht** (3 Doku + 4 Bundles + Milestone) — Push
-   erst auf Mike-Wort.
+**▶ NÄCHSTE Robustheits-Punkte (autonom fortsetzbar, je voller Workflow):** OPT-54
+(`atomic_write_json`-Helfer, DRY 5 Stores + ntp_time-Lücke), OPT-52 (PSK-Worker
+Thread→Qt-Signal — ⚠️ berührt Threading, ggf. Mike kurz vorlegen), OPT-53 (Settings-
+Typvalidierung), OPT-56/57/60. Dann KISS (OPT-61 `is_busy`-Property …).
+
+**⛔ NUR nach Mike-Rückmeldung (nichts eigenmächtig):**
+- **TX-Pfad-Verdacht OPT-59** (`_p94_quick73_filter` evtl. ohne `_abort_active_tx` —
+  dreifach prüfen) + **Zufallsfund-Bug-Verdachte** OPT-55 (ADIF `CALL.upper()` QRZ-Upload) /
+  OPT-58 (`_execute_full_halt` leert `_p158_insertable` nicht).
+- **Push?** Aktuell **10 Commits lokal ungepusht** — Push erst auf Mike-Wort.
 
 **Reihenfolge (Plan):** Robustheit → KISS → Speed nachrangig → große Methoden. Alle
 OPT-Punkte + Status: **`OPTIMIERUNGSWORKFLOW.md`**. Voller Audit-Befund: `OPTIMIERUNG_AUDIT.md`.

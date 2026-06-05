@@ -43,6 +43,36 @@ Gelöscht wird nie etwas. Format: `## YYYY-MM-DD vX.YY — Kurztitel`.
 > Minus, −0.69] → `~/.simpleft8/dt_corrections.json` manuell auf Hardware-Default
 > 0.26 zurückgesetzt; greift nach App-Neustart.)*
 
+## 2026-06-05 v0.99.12 — App-Start-Crash-Schutz für Settings-Migration (OPT-50, Robustheit)
+
+**Erste Robustheits-Verbesserung der Optimierungs-Kampagne (Stufe 2). Voller Workflow,
+DeepSeek-R1 FREIGEBEN.** Mike-Priorität für Stufe 2: Robustheit.
+
+**Problem (Audit R2, verifiziert):** `Settings.__init__` → `load()` → ruft am Ende
+`_migrate_bandpilot_settings_v088()`. Diese Migration macht ungefährliche In-Memory-
+Änderungen, ruft dann aber `self.save()` **ungeschützt**. `save()` (mkdir/open/json.dump/
+os.replace) kann bei Platten-/Permission-Fehler werfen → propagiert durch `load()` →
+`__init__` → **App crasht beim Start** (nur bei alten Configs mit `bandpilot_enabled`-Key).
+
+**Fix (`config/settings.py`):** nur den `self.save()`-Aufruf in der Migration in
+`try/except Exception` + `print` (fail-silent) gekapselt — die einzige crashende Stelle.
+**Idempotent:** die In-Memory-Migration ist bereits erfolgt (Session korrekt); schlägt
+save() fehl, bleibt die alte Datei → `has_old_keys` triggert beim nächsten Start erneut.
+`except Exception` bewusst breit (DeepSeek bestätigt: ein Start-Guard darf NIE crashen;
+auch `TypeError` bei manuell verbogener config.json darf den Start nicht verhindern). Muster
+identisch zu `core/preset_store.py`. **Im Normalfall (intakte Platte) verhaltensneutral.**
+
+**OPT-51 war bereits erledigt (verify-don't-assume):** `core/preset_store.py __init__`
+kapselt `migrate_legacy_files()` schon mit `try/except Exception` + print (Z.175-179). Der
+Audit hatte das nur als „⚠️ plausibel" markiert — Prüfung zeigte: schon vorhanden, kein
+Handlungsbedarf.
+
+**Kein TX-/Antennen-Eingriff, ANT1/ANT2 unberührt** (reine Start-/Persistenz-Robustheit).
+DeepSeek Plan-R1 **FREIGEBEN** (alle 4 Prüfpunkte: nur save() richtig, breit korrekt, keine
+weiteren ungeschützten Pfade, normalfall-neutral). Tests 2415→**2416** (+1
+`test_settings_migration_survives_save_failure`: Mutationsbeweis — ohne try/except wirft
+`Settings()` bei save()-Fehler). **NICHT gepusht.**
+
 ## 2026-06-05 v0.99.11 — 3 tote Module entfernt (OPT-Q1/Q2 aufgelöst, Mike-Entscheid)
 
 **Mike-Entscheid (wörtlich):** „ap_decoder / osd_decoder / diversity_merger — die hängen

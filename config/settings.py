@@ -182,7 +182,17 @@ class Settings:
             except OSError:
                 pass  # nicht kritisch
 
-        self.save()
+        # OPT-50 (Robustheit): save() ist der EINZIGE crashende Pfad dieser
+        # Migration (mkdir/open/json.dump/os.replace). Ein Plattenfehler beim
+        # Start darf die App NIE crashen. Fail-silent + idempotent: die
+        # In-Memory-Migration ist bereits erfolgt; schlägt save() fehl, bleibt
+        # die alte Datei → has_old_keys triggert beim naechsten Start erneut.
+        # Muster wie core/preset_store.py (migrate_legacy_files-Kapselung).
+        try:
+            self.save()
+        except Exception as exc:
+            print(f"[P88] Bandpilot-Migration: save() fehlgeschlagen "
+                  f"(fail-silent, wird beim naechsten Start erneut versucht): {exc}")
 
     def save(self):
         """Atomarer Write via tmp+replace (R1-Finding 2026-05-04)."""

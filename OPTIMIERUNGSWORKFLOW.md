@@ -72,8 +72,8 @@ Quelle aller Befunde: `OPTIMIERUNG_AUDIT.md` (Teil 1 = Decoder/Speed + control_p
 ## TEIL 2 — Robustheit (höchster Wert — je eigener Workflow)
 | ID | Was | Datei | Status |
 |---|---|---|---|
-| OPT-50 | `load()`-Migration in `try/except` → kein App-Start-Crash bei Plattenfehler (✅ bestätigt) | settings.py:161 | ☐ |
-| OPT-51 | `migrate_legacy_files()` in `__init__` in `try/except` (analog) | preset_store.py | ☐ |
+| OPT-50 | `load()`-Migration `save()` in `try/except` → kein App-Start-Crash bei Plattenfehler (v0.99.12, +Mutationstest) | settings.py | ☑ |
+| OPT-51 | `migrate_legacy_files()` in `try/except` — **war BEREITS so** (preset_store.py:175-179), verify-don't-assume | preset_store.py | ☑ |
 | OPT-52 | **PSK-Worker: GUI-Update per Qt-Signal** statt direkt aus Thread (✅ Z.1271 bestätigt) | main_window.py | ☐ |
 | OPT-53 | `load()`: kritische Felder (`callsign`/`locator`/…) per `isinstance` validieren | settings.py:115 | ☐ |
 | OPT-54 | **`atomic_write_json`-Helfer** (DRY 5 Stores) + `ntp_time` atomar nachziehen (✅) | core/ (neu) + ntp_time.py | ☐ |
@@ -164,6 +164,13 @@ Quelle aller Befunde: `OPTIMIERUNG_AUDIT.md` (Teil 1 = Decoder/Speed + control_p
 
 > Pro erledigtem Punkt eine Zeile: `YYYY-MM-DD · OPT-NN · Kurz · Tests X→Y · Commit <sha>`.
 
+- 2026-06-05 · **OPT-50/51 (v0.99.12, Stufe 2 Robustheit, voller Workflow)** · App-Start-
+  Crash-Schutz: `self.save()` in `settings._migrate_bandpilot_settings_v088` in
+  `try/except Exception`+print (fail-silent, idempotent) — die einzige crashende Stelle der
+  Migration. **OPT-51 war BEREITS erledigt** (preset_store kapselt migrate schon) →
+  verify-don't-assume-Win, kein Code. DeepSeek-Plan-R1 FREIGEBEN (4 Punkte). Tests
+  2415→**2416** (+1 Mutationsbeweis-Test). Commit `<opt50>`. **Damit beginnt Stufe 2 —
+  die flagged OPT-55/58/59 weiterhin NUR nach Mike-Rückmeldung.**
 - 2026-06-05 · **OPT-Q1/Q2 aufgelöst (v0.99.11)** · 3 tote Module entfernt nach Mike-
   Entscheid (nicht verlinkt + nicht FT2-relevant → weg): `ap_decoder` + `osd_decoder`
   (rein FT8, PyFT8-LDPC, kein Test) + `diversity_merger` (+ 10er-Test). DeepSeek-R1

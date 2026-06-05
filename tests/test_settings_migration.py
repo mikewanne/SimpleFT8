@@ -98,6 +98,24 @@ def test_settings_migration_deletes_old_cache(isolated_settings, monkeypatch, tm
     assert not old_cache.exists()
 
 
+def test_settings_migration_survives_save_failure(isolated_settings, monkeypatch):
+    """OPT-50 (Robustheit): ein save()-Fehler WAEHREND der Migration crasht den
+    App-Start NICHT (fail-silent). Vor OPT-50 propagierte der OSError durch
+    load() -> __init__ -> Konstruktor-Crash. Mutationsbeweis: ohne den try/except
+    um self.save() wirft Settings() hier eine OSError."""
+    config_file = isolated_settings / "config.json"
+    config_file.write_text(json.dumps({"bandpilot_enabled": True}))
+
+    def _boom(self):
+        raise OSError("disk full (simuliert)")
+    monkeypatch.setattr(settings_mod.Settings, "save", _boom)
+
+    s = Settings()  # darf NICHT werfen
+    # In-Memory-Migration ist trotz save()-Fehler erfolgt:
+    assert s.get("bandpilot_mode") == "auto"
+    assert "bandpilot_enabled" not in s._data
+
+
 # ── Atomic save ───────────────────────────────────────────────────────────────
 
 def test_settings_save_atomic(isolated_settings):
